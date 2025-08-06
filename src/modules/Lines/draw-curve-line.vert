@@ -4,6 +4,7 @@ attribute vec2 position, pointA, pointB;
 attribute vec4 color;
 attribute float width;
 attribute float arrow;
+attribute float linkIndices;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D pointGreyoutStatus;
@@ -22,6 +23,9 @@ uniform float curvedLinkControlPointDistance;
 uniform float curvedLinkSegments;
 uniform bool scaleLinksOnZoom;
 uniform float maxPointSize;
+// renderMode: 0.0 = normal rendering, 1.0 = index buffer rendering for picking
+uniform float renderMode;
+uniform float hoveredLinkIndex;
 
 varying vec4 rgbaColor;
 varying vec2 pos;
@@ -29,6 +33,7 @@ varying float arrowLength;
 varying float useArrow;
 varying float smoothing;
 varying float arrowWidthFactor;
+varying float linkIndex;
 
 float map(float value, float min1, float max1, float min2, float max2) {
   return min2 + (value - min1) * (max2 - min2) / (max1 - min1);
@@ -73,6 +78,7 @@ float calculateArrowWidth(float arrowWidth) {
 
 void main() {
   pos = position;
+  linkIndex = linkIndices;
 
   vec2 pointTexturePosA = (pointA + 0.5) / pointsTextureSize;
   vec2 pointTexturePosB = (pointB + 0.5) / pointsTextureSize;
@@ -120,6 +126,10 @@ void main() {
     linkWidth += arrowWidthDifference;
   }
 
+  if (renderMode > 0.0) {
+    linkWidth += 5.0;
+  }
+
   arrowWidthFactor = arrowWidthDifference / linkWidth;
 
   // Calculate final link width in pixels with smoothing
@@ -140,6 +150,11 @@ void main() {
 
   // Pass final color to fragment shader
   rgbaColor = vec4(rgbColor, opacity);
+
+  // 👇 use for highlighting hovered link
+  // if (hoveredLinkIndex == linkIndex) {
+  //   rgbaColor = vec4(1.0, 0.0, 0.0, 1.0);
+  // }
 
   // Calculate position on the curved path
   float t = position.x;

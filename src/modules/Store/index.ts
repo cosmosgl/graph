@@ -26,6 +26,7 @@ export class Store {
   public hoveredPoint: Hovered | undefined = undefined
   public focusedPoint: Focused | undefined = undefined
   public draggingPointIndex: number | undefined = undefined
+  public hoveredLinkIndex: number | undefined = undefined
   public adjustedSpaceSize = defaultConfigValues.spaceSize
   public isSpaceKeyPressed = false
   public div: HTMLDivElement | undefined

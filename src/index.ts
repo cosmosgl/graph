@@ -50,12 +50,12 @@ export class Graph {
 
   private currentEvent: D3ZoomEvent<HTMLCanvasElement, undefined> | D3DragEvent<HTMLCanvasElement, undefined, Hovered> | MouseEvent | undefined
   /**
-   * The value of `_findHoveredPointExecutionCount` is incremented by 1 on each animation frame.
-   * When the counter reaches 2 (or more), it is reset to 0 and the `findHoveredPoint` method is executed.
+   * The value of `_findHoveredItemExecutionCount` is incremented by 1 on each animation frame.
+   * When the counter reaches 2 (or more), it is reset to 0 and the `findHoveredPoint` or `findHoveredLine` method is executed.
    */
-  private _findHoveredPointExecutionCount = 0
+  private _findHoveredItemExecutionCount = 0
   /**
-   * If the mouse is not on the Canvas, the `findHoveredPoint` method will not be executed.
+   * If the mouse is not on the Canvas, the `findHoveredPoint` or `findHoveredLine` method will not be executed.
    */
   private _isMouseOnCanvas = false
   /**
@@ -1245,6 +1245,7 @@ export class Graph {
   }
 
   private frame (): void {
+    if (this._isDestroyed) return
     const { config: { simulationGravity, simulationCenter, renderLinks, enableSimulation }, store: { alpha, isSimulationRunning } } = this
     if (alpha < ALPHA_MIN && isSimulationRunning) this.end()
     if (!this.store.pointsTextureSize) return
@@ -1252,7 +1253,9 @@ export class Graph {
     this.requestAnimationFrameId = window.requestAnimationFrame((now) => {
       this.fpsMonitor?.begin()
       this.resizeCanvas()
-      if (!this.dragInstance.isActive) this.findHoveredPoint()
+      if (!this.dragInstance.isActive) {
+        this.findHoveredItem()
+      }
 
       if (enableSimulation) {
         if (this.isRightClickMouse && this.config.enableRightClickRepulsion) {
@@ -1318,7 +1321,9 @@ export class Graph {
       this.fpsMonitor?.end(now)
 
       this.currentEvent = undefined
-      this.frame()
+      if (!this._isDestroyed) {
+        this.frame()
+      }
     })
   }
 
@@ -1365,6 +1370,7 @@ export class Graph {
   }
 
   private resizeCanvas (forceResize = false): void {
+    if (this._isDestroyed) return
     const prevWidth = this.canvas.width
     const prevHeight = this.canvas.height
     const w = this.canvas.clientWidth
@@ -1382,6 +1388,7 @@ export class Graph {
       this.canvasD3Selection
         ?.call(this.zoomInstance.behavior.transform, this.zoomInstance.getTransform([centerPosition], k))
       this.points?.updateSampledPointsGrid()
+      this.lines?.updateLinkIndexFbo()
     }
   }
 
@@ -1413,13 +1420,20 @@ export class Graph {
     }
   }
 
-  private findHoveredPoint (): void {
-    if (!this._isMouseOnCanvas || !this.reglInstance || !this.points) return
-    if (this._findHoveredPointExecutionCount < 2) {
-      this._findHoveredPointExecutionCount += 1
+  private findHoveredItem (): void {
+    if (this._isDestroyed || !this._isMouseOnCanvas || !this.reglInstance) return
+    if (this._findHoveredItemExecutionCount < 2) {
+      this._findHoveredItemExecutionCount += 1
       return
     }
-    this._findHoveredPointExecutionCount = 0
+    this._findHoveredItemExecutionCount = 0
+    this.findHoveredPoint()
+    if (this.graph.linksNumber) this.findHoveredLine()
+    this.updateCanvasCursor()
+  }
+
+  private findHoveredPoint (): void {
+    if (this._isDestroyed || !this.reglInstance || !this.points) return
     this.points.findHoveredPoint()
     let isMouseover = false
     let isMouseout = false
@@ -1447,7 +1461,36 @@ export class Graph {
       )
     }
     if (isMouseout) this.config.onPointMouseOut?.(this.currentEvent)
-    this.updateCanvasCursor()
+  }
+
+  private findHoveredLine (): void {
+    if (this._isDestroyed || !this.reglInstance || !this.lines) return
+    if (this.store.hoveredPoint) {
+      if (this.store.hoveredLinkIndex !== undefined) {
+        this.store.hoveredLinkIndex = undefined
+        this.config.onLinkMouseOut?.()
+      }
+      return
+    }
+    this.lines.findHoveredLine()
+    let isMouseover = false
+    let isMouseout = false
+
+    const pixels = readPixels(this.reglInstance, this.lines.hoveredLineIndexFbo as regl.Framebuffer2D)
+    const hoveredLineIndex = pixels[0] as number
+
+    if (hoveredLineIndex >= 0) {
+      if (this.store.hoveredLinkIndex !== hoveredLineIndex) isMouseover = true
+      this.store.hoveredLinkIndex = hoveredLineIndex
+    } else {
+      if (this.store.hoveredLinkIndex) isMouseout = true
+      this.store.hoveredLinkIndex = undefined
+    }
+
+    if (isMouseover && this.store.hoveredLinkIndex !== undefined) {
+      this.config.onLinkMouseOver?.(this.store.hoveredLinkIndex)
+    }
+    if (isMouseout) this.config.onLinkMouseOut?.()
   }
 
   private updateCanvasCursor (): void {
@@ -1456,6 +1499,8 @@ export class Graph {
     else if (this.store.hoveredPoint) {
       if (!this.config.enableDrag || this.store.isSpaceKeyPressed) select(this.canvas).style('cursor', hoveredPointCursor)
       else select(this.canvas).style('cursor', 'grab')
+    } else if (this.store.hoveredLinkIndex !== undefined) {
+      select(this.canvas).style('cursor', 'pointer')
     } else select(this.canvas).style('cursor', null)
   }
 

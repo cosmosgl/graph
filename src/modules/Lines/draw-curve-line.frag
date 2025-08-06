@@ -6,6 +6,10 @@ varying float arrowLength;
 varying float useArrow;
 varying float smoothing;
 varying float arrowWidthFactor;
+varying float linkIndex;
+
+// renderMode: 0.0 = normal rendering, 1.0 = index buffer rendering for picking
+uniform float renderMode;
 
 float map(float value, float min1, float max1, float min2, float max2) {
   return min2 + (value - min1) * (max2 - min2) / (max1 - min1);
@@ -31,5 +35,12 @@ void main() {
     opacity = linkOpacity;
   } else opacity = rgbaColor.a * smoothstep(0.5, 0.5 - smoothing, abs(pos.y));
   
-  gl_FragColor = vec4(color, opacity);
+  if (renderMode > 0.0) {
+    if (opacity > 0.0) {
+      gl_FragColor = vec4(linkIndex, 0.0, 0.0, 1.0);
+    } else {
+      gl_FragColor = vec4(-1.0, 0.0, 0.0, 0.0);
+    }
+  } else gl_FragColor = vec4(color, opacity);
+
 }
