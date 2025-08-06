@@ -10,6 +10,7 @@ export class CoreModule {
   public readonly store: Store
   public readonly data: GraphData
   public readonly points: Points | undefined
+  public _debugRandomNumber = Math.floor(Math.random() * 1000)
 
   public constructor (
     reglInstance: regl.Regl,

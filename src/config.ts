@@ -375,6 +375,22 @@ export interface GraphConfigInterface {
   onPointMouseOut?: (event: MouseEvent | D3ZoomEvent<HTMLCanvasElement, undefined> | D3DragEvent<HTMLCanvasElement, undefined, Hovered> | undefined) => void;
 
   /**
+   * Callback function that will be called when the mouse moves over a link.
+   * The link index will be passed as the first argument:
+   * `(linkIndex: number) => void`.
+   * Default value: `undefined`
+   */
+  onLinkMouseOver?: (linkIndex: number) => void;
+
+  /**
+   * Callback function that will be called when the mouse moves out of a link.
+   * The link index will be passed as the first argument:
+   * `(linkIndex: number) => void`.
+   * Default value: `undefined`
+   */
+  onLinkMouseOut?: () => void;
+
+  /**
    * Callback function that will be called when zooming or panning starts.
    * First argument is a D3 Zoom Event and second indicates whether
    * the event has been initiated by a user interaction (e.g. a mouse event):
@@ -591,6 +607,8 @@ export class GraphConfig implements GraphConfigInterface {
   public onMouseMove: GraphConfigInterface['onMouseMove'] = undefined
   public onPointMouseOver: GraphConfigInterface['onPointMouseOver'] = undefined
   public onPointMouseOut: GraphConfigInterface['onPointMouseOut'] = undefined
+  public onLinkMouseOver: GraphConfigInterface['onLinkMouseOver'] = undefined
+  public onLinkMouseOut: GraphConfigInterface['onLinkMouseOut'] = undefined
   public onZoomStart: GraphConfigInterface['onZoomStart'] = undefined
   public onZoom: GraphConfigInterface['onZoom'] = undefined
   public onZoomEnd: GraphConfigInterface['onZoomEnd'] = undefined
