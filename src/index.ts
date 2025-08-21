@@ -188,6 +188,9 @@ export class Graph {
     if (this.config.pointGreyoutColor) {
       this.store.setGreyoutPointColor(this.config.pointGreyoutColor)
     }
+    if (this.config.hoveredLinkColor) {
+      this.store.setHoveredLinkColor(this.config.hoveredLinkColor)
+    }
 
     if (this.config.showFPSMonitor) this.fpsMonitor = new FPSMonitor(this.canvas)
 
@@ -260,6 +263,9 @@ export class Graph {
     }
     if (prevConfig.pointGreyoutColor !== this.config.pointGreyoutColor) {
       this.store.setGreyoutPointColor(this.config.pointGreyoutColor)
+    }
+    if (prevConfig.hoveredLinkColor !== this.config.hoveredLinkColor) {
+      this.store.setHoveredLinkColor(this.config.hoveredLinkColor)
     }
     if (prevConfig.focusedPointIndex !== this.config.focusedPointIndex) {
       this.store.setFocusedPoint(this.config.focusedPointIndex)
@@ -1494,13 +1500,13 @@ export class Graph {
   }
 
   private updateCanvasCursor (): void {
-    const { hoveredPointCursor } = this.config
+    const { hoveredPointCursor, hoveredLinkCursor } = this.config
     if (this.dragInstance.isActive) select(this.canvas).style('cursor', 'grabbing')
     else if (this.store.hoveredPoint) {
       if (!this.config.enableDrag || this.store.isSpaceKeyPressed) select(this.canvas).style('cursor', hoveredPointCursor)
       else select(this.canvas).style('cursor', 'grab')
     } else if (this.store.hoveredLinkIndex !== undefined) {
-      select(this.canvas).style('cursor', 'pointer')
+      select(this.canvas).style('cursor', hoveredLinkCursor)
     } else select(this.canvas).style('cursor', null)
   }
 
