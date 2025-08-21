@@ -106,6 +106,8 @@ export class Lines extends CoreModule {
           curvedLinkControlPointDistance: () => config.curvedLinkControlPointDistance,
           curvedLinkSegments: () => config.curvedLinks ? config.curvedLinkSegments ?? defaultConfigValues.curvedLinkSegments : 1,
           hoveredLinkIndex: () => store.hoveredLinkIndex ?? -1,
+          hoveredLinkColor: () => store.hoveredLinkColor,
+          hoveredLinkWidthIncrease: () => config.hoveredLinkWidthIncrease,
           renderMode: reglInstance.prop<{ renderMode: number }, 'renderMode'>('renderMode'),
         },
         cull: {

@@ -26,6 +26,8 @@ uniform float maxPointSize;
 // renderMode: 0.0 = normal rendering, 1.0 = index buffer rendering for picking
 uniform float renderMode;
 uniform float hoveredLinkIndex;
+uniform vec4 hoveredLinkColor;
+uniform float hoveredLinkWidthIncrease;
 
 varying vec4 rgbaColor;
 varying vec2 pos;
@@ -130,14 +132,21 @@ void main() {
 
   // Calculate final link width in pixels with smoothing
   float linkWidthPx = calculateLinkWidth(linkWidth);
+    
+  if (renderMode > 0.0) {
+    // Add 5 pixels padding for better hover detection
+    linkWidthPx += 5.0 / transformationMatrix[0][0];
+  } else {
+      // Add pixel increase if this is the hovered link
+    if (hoveredLinkIndex == linkIndex) {
+      linkWidthPx += hoveredLinkWidthIncrease / transformationMatrix[0][0];
+    }
+  }
   float smoothingPx = 0.5 / transformationMatrix[0][0];
   smoothing = smoothingPx / linkWidthPx;
   linkWidthPx += smoothingPx;
 
-  // Add 5 pixels padding for better hover detection
-  if (renderMode > 0.0) {
-    linkWidthPx += 5.0 / transformationMatrix[0][0];
-  } 
+
 
   // Calculate final color with opacity based on link distance
   vec3 rgbColor = color.rgb;
@@ -152,10 +161,10 @@ void main() {
   // Pass final color to fragment shader
   rgbaColor = vec4(rgbColor, opacity);
 
-  // 👇 use for highlighting hovered link
-  // if (hoveredLinkIndex == linkIndex) {
-  //   rgbaColor = vec4(1.0, 0.0, 0.0, 1.0);
-  // }
+  // Apply hover color if this is the hovered link
+  if (hoveredLinkIndex == linkIndex) {
+    rgbaColor = hoveredLinkColor;
+  }
 
   // Calculate position on the curved path
   float t = position.x;

@@ -34,6 +34,7 @@ export class Store {
 
   public hoveredPointRingColor = [1, 1, 1, hoveredPointRingOpacity]
   public focusedPointRingColor = [1, 1, 1, focusedPointRingOpacity]
+  public hoveredLinkColor = getRgbaColor(defaultConfigValues.hoveredLinkColor)
   // -1 means that the color is not set
   public greyoutPointColor = [-1, -1, -1, -1]
   // If backgroundColor is dark, isDarkenGreyout is true
@@ -127,6 +128,14 @@ export class Store {
     this.greyoutPointColor[1] = convertedRgba[1]
     this.greyoutPointColor[2] = convertedRgba[2]
     this.greyoutPointColor[3] = convertedRgba[3]
+  }
+
+  public setHoveredLinkColor (color: string | [number, number, number, number]): void {
+    const convertedRgba = getRgbaColor(color)
+    this.hoveredLinkColor[0] = convertedRgba[0]
+    this.hoveredLinkColor[1] = convertedRgba[1]
+    this.hoveredLinkColor[2] = convertedRgba[2]
+    this.hoveredLinkColor[3] = convertedRgba[3]
   }
 
   public setFocusedPoint (index?: number): void {
