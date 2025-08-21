@@ -126,10 +126,6 @@ void main() {
     linkWidth += arrowWidthDifference;
   }
 
-  if (renderMode > 0.0) {
-    linkWidth += 5.0;
-  }
-
   arrowWidthFactor = arrowWidthDifference / linkWidth;
 
   // Calculate final link width in pixels with smoothing
@@ -137,6 +133,11 @@ void main() {
   float smoothingPx = 0.5 / transformationMatrix[0][0];
   smoothing = smoothingPx / linkWidthPx;
   linkWidthPx += smoothingPx;
+
+  // Add 5 pixels padding for better hover detection
+  if (renderMode > 0.0) {
+    linkWidthPx += 5.0 / transformationMatrix[0][0];
+  } 
 
   // Calculate final color with opacity based on link distance
   vec3 rgbColor = color.rgb;
