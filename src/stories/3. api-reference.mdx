@@ -8,11 +8,14 @@ This method sets the [cosmos.gl configuration](../?path=/docs/configuration--doc
 
 * **`config`** (Object): The configuration object adhering to cosmos.gl configuration properties.
 
-### <a name="set_point_positions" href="#set_point_positions">#</a> graph.<b>setPointPositions</b>(<i>pointPositions</i>)
+### <a name="set_point_positions" href="#set_point_positions">#</a> graph.<b>setPointPositions</b>(<i>pointPositions</i>, [<i>dontRescale</i>])
 
 This method sets the positions of points in a cosmos.gl graph using the provided coordinates array.
 
 * **`pointPositions`** (Float32Array): A Float32Array representing the x and y coordinates of points in the format `[x1, y1, x2, y2, ..., xN, yN]`. Each pair represents the coordinates of a single point.
+* **`dontRescale`** (Boolean, optional): For this call only, controls whether to rescale the points.
+  - `true`: Don't rescale the points.
+  - `false` or `undefined` (default): Use the behavior defined by `config.rescalePositions`.
 
 **Example:**
 ```javascript
@@ -246,7 +249,7 @@ graph.render();
 
 In this example, the `linkArrows` array contains three boolean values. The first value `true` sets an arrow on the first link, the second value `false` leaves the second link without an arrow, and the third value `true` sets an arrow on the third link.
 
-### <a name="set_link_strengths" href="#set_link_strengths">#</a> graph.<b>setLinkStrength</b>(<i>linkStrength</i>)
+### <a name="set_link_strength" href="#set_link_strength">#</a> graph.<b>setLinkStrength</b>(<i>linkStrength</i>)
 
 This method sets the strength of the graph links.
 
@@ -298,7 +301,7 @@ This method sets the force strength coefficients for clustering points in the gr
 
 The `render` method renders the graph and, optionally, controls the initial energy of the simulation.
 
-* **`runSimulation`** (number, optional): The higher the value, the more initial energy the simulation will get. Zero value stops the simulation.
+* **`simulationAlpha`** (number, optional): The higher the value, the more initial energy the simulation will get. Zero value stops the simulation.
 
 ### <a name="zoom_to_point_by_index" href="#zoom_to_point_by_index">#</a> graph.<b>zoomToPointByIndex</b>(<i>index</i>, [<i>duration</i>], [<i>scale</i>], [<i>canZoomOut</i>])
 

@@ -163,7 +163,9 @@ void main() {
 
   // Apply hover color if this is the hovered link
   if (hoveredLinkIndex == linkIndex) {
-    rgbaColor = hoveredLinkColor;
+    // Keep existing RGB values but multiply opacity with hover color opacity
+    rgbaColor.rgb = hoveredLinkColor.rgb;
+    rgbaColor.a *= hoveredLinkColor.a;
   }
 
   // Calculate position on the curved path

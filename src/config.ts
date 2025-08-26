@@ -598,7 +598,7 @@ export class GraphConfig implements GraphConfigInterface {
   public curvedLinkSegments = defaultConfigValues.curvedLinkSegments
   public curvedLinkWeight = defaultConfigValues.curvedLinkWeight
   public curvedLinkControlPointDistance = defaultConfigValues.curvedLinkControlPointDistance
-  public linkArrows = defaultConfigValues.arrowLinks
+  public linkArrows = defaultConfigValues.linkArrows
   public linkArrowsSizeScale = defaultConfigValues.arrowSizeScale
   public scaleLinksOnZoom = defaultConfigValues.scaleLinksOnZoom
   public linkVisibilityDistanceRange = defaultConfigValues.linkVisibilityDistanceRange
