@@ -20,7 +20,7 @@ export const defaultConfigValues = {
   curvedLinkSegments: 19,
   curvedLinkWeight: 0.8,
   curvedLinkControlPointDistance: 0.5,
-  arrowLinks: false,
+  linkArrows: false,
   linkVisibilityDistanceRange: [50, 150],
   linkVisibilityMinTransparency: 0.25,
   hoveredPointCursor: 'auto',
