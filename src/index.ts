@@ -17,7 +17,7 @@ import { FPSMonitor } from '@/graph/modules/FPSMonitor'
 import { GraphData } from '@/graph/modules/GraphData'
 import { Lines } from '@/graph/modules/Lines'
 import { Points } from '@/graph/modules/Points'
-import { Store, ALPHA_MIN, MAX_POINT_SIZE, type Hovered } from '@/graph/modules/Store'
+import { Store, ALPHA_MIN, MAX_POINT_SIZE, MAX_HOVER_DETECTION_DELAY, type Hovered } from '@/graph/modules/Store'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
 import { defaultConfigValues, defaultScaleToZoom } from '@/graph/variables'
@@ -1428,7 +1428,7 @@ export class Graph {
 
   private findHoveredItem (): void {
     if (this._isDestroyed || !this._isMouseOnCanvas || !this.reglInstance) return
-    if (this._findHoveredItemExecutionCount < 2) {
+    if (this._findHoveredItemExecutionCount < MAX_HOVER_DETECTION_DELAY) {
       this._findHoveredItemExecutionCount += 1
       return
     }

@@ -7,6 +7,13 @@ import { hoveredPointRingOpacity, focusedPointRingOpacity, defaultConfigValues }
 export const ALPHA_MIN = 0.001
 export const MAX_POINT_SIZE = 64
 
+/**
+ * Maximum number of executions to delay before performing hover detection.
+ * This threshold prevents excessive hover detection calls for performance optimization.
+ * The `findHoveredItem` method will skip actual detection until this count is reached.
+ */
+export const MAX_HOVER_DETECTION_DELAY = 4
+
 export type Hovered = { index: number; position: [ number, number ] }
 type Focused = { index: number }
 
