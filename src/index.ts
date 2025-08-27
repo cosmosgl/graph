@@ -20,7 +20,7 @@ import { Points } from '@/graph/modules/Points'
 import { Store, ALPHA_MIN, MAX_POINT_SIZE, MAX_HOVER_DETECTION_DELAY, type Hovered } from '@/graph/modules/Store'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
-import { defaultConfigValues, defaultScaleToZoom } from '@/graph/variables'
+import { defaultConfigValues, defaultScaleToZoom, defaultGreyoutPointColor, defaultBackgroundColor } from '@/graph/variables'
 import { createWebGLErrorMessage } from './graph/utils/error-message'
 
 export class Graph {
@@ -176,21 +176,13 @@ export class Graph {
     this.clusters = new Clusters(this.reglInstance, this.config, this.store, this.graph, this.points)
 
     this.store.backgroundColor = getRgbaColor(this.config.backgroundColor)
-    if (this.config.hoveredPointRingColor) {
-      this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor)
-    }
-    if (this.config.focusedPointRingColor) {
-      this.store.setFocusedPointRingColor(this.config.focusedPointRingColor)
-    }
+    this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor ?? defaultConfigValues.hoveredPointRingColor)
+    this.store.setFocusedPointRingColor(this.config.focusedPointRingColor ?? defaultConfigValues.focusedPointRingColor)
     if (this.config.focusedPointIndex !== undefined) {
       this.store.setFocusedPoint(this.config.focusedPointIndex)
     }
-    if (this.config.pointGreyoutColor) {
-      this.store.setGreyoutPointColor(this.config.pointGreyoutColor)
-    }
-    if (this.config.hoveredLinkColor) {
-      this.store.setHoveredLinkColor(this.config.hoveredLinkColor)
-    }
+    this.store.setGreyoutPointColor(this.config.pointGreyoutColor ?? defaultGreyoutPointColor)
+    this.store.setHoveredLinkColor(this.config.hoveredLinkColor ?? defaultConfigValues.hoveredLinkColor)
 
     this.store.updateLinkHoveringEnabled(this.config)
 
@@ -256,18 +248,20 @@ export class Graph {
       prevConfig.curvedLinks !== this.config.curvedLinks) {
       this.lines.updateCurveLineGeometry()
     }
-    if (prevConfig.backgroundColor !== this.config.backgroundColor) this.store.backgroundColor = getRgbaColor(this.config.backgroundColor)
+    if (prevConfig.backgroundColor !== this.config.backgroundColor) {
+      this.store.backgroundColor = getRgbaColor(this.config.backgroundColor ?? defaultBackgroundColor)
+    }
     if (prevConfig.hoveredPointRingColor !== this.config.hoveredPointRingColor) {
-      this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor)
+      this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor ?? defaultConfigValues.hoveredPointRingColor)
     }
     if (prevConfig.focusedPointRingColor !== this.config.focusedPointRingColor) {
-      this.store.setFocusedPointRingColor(this.config.focusedPointRingColor)
+      this.store.setFocusedPointRingColor(this.config.focusedPointRingColor ?? defaultConfigValues.focusedPointRingColor)
     }
     if (prevConfig.pointGreyoutColor !== this.config.pointGreyoutColor) {
-      this.store.setGreyoutPointColor(this.config.pointGreyoutColor)
+      this.store.setGreyoutPointColor(this.config.pointGreyoutColor ?? defaultGreyoutPointColor)
     }
     if (prevConfig.hoveredLinkColor !== this.config.hoveredLinkColor) {
-      this.store.setHoveredLinkColor(this.config.hoveredLinkColor)
+      this.store.setHoveredLinkColor(this.config.hoveredLinkColor ?? defaultConfigValues.hoveredLinkColor)
     }
     if (prevConfig.focusedPointIndex !== this.config.focusedPointIndex) {
       this.store.setFocusedPoint(this.config.focusedPointIndex)
