@@ -123,7 +123,24 @@ export class Graph {
     this.canvasD3Selection
       .on('mouseenter.cosmos', () => { this._isMouseOnCanvas = true })
       .on('mousemove.cosmos', () => { this._isMouseOnCanvas = true })
-      .on('mouseleave.cosmos', () => { this._isMouseOnCanvas = false })
+      .on('mouseleave.cosmos', () => {
+        this._isMouseOnCanvas = false
+
+        // Clear point hover state and trigger callback if needed
+        if (this.store.hoveredPoint !== undefined && this.config.onPointMouseOut) {
+          this.config.onPointMouseOut(this.currentEvent)
+        }
+        this.store.hoveredPoint = undefined
+
+        // Clear link hover state and trigger callback if needed
+        if (this.store.hoveredLinkIndex !== undefined && this.config.onLinkMouseOut) {
+          this.config.onLinkMouseOut()
+        }
+        this.store.hoveredLinkIndex = undefined
+
+        // Update cursor style after clearing hover states
+        this.updateCanvasCursor()
+      })
     select(document)
       .on('keydown.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
       .on('keyup.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
@@ -1454,7 +1471,18 @@ export class Graph {
     }
     this._findHoveredItemExecutionCount = 0
     this.findHoveredPoint()
-    if (this.graph.linksNumber && this.store.isLinkHoveringEnabled) this.findHoveredLine()
+
+    if (this.graph.linksNumber && this.store.isLinkHoveringEnabled) {
+      this.findHoveredLine()
+    } else if (this.store.hoveredLinkIndex !== undefined) {
+      // Clear stale hoveredLinkIndex when there are no links
+      const wasHovered = this.store.hoveredLinkIndex !== undefined
+      this.store.hoveredLinkIndex = undefined
+      if (wasHovered && this.config.onLinkMouseOut) {
+        this.config.onLinkMouseOut()
+      }
+    }
+
     this.updateCanvasCursor()
   }
 
