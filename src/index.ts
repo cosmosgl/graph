@@ -1349,6 +1349,19 @@ export class Graph {
       this.store.hoveredPoint?.position,
       event
     )
+
+    if (this.store.hoveredPoint) {
+      this.config.onPointClick?.(
+        this.store.hoveredPoint.index,
+        this.store.hoveredPoint.position,
+        event
+      )
+    } else if (this.store.hoveredLinkIndex !== undefined) {
+      this.config.onLinkClick?.(
+        this.store.hoveredLinkIndex,
+        event
+      )
+    }
   }
 
   private updateMousePosition (event: MouseEvent | D3DragEvent<HTMLCanvasElement, undefined, Hovered>): void {
