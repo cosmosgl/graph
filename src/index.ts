@@ -192,6 +192,8 @@ export class Graph {
       this.store.setHoveredLinkColor(this.config.hoveredLinkColor)
     }
 
+    this.store.updateLinkHoveringEnabled(this.config)
+
     if (this.config.showFPSMonitor) this.fpsMonitor = new FPSMonitor(this.canvas)
 
     if (this.config.randomSeed !== undefined) this.store.addRandomSeed(this.config.randomSeed)
@@ -290,6 +292,12 @@ export class Graph {
 
     if (prevConfig.enableZoom !== this.config.enableZoom || prevConfig.enableDrag !== this.config.enableDrag) {
       this.updateZoomDragBehaviors()
+    }
+
+    if (prevConfig.onLinkClick !== this.config.onLinkClick ||
+        prevConfig.onLinkMouseOver !== this.config.onLinkMouseOver ||
+        prevConfig.onLinkMouseOut !== this.config.onLinkMouseOut) {
+      this.store.updateLinkHoveringEnabled(this.config)
     }
   }
 
@@ -1407,7 +1415,10 @@ export class Graph {
       this.canvasD3Selection
         ?.call(this.zoomInstance.behavior.transform, this.zoomInstance.getTransform([centerPosition], k))
       this.points?.updateSampledPointsGrid()
-      this.lines?.updateLinkIndexFbo()
+      // Only update link index FBO if link hovering is enabled
+      if (this.store.isLinkHoveringEnabled) {
+        this.lines?.updateLinkIndexFbo()
+      }
     }
   }
 
@@ -1447,7 +1458,7 @@ export class Graph {
     }
     this._findHoveredItemExecutionCount = 0
     this.findHoveredPoint()
-    if (this.graph.linksNumber) this.findHoveredLine()
+    if (this.graph.linksNumber && this.store.isLinkHoveringEnabled) this.findHoveredLine()
     this.updateCanvasCursor()
   }
 
@@ -1518,7 +1529,7 @@ export class Graph {
     else if (this.store.hoveredPoint) {
       if (!this.config.enableDrag || this.store.isSpaceKeyPressed) select(this.canvas).style('cursor', hoveredPointCursor)
       else select(this.canvas).style('cursor', 'grab')
-    } else if (this.store.hoveredLinkIndex !== undefined) {
+    } else if (this.store.isLinkHoveringEnabled && this.store.hoveredLinkIndex !== undefined) {
       select(this.canvas).style('cursor', hoveredLinkCursor)
     } else select(this.canvas).style('cursor', null)
   }

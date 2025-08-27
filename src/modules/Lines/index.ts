@@ -178,6 +178,9 @@ export class Lines extends CoreModule {
   public updateLinkIndexFbo (): void {
     const { reglInstance, store } = this
 
+    // Only create and update the link index FBO if link hovering is enabled
+    if (!this.store.isLinkHoveringEnabled) return
+
     if (!this.linkIndexFbo) this.linkIndexFbo = reglInstance.framebuffer()
     this.linkIndexFbo({
       color: reglInstance.texture({
@@ -246,7 +249,7 @@ export class Lines extends CoreModule {
   }
 
   public findHoveredLine (): void {
-    if (!this.data.linksNumber) return
+    if (!this.data.linksNumber || !this.store.isLinkHoveringEnabled) return
     if (!this.linkIndexFbo) this.updateLinkIndexFbo()
     this.reglInstance.clear({
       framebuffer: this.linkIndexFbo as regl.Framebuffer2D,
