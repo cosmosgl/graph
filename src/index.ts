@@ -123,19 +123,25 @@ export class Graph {
     this.canvasD3Selection
       .on('mouseenter.cosmos', () => { this._isMouseOnCanvas = true })
       .on('mousemove.cosmos', () => { this._isMouseOnCanvas = true })
-      .on('mouseleave.cosmos', () => {
+      .on('mouseleave.cosmos', (event) => {
         this._isMouseOnCanvas = false
+        this.currentEvent = event
 
         // Clear point hover state and trigger callback if needed
         if (this.store.hoveredPoint !== undefined && this.config.onPointMouseOut) {
-          this.config.onPointMouseOut(this.currentEvent)
+          this.config.onPointMouseOut(event)
         }
-        this.store.hoveredPoint = undefined
 
         // Clear link hover state and trigger callback if needed
         if (this.store.hoveredLinkIndex !== undefined && this.config.onLinkMouseOut) {
-          this.config.onLinkMouseOut()
+          this.config.onLinkMouseOut(event)
         }
+
+        // Reset right-click flag
+        this.isRightClickMouse = false
+
+        // Clear hover states
+        this.store.hoveredPoint = undefined
         this.store.hoveredLinkIndex = undefined
 
         // Update cursor style after clearing hover states
@@ -1479,7 +1485,7 @@ export class Graph {
       const wasHovered = this.store.hoveredLinkIndex !== undefined
       this.store.hoveredLinkIndex = undefined
       if (wasHovered && this.config.onLinkMouseOut) {
-        this.config.onLinkMouseOut()
+        this.config.onLinkMouseOut(this.currentEvent)
       }
     }
 
@@ -1522,7 +1528,7 @@ export class Graph {
     if (this.store.hoveredPoint) {
       if (this.store.hoveredLinkIndex !== undefined) {
         this.store.hoveredLinkIndex = undefined
-        this.config.onLinkMouseOut?.()
+        this.config.onLinkMouseOut?.(this.currentEvent)
       }
       return
     }
@@ -1544,7 +1550,7 @@ export class Graph {
     if (isMouseover && this.store.hoveredLinkIndex !== undefined) {
       this.config.onLinkMouseOver?.(this.store.hoveredLinkIndex)
     }
-    if (isMouseout) this.config.onLinkMouseOut?.()
+    if (isMouseout) this.config.onLinkMouseOut?.(this.currentEvent)
   }
 
   private updateCanvasCursor (): void {

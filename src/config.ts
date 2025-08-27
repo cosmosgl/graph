@@ -427,10 +427,11 @@ export interface GraphConfigInterface {
 
   /**
    * Callback function that will be called when the mouse moves out of a link.
-   * `() => void`.
+   * The event will be passed as the first argument:
+   * `(event: MouseEvent | D3ZoomEvent<HTMLCanvasElement, undefined> | D3DragEvent<HTMLCanvasElement, undefined, Hovered> | undefined) => void`.
    * Default value: `undefined`
    */
-  onLinkMouseOut?: () => void;
+  onLinkMouseOut?: (event: MouseEvent | D3ZoomEvent<HTMLCanvasElement, undefined> | D3DragEvent<HTMLCanvasElement, undefined, Hovered> | undefined) => void;
 
   /**
    * Callback function that will be called when zooming or panning starts.
