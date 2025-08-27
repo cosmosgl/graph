@@ -3,6 +3,7 @@ import { mat3 } from 'gl-matrix'
 import { Random } from 'random'
 import { getRgbaColor, rgbToBrightness } from '@/graph/helper'
 import { hoveredPointRingOpacity, focusedPointRingOpacity, defaultConfigValues } from '@/graph/variables'
+import type { GraphConfigInterface } from '@/graph/config'
 
 export const ALPHA_MIN = 0.001
 export const MAX_POINT_SIZE = 64
@@ -46,6 +47,8 @@ export class Store {
   public greyoutPointColor = [-1, -1, -1, -1]
   // If backgroundColor is dark, isDarkenGreyout is true
   public isDarkenGreyout = false
+  // Whether link hovering is enabled based on configured event handlers
+  public isLinkHoveringEnabled = false
   private alphaTarget = 0
   private scalePointX = scaleLinear()
   private scalePointY = scaleLinear()
@@ -135,6 +138,10 @@ export class Store {
     this.greyoutPointColor[1] = convertedRgba[1]
     this.greyoutPointColor[2] = convertedRgba[2]
     this.greyoutPointColor[3] = convertedRgba[3]
+  }
+
+  public updateLinkHoveringEnabled (config: Pick<GraphConfigInterface, 'onLinkClick' | 'onLinkMouseOver' | 'onLinkMouseOut'>): void {
+    this.isLinkHoveringEnabled = !!(config.onLinkClick || config.onLinkMouseOver || config.onLinkMouseOut)
   }
 
   public setHoveredLinkColor (color: string | [number, number, number, number]): void {
