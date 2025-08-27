@@ -1079,7 +1079,8 @@ export class Graph {
   }
 
   /**
-   * Pause the simulation.
+   * Pause the simulation. When paused, the simulation stops running
+   * and can be resumed using the restart method.
    */
   public pause (): void {
     if (this._isDestroyed) return
@@ -1088,7 +1089,8 @@ export class Graph {
   }
 
   /**
-   * Restart the simulation.
+   * Restart/Resume the simulation. This method unpauses a paused
+   * simulation and resumes its execution.
    */
   public restart (): void {
     if (this._isDestroyed) return
@@ -1513,7 +1515,7 @@ export class Graph {
       if (this.store.hoveredLinkIndex !== hoveredLineIndex) isMouseover = true
       this.store.hoveredLinkIndex = hoveredLineIndex
     } else {
-      if (this.store.hoveredLinkIndex) isMouseout = true
+      if (this.store.hoveredLinkIndex !== undefined) isMouseout = true
       this.store.hoveredLinkIndex = undefined
     }
 

@@ -11,7 +11,7 @@ uniform sampler2D pointGreyoutStatus;
 uniform mat3 transformationMatrix;
 uniform float pointsTextureSize;
 uniform float widthScale;
-uniform float arrowSizeScale;
+uniform float linkArrowsSizeScale;
 uniform float spaceSize;
 uniform vec2 screenSize;
 uniform vec2 linkVisibilityDistanceRange;
@@ -110,7 +110,7 @@ void main() {
   float k = 2.0;
   // Arrow width is proportionally larger than the line width
   float arrowWidth = linkWidth * k;
-  arrowWidth *= arrowSizeScale;
+  arrowWidth *= linkArrowsSizeScale;
 
   // Ensure arrow width difference is non-negative to prevent unwanted changes to link width
   float arrowWidthDifference = max(0.0, arrowWidth - linkWidth);

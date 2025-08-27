@@ -14,7 +14,7 @@ export const defaultConfigValues = {
   spaceSize: 8192,
   pointSizeScale: 1,
   linkWidthScale: 1,
-  arrowSizeScale: 1,
+  linkArrowsSizeScale: 1,
   renderLinks: true,
   curvedLinks: false,
   curvedLinkSegments: 19,

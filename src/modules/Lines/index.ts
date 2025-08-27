@@ -93,7 +93,7 @@ export class Lines extends CoreModule {
           transformationMatrix: () => store.transform,
           pointsTextureSize: () => store.pointsTextureSize,
           widthScale: () => config.linkWidthScale,
-          arrowSizeScale: () => config.linkArrowsSizeScale,
+          linkArrowsSizeScale: () => config.linkArrowsSizeScale,
           spaceSize: () => store.adjustedSpaceSize,
           screenSize: () => store.screenSize,
           linkVisibilityDistanceRange: () => config.linkVisibilityDistanceRange,
@@ -114,6 +114,15 @@ export class Lines extends CoreModule {
           enable: true,
           face: 'back',
         },
+        /**
+         * Blending behavior for link index rendering (renderMode: 1.0 - hover detection):
+         *
+         * When rendering link indices to the framebuffer, we use full opacity (1.0).
+         * This means:
+         * - The source color completely overwrites the destination
+         * - No blending occurs - it's like drawing with a permanent marker
+         * - This preserves the exact index values we need for picking/selection
+         */
         blend: {
           enable: true,
           func: {

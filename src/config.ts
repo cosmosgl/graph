@@ -427,8 +427,7 @@ export interface GraphConfigInterface {
 
   /**
    * Callback function that will be called when the mouse moves out of a link.
-   * The link index will be passed as the first argument:
-   * `(linkIndex: number) => void`.
+   * `() => void`.
    * Default value: `undefined`
    */
   onLinkMouseOut?: () => void;
@@ -623,7 +622,7 @@ export class GraphConfig implements GraphConfigInterface {
   public curvedLinkWeight = defaultConfigValues.curvedLinkWeight
   public curvedLinkControlPointDistance = defaultConfigValues.curvedLinkControlPointDistance
   public linkArrows = defaultConfigValues.linkArrows
-  public linkArrowsSizeScale = defaultConfigValues.arrowSizeScale
+  public linkArrowsSizeScale = defaultConfigValues.linkArrowsSizeScale
   public scaleLinksOnZoom = defaultConfigValues.scaleLinksOnZoom
   public linkVisibilityDistanceRange = defaultConfigValues.linkVisibilityDistanceRange
   public linkVisibilityMinTransparency = defaultConfigValues.linkVisibilityMinTransparency
