@@ -142,6 +142,9 @@ export class Store {
 
   public updateLinkHoveringEnabled (config: Pick<GraphConfigInterface, 'onLinkClick' | 'onLinkMouseOver' | 'onLinkMouseOut'>): void {
     this.isLinkHoveringEnabled = !!(config.onLinkClick || config.onLinkMouseOver || config.onLinkMouseOut)
+    if (!this.isLinkHoveringEnabled) {
+      this.hoveredLinkIndex = undefined
+    }
   }
 
   public setHoveredLinkColor (color: string | [number, number, number, number]): void {
