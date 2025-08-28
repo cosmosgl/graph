@@ -38,14 +38,14 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement} => {
     simulationRepulsion: 0.2,
     simulationGravity: 0.1,
     simulationDecay: 100000,
-    onClick: (index: number | undefined): void => {
-      if (index !== undefined) {
-        graph.selectPointByIndex(index)
-        graph.zoomToPointByIndex(index)
-      } else {
-        graph.unselectPoints()
-      }
+    onPointClick: (index: number): void => {
+      graph.selectPointByIndex(index)
+      graph.zoomToPointByIndex(index)
       console.log('Clicked point index: ', index)
+    },
+    onBackgroundClick: (): void => {
+      graph.unselectPoints()
+      console.log('Clicked background')
     },
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
   })

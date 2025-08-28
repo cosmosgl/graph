@@ -17,10 +17,8 @@ export const polygonSelection = (): {div: HTMLDivElement; graph: Graph; destroy:
     pointSize: 8,
     backgroundColor: '#1a1a2e',
     pointGreyoutOpacity: 0.2,
-    onClick: (index: number | undefined): void => {
-      if (index === undefined) {
-        graph.unselectPoints()
-      }
+    onBackgroundClick: (): void => {
+      graph.unselectPoints()
     },
   })
 

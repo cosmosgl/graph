@@ -389,6 +389,16 @@ export interface GraphConfigInterface {
   ) => void;
 
   /**
+   * Callback function that will be called when the background (empty space) is clicked.
+   * The mouse event will be passed as the first argument:
+   * `(event: MouseEvent) => void`.
+   * Default value: `undefined`
+   */
+  onBackgroundClick?: (
+    event: MouseEvent
+  ) => void;
+
+  /**
    * Callback function that will be called when mouse movement happens.
    * If the mouse moves over a point, its index will be passed as the first argument,
    * position as the second argument and the corresponding mouse event as the third argument:
@@ -659,6 +669,7 @@ export class GraphConfig implements GraphConfigInterface {
   public onClick: GraphConfigInterface['onClick'] = undefined
   public onPointClick: GraphConfigInterface['onPointClick'] = undefined
   public onLinkClick: GraphConfigInterface['onLinkClick'] = undefined
+  public onBackgroundClick: GraphConfigInterface['onBackgroundClick'] = undefined
   public onMouseMove: GraphConfigInterface['onMouseMove'] = undefined
   public onPointMouseOver: GraphConfigInterface['onPointMouseOver'] = undefined
   public onPointMouseOut: GraphConfigInterface['onPointMouseOut'] = undefined

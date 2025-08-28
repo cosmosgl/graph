@@ -18,7 +18,8 @@ export const quickStart = (): { graph: Graph; div: HTMLDivElement} => {
     fitViewPadding: 0.3, // centers the graph width padding of ~30% of screen
     rescalePositions: true, // rescale positions
     enableDrag: true, // enable dragging points
-    onClick: pointIndex => { console.log('Clicked point index: ', pointIndex) },
+    onPointClick: pointIndex => { console.log('Clicked point index: ', pointIndex) },
+    onBackgroundClick: () => { console.log('Clicked background') },
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
   /* ... */
   }

@@ -22,7 +22,7 @@ export const removePoints = (): { graph: Graph; div: HTMLDivElement} => {
 
   const graph = new Graph(graphDiv, {
     ...config,
-    onClick: (i): void => {
+    onPointClick: (i): void => {
       if (i !== undefined) {
         // Filter out the clicked point from positions array
         const currentPositions = graph.getPointPositions()

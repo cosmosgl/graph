@@ -194,14 +194,13 @@ export const imageExample = async (): Promise<{div: HTMLDivElement; graph: Graph
       renderHoveredPointRing: true,
 
       // Add click handler for point and background selection
-      onClick: (pointIndex: number | undefined): void => {
-        if (pointIndex !== undefined) {
-          // Use built-in functionality to select the clicked point and its neighbors
-          graph.selectPointByIndex(pointIndex, true)
-        } else {
-          // Clear selection when clicking on background
-          graph.unselectPoints()
-        }
+      onPointClick: (pointIndex: number): void => {
+        // Use built-in functionality to select the clicked point and its neighbors
+        graph.selectPointByIndex(pointIndex, true)
+      },
+      onBackgroundClick: (): void => {
+        // Clear selection when clicking on background
+        graph.unselectPoints()
       },
     })
 

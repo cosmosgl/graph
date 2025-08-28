@@ -1399,6 +1399,10 @@ export class Graph {
         this.store.hoveredLinkIndex,
         event
       )
+    } else {
+      this.config.onBackgroundClick?.(
+        event
+      )
     }
   }
 
