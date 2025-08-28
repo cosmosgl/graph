@@ -27,7 +27,7 @@ export const defaultConfigValues = {
   hoveredLinkCursor: 'auto',
   renderHoveredPointRing: false,
   hoveredPointRingColor: 'white',
-  hoveredLinkColor: '#ff3333',
+  hoveredLinkColor: undefined,
   hoveredLinkWidthIncrease: 2,
   focusedPointRingColor: 'white',
   focusedPointIndex: undefined,

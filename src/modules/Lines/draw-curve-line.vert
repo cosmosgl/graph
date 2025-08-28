@@ -161,8 +161,8 @@ void main() {
   // Pass final color to fragment shader
   rgbaColor = vec4(rgbColor, opacity);
 
-  // Apply hover color if this is the hovered link
-  if (hoveredLinkIndex == linkIndex) {
+  // Apply hover color if this is the hovered link and hover color is defined
+  if (hoveredLinkIndex == linkIndex && hoveredLinkColor.a > -0.5) {
     // Keep existing RGB values but multiply opacity with hover color opacity
     rgbaColor.rgb = hoveredLinkColor.rgb;
     rgbaColor.a *= hoveredLinkColor.a;

@@ -168,7 +168,7 @@ export interface GraphConfigInterface {
    * The color to use for links when they are hovered.
    * This can be either a hex color string (e.g., '#ff3333') or an array of RGBA values
    * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255.
-   * Default value: '#ff3333'
+   * Default value: `undefined`
    */
   hoveredLinkColor?: string | [number, number, number, number];
   /**
