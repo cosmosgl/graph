@@ -343,9 +343,15 @@ export interface GraphConfigInterface {
   onSimulationPause?: () => void;
   /**
    * Callback function that will be called when the simulation is restarted.
+   * @deprecated Use `onSimulationUnpause` instead. This callback will be removed in a future version.
    * Default value: `undefined`
    */
   onSimulationRestart?: () => void;
+  /**
+   * Callback function that will be called when the simulation is unpaused.
+   * Default value: `undefined`
+   */
+  onSimulationUnpause?: () => void;
 
   /**
    * Callback function that will be called on every canvas click.
@@ -648,6 +654,7 @@ export class GraphConfig implements GraphConfigInterface {
   public onSimulationEnd: GraphConfigInterface['onSimulationEnd'] = undefined
   public onSimulationPause: GraphConfigInterface['onSimulationPause'] = undefined
   public onSimulationRestart: GraphConfigInterface['onSimulationRestart'] = undefined
+  public onSimulationUnpause: GraphConfigInterface['onSimulationUnpause'] = undefined
 
   public onClick: GraphConfigInterface['onClick'] = undefined
   public onPointClick: GraphConfigInterface['onPointClick'] = undefined

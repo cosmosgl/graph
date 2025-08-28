@@ -89,7 +89,8 @@ cosmos.gl layout algorithm was inspired by the [d3-force](https://github.com/d3/
 | onSimulationTick | Called on every simulation tick, with the current alpha value and hover information |
 | onSimulationEnd | Called when simulation stops |
 | onSimulationPause | Called when simulation pauses |
-| onSimulationRestart | Called when simulation restarts |
+| onSimulationUnpause | Called when simulation unpauses |
+| onSimulationRestart | **[DEPRECATED]** Called when simulation restarts. Use `onSimulationUnpause` instead |
 | onClick | Called on canvas click with point index and position |
 | onPointClick | Called when a point is clicked |
 | onLinkClick | Called when a link is clicked |

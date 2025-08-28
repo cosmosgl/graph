@@ -71,18 +71,28 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement} => {
     graph.pause()
   }
 
-  function start (): void {
+  function unpause (): void {
     isPaused = false
     pauseButton.textContent = 'Pause'
-    graph.start()
+    // if the graph is at 100% progress, start the graph
+    if (graph.progress === 1) {
+      graph.start()
+    } else {
+      graph.unpause()
+    }
   }
 
   function togglePause (): void {
-    if (isPaused) start()
+    if (isPaused) unpause()
     else pause()
   }
 
   pauseButton.addEventListener('click', togglePause)
+  graph.setConfig({
+    onSimulationEnd: (): void => {
+      pause()
+    },
+  })
 
   // Zoom and Select
   function getRandomPointIndex (): number {

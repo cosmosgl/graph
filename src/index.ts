@@ -1097,7 +1097,7 @@ export class Graph {
 
   /**
    * Pause the simulation. When paused, the simulation stops running
-   * and can be resumed using the restart method.
+   * and can be resumed using the unpause method.
    */
   public pause (): void {
     if (this._isDestroyed) return
@@ -1106,8 +1106,19 @@ export class Graph {
   }
 
   /**
+   * Unpause the simulation. This method resumes a paused
+   * simulation and continues its execution.
+   */
+  public unpause (): void {
+    if (this._isDestroyed) return
+    this.store.isSimulationRunning = true
+    this.config.onSimulationUnpause?.()
+  }
+
+  /**
    * Restart/Resume the simulation. This method unpauses a paused
    * simulation and resumes its execution.
+   * @deprecated Use `unpause()` instead. This method will be removed in a future version.
    */
   public restart (): void {
     if (this._isDestroyed) return
