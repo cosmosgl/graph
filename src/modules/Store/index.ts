@@ -114,14 +114,14 @@ export class Store {
     return this.scalePointY(y)
   }
 
-  public setHoveredPointRingColor (color: string): void {
+  public setHoveredPointRingColor (color: string | [number, number, number, number]): void {
     const convertedRgba = getRgbaColor(color)
     this.hoveredPointRingColor[0] = convertedRgba[0]
     this.hoveredPointRingColor[1] = convertedRgba[1]
     this.hoveredPointRingColor[2] = convertedRgba[2]
   }
 
-  public setFocusedPointRingColor (color: string): void {
+  public setFocusedPointRingColor (color: string | [number, number, number, number]): void {
     const convertedRgba = getRgbaColor(color)
     this.focusedPointRingColor[0] = convertedRgba[0]
     this.focusedPointRingColor[1] = convertedRgba[1]

@@ -51,7 +51,7 @@ export class Graph {
   private currentEvent: D3ZoomEvent<HTMLCanvasElement, undefined> | D3DragEvent<HTMLCanvasElement, undefined, Hovered> | MouseEvent | undefined
   /**
    * The value of `_findHoveredItemExecutionCount` is incremented by 1 on each animation frame.
-   * When the counter reaches 2 (or more), it is reset to 0 and the `findHoveredPoint` or `findHoveredLine` method is executed.
+   * When the counter reaches MAX_HOVER_DETECTION_DELAY (default 4), it is reset to 0 and the `findHoveredPoint` or `findHoveredLine` method is executed.
    */
   private _findHoveredItemExecutionCount = 0
   /**
