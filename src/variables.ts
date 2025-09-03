@@ -28,7 +28,7 @@ export const defaultConfigValues = {
   renderHoveredPointRing: false,
   hoveredPointRingColor: 'white',
   hoveredLinkColor: undefined,
-  hoveredLinkWidthIncrease: 2,
+  hoveredLinkWidthIncrease: 5,
   focusedPointRingColor: 'white',
   focusedPointIndex: undefined,
   useClassicQuadtree: false,
