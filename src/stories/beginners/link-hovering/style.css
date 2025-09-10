@@ -1,0 +1,73 @@
+/* Enhanced styling for the link hovering demo */
+
+.company-network {
+  background: radial-gradient(circle at 50% 50%, #1a1a2e 0%, #0a0a0a 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.info-panel {
+  backdrop-filter: blur(12px);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.info-panel:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.6), 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+
+.relationship-type-indicator {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.relationship-type-indicator.management {
+  background: linear-gradient(45deg, #FFAD6B, #FF8A65);
+  box-shadow: 0 2px 8px rgba(255, 173, 107, 0.4);
+}
+
+.relationship-type-indicator.collaboration {
+  background: linear-gradient(45deg, #59C0FF, #42A5F5);
+  box-shadow: 0 2px 8px rgba(89, 192, 255, 0.4);
+}
+
+.relationship-type-indicator.mentorship {
+  background: linear-gradient(45deg, #6BD17B, #66BB6A);
+  box-shadow: 0 2px 8px rgba(107, 209, 123, 0.4);
+}
+
+.relationship-type-indicator.friendship {
+  background: linear-gradient(45deg, #FF61AD, #EC407A);
+  box-shadow: 0 2px 8px rgba(255, 97, 173, 0.4);
+}
+
+.person-card {
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 6px 0;
+  border-left: 3px solid transparent;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: all 0.2s ease;
+}
+
+.person-card.highlighted {
+  border-left-color: #59C0FF;
+  background: rgba(89, 192, 255, 0.08);
+  box-shadow: 0 4px 16px rgba(89, 192, 255, 0.15);
+}
+
+/* Modern color scheme variables */
+:root {
+  --cosmos-orange: #FFAD6B;
+  --cosmos-blue: #59C0FF;
+  --cosmos-green: #6BD17B;
+  --cosmos-pink: #FF61AD;
+  --cosmos-gray: #C7CDD1;
+  --cosmos-dark-bg: rgba(16, 20, 40, 0.95);
+  --cosmos-card-bg: rgba(255, 255, 255, 0.03);
+  --cosmos-border: rgba(255, 255, 255, 0.08);
+}

@@ -6,6 +6,7 @@ import { quickStart } from './beginners/quick-start'
 import { basicSetUp } from './beginners/basic-set-up'
 import { pointLabels } from './beginners/point-labels'
 import { removePoints } from './beginners/remove-points'
+import { linkHovering } from './beginners/link-hovering'
 
 import quickStartStoryRaw from './beginners/quick-start?raw'
 import basicSetUpStoryRaw from './beginners/basic-set-up/index?raw'
@@ -19,6 +20,9 @@ import removePointsStoryRaw from './beginners/remove-points/index?raw'
 import removePointsStoryCssRaw from './beginners/remove-points/style.css?raw'
 import removePointsStoryConfigRaw from './beginners/remove-points/config.ts?raw'
 import removePointsStoryDataGenRaw from './beginners/remove-points/data-gen.ts?raw'
+import linkHoveringStoryRaw from './beginners/link-hovering/index?raw'
+import linkHoveringStoryDataGenRaw from './beginners/link-hovering/data-generator.ts?raw'
+import linkHoveringStoryCssRaw from './beginners/link-hovering/style.css?raw'
 
 // More on how to set up stories at: https://storybook.js.org/docs/writing-stories#default-export
 const meta: Meta<CosmosStoryProps> = {
@@ -96,5 +100,18 @@ export const RemovePoints: Story = {
     ],
   },
 }
+
+export const LinkHovering: Story = {
+  ...createStory(linkHovering),
+  name: 'Link Hovering',
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: linkHoveringStoryRaw },
+      { name: 'data-generator.ts', code: linkHoveringStoryDataGenRaw },
+      { name: 'style.css', code: linkHoveringStoryCssRaw },
+    ],
+  },
+}
+
 // eslint-disable-next-line import/no-default-export
 export default meta
