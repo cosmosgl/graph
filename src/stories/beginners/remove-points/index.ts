@@ -23,39 +23,37 @@ export const removePoints = (): { graph: Graph; div: HTMLDivElement} => {
   const graph = new Graph(graphDiv, {
     ...config,
     onPointClick: (i): void => {
-      if (i !== undefined) {
-        // Filter out the clicked point from positions array
-        const currentPositions = graph.getPointPositions()
-        const newPointPositions = currentPositions
-          .filter((pos, posIndex) => {
-            return (
-              (posIndex % 2 === 0 && posIndex !== i * 2) ||
+      // Filter out the clicked point from positions array
+      const currentPositions = graph.getPointPositions()
+      const newPointPositions = currentPositions
+        .filter((pos, posIndex) => {
+          return (
+            (posIndex % 2 === 0 && posIndex !== i * 2) ||
             (posIndex % 2 === 1 && posIndex !== i * 2 + 1)
-            )
-          })
-
-        // Convert links array to source-target pairs for easier filtering
-        const pairedNumbers = []
-        for (let j = 0; j < graphLinks.length; j += 2) {
-          const pair = [graphLinks[j], graphLinks[j + 1]]
-          pairedNumbers.push(pair)
-        }
-
-        // Remove links connected to deleted point and adjust indices of remaining links
-        graphLinks = (pairedNumbers
-          .filter(
-            ([sourceIndex, targetIndex]) => sourceIndex !== i && targetIndex !== i
           )
-          .flat() as number[])
-          .map((p) => {
-            if (p > i) return p - 1
-            else return p
-          })
+        })
 
-        graph.setPointPositions(new Float32Array(newPointPositions))
-        graph.setLinks(new Float32Array(graphLinks))
-        graph.render(isPaused ? 0 : undefined)
+      // Convert links array to source-target pairs for easier filtering
+      const pairedNumbers = []
+      for (let j = 0; j < graphLinks.length; j += 2) {
+        const pair = [graphLinks[j], graphLinks[j + 1]]
+        pairedNumbers.push(pair)
       }
+
+      // Remove links connected to deleted point and adjust indices of remaining links
+      graphLinks = (pairedNumbers
+        .filter(
+          ([sourceIndex, targetIndex]) => sourceIndex !== i && targetIndex !== i
+        )
+        .flat() as number[])
+        .map((p) => {
+          if (p > i) return p - 1
+          else return p
+        })
+
+      graph.setPointPositions(new Float32Array(newPointPositions))
+      graph.setLinks(new Float32Array(graphLinks))
+      graph.render(isPaused ? 0 : undefined)
       console.log('Clicked node: ', i)
     },
   })

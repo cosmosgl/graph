@@ -174,7 +174,7 @@ export interface GraphConfigInterface {
   /**
    * Number of pixels to add to the link width when hovered.
    * The hovered width is calculated as: originalWidth + hoveredLinkWidthIncrease
-   * Default value: `2`
+   * Default value: `5`
    */
   hoveredLinkWidthIncrease?: number;
   /**
