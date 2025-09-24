@@ -1606,3 +1606,5 @@ export type { GraphConfigInterface } from './config'
 export { PointShape } from './modules/GraphData'
 
 export * from './helper'
+
+export * from './webgpu-experiments/compute'
