@@ -107,7 +107,6 @@ export const helloLumagl = async (): Promise<{ div: HTMLDivElement; destroy: () 
   // Get device and position buffer from ComputeManager (for potential future use)
   const device = computeManager.getDevice()
   const positionBuffer = computeManager.getPositionBuffer()
-  computeManager.getPositionBuffer()
 
   // Create the onTick callback that runs the physics step
   const onTick: OnTickCallback = async () => {
@@ -133,6 +132,7 @@ export const helloLumagl = async (): Promise<{ div: HTMLDivElement; destroy: () 
     positionBuffer,
     instanceCount: INSTANCE_COUNT,
     onTick,
+    scalePointSizeWithZoom: false, // Points stay same size when zooming (better for data visualization)
   }
 
   // Create and initialize the application

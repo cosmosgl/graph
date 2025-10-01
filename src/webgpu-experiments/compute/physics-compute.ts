@@ -1,6 +1,6 @@
-import {Buffer, Device, ComputePipeline} from '@luma.gl/core';
+import { Buffer, Device, ComputePipeline } from '@luma.gl/core'
 
-const WORKGROUP_SIZE = 64;
+const WORKGROUP_SIZE = 64
 
 const physicsComputeShaderSource = /* wgsl */ `\
 struct PhysicsParams {
@@ -86,7 +86,7 @@ fn main(@builtin(global_invocation_id) globalId: vec3<u32>) {
   diskVelocities[2u * index] = velocityX;
   diskVelocities[2u * index + 1u] = velocityY;
 }
-`;
+`
 
 export interface PhysicsComputeConfig {
   device: Device;
@@ -99,119 +99,119 @@ export interface PhysicsComputeConfig {
 }
 
 export class PhysicsCompute {
-  private device: Device;
-  private instanceCount: number;
-  private velocityBuffer: Buffer;
-  private positionBuffer: Buffer;
-  private computePipeline: ComputePipeline;
-  private paramsBuffer: Buffer;
-  private bindingsSet: boolean = false;
+  private device: Device
+  private instanceCount: number
+  private velocityBuffer: Buffer
+  private positionBuffer: Buffer
+  private computePipeline: ComputePipeline
+  private paramsBuffer: Buffer
+  private isBindingsSet: boolean = false
 
-  constructor(config: PhysicsComputeConfig) {
+  public constructor (config: PhysicsComputeConfig) {
     const {
-      device, 
-      instanceCount, 
-      velocityBuffer, 
+      device,
+      instanceCount,
+      velocityBuffer,
       positionBuffer,
       jiggleStrength = 0.01,
       springConstant = 0.05,
-      dampingFactor = 0.02
-    } = config;
-    
-    this.device = device;
-    this.instanceCount = instanceCount;
-    this.velocityBuffer = velocityBuffer;
-    this.positionBuffer = positionBuffer;
+      dampingFactor = 0.02,
+    } = config
+
+    this.device = device
+    this.instanceCount = instanceCount
+    this.velocityBuffer = velocityBuffer
+    this.positionBuffer = positionBuffer
 
     // Create physics params buffer with new spring parameters
     const physicsParamsData = new Float32Array([
-      instanceCount, 
+      instanceCount,
       1.0, // physicsStrength
       jiggleStrength, // jiggleStrength
       0.0, // time
       springConstant, // springConstant
-      dampingFactor // dampingFactor
-    ]);
+      dampingFactor, // dampingFactor
+    ])
     this.paramsBuffer = device.createBuffer({
       data: physicsParamsData,
-      usage: Buffer.UNIFORM | Buffer.COPY_DST
-    });
+      usage: Buffer.UNIFORM | Buffer.COPY_DST,
+    })
 
     // Create compute shader and pipeline
     const computeShader = device.createShader({
       stage: 'compute',
-      source: physicsComputeShaderSource
-    });
-    
+      source: physicsComputeShaderSource,
+    })
+
     const shaderLayout = {
       bindings: [
         {
-          type: 'storage' as const, 
+          type: 'storage' as const,
           name: 'diskVelocities',
           group: 0,
-          location: 0
+          location: 0,
         },
         {
           type: 'storage' as const,
           name: 'diskPositions',
           group: 0,
-          location: 1
+          location: 1,
         },
         {
           type: 'uniform' as const,
           name: 'params',
           group: 0,
-          location: 2
-        }
-      ]
-    };
-    
+          location: 2,
+        },
+      ],
+    }
+
     this.computePipeline = device.createComputePipeline({
       shader: computeShader,
       entryPoint: 'main',
-      shaderLayout
-    });
+      shaderLayout,
+    })
   }
 
-  updateParams(
-    strength: number, 
-    jiggleStrength?: number, 
+  public updateParams (
+    strength: number,
+    jiggleStrength?: number,
     time?: number,
     springConstant?: number,
     dampingFactor?: number
   ): void {
     const paramsData = new Float32Array([
-      this.instanceCount, 
+      this.instanceCount,
       strength,
       jiggleStrength ?? 0.01, // Keep current jiggle strength if not provided
       time ?? 0.0, // Keep current time if not provided
       springConstant ?? 0.05, // Keep current spring constant if not provided
-      dampingFactor ?? 0.02 // Keep current damping factor if not provided
-    ]);
-    this.paramsBuffer.write(paramsData, 0);
+      dampingFactor ?? 0.02, // Keep current damping factor if not provided
+    ])
+    this.paramsBuffer.write(paramsData, 0)
   }
 
-  execute(): void {
-    if (!this.bindingsSet) {
+  public execute (): void {
+    if (!this.isBindingsSet) {
       this.computePipeline.setBindings({
         diskVelocities: this.velocityBuffer,
         diskPositions: this.positionBuffer,
-        params: this.paramsBuffer
-      });
-      this.bindingsSet = true;
+        params: this.paramsBuffer,
+      })
+      this.isBindingsSet = true
     }
 
-    const commandEncoder = this.device.createCommandEncoder();
-    const computePass = commandEncoder.beginComputePass({});
-    
-    computePass.setPipeline(this.computePipeline);
-    computePass.dispatch(Math.ceil(this.instanceCount / WORKGROUP_SIZE));
-    
-    computePass.end();
-    this.device.submit(commandEncoder.finish());
+    const commandEncoder = this.device.createCommandEncoder()
+    const computePass = commandEncoder.beginComputePass({})
+
+    computePass.setPipeline(this.computePipeline)
+    computePass.dispatch(Math.ceil(this.instanceCount / WORKGROUP_SIZE))
+
+    computePass.end()
+    this.device.submit(commandEncoder.finish())
   }
 
-  destroy(): void {
-    this.paramsBuffer.destroy();
+  public destroy (): void {
+    this.paramsBuffer.destroy()
   }
 }

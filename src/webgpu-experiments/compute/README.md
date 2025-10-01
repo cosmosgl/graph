@@ -10,10 +10,10 @@ This module contains all compute-related logic for the bouncing disks simulation
 
 The compute module is organized as follows:
 
-- **`ComputeManager.ts`** - Main manager class that orchestrates all compute operations
-- **`VelocityPositionCompute.ts`** - Handles position updates based on velocity
-- **`PhysicsCompute.ts`** - Implements collision detection and spring physics
-- **`GravityCompute.ts`** - Implements gravitational forces between particles
+- **`compute-manager.ts`** - Main manager class that orchestrates all compute operations
+- **`velocity-position-compute.ts`** - Handles position updates based on velocity
+- **`physics-compute.ts`** - Implements collision detection and spring physics
+- **`gravity-compute.ts`** - Implements gravitational forces between particles
 - **`index.ts`** - Module entry point that exports all public classes and types
 
 ## Usage

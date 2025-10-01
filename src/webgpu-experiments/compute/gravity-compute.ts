@@ -1,6 +1,6 @@
-import {Buffer, Device, ComputePipeline} from '@luma.gl/core';
+import { Buffer, Device, ComputePipeline } from '@luma.gl/core'
 
-const WORKGROUP_SIZE = 64;
+const WORKGROUP_SIZE = 64
 
 const gravityComputeShaderSource = /* wgsl */ `\
 struct GravityParams {
@@ -56,7 +56,7 @@ fn main(@builtin(global_invocation_id) globalId: vec3<u32>) {
   diskVelocities[2u * index] = velocityX;
   diskVelocities[2u * index + 1u] = velocityY;
 }
-`;
+`
 
 export interface GravityComputeConfig {
   device: Device;
@@ -67,101 +67,101 @@ export interface GravityComputeConfig {
 }
 
 export class GravityCompute {
-  private device: Device;
-  private instanceCount: number;
-  private positionBuffer: Buffer;
-  private velocityBuffer: Buffer;
-  private diskRadius: number;
-  private computePipeline: ComputePipeline;
-  private paramsBuffer: Buffer;
-  private bindingsSet: boolean = false;
+  private device: Device
+  private instanceCount: number
+  private positionBuffer: Buffer
+  private velocityBuffer: Buffer
+  private diskRadius: number
+  private computePipeline: ComputePipeline
+  private paramsBuffer: Buffer
+  private isBindingsSet: boolean = false
 
-  constructor(config: GravityComputeConfig) {
-    const {device, instanceCount, positionBuffer, velocityBuffer, diskRadius} = config;
-    
-    this.device = device;
-    this.instanceCount = instanceCount;
-    this.positionBuffer = positionBuffer;
-    this.velocityBuffer = velocityBuffer;
-    this.diskRadius = diskRadius;
+  public constructor (config: GravityComputeConfig) {
+    const { device, instanceCount, positionBuffer, velocityBuffer, diskRadius } = config
+
+    this.device = device
+    this.instanceCount = instanceCount
+    this.positionBuffer = positionBuffer
+    this.velocityBuffer = velocityBuffer
+    this.diskRadius = diskRadius
 
     // Create gravity params buffer
     const gravityParamsData = new Float32Array([
       instanceCount,
       2.0, // gravityStrength
-      diskRadius // diskRadius
-    ]);
+      diskRadius, // diskRadius
+    ])
     this.paramsBuffer = device.createBuffer({
       data: gravityParamsData,
-      usage: Buffer.UNIFORM | Buffer.COPY_DST
-    });
+      usage: Buffer.UNIFORM | Buffer.COPY_DST,
+    })
 
     // Create compute shader and pipeline
     const computeShader = device.createShader({
       stage: 'compute',
-      source: gravityComputeShaderSource
-    });
-    
+      source: gravityComputeShaderSource,
+    })
+
     const shaderLayout = {
       bindings: [
         {
           type: 'storage' as const,
           name: 'diskOffsets',
           group: 0,
-          location: 0
+          location: 0,
         },
         {
-          type: 'storage' as const, 
+          type: 'storage' as const,
           name: 'diskVelocities',
           group: 0,
-          location: 1
+          location: 1,
         },
         {
           type: 'uniform' as const,
           name: 'params',
           group: 0,
-          location: 2
-        }
-      ]
-    };
-    
+          location: 2,
+        },
+      ],
+    }
+
     this.computePipeline = device.createComputePipeline({
       shader: computeShader,
       entryPoint: 'main',
-      shaderLayout
-    });
+      shaderLayout,
+    })
   }
 
-  updateParams(gravityStrength: number): void {
+  public updateParams (gravityStrength: number): void {
     const paramsData = new Float32Array([
       this.instanceCount,
       gravityStrength,
-      this.diskRadius
-    ]);
-    this.paramsBuffer.write(paramsData, 0);
+      this.diskRadius,
+    ])
+    this.paramsBuffer.write(paramsData, 0)
   }
 
-  execute(): void {
-    if (!this.bindingsSet) {
+  public execute (): void {
+    if (!this.isBindingsSet) {
       this.computePipeline.setBindings({
         diskOffsets: this.positionBuffer,
         diskVelocities: this.velocityBuffer,
-        params: this.paramsBuffer
-      });
-      this.bindingsSet = true;
+        params: this.paramsBuffer,
+      })
+      this.isBindingsSet = true
     }
 
-    const commandEncoder = this.device.createCommandEncoder();
-    const computePass = commandEncoder.beginComputePass({});
-    
-    computePass.setPipeline(this.computePipeline);
-    computePass.dispatch(Math.ceil(this.instanceCount / WORKGROUP_SIZE));
-    
-    computePass.end();
-    this.device.submit(commandEncoder.finish());
+    const commandEncoder = this.device.createCommandEncoder()
+    const computePass = commandEncoder.beginComputePass({})
+
+    computePass.setPipeline(this.computePipeline)
+    computePass.dispatch(Math.ceil(this.instanceCount / WORKGROUP_SIZE))
+
+    computePass.end()
+    this.device.submit(commandEncoder.finish())
   }
 
-  destroy(): void {
-    this.paramsBuffer.destroy();
+  public destroy (): void {
+    this.paramsBuffer.destroy()
   }
 }

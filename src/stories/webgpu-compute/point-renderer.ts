@@ -1,12 +1,18 @@
 import { Buffer, Device } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { generateInstanceColors, generateInstanceRadii } from './color-utils'
+import { SharedStore } from './shared-store'
+import { BouncingDisksAppConfig } from './app'
 
 const VERTEX_COUNT = 6 // Simple quad for each disk (2 triangles)
 
 const shaderSource = /* wgsl */ `\
 struct Uniforms {
   screenSize: vec2<f32>,
+  scalePointSizeWithZoom: f32,
+  padding: f32,
+  viewMatrix: mat4x4<f32>,
+  projectionMatrix: mat4x4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -34,12 +40,36 @@ fn vertexMain(inputs: VertexInputs) -> FragmentInputs {
   let normalizedRadiusX = inputs.instanceRadius / (uniforms.screenSize.x * 0.5);
   let normalizedRadiusY = inputs.instanceRadius / (uniforms.screenSize.y * 0.5);
   
-  // Scale the vertex position by normalized radius and add offset
-  let scaledPosition = vec2<f32>(
-    inputs.vertexPosition.x * normalizedRadiusX,
-    inputs.vertexPosition.y * normalizedRadiusY
-  );
-  output.position = vec4<f32>(scaledPosition + inputs.instanceOffset, 0.0, 1.0);
+  // Check if we should scale point size with zoom
+  if (uniforms.scalePointSizeWithZoom > 0.5) {
+    // Original behavior: scale vertices first, then apply view matrix
+    let scaledPosition = vec2<f32>(
+      inputs.vertexPosition.x * normalizedRadiusX,
+      inputs.vertexPosition.y * normalizedRadiusY
+    );
+    
+    // Apply view and projection matrices for zoom/pan
+    let worldPosition = vec4<f32>(scaledPosition + inputs.instanceOffset, 0.0, 1.0);
+    output.position = uniforms.projectionMatrix * uniforms.viewMatrix * worldPosition;
+  } else {
+    // New behavior: apply view matrix first, then scale in screen space
+    // First apply view and projection matrices to the center position (without scaling)
+    let centerPosition = vec4<f32>(inputs.instanceOffset, 0.0, 1.0);
+    let transformedCenter = uniforms.projectionMatrix * uniforms.viewMatrix * centerPosition;
+    
+    // Scale the vertex position by normalized radius (in screen space, not world space)
+    let scaledPosition = vec2<f32>(
+      inputs.vertexPosition.x * normalizedRadiusX,
+      inputs.vertexPosition.y * normalizedRadiusY
+    );
+    
+    // Add the scaled position to the transformed center
+    output.position = vec4<f32>(
+      transformedCenter.xy + scaledPosition,
+      transformedCenter.zw
+    );
+  }
+  
   output.color = vec4<f32>(inputs.instanceColor, 1.0);
   // Pass the local position (before offset) to fragment shader for circle calculation
   output.localPosition = inputs.vertexPosition;
@@ -62,12 +92,6 @@ fn fragmentMain(inputs: FragmentInputs) -> @location(0) vec4<f32> {
 }
 `
 
-export interface PointRendererConfig {
-  device: Device;
-  instanceCount: number;
-  positionBuffer: Buffer;
-}
-
 export class PointRenderer {
   private model: Model
   private vertexBuffer: Buffer
@@ -76,14 +100,21 @@ export class PointRenderer {
   private radiusBuffer: Buffer
   private instanceColors!: Float32Array
   private instanceRadii!: Float32Array
-  private lastScreenWidth: number = 0
-  private lastScreenHeight: number = 0
+  private viewMatrix: Float32Array
+  private projectionMatrix: Float32Array
+  private store: SharedStore
+  private config: BouncingDisksAppConfig
 
-  public constructor (config: PointRendererConfig) {
-    const { device, instanceCount, positionBuffer } = config
+  public constructor (device: Device, config: BouncingDisksAppConfig, store: SharedStore) {
+    this.store = store
+    this.config = config
+
+    // Initialize matrices as identity matrices
+    this.viewMatrix = this.createIdentityMatrix()
+    this.projectionMatrix = this.createIdentityMatrix()
 
     // Generate instance data for colors and radii
-    this.initializeInstanceData(instanceCount)
+    this.initializeInstanceData(config.instanceCount)
 
     // Create instance buffers
     this.colorBuffer = device.createBuffer({
@@ -99,8 +130,8 @@ export class PointRenderer {
     const vertexCoords = this.generateQuadVertices()
     this.vertexBuffer = device.createBuffer(vertexCoords)
 
-    // Create uniform buffer for screen size
-    const uniformData = new Float32Array([0, 0]) // Will be updated in render
+    // Create uniform buffer: screenSize (2 floats) + scalePointSizeWithZoom (1 float) + padding (1 float) + viewMatrix (16 floats) + projectionMatrix (16 floats)
+    const uniformData = new Float32Array(2 + 1 + 1 + 16 + 16) // Total: 36 floats
     this.uniformBuffer = device.createBuffer({
       data: uniformData,
       usage: Buffer.UNIFORM | Buffer.COPY_DST,
@@ -116,7 +147,7 @@ export class PointRenderer {
       ],
       attributes: {
         vertexPosition: this.vertexBuffer,
-        instanceOffset: positionBuffer,
+        instanceOffset: config.positionBuffer,
         instanceColor: this.colorBuffer,
         instanceRadius: this.radiusBuffer,
       },
@@ -124,7 +155,7 @@ export class PointRenderer {
         uniforms: this.uniformBuffer,
       },
       vertexCount: VERTEX_COUNT,
-      instanceCount,
+      instanceCount: config.instanceCount,
       topology: 'triangle-list',
       parameters: {
         depthWriteEnabled: false,
@@ -134,20 +165,42 @@ export class PointRenderer {
   }
 
   public render (device: Device, clearColor: [number, number, number, number] = [1.0, 1.0, 1.0, 1.0]): void {
-    // Update uniform buffer with current screen size (only when changed)
-    const canvas = device.canvasContext?.canvas
-    if (canvas && (canvas.width !== this.lastScreenWidth || canvas.height !== this.lastScreenHeight)) {
-      const screenSize = new Float32Array([canvas.width, canvas.height])
-      this.uniformBuffer.write(screenSize, 0)
-      this.lastScreenWidth = canvas.width
-      this.lastScreenHeight = canvas.height
-    }
+    // Update uniform buffer with current screen size and matrices
+    const [width, height] = this.store.screenSize
+
+    // Create uniform data array
+    const uniformData = new Float32Array(2 + 1 + 1 + 16 + 16)
+    uniformData[0] = width
+    uniformData[1] = height
+    uniformData[2] = this.config.scalePointSizeWithZoom ? 1.0 : 0.0 // scalePointSizeWithZoom
+    // index 3 is padding
+    uniformData.set(this.viewMatrix, 4) // offset 4 for viewMatrix
+    uniformData.set(this.projectionMatrix, 20) // offset 20 for projectionMatrix (4 + 16)
+
+    this.uniformBuffer.write(uniformData, 0)
 
     const renderPass = device.beginRenderPass({
       clearColor,
     })
     this.model.draw(renderPass)
     renderPass.end()
+  }
+
+  // Public methods to update view and projection matrices for zoom/pan
+  public setViewMatrix (matrix: Float32Array): void {
+    this.viewMatrix.set(matrix)
+  }
+
+  public setProjectionMatrix (matrix: Float32Array): void {
+    this.projectionMatrix.set(matrix)
+  }
+
+  public getViewMatrix (): Float32Array {
+    return this.viewMatrix
+  }
+
+  public getProjectionMatrix (): Float32Array {
+    return this.projectionMatrix
   }
 
   public destroy (): void {
@@ -195,6 +248,15 @@ export class PointRenderer {
       -1, -1, // Triangle 2, vertex 1
       1, 1, // Triangle 2, vertex 2
       -1, 1, // Triangle 2, vertex 3
+    ])
+  }
+
+  private createIdentityMatrix (): Float32Array {
+    return new Float32Array([
+      1, 0, 0, 0,
+      0, 1, 0, 0,
+      0, 0, 1, 0,
+      0, 0, 0, 1,
     ])
   }
 }
