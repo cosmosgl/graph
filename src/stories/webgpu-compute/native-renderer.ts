@@ -32,7 +32,11 @@ export class NativePointRenderer {
     this.initializeInstanceData(instanceCount)
   }
 
-  public render (positions: Float32Array, clearColor: [number, number, number, number] = [248, 249, 250, 255]): void {
+  public render (
+    positions: Float32Array,
+    centerMass: { x: number; y: number; count: number },
+    clearColor: [number, number, number, number] = [248, 249, 250, 255]
+  ): void {
     // Get display dimensions (CSS pixels)
     const displayWidth = this.canvas.clientWidth
     const displayHeight = this.canvas.clientHeight
@@ -58,6 +62,15 @@ export class NativePointRenderer {
         this.context.fillStyle = color
         // Scale radius by device pixel ratio to match WebGPU renderer
         this.context.arc(x, y, radius / this.devicePixelRatio, 0, 2 * Math.PI)
+        this.context.fill()
+
+        // Draw center mass
+        this.context.beginPath()
+        const centerX = (centerMass.x + 1) * displayWidth / 2
+        const centerY = (1 - centerMass.y) * displayHeight / 2
+        this.context.fillStyle = '#000000'
+        // console.log(centerX, centerY)
+        this.context.arc(centerX, centerY, 8, 0, 2 * Math.PI)
         this.context.fill()
       }
     }

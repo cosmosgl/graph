@@ -3,6 +3,7 @@ import { webgpuAdapter } from '@luma.gl/webgpu'
 import { VelocityPositionCompute } from './velocity-position-compute'
 import { PhysicsCompute } from './physics-compute'
 import { GravityCompute } from './gravity-compute'
+import { CenterMassCompute } from './centermass-compute'
 
 export interface ComputeManagerConfig {
   canvas?: HTMLCanvasElement;
@@ -17,6 +18,8 @@ export interface ComputeSettings {
   jiggleStrength?: number;
   springConstant?: number;
   dampingFactor?: number;
+  centerMassEnabled?: boolean; // When true, always executes center mass calculation and force
+  centerMassStrength?: number; // Gravity strength for center mass force
 }
 
 export class ComputeManager {
@@ -24,6 +27,7 @@ export class ComputeManager {
   private velocityPositionCompute!: VelocityPositionCompute
   private physicsCompute!: PhysicsCompute
   private gravityCompute!: GravityCompute
+  private centerMassCompute!: CenterMassCompute
   private positionBuffer!: Buffer
   private velocityBuffer!: Buffer
   private instanceCount: number = 0
@@ -90,6 +94,14 @@ export class ComputeManager {
       diskRadius,
     })
 
+    this.centerMassCompute = new CenterMassCompute({
+      device: this.device,
+      instanceCount: this.instanceCount,
+      positionBuffer: this.positionBuffer,
+      velocityBuffer: this.velocityBuffer,
+      strength: 2.0, // Default value
+    })
+
     this.isInitialized = true
   }
 
@@ -123,6 +135,7 @@ export class ComputeManager {
       settings.dampingFactor ?? 0.02
     )
     this.gravityCompute.updateParams(settings.gravityStrength)
+    this.centerMassCompute.updateParams(settings.centerMassStrength ?? 2.0)
 
     // Clean velocity buffer before running physics
     this.cleanVelocityBuffer()
@@ -137,6 +150,13 @@ export class ComputeManager {
     if (settings.physicsEnabled) {
       this.physicsCompute.execute()
       // Apply positions after physics velocity changes
+      this.velocityPositionCompute.execute()
+    }
+
+    // Calculate center mass (and apply force if enabled)
+    if (settings.centerMassEnabled) {
+      this.centerMassCompute.execute()
+      // Apply positions after center mass calculation and force application
       this.velocityPositionCompute.execute()
     }
   }
@@ -160,10 +180,15 @@ export class ComputeManager {
     return new Float32Array(data.buffer, data.byteOffset, data.byteLength / 4)
   }
 
+  public async getCenterMass (): Promise<{ x: number; y: number; count: number }> {
+    return this.centerMassCompute.getCenterMass()
+  }
+
   public destroy (): void {
     this.velocityPositionCompute?.destroy()
     this.physicsCompute?.destroy()
     this.gravityCompute?.destroy()
+    this.centerMassCompute?.destroy()
     this.positionBuffer?.destroy()
     this.velocityBuffer?.destroy()
 

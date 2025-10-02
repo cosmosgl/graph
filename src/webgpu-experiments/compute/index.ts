@@ -3,3 +3,4 @@ export { ComputeManager, type ComputeManagerConfig, type ComputeSettings } from 
 export { VelocityPositionCompute } from './velocity-position-compute'
 export { PhysicsCompute } from './physics-compute'
 export { GravityCompute } from './gravity-compute'
+export { CenterMassCompute } from './centermass-compute'

@@ -113,17 +113,20 @@ export const helloLumagl = async (): Promise<{ div: HTMLDivElement; destroy: () 
     const computeSettings: ComputeSettings = {
       physicsEnabled: true,
       physicsStrength: 0.10,
-      gravityEnabled: true,
+      gravityEnabled: false,
       gravityStrength: 0.1,
       jiggleStrength: 0.02, // Increased for more visible spring jiggle
       springConstant: 0.05, // Spring constant for center attraction
       dampingFactor: 0.02, // Damping to prevent infinite oscillation
+      centerMassEnabled: true,
+      centerMassStrength: 0.5,
     }
     computeManager.update(computeSettings)
 
     // Read positions and render to native canvas
     const positions = await computeManager.readPositions()
-    nativePointRenderer.render(positions)
+    const centerMass = await computeManager.getCenterMass()
+    nativePointRenderer.render(positions, centerMass)
   }
 
   // Create the app configuration
