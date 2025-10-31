@@ -3,9 +3,11 @@ import { GraphConfigInterface } from '@/graph/config'
 import { GraphData } from '@/graph/modules/GraphData'
 import { Points } from '@/graph/modules/Points'
 import { Store } from '@/graph/modules/Store'
+import { Device } from '@luma.gl/core'
 
 export class CoreModule {
   public readonly reglInstance: regl.Regl
+  public readonly device: Device
   public readonly config: GraphConfigInterface
   public readonly store: Store
   public readonly data: GraphData
