@@ -7,9 +7,22 @@ uniform sampler2D centermassTexture;
 uniform sampler2D clusterTexture;
 uniform sampler2D clusterPositionsTexture;
 uniform sampler2D clusterForceCoefficient;
+
+#ifdef USE_UNIFORM_BUFFERS
+layout(std140) uniform ClusterForceUniforms {
+  float alpha;
+  float clustersTextureSize;
+  float clusterCoefficient;
+} clusterForceUniforms;
+
+#define alpha clusterForceUniforms.alpha
+#define clustersTextureSize clusterForceUniforms.clustersTextureSize
+#define clusterCoefficient clusterForceUniforms.clusterCoefficient
+#else
 uniform float alpha;
 uniform float clustersTextureSize;
 uniform float clusterCoefficient;
+#endif
 
 varying vec2 textureCoords;
 

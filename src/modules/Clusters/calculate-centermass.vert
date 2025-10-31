@@ -4,8 +4,19 @@ precision highp float;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D clusterTexture;
+
+#ifdef USE_UNIFORM_BUFFERS
+layout(std140) uniform ClusterCentermassUniforms {
+  float pointsTextureSize;
+  float clustersTextureSize;
+} clusterCentermassUniforms;
+
+#define pointsTextureSize clusterCentermassUniforms.pointsTextureSize
+#define clustersTextureSize clusterCentermassUniforms.clustersTextureSize
+#else
 uniform float pointsTextureSize;
 uniform float clustersTextureSize;
+#endif
 
 attribute vec2 pointIndices;
 
