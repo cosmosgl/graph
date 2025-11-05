@@ -61,6 +61,8 @@ export class Points extends CoreModule {
   private trackedIndices: number[] | undefined
   private selectedTexture: regl.Texture2D | undefined
   private greyoutStatusTexture: regl.Texture2D | undefined
+  private pinnedStatusTexture: regl.Texture2D | undefined
+  private pinnedStatusFbo: regl.Framebuffer2D | undefined
   private sizeTexture: regl.Texture2D | undefined
   private trackedIndicesTexture: regl.Texture2D | undefined
   private polygonPathTexture: regl.Texture2D | undefined
@@ -172,6 +174,7 @@ export class Points extends CoreModule {
     this.sampledPointIndices(createIndexesForBuffer(store.pointsTextureSize))
 
     this.updateGreyoutStatus()
+    this.updatePinnedStatus()
     this.updateSampledPointsGrid()
 
     this.trackPointsByIndices()
@@ -193,6 +196,7 @@ export class Points extends CoreModule {
             velocity: () => this.velocityFbo,
             friction: () => config.simulationFriction,
             spaceSize: () => store.adjustedSpaceSize,
+            pinnedStatusTexture: () => this.pinnedStatusFbo,
           },
         })
       }
@@ -515,6 +519,36 @@ export class Points extends CoreModule {
     if (!this.greyoutStatusFbo) this.greyoutStatusFbo = reglInstance.framebuffer()
     this.greyoutStatusFbo({
       color: this.greyoutStatusTexture,
+      depth: false,
+      stencil: false,
+    })
+  }
+
+  public updatePinnedStatus (): void {
+    const { reglInstance, store: { pointsTextureSize }, data } = this
+    if (!pointsTextureSize) return
+
+    // Pinned status: 0 - not pinned, 1 - pinned
+    const initialState = new Float32Array(pointsTextureSize * pointsTextureSize * 4).fill(0)
+
+    if (data.inputPinnedPoints && data.pointsNumber !== undefined) {
+      for (const pinnedIndex of data.inputPinnedPoints) {
+        if (pinnedIndex >= 0 && pinnedIndex < data.pointsNumber) {
+          initialState[pinnedIndex * 4] = 1
+        }
+      }
+    }
+
+    if (!this.pinnedStatusTexture) this.pinnedStatusTexture = reglInstance.texture()
+    this.pinnedStatusTexture({
+      data: initialState,
+      width: pointsTextureSize,
+      height: pointsTextureSize,
+      type: 'float',
+    })
+    if (!this.pinnedStatusFbo) this.pinnedStatusFbo = reglInstance.framebuffer()
+    this.pinnedStatusFbo({
+      color: this.pinnedStatusTexture,
       depth: false,
       stencil: false,
     })

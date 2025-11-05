@@ -593,6 +593,29 @@ export class Graph {
   }
 
   /**
+   * Sets which points are pinned (fixed) in position.
+   *
+   * Pinned points:
+   * - Do not move due to physics forces (gravity, repulsion, link forces, etc.)
+   * - Still participate in force calculations (other nodes are attracted to/repelled by them)
+   * - Can still be dragged by the user if `enableDrag` is true
+   *
+   * @param {number[] | null} pinnedIndices - Array of point indices to pin. Set to `[]` or `null` to unpin all points.
+   * @example
+   *   // Pin points 0 and 5
+   *   graph.setPinnedPoints([0, 5])
+   *
+   *   // Unpin all points
+   *   graph.setPinnedPoints([])
+   *   graph.setPinnedPoints(null)
+   */
+  public setPinnedPoints (pinnedIndices: number[] | null): void {
+    if (this._isDestroyed || !this.points) return
+    this.graph.inputPinnedPoints = pinnedIndices && pinnedIndices.length > 0 ? pinnedIndices : undefined
+    this.points.updatePinnedStatus()
+  }
+
+  /**
    * Renders the graph.
    *
    * @param {number} [simulationAlpha] - Optional value between 0 and 1

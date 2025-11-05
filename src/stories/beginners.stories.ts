@@ -7,6 +7,7 @@ import { basicSetUp } from './beginners/basic-set-up'
 import { pointLabels } from './beginners/point-labels'
 import { removePoints } from './beginners/remove-points'
 import { linkHovering } from './beginners/link-hovering'
+import { pinnedPoints } from './beginners/pinned-points'
 
 import quickStartStoryRaw from './beginners/quick-start?raw'
 import basicSetUpStoryRaw from './beginners/basic-set-up/index?raw'
@@ -23,6 +24,8 @@ import removePointsStoryDataGenRaw from './beginners/remove-points/data-gen.ts?r
 import linkHoveringStoryRaw from './beginners/link-hovering/index?raw'
 import linkHoveringStoryDataGenRaw from './beginners/link-hovering/data-generator.ts?raw'
 import linkHoveringStoryCssRaw from './beginners/link-hovering/style.css?raw'
+import pinnedPointsStoryRaw from './beginners/pinned-points/index?raw'
+import pinnedPointsStoryDataGenRaw from './beginners/pinned-points/data-gen.ts?raw'
 
 // More on how to set up stories at: https://storybook.js.org/docs/writing-stories#default-export
 const meta: Meta<CosmosStoryProps> = {
@@ -109,6 +112,17 @@ export const LinkHovering: Story = {
       { name: 'Story', code: linkHoveringStoryRaw },
       { name: 'data-generator.ts', code: linkHoveringStoryDataGenRaw },
       { name: 'style.css', code: linkHoveringStoryCssRaw },
+    ],
+  },
+}
+
+export const PinnedPoints: Story = {
+  ...createStory(pinnedPoints),
+  name: 'Pinned Points',
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: pinnedPointsStoryRaw },
+      { name: 'data-gen.ts', code: pinnedPointsStoryDataGenRaw },
     ],
   },
 }
