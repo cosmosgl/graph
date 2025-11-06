@@ -82,7 +82,11 @@ export class Graph {
 
   private _isDestroyed = false
 
-  public constructor (div: HTMLDivElement, config?: GraphConfigInterface) {
+  public constructor (
+    div: HTMLDivElement,
+    device: Device,
+    config?: GraphConfigInterface
+  ) {
     if (config) this.config.init(config)
 
     this.store.div = div
@@ -99,19 +103,20 @@ export class Graph {
 
     this.canvas = canvas
 
-    this.device = luma.createDevice({
-      adapters: [webgl2Adapter],
-      canvasContext: {
-        canvas: this.canvas,
-      },
-      webgl: {
-        antialias: false,
-        preserveDrawingBuffer: true,
-      },
-    })
+    this.device = device
+    // luma.createDevice({
+    //   adapters: [webgl2Adapter],
+    //   canvasContext: {
+    //     canvas: this.canvas,
+    //   },
+    //   webgl: {
+    //     antialias: false,
+    //     preserveDrawingBuffer: true,
+    //   },
+    // })
 
-    this.store.adjustSpaceSize(this.config.spaceSize, this.device.limits.maxTextureSize)
-    this.store.setWebGLMaxTextureSize(this.device.limits.maxTextureSize)
+    this.store.adjustSpaceSize(this.config.spaceSize, this.device.limits.maxTextureDimension2D)
+    this.store.setWebGLMaxTextureSize(this.device.limits.maxTextureDimension2D)
     this.store.updateScreenSize(w, h)
 
     this.canvasD3Selection = select<HTMLCanvasElement, undefined>(this.canvas)

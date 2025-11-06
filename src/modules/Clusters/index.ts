@@ -1,4 +1,4 @@
-import {Device, Framebuffer, Buffer, Texture} from '@luma.gl/core'
+import {Device, Framebuffer, Buffer, Texture, RenderPass} from '@luma.gl/core'
 import {Model} from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
 import calculateCentermassFrag from '@/graph/modules/Clusters/calculate-centermass.frag'
@@ -120,12 +120,18 @@ export class Clusters extends CoreModule {
 
     if (!this.clearCentermassCommand) {
       this.clearCentermassCommand = new Model(device, {
-        frag: clearFrag,
-        vert: updateVert,
-        framebuffer: () => this.centermassFbo as Framebuffer,
-        primitive: 'triangle strip',
-        count: 4,
-        attributes: { vertexCoord: createQuadBuffer(reglInstance) },
+        fs: clearFrag,
+        vs: updateVert,
+        topology: 'triangle-strip',
+        vertexCount: 4,
+        attributes: {
+          vertexCoord: device.createBuffer({
+            data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1])
+          })
+        },
+        bufferLayout: [
+          {name: 'vertexCoord', format: 'float32x2'}  // 2 floats per vertex
+        ]
       })
     }
     if (!this.calculateCentermassCommand) {
@@ -184,14 +190,14 @@ export class Clusters extends CoreModule {
     }
   }
 
-  public calculateCentermass (): void {
-    this.clearCentermassCommand?.draw()
-    this.calculateCentermassCommand?.draw()
+  public calculateCentermass (renderPass: RenderPass): void {
+    this.clearCentermassCommand?.draw(renderPass)
+    this.calculateCentermassCommand?.draw(renderPass)
   }
 
-  public run (): void {
+  public run (renderPass: RenderPass): void {
     if (!this.data.pointClusters && !this.data.clusterPositions) return
-    this.calculateCentermass()
-    this.applyForcesCommand?.()
+    this.calculateCentermass(renderPass)
+    this.applyForcesCommand?.draw(renderPass)
   }
 }
