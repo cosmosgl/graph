@@ -4,7 +4,7 @@ export const config: GraphConfigInterface = {
   spaceSize: 4096,
   backgroundColor: '#2d313a',
   pointSize: 4,
-  pointColor: '#4B5BBF',
+  pointDefaultColor: '#4B5BBF',
   scalePointsOnZoom: true,
   pointGreyoutOpacity: 0.1,
   linkWidth: 0.6,

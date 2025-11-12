@@ -23,7 +23,7 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement} => {
     spaceSize: 4096,
     backgroundColor: '#2d313a',
     pointSize: 4,
-    pointColor: '#4B5BBF',
+    pointDefaultColor: '#4B5BBF',
     linkWidth: 0.6,
     scalePointsOnZoom: true,
     linkColor: '#5F74C2',
