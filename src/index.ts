@@ -340,6 +340,7 @@ export class Graph {
     this.isPointSizeUpdateNeeded = true
     this.isPointShapeUpdateNeeded = true
     this.isPointImageIndicesUpdateNeeded = true
+    this.isPointImageSizesUpdateNeeded = true
     this.isPointClusterUpdateNeeded = true
     this.isForceManyBodyUpdateNeeded = true
     this.isForceLinkUpdateNeeded = true
@@ -1361,6 +1362,8 @@ export class Graph {
         // To prevent the dragged point from suddenly jumping, run the drag function twice
         this.points?.drag()
         this.points?.drag()
+        // Update tracked positions after drag, even when simulation is disabled
+        this.points?.trackPoints()
       }
       this.fpsMonitor?.end(now)
 
