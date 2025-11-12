@@ -23,7 +23,7 @@ export const createCosmos = (props: CosmosStoryProps): { div: HTMLDivElement; gr
   const config: GraphConfigInterface = {
     backgroundColor: '#2d313a',
     pointSize: 3,
-    pointColor: '#4B5BBF',
+    pointDefaultColor: '#4B5BBF',
     pointGreyoutOpacity: 0.1,
     scalePointsOnZoom: true,
     linkWidth: 0.8,

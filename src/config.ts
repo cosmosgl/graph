@@ -44,6 +44,9 @@ export interface GraphConfigInterface {
    * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255.
    * Default value: '#b3b3b3'
    */
+  pointDefaultColor?: string | [number, number, number, number];
+
+  /** @deprecated Use `pointDefaultColor` instead */
   pointColor?: string | [number, number, number, number];
 
   /**
@@ -615,6 +618,7 @@ export class GraphConfig implements GraphConfigInterface {
   public backgroundColor = defaultBackgroundColor
   public spaceSize = defaultConfigValues.spaceSize
   public pointColor = defaultPointColor
+  public pointDefaultColor = undefined
   public pointGreyoutOpacity = defaultGreyoutPointOpacity
   public pointGreyoutColor = defaultGreyoutPointColor
   public pointSize = defaultPointSize

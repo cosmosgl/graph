@@ -88,7 +88,7 @@ export class GraphData {
     }
 
     // Sets point colors to default values from config if the input is missing or does not match input points number.
-    const defaultRgba = getRgbaColor(this._config.pointColor)
+    const defaultRgba = getRgbaColor(this._config.pointDefaultColor ?? this._config.pointColor)
     if (this.inputPointColors === undefined || this.inputPointColors.length / 4 !== this.pointsNumber) {
       this.pointColors = new Float32Array(this.pointsNumber * 4)
       for (let i = 0; i < this.pointColors.length / 4; i++) {

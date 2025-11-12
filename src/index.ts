@@ -247,7 +247,8 @@ export class Graph {
     if (this._isDestroyed || !this.reglInstance || !this.points || !this.lines || !this.clusters) return
     const prevConfig = { ...this.config }
     this.config.init(config)
-    if (prevConfig.pointColor !== this.config.pointColor) {
+    if ((prevConfig.pointDefaultColor !== this.config.pointDefaultColor) ||
+      (prevConfig.pointColor !== this.config.pointColor)) {
       this.graph.updatePointColor()
       this.points.updateColor()
     }
