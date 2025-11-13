@@ -25,6 +25,11 @@ export class Clusters extends CoreModule {
   private pointIndices: Buffer | undefined
   private clustersTextureSize: number | undefined
 
+  // Track previous sizes to detect changes
+  private previousPointsTextureSize: number | undefined
+  private previousClustersTextureSize: number | undefined
+  private previousClusterCount: number | undefined
+
   public create (): void {
     const { device, store, data } = this
     const { pointsTextureSize } = store
@@ -37,6 +42,12 @@ export class Clusters extends CoreModule {
     }, 0) + 1
 
     this.clustersTextureSize = Math.ceil(Math.sqrt(this.clusterCount))
+
+    // Check if sizes have changed - if so, we need to recreate textures/framebuffers
+    const sizesChanged = 
+      this.previousPointsTextureSize !== pointsTextureSize ||
+      this.previousClustersTextureSize !== this.clustersTextureSize ||
+      this.previousClusterCount !== this.clusterCount
 
     const clusterState = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
     const clusterPositions = new Float32Array(this.clustersTextureSize * this.clustersTextureSize * 4).fill(-1)
@@ -62,56 +73,154 @@ export class Clusters extends CoreModule {
       if (data.clusterStrength) clusterForceCoefficient[i * 4 + 0] = data.clusterStrength[i] ?? 1
     }
 
-    if (!this.clusterTexture) this.clusterTexture = device.createTexture({
-      data: clusterState,
-      width: pointsTextureSize,
-      height: pointsTextureSize,
-      format: 'rgba32float',
-    })
-    if (!this.clusterFbo) this.clusterFbo = device.createFramebuffer({
-      colorAttachments: [this.clusterTexture],
-    })
+    // Handle clusterTexture - recreate if size changed, update data if size same
+    if (!this.clusterTexture || sizesChanged) {
+      // Destroy framebuffer FIRST (before texture)
+      if (this.clusterFbo && !this.clusterFbo.destroyed) {
+        this.clusterFbo.destroy()
+      }
+      // Then destroy texture
+      if (this.clusterTexture && !this.clusterTexture.destroyed) {
+        this.clusterTexture.destroy()
+      }
+      // Create new texture
+      this.clusterTexture = device.createTexture({
+        data: clusterState,
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+      })
+      // Create new framebuffer with explicit dimensions
+      this.clusterFbo = device.createFramebuffer({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        colorAttachments: [this.clusterTexture],
+      })
+    } else {
+      // Size hasn't changed, just update the data
+      this.clusterTexture.copyImageData({
+        data: clusterState,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+    }
 
-    if (!this.clusterPositionsTexture) this.clusterPositionsTexture = device.createTexture({
-      data: clusterPositions,
-      width: this.clustersTextureSize,
-      height: this.clustersTextureSize,
-      format: 'rgba32float',
-    })
+    // Handle clusterPositionsTexture
+    if (!this.clusterPositionsTexture || sizesChanged) {
+      // Destroy framebuffer FIRST
+      if (this.clusterPositionsFbo && !this.clusterPositionsFbo.destroyed) {
+        this.clusterPositionsFbo.destroy()
+      }
+      // Then destroy texture
+      if (this.clusterPositionsTexture && !this.clusterPositionsTexture.destroyed) {
+        this.clusterPositionsTexture.destroy()
+      }
+      // Create new texture
+      this.clusterPositionsTexture = device.createTexture({
+        data: clusterPositions,
+        width: this.clustersTextureSize,
+        height: this.clustersTextureSize,
+        format: 'rgba32float',
+      })
+      // Create new framebuffer with explicit dimensions
+      this.clusterPositionsFbo = device.createFramebuffer({
+        width: this.clustersTextureSize,
+        height: this.clustersTextureSize,
+        colorAttachments: [this.clusterPositionsTexture],
+      })
+    } else {
+      // Update data
+      this.clusterPositionsTexture.copyImageData({
+        data: clusterPositions,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+    }
 
-    if (!this.clusterPositionsFbo) this.clusterPositionsFbo = device.createFramebuffer({
-      colorAttachments: [this.clusterPositionsTexture],
-    })
+    // Handle clusterForceCoefficientTexture
+    if (!this.clusterForceCoefficientTexture || sizesChanged) {
+      // Destroy framebuffer FIRST
+      if (this.clusterForceCoefficientFbo && !this.clusterForceCoefficientFbo.destroyed) {
+        this.clusterForceCoefficientFbo.destroy()
+      }
+      // Then destroy texture
+      if (this.clusterForceCoefficientTexture && !this.clusterForceCoefficientTexture.destroyed) {
+        this.clusterForceCoefficientTexture.destroy()
+      }
+      // Create new texture
+      this.clusterForceCoefficientTexture = device.createTexture({
+        data: clusterForceCoefficient,
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+      })
+      // Create new framebuffer with explicit dimensions
+      this.clusterForceCoefficientFbo = device.createFramebuffer({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        colorAttachments: [this.clusterForceCoefficientTexture],
+      })
+    } else {
+      // Update data
+      this.clusterForceCoefficientTexture.copyImageData({
+        data: clusterForceCoefficient,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+    }
 
-    if (!this.clusterForceCoefficientTexture) this.clusterForceCoefficientTexture = device.createTexture({
-      data: clusterForceCoefficient,
-      width: pointsTextureSize,
-      height: pointsTextureSize,
-      format: 'rgba32float',
-    })
+    // Handle centermassTexture - only size depends on clustersTextureSize
+    if (!this.centermassTexture || this.previousClustersTextureSize !== this.clustersTextureSize) {
+      // Destroy framebuffer FIRST
+      if (this.centermassFbo && !this.centermassFbo.destroyed) {
+        this.centermassFbo.destroy()
+      }
+      // Then destroy texture
+      if (this.centermassTexture && !this.centermassTexture.destroyed) {
+        this.centermassTexture.destroy()
+      }
+      // Create new texture
+      this.centermassTexture = device.createTexture({
+        data: new Float32Array(this.clustersTextureSize * this.clustersTextureSize * 4).fill(0),
+        width: this.clustersTextureSize,
+        height: this.clustersTextureSize,
+        format: 'rgba32float',
+      })
+      // Create new framebuffer with explicit dimensions
+      this.centermassFbo = device.createFramebuffer({
+        width: this.clustersTextureSize,
+        height: this.clustersTextureSize,
+        colorAttachments: [this.centermassTexture],
+      })
+    } else {
+      // Clear the centermass texture (fill with zeros)
+      this.centermassTexture.copyImageData({
+        data: new Float32Array(this.clustersTextureSize * this.clustersTextureSize * 4).fill(0),
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+    }
 
-    if (!this.clusterForceCoefficientFbo) this.clusterForceCoefficientFbo = device.createFramebuffer({
-      colorAttachments: [this.clusterForceCoefficientTexture],
-    })
+    // Update pointIndices buffer if pointsTextureSize changed
+    if (!this.pointIndices || this.previousPointsTextureSize !== pointsTextureSize) {
+      if (this.pointIndices && !this.pointIndices.destroyed) {
+        this.pointIndices.destroy()
+      }
+      this.pointIndices = device.createBuffer({
+        data: createIndexesForBuffer(store.pointsTextureSize),
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+        byteLength: createIndexesForBuffer(store.pointsTextureSize).byteLength,
+      })
+    }
 
-    if (!this.centermassTexture) this.centermassTexture = device.createTexture({
-      data: new Float32Array(this.clustersTextureSize * this.clustersTextureSize * 4).fill(0),
-      width: this.clustersTextureSize,
-      height: this.clustersTextureSize,
-      format: 'rgba32float',
-    })
-    if (!this.centermassFbo) this.centermassFbo = device.createFramebuffer({
-      colorAttachments: [this.centermassTexture],
-    })
-
-    // if (!this.pointIndices) this.pointIndices = device.createBuffer(0)
-    //   this.pointIndices(createIndexesForBuffer(store.pointsTextureSize))
-    
-    if (!this.pointIndices) this.pointIndices = device.createBuffer({
-      data: createIndexesForBuffer(store.pointsTextureSize),
-      usage: Buffer.VERTEX | Buffer.COPY_DST,
-      byteLength: createIndexesForBuffer(store.pointsTextureSize).byteLength,
-    })
+    // Update tracked sizes
+    this.previousPointsTextureSize = pointsTextureSize
+    this.previousClustersTextureSize = this.clustersTextureSize
+    this.previousClusterCount = this.clusterCount
   }
 
   public initPrograms (): void {
