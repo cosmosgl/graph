@@ -54,7 +54,7 @@ export interface GraphConfigInterface {
    * This can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values
    * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255.
    *
-   * If not provided, the color will be the same as the `pointColor`,
+   * If not provided, the color will be the same as the point's original color,
    * but darkened or lightened depending on the background color.
    *
    * If `pointGreyoutOpacity` is also defined, it will override the alpha/opacity component
@@ -618,6 +618,10 @@ export class GraphConfig implements GraphConfigInterface {
   public backgroundColor = defaultBackgroundColor
   public spaceSize = defaultConfigValues.spaceSize
   public pointColor = defaultPointColor
+  // TODO: When pointColor is removed, change this to:
+  // public pointDefaultColor = defaultPointColor
+  // Currently undefined to allow fallback to deprecated pointColor via nullish coalescing
+  // in GraphData.updatePointColor() (see: this._config.pointDefaultColor ?? this._config.pointColor)
   public pointDefaultColor = undefined
   public pointGreyoutOpacity = defaultGreyoutPointOpacity
   public pointGreyoutColor = defaultGreyoutPointColor

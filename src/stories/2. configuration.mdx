@@ -9,9 +9,10 @@ import { Meta } from "@storybook/blocks";
 | enableSimulation | If set to `false`, the simulation will not run. This property will be applied only on component initialization and it can't be changed using the `setConfig` method | `true` |
 | backgroundColor | Canvas background color | `#222222` |
 | spaceSize | Simulation space size (max 8192) | `8192` |
-| pointColor | The default color to use for points when no point colors are provided, or if the color value in the array is `undefined` or `null`. This can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255 | `#b3b3b3` |
+| pointDefaultColor | The default color to use for points when no point colors are provided, or if the color value in the array is `undefined` or `null`. This can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255 | `#b3b3b3` |
+| pointColor | **[DEPRECATED]** Use `pointDefaultColor` instead. The default color to use for points when no point colors are provided... | `#b3b3b3` |
 | pointGreyoutOpacity | Greyed out point opacity value when the selection is active | `undefined` |
-| pointGreyoutColor | Greyed out point color value when the selection is active | `undefined` |
+| pointGreyoutColor | The color to use for points when they are greyed out (when selection is active). This can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255. If not provided, the color will be the same as the point's original color, but darkened or lightened depending on the background color. If `pointGreyoutOpacity` is also defined, it will override the alpha/opacity component of this color. | `undefined` |
 | pointSize | The default size value to use for points when no point sizes are provided or if the size value in the array is `undefined` or `null` | `4` |
 | pointOpacity | Universal opacity value applied to all points. This value multiplies with individual point alpha values (if set via setPointColors). Useful for dynamically controlling opacity of all points without updating individual RGBA arrays. | `1.0` |
 | pointSizeScale | Scale factor for the point size | `1` |
