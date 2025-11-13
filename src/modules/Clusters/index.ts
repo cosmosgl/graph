@@ -49,9 +49,12 @@ export class Clusters extends CoreModule {
       this.previousClustersTextureSize !== this.clustersTextureSize ||
       this.previousClusterCount !== this.clusterCount
 
-    const clusterState = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
-    const clusterPositions = new Float32Array(this.clustersTextureSize * this.clustersTextureSize * 4).fill(-1)
-    const clusterForceCoefficient = new Float32Array(pointsTextureSize * pointsTextureSize * 4).fill(1)
+    const pointsTextureDataSize = pointsTextureSize * pointsTextureSize * 4
+    const clustersTextureDataSize = this.clustersTextureSize * this.clustersTextureSize * 4
+
+    const clusterState = new Float32Array(pointsTextureDataSize)
+    const clusterPositions = new Float32Array(clustersTextureDataSize).fill(-1)
+    const clusterForceCoefficient = new Float32Array(pointsTextureDataSize).fill(1)
     if (data.clusterPositions) {
       for (let cluster = 0; cluster < this.clusterCount; ++cluster) {
         clusterPositions[cluster * 4 + 0] = data.clusterPositions[cluster * 2 + 0] ?? -1
@@ -184,7 +187,7 @@ export class Clusters extends CoreModule {
       }
       // Create new texture
       this.centermassTexture = device.createTexture({
-        data: new Float32Array(this.clustersTextureSize * this.clustersTextureSize * 4).fill(0),
+        data: new Float32Array(clustersTextureDataSize).fill(0),
         width: this.clustersTextureSize,
         height: this.clustersTextureSize,
         format: 'rgba32float',
@@ -198,7 +201,7 @@ export class Clusters extends CoreModule {
     } else {
       // Clear the centermass texture (fill with zeros)
       this.centermassTexture.copyImageData({
-        data: new Float32Array(this.clustersTextureSize * this.clustersTextureSize * 4).fill(0),
+        data: new Float32Array(clustersTextureDataSize).fill(0),
         mipLevel: 0,
         x: 0,
         y: 0,
@@ -210,10 +213,10 @@ export class Clusters extends CoreModule {
       if (this.pointIndices && !this.pointIndices.destroyed) {
         this.pointIndices.destroy()
       }
+      const indexData = createIndexesForBuffer(store.pointsTextureSize)
       this.pointIndices = device.createBuffer({
-        data: createIndexesForBuffer(store.pointsTextureSize),
+        data: indexData,
         usage: Buffer.VERTEX | Buffer.COPY_DST,
-        byteLength: createIndexesForBuffer(store.pointsTextureSize).byteLength,
       })
     }
 
