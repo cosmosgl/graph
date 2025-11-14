@@ -32,7 +32,7 @@ export const pointLabels = (
     backgroundColor: '#2d313a',
     scalePointsOnZoom: true,
     linkWidth: 0.6,
-    linkColor: '#5F74C2',
+    linkDefaultColor: '#5F74C2',
     linkArrows: false,
     fitViewOnInit: false,
     enableDrag: true,

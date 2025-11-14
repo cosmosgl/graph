@@ -256,7 +256,8 @@ export class Graph {
       this.graph.updatePointSize()
       this.points.updateSize()
     }
-    if (prevConfig.linkColor !== this.config.linkColor) {
+    if ((prevConfig.linkDefaultColor !== this.config.linkDefaultColor) ||
+      (prevConfig.linkColor !== this.config.linkColor)) {
       this.graph.updateLinkColor()
       this.lines.updateColor()
     }
