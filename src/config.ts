@@ -147,6 +147,9 @@ export interface GraphConfigInterface {
    * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255.
    * Default value: '#666666'
    */
+  linkDefaultColor?: string | [number, number, number, number];
+
+  /** @deprecated Use `linkDefaultColor` instead */
   linkColor?: string | [number, number, number, number];
 
   /**
@@ -635,6 +638,11 @@ export class GraphConfig implements GraphConfigInterface {
   public focusedPointRingColor = defaultConfigValues.focusedPointRingColor
   public focusedPointIndex = defaultConfigValues.focusedPointIndex
   public linkColor = defaultLinkColor
+  // TODO: When linkColor is removed, change this to:
+  // public linkDefaultColor = defaultLinkColor
+  // Currently undefined to allow fallback to deprecated linkColor via nullish coalescing
+  // in GraphData.updateLinkColor() (see: this._config.linkDefaultColor ?? this._config.linkColor)
+  public linkDefaultColor = undefined
   public linkOpacity = defaultLinkOpacity
   public linkGreyoutOpacity = defaultGreyoutLinkOpacity
   public linkWidth = defaultLinkWidth

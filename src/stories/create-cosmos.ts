@@ -27,7 +27,7 @@ export const createCosmos = (props: CosmosStoryProps): { div: HTMLDivElement; gr
     pointGreyoutOpacity: 0.1,
     scalePointsOnZoom: true,
     linkWidth: 0.8,
-    linkColor: '#5F74C2',
+    linkDefaultColor: '#5F74C2',
     linkArrows: false,
     linkGreyoutOpacity: 0,
     curvedLinks: true,

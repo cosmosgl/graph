@@ -26,7 +26,7 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement} => {
     pointDefaultColor: '#4B5BBF',
     linkWidth: 0.6,
     scalePointsOnZoom: true,
-    linkColor: '#5F74C2',
+    linkDefaultColor: '#5F74C2',
     linkArrows: false,
     linkGreyoutOpacity: 0,
     curvedLinks: true,

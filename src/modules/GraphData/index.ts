@@ -222,7 +222,7 @@ export class GraphData {
     }
 
     // Sets link colors to default values from config if the input is missing or does not match input links number.
-    const defaultRgba = getRgbaColor(this._config.linkColor)
+    const defaultRgba = getRgbaColor(this._config.linkDefaultColor ?? this._config.linkColor)
     if (this.inputLinkColors === undefined || this.inputLinkColors.length / 4 !== this.linksNumber) {
       this.linkColors = new Float32Array(this.linksNumber * 4)
 

@@ -23,7 +23,8 @@ import { Meta } from "@storybook/blocks";
 | focusedPointRingColor | Focused point ring color hex value or an array of RGBA values | `white` |
 | focusedPointIndex | Set focus on a point by index. A ring will be highlighted around the focused point. When set to `undefined`, no point is focused. | `undefined` |
 | renderLinks | Turns link rendering on / off | `true` |
-| linkColor | The default color to use for links when no link colors are provided, or if the color value in the array is `undefined` or `null`. This can be either a hex color string (e.g., '#666666') or an array of RGBA values in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255 | `#666666` |
+| linkDefaultColor | The default color to use for links when no link colors are provided, or if the color value in the array is `undefined` or `null`. This can be either a hex color string (e.g., '#666666') or an array of RGBA values in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255 | `#666666` |
+| linkColor | **[DEPRECATED]** Use `linkDefaultColor` instead. The default color to use for links when no link colors are provided... | `#666666` |
 | linkOpacity | Universal opacity value applied to all links. This value multiplies with individual link alpha values (if set via setLinkColors). Useful for dynamically controlling opacity of all links without updating individual RGBA arrays. | `1.0` |
 | linkGreyoutOpacity | Greyed out link opacity value when the selection is active | `0.1` |
 | linkWidth | The default width value to use for links when no link widths are provided or if the width value in the array is `undefined` or `null` | `1` |

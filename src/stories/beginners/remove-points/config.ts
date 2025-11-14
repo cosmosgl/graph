@@ -8,7 +8,7 @@ export const config: GraphConfigInterface = {
   scalePointsOnZoom: true,
   pointGreyoutOpacity: 0.1,
   linkWidth: 0.6,
-  linkColor: '#5F74C2',
+  linkDefaultColor: '#5F74C2',
   linkArrows: false,
   linkGreyoutOpacity: 0,
   hoveredPointCursor: 'pointer',
