@@ -1,6 +1,6 @@
 {
   "name": "@cosmos.gl/graph",
-  "version": "2.6.0",
+  "version": "2.6.1",
   "description": "GPU-based force graph layout and rendering",
   "jsdelivr": "dist/index.min.js",
   "main": "dist/index.js",
@@ -8,6 +8,10 @@
   "license": "MIT",
   "repository": "git://github.com/cosmos.gl/graph.git",
   "type": "module",
+  "files": [
+    "dist",
+    "CITATION.cff"
+  ],
   "scripts": {
     "build": "rm -rf dist; rollup -c",
     "build:vite": "rm -rf dist; vite build",
