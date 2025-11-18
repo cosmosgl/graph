@@ -299,9 +299,12 @@ This method sets the force strength coefficients for clustering points in the gr
 
 ### <a name="render" href="#render">#</a> graph.<b>render</b>([<i>simulationAlpha</i>])
 
-The `render` method renders the graph and, optionally, controls the initial energy of the simulation.
+The `render` method renders the graph and starts rendering. It does NOT modify simulation state - use `start()`, `stop()`, `pause()`, or `unpause()` to control the simulation.
 
-* **`simulationAlpha`** (number, optional): The higher the value, the more initial energy the simulation will get. Zero value stops the simulation.
+* **`simulationAlpha`** (number, optional): Optional alpha value to set.
+  - If `0`: Sets alpha to 0, simulation stops after one frame (graph becomes static).
+  - If positive: Sets alpha to that value.
+  - If `undefined`: Keeps current alpha value.
 
 ### <a name="zoom_to_point_by_index" href="#zoom_to_point_by_index">#</a> graph.<b>zoomToPointByIndex</b>(<i>index</i>, [<i>duration</i>], [<i>scale</i>], [<i>canZoomOut</i>])
 
@@ -503,17 +506,17 @@ The sample aims to distribute points evenly across the visible area.
 
 ### <a name="start" href="#start">#</a> graph.<b>start</b>([<i>alpha</i>])
 
-Starts the simulation with an optional <i>alpha</i> parameter, which controls the initial energy of the simulation.
+Starts the simulation. This method only controls the simulation state, not rendering. Rendering is started automatically by `render()`.
 
 * **`alpha`** (Number, optional): A number between `0` and `1` representing the initial energy of the simulation. The default value is `1` if not provided. A higher `alpha` value results in more initial energy for the simulation.
 
 ### <a name="pause" href="#pause">#</a> graph.<b>pause</b>()
 
-Pauses the current simulation in the graph.
+Pauses the simulation. When paused, the simulation stops running but preserves its current state (progress, alpha). Can be resumed using the `unpause()` method.
 
 ### <a name="unpause" href="#unpause">#</a> graph.<b>unpause</b>()
 
-Unpauses (resumes) the current simulation in the graph.
+Unpauses (resumes) the simulation. This method resumes a paused simulation and continues its execution from where it was paused.
 
 ### <a name="restart" href="#restart">#</a> graph.<b>restart</b>() <b style={{ color: 'orange' }}>[DEPRECATED]</b>
 
@@ -521,9 +524,13 @@ Unpauses (resumes) the current simulation in the graph.
 
 Restarts the current simulation in the graph.
 
+### <a name="stop" href="#stop">#</a> graph.<b>stop</b>()
+
+Stops the simulation. This stops the simulation and resets its state (progress, alpha). Use `start()` to begin a new simulation cycle.
+
 ### <a name="step" href="#step">#</a> graph.<b>step</b>()
 
-Renders a single frame of the simulation and pauses the simulation if it was active.
+Runs one step of the simulation manually. Works even when the simulation is paused. This allows you to manually advance the simulation one frame at a time.
 
 ### <a name="destroy" href="#destroy">#</a> graph.<b>destroy</b>()
 

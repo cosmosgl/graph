@@ -184,6 +184,10 @@ export class Graph {
 
     this.store.maxPointSize = (this.reglInstance.limits.pointSizeDims[1] ?? MAX_POINT_SIZE) / this.config.pixelRatio
 
+    // Initialize simulation state based on enableSimulation config
+    // If simulation is disabled, start with isSimulationRunning = false
+    this.store.isSimulationRunning = this.config.enableSimulation
+
     this.points = new Points(this.reglInstance, this.config, this.store, this.graph)
     this.lines = new Lines(this.reglInstance, this.config, this.store, this.graph, this.points)
     if (this.config.enableSimulation) {
@@ -619,11 +623,13 @@ export class Graph {
   }
 
   /**
-   * Renders the graph.
+   * Renders the graph and starts rendering.
+   * Does NOT modify simulation state - use start(), stop(), pause(), unpause() to control simulation.
    *
-   * @param {number} [simulationAlpha] - Optional value between 0 and 1
-   * that controls the initial energy of the simulation.The higher the value,
-   * the more initial energy the simulation will get. Zero value stops the simulation.
+   * @param {number} [simulationAlpha] - Optional alpha value to set.
+   *   - If 0: Sets alpha to 0, simulation stops after one frame (graph becomes static).
+   *   - If positive: Sets alpha to that value.
+   *   - If undefined: Keeps current alpha value.
    */
   public render (simulationAlpha?: number): void {
     if (this._isDestroyed || !this.reglInstance) return
@@ -648,9 +654,11 @@ export class Graph {
         else this.fitView(fitViewDuration, fitViewPadding)
       }, fitViewDelay)
     }
-    this._isFirstRenderAfterInit = false
-
+    // Update graph and start frames
     this.update(simulationAlpha)
+    this.startFrames()
+
+    this._isFirstRenderAfterInit = false
   }
 
   /**
@@ -1103,27 +1111,38 @@ export class Graph {
 
   /**
    * Start the simulation.
+   * This only controls the simulation state, not rendering.
    * @param alpha Value from 0 to 1. The higher the value, the more initial energy the simulation will get.
    */
   public start (alpha = 1): void {
     if (this._isDestroyed) return
     if (!this.graph.pointsNumber) return
 
-    // Only start the simulation if alpha > 0
-    if (alpha > 0) {
-      this.store.isSimulationRunning = true
-      this.store.simulationProgress = 0
-      this.config.onSimulationStart?.()
-    }
-
+    // Always set simulation as running when start() is called
+    this.store.isSimulationRunning = true
+    this.store.simulationProgress = 0
     this.store.alpha = alpha
-    this.stopFrames()
-    this.frame()
+    this.config.onSimulationStart?.()
+
+    // Note: Does NOT start frames - that's handled separately
+  }
+
+  /**
+   * Stop the simulation. This stops the simulation and resets its state.
+   * Use start() to begin a new simulation cycle.
+   */
+  public stop (): void {
+    if (this._isDestroyed) return
+    this.store.isSimulationRunning = false
+    this.store.simulationProgress = 0
+    this.store.alpha = 0
+    this.config.onSimulationEnd?.()
   }
 
   /**
    * Pause the simulation. When paused, the simulation stops running
-   * and can be resumed using the unpause method.
+   * but preserves its current state (progress, alpha).
+   * Can be resumed using the unpause method.
    */
   public pause (): void {
     if (this._isDestroyed) return
@@ -1153,13 +1172,16 @@ export class Graph {
   }
 
   /**
-   * Render only one frame of the simulation (stops the simulation if it was running).
+   * Run one step of the simulation manually.
+   * Works even when the simulation is paused.
    */
   public step (): void {
     if (this._isDestroyed) return
-    this.store.isSimulationRunning = false
-    this.stopFrames()
-    this.frame()
+    if (!this.config.enableSimulation) return
+    if (!this.store.pointsTextureSize) return
+
+    // Run one simulation step, forcing execution regardless of isSimulationRunning
+    this.runSimulationStep(true)
   }
 
   /**
@@ -1291,6 +1313,11 @@ export class Graph {
     return arr
   }
 
+  /**
+   * Updates and recreates the graph visualization based on pending changes.
+   *
+   * @param simulationAlpha - Optional alpha value to set. If not provided, keeps current alpha.
+   */
   private update (simulationAlpha = this.store.alpha): void {
     const { graph } = this
     this.store.pointsTextureSize = Math.ceil(Math.sqrt(graph.pointsNumber ?? 0))
@@ -1298,7 +1325,78 @@ export class Graph {
     this.create()
     this.initPrograms()
     this.store.hoveredPoint = undefined
-    this.start(simulationAlpha)
+    this.store.alpha = simulationAlpha
+  }
+
+  /**
+   * Runs one step of the simulation (forces, position updates, alpha decay).
+   * This is the core simulation logic that can be called by step() or during rendering.
+   *
+   * @param forceExecution - Controls whether to run the simulation step when paused.
+   *   - If true: Always runs the simulation step, even when isSimulationRunning is false.
+   *     Used by step() to allow manual stepping while the simulation is paused.
+   *   - If false: Only runs if isSimulationRunning is true. Used during rendering
+   *     to respect pause/unpause state.
+   */
+  private runSimulationStep (forceExecution = false): void {
+    const { config: { simulationGravity, simulationCenter, enableSimulation }, store: { isSimulationRunning } } = this
+
+    if (!enableSimulation) return
+
+    // Right-click repulsion (runs regardless of isSimulationRunning)
+    if (this.isRightClickMouse && this.config.enableRightClickRepulsion) {
+      this.forceMouse?.run()
+      this.points?.updatePosition()
+    }
+
+    // Main simulation forces
+    // If forceExecution is true (from step()), always run
+    // Otherwise, respect isSimulationRunning and zoom state
+    const shouldRunSimulation = forceExecution ||
+      (isSimulationRunning && !(this.zoomInstance.isRunning && !this.config.enableSimulationDuringZoom))
+
+    if (shouldRunSimulation) {
+      if (simulationGravity) {
+        this.forceGravity?.run()
+        this.points?.updatePosition()
+      }
+
+      if (simulationCenter) {
+        this.forceCenter?.run()
+        this.points?.updatePosition()
+      }
+
+      this.forceManyBody?.run()
+      this.points?.updatePosition()
+
+      if (this.store.linksTextureSize) {
+        this.forceLinkIncoming?.run()
+        this.points?.updatePosition()
+        this.forceLinkOutgoing?.run()
+        this.points?.updatePosition()
+      }
+
+      if (this.graph.pointClusters || this.graph.clusterPositions) {
+        this.clusters?.run()
+        this.points?.updatePosition()
+      }
+
+      // Alpha decay and progress
+      this.store.alpha += this.store.addAlpha(this.config.simulationDecay ?? defaultConfigValues.simulation.decay)
+      if (this.isRightClickMouse && this.config.enableRightClickRepulsion) {
+        this.store.alpha = Math.max(this.store.alpha, 0.1)
+      }
+      this.store.simulationProgress = Math.sqrt(Math.min(1, ALPHA_MIN / this.store.alpha))
+
+      this.config.onSimulationTick?.(
+        this.store.alpha,
+        this.store.hoveredPoint?.index,
+        this.store.hoveredPoint?.position
+      )
+    }
+
+    // Track points (runs regardless of simulation state)
+    this.points?.trackPoints()
   }
 
   private initPrograms (): void {
@@ -1314,95 +1412,91 @@ export class Graph {
     this.clusters.initPrograms()
   }
 
+  /**
+   * The rendering loop - schedules itself to run continuously
+   */
   private frame (): void {
     if (this._isDestroyed) return
-    const { config: { simulationGravity, simulationCenter, renderLinks, enableSimulation }, store: { alpha, isSimulationRunning } } = this
-    if (alpha < ALPHA_MIN && isSimulationRunning) this.end()
-    if (!this.store.pointsTextureSize) return
+
+    // Check if simulation should end BEFORE scheduling next frame
+    // This prevents one extra frame from running after simulation ends
+    const { store: { alpha, isSimulationRunning } } = this
+    if (alpha < ALPHA_MIN && isSimulationRunning) {
+      this.end()
+    }
 
     this.requestAnimationFrameId = window.requestAnimationFrame((now) => {
-      this.fpsMonitor?.begin()
-      this.resizeCanvas()
-      if (!this.dragInstance.isActive) {
-        this.findHoveredItem()
-      }
+      this.renderFrame(now)
 
-      if (enableSimulation) {
-        if (this.isRightClickMouse && this.config.enableRightClickRepulsion) {
-          this.forceMouse?.run()
-          this.points?.updatePosition()
-        }
-        if ((isSimulationRunning && !(this.zoomInstance.isRunning && !this.config.enableSimulationDuringZoom))) {
-          if (simulationGravity) {
-            this.forceGravity?.run()
-            this.points?.updatePosition()
-          }
-
-          if (simulationCenter) {
-            this.forceCenter?.run()
-            this.points?.updatePosition()
-          }
-
-          this.forceManyBody?.run()
-          this.points?.updatePosition()
-
-          if (this.store.linksTextureSize) {
-            this.forceLinkIncoming?.run()
-            this.points?.updatePosition()
-            this.forceLinkOutgoing?.run()
-            this.points?.updatePosition()
-          }
-
-          if (this.graph.pointClusters || this.graph.clusterPositions) {
-            this.clusters?.run()
-            this.points?.updatePosition()
-          }
-
-          this.store.alpha += this.store.addAlpha(this.config.simulationDecay ?? defaultConfigValues.simulation.decay)
-          if (this.isRightClickMouse && this.config.enableRightClickRepulsion) this.store.alpha = Math.max(this.store.alpha, 0.1)
-          this.store.simulationProgress = Math.sqrt(Math.min(1, ALPHA_MIN / this.store.alpha))
-          this.config.onSimulationTick?.(
-            this.store.alpha,
-            this.store.hoveredPoint?.index,
-            this.store.hoveredPoint?.position
-          )
-        }
-
-        this.points?.trackPoints()
-      }
-
-      // Clear canvas
-      this.reglInstance?.clear({
-        color: this.store.backgroundColor,
-        depth: 1,
-        stencil: 0,
-      })
-
-      if (renderLinks && this.store.linksTextureSize) {
-        this.lines?.draw()
-      }
-
-      this.points?.draw()
-      if (this.dragInstance.isActive) {
-        // To prevent the dragged point from suddenly jumping, run the drag function twice
-        this.points?.drag()
-        this.points?.drag()
-        // Update tracked positions after drag, even when simulation is disabled
-        this.points?.trackPoints()
-      }
-      this.fpsMonitor?.end(now)
-
-      this.currentEvent = undefined
+      // Continue the loop (even after simulation ends)
       if (!this._isDestroyed) {
         this.frame()
       }
     })
   }
 
-  private stopFrames (): void {
-    if (this.requestAnimationFrameId) window.cancelAnimationFrame(this.requestAnimationFrameId)
+  /**
+   * Renders a single frame (the actual rendering logic).
+   * This does NOT schedule the next frame.
+   */
+  private renderFrame (now?: number): void {
+    if (this._isDestroyed) return
+    if (!this.store.pointsTextureSize) return
+
+    this.fpsMonitor?.begin()
+    this.resizeCanvas()
+    if (!this.dragInstance.isActive) {
+      this.findHoveredItem()
+    }
+
+    // Run simulation step (respects isSimulationRunning)
+    // When simulation ends, forces stop but rendering continues
+    this.runSimulationStep(false)
+
+    // Clear canvas
+    this.reglInstance?.clear({
+      color: this.store.backgroundColor,
+      depth: 1,
+      stencil: 0,
+    })
+
+    const { config: { renderLinks } } = this
+    if (renderLinks && this.store.linksTextureSize) {
+      this.lines?.draw()
+    }
+
+    this.points?.draw()
+    if (this.dragInstance.isActive) {
+      // To prevent the dragged point from suddenly jumping, run the drag function twice
+      this.points?.drag()
+      this.points?.drag()
+      // Update tracked positions after drag, even when simulation is disabled
+      this.points?.trackPoints()
+    }
+    this.fpsMonitor?.end(now ?? performance.now())
+    this.currentEvent = undefined
   }
 
+  private stopFrames (): void {
+    if (this.requestAnimationFrameId) {
+      window.cancelAnimationFrame(this.requestAnimationFrameId)
+      this.requestAnimationFrameId = 0 // Reset to 0
+    }
+  }
+
+  /**
+   * Starts continuous rendering
+   */
+  private startFrames (): void {
+    if (this._isDestroyed) return
+    this.stopFrames() // Stop any existing rendering
+    this.frame() // Start the loop
+  }
+
+  /**
+   * Called automatically when simulation completes (alpha < ALPHA_MIN).
+   * Rendering continues after this is called (for rendering/interaction).
+   */
   private end (): void {
     this.store.isSimulationRunning = false
     this.store.simulationProgress = 1
