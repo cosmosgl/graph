@@ -1,10 +1,10 @@
-import {Device, Framebuffer, Buffer, Texture, RenderPass} from '@luma.gl/core'
-import {Model} from '@luma.gl/engine'
+import { Framebuffer, Buffer, Texture, UniformStore } from '@luma.gl/core'
+import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
 import calculateCentermassFrag from '@/graph/modules/Clusters/calculate-centermass.frag'
 import calculateCentermassVert from '@/graph/modules/Clusters/calculate-centermass.vert'
 import forceFrag from '@/graph/modules/Clusters/force-cluster.frag'
-import { createQuadBuffer, createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
+import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import clearFrag from '@/graph/modules/Shared/clear.frag'
 import updateVert from '@/graph/modules/Shared/quad.vert'
 
@@ -25,10 +25,30 @@ export class Clusters extends CoreModule {
   private pointIndices: Buffer | undefined
   private clustersTextureSize: number | undefined
 
+  // Attribute buffers that need manual cleanup (Model doesn't destroy them)
+  private clearCentermassVertexCoordBuffer: Buffer | undefined
+  private applyForcesVertexCoordBuffer: Buffer | undefined
+
   // Track previous sizes to detect changes
   private previousPointsTextureSize: number | undefined
   private previousClustersTextureSize: number | undefined
   private previousClusterCount: number | undefined
+
+  // Uniform stores for scalar uniforms
+  private calculateCentermassUniformStore: UniformStore<{
+    calculateCentermassUniforms: {
+      pointsTextureSize: number;
+      clustersTextureSize: number;
+    };
+  }> | undefined
+
+  private applyForcesUniformStore: UniformStore<{
+    applyForcesUniforms: {
+      alpha: number;
+      clustersTextureSize: number;
+      clusterCoefficient: number;
+    };
+  }> | undefined
 
   public create (): void {
     const { device, store, data } = this
@@ -44,7 +64,7 @@ export class Clusters extends CoreModule {
     this.clustersTextureSize = Math.ceil(Math.sqrt(this.clusterCount))
 
     // Check if sizes have changed - if so, we need to recreate textures/framebuffers
-    const sizesChanged = 
+    const sizesChanged =
       this.previousPointsTextureSize !== pointsTextureSize ||
       this.previousClustersTextureSize !== this.clustersTextureSize ||
       this.previousClusterCount !== this.clusterCount
@@ -228,88 +248,292 @@ export class Clusters extends CoreModule {
 
   public initPrograms (): void {
     const { device, store, data, points } = this
-    if (data.pointClusters === undefined) return
+    // Use same check as create() and run() for consistency
+    if (!data.pointClusters && !data.clusterPositions) return
 
     if (!this.clearCentermassCommand) {
+      // Create and track vertexCoord buffer
+      if (!this.clearCentermassVertexCoordBuffer) {
+        this.clearCentermassVertexCoordBuffer = device.createBuffer({
+          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+        })
+      }
+
       this.clearCentermassCommand = new Model(device, {
         fs: clearFrag,
         vs: updateVert,
         topology: 'triangle-strip',
         vertexCount: 4,
         attributes: {
-          vertexCoord: device.createBuffer({
-            data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1])
-          })
+          vertexCoord: this.clearCentermassVertexCoordBuffer,
         },
         bufferLayout: [
-          {name: 'vertexCoord', format: 'float32x2'}  // 2 floats per vertex
-        ]
+          { name: 'vertexCoord', format: 'float32x2' }, // 2 floats per vertex
+        ],
       })
     }
     if (!this.calculateCentermassCommand) {
+      // Ensure pointIndices buffer exists
+      if (!this.pointIndices) {
+        const indexData = createIndexesForBuffer(store.pointsTextureSize)
+        this.pointIndices = device.createBuffer({
+          data: indexData,
+          usage: Buffer.VERTEX | Buffer.COPY_DST,
+        })
+      }
+
+      // Create UniformStore for calculateCentermass uniforms
+      if (!this.calculateCentermassUniformStore) {
+        this.calculateCentermassUniformStore = new UniformStore({
+          calculateCentermassUniforms: {
+            uniformTypes: {
+              pointsTextureSize: 'f32',
+              clustersTextureSize: 'f32',
+            },
+            defaultUniforms: {
+              pointsTextureSize: store.pointsTextureSize,
+              clustersTextureSize: (this.clustersTextureSize ?? 0),
+            },
+          },
+        })
+      }
+
       this.calculateCentermassCommand = new Model(device, {
-        frag: calculateCentermassFrag,
-        vert: calculateCentermassVert,
-        framebuffer: () => this.centermassFbo as Framebuffer,
-        primitive: 'points',
-        count: () => data.pointsNumber ?? 0,
+        fs: calculateCentermassFrag,
+        vs: calculateCentermassVert,
+        topology: 'point-list',
+        vertexCount: data.pointsNumber ?? 0,
         attributes: {
-          pointIndices: {
-            buffer: this.pointIndices,
-            size: 2,
-          },
+          pointIndices: this.pointIndices,
         },
+        bufferLayout: [
+          { name: 'pointIndices', format: 'float32x2' }, // 2 floats per vertex
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true, // Enable uniform buffers
+        },
+        bindings: {
+          // Uniform buffer via UniformStore (WebGPU-compatible)
+          calculateCentermassUniforms: this.calculateCentermassUniformStore.getManagedUniformBuffer(device, 'calculateCentermassUniforms'),
+          ...(this.clusterTexture && { clusterTexture: this.clusterTexture }),
+        },
+        // @ts-expect-error - positionsTexture is still regl Framebuffer2D until Points module is migrated
         uniforms: {
-          positionsTexture: () => points?.previousPositionFbo,
-          pointsTextureSize: () => store.pointsTextureSize,
-          clusterTexture: () => this.clusterFbo,
-          clustersTextureSize: () => this.clustersTextureSize,
+          // TODO: Move positionsTexture to bindings when Points module is migrated
+          ...(points?.previousPositionFbo && { positionsTexture: points.previousPositionFbo }),
         },
-        blend: {
-          enable: true,
-          func: {
-            src: 'one',
-            dst: 'one',
-          },
-          equation: {
-            rgb: 'add',
-            alpha: 'add',
-          },
+        parameters: {
+          blend: true,
+          blendColorOperation: 'add',
+          blendColorSrcFactor: 'one',
+          blendColorDstFactor: 'one',
+          blendAlphaOperation: 'add',
+          blendAlphaSrcFactor: 'one',
+          blendAlphaDstFactor: 'one',
+          depthWriteEnabled: false,
+          depthCompare: 'always',
         },
-        depth: { enable: false, mask: false },
-        stencil: { enable: false },
       })
     }
     if (!this.applyForcesCommand) {
-      this.applyForcesCommand = new Model(device, ({
-        frag: forceFrag,
-        vert: updateVert,
-        framebuffer: () => points?.velocityFbo as Framebuffer,
-        primitive: 'triangle strip',
-        count: 4,
-        attributes: { vertexCoord: createQuadBuffer(device) },
+      // Create UniformStore for applyForces uniforms
+      if (!this.applyForcesUniformStore) {
+        this.applyForcesUniformStore = new UniformStore({
+          applyForcesUniforms: {
+            uniformTypes: {
+              alpha: 'f32',
+              clustersTextureSize: 'f32',
+              clusterCoefficient: 'f32',
+            },
+            defaultUniforms: {
+              alpha: store.alpha,
+              clustersTextureSize: (this.clustersTextureSize ?? 0),
+              clusterCoefficient: (this.config.simulationCluster ?? 0),
+            },
+          },
+        })
+      }
+
+      // Create and track vertexCoord buffer
+      if (!this.applyForcesVertexCoordBuffer) {
+        this.applyForcesVertexCoordBuffer = device.createBuffer({
+          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+        })
+      }
+
+      this.applyForcesCommand = new Model(device, {
+        fs: forceFrag,
+        vs: updateVert,
+        topology: 'triangle-strip',
+        vertexCount: 4,
+        attributes: {
+          vertexCoord: this.applyForcesVertexCoordBuffer,
+        },
+        bufferLayout: [
+          { name: 'vertexCoord', format: 'float32x2' }, // 2 floats per vertex
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true, // Enable uniform buffers
+        },
+        bindings: {
+          // Uniform buffer via UniformStore (WebGPU-compatible)
+          applyForcesUniforms: this.applyForcesUniformStore.getManagedUniformBuffer(device, 'applyForcesUniforms'),
+          ...(this.clusterTexture && { clusterTexture: this.clusterTexture }),
+          ...(this.centermassTexture && { centermassTexture: this.centermassTexture }),
+          ...(this.clusterPositionsTexture && { clusterPositionsTexture: this.clusterPositionsTexture }),
+          ...(this.clusterForceCoefficientTexture && { clusterForceCoefficient: this.clusterForceCoefficientTexture }),
+        },
+        // @ts-expect-error - positionsTexture is still regl Framebuffer2D until Points module is migrated
         uniforms: {
-          positionsTexture: () => points?.previousPositionFbo,
-          clusterTexture: () => this.clusterFbo,
-          centermassTexture: () => this.centermassFbo,
-          clusterPositionsTexture: () => this.clusterPositionsFbo,
-          clusterForceCoefficient: () => this.clusterForceCoefficientFbo,
-          alpha: () => store.alpha,
-          clustersTextureSize: () => this.clustersTextureSize,
-          clusterCoefficient: () => this.config.simulationCluster,
+          // TODO: Move positionsTexture to bindings when Points module is migrated
+          ...(points?.previousPositionFbo && { positionsTexture: points.previousPositionFbo }),
         },
       })
     }
   }
 
-  public calculateCentermass (renderPass: RenderPass): void {
-    this.clearCentermassCommand?.draw(renderPass)
-    this.calculateCentermassCommand?.draw(renderPass)
+  public calculateCentermass (): void {
+    // Add safety check
+    if (!this.calculateCentermassCommand || !this.calculateCentermassUniformStore) {
+      return
+    }
+
+    if (!this.centermassFbo) return
+
+    // Update vertex count dynamically (using same fallback logic as initialization)
+    this.calculateCentermassCommand.setVertexCount(this.data.pointsNumber ?? 0)
+
+    // Update UniformStore with current values
+    this.calculateCentermassUniformStore.setUniforms({
+      calculateCentermassUniforms: {
+        pointsTextureSize: this.store.pointsTextureSize,
+        clustersTextureSize: (this.clustersTextureSize ?? 0),
+      },
+    })
+
+    // Update bindings dynamically
+    if (this.clusterTexture) {
+      this.calculateCentermassCommand.setBindings({
+        clusterTexture: this.clusterTexture,
+      })
+    }
+
+    // Create a RenderPass for the centermass framebuffer
+    const centermassPass = this.device.beginRenderPass({
+      framebuffer: this.centermassFbo,
+    })
+
+    this.clearCentermassCommand?.draw(centermassPass)
+    this.calculateCentermassCommand.draw(centermassPass)
+
+    centermassPass.end()
   }
 
-  public run (renderPass: RenderPass): void {
+  public run (): void {
     if (!this.data.pointClusters && !this.data.clusterPositions) return
-    this.calculateCentermass(renderPass)
-    this.applyForcesCommand?.draw(renderPass)
+
+    // Calculate centermass (creates its own RenderPass)
+    this.calculateCentermass()
+
+    // Add safety check
+    if (!this.applyForcesCommand || !this.applyForcesUniformStore) {
+      return
+    }
+
+    // Update UniformStore with current values
+    this.applyForcesUniformStore.setUniforms({
+      applyForcesUniforms: {
+        alpha: this.store.alpha,
+        clustersTextureSize: (this.clustersTextureSize ?? 0),
+        clusterCoefficient: this.config.simulationCluster ?? 0,
+      },
+    })
+
+    // Update bindings dynamically
+    this.applyForcesCommand.setBindings({
+      ...(this.clusterTexture && { clusterTexture: this.clusterTexture }),
+      ...(this.centermassTexture && { centermassTexture: this.centermassTexture }),
+      ...(this.clusterPositionsTexture && { clusterPositionsTexture: this.clusterPositionsTexture }),
+      ...(this.clusterForceCoefficientTexture && { clusterForceCoefficient: this.clusterForceCoefficientTexture }),
+    })
+
+    // Create a RenderPass for the velocity framebuffer
+    if (!this.points?.velocityFbo) return
+
+    // velocityFbo is still regl Framebuffer2D until Points module is migrated
+    const velocityPass = this.device.beginRenderPass({
+      framebuffer: this.points.velocityFbo as unknown as Framebuffer,
+    })
+
+    this.applyForcesCommand.draw(velocityPass)
+
+    velocityPass.end()
+  }
+
+  public destroy (): void {
+    // Destroy UniformStore
+    this.calculateCentermassUniformStore?.destroy()
+    this.calculateCentermassUniformStore = undefined
+    this.applyForcesUniformStore?.destroy()
+    this.applyForcesUniformStore = undefined
+
+    // Destroy Models
+    this.clearCentermassCommand?.destroy()
+    this.clearCentermassCommand = undefined
+    this.calculateCentermassCommand?.destroy()
+    this.calculateCentermassCommand = undefined
+    this.applyForcesCommand?.destroy()
+    this.applyForcesCommand = undefined
+
+    // Destroy Framebuffers (destroy before textures they reference)
+    if (this.centermassFbo && !this.centermassFbo.destroyed) {
+      this.centermassFbo.destroy()
+    }
+    this.centermassFbo = undefined
+    if (this.clusterFbo && !this.clusterFbo.destroyed) {
+      this.clusterFbo.destroy()
+    }
+    this.clusterFbo = undefined
+    if (this.clusterPositionsFbo && !this.clusterPositionsFbo.destroyed) {
+      this.clusterPositionsFbo.destroy()
+    }
+    this.clusterPositionsFbo = undefined
+    if (this.clusterForceCoefficientFbo && !this.clusterForceCoefficientFbo.destroyed) {
+      this.clusterForceCoefficientFbo.destroy()
+    }
+    this.clusterForceCoefficientFbo = undefined
+
+    // Destroy Textures
+    if (this.clusterTexture && !this.clusterTexture.destroyed) {
+      this.clusterTexture.destroy()
+    }
+    this.clusterTexture = undefined
+    if (this.clusterPositionsTexture && !this.clusterPositionsTexture.destroyed) {
+      this.clusterPositionsTexture.destroy()
+    }
+    this.clusterPositionsTexture = undefined
+    if (this.clusterForceCoefficientTexture && !this.clusterForceCoefficientTexture.destroyed) {
+      this.clusterForceCoefficientTexture.destroy()
+    }
+    this.clusterForceCoefficientTexture = undefined
+    if (this.centermassTexture && !this.centermassTexture.destroyed) {
+      this.centermassTexture.destroy()
+    }
+    this.centermassTexture = undefined
+
+    // Destroy Buffers
+    if (this.pointIndices && !this.pointIndices.destroyed) {
+      this.pointIndices.destroy()
+    }
+    this.pointIndices = undefined
+    // Destroy attribute buffers (Model doesn't destroy them automatically)
+    if (this.clearCentermassVertexCoordBuffer && !this.clearCentermassVertexCoordBuffer.destroyed) {
+      this.clearCentermassVertexCoordBuffer.destroy()
+    }
+    this.clearCentermassVertexCoordBuffer = undefined
+    if (this.applyForcesVertexCoordBuffer && !this.applyForcesVertexCoordBuffer.destroyed) {
+      this.applyForcesVertexCoordBuffer.destroy()
+    }
+    this.applyForcesVertexCoordBuffer = undefined
   }
 }
