@@ -118,13 +118,14 @@ export class GraphData {
     }
 
     // Sets point sizes to default values from config if the input is missing or does not match input points number.
+    const defaultSize = this._config.pointDefaultSize ?? this._config.pointSize
     if (this.inputPointSizes === undefined || this.inputPointSizes.length !== this.pointsNumber) {
-      this.pointSizes = new Float32Array(this.pointsNumber).fill(this._config.pointSize)
+      this.pointSizes = new Float32Array(this.pointsNumber).fill(defaultSize)
     } else {
       this.pointSizes = this.inputPointSizes
       for (let i = 0; i < this.pointSizes.length; i++) {
         if (!isNumber(this.pointSizes[i])) {
-          this.pointSizes[i] = this._config.pointSize
+          this.pointSizes[i] = defaultSize
         }
       }
     }
@@ -196,13 +197,14 @@ export class GraphData {
     }
 
     // Sets point image sizes to point sizes if the input is missing or does not match input points number.
+    const defaultSize = this._config.pointDefaultSize ?? this._config.pointSize
     if (this.inputPointImageSizes === undefined || this.inputPointImageSizes.length !== this.pointsNumber) {
-      this.pointImageSizes = this.pointSizes ? new Float32Array(this.pointSizes) : new Float32Array(this.pointsNumber).fill(this._config.pointSize)
+      this.pointImageSizes = this.pointSizes ? new Float32Array(this.pointSizes) : new Float32Array(this.pointsNumber).fill(defaultSize)
     } else {
       this.pointImageSizes = new Float32Array(this.inputPointImageSizes)
       for (let i = 0; i < this.pointImageSizes.length; i++) {
         if (!isNumber(this.pointImageSizes[i])) {
-          this.pointImageSizes[i] = this.pointSizes?.[i] ?? this._config.pointSize
+          this.pointImageSizes[i] = this.pointSizes?.[i] ?? defaultSize
         }
       }
     }
@@ -253,13 +255,14 @@ export class GraphData {
     }
 
     // Sets link widths to default values from config if the input is missing or does not match input links number.
+    const defaultWidth = this._config.linkDefaultWidth ?? this._config.linkWidth
     if (this.inputLinkWidths === undefined || this.inputLinkWidths.length !== this.linksNumber) {
-      this.linkWidths = new Float32Array(this.linksNumber).fill(this._config.linkWidth)
+      this.linkWidths = new Float32Array(this.linksNumber).fill(defaultWidth)
     } else {
       this.linkWidths = this.inputLinkWidths
       for (let i = 0; i < this.linkWidths.length; i++) {
         if (!isNumber(this.linkWidths[i])) {
-          this.linkWidths[i] = this._config.linkWidth
+          this.linkWidths[i] = defaultWidth
         }
       }
     }
@@ -275,8 +278,9 @@ export class GraphData {
     }
 
     // Sets link arrows to default values from config if the input is missing or does not match input links number.
+    const defaultArrows = this._config.linkDefaultArrows ?? this._config.linkArrows
     if (this.linkArrowsBoolean === undefined || this.linkArrowsBoolean.length !== this.linksNumber) {
-      this.linkArrows = new Array(this.linksNumber).fill(+this._config.linkArrows)
+      this.linkArrows = new Array(this.linksNumber).fill(+defaultArrows)
     } else {
       this.linkArrows = this.linkArrowsBoolean.map(d => +d)
     }

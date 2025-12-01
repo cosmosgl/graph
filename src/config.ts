@@ -79,6 +79,9 @@ export interface GraphConfigInterface {
    * if the size value in the array is `undefined` or `null`.
    * Default value: `4`
   */
+  pointDefaultSize?: number;
+
+  /** @deprecated Use `pointDefaultSize` instead */
   pointSize?: number;
 
   /**
@@ -169,6 +172,9 @@ export interface GraphConfigInterface {
    * The default width value to use for links when no link widths are provided or if the width value in the array is `undefined` or `null`.
    * Default value: `1`
   */
+  linkDefaultWidth?: number;
+
+  /** @deprecated Use `linkDefaultWidth` instead */
   linkWidth?: number;
   /**
    * The color to use for links when they are hovered.
@@ -219,6 +225,9 @@ export interface GraphConfigInterface {
    * The default link arrow value that controls whether or not to display link arrows.
    * Default value: `false`
    */
+  linkDefaultArrows?: boolean;
+
+  /** @deprecated Use `linkDefaultArrows` instead */
   linkArrows?: boolean;
   /**
    * Scale factor for the link arrows size.
@@ -629,6 +638,11 @@ export class GraphConfig implements GraphConfigInterface {
   public pointGreyoutOpacity = defaultGreyoutPointOpacity
   public pointGreyoutColor = defaultGreyoutPointColor
   public pointSize = defaultPointSize
+  // TODO: When pointSize is removed, change this to:
+  // public pointDefaultSize = defaultPointSize
+  // Currently undefined to allow fallback to deprecated pointSize via nullish coalescing
+  // in GraphData.updatePointSize() (see: this._config.pointDefaultSize ?? this._config.pointSize)
+  public pointDefaultSize = undefined
   public pointOpacity = defaultPointOpacity
   public pointSizeScale = defaultConfigValues.pointSizeScale
   public hoveredPointCursor = defaultConfigValues.hoveredPointCursor
@@ -646,6 +660,11 @@ export class GraphConfig implements GraphConfigInterface {
   public linkOpacity = defaultLinkOpacity
   public linkGreyoutOpacity = defaultGreyoutLinkOpacity
   public linkWidth = defaultLinkWidth
+  // TODO: When linkWidth is removed, change this to:
+  // public linkDefaultWidth = defaultLinkWidth
+  // Currently undefined to allow fallback to deprecated linkWidth via nullish coalescing
+  // in GraphData.updateLinkWidth() (see: this._config.linkDefaultWidth ?? this._config.linkWidth)
+  public linkDefaultWidth = undefined
   public linkWidthScale = defaultConfigValues.linkWidthScale
   public hoveredLinkColor = defaultConfigValues.hoveredLinkColor
   public hoveredLinkWidthIncrease = defaultConfigValues.hoveredLinkWidthIncrease
@@ -655,6 +674,11 @@ export class GraphConfig implements GraphConfigInterface {
   public curvedLinkWeight = defaultConfigValues.curvedLinkWeight
   public curvedLinkControlPointDistance = defaultConfigValues.curvedLinkControlPointDistance
   public linkArrows = defaultConfigValues.linkArrows
+  // TODO: When linkArrows is removed, change this to:
+  // public linkDefaultArrows = defaultConfigValues.linkArrows
+  // Currently undefined to allow fallback to deprecated linkArrows via nullish coalescing
+  // in GraphData.updateArrows() (see: this._config.linkDefaultArrows ?? this._config.linkArrows)
+  public linkDefaultArrows = undefined
   public linkArrowsSizeScale = defaultConfigValues.linkArrowsSizeScale
   public scaleLinksOnZoom = defaultConfigValues.scaleLinksOnZoom
   public linkVisibilityDistanceRange = defaultConfigValues.linkVisibilityDistanceRange

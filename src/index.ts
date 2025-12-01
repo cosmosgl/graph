@@ -256,7 +256,8 @@ export class Graph {
       this.graph.updatePointColor()
       this.points.updateColor()
     }
-    if (prevConfig.pointSize !== this.config.pointSize) {
+    if ((prevConfig.pointDefaultSize !== this.config.pointDefaultSize) ||
+      (prevConfig.pointSize !== this.config.pointSize)) {
       this.graph.updatePointSize()
       this.points.updateSize()
     }
@@ -265,11 +266,13 @@ export class Graph {
       this.graph.updateLinkColor()
       this.lines.updateColor()
     }
-    if (prevConfig.linkWidth !== this.config.linkWidth) {
+    if ((prevConfig.linkDefaultWidth !== this.config.linkDefaultWidth) ||
+      (prevConfig.linkWidth !== this.config.linkWidth)) {
       this.graph.updateLinkWidth()
       this.lines.updateWidth()
     }
-    if (prevConfig.linkArrows !== this.config.linkArrows) {
+    if ((prevConfig.linkDefaultArrows !== this.config.linkDefaultArrows) ||
+      (prevConfig.linkArrows !== this.config.linkArrows)) {
       this.graph.updateArrows()
       this.lines.updateArrow()
     }
