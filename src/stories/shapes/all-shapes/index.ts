@@ -49,7 +49,7 @@ export const allShapes = (): {div: HTMLDivElement; graph: Graph } => {
   // Create graph with minimal configuration
   const graph = new Graph(div, {
     spaceSize,
-    pointSize: spacing / 2,
+    pointDefaultSize: spacing / 2,
     enableSimulation: false,
     scalePointsOnZoom: true,
     renderHoveredPointRing: true,

@@ -14,7 +14,7 @@ export const polygonSelection = (): {div: HTMLDivElement; graph: Graph; destroy:
     simulationGravity: 1.5,
     simulationCluster: 0.3,
     simulationRepulsion: 8,
-    pointSize: 8,
+    pointDefaultSize: 8,
     backgroundColor: '#1a1a2e',
     pointGreyoutOpacity: 0.2,
     onBackgroundClick: (): void => {

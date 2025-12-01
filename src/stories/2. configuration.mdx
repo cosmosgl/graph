@@ -13,7 +13,8 @@ import { Meta } from "@storybook/blocks";
 | pointColor | **[DEPRECATED]** Use `pointDefaultColor` instead. The default color to use for points when no point colors are provided... | `#b3b3b3` |
 | pointGreyoutOpacity | Greyed out point opacity value when the selection is active | `undefined` |
 | pointGreyoutColor | The color to use for points when they are greyed out (when selection is active). This can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255. If not provided, the color will be the same as the point's original color, but darkened or lightened depending on the background color. If `pointGreyoutOpacity` is also defined, it will override the alpha/opacity component of this color. | `undefined` |
-| pointSize | The default size value to use for points when no point sizes are provided or if the size value in the array is `undefined` or `null` | `4` |
+| pointDefaultSize | The default size value to use for points when no point sizes are provided or if the size value in the array is `undefined` or `null` | `4` |
+| pointSize | **[DEPRECATED]** Use `pointDefaultSize` instead. The default size value to use for points when no point sizes are provided... | `4` |
 | pointOpacity | Universal opacity value applied to all points. This value multiplies with individual point alpha values (if set via setPointColors). Useful for dynamically controlling opacity of all points without updating individual RGBA arrays. | `1.0` |
 | pointSizeScale | Scale factor for the point size | `1` |
 | hoveredPointCursor | Cursor style to use when hovering over a point | `auto` |
@@ -27,7 +28,8 @@ import { Meta } from "@storybook/blocks";
 | linkColor | **[DEPRECATED]** Use `linkDefaultColor` instead. The default color to use for links when no link colors are provided... | `#666666` |
 | linkOpacity | Universal opacity value applied to all links. This value multiplies with individual link alpha values (if set via setLinkColors). Useful for dynamically controlling opacity of all links without updating individual RGBA arrays. | `1.0` |
 | linkGreyoutOpacity | Greyed out link opacity value when the selection is active | `0.1` |
-| linkWidth | The default width value to use for links when no link widths are provided or if the width value in the array is `undefined` or `null` | `1` |
+| linkDefaultWidth | The default width value to use for links when no link widths are provided or if the width value in the array is `undefined` or `null` | `1` |
+| linkWidth | **[DEPRECATED]** Use `linkDefaultWidth` instead. The default width value to use for links when no link widths are provided... | `1` |
 | linkWidthScale | Scale factor for the link width | `1` |
 | hoveredLinkColor | The color to use for links when they are hovered. This can be either a hex color string (e.g., '#ff3333') or an array of RGBA values in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255 | `undefined` |
 | hoveredLinkWidthIncrease | Number of pixels to add to the link width when hovered | `5` |
@@ -36,7 +38,8 @@ import { Meta } from "@storybook/blocks";
 | curvedLinkSegments | Number of segments in a curved line | `19` |
 | curvedLinkWeight | Weight affects the shape of the curve | `0.8` |
 | curvedLinkControlPointDistance | Defines the position of the control point of the curve on the normal from the centre of the line. If set to 1 then the control point is at a distance equal to the length of the line | `0.5` |
-| linkArrows | The default link arrow value that controls whether or not to display link arrows | `false` |
+| linkDefaultArrows | The default link arrow value that controls whether or not to display link arrows | `false` |
+| linkArrows | **[DEPRECATED]** Use `linkDefaultArrows` instead. The default link arrow value that controls whether or not to display link arrows | `false` |
 | linkArrowsSizeScale | Scale factor for the link arrows size | `1` |
 | linkVisibilityDistanceRange | The range defines the minimum and maximum link visibility distance in pixels.<br /><br />The link will be fully opaque when its length is less than the first number in the array, and will have `linkVisibilityMinTransparency` transparency when its length is greater than the second number in the array.<br /><br />This distance is defined in screen space coordinates and will change as you zoom in and out (e.g. links become longer when you zoom in, and shorter when you zoom out). | `[50, 150]` |
 | linkVisibilityMinTransparency | The transparency value that the link will have when its length reaches the maximum link distance value from `linkVisibilityDistanceRange`. | `0.25` |

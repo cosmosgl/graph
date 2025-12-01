@@ -14,7 +14,7 @@ export const withLabels = (): {div: HTMLDivElement; graph: Graph; destroy: () =>
     simulationGravity: 2,
     simulationCluster: 0.25,
     simulationRepulsion: 10,
-    pointSize: 10,
+    pointDefaultSize: 10,
   })
 
   const updateClusterLabels = createClusterLabels({ div })

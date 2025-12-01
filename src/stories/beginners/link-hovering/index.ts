@@ -16,7 +16,7 @@ export const linkHovering = (): { div: HTMLDivElement; graph: Graph } => {
   const config: GraphConfigInterface = {
     backgroundColor: '#2d313a',
     scalePointsOnZoom: true,
-    linkArrows: false,
+    linkDefaultArrows: false,
     curvedLinks: true,
     enableSimulation: false,
     hoveredLinkWidthIncrease: 4,

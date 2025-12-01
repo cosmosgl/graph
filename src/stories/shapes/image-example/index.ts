@@ -186,10 +186,10 @@ export const imageExample = async (): Promise<{div: HTMLDivElement; graph: Graph
       spaceSize,
       enableSimulation: false,
       enableDrag: false,
-      linkArrows: true,
+      linkDefaultArrows: true,
       curvedLinks: true,
-      pointSize: 50,
-      linkWidth: 3,
+      pointDefaultSize: 50,
+      linkDefaultWidth: 3,
       hoveredPointRingColor: 'white',
       renderHoveredPointRing: true,
 
