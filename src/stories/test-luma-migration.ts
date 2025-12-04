@@ -19,6 +19,8 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
     },
   })
 
+  // Create graph with device first (needed for callbacks)
+  // eslint-disable-next-line prefer-const
   let graph: Graph | undefined
 
   const config: GraphConfigInterface = {
@@ -30,6 +32,7 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
     simulationFriction: 0.1,
     simulationGravity: 0,
     simulationRepulsion: 0.5,
+    simulationCluster: 0.25, // Cluster force strength
     curvedLinks: true,
     fitViewDelay: 1000,
     fitViewPadding: 0.3,
@@ -40,7 +43,7 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
     hoveredPointRingColor: 'orange',
     focusedPointIndex: 0,
     focusedPointRingColor: 'blue',
-    enableSimulation: false,
+    enableSimulation: true,
     // Test point interactions
     onPointClick: pointIndex => {
       console.log('Clicked point index: ', pointIndex)
@@ -137,6 +140,30 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
   graph.setPointColors(pointColors)
   graph.setPointSizes(pointSizes)
   graph.setPointShapes(pointShapes)
+
+  // Create cluster assignments - group points into clusters based on their shape
+  // Points with the same shape will be in the same cluster
+  const pointClusters: (number | undefined)[] = []
+  const numShapes = 8 // Number of different shapes (0-7)
+  for (let i = 0; i < pointCount; i++) {
+    const shapeIndex = i % numShapes
+    // Assign each shape group to a cluster (cluster index = shape index)
+    pointClusters.push(shapeIndex)
+  }
+  graph.setPointClusters(pointClusters)
+
+  // Optionally set explicit cluster positions (centered around the grid)
+  // If not set, clusters will use centermass (average position of points in cluster)
+  const clusterPositions: (number | undefined)[] = []
+  for (let clusterIndex = 0; clusterIndex < numShapes; clusterIndex++) {
+    // Position clusters in a circle around the center
+    const angle = (clusterIndex / numShapes) * Math.PI * 2
+    const radius = gridSize * 30 // Distance from center
+    const x = Math.cos(angle) * radius
+    const y = Math.sin(angle) * radius
+    clusterPositions.push(x, y)
+  }
+  graph.setClusterPositions(clusterPositions)
 
   // // Create links to test link rendering
   // const links = new Float32Array((pointCount - 1) * 2)
