@@ -1,84 +1,228 @@
-import regl from 'regl'
+import { Framebuffer, Buffer, Texture, UniformStore, RenderPass } from '@luma.gl/core'
+import { Model } from '@luma.gl/engine'
 // import { scaleLinear } from 'd3-scale'
 // import { extent } from 'd3-array'
 import { CoreModule } from '@/graph/modules/core-module'
 import { defaultConfigValues } from '@/graph/variables'
-import drawPointsFrag from '@/graph/modules/Points/draw-points.frag'
-import drawPointsVert from '@/graph/modules/Points/draw-points.vert'
-import findPointsOnAreaSelectionFrag from '@/graph/modules/Points/find-points-on-area-selection.frag'
-import findPointsOnPolygonSelectionFrag from '@/graph/modules/Points/find-points-on-polygon-selection.frag'
-import drawHighlightedFrag from '@/graph/modules/Points/draw-highlighted.frag'
-import drawHighlightedVert from '@/graph/modules/Points/draw-highlighted.vert'
-import findHoveredPointFrag from '@/graph/modules/Points/find-hovered-point.frag'
-import findHoveredPointVert from '@/graph/modules/Points/find-hovered-point.vert'
-import fillGridWithSampledPointsFrag from '@/graph/modules/Points/fill-sampled-points.frag'
-import fillGridWithSampledPointsVert from '@/graph/modules/Points/fill-sampled-points.vert'
-import updatePositionFrag from '@/graph/modules/Points/update-position.frag'
-import { createIndexesForBuffer, createQuadBuffer } from '@/graph/modules/Shared/buffer'
-import trackPositionsFrag from '@/graph/modules/Points/track-positions.frag'
-import dragPointFrag from '@/graph/modules/Points/drag-point.frag'
-import updateVert from '@/graph/modules/Shared/quad.vert'
-import clearFrag from '@/graph/modules/Shared/clear.frag'
+import drawPointsFrag from '@/graph/modules/Points/draw-points.frag?raw'
+import drawPointsVert from '@/graph/modules/Points/draw-points.vert?raw'
+import findPointsOnAreaSelectionFrag from '@/graph/modules/Points/find-points-on-area-selection.frag?raw'
+import findPointsOnPolygonSelectionFrag from '@/graph/modules/Points/find-points-on-polygon-selection.frag?raw'
+import drawHighlightedFrag from '@/graph/modules/Points/draw-highlighted.frag?raw'
+import drawHighlightedVert from '@/graph/modules/Points/draw-highlighted.vert?raw'
+import findHoveredPointFrag from '@/graph/modules/Points/find-hovered-point.frag?raw'
+import findHoveredPointVert from '@/graph/modules/Points/find-hovered-point.vert?raw'
+import fillGridWithSampledPointsFrag from '@/graph/modules/Points/fill-sampled-points.frag?raw'
+import fillGridWithSampledPointsVert from '@/graph/modules/Points/fill-sampled-points.vert?raw'
+import updatePositionFrag from '@/graph/modules/Points/update-position.frag?raw'
+import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
+import trackPositionsFrag from '@/graph/modules/Points/track-positions.frag?raw'
+import dragPointFrag from '@/graph/modules/Points/drag-point.frag?raw'
+import updateVert from '@/graph/modules/Shared/quad.vert?raw'
+import clearFrag from '@/graph/modules/Shared/clear.frag?raw'
 import { readPixels } from '@/graph/helper'
 import { createAtlasDataFromImageData } from '@/graph/modules/Points/atlas-utils'
 
 export class Points extends CoreModule {
-  public currentPositionFbo: regl.Framebuffer2D | undefined
-  public previousPositionFbo: regl.Framebuffer2D | undefined
-  public velocityFbo: regl.Framebuffer2D | undefined
-  public selectedFbo: regl.Framebuffer2D | undefined
-  public hoveredFbo: regl.Framebuffer2D | undefined
-  public greyoutStatusFbo: regl.Framebuffer2D | undefined
+  public currentPositionFbo: Framebuffer | undefined
+  public previousPositionFbo: Framebuffer | undefined
+  public velocityFbo: Framebuffer | undefined
+  public selectedFbo: Framebuffer | undefined
+  public hoveredFbo: Framebuffer | undefined
+  public greyoutStatusFbo: Framebuffer | undefined
   public scaleX: ((x: number) => number) | undefined
   public scaleY: ((y: number) => number) | undefined
   public shouldSkipRescale: boolean | undefined
-  public imageAtlasTexture: regl.Texture2D | undefined
+  public imageAtlasTexture: Texture | undefined
   public imageCount = 0
-  private colorBuffer: regl.Buffer | undefined
-  private sizeFbo: regl.Framebuffer2D | undefined
-  private sizeBuffer: regl.Buffer | undefined
-  private shapeBuffer: regl.Buffer | undefined
-  private imageIndicesBuffer: regl.Buffer | undefined
-  private imageSizesBuffer: regl.Buffer | undefined
-  private imageAtlasCoordsTexture: regl.Texture2D | undefined
+  // Add texture properties for position data (public for Clusters module access)
+  public currentPositionTexture: Texture | undefined
+  public previousPositionTexture: Texture | undefined
+  public velocityTexture: Texture | undefined
+  private colorBuffer: Buffer | undefined
+  private sizeFbo: Framebuffer | undefined
+  private sizeBuffer: Buffer | undefined
+  private shapeBuffer: Buffer | undefined
+  private imageIndicesBuffer: Buffer | undefined
+  private imageSizesBuffer: Buffer | undefined
+  private imageAtlasCoordsTexture: Texture | undefined
   private imageAtlasCoordsTextureSize: number | undefined
-  private trackedIndicesFbo: regl.Framebuffer2D | undefined
-  private trackedPositionsFbo: regl.Framebuffer2D | undefined
-  private sampledPointsFbo: regl.Framebuffer2D | undefined
+  private trackedIndicesFbo: Framebuffer | undefined
+  private trackedPositionsFbo: Framebuffer | undefined
+  private sampledPointsFbo: Framebuffer | undefined
   private trackedPositions: Map<number, [number, number]> | undefined
   private isPositionsUpToDate = false
-  private drawCommand: regl.DrawCommand | undefined
-  private drawHighlightedCommand: regl.DrawCommand | undefined
-  private updatePositionCommand: regl.DrawCommand | undefined
-  private dragPointCommand: regl.DrawCommand | undefined
-  private findPointsOnAreaSelectionCommand: regl.DrawCommand | undefined
-  private findPointsOnPolygonSelectionCommand: regl.DrawCommand | undefined
-  private findHoveredPointCommand: regl.DrawCommand | undefined
-  private clearHoveredFboCommand: regl.DrawCommand | undefined
-  private clearSampledPointsFboCommand: regl.DrawCommand | undefined
-  private fillSampledPointsFboCommand: regl.DrawCommand | undefined
-  private trackPointsCommand: regl.DrawCommand | undefined
+  private drawCommand: Model | undefined
+  private drawHighlightedCommand: Model | undefined
+  private updatePositionCommand: Model | undefined
+  private dragPointCommand: Model | undefined
+  private findPointsOnAreaSelectionCommand: Model | undefined
+  private findPointsOnPolygonSelectionCommand: Model | undefined
+  private findHoveredPointCommand: Model | undefined
+  private clearHoveredFboCommand: Model | undefined
+  private clearSampledPointsFboCommand: Model | undefined
+  private fillSampledPointsFboCommand: Model | undefined
+  private trackPointsCommand: Model | undefined
+  // Vertex buffers for quad rendering (Model doesn't destroy them automatically)
+  private updatePositionVertexCoordBuffer: Buffer | undefined
+  private dragPointVertexCoordBuffer: Buffer | undefined
+  private findPointsOnAreaSelectionVertexCoordBuffer: Buffer | undefined
+  private findPointsOnPolygonSelectionVertexCoordBuffer: Buffer | undefined
+  private clearHoveredFboVertexCoordBuffer: Buffer | undefined
+  private clearSampledPointsFboVertexCoordBuffer: Buffer | undefined
+  private drawHighlightedVertexCoordBuffer: Buffer | undefined
+  private trackPointsVertexCoordBuffer: Buffer | undefined
   private trackedIndices: number[] | undefined
-  private selectedTexture: regl.Texture2D | undefined
-  private greyoutStatusTexture: regl.Texture2D | undefined
+  private selectedTexture: Texture | undefined
+  private greyoutStatusTexture: Texture | undefined
   private pinnedStatusTexture: regl.Texture2D | undefined
   private pinnedStatusFbo: regl.Framebuffer2D | undefined
-  private sizeTexture: regl.Texture2D | undefined
-  private trackedIndicesTexture: regl.Texture2D | undefined
-  private polygonPathTexture: regl.Texture2D | undefined
-  private polygonPathFbo: regl.Framebuffer2D | undefined
+  private sizeTexture: Texture | undefined
+  private trackedIndicesTexture: Texture | undefined
+  private polygonPathTexture: Texture | undefined
+  private polygonPathFbo: Framebuffer | undefined
   private polygonPathLength = 0
-  private drawPointIndices: regl.Buffer | undefined
-  private hoveredPointIndices: regl.Buffer | undefined
-  private sampledPointIndices: regl.Buffer | undefined
+  private drawPointIndices: Buffer | undefined
+  private hoveredPointIndices: Buffer | undefined
+  private sampledPointIndices: Buffer | undefined
+
+  // Uniform stores for scalar uniforms
+  private updatePositionUniformStore: UniformStore<{
+    updatePositionUniforms: {
+      friction: number;
+      spaceSize: number;
+    };
+  }> | undefined
+
+  private dragPointUniformStore: UniformStore<{
+    dragPointUniforms: {
+      mousePos: [number, number];
+      index: number;
+    };
+  }> | undefined
+
+  private drawUniformStore: UniformStore<{
+    drawVertexUniforms: {
+      ratio: number;
+      sizeScale: number;
+      pointsTextureSize: number;
+      transformationMatrix: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+      spaceSize: number;
+      screenSize: [number, number];
+      greyoutColor: [number, number, number, number];
+      backgroundColor: [number, number, number, number];
+      scalePointsOnZoom: number;
+      maxPointSize: number;
+      isDarkenGreyout: number;
+      skipSelected: number;
+      skipUnselected: number;
+      hasImages: number;
+      imageCount: number;
+      imageAtlasCoordsTextureSize: number;
+    };
+    drawFragmentUniforms: {
+      greyoutOpacity: number;
+      pointOpacity: number;
+      isDarkenGreyout: number;
+      backgroundColor: [number, number, number, number];
+    };
+  }> | undefined
+
+  private findPointsOnAreaSelectionUniformStore: UniformStore<{
+    findPointsOnAreaSelectionUniforms: {
+      spaceSize: number;
+      screenSize: [number, number];
+      sizeScale: number;
+      transformationMatrix: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+      ratio: number;
+      selection0: [number, number];
+      selection1: [number, number];
+      scalePointsOnZoom: number;
+      maxPointSize: number;
+    };
+  }> | undefined
+
+  private findPointsOnPolygonSelectionUniformStore: UniformStore<{
+    findPointsOnPolygonSelectionUniforms: {
+      spaceSize: number;
+      screenSize: [number, number];
+      transformationMatrix: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+      polygonPathLength: number;
+    };
+  }> | undefined
+
+  private findHoveredPointUniformStore: UniformStore<{
+    findHoveredPointUniforms: {
+      ratio: number;
+      sizeScale: number;
+      pointsTextureSize: number;
+      transformationMatrix: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+      spaceSize: number;
+      screenSize: [number, number];
+      scalePointsOnZoom: number;
+      mousePosition: [number, number];
+      maxPointSize: number;
+    };
+  }> | undefined
+
+  private fillSampledPointsUniformStore: UniformStore<{
+    fillSampledPointsUniforms: {
+      pointsTextureSize: number;
+      transformationMatrix: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+      spaceSize: number;
+      screenSize: [number, number];
+    };
+  }> | undefined
+
+  private drawHighlightedUniformStore: UniformStore<{
+    drawHighlightedUniforms: {
+      color: [number, number, number, number];
+      width: number;
+      pointIndex: number;
+      size: number;
+      sizeScale: number;
+      pointsTextureSize: number;
+      transformationMatrix: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+      spaceSize: number;
+      screenSize: [number, number];
+      scalePointsOnZoom: number; // f32 in shader, not boolean
+      maxPointSize: number;
+      universalPointOpacity: number;
+      greyoutOpacity: number;
+      isDarkenGreyout: number; // f32 in shader, not boolean
+      backgroundColor: [number, number, number, number];
+      greyoutColor: [number, number, number, number];
+    };
+  }> | undefined
+
+  private trackPointsUniformStore: UniformStore<{
+    trackPointsUniforms: {
+      pointsTextureSize: number;
+    };
+  }> | undefined
 
   public updatePositions (): void {
-    const { reglInstance, store, data, config: { rescalePositions, enableSimulation } } = this
+    const { device, store, data, config: { rescalePositions, enableSimulation } } = this
 
     const { pointsTextureSize } = store
     if (!pointsTextureSize || !data.pointPositions || data.pointsNumber === undefined) return
 
-    const initialState = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
+    // Create initial state array with exact size needed for RGBA32Float texture
+    // Ensure it's a new contiguous buffer (not a view) with the exact size
+    const textureDataSize = pointsTextureSize * pointsTextureSize * 4
+    const initialState = new Float32Array(textureDataSize)
+
+    const expectedBytes = pointsTextureSize * pointsTextureSize * 4 * 4 // width * height * 4 components * 4 bytes
+    const actualBytes = initialState.byteLength
+    if (actualBytes !== expectedBytes) {
+      console.error('Texture data size mismatch:', {
+        pointsTextureSize,
+        expectedBytes,
+        actualBytes,
+        textureDataSize,
+        dataLength: initialState.length,
+      })
+    }
 
     let shouldRescale = rescalePositions
     // If rescalePositions isn't specified in config and simulation is disabled, default to true
@@ -105,73 +249,193 @@ export class Points extends CoreModule {
       initialState[i * 4 + 2] = i
     }
 
-    // Create position buffer
-    if (!this.currentPositionFbo) this.currentPositionFbo = reglInstance.framebuffer()
-    this.currentPositionFbo({
-      color: reglInstance.texture({
+    // Create currentPositionTexture and framebuffer
+    if (!this.currentPositionTexture || this.currentPositionTexture.width !== pointsTextureSize || this.currentPositionTexture.height !== pointsTextureSize) {
+      if (this.currentPositionTexture) {
+        this.currentPositionTexture.destroy()
+      }
+      if (this.currentPositionFbo) {
+        this.currentPositionFbo.destroy()
+      }
+      this.currentPositionTexture = device.createTexture({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+      })
+      this.currentPositionTexture.copyImageData({
         data: initialState,
-        shape: [pointsTextureSize, pointsTextureSize, 4],
-        type: 'float',
-      }),
-      depth: false,
-      stencil: false,
-    })
-
-    if (!this.previousPositionFbo) this.previousPositionFbo = reglInstance.framebuffer()
-    this.previousPositionFbo({
-      color: reglInstance.texture({
+        bytesPerRow: pointsTextureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+      this.currentPositionFbo = device.createFramebuffer({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        colorAttachments: [this.currentPositionTexture],
+      })
+    } else {
+      this.currentPositionTexture.copyImageData({
         data: initialState,
-        shape: [pointsTextureSize, pointsTextureSize, 4],
-        type: 'float',
-      }),
-      depth: false,
-      stencil: false,
-    })
-
-    if (this.config.enableSimulation) {
-      // Create velocity buffer
-      if (!this.velocityFbo) this.velocityFbo = reglInstance.framebuffer()
-      this.velocityFbo({
-        color: reglInstance.texture({
-          data: new Float32Array(pointsTextureSize * pointsTextureSize * 4).fill(0),
-          shape: [pointsTextureSize, pointsTextureSize, 4],
-          type: 'float',
-        }),
-        depth: false,
-        stencil: false,
+        bytesPerRow: pointsTextureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
       })
     }
 
-    // Create selected points buffer
-    if (!this.selectedTexture) this.selectedTexture = reglInstance.texture()
-    this.selectedTexture({
-      data: initialState,
-      shape: [pointsTextureSize, pointsTextureSize, 4],
-      type: 'float',
-    })
-    if (!this.selectedFbo) this.selectedFbo = reglInstance.framebuffer()
-    this.selectedFbo({
-      color: this.selectedTexture,
-      depth: false,
-      stencil: false,
-    })
+    // Create previousPositionTexture and framebuffer
+    if (!this.previousPositionTexture ||
+        this.previousPositionTexture.width !== pointsTextureSize ||
+        this.previousPositionTexture.height !== pointsTextureSize) {
+      if (this.previousPositionTexture) {
+        this.previousPositionTexture.destroy()
+      }
+      if (this.previousPositionFbo) {
+        this.previousPositionFbo.destroy()
+      }
+      this.previousPositionTexture = device.createTexture({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+      })
+      this.previousPositionTexture.copyImageData({
+        data: initialState,
+        bytesPerRow: pointsTextureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+      this.previousPositionFbo = device.createFramebuffer({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        colorAttachments: [this.previousPositionTexture],
+      })
+    } else {
+      this.previousPositionTexture.copyImageData({
+        data: initialState,
+        bytesPerRow: pointsTextureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+    }
 
-    if (!this.hoveredFbo) this.hoveredFbo = reglInstance.framebuffer()
-    this.hoveredFbo({
-      shape: [2, 2],
-      colorType: 'float',
-      depth: false,
-      stencil: false,
-    })
+    if (this.config.enableSimulation) {
+      // Create velocityTexture and framebuffer
+      const velocityData = new Float32Array(pointsTextureSize * pointsTextureSize * 4).fill(0)
+      if (!this.velocityTexture || this.velocityTexture.width !== pointsTextureSize || this.velocityTexture.height !== pointsTextureSize) {
+        if (this.velocityTexture) {
+          this.velocityTexture.destroy()
+        }
+        if (this.velocityFbo) {
+          this.velocityFbo.destroy()
+        }
+        this.velocityTexture = device.createTexture({
+          width: pointsTextureSize,
+          height: pointsTextureSize,
+          format: 'rgba32float',
+        })
+        this.velocityTexture.copyImageData({
+          data: velocityData,
+          bytesPerRow: pointsTextureSize,
+          mipLevel: 0,
+          x: 0,
+          y: 0,
+        })
+        this.velocityFbo = device.createFramebuffer({
+          width: pointsTextureSize,
+          height: pointsTextureSize,
+          colorAttachments: [this.velocityTexture],
+        })
+      } else {
+        this.velocityTexture.copyImageData({
+          data: velocityData,
+          bytesPerRow: pointsTextureSize,
+          mipLevel: 0,
+          x: 0,
+          y: 0,
+        })
+      }
+    }
 
-    if (!this.drawPointIndices) this.drawPointIndices = reglInstance.buffer(0)
-    this.drawPointIndices(createIndexesForBuffer(store.pointsTextureSize))
+    // Create selectedTexture and framebuffer
+    if (!this.selectedTexture || this.selectedTexture.width !== pointsTextureSize || this.selectedTexture.height !== pointsTextureSize) {
+      if (this.selectedTexture) {
+        this.selectedTexture.destroy()
+      }
+      if (this.selectedFbo) {
+        this.selectedFbo.destroy()
+      }
+      this.selectedTexture = device.createTexture({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+      })
+      this.selectedTexture.copyImageData({
+        data: initialState,
+        bytesPerRow: pointsTextureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+      this.selectedFbo = device.createFramebuffer({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        colorAttachments: [this.selectedTexture],
+      })
+    } else {
+      this.selectedTexture.copyImageData({
+        data: initialState,
+        bytesPerRow: pointsTextureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+    }
 
-    if (!this.hoveredPointIndices) this.hoveredPointIndices = reglInstance.buffer(0)
-    this.hoveredPointIndices(createIndexesForBuffer(store.pointsTextureSize))
+    // Create hoveredFbo (2x2 for hover detection)
+    if (!this.hoveredFbo) {
+      this.hoveredFbo = device.createFramebuffer({
+        width: 2,
+        height: 2,
+        colorAttachments: ['rgba32float'],
+      })
+    }
 
-    if (!this.sampledPointIndices) this.sampledPointIndices = reglInstance.buffer(0)
-    this.sampledPointIndices(createIndexesForBuffer(store.pointsTextureSize))
+    // Create buffers
+    const indexData = createIndexesForBuffer(store.pointsTextureSize)
+    const requiredByteLength = indexData.byteLength
+
+    if (!this.drawPointIndices || this.drawPointIndices.byteLength !== requiredByteLength) {
+      this.drawPointIndices?.destroy()
+      this.drawPointIndices = device.createBuffer({
+        data: indexData,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+      })
+    } else {
+      this.drawPointIndices.write(indexData)
+    }
+
+    if (!this.hoveredPointIndices || this.hoveredPointIndices.byteLength !== requiredByteLength) {
+      this.hoveredPointIndices?.destroy()
+      this.hoveredPointIndices = device.createBuffer({
+        data: indexData,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+      })
+    } else {
+      this.hoveredPointIndices.write(indexData)
+    }
+
+    if (!this.sampledPointIndices || this.sampledPointIndices.byteLength !== requiredByteLength) {
+      this.sampledPointIndices?.destroy()
+      this.sampledPointIndices = device.createBuffer({
+        data: indexData,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+      })
+    } else {
+      this.sampledPointIndices.write(indexData)
+    }
 
     this.updateGreyoutStatus()
     this.updatePinnedStatus()
@@ -181,323 +445,649 @@ export class Points extends CoreModule {
   }
 
   public initPrograms (): void {
-    const { reglInstance, config, store, data } = this
+    const { device, config, store, data } = this
+    // Ensure textures are created before Model initialization
+    if (!this.imageAtlasCoordsTexture || !this.imageAtlasTexture) {
+      this.createAtlas()
+    }
+    // Ensure buffers exist before Model creation (Model needs attributes at creation time)
+    if (!this.colorBuffer) this.updateColor()
+    if (!this.sizeBuffer) this.updateSize()
+    if (!this.shapeBuffer) this.updateShape()
+    if (!this.imageIndicesBuffer) this.updateImageIndices()
+    if (!this.imageSizesBuffer) this.updateImageSizes()
+    if (!this.greyoutStatusTexture) this.updateGreyoutStatus()
     if (config.enableSimulation) {
       if (!this.updatePositionCommand) {
-        this.updatePositionCommand = reglInstance({
-          frag: updatePositionFrag,
-          vert: updateVert,
-          framebuffer: () => this.currentPositionFbo as regl.Framebuffer2D,
-          primitive: 'triangle strip',
-          count: 4,
-          attributes: { vertexCoord: createQuadBuffer(reglInstance) },
-          uniforms: {
-            positionsTexture: () => this.previousPositionFbo,
-            velocity: () => this.velocityFbo,
-            friction: () => config.simulationFriction,
-            spaceSize: () => store.adjustedSpaceSize,
-            pinnedStatusTexture: () => this.pinnedStatusFbo,
+        // Create vertex buffer for quad
+        if (!this.updatePositionVertexCoordBuffer) {
+          this.updatePositionVertexCoordBuffer = device.createBuffer({
+            data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+          })
+        }
+
+        // Create UniformStore for updatePosition uniforms
+        if (!this.updatePositionUniformStore) {
+          this.updatePositionUniformStore = new UniformStore({
+            updatePositionUniforms: {
+              uniformTypes: {
+                // Order MUST match shader declaration order (std140 layout)
+                friction: 'f32',
+                spaceSize: 'f32',
+              },
+              defaultUniforms: {
+                friction: config.simulationFriction ?? 0,
+                spaceSize: store.adjustedSpaceSize ?? 0,
+              },
+            },
+          })
+        }
+
+        this.updatePositionCommand = new Model(device, {
+          fs: updatePositionFrag,
+          vs: updateVert,
+          topology: 'triangle-strip',
+          vertexCount: 4,
+          attributes: {
+            vertexCoord: this.updatePositionVertexCoordBuffer,
+          },
+          bufferLayout: [
+            { name: 'vertexCoord', format: 'float32x2' },
+          ],
+          defines: {
+            USE_UNIFORM_BUFFERS: true,
+          },
+          bindings: {
+            updatePositionUniforms: this.updatePositionUniformStore.getManagedUniformBuffer(device, 'updatePositionUniforms'),
+            ...(this.previousPositionTexture && { positionsTexture: this.previousPositionTexture }),
+            ...(this.velocityTexture && { velocity: this.velocityTexture }),
           },
         })
       }
     }
+
     if (!this.dragPointCommand) {
-      this.dragPointCommand = reglInstance({
-        frag: dragPointFrag,
-        vert: updateVert,
-        framebuffer: () => this.currentPositionFbo as regl.Framebuffer2D,
-        primitive: 'triangle strip',
-        count: 4,
-        attributes: { vertexCoord: createQuadBuffer(reglInstance) },
-        uniforms: {
-          positionsTexture: () => this.previousPositionFbo,
-          mousePos: () => store.mousePosition,
-          index: () => store.hoveredPoint?.index ?? -1,
+      // Create vertex buffer for quad
+      if (!this.dragPointVertexCoordBuffer) {
+        this.dragPointVertexCoordBuffer = device.createBuffer({
+          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+        })
+      }
+
+      // Create UniformStore for dragPoint uniforms
+      if (!this.dragPointUniformStore) {
+        this.dragPointUniformStore = new UniformStore({
+          dragPointUniforms: {
+            uniformTypes: {
+              // Order MUST match shader declaration order (std140 layout)
+              mousePos: 'vec2<f32>',
+              index: 'f32',
+            },
+            defaultUniforms: {
+              mousePos: (store.mousePosition as [number, number]) ?? [0, 0],
+              index: store.hoveredPoint?.index ?? -1,
+            },
+          },
+        })
+      }
+
+      this.dragPointCommand = new Model(device, {
+        fs: dragPointFrag,
+        vs: updateVert,
+        topology: 'triangle-strip',
+        vertexCount: 4,
+        attributes: {
+          vertexCoord: this.dragPointVertexCoordBuffer,
+        },
+        bufferLayout: [
+          { name: 'vertexCoord', format: 'float32x2' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
+        },
+        bindings: {
+          dragPointUniforms: this.dragPointUniformStore.getManagedUniformBuffer(device, 'dragPointUniforms'),
+          ...(this.previousPositionTexture && { positionsTexture: this.previousPositionTexture }),
         },
       })
     }
 
     if (!this.drawCommand) {
-      this.drawCommand = reglInstance({
-        frag: drawPointsFrag,
-        vert: drawPointsVert,
-        primitive: 'points',
-        count: () => data.pointsNumber ?? 0,
+      // Create UniformStore for draw uniforms
+      if (!this.drawUniformStore) {
+        this.drawUniformStore = new UniformStore({
+          drawVertexUniforms: {
+            uniformTypes: {
+              // Order MUST match shader declaration order (std140 layout)
+              ratio: 'f32',
+              transformationMatrix: 'mat4x4<f32>',
+              pointsTextureSize: 'f32',
+              sizeScale: 'f32',
+              spaceSize: 'f32',
+              screenSize: 'vec2<f32>',
+              greyoutColor: 'vec4<f32>',
+              backgroundColor: 'vec4<f32>',
+              scalePointsOnZoom: 'f32',
+              maxPointSize: 'f32',
+              isDarkenGreyout: 'f32',
+              skipSelected: 'f32',
+              skipUnselected: 'f32',
+              hasImages: 'f32',
+              imageCount: 'f32',
+              imageAtlasCoordsTextureSize: 'f32',
+            },
+            defaultUniforms: {
+              // Order MUST match uniformTypes and shader declaration
+              ratio: config.pixelRatio ?? 1,
+              transformationMatrix: ((): [
+                number, number, number, number,
+                number, number, number, number,
+                number, number, number, number,
+                number, number, number, number
+              ] => {
+                const t = store.transform ?? [1, 0, 0, 0, 1, 0, 0, 0, 1]
+                return [
+                  t[0], t[1], t[2], 0,
+                  t[3], t[4], t[5], 0,
+                  t[6], t[7], t[8], 0,
+                  0, 0, 0, 1,
+                ]
+              })(),
+              pointsTextureSize: store.pointsTextureSize ?? 0,
+              sizeScale: config.pointSizeScale ?? 1,
+              spaceSize: store.adjustedSpaceSize ?? 0,
+              screenSize: store.screenSize ?? [0, 0],
+              greyoutColor: (store.greyoutPointColor ?? [0, 0, 0, 1]) as [number, number, number, number],
+              backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
+              scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0, // Convert boolean to float
+              maxPointSize: store.maxPointSize ?? 100,
+              isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
+              skipSelected: 0, // Default to 0 (false)
+              skipUnselected: 0, // Default to 0 (false)
+              hasImages: (this.imageCount > 0) ? 1 : 0, // Convert boolean to float
+              imageCount: this.imageCount,
+              imageAtlasCoordsTextureSize: this.imageAtlasCoordsTextureSize ?? 0,
+            },
+          },
+          drawFragmentUniforms: {
+            uniformTypes: {
+              greyoutOpacity: 'f32',
+              pointOpacity: 'f32',
+              isDarkenGreyout: 'f32',
+              backgroundColor: 'vec4<f32>',
+            },
+            defaultUniforms: {
+              greyoutOpacity: config.pointGreyoutOpacity ?? -1,
+              pointOpacity: config.pointOpacity ?? 1,
+              isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
+              backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
+            },
+          },
+        })
+      }
+
+      this.drawCommand = new Model(device, {
+        fs: drawPointsFrag,
+        vs: drawPointsVert,
+        topology: 'point-list',
+        vertexCount: data.pointsNumber ?? 0,
         attributes: {
-          pointIndices: {
-            buffer: this.drawPointIndices,
-            size: 2,
-          },
-          size: {
-            buffer: () => this.sizeBuffer,
-            size: 1,
-          },
-          color: {
-            buffer: () => this.colorBuffer,
-            size: 4,
-          },
-          shape: {
-            buffer: () => this.shapeBuffer,
-            size: 1,
-          },
-          imageIndex: {
-            buffer: () => this.imageIndicesBuffer,
-            size: 1,
-          },
-          imageSize: {
-            buffer: () => this.imageSizesBuffer,
-            size: 1,
-          },
+          ...(this.drawPointIndices && { pointIndices: this.drawPointIndices }),
+          ...(this.sizeBuffer && { size: this.sizeBuffer }),
+          ...(this.colorBuffer && { color: this.colorBuffer }),
+          ...(this.shapeBuffer && { shape: this.shapeBuffer }),
+          ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
+          ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
         },
-        uniforms: {
-          positionsTexture: () => this.currentPositionFbo,
-          pointGreyoutStatus: () => this.greyoutStatusFbo,
-          ratio: () => config.pixelRatio,
-          sizeScale: () => config.pointSizeScale,
-          pointsTextureSize: () => store.pointsTextureSize,
-          transformationMatrix: () => store.transform,
-          spaceSize: () => store.adjustedSpaceSize,
-          screenSize: () => store.screenSize,
-          pointOpacity: () => config.pointOpacity,
-          greyoutOpacity: () => config.pointGreyoutOpacity ?? -1,
-          greyoutColor: () => store.greyoutPointColor,
-          backgroundColor: () => store.backgroundColor,
-          isDarkenGreyout: () => store.isDarkenGreyout,
-          scalePointsOnZoom: () => config.scalePointsOnZoom,
-          maxPointSize: () => store.maxPointSize,
-          skipSelected: reglInstance.prop<{ skipSelected: boolean }, 'skipSelected'>('skipSelected'),
-          skipUnselected: reglInstance.prop<{ skipUnselected: boolean }, 'skipUnselected'>('skipUnselected'),
-          imageAtlasTexture: () => this.imageAtlasTexture,
-          imageAtlasCoords: () => this.imageAtlasCoordsTexture,
-          hasImages: () => this.imageCount > 0,
-          imageCount: () => this.imageCount,
-          imageAtlasCoordsTextureSize: () => this.imageAtlasCoordsTextureSize,
+        bufferLayout: [
+          { name: 'pointIndices', format: 'float32x2' },
+          { name: 'size', format: 'float32' },
+          { name: 'color', format: 'float32x4' },
+          { name: 'shape', format: 'float32' },
+          { name: 'imageIndex', format: 'float32' },
+          { name: 'imageSize', format: 'float32' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
         },
-        blend: {
-          enable: true,
-          func: {
-            dstRGB: 'one minus src alpha',
-            srcRGB: 'src alpha',
-            dstAlpha: 'one minus src alpha',
-            srcAlpha: 'one',
-          },
-          equation: {
-            rgb: 'add',
-            alpha: 'add',
-          },
+        bindings: {
+          drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer(device, 'drawVertexUniforms'),
+          drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer(device, 'drawFragmentUniforms'),
+          ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
+          ...(this.greyoutStatusTexture && { pointGreyoutStatus: this.greyoutStatusTexture }),
+          ...(this.imageAtlasTexture && { imageAtlasTexture: this.imageAtlasTexture }),
+          ...(this.imageAtlasCoordsTexture && { imageAtlasCoords: this.imageAtlasCoordsTexture }),
         },
-        depth: {
-          enable: false,
-          mask: false,
+        parameters: {
+          blend: true,
+          blendColorOperation: 'add',
+          blendColorSrcFactor: 'src-alpha',
+          blendColorDstFactor: 'one-minus-src-alpha',
+          blendAlphaOperation: 'add',
+          blendAlphaSrcFactor: 'one',
+          blendAlphaDstFactor: 'one-minus-src-alpha',
+          depthWriteEnabled: false,
+          depthCompare: 'always',
         },
       })
     }
 
     if (!this.findPointsOnAreaSelectionCommand) {
-      this.findPointsOnAreaSelectionCommand = reglInstance({
-        frag: findPointsOnAreaSelectionFrag,
-        vert: updateVert,
-        framebuffer: () => this.selectedFbo as regl.Framebuffer2D,
-        primitive: 'triangle strip',
-        count: 4,
+      // Create vertex buffer for quad
+      if (!this.findPointsOnAreaSelectionVertexCoordBuffer) {
+        this.findPointsOnAreaSelectionVertexCoordBuffer = device.createBuffer({
+          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+        })
+      }
+
+      // Create UniformStore for findPointsOnAreaSelection uniforms
+      if (!this.findPointsOnAreaSelectionUniformStore) {
+        this.findPointsOnAreaSelectionUniformStore = new UniformStore({
+          findPointsOnAreaSelectionUniforms: {
+            uniformTypes: {
+              // Order MUST match shader declaration order (std140 layout)
+              sizeScale: 'f32',
+              spaceSize: 'f32',
+              screenSize: 'vec2<f32>',
+              ratio: 'f32',
+              transformationMatrix: 'mat4x4<f32>',
+              selection0: 'vec2<f32>',
+              selection1: 'vec2<f32>',
+              scalePointsOnZoom: 'f32',
+              maxPointSize: 'f32',
+            },
+            defaultUniforms: {
+              sizeScale: config.pointSizeScale ?? 1,
+              spaceSize: store.adjustedSpaceSize ?? 0,
+              screenSize: store.screenSize ?? [0, 0],
+              ratio: config.pixelRatio ?? 1,
+              transformationMatrix: store.transformationMatrix4x4,
+              selection0: (store.selectedArea?.[0] ?? [0, 0]) as [number, number],
+              selection1: (store.selectedArea?.[1] ?? [0, 0]) as [number, number],
+              scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
+              maxPointSize: store.maxPointSize ?? 100,
+            },
+          },
+        })
+      }
+
+      this.findPointsOnAreaSelectionCommand = new Model(device, {
+        fs: findPointsOnAreaSelectionFrag,
+        vs: updateVert,
+        topology: 'triangle-strip',
+        vertexCount: 4,
         attributes: {
-          vertexCoord: createQuadBuffer(reglInstance),
+          vertexCoord: this.findPointsOnAreaSelectionVertexCoordBuffer,
         },
-        uniforms: {
-          positionsTexture: () => this.currentPositionFbo,
-          pointSize: () => this.sizeFbo,
-          spaceSize: () => store.adjustedSpaceSize,
-          screenSize: () => store.screenSize,
-          sizeScale: () => config.pointSizeScale,
-          transformationMatrix: () => store.transform,
-          ratio: () => config.pixelRatio,
-          selection0: () => store.selectedArea[0],
-          selection1: () => store.selectedArea[1],
-          scalePointsOnZoom: () => config.scalePointsOnZoom,
-          maxPointSize: () => store.maxPointSize,
+        bufferLayout: [
+          { name: 'vertexCoord', format: 'float32x2' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
+        },
+        bindings: {
+          findPointsOnAreaSelectionUniforms: this.findPointsOnAreaSelectionUniformStore.getManagedUniformBuffer(device, 'findPointsOnAreaSelectionUniforms'),
+          ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
+          ...(this.sizeTexture && { pointSize: this.sizeTexture }),
         },
       })
     }
 
     if (!this.findPointsOnPolygonSelectionCommand) {
-      this.findPointsOnPolygonSelectionCommand = reglInstance({
-        frag: findPointsOnPolygonSelectionFrag,
-        vert: updateVert,
-        framebuffer: () => this.selectedFbo as regl.Framebuffer2D,
-        primitive: 'triangle strip',
-        count: 4,
+      // Create vertex buffer for quad
+      if (!this.findPointsOnPolygonSelectionVertexCoordBuffer) {
+        this.findPointsOnPolygonSelectionVertexCoordBuffer = device.createBuffer({
+          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+        })
+      }
+
+      // Create UniformStore for findPointsOnPolygonSelection uniforms
+      if (!this.findPointsOnPolygonSelectionUniformStore) {
+        this.findPointsOnPolygonSelectionUniformStore = new UniformStore({
+          findPointsOnPolygonSelectionUniforms: {
+            uniformTypes: {
+              // Order MUST match shader declaration order (std140 layout)
+              spaceSize: 'f32',
+              screenSize: 'vec2<f32>',
+              transformationMatrix: 'mat4x4<f32>',
+              polygonPathLength: 'f32',
+            },
+            defaultUniforms: {
+              spaceSize: store.adjustedSpaceSize ?? 0,
+              screenSize: store.screenSize ?? [0, 0],
+              transformationMatrix: store.transformationMatrix4x4,
+              polygonPathLength: this.polygonPathLength,
+            },
+          },
+        })
+      }
+
+      this.findPointsOnPolygonSelectionCommand = new Model(device, {
+        fs: findPointsOnPolygonSelectionFrag,
+        vs: updateVert,
+        topology: 'triangle-strip',
+        vertexCount: 4,
         attributes: {
-          vertexCoord: createQuadBuffer(reglInstance),
+          vertexCoord: this.findPointsOnPolygonSelectionVertexCoordBuffer,
         },
-        uniforms: {
-          positionsTexture: () => this.currentPositionFbo,
-          spaceSize: () => store.adjustedSpaceSize,
-          screenSize: () => store.screenSize,
-          transformationMatrix: () => store.transform,
-          polygonPathTexture: () => this.polygonPathTexture,
-          polygonPathLength: () => this.polygonPathLength,
+        bufferLayout: [
+          { name: 'vertexCoord', format: 'float32x2' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
+        },
+        bindings: {
+          findPointsOnPolygonSelectionUniforms: this.findPointsOnPolygonSelectionUniformStore
+            .getManagedUniformBuffer(device, 'findPointsOnPolygonSelectionUniforms'),
+          ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
+          ...(this.polygonPathTexture && { polygonPathTexture: this.polygonPathTexture }),
         },
       })
     }
 
     if (!this.clearHoveredFboCommand) {
-      this.clearHoveredFboCommand = reglInstance({
-        frag: clearFrag,
-        vert: updateVert,
-        framebuffer: this.hoveredFbo as regl.Framebuffer2D,
-        primitive: 'triangle strip',
-        count: 4,
-        attributes: { vertexCoord: createQuadBuffer(reglInstance) },
+      // Create vertex buffer for quad
+      if (!this.clearHoveredFboVertexCoordBuffer) {
+        this.clearHoveredFboVertexCoordBuffer = device.createBuffer({
+          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+        })
+      }
+
+      this.clearHoveredFboCommand = new Model(device, {
+        fs: clearFrag,
+        vs: updateVert,
+        topology: 'triangle-strip',
+        vertexCount: 4,
+        attributes: {
+          vertexCoord: this.clearHoveredFboVertexCoordBuffer,
+        },
+        bufferLayout: [
+          { name: 'vertexCoord', format: 'float32x2' },
+        ],
       })
     }
 
     if (!this.findHoveredPointCommand) {
-      this.findHoveredPointCommand = reglInstance({
-        frag: findHoveredPointFrag,
-        vert: findHoveredPointVert,
-        primitive: 'points',
-        count: () => data.pointsNumber ?? 0,
-        framebuffer: () => this.hoveredFbo as regl.Framebuffer2D,
+      // Create UniformStore for findHoveredPoint uniforms
+      if (!this.findHoveredPointUniformStore) {
+        this.findHoveredPointUniformStore = new UniformStore({
+          findHoveredPointUniforms: {
+            uniformTypes: {
+              // Order MUST match shader declaration order (std140 layout)
+              pointsTextureSize: 'f32',
+              sizeScale: 'f32',
+              spaceSize: 'f32',
+              screenSize: 'vec2<f32>',
+              ratio: 'f32',
+              transformationMatrix: 'mat4x4<f32>',
+              mousePosition: 'vec2<f32>',
+              scalePointsOnZoom: 'f32',
+              maxPointSize: 'f32',
+            },
+            defaultUniforms: {
+              pointsTextureSize: store.pointsTextureSize ?? 0,
+              sizeScale: config.pointSizeScale ?? 1,
+              spaceSize: store.adjustedSpaceSize ?? 0,
+              screenSize: store.screenSize ?? [0, 0],
+              ratio: config.pixelRatio ?? 1,
+              transformationMatrix: store.transformationMatrix4x4,
+              mousePosition: store.screenMousePosition ?? [0, 0],
+              scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
+              maxPointSize: store.maxPointSize ?? 100,
+            },
+          },
+        })
+      }
+
+      this.findHoveredPointCommand = new Model(device, {
+        fs: findHoveredPointFrag,
+        vs: findHoveredPointVert,
+        topology: 'point-list',
+        vertexCount: data.pointsNumber ?? 0,
         attributes: {
-          pointIndices: {
-            buffer: this.hoveredPointIndices,
-            size: 2,
-          },
-          size: {
-            buffer: () => this.sizeBuffer,
-            size: 1,
-          },
+          ...(this.hoveredPointIndices && { pointIndices: this.hoveredPointIndices }),
+          ...(this.sizeBuffer && { size: this.sizeBuffer }),
         },
-        uniforms: {
-          positionsTexture: () => this.currentPositionFbo,
-          ratio: () => config.pixelRatio,
-          sizeScale: () => config.pointSizeScale,
-          pointsTextureSize: () => store.pointsTextureSize,
-          transformationMatrix: () => store.transform,
-          spaceSize: () => store.adjustedSpaceSize,
-          screenSize: () => store.screenSize,
-          scalePointsOnZoom: () => config.scalePointsOnZoom,
-          mousePosition: () => store.screenMousePosition,
-          maxPointSize: () => store.maxPointSize,
+        bufferLayout: [
+          { name: 'pointIndices', format: 'float32x2' },
+          { name: 'size', format: 'float32' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
         },
-        depth: {
-          enable: false,
-          mask: false,
+        bindings: {
+          findHoveredPointUniforms: this.findHoveredPointUniformStore.getManagedUniformBuffer(device, 'findHoveredPointUniforms'),
+          ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
+        },
+        parameters: {
+          depthWriteEnabled: false,
+          depthCompare: 'always',
+          blend: false, // Disable blending - we want to overwrite, not blend
         },
       })
     }
 
     if (!this.clearSampledPointsFboCommand) {
-      this.clearSampledPointsFboCommand = reglInstance({
-        frag: clearFrag,
-        vert: updateVert,
-        framebuffer: () => this.sampledPointsFbo as regl.Framebuffer2D,
-        primitive: 'triangle strip',
-        count: 4,
-        attributes: { vertexCoord: createQuadBuffer(reglInstance) },
+      // Create vertex buffer for quad
+      if (!this.clearSampledPointsFboVertexCoordBuffer) {
+        this.clearSampledPointsFboVertexCoordBuffer = device.createBuffer({
+          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+        })
+      }
+
+      this.clearSampledPointsFboCommand = new Model(device, {
+        fs: clearFrag,
+        vs: updateVert,
+        topology: 'triangle-strip',
+        vertexCount: 4,
+        attributes: {
+          vertexCoord: this.clearSampledPointsFboVertexCoordBuffer,
+        },
+        bufferLayout: [
+          { name: 'vertexCoord', format: 'float32x2' },
+        ],
       })
     }
 
     if (!this.fillSampledPointsFboCommand) {
-      this.fillSampledPointsFboCommand = reglInstance({
-        frag: fillGridWithSampledPointsFrag,
-        vert: fillGridWithSampledPointsVert,
-        primitive: 'points',
-        count: () => data.pointsNumber ?? 0,
-        framebuffer: () => this.sampledPointsFbo as regl.Framebuffer2D,
-        attributes: {
-          pointIndices: {
-            buffer: this.sampledPointIndices,
-            size: 2,
+      // Create UniformStore for fillSampledPoints uniforms
+      if (!this.fillSampledPointsUniformStore) {
+        this.fillSampledPointsUniformStore = new UniformStore({
+          fillSampledPointsUniforms: {
+            uniformTypes: {
+              // Order MUST match shader declaration order (std140 layout)
+              pointsTextureSize: 'f32',
+              transformationMatrix: 'mat4x4<f32>',
+              spaceSize: 'f32',
+              screenSize: 'vec2<f32>',
+            },
+            defaultUniforms: {
+              pointsTextureSize: store.pointsTextureSize ?? 0,
+              transformationMatrix: store.transformationMatrix4x4,
+              spaceSize: store.adjustedSpaceSize ?? 0,
+              screenSize: store.screenSize ?? [0, 0],
+            },
           },
+        })
+      }
+
+      this.fillSampledPointsFboCommand = new Model(device, {
+        fs: fillGridWithSampledPointsFrag,
+        vs: fillGridWithSampledPointsVert,
+        topology: 'point-list',
+        vertexCount: data.pointsNumber ?? 0,
+        attributes: {
+          ...(this.sampledPointIndices && { pointIndices: this.sampledPointIndices }),
         },
-        uniforms: {
-          positionsTexture: () => this.currentPositionFbo,
-          pointsTextureSize: () => store.pointsTextureSize,
-          transformationMatrix: () => store.transform,
-          spaceSize: () => store.adjustedSpaceSize,
-          screenSize: () => store.screenSize,
+        bufferLayout: [
+          { name: 'pointIndices', format: 'float32x2' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
         },
-        depth: {
-          enable: false,
-          mask: false,
+        bindings: {
+          fillSampledPointsUniforms: this.fillSampledPointsUniformStore.getManagedUniformBuffer(device, 'fillSampledPointsUniforms'),
+          ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
+        },
+        parameters: {
+          depthWriteEnabled: false,
+          depthCompare: 'always',
         },
       })
     }
 
     if (!this.drawHighlightedCommand) {
-      this.drawHighlightedCommand = reglInstance({
-        frag: drawHighlightedFrag,
-        vert: drawHighlightedVert,
-        attributes: { vertexCoord: createQuadBuffer(reglInstance) },
-        primitive: 'triangle strip',
-        count: 4,
-        uniforms: {
-          color: reglInstance.prop<{ color: number[] }, 'color'>('color'),
-          width: reglInstance.prop<{ width: number }, 'width'>('width'),
-          pointIndex: reglInstance.prop<{ pointIndex: number }, 'pointIndex'>('pointIndex'),
-          size: reglInstance.prop<{ size: number }, 'size'>('size'),
-          positionsTexture: () => this.currentPositionFbo,
-          sizeScale: () => config.pointSizeScale,
-          pointsTextureSize: () => store.pointsTextureSize,
-          transformationMatrix: () => store.transform,
-          spaceSize: () => store.adjustedSpaceSize,
-          screenSize: () => store.screenSize,
-          scalePointsOnZoom: () => config.scalePointsOnZoom,
-          maxPointSize: () => store.maxPointSize,
-          pointGreyoutStatusTexture: () => this.greyoutStatusFbo,
-          universalPointOpacity: () => config.pointOpacity,
-          greyoutOpacity: () => config.pointGreyoutOpacity ?? -1,
-          isDarkenGreyout: () => store.isDarkenGreyout,
-          backgroundColor: () => store.backgroundColor,
-          greyoutColor: () => store.greyoutPointColor,
-        },
-        blend: {
-          enable: true,
-          func: {
-            dstRGB: 'one minus src alpha',
-            srcRGB: 'src alpha',
-            dstAlpha: 'one minus src alpha',
-            srcAlpha: 'one',
+      if (!this.drawHighlightedVertexCoordBuffer) {
+        this.drawHighlightedVertexCoordBuffer = device.createBuffer({
+          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+        })
+      }
+
+      if (!this.drawHighlightedUniformStore) {
+        this.drawHighlightedUniformStore = new UniformStore({
+          drawHighlightedUniforms: {
+            uniformTypes: {
+              // Order MUST match shader declaration order (std140 layout)
+              // Vertex shader uniforms:
+              size: 'f32',
+              transformationMatrix: 'mat4x4<f32>',
+              pointsTextureSize: 'f32',
+              sizeScale: 'f32',
+              spaceSize: 'f32',
+              screenSize: 'vec2<f32>',
+              scalePointsOnZoom: 'f32',
+              pointIndex: 'f32',
+              maxPointSize: 'f32',
+              color: 'vec4<f32>',
+              universalPointOpacity: 'f32',
+              greyoutOpacity: 'f32',
+              isDarkenGreyout: 'f32',
+              backgroundColor: 'vec4<f32>',
+              greyoutColor: 'vec4<f32>',
+              // Fragment shader uniforms (width is in same block):
+              width: 'f32',
+            },
+            defaultUniforms: {
+              size: 1,
+              transformationMatrix: store.transformationMatrix4x4,
+              pointsTextureSize: store.pointsTextureSize ?? 0,
+              sizeScale: config.pointSizeScale ?? 1,
+              spaceSize: store.adjustedSpaceSize ?? 0,
+              screenSize: store.screenSize ?? [0, 0],
+              scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
+              pointIndex: -1,
+              maxPointSize: store.maxPointSize ?? 100,
+              color: [0, 0, 0, 1] as [number, number, number, number],
+              universalPointOpacity: config.pointOpacity ?? 1,
+              greyoutOpacity: config.pointGreyoutOpacity ?? -1,
+              isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0,
+              backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
+              greyoutColor: (store.greyoutPointColor ?? [0, 0, 0, 1]) as [number, number, number, number],
+              width: 0.85,
+            },
           },
-          equation: {
-            rgb: 'add',
-            alpha: 'add',
-          },
+        })
+      }
+
+      this.drawHighlightedCommand = new Model(device, {
+        fs: drawHighlightedFrag,
+        vs: drawHighlightedVert,
+        topology: 'triangle-strip',
+        vertexCount: 4,
+        attributes: {
+          vertexCoord: this.drawHighlightedVertexCoordBuffer,
         },
-        depth: {
-          enable: false,
-          mask: false,
+        bufferLayout: [
+          { name: 'vertexCoord', format: 'float32x2' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
+        },
+        bindings: {
+          drawHighlightedUniforms: this.drawHighlightedUniformStore.getManagedUniformBuffer(device, 'drawHighlightedUniforms'),
+          ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
+          ...(this.greyoutStatusTexture && { pointGreyoutStatusTexture: this.greyoutStatusTexture }),
+        },
+        parameters: {
+          blend: true,
+          blendColorOperation: 'add',
+          blendColorSrcFactor: 'src-alpha',
+          blendColorDstFactor: 'one-minus-src-alpha',
+          blendAlphaOperation: 'add',
+          blendAlphaSrcFactor: 'one',
+          blendAlphaDstFactor: 'one-minus-src-alpha',
+          depthWriteEnabled: false,
+          depthCompare: 'always',
         },
       })
     }
 
     if (!this.trackPointsCommand) {
-      this.trackPointsCommand = reglInstance({
-        frag: trackPositionsFrag,
-        vert: updateVert,
-        framebuffer: () => this.trackedPositionsFbo as regl.Framebuffer2D,
-        primitive: 'triangle strip',
-        count: 4,
-        attributes: { vertexCoord: createQuadBuffer(reglInstance) },
-        uniforms: {
-          positionsTexture: () => this.currentPositionFbo,
-          trackedIndices: () => this.trackedIndicesFbo,
-          pointsTextureSize: () => store.pointsTextureSize,
+      // Create vertex buffer for quad
+      if (!this.trackPointsVertexCoordBuffer) {
+        this.trackPointsVertexCoordBuffer = device.createBuffer({
+          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+        })
+      }
+
+      // Create UniformStore for trackPoints uniforms
+      if (!this.trackPointsUniformStore) {
+        this.trackPointsUniformStore = new UniformStore({
+          trackPointsUniforms: {
+            uniformTypes: {
+              // Order MUST match shader declaration order (std140 layout)
+              pointsTextureSize: 'f32',
+            },
+            defaultUniforms: {
+              pointsTextureSize: store.pointsTextureSize ?? 0,
+            },
+          },
+        })
+      }
+
+      this.trackPointsCommand = new Model(device, {
+        fs: trackPositionsFrag,
+        vs: updateVert,
+        topology: 'triangle-strip',
+        vertexCount: 4,
+        attributes: {
+          vertexCoord: this.trackPointsVertexCoordBuffer,
+        },
+        bufferLayout: [
+          { name: 'vertexCoord', format: 'float32x2' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
+        },
+        bindings: {
+          trackPointsUniforms: this.trackPointsUniformStore.getManagedUniformBuffer(device, 'trackPointsUniforms'),
+          ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
+          ...(this.trackedIndicesTexture && { trackedIndices: this.trackedIndicesTexture }),
         },
       })
     }
   }
 
   public updateColor (): void {
-    const { reglInstance, store: { pointsTextureSize }, data } = this
+    const { device, store: { pointsTextureSize }, data } = this
     if (!pointsTextureSize) return
-    if (!this.colorBuffer) this.colorBuffer = reglInstance.buffer(0)
-    this.colorBuffer(data.pointColors as Float32Array)
+
+    const colorData = data.pointColors as Float32Array
+    const requiredByteLength = colorData.byteLength
+
+    if (!this.colorBuffer || this.colorBuffer.byteLength !== requiredByteLength) {
+      this.colorBuffer?.destroy()
+      this.colorBuffer = device.createBuffer({
+        data: colorData,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+      })
+    } else {
+      this.colorBuffer.write(colorData)
+    }
   }
 
   public updateGreyoutStatus (): void {
-    const { reglInstance, store: { selectedIndices, pointsTextureSize } } = this
+    const { device, store: { selectedIndices, pointsTextureSize } } = this
     if (!pointsTextureSize) return
 
     // Greyout status: 0 - false, highlighted or normal point; 1 - true, greyout point
@@ -509,19 +1099,40 @@ export class Points extends CoreModule {
         initialState[selectedIndex * 4] = 0
       }
     }
-    if (!this.greyoutStatusTexture) this.greyoutStatusTexture = reglInstance.texture()
-    this.greyoutStatusTexture({
-      data: initialState,
-      width: pointsTextureSize,
-      height: pointsTextureSize,
-      type: 'float',
-    })
-    if (!this.greyoutStatusFbo) this.greyoutStatusFbo = reglInstance.framebuffer()
-    this.greyoutStatusFbo({
-      color: this.greyoutStatusTexture,
-      depth: false,
-      stencil: false,
-    })
+
+    if (!this.greyoutStatusTexture || this.greyoutStatusTexture.width !== pointsTextureSize || this.greyoutStatusTexture.height !== pointsTextureSize) {
+      if (this.greyoutStatusTexture) {
+        this.greyoutStatusTexture.destroy()
+      }
+      if (this.greyoutStatusFbo) {
+        this.greyoutStatusFbo.destroy()
+      }
+      this.greyoutStatusTexture = device.createTexture({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+      })
+      this.greyoutStatusTexture.copyImageData({
+        data: initialState,
+        bytesPerRow: pointsTextureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+      this.greyoutStatusFbo = device.createFramebuffer({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        colorAttachments: [this.greyoutStatusTexture],
+      })
+    } else {
+      this.greyoutStatusTexture.copyImageData({
+        data: initialState,
+        bytesPerRow: pointsTextureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+    }
   }
 
   public updatePinnedStatus (): void {
@@ -555,61 +1166,139 @@ export class Points extends CoreModule {
   }
 
   public updateSize (): void {
-    const { reglInstance, store: { pointsTextureSize }, data } = this
+    const { device, store: { pointsTextureSize }, data } = this
     if (!pointsTextureSize || data.pointsNumber === undefined || data.pointSizes === undefined) return
-    if (!this.sizeBuffer) this.sizeBuffer = reglInstance.buffer(0)
-    this.sizeBuffer(data.pointSizes)
+
+    const sizeData = data.pointSizes
+    const requiredByteLength = sizeData.byteLength
+
+    if (!this.sizeBuffer || this.sizeBuffer.byteLength !== requiredByteLength) {
+      this.sizeBuffer?.destroy()
+      this.sizeBuffer = device.createBuffer({
+        data: sizeData,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+      })
+    } else {
+      this.sizeBuffer.write(sizeData)
+    }
 
     const initialState = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
     for (let i = 0; i < data.pointsNumber; i++) {
       initialState[i * 4] = data.pointSizes[i] as number
     }
 
-    if (!this.sizeTexture) this.sizeTexture = reglInstance.texture()
-    this.sizeTexture({
-      data: initialState,
-      width: pointsTextureSize,
-      height: pointsTextureSize,
-      type: 'float',
-    })
-
-    if (!this.sizeFbo) this.sizeFbo = reglInstance.framebuffer()
-    this.sizeFbo({
-      color: this.sizeTexture,
-      depth: false,
-      stencil: false,
-    })
+    if (!this.sizeTexture || this.sizeTexture.width !== pointsTextureSize || this.sizeTexture.height !== pointsTextureSize) {
+      if (this.sizeTexture) {
+        this.sizeTexture.destroy()
+      }
+      if (this.sizeFbo) {
+        this.sizeFbo.destroy()
+      }
+      this.sizeTexture = device.createTexture({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+      })
+      this.sizeTexture.copyImageData({
+        data: initialState,
+        bytesPerRow: pointsTextureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+      this.sizeFbo = device.createFramebuffer({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        colorAttachments: [this.sizeTexture],
+      })
+    } else {
+      this.sizeTexture.copyImageData({
+        data: initialState,
+        bytesPerRow: pointsTextureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+    }
   }
 
   public updateShape (): void {
-    const { reglInstance, data } = this
+    const { device, data } = this
     if (data.pointsNumber === undefined || data.pointShapes === undefined) return
-    if (!this.shapeBuffer) this.shapeBuffer = reglInstance.buffer(0)
-    this.shapeBuffer(data.pointShapes)
+
+    const shapeData = data.pointShapes
+    const requiredByteLength = shapeData.byteLength
+
+    if (!this.shapeBuffer || this.shapeBuffer.byteLength !== requiredByteLength) {
+      this.shapeBuffer?.destroy()
+      this.shapeBuffer = device.createBuffer({
+        data: shapeData,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+      })
+    } else {
+      this.shapeBuffer.write(shapeData)
+    }
   }
 
   public updateImageIndices (): void {
-    const { reglInstance, data } = this
+    const { device, data } = this
     if (data.pointsNumber === undefined || data.pointImageIndices === undefined) return
-    if (!this.imageIndicesBuffer) this.imageIndicesBuffer = reglInstance.buffer(0)
-    this.imageIndicesBuffer(data.pointImageIndices)
+
+    const imageIndicesData = data.pointImageIndices
+    const requiredByteLength = imageIndicesData.byteLength
+
+    if (!this.imageIndicesBuffer || this.imageIndicesBuffer.byteLength !== requiredByteLength) {
+      this.imageIndicesBuffer?.destroy()
+      this.imageIndicesBuffer = device.createBuffer({
+        data: imageIndicesData,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+      })
+    } else {
+      this.imageIndicesBuffer.write(imageIndicesData)
+    }
   }
 
   public updateImageSizes (): void {
-    const { reglInstance, data } = this
+    const { device, data } = this
     if (data.pointsNumber === undefined || data.pointImageSizes === undefined) return
-    if (!this.imageSizesBuffer) this.imageSizesBuffer = reglInstance.buffer(0)
-    this.imageSizesBuffer(data.pointImageSizes)
+
+    const imageSizesData = data.pointImageSizes
+    const requiredByteLength = imageSizesData.byteLength
+
+    if (!this.imageSizesBuffer || this.imageSizesBuffer.byteLength !== requiredByteLength) {
+      this.imageSizesBuffer?.destroy()
+      this.imageSizesBuffer = device.createBuffer({
+        data: imageSizesData,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+      })
+    } else {
+      this.imageSizesBuffer.write(imageSizesData)
+    }
   }
 
   public createAtlas (): void {
-    const { reglInstance, data, store } = this
-    if (!this.imageAtlasTexture) this.imageAtlasTexture = reglInstance.texture()
-    if (!this.imageAtlasCoordsTexture) this.imageAtlasCoordsTexture = reglInstance.texture()
+    const { device, data, store } = this
 
     if (!data.inputImageData?.length) {
       this.imageCount = 0
       this.imageAtlasCoordsTextureSize = 0
+      // Create dummy textures so bindings are always available
+      if (!this.imageAtlasCoordsTexture) {
+        this.imageAtlasCoordsTexture = device.createTexture({
+          data: new Float32Array(4).fill(0),
+          width: 1,
+          height: 1,
+          format: 'rgba32float',
+        })
+      }
+      if (!this.imageAtlasTexture) {
+        this.imageAtlasTexture = device.createTexture({
+          data: new Uint8Array(4).fill(0),
+          width: 1,
+          height: 1,
+          format: 'rgba8unorm',
+        })
+      }
       return
     }
 
@@ -623,104 +1312,411 @@ export class Points extends CoreModule {
     const { atlasData, atlasSize, atlasCoords, atlasCoordsSize } = atlasResult
     this.imageAtlasCoordsTextureSize = atlasCoordsSize
 
-    this.imageAtlasTexture({
-      data: atlasData,
-      shape: [atlasSize, atlasSize, 4],
-      type: 'uint8',
-    })
+    // Update atlas texture
+    if (!this.imageAtlasTexture || this.imageAtlasTexture.width !== atlasSize || this.imageAtlasTexture.height !== atlasSize) {
+      this.imageAtlasTexture?.destroy()
+      this.imageAtlasTexture = device.createTexture({
+        width: atlasSize,
+        height: atlasSize,
+        format: 'rgba8unorm',
+        data: atlasData,
+      })
+    } else {
+      this.imageAtlasTexture.copyImageData({
+        data: atlasData,
+        bytesPerRow: atlasSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+    }
 
-    this.imageAtlasCoordsTexture({
-      data: atlasCoords,
-      shape: [atlasCoordsSize, atlasCoordsSize, 4],
-      type: 'float',
-    })
+    // Update coords texture
+    if (!this.imageAtlasCoordsTexture || this.imageAtlasCoordsTexture.width !== atlasCoordsSize || this.imageAtlasCoordsTexture.height !== atlasCoordsSize) {
+      this.imageAtlasCoordsTexture?.destroy()
+      this.imageAtlasCoordsTexture = device.createTexture({
+        width: atlasCoordsSize,
+        height: atlasCoordsSize,
+        format: 'rgba32float',
+      })
+      this.imageAtlasCoordsTexture.copyImageData({
+        data: atlasCoords,
+        bytesPerRow: atlasCoordsSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+    } else {
+      this.imageAtlasCoordsTexture.copyImageData({
+        data: atlasCoords,
+        bytesPerRow: atlasCoordsSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+    }
   }
 
   public updateSampledPointsGrid (): void {
-    const { store: { screenSize }, config: { pointSamplingDistance }, reglInstance } = this
+    const { store: { screenSize }, config: { pointSamplingDistance }, device } = this
     let dist = pointSamplingDistance ?? Math.min(...screenSize) / 2
     if (dist === 0) dist = defaultConfigValues.pointSamplingDistance
     const w = Math.ceil(screenSize[0] / dist)
     const h = Math.ceil(screenSize[1] / dist)
-    if (!this.sampledPointsFbo) this.sampledPointsFbo = reglInstance.framebuffer()
-    this.sampledPointsFbo({
-      shape: [w, h],
-      depth: false,
-      stencil: false,
-      colorType: 'float',
-    })
+
+    if (!this.sampledPointsFbo || this.sampledPointsFbo.width !== w || this.sampledPointsFbo.height !== h) {
+      if (this.sampledPointsFbo && !this.sampledPointsFbo.destroyed) {
+        this.sampledPointsFbo.destroy()
+      }
+      this.sampledPointsFbo = device.createFramebuffer({
+        width: w,
+        height: h,
+        colorAttachments: ['rgba32float'],
+      })
+    }
   }
 
   public trackPoints (): void {
-    if (!this.trackedIndices?.length) return
-    this.trackPointsCommand?.()
+    if (!this.trackedIndices?.length || !this.trackPointsCommand || !this.trackPointsUniformStore ||
+        !this.trackedPositionsFbo || this.trackedPositionsFbo.destroyed) return
+    if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
+    if (!this.trackedIndicesTexture || this.trackedIndicesTexture.destroyed) return
+
+    this.trackPointsUniformStore.setUniforms({
+      trackPointsUniforms: {
+        pointsTextureSize: this.store.pointsTextureSize ?? 0,
+      },
+    })
+
+    this.trackPointsCommand.setBindings({
+      trackPointsUniforms: this.trackPointsUniformStore.getManagedUniformBuffer(this.device, 'trackPointsUniforms'),
+      positionsTexture: this.currentPositionTexture,
+      trackedIndices: this.trackedIndicesTexture,
+    })
+
+    const renderPass = this.device.beginRenderPass({
+      framebuffer: this.trackedPositionsFbo,
+    })
+    this.trackPointsCommand.draw(renderPass)
+    renderPass.end()
   }
 
-  public draw (): void {
-    const { config: { renderHoveredPointRing, pointSize }, store, data } = this
+  public draw (renderPass: RenderPass): void {
+    const { data, config, store } = this
     if (!this.colorBuffer) this.updateColor()
     if (!this.sizeBuffer) this.updateSize()
     if (!this.shapeBuffer) this.updateShape()
     if (!this.imageIndicesBuffer) this.updateImageIndices()
     if (!this.imageSizesBuffer) this.updateImageSizes()
-    if (!this.imageAtlasCoordsTexture || !this.imageAtlasTexture) this.createAtlas()
+
+    if (!this.drawCommand || !this.drawUniformStore) return
+    if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
+    if (!this.greyoutStatusTexture || this.greyoutStatusTexture.destroyed) return
+    if (!this.imageAtlasTexture || !this.imageAtlasCoordsTexture) {
+      this.createAtlas()
+      if (!this.imageAtlasTexture || !this.imageAtlasCoordsTexture) return
+    }
+    if (this.imageAtlasTexture.destroyed || this.imageAtlasCoordsTexture.destroyed) return
+
+    // Check if we have points to draw
+    if (!data.pointsNumber || data.pointsNumber === 0) {
+      return
+    }
+
+    // Verify canvas is sized (screenSize must be non-zero to avoid division by zero in shader)
+    if (!store.screenSize || store.screenSize[0] === 0 || store.screenSize[1] === 0) {
+      return
+    }
+
+    // Update vertex count dynamically
+    this.drawCommand.setVertexCount(data.pointsNumber)
+
+    // Base uniforms that don't change between layers
+    // Convert booleans to floats (1.0 or 0.0) since uniform type is 'f32'
+    const baseVertexUniforms = {
+      ratio: config.pixelRatio ?? 1,
+      transformationMatrix: store.transformationMatrix4x4,
+      pointsTextureSize: store.pointsTextureSize ?? 0,
+      sizeScale: config.pointSizeScale ?? 1,
+      spaceSize: store.adjustedSpaceSize ?? 0,
+      screenSize: store.screenSize ?? [0, 0],
+      greyoutColor: (store.greyoutPointColor ?? [-1, -1, -1, -1]) as [number, number, number, number],
+      backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
+      scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0, // Convert boolean to float
+      maxPointSize: store.maxPointSize ?? 100,
+      isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
+      hasImages: (this.imageCount > 0) ? 1 : 0, // Convert boolean to float
+      imageCount: this.imageCount,
+      imageAtlasCoordsTextureSize: this.imageAtlasCoordsTextureSize ?? 0,
+    }
+
+    const baseFragmentUniforms = {
+      greyoutOpacity: config.pointGreyoutOpacity ?? -1,
+      pointOpacity: config.pointOpacity ?? 1,
+      isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
+      backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
+    }
 
     // Render in layers: unselected points first (behind), then selected points (in front)
     if (store.selectedIndices && store.selectedIndices.length > 0) {
       // First draw unselected points (they will appear behind)
-      this.drawCommand?.({ skipSelected: true, skipUnselected: false })
+      this.drawUniformStore.setUniforms({
+        drawVertexUniforms: {
+          ...baseVertexUniforms,
+          skipSelected: 1, // Skip selected points (1.0 for true)
+          skipUnselected: 0, // Draw unselected points (0.0 for false)
+        },
+        drawFragmentUniforms: baseFragmentUniforms,
+      })
+
+      this.drawCommand.setBindings({
+        drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer(this.device, 'drawVertexUniforms'),
+        drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer(this.device, 'drawFragmentUniforms'),
+        positionsTexture: this.currentPositionTexture,
+        pointGreyoutStatus: this.greyoutStatusTexture,
+        imageAtlasTexture: this.imageAtlasTexture,
+        imageAtlasCoords: this.imageAtlasCoordsTexture,
+      })
+
+      this.drawCommand.draw(renderPass)
+
       // Then draw selected points (they will appear in front)
-      this.drawCommand?.({ skipSelected: false, skipUnselected: true })
+      this.drawUniformStore.setUniforms({
+        drawVertexUniforms: {
+          ...baseVertexUniforms,
+          skipSelected: 0, // Draw selected points (0.0 for false)
+          skipUnselected: 1, // Skip unselected points (1.0 for true)
+        },
+        drawFragmentUniforms: baseFragmentUniforms,
+      })
+
+      this.drawCommand.setBindings({
+        drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer(this.device, 'drawVertexUniforms'),
+        drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer(this.device, 'drawFragmentUniforms'),
+        positionsTexture: this.currentPositionTexture,
+        pointGreyoutStatus: this.greyoutStatusTexture,
+        imageAtlasTexture: this.imageAtlasTexture,
+        imageAtlasCoords: this.imageAtlasCoordsTexture,
+      })
+
+      this.drawCommand.draw(renderPass)
     } else {
       // If no selection, draw all points
-      this.drawCommand?.({ skipSelected: false, skipUnselected: false })
-    }
-    if ((renderHoveredPointRing) && store.hoveredPoint) {
-      this.drawHighlightedCommand?.({
-        width: 0.85,
-        color: store.hoveredPointRingColor,
-        pointIndex: store.hoveredPoint.index,
-        size: data.pointSizes?.[store.hoveredPoint.index] ?? pointSize,
+      this.drawUniformStore.setUniforms({
+        drawVertexUniforms: {
+          ...baseVertexUniforms,
+          skipSelected: 0, // Draw all points (0.0 for false)
+          skipUnselected: 0, // Draw all points (0.0 for false)
+        },
+        drawFragmentUniforms: baseFragmentUniforms,
       })
-    }
-    if (store.focusedPoint) {
-      this.drawHighlightedCommand?.({
-        width: 0.75,
-        color: store.focusedPointRingColor,
-        pointIndex: store.focusedPoint.index,
-        size: data.pointSizes?.[store.focusedPoint.index] ?? pointSize,
+
+      this.drawCommand.setBindings({
+        drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer(this.device, 'drawVertexUniforms'),
+        drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer(this.device, 'drawFragmentUniforms'),
+        positionsTexture: this.currentPositionTexture,
+        pointGreyoutStatus: this.greyoutStatusTexture,
+        imageAtlasTexture: this.imageAtlasTexture,
+        imageAtlasCoords: this.imageAtlasCoordsTexture,
       })
+
+      this.drawCommand.draw(renderPass)
+    }
+
+    // Draw highlighted point rings if enabled
+    if (config.renderHoveredPointRing && store.hoveredPoint && this.drawHighlightedCommand && this.drawHighlightedUniformStore) {
+      if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
+      if (!this.greyoutStatusTexture || this.greyoutStatusTexture.destroyed) return
+      const pointSize = data.pointSizes?.[store.hoveredPoint.index] ?? 1
+      this.drawHighlightedUniformStore.setUniforms({
+        drawHighlightedUniforms: {
+          size: pointSize,
+          transformationMatrix: store.transformationMatrix4x4,
+          pointsTextureSize: store.pointsTextureSize ?? 0,
+          sizeScale: config.pointSizeScale ?? 1,
+          spaceSize: store.adjustedSpaceSize ?? 0,
+          screenSize: store.screenSize ?? [0, 0],
+          scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
+          pointIndex: store.hoveredPoint.index,
+          maxPointSize: store.maxPointSize ?? 100,
+          color: (store.hoveredPointRingColor as [number, number, number, number]),
+          universalPointOpacity: config.pointOpacity ?? 1,
+          greyoutOpacity: config.pointGreyoutOpacity ?? -1,
+          isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0,
+          backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
+          greyoutColor: (store.greyoutPointColor ?? [0, 0, 0, 1]) as [number, number, number, number],
+          width: 0.85,
+        },
+      })
+      this.drawHighlightedCommand.setBindings({
+        drawHighlightedUniforms: this.drawHighlightedUniformStore.getManagedUniformBuffer(this.device, 'drawHighlightedUniforms'),
+        positionsTexture: this.currentPositionTexture,
+        pointGreyoutStatusTexture: this.greyoutStatusTexture,
+      })
+      this.drawHighlightedCommand.draw(renderPass)
+    }
+
+    if (store.focusedPoint && this.drawHighlightedCommand && this.drawHighlightedUniformStore) {
+      if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
+      if (!this.greyoutStatusTexture || this.greyoutStatusTexture.destroyed) return
+      const pointSize = data.pointSizes?.[store.focusedPoint.index] ?? 1
+      this.drawHighlightedUniformStore.setUniforms({
+        drawHighlightedUniforms: {
+          size: pointSize,
+          transformationMatrix: store.transformationMatrix4x4,
+          pointsTextureSize: store.pointsTextureSize ?? 0,
+          sizeScale: config.pointSizeScale ?? 1,
+          spaceSize: store.adjustedSpaceSize ?? 0,
+          screenSize: store.screenSize ?? [0, 0],
+          scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
+          pointIndex: store.focusedPoint.index,
+          maxPointSize: store.maxPointSize ?? 100,
+          color: (store.focusedPointRingColor as [number, number, number, number]),
+          universalPointOpacity: config.pointOpacity ?? 1,
+          greyoutOpacity: config.pointGreyoutOpacity ?? -1,
+          isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0,
+          backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
+          greyoutColor: (store.greyoutPointColor ?? [0, 0, 0, 1]) as [number, number, number, number],
+          width: 0.85,
+        },
+      })
+      this.drawHighlightedCommand.setBindings({
+        drawHighlightedUniforms: this.drawHighlightedUniformStore.getManagedUniformBuffer(this.device, 'drawHighlightedUniforms'),
+        positionsTexture: this.currentPositionTexture,
+        pointGreyoutStatusTexture: this.greyoutStatusTexture,
+      })
+      this.drawHighlightedCommand.draw(renderPass)
     }
   }
 
   public updatePosition (): void {
-    this.updatePositionCommand?.()
+    if (!this.updatePositionCommand || !this.updatePositionUniformStore || !this.currentPositionFbo || this.currentPositionFbo.destroyed) return
+    if (!this.previousPositionTexture || this.previousPositionTexture.destroyed) return
+    if (!this.velocityTexture || this.velocityTexture.destroyed) return
+
+    this.updatePositionUniformStore.setUniforms({
+      updatePositionUniforms: {
+        friction: this.config.simulationFriction ?? 0,
+        spaceSize: this.store.adjustedSpaceSize ?? 0,
+      },
+    })
+
+    this.updatePositionCommand.setBindings({
+      updatePositionUniforms: this.updatePositionUniformStore.getManagedUniformBuffer(this.device, 'updatePositionUniforms'),
+      positionsTexture: this.previousPositionTexture,
+      velocity: this.velocityTexture,
+    })
+
+    const renderPass = this.device.beginRenderPass({
+      framebuffer: this.currentPositionFbo,
+    })
+    this.updatePositionCommand.draw(renderPass)
+    renderPass.end()
+
     this.swapFbo()
     // Invalidate tracked positions cache since positions have changed
     this.isPositionsUpToDate = false
   }
 
   public drag (): void {
-    this.dragPointCommand?.()
+    if (!this.dragPointCommand || !this.dragPointUniformStore || !this.currentPositionFbo || this.currentPositionFbo.destroyed) return
+    if (!this.previousPositionTexture || this.previousPositionTexture.destroyed) return
+
+    this.dragPointUniformStore.setUniforms({
+      dragPointUniforms: {
+        mousePos: (this.store.mousePosition as [number, number]) ?? [0, 0],
+        index: this.store.hoveredPoint?.index ?? -1,
+      },
+    })
+
+    this.dragPointCommand.setBindings({
+      dragPointUniforms: this.dragPointUniformStore.getManagedUniformBuffer(this.device, 'dragPointUniforms'),
+      positionsTexture: this.previousPositionTexture,
+    })
+
+    const renderPass = this.device.beginRenderPass({
+      framebuffer: this.currentPositionFbo,
+    })
+    this.dragPointCommand.draw(renderPass)
+    renderPass.end()
+
     this.swapFbo()
     // Invalidate tracked positions cache since positions have changed
     this.isPositionsUpToDate = false
   }
 
   public findPointsOnAreaSelection (): void {
-    this.findPointsOnAreaSelectionCommand?.()
+    if (!this.findPointsOnAreaSelectionCommand || !this.findPointsOnAreaSelectionUniformStore || !this.selectedFbo || this.selectedFbo.destroyed) return
+    if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
+    if (!this.sizeTexture || this.sizeTexture.destroyed) return
+
+    this.findPointsOnAreaSelectionUniformStore.setUniforms({
+      findPointsOnAreaSelectionUniforms: {
+        spaceSize: this.store.adjustedSpaceSize ?? 0,
+        screenSize: this.store.screenSize ?? [0, 0],
+        sizeScale: this.config.pointSizeScale ?? 1,
+        transformationMatrix: this.store.transformationMatrix4x4,
+        ratio: this.config.pixelRatio ?? 1,
+        selection0: (this.store.selectedArea?.[0] ?? [0, 0]) as [number, number],
+        selection1: (this.store.selectedArea?.[1] ?? [0, 0]) as [number, number],
+        scalePointsOnZoom: (this.config.scalePointsOnZoom ?? true) ? 1 : 0, // Convert boolean to number
+        maxPointSize: this.store.maxPointSize ?? 100,
+      },
+    })
+
+    this.findPointsOnAreaSelectionCommand.setBindings({
+      findPointsOnAreaSelectionUniforms: this.findPointsOnAreaSelectionUniformStore.getManagedUniformBuffer(this.device, 'findPointsOnAreaSelectionUniforms'),
+      positionsTexture: this.currentPositionTexture,
+      pointSize: this.sizeTexture,
+    })
+
+    const renderPass = this.device.beginRenderPass({
+      framebuffer: this.selectedFbo,
+    })
+    this.findPointsOnAreaSelectionCommand.draw(renderPass)
+    renderPass.end()
   }
 
   public findPointsOnPolygonSelection (): void {
-    this.findPointsOnPolygonSelectionCommand?.()
+    if (!this.findPointsOnPolygonSelectionCommand || !this.findPointsOnPolygonSelectionUniformStore || !this.selectedFbo || this.selectedFbo.destroyed) return
+    if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
+    if (!this.polygonPathTexture || this.polygonPathTexture.destroyed) return
+
+    this.findPointsOnPolygonSelectionUniformStore.setUniforms({
+      findPointsOnPolygonSelectionUniforms: {
+        spaceSize: this.store.adjustedSpaceSize ?? 0,
+        screenSize: this.store.screenSize ?? [0, 0],
+        transformationMatrix: this.store.transformationMatrix4x4,
+        polygonPathLength: this.polygonPathLength,
+      },
+    })
+
+    this.findPointsOnPolygonSelectionCommand.setBindings({
+      findPointsOnPolygonSelectionUniforms: this.findPointsOnPolygonSelectionUniformStore
+        .getManagedUniformBuffer(this.device, 'findPointsOnPolygonSelectionUniforms'),
+      positionsTexture: this.currentPositionTexture,
+      polygonPathTexture: this.polygonPathTexture,
+    })
+
+    const renderPass = this.device.beginRenderPass({
+      framebuffer: this.selectedFbo,
+    })
+    this.findPointsOnPolygonSelectionCommand.draw(renderPass)
+    renderPass.end()
   }
 
   public updatePolygonPath (polygonPath: [number, number][]): void {
-    const { reglInstance } = this
+    const { device } = this
     this.polygonPathLength = polygonPath.length
 
     if (polygonPath.length === 0) {
+      if (this.polygonPathTexture && !this.polygonPathTexture.destroyed) {
+        this.polygonPathTexture.destroy()
+      }
       this.polygonPathTexture = undefined
+      if (this.polygonPathFbo && !this.polygonPathFbo.destroyed) {
+        this.polygonPathFbo.destroy()
+      }
       this.polygonPathFbo = undefined
       return
     }
@@ -738,29 +1734,90 @@ export class Points extends CoreModule {
       textureData[i * 4 + 3] = 0 // unused
     }
 
-    if (!this.polygonPathTexture) this.polygonPathTexture = reglInstance.texture()
-    this.polygonPathTexture({
-      data: textureData,
-      width: textureSize,
-      height: textureSize,
-      type: 'float',
-    })
-
-    if (!this.polygonPathFbo) this.polygonPathFbo = reglInstance.framebuffer()
-    this.polygonPathFbo({
-      color: this.polygonPathTexture,
-      depth: false,
-      stencil: false,
-    })
+    if (!this.polygonPathTexture || this.polygonPathTexture.width !== textureSize || this.polygonPathTexture.height !== textureSize) {
+      if (this.polygonPathFbo && !this.polygonPathFbo.destroyed) {
+        this.polygonPathFbo.destroy()
+      }
+      if (this.polygonPathTexture && !this.polygonPathTexture.destroyed) {
+        this.polygonPathTexture.destroy()
+      }
+      this.polygonPathTexture = device.createTexture({
+        width: textureSize,
+        height: textureSize,
+        format: 'rgba32float',
+      })
+      this.polygonPathTexture.copyImageData({
+        data: textureData,
+        bytesPerRow: textureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+      this.polygonPathFbo = device.createFramebuffer({
+        width: textureSize,
+        height: textureSize,
+        colorAttachments: [this.polygonPathTexture],
+      })
+    } else {
+      this.polygonPathTexture.copyImageData({
+        data: textureData,
+        bytesPerRow: textureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+    }
   }
 
   public findHoveredPoint (): void {
-    this.clearHoveredFboCommand?.()
-    this.findHoveredPointCommand?.()
+    if (!this.hoveredFbo || this.hoveredFbo.destroyed) return
+
+    if (this.clearHoveredFboCommand) {
+      const clearPass = this.device.beginRenderPass({
+        framebuffer: this.hoveredFbo,
+      })
+      this.clearHoveredFboCommand.draw(clearPass)
+      clearPass.end()
+    }
+
+    if (!this.findHoveredPointCommand || !this.findHoveredPointUniformStore) return
+    if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
+
+    this.findHoveredPointCommand.setVertexCount(this.data.pointsNumber ?? 0)
+
+    this.findHoveredPointCommand.setAttributes({
+      ...(this.hoveredPointIndices && { pointIndices: this.hoveredPointIndices }),
+      ...(this.sizeBuffer && { size: this.sizeBuffer }),
+    })
+
+    this.findHoveredPointUniformStore.setUniforms({
+      findHoveredPointUniforms: {
+        ratio: this.config.pixelRatio ?? 1,
+        sizeScale: this.config.pointSizeScale ?? 1,
+        pointsTextureSize: this.store.pointsTextureSize ?? 0,
+        transformationMatrix: this.store.transformationMatrix4x4,
+        spaceSize: this.store.adjustedSpaceSize ?? 0,
+        screenSize: this.store.screenSize ?? [0, 0],
+        scalePointsOnZoom: (this.config.scalePointsOnZoom ?? true) ? 1 : 0,
+        mousePosition: (this.store.screenMousePosition ?? [0, 0]) as [number, number],
+        maxPointSize: this.store.maxPointSize ?? 100,
+      },
+    })
+
+    this.findHoveredPointCommand.setBindings({
+      findHoveredPointUniforms: this.findHoveredPointUniformStore.getManagedUniformBuffer(this.device, 'findHoveredPointUniforms'),
+      positionsTexture: this.currentPositionTexture,
+    })
+
+    const renderPass = this.device.beginRenderPass({
+      framebuffer: this.hoveredFbo,
+    })
+    this.findHoveredPointCommand.draw(renderPass)
+    renderPass.end()
   }
 
   public trackPointsByIndices (indices?: number[] | undefined): void {
-    const { store: { pointsTextureSize }, reglInstance } = this
+    const { store: { pointsTextureSize }, device } = this
     this.trackedIndices = indices
 
     // Clear cache when changing tracked indices
@@ -779,27 +1836,51 @@ export class Points extends CoreModule {
         initialState[i * 4 + 3] = 0
       }
     }
-    if (!this.trackedIndicesTexture) this.trackedIndicesTexture = reglInstance.texture()
-    this.trackedIndicesTexture({
-      data: initialState,
-      width: textureSize,
-      height: textureSize,
-      type: 'float',
-    })
-    if (!this.trackedIndicesFbo) this.trackedIndicesFbo = reglInstance.framebuffer()
-    this.trackedIndicesFbo({
-      color: this.trackedIndicesTexture,
-      depth: false,
-      stencil: false,
-    })
 
-    if (!this.trackedPositionsFbo) this.trackedPositionsFbo = reglInstance.framebuffer()
-    this.trackedPositionsFbo({
-      shape: [textureSize, textureSize],
-      depth: false,
-      stencil: false,
-      colorType: 'float',
-    })
+    if (!this.trackedIndicesTexture || this.trackedIndicesTexture.width !== textureSize || this.trackedIndicesTexture.height !== textureSize) {
+      if (this.trackedIndicesFbo && !this.trackedIndicesFbo.destroyed) {
+        this.trackedIndicesFbo.destroy()
+      }
+      if (this.trackedIndicesTexture && !this.trackedIndicesTexture.destroyed) {
+        this.trackedIndicesTexture.destroy()
+      }
+      this.trackedIndicesTexture = device.createTexture({
+        width: textureSize,
+        height: textureSize,
+        format: 'rgba32float',
+      })
+      this.trackedIndicesTexture.copyImageData({
+        data: initialState,
+        bytesPerRow: textureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+      this.trackedIndicesFbo = device.createFramebuffer({
+        width: textureSize,
+        height: textureSize,
+        colorAttachments: [this.trackedIndicesTexture],
+      })
+    } else {
+      this.trackedIndicesTexture.copyImageData({
+        data: initialState,
+        bytesPerRow: textureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+    }
+
+    if (!this.trackedPositionsFbo || this.trackedPositionsFbo.width !== textureSize || this.trackedPositionsFbo.height !== textureSize) {
+      if (this.trackedPositionsFbo && !this.trackedPositionsFbo.destroyed) {
+        this.trackedPositionsFbo.destroy()
+      }
+      this.trackedPositionsFbo = device.createFramebuffer({
+        width: textureSize,
+        height: textureSize,
+        colorAttachments: ['rgba32float'],
+      })
+    }
 
     this.trackPoints()
   }
@@ -824,7 +1905,9 @@ export class Points extends CoreModule {
       return this.trackedPositions
     }
 
-    const pixels = readPixels(this.reglInstance, this.trackedPositionsFbo as regl.Framebuffer2D)
+    if (!this.trackedPositionsFbo || this.trackedPositionsFbo.destroyed) return new Map()
+
+    const pixels = readPixels(this.device, this.trackedPositionsFbo as Framebuffer)
 
     const tracked = new Map<number, [number, number]>()
     for (let i = 0; i < pixels.length / 4; i += 1) {
@@ -847,10 +1930,45 @@ export class Points extends CoreModule {
 
   public getSampledPointPositionsMap (): Map<number, [number, number]> {
     const positions = new Map<number, [number, number]>()
-    if (!this.sampledPointsFbo) return positions
-    this.clearSampledPointsFboCommand?.()
-    this.fillSampledPointsFboCommand?.()
-    const pixels = readPixels(this.reglInstance, this.sampledPointsFbo as regl.Framebuffer2D)
+    if (!this.sampledPointsFbo || this.sampledPointsFbo.destroyed) return positions
+
+    // Clear sampled points FBO
+    if (this.clearSampledPointsFboCommand) {
+      const clearPass = this.device.beginRenderPass({
+        framebuffer: this.sampledPointsFbo,
+      })
+      this.clearSampledPointsFboCommand.draw(clearPass)
+      clearPass.end()
+    }
+
+    // Fill sampled points FBO
+    if (this.fillSampledPointsFboCommand && this.fillSampledPointsUniformStore && this.sampledPointsFbo) {
+      if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return positions
+      // Update vertex count dynamically
+      this.fillSampledPointsFboCommand.setVertexCount(this.data.pointsNumber ?? 0)
+
+      this.fillSampledPointsUniformStore.setUniforms({
+        fillSampledPointsUniforms: {
+          pointsTextureSize: this.store.pointsTextureSize ?? 0,
+          transformationMatrix: this.store.transformationMatrix4x4,
+          spaceSize: this.store.adjustedSpaceSize ?? 0,
+          screenSize: this.store.screenSize ?? [0, 0],
+        },
+      })
+
+      this.fillSampledPointsFboCommand.setBindings({
+        fillSampledPointsUniforms: this.fillSampledPointsUniformStore.getManagedUniformBuffer(this.device, 'fillSampledPointsUniforms'),
+        positionsTexture: this.currentPositionTexture,
+      })
+
+      const fillPass = this.device.beginRenderPass({
+        framebuffer: this.sampledPointsFbo,
+      })
+      this.fillSampledPointsFboCommand.draw(fillPass)
+      fillPass.end()
+    }
+
+    const pixels = readPixels(this.device, this.sampledPointsFbo as Framebuffer)
     for (let i = 0; i < pixels.length / 4; i++) {
       const index = pixels[i * 4]
       const isNotEmpty = !!pixels[i * 4 + 1]
@@ -867,11 +1985,45 @@ export class Points extends CoreModule {
   public getSampledPoints (): { indices: number[]; positions: number[] } {
     const indices: number[] = []
     const positions: number[] = []
-    if (!this.sampledPointsFbo) return { indices, positions }
+    if (!this.sampledPointsFbo || this.sampledPointsFbo.destroyed) return { indices, positions }
 
-    this.clearSampledPointsFboCommand?.()
-    this.fillSampledPointsFboCommand?.()
-    const pixels = readPixels(this.reglInstance, this.sampledPointsFbo as regl.Framebuffer2D)
+    // Clear sampled points FBO
+    if (this.clearSampledPointsFboCommand) {
+      const clearPass = this.device.beginRenderPass({
+        framebuffer: this.sampledPointsFbo,
+      })
+      this.clearSampledPointsFboCommand.draw(clearPass)
+      clearPass.end()
+    }
+
+    // Fill sampled points FBO
+    if (this.fillSampledPointsFboCommand && this.fillSampledPointsUniformStore && this.sampledPointsFbo) {
+      if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return { indices, positions }
+      // Update vertex count dynamically
+      this.fillSampledPointsFboCommand.setVertexCount(this.data.pointsNumber ?? 0)
+
+      this.fillSampledPointsUniformStore.setUniforms({
+        fillSampledPointsUniforms: {
+          pointsTextureSize: this.store.pointsTextureSize ?? 0,
+          transformationMatrix: this.store.transformationMatrix4x4,
+          spaceSize: this.store.adjustedSpaceSize ?? 0,
+          screenSize: this.store.screenSize ?? [0, 0],
+        },
+      })
+
+      this.fillSampledPointsFboCommand.setBindings({
+        fillSampledPointsUniforms: this.fillSampledPointsUniformStore.getManagedUniformBuffer(this.device, 'fillSampledPointsUniforms'),
+        positionsTexture: this.currentPositionTexture,
+      })
+
+      const fillPass = this.device.beginRenderPass({
+        framebuffer: this.sampledPointsFbo,
+      })
+      this.fillSampledPointsFboCommand.draw(fillPass)
+      fillPass.end()
+    }
+
+    const pixels = readPixels(this.device, this.sampledPointsFbo as Framebuffer)
 
     for (let i = 0; i < pixels.length / 4; i++) {
       const index = pixels[i * 4]
@@ -891,8 +2043,9 @@ export class Points extends CoreModule {
   public getTrackedPositionsArray (): number[] {
     const positions: number[] = []
     if (!this.trackedIndices) return positions
+    if (!this.trackedPositionsFbo || this.trackedPositionsFbo.destroyed) return positions
     positions.length = this.trackedIndices.length * 2
-    const pixels = readPixels(this.reglInstance, this.trackedPositionsFbo as regl.Framebuffer2D)
+    const pixels = readPixels(this.device, this.trackedPositionsFbo as Framebuffer)
     for (let i = 0; i < pixels.length / 4; i += 1) {
       const x = pixels[i * 4]
       const y = pixels[i * 4 + 1]
@@ -905,10 +2058,223 @@ export class Points extends CoreModule {
     return positions
   }
 
+  public destroy (): void {
+    // Destroy UniformStore instances
+    this.updatePositionUniformStore?.destroy()
+    this.updatePositionUniformStore = undefined
+    this.dragPointUniformStore?.destroy()
+    this.dragPointUniformStore = undefined
+    this.drawUniformStore?.destroy()
+    this.drawUniformStore = undefined
+    this.findPointsOnAreaSelectionUniformStore?.destroy()
+    this.findPointsOnAreaSelectionUniformStore = undefined
+    this.findPointsOnPolygonSelectionUniformStore?.destroy()
+    this.findPointsOnPolygonSelectionUniformStore = undefined
+    this.findHoveredPointUniformStore?.destroy()
+    this.findHoveredPointUniformStore = undefined
+    this.fillSampledPointsUniformStore?.destroy()
+    this.fillSampledPointsUniformStore = undefined
+    this.drawHighlightedUniformStore?.destroy()
+    this.drawHighlightedUniformStore = undefined
+    this.trackPointsUniformStore?.destroy()
+    this.trackPointsUniformStore = undefined
+
+    // Destroy Models
+    this.drawCommand?.destroy()
+    this.drawCommand = undefined
+    this.drawHighlightedCommand?.destroy()
+    this.drawHighlightedCommand = undefined
+    this.updatePositionCommand?.destroy()
+    this.updatePositionCommand = undefined
+    this.dragPointCommand?.destroy()
+    this.dragPointCommand = undefined
+    this.findPointsOnAreaSelectionCommand?.destroy()
+    this.findPointsOnAreaSelectionCommand = undefined
+    this.findPointsOnPolygonSelectionCommand?.destroy()
+    this.findPointsOnPolygonSelectionCommand = undefined
+    this.findHoveredPointCommand?.destroy()
+    this.findHoveredPointCommand = undefined
+    this.clearHoveredFboCommand?.destroy()
+    this.clearHoveredFboCommand = undefined
+    this.clearSampledPointsFboCommand?.destroy()
+    this.clearSampledPointsFboCommand = undefined
+    this.fillSampledPointsFboCommand?.destroy()
+    this.fillSampledPointsFboCommand = undefined
+    this.trackPointsCommand?.destroy()
+    this.trackPointsCommand = undefined
+
+    // Destroy Framebuffers (destroy before textures they reference)
+    if (this.currentPositionFbo && !this.currentPositionFbo.destroyed) {
+      this.currentPositionFbo.destroy()
+    }
+    this.currentPositionFbo = undefined
+    if (this.previousPositionFbo && !this.previousPositionFbo.destroyed) {
+      this.previousPositionFbo.destroy()
+    }
+    this.previousPositionFbo = undefined
+    if (this.velocityFbo && !this.velocityFbo.destroyed) {
+      this.velocityFbo.destroy()
+    }
+    this.velocityFbo = undefined
+    if (this.selectedFbo && !this.selectedFbo.destroyed) {
+      this.selectedFbo.destroy()
+    }
+    this.selectedFbo = undefined
+    if (this.hoveredFbo && !this.hoveredFbo.destroyed) {
+      this.hoveredFbo.destroy()
+    }
+    this.hoveredFbo = undefined
+    if (this.greyoutStatusFbo && !this.greyoutStatusFbo.destroyed) {
+      this.greyoutStatusFbo.destroy()
+    }
+    this.greyoutStatusFbo = undefined
+    if (this.sizeFbo && !this.sizeFbo.destroyed) {
+      this.sizeFbo.destroy()
+    }
+    this.sizeFbo = undefined
+    if (this.trackedIndicesFbo && !this.trackedIndicesFbo.destroyed) {
+      this.trackedIndicesFbo.destroy()
+    }
+    this.trackedIndicesFbo = undefined
+    if (this.trackedPositionsFbo && !this.trackedPositionsFbo.destroyed) {
+      this.trackedPositionsFbo.destroy()
+    }
+    this.trackedPositionsFbo = undefined
+    if (this.sampledPointsFbo && !this.sampledPointsFbo.destroyed) {
+      this.sampledPointsFbo.destroy()
+    }
+    this.sampledPointsFbo = undefined
+    if (this.polygonPathFbo && !this.polygonPathFbo.destroyed) {
+      this.polygonPathFbo.destroy()
+    }
+    this.polygonPathFbo = undefined
+
+    // Destroy Textures
+    if (this.currentPositionTexture && !this.currentPositionTexture.destroyed) {
+      this.currentPositionTexture.destroy()
+    }
+    this.currentPositionTexture = undefined
+    if (this.previousPositionTexture && !this.previousPositionTexture.destroyed) {
+      this.previousPositionTexture.destroy()
+    }
+    this.previousPositionTexture = undefined
+    if (this.velocityTexture && !this.velocityTexture.destroyed) {
+      this.velocityTexture.destroy()
+    }
+    this.velocityTexture = undefined
+    if (this.selectedTexture && !this.selectedTexture.destroyed) {
+      this.selectedTexture.destroy()
+    }
+    this.selectedTexture = undefined
+    if (this.greyoutStatusTexture && !this.greyoutStatusTexture.destroyed) {
+      this.greyoutStatusTexture.destroy()
+    }
+    this.greyoutStatusTexture = undefined
+    if (this.sizeTexture && !this.sizeTexture.destroyed) {
+      this.sizeTexture.destroy()
+    }
+    this.sizeTexture = undefined
+    if (this.trackedIndicesTexture && !this.trackedIndicesTexture.destroyed) {
+      this.trackedIndicesTexture.destroy()
+    }
+    this.trackedIndicesTexture = undefined
+    if (this.polygonPathTexture && !this.polygonPathTexture.destroyed) {
+      this.polygonPathTexture.destroy()
+    }
+    this.polygonPathTexture = undefined
+    if (this.imageAtlasTexture && !this.imageAtlasTexture.destroyed) {
+      this.imageAtlasTexture.destroy()
+    }
+    this.imageAtlasTexture = undefined
+    if (this.imageAtlasCoordsTexture && !this.imageAtlasCoordsTexture.destroyed) {
+      this.imageAtlasCoordsTexture.destroy()
+    }
+    this.imageAtlasCoordsTexture = undefined
+
+    // Destroy Buffers
+    if (this.colorBuffer && !this.colorBuffer.destroyed) {
+      this.colorBuffer.destroy()
+    }
+    this.colorBuffer = undefined
+    if (this.sizeBuffer && !this.sizeBuffer.destroyed) {
+      this.sizeBuffer.destroy()
+    }
+    this.sizeBuffer = undefined
+    if (this.shapeBuffer && !this.shapeBuffer.destroyed) {
+      this.shapeBuffer.destroy()
+    }
+    this.shapeBuffer = undefined
+    if (this.imageIndicesBuffer && !this.imageIndicesBuffer.destroyed) {
+      this.imageIndicesBuffer.destroy()
+    }
+    this.imageIndicesBuffer = undefined
+    if (this.imageSizesBuffer && !this.imageSizesBuffer.destroyed) {
+      this.imageSizesBuffer.destroy()
+    }
+    this.imageSizesBuffer = undefined
+    if (this.drawPointIndices && !this.drawPointIndices.destroyed) {
+      this.drawPointIndices.destroy()
+    }
+    this.drawPointIndices = undefined
+    if (this.hoveredPointIndices && !this.hoveredPointIndices.destroyed) {
+      this.hoveredPointIndices.destroy()
+    }
+    this.hoveredPointIndices = undefined
+    if (this.sampledPointIndices && !this.sampledPointIndices.destroyed) {
+      this.sampledPointIndices.destroy()
+    }
+    this.sampledPointIndices = undefined
+
+    // Destroy attribute buffers (Model doesn't destroy them automatically)
+    if (this.updatePositionVertexCoordBuffer && !this.updatePositionVertexCoordBuffer.destroyed) {
+      this.updatePositionVertexCoordBuffer.destroy()
+    }
+    this.updatePositionVertexCoordBuffer = undefined
+    if (this.dragPointVertexCoordBuffer && !this.dragPointVertexCoordBuffer.destroyed) {
+      this.dragPointVertexCoordBuffer.destroy()
+    }
+    this.dragPointVertexCoordBuffer = undefined
+    if (this.findPointsOnAreaSelectionVertexCoordBuffer && !this.findPointsOnAreaSelectionVertexCoordBuffer.destroyed) {
+      this.findPointsOnAreaSelectionVertexCoordBuffer.destroy()
+    }
+    this.findPointsOnAreaSelectionVertexCoordBuffer = undefined
+    if (this.findPointsOnPolygonSelectionVertexCoordBuffer && !this.findPointsOnPolygonSelectionVertexCoordBuffer.destroyed) {
+      this.findPointsOnPolygonSelectionVertexCoordBuffer.destroy()
+    }
+    this.findPointsOnPolygonSelectionVertexCoordBuffer = undefined
+    if (this.clearHoveredFboVertexCoordBuffer && !this.clearHoveredFboVertexCoordBuffer.destroyed) {
+      this.clearHoveredFboVertexCoordBuffer.destroy()
+    }
+    this.clearHoveredFboVertexCoordBuffer = undefined
+    if (this.clearSampledPointsFboVertexCoordBuffer && !this.clearSampledPointsFboVertexCoordBuffer.destroyed) {
+      this.clearSampledPointsFboVertexCoordBuffer.destroy()
+    }
+    this.clearSampledPointsFboVertexCoordBuffer = undefined
+    if (this.drawHighlightedVertexCoordBuffer && !this.drawHighlightedVertexCoordBuffer.destroyed) {
+      this.drawHighlightedVertexCoordBuffer.destroy()
+    }
+    this.drawHighlightedVertexCoordBuffer = undefined
+    if (this.trackPointsVertexCoordBuffer && !this.trackPointsVertexCoordBuffer.destroyed) {
+      this.trackPointsVertexCoordBuffer.destroy()
+    }
+    this.trackPointsVertexCoordBuffer = undefined
+  }
+
   private swapFbo (): void {
-    const temp = this.previousPositionFbo
+    // Swap textures and framebuffers
+    // Safety check: ensure resources exist and aren't destroyed before swapping
+    if (!this.currentPositionTexture || this.currentPositionTexture.destroyed ||
+        !this.previousPositionTexture || this.previousPositionTexture.destroyed ||
+        !this.currentPositionFbo || this.currentPositionFbo.destroyed ||
+        !this.previousPositionFbo || this.previousPositionFbo.destroyed) {
+      return
+    }
+    const tempTexture = this.previousPositionTexture
+    const tempFbo = this.previousPositionFbo
+    this.previousPositionTexture = this.currentPositionTexture
     this.previousPositionFbo = this.currentPositionFbo
-    this.currentPositionFbo = temp
+    this.currentPositionTexture = tempTexture
+    this.currentPositionFbo = tempFbo
   }
 
   private rescaleInitialNodePositions (): void {

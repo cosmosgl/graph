@@ -1,11 +1,11 @@
 import regl from 'regl'
 import { CoreModule } from '@/graph/modules/core-module'
-import calculateCentermassFrag from '@/graph/modules/ForceCenter/calculate-centermass.frag'
-import calculateCentermassVert from '@/graph/modules/ForceCenter/calculate-centermass.vert'
-import forceFrag from '@/graph/modules/ForceCenter/force-center.frag'
+import calculateCentermassFrag from '@/graph/modules/ForceCenter/calculate-centermass.frag?raw'
+import calculateCentermassVert from '@/graph/modules/ForceCenter/calculate-centermass.vert?raw'
+import forceFrag from '@/graph/modules/ForceCenter/force-center.frag?raw'
 import { createQuadBuffer, createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
-import clearFrag from '@/graph/modules/Shared/clear.frag'
-import updateVert from '@/graph/modules/Shared/quad.vert'
+import clearFrag from '@/graph/modules/Shared/clear.frag?raw'
+import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
 export class ForceCenter extends CoreModule {
   private centermassFbo: regl.Framebuffer2D | undefined

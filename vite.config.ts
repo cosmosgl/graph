@@ -1,6 +1,5 @@
 import { resolve } from 'path'
 import { defineConfig, LibraryFormats, UserConfig } from 'vite'
-import glsl from 'vite-plugin-glsl'
 import dts from 'vite-plugin-dts'
 
 // eslint-disable-next-line import/no-default-export
@@ -35,7 +34,6 @@ export default defineConfig(() => {
       },
     },
     plugins: [
-      glsl(),
       dts(),
     ],
     resolve: {

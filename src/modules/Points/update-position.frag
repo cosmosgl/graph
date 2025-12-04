@@ -1,3 +1,4 @@
+#version 300 es
 #ifdef GL_ES
 precision highp float;
 #endif
@@ -5,14 +6,27 @@ precision highp float;
 uniform sampler2D positionsTexture;
 uniform sampler2D velocity;
 uniform sampler2D pinnedStatusTexture;
+
+#ifdef USE_UNIFORM_BUFFERS
+layout(std140) uniform updatePositionUniforms {
+  float friction;
+  float spaceSize;
+} updatePosition;
+
+#define friction updatePosition.friction
+#define spaceSize updatePosition.spaceSize
+#else
 uniform float friction;
 uniform float spaceSize;
+#endif
 
-varying vec2 textureCoords;
+in vec2 textureCoords;
+
+out vec4 fragColor;
 
 void main() {
-  vec4 pointPosition = texture2D(positionsTexture, textureCoords);
-  vec4 pointVelocity = texture2D(velocity, textureCoords);
+  vec4 pointPosition = texture(positionsTexture, textureCoords);
+  vec4 pointVelocity = texture(velocity, textureCoords);
 
   // Check if point is pinned
   // pinnedStatusTexture has the same size and layout as positionsTexture
@@ -33,5 +47,5 @@ void main() {
   pointPosition.r = clamp(pointPosition.r, 0.0, spaceSize);
   pointPosition.g = clamp(pointPosition.g, 0.0, spaceSize);
   
-  gl_FragColor = pointPosition;
+  fragColor = pointPosition;
 }

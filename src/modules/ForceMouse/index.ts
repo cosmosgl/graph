@@ -1,8 +1,8 @@
 import regl from 'regl'
 import { CoreModule } from '@/graph/modules/core-module'
-import forceFrag from '@/graph/modules/ForceMouse/force-mouse.frag'
+import forceFrag from '@/graph/modules/ForceMouse/force-mouse.frag?raw'
 import { createQuadBuffer } from '@/graph/modules/Shared/buffer'
-import updateVert from '@/graph/modules/Shared/quad.vert'
+import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
 export class ForceMouse extends CoreModule {
   private runCommand: regl.DrawCommand | undefined
