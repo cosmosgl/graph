@@ -1,17 +1,9 @@
 import regl from 'regl'
 
 export function createQuadBuffer (reglInstance: regl.Regl): { buffer: regl.Buffer; size: number } {
-  const quadBuffer = reglInstance.buffer(new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]))
-  return {
-    buffer: quadBuffer,
-    size: 2,
-  }
-}
+  const QUAD_POSITIONS = [-1, -1, 1, -1, -1, 1, 1, 1]
 
-export function createQuadBuffer (reglInstance: regl.Regl): { buffer: regl.Buffer; size: number } {
-  const QUAD_POSITIONS = [-1, -1, 1, -1, -1, 1, 1, 1];
-  
-  const quadBuffer = reglInstance.buffer(new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]))
+  const quadBuffer = reglInstance.buffer(new Float32Array(QUAD_POSITIONS))
   return {
     buffer: quadBuffer,
     size: 2,

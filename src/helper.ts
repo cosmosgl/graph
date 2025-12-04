@@ -1,5 +1,5 @@
 import { color as d3Color } from 'd3-color'
-import regl from 'regl'
+import { Device, Framebuffer } from '@luma.gl/core'
 import DOMPurify from 'dompurify'
 
 export const isFunction = <T>(a: T): boolean => typeof a === 'function'
@@ -35,13 +35,52 @@ export function rgbToBrightness (r: number, g: number, b: number): number {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b
 }
 
-export function readPixels (reglInstance: regl.Regl, fbo: regl.Framebuffer2D): Float32Array {
-  let resultPixels = new Float32Array()
-  reglInstance({ framebuffer: fbo })(() => {
-    resultPixels = reglInstance.read()
-  })
-
-  return resultPixels
+/**
+ * TODO: Migrate from deprecated `readPixelsToArrayWebGL` to CommandEncoder API
+ *
+ * `readPixelsToArrayWebGL` is deprecated in luma.gl v9. The recommended modern approach is:
+ *
+ * 1. Create a buffer to hold the pixel data:
+ *    const buffer = device.createBuffer({
+ *      byteLength: width * height * 4 * 4, // RGBA, 4 bytes per float
+ *      usage: Buffer.COPY_DST | Buffer.MAP_READ
+ *    });
+ *
+ * 2. Copy texture/framebuffer to buffer using command encoder:
+ *    const commandEncoder = device.createCommandEncoder();
+ *    commandEncoder.copyTextureToBuffer({
+ *      sourceTexture: fbo, // Can be Texture or Framebuffer
+ *      width: sourceWidth ?? fbo.width,
+ *      height: sourceHeight ?? fbo.height,
+ *      origin: [sourceX, sourceY],
+ *      destinationBuffer: buffer
+ *    });
+ *    const commandBuffer = commandEncoder.finish();
+ *    device.submit(commandBuffer);
+ *
+ * 3. Read the data from the buffer (async):
+ *    const pixelData = await buffer.readAsync(); // Returns ArrayBuffer
+ *    return new Float32Array(pixelData);
+ *
+ * Note: The modern approach is asynchronous, so this function signature would need to change
+ * to return Promise<Float32Array> or we'd need to handle async at all call sites (18 locations).
+ *
+ * Migration impact:
+ * - This function is used in 18 places across the codebase
+ * - All call sites would need to be updated to handle async
+ * - Consider batching the migration to avoid inconsistencies
+ *
+ * Current status: Deprecated but still functional. Keeping for now until full migration can be planned.
+ */
+export function readPixels (device: Device, fbo: Framebuffer, sourceX = 0, sourceY = 0, sourceWidth?: number, sourceHeight?: number): Float32Array {
+  // Let luma.gl auto-allocate based on texture format
+  // It will use Float32Array for rgba32float textures
+  return device.readPixelsToArrayWebGL(fbo, {
+    sourceX,
+    sourceY,
+    sourceWidth,
+    sourceHeight,
+  }) as Float32Array
 }
 
 export function clamp (num: number, min: number, max: number): number {

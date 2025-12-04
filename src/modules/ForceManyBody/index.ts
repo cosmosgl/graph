@@ -1,12 +1,12 @@
 import regl from 'regl'
 import { CoreModule } from '@/graph/modules/core-module'
-import calculateLevelFrag from '@/graph/modules/ForceManyBody/calculate-level.frag'
-import calculateLevelVert from '@/graph/modules/ForceManyBody/calculate-level.vert'
-import forceFrag from '@/graph/modules/ForceManyBody/force-level.frag'
-import forceCenterFrag from '@/graph/modules/ForceManyBody/force-centermass.frag'
+import calculateLevelFrag from '@/graph/modules/ForceManyBody/calculate-level.frag?raw'
+import calculateLevelVert from '@/graph/modules/ForceManyBody/calculate-level.vert?raw'
+import forceFrag from '@/graph/modules/ForceManyBody/force-level.frag?raw'
+import forceCenterFrag from '@/graph/modules/ForceManyBody/force-centermass.frag?raw'
 import { createIndexesForBuffer, createQuadBuffer } from '@/graph/modules/Shared/buffer'
-import clearFrag from '@/graph/modules/Shared/clear.frag'
-import updateVert from '@/graph/modules/Shared/quad.vert'
+import clearFrag from '@/graph/modules/Shared/clear.frag?raw'
+import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
 export class ForceManyBody extends CoreModule {
   private randomValuesFbo: regl.Framebuffer2D | undefined

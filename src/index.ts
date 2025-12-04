@@ -3,8 +3,9 @@ import 'd3-transition'
 import { easeQuadInOut, easeQuadIn, easeQuadOut } from 'd3-ease'
 import { D3ZoomEvent } from 'd3-zoom'
 import { D3DragEvent } from 'd3-drag'
-import { luma, Device } from '@luma.gl/core'
-import { webgl2Adapter } from '@luma.gl/webgl'
+import { Device, Framebuffer } from '@luma.gl/core'
+import { WebGLDevice } from '@luma.gl/webgl'
+import { GL } from '@luma.gl/constants'
 
 import { GraphConfig, GraphConfigInterface } from '@/graph/config'
 import { getRgbaColor, readPixels, sanitizeHtml } from '@/graph/helper'
@@ -17,7 +18,7 @@ import { ForceMouse } from '@/graph/modules/ForceMouse'
 import { Clusters } from '@/graph/modules/Clusters'
 import { FPSMonitor } from '@/graph/modules/FPSMonitor'
 import { GraphData } from '@/graph/modules/GraphData'
-import { Lines } from '@/graph/modules/Lines'
+// import { Lines } from '@/graph/modules/Lines'
 import { Points } from '@/graph/modules/Points'
 import { Store, ALPHA_MIN, MAX_POINT_SIZE, MAX_HOVER_DETECTION_DELAY, type Hovered } from '@/graph/modules/Store'
 import { Zoom } from '@/graph/modules/Zoom'
@@ -36,7 +37,7 @@ export class Graph {
 
   private store = new Store()
   private points: Points | undefined
-  private lines: Lines | undefined
+  // private lines: Lines | undefined
   private forceGravity: ForceGravity | undefined
   private forceCenter: ForceCenter | undefined
   private forceManyBody: ForceManyBody | ForceManyBodyQuadtree | undefined
@@ -90,30 +91,22 @@ export class Graph {
     if (config) this.config.init(config)
 
     this.store.div = div
-    const canvas = document.createElement('canvas')
-    canvas.style.width = '100%'
-    canvas.style.height = '100%'
-    this.store.div.appendChild(canvas)
+    // const canvas = document.createElement('canvas')
+    // canvas.style.width = '100%'
+    // canvas.style.height = '100%'
+    // this.store.div.appendChild(canvas)
     this.addAttribution()
-    const w = canvas.clientWidth
-    const h = canvas.clientHeight
+    // const w = canvas.clientWidth
+    // const h = canvas.clientHeight
 
-    canvas.width = w * this.config.pixelRatio
-    canvas.height = h * this.config.pixelRatio
+    // canvas.width = w * this.config.pixelRatio
+    // canvas.height = h * this.config.pixelRatio
 
-    this.canvas = canvas
+    this.canvas = device.canvasContext?.canvas// canvas
+    const w = this.canvas.clientWidth
+    const h = this.canvas.clientHeight
 
     this.device = device
-    // luma.createDevice({
-    //   adapters: [webgl2Adapter],
-    //   canvasContext: {
-    //     canvas: this.canvas,
-    //   },
-    //   webgl: {
-    //     antialias: false,
-    //     preserveDrawingBuffer: true,
-    //   },
-    // })
 
     this.store.adjustSpaceSize(this.config.spaceSize, this.device.limits.maxTextureDimension2D)
     this.store.setWebGLMaxTextureSize(this.device.limits.maxTextureDimension2D)
@@ -182,14 +175,15 @@ export class Graph {
     if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
     this.setZoomLevel(this.config.initialZoomLevel ?? 1)
 
-    this.store.maxPointSize = (this.device.limits.pointSizeDims[1] ?? MAX_POINT_SIZE) / this.config.pixelRatio
+    const pointSizeRange = (device as WebGLDevice).gl.getParameter(GL.ALIASED_POINT_SIZE_RANGE) as [number, number]
+    this.store.maxPointSize = (pointSizeRange?.[1] ?? MAX_POINT_SIZE) / this.config.pixelRatio
 
     // Initialize simulation state based on enableSimulation config
     // If simulation is disabled, start with isSimulationRunning = false
     this.store.isSimulationRunning = this.config.enableSimulation
 
     this.points = new Points(this.device, this.config, this.store, this.graph)
-    this.lines = new Lines(this.device, this.config, this.store, this.graph, this.points)
+    // this.lines = new Lines(this.device, this.config, this.store, this.graph, this.points)
     if (this.config.enableSimulation) {
       this.forceGravity = new ForceGravity(this.device, this.config, this.store, this.graph, this.points)
       this.forceCenter = new ForceCenter(this.device, this.config, this.store, this.graph, this.points)
@@ -248,7 +242,7 @@ export class Graph {
    * @param config Cosmos configuration object.
    */
   public setConfig (config: Partial<GraphConfigInterface>): void {
-    if (this._isDestroyed || !this.points || !this.lines || !this.clusters) return
+    if (this._isDestroyed || !this.points || /* !this.lines || */ !this.clusters) return
     const prevConfig = { ...this.config }
     this.config.init(config)
     if ((prevConfig.pointDefaultColor !== this.config.pointDefaultColor) ||
@@ -300,7 +294,7 @@ export class Graph {
     }
     if (prevConfig.spaceSize !== this.config.spaceSize ||
       prevConfig.simulationRepulsionQuadtreeLevels !== this.config.simulationRepulsionQuadtreeLevels) {
-      this.store.adjustSpaceSize(this.config.spaceSize, this.device.limits.maxTextureSize)
+      this.store.adjustSpaceSize(this.config.spaceSize, this.device?.limits.maxTextureDimension2D ?? 4096)
       this.resizeCanvas(true)
       this.update(this.store.isSimulationRunning ? this.store.alpha : 0)
     }
@@ -313,7 +307,8 @@ export class Graph {
       }
     }
     if (prevConfig.pixelRatio !== this.config.pixelRatio) {
-      this.store.maxPointSize = (this.device.limits.pointSizeDims[1] ?? MAX_POINT_SIZE) / this.config.pixelRatio
+      // luma.gl doesn't have pointSizeDims, use fallback
+      this.store.maxPointSize = MAX_POINT_SIZE / this.config.pixelRatio
     }
 
     if (prevConfig.enableZoom !== this.config.enableZoom || prevConfig.enableDrag !== this.config.enableDrag) {
@@ -641,11 +636,14 @@ export class Graph {
     if (!this.graph.pointsNumber && !this.graph.linksNumber) {
       this.stopFrames()
       select(this.canvas).style('cursor', null)
-      this.device.clear({
-        color: this.store.backgroundColor,
-        depth: 1,
-        stencil: 0,
-      })
+      if (this.device) {
+        const clearPass = this.device.beginRenderPass({
+          clearColor: [0, 0, 1, 1], // this.store.backgroundColor,
+          clearDepth: 1,
+          clearStencil: 0,
+        })
+        clearPass.end()
+      }
       return
     }
 
@@ -672,9 +670,9 @@ export class Graph {
    * @param canZoomOut Set to `false` to prevent zooming out from the point (`true` by default).
    */
   public zoomToPointByIndex (index: number, duration = 700, scale = defaultScaleToZoom, canZoomOut = true): void {
-    if (this._isDestroyed || !this.points || !this.canvasD3Selection) return
+    if (this._isDestroyed || !this.device || !this.points || !this.canvasD3Selection) return
     const { store: { screenSize } } = this
-    const positionPixels = readPixels(this.device, this.points.currentPositionFbo as regl.Framebuffer2D)
+    const positionPixels = readPixels(this.device, this.points.currentPositionFbo as Framebuffer)
     if (index === undefined) return
     const posX = positionPixels[index * 4 + 0]
     const posY = positionPixels[index * 4 + 1]
@@ -741,10 +739,10 @@ export class Graph {
    * @returns Array of point positions.
    */
   public getPointPositions (): number[] {
-    if (this._isDestroyed || !this.points) return []
+    if (this._isDestroyed || !this.device || !this.points) return []
     if (this.graph.pointsNumber === undefined) return []
     const positions: number[] = []
-    const pointPositionsPixels = readPixels(this.device, this.points.currentPositionFbo as regl.Framebuffer2D)
+    const pointPositionsPixels = readPixels(this.device, this.points.currentPositionFbo as Framebuffer)
     positions.length = this.graph.pointsNumber * 2
     for (let i = 0; i < this.graph.pointsNumber; i += 1) {
       const posX = pointPositionsPixels[i * 4 + 0]
@@ -762,11 +760,11 @@ export class Graph {
    * @returns Array of point cluster.
    */
   public getClusterPositions (): number[] {
-    if (this._isDestroyed || !this.clusters) return []
+    if (this._isDestroyed || !this.device || !this.clusters) return []
     if (this.graph.pointClusters === undefined || this.clusters.clusterCount === undefined) return []
     this.clusters.calculateCentermass()
     const positions: number[] = []
-    const clusterPositionsPixels = readPixels(this.device, this.clusters.centermassFbo as regl.Framebuffer2D)
+    const clusterPositionsPixels = readPixels(this.device, this.clusters.centermassFbo as Framebuffer)
     positions.length = this.clusters.clusterCount * 2
     for (let i = 0; i < positions.length / 2; i += 1) {
       const sumX = clusterPositionsPixels[i * 4 + 0]
@@ -824,11 +822,11 @@ export class Graph {
    * @returns A Float32Array containing the indices of points inside a rectangular area.
    */
   public getPointsInRect (selection: [[number, number], [number, number]]): Float32Array {
-    if (this._isDestroyed || !this.points) return new Float32Array()
+    if (this._isDestroyed || !this.device || !this.points) return new Float32Array()
     const h = this.store.screenSize[1]
     this.store.selectedArea = [[selection[0][0], (h - selection[1][1])], [selection[1][0], (h - selection[0][1])]]
     this.points.findPointsOnAreaSelection()
-    const pixels = readPixels(this.device, this.points.selectedFbo as regl.Framebuffer2D)
+    const pixels = readPixels(this.device, this.points.selectedFbo as Framebuffer)
 
     return pixels
       .map((pixel, i) => {
@@ -857,7 +855,7 @@ export class Graph {
    * @returns A Float32Array containing the indices of points inside the polygon area.
    */
   public getPointsInPolygon (polygonPath: [number, number][]): Float32Array {
-    if (this._isDestroyed || !this.points) return new Float32Array()
+    if (this._isDestroyed || !this.device || !this.points) return new Float32Array()
     if (polygonPath.length < 3) return new Float32Array() // Need at least 3 points for a polygon
 
     const h = this.store.screenSize[1]
@@ -865,7 +863,7 @@ export class Graph {
     const convertedPath = polygonPath.map(([x, y]) => [x, h - y] as [number, number])
     this.points.updatePolygonPath(convertedPath)
     this.points.findPointsOnPolygonSelection()
-    const pixels = readPixels(this.device, this.points.selectedFbo as regl.Framebuffer2D)
+    const pixels = readPixels(this.device, this.points.selectedFbo as Framebuffer)
 
     return pixels
       .map((pixel, i) => {
@@ -880,12 +878,12 @@ export class Graph {
    * The `left` and `right` coordinates should be from 0 to the width of the canvas.
    * The `top` and `bottom` coordinates should be from 0 to the height of the canvas. */
   public selectPointsInRect (selection: [[number, number], [number, number]] | null): void {
-    if (this._isDestroyed || !this.points) return
+    if (this._isDestroyed || !this.device || !this.points) return
     if (selection) {
       const h = this.store.screenSize[1]
       this.store.selectedArea = [[selection[0][0], (h - selection[1][1])], [selection[1][0], (h - selection[0][1])]]
       this.points.findPointsOnAreaSelection()
-      const pixels = readPixels(this.device, this.points.selectedFbo as regl.Framebuffer2D)
+      const pixels = readPixels(this.device, this.points.selectedFbo as Framebuffer)
       this.store.selectedIndices = pixels
         .map((pixel, i) => {
           if (i % 4 === 0 && pixel !== 0) return i / 4
@@ -913,7 +911,7 @@ export class Graph {
    * The coordinates should be from 0 to the width/height of the canvas.
    * Set to null to clear selection. */
   public selectPointsInPolygon (polygonPath: [number, number][] | null): void {
-    if (this._isDestroyed || !this.points) return
+    if (this._isDestroyed || !this.device || !this.points) return
     if (polygonPath) {
       if (polygonPath.length < 3) {
         console.warn('Polygon path requires at least 3 points to form a polygon.')
@@ -925,7 +923,7 @@ export class Graph {
       const convertedPath = polygonPath.map(([x, y]) => [x, h - y] as [number, number])
       this.points.updatePolygonPath(convertedPath)
       this.points.findPointsOnPolygonSelection()
-      const pixels = readPixels(this.device, this.points.selectedFbo as regl.Framebuffer2D)
+      const pixels = readPixels(this.device, this.points.selectedFbo as Framebuffer)
       this.store.selectedIndices = pixels
         .map((pixel, i) => {
           if (i % 4 === 0 && pixel !== 0) return i / 4
@@ -1227,13 +1225,16 @@ export class Graph {
     }
 
     this.fpsMonitor?.destroy()
-    this.device.destroy()
-    // Clears the canvas after particle system is destroyed
-    this.device.clear({
-      color: this.store.backgroundColor,
-      depth: 1,
-      stencil: 0,
-    })
+    if (this.device) {
+      // Clears the canvas after particle system is destroyed
+      const clearPass = this.device.beginRenderPass({
+        clearColor: this.store.backgroundColor,
+        clearDepth: 1,
+        clearStencil: 0,
+      })
+      clearPass.end()
+      this.device.destroy()
+    }
 
     if (this.canvas && this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas)
@@ -1255,7 +1256,7 @@ export class Graph {
    * Updates and recreates the graph visualization based on pending changes.
    */
   public create (): void {
-    if (this._isDestroyed || !this.points || !this.lines) return
+    if (this._isDestroyed || !this.points /* || !this.lines */) return
     if (this.isPointPositionsUpdateNeeded) this.points.updatePositions()
     if (this.isPointColorUpdateNeeded) this.points.updateColor()
     if (this.isPointSizeUpdateNeeded) this.points.updateSize()
@@ -1263,10 +1264,10 @@ export class Graph {
     if (this.isPointImageIndicesUpdateNeeded) this.points.updateImageIndices()
     if (this.isPointImageSizesUpdateNeeded) this.points.updateImageSizes()
 
-    if (this.isLinksUpdateNeeded) this.lines.updatePointsBuffer()
-    if (this.isLinkColorUpdateNeeded) this.lines.updateColor()
-    if (this.isLinkWidthUpdateNeeded) this.lines.updateWidth()
-    if (this.isLinkArrowUpdateNeeded) this.lines.updateArrow()
+    // if (this.isLinksUpdateNeeded) this.lines.updatePointsBuffer()
+    // if (this.isLinkColorUpdateNeeded) this.lines.updateColor()
+    // if (this.isLinkWidthUpdateNeeded) this.lines.updateWidth()
+    // if (this.isLinkArrowUpdateNeeded) this.lines.updateArrow()
 
     if (this.isForceManyBodyUpdateNeeded) this.forceManyBody?.create()
     if (this.isForceLinkUpdateNeeded) {
@@ -1402,9 +1403,9 @@ export class Graph {
   }
 
   private initPrograms (): void {
-    if (this._isDestroyed || !this.points || !this.lines || !this.clusters) return
+    if (this._isDestroyed || !this.points || /* !this.lines || */ !this.clusters) return
     this.points.initPrograms()
-    this.lines.initPrograms()
+    // this.lines.initPrograms()
     this.forceGravity?.initPrograms()
     this.forceLinkIncoming?.initPrograms()
     this.forceLinkOutgoing?.initPrograms()
@@ -1569,14 +1570,14 @@ export class Graph {
       this.store.updateScreenSize(w, h)
       this.canvas.width = w * this.config.pixelRatio
       this.canvas.height = h * this.config.pixelRatio
-      this.device.poll()
+      // Device.poll() doesn't exist in luma.gl - not needed
       this.canvasD3Selection
         ?.call(this.zoomInstance.behavior.transform, this.zoomInstance.getTransform([centerPosition], k))
       this.points?.updateSampledPointsGrid()
       // Only update link index FBO if link hovering is enabled
-      if (this.store.isLinkHoveringEnabled) {
-        this.lines?.updateLinkIndexFbo()
-      }
+      // if (this.store.isLinkHoveringEnabled) {
+      //   this.lines?.updateLinkIndexFbo()
+      // }
     }
   }
 
@@ -1617,9 +1618,10 @@ export class Graph {
     this._findHoveredItemExecutionCount = 0
     this.findHoveredPoint()
 
-    if (this.graph.linksNumber && this.store.isLinkHoveringEnabled) {
-      this.findHoveredLine()
-    } else if (this.store.hoveredLinkIndex !== undefined) {
+    // if (this.graph.linksNumber && this.store.isLinkHoveringEnabled) {
+    //   this.findHoveredLine()
+    // } else if (this.store.hoveredLinkIndex !== undefined) {
+    if (this.store.hoveredLinkIndex !== undefined) {
       // Clear stale hoveredLinkIndex when there are no links
       const wasHovered = this.store.hoveredLinkIndex !== undefined
       this.store.hoveredLinkIndex = undefined
@@ -1632,17 +1634,21 @@ export class Graph {
   }
 
   private findHoveredPoint (): void {
-    if (this._isDestroyed || !this.points) return
+    if (this._isDestroyed || !this.device || !this.points) return
     this.points.findHoveredPoint()
     let isMouseover = false
     let isMouseout = false
-    const pixels = readPixels(this.device, this.points.hoveredFbo as regl.Framebuffer2D)
+    const pixels = readPixels(this.device, this.points.hoveredFbo as Framebuffer, 0, 0, 2, 2)
+    // Shader writes: rgba = vec4(index, size, pointPosition.xy)
+    const hoveredIndex = pixels[0] as number
     const pointSize = pixels[1] as number
-    if (pointSize) {
-      const hoveredIndex = pixels[0] as number
-      if (this.store.hoveredPoint?.index !== hoveredIndex) isMouseover = true
-      const pointX = pixels[2] as number
-      const pointY = pixels[3] as number
+    const pointX = pixels[2] as number
+    const pointY = pixels[3] as number
+
+    if (pointSize > 0) {
+      if (this.store.hoveredPoint === undefined || this.store.hoveredPoint.index !== hoveredIndex) {
+        isMouseover = true
+      }
       this.store.hoveredPoint = {
         index: hoveredIndex,
         position: [pointX, pointY],
@@ -1662,35 +1668,38 @@ export class Graph {
     if (isMouseout) this.config.onPointMouseOut?.(this.currentEvent)
   }
 
-  private findHoveredLine (): void {
-    if (this._isDestroyed || !this.lines) return
-    if (this.store.hoveredPoint) {
-      if (this.store.hoveredLinkIndex !== undefined) {
-        this.store.hoveredLinkIndex = undefined
-        this.config.onLinkMouseOut?.(this.currentEvent)
-      }
-      return
-    }
-    this.lines.findHoveredLine()
-    let isMouseover = false
-    let isMouseout = false
+  // private findHoveredLine (): void {
+  //   if (this._isDestroyed || !this.lines) return
+  //   if (this.store.hoveredPoint) {
+  //     if (this.store.hoveredLinkIndex !== undefined) {
+  //       this.store.hoveredLinkIndex = undefined
+  //       this.config.onLinkMouseOut?.(this.currentEvent)
+  //     }
+  //     return
+  //   }
+  //   this.lines.findHoveredLine()
+  //   let isMouseover = false
+  //   let isMouseout = false
 
-    const pixels = readPixels(this.device, this.lines.hoveredLineIndexFbo as regl.Framebuffer2D)
-    const hoveredLineIndex = pixels[0] as number
+  //   // Lines module still uses regl, so we need to cast
+  //   if (!this.device) return
+  //   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  //   const pixels = readPixels(this.device, this.lines.hoveredLineIndexFbo as any)
+  //   const hoveredLineIndex = pixels[0] as number
 
-    if (hoveredLineIndex >= 0) {
-      if (this.store.hoveredLinkIndex !== hoveredLineIndex) isMouseover = true
-      this.store.hoveredLinkIndex = hoveredLineIndex
-    } else {
-      if (this.store.hoveredLinkIndex !== undefined) isMouseout = true
-      this.store.hoveredLinkIndex = undefined
-    }
+  //   if (hoveredLineIndex >= 0) {
+  //     if (this.store.hoveredLinkIndex !== hoveredLineIndex) isMouseover = true
+  //     this.store.hoveredLinkIndex = hoveredLineIndex
+  //   } else {
+  //     if (this.store.hoveredLinkIndex !== undefined) isMouseout = true
+  //     this.store.hoveredLinkIndex = undefined
+  //   }
 
-    if (isMouseover && this.store.hoveredLinkIndex !== undefined) {
-      this.config.onLinkMouseOver?.(this.store.hoveredLinkIndex)
-    }
-    if (isMouseout) this.config.onLinkMouseOut?.(this.currentEvent)
-  }
+  //   if (isMouseover && this.store.hoveredLinkIndex !== undefined) {
+  //     this.config.onLinkMouseOver?.(this.store.hoveredLinkIndex)
+  //   }
+  //   if (isMouseout) this.config.onLinkMouseOut?.(this.currentEvent)
+  // }
 
   private updateCanvasCursor (): void {
     const { hoveredPointCursor, hoveredLinkCursor } = this.config

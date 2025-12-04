@@ -1,3 +1,4 @@
+#version 300 es
 #ifdef GL_ES
 precision highp float;
 #endif
@@ -24,22 +25,24 @@ uniform float clustersTextureSize;
 uniform float clusterCoefficient;
 #endif
 
-varying vec2 textureCoords;
+in vec2 textureCoords;
+
+out vec4 fragColor;
 
 
 void main() {
-  vec4 pointPosition = texture2D(positionsTexture, textureCoords);
+  vec4 pointPosition = texture(positionsTexture, textureCoords);
   vec4 velocity = vec4(0.0);
-  vec4 pointClusterIndices = texture2D(clusterTexture, textureCoords);
+  vec4 pointClusterIndices = texture(clusterTexture, textureCoords);
   // no cluster, so no forces
   if (pointClusterIndices.x >= 0.0 && pointClusterIndices.y >= 0.0) {
     // positioning points to custom cluster position or either to the center of mass
-    vec2 clusterPositions = texture2D(clusterPositionsTexture, pointClusterIndices.xy / clustersTextureSize).xy;
+    vec2 clusterPositions = texture(clusterPositionsTexture, pointClusterIndices.xy / clustersTextureSize).xy;
     if (clusterPositions.x < 0.0 || clusterPositions.y < 0.0) {
-      vec4 centermassValues = texture2D(centermassTexture, pointClusterIndices.xy / clustersTextureSize);
+      vec4 centermassValues = texture(centermassTexture, pointClusterIndices.xy / clustersTextureSize);
       clusterPositions = centermassValues.xy / centermassValues.b;
     }
-    vec4 clusterCustomCoeff = texture2D(clusterForceCoefficient, textureCoords);
+    vec4 clusterCustomCoeff = texture(clusterForceCoefficient, textureCoords);
     vec2 distVector = clusterPositions.xy - pointPosition.xy;
     float dist = length(distVector);
     if (dist > 0.0) {
@@ -48,5 +51,5 @@ void main() {
     }
   }
 
-  gl_FragColor = velocity;
+  fragColor = velocity;
 }

@@ -18,6 +18,12 @@ export const MAX_HOVER_DETECTION_DELAY = 4
 export type Hovered = { index: number; position: [ number, number ] }
 type Focused = { index: number }
 
+/**
+ * Type alias for a 4x4 matrix stored as a 16-element array in column-major order.
+ * Used for std140 uniform buffer layout compatibility.
+ */
+type Mat4Array = [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number]
+
 export class Store {
   public pointsTextureSize = 0
   public linksTextureSize = 0
@@ -167,6 +173,110 @@ export class Store {
 
   public addAlpha (decay: number): number {
     return (this.alphaTarget - this.alpha) * this.alphaDecay(decay)
+  }
+
+  /**
+   * Gets the transformation matrix as a 4x4 matrix for std140 uniform buffer layout.
+   * 
+   * This method converts the internal 3x3 transformation matrix (mat3) to a 4x4 matrix format
+   * required by WebGPU uniform buffers using the std140 layout standard.
+   * 
+   * ## Matrix Storage Format
+   * 
+   * Matrices are stored in **column-major order** (GLSL convention). The internal `transform` 
+   * array is a 9-element array representing a 3x3 matrix:
+   * 
+   * ```
+   * [m00, m10, m20, m01, m11, m21, m02, m12, m22]
+   * ```
+   * 
+   * Which represents the matrix:
+   * ```
+   * [m00 m01 m02]
+   * [m10 m11 m12]
+   * [m20 m21 m22]
+   * ```
+   * 
+   * ## Why This Conversion Is Needed
+   * 
+   * The internal `transform` property stores a 3x3 matrix (9 elements) which is sufficient for
+   * 2D transformations (translation, rotation, scaling in x/y plane). However, when passing
+   * transformation matrices to GPU shaders via uniform buffers, we must comply with the std140
+   * layout standard.
+   * 
+   * ### std140 Layout Requirements
+   * 
+   * The std140 layout standard (used in both OpenGL and WebGPU) defines strict alignment rules:
+   * 
+   * 1. **Matrix Alignment**: In std140, matrices are stored as arrays of column vectors
+   *    - `mat3` requires each column to be aligned to 16 bytes (vec4 alignment)
+   *    - This means `mat3` occupies 3 columns × 16 bytes = 48 bytes total
+   *    - `mat4` occupies 4 columns × 16 bytes = 64 bytes total
+   * 
+   * 2. **Alignment Issues with mat3**: 
+   *    - The 48-byte size of `mat3` creates awkward alignment and padding requirements
+   *    - Different GPU drivers may handle `mat3` padding inconsistently
+   *    - This can lead to data misalignment and incorrect transformations
+   * 
+   * 3. **Why mat4 is Preferred**:
+   *    - `mat4` has clean 64-byte alignment (power of 2)
+   *    - Consistent behavior across all GPU drivers and platforms
+   *    - The shader can easily extract the 3x3 portion: `mat3 transformMat3 = mat3(transformationMatrix)`
+   *    - The 4th column is set to `[0, 0, 0, 1]` (homogeneous coordinate) which doesn't affect 2D transforms
+   * 
+   * ### Conversion Process
+   * 
+   * The 3x3 matrix is converted to 4x4 by:
+   * - Placing the 3x3 values in the top-left corner (preserving column-major order)
+   * - Setting the 4th column to `[0, 0, 0, 1]` (homogeneous coordinate)
+   * - The 4th row is implicitly `[0, 0, 0, 1]` due to column-major storage
+   * 
+   * This creates a valid 4x4 transformation matrix that:
+   * - Maintains the same 2D transformation behavior
+   * - Satisfies std140 alignment requirements
+   * - Works consistently across all GPU platforms
+   * 
+   * ### Usage in Shaders
+   * 
+   * Shaders using uniform buffers receive this as `mat4` and extract the 3x3 portion:
+   * ```glsl
+   * layout(std140) uniform uniforms {
+   *   mat4 transformationMatrix;
+   * } uniforms;
+   * 
+   * mat3 transformMat3 = mat3(uniforms.transformationMatrix);
+   * vec3 final = transformMat3 * vec3(position, 1);
+   * ```
+   * 
+   * @returns A 16-element array representing a 4x4 matrix in column-major order,
+   *          suitable for std140 uniform buffer layout. The matrix preserves the
+   *          2D transformation from the original 3x3 matrix.
+   * 
+   * @example
+   * ```typescript
+   * const matrix = store.transformationMatrix4x4;
+   * uniformStore.setUniforms({
+   *   uniforms: {
+   *     transformationMatrix: matrix  // Expects mat4x4<f32> in shader
+   *   }
+   * });
+   * ```
+   */
+  public get transformationMatrix4x4(): Mat4Array {
+    const t = this.transform
+    
+    // Validate transform array length
+    if (t.length !== 9) {
+      throw new Error(`Transform must be a 9-element array (3x3 matrix), got ${t.length} elements`)
+    }
+    
+    // Convert 3x3 to 4x4 matrix in column-major order
+    return [
+      t[0], t[1], t[2], 0,    // Column 0
+      t[3], t[4], t[5], 0,    // Column 1
+      t[6], t[7], t[8], 0,    // Column 2
+      0,    0,    0,    1,    // Column 3 (homogeneous)
+    ]
   }
 
   private alphaDecay = (decay: number): number => 1 - Math.pow(ALPHA_MIN, 1 / decay)
