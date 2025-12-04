@@ -10,10 +10,10 @@ uniform sampler2D clusterTexture;
 layout(std140) uniform calculateCentermassUniforms {
   float pointsTextureSize;
   float clustersTextureSize;
-} calculateCentermassUniforms;
+} calculateCentermass;
 
-#define pointsTextureSize calculateCentermassUniforms.pointsTextureSize
-#define clustersTextureSize calculateCentermassUniforms.clustersTextureSize
+#define pointsTextureSize calculateCentermass.pointsTextureSize
+#define clustersTextureSize calculateCentermass.clustersTextureSize
 #else
 uniform float pointsTextureSize;
 uniform float clustersTextureSize;
