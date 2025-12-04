@@ -3,18 +3,19 @@ import 'd3-transition'
 import { easeQuadInOut, easeQuadIn, easeQuadOut } from 'd3-ease'
 import { D3ZoomEvent } from 'd3-zoom'
 import { D3DragEvent } from 'd3-drag'
-import { Device, Framebuffer } from '@luma.gl/core'
+import { Device, Framebuffer, RenderPass } from '@luma.gl/core'
 import { WebGLDevice } from '@luma.gl/webgl'
 import { GL } from '@luma.gl/constants'
 
 import { GraphConfig, GraphConfigInterface } from '@/graph/config'
 import { getRgbaColor, readPixels, sanitizeHtml } from '@/graph/helper'
-import { ForceCenter } from '@/graph/modules/ForceCenter'
-import { ForceGravity } from '@/graph/modules/ForceGravity'
-import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
-import { ForceManyBody } from '@/graph/modules/ForceManyBody'
-import { ForceManyBodyQuadtree } from '@/graph/modules/ForceManyBodyQuadtree'
-import { ForceMouse } from '@/graph/modules/ForceMouse'
+// TODO: Migrate to luma.gl
+// import { ForceCenter } from '@/graph/modules/ForceCenter'
+// import { ForceGravity } from '@/graph/modules/ForceGravity'
+// import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
+// import { ForceManyBody } from '@/graph/modules/ForceManyBody'
+// import { ForceManyBodyQuadtree } from '@/graph/modules/ForceManyBodyQuadtree'
+// import { ForceMouse } from '@/graph/modules/ForceMouse'
 import { Clusters } from '@/graph/modules/Clusters'
 import { FPSMonitor } from '@/graph/modules/FPSMonitor'
 import { GraphData } from '@/graph/modules/GraphData'
@@ -38,12 +39,13 @@ export class Graph {
   private store = new Store()
   private points: Points | undefined
   // private lines: Lines | undefined
-  private forceGravity: ForceGravity | undefined
-  private forceCenter: ForceCenter | undefined
-  private forceManyBody: ForceManyBody | ForceManyBodyQuadtree | undefined
-  private forceLinkIncoming: ForceLink | undefined
-  private forceLinkOutgoing: ForceLink | undefined
-  private forceMouse: ForceMouse | undefined
+  // TODO: Migrate to luma.gl
+  // private forceGravity: ForceGravity | undefined
+  // private forceCenter: ForceCenter | undefined
+  // private forceManyBody: ForceManyBody | ForceManyBodyQuadtree | undefined
+  // private forceLinkIncoming: ForceLink | undefined
+  // private forceLinkOutgoing: ForceLink | undefined
+  // private forceMouse: ForceMouse | undefined
   private clusters: Clusters | undefined
   private zoomInstance = new Zoom(this.store, this.config)
   private dragInstance = new Drag(this.store, this.config)
@@ -185,14 +187,15 @@ export class Graph {
     this.points = new Points(this.device, this.config, this.store, this.graph)
     // this.lines = new Lines(this.device, this.config, this.store, this.graph, this.points)
     if (this.config.enableSimulation) {
-      this.forceGravity = new ForceGravity(this.device, this.config, this.store, this.graph, this.points)
-      this.forceCenter = new ForceCenter(this.device, this.config, this.store, this.graph, this.points)
-      this.forceManyBody = this.config.useClassicQuadtree
-        ? new ForceManyBodyQuadtree(this.device, this.config, this.store, this.graph, this.points)
-        : new ForceManyBody(this.device, this.config, this.store, this.graph, this.points)
-      this.forceLinkIncoming = new ForceLink(this.device, this.config, this.store, this.graph, this.points)
-      this.forceLinkOutgoing = new ForceLink(this.device, this.config, this.store, this.graph, this.points)
-      this.forceMouse = new ForceMouse(this.device, this.config, this.store, this.graph, this.points)
+      // TODO: Migrate to luma.gl
+      // this.forceGravity = new ForceGravity(this.device, this.config, this.store, this.graph, this.points)
+      // this.forceCenter = new ForceCenter(this.device, this.config, this.store, this.graph, this.points)
+      // this.forceManyBody = this.config.useClassicQuadtree
+      //   ? new ForceManyBodyQuadtree(this.device, this.config, this.store, this.graph, this.points)
+      //   : new ForceManyBody(this.device, this.config, this.store, this.graph, this.points)
+      // this.forceLinkIncoming = new ForceLink(this.device, this.config, this.store, this.graph, this.points)
+      // this.forceLinkOutgoing = new ForceLink(this.device, this.config, this.store, this.graph, this.points)
+      // this.forceMouse = new ForceMouse(this.device, this.config, this.store, this.graph, this.points)
     }
     this.clusters = new Clusters(this.device, this.config, this.store, this.graph, this.points)
 
@@ -1269,12 +1272,13 @@ export class Graph {
     // if (this.isLinkWidthUpdateNeeded) this.lines.updateWidth()
     // if (this.isLinkArrowUpdateNeeded) this.lines.updateArrow()
 
-    if (this.isForceManyBodyUpdateNeeded) this.forceManyBody?.create()
-    if (this.isForceLinkUpdateNeeded) {
-      this.forceLinkIncoming?.create(LinkDirection.INCOMING)
-      this.forceLinkOutgoing?.create(LinkDirection.OUTGOING)
-    }
-    if (this.isForceCenterUpdateNeeded) this.forceCenter?.create()
+    // TODO: Migrate to luma.gl
+    // if (this.isForceManyBodyUpdateNeeded) this.forceManyBody?.create()
+    // if (this.isForceLinkUpdateNeeded) {
+    //   this.forceLinkIncoming?.create(LinkDirection.INCOMING)
+    //   this.forceLinkOutgoing?.create(LinkDirection.OUTGOING)
+    // }
+    // if (this.isForceCenterUpdateNeeded) this.forceCenter?.create()
     if (this.isPointClusterUpdateNeeded) this.clusters?.create()
 
     this.isPointPositionsUpdateNeeded = false
@@ -1406,12 +1410,13 @@ export class Graph {
     if (this._isDestroyed || !this.points || /* !this.lines || */ !this.clusters) return
     this.points.initPrograms()
     // this.lines.initPrograms()
-    this.forceGravity?.initPrograms()
-    this.forceLinkIncoming?.initPrograms()
-    this.forceLinkOutgoing?.initPrograms()
-    this.forceMouse?.initPrograms()
-    this.forceManyBody?.initPrograms()
-    this.forceCenter?.initPrograms()
+    // TODO: Migrate to luma.gl
+    // this.forceGravity?.initPrograms()
+    // this.forceLinkIncoming?.initPrograms()
+    // this.forceLinkOutgoing?.initPrograms()
+    // this.forceMouse?.initPrograms()
+    // this.forceManyBody?.initPrograms()
+    // this.forceCenter?.initPrograms()
     this.clusters.initPrograms()
   }
 

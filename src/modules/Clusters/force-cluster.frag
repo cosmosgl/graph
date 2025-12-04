@@ -14,11 +14,11 @@ layout(std140) uniform applyForcesUniforms {
   float alpha;
   float clustersTextureSize;
   float clusterCoefficient;
-} applyForcesUniforms;
+} applyForces;
 
-#define alpha applyForcesUniforms.alpha
-#define clustersTextureSize applyForcesUniforms.clustersTextureSize
-#define clusterCoefficient applyForcesUniforms.clusterCoefficient
+#define alpha applyForces.alpha
+#define clustersTextureSize applyForces.clustersTextureSize
+#define clusterCoefficient applyForces.clusterCoefficient
 #else
 uniform float alpha;
 uniform float clustersTextureSize;
