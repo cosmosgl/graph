@@ -1,9 +1,9 @@
 import regl from 'regl'
 import { CoreModule } from '@/graph/modules/core-module'
-import drawLineFrag from '@/graph/modules/Lines/draw-curve-line.frag'
-import drawLineVert from '@/graph/modules/Lines/draw-curve-line.vert'
-import hoveredLineIndexFrag from '@/graph/modules/Lines/hovered-line-index.frag'
-import hoveredLineIndexVert from '@/graph/modules/Lines/hovered-line-index.vert'
+import drawLineFrag from '@/graph/modules/Lines/draw-curve-line.frag?raw'
+import drawLineVert from '@/graph/modules/Lines/draw-curve-line.vert?raw'
+import hoveredLineIndexFrag from '@/graph/modules/Lines/hovered-line-index.frag?raw'
+import hoveredLineIndexVert from '@/graph/modules/Lines/hovered-line-index.vert?raw'
 import { defaultConfigValues } from '@/graph/variables'
 import { getCurveLineGeometry } from '@/graph/modules/Lines/geometry'
 

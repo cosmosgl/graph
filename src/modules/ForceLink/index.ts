@@ -2,7 +2,7 @@ import regl from 'regl'
 import { CoreModule } from '@/graph/modules/core-module'
 import { forceFrag } from '@/graph/modules/ForceLink/force-spring'
 import { createQuadBuffer } from '@/graph/modules/Shared/buffer'
-import updateVert from '@/graph/modules/Shared/quad.vert'
+import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
 export enum LinkDirection {
   OUTGOING = 'outgoing',
