@@ -1,4 +1,4 @@
-import { Framebuffer, Buffer, Texture, UniformStore } from '@luma.gl/core'
+import { Framebuffer, Buffer, Texture, UniformStore, RenderPass } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
 import calculateCentermassFrag from '@/graph/modules/Clusters/calculate-centermass.frag?raw'
@@ -108,11 +108,17 @@ export class Clusters extends CoreModule {
       }
       // Create new texture
       this.clusterTexture = device.createTexture({
-        data: clusterState,
         width: pointsTextureSize,
         height: pointsTextureSize,
         format: 'rgba32float',
         usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
+      })
+      this.clusterTexture.copyImageData({
+        data: clusterState,
+        bytesPerRow: pointsTextureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
       })
       // Create new framebuffer with explicit dimensions
       this.clusterFbo = device.createFramebuffer({
@@ -124,6 +130,7 @@ export class Clusters extends CoreModule {
       // Size hasn't changed, just update the data
       this.clusterTexture.copyImageData({
         data: clusterState,
+        bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
         y: 0,
@@ -142,11 +149,17 @@ export class Clusters extends CoreModule {
       }
       // Create new texture
       this.clusterPositionsTexture = device.createTexture({
-        data: clusterPositions,
         width: this.clustersTextureSize,
         height: this.clustersTextureSize,
         format: 'rgba32float',
         usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
+      })
+      this.clusterPositionsTexture.copyImageData({
+        data: clusterPositions,
+        bytesPerRow: this.clustersTextureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
       })
       // Create new framebuffer with explicit dimensions
       this.clusterPositionsFbo = device.createFramebuffer({
@@ -158,6 +171,7 @@ export class Clusters extends CoreModule {
       // Update data
       this.clusterPositionsTexture.copyImageData({
         data: clusterPositions,
+        bytesPerRow: this.clustersTextureSize,
         mipLevel: 0,
         x: 0,
         y: 0,
@@ -176,11 +190,17 @@ export class Clusters extends CoreModule {
       }
       // Create new texture
       this.clusterForceCoefficientTexture = device.createTexture({
-        data: clusterForceCoefficient,
         width: pointsTextureSize,
         height: pointsTextureSize,
         format: 'rgba32float',
         usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
+      })
+      this.clusterForceCoefficientTexture.copyImageData({
+        data: clusterForceCoefficient,
+        bytesPerRow: pointsTextureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
       })
       // Create new framebuffer with explicit dimensions
       this.clusterForceCoefficientFbo = device.createFramebuffer({
@@ -192,6 +212,7 @@ export class Clusters extends CoreModule {
       // Update data
       this.clusterForceCoefficientTexture.copyImageData({
         data: clusterForceCoefficient,
+        bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
         y: 0,
@@ -210,11 +231,17 @@ export class Clusters extends CoreModule {
       }
       // Create new texture
       this.centermassTexture = device.createTexture({
-        data: new Float32Array(clustersTextureDataSize).fill(0),
         width: this.clustersTextureSize,
         height: this.clustersTextureSize,
         format: 'rgba32float',
         usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
+      })
+      this.centermassTexture.copyImageData({
+        data: new Float32Array(clustersTextureDataSize).fill(0),
+        bytesPerRow: this.clustersTextureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
       })
       // Create new framebuffer with explicit dimensions
       this.centermassFbo = device.createFramebuffer({
@@ -226,6 +253,7 @@ export class Clusters extends CoreModule {
       // Clear the centermass texture (fill with zeros)
       this.centermassTexture.copyImageData({
         data: new Float32Array(clustersTextureDataSize).fill(0),
+        bytesPerRow: this.clustersTextureSize,
         mipLevel: 0,
         x: 0,
         y: 0,
@@ -427,10 +455,10 @@ export class Clusters extends CoreModule {
     centermassPass.end()
   }
 
-  public run (): void {
+  public run (renderPass?: RenderPass): void {
     if (!this.data.pointClusters && !this.data.clusterPositions) return
 
-    // Calculate centermass (creates its own RenderPass)
+    // Calculate centermass (creates its own RenderPass - different framebuffer)
     this.calculateCentermass()
 
     // Add safety check
@@ -465,15 +493,20 @@ export class Clusters extends CoreModule {
       positionsTexture: this.points.previousPositionTexture,
     })
 
-    // Create a RenderPass for the velocity framebuffer
+    // Use provided render pass or create one if not provided (backward compatibility)
+    if (renderPass) {
+      // Use the provided render pass (created in simulation loop)
+      this.applyForcesCommand.draw(renderPass)
+    } else {
+      // Create a RenderPass for the velocity framebuffer (fallback for backward compatibility)
+      const velocityPass = this.device.beginRenderPass({
+        framebuffer: this.points.velocityFbo,
+      })
 
-    const velocityPass = this.device.beginRenderPass({
-      framebuffer: this.points.velocityFbo,
-    })
+      this.applyForcesCommand.draw(velocityPass)
 
-    this.applyForcesCommand.draw(velocityPass)
-
-    velocityPass.end()
+      velocityPass.end()
+    }
   }
 
   public destroy (): void {
