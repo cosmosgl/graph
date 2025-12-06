@@ -7,6 +7,7 @@ import regl from 'regl'
 import { GraphConfig, GraphConfigInterface } from '@/graph/config'
 import { getRgbaColor, readPixels, sanitizeHtml } from '@/graph/helper'
 import { ForceCenter } from '@/graph/modules/ForceCenter'
+import { ForceCollision } from '@/graph/modules/ForceCollision'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
 import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
 import { ForceManyBody } from '@/graph/modules/ForceManyBody'
@@ -42,6 +43,7 @@ export class Graph {
   private forceLinkIncoming: ForceLink | undefined
   private forceLinkOutgoing: ForceLink | undefined
   private forceMouse: ForceMouse | undefined
+  private forceCollision: ForceCollision | undefined
   private clusters: Clusters | undefined
   private zoomInstance = new Zoom(this.store, this.config)
   private dragInstance = new Drag(this.store, this.config)
@@ -199,6 +201,7 @@ export class Graph {
       this.forceLinkIncoming = new ForceLink(this.reglInstance, this.config, this.store, this.graph, this.points)
       this.forceLinkOutgoing = new ForceLink(this.reglInstance, this.config, this.store, this.graph, this.points)
       this.forceMouse = new ForceMouse(this.reglInstance, this.config, this.store, this.graph, this.points)
+      this.forceCollision = new ForceCollision(this.reglInstance, this.config, this.store, this.graph, this.points)
     }
     this.clusters = new Clusters(this.reglInstance, this.config, this.store, this.graph, this.points)
 
@@ -1275,6 +1278,7 @@ export class Graph {
       this.forceLinkOutgoing?.create(LinkDirection.OUTGOING)
     }
     if (this.isForceCenterUpdateNeeded) this.forceCenter?.create()
+    if (this.isForceManyBodyUpdateNeeded) this.forceCollision?.create()
     if (this.isPointClusterUpdateNeeded) this.clusters?.create()
 
     this.isPointPositionsUpdateNeeded = false
@@ -1384,6 +1388,11 @@ export class Graph {
         this.points?.updatePosition()
       }
 
+      if (this.config.simulationCollision) {
+        this.forceCollision?.run()
+        this.points?.updatePosition()
+      }
+
       // Alpha decay and progress
       this.store.alpha += this.store.addAlpha(this.config.simulationDecay ?? defaultConfigValues.simulation.decay)
       if (this.isRightClickMouse && this.config.enableRightClickRepulsion) {
@@ -1412,6 +1421,7 @@ export class Graph {
     this.forceMouse?.initPrograms()
     this.forceManyBody?.initPrograms()
     this.forceCenter?.initPrograms()
+    this.forceCollision?.initPrograms()
     this.clusters.initPrograms()
   }
 

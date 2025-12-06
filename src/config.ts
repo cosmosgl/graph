@@ -329,6 +329,20 @@ export interface GraphConfigInterface {
    * Default value: `0.1`
    */
   simulationCluster?: number;
+  /**
+   * Collision force coefficient. When set to a value greater than 0,
+   * points will push each other apart when they overlap.
+   * Note: This is an O(n²) algorithm and can be slower than many-body repulsion for large graphs.
+   * Default value: `0`
+   */
+  simulationCollision?: number;
+  /**
+   * Collision radius. When set to 0, the collision radius will be calculated
+   * based on point sizes (half of point size). When set to a positive value,
+   * all points will use this fixed collision radius.
+   * Default value: `0`
+   */
+  simulationCollisionRadius?: number;
 
   /**
    * Callback function that will be called when the simulation starts.
@@ -698,6 +712,8 @@ export class GraphConfig implements GraphConfigInterface {
   public enableRightClickRepulsion = defaultConfigValues.enableRightClickRepulsion
   public simulationFriction = defaultConfigValues.simulation.friction
   public simulationCluster = defaultConfigValues.simulation.cluster
+  public simulationCollision = defaultConfigValues.simulation.collision
+  public simulationCollisionRadius = defaultConfigValues.simulation.collisionRadius
 
   public onSimulationStart: GraphConfigInterface['onSimulationStart'] = undefined
   public onSimulationTick: GraphConfigInterface['onSimulationTick'] = undefined

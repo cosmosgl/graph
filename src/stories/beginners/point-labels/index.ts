@@ -39,7 +39,9 @@ export const pointLabels = (
     simulationGravity: 0.1,
     simulationLinkDistance: 1,
     simulationLinkSpring: 0.3,
-    simulationRepulsion: 0.4,
+    simulationRepulsion: 0.8,
+    simulationCollision: 0,
+    simulationCollisionRadius: 0, // Use point sizes for collision radius
     onSimulationTick: () => cosmosLabels.update(graph),
     onZoom: () => cosmosLabels.update(graph),
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
