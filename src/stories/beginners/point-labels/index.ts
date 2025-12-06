@@ -40,7 +40,7 @@ export const pointLabels = (
     simulationLinkDistance: 1,
     simulationLinkSpring: 0.3,
     simulationRepulsion: 0.8,
-    simulationCollision: 0,
+    simulationCollision: 0.1,
     simulationCollisionRadius: 0, // Use point sizes for collision radius
     onSimulationTick: () => cosmosLabels.update(graph),
     onZoom: () => cosmosLabels.update(graph),
