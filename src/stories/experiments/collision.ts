@@ -38,7 +38,7 @@ export const collision = (): { graph: Graph; div: HTMLDivElement } => {
     simulationRepulsion: 0.1,
     simulationGravity: 0.05,
     simulationDecay: 100000,
-    simulationFriction: 0.9,
+    simulationFriction: 0.5,
     fitViewOnInit: true,
     fitViewDelay: 100,
   })

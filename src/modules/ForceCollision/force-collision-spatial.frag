@@ -44,6 +44,9 @@ void main() {
   float myCellX = floor(offsetPos.x / cellSize);
   float myCellY = floor(offsetPos.y / cellSize);
 
+  // Track total neighbor count for damping
+  float totalNeighbors = 0.0;
+
   // Check 3x3 neighborhood of cells
   for (int dx = -1; dx <= 1; dx++) {
     for (int dy = -1; dy <= 1; dy++) {
@@ -63,8 +66,16 @@ void main() {
       float cellCount = cellData.w;
       if (cellCount < 0.5) continue; // Empty cell
       
+      // Scale force by number of points in cell
+      // Subtract 1 if this is our own cell to avoid self-collision
+      float effectiveCount = cellCount;
+      if (dx == 0 && dy == 0) {
+        effectiveCount = max(0.0, cellCount - 1.0);
+      }
+      
+      totalNeighbors += effectiveCount;
+      
       // Get average position and size in this cell
-      // Note: positions stored are original (not offset), so use them directly
       vec2 avgPos = cellData.xy / cellCount;
       float avgSize = cellData.z / cellCount;
       float otherCollisionRadius = collisionRadius > 0.0 ? collisionRadius : avgSize * 0.5;
@@ -78,30 +89,38 @@ void main() {
       
       // Check for collision
       if (dist < combinedRadius && dist > 0.001) {
-        // Calculate overlap amount
-        float overlap = combinedRadius - dist;
+        // Calculate overlap ratio (0 = just touching, 1 = fully overlapping)
+        float overlapRatio = (combinedRadius - dist) / combinedRadius;
+        
+        // Soft collision curve: use square root for gentler force near edges
+        // This prevents the "ping-pong" effect at boundaries
+        float softOverlap = sqrt(overlapRatio) * combinedRadius * 0.5;
         
         // Direction to push apart (normalized)
         vec2 direction = distVector / dist;
         
-        // Scale force by number of points in cell
-        // Subtract 1 if this is our own cell to avoid self-collision
-        float effectiveCount = cellCount;
-        if (dx == 0 && dy == 0) {
-          effectiveCount = max(0.0, cellCount - 1.0);
-        }
-        
-        // Apply repulsion force proportional to overlap
+        // Apply repulsion force with soft curve
         // Divide by 4 since we run 4 passes with different offsets
-        float force = alpha * collisionStrength * overlap * 0.25 * effectiveCount;
+        float force = alpha * collisionStrength * softOverlap * 0.25 * effectiveCount;
+        
+        // Clamp maximum force to prevent instability
+        force = min(force, combinedRadius * 0.5);
+        
         velocity.rg += force * direction;
-      } else if (dist <= 0.001 && cellCount > 1.0) {
+      } else if (dist <= 0.001 && effectiveCount > 0.0) {
         // Points at same position - push based on index
         float angle = currentIndex * 0.618033988749895;
-        float effectiveCount = (dx == 0 && dy == 0) ? max(0.0, cellCount - 1.0) : cellCount;
-        velocity.rg += alpha * collisionStrength * combinedRadius * 0.25 * effectiveCount * vec2(cos(angle), sin(angle));
+        float force = min(alpha * collisionStrength * combinedRadius * 0.1, combinedRadius * 0.3);
+        velocity.rg += force * effectiveCount * vec2(cos(angle), sin(angle));
       }
     }
+  }
+
+  // Apply density-based damping: reduce force when surrounded by many neighbors
+  // This prevents chaotic oscillations in dense clusters
+  if (totalNeighbors > 2.0) {
+    float damping = 2.0 / totalNeighbors;
+    velocity.rg *= damping;
   }
 
   gl_FragColor = velocity;

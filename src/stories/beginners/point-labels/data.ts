@@ -48,7 +48,7 @@ export const processPerformances = (performances: {
       pointColors.push(180 / 256) // b
       pointColors.push(1) // a
     }
-    pointSizes.push(pointsToShowLabelsFor.includes(point) ? 8 : 2)
+    pointSizes.push(pointsToShowLabelsFor.includes(point) ? 50 : 15)
   })
 
   const links = performances
