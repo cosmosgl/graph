@@ -14,7 +14,7 @@
   ],
   "parser": "@typescript-eslint/parser",
   "parserOptions": {
-    "project": "./tsconfig.json"
+    "project": ["./tsconfig.json", "./src/stories/tsconfig.json"]
   },
   "rules": {
     "object-curly-spacing": ["error", "always"],
