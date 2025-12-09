@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "../..",
+    "paths": {
+      "@cosmos.gl/graph": ["src/"],
+      "@cosmos.gl/graph/*": ["src/*"],
+      "@/graph": ["src/"],
+      "@/graph/*": ["src/*"]
+    },
+    "declaration": false,
+    "noEmit": true
+  },
+  "include": ["./**/*"],
+  "exclude": []
+}
