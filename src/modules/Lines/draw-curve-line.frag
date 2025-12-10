@@ -1,15 +1,28 @@
+#version 300 es
+#ifdef GL_ES
 precision highp float;
+#endif
 
-varying vec4 rgbaColor;
-varying vec2 pos;
-varying float arrowLength;
-varying float useArrow;
-varying float smoothing;
-varying float arrowWidthFactor;
-varying float linkIndex;
+in vec4 rgbaColor;
+in vec2 pos;
+in float arrowLength;
+in float useArrow;
+in float smoothing;
+in float arrowWidthFactor;
+in float linkIndex;
 
+#ifdef USE_UNIFORM_BUFFERS
+layout(std140) uniform drawLineFragmentUniforms {
+  float renderMode;
+} drawLineFrag;
+
+#define renderMode drawLineFrag.renderMode
+#else
 // renderMode: 0.0 = normal rendering, 1.0 = index buffer rendering for picking
 uniform float renderMode;
+#endif
+
+out vec4 fragColor;
 
 float map(float value, float min1, float max1, float min2, float max2) {
   return min2 + (value - min1) * (max2 - min2) / (max1 - min1);
@@ -37,10 +50,10 @@ void main() {
   
   if (renderMode > 0.0) {
     if (opacity > 0.0) {
-      gl_FragColor = vec4(linkIndex, 0.0, 0.0, 1.0);
+      fragColor = vec4(linkIndex, 0.0, 0.0, 1.0);
     } else {
-      gl_FragColor = vec4(-1.0, 0.0, 0.0, 0.0);
+      fragColor = vec4(-1.0, 0.0, 0.0, 0.0);
     }
-  } else gl_FragColor = vec4(color, opacity);
+  } else fragColor = vec4(color, opacity);
 
 }

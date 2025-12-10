@@ -1,13 +1,60 @@
+#version 300 es
+#ifdef GL_ES
 precision highp float;
+#endif
 
-attribute vec2 position, pointA, pointB;
-attribute vec4 color;
-attribute float width;
-attribute float arrow;
-attribute float linkIndices;
+in vec2 position, pointA, pointB;
+in vec4 color;
+in float width;
+in float arrow;
+in float linkIndices;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D pointGreyoutStatus;
+
+#ifdef USE_UNIFORM_BUFFERS
+layout(std140) uniform drawLineUniforms {
+  mat4 transformationMatrix;
+  float pointsTextureSize;
+  float widthScale;
+  float linkArrowsSizeScale;
+  float spaceSize;
+  vec2 screenSize;
+  vec2 linkVisibilityDistanceRange;
+  float linkVisibilityMinTransparency;
+  float linkOpacity;
+  float greyoutOpacity;
+  float curvedWeight;
+  float curvedLinkControlPointDistance;
+  float curvedLinkSegments;
+  float scaleLinksOnZoom;
+  float maxPointSize;
+  float renderMode;
+  float hoveredLinkIndex;
+  vec4 hoveredLinkColor;
+  float hoveredLinkWidthIncrease;
+} drawLine;
+
+#define transformationMatrix drawLine.transformationMatrix
+#define pointsTextureSize drawLine.pointsTextureSize
+#define widthScale drawLine.widthScale
+#define linkArrowsSizeScale drawLine.linkArrowsSizeScale
+#define spaceSize drawLine.spaceSize
+#define screenSize drawLine.screenSize
+#define linkVisibilityDistanceRange drawLine.linkVisibilityDistanceRange
+#define linkVisibilityMinTransparency drawLine.linkVisibilityMinTransparency
+#define linkOpacity drawLine.linkOpacity
+#define greyoutOpacity drawLine.greyoutOpacity
+#define curvedWeight drawLine.curvedWeight
+#define curvedLinkControlPointDistance drawLine.curvedLinkControlPointDistance
+#define curvedLinkSegments drawLine.curvedLinkSegments
+#define scaleLinksOnZoom drawLine.scaleLinksOnZoom
+#define maxPointSize drawLine.maxPointSize
+#define renderMode drawLine.renderMode
+#define hoveredLinkIndex drawLine.hoveredLinkIndex
+#define hoveredLinkColor drawLine.hoveredLinkColor
+#define hoveredLinkWidthIncrease drawLine.hoveredLinkWidthIncrease
+#else
 uniform mat3 transformationMatrix;
 uniform float pointsTextureSize;
 uniform float widthScale;
@@ -28,14 +75,15 @@ uniform float renderMode;
 uniform float hoveredLinkIndex;
 uniform vec4 hoveredLinkColor;
 uniform float hoveredLinkWidthIncrease;
+#endif
 
-varying vec4 rgbaColor;
-varying vec2 pos;
-varying float arrowLength;
-varying float useArrow;
-varying float smoothing;
-varying float arrowWidthFactor;
-varying float linkIndex;
+out vec4 rgbaColor;
+out vec2 pos;
+out float arrowLength;
+out float useArrow;
+out float smoothing;
+out float arrowWidthFactor;
+out float linkIndex;
 
 float map(float value, float min1, float max1, float min2, float max2) {
   return min2 + (value - min1) * (max2 - min2) / (max1 - min1);
@@ -49,7 +97,7 @@ vec2 conicParametricCurve(vec2 A, vec2 B, vec2 ControlPoint, float t, float w) {
 
 float calculateLinkWidth(float width) {
   float linkWidth;
-  if (scaleLinksOnZoom) {
+  if (scaleLinksOnZoom > 0.0) {
     // Use original width if links should scale with zoom
     linkWidth = width;
   } else {
@@ -67,7 +115,7 @@ float calculateLinkWidth(float width) {
 }
 
 float calculateArrowWidth(float arrowWidth) {
-  if (scaleLinksOnZoom) {
+  if (scaleLinksOnZoom > 0.0) {
     return arrowWidth;
   } else {
     // Apply the same scaling logic as calculateLinkWidth to maintain proportionality
@@ -85,11 +133,11 @@ void main() {
   vec2 pointTexturePosA = (pointA + 0.5) / pointsTextureSize;
   vec2 pointTexturePosB = (pointB + 0.5) / pointsTextureSize;
   
-  vec4 greyoutStatusA = texture2D(pointGreyoutStatus, pointTexturePosA);
-  vec4 greyoutStatusB = texture2D(pointGreyoutStatus, pointTexturePosB);
+  vec4 greyoutStatusA = texture(pointGreyoutStatus, pointTexturePosA);
+  vec4 greyoutStatusB = texture(pointGreyoutStatus, pointTexturePosB);
   
-  vec4 pointPositionA = texture2D(positionsTexture, pointTexturePosA);
-  vec4 pointPositionB = texture2D(positionsTexture, pointTexturePosB);
+  vec4 pointPositionA = texture(positionsTexture, pointTexturePosA);
+  vec4 pointPositionB = texture(positionsTexture, pointTexturePosB);
   vec2 a = pointPositionA.xy;
   vec2 b = pointPositionB.xy;
   
@@ -188,7 +236,13 @@ void main() {
   // Transform to clip space coordinates
   vec2 p = 2.0 * pointCurr / spaceSize - 1.0;
   p *= spaceSize / screenSize;
+  
+  #ifdef USE_UNIFORM_BUFFERS
+  mat3 transformMat3 = mat3(transformationMatrix);
+  vec3 final = transformMat3 * vec3(p, 1);
+  #else
   vec3 final = transformationMatrix * vec3(p, 1);
+  #endif
   
   gl_Position = vec4(final.rg, 0, 1);
 }
