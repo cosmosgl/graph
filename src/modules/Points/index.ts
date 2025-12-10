@@ -1314,49 +1314,39 @@ export class Points extends CoreModule {
     const { atlasData, atlasSize, atlasCoords, atlasCoordsSize } = atlasResult
     this.imageAtlasCoordsTextureSize = atlasCoordsSize
 
-    // Update atlas texture
-    if (!this.imageAtlasTexture || this.imageAtlasTexture.width !== atlasSize || this.imageAtlasTexture.height !== atlasSize) {
-      this.imageAtlasTexture?.destroy()
-      this.imageAtlasTexture = device.createTexture({
-        width: atlasSize,
-        height: atlasSize,
-        format: 'rgba8unorm',
-        data: atlasData,
-      })
-    } else {
-      this.imageAtlasTexture.copyImageData({
-        data: atlasData,
-        bytesPerRow: atlasSize,
-        mipLevel: 0,
-        x: 0,
-        y: 0,
-      })
-    }
+    // Recreate atlas texture to avoid row-stride/format issues
+    this.imageAtlasTexture?.destroy()
+    this.imageAtlasTexture = device.createTexture({
+      width: atlasSize,
+      height: atlasSize,
+      format: 'rgba8unorm',
+    })
+    this.imageAtlasTexture.copyImageData({
+      data: atlasData,
+      // UNPACK_ROW_LENGTH and UNPACK_IMAGE_HEIGHT expect pixel counts (not bytes)
+      bytesPerRow: atlasSize,
+      rowsPerImage: atlasSize,
+      mipLevel: 0,
+      x: 0,
+      y: 0,
+    })
 
-    // Update coords texture
-    if (!this.imageAtlasCoordsTexture || this.imageAtlasCoordsTexture.width !== atlasCoordsSize || this.imageAtlasCoordsTexture.height !== atlasCoordsSize) {
-      this.imageAtlasCoordsTexture?.destroy()
-      this.imageAtlasCoordsTexture = device.createTexture({
-        width: atlasCoordsSize,
-        height: atlasCoordsSize,
-        format: 'rgba32float',
-      })
-      this.imageAtlasCoordsTexture.copyImageData({
-        data: atlasCoords,
-        bytesPerRow: atlasCoordsSize,
-        mipLevel: 0,
-        x: 0,
-        y: 0,
-      })
-    } else {
-      this.imageAtlasCoordsTexture.copyImageData({
-        data: atlasCoords,
-        bytesPerRow: atlasCoordsSize,
-        mipLevel: 0,
-        x: 0,
-        y: 0,
-      })
-    }
+    // Recreate coords texture
+    this.imageAtlasCoordsTexture?.destroy()
+    this.imageAtlasCoordsTexture = device.createTexture({
+      width: atlasCoordsSize,
+      height: atlasCoordsSize,
+      format: 'rgba32float',
+    })
+    this.imageAtlasCoordsTexture.copyImageData({
+      data: atlasCoords,
+      // UNPACK_ROW_LENGTH and UNPACK_IMAGE_HEIGHT expect pixel counts (not bytes)
+      bytesPerRow: atlasCoordsSize,
+      rowsPerImage: atlasCoordsSize,
+      mipLevel: 0,
+      x: 0,
+      y: 0,
+    })
   }
 
   public updateSampledPointsGrid (): void {
