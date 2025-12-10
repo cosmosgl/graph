@@ -19,10 +19,6 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
     },
   })
 
-  // Create graph with device first (needed for callbacks)
-  // eslint-disable-next-line prefer-const
-  let graph: Graph | undefined
-
   const config: GraphConfigInterface = {
     spaceSize: 4096,
     backgroundColor: '#f25a8a', // '#2d313a',
@@ -32,8 +28,8 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
     simulationFriction: 0.1,
     simulationGravity: 0,
     simulationRepulsion: 0.5,
-    simulationCluster: 0.25, // Cluster force strength
-    curvedLinks: true,
+    simulationCluster: 0.05, // Cluster force strength
+    curvedLinks: false,
     fitViewDelay: 1000,
     fitViewPadding: 0.3,
     rescalePositions: true,
@@ -44,6 +40,18 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
     focusedPointIndex: 0,
     focusedPointRingColor: 'blue',
     enableSimulation: true,
+    linkArrows: true,
+    linkArrowsSizeScale: 2,
+    linkColor: 'orange',
+    linkWidth: 2,
+    linkOpacity: 1,
+    linkGreyoutOpacity: 0.1,
+    hoveredLinkColor: 'red',
+    scaleLinksOnZoom: true,
+    renderLinks: false,
+    onLinkMouseOver: linkIndex => {
+      console.log('Hovered link index: ', linkIndex)
+    },
     // Test point interactions
     onPointClick: pointIndex => {
       console.log('Clicked point index: ', pointIndex)
@@ -52,12 +60,12 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
       console.log('Hovered point index: ', pointIndex)
     },
     onBackgroundClick: () => {
-      console.log('Clicked background')
-      // const points = graph.getPointsInRect([[0, 0], [100, 100]])
+      // console.log('Clicked background')
+      // // const points = graph.getPointsInRect([[0, 0], [100, 100]])
+      // // console.log('Points: ', points)
+      // const polygonPath = [[0, 0], [100, 0], [100, 100], [0, 100]] as [number, number][]
+      // const points = graph?.getPointsInPolygon(polygonPath)
       // console.log('Points: ', points)
-      const polygonPath = [[0, 0], [100, 0], [100, 100], [0, 100]] as [number, number][]
-      const points = graph?.getPointsInPolygon(polygonPath)
-      console.log('Points: ', points)
     },
     onZoomEnd: () => {
       // const sampledPointIndices = graph?.getSampledPoints().indices
@@ -70,7 +78,7 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
   }
 
   // Create graph with device
-  graph = new Graph(div, device, config)
+  const graph = new Graph(div, device, config)
 
   // Create a grid of points to test rendering with different colors and sizes
   const pointCount = 100
@@ -165,17 +173,31 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
   }
   graph.setClusterPositions(clusterPositions)
 
-  // // Create links to test link rendering
-  // const links = new Float32Array((pointCount - 1) * 2)
-  // for (let i = 0; i < pointCount - 1; i++) {
-  //   links[i * 2] = i
-  //   links[i * 2 + 1] = i + 1
-  // }
+  // Create links to test link rendering
+  const links = new Float32Array((pointCount - 1) * 2)
+  for (let i = 0; i < pointCount - 1; i++) {
+    links[i * 2] = i
+    links[i * 2 + 1] = i + 1
+  }
 
-  // graph.setLinks(links)
+  graph.setLinks(links)
 
   graph.render()
   graph.trackPointPositionsByIndices([0, 1])
+
+  // Dynamic update: change links 5s after initial rendering
+  setTimeout(() => {
+    if (!graph) return
+    // Create a simple star topology: node 0 connected to all others
+    const dynamicLinks = new Float32Array((pointCount - 1) * 2)
+    for (let i = 1; i < pointCount; i++) {
+      dynamicLinks[(i - 1) * 2] = 0
+      dynamicLinks[(i - 1) * 2 + 1] = i
+    }
+    graph.setLinks(dynamicLinks)
+    graph.setConfig({ renderLinks: true })
+    graph.render()
+  }, 5000)
 
   const destroy = (): void => {
     graph.destroy()
