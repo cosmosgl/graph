@@ -1,7 +1,7 @@
-import regl from 'regl'
+import { Buffer, RenderPass, Texture, UniformStore } from '@luma.gl/core'
+import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
 import { forceFrag } from '@/graph/modules/ForceLink/force-spring'
-import { createQuadBuffer } from '@/graph/modules/Shared/buffer'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
 export enum LinkDirection {
@@ -10,22 +10,35 @@ export enum LinkDirection {
 }
 
 export class ForceLink extends CoreModule {
-  private linkFirstIndicesAndAmountFbo: regl.Framebuffer2D | undefined
-  private indicesFbo: regl.Framebuffer2D | undefined
-  private biasAndStrengthFbo: regl.Framebuffer2D | undefined
-  private randomDistanceFbo: regl.Framebuffer2D | undefined
   private linkFirstIndicesAndAmount: Float32Array = new Float32Array()
   private indices: Float32Array = new Float32Array()
   private maxPointDegree = 0
-  private runCommand: regl.DrawCommand | undefined
-  private linkFirstIndicesAndAmountTexture: regl.Texture2D | undefined
-  private indicesTexture: regl.Texture2D | undefined
-  private biasAndStrengthTexture: regl.Texture2D | undefined
-  private randomDistanceTexture: regl.Texture2D | undefined
+  private previousMaxPointDegree: number | undefined
+  private previousPointsTextureSize: number | undefined
+  private previousLinksTextureSize: number | undefined
+
+  private runCommand: Model | undefined
+  private vertexCoordBuffer: Buffer | undefined
+  private uniformStore: UniformStore<{
+    forceLinkUniforms: {
+      linkSpring: number;
+      linkDistance: number;
+      linkDistRandomVariationRange: [number, number];
+      pointsTextureSize: number;
+      linksTextureSize: number;
+      alpha: number;
+    };
+  }> | undefined
+
+  private linkFirstIndicesAndAmountTexture: Texture | undefined
+  private indicesTexture: Texture | undefined
+  private biasAndStrengthTexture: Texture | undefined
+  private randomDistanceTexture: Texture | undefined
 
   public create (direction: LinkDirection): void {
-    const { reglInstance, store: { pointsTextureSize, linksTextureSize }, data } = this
+    const { device, store: { pointsTextureSize, linksTextureSize }, data } = this
     if (!pointsTextureSize || !linksTextureSize) return
+
     this.linkFirstIndicesAndAmount = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
     this.indices = new Float32Array(linksTextureSize * linksTextureSize * 4)
     const linkBiasAndStrengthState = new Float32Array(linksTextureSize * linksTextureSize * 4)
@@ -63,87 +76,218 @@ export class ForceLink extends CoreModule {
       }
     })
 
-    if (!this.linkFirstIndicesAndAmountTexture) this.linkFirstIndicesAndAmountTexture = reglInstance.texture()
-    this.linkFirstIndicesAndAmountTexture({
+    // Recreate textures if sizes changed
+    const recreatePointTextures =
+      !this.linkFirstIndicesAndAmountTexture ||
+      this.linkFirstIndicesAndAmountTexture.width !== pointsTextureSize ||
+      this.linkFirstIndicesAndAmountTexture.height !== pointsTextureSize
+
+    const recreateLinkTextures =
+      !this.indicesTexture ||
+      this.indicesTexture.width !== linksTextureSize ||
+      this.indicesTexture.height !== linksTextureSize
+
+    if (recreatePointTextures) {
+      if (this.linkFirstIndicesAndAmountTexture && !this.linkFirstIndicesAndAmountTexture.destroyed) {
+        this.linkFirstIndicesAndAmountTexture.destroy()
+      }
+      this.linkFirstIndicesAndAmountTexture = device.createTexture({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+        usage: Texture.SAMPLE | Texture.COPY_DST,
+      })
+    }
+    this.linkFirstIndicesAndAmountTexture!.copyImageData({
       data: this.linkFirstIndicesAndAmount,
-      shape: [pointsTextureSize, pointsTextureSize, 4],
-      type: 'float',
-    })
-    if (!this.linkFirstIndicesAndAmountFbo) this.linkFirstIndicesAndAmountFbo = reglInstance.framebuffer()
-    this.linkFirstIndicesAndAmountFbo({
-      color: this.linkFirstIndicesAndAmountTexture,
-      depth: false,
-      stencil: false,
+      bytesPerRow: pointsTextureSize,
+      mipLevel: 0,
+      x: 0,
+      y: 0,
     })
 
-    if (!this.indicesTexture) this.indicesTexture = reglInstance.texture()
-    this.indicesTexture({
+    if (recreateLinkTextures) {
+      if (this.indicesTexture && !this.indicesTexture.destroyed) this.indicesTexture.destroy()
+      if (this.biasAndStrengthTexture && !this.biasAndStrengthTexture.destroyed) this.biasAndStrengthTexture.destroy()
+      if (this.randomDistanceTexture && !this.randomDistanceTexture.destroyed) this.randomDistanceTexture.destroy()
+
+      this.indicesTexture = device.createTexture({
+        width: linksTextureSize,
+        height: linksTextureSize,
+        format: 'rgba32float',
+        usage: Texture.SAMPLE | Texture.COPY_DST,
+      })
+      this.biasAndStrengthTexture = device.createTexture({
+        width: linksTextureSize,
+        height: linksTextureSize,
+        format: 'rgba32float',
+        usage: Texture.SAMPLE | Texture.COPY_DST,
+      })
+      this.randomDistanceTexture = device.createTexture({
+        width: linksTextureSize,
+        height: linksTextureSize,
+        format: 'rgba32float',
+        usage: Texture.SAMPLE | Texture.COPY_DST,
+      })
+    }
+
+    this.indicesTexture!.copyImageData({
       data: this.indices,
-      shape: [linksTextureSize, linksTextureSize, 4],
-      type: 'float',
+      bytesPerRow: linksTextureSize,
+      mipLevel: 0,
+      x: 0,
+      y: 0,
     })
-    if (!this.indicesFbo) this.indicesFbo = reglInstance.framebuffer()
-    this.indicesFbo({
-      color: this.indicesTexture,
-      depth: false,
-      stencil: false,
-    })
-
-    if (!this.biasAndStrengthTexture) this.biasAndStrengthTexture = reglInstance.texture()
-    this.biasAndStrengthTexture({
+    this.biasAndStrengthTexture!.copyImageData({
       data: linkBiasAndStrengthState,
-      shape: [linksTextureSize, linksTextureSize, 4],
-      type: 'float',
+      bytesPerRow: linksTextureSize,
+      mipLevel: 0,
+      x: 0,
+      y: 0,
     })
-    if (!this.biasAndStrengthFbo) this.biasAndStrengthFbo = reglInstance.framebuffer()
-    this.biasAndStrengthFbo({
-      color: this.biasAndStrengthTexture,
-      depth: false,
-      stencil: false,
+    this.randomDistanceTexture!.copyImageData({
+      data: linkDistanceState,
+      bytesPerRow: linksTextureSize,
+      mipLevel: 0,
+      x: 0,
+      y: 0,
     })
 
-    if (!this.randomDistanceTexture) this.randomDistanceTexture = reglInstance.texture()
-    this.randomDistanceTexture({
-      data: linkDistanceState,
-      shape: [linksTextureSize, linksTextureSize, 4],
-      type: 'float',
-    })
-    if (!this.randomDistanceFbo) this.randomDistanceFbo = reglInstance.framebuffer()
-    this.randomDistanceFbo({
-      color: this.randomDistanceTexture,
-      depth: false,
-      stencil: false,
-    })
+    // Force shader rebuild if degree changed
+    if (this.previousMaxPointDegree !== undefined && this.previousMaxPointDegree !== this.maxPointDegree) {
+      this.runCommand?.destroy()
+      this.runCommand = undefined
+    }
+
+    this.previousMaxPointDegree = this.maxPointDegree
+    this.previousPointsTextureSize = pointsTextureSize
+    this.previousLinksTextureSize = linksTextureSize
   }
 
   public initPrograms (): void {
-    const { reglInstance, config, store, points } = this
+    const { device, store, points } = this
+    if (!points || !store.pointsTextureSize || !store.linksTextureSize) return
+    if (!this.linkFirstIndicesAndAmountTexture || !this.indicesTexture || !this.biasAndStrengthTexture || !this.randomDistanceTexture) return
+
+    if (!this.vertexCoordBuffer || this.vertexCoordBuffer.destroyed) {
+      this.vertexCoordBuffer = device.createBuffer({
+        data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+      })
+    }
+
+    if (!this.uniformStore) {
+      this.uniformStore = new UniformStore({
+        forceLinkUniforms: {
+          uniformTypes: {
+            linkSpring: 'f32',
+            linkDistance: 'f32',
+            linkDistRandomVariationRange: 'vec2<f32>',
+            pointsTextureSize: 'f32',
+            linksTextureSize: 'f32',
+            alpha: 'f32',
+          },
+        },
+      })
+    }
+
     if (!this.runCommand) {
-      this.runCommand = reglInstance({
-        frag: () => forceFrag(this.maxPointDegree),
-        vert: updateVert,
-        framebuffer: () => points?.velocityFbo as regl.Framebuffer2D,
-        primitive: 'triangle strip',
-        count: 4,
-        attributes: { vertexCoord: createQuadBuffer(reglInstance) },
-        uniforms: {
-          positionsTexture: () => points?.previousPositionFbo,
-          linkSpring: () => config.simulationLinkSpring,
-          linkDistance: () => config.simulationLinkDistance,
-          linkDistRandomVariationRange: () => config.simulationLinkDistRandomVariationRange,
-          linkInfoTexture: () => this.linkFirstIndicesAndAmountFbo,
-          linkIndicesTexture: () => this.indicesFbo,
-          linkPropertiesTexture: () => this.biasAndStrengthFbo,
-          linkRandomDistanceTexture: () => this.randomDistanceFbo,
-          pointsTextureSize: () => store.pointsTextureSize,
-          linksTextureSize: () => store.linksTextureSize,
-          alpha: () => store.alpha,
+      this.runCommand = new Model(device, {
+        fs: forceFrag(this.maxPointDegree),
+        vs: updateVert,
+        topology: 'triangle-strip',
+        vertexCount: 4,
+        attributes: {
+          vertexCoord: this.vertexCoordBuffer,
+        },
+        bufferLayout: [
+          { name: 'vertexCoord', format: 'float32x2' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
+        },
+        bindings: {
+          forceLinkUniforms: this.uniformStore.getManagedUniformBuffer(device, 'forceLinkUniforms'),
+          positionsTexture: points.previousPositionTexture!,
+          linkInfoTexture: this.linkFirstIndicesAndAmountTexture,
+          linkIndicesTexture: this.indicesTexture,
+          linkPropertiesTexture: this.biasAndStrengthTexture,
+          linkRandomDistanceTexture: this.randomDistanceTexture,
+        },
+        parameters: {
+          depthWriteEnabled: false,
+          depthCompare: 'always',
         },
       })
     }
   }
 
-  public run (): void {
-    this.runCommand?.()
+  public run (renderPass?: RenderPass): void {
+    const { device, store, points } = this
+    if (!points || !this.runCommand || !this.uniformStore) return
+    if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
+    if (!this.linkFirstIndicesAndAmountTexture || !this.indicesTexture || !this.biasAndStrengthTexture || !this.randomDistanceTexture) return
+    if (!renderPass && (!points.velocityFbo || points.velocityFbo.destroyed)) return
+
+    // Skip if sizes changed and create() wasn't called again
+    if (
+      store.pointsTextureSize !== this.previousPointsTextureSize ||
+      store.linksTextureSize !== this.previousLinksTextureSize
+    ) {
+      return
+    }
+
+    this.uniformStore.setUniforms({
+      forceLinkUniforms: {
+        linkSpring: this.config.simulationLinkSpring ?? 0,
+        linkDistance: this.config.simulationLinkDistance ?? 0,
+        linkDistRandomVariationRange: [
+          this.config.simulationLinkDistRandomVariationRange?.[0] ?? 0,
+          this.config.simulationLinkDistRandomVariationRange?.[1] ?? 0,
+        ],
+        pointsTextureSize: store.pointsTextureSize,
+        linksTextureSize: store.linksTextureSize,
+        alpha: store.alpha,
+      },
+    })
+
+    this.runCommand.setBindings({
+      forceLinkUniforms: this.uniformStore.getManagedUniformBuffer(device, 'forceLinkUniforms'),
+      positionsTexture: points.previousPositionTexture!,
+      linkInfoTexture: this.linkFirstIndicesAndAmountTexture,
+      linkIndicesTexture: this.indicesTexture,
+      linkPropertiesTexture: this.biasAndStrengthTexture,
+      linkRandomDistanceTexture: this.randomDistanceTexture,
+    })
+
+    const pass = renderPass ?? device.beginRenderPass({
+      framebuffer: points.velocityFbo,
+    })
+
+    this.runCommand.draw(pass)
+
+    if (!renderPass) pass.end()
+  }
+
+  public destroy (): void {
+    this.uniformStore?.destroy()
+    this.uniformStore = undefined
+
+    this.runCommand?.destroy()
+    this.runCommand = undefined
+
+    if (this.vertexCoordBuffer && !this.vertexCoordBuffer.destroyed) this.vertexCoordBuffer.destroy()
+    this.vertexCoordBuffer = undefined
+
+    if (this.linkFirstIndicesAndAmountTexture && !this.linkFirstIndicesAndAmountTexture.destroyed) this.linkFirstIndicesAndAmountTexture.destroy()
+    this.linkFirstIndicesAndAmountTexture = undefined
+
+    if (this.indicesTexture && !this.indicesTexture.destroyed) this.indicesTexture.destroy()
+    this.indicesTexture = undefined
+
+    if (this.biasAndStrengthTexture && !this.biasAndStrengthTexture.destroyed) this.biasAndStrengthTexture.destroy()
+    this.biasAndStrengthTexture = undefined
+
+    if (this.randomDistanceTexture && !this.randomDistanceTexture.destroyed) this.randomDistanceTexture.destroy()
+    this.randomDistanceTexture = undefined
   }
 }
