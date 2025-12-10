@@ -29,7 +29,7 @@ export function forceFrag (startLevel: number, maxLevels: number): string {
         float groupPosX = (i + 0.5) / ${groupSize}.0;
         float groupPosY = (j + 0.5) / ${groupSize}.0;
         
-        vec4 centermass = texture2D(level[${level}], vec2(groupPosX, groupPosY));
+        vec4 centermass = texture(level[${level}], vec2(groupPosX, groupPosY));
         if (centermass.r > 0.0 && centermass.g > 0.0 && centermass.b > 0.0) {
           float x = centermass.r / centermass.b - pointPosition.r;
           float y = centermass.g / centermass.b - pointPosition.g;
@@ -44,10 +44,8 @@ export function forceFrag (startLevel: number, maxLevels: number): string {
       `
     }
   }
-  return `
-#ifdef GL_ES
+  return `#version 300 es
 precision highp float;
-#endif
 
 uniform sampler2D positionsTexture;
 uniform sampler2D randomValues;
@@ -56,7 +54,8 @@ uniform float repulsion;
 uniform float theta;
 uniform float alpha;
 uniform sampler2D level[${maxLevels}];
-varying vec2 textureCoords;
+in vec2 textureCoords;
+out vec4 fragColor;
 
 vec2 calcAdd(vec2 xy, float l, float c) {
   float distanceMin2 = 1.0;
@@ -66,8 +65,8 @@ vec2 calcAdd(vec2 xy, float l, float c) {
 }
 
 void main() {
-  vec4 pointPosition = texture2D(positionsTexture, textureCoords);
-  vec4 random = texture2D(randomValues, textureCoords);
+  vec4 pointPosition = texture(positionsTexture, textureCoords);
+  vec4 random = texture(randomValues, textureCoords);
 
   float width0 = spaceSize;
 
@@ -84,7 +83,7 @@ void main() {
 
   velocity -= addVelocity;
 
-  gl_FragColor = vec4(velocity, 0.0, 0.0);
+  fragColor = vec4(velocity, 0.0, 0.0);
 }
 `
 }
