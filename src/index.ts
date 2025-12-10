@@ -3,17 +3,17 @@ import 'd3-transition'
 import { easeQuadInOut, easeQuadIn, easeQuadOut } from 'd3-ease'
 import { D3ZoomEvent } from 'd3-zoom'
 import { D3DragEvent } from 'd3-drag'
-import { Device, Framebuffer, RenderPass } from '@luma.gl/core'
+import { Device, Framebuffer } from '@luma.gl/core'
 import { WebGLDevice } from '@luma.gl/webgl'
 import { GL } from '@luma.gl/constants'
 
 import { GraphConfig, GraphConfigInterface } from '@/graph/config'
 import { getRgbaColor, readPixels, sanitizeHtml } from '@/graph/helper'
-// TODO: Migrate to luma.gl
+// TODO: Migrate the remaining forces to luma.gl
 // import { ForceCenter } from '@/graph/modules/ForceCenter'
 // import { ForceGravity } from '@/graph/modules/ForceGravity'
 // import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
-// import { ForceManyBody } from '@/graph/modules/ForceManyBody'
+import { ForceManyBody } from '@/graph/modules/ForceManyBody'
 // import { ForceManyBodyQuadtree } from '@/graph/modules/ForceManyBodyQuadtree'
 // import { ForceMouse } from '@/graph/modules/ForceMouse'
 import { Clusters } from '@/graph/modules/Clusters'
@@ -39,10 +39,10 @@ export class Graph {
   private store = new Store()
   private points: Points | undefined
   private lines: Lines | undefined
-  // TODO: Migrate to luma.gl
+  // TODO: Migrate remaining forces to luma.gl
   // private forceGravity: ForceGravity | undefined
   // private forceCenter: ForceCenter | undefined
-  // private forceManyBody: ForceManyBody | ForceManyBodyQuadtree | undefined
+  private forceManyBody: ForceManyBody | undefined
   // private forceLinkIncoming: ForceLink | undefined
   // private forceLinkOutgoing: ForceLink | undefined
   // private forceMouse: ForceMouse | undefined
@@ -104,7 +104,11 @@ export class Graph {
     // canvas.width = w * this.config.pixelRatio
     // canvas.height = h * this.config.pixelRatio
 
-    this.canvas = device.canvasContext?.canvas// canvas
+    const canvas = device.canvasContext?.canvas
+    if (!(canvas instanceof HTMLCanvasElement)) {
+      throw new Error('Expected a DOM canvas from luma device')
+    }
+    this.canvas = canvas
     const w = this.canvas.clientWidth
     const h = this.canvas.clientHeight
 
@@ -183,12 +187,10 @@ export class Graph {
     this.points = new Points(this.device, this.config, this.store, this.graph)
     this.lines = new Lines(this.device, this.config, this.store, this.graph, this.points)
     if (this.config.enableSimulation) {
-      // TODO: Migrate to luma.gl
+      // TODO: Migrate remaining forces to luma.gl
       // this.forceGravity = new ForceGravity(this.device, this.config, this.store, this.graph, this.points)
       // this.forceCenter = new ForceCenter(this.device, this.config, this.store, this.graph, this.points)
-      // this.forceManyBody = this.config.useClassicQuadtree
-      //   ? new ForceManyBodyQuadtree(this.device, this.config, this.store, this.graph, this.points)
-      //   : new ForceManyBody(this.device, this.config, this.store, this.graph, this.points)
+      this.forceManyBody = new ForceManyBody(this.device, this.config, this.store, this.graph, this.points)
       // this.forceLinkIncoming = new ForceLink(this.device, this.config, this.store, this.graph, this.points)
       // this.forceLinkOutgoing = new ForceLink(this.device, this.config, this.store, this.graph, this.points)
       // this.forceMouse = new ForceMouse(this.device, this.config, this.store, this.graph, this.points)
@@ -1221,8 +1223,7 @@ export class Graph {
     if (this.isLinkWidthUpdateNeeded) this.lines.updateWidth()
     if (this.isLinkArrowUpdateNeeded) this.lines.updateArrow()
 
-    // TODO: Migrate to luma.gl
-    // if (this.isForceManyBodyUpdateNeeded) this.forceManyBody?.create()
+    if (this.isForceManyBodyUpdateNeeded) this.forceManyBody?.create()
     // if (this.isForceLinkUpdateNeeded) {
     //   this.forceLinkIncoming?.create(LinkDirection.INCOMING)
     //   this.forceLinkOutgoing?.create(LinkDirection.OUTGOING)
@@ -1283,12 +1284,12 @@ export class Graph {
     if (this._isDestroyed || !this.points || !this.lines || !this.clusters) return
     this.points.initPrograms()
     this.lines.initPrograms()
-    // TODO: Migrate to luma.gl
+    this.forceManyBody?.initPrograms()
+    // TODO: Migrate remaining forces to luma.gl
     // this.forceGravity?.initPrograms()
     // this.forceLinkIncoming?.initPrograms()
     // this.forceLinkOutgoing?.initPrograms()
     // this.forceMouse?.initPrograms()
-    // this.forceManyBody?.initPrograms()
     // this.forceCenter?.initPrograms()
     this.clusters.initPrograms()
   }
@@ -1313,44 +1314,46 @@ export class Graph {
         //   this.forceMouse?.run()
         //   this.points?.updatePosition()
         // }
-        if ((isSimulationRunning && !(this.zoomInstance.isRunning && !this.config.enableSimulationDuringZoom))) {
-          // Create a single render pass for all velocity force updates
-          // All forces write to the same velocityFbo with additive blending
-          let velocityPass: RenderPass | undefined
+
+        const shouldRunSimulation =
+          isSimulationRunning &&
+          !(this.zoomInstance.isRunning && !this.config.enableSimulationDuringZoom)
+
+        if (shouldRunSimulation) {
+          // Clear velocity buffer once per frame before applying forces
           if (this.points?.velocityFbo && !this.points.velocityFbo.destroyed && this.device) {
-            velocityPass = this.device.beginRenderPass({
+            const velocityClearPass = this.device.beginRenderPass({
               framebuffer: this.points.velocityFbo,
+              clearColor: [0, 0, 0, 0],
             })
+            velocityClearPass.end()
           }
 
-          // TODO: Migrate to luma.gl
+          // TODO: Migrate remaining forces to luma.gl
           // if (simulationGravity) {
-          //   this.forceGravity?.run(velocityPass)
+          //   this.forceGravity?.run()
+          //   this.points?.updatePosition()
           // }
 
           // if (simulationCenter) {
-          //   this.forceCenter?.run(velocityPass)
+          //   this.forceCenter?.run()
+          //   this.points?.updatePosition()
           // }
 
-          // this.forceManyBody?.run(velocityPass)
+          this.forceManyBody?.run()
+          this.points?.updatePosition()
 
           // if (this.store.linksTextureSize) {
-          //   this.forceLinkIncoming?.run(velocityPass)
-          //   this.forceLinkOutgoing?.run(velocityPass)
+          //   this.forceLinkIncoming?.run()
+          //   this.points?.updatePosition()
+          //   this.forceLinkOutgoing?.run()
+          //   this.points?.updatePosition()
           // }
 
-          // Only clusters force is active (migrated to luma.gl)
           if (this.graph.pointClusters || this.graph.clusterPositions) {
-            this.clusters?.run(velocityPass)
+            this.clusters?.run()
+            this.points?.updatePosition()
           }
-
-          // End the velocity render pass if we created one
-          if (velocityPass) {
-            velocityPass.end()
-          }
-
-          // Update positions (uses separate render pass for currentPositionFbo)
-          this.points?.updatePosition()
 
           this.store.alpha += this.store.addAlpha(this.config.simulationDecay ?? defaultConfigValues.simulation.decay)
           if (this.isRightClickMouse && this.config.enableRightClickRepulsion) this.store.alpha = Math.max(this.store.alpha, 0.1)
