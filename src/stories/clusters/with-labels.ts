@@ -3,11 +3,11 @@ import { createClusterLabels } from '../create-cluster-labels'
 import { createCosmos } from '../create-cosmos'
 import { generateMeshData } from '../generate-mesh-data'
 
-export const withLabels = (): {div: HTMLDivElement; graph: Graph; destroy: () => void } => {
+export const withLabels = async (): Promise<{div: HTMLDivElement; graph: Graph; destroy: () => void }> => {
   let nClusters = 2
   const { pointPositions, pointColors, pointClusters } = generateMeshData(100, 100, nClusters, 1.0)
 
-  const { div, graph } = createCosmos({
+  const { div, graph, destroy: baseDestroy } = await createCosmos({
     pointPositions,
     pointColors,
     pointClusters,
@@ -47,6 +47,7 @@ export const withLabels = (): {div: HTMLDivElement; graph: Graph; destroy: () =>
 
   const destroy = (): void => {
     clearInterval(interval)
+    baseDestroy?.()
   }
 
   return { div, graph, destroy }
