@@ -1,4 +1,6 @@
 import { Graph } from '@cosmos.gl/graph'
+import { luma } from '@luma.gl/core'
+import { webgl2Adapter } from '@luma.gl/webgl'
 import { CosmosLabels } from './labels'
 import { processPerformances, pointsToShowLabelsFor } from './data'
 import './style.css'
@@ -7,13 +9,13 @@ import './style.css'
 // const data = await fetch('https://gist.githubusercontent.com/Stukova/e6c4c7777e0166431a983999213f10c8/raw/performances.json')
 // const performances = await data.json()
 
-export const pointLabels = (
+export const pointLabels = async (
   performances: {
     theaterCode: string;
     performanceTitle: string;
     theaterName: string;
   }[]
-): { graph: Graph; div: HTMLDivElement} => {
+): Promise<{ graph: Graph; div: HTMLDivElement; destroy?: () => void }> => {
   const { pointPositions, pointColors, pointSizes, links, pointIndexToLabel, pointLabelToIndex } = processPerformances(performances)
   const div = document.createElement('div')
   div.className = 'app'
@@ -27,7 +29,17 @@ export const pointLabels = (
 
   const cosmosLabels = new CosmosLabels(labelsDiv, pointIndexToLabel)
 
-  const graph = new Graph(graphDiv, {
+  const device = await luma.createDevice({
+    type: 'webgl',
+    adapters: [webgl2Adapter],
+    createCanvasContext: {
+      container: graphDiv,
+      useDevicePixels: true,
+      autoResize: true,
+    },
+  })
+
+  const graph = new Graph(graphDiv, device, {
     spaceSize: 4096,
     backgroundColor: '#2d313a',
     scalePointsOnZoom: true,
@@ -61,5 +73,10 @@ export const pointLabels = (
     pointsToShowLabelsFor.map((l) => pointLabelToIndex.get(l) as number)
   )
 
-  return { div, graph }
+  const destroy = (): void => {
+    graph.destroy()
+    device.destroy()
+  }
+
+  return { div, graph, destroy }
 }

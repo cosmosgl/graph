@@ -3,10 +3,10 @@ import { Graph } from '@cosmos.gl/graph'
 import { createCosmos } from '../create-cosmos'
 import { generateMeshData } from '../generate-mesh-data'
 
-export const worm = (): {graph: Graph; div: HTMLDivElement} => {
+export const worm = async (): Promise<{graph: Graph; div: HTMLDivElement; destroy?: () => void}> => {
   const { pointPositions, pointColors, links, linkColors, pointClusters } = generateMeshData(100, 100, 1000, 1.0)
 
-  const { div, graph } = createCosmos({
+  const { div, graph, destroy } = await createCosmos({
     simulationGravity: 0.5,
     simulationRepulsion: 1,
     simulationLinkSpring: 1,
@@ -36,5 +36,5 @@ export const worm = (): {graph: Graph; div: HTMLDivElement} => {
     },
   })
 
-  return { div, graph }
+  return { div, graph, destroy }
 }

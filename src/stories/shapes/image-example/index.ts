@@ -1,4 +1,6 @@
 import { Graph, PointShape } from '@cosmos.gl/graph'
+import { luma } from '@luma.gl/core'
+import { webgl2Adapter } from '@luma.gl/webgl'
 
 // Import all PNG icons
 import boxUrl from './icons/box.png'
@@ -56,7 +58,7 @@ interface DependencyNode {
   color: [number, number, number, number];
 }
 
-export const imageExample = async (): Promise<{div: HTMLDivElement; graph: Graph }> => {
+export const imageExample = async (): Promise<{div: HTMLDivElement; graph: Graph; destroy?: () => void }> => {
   // Create container div
   const div = document.createElement('div')
   div.style.height = '100vh'
@@ -72,7 +74,18 @@ export const imageExample = async (): Promise<{div: HTMLDivElement; graph: Graph
   graphContainer.style.overflow = 'hidden'
   div.appendChild(graphContainer)
 
+  let device
   try {
+    device = await luma.createDevice({
+      type: 'webgl',
+      adapters: [webgl2Adapter],
+      createCanvasContext: {
+        container: graphContainer,
+        useDevicePixels: true,
+        autoResize: true,
+      },
+    })
+
     const spaceSize = 4096
 
     const nodes: DependencyNode[] = [
@@ -182,7 +195,7 @@ export const imageExample = async (): Promise<{div: HTMLDivElement; graph: Graph
     }
 
     // Create graph with static positioning
-    const graph = new Graph(graphContainer, {
+    const graph = new Graph(graphContainer, device, {
       spaceSize,
       enableSimulation: false,
       enableDrag: false,
@@ -225,8 +238,14 @@ export const imageExample = async (): Promise<{div: HTMLDivElement; graph: Graph
 
     graph.render()
 
-    return { div, graph }
+    const destroy = (): void => {
+      graph.destroy()
+      device?.destroy()
+    }
+
+    return { div, graph, destroy }
   } catch (error) {
+    if (device) device.destroy()
     console.error('Error creating Xcode dependency graph:', error)
     div.innerHTML = `
       <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff0000; font-size: 18px;">
