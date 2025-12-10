@@ -1,15 +1,26 @@
-#ifdef GL_ES
+#version 300 es
 precision highp float;
-#endif
 
 uniform sampler2D positionsTexture;
+
+#ifdef USE_UNIFORM_BUFFERS
+layout(std140) uniform forceMouseUniforms {
+  float repulsion;
+  vec2 mousePos;
+} forceMouse;
+
+#define repulsion forceMouse.repulsion
+#define mousePos forceMouse.mousePos
+#else
 uniform float repulsion;
 uniform vec2 mousePos;
+#endif
 
-varying vec2 textureCoords;
+in vec2 textureCoords;
+out vec4 fragColor;
 
-void main() {  
-  vec4 pointPosition = texture2D(positionsTexture, textureCoords);
+void main() {
+  vec4 pointPosition = texture(positionsTexture, textureCoords);
   vec4 velocity = vec4(0.0);
   vec2 mouse = mousePos;
   // Move particles away from the mouse position using a repulsive force
@@ -20,5 +31,5 @@ void main() {
   float addV = 100.0 * repulsion / (dist * dist);
   velocity.rg -= addV * vec2(cos(angle), sin(angle));
 
-  gl_FragColor = velocity;
+  fragColor = velocity;
 }

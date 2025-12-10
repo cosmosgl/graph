@@ -15,7 +15,7 @@ import { ForceGravity } from '@/graph/modules/ForceGravity'
 import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
 import { ForceManyBody } from '@/graph/modules/ForceManyBody'
 // import { ForceManyBodyQuadtree } from '@/graph/modules/ForceManyBodyQuadtree'
-// import { ForceMouse } from '@/graph/modules/ForceMouse'
+import { ForceMouse } from '@/graph/modules/ForceMouse'
 import { Clusters } from '@/graph/modules/Clusters'
 import { FPSMonitor } from '@/graph/modules/FPSMonitor'
 import { GraphData } from '@/graph/modules/GraphData'
@@ -45,7 +45,7 @@ export class Graph {
   private forceManyBody: ForceManyBody | undefined
   private forceLinkIncoming: ForceLink | undefined
   private forceLinkOutgoing: ForceLink | undefined
-  // private forceMouse: ForceMouse | undefined
+  private forceMouse: ForceMouse | undefined
   private clusters: Clusters | undefined
   private zoomInstance = new Zoom(this.store, this.config)
   private dragInstance = new Drag(this.store, this.config)
@@ -197,7 +197,7 @@ export class Graph {
       this.forceManyBody = new ForceManyBody(this.device, this.config, this.store, this.graph, this.points)
       this.forceLinkIncoming = new ForceLink(this.device, this.config, this.store, this.graph, this.points)
       this.forceLinkOutgoing = new ForceLink(this.device, this.config, this.store, this.graph, this.points)
-      // this.forceMouse = new ForceMouse(this.device, this.config, this.store, this.graph, this.points)
+      this.forceMouse = new ForceMouse(this.device, this.config, this.store, this.graph, this.points)
     }
     this.clusters = new Clusters(this.device, this.config, this.store, this.graph, this.points)
 
@@ -1417,7 +1417,7 @@ export class Graph {
     this.forceCenter?.initPrograms()
     this.forceLinkIncoming?.initPrograms()
     this.forceLinkOutgoing?.initPrograms()
-    // this.forceMouse?.initPrograms()
+    this.forceMouse?.initPrograms()
     this.clusters.initPrograms()
   }
 
