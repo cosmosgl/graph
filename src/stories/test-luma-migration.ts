@@ -25,9 +25,9 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
     pointColor: '#f069b4',
     pointSize: 40,
     scalePointsOnZoom: true,
-    simulationGravity: 0,
-    simulationRepulsion: 0.5,
-    simulationCluster: 0.05, // Cluster force strength
+    simulationGravity: 0.5,
+    simulationRepulsion: 10,
+    // simulationCluster: 0.05, // Cluster force strength
     curvedLinks: false,
     fitViewDelay: 1000,
     fitViewPadding: 0.3,
@@ -47,7 +47,7 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
     linkGreyoutOpacity: 0.1,
     hoveredLinkColor: 'red',
     scaleLinksOnZoom: true,
-    renderLinks: false,
+    // renderLinks: false,
     onLinkMouseOver: linkIndex => {
       console.log('Hovered link index: ', linkIndex)
     },
@@ -157,7 +157,7 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
     // Assign each shape group to a cluster (cluster index = shape index)
     pointClusters.push(shapeIndex)
   }
-  graph.setPointClusters(pointClusters)
+  // graph.setPointClusters(pointClusters)
 
   // Optionally set explicit cluster positions (centered around the grid)
   // If not set, clusters will use centermass (average position of points in cluster)
@@ -170,7 +170,7 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
     const y = Math.sin(angle) * radius
     clusterPositions.push(x, y)
   }
-  graph.setClusterPositions(clusterPositions)
+  // graph.setClusterPositions(clusterPositions)
 
   // Create links to test link rendering
   const links = new Float32Array((pointCount - 1) * 2)
@@ -185,18 +185,18 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
   graph.trackPointPositionsByIndices([0, 1])
 
   // Dynamic update: change links 5s after initial rendering
-  setTimeout(() => {
-    if (!graph) return
-    // Create a simple star topology: node 0 connected to all others
-    const dynamicLinks = new Float32Array((pointCount - 1) * 2)
-    for (let i = 1; i < pointCount; i++) {
-      dynamicLinks[(i - 1) * 2] = 0
-      dynamicLinks[(i - 1) * 2 + 1] = i
-    }
-    graph.setLinks(dynamicLinks)
-    graph.setConfig({ renderLinks: true })
-    graph.render()
-  }, 5000)
+  // setTimeout(() => {
+  //   if (!graph) return
+  //   // Create a simple star topology: node 0 connected to all others
+  //   const dynamicLinks = new Float32Array((pointCount - 1) * 2)
+  //   for (let i = 1; i < pointCount; i++) {
+  //     dynamicLinks[(i - 1) * 2] = 0
+  //     dynamicLinks[(i - 1) * 2 + 1] = i
+  //   }
+  //   graph.setLinks(dynamicLinks)
+  //   graph.setConfig({ renderLinks: true })
+  //   graph.render()
+  // }, 5000)
 
   const destroy = (): void => {
     graph.destroy()
