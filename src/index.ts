@@ -19,7 +19,7 @@ import { getRgbaColor, readPixels, sanitizeHtml } from '@/graph/helper'
 import { Clusters } from '@/graph/modules/Clusters'
 import { FPSMonitor } from '@/graph/modules/FPSMonitor'
 import { GraphData } from '@/graph/modules/GraphData'
-// import { Lines } from '@/graph/modules/Lines'
+import { Lines } from '@/graph/modules/Lines'
 import { Points } from '@/graph/modules/Points'
 import { Store, ALPHA_MIN, MAX_POINT_SIZE, MAX_HOVER_DETECTION_DELAY, type Hovered } from '@/graph/modules/Store'
 import { Zoom } from '@/graph/modules/Zoom'
@@ -38,7 +38,7 @@ export class Graph {
 
   private store = new Store()
   private points: Points | undefined
-  // private lines: Lines | undefined
+  private lines: Lines | undefined
   // TODO: Migrate to luma.gl
   // private forceGravity: ForceGravity | undefined
   // private forceCenter: ForceCenter | undefined
@@ -185,7 +185,7 @@ export class Graph {
     this.store.isSimulationRunning = this.config.enableSimulation
 
     this.points = new Points(this.device, this.config, this.store, this.graph)
-    // this.lines = new Lines(this.device, this.config, this.store, this.graph, this.points)
+    this.lines = new Lines(this.device, this.config, this.store, this.graph, this.points)
     if (this.config.enableSimulation) {
       // TODO: Migrate to luma.gl
       // this.forceGravity = new ForceGravity(this.device, this.config, this.store, this.graph, this.points)
@@ -1259,7 +1259,7 @@ export class Graph {
    * Updates and recreates the graph visualization based on pending changes.
    */
   public create (): void {
-    if (this._isDestroyed || !this.points /* || !this.lines */) return
+    if (this._isDestroyed || !this.points || !this.lines) return
     if (this.isPointPositionsUpdateNeeded) this.points.updatePositions()
     if (this.isPointColorUpdateNeeded) this.points.updateColor()
     if (this.isPointSizeUpdateNeeded) this.points.updateSize()
@@ -1267,10 +1267,10 @@ export class Graph {
     if (this.isPointImageIndicesUpdateNeeded) this.points.updateImageIndices()
     if (this.isPointImageSizesUpdateNeeded) this.points.updateImageSizes()
 
-    // if (this.isLinksUpdateNeeded) this.lines.updatePointsBuffer()
-    // if (this.isLinkColorUpdateNeeded) this.lines.updateColor()
-    // if (this.isLinkWidthUpdateNeeded) this.lines.updateWidth()
-    // if (this.isLinkArrowUpdateNeeded) this.lines.updateArrow()
+    if (this.isLinksUpdateNeeded) this.lines.updatePointsBuffer()
+    if (this.isLinkColorUpdateNeeded) this.lines.updateColor()
+    if (this.isLinkWidthUpdateNeeded) this.lines.updateWidth()
+    if (this.isLinkArrowUpdateNeeded) this.lines.updateArrow()
 
     // TODO: Migrate to luma.gl
     // if (this.isForceManyBodyUpdateNeeded) this.forceManyBody?.create()
@@ -1407,9 +1407,9 @@ export class Graph {
   }
 
   private initPrograms (): void {
-    if (this._isDestroyed || !this.points || /* !this.lines || */ !this.clusters) return
+    if (this._isDestroyed || !this.points || !this.lines || !this.clusters) return
     this.points.initPrograms()
-    // this.lines.initPrograms()
+    this.lines.initPrograms()
     // TODO: Migrate to luma.gl
     // this.forceGravity?.initPrograms()
     // this.forceLinkIncoming?.initPrograms()
@@ -1580,9 +1580,9 @@ export class Graph {
         ?.call(this.zoomInstance.behavior.transform, this.zoomInstance.getTransform([centerPosition], k))
       this.points?.updateSampledPointsGrid()
       // Only update link index FBO if link hovering is enabled
-      // if (this.store.isLinkHoveringEnabled) {
-      //   this.lines?.updateLinkIndexFbo()
-      // }
+      if (this.store.isLinkHoveringEnabled) {
+        this.lines?.updateLinkIndexFbo()
+      }
     }
   }
 
@@ -1623,10 +1623,9 @@ export class Graph {
     this._findHoveredItemExecutionCount = 0
     this.findHoveredPoint()
 
-    // if (this.graph.linksNumber && this.store.isLinkHoveringEnabled) {
-    //   this.findHoveredLine()
-    // } else if (this.store.hoveredLinkIndex !== undefined) {
-    if (this.store.hoveredLinkIndex !== undefined) {
+    if (this.graph.linksNumber && this.store.isLinkHoveringEnabled) {
+      this.findHoveredLine()
+    } else if (this.store.hoveredLinkIndex !== undefined) {
       // Clear stale hoveredLinkIndex when there are no links
       const wasHovered = this.store.hoveredLinkIndex !== undefined
       this.store.hoveredLinkIndex = undefined
@@ -1673,38 +1672,36 @@ export class Graph {
     if (isMouseout) this.config.onPointMouseOut?.(this.currentEvent)
   }
 
-  // private findHoveredLine (): void {
-  //   if (this._isDestroyed || !this.lines) return
-  //   if (this.store.hoveredPoint) {
-  //     if (this.store.hoveredLinkIndex !== undefined) {
-  //       this.store.hoveredLinkIndex = undefined
-  //       this.config.onLinkMouseOut?.(this.currentEvent)
-  //     }
-  //     return
-  //   }
-  //   this.lines.findHoveredLine()
-  //   let isMouseover = false
-  //   let isMouseout = false
+  private findHoveredLine (): void {
+    if (this._isDestroyed || !this.lines) return
+    if (this.store.hoveredPoint) {
+      if (this.store.hoveredLinkIndex !== undefined) {
+        this.store.hoveredLinkIndex = undefined
+        this.config.onLinkMouseOut?.(this.currentEvent)
+      }
+      return
+    }
+    this.lines.findHoveredLine()
+    let isMouseover = false
+    let isMouseout = false
 
-  //   // Lines module still uses regl, so we need to cast
-  //   if (!this.device) return
-  //   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  //   const pixels = readPixels(this.device, this.lines.hoveredLineIndexFbo as any)
-  //   const hoveredLineIndex = pixels[0] as number
+    if (!this.device) return
+    const pixels = readPixels(this.device, this.lines.hoveredLineIndexFbo!)
+    const hoveredLineIndex = pixels[0] as number
 
-  //   if (hoveredLineIndex >= 0) {
-  //     if (this.store.hoveredLinkIndex !== hoveredLineIndex) isMouseover = true
-  //     this.store.hoveredLinkIndex = hoveredLineIndex
-  //   } else {
-  //     if (this.store.hoveredLinkIndex !== undefined) isMouseout = true
-  //     this.store.hoveredLinkIndex = undefined
-  //   }
+    if (hoveredLineIndex >= 0) {
+      if (this.store.hoveredLinkIndex !== hoveredLineIndex) isMouseover = true
+      this.store.hoveredLinkIndex = hoveredLineIndex
+    } else {
+      if (this.store.hoveredLinkIndex !== undefined) isMouseout = true
+      this.store.hoveredLinkIndex = undefined
+    }
 
-  //   if (isMouseover && this.store.hoveredLinkIndex !== undefined) {
-  //     this.config.onLinkMouseOver?.(this.store.hoveredLinkIndex)
-  //   }
-  //   if (isMouseout) this.config.onLinkMouseOut?.(this.currentEvent)
-  // }
+    if (isMouseover && this.store.hoveredLinkIndex !== undefined) {
+      this.config.onLinkMouseOver?.(this.store.hoveredLinkIndex)
+    }
+    if (isMouseout) this.config.onLinkMouseOut?.(this.currentEvent)
+  }
 
   private updateCanvasCursor (): void {
     const { hoveredPointCursor, hoveredLinkCursor } = this.config
