@@ -11,7 +11,7 @@ import { GraphConfig, GraphConfigInterface } from '@/graph/config'
 import { getRgbaColor, readPixels, sanitizeHtml } from '@/graph/helper'
 // TODO: Migrate the remaining forces to luma.gl
 // import { ForceCenter } from '@/graph/modules/ForceCenter'
-// import { ForceGravity } from '@/graph/modules/ForceGravity'
+import { ForceGravity } from '@/graph/modules/ForceGravity'
 // import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
 import { ForceManyBody } from '@/graph/modules/ForceManyBody'
 // import { ForceManyBodyQuadtree } from '@/graph/modules/ForceManyBodyQuadtree'
@@ -40,7 +40,7 @@ export class Graph {
   private points: Points | undefined
   private lines: Lines | undefined
   // TODO: Migrate remaining forces to luma.gl
-  // private forceGravity: ForceGravity | undefined
+  private forceGravity: ForceGravity | undefined
   // private forceCenter: ForceCenter | undefined
   private forceManyBody: ForceManyBody | undefined
   // private forceLinkIncoming: ForceLink | undefined
@@ -192,7 +192,7 @@ export class Graph {
     this.lines = new Lines(this.device, this.config, this.store, this.graph, this.points)
     if (this.config.enableSimulation) {
       // TODO: Migrate remaining forces to luma.gl
-      // this.forceGravity = new ForceGravity(this.device, this.config, this.store, this.graph, this.points)
+      this.forceGravity = new ForceGravity(this.device, this.config, this.store, this.graph, this.points)
       // this.forceCenter = new ForceCenter(this.device, this.config, this.store, this.graph, this.points)
       this.forceManyBody = new ForceManyBody(this.device, this.config, this.store, this.graph, this.points)
       // this.forceLinkIncoming = new ForceLink(this.device, this.config, this.store, this.graph, this.points)
@@ -1411,9 +1411,9 @@ export class Graph {
     if (this._isDestroyed || !this.points || !this.lines || !this.clusters) return
     this.points.initPrograms()
     this.lines.initPrograms()
+    this.forceGravity?.initPrograms()
     this.forceManyBody?.initPrograms()
     // TODO: Migrate remaining forces to luma.gl
-    // this.forceGravity?.initPrograms()
     // this.forceLinkIncoming?.initPrograms()
     // this.forceLinkOutgoing?.initPrograms()
     // this.forceMouse?.initPrograms()
