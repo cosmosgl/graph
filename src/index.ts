@@ -12,7 +12,7 @@ import { getRgbaColor, readPixels, sanitizeHtml } from '@/graph/helper'
 // TODO: Migrate the remaining forces to luma.gl
 // import { ForceCenter } from '@/graph/modules/ForceCenter'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
-// import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
+import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
 import { ForceManyBody } from '@/graph/modules/ForceManyBody'
 // import { ForceManyBodyQuadtree } from '@/graph/modules/ForceManyBodyQuadtree'
 // import { ForceMouse } from '@/graph/modules/ForceMouse'
@@ -43,8 +43,8 @@ export class Graph {
   private forceGravity: ForceGravity | undefined
   // private forceCenter: ForceCenter | undefined
   private forceManyBody: ForceManyBody | undefined
-  // private forceLinkIncoming: ForceLink | undefined
-  // private forceLinkOutgoing: ForceLink | undefined
+  private forceLinkIncoming: ForceLink | undefined
+  private forceLinkOutgoing: ForceLink | undefined
   // private forceMouse: ForceMouse | undefined
   private clusters: Clusters | undefined
   private zoomInstance = new Zoom(this.store, this.config)
@@ -191,8 +191,8 @@ export class Graph {
       this.forceGravity = new ForceGravity(this.device, this.config, this.store, this.graph, this.points)
       // this.forceCenter = new ForceCenter(this.device, this.config, this.store, this.graph, this.points)
       this.forceManyBody = new ForceManyBody(this.device, this.config, this.store, this.graph, this.points)
-      // this.forceLinkIncoming = new ForceLink(this.device, this.config, this.store, this.graph, this.points)
-      // this.forceLinkOutgoing = new ForceLink(this.device, this.config, this.store, this.graph, this.points)
+      this.forceLinkIncoming = new ForceLink(this.device, this.config, this.store, this.graph, this.points)
+      this.forceLinkOutgoing = new ForceLink(this.device, this.config, this.store, this.graph, this.points)
       // this.forceMouse = new ForceMouse(this.device, this.config, this.store, this.graph, this.points)
     }
     this.clusters = new Clusters(this.device, this.config, this.store, this.graph, this.points)
@@ -1224,10 +1224,10 @@ export class Graph {
     if (this.isLinkArrowUpdateNeeded) this.lines.updateArrow()
 
     if (this.isForceManyBodyUpdateNeeded) this.forceManyBody?.create()
-    // if (this.isForceLinkUpdateNeeded) {
-    //   this.forceLinkIncoming?.create(LinkDirection.INCOMING)
-    //   this.forceLinkOutgoing?.create(LinkDirection.OUTGOING)
-    // }
+    if (this.isForceLinkUpdateNeeded) {
+      this.forceLinkIncoming?.create(LinkDirection.INCOMING)
+      this.forceLinkOutgoing?.create(LinkDirection.OUTGOING)
+    }
     // if (this.isForceCenterUpdateNeeded) this.forceCenter?.create()
     if (this.isPointClusterUpdateNeeded) this.clusters?.create()
 
@@ -1287,8 +1287,8 @@ export class Graph {
     this.forceGravity?.initPrograms()
     this.forceManyBody?.initPrograms()
     // TODO: Migrate remaining forces to luma.gl
-    // this.forceLinkIncoming?.initPrograms()
-    // this.forceLinkOutgoing?.initPrograms()
+    this.forceLinkIncoming?.initPrograms()
+    this.forceLinkOutgoing?.initPrograms()
     // this.forceMouse?.initPrograms()
     // this.forceCenter?.initPrograms()
     this.clusters.initPrograms()
@@ -1342,12 +1342,12 @@ export class Graph {
           this.forceManyBody?.run()
           this.points?.updatePosition()
 
-          // if (this.store.linksTextureSize) {
-          //   this.forceLinkIncoming?.run()
-          //   this.points?.updatePosition()
-          //   this.forceLinkOutgoing?.run()
-          //   this.points?.updatePosition()
-          // }
+          if (this.store.linksTextureSize) {
+            this.forceLinkIncoming?.run()
+            this.points?.updatePosition()
+            this.forceLinkOutgoing?.run()
+            this.points?.updatePosition()
+          }
 
           if (this.graph.pointClusters || this.graph.clusterPositions) {
             this.clusters?.run()
