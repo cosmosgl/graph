@@ -1,5 +1,5 @@
 import { Graph, PointShape } from '@cosmos.gl/graph'
-import { luma } from '@luma.gl/core'
+import { luma, Device } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
 
 // Import all PNG icons
@@ -74,7 +74,7 @@ export const imageExample = async (): Promise<{div: HTMLDivElement; graph: Graph
   graphContainer.style.overflow = 'hidden'
   div.appendChild(graphContainer)
 
-  let device
+  let device: Device | undefined
   try {
     device = await luma.createDevice({
       type: 'webgl',
