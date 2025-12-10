@@ -10,7 +10,7 @@ import { GL } from '@luma.gl/constants'
 import { GraphConfig, GraphConfigInterface } from '@/graph/config'
 import { getRgbaColor, readPixels, sanitizeHtml } from '@/graph/helper'
 // TODO: Migrate the remaining forces to luma.gl
-// import { ForceCenter } from '@/graph/modules/ForceCenter'
+import { ForceCenter } from '@/graph/modules/ForceCenter'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
 import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
 import { ForceManyBody } from '@/graph/modules/ForceManyBody'
@@ -41,7 +41,7 @@ export class Graph {
   private lines: Lines | undefined
   // TODO: Migrate remaining forces to luma.gl
   private forceGravity: ForceGravity | undefined
-  // private forceCenter: ForceCenter | undefined
+  private forceCenter: ForceCenter | undefined
   private forceManyBody: ForceManyBody | undefined
   private forceLinkIncoming: ForceLink | undefined
   private forceLinkOutgoing: ForceLink | undefined
@@ -189,7 +189,7 @@ export class Graph {
     if (this.config.enableSimulation) {
       // TODO: Migrate remaining forces to luma.gl
       this.forceGravity = new ForceGravity(this.device, this.config, this.store, this.graph, this.points)
-      // this.forceCenter = new ForceCenter(this.device, this.config, this.store, this.graph, this.points)
+      this.forceCenter = new ForceCenter(this.device, this.config, this.store, this.graph, this.points)
       this.forceManyBody = new ForceManyBody(this.device, this.config, this.store, this.graph, this.points)
       this.forceLinkIncoming = new ForceLink(this.device, this.config, this.store, this.graph, this.points)
       this.forceLinkOutgoing = new ForceLink(this.device, this.config, this.store, this.graph, this.points)
@@ -1228,7 +1228,7 @@ export class Graph {
       this.forceLinkIncoming?.create(LinkDirection.INCOMING)
       this.forceLinkOutgoing?.create(LinkDirection.OUTGOING)
     }
-    // if (this.isForceCenterUpdateNeeded) this.forceCenter?.create()
+    if (this.isForceCenterUpdateNeeded) this.forceCenter?.create()
     if (this.isPointClusterUpdateNeeded) this.clusters?.create()
 
     this.isPointPositionsUpdateNeeded = false
@@ -1287,10 +1287,10 @@ export class Graph {
     this.forceGravity?.initPrograms()
     this.forceManyBody?.initPrograms()
     // TODO: Migrate remaining forces to luma.gl
+    this.forceCenter?.initPrograms()
     this.forceLinkIncoming?.initPrograms()
     this.forceLinkOutgoing?.initPrograms()
     // this.forceMouse?.initPrograms()
-    // this.forceCenter?.initPrograms()
     this.clusters.initPrograms()
   }
 
@@ -1334,10 +1334,10 @@ export class Graph {
             this.points?.updatePosition()
           }
 
-          // if (simulationCenter) {
-          //   this.forceCenter?.run()
-          //   this.points?.updatePosition()
-          // }
+          if ((this.config.simulationCenter ?? 0) !== 0) {
+            this.forceCenter?.run()
+            this.points?.updatePosition()
+          }
 
           this.forceManyBody?.run()
           this.points?.updatePosition()
