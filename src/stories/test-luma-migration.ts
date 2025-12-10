@@ -29,6 +29,8 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
     // simulationCenter: 1,
     simulationRepulsion: 10,
     // simulationCluster: 0.05, // Cluster force strength
+    simulationRepulsionFromMouse: 100,
+    enableRightClickRepulsion: true,
     curvedLinks: false,
     fitViewDelay: 1000,
     fitViewPadding: 0.3,
