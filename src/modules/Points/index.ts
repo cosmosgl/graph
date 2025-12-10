@@ -39,6 +39,8 @@ export class Points extends CoreModule {
   public currentPositionTexture: Texture | undefined
   public previousPositionTexture: Texture | undefined
   public velocityTexture: Texture | undefined
+  // Add texture property for greyout status (public for Lines module access)
+  public greyoutStatusTexture: Texture | undefined
   private colorBuffer: Buffer | undefined
   private sizeFbo: Framebuffer | undefined
   private sizeBuffer: Buffer | undefined
@@ -74,7 +76,6 @@ export class Points extends CoreModule {
   private trackPointsVertexCoordBuffer: Buffer | undefined
   private trackedIndices: number[] | undefined
   private selectedTexture: Texture | undefined
-  private greyoutStatusTexture: Texture | undefined
   private sizeTexture: Texture | undefined
   private trackedIndicesTexture: Texture | undefined
   private polygonPathTexture: Texture | undefined
