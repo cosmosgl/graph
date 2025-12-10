@@ -1,19 +1,31 @@
-#ifdef GL_ES
+#version 300 es
 precision highp float;
-#endif
 
 uniform sampler2D positionsTexture;
+
+#ifdef USE_UNIFORM_BUFFERS
+layout(std140) uniform calculateLevelsUniforms {
+  float pointsTextureSize;
+  float levelTextureSize;
+  float cellSize;
+} calculateLevels;
+
+#define pointsTextureSize calculateLevels.pointsTextureSize
+#define levelTextureSize calculateLevels.levelTextureSize
+#define cellSize calculateLevels.cellSize
+#else
 uniform float pointsTextureSize;
 uniform float levelTextureSize;
 uniform float cellSize;
+#endif
 
-attribute vec2 pointIndices;
+in vec2 pointIndices;
 
-varying vec4 rgba;
+out vec4 vColor;
 
 void main() {
-  vec4 pointPosition = texture2D(positionsTexture, pointIndices / pointsTextureSize);
-  rgba = vec4(pointPosition.rg, 1.0, 0.0);
+  vec4 pointPosition = texture(positionsTexture, pointIndices / pointsTextureSize);
+  vColor = vec4(pointPosition.rg, 1.0, 0.0);
 
   float n = floor(pointPosition.x / cellSize);
   float m = floor(pointPosition.y / cellSize);
