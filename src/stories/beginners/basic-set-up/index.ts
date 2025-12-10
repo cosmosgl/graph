@@ -1,8 +1,10 @@
 import { Graph } from '@cosmos.gl/graph'
+import { luma } from '@luma.gl/core'
+import { webgl2Adapter } from '@luma.gl/webgl'
 import { generateData } from './data-gen'
 import './style.css'
 
-export const basicSetUp = (): { graph: Graph; div: HTMLDivElement} => {
+export const basicSetUp = async (): Promise<{ graph: Graph; div: HTMLDivElement; destroy?: () => void }> => {
   const div = document.createElement('div')
   div.className = 'app'
 
@@ -19,7 +21,17 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement} => {
   actionsHeader.textContent = 'Actions'
   actionsDiv.appendChild(actionsHeader)
 
-  const graph = new Graph(graphDiv, {
+  const device = await luma.createDevice({
+    type: 'webgl',
+    adapters: [webgl2Adapter],
+    createCanvasContext: {
+      container: graphDiv,
+      useDevicePixels: true,
+      autoResize: true,
+    },
+  })
+
+  const graph = new Graph(graphDiv, device, {
     spaceSize: 4096,
     backgroundColor: '#2d313a',
     pointDefaultSize: 4,
@@ -159,5 +171,10 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement} => {
   selectPointsInAreaButton.addEventListener('click', selectPointsInArea)
   actionsDiv.appendChild(selectPointsInAreaButton)
 
-  return { div, graph }
+  const destroy = (): void => {
+    graph.destroy()
+    device.destroy()
+  }
+
+  return { div, graph, destroy }
 }
