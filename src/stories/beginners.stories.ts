@@ -77,9 +77,10 @@ export const PointLabels: Story = {
       d.args.graph?.destroy()
     }
   },
-  render: (args, { loaded: { data } }) => {
-    const story = pointLabels(data.performances)
+  render: async (args, { loaded: { data } }) => {
+    const story = await pointLabels(data.performances)
     args.graph = story.graph
+    args.destroy = story.destroy
     return story.div
   },
   parameters: {
