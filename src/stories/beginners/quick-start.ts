@@ -34,6 +34,8 @@ export const quickStart = async (): Promise<{ graph: Graph; div: HTMLDivElement;
       container: div,
       useDevicePixels: true,
       autoResize: true,
+      width: undefined,
+      height: undefined,
     },
   })
 

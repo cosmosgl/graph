@@ -28,6 +28,8 @@ export const basicSetUp = async (): Promise<{ graph: Graph; div: HTMLDivElement;
       container: graphDiv,
       useDevicePixels: true,
       autoResize: true,
+      width: undefined,
+      height: undefined,
     },
   })
 
