@@ -631,6 +631,9 @@ export class Lines extends CoreModule {
     // Render to index buffer for picking/hover detection
     const indexPass = this.device.beginRenderPass({
       framebuffer: this.linkIndexFbo,
+      // Note: We explicitly set clearColor to [0, 0, 0, 0] to prevent re-clearing the framebuffer.
+      // Without this, luma.gl would use its default clearColor of [0, 0, 0, 1] (opaque black)
+      clearColor: [0, 0, 0, 0], // or `clearColor: false`
     })
     this.drawCurveCommand.draw(indexPass)
     indexPass.end()
