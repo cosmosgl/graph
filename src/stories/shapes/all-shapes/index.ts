@@ -56,6 +56,8 @@ export const allShapes = async (): Promise<{div: HTMLDivElement; graph: Graph; d
       container: div,
       useDevicePixels: true,
       autoResize: true,
+      width: undefined,
+      height: undefined,
     },
   })
 
