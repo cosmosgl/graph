@@ -83,6 +83,8 @@ export const imageExample = async (): Promise<{div: HTMLDivElement; graph: Graph
         container: graphContainer,
         useDevicePixels: true,
         autoResize: true,
+        width: undefined,
+        height: undefined,
       },
     })
 

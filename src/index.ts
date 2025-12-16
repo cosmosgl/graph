@@ -1563,20 +1563,18 @@ export class Graph {
 
   private resizeCanvas (forceResize = false): void {
     if (this._isDestroyed) return
-    const prevWidth = this.canvas.width
-    const prevHeight = this.canvas.height
     const w = this.canvas.clientWidth
     const h = this.canvas.clientHeight
+    const [prevW, prevH] = this.store.screenSize
 
-    if (forceResize || prevWidth !== w * this.config.pixelRatio || prevHeight !== h * this.config.pixelRatio) {
-      const [prevW, prevH] = this.store.screenSize
+    // Check if CSS size changed (luma.gl's autoResize handles canvas.width/height automatically)
+    if (forceResize || prevW !== w || prevH !== h) {
       const { k } = this.zoomInstance.eventTransform
       const centerPosition = this.zoomInstance.convertScreenToSpacePosition([prevW / 2, prevH / 2])
 
       this.store.updateScreenSize(w, h)
-      this.canvas.width = w * this.config.pixelRatio
-      this.canvas.height = h * this.config.pixelRatio
-      // Device.poll() doesn't exist in luma.gl - not needed
+      // Note: canvas.width and canvas.height are managed by luma.gl's autoResize
+      // We only update our internal state and dependent components
       this.canvasD3Selection
         ?.call(this.zoomInstance.behavior.transform, this.zoomInstance.getTransform([centerPosition], k))
       this.points?.updateSampledPointsGrid()

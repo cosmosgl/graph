@@ -55,6 +55,8 @@ export const createCosmos = async (props: CosmosStoryProps): Promise<{ div: HTML
       container: div,
       useDevicePixels: true,
       autoResize: true,
+      width: undefined,
+      height: undefined,
     },
   })
 
