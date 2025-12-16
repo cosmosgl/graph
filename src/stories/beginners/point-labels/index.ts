@@ -36,6 +36,8 @@ export const pointLabels = async (
       container: graphDiv,
       useDevicePixels: true,
       autoResize: true,
+      width: undefined,
+      height: undefined,
     },
   })
 

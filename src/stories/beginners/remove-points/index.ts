@@ -29,6 +29,8 @@ export const removePoints = async (): Promise<{ graph: Graph; div: HTMLDivElemen
       container: graphDiv,
       useDevicePixels: true,
       autoResize: true,
+      width: undefined,
+      height: undefined,
     },
   })
 

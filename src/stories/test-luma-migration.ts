@@ -16,6 +16,8 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
       container: div, // This will create a canvas and add it to the div
       useDevicePixels: true,
       autoResize: true,
+      width: undefined, // Force canvas to use 100% width instead of default 800px
+      height: undefined, // Force canvas to use 100% height instead of default 600px
     },
   })
 

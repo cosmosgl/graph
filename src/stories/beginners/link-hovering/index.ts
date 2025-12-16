@@ -42,6 +42,8 @@ export const linkHovering = async (): Promise<{ div: HTMLDivElement; graph: Grap
       container: div,
       useDevicePixels: true,
       autoResize: true,
+      width: undefined,
+      height: undefined,
     },
   })
 

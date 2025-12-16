@@ -36,6 +36,8 @@ export const moscowMetroStations = async (): Promise<{graph: Graph; div: HTMLDiv
       container: graphDiv,
       useDevicePixels: true,
       autoResize: true,
+      width: undefined,
+      height: undefined,
     },
   })
 
