@@ -1,8 +1,6 @@
 import { Graph, GraphConfigInterface } from '@cosmos.gl/graph'
-import { luma } from '@luma.gl/core'
-import { webgl2Adapter } from '@luma.gl/webgl'
 
-export const quickStart = async (): Promise<{ graph: Graph; div: HTMLDivElement; destroy?: () => void }> => {
+export const quickStart = (): { graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
   const div = document.createElement('div')
   div.style.height = '100vh'
   div.style.width = '100%'
@@ -26,20 +24,7 @@ export const quickStart = async (): Promise<{ graph: Graph; div: HTMLDivElement;
   /* ... */
   }
 
-  // Create luma.gl device with its own canvas
-  const device = await luma.createDevice({
-    type: 'webgl',
-    adapters: [webgl2Adapter],
-    createCanvasContext: {
-      container: div,
-      useDevicePixels: true,
-      autoResize: true,
-      width: undefined,
-      height: undefined,
-    },
-  })
-
-  const graph = new Graph(div, device, config)
+  const graph = new Graph(div, config)
 
   // Points: [x1, y1, x2, y2, x3, y3]
   const pointPositions = new Float32Array([
@@ -63,7 +48,6 @@ export const quickStart = async (): Promise<{ graph: Graph; div: HTMLDivElement;
 
   const destroy = (): void => {
     graph.destroy()
-    device.destroy()
   }
 
   return { div, graph, destroy }

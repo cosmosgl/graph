@@ -1,25 +1,9 @@
 import { Graph, GraphConfigInterface } from '@cosmos.gl/graph'
-import { luma } from '@luma.gl/core'
-import { webgl2Adapter } from '@luma.gl/webgl'
 
-export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivElement; destroy?: () => void }> => {
+export const testLumaMigration = (): { graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
   const div = document.createElement('div')
   div.style.height = '100vh'
   div.style.width = '100%'
-
-  // Create the device with a canvas context
-  // The device will create its own canvas, which we'll use
-  const device = await luma.createDevice({
-    type: 'webgl',
-    adapters: [webgl2Adapter],
-    createCanvasContext: {
-      container: div, // This will create a canvas and add it to the div
-      useDevicePixels: true,
-      autoResize: true,
-      width: undefined, // Force canvas to use 100% width instead of default 800px
-      height: undefined, // Force canvas to use 100% height instead of default 600px
-    },
-  })
 
   const config: GraphConfigInterface = {
     spaceSize: 4096,
@@ -81,8 +65,8 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
   }
 
-  // Create graph with device
-  const graph = new Graph(div, device, config)
+  // Create graph
+  const graph = new Graph(div, config)
 
   // Create a grid of points to test rendering with different colors and sizes
   const pointCount = 100
@@ -205,7 +189,6 @@ export const testLumaMigration = async (): Promise<{ graph: Graph; div: HTMLDivE
 
   const destroy = (): void => {
     graph.destroy()
-    device.destroy()
   }
 
   return { div, graph, destroy }

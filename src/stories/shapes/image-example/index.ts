@@ -1,6 +1,4 @@
 import { Graph, PointShape } from '@cosmos.gl/graph'
-import { luma, Device } from '@luma.gl/core'
-import { webgl2Adapter } from '@luma.gl/webgl'
 
 // Import all PNG icons
 import boxUrl from './icons/box.png'
@@ -58,7 +56,7 @@ interface DependencyNode {
   color: [number, number, number, number];
 }
 
-export const imageExample = async (): Promise<{div: HTMLDivElement; graph: Graph; destroy?: () => void }> => {
+export const imageExample = (): {div: HTMLDivElement; graph: Graph; destroy?: () => void } => {
   // Create container div
   const div = document.createElement('div')
   div.style.height = '100vh'
@@ -74,20 +72,7 @@ export const imageExample = async (): Promise<{div: HTMLDivElement; graph: Graph
   graphContainer.style.overflow = 'hidden'
   div.appendChild(graphContainer)
 
-  let device: Device | undefined
   try {
-    device = await luma.createDevice({
-      type: 'webgl',
-      adapters: [webgl2Adapter],
-      createCanvasContext: {
-        container: graphContainer,
-        useDevicePixels: true,
-        autoResize: true,
-        width: undefined,
-        height: undefined,
-      },
-    })
-
     const spaceSize = 4096
 
     const nodes: DependencyNode[] = [
@@ -197,7 +182,7 @@ export const imageExample = async (): Promise<{div: HTMLDivElement; graph: Graph
     }
 
     // Create graph with static positioning
-    const graph = new Graph(graphContainer, device, {
+    const graph = new Graph(graphContainer, {
       spaceSize,
       enableSimulation: false,
       enableDrag: false,
@@ -219,11 +204,15 @@ export const imageExample = async (): Promise<{div: HTMLDivElement; graph: Graph
       },
     })
 
-    const imageDataArray = await loadPngImages([swiftUrl, boxUrl, toolboxUrl, legoUrl, sUrl])
-
-    // Set images and their indices
-    graph.setImageData(imageDataArray)
-    graph.setPointImageIndices(imageIndices)
+    // Load images asynchronously and set them when ready
+    loadPngImages([swiftUrl, boxUrl, toolboxUrl, legoUrl, sUrl]).then((imageDataArray) => {
+      // Set images and their indices
+      graph.setImageData(imageDataArray)
+      graph.setPointImageIndices(imageIndices)
+      graph.render()
+    }).catch((error) => {
+      console.error('Error loading images:', error)
+    })
 
     // Set all data
     graph.setPointPositions(pointPositions)
@@ -242,12 +231,10 @@ export const imageExample = async (): Promise<{div: HTMLDivElement; graph: Graph
 
     const destroy = (): void => {
       graph.destroy()
-      device?.destroy()
     }
 
     return { div, graph, destroy }
   } catch (error) {
-    if (device) device.destroy()
     console.error('Error creating Xcode dependency graph:', error)
     div.innerHTML = `
       <div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff0000; font-size: 18px;">

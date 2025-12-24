@@ -1,10 +1,8 @@
 import { Graph, GraphConfigInterface } from '@cosmos.gl/graph'
-import { luma } from '@luma.gl/core'
-import { webgl2Adapter } from '@luma.gl/webgl'
 import { generateData } from './data-generator'
 import './style.css'
 
-export const linkHovering = async (): Promise<{ div: HTMLDivElement; graph: Graph; destroy?: () => void }> => {
+export const linkHovering = (): { div: HTMLDivElement; graph: Graph; destroy?: () => void } => {
   const data = generateData()
   const infoPanel = document.createElement('div')
 
@@ -34,20 +32,8 @@ export const linkHovering = async (): Promise<{ div: HTMLDivElement; graph: Grap
     },
   }
 
-  // Create luma device and graph instance
-  const device = await luma.createDevice({
-    type: 'webgl',
-    adapters: [webgl2Adapter],
-    createCanvasContext: {
-      container: div,
-      useDevicePixels: true,
-      autoResize: true,
-      width: undefined,
-      height: undefined,
-    },
-  })
-
-  const graph = new Graph(div, device, config)
+  // Create graph instance
+  const graph = new Graph(div, config)
 
   // Set data
   graph.setPointPositions(data.pointPositions)
@@ -73,7 +59,6 @@ export const linkHovering = async (): Promise<{ div: HTMLDivElement; graph: Grap
 
   const destroy = (): void => {
     graph.destroy()
-    device.destroy()
   }
 
   return { div, graph, destroy }

@@ -1,6 +1,4 @@
 import { Graph, GraphConfigInterface } from '@cosmos.gl/graph'
-import { luma } from '@luma.gl/core'
-import { webgl2Adapter } from '@luma.gl/webgl'
 
 export type CosmosStoryProps = GraphConfigInterface & {
   pointPositions: Float32Array;
@@ -17,7 +15,7 @@ export type CosmosStoryProps = GraphConfigInterface & {
   clusterStrength?: Float32Array;
 }
 
-export const createCosmos = async (props: CosmosStoryProps): Promise<{ div: HTMLDivElement; graph: Graph; destroy?: () => void}> => {
+export const createCosmos = (props: CosmosStoryProps): { div: HTMLDivElement; graph: Graph; destroy?: () => void} => {
   const div = document.createElement('div')
   div.style.height = '100vh'
   div.style.width = '100%'
@@ -48,19 +46,7 @@ export const createCosmos = async (props: CosmosStoryProps): Promise<{ div: HTML
     ...props,
   }
 
-  const device = await luma.createDevice({
-    type: 'webgl',
-    adapters: [webgl2Adapter],
-    createCanvasContext: {
-      container: div,
-      useDevicePixels: true,
-      autoResize: true,
-      width: undefined,
-      height: undefined,
-    },
-  })
-
-  const graph = new Graph(div, device, config)
+  const graph = new Graph(div, config)
 
   graph.setPointPositions(props.pointPositions)
   if (props.pointColors) graph.setPointColors(props.pointColors)
@@ -80,7 +66,6 @@ export const createCosmos = async (props: CosmosStoryProps): Promise<{ div: HTML
 
   const destroy = (): void => {
     graph.destroy()
-    device.destroy()
   }
 
   return { div, graph, destroy }
