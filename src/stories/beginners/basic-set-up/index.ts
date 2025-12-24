@@ -1,10 +1,8 @@
 import { Graph } from '@cosmos.gl/graph'
-import { luma } from '@luma.gl/core'
-import { webgl2Adapter } from '@luma.gl/webgl'
 import { generateData } from './data-gen'
 import './style.css'
 
-export const basicSetUp = async (): Promise<{ graph: Graph; div: HTMLDivElement; destroy?: () => void }> => {
+export const basicSetUp = (): { graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
   const div = document.createElement('div')
   div.className = 'app'
 
@@ -21,19 +19,7 @@ export const basicSetUp = async (): Promise<{ graph: Graph; div: HTMLDivElement;
   actionsHeader.textContent = 'Actions'
   actionsDiv.appendChild(actionsHeader)
 
-  const device = await luma.createDevice({
-    type: 'webgl',
-    adapters: [webgl2Adapter],
-    createCanvasContext: {
-      container: graphDiv,
-      useDevicePixels: true,
-      autoResize: true,
-      width: undefined,
-      height: undefined,
-    },
-  })
-
-  const graph = new Graph(graphDiv, device, {
+  const graph = new Graph(graphDiv, {
     spaceSize: 4096,
     backgroundColor: '#2d313a',
     pointDefaultSize: 4,
@@ -175,7 +161,6 @@ export const basicSetUp = async (): Promise<{ graph: Graph; div: HTMLDivElement;
 
   const destroy = (): void => {
     graph.destroy()
-    device.destroy()
   }
 
   return { div, graph, destroy }

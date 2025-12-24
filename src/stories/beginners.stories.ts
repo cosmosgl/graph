@@ -82,17 +82,16 @@ export const PointLabels: Story = {
     const div = document.createElement('div')
     div.style.height = '100vh'
     div.style.width = '100%'
-    div.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #666;">Loading story...</div>'
 
-    pointLabels(data.performances).then((story) => {
+    try {
+      const story = pointLabels(data.performances)
       args.graph = story.graph
       args.destroy = story.destroy
-      div.innerHTML = ''
       div.appendChild(story.div)
-    }).catch((error) => {
+    } catch (error) {
       console.error('Failed to load PointLabels story:', error)
       div.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff0000;">Failed to load story</div>'
-    })
+    }
 
     return div
   },

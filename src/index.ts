@@ -3,13 +3,12 @@ import 'd3-transition'
 import { easeQuadInOut, easeQuadIn, easeQuadOut } from 'd3-ease'
 import { D3ZoomEvent } from 'd3-zoom'
 import { D3DragEvent } from 'd3-drag'
-import { Device, Framebuffer } from '@luma.gl/core'
-import { WebGLDevice } from '@luma.gl/webgl'
+import { Device, Framebuffer, luma } from '@luma.gl/core'
+import { WebGLDevice, webgl2Adapter } from '@luma.gl/webgl'
 import { GL } from '@luma.gl/constants'
 
 import { GraphConfig, GraphConfigInterface } from '@/graph/config'
 import { getRgbaColor, readPixels, sanitizeHtml } from '@/graph/helper'
-// TODO: Migrate the remaining forces to luma.gl
 import { ForceCenter } from '@/graph/modules/ForceCenter'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
 import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
@@ -33,13 +32,13 @@ export class Graph {
   private attributionDivElement: HTMLElement | undefined
   private canvasD3Selection: Selection<HTMLCanvasElement, undefined, null, undefined> | undefined
   private device: Device | undefined
+  private deviceInitPromise: Promise<Device>
   private requestAnimationFrameId = 0
   private isRightClickMouse = false
 
   private store = new Store()
   private points: Points | undefined
   private lines: Lines | undefined
-  // TODO: Migrate remaining forces to luma.gl
   private forceGravity: ForceGravity | undefined
   private forceCenter: ForceCenter | undefined
   private forceManyBody: ForceManyBody | undefined
@@ -87,134 +86,133 @@ export class Graph {
 
   public constructor (
     div: HTMLDivElement,
-    device: Device,
     config?: GraphConfigInterface
   ) {
     if (config) this.config.init(config)
 
     this.store.div = div
-    // const canvas = document.createElement('canvas')
-    // canvas.style.width = '100%'
-    // canvas.style.height = '100%'
-    // this.store.div.appendChild(canvas)
+    const canvas = document.createElement('canvas')
+    canvas.style.width = '100%'
+    canvas.style.height = '100%'
+    this.store.div.appendChild(canvas)
     this.addAttribution()
-    // const w = canvas.clientWidth
-    // const h = canvas.clientHeight
-
-    // canvas.width = w * this.config.pixelRatio
-    // canvas.height = h * this.config.pixelRatio
-
-    const canvas = device.canvasContext?.canvas
-    if (!(canvas instanceof HTMLCanvasElement)) {
-      throw new Error('Expected a DOM canvas from luma device')
-    }
     this.canvas = canvas
-    const w = this.canvas.clientWidth
-    const h = this.canvas.clientHeight
 
-    this.device = device
+    // Start device creation immediately (fire and forget)
+    this.deviceInitPromise = this.createDevice(canvas)
+      .then(device => {
+        this.device = device
 
-    this.store.adjustSpaceSize(this.config.spaceSize, this.device.limits.maxTextureDimension2D)
-    this.store.setWebGLMaxTextureSize(this.device.limits.maxTextureDimension2D)
-    this.store.updateScreenSize(w, h)
+        const w = canvas.clientWidth
+        const h = canvas.clientHeight
 
-    this.canvasD3Selection = select<HTMLCanvasElement, undefined>(this.canvas)
-    this.canvasD3Selection
-      .on('mouseenter.cosmos', () => { this._isMouseOnCanvas = true })
-      .on('mousemove.cosmos', () => { this._isMouseOnCanvas = true })
-      .on('mouseleave.cosmos', (event) => {
-        this._isMouseOnCanvas = false
-        this.currentEvent = event
+        canvas.width = w * this.config.pixelRatio
+        canvas.height = h * this.config.pixelRatio
 
-        // Clear point hover state and trigger callback if needed
-        if (this.store.hoveredPoint !== undefined && this.config.onPointMouseOut) {
-          this.config.onPointMouseOut(event)
+        this.store.adjustSpaceSize(this.config.spaceSize, this.device.limits.maxTextureDimension2D)
+        this.store.setWebGLMaxTextureSize(this.device.limits.maxTextureDimension2D)
+        this.store.updateScreenSize(w, h)
+
+        this.canvasD3Selection = select<HTMLCanvasElement, undefined>(this.canvas)
+        this.canvasD3Selection
+          .on('mouseenter.cosmos', () => { this._isMouseOnCanvas = true })
+          .on('mousemove.cosmos', () => { this._isMouseOnCanvas = true })
+          .on('mouseleave.cosmos', (event) => {
+            this._isMouseOnCanvas = false
+            this.currentEvent = event
+
+            // Clear point hover state and trigger callback if needed
+            if (this.store.hoveredPoint !== undefined && this.config.onPointMouseOut) {
+              this.config.onPointMouseOut(event)
+            }
+
+            // Clear link hover state and trigger callback if needed
+            if (this.store.hoveredLinkIndex !== undefined && this.config.onLinkMouseOut) {
+              this.config.onLinkMouseOut(event)
+            }
+
+            // Reset right-click flag
+            this.isRightClickMouse = false
+
+            // Clear hover states
+            this.store.hoveredPoint = undefined
+            this.store.hoveredLinkIndex = undefined
+
+            // Update cursor style after clearing hover states
+            this.updateCanvasCursor()
+          })
+        select(document)
+          .on('keydown.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
+          .on('keyup.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
+        this.zoomInstance.behavior
+          .on('start.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => { this.currentEvent = e })
+          .on('zoom.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
+            const userDriven = !!e.sourceEvent
+            if (userDriven) this.updateMousePosition(e.sourceEvent)
+            this.currentEvent = e
+          })
+          .on('end.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => { this.currentEvent = e })
+        this.dragInstance.behavior
+          .on('start.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
+            this.currentEvent = e
+            this.updateCanvasCursor()
+          })
+          .on('drag.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
+            if (this.dragInstance.isActive) {
+              this.updateMousePosition(e)
+            }
+            this.currentEvent = e
+          })
+          .on('end.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
+            this.currentEvent = e
+            this.updateCanvasCursor()
+          })
+        this.canvasD3Selection
+          .call(this.dragInstance.behavior)
+          .call(this.zoomInstance.behavior)
+          .on('click', this.onClick.bind(this))
+          .on('mousemove', this.onMouseMove.bind(this))
+          .on('contextmenu', this.onRightClickMouse.bind(this))
+        if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
+        this.setZoomLevel(this.config.initialZoomLevel ?? 1)
+
+        const pointSizeRange = (device as WebGLDevice).gl.getParameter(GL.ALIASED_POINT_SIZE_RANGE) as [number, number]
+        const pixelRatio = this.config.pixelRatio ?? (typeof window !== 'undefined' ? window.devicePixelRatio || 2 : 2)
+        this.store.maxPointSize = (pointSizeRange?.[1] ?? MAX_POINT_SIZE) / pixelRatio
+
+        this.points = new Points(device, this.config, this.store, this.graph)
+        this.lines = new Lines(device, this.config, this.store, this.graph, this.points)
+        if (this.config.enableSimulation) {
+          this.forceGravity = new ForceGravity(device, this.config, this.store, this.graph, this.points)
+          this.forceCenter = new ForceCenter(device, this.config, this.store, this.graph, this.points)
+          this.forceManyBody = new ForceManyBody(device, this.config, this.store, this.graph, this.points)
+          this.forceLinkIncoming = new ForceLink(device, this.config, this.store, this.graph, this.points)
+          this.forceLinkOutgoing = new ForceLink(device, this.config, this.store, this.graph, this.points)
+          this.forceMouse = new ForceMouse(device, this.config, this.store, this.graph, this.points)
         }
+        this.clusters = new Clusters(device, this.config, this.store, this.graph, this.points)
 
-        // Clear link hover state and trigger callback if needed
-        if (this.store.hoveredLinkIndex !== undefined && this.config.onLinkMouseOut) {
-          this.config.onLinkMouseOut(event)
+        this.store.backgroundColor = getRgbaColor(this.config.backgroundColor)
+        this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor ?? defaultConfigValues.hoveredPointRingColor)
+        this.store.setFocusedPointRingColor(this.config.focusedPointRingColor ?? defaultConfigValues.focusedPointRingColor)
+        if (this.config.focusedPointIndex !== undefined) {
+          this.store.setFocusedPoint(this.config.focusedPointIndex)
         }
+        this.store.setGreyoutPointColor(this.config.pointGreyoutColor ?? defaultGreyoutPointColor)
+        this.store.setHoveredLinkColor(this.config.hoveredLinkColor ?? defaultConfigValues.hoveredLinkColor)
 
-        // Reset right-click flag
-        this.isRightClickMouse = false
+        this.store.updateLinkHoveringEnabled(this.config)
 
-        // Clear hover states
-        this.store.hoveredPoint = undefined
-        this.store.hoveredLinkIndex = undefined
+        if (this.config.showFPSMonitor) this.fpsMonitor = new FPSMonitor(this.canvas)
 
-        // Update cursor style after clearing hover states
-        this.updateCanvasCursor()
+        if (this.config.randomSeed !== undefined) this.store.addRandomSeed(this.config.randomSeed)
+
+        return device
       })
-    select(document)
-      .on('keydown.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
-      .on('keyup.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
-    this.zoomInstance.behavior
-      .on('start.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => { this.currentEvent = e })
-      .on('zoom.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
-        const userDriven = !!e.sourceEvent
-        if (userDriven) this.updateMousePosition(e.sourceEvent)
-        this.currentEvent = e
+      .catch(error => {
+        console.error('Device initialization failed:', error)
+        throw error
       })
-      .on('end.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => { this.currentEvent = e })
-    this.dragInstance.behavior
-      .on('start.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
-        this.currentEvent = e
-        this.updateCanvasCursor()
-      })
-      .on('drag.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
-        if (this.dragInstance.isActive) {
-          this.updateMousePosition(e)
-        }
-        this.currentEvent = e
-      })
-      .on('end.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
-        this.currentEvent = e
-        this.updateCanvasCursor()
-      })
-    this.canvasD3Selection
-      .call(this.dragInstance.behavior)
-      .call(this.zoomInstance.behavior)
-      .on('click', this.onClick.bind(this))
-      .on('mousemove', this.onMouseMove.bind(this))
-      .on('contextmenu', this.onRightClickMouse.bind(this))
-    if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
-    this.setZoomLevel(this.config.initialZoomLevel ?? 1)
-
-    const pointSizeRange = (device as WebGLDevice).gl.getParameter(GL.ALIASED_POINT_SIZE_RANGE) as [number, number]
-    this.store.maxPointSize = (pointSizeRange?.[1] ?? MAX_POINT_SIZE) / this.config.pixelRatio
-
-    // Initialize simulation state based on enableSimulation config
-    // If simulation is disabled, start with isSimulationRunning = false
-    this.store.isSimulationRunning = this.config.enableSimulation
-
-    this.points = new Points(this.device, this.config, this.store, this.graph)
-    this.lines = new Lines(this.device, this.config, this.store, this.graph, this.points)
-    if (this.config.enableSimulation) {
-      // TODO: Migrate remaining forces to luma.gl
-      this.forceGravity = new ForceGravity(this.device, this.config, this.store, this.graph, this.points)
-      this.forceCenter = new ForceCenter(this.device, this.config, this.store, this.graph, this.points)
-      this.forceManyBody = new ForceManyBody(this.device, this.config, this.store, this.graph, this.points)
-      this.forceLinkIncoming = new ForceLink(this.device, this.config, this.store, this.graph, this.points)
-      this.forceLinkOutgoing = new ForceLink(this.device, this.config, this.store, this.graph, this.points)
-      this.forceMouse = new ForceMouse(this.device, this.config, this.store, this.graph, this.points)
-    }
-    this.clusters = new Clusters(this.device, this.config, this.store, this.graph, this.points)
-
-    this.store.backgroundColor = getRgbaColor(this.config.backgroundColor)
-    this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor ?? defaultConfigValues.hoveredPointRingColor)
-    this.store.setFocusedPointRingColor(this.config.focusedPointRingColor ?? defaultConfigValues.focusedPointRingColor)
-    if (this.config.focusedPointIndex !== undefined) {
-      this.store.setFocusedPoint(this.config.focusedPointIndex)
-    }
-    this.store.setGreyoutPointColor(this.config.pointGreyoutColor ?? defaultGreyoutPointColor)
-    this.store.setHoveredLinkColor(this.config.hoveredLinkColor ?? defaultConfigValues.hoveredLinkColor)
-
-    this.store.updateLinkHoveringEnabled(this.config)
-
-    if (this.config.showFPSMonitor) this.fpsMonitor = new FPSMonitor(this.canvas)
-
-    if (this.config.randomSeed !== undefined) this.store.addRandomSeed(this.config.randomSeed)
   }
 
   /**
@@ -247,38 +245,41 @@ export class Graph {
    * @param config Cosmos configuration object.
    */
   public setConfig (config: Partial<GraphConfigInterface>): void {
-    if (this._isDestroyed || !this.points || /* !this.lines || */ !this.clusters) return
+    if (this._isDestroyed) return
+
+    if (this.ensureDevice(() => this.setConfig(config))) return
     const prevConfig = { ...this.config }
     this.config.init(config)
     if ((prevConfig.pointDefaultColor !== this.config.pointDefaultColor) ||
       (prevConfig.pointColor !== this.config.pointColor)) {
       this.graph.updatePointColor()
-      this.points.updateColor()
+      this.points?.updateColor()
     }
     if ((prevConfig.pointDefaultSize !== this.config.pointDefaultSize) ||
       (prevConfig.pointSize !== this.config.pointSize)) {
       this.graph.updatePointSize()
-      this.points.updateSize()
-    }
+      this.points?.updateSize()
+    }    
     if ((prevConfig.linkDefaultColor !== this.config.linkDefaultColor) ||
       (prevConfig.linkColor !== this.config.linkColor)) {
       this.graph.updateLinkColor()
-      this.lines.updateColor()
+      this.lines?.updateColor()
     }
     if ((prevConfig.linkDefaultWidth !== this.config.linkDefaultWidth) ||
       (prevConfig.linkWidth !== this.config.linkWidth)) {
       this.graph.updateLinkWidth()
-      this.lines.updateWidth()
+      this.lines?.updateWidth()
     }
     if ((prevConfig.linkDefaultArrows !== this.config.linkDefaultArrows) ||
       (prevConfig.linkArrows !== this.config.linkArrows)) {
       this.graph.updateArrows()
-      this.lines.updateArrow()
+      this.lines?.updateArrow()
     }
     if (prevConfig.curvedLinkSegments !== this.config.curvedLinkSegments ||
       prevConfig.curvedLinks !== this.config.curvedLinks) {
-      this.lines.updateCurveLineGeometry()
+      this.lines?.updateCurveLineGeometry()
     }
+
     if (prevConfig.backgroundColor !== this.config.backgroundColor) {
       this.store.backgroundColor = getRgbaColor(this.config.backgroundColor ?? defaultBackgroundColor)
     }
@@ -297,6 +298,20 @@ export class Graph {
     if (prevConfig.focusedPointIndex !== this.config.focusedPointIndex) {
       this.store.setFocusedPoint(this.config.focusedPointIndex)
     }
+    if (prevConfig.pixelRatio !== this.config.pixelRatio) {
+      // Update device's canvas context useDevicePixels
+      if (this.device?.canvasContext) {
+        const useDevicePixels = this.config.pixelRatio !== undefined
+          ? this.config.pixelRatio // Use config value as number
+          : true // Use window.devicePixelRatio
+        this.device.canvasContext.setProps({ useDevicePixels })
+
+        // Recalculate maxPointSize with new pixelRatio
+        const pointSizeRange = (this.device as WebGLDevice).gl.getParameter(GL.ALIASED_POINT_SIZE_RANGE) as [number, number]
+        const pixelRatio = this.config.pixelRatio ?? defaultConfigValues.pixelRatio
+        this.store.maxPointSize = (pointSizeRange?.[1] ?? MAX_POINT_SIZE) / pixelRatio
+      }
+    }
     if (prevConfig.spaceSize !== this.config.spaceSize ||
       prevConfig.simulationRepulsionQuadtreeLevels !== this.config.simulationRepulsionQuadtreeLevels) {
       this.store.adjustSpaceSize(this.config.spaceSize, this.device?.limits.maxTextureDimension2D ?? 4096)
@@ -311,11 +326,6 @@ export class Graph {
         this.fpsMonitor = undefined
       }
     }
-    if (prevConfig.pixelRatio !== this.config.pixelRatio) {
-      // luma.gl doesn't have pointSizeDims, use fallback
-      this.store.maxPointSize = MAX_POINT_SIZE / this.config.pixelRatio
-    }
-
     if (prevConfig.enableZoom !== this.config.enableZoom || prevConfig.enableDrag !== this.config.enableDrag) {
       this.updateZoomDragBehaviors()
     }
@@ -338,9 +348,11 @@ export class Graph {
    *   - `false` or `undefined` (default): Use the behavior defined by `config.rescalePositions`.
    */
   public setPointPositions (pointPositions: Float32Array, dontRescale?: boolean | undefined): void {
-    if (this._isDestroyed || !this.points) return
+    if (this._isDestroyed) return
+
+    if (this.ensureDevice(() => this.setPointPositions(pointPositions, dontRescale))) return
     this.graph.inputPointPositions = pointPositions
-    this.points.shouldSkipRescale = dontRescale
+    this.points!.shouldSkipRescale = dontRescale
     this.isPointPositionsUpdateNeeded = true
     // Links related texture depends on point positions, so we need to update it
     this.isLinksUpdateNeeded = true
@@ -365,6 +377,8 @@ export class Graph {
   */
   public setPointColors (pointColors: Float32Array): void {
     if (this._isDestroyed) return
+
+    if (this.ensureDevice(() => this.setPointColors(pointColors))) return
     this.graph.inputPointColors = pointColors
     this.isPointColorUpdateNeeded = true
   }
@@ -389,6 +403,7 @@ export class Graph {
    */
   public setPointSizes (pointSizes: Float32Array): void {
     if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointSizes(pointSizes))) return
     this.graph.inputPointSizes = pointSizes
     this.isPointSizeUpdateNeeded = true
   }
@@ -404,6 +419,7 @@ export class Graph {
    */
   public setPointShapes (pointShapes: Float32Array): void {
     if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointShapes(pointShapes))) return
     this.graph.inputPointShapes = pointShapes
     this.isPointShapeUpdateNeeded = true
   }
@@ -417,9 +433,10 @@ export class Graph {
    * Example: `setImageData([imageData1, imageData2, imageData3])`
    */
   public setImageData (imageDataArray: ImageData[]): void {
-    if (this._isDestroyed || !this.points) return
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setImageData(imageDataArray))) return
     this.graph.inputImageData = imageDataArray
-    this.points.createAtlas()
+    this.points?.createAtlas()
   }
 
   /**
@@ -432,6 +449,7 @@ export class Graph {
    */
   public setPointImageIndices (imageIndices: Float32Array): void {
     if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointImageIndices(imageIndices))) return
     this.graph.inputPointImageIndices = imageIndices
     this.isPointImageIndicesUpdateNeeded = true
   }
@@ -445,6 +463,7 @@ export class Graph {
    */
   public setPointImageSizes (imageSizes: Float32Array): void {
     if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointImageSizes(imageSizes))) return
     this.graph.inputPointImageSizes = imageSizes
     this.isPointImageSizesUpdateNeeded = true
   }
@@ -470,6 +489,7 @@ export class Graph {
    */
   public setLinks (links: Float32Array): void {
     if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setLinks(links))) return
     this.graph.inputLinks = links
     this.isLinksUpdateNeeded = true
     // Links related texture depends on links length, so we need to update it
@@ -488,6 +508,7 @@ export class Graph {
    */
   public setLinkColors (linkColors: Float32Array): void {
     if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setLinkColors(linkColors))) return
     this.graph.inputLinkColors = linkColors
     this.isLinkColorUpdateNeeded = true
   }
@@ -512,6 +533,7 @@ export class Graph {
    */
   public setLinkWidths (linkWidths: Float32Array): void {
     if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setLinkWidths(linkWidths))) return
     this.graph.inputLinkWidths = linkWidths
     this.isLinkWidthUpdateNeeded = true
   }
@@ -536,6 +558,7 @@ export class Graph {
    */
   public setLinkArrows (linkArrows: boolean[]): void {
     if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setLinkArrows(linkArrows))) return
     this.graph.linkArrowsBoolean = linkArrows
     this.isLinkArrowUpdateNeeded = true
   }
@@ -549,6 +572,7 @@ export class Graph {
    */
   public setLinkStrength (linkStrength: Float32Array): void {
     if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setLinkStrength(linkStrength))) return
     this.graph.inputLinkStrength = linkStrength
     this.isForceLinkUpdateNeeded = true
   }
@@ -566,6 +590,7 @@ export class Graph {
    */
   public setPointClusters (pointClusters: (number | undefined)[]): void {
     if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointClusters(pointClusters))) return
     this.graph.inputPointClusters = pointClusters
     this.isPointClusterUpdateNeeded = true
   }
@@ -582,6 +607,7 @@ export class Graph {
    */
   public setClusterPositions (clusterPositions: (number | undefined)[]): void {
     if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setClusterPositions(clusterPositions))) return
     this.graph.inputClusterPositions = clusterPositions
     this.isPointClusterUpdateNeeded = true
   }
@@ -598,6 +624,7 @@ export class Graph {
    */
   public setPointClusterStrength (clusterStrength: Float32Array): void {
     if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointClusterStrength(clusterStrength))) return
     this.graph.inputClusterStrength = clusterStrength
     this.isPointClusterUpdateNeeded = true
   }
@@ -636,6 +663,8 @@ export class Graph {
    */
   public render (simulationAlpha?: number): void {
     if (this._isDestroyed) return
+
+    if (this.ensureDevice(() => this.render(simulationAlpha))) return
     this.graph.update()
     const { fitViewOnInit, fitViewDelay, fitViewPadding, fitViewDuration, fitViewByPointsInRect, fitViewByPointIndices, initialZoomLevel } = this.config
     if (!this.graph.pointsNumber && !this.graph.linksNumber) {
@@ -675,7 +704,10 @@ export class Graph {
    * @param canZoomOut Set to `false` to prevent zooming out from the point (`true` by default).
    */
   public zoomToPointByIndex (index: number, duration = 700, scale = defaultScaleToZoom, canZoomOut = true): void {
-    if (this._isDestroyed || !this.device || !this.points || !this.canvasD3Selection) return
+    if (this._isDestroyed) return
+
+    if (this.ensureDevice(() => this.zoomToPointByIndex(index, duration, scale, canZoomOut))) return
+    if (!this.device || !this.points || !this.canvasD3Selection) return
     const { store: { screenSize } } = this
     const positionPixels = readPixels(this.device, this.points.currentPositionFbo as Framebuffer)
     if (index === undefined) return
@@ -718,7 +750,12 @@ export class Graph {
    * @param duration Duration of the zoom in/out transition.
    */
   public setZoomLevel (value: number, duration = 0): void {
-    if (this._isDestroyed || !this.canvasD3Selection) return
+    if (this._isDestroyed) return
+
+    if (this.ensureDevice(() => this.setZoomLevel(value, duration))) return
+
+    if (!this.canvasD3Selection) return
+
     if (duration === 0) {
       this.canvasD3Selection
         .call(this.zoomInstance.behavior.scaleTo, value)
@@ -790,6 +827,9 @@ export class Graph {
    */
   public fitView (duration = 250, padding = 0.1): void {
     if (this._isDestroyed) return
+
+    if (this.ensureDevice(() => this.fitView(duration, padding))) return
+
     this.setZoomTransformByPointPositions(this.getPointPositions(), duration, undefined, padding)
   }
 
@@ -800,6 +840,8 @@ export class Graph {
    */
   public fitViewByPointIndices (indices: number[], duration = 250, padding = 0.1): void {
     if (this._isDestroyed) return
+
+    if (this.ensureDevice(() => this.fitViewByPointIndices(indices, duration, padding))) return
     const positionsArray = this.getPointPositions()
     const positions = new Array(indices.length * 2)
     for (const [i, index] of indices.entries()) {
@@ -816,6 +858,9 @@ export class Graph {
    */
   public fitViewByPointPositions (positions: number[], duration = 250, padding = 0.1): void {
     if (this._isDestroyed) return
+
+    if (this.ensureDevice(() => this.fitViewByPointPositions(positions, duration, padding))) return
+
     this.setZoomTransformByPointPositions(positions, duration, undefined, padding)
   }
 
@@ -883,7 +928,10 @@ export class Graph {
    * The `left` and `right` coordinates should be from 0 to the width of the canvas.
    * The `top` and `bottom` coordinates should be from 0 to the height of the canvas. */
   public selectPointsInRect (selection: [[number, number], [number, number]] | null): void {
-    if (this._isDestroyed || !this.device || !this.points) return
+    if (this._isDestroyed) return
+
+    if (this.ensureDevice(() => this.selectPointsInRect(selection))) return
+    if (!this.device || !this.points) return
     if (selection) {
       const h = this.store.screenSize[1]
       this.store.selectedArea = [[selection[0][0], (h - selection[1][1])], [selection[1][0], (h - selection[0][1])]]
@@ -916,7 +964,10 @@ export class Graph {
    * The coordinates should be from 0 to the width/height of the canvas.
    * Set to null to clear selection. */
   public selectPointsInPolygon (polygonPath: [number, number][] | null): void {
-    if (this._isDestroyed || !this.device || !this.points) return
+    if (this._isDestroyed) return
+
+    if (this.ensureDevice(() => this.selectPointsInPolygon(polygonPath))) return
+    if (!this.device || !this.points) return
     if (polygonPath) {
       if (polygonPath.length < 3) {
         console.warn('Polygon path requires at least 3 points to form a polygon.')
@@ -948,6 +999,7 @@ export class Graph {
    */
   public selectPointByIndex (index: number, selectAdjacentPoints = false): void {
     if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.selectPointByIndex(index, selectAdjacentPoints))) return
     if (selectAdjacentPoints) {
       const adjacentIndices = this.graph.getAdjacentIndices(index) ?? []
       this.selectPointsByIndices([index, ...adjacentIndices])
@@ -959,7 +1011,9 @@ export class Graph {
    * @param indices Array of points indices.
    */
   public selectPointsByIndices (indices?: (number | undefined)[] | null): void {
-    if (this._isDestroyed || !this.points) return
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.selectPointsByIndices(indices))) return
+    if (!this.points) return
     if (!indices) {
       this.store.selectedIndices = null
     } else if (indices.length === 0) {
@@ -975,7 +1029,9 @@ export class Graph {
    * Unselect all points.
    */
   public unselectPoints (): void {
-    if (this._isDestroyed || !this.points) return
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.unselectPoints())) return
+    if (!this.points) return
     this.store.selectedIndices = null
     this.points.updateGreyoutStatus()
   }
@@ -1047,7 +1103,10 @@ export class Graph {
    * @param indices Array of points indices.
    */
   public trackPointPositionsByIndices (indices: number[]): void {
-    if (this._isDestroyed || !this.points) return
+    if (this._isDestroyed) return
+
+    if (this.ensureDevice(() => this.trackPointPositionsByIndices(indices))) return
+    if (!this.points) return
     this.points.trackPointsByIndices(indices)
   }
 
@@ -1122,6 +1181,9 @@ export class Graph {
    */
   public start (alpha = 1): void {
     if (this._isDestroyed) return
+
+    if (this.ensureDevice(() => this.start(alpha))) return
+
     if (!this.graph.pointsNumber) return
 
     // Always set simulation as running when start() is called
@@ -1152,6 +1214,7 @@ export class Graph {
    */
   public pause (): void {
     if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.pause())) return
     this.store.isSimulationRunning = false
     this.config.onSimulationPause?.()
   }
@@ -1162,6 +1225,7 @@ export class Graph {
    */
   public unpause (): void {
     if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.unpause())) return
     this.store.isSimulationRunning = true
     this.config.onSimulationUnpause?.()
   }
@@ -1173,6 +1237,7 @@ export class Graph {
    */
   public restart (): void {
     if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.restart())) return
     this.store.isSimulationRunning = true
     this.config.onSimulationRestart?.()
   }
@@ -1183,6 +1248,9 @@ export class Graph {
    */
   public step (): void {
     if (this._isDestroyed) return
+
+    if (this.ensureDevice(() => this.step())) return
+
     if (!this.config.enableSimulation) return
     if (!this.store.pointsTextureSize) return
 
@@ -1261,7 +1329,10 @@ export class Graph {
    * Updates and recreates the graph visualization based on pending changes.
    */
   public create (): void {
-    if (this._isDestroyed || !this.points || !this.lines) return
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.create())) return
+    if (!this.points) return
+    if (!this.lines) return
     if (this.isPointPositionsUpdateNeeded) this.points.updatePositions()
     if (this.isPointColorUpdateNeeded) this.points.updateColor()
     if (this.isPointSizeUpdateNeeded) this.points.updateSize()
@@ -1322,10 +1393,55 @@ export class Graph {
   }
 
   /**
-   * Updates and recreates the graph visualization based on pending changes.
-   *
-   * @param simulationAlpha - Optional alpha value to set. If not provided, keeps current alpha.
+   * Ensures device is initialized before executing a method.
+   * If device is not ready, queues the method to run after initialization.
+   * @param callback - Function to execute once device is ready
+   * @returns true if device was not ready and operation was queued, false if device is ready
    */
+  private ensureDevice (callback: () => void): boolean {
+    if (!this.device) {
+      this.deviceInitPromise
+        .then(() => {
+          callback()
+        })
+        .catch(error => {
+          console.error('Device initialization failed', error)
+        })
+      return true
+    }
+    return false
+  }
+
+  /**
+   * Internal device creation method
+   * Graph class decides what device to create with sensible defaults
+   */
+  private async createDevice (
+    canvas: HTMLCanvasElement
+  ): Promise<Device> {
+    // Use config.pixelRatio if provided, otherwise use true (window.devicePixelRatio)
+    const useDevicePixels = this.config.pixelRatio !== undefined
+      ? this.config.pixelRatio // Use config value as number multiplier
+      : true // Use window.devicePixelRatio automatically
+
+    return await luma.createDevice({
+      type: 'webgl',
+      adapters: [webgl2Adapter],
+      createCanvasContext: {
+        canvas, // Provide existing canvas
+        useDevicePixels, // Use computed value
+        autoResize: true,
+        width: undefined,
+        height: undefined,
+      },
+    })
+  }
+
+  /**
+  * Updates and recreates the graph visualization based on pending changes.
+  *
+  * @param simulationAlpha - Optional alpha value to set. If not provided, keeps current alpha.
+  */
   private update (simulationAlpha = this.store.alpha): void {
     const { graph } = this
     this.store.pointsTextureSize = Math.ceil(Math.sqrt(graph.pointsNumber ?? 0))
@@ -1364,6 +1480,14 @@ export class Graph {
       (isSimulationRunning && !(this.zoomInstance.isRunning && !this.config.enableSimulationDuringZoom))
 
     if (shouldRunSimulation) {
+      // Clear velocity buffer once per frame before applying forces
+      if (this.points?.velocityFbo && !this.points.velocityFbo.destroyed && this.device) {
+        const velocityClearPass = this.device.beginRenderPass({
+          framebuffer: this.points.velocityFbo,
+          clearColor: [0, 0, 0, 0],
+        })
+        velocityClearPass.end()
+      }
       if (simulationGravity) {
         this.forceGravity?.run()
         this.points?.updatePosition()
@@ -1413,7 +1537,6 @@ export class Graph {
     this.lines.initPrograms()
     this.forceGravity?.initPrograms()
     this.forceManyBody?.initPrograms()
-    // TODO: Migrate remaining forces to luma.gl
     this.forceCenter?.initPrograms()
     this.forceLinkIncoming?.initPrograms()
     this.forceLinkOutgoing?.initPrograms()
@@ -1462,27 +1585,43 @@ export class Graph {
     // When simulation ends, forces stop but rendering continues
     this.runSimulationStep(false)
 
-    // Clear canvas
-    this.reglInstance?.clear({
-      color: this.store.backgroundColor,
-      depth: 1,
-      stencil: 0,
-    })
+    // Create a single render pass for drawing (points, lines, etc.)
+    // Simulation will use separate render passes later
+    if (this.device) {
+      const backgroundColor = this.store.backgroundColor ?? [0, 0, 0, 1]
+      const drawRenderPass = this.device.beginRenderPass({
+        clearColor: backgroundColor,
+        clearDepth: 1,
+        clearStencil: 0,
+      })
 
-    const { config: { renderLinks } } = this
-    if (renderLinks && this.store.linksTextureSize) {
-      this.lines?.draw()
+      const { config: { renderLinks } } = this
+      const shouldDrawLinks =
+        renderLinks !== false &&
+        !!this.store.linksTextureSize &&
+        !!this.graph.linksNumber &&
+        this.graph.linksNumber > 0
+
+      if (shouldDrawLinks) {
+        this.lines?.draw(drawRenderPass)
+      }
+
+      this.points?.draw(drawRenderPass)
+
+      if (this.dragInstance.isActive) {
+        // To prevent the dragged point from suddenly jumping, run the drag function twice
+        this.points?.drag()
+        this.points?.drag()
+        // Update tracked positions after drag, even when simulation is disabled
+        this.points?.trackPoints()
+      }
+
+      drawRenderPass.end()
+      this.device.submit()
     }
 
-    this.points?.draw()
-    if (this.dragInstance.isActive) {
-      // To prevent the dragged point from suddenly jumping, run the drag function twice
-      this.points?.drag()
-      this.points?.drag()
-      // Update tracked positions after drag, even when simulation is disabled
-      this.points?.trackPoints()
-    }
     this.fpsMonitor?.end(now ?? performance.now())
+
     this.currentEvent = undefined
   }
 

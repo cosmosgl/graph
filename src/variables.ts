@@ -47,7 +47,7 @@ export const defaultConfigValues = {
     cluster: 0.1,
   },
   showFPSMonitor: false,
-  pixelRatio: 2,
+  pixelRatio: typeof window !== 'undefined' ? window.devicePixelRatio || 2 : 2,
   scalePointsOnZoom: false,
   scaleLinksOnZoom: false,
   enableZoom: true,
