@@ -580,7 +580,7 @@ export class Points extends CoreModule {
             },
             defaultUniforms: {
               // Order MUST match uniformTypes and shader declaration
-              ratio: config.pixelRatio ?? 1,
+              ratio: config.pixelRatio ?? defaultConfigValues.pixelRatio,
               transformationMatrix: ((): [
                 number, number, number, number,
                 number, number, number, number,
@@ -702,7 +702,7 @@ export class Points extends CoreModule {
               sizeScale: config.pointSizeScale ?? 1,
               spaceSize: store.adjustedSpaceSize ?? 0,
               screenSize: store.screenSize ?? [0, 0],
-              ratio: config.pixelRatio ?? 1,
+              ratio: config.pixelRatio ?? defaultConfigValues.pixelRatio,
               transformationMatrix: store.transformationMatrix4x4,
               selection0: (store.selectedArea?.[0] ?? [0, 0]) as [number, number],
               selection1: (store.selectedArea?.[1] ?? [0, 0]) as [number, number],
@@ -831,7 +831,7 @@ export class Points extends CoreModule {
               sizeScale: config.pointSizeScale ?? 1,
               spaceSize: store.adjustedSpaceSize ?? 0,
               screenSize: store.screenSize ?? [0, 0],
-              ratio: config.pixelRatio ?? 1,
+              ratio: config.pixelRatio ?? defaultConfigValues.pixelRatio,
               transformationMatrix: store.transformationMatrix4x4,
               mousePosition: store.screenMousePosition ?? [0, 0],
               scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
@@ -1426,7 +1426,7 @@ export class Points extends CoreModule {
     // Base uniforms that don't change between layers
     // Convert booleans to floats (1.0 or 0.0) since uniform type is 'f32'
     const baseVertexUniforms = {
-      ratio: config.pixelRatio ?? 1,
+      ratio: config.pixelRatio ?? defaultConfigValues.pixelRatio,
       transformationMatrix: store.transformationMatrix4x4,
       pointsTextureSize: store.pointsTextureSize ?? 0,
       sizeScale: config.pointSizeScale ?? 1,
@@ -1648,7 +1648,7 @@ export class Points extends CoreModule {
         screenSize: this.store.screenSize ?? [0, 0],
         sizeScale: this.config.pointSizeScale ?? 1,
         transformationMatrix: this.store.transformationMatrix4x4,
-        ratio: this.config.pixelRatio ?? 1,
+        ratio: this.config.pixelRatio ?? defaultConfigValues.pixelRatio,
         selection0: (this.store.selectedArea?.[0] ?? [0, 0]) as [number, number],
         selection1: (this.store.selectedArea?.[1] ?? [0, 0]) as [number, number],
         scalePointsOnZoom: (this.config.scalePointsOnZoom ?? true) ? 1 : 0, // Convert boolean to number
@@ -1784,7 +1784,7 @@ export class Points extends CoreModule {
 
     this.findHoveredPointUniformStore.setUniforms({
       findHoveredPointUniforms: {
-        ratio: this.config.pixelRatio ?? 1,
+        ratio: this.config.pixelRatio ?? defaultConfigValues.pixelRatio,
         sizeScale: this.config.pointSizeScale ?? 1,
         pointsTextureSize: this.store.pointsTextureSize ?? 0,
         transformationMatrix: this.store.transformationMatrix4x4,

@@ -1,6 +1,4 @@
 import { Graph } from '@cosmos.gl/graph'
-import { luma } from '@luma.gl/core'
-import { webgl2Adapter } from '@luma.gl/webgl'
 import { moscowMetroCoords } from './moscow-metro-coords'
 import { getPointColors } from './point-colors'
 import './style.css'
@@ -15,7 +13,7 @@ import './style.css'
  * - This causes visual artifacts due to WebGL's floating-point precision limitations
  * - Points cluster in the center and may exhibit rendering glitches
  */
-export const moscowMetroStations = async (): Promise<{graph: Graph; div: HTMLDivElement; destroy?: () => void}> => {
+export const moscowMetroStations = (): {graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
   const div = document.createElement('div')
   div.className = 'app'
 
@@ -29,19 +27,7 @@ export const moscowMetroStations = async (): Promise<{graph: Graph; div: HTMLDiv
 
   let rescalePositions = true
 
-  const device = await luma.createDevice({
-    type: 'webgl',
-    adapters: [webgl2Adapter],
-    createCanvasContext: {
-      container: graphDiv,
-      useDevicePixels: true,
-      autoResize: true,
-      width: undefined,
-      height: undefined,
-    },
-  })
-
-  const graph = new Graph(graphDiv, device, {
+  const graph = new Graph(graphDiv, {
     backgroundColor: '#2d313a',
     scalePointsOnZoom: false,
     rescalePositions,
@@ -74,7 +60,6 @@ export const moscowMetroStations = async (): Promise<{graph: Graph; div: HTMLDiv
 
   const destroy = (): void => {
     graph.destroy()
-    device.destroy()
   }
 
   return { div, graph, destroy }
