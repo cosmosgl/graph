@@ -1,8 +1,6 @@
 import { Graph, PointShape } from '@cosmos.gl/graph'
-import { luma } from '@luma.gl/core'
-import { webgl2Adapter } from '@luma.gl/webgl'
 
-export const allShapes = async (): Promise<{div: HTMLDivElement; graph: Graph; destroy?: () => void }> => {
+export const allShapes = (): {div: HTMLDivElement; graph: Graph; destroy?: () => void } => {
   // Create container div
   const div = document.createElement('div')
   div.style.height = '100vh'
@@ -49,19 +47,7 @@ export const allShapes = async (): Promise<{div: HTMLDivElement; graph: Graph; d
   }
 
   // Create graph with minimal configuration
-  const device = await luma.createDevice({
-    type: 'webgl',
-    adapters: [webgl2Adapter],
-    createCanvasContext: {
-      container: div,
-      useDevicePixels: true,
-      autoResize: true,
-      width: undefined,
-      height: undefined,
-    },
-  })
-
-  const graph = new Graph(div, device, {
+  const graph = new Graph(div, {
     spaceSize,
     pointDefaultSize: spacing / 2,
     enableSimulation: false,
@@ -81,7 +67,6 @@ export const allShapes = async (): Promise<{div: HTMLDivElement; graph: Graph; d
 
   const destroy = (): void => {
     graph.destroy()
-    device.destroy()
   }
 
   return { div, graph, destroy }

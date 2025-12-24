@@ -1,11 +1,9 @@
 import { Graph } from '@cosmos.gl/graph'
-import { luma } from '@luma.gl/core'
-import { webgl2Adapter } from '@luma.gl/webgl'
 import { generateData } from './data-gen'
 import { config } from './config'
 import './style.css'
 
-export const removePoints = async (): Promise<{ graph: Graph; div: HTMLDivElement; destroy?: () => void}> => {
+export const removePoints = (): { graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
   const { pointPositions, links } = generateData()
   const div = document.createElement('div')
   div.className = 'app'
@@ -22,19 +20,7 @@ export const removePoints = async (): Promise<{ graph: Graph; div: HTMLDivElemen
 
   let graphLinks = links
 
-  const device = await luma.createDevice({
-    type: 'webgl',
-    adapters: [webgl2Adapter],
-    createCanvasContext: {
-      container: graphDiv,
-      useDevicePixels: true,
-      autoResize: true,
-      width: undefined,
-      height: undefined,
-    },
-  })
-
-  const graph = new Graph(graphDiv, device, {
+  const graph = new Graph(graphDiv, {
     ...config,
     onPointClick: (i): void => {
       // Filter out the clicked point from positions array
@@ -104,7 +90,6 @@ export const removePoints = async (): Promise<{ graph: Graph; div: HTMLDivElemen
 
   const destroy = (): void => {
     graph.destroy()
-    device.destroy()
   }
 
   return { div, graph, destroy }
