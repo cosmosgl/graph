@@ -521,10 +521,8 @@ export interface GraphConfigInterface {
    */
   showFPSMonitor?: boolean;
   /**
-   * Pixel ratio for the canvas. Controls the resolution of the drawing buffer.
-   * - Higher values use more GPU memory but provide better quality on high-DPI displays
-   * - If not provided, uses `window.devicePixelRatio` or falls back to `2`
-   * Default value: `typeof window !== 'undefined' ? window.devicePixelRatio || 2 : 2`
+   * Pixel ratio for the canvas. Higher values use more GPU memory but provide better quality on high-DPI displays.
+   * Default value: `window.devicePixelRatio || 2`
    */
   pixelRatio?: number;
   /**
