@@ -177,8 +177,7 @@ export class Graph {
         this.setZoomLevel(this.config.initialZoomLevel ?? 1)
 
         const pointSizeRange = (device as WebGLDevice).gl.getParameter(GL.ALIASED_POINT_SIZE_RANGE) as [number, number]
-        const pixelRatio = this.config.pixelRatio ?? (typeof window !== 'undefined' ? window.devicePixelRatio || 2 : 2)
-        this.store.maxPointSize = (pointSizeRange?.[1] ?? MAX_POINT_SIZE) / pixelRatio
+        this.store.maxPointSize = (pointSizeRange?.[1] ?? MAX_POINT_SIZE) / this.config.pixelRatio
 
         this.points = new Points(device, this.config, this.store, this.graph)
         this.lines = new Lines(device, this.config, this.store, this.graph, this.points)
@@ -301,15 +300,11 @@ export class Graph {
     if (prevConfig.pixelRatio !== this.config.pixelRatio) {
       // Update device's canvas context useDevicePixels
       if (this.device?.canvasContext) {
-        const useDevicePixels = this.config.pixelRatio !== undefined
-          ? this.config.pixelRatio // Use config value as number
-          : true // Use window.devicePixelRatio
-        this.device.canvasContext.setProps({ useDevicePixels })
+        this.device.canvasContext.setProps({ useDevicePixels: this.config.pixelRatio })
 
         // Recalculate maxPointSize with new pixelRatio
         const pointSizeRange = (this.device as WebGLDevice).gl.getParameter(GL.ALIASED_POINT_SIZE_RANGE) as [number, number]
-        const pixelRatio = this.config.pixelRatio ?? defaultConfigValues.pixelRatio
-        this.store.maxPointSize = (pointSizeRange?.[1] ?? MAX_POINT_SIZE) / pixelRatio
+        this.store.maxPointSize = (pointSizeRange?.[1] ?? MAX_POINT_SIZE) / this.config.pixelRatio
       }
     }
     if (prevConfig.spaceSize !== this.config.spaceSize ||
@@ -1419,17 +1414,12 @@ export class Graph {
   private async createDevice (
     canvas: HTMLCanvasElement
   ): Promise<Device> {
-    // Use config.pixelRatio if provided, otherwise use true (window.devicePixelRatio)
-    const useDevicePixels = this.config.pixelRatio !== undefined
-      ? this.config.pixelRatio // Use config value as number multiplier
-      : true // Use window.devicePixelRatio automatically
-
     return await luma.createDevice({
       type: 'webgl',
       adapters: [webgl2Adapter],
       createCanvasContext: {
         canvas, // Provide existing canvas
-        useDevicePixels, // Use computed value
+        useDevicePixels: this.config.pixelRatio, // Use config pixelRatio value
         autoResize: true,
         width: undefined,
         height: undefined,

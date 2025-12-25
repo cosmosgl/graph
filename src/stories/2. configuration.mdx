@@ -45,6 +45,7 @@ import { Meta } from "@storybook/blocks";
 | linkVisibilityMinTransparency | The transparency value that the link will have when its length reaches the maximum link distance value from `linkVisibilityDistanceRange`. | `0.25` |
 | useClassicQuadtree | Use the classic [quadtree algorithm](https://en.wikipedia.org/wiki/Barnes%E2%80%93Hut_simulation) for the Many-Body force. This property will be applied only on component initialization and it can't be changed using the `setConfig` method.<br /><br /> ⚠ The algorithm might not work on some GPUs (e.g. Nvidia) and on Windows (unless you disable ANGLE in the browser settings). | `false` |
 | showFPSMonitor | Show WebGL performance monitor | `false` |
+| pixelRatio | Pixel ratio for the canvas. Higher values use more GPU memory but provide better quality on high-DPI displays | `window.devicePixelRatio \|\| 2` |
 | scalePointsOnZoom | Increase/decrease point size when zooming | `false` |
 | initialZoomLevel | Initial zoom level (set once during initialization) | `undefined` |
 | enableZoom | Enables zooming interactions | `true` |
