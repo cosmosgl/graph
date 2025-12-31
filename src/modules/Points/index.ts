@@ -29,7 +29,6 @@ export class Points extends CoreModule {
   public velocityFbo: Framebuffer | undefined
   public selectedFbo: Framebuffer | undefined
   public hoveredFbo: Framebuffer | undefined
-  public greyoutStatusFbo: Framebuffer | undefined
   public scaleX: ((x: number) => number) | undefined
   public scaleY: ((y: number) => number) | undefined
   public shouldSkipRescale: boolean | undefined
@@ -42,14 +41,12 @@ export class Points extends CoreModule {
   // Add texture property for greyout status (public for Lines module access)
   public greyoutStatusTexture: Texture | undefined
   private colorBuffer: Buffer | undefined
-  private sizeFbo: Framebuffer | undefined
   private sizeBuffer: Buffer | undefined
   private shapeBuffer: Buffer | undefined
   private imageIndicesBuffer: Buffer | undefined
   private imageSizesBuffer: Buffer | undefined
   private imageAtlasCoordsTexture: Texture | undefined
   private imageAtlasCoordsTextureSize: number | undefined
-  private trackedIndicesFbo: Framebuffer | undefined
   private trackedPositionsFbo: Framebuffer | undefined
   private sampledPointsFbo: Framebuffer | undefined
   private trackedPositions: Map<number, [number, number]> | undefined
@@ -76,13 +73,10 @@ export class Points extends CoreModule {
   private trackPointsVertexCoordBuffer: Buffer | undefined
   private trackedIndices: number[] | undefined
   private selectedTexture: Texture | undefined
-  private greyoutStatusTexture: Texture | undefined
-  private pinnedStatusTexture: regl.Texture2D | undefined
-  private pinnedStatusFbo: regl.Framebuffer2D | undefined
+  private pinnedStatusTexture: Texture | undefined
   private sizeTexture: Texture | undefined
   private trackedIndicesTexture: Texture | undefined
   private polygonPathTexture: Texture | undefined
-  private polygonPathFbo: Framebuffer | undefined
   private polygonPathLength = 0
   private drawPointIndices: Buffer | undefined
   private hoveredPointIndices: Buffer | undefined
@@ -503,6 +497,7 @@ export class Points extends CoreModule {
             updatePositionUniforms: this.updatePositionUniformStore.getManagedUniformBuffer(device, 'updatePositionUniforms'),
             ...(this.previousPositionTexture && { positionsTexture: this.previousPositionTexture }),
             ...(this.velocityTexture && { velocity: this.velocityTexture }),
+            ...(this.pinnedStatusTexture && { pinnedStatusTexture: this.pinnedStatusTexture }),
           },
         })
       }
@@ -1106,9 +1101,6 @@ export class Points extends CoreModule {
       if (this.greyoutStatusTexture) {
         this.greyoutStatusTexture.destroy()
       }
-      if (this.greyoutStatusFbo) {
-        this.greyoutStatusFbo.destroy()
-      }
       this.greyoutStatusTexture = device.createTexture({
         width: pointsTextureSize,
         height: pointsTextureSize,
@@ -1120,11 +1112,6 @@ export class Points extends CoreModule {
         mipLevel: 0,
         x: 0,
         y: 0,
-      })
-      this.greyoutStatusFbo = device.createFramebuffer({
-        width: pointsTextureSize,
-        height: pointsTextureSize,
-        colorAttachments: [this.greyoutStatusTexture],
       })
     } else {
       this.greyoutStatusTexture.copyImageData({
@@ -1138,7 +1125,7 @@ export class Points extends CoreModule {
   }
 
   public updatePinnedStatus (): void {
-    const { reglInstance, store: { pointsTextureSize }, data } = this
+    const { device, store: { pointsTextureSize }, data } = this
     if (!pointsTextureSize) return
 
     // Pinned status: 0 - not pinned, 1 - pinned
@@ -1152,19 +1139,31 @@ export class Points extends CoreModule {
       }
     }
 
-    if (!this.pinnedStatusTexture) this.pinnedStatusTexture = reglInstance.texture()
-    this.pinnedStatusTexture({
-      data: initialState,
-      width: pointsTextureSize,
-      height: pointsTextureSize,
-      type: 'float',
-    })
-    if (!this.pinnedStatusFbo) this.pinnedStatusFbo = reglInstance.framebuffer()
-    this.pinnedStatusFbo({
-      color: this.pinnedStatusTexture,
-      depth: false,
-      stencil: false,
-    })
+    if (!this.pinnedStatusTexture || this.pinnedStatusTexture.width !== pointsTextureSize || this.pinnedStatusTexture.height !== pointsTextureSize) {
+      if (this.pinnedStatusTexture) {
+        this.pinnedStatusTexture.destroy()
+      }
+      this.pinnedStatusTexture = device.createTexture({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+      })
+      this.pinnedStatusTexture.copyImageData({
+        data: initialState,
+        bytesPerRow: pointsTextureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+    } else {
+      this.pinnedStatusTexture.copyImageData({
+        data: initialState,
+        bytesPerRow: pointsTextureSize,
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+    }
   }
 
   public updateSize (): void {
@@ -1193,9 +1192,6 @@ export class Points extends CoreModule {
       if (this.sizeTexture) {
         this.sizeTexture.destroy()
       }
-      if (this.sizeFbo) {
-        this.sizeFbo.destroy()
-      }
       this.sizeTexture = device.createTexture({
         width: pointsTextureSize,
         height: pointsTextureSize,
@@ -1207,11 +1203,6 @@ export class Points extends CoreModule {
         mipLevel: 0,
         x: 0,
         y: 0,
-      })
-      this.sizeFbo = device.createFramebuffer({
-        width: pointsTextureSize,
-        height: pointsTextureSize,
-        colorAttachments: [this.sizeTexture],
       })
     } else {
       this.sizeTexture.copyImageData({
@@ -1585,6 +1576,7 @@ export class Points extends CoreModule {
     if (!this.updatePositionCommand || !this.updatePositionUniformStore || !this.currentPositionFbo || this.currentPositionFbo.destroyed) return
     if (!this.previousPositionTexture || this.previousPositionTexture.destroyed) return
     if (!this.velocityTexture || this.velocityTexture.destroyed) return
+    if (!this.pinnedStatusTexture || this.pinnedStatusTexture.destroyed) return
 
     this.updatePositionUniformStore.setUniforms({
       updatePositionUniforms: {
@@ -1597,6 +1589,7 @@ export class Points extends CoreModule {
       updatePositionUniforms: this.updatePositionUniformStore.getManagedUniformBuffer(this.device, 'updatePositionUniforms'),
       positionsTexture: this.previousPositionTexture,
       velocity: this.velocityTexture,
+      pinnedStatusTexture: this.pinnedStatusTexture,
     })
 
     const renderPass = this.device.beginRenderPass({
@@ -1706,10 +1699,6 @@ export class Points extends CoreModule {
         this.polygonPathTexture.destroy()
       }
       this.polygonPathTexture = undefined
-      if (this.polygonPathFbo && !this.polygonPathFbo.destroyed) {
-        this.polygonPathFbo.destroy()
-      }
-      this.polygonPathFbo = undefined
       return
     }
 
@@ -1727,9 +1716,6 @@ export class Points extends CoreModule {
     }
 
     if (!this.polygonPathTexture || this.polygonPathTexture.width !== textureSize || this.polygonPathTexture.height !== textureSize) {
-      if (this.polygonPathFbo && !this.polygonPathFbo.destroyed) {
-        this.polygonPathFbo.destroy()
-      }
       if (this.polygonPathTexture && !this.polygonPathTexture.destroyed) {
         this.polygonPathTexture.destroy()
       }
@@ -1744,11 +1730,6 @@ export class Points extends CoreModule {
         mipLevel: 0,
         x: 0,
         y: 0,
-      })
-      this.polygonPathFbo = device.createFramebuffer({
-        width: textureSize,
-        height: textureSize,
-        colorAttachments: [this.polygonPathTexture],
       })
     } else {
       this.polygonPathTexture.copyImageData({
@@ -1830,9 +1811,6 @@ export class Points extends CoreModule {
     }
 
     if (!this.trackedIndicesTexture || this.trackedIndicesTexture.width !== textureSize || this.trackedIndicesTexture.height !== textureSize) {
-      if (this.trackedIndicesFbo && !this.trackedIndicesFbo.destroyed) {
-        this.trackedIndicesFbo.destroy()
-      }
       if (this.trackedIndicesTexture && !this.trackedIndicesTexture.destroyed) {
         this.trackedIndicesTexture.destroy()
       }
@@ -1847,11 +1825,6 @@ export class Points extends CoreModule {
         mipLevel: 0,
         x: 0,
         y: 0,
-      })
-      this.trackedIndicesFbo = device.createFramebuffer({
-        width: textureSize,
-        height: textureSize,
-        colorAttachments: [this.trackedIndicesTexture],
       })
     } else {
       this.trackedIndicesTexture.copyImageData({
@@ -2116,18 +2089,6 @@ export class Points extends CoreModule {
       this.hoveredFbo.destroy()
     }
     this.hoveredFbo = undefined
-    if (this.greyoutStatusFbo && !this.greyoutStatusFbo.destroyed) {
-      this.greyoutStatusFbo.destroy()
-    }
-    this.greyoutStatusFbo = undefined
-    if (this.sizeFbo && !this.sizeFbo.destroyed) {
-      this.sizeFbo.destroy()
-    }
-    this.sizeFbo = undefined
-    if (this.trackedIndicesFbo && !this.trackedIndicesFbo.destroyed) {
-      this.trackedIndicesFbo.destroy()
-    }
-    this.trackedIndicesFbo = undefined
     if (this.trackedPositionsFbo && !this.trackedPositionsFbo.destroyed) {
       this.trackedPositionsFbo.destroy()
     }
@@ -2136,10 +2097,6 @@ export class Points extends CoreModule {
       this.sampledPointsFbo.destroy()
     }
     this.sampledPointsFbo = undefined
-    if (this.polygonPathFbo && !this.polygonPathFbo.destroyed) {
-      this.polygonPathFbo.destroy()
-    }
-    this.polygonPathFbo = undefined
 
     // Destroy Textures
     if (this.currentPositionTexture && !this.currentPositionTexture.destroyed) {
@@ -2182,6 +2139,10 @@ export class Points extends CoreModule {
       this.imageAtlasCoordsTexture.destroy()
     }
     this.imageAtlasCoordsTexture = undefined
+    if (this.pinnedStatusTexture && !this.pinnedStatusTexture.destroyed) {
+      this.pinnedStatusTexture.destroy()
+    }
+    this.pinnedStatusTexture = undefined
 
     // Destroy Buffers
     if (this.colorBuffer && !this.colorBuffer.destroyed) {
