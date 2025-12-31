@@ -179,6 +179,10 @@ export class Graph {
         const pointSizeRange = (device as WebGLDevice).gl.getParameter(GL.ALIASED_POINT_SIZE_RANGE) as [number, number]
         this.store.maxPointSize = (pointSizeRange?.[1] ?? MAX_POINT_SIZE) / this.config.pixelRatio
 
+        // Initialize simulation state based on enableSimulation config
+        // If simulation is disabled, start with isSimulationRunning = false
+        this.store.isSimulationRunning = this.config.enableSimulation
+
         this.points = new Points(device, this.config, this.store, this.graph)
         this.lines = new Lines(device, this.config, this.store, this.graph, this.points)
         if (this.config.enableSimulation) {
@@ -258,7 +262,7 @@ export class Graph {
       (prevConfig.pointSize !== this.config.pointSize)) {
       this.graph.updatePointSize()
       this.points?.updateSize()
-    }    
+    }
     if ((prevConfig.linkDefaultColor !== this.config.linkDefaultColor) ||
       (prevConfig.linkColor !== this.config.linkColor)) {
       this.graph.updateLinkColor()
@@ -642,9 +646,10 @@ export class Graph {
    *   graph.setPinnedPoints(null)
    */
   public setPinnedPoints (pinnedIndices: number[] | null): void {
-    if (this._isDestroyed || !this.points) return
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPinnedPoints(pinnedIndices))) return
     this.graph.inputPinnedPoints = pinnedIndices && pinnedIndices.length > 0 ? pinnedIndices : undefined
-    this.points.updatePinnedStatus()
+    this.points?.updatePinnedStatus()
   }
 
   /**

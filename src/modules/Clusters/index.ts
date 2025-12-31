@@ -12,9 +12,6 @@ export class Clusters extends CoreModule {
   public centermassFbo: Framebuffer | undefined
   public clusterCount: number | undefined
 
-  private clusterFbo: Framebuffer | undefined
-  private clusterPositionsFbo: Framebuffer | undefined
-  private clusterForceCoefficientFbo: Framebuffer | undefined
   private clearCentermassCommand: Model | undefined
   private calculateCentermassCommand: Model | undefined
   private applyForcesCommand: Model | undefined
@@ -98,10 +95,6 @@ export class Clusters extends CoreModule {
 
     // Handle clusterTexture - recreate if size changed, update data if size same
     if (!this.clusterTexture || sizesChanged) {
-      // Destroy framebuffer FIRST (before texture)
-      if (this.clusterFbo && !this.clusterFbo.destroyed) {
-        this.clusterFbo.destroy()
-      }
       // Then destroy texture
       if (this.clusterTexture && !this.clusterTexture.destroyed) {
         this.clusterTexture.destroy()
@@ -120,12 +113,6 @@ export class Clusters extends CoreModule {
         x: 0,
         y: 0,
       })
-      // Create new framebuffer with explicit dimensions
-      this.clusterFbo = device.createFramebuffer({
-        width: pointsTextureSize,
-        height: pointsTextureSize,
-        colorAttachments: [this.clusterTexture],
-      })
     } else {
       // Size hasn't changed, just update the data
       this.clusterTexture.copyImageData({
@@ -139,10 +126,6 @@ export class Clusters extends CoreModule {
 
     // Handle clusterPositionsTexture
     if (!this.clusterPositionsTexture || sizesChanged) {
-      // Destroy framebuffer FIRST
-      if (this.clusterPositionsFbo && !this.clusterPositionsFbo.destroyed) {
-        this.clusterPositionsFbo.destroy()
-      }
       // Then destroy texture
       if (this.clusterPositionsTexture && !this.clusterPositionsTexture.destroyed) {
         this.clusterPositionsTexture.destroy()
@@ -161,12 +144,6 @@ export class Clusters extends CoreModule {
         x: 0,
         y: 0,
       })
-      // Create new framebuffer with explicit dimensions
-      this.clusterPositionsFbo = device.createFramebuffer({
-        width: this.clustersTextureSize,
-        height: this.clustersTextureSize,
-        colorAttachments: [this.clusterPositionsTexture],
-      })
     } else {
       // Update data
       this.clusterPositionsTexture.copyImageData({
@@ -180,10 +157,6 @@ export class Clusters extends CoreModule {
 
     // Handle clusterForceCoefficientTexture
     if (!this.clusterForceCoefficientTexture || sizesChanged) {
-      // Destroy framebuffer FIRST
-      if (this.clusterForceCoefficientFbo && !this.clusterForceCoefficientFbo.destroyed) {
-        this.clusterForceCoefficientFbo.destroy()
-      }
       // Then destroy texture
       if (this.clusterForceCoefficientTexture && !this.clusterForceCoefficientTexture.destroyed) {
         this.clusterForceCoefficientTexture.destroy()
@@ -201,12 +174,6 @@ export class Clusters extends CoreModule {
         mipLevel: 0,
         x: 0,
         y: 0,
-      })
-      // Create new framebuffer with explicit dimensions
-      this.clusterForceCoefficientFbo = device.createFramebuffer({
-        width: pointsTextureSize,
-        height: pointsTextureSize,
-        colorAttachments: [this.clusterForceCoefficientTexture],
       })
     } else {
       // Update data
@@ -529,18 +496,6 @@ export class Clusters extends CoreModule {
       this.centermassFbo.destroy()
     }
     this.centermassFbo = undefined
-    if (this.clusterFbo && !this.clusterFbo.destroyed) {
-      this.clusterFbo.destroy()
-    }
-    this.clusterFbo = undefined
-    if (this.clusterPositionsFbo && !this.clusterPositionsFbo.destroyed) {
-      this.clusterPositionsFbo.destroy()
-    }
-    this.clusterPositionsFbo = undefined
-    if (this.clusterForceCoefficientFbo && !this.clusterForceCoefficientFbo.destroyed) {
-      this.clusterForceCoefficientFbo.destroy()
-    }
-    this.clusterForceCoefficientFbo = undefined
 
     // Destroy Textures
     if (this.clusterTexture && !this.clusterTexture.destroyed) {

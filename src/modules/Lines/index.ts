@@ -337,7 +337,7 @@ export class Lines extends CoreModule {
       drawLineUniforms: this.drawLineUniformStore.getManagedUniformBuffer(this.device, 'drawLineUniforms'),
       drawLineFragmentUniforms: this.drawLineUniformStore.getManagedUniformBuffer(this.device, 'drawLineFragmentUniforms'),
       ...(this.points?.currentPositionTexture && { positionsTexture: this.points.currentPositionTexture }),
-      ...(this.points?.greyoutStatusFbo?.colorAttachments[0] && { pointGreyoutStatus: this.points.greyoutStatusFbo.colorAttachments[0] }),
+      ...(this.points?.greyoutStatusTexture && { pointGreyoutStatus: this.points.greyoutStatusTexture }),
     })
 
     // Update instance count
@@ -615,7 +615,7 @@ export class Lines extends CoreModule {
       drawLineUniforms: this.drawLineUniformStore.getManagedUniformBuffer(this.device, 'drawLineUniforms'),
       drawLineFragmentUniforms: this.drawLineUniformStore.getManagedUniformBuffer(this.device, 'drawLineFragmentUniforms'),
       ...(this.points?.currentPositionTexture && { positionsTexture: this.points.currentPositionTexture }),
-      ...(this.points?.greyoutStatusFbo?.colorAttachments[0] && { pointGreyoutStatus: this.points.greyoutStatusFbo.colorAttachments[0] }),
+      ...(this.points?.greyoutStatusTexture && { pointGreyoutStatus: this.points.greyoutStatusTexture }),
     })
 
     // Update instance count

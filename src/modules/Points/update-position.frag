@@ -31,11 +31,11 @@ void main() {
   // Check if point is pinned
   // pinnedStatusTexture has the same size and layout as positionsTexture
   // Each pixel corresponds to a point: red channel > 0.5 means the point is pinned
-  vec4 pinnedStatus = texture2D(pinnedStatusTexture, textureCoords);
+  vec4 pinnedStatus = texture(pinnedStatusTexture, textureCoords);
   
   // If pinned, don't update position
   if (pinnedStatus.r > 0.5) {
-    gl_FragColor = pointPosition;
+    fragColor = pointPosition;
     return;
   }
 
