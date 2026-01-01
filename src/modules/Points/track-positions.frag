@@ -1,18 +1,30 @@
+#version 300 es
 #ifdef GL_ES
 precision highp float;
 #endif
 
 uniform sampler2D positionsTexture;
 uniform sampler2D trackedIndices;
-uniform float pointsTextureSize;
 
-varying vec2 textureCoords;
+#ifdef USE_UNIFORM_BUFFERS
+layout(std140) uniform trackPointsUniforms {
+  float pointsTextureSize;
+} trackPoints;
+
+#define pointsTextureSize trackPoints.pointsTextureSize
+#else
+uniform float pointsTextureSize;
+#endif
+
+in vec2 textureCoords;
+
+out vec4 fragColor;
 
 void main() {
-  vec4 trackedPointIndices = texture2D(trackedIndices, textureCoords);
+  vec4 trackedPointIndices = texture(trackedIndices, textureCoords);
   if (trackedPointIndices.r < 0.0) discard;
-  vec4 pointPosition = texture2D(positionsTexture, (trackedPointIndices.rg + 0.5) / pointsTextureSize);
+  vec4 pointPosition = texture(positionsTexture, (trackedPointIndices.rg + 0.5) / pointsTextureSize);
 
-  gl_FragColor = vec4(pointPosition.rg, 1.0, 1.0);
+  fragColor = vec4(pointPosition.rg, 1.0, 1.0);
 }
 

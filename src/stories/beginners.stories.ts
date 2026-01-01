@@ -74,13 +74,26 @@ export const PointLabels: Story = {
   ],
   async beforeEach (d): Promise<() => void> {
     return (): void => {
+      d.args.destroy?.()
       d.args.graph?.destroy()
     }
   },
-  render: (args, { loaded: { data } }) => {
-    const story = pointLabels(data.performances)
-    args.graph = story.graph
-    return story.div
+  render: (args, { loaded: { data } }): HTMLDivElement => {
+    const div = document.createElement('div')
+    div.style.height = '100vh'
+    div.style.width = '100%'
+
+    try {
+      const story = pointLabels(data.performances)
+      args.graph = story.graph
+      args.destroy = story.destroy
+      div.appendChild(story.div)
+    } catch (error) {
+      console.error('Failed to load PointLabels story:', error)
+      div.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #ff0000;">Failed to load story</div>'
+    }
+
+    return div
   },
   parameters: {
     sourceCode: [

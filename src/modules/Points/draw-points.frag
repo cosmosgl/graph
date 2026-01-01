@@ -1,23 +1,39 @@
-// Fragment shader for rendering points with various shapes and smooth edges
-
+#version 300 es
 #ifdef GL_ES
 precision highp float;
 #endif
 
+uniform sampler2D imageAtlasTexture;
+
+#ifdef USE_UNIFORM_BUFFERS
+layout(std140) uniform drawFragmentUniforms {
+  float greyoutOpacity;
+  float pointOpacity;
+  float isDarkenGreyout;
+  vec4 backgroundColor;
+} drawFragment;
+
+#define greyoutOpacity drawFragment.greyoutOpacity
+#define pointOpacity drawFragment.pointOpacity
+#define isDarkenGreyout drawFragment.isDarkenGreyout
+#define backgroundColor drawFragment.backgroundColor
+#else
 uniform float greyoutOpacity;
 uniform float pointOpacity;
-uniform sampler2D imageAtlasTexture;
-uniform bool isDarkenGreyout;
+uniform float isDarkenGreyout;
 uniform vec4 backgroundColor;
+#endif
 
 
-varying float pointShape;
-varying float isGreyedOut;
-varying vec4 shapeColor;
-varying vec4 imageAtlasUV;
-varying float shapeSize;
-varying float imageSizeVarying;
-varying float overallSize;
+in float pointShape;
+in float isGreyedOut;
+in vec4 shapeColor;
+in vec4 imageAtlasUV;
+in float shapeSize;
+in float imageSizeVarying;
+in float overallSize;
+
+out vec4 fragColor;
 
 // Smoothing controls the smoothness of the point's edge
 const float smoothing = 0.9;
@@ -39,14 +55,14 @@ float circleDistance(vec2 p) {
 }
 
 // Function to apply greyout logic to image colors
-vec4 applyGreyoutToImage(vec4 imageColor) {
+vec4 applyGreyoutToImage(vec4 imageColor, float isGreyedOutValue) {
     vec3 finalColor = imageColor.rgb;
     float finalAlpha = imageColor.a;
     
-    if (isGreyedOut > 0.0) {
+    if (isGreyedOutValue > 0.0) {
         float blendFactor = 0.65; // Controls how much to modify (0.0 = original, 1.0 = target color)
         
-        if (isDarkenGreyout) {
+        if (isDarkenGreyout > 0.0) {
             finalColor = mix(finalColor, vec3(0.2), blendFactor);
         } else {
             finalColor = mix(finalColor, max(backgroundColor.rgb, vec3(0.8)), blendFactor);
@@ -216,15 +232,15 @@ void main() {
             } else {
                 // Sample from texture atlas
                 vec2 atlasUV = mix(imageAtlasUV.xy, imageAtlasUV.zw, (imageCoord + 1.0) * 0.5);
-                vec4 imageColor = texture2D(imageAtlasTexture, atlasUV);
-                finalImageColor = applyGreyoutToImage(imageColor);
+                vec4 imageColor = texture(imageAtlasTexture, atlasUV);
+                finalImageColor = applyGreyoutToImage(imageColor, isGreyedOut);
             }
         } else {
             // Image is same size or larger than overall size, no scaling needed
             // Sample from texture atlas
             vec2 atlasUV = mix(imageAtlasUV.xy, imageAtlasUV.zw, (imageCoord + 1.0) * 0.5);
-            vec4 imageColor = texture2D(imageAtlasTexture, atlasUV);
-            finalImageColor = applyGreyoutToImage(imageColor);
+            vec4 imageColor = texture(imageAtlasTexture, atlasUV);
+            finalImageColor = applyGreyoutToImage(imageColor, isGreyedOut);
         }
     }
 
@@ -236,7 +252,7 @@ void main() {
     }
 
     // Blend image color above point color
-    gl_FragColor = vec4(
+    fragColor = vec4(
         mix(finalShapeColor.rgb, finalImageColor.rgb, finalImageColor.a),
         finalPointAlpha
     );

@@ -3,7 +3,7 @@ import { generateData } from './data-gen'
 import { config } from './config'
 import './style.css'
 
-export const removePoints = (): { graph: Graph; div: HTMLDivElement} => {
+export const removePoints = (): { graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
   const { pointPositions, links } = generateData()
   const div = document.createElement('div')
   div.className = 'app'
@@ -88,5 +88,9 @@ export const removePoints = (): { graph: Graph; div: HTMLDivElement} => {
 
   pauseButton.addEventListener('click', togglePause)
 
-  return { div, graph }
+  const destroy = (): void => {
+    graph.destroy()
+  }
+
+  return { div, graph, destroy }
 }

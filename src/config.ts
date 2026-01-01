@@ -521,8 +521,8 @@ export interface GraphConfigInterface {
    */
   showFPSMonitor?: boolean;
   /**
-   * Canvas pixel ratio.
-   * Default value: `2`
+   * Pixel ratio for the canvas. Higher values use more GPU memory but provide better quality on high-DPI displays.
+   * Default value: `window.devicePixelRatio || 2`
    */
   pixelRatio?: number;
   /**

@@ -1,15 +1,33 @@
+#version 300 es
 #ifdef GL_ES
 precision highp float;
 #endif
 
 uniform sampler2D positionsTexture;
 uniform sampler2D polygonPathTexture; // Texture containing polygon path points
+
+#ifdef USE_UNIFORM_BUFFERS
+layout(std140) uniform findPointsOnPolygonSelectionUniforms {
+  float spaceSize;
+  vec2 screenSize;
+  mat4 transformationMatrix;
+  float polygonPathLength;
+} findPointsOnPolygonSelection;
+
+#define spaceSize findPointsOnPolygonSelection.spaceSize
+#define screenSize findPointsOnPolygonSelection.screenSize
+#define transformationMatrix findPointsOnPolygonSelection.transformationMatrix
+#define polygonPathLength int(findPointsOnPolygonSelection.polygonPathLength)
+#else
 uniform int polygonPathLength;
 uniform float spaceSize;
 uniform vec2 screenSize;
 uniform mat3 transformationMatrix;
+#endif
 
-varying vec2 textureCoords;
+in vec2 textureCoords;
+
+out vec4 fragColor;
 
 // Get a point from the polygon path texture at a specific index
 vec2 getPolygonPoint(sampler2D pathTexture, int index, int pathLength) {
@@ -21,7 +39,7 @@ vec2 getPolygonPoint(sampler2D pathTexture, int index, int pathLength) {
   int y = index / textureSize;
   
   vec2 texCoord = (vec2(float(x), float(y)) + 0.5) / float(textureSize);
-  vec4 pathData = texture2D(pathTexture, texCoord);
+  vec4 pathData = texture(pathTexture, texCoord);
   
   return pathData.xy;
 }
@@ -48,18 +66,24 @@ bool pointInPolygon(vec2 point, sampler2D pathTexture, int pathLength) {
 }
 
 void main() {
-  vec4 pointPosition = texture2D(positionsTexture, textureCoords);
+  vec4 pointPosition = texture(positionsTexture, textureCoords);
   vec2 p = 2.0 * pointPosition.rg / spaceSize - 1.0;
   p *= spaceSize / screenSize;
+  #ifdef USE_UNIFORM_BUFFERS
+  // Convert mat4 to mat3 for vec3 multiplication
+  mat3 transformMat3 = mat3(transformationMatrix);
+  vec3 final = transformMat3 * vec3(p, 1);
+  #else
   vec3 final = transformationMatrix * vec3(p, 1);
+  #endif
 
   // Convert to screen coordinates for polygon check
   vec2 screenPos = (final.xy + 1.0) * screenSize / 2.0;
   
-  gl_FragColor = vec4(0.0, 0.0, pointPosition.rg);
+  fragColor = vec4(0.0, 0.0, pointPosition.r, pointPosition.g);
   
   // Check if point center is inside the polygon
   if (pointInPolygon(screenPos, polygonPathTexture, polygonPathLength)) {
-    gl_FragColor.r = 1.0;
+    fragColor.r = 1.0;
   }
 } 
