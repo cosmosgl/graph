@@ -2023,28 +2023,12 @@ export class Points extends CoreModule {
     return positions
   }
 
+  /**
+   * Destruction order matters
+   * Models -> Framebuffers -> Textures -> UniformStores -> Buffers
+   * */
   public destroy (): void {
-    // Destroy UniformStore instances
-    this.updatePositionUniformStore?.destroy()
-    this.updatePositionUniformStore = undefined
-    this.dragPointUniformStore?.destroy()
-    this.dragPointUniformStore = undefined
-    this.drawUniformStore?.destroy()
-    this.drawUniformStore = undefined
-    this.findPointsOnAreaSelectionUniformStore?.destroy()
-    this.findPointsOnAreaSelectionUniformStore = undefined
-    this.findPointsOnPolygonSelectionUniformStore?.destroy()
-    this.findPointsOnPolygonSelectionUniformStore = undefined
-    this.findHoveredPointUniformStore?.destroy()
-    this.findHoveredPointUniformStore = undefined
-    this.fillSampledPointsUniformStore?.destroy()
-    this.fillSampledPointsUniformStore = undefined
-    this.drawHighlightedUniformStore?.destroy()
-    this.drawHighlightedUniformStore = undefined
-    this.trackPointsUniformStore?.destroy()
-    this.trackPointsUniformStore = undefined
-
-    // Destroy Models
+    // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
     this.drawCommand?.destroy()
     this.drawCommand = undefined
     this.drawHighlightedCommand?.destroy()
@@ -2068,7 +2052,7 @@ export class Points extends CoreModule {
     this.trackPointsCommand?.destroy()
     this.trackPointsCommand = undefined
 
-    // Destroy Framebuffers (destroy before textures they reference)
+    // 2. Destroy Framebuffers (before textures they reference)
     if (this.currentPositionFbo && !this.currentPositionFbo.destroyed) {
       this.currentPositionFbo.destroy()
     }
@@ -2098,7 +2082,7 @@ export class Points extends CoreModule {
     }
     this.sampledPointsFbo = undefined
 
-    // Destroy Textures
+    // 3. Destroy Textures
     if (this.currentPositionTexture && !this.currentPositionTexture.destroyed) {
       this.currentPositionTexture.destroy()
     }
@@ -2144,7 +2128,27 @@ export class Points extends CoreModule {
     }
     this.pinnedStatusTexture = undefined
 
-    // Destroy Buffers
+    // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
+    this.updatePositionUniformStore?.destroy()
+    this.updatePositionUniformStore = undefined
+    this.dragPointUniformStore?.destroy()
+    this.dragPointUniformStore = undefined
+    this.drawUniformStore?.destroy()
+    this.drawUniformStore = undefined
+    this.findPointsOnAreaSelectionUniformStore?.destroy()
+    this.findPointsOnAreaSelectionUniformStore = undefined
+    this.findPointsOnPolygonSelectionUniformStore?.destroy()
+    this.findPointsOnPolygonSelectionUniformStore = undefined
+    this.findHoveredPointUniformStore?.destroy()
+    this.findHoveredPointUniformStore = undefined
+    this.fillSampledPointsUniformStore?.destroy()
+    this.fillSampledPointsUniformStore = undefined
+    this.drawHighlightedUniformStore?.destroy()
+    this.drawHighlightedUniformStore = undefined
+    this.trackPointsUniformStore?.destroy()
+    this.trackPointsUniformStore = undefined
+
+    // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
     if (this.colorBuffer && !this.colorBuffer.destroyed) {
       this.colorBuffer.destroy()
     }
@@ -2177,8 +2181,6 @@ export class Points extends CoreModule {
       this.sampledPointIndices.destroy()
     }
     this.sampledPointIndices = undefined
-
-    // Destroy attribute buffers (Model doesn't destroy them automatically)
     if (this.updatePositionVertexCoordBuffer && !this.updatePositionVertexCoordBuffer.destroyed) {
       this.updatePositionVertexCoordBuffer.destroy()
     }

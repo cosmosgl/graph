@@ -658,4 +658,76 @@ export class Lines extends CoreModule {
       hoverPass.end()
     }
   }
+
+  /**
+   * Destruction order matters
+   * Models -> Framebuffers -> Textures -> UniformStores -> Buffers
+   */
+  public destroy (): void {
+    // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
+    this.drawCurveCommand?.destroy()
+    this.drawCurveCommand = undefined
+    this.hoveredLineIndexCommand?.destroy()
+    this.hoveredLineIndexCommand = undefined
+
+    // 2. Destroy Framebuffers (before textures they reference)
+    if (this.linkIndexFbo && !this.linkIndexFbo.destroyed) {
+      this.linkIndexFbo.destroy()
+    }
+    this.linkIndexFbo = undefined
+    if (this.hoveredLineIndexFbo && !this.hoveredLineIndexFbo.destroyed) {
+      this.hoveredLineIndexFbo.destroy()
+    }
+    this.hoveredLineIndexFbo = undefined
+
+    // 3. Destroy Textures
+    if (this.linkIndexTexture && !this.linkIndexTexture.destroyed) {
+      this.linkIndexTexture.destroy()
+    }
+    this.linkIndexTexture = undefined
+    if (this.hoveredLineIndexTexture && !this.hoveredLineIndexTexture.destroyed) {
+      this.hoveredLineIndexTexture.destroy()
+    }
+    this.hoveredLineIndexTexture = undefined
+
+    // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
+    this.drawLineUniformStore?.destroy()
+    this.drawLineUniformStore = undefined
+    this.hoveredLineIndexUniformStore?.destroy()
+    this.hoveredLineIndexUniformStore = undefined
+
+    // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
+    if (this.pointABuffer && !this.pointABuffer.destroyed) {
+      this.pointABuffer.destroy()
+    }
+    this.pointABuffer = undefined
+    if (this.pointBBuffer && !this.pointBBuffer.destroyed) {
+      this.pointBBuffer.destroy()
+    }
+    this.pointBBuffer = undefined
+    if (this.colorBuffer && !this.colorBuffer.destroyed) {
+      this.colorBuffer.destroy()
+    }
+    this.colorBuffer = undefined
+    if (this.widthBuffer && !this.widthBuffer.destroyed) {
+      this.widthBuffer.destroy()
+    }
+    this.widthBuffer = undefined
+    if (this.arrowBuffer && !this.arrowBuffer.destroyed) {
+      this.arrowBuffer.destroy()
+    }
+    this.arrowBuffer = undefined
+    if (this.curveLineBuffer && !this.curveLineBuffer.destroyed) {
+      this.curveLineBuffer.destroy()
+    }
+    this.curveLineBuffer = undefined
+    if (this.linkIndexBuffer && !this.linkIndexBuffer.destroyed) {
+      this.linkIndexBuffer.destroy()
+    }
+    this.linkIndexBuffer = undefined
+    if (this.quadBuffer && !this.quadBuffer.destroyed) {
+      this.quadBuffer.destroy()
+    }
+    this.quadBuffer = undefined
+  }
 }

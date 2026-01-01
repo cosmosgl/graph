@@ -251,12 +251,12 @@ export class ForceCenter extends CoreModule {
     if (!renderPass) pass.end()
   }
 
+  /**
+   * Destruction order matters
+   * Models -> Framebuffers -> Textures -> UniformStores -> Buffers
+   */
   public destroy (): void {
-    this.calculateUniformStore?.destroy()
-    this.calculateUniformStore = undefined
-    this.forceUniformStore?.destroy()
-    this.forceUniformStore = undefined
-
+    // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
     this.clearCentermassCommand?.destroy()
     this.clearCentermassCommand = undefined
     this.calculateCentermassCommand?.destroy()
@@ -264,20 +264,37 @@ export class ForceCenter extends CoreModule {
     this.runCommand?.destroy()
     this.runCommand = undefined
 
-    if (this.clearVertexCoordBuffer && !this.clearVertexCoordBuffer.destroyed) this.clearVertexCoordBuffer.destroy()
-    this.clearVertexCoordBuffer = undefined
+    // 2. Destroy Framebuffers (before textures they reference)
+    if (this.centermassFbo && !this.centermassFbo.destroyed) {
+      this.centermassFbo.destroy()
+    }
+    this.centermassFbo = undefined
 
-    if (this.forceVertexCoordBuffer && !this.forceVertexCoordBuffer.destroyed) this.forceVertexCoordBuffer.destroy()
-    this.forceVertexCoordBuffer = undefined
-
-    this.pointIndices?.destroy()
-    this.pointIndices = undefined
-
-    if (this.centermassTexture && !this.centermassTexture.destroyed) this.centermassTexture.destroy()
+    // 3. Destroy Textures
+    if (this.centermassTexture && !this.centermassTexture.destroyed) {
+      this.centermassTexture.destroy()
+    }
     this.centermassTexture = undefined
 
-    if (this.centermassFbo && !this.centermassFbo.destroyed) this.centermassFbo.destroy()
-    this.centermassFbo = undefined
+    // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
+    this.calculateUniformStore?.destroy()
+    this.calculateUniformStore = undefined
+    this.forceUniformStore?.destroy()
+    this.forceUniformStore = undefined
+
+    // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
+    if (this.pointIndices && !this.pointIndices.destroyed) {
+      this.pointIndices.destroy()
+    }
+    this.pointIndices = undefined
+    if (this.clearVertexCoordBuffer && !this.clearVertexCoordBuffer.destroyed) {
+      this.clearVertexCoordBuffer.destroy()
+    }
+    this.clearVertexCoordBuffer = undefined
+    if (this.forceVertexCoordBuffer && !this.forceVertexCoordBuffer.destroyed) {
+      this.forceVertexCoordBuffer.destroy()
+    }
+    this.forceVertexCoordBuffer = undefined
 
     this.previousPointsTextureSize = undefined
   }
