@@ -476,14 +476,12 @@ export class Clusters extends CoreModule {
     }
   }
 
+  /**
+   * Destruction order matters
+   * Models -> Framebuffers -> Textures -> UniformStores -> Buffers
+   */
   public destroy (): void {
-    // Destroy UniformStore
-    this.calculateCentermassUniformStore?.destroy()
-    this.calculateCentermassUniformStore = undefined
-    this.applyForcesUniformStore?.destroy()
-    this.applyForcesUniformStore = undefined
-
-    // Destroy Models
+    // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
     this.clearCentermassCommand?.destroy()
     this.clearCentermassCommand = undefined
     this.calculateCentermassCommand?.destroy()
@@ -491,13 +489,13 @@ export class Clusters extends CoreModule {
     this.applyForcesCommand?.destroy()
     this.applyForcesCommand = undefined
 
-    // Destroy Framebuffers (destroy before textures they reference)
+    // 2. Destroy Framebuffers (before textures they reference)
     if (this.centermassFbo && !this.centermassFbo.destroyed) {
       this.centermassFbo.destroy()
     }
     this.centermassFbo = undefined
 
-    // Destroy Textures
+    // 3. Destroy Textures
     if (this.clusterTexture && !this.clusterTexture.destroyed) {
       this.clusterTexture.destroy()
     }
@@ -515,12 +513,17 @@ export class Clusters extends CoreModule {
     }
     this.centermassTexture = undefined
 
-    // Destroy Buffers
+    // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
+    this.calculateCentermassUniformStore?.destroy()
+    this.calculateCentermassUniformStore = undefined
+    this.applyForcesUniformStore?.destroy()
+    this.applyForcesUniformStore = undefined
+
+    // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
     if (this.pointIndices && !this.pointIndices.destroyed) {
       this.pointIndices.destroy()
     }
     this.pointIndices = undefined
-    // Destroy attribute buffers (Model doesn't destroy them automatically)
     if (this.clearCentermassVertexCoordBuffer && !this.clearCentermassVertexCoordBuffer.destroyed) {
       this.clearCentermassVertexCoordBuffer.destroy()
     }

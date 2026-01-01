@@ -1298,6 +1298,18 @@ export class Graph {
     }
 
     this.fpsMonitor?.destroy()
+
+    // Destroy all module resources before destroying the device
+    this.points?.destroy()
+    this.lines?.destroy()
+    this.clusters?.destroy()
+    this.forceGravity?.destroy()
+    this.forceCenter?.destroy()
+    this.forceManyBody?.destroy()
+    this.forceLinkIncoming?.destroy()
+    this.forceLinkOutgoing?.destroy()
+    this.forceMouse?.destroy()
+
     if (this.device) {
       // Clears the canvas after particle system is destroyed
       const clearPass = this.device.beginRenderPass({

@@ -89,14 +89,29 @@ export class ForceMouse extends CoreModule {
     if (!renderPass) pass.end()
   }
 
+  /**
+   * Destruction order matters
+   * Models -> Framebuffers -> Textures -> UniformStores -> Buffers
+   */
   public destroy (): void {
-    this.uniformStore?.destroy()
-    this.uniformStore = undefined
-
+    // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
     this.runCommand?.destroy()
     this.runCommand = undefined
 
-    if (this.vertexCoordBuffer && !this.vertexCoordBuffer.destroyed) this.vertexCoordBuffer.destroy()
+    // 2. Destroy Framebuffers (before textures they reference)
+    // ForceMouse has no framebuffers
+
+    // 3. Destroy Textures
+    // ForceMouse has no textures
+
+    // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
+    this.uniformStore?.destroy()
+    this.uniformStore = undefined
+
+    // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
+    if (this.vertexCoordBuffer && !this.vertexCoordBuffer.destroyed) {
+      this.vertexCoordBuffer.destroy()
+    }
     this.vertexCoordBuffer = undefined
   }
 }

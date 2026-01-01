@@ -372,14 +372,12 @@ export class ForceManyBody extends CoreModule {
     this.drawForces(renderPass)
   }
 
+  /**
+   * Destruction order matters
+   * Models -> Framebuffers -> Textures -> UniformStores -> Buffers
+   */
   public destroy (): void {
-    this.calculateLevelsUniformStore?.destroy()
-    this.calculateLevelsUniformStore = undefined
-    this.forceUniformStore?.destroy()
-    this.forceUniformStore = undefined
-    this.forceCenterUniformStore?.destroy()
-    this.forceCenterUniformStore = undefined
-
+    // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
     this.clearLevelsCommand?.destroy()
     this.clearLevelsCommand = undefined
     this.calculateLevelsCommand?.destroy()
@@ -389,25 +387,43 @@ export class ForceManyBody extends CoreModule {
     this.forceFromItsOwnCentermassCommand?.destroy()
     this.forceFromItsOwnCentermassCommand = undefined
 
-    this.pointIndices?.destroy()
-    this.pointIndices = undefined
+    // 2. Destroy Framebuffers (before textures they reference)
+    for (const target of this.levelTargets.values()) {
+      if (target.fbo && !target.fbo.destroyed) {
+        target.fbo.destroy()
+      }
+    }
 
+    // 3. Destroy Textures
     if (this.randomValuesTexture && !this.randomValuesTexture.destroyed) {
       this.randomValuesTexture.destroy()
     }
     this.randomValuesTexture = undefined
 
     for (const target of this.levelTargets.values()) {
-      if (!target.texture.destroyed) target.texture.destroy()
-      if (!target.fbo.destroyed) target.fbo.destroy()
+      if (target.texture && !target.texture.destroyed) {
+        target.texture.destroy()
+      }
     }
     this.levelTargets.clear()
 
+    // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
+    this.calculateLevelsUniformStore?.destroy()
+    this.calculateLevelsUniformStore = undefined
+    this.forceUniformStore?.destroy()
+    this.forceUniformStore = undefined
+    this.forceCenterUniformStore?.destroy()
+    this.forceCenterUniformStore = undefined
+
+    // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
+    if (this.pointIndices && !this.pointIndices.destroyed) {
+      this.pointIndices.destroy()
+    }
+    this.pointIndices = undefined
     if (this.clearLevelsVertexCoordBuffer && !this.clearLevelsVertexCoordBuffer.destroyed) {
       this.clearLevelsVertexCoordBuffer.destroy()
     }
     this.clearLevelsVertexCoordBuffer = undefined
-
     if (this.forceVertexCoordBuffer && !this.forceVertexCoordBuffer.destroyed) {
       this.forceVertexCoordBuffer.destroy()
     }

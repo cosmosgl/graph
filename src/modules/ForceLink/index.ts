@@ -268,26 +268,44 @@ export class ForceLink extends CoreModule {
     if (!renderPass) pass.end()
   }
 
+  /**
+   * Destruction order matters
+   * Models -> Framebuffers -> Textures -> UniformStores -> Buffers
+   */
   public destroy (): void {
-    this.uniformStore?.destroy()
-    this.uniformStore = undefined
-
+    // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
     this.runCommand?.destroy()
     this.runCommand = undefined
 
-    if (this.vertexCoordBuffer && !this.vertexCoordBuffer.destroyed) this.vertexCoordBuffer.destroy()
-    this.vertexCoordBuffer = undefined
+    // 2. Destroy Framebuffers (before textures they reference)
+    // ForceLink has no framebuffers
 
-    if (this.linkFirstIndicesAndAmountTexture && !this.linkFirstIndicesAndAmountTexture.destroyed) this.linkFirstIndicesAndAmountTexture.destroy()
+    // 3. Destroy Textures
+    if (this.linkFirstIndicesAndAmountTexture && !this.linkFirstIndicesAndAmountTexture.destroyed) {
+      this.linkFirstIndicesAndAmountTexture.destroy()
+    }
     this.linkFirstIndicesAndAmountTexture = undefined
-
-    if (this.indicesTexture && !this.indicesTexture.destroyed) this.indicesTexture.destroy()
+    if (this.indicesTexture && !this.indicesTexture.destroyed) {
+      this.indicesTexture.destroy()
+    }
     this.indicesTexture = undefined
-
-    if (this.biasAndStrengthTexture && !this.biasAndStrengthTexture.destroyed) this.biasAndStrengthTexture.destroy()
+    if (this.biasAndStrengthTexture && !this.biasAndStrengthTexture.destroyed) {
+      this.biasAndStrengthTexture.destroy()
+    }
     this.biasAndStrengthTexture = undefined
-
-    if (this.randomDistanceTexture && !this.randomDistanceTexture.destroyed) this.randomDistanceTexture.destroy()
+    if (this.randomDistanceTexture && !this.randomDistanceTexture.destroyed) {
+      this.randomDistanceTexture.destroy()
+    }
     this.randomDistanceTexture = undefined
+
+    // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
+    this.uniformStore?.destroy()
+    this.uniformStore = undefined
+
+    // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
+    if (this.vertexCoordBuffer && !this.vertexCoordBuffer.destroyed) {
+      this.vertexCoordBuffer.destroy()
+    }
+    this.vertexCoordBuffer = undefined
   }
 }
