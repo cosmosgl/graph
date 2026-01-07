@@ -35,6 +35,7 @@
   "homepage": "https://cosmosgl.github.io/graph",
   "author": "cosmos.gl",
   "devDependencies": {
+    "@fastify/pre-commit": "^2.2.1",
     "@interacta/css-labels": "^0.1.2",
     "@jls-digital/storybook-addon-code": "^1.0.4",
     "@rollup/plugin-alias": "^3.1.9",
@@ -70,7 +71,6 @@
     "eslint-plugin-storybook": "^0.11.1",
     "eslint-plugin-unicorn": "^43.0.1",
     "lint-staged": "^13.0.3",
-    "pre-commit": "^1.2.2",
     "remark-gfm": "^4.0.0",
     "rollup": "^2.76.0",
     "rollup-plugin-glslify": "^1.3.0",
