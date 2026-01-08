@@ -75,7 +75,6 @@ export const PointLabels: Story = {
   async beforeEach (d): Promise<() => void> {
     return (): void => {
       d.args.destroy?.()
-      d.args.graph?.destroy()
     }
   },
   render: (args, { loaded: { data } }): HTMLDivElement => {

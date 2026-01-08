@@ -18,8 +18,6 @@ uniform vec2 mousePosition;
 uniform vec2 screenSize;
 #endif
 
-in vec2 vTexCoord;
-
 out vec4 fragColor;
 
 void main() {

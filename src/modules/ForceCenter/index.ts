@@ -50,6 +50,8 @@ export class ForceCenter extends CoreModule {
     }
     this.centermassTexture.copyImageData({
       data: new Float32Array(4).fill(0),
+      // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+      // (should be bytes). Correct value would be 1 * 16.
       bytesPerRow: 1,
       mipLevel: 0,
       x: 0,

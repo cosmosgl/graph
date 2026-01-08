@@ -260,6 +260,8 @@ export class Points extends CoreModule {
       })
       this.currentPositionTexture.copyImageData({
         data: initialState,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be pointsTextureSize * 16.
         bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
@@ -273,6 +275,8 @@ export class Points extends CoreModule {
     } else {
       this.currentPositionTexture.copyImageData({
         data: initialState,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be pointsTextureSize * 16.
         bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
@@ -297,6 +301,8 @@ export class Points extends CoreModule {
       })
       this.previousPositionTexture.copyImageData({
         data: initialState,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be pointsTextureSize * 16.
         bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
@@ -310,6 +316,8 @@ export class Points extends CoreModule {
     } else {
       this.previousPositionTexture.copyImageData({
         data: initialState,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be pointsTextureSize * 16.
         bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
@@ -334,6 +342,8 @@ export class Points extends CoreModule {
         })
         this.velocityTexture.copyImageData({
           data: velocityData,
+          // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+          // (should be bytes). Correct value would be pointsTextureSize * 16.
           bytesPerRow: pointsTextureSize,
           mipLevel: 0,
           x: 0,
@@ -347,6 +357,8 @@ export class Points extends CoreModule {
       } else {
         this.velocityTexture.copyImageData({
           data: velocityData,
+          // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+          // (should be bytes). Correct value would be pointsTextureSize * 16.
           bytesPerRow: pointsTextureSize,
           mipLevel: 0,
           x: 0,
@@ -370,6 +382,8 @@ export class Points extends CoreModule {
       })
       this.selectedTexture.copyImageData({
         data: initialState,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be pointsTextureSize * 16.
         bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
@@ -383,6 +397,8 @@ export class Points extends CoreModule {
     } else {
       this.selectedTexture.copyImageData({
         data: initialState,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be pointsTextureSize * 16.
         bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
@@ -1108,6 +1124,8 @@ export class Points extends CoreModule {
       })
       this.greyoutStatusTexture.copyImageData({
         data: initialState,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be pointsTextureSize * 16.
         bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
@@ -1116,6 +1134,8 @@ export class Points extends CoreModule {
     } else {
       this.greyoutStatusTexture.copyImageData({
         data: initialState,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be pointsTextureSize * 16.
         bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
@@ -1150,6 +1170,8 @@ export class Points extends CoreModule {
       })
       this.pinnedStatusTexture.copyImageData({
         data: initialState,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be pointsTextureSize * 16.
         bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
@@ -1158,6 +1180,8 @@ export class Points extends CoreModule {
     } else {
       this.pinnedStatusTexture.copyImageData({
         data: initialState,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be pointsTextureSize * 16.
         bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
@@ -1199,6 +1223,8 @@ export class Points extends CoreModule {
       })
       this.sizeTexture.copyImageData({
         data: initialState,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be pointsTextureSize * 16.
         bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
@@ -1207,6 +1233,8 @@ export class Points extends CoreModule {
     } else {
       this.sizeTexture.copyImageData({
         data: initialState,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be pointsTextureSize * 16.
         bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
@@ -1314,7 +1342,8 @@ export class Points extends CoreModule {
     })
     this.imageAtlasTexture.copyImageData({
       data: atlasData,
-      // UNPACK_ROW_LENGTH and UNPACK_IMAGE_HEIGHT expect pixel counts (not bytes)
+      // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+      // (should be bytes). Correct value would be atlasSize * 4.
       bytesPerRow: atlasSize,
       rowsPerImage: atlasSize,
       mipLevel: 0,
@@ -1331,7 +1360,8 @@ export class Points extends CoreModule {
     })
     this.imageAtlasCoordsTexture.copyImageData({
       data: atlasCoords,
-      // UNPACK_ROW_LENGTH and UNPACK_IMAGE_HEIGHT expect pixel counts (not bytes)
+      // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+      // (should be bytes). Correct value would be atlasCoordsSize * 16.
       bytesPerRow: atlasCoordsSize,
       rowsPerImage: atlasCoordsSize,
       mipLevel: 0,
@@ -1726,6 +1756,8 @@ export class Points extends CoreModule {
       })
       this.polygonPathTexture.copyImageData({
         data: textureData,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be textureSize * 16.
         bytesPerRow: textureSize,
         mipLevel: 0,
         x: 0,
@@ -1734,6 +1766,8 @@ export class Points extends CoreModule {
     } else {
       this.polygonPathTexture.copyImageData({
         data: textureData,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be textureSize * 16.
         bytesPerRow: textureSize,
         mipLevel: 0,
         x: 0,
@@ -1821,6 +1855,8 @@ export class Points extends CoreModule {
       })
       this.trackedIndicesTexture.copyImageData({
         data: initialState,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be textureSize * 16.
         bytesPerRow: textureSize,
         mipLevel: 0,
         x: 0,
@@ -1829,6 +1865,8 @@ export class Points extends CoreModule {
     } else {
       this.trackedIndicesTexture.copyImageData({
         data: initialState,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be textureSize * 16.
         bytesPerRow: textureSize,
         mipLevel: 0,
         x: 0,

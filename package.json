@@ -95,8 +95,7 @@
     "dompurify": "^3.2.6",
     "gl-bench": "^1.0.42",
     "gl-matrix": "^3.4.3",
-    "random": "^4.1.0",
-    "regl": "^2.1.0"
+    "random": "^4.1.0"
   },
   "pre-commit": "lint:staged",
   "lint-staged": {

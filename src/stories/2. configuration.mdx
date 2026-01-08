@@ -43,7 +43,6 @@ import { Meta } from "@storybook/blocks";
 | linkArrowsSizeScale | Scale factor for the link arrows size | `1` |
 | linkVisibilityDistanceRange | The range defines the minimum and maximum link visibility distance in pixels.<br /><br />The link will be fully opaque when its length is less than the first number in the array, and will have `linkVisibilityMinTransparency` transparency when its length is greater than the second number in the array.<br /><br />This distance is defined in screen space coordinates and will change as you zoom in and out (e.g. links become longer when you zoom in, and shorter when you zoom out). | `[50, 150]` |
 | linkVisibilityMinTransparency | The transparency value that the link will have when its length reaches the maximum link distance value from `linkVisibilityDistanceRange`. | `0.25` |
-| useClassicQuadtree | Use the classic [quadtree algorithm](https://en.wikipedia.org/wiki/Barnes%E2%80%93Hut_simulation) for the Many-Body force. This property will be applied only on component initialization and it can't be changed using the `setConfig` method.<br /><br /> ⚠ The algorithm might not work on some GPUs (e.g. Nvidia) and on Windows (unless you disable ANGLE in the browser settings). | `false` |
 | showFPSMonitor | Show WebGL performance monitor | `false` |
 | pixelRatio | Pixel ratio for the canvas. Higher values use more GPU memory but provide better quality on high-DPI displays | `window.devicePixelRatio \|\| 2` |
 | scalePointsOnZoom | Increase/decrease point size when zooming | `false` |
@@ -76,8 +75,7 @@ cosmos.gl layout algorithm was inspired by the [d3-force](https://github.com/d3/
 | simulationGravity | Gravity force coefficient | 0.0 – 1.0 | `0.25` |
 | simulationCenter | Centering force coefficient | 0.0 – 1.0 | `0.0` |
 | simulationRepulsion | Repulsion force coefficient | 0.0 – 2.0 | `1.0` |
-| simulationRepulsionTheta | Decreases / increases the detalization of the Many-Body force calculations. <br /><br /> When `useClassicQuadtree` is set to `true`, this property corresponds to the Barnes–Hut approximation criterion. | 0.3 – 2.0 | `1.15` |
-| simulationRepulsionQuadtreeLevels | Barnes–Hut approximation depth. <br /><br />Can only be used when `useClassicQuadtree` is set `true`.  | 5 – 12 | `12` | 
+| simulationRepulsionTheta | Decreases / increases the detalization of the Many-Body force calculations. | 0.3 – 2.0 | `1.15` |
 | simulationLinkSpring | Link spring force coefficient | 0.0 – 2.0 | `1.0` |
 | simulationLinkDistance | Minimum link distance | 1 – 20 | `10` |
 | simulationLinkDistRandomVariationRange | Link distance randomness multiplier range | [0.8 – 1.2,<br/> 1.2 – 2.0] | `[1.0, 1.2]` |

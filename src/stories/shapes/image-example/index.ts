@@ -204,14 +204,24 @@ export const imageExample = (): {div: HTMLDivElement; graph: Graph; destroy?: ()
       },
     })
 
+    // Guard flag to prevent async callbacks from executing after destruction
+    let isDestroyed = false
+
     // Load images asynchronously and set them when ready
     loadPngImages([swiftUrl, boxUrl, toolboxUrl, legoUrl, sUrl]).then((imageDataArray) => {
+      // Check if graph has been destroyed before calling any methods
+      if (isDestroyed) {
+        return
+      }
       // Set images and their indices
       graph.setImageData(imageDataArray)
       graph.setPointImageIndices(imageIndices)
       graph.render()
     }).catch((error) => {
-      console.error('Error loading images:', error)
+      // Only log error if graph hasn't been destroyed
+      if (!isDestroyed) {
+        console.error('Error loading images:', error)
+      }
     })
 
     // Set all data
@@ -230,6 +240,7 @@ export const imageExample = (): {div: HTMLDivElement; graph: Graph; destroy?: ()
     graph.render()
 
     const destroy = (): void => {
+      isDestroyed = true
       graph.destroy()
     }
 

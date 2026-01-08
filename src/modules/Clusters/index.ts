@@ -108,6 +108,8 @@ export class Clusters extends CoreModule {
       })
       this.clusterTexture.copyImageData({
         data: clusterState,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be pointsTextureSize * 16.
         bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
@@ -117,6 +119,8 @@ export class Clusters extends CoreModule {
       // Size hasn't changed, just update the data
       this.clusterTexture.copyImageData({
         data: clusterState,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be pointsTextureSize * 16.
         bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
@@ -139,6 +143,8 @@ export class Clusters extends CoreModule {
       })
       this.clusterPositionsTexture.copyImageData({
         data: clusterPositions,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be this.clustersTextureSize * 16.
         bytesPerRow: this.clustersTextureSize,
         mipLevel: 0,
         x: 0,
@@ -148,6 +154,8 @@ export class Clusters extends CoreModule {
       // Update data
       this.clusterPositionsTexture.copyImageData({
         data: clusterPositions,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be this.clustersTextureSize * 16.
         bytesPerRow: this.clustersTextureSize,
         mipLevel: 0,
         x: 0,
@@ -170,6 +178,8 @@ export class Clusters extends CoreModule {
       })
       this.clusterForceCoefficientTexture.copyImageData({
         data: clusterForceCoefficient,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be pointsTextureSize * 16.
         bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
@@ -179,6 +189,8 @@ export class Clusters extends CoreModule {
       // Update data
       this.clusterForceCoefficientTexture.copyImageData({
         data: clusterForceCoefficient,
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be pointsTextureSize * 16.
         bytesPerRow: pointsTextureSize,
         mipLevel: 0,
         x: 0,
@@ -205,6 +217,8 @@ export class Clusters extends CoreModule {
       })
       this.centermassTexture.copyImageData({
         data: new Float32Array(clustersTextureDataSize).fill(0),
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be this.clustersTextureSize * 16.
         bytesPerRow: this.clustersTextureSize,
         mipLevel: 0,
         x: 0,
@@ -220,6 +234,8 @@ export class Clusters extends CoreModule {
       // Clear the centermass texture (fill with zeros)
       this.centermassTexture.copyImageData({
         data: new Float32Array(clustersTextureDataSize).fill(0),
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be this.clustersTextureSize * 16.
         bytesPerRow: this.clustersTextureSize,
         mipLevel: 0,
         x: 0,

@@ -7,7 +7,7 @@ export const withLabels = async (): Promise<{div: HTMLDivElement; graph: Graph; 
   let nClusters = 2
   const { pointPositions, pointColors, pointClusters } = generateMeshData(100, 100, nClusters, 1.0)
 
-  const { div, graph, destroy: baseDestroy } = await createCosmos({
+  const { div, graph, destroy: baseDestroy } = createCosmos({
     pointPositions,
     pointColors,
     pointClusters,
