@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 import { resolve } from 'path'
 import { defineConfig, LibraryFormats, UserConfig } from 'vite'
 import dts from 'vite-plugin-dts'
@@ -15,12 +16,11 @@ export default defineConfig(() => {
       sourcemap: true,
       minify: true,
       rollupOptions: {
-        external: ['d3-array', 'd3-color', 'd3-drag', 'd3-ease', 'd3-scale', 'd3-selection', 'd3-transition', 'd3-zoom', 'regl'],
+        external: ['d3-array', 'd3-color', 'd3-drag', 'd3-ease', 'd3-scale', 'd3-selection', 'd3-transition', 'd3-zoom'],
         output: {
           globals: {
             'd3-selection': 'd3',
             'd3-ease': 'd3',
-            regl: 'createREGL',
             'd3-color': 'd3',
             'd3-scale': 'd3',
             'd3-array': 'd3',

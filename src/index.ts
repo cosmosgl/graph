@@ -13,7 +13,6 @@ import { ForceCenter } from '@/graph/modules/ForceCenter'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
 import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
 import { ForceManyBody } from '@/graph/modules/ForceManyBody'
-// import { ForceManyBodyQuadtree } from '@/graph/modules/ForceManyBodyQuadtree'
 import { ForceMouse } from '@/graph/modules/ForceMouse'
 import { Clusters } from '@/graph/modules/Clusters'
 import { FPSMonitor } from '@/graph/modules/FPSMonitor'
@@ -311,8 +310,7 @@ export class Graph {
         this.store.maxPointSize = (pointSizeRange?.[1] ?? MAX_POINT_SIZE) / this.config.pixelRatio
       }
     }
-    if (prevConfig.spaceSize !== this.config.spaceSize ||
-      prevConfig.simulationRepulsionQuadtreeLevels !== this.config.simulationRepulsionQuadtreeLevels) {
+    if (prevConfig.spaceSize !== this.config.spaceSize) {
       this.store.adjustSpaceSize(this.config.spaceSize, this.device?.limits.maxTextureDimension2D ?? 4096)
       this.resizeCanvas(true)
       this.update(this.store.isSimulationRunning ? this.store.alpha : 0)
@@ -672,7 +670,7 @@ export class Graph {
       select(this.canvas).style('cursor', null)
       if (this.device) {
         const clearPass = this.device.beginRenderPass({
-          clearColor: [0, 0, 1, 1], // this.store.backgroundColor,
+          clearColor: this.store.backgroundColor,
           clearDepth: 1,
           clearStencil: 0,
         })

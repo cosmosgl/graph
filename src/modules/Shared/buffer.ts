@@ -1,15 +1,3 @@
-import regl from 'regl'
-
-export function createQuadBuffer (reglInstance: regl.Regl): { buffer: regl.Buffer; size: number } {
-  const QUAD_POSITIONS = [-1, -1, 1, -1, -1, 1, 1, 1]
-
-  const quadBuffer = reglInstance.buffer(new Float32Array(QUAD_POSITIONS))
-  return {
-    buffer: quadBuffer,
-    size: 2,
-  }
-}
-
 export function createIndexesForBuffer (textureSize: number): Float32Array {
   const indexes = new Float32Array(textureSize * textureSize * 2)
   for (let y = 0; y < textureSize; y++) {
@@ -20,20 +8,4 @@ export function createIndexesForBuffer (textureSize: number): Float32Array {
     }
   }
   return indexes
-}
-
-export function destroyFramebuffer (fbo?: regl.Framebuffer2D): void {
-  if (!fbo) return
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((fbo as any)?._framebuffer?.framebuffer) {
-    fbo.destroy()
-  }
-}
-
-export function destroyBuffer (fbo?: regl.Buffer): void {
-  if (!fbo) return
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  if ((fbo as any)?._buffer?.buffer) {
-    fbo.destroy()
-  }
 }

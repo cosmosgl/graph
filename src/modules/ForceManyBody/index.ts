@@ -78,6 +78,8 @@ export class ForceManyBody extends CoreModule {
         // Clear existing texture data to zero
         existingTarget.texture.copyImageData({
           data: new Float32Array(levelTextureSize * levelTextureSize * 4).fill(0),
+          // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+          // (should be bytes). Correct value would be levelTextureSize * 16.
           bytesPerRow: levelTextureSize,
           mipLevel: 0,
           x: 0,
@@ -100,6 +102,8 @@ export class ForceManyBody extends CoreModule {
       })
       texture.copyImageData({
         data: new Float32Array(levelTextureSize * levelTextureSize * 4).fill(0),
+        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+        // (should be bytes). Correct value would be levelTextureSize * 16.
         bytesPerRow: levelTextureSize,
         mipLevel: 0,
         x: 0,
@@ -130,7 +134,16 @@ export class ForceManyBody extends CoreModule {
       randomValuesState[i * 4 + 1] = store.getRandomFloat(-1, 1) * 0.00001
     }
 
-    if (!this.randomValuesTexture || this.randomValuesTexture.destroyed) {
+    const recreateRandomValuesTexture =
+      !this.randomValuesTexture ||
+      this.randomValuesTexture.destroyed ||
+      this.randomValuesTexture.width !== store.pointsTextureSize ||
+      this.randomValuesTexture.height !== store.pointsTextureSize
+
+    if (recreateRandomValuesTexture) {
+      if (this.randomValuesTexture && !this.randomValuesTexture.destroyed) {
+        this.randomValuesTexture.destroy()
+      }
       this.randomValuesTexture = device.createTexture({
         width: store.pointsTextureSize,
         height: store.pointsTextureSize,
@@ -138,8 +151,10 @@ export class ForceManyBody extends CoreModule {
         usage: Texture.SAMPLE | Texture.COPY_DST,
       })
     }
-    this.randomValuesTexture.copyImageData({
+    this.randomValuesTexture!.copyImageData({
       data: randomValuesState,
+      // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+      // (should be bytes). Correct value would be store.pointsTextureSize * 16.
       bytesPerRow: store.pointsTextureSize,
       mipLevel: 0,
       x: 0,

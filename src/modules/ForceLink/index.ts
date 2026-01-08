@@ -100,6 +100,8 @@ export class ForceLink extends CoreModule {
     }
     this.linkFirstIndicesAndAmountTexture!.copyImageData({
       data: this.linkFirstIndicesAndAmount,
+      // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+      // (should be bytes). Correct value would be pointsTextureSize * 16.
       bytesPerRow: pointsTextureSize,
       mipLevel: 0,
       x: 0,
@@ -133,6 +135,8 @@ export class ForceLink extends CoreModule {
 
     this.indicesTexture!.copyImageData({
       data: this.indices,
+      // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+      // (should be bytes). Correct value would be linksTextureSize * 16.
       bytesPerRow: linksTextureSize,
       mipLevel: 0,
       x: 0,
@@ -140,6 +144,8 @@ export class ForceLink extends CoreModule {
     })
     this.biasAndStrengthTexture!.copyImageData({
       data: linkBiasAndStrengthState,
+      // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+      // (should be bytes). Correct value would be linksTextureSize * 16.
       bytesPerRow: linksTextureSize,
       mipLevel: 0,
       x: 0,
@@ -147,6 +153,8 @@ export class ForceLink extends CoreModule {
     })
     this.randomDistanceTexture!.copyImageData({
       data: linkDistanceState,
+      // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
+      // (should be bytes). Correct value would be linksTextureSize * 16.
       bytesPerRow: linksTextureSize,
       mipLevel: 0,
       x: 0,

@@ -250,13 +250,6 @@ export interface GraphConfigInterface {
    * Default value: `0.25`
    */
   linkVisibilityMinTransparency?: number;
-  /**
-   * Use the classic quadtree algorithm for the Many-Body force.
-   * This property will be applied only on component initialization and it
-   * can't be changed using the `setConfig` method.
-   * Default value: `false`
-   */
-  useClassicQuadtree?: boolean;
 
   /**
    * Decay coefficient. Use smaller values if you want the simulation to "cool down" slower.
@@ -280,16 +273,9 @@ export interface GraphConfigInterface {
   simulationRepulsion?: number;
   /**
    * Decreases / increases the detalization of the Many-Body force calculations.
-   * When `useClassicQuadtree` is set to `true`, this property corresponds to the Barnes–Hut approximation criterion.
    * Default value: `1.15`
    */
   simulationRepulsionTheta?: number;
-  /**
-   * Barnes–Hut approximation depth.
-   * Can only be used when `useClassicQuadtree` is set `true`.
-   * Default value: `12`
-   */
-  simulationRepulsionQuadtreeLevels?: number;
   /**
    * Link spring force coefficient.
    * Default value: `1`
@@ -683,14 +669,12 @@ export class GraphConfig implements GraphConfigInterface {
   public scaleLinksOnZoom = defaultConfigValues.scaleLinksOnZoom
   public linkVisibilityDistanceRange = defaultConfigValues.linkVisibilityDistanceRange
   public linkVisibilityMinTransparency = defaultConfigValues.linkVisibilityMinTransparency
-  public useClassicQuadtree = defaultConfigValues.useClassicQuadtree
 
   public simulationDecay = defaultConfigValues.simulation.decay
   public simulationGravity = defaultConfigValues.simulation.gravity
   public simulationCenter = defaultConfigValues.simulation.center
   public simulationRepulsion = defaultConfigValues.simulation.repulsion
   public simulationRepulsionTheta = defaultConfigValues.simulation.repulsionTheta
-  public simulationRepulsionQuadtreeLevels = defaultConfigValues.simulation.repulsionQuadtreeLevels
   public simulationLinkSpring = defaultConfigValues.simulation.linkSpring
   public simulationLinkDistance = defaultConfigValues.simulation.linkDistance
   public simulationLinkDistRandomVariationRange = defaultConfigValues.simulation.linkDistRandomVariationRange
