@@ -13,7 +13,7 @@ export const pointLabels = (
     performanceTitle: string;
     theaterName: string;
   }[]
-): { graph: Graph; div: HTMLDivElement} => {
+): { graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
   const { pointPositions, pointColors, pointSizes, links, pointIndexToLabel, pointLabelToIndex } = processPerformances(performances)
   const div = document.createElement('div')
   div.className = 'app'
@@ -61,5 +61,9 @@ export const pointLabels = (
     pointsToShowLabelsFor.map((l) => pointLabelToIndex.get(l) as number)
   )
 
-  return { div, graph }
+  const destroy = (): void => {
+    graph.destroy()
+  }
+
+  return { div, graph, destroy }
 }

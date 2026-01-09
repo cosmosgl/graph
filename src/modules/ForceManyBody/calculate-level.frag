@@ -1,9 +1,9 @@
-#ifdef GL_ES
+#version 300 es
 precision highp float;
-#endif
 
-varying vec4 rgba;
+in vec4 vColor;
+out vec4 fragColor;
 
 void main() {
-  gl_FragColor = rgba;
+  fragColor = vColor;
 }

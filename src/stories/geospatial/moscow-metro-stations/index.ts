@@ -13,7 +13,7 @@ import './style.css'
  * - This causes visual artifacts due to WebGL's floating-point precision limitations
  * - Points cluster in the center and may exhibit rendering glitches
  */
-export const moscowMetroStations = (): {graph: Graph; div: HTMLDivElement} => {
+export const moscowMetroStations = (): {graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
   const div = document.createElement('div')
   div.className = 'app'
 
@@ -58,5 +58,9 @@ export const moscowMetroStations = (): {graph: Graph; div: HTMLDivElement} => {
     graph.fitView()
   })
 
-  return { div, graph }
+  const destroy = (): void => {
+    graph.destroy()
+  }
+
+  return { div, graph, destroy }
 }

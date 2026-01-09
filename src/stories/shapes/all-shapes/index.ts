@@ -1,6 +1,6 @@
 import { Graph, PointShape } from '@cosmos.gl/graph'
 
-export const allShapes = (): {div: HTMLDivElement; graph: Graph } => {
+export const allShapes = (): {div: HTMLDivElement; graph: Graph; destroy?: () => void } => {
   // Create container div
   const div = document.createElement('div')
   div.style.height = '100vh'
@@ -65,5 +65,9 @@ export const allShapes = (): {div: HTMLDivElement; graph: Graph } => {
 
   graph.render()
 
-  return { div, graph }
+  const destroy = (): void => {
+    graph.destroy()
+  }
+
+  return { div, graph, destroy }
 }

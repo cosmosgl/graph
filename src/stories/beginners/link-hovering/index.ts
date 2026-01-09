@@ -2,7 +2,7 @@ import { Graph, GraphConfigInterface } from '@cosmos.gl/graph'
 import { generateData } from './data-generator'
 import './style.css'
 
-export const linkHovering = (): { div: HTMLDivElement; graph: Graph } => {
+export const linkHovering = (): { div: HTMLDivElement; graph: Graph; destroy?: () => void } => {
   const data = generateData()
   const infoPanel = document.createElement('div')
 
@@ -57,5 +57,9 @@ export const linkHovering = (): { div: HTMLDivElement; graph: Graph } => {
   `
   div.appendChild(infoPanel)
 
-  return { div, graph }
+  const destroy = (): void => {
+    graph.destroy()
+  }
+
+  return { div, graph, destroy }
 }
