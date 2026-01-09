@@ -6,6 +6,7 @@ import calculateLevelVert from '@/graph/modules/ForceManyBody/calculate-level.ve
 import forceFrag from '@/graph/modules/ForceManyBody/force-level.frag?raw'
 import forceCenterFrag from '@/graph/modules/ForceManyBody/force-centermass.frag?raw'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
+import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import clearFrag from '@/graph/modules/Shared/clear.frag?raw'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
@@ -78,9 +79,7 @@ export class ForceManyBody extends CoreModule {
         // Clear existing texture data to zero
         existingTarget.texture.copyImageData({
           data: new Float32Array(levelTextureSize * levelTextureSize * 4).fill(0),
-          // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-          // (should be bytes). Correct value would be levelTextureSize * 16.
-          bytesPerRow: levelTextureSize,
+          bytesPerRow: getBytesPerRow('rgba32float', levelTextureSize),
           mipLevel: 0,
           x: 0,
           y: 0,
@@ -102,9 +101,7 @@ export class ForceManyBody extends CoreModule {
       })
       texture.copyImageData({
         data: new Float32Array(levelTextureSize * levelTextureSize * 4).fill(0),
-        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-        // (should be bytes). Correct value would be levelTextureSize * 16.
-        bytesPerRow: levelTextureSize,
+        bytesPerRow: getBytesPerRow('rgba32float', levelTextureSize),
         mipLevel: 0,
         x: 0,
         y: 0,
@@ -153,9 +150,7 @@ export class ForceManyBody extends CoreModule {
     }
     this.randomValuesTexture!.copyImageData({
       data: randomValuesState,
-      // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-      // (should be bytes). Correct value would be store.pointsTextureSize * 16.
-      bytesPerRow: store.pointsTextureSize,
+      bytesPerRow: getBytesPerRow('rgba32float', store.pointsTextureSize),
       mipLevel: 0,
       x: 0,
       y: 0,

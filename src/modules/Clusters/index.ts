@@ -5,6 +5,7 @@ import calculateCentermassFrag from '@/graph/modules/Clusters/calculate-centerma
 import calculateCentermassVert from '@/graph/modules/Clusters/calculate-centermass.vert?raw'
 import forceFrag from '@/graph/modules/Clusters/force-cluster.frag?raw'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
+import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import clearFrag from '@/graph/modules/Shared/clear.frag?raw'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
@@ -108,9 +109,7 @@ export class Clusters extends CoreModule {
       })
       this.clusterTexture.copyImageData({
         data: clusterState,
-        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-        // (should be bytes). Correct value would be pointsTextureSize * 16.
-        bytesPerRow: pointsTextureSize,
+        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
         mipLevel: 0,
         x: 0,
         y: 0,
@@ -119,9 +118,7 @@ export class Clusters extends CoreModule {
       // Size hasn't changed, just update the data
       this.clusterTexture.copyImageData({
         data: clusterState,
-        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-        // (should be bytes). Correct value would be pointsTextureSize * 16.
-        bytesPerRow: pointsTextureSize,
+        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
         mipLevel: 0,
         x: 0,
         y: 0,
@@ -143,9 +140,7 @@ export class Clusters extends CoreModule {
       })
       this.clusterPositionsTexture.copyImageData({
         data: clusterPositions,
-        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-        // (should be bytes). Correct value would be this.clustersTextureSize * 16.
-        bytesPerRow: this.clustersTextureSize,
+        bytesPerRow: getBytesPerRow('rgba32float', this.clustersTextureSize),
         mipLevel: 0,
         x: 0,
         y: 0,
@@ -154,9 +149,7 @@ export class Clusters extends CoreModule {
       // Update data
       this.clusterPositionsTexture.copyImageData({
         data: clusterPositions,
-        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-        // (should be bytes). Correct value would be this.clustersTextureSize * 16.
-        bytesPerRow: this.clustersTextureSize,
+        bytesPerRow: getBytesPerRow('rgba32float', this.clustersTextureSize),
         mipLevel: 0,
         x: 0,
         y: 0,
@@ -178,9 +171,7 @@ export class Clusters extends CoreModule {
       })
       this.clusterForceCoefficientTexture.copyImageData({
         data: clusterForceCoefficient,
-        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-        // (should be bytes). Correct value would be pointsTextureSize * 16.
-        bytesPerRow: pointsTextureSize,
+        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
         mipLevel: 0,
         x: 0,
         y: 0,
@@ -189,9 +180,7 @@ export class Clusters extends CoreModule {
       // Update data
       this.clusterForceCoefficientTexture.copyImageData({
         data: clusterForceCoefficient,
-        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-        // (should be bytes). Correct value would be pointsTextureSize * 16.
-        bytesPerRow: pointsTextureSize,
+        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
         mipLevel: 0,
         x: 0,
         y: 0,
@@ -217,9 +206,7 @@ export class Clusters extends CoreModule {
       })
       this.centermassTexture.copyImageData({
         data: new Float32Array(clustersTextureDataSize).fill(0),
-        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-        // (should be bytes). Correct value would be this.clustersTextureSize * 16.
-        bytesPerRow: this.clustersTextureSize,
+        bytesPerRow: getBytesPerRow('rgba32float', this.clustersTextureSize),
         mipLevel: 0,
         x: 0,
         y: 0,
@@ -234,9 +221,7 @@ export class Clusters extends CoreModule {
       // Clear the centermass texture (fill with zeros)
       this.centermassTexture.copyImageData({
         data: new Float32Array(clustersTextureDataSize).fill(0),
-        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-        // (should be bytes). Correct value would be this.clustersTextureSize * 16.
-        bytesPerRow: this.clustersTextureSize,
+        bytesPerRow: getBytesPerRow('rgba32float', this.clustersTextureSize),
         mipLevel: 0,
         x: 0,
         y: 0,

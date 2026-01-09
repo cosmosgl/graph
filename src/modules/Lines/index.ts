@@ -7,6 +7,7 @@ import hoveredLineIndexFrag from '@/graph/modules/Lines/hovered-line-index.frag?
 import hoveredLineIndexVert from '@/graph/modules/Lines/hovered-line-index.vert?raw'
 import { defaultConfigValues } from '@/graph/variables'
 import { getCurveLineGeometry } from '@/graph/modules/Lines/geometry'
+import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 
 export class Lines extends CoreModule {
   public linkIndexFbo: Framebuffer | undefined
@@ -78,9 +79,7 @@ export class Lines extends CoreModule {
       })
       this.hoveredLineIndexTexture.copyImageData({
         data: new Float32Array(4).fill(0),
-        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-        // (should be bytes). Correct value would be 1 * 16.
-        bytesPerRow: 1,
+        bytesPerRow: getBytesPerRow('rgba32float', 1),
         mipLevel: 0,
         x: 0,
         y: 0,
@@ -385,9 +384,7 @@ export class Lines extends CoreModule {
       })
       this.linkIndexTexture.copyImageData({
         data: new Float32Array(screenWidth * screenHeight * 4).fill(0),
-        // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-        // (should be bytes). Correct value would be screenWidth * 16.
-        bytesPerRow: screenWidth,
+        bytesPerRow: getBytesPerRow('rgba32float', screenWidth),
         mipLevel: 0,
         x: 0,
         y: 0,

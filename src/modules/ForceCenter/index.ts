@@ -5,6 +5,7 @@ import calculateCentermassFrag from '@/graph/modules/ForceCenter/calculate-cente
 import calculateCentermassVert from '@/graph/modules/ForceCenter/calculate-centermass.vert?raw'
 import forceFrag from '@/graph/modules/ForceCenter/force-center.frag?raw'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
+import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import clearFrag from '@/graph/modules/Shared/clear.frag?raw'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
@@ -50,9 +51,7 @@ export class ForceCenter extends CoreModule {
     }
     this.centermassTexture.copyImageData({
       data: new Float32Array(4).fill(0),
-      // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-      // (should be bytes). Correct value would be 1 * 16.
-      bytesPerRow: 1,
+      bytesPerRow: getBytesPerRow('rgba32float', 1),
       mipLevel: 0,
       x: 0,
       y: 0,
