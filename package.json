@@ -80,9 +80,9 @@
     "vite-plugin-dts": "^4.3.0"
   },
   "dependencies": {
-    "@luma.gl/core": "^9.2.3",
-    "@luma.gl/engine": "^9.2.3",
-    "@luma.gl/webgl": "^9.2.3",
+    "@luma.gl/core": "^9.2.5",
+    "@luma.gl/engine": "^9.2.5",
+    "@luma.gl/webgl": "^9.2.5",
     "d3-array": "^3.2.0",
     "d3-color": "^3.1.0",
     "d3-drag": "^3.0.0",

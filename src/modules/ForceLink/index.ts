@@ -2,6 +2,7 @@ import { Buffer, RenderPass, Texture, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
 import { forceFrag } from '@/graph/modules/ForceLink/force-spring'
+import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
 export enum LinkDirection {
@@ -100,9 +101,7 @@ export class ForceLink extends CoreModule {
     }
     this.linkFirstIndicesAndAmountTexture!.copyImageData({
       data: this.linkFirstIndicesAndAmount,
-      // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-      // (should be bytes). Correct value would be pointsTextureSize * 16.
-      bytesPerRow: pointsTextureSize,
+      bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
       mipLevel: 0,
       x: 0,
       y: 0,
@@ -135,27 +134,21 @@ export class ForceLink extends CoreModule {
 
     this.indicesTexture!.copyImageData({
       data: this.indices,
-      // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-      // (should be bytes). Correct value would be linksTextureSize * 16.
-      bytesPerRow: linksTextureSize,
+      bytesPerRow: getBytesPerRow('rgba32float', linksTextureSize),
       mipLevel: 0,
       x: 0,
       y: 0,
     })
     this.biasAndStrengthTexture!.copyImageData({
       data: linkBiasAndStrengthState,
-      // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-      // (should be bytes). Correct value would be linksTextureSize * 16.
-      bytesPerRow: linksTextureSize,
+      bytesPerRow: getBytesPerRow('rgba32float', linksTextureSize),
       mipLevel: 0,
       x: 0,
       y: 0,
     })
     this.randomDistanceTexture!.copyImageData({
       data: linkDistanceState,
-      // WORKAROUND: luma.gl 9.2.3 bug - bytesPerRow incorrectly expects pixels here
-      // (should be bytes). Correct value would be linksTextureSize * 16.
-      bytesPerRow: linksTextureSize,
+      bytesPerRow: getBytesPerRow('rgba32float', linksTextureSize),
       mipLevel: 0,
       x: 0,
       y: 0,
