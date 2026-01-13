@@ -412,6 +412,12 @@ export class Points extends CoreModule {
       this.drawPointIndices.write(indexData)
     }
 
+    if (this.drawCommand) {
+      this.drawCommand.setAttributes({
+        pointIndices: this.drawPointIndices,
+      })
+    }
+
     if (!this.hoveredPointIndices || this.hoveredPointIndices.byteLength !== requiredByteLength) {
       this.hoveredPointIndices?.destroy()
       this.hoveredPointIndices = device.createBuffer({
@@ -430,6 +436,11 @@ export class Points extends CoreModule {
       })
     } else {
       this.sampledPointIndices.write(indexData)
+    }
+    if (this.fillSampledPointsFboCommand) {
+      this.fillSampledPointsFboCommand.setAttributes({
+        pointIndices: this.sampledPointIndices,
+      })
     }
 
     this.updateGreyoutStatus()
@@ -1024,6 +1035,11 @@ export class Points extends CoreModule {
     } else {
       this.colorBuffer.write(colorData)
     }
+    if (this.drawCommand) {
+      this.drawCommand.setAttributes({
+        color: this.colorBuffer,
+      })
+    }
   }
 
   public updateGreyoutStatus (): void {
@@ -1125,6 +1141,11 @@ export class Points extends CoreModule {
     } else {
       this.sizeBuffer.write(sizeData)
     }
+    if (this.drawCommand) {
+      this.drawCommand.setAttributes({
+        size: this.sizeBuffer,
+      })
+    }
 
     const initialState = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
     for (let i = 0; i < data.pointsNumber; i++) {
@@ -1174,6 +1195,11 @@ export class Points extends CoreModule {
     } else {
       this.shapeBuffer.write(shapeData)
     }
+    if (this.drawCommand) {
+      this.drawCommand.setAttributes({
+        shape: this.shapeBuffer,
+      })
+    }
   }
 
   public updateImageIndices (): void {
@@ -1192,6 +1218,11 @@ export class Points extends CoreModule {
     } else {
       this.imageIndicesBuffer.write(imageIndicesData)
     }
+    if (this.drawCommand) {
+      this.drawCommand.setAttributes({
+        imageIndex: this.imageIndicesBuffer,
+      })
+    }
   }
 
   public updateImageSizes (): void {
@@ -1209,6 +1240,11 @@ export class Points extends CoreModule {
       })
     } else {
       this.imageSizesBuffer.write(imageSizesData)
+    }
+    if (this.drawCommand) {
+      this.drawCommand.setAttributes({
+        imageSize: this.imageSizesBuffer,
+      })
     }
   }
 

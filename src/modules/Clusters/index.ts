@@ -239,6 +239,11 @@ export class Clusters extends CoreModule {
         usage: Buffer.VERTEX | Buffer.COPY_DST,
       })
     }
+    if (this.calculateCentermassCommand) {
+      this.calculateCentermassCommand.setAttributes({
+        pointIndices: this.pointIndices,
+      })
+    }
 
     // Update tracked sizes
     this.previousPointsTextureSize = pointsTextureSize
@@ -289,7 +294,7 @@ export class Clusters extends CoreModule {
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       attributes: {
-        pointIndices: this.pointIndices,
+        pointIndices: this.pointIndices!,
       },
       bufferLayout: [
         { name: 'pointIndices', format: 'float32x2' }, // 2 floats per vertex
