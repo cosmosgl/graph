@@ -249,139 +249,118 @@ export class Clusters extends CoreModule {
   public initPrograms (): void {
     const { device, store, data, points } = this
     // Use same check as create() and run() for consistency
-    if (!data.pointClusters && !data.clusterPositions) return
+    if (data.pointsNumber === undefined || (!data.pointClusters && !data.clusterPositions)) return
 
-    if (!this.clearCentermassCommand) {
-      // Create and track vertexCoord buffer
-      if (!this.clearCentermassVertexCoordBuffer) {
-        this.clearCentermassVertexCoordBuffer = device.createBuffer({
-          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-        })
-      }
+    // Create and track vertexCoord buffer
+    this.clearCentermassVertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
 
-      this.clearCentermassCommand = new Model(device, {
-        fs: clearFrag,
-        vs: updateVert,
-        topology: 'triangle-strip',
-        vertexCount: 4,
-        attributes: {
-          vertexCoord: this.clearCentermassVertexCoordBuffer,
-        },
-        bufferLayout: [
-          { name: 'vertexCoord', format: 'float32x2' }, // 2 floats per vertex
-        ],
-      })
-    }
-    if (!this.calculateCentermassCommand) {
-      // Ensure pointIndices buffer exists
-      if (!this.pointIndices) {
-        const indexData = createIndexesForBuffer(store.pointsTextureSize)
-        this.pointIndices = device.createBuffer({
-          data: indexData,
-          usage: Buffer.VERTEX | Buffer.COPY_DST,
-        })
-      }
+    this.clearCentermassCommand ||= new Model(device, {
+      fs: clearFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.clearCentermassVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' }, // 2 floats per vertex
+      ],
+    })
 
-      // Create UniformStore for calculateCentermass uniforms
-      if (!this.calculateCentermassUniformStore) {
-        this.calculateCentermassUniformStore = new UniformStore({
-          calculateCentermassUniforms: {
-            uniformTypes: {
-              pointsTextureSize: 'f32',
-              clustersTextureSize: 'f32',
-            },
-            defaultUniforms: {
-              pointsTextureSize: store.pointsTextureSize,
-              clustersTextureSize: (this.clustersTextureSize ?? 0),
-            },
-          },
-        })
-      }
+    // Create UniformStore for calculateCentermass uniforms
+    this.calculateCentermassUniformStore ||= new UniformStore({
+      calculateCentermassUniforms: {
+        uniformTypes: {
+          pointsTextureSize: 'f32',
+          clustersTextureSize: 'f32',
+        },
+        defaultUniforms: {
+          pointsTextureSize: store.pointsTextureSize,
+          clustersTextureSize: (this.clustersTextureSize ?? 0),
+        },
+      },
+    })
 
-      this.calculateCentermassCommand = new Model(device, {
-        fs: calculateCentermassFrag,
-        vs: calculateCentermassVert,
-        topology: 'point-list',
-        vertexCount: data.pointsNumber ?? 0,
-        attributes: {
-          pointIndices: this.pointIndices,
-        },
-        bufferLayout: [
-          { name: 'pointIndices', format: 'float32x2' }, // 2 floats per vertex
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true, // Enable uniform buffers
-        },
-        bindings: {
-          // Uniform buffer via UniformStore (WebGPU-compatible)
-          calculateCentermassUniforms: this.calculateCentermassUniformStore.getManagedUniformBuffer(device, 'calculateCentermassUniforms'),
-          ...(this.clusterTexture && { clusterTexture: this.clusterTexture }),
-          ...(points?.previousPositionTexture && { positionsTexture: points.previousPositionTexture }),
-        },
-        parameters: {
-          blend: true,
-          blendColorOperation: 'add',
-          blendColorSrcFactor: 'one',
-          blendColorDstFactor: 'one',
-          blendAlphaOperation: 'add',
-          blendAlphaSrcFactor: 'one',
-          blendAlphaDstFactor: 'one',
-          depthWriteEnabled: false,
-          depthCompare: 'always',
-        },
-      })
-    }
-    if (!this.applyForcesCommand) {
-      // Create UniformStore for applyForces uniforms
-      if (!this.applyForcesUniformStore) {
-        this.applyForcesUniformStore = new UniformStore({
-          applyForcesUniforms: {
-            uniformTypes: {
-              alpha: 'f32',
-              clustersTextureSize: 'f32',
-              clusterCoefficient: 'f32',
-            },
-            defaultUniforms: {
-              alpha: store.alpha,
-              clustersTextureSize: (this.clustersTextureSize ?? 0),
-              clusterCoefficient: (this.config.simulationCluster ?? 0),
-            },
-          },
-        })
-      }
+    this.calculateCentermassCommand ||= new Model(device, {
+      fs: calculateCentermassFrag,
+      vs: calculateCentermassVert,
+      topology: 'point-list',
+      vertexCount: data.pointsNumber ?? 0,
+      attributes: {
+        pointIndices: this.pointIndices,
+      },
+      bufferLayout: [
+        { name: 'pointIndices', format: 'float32x2' }, // 2 floats per vertex
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true, // Enable uniform buffers
+      },
+      bindings: {
+        // Uniform buffer via UniformStore (WebGPU-compatible)
+        calculateCentermassUniforms: this.calculateCentermassUniformStore.getManagedUniformBuffer(device, 'calculateCentermassUniforms'),
+        ...(this.clusterTexture && { clusterTexture: this.clusterTexture }),
+        ...(points?.previousPositionTexture && { positionsTexture: points.previousPositionTexture }),
+      },
+      parameters: {
+        blend: true,
+        blendColorOperation: 'add',
+        blendColorSrcFactor: 'one',
+        blendColorDstFactor: 'one',
+        blendAlphaOperation: 'add',
+        blendAlphaSrcFactor: 'one',
+        blendAlphaDstFactor: 'one',
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      },
+    })
 
-      // Create and track vertexCoord buffer
-      if (!this.applyForcesVertexCoordBuffer) {
-        this.applyForcesVertexCoordBuffer = device.createBuffer({
-          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-        })
-      }
+    // Create UniformStore for applyForces uniforms
+    this.applyForcesUniformStore ||= new UniformStore({
+      applyForcesUniforms: {
+        uniformTypes: {
+          alpha: 'f32',
+          clustersTextureSize: 'f32',
+          clusterCoefficient: 'f32',
+        },
+        defaultUniforms: {
+          alpha: store.alpha,
+          clustersTextureSize: (this.clustersTextureSize ?? 0),
+          clusterCoefficient: (this.config.simulationCluster ?? 0),
+        },
+      },
+    })
 
-      this.applyForcesCommand = new Model(device, {
-        fs: forceFrag,
-        vs: updateVert,
-        topology: 'triangle-strip',
-        vertexCount: 4,
-        attributes: {
-          vertexCoord: this.applyForcesVertexCoordBuffer,
-        },
-        bufferLayout: [
-          { name: 'vertexCoord', format: 'float32x2' }, // 2 floats per vertex
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true, // Enable uniform buffers
-        },
-        bindings: {
-          // Uniform buffer via UniformStore (WebGPU-compatible)
-          applyForcesUniforms: this.applyForcesUniformStore.getManagedUniformBuffer(device, 'applyForcesUniforms'),
-          ...(this.clusterTexture && { clusterTexture: this.clusterTexture }),
-          ...(this.centermassTexture && { centermassTexture: this.centermassTexture }),
-          ...(this.clusterPositionsTexture && { clusterPositionsTexture: this.clusterPositionsTexture }),
-          ...(this.clusterForceCoefficientTexture && { clusterForceCoefficient: this.clusterForceCoefficientTexture }),
-          ...(points?.previousPositionTexture && { positionsTexture: points.previousPositionTexture }),
-        },
-      })
-    }
+    // Create and track vertexCoord buffer
+    this.applyForcesVertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
+
+    this.applyForcesCommand ||= new Model(device, {
+      fs: forceFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.applyForcesVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' }, // 2 floats per vertex
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true, // Enable uniform buffers
+      },
+      bindings: {
+        // Uniform buffer via UniformStore (WebGPU-compatible)
+        applyForcesUniforms: this.applyForcesUniformStore.getManagedUniformBuffer(device, 'applyForcesUniforms'),
+        ...(this.clusterTexture && { clusterTexture: this.clusterTexture }),
+        ...(this.centermassTexture && { centermassTexture: this.centermassTexture }),
+        ...(this.clusterPositionsTexture && { clusterPositionsTexture: this.clusterPositionsTexture }),
+        ...(this.clusterForceCoefficientTexture && { clusterForceCoefficient: this.clusterForceCoefficientTexture }),
+        ...(points?.previousPositionTexture && { positionsTexture: points.previousPositionTexture }),
+      },
+    })
   }
 
   public calculateCentermass (): void {

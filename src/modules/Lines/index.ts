@@ -70,26 +70,18 @@ export class Lines extends CoreModule {
     this.updateLinkIndexFbo()
 
     // Initialize the hovered line index FBO
-    if (!this.hoveredLineIndexTexture) {
-      this.hoveredLineIndexTexture = device.createTexture({
-        width: 1,
-        height: 1,
-        format: 'rgba32float',
-        usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
-      })
-      this.hoveredLineIndexTexture.copyImageData({
-        data: new Float32Array(4).fill(0),
-        bytesPerRow: getBytesPerRow('rgba32float', 1),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
-      })
-      this.hoveredLineIndexFbo = device.createFramebuffer({
-        width: 1,
-        height: 1,
-        colorAttachments: [this.hoveredLineIndexTexture],
-      })
-    }
+    this.hoveredLineIndexTexture ||= device.createTexture({
+      width: 1,
+      height: 1,
+      format: 'rgba32float',
+      usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
+      data: new Float32Array(4).fill(0),
+    })
+    this.hoveredLineIndexFbo ||= device.createFramebuffer({
+      width: 1,
+      height: 1,
+      colorAttachments: [this.hoveredLineIndexTexture],
+    })
 
     // Ensure geometry buffer exists (create empty if needed)
     if (!this.curveLineGeometry) {
@@ -98,135 +90,120 @@ export class Lines extends CoreModule {
 
     // Ensure all attribute buffers exist (create empty if needed) so Model has all attributes
     const linksNumber = this.data.linksNumber ?? 0
-    if (!this.pointABuffer) {
-      this.pointABuffer = device.createBuffer({
-        data: new Float32Array(linksNumber * 2),
-        usage: Buffer.VERTEX | Buffer.COPY_DST,
-      })
-    }
-    if (!this.pointBBuffer) {
-      this.pointBBuffer = device.createBuffer({
-        data: new Float32Array(linksNumber * 2),
-        usage: Buffer.VERTEX | Buffer.COPY_DST,
-      })
-    }
-    if (!this.colorBuffer) {
-      this.colorBuffer = device.createBuffer({
-        data: new Float32Array(linksNumber * 4),
-        usage: Buffer.VERTEX | Buffer.COPY_DST,
-      })
-    }
-    if (!this.widthBuffer) {
-      this.widthBuffer = device.createBuffer({
-        data: new Float32Array(linksNumber),
-        usage: Buffer.VERTEX | Buffer.COPY_DST,
-      })
-    }
-    if (!this.arrowBuffer) {
-      this.arrowBuffer = device.createBuffer({
-        data: new Float32Array(linksNumber),
-        usage: Buffer.VERTEX | Buffer.COPY_DST,
-      })
-    }
-    if (!this.linkIndexBuffer) {
-      this.linkIndexBuffer = device.createBuffer({
-        data: new Float32Array(linksNumber),
-        usage: Buffer.VERTEX | Buffer.COPY_DST,
-      })
-    }
+    this.pointABuffer ||= device.createBuffer({
+      data: new Float32Array(linksNumber * 2),
+      usage: Buffer.VERTEX | Buffer.COPY_DST,
+    })
+    this.pointBBuffer ||= device.createBuffer({
+      data: new Float32Array(linksNumber * 2),
+      usage: Buffer.VERTEX | Buffer.COPY_DST,
+    })
+    this.colorBuffer ||= device.createBuffer({
+      data: new Float32Array(linksNumber * 4),
+      usage: Buffer.VERTEX | Buffer.COPY_DST,
+    })
+    this.widthBuffer ||= device.createBuffer({
+      data: new Float32Array(linksNumber),
+      usage: Buffer.VERTEX | Buffer.COPY_DST,
+    })
+    this.arrowBuffer ||= device.createBuffer({
+      data: new Float32Array(linksNumber),
+      usage: Buffer.VERTEX | Buffer.COPY_DST,
+    })
+    this.linkIndexBuffer ||= device.createBuffer({
+      data: new Float32Array(linksNumber),
+      usage: Buffer.VERTEX | Buffer.COPY_DST,
+    })
 
-    if (!this.drawCurveCommand) {
-      // Create UniformStore for drawLine uniforms
-      if (!this.drawLineUniformStore) {
-        this.drawLineUniformStore = new UniformStore({
-          drawLineUniforms: {
-            uniformTypes: {
-              transformationMatrix: 'mat4x4<f32>',
-              pointsTextureSize: 'f32',
-              widthScale: 'f32',
-              linkArrowsSizeScale: 'f32',
-              spaceSize: 'f32',
-              screenSize: 'vec2<f32>',
-              linkVisibilityDistanceRange: 'vec2<f32>',
-              linkVisibilityMinTransparency: 'f32',
-              linkOpacity: 'f32',
-              greyoutOpacity: 'f32',
-              curvedWeight: 'f32',
-              curvedLinkControlPointDistance: 'f32',
-              curvedLinkSegments: 'f32',
-              scaleLinksOnZoom: 'f32',
-              maxPointSize: 'f32',
-              renderMode: 'f32',
-              hoveredLinkIndex: 'f32',
-              hoveredLinkColor: 'vec4<f32>',
-              hoveredLinkWidthIncrease: 'f32',
-            },
-            defaultUniforms: {
-              transformationMatrix: store.transformationMatrix4x4,
-              pointsTextureSize: store.pointsTextureSize,
-              widthScale: config.linkWidthScale ?? 1,
-              linkArrowsSizeScale: config.linkArrowsSizeScale ?? 1,
-              spaceSize: store.adjustedSpaceSize ?? 0,
-              screenSize: store.screenSize ?? [0, 0],
-              linkVisibilityDistanceRange: config.linkVisibilityDistanceRange ?? [0, 0],
-              linkVisibilityMinTransparency: config.linkVisibilityMinTransparency ?? 0,
-              linkOpacity: config.linkOpacity ?? 1,
-              greyoutOpacity: config.linkGreyoutOpacity ?? 1,
-              curvedWeight: config.curvedLinkWeight ?? 0,
-              curvedLinkControlPointDistance: config.curvedLinkControlPointDistance ?? 0,
-              curvedLinkSegments: config.curvedLinks ? config.curvedLinkSegments ?? defaultConfigValues.curvedLinkSegments : 1,
-              scaleLinksOnZoom: (config.scaleLinksOnZoom ?? true) ? 1 : 0,
-              maxPointSize: store.maxPointSize ?? 100,
-              renderMode: 0.0,
-              hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
-              hoveredLinkColor: store.hoveredLinkColor ?? [-1, -1, -1, -1],
-              hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease ?? 0,
-            },
-          },
-          drawLineFragmentUniforms: {
-            uniformTypes: {
-              renderMode: 'f32',
-            },
-            defaultUniforms: {
-              renderMode: 0.0,
-            },
-          },
-        })
-      }
+    // Create UniformStore for drawLine uniforms
+    this.drawLineUniformStore ||= new UniformStore({
+      drawLineUniforms: {
+        uniformTypes: {
+          transformationMatrix: 'mat4x4<f32>',
+          pointsTextureSize: 'f32',
+          widthScale: 'f32',
+          linkArrowsSizeScale: 'f32',
+          spaceSize: 'f32',
+          screenSize: 'vec2<f32>',
+          linkVisibilityDistanceRange: 'vec2<f32>',
+          linkVisibilityMinTransparency: 'f32',
+          linkOpacity: 'f32',
+          greyoutOpacity: 'f32',
+          curvedWeight: 'f32',
+          curvedLinkControlPointDistance: 'f32',
+          curvedLinkSegments: 'f32',
+          scaleLinksOnZoom: 'f32',
+          maxPointSize: 'f32',
+          renderMode: 'f32',
+          hoveredLinkIndex: 'f32',
+          hoveredLinkColor: 'vec4<f32>',
+          hoveredLinkWidthIncrease: 'f32',
+        },
+        defaultUniforms: {
+          transformationMatrix: store.transformationMatrix4x4,
+          pointsTextureSize: store.pointsTextureSize,
+          widthScale: config.linkWidthScale ?? 1,
+          linkArrowsSizeScale: config.linkArrowsSizeScale ?? 1,
+          spaceSize: store.adjustedSpaceSize ?? 0,
+          screenSize: store.screenSize ?? [0, 0],
+          linkVisibilityDistanceRange: config.linkVisibilityDistanceRange ?? [0, 0],
+          linkVisibilityMinTransparency: config.linkVisibilityMinTransparency ?? 0,
+          linkOpacity: config.linkOpacity ?? 1,
+          greyoutOpacity: config.linkGreyoutOpacity ?? 1,
+          curvedWeight: config.curvedLinkWeight ?? 0,
+          curvedLinkControlPointDistance: config.curvedLinkControlPointDistance ?? 0,
+          curvedLinkSegments: config.curvedLinks ? config.curvedLinkSegments ?? defaultConfigValues.curvedLinkSegments : 1,
+          scaleLinksOnZoom: (config.scaleLinksOnZoom ?? true) ? 1 : 0,
+          maxPointSize: store.maxPointSize ?? 100,
+          renderMode: 0.0,
+          hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
+          hoveredLinkColor: store.hoveredLinkColor ?? [-1, -1, -1, -1],
+          hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease ?? 0,
+        },
+      },
+      drawLineFragmentUniforms: {
+        uniformTypes: {
+          renderMode: 'f32',
+        },
+        defaultUniforms: {
+          renderMode: 0.0,
+        },
+      },
+    })
 
-      this.drawCurveCommand = new Model(device, {
-        vs: drawLineVert,
-        fs: drawLineFrag,
-        topology: 'triangle-strip',
-        vertexCount: this.curveLineGeometry?.length ?? 0,
-        attributes: {
-          position: this.curveLineBuffer!,
-          pointA: this.pointABuffer!,
-          pointB: this.pointBBuffer!,
-          color: this.colorBuffer!,
-          width: this.widthBuffer!,
-          arrow: this.arrowBuffer!,
-          linkIndices: this.linkIndexBuffer!,
-        },
-        bufferLayout: [
-          { name: 'position', format: 'float32x2' },
-          { name: 'pointA', format: 'float32x2', stepMode: 'instance' },
-          { name: 'pointB', format: 'float32x2', stepMode: 'instance' },
-          { name: 'color', format: 'float32x4', stepMode: 'instance' },
-          { name: 'width', format: 'float32', stepMode: 'instance' },
-          { name: 'arrow', format: 'float32', stepMode: 'instance' },
-          { name: 'linkIndices', format: 'float32', stepMode: 'instance' },
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true,
-        },
-        bindings: {
-          drawLineUniforms: this.drawLineUniformStore.getManagedUniformBuffer(device, 'drawLineUniforms'),
-          drawLineFragmentUniforms: this.drawLineUniformStore.getManagedUniformBuffer(device, 'drawLineFragmentUniforms'),
-          ...(this.points?.currentPositionTexture && { positionsTexture: this.points.currentPositionTexture }),
-          ...(this.points?.greyoutStatusTexture && { pointGreyoutStatus: this.points.greyoutStatusTexture }),
-        },
-        /**
+    this.drawCurveCommand ||= new Model(device, {
+      vs: drawLineVert,
+      fs: drawLineFrag,
+      topology: 'triangle-strip',
+      vertexCount: this.curveLineGeometry?.length ?? 0,
+      attributes: {
+        position: this.curveLineBuffer!,
+        pointA: this.pointABuffer!,
+        pointB: this.pointBBuffer!,
+        color: this.colorBuffer!,
+        width: this.widthBuffer!,
+        arrow: this.arrowBuffer!,
+        linkIndices: this.linkIndexBuffer!,
+      },
+      bufferLayout: [
+        { name: 'position', format: 'float32x2' },
+        { name: 'pointA', format: 'float32x2', stepMode: 'instance' },
+        { name: 'pointB', format: 'float32x2', stepMode: 'instance' },
+        { name: 'color', format: 'float32x4', stepMode: 'instance' },
+        { name: 'width', format: 'float32', stepMode: 'instance' },
+        { name: 'arrow', format: 'float32', stepMode: 'instance' },
+        { name: 'linkIndices', format: 'float32', stepMode: 'instance' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        drawLineUniforms: this.drawLineUniformStore.getManagedUniformBuffer(device, 'drawLineUniforms'),
+        drawLineFragmentUniforms: this.drawLineUniformStore.getManagedUniformBuffer(device, 'drawLineFragmentUniforms'),
+        ...(this.points?.currentPositionTexture && { positionsTexture: this.points.currentPositionTexture }),
+        ...(this.points?.greyoutStatusTexture && { pointGreyoutStatus: this.points.greyoutStatusTexture }),
+      },
+      /**
          * Blending behavior for link index rendering (renderMode: 1.0 - hover detection):
          *
          * When rendering link indices to the framebuffer, we use full opacity (1.0).
@@ -235,65 +212,58 @@ export class Lines extends CoreModule {
          * - No blending occurs - it's like drawing with a permanent marker
          * - This preserves the exact index values we need for picking/selection
          */
-        parameters: {
-          cullMode: 'back',
-          blend: true,
-          blendColorOperation: 'add',
-          blendColorSrcFactor: 'src-alpha',
-          blendColorDstFactor: 'one-minus-src-alpha',
-          blendAlphaOperation: 'add',
-          blendAlphaSrcFactor: 'one',
-          blendAlphaDstFactor: 'one-minus-src-alpha',
-          depthWriteEnabled: false,
-          depthCompare: 'always',
-        },
-      })
-    }
+      parameters: {
+        cullMode: 'back',
+        blend: true,
+        blendColorOperation: 'add',
+        blendColorSrcFactor: 'src-alpha',
+        blendColorDstFactor: 'one-minus-src-alpha',
+        blendAlphaOperation: 'add',
+        blendAlphaSrcFactor: 'one',
+        blendAlphaDstFactor: 'one-minus-src-alpha',
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      },
+    })
 
-    if (!this.hoveredLineIndexCommand) {
-      // Initialize quad buffer for full-screen rendering
-      if (!this.quadBuffer) {
-        this.quadBuffer = device.createBuffer({
-          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-          usage: Buffer.VERTEX | Buffer.COPY_DST,
-        })
-      }
+    // Initialize quad buffer for full-screen rendering
+    this.quadBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+      usage: Buffer.VERTEX | Buffer.COPY_DST,
+    })
 
-      if (!this.hoveredLineIndexUniformStore) {
-        this.hoveredLineIndexUniformStore = new UniformStore({
-          hoveredLineIndexUniforms: {
-            uniformTypes: {
-              mousePosition: 'vec2<f32>',
-              screenSize: 'vec2<f32>',
-            },
-            defaultUniforms: {
-              mousePosition: store.screenMousePosition ?? [0, 0],
-              screenSize: store.screenSize ?? [0, 0],
-            },
-          },
-        })
-      }
+    this.hoveredLineIndexUniformStore ||= new UniformStore({
+      hoveredLineIndexUniforms: {
+        uniformTypes: {
+          mousePosition: 'vec2<f32>',
+          screenSize: 'vec2<f32>',
+        },
+        defaultUniforms: {
+          mousePosition: store.screenMousePosition ?? [0, 0],
+          screenSize: store.screenSize ?? [0, 0],
+        },
+      },
+    })
 
-      this.hoveredLineIndexCommand = new Model(device, {
-        vs: hoveredLineIndexVert,
-        fs: hoveredLineIndexFrag,
-        topology: 'triangle-strip',
-        vertexCount: 4,
-        attributes: {
-          vertexCoord: this.quadBuffer,
-        },
-        bufferLayout: [
-          { name: 'vertexCoord', format: 'float32x2' },
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true,
-        },
-        bindings: {
-          hoveredLineIndexUniforms: this.hoveredLineIndexUniformStore.getManagedUniformBuffer(device, 'hoveredLineIndexUniforms'),
-          ...(this.linkIndexTexture && { linkIndexTexture: this.linkIndexTexture }),
-        },
-      })
-    }
+    this.hoveredLineIndexCommand ||= new Model(device, {
+      vs: hoveredLineIndexVert,
+      fs: hoveredLineIndexFrag,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.quadBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        hoveredLineIndexUniforms: this.hoveredLineIndexUniformStore.getManagedUniformBuffer(device, 'hoveredLineIndexUniforms'),
+        ...(this.linkIndexTexture && { linkIndexTexture: this.linkIndexTexture }),
+      },
+    })
   }
 
   public draw (renderPass: RenderPass): void {

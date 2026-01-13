@@ -178,199 +178,179 @@ export class ForceManyBody extends CoreModule {
     if (!data.pointsNumber || !points || !store.pointsTextureSize) return
 
     // Clear levels command (fullscreen quad)
-    if (!this.clearLevelsCommand) {
-      if (!this.clearLevelsVertexCoordBuffer) {
-        this.clearLevelsVertexCoordBuffer = device.createBuffer({
-          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-        })
-      }
-      this.clearLevelsCommand = new Model(device, {
-        fs: clearFrag,
-        vs: updateVert,
-        topology: 'triangle-strip',
-        vertexCount: 4,
-        attributes: {
-          vertexCoord: this.clearLevelsVertexCoordBuffer,
-        },
-        bufferLayout: [
-          { name: 'vertexCoord', format: 'float32x2' },
-        ],
-      })
-    }
+    this.clearLevelsVertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
+    this.clearLevelsCommand ||= new Model(device, {
+      fs: clearFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.clearLevelsVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+    })
 
     // Calculate levels command (point list)
-    if (!this.calculateLevelsCommand) {
-      if (!this.calculateLevelsUniformStore) {
-        this.calculateLevelsUniformStore = new UniformStore({
-          calculateLevelsUniforms: {
-            uniformTypes: {
-              pointsTextureSize: 'f32',
-              levelTextureSize: 'f32',
-              cellSize: 'f32',
-            },
-            defaultUniforms: {
-              pointsTextureSize: store.pointsTextureSize,
-              levelTextureSize: 0,
-              cellSize: 0,
-            },
-          },
-        })
-      }
+    this.calculateLevelsUniformStore ||= new UniformStore({
+      calculateLevelsUniforms: {
+        uniformTypes: {
+          pointsTextureSize: 'f32',
+          levelTextureSize: 'f32',
+          cellSize: 'f32',
+        },
+        defaultUniforms: {
+          pointsTextureSize: store.pointsTextureSize,
+          levelTextureSize: 0,
+          cellSize: 0,
+        },
+      },
+    })
 
-      this.calculateLevelsCommand = new Model(device, {
-        fs: calculateLevelFrag,
-        vs: calculateLevelVert,
-        topology: 'point-list',
-        vertexCount: data.pointsNumber,
-        attributes: {
-          pointIndices: this.pointIndices!,
-        },
-        bufferLayout: [
-          { name: 'pointIndices', format: 'float32x2' },
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true,
-        },
-        bindings: {
-          calculateLevelsUniforms: this.calculateLevelsUniformStore.getManagedUniformBuffer(device, 'calculateLevelsUniforms'),
-          positionsTexture: points.previousPositionTexture!,
-        },
-        parameters: {
-          blend: true,
-          blendColorOperation: 'add',
-          blendColorSrcFactor: 'one',
-          blendColorDstFactor: 'one',
-          blendAlphaOperation: 'add',
-          blendAlphaSrcFactor: 'one',
-          blendAlphaDstFactor: 'one',
-          depthWriteEnabled: false,
-          depthCompare: 'always',
-        },
-      })
-    }
+    this.calculateLevelsCommand ||= new Model(device, {
+      fs: calculateLevelFrag,
+      vs: calculateLevelVert,
+      topology: 'point-list',
+      vertexCount: data.pointsNumber,
+      attributes: {
+        pointIndices: this.pointIndices!,
+      },
+      bufferLayout: [
+        { name: 'pointIndices', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        calculateLevelsUniforms: this.calculateLevelsUniformStore.getManagedUniformBuffer(device, 'calculateLevelsUniforms'),
+        positionsTexture: points.previousPositionTexture!,
+      },
+      parameters: {
+        blend: true,
+        blendColorOperation: 'add',
+        blendColorSrcFactor: 'one',
+        blendColorDstFactor: 'one',
+        blendAlphaOperation: 'add',
+        blendAlphaSrcFactor: 'one',
+        blendAlphaDstFactor: 'one',
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      },
+    })
 
     // Force command (fullscreen quad)
-    if (!this.forceCommand) {
-      if (!this.forceUniformStore) {
-        this.forceUniformStore = new UniformStore({
-          forceUniforms: {
-            uniformTypes: {
-              level: 'f32',
-              levels: 'f32',
-              levelTextureSize: 'f32',
-              alpha: 'f32',
-              repulsion: 'f32',
-              spaceSize: 'f32',
-              theta: 'f32',
-            },
-            defaultUniforms: {
-              level: 0,
-              levels: this.levels,
-              levelTextureSize: 0,
-              alpha: store.alpha,
-              repulsion: this.config.simulationRepulsion ?? 0,
-              spaceSize: store.adjustedSpaceSize ?? 0,
-              theta: this.config.simulationRepulsionTheta ?? 0,
-            },
-          },
-        })
-      }
+    this.forceUniformStore ||= new UniformStore({
+      forceUniforms: {
+        uniformTypes: {
+          level: 'f32',
+          levels: 'f32',
+          levelTextureSize: 'f32',
+          alpha: 'f32',
+          repulsion: 'f32',
+          spaceSize: 'f32',
+          theta: 'f32',
+        },
+        defaultUniforms: {
+          level: 0,
+          levels: this.levels,
+          levelTextureSize: 0,
+          alpha: store.alpha,
+          repulsion: this.config.simulationRepulsion ?? 0,
+          spaceSize: store.adjustedSpaceSize ?? 0,
+          theta: this.config.simulationRepulsionTheta ?? 0,
+        },
+      },
+    })
 
-      if (!this.forceVertexCoordBuffer) {
-        this.forceVertexCoordBuffer = device.createBuffer({
-          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-        })
-      }
+    this.forceVertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
 
-      this.forceCommand = new Model(device, {
-        fs: forceFrag,
-        vs: updateVert,
-        topology: 'triangle-strip',
-        vertexCount: 4,
-        attributes: {
-          vertexCoord: this.forceVertexCoordBuffer,
-        },
-        bufferLayout: [
-          { name: 'vertexCoord', format: 'float32x2' },
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true,
-        },
-        bindings: {
-          forceUniforms: this.forceUniformStore.getManagedUniformBuffer(device, 'forceUniforms'),
-          positionsTexture: points.previousPositionTexture!,
-        },
-        parameters: {
-          blend: true,
-          blendColorOperation: 'add',
-          blendColorSrcFactor: 'one',
-          blendColorDstFactor: 'one',
-          blendAlphaOperation: 'add',
-          blendAlphaSrcFactor: 'one',
-          blendAlphaDstFactor: 'one',
-          depthWriteEnabled: false,
-          depthCompare: 'always',
-        },
-      })
-    }
+    this.forceCommand ||= new Model(device, {
+      fs: forceFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.forceVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        forceUniforms: this.forceUniformStore.getManagedUniformBuffer(device, 'forceUniforms'),
+        positionsTexture: points.previousPositionTexture!,
+      },
+      parameters: {
+        blend: true,
+        blendColorOperation: 'add',
+        blendColorSrcFactor: 'one',
+        blendColorDstFactor: 'one',
+        blendAlphaOperation: 'add',
+        blendAlphaSrcFactor: 'one',
+        blendAlphaDstFactor: 'one',
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      },
+    })
 
     // Force-from-centermass command (fullscreen quad)
-    if (!this.forceFromItsOwnCentermassCommand) {
-      if (!this.forceCenterUniformStore) {
-        this.forceCenterUniformStore = new UniformStore({
-          forceCenterUniforms: {
-            uniformTypes: {
-              levelTextureSize: 'f32',
-              alpha: 'f32',
-              repulsion: 'f32',
-            },
-            defaultUniforms: {
-              levelTextureSize: 0,
-              alpha: store.alpha,
-              repulsion: this.config.simulationRepulsion ?? 0,
-            },
-          },
-        })
-      }
+    this.forceCenterUniformStore ||= new UniformStore({
+      forceCenterUniforms: {
+        uniformTypes: {
+          levelTextureSize: 'f32',
+          alpha: 'f32',
+          repulsion: 'f32',
+        },
+        defaultUniforms: {
+          levelTextureSize: 0,
+          alpha: store.alpha,
+          repulsion: this.config.simulationRepulsion ?? 0,
+        },
+      },
+    })
 
-      if (!this.forceVertexCoordBuffer) {
-        this.forceVertexCoordBuffer = device.createBuffer({
-          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-        })
-      }
+    this.forceVertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
 
-      this.forceFromItsOwnCentermassCommand = new Model(device, {
-        fs: forceCenterFrag,
-        vs: updateVert,
-        topology: 'triangle-strip',
-        vertexCount: 4,
-        attributes: {
-          vertexCoord: this.forceVertexCoordBuffer,
-        },
-        bufferLayout: [
-          { name: 'vertexCoord', format: 'float32x2' },
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true,
-        },
-        bindings: {
-          forceCenterUniforms: this.forceCenterUniformStore.getManagedUniformBuffer(device, 'forceCenterUniforms'),
-          positionsTexture: points.previousPositionTexture!,
-          randomValues: this.randomValuesTexture!,
-        },
-        parameters: {
-          blend: true,
-          blendColorOperation: 'add',
-          blendColorSrcFactor: 'one',
-          blendColorDstFactor: 'one',
-          blendAlphaOperation: 'add',
-          blendAlphaSrcFactor: 'one',
-          blendAlphaDstFactor: 'one',
-          depthWriteEnabled: false,
-          depthCompare: 'always',
-        },
-      })
-    }
+    this.forceFromItsOwnCentermassCommand ||= new Model(device, {
+      fs: forceCenterFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.forceVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        forceCenterUniforms: this.forceCenterUniformStore.getManagedUniformBuffer(device, 'forceCenterUniforms'),
+        positionsTexture: points.previousPositionTexture!,
+        randomValues: this.randomValuesTexture!,
+      },
+      parameters: {
+        blend: true,
+        blendColorOperation: 'add',
+        blendColorSrcFactor: 'one',
+        blendColorDstFactor: 'one',
+        blendAlphaOperation: 'add',
+        blendAlphaSrcFactor: 'one',
+        blendAlphaDstFactor: 'one',
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      },
+    })
   }
 
   public run (renderPass?: RenderPass): void {

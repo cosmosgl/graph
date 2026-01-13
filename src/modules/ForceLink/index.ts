@@ -170,56 +170,50 @@ export class ForceLink extends CoreModule {
     if (!points || !store.pointsTextureSize || !store.linksTextureSize) return
     if (!this.linkFirstIndicesAndAmountTexture || !this.indicesTexture || !this.biasAndStrengthTexture || !this.randomDistanceTexture) return
 
-    if (!this.vertexCoordBuffer || this.vertexCoordBuffer.destroyed) {
-      this.vertexCoordBuffer = device.createBuffer({
-        data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-      })
-    }
+    this.vertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
 
-    if (!this.uniformStore) {
-      this.uniformStore = new UniformStore({
-        forceLinkUniforms: {
-          uniformTypes: {
-            linkSpring: 'f32',
-            linkDistance: 'f32',
-            linkDistRandomVariationRange: 'vec2<f32>',
-            pointsTextureSize: 'f32',
-            linksTextureSize: 'f32',
-            alpha: 'f32',
-          },
+    this.uniformStore ||= new UniformStore({
+      forceLinkUniforms: {
+        uniformTypes: {
+          linkSpring: 'f32',
+          linkDistance: 'f32',
+          linkDistRandomVariationRange: 'vec2<f32>',
+          pointsTextureSize: 'f32',
+          linksTextureSize: 'f32',
+          alpha: 'f32',
         },
-      })
-    }
+      },
+    })
 
-    if (!this.runCommand) {
-      this.runCommand = new Model(device, {
-        fs: forceFrag(this.maxPointDegree),
-        vs: updateVert,
-        topology: 'triangle-strip',
-        vertexCount: 4,
-        attributes: {
-          vertexCoord: this.vertexCoordBuffer,
-        },
-        bufferLayout: [
-          { name: 'vertexCoord', format: 'float32x2' },
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true,
-        },
-        bindings: {
-          forceLinkUniforms: this.uniformStore.getManagedUniformBuffer(device, 'forceLinkUniforms'),
-          positionsTexture: points.previousPositionTexture!,
-          linkInfoTexture: this.linkFirstIndicesAndAmountTexture,
-          linkIndicesTexture: this.indicesTexture,
-          linkPropertiesTexture: this.biasAndStrengthTexture,
-          linkRandomDistanceTexture: this.randomDistanceTexture,
-        },
-        parameters: {
-          depthWriteEnabled: false,
-          depthCompare: 'always',
-        },
-      })
-    }
+    this.runCommand ||= new Model(device, {
+      fs: forceFrag(this.maxPointDegree),
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.vertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        forceLinkUniforms: this.uniformStore.getManagedUniformBuffer(device, 'forceLinkUniforms'),
+        positionsTexture: points.previousPositionTexture!,
+        linkInfoTexture: this.linkFirstIndicesAndAmountTexture,
+        linkIndicesTexture: this.indicesTexture,
+        linkPropertiesTexture: this.biasAndStrengthTexture,
+        linkRandomDistanceTexture: this.randomDistanceTexture,
+      },
+      parameters: {
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      },
+    })
   }
 
   public run (renderPass?: RenderPass): void {
