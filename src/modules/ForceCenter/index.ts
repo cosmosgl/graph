@@ -71,6 +71,11 @@ export class ForceCenter extends CoreModule {
     } else {
       this.pointIndices.write(indexData)
     }
+    if (this.calculateCentermassCommand) {
+      this.calculateCentermassCommand.setAttributes({
+        pointIndices: this.pointIndices,
+      })
+    }
 
     this.previousPointsTextureSize = pointsTextureSize
   }

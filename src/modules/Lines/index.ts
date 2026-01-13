@@ -436,6 +436,13 @@ export class Lines extends CoreModule {
     } else {
       this.linkIndexBuffer.write(linkIndices)
     }
+    if (this.drawCurveCommand) {
+      this.drawCurveCommand.setAttributes({
+        pointA: this.pointABuffer,
+        pointB: this.pointBBuffer,
+        linkIndices: this.linkIndexBuffer,
+      })
+    }
   }
 
   public updateColor (): void {
@@ -463,6 +470,11 @@ export class Lines extends CoreModule {
         this.colorBuffer.write(colorData)
       }
     }
+    if (this.drawCurveCommand) {
+      this.drawCurveCommand.setAttributes({
+        color: this.colorBuffer,
+      })
+    }
   }
 
   public updateWidth (): void {
@@ -489,6 +501,11 @@ export class Lines extends CoreModule {
       } else {
         this.widthBuffer.write(widthData)
       }
+    }
+    if (this.drawCurveCommand) {
+      this.drawCurveCommand.setAttributes({
+        width: this.widthBuffer,
+      })
     }
   }
 
@@ -521,6 +538,11 @@ export class Lines extends CoreModule {
         this.arrowBuffer.write(arrowData)
       }
     }
+    if (this.drawCurveCommand) {
+      this.drawCurveCommand.setAttributes({
+        arrow: this.arrowBuffer,
+      })
+    }
   }
 
   public updateCurveLineGeometry (): void {
@@ -534,7 +556,8 @@ export class Lines extends CoreModule {
       flatGeometry[i * 2 + 1] = this.curveLineGeometry[i]![1]!
     }
 
-    if (!this.curveLineBuffer) {
+    if (!this.curveLineBuffer || this.curveLineBuffer.byteLength !== flatGeometry.byteLength) {
+      this.curveLineBuffer?.destroy()
       this.curveLineBuffer = device.createBuffer({
         data: flatGeometry,
         usage: Buffer.VERTEX | Buffer.COPY_DST,
@@ -545,6 +568,9 @@ export class Lines extends CoreModule {
 
     // Update vertex count in model if it exists
     if (this.drawCurveCommand) {
+      this.drawCurveCommand.setAttributes({
+        position: this.curveLineBuffer,
+      })
       this.drawCurveCommand.setVertexCount(this.curveLineGeometry.length)
     }
   }

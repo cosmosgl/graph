@@ -168,6 +168,11 @@ export class ForceManyBody extends CoreModule {
     } else {
       this.pointIndices.write(indexData)
     }
+    if (this.calculateLevelsCommand) {
+      this.calculateLevelsCommand.setAttributes({
+        pointIndices: this.pointIndices,
+      })
+    }
 
     this.previousPointsTextureSize = store.pointsTextureSize
     this.previousSpaceSize = store.adjustedSpaceSize
