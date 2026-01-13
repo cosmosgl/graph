@@ -392,13 +392,11 @@ export class Points extends CoreModule {
     }
 
     // Create hoveredFbo (2x2 for hover detection)
-    if (!this.hoveredFbo) {
-      this.hoveredFbo = device.createFramebuffer({
-        width: 2,
-        height: 2,
-        colorAttachments: ['rgba32float'],
-      })
-    }
+    this.hoveredFbo ||= device.createFramebuffer({
+      width: 2,
+      height: 2,
+      colorAttachments: ['rgba32float'],
+    })
 
     // Create buffers
     const indexData = createIndexesForBuffer(store.pointsTextureSize)
@@ -455,87 +453,33 @@ export class Points extends CoreModule {
     if (!this.imageSizesBuffer) this.updateImageSizes()
     if (!this.greyoutStatusTexture) this.updateGreyoutStatus()
     if (config.enableSimulation) {
-      if (!this.updatePositionCommand) {
-        // Create vertex buffer for quad
-        if (!this.updatePositionVertexCoordBuffer) {
-          this.updatePositionVertexCoordBuffer = device.createBuffer({
-            data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-          })
-        }
-
-        // Create UniformStore for updatePosition uniforms
-        if (!this.updatePositionUniformStore) {
-          this.updatePositionUniformStore = new UniformStore({
-            updatePositionUniforms: {
-              uniformTypes: {
-                // Order MUST match shader declaration order (std140 layout)
-                friction: 'f32',
-                spaceSize: 'f32',
-              },
-              defaultUniforms: {
-                friction: config.simulationFriction ?? 0,
-                spaceSize: store.adjustedSpaceSize ?? 0,
-              },
-            },
-          })
-        }
-
-        this.updatePositionCommand = new Model(device, {
-          fs: updatePositionFrag,
-          vs: updateVert,
-          topology: 'triangle-strip',
-          vertexCount: 4,
-          attributes: {
-            vertexCoord: this.updatePositionVertexCoordBuffer,
-          },
-          bufferLayout: [
-            { name: 'vertexCoord', format: 'float32x2' },
-          ],
-          defines: {
-            USE_UNIFORM_BUFFERS: true,
-          },
-          bindings: {
-            updatePositionUniforms: this.updatePositionUniformStore.getManagedUniformBuffer(device, 'updatePositionUniforms'),
-            ...(this.previousPositionTexture && { positionsTexture: this.previousPositionTexture }),
-            ...(this.velocityTexture && { velocity: this.velocityTexture }),
-            ...(this.pinnedStatusTexture && { pinnedStatusTexture: this.pinnedStatusTexture }),
-          },
-        })
-      }
-    }
-
-    if (!this.dragPointCommand) {
       // Create vertex buffer for quad
-      if (!this.dragPointVertexCoordBuffer) {
-        this.dragPointVertexCoordBuffer = device.createBuffer({
-          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-        })
-      }
+      this.updatePositionVertexCoordBuffer ||= device.createBuffer({
+        data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+      })
 
-      // Create UniformStore for dragPoint uniforms
-      if (!this.dragPointUniformStore) {
-        this.dragPointUniformStore = new UniformStore({
-          dragPointUniforms: {
-            uniformTypes: {
-              // Order MUST match shader declaration order (std140 layout)
-              mousePos: 'vec2<f32>',
-              index: 'f32',
-            },
-            defaultUniforms: {
-              mousePos: (store.mousePosition as [number, number]) ?? [0, 0],
-              index: store.hoveredPoint?.index ?? -1,
-            },
+      // Create UniformStore for updatePosition uniforms
+      this.updatePositionUniformStore ||= new UniformStore({
+        updatePositionUniforms: {
+          uniformTypes: {
+            // Order MUST match shader declaration order (std140 layout)
+            friction: 'f32',
+            spaceSize: 'f32',
           },
-        })
-      }
+          defaultUniforms: {
+            friction: config.simulationFriction ?? 0,
+            spaceSize: store.adjustedSpaceSize ?? 0,
+          },
+        },
+      })
 
-      this.dragPointCommand = new Model(device, {
-        fs: dragPointFrag,
+      this.updatePositionCommand ||= new Model(device, {
+        fs: updatePositionFrag,
         vs: updateVert,
         topology: 'triangle-strip',
         vertexCount: 4,
         attributes: {
-          vertexCoord: this.dragPointVertexCoordBuffer,
+          vertexCoord: this.updatePositionVertexCoordBuffer,
         },
         bufferLayout: [
           { name: 'vertexCoord', format: 'float32x2' },
@@ -544,526 +488,524 @@ export class Points extends CoreModule {
           USE_UNIFORM_BUFFERS: true,
         },
         bindings: {
-          dragPointUniforms: this.dragPointUniformStore.getManagedUniformBuffer(device, 'dragPointUniforms'),
+          updatePositionUniforms: this.updatePositionUniformStore.getManagedUniformBuffer(device, 'updatePositionUniforms'),
           ...(this.previousPositionTexture && { positionsTexture: this.previousPositionTexture }),
+          ...(this.velocityTexture && { velocity: this.velocityTexture }),
+          ...(this.pinnedStatusTexture && { pinnedStatusTexture: this.pinnedStatusTexture }),
         },
       })
     }
 
-    if (!this.drawCommand) {
-      // Create UniformStore for draw uniforms
-      if (!this.drawUniformStore) {
-        this.drawUniformStore = new UniformStore({
-          drawVertexUniforms: {
-            uniformTypes: {
-              // Order MUST match shader declaration order (std140 layout)
-              ratio: 'f32',
-              transformationMatrix: 'mat4x4<f32>',
-              pointsTextureSize: 'f32',
-              sizeScale: 'f32',
-              spaceSize: 'f32',
-              screenSize: 'vec2<f32>',
-              greyoutColor: 'vec4<f32>',
-              backgroundColor: 'vec4<f32>',
-              scalePointsOnZoom: 'f32',
-              maxPointSize: 'f32',
-              isDarkenGreyout: 'f32',
-              skipSelected: 'f32',
-              skipUnselected: 'f32',
-              hasImages: 'f32',
-              imageCount: 'f32',
-              imageAtlasCoordsTextureSize: 'f32',
-            },
-            defaultUniforms: {
-              // Order MUST match uniformTypes and shader declaration
-              ratio: config.pixelRatio ?? defaultConfigValues.pixelRatio,
-              transformationMatrix: ((): [
+    // Create vertex buffer for quad
+    this.dragPointVertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
+
+    // Create UniformStore for dragPoint uniforms
+    this.dragPointUniformStore ||= new UniformStore({
+      dragPointUniforms: {
+        uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
+          mousePos: 'vec2<f32>',
+          index: 'f32',
+        },
+        defaultUniforms: {
+          mousePos: (store.mousePosition as [number, number]) ?? [0, 0],
+          index: store.hoveredPoint?.index ?? -1,
+        },
+      },
+    })
+
+    this.dragPointCommand ||= new Model(device, {
+      fs: dragPointFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.dragPointVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        dragPointUniforms: this.dragPointUniformStore.getManagedUniformBuffer(device, 'dragPointUniforms'),
+        ...(this.previousPositionTexture && { positionsTexture: this.previousPositionTexture }),
+      },
+    })
+
+    // Create UniformStore for draw uniforms
+    this.drawUniformStore ||= new UniformStore({
+      drawVertexUniforms: {
+        uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
+          ratio: 'f32',
+          transformationMatrix: 'mat4x4<f32>',
+          pointsTextureSize: 'f32',
+          sizeScale: 'f32',
+          spaceSize: 'f32',
+          screenSize: 'vec2<f32>',
+          greyoutColor: 'vec4<f32>',
+          backgroundColor: 'vec4<f32>',
+          scalePointsOnZoom: 'f32',
+          maxPointSize: 'f32',
+          isDarkenGreyout: 'f32',
+          skipSelected: 'f32',
+          skipUnselected: 'f32',
+          hasImages: 'f32',
+          imageCount: 'f32',
+          imageAtlasCoordsTextureSize: 'f32',
+        },
+        defaultUniforms: {
+          // Order MUST match uniformTypes and shader declaration
+          ratio: config.pixelRatio ?? defaultConfigValues.pixelRatio,
+          transformationMatrix: ((): [
                 number, number, number, number,
                 number, number, number, number,
                 number, number, number, number,
                 number, number, number, number
               ] => {
-                const t = store.transform ?? [1, 0, 0, 0, 1, 0, 0, 0, 1]
-                return [
-                  t[0], t[1], t[2], 0,
-                  t[3], t[4], t[5], 0,
-                  t[6], t[7], t[8], 0,
-                  0, 0, 0, 1,
-                ]
-              })(),
-              pointsTextureSize: store.pointsTextureSize ?? 0,
-              sizeScale: config.pointSizeScale ?? 1,
-              spaceSize: store.adjustedSpaceSize ?? 0,
-              screenSize: store.screenSize ?? [0, 0],
-              greyoutColor: (store.greyoutPointColor ?? [0, 0, 0, 1]) as [number, number, number, number],
-              backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
-              scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0, // Convert boolean to float
-              maxPointSize: store.maxPointSize ?? 100,
-              isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
-              skipSelected: 0, // Default to 0 (false)
-              skipUnselected: 0, // Default to 0 (false)
-              hasImages: (this.imageCount > 0) ? 1 : 0, // Convert boolean to float
-              imageCount: this.imageCount,
-              imageAtlasCoordsTextureSize: this.imageAtlasCoordsTextureSize ?? 0,
-            },
-          },
-          drawFragmentUniforms: {
-            uniformTypes: {
-              greyoutOpacity: 'f32',
-              pointOpacity: 'f32',
-              isDarkenGreyout: 'f32',
-              backgroundColor: 'vec4<f32>',
-            },
-            defaultUniforms: {
-              greyoutOpacity: config.pointGreyoutOpacity ?? -1,
-              pointOpacity: config.pointOpacity ?? 1,
-              isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
-              backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
-            },
-          },
-        })
-      }
+            const t = store.transform ?? [1, 0, 0, 0, 1, 0, 0, 0, 1]
+            return [
+              t[0], t[1], t[2], 0,
+              t[3], t[4], t[5], 0,
+              t[6], t[7], t[8], 0,
+              0, 0, 0, 1,
+            ]
+          })(),
+          pointsTextureSize: store.pointsTextureSize ?? 0,
+          sizeScale: config.pointSizeScale ?? 1,
+          spaceSize: store.adjustedSpaceSize ?? 0,
+          screenSize: store.screenSize ?? [0, 0],
+          greyoutColor: (store.greyoutPointColor ?? [0, 0, 0, 1]) as [number, number, number, number],
+          backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
+          scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0, // Convert boolean to float
+          maxPointSize: store.maxPointSize ?? 100,
+          isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
+          skipSelected: 0, // Default to 0 (false)
+          skipUnselected: 0, // Default to 0 (false)
+          hasImages: (this.imageCount > 0) ? 1 : 0, // Convert boolean to float
+          imageCount: this.imageCount,
+          imageAtlasCoordsTextureSize: this.imageAtlasCoordsTextureSize ?? 0,
+        },
+      },
+      drawFragmentUniforms: {
+        uniformTypes: {
+          greyoutOpacity: 'f32',
+          pointOpacity: 'f32',
+          isDarkenGreyout: 'f32',
+          backgroundColor: 'vec4<f32>',
+        },
+        defaultUniforms: {
+          greyoutOpacity: config.pointGreyoutOpacity ?? -1,
+          pointOpacity: config.pointOpacity ?? 1,
+          isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
+          backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
+        },
+      },
+    })
 
-      this.drawCommand = new Model(device, {
-        fs: drawPointsFrag,
-        vs: drawPointsVert,
-        topology: 'point-list',
-        vertexCount: data.pointsNumber ?? 0,
-        attributes: {
-          ...(this.drawPointIndices && { pointIndices: this.drawPointIndices }),
-          ...(this.sizeBuffer && { size: this.sizeBuffer }),
-          ...(this.colorBuffer && { color: this.colorBuffer }),
-          ...(this.shapeBuffer && { shape: this.shapeBuffer }),
-          ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
-          ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
-        },
-        bufferLayout: [
-          { name: 'pointIndices', format: 'float32x2' },
-          { name: 'size', format: 'float32' },
-          { name: 'color', format: 'float32x4' },
-          { name: 'shape', format: 'float32' },
-          { name: 'imageIndex', format: 'float32' },
-          { name: 'imageSize', format: 'float32' },
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true,
-        },
-        bindings: {
-          drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer(device, 'drawVertexUniforms'),
-          drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer(device, 'drawFragmentUniforms'),
-          ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
-          ...(this.greyoutStatusTexture && { pointGreyoutStatus: this.greyoutStatusTexture }),
-          ...(this.imageAtlasTexture && { imageAtlasTexture: this.imageAtlasTexture }),
-          ...(this.imageAtlasCoordsTexture && { imageAtlasCoords: this.imageAtlasCoordsTexture }),
-        },
-        parameters: {
-          blend: true,
-          blendColorOperation: 'add',
-          blendColorSrcFactor: 'src-alpha',
-          blendColorDstFactor: 'one-minus-src-alpha',
-          blendAlphaOperation: 'add',
-          blendAlphaSrcFactor: 'one',
-          blendAlphaDstFactor: 'one-minus-src-alpha',
-          depthWriteEnabled: false,
-          depthCompare: 'always',
-        },
-      })
-    }
+    this.drawCommand ||= new Model(device, {
+      fs: drawPointsFrag,
+      vs: drawPointsVert,
+      topology: 'point-list',
+      vertexCount: data.pointsNumber ?? 0,
+      attributes: {
+        ...(this.drawPointIndices && { pointIndices: this.drawPointIndices }),
+        ...(this.sizeBuffer && { size: this.sizeBuffer }),
+        ...(this.colorBuffer && { color: this.colorBuffer }),
+        ...(this.shapeBuffer && { shape: this.shapeBuffer }),
+        ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
+        ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
+      },
+      bufferLayout: [
+        { name: 'pointIndices', format: 'float32x2' },
+        { name: 'size', format: 'float32' },
+        { name: 'color', format: 'float32x4' },
+        { name: 'shape', format: 'float32' },
+        { name: 'imageIndex', format: 'float32' },
+        { name: 'imageSize', format: 'float32' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer(device, 'drawVertexUniforms'),
+        drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer(device, 'drawFragmentUniforms'),
+        ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
+        ...(this.greyoutStatusTexture && { pointGreyoutStatus: this.greyoutStatusTexture }),
+        ...(this.imageAtlasTexture && { imageAtlasTexture: this.imageAtlasTexture }),
+        ...(this.imageAtlasCoordsTexture && { imageAtlasCoords: this.imageAtlasCoordsTexture }),
+      },
+      parameters: {
+        blend: true,
+        blendColorOperation: 'add',
+        blendColorSrcFactor: 'src-alpha',
+        blendColorDstFactor: 'one-minus-src-alpha',
+        blendAlphaOperation: 'add',
+        blendAlphaSrcFactor: 'one',
+        blendAlphaDstFactor: 'one-minus-src-alpha',
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      },
+    })
 
-    if (!this.findPointsOnAreaSelectionCommand) {
-      // Create vertex buffer for quad
-      if (!this.findPointsOnAreaSelectionVertexCoordBuffer) {
-        this.findPointsOnAreaSelectionVertexCoordBuffer = device.createBuffer({
-          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-        })
-      }
+    // Create vertex buffer for quad
+    this.findPointsOnAreaSelectionVertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
 
-      // Create UniformStore for findPointsOnAreaSelection uniforms
-      if (!this.findPointsOnAreaSelectionUniformStore) {
-        this.findPointsOnAreaSelectionUniformStore = new UniformStore({
-          findPointsOnAreaSelectionUniforms: {
-            uniformTypes: {
-              // Order MUST match shader declaration order (std140 layout)
-              sizeScale: 'f32',
-              spaceSize: 'f32',
-              screenSize: 'vec2<f32>',
-              ratio: 'f32',
-              transformationMatrix: 'mat4x4<f32>',
-              selection0: 'vec2<f32>',
-              selection1: 'vec2<f32>',
-              scalePointsOnZoom: 'f32',
-              maxPointSize: 'f32',
-            },
-            defaultUniforms: {
-              sizeScale: config.pointSizeScale ?? 1,
-              spaceSize: store.adjustedSpaceSize ?? 0,
-              screenSize: store.screenSize ?? [0, 0],
-              ratio: config.pixelRatio ?? defaultConfigValues.pixelRatio,
-              transformationMatrix: store.transformationMatrix4x4,
-              selection0: (store.selectedArea?.[0] ?? [0, 0]) as [number, number],
-              selection1: (store.selectedArea?.[1] ?? [0, 0]) as [number, number],
-              scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
-              maxPointSize: store.maxPointSize ?? 100,
-            },
-          },
-        })
-      }
+    // Create UniformStore for findPointsOnAreaSelection uniforms
+    this.findPointsOnAreaSelectionUniformStore ||= new UniformStore({
+      findPointsOnAreaSelectionUniforms: {
+        uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
+          sizeScale: 'f32',
+          spaceSize: 'f32',
+          screenSize: 'vec2<f32>',
+          ratio: 'f32',
+          transformationMatrix: 'mat4x4<f32>',
+          selection0: 'vec2<f32>',
+          selection1: 'vec2<f32>',
+          scalePointsOnZoom: 'f32',
+          maxPointSize: 'f32',
+        },
+        defaultUniforms: {
+          sizeScale: config.pointSizeScale ?? 1,
+          spaceSize: store.adjustedSpaceSize ?? 0,
+          screenSize: store.screenSize ?? [0, 0],
+          ratio: config.pixelRatio ?? defaultConfigValues.pixelRatio,
+          transformationMatrix: store.transformationMatrix4x4,
+          selection0: (store.selectedArea?.[0] ?? [0, 0]) as [number, number],
+          selection1: (store.selectedArea?.[1] ?? [0, 0]) as [number, number],
+          scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
+          maxPointSize: store.maxPointSize ?? 100,
+        },
+      },
+    })
 
-      this.findPointsOnAreaSelectionCommand = new Model(device, {
-        fs: findPointsOnAreaSelectionFrag,
-        vs: updateVert,
-        topology: 'triangle-strip',
-        vertexCount: 4,
-        attributes: {
-          vertexCoord: this.findPointsOnAreaSelectionVertexCoordBuffer,
-        },
-        bufferLayout: [
-          { name: 'vertexCoord', format: 'float32x2' },
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true,
-        },
-        bindings: {
-          findPointsOnAreaSelectionUniforms: this.findPointsOnAreaSelectionUniformStore.getManagedUniformBuffer(device, 'findPointsOnAreaSelectionUniforms'),
-          ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
-          ...(this.sizeTexture && { pointSize: this.sizeTexture }),
-        },
-      })
-    }
+    this.findPointsOnAreaSelectionCommand ||= new Model(device, {
+      fs: findPointsOnAreaSelectionFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.findPointsOnAreaSelectionVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        findPointsOnAreaSelectionUniforms: this.findPointsOnAreaSelectionUniformStore.getManagedUniformBuffer(device, 'findPointsOnAreaSelectionUniforms'),
+        ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
+        ...(this.sizeTexture && { pointSize: this.sizeTexture }),
+      },
+    })
 
-    if (!this.findPointsOnPolygonSelectionCommand) {
-      // Create vertex buffer for quad
-      if (!this.findPointsOnPolygonSelectionVertexCoordBuffer) {
-        this.findPointsOnPolygonSelectionVertexCoordBuffer = device.createBuffer({
-          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-        })
-      }
+    // Create vertex buffer for quad
+    this.findPointsOnPolygonSelectionVertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
 
-      // Create UniformStore for findPointsOnPolygonSelection uniforms
-      if (!this.findPointsOnPolygonSelectionUniformStore) {
-        this.findPointsOnPolygonSelectionUniformStore = new UniformStore({
-          findPointsOnPolygonSelectionUniforms: {
-            uniformTypes: {
-              // Order MUST match shader declaration order (std140 layout)
-              spaceSize: 'f32',
-              screenSize: 'vec2<f32>',
-              transformationMatrix: 'mat4x4<f32>',
-              polygonPathLength: 'f32',
-            },
-            defaultUniforms: {
-              spaceSize: store.adjustedSpaceSize ?? 0,
-              screenSize: store.screenSize ?? [0, 0],
-              transformationMatrix: store.transformationMatrix4x4,
-              polygonPathLength: this.polygonPathLength,
-            },
-          },
-        })
-      }
+    // Create UniformStore for findPointsOnPolygonSelection uniforms
+    this.findPointsOnPolygonSelectionUniformStore ||= new UniformStore({
+      findPointsOnPolygonSelectionUniforms: {
+        uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
+          spaceSize: 'f32',
+          screenSize: 'vec2<f32>',
+          transformationMatrix: 'mat4x4<f32>',
+          polygonPathLength: 'f32',
+        },
+        defaultUniforms: {
+          spaceSize: store.adjustedSpaceSize ?? 0,
+          screenSize: store.screenSize ?? [0, 0],
+          transformationMatrix: store.transformationMatrix4x4,
+          polygonPathLength: this.polygonPathLength,
+        },
+      },
+    })
 
-      this.findPointsOnPolygonSelectionCommand = new Model(device, {
-        fs: findPointsOnPolygonSelectionFrag,
-        vs: updateVert,
-        topology: 'triangle-strip',
-        vertexCount: 4,
-        attributes: {
-          vertexCoord: this.findPointsOnPolygonSelectionVertexCoordBuffer,
-        },
-        bufferLayout: [
-          { name: 'vertexCoord', format: 'float32x2' },
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true,
-        },
-        bindings: {
-          findPointsOnPolygonSelectionUniforms: this.findPointsOnPolygonSelectionUniformStore
-            .getManagedUniformBuffer(device, 'findPointsOnPolygonSelectionUniforms'),
-          ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
-          ...(this.polygonPathTexture && { polygonPathTexture: this.polygonPathTexture }),
-        },
-      })
-    }
+    this.findPointsOnPolygonSelectionCommand ||= new Model(device, {
+      fs: findPointsOnPolygonSelectionFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.findPointsOnPolygonSelectionVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        findPointsOnPolygonSelectionUniforms: this.findPointsOnPolygonSelectionUniformStore
+          .getManagedUniformBuffer(device, 'findPointsOnPolygonSelectionUniforms'),
+        ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
+        ...(this.polygonPathTexture && { polygonPathTexture: this.polygonPathTexture }),
+      },
+    })
 
-    if (!this.clearHoveredFboCommand) {
-      // Create vertex buffer for quad
-      if (!this.clearHoveredFboVertexCoordBuffer) {
-        this.clearHoveredFboVertexCoordBuffer = device.createBuffer({
-          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-        })
-      }
+    // Create vertex buffer for quad
+    this.clearHoveredFboVertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
 
-      this.clearHoveredFboCommand = new Model(device, {
-        fs: clearFrag,
-        vs: updateVert,
-        topology: 'triangle-strip',
-        vertexCount: 4,
-        attributes: {
-          vertexCoord: this.clearHoveredFboVertexCoordBuffer,
-        },
-        bufferLayout: [
-          { name: 'vertexCoord', format: 'float32x2' },
-        ],
-      })
-    }
+    this.clearHoveredFboCommand ||= new Model(device, {
+      fs: clearFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.clearHoveredFboVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+    })
 
-    if (!this.findHoveredPointCommand) {
-      // Create UniformStore for findHoveredPoint uniforms
-      if (!this.findHoveredPointUniformStore) {
-        this.findHoveredPointUniformStore = new UniformStore({
-          findHoveredPointUniforms: {
-            uniformTypes: {
-              // Order MUST match shader declaration order (std140 layout)
-              pointsTextureSize: 'f32',
-              sizeScale: 'f32',
-              spaceSize: 'f32',
-              screenSize: 'vec2<f32>',
-              ratio: 'f32',
-              transformationMatrix: 'mat4x4<f32>',
-              mousePosition: 'vec2<f32>',
-              scalePointsOnZoom: 'f32',
-              maxPointSize: 'f32',
-            },
-            defaultUniforms: {
-              pointsTextureSize: store.pointsTextureSize ?? 0,
-              sizeScale: config.pointSizeScale ?? 1,
-              spaceSize: store.adjustedSpaceSize ?? 0,
-              screenSize: store.screenSize ?? [0, 0],
-              ratio: config.pixelRatio ?? defaultConfigValues.pixelRatio,
-              transformationMatrix: store.transformationMatrix4x4,
-              mousePosition: store.screenMousePosition ?? [0, 0],
-              scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
-              maxPointSize: store.maxPointSize ?? 100,
-            },
-          },
-        })
-      }
+    // Create UniformStore for findHoveredPoint uniforms
+    this.findHoveredPointUniformStore ||= new UniformStore({
+      findHoveredPointUniforms: {
+        uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
+          pointsTextureSize: 'f32',
+          sizeScale: 'f32',
+          spaceSize: 'f32',
+          screenSize: 'vec2<f32>',
+          ratio: 'f32',
+          transformationMatrix: 'mat4x4<f32>',
+          mousePosition: 'vec2<f32>',
+          scalePointsOnZoom: 'f32',
+          maxPointSize: 'f32',
+        },
+        defaultUniforms: {
+          pointsTextureSize: store.pointsTextureSize ?? 0,
+          sizeScale: config.pointSizeScale ?? 1,
+          spaceSize: store.adjustedSpaceSize ?? 0,
+          screenSize: store.screenSize ?? [0, 0],
+          ratio: config.pixelRatio ?? defaultConfigValues.pixelRatio,
+          transformationMatrix: store.transformationMatrix4x4,
+          mousePosition: store.screenMousePosition ?? [0, 0],
+          scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
+          maxPointSize: store.maxPointSize ?? 100,
+        },
+      },
+    })
 
-      this.findHoveredPointCommand = new Model(device, {
-        fs: findHoveredPointFrag,
-        vs: findHoveredPointVert,
-        topology: 'point-list',
-        vertexCount: data.pointsNumber ?? 0,
-        attributes: {
-          ...(this.hoveredPointIndices && { pointIndices: this.hoveredPointIndices }),
-          ...(this.sizeBuffer && { size: this.sizeBuffer }),
-        },
-        bufferLayout: [
-          { name: 'pointIndices', format: 'float32x2' },
-          { name: 'size', format: 'float32' },
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true,
-        },
-        bindings: {
-          findHoveredPointUniforms: this.findHoveredPointUniformStore.getManagedUniformBuffer(device, 'findHoveredPointUniforms'),
-          ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
-        },
-        parameters: {
-          depthWriteEnabled: false,
-          depthCompare: 'always',
-          blend: false, // Disable blending - we want to overwrite, not blend
-        },
-      })
-    }
+    this.findHoveredPointCommand ||= new Model(device, {
+      fs: findHoveredPointFrag,
+      vs: findHoveredPointVert,
+      topology: 'point-list',
+      vertexCount: data.pointsNumber ?? 0,
+      attributes: {
+        ...(this.hoveredPointIndices && { pointIndices: this.hoveredPointIndices }),
+        ...(this.sizeBuffer && { size: this.sizeBuffer }),
+      },
+      bufferLayout: [
+        { name: 'pointIndices', format: 'float32x2' },
+        { name: 'size', format: 'float32' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        findHoveredPointUniforms: this.findHoveredPointUniformStore.getManagedUniformBuffer(device, 'findHoveredPointUniforms'),
+        ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
+      },
+      parameters: {
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+        blend: false, // Disable blending - we want to overwrite, not blend
+      },
+    })
 
-    if (!this.clearSampledPointsFboCommand) {
-      // Create vertex buffer for quad
-      if (!this.clearSampledPointsFboVertexCoordBuffer) {
-        this.clearSampledPointsFboVertexCoordBuffer = device.createBuffer({
-          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-        })
-      }
+    // Create vertex buffer for quad
+    this.clearSampledPointsFboVertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
 
-      this.clearSampledPointsFboCommand = new Model(device, {
-        fs: clearFrag,
-        vs: updateVert,
-        topology: 'triangle-strip',
-        vertexCount: 4,
-        attributes: {
-          vertexCoord: this.clearSampledPointsFboVertexCoordBuffer,
-        },
-        bufferLayout: [
-          { name: 'vertexCoord', format: 'float32x2' },
-        ],
-      })
-    }
+    this.clearSampledPointsFboCommand ||= new Model(device, {
+      fs: clearFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.clearSampledPointsFboVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+    })
 
-    if (!this.fillSampledPointsFboCommand) {
-      // Create UniformStore for fillSampledPoints uniforms
-      if (!this.fillSampledPointsUniformStore) {
-        this.fillSampledPointsUniformStore = new UniformStore({
-          fillSampledPointsUniforms: {
-            uniformTypes: {
-              // Order MUST match shader declaration order (std140 layout)
-              pointsTextureSize: 'f32',
-              transformationMatrix: 'mat4x4<f32>',
-              spaceSize: 'f32',
-              screenSize: 'vec2<f32>',
-            },
-            defaultUniforms: {
-              pointsTextureSize: store.pointsTextureSize ?? 0,
-              transformationMatrix: store.transformationMatrix4x4,
-              spaceSize: store.adjustedSpaceSize ?? 0,
-              screenSize: store.screenSize ?? [0, 0],
-            },
-          },
-        })
-      }
+    // Create UniformStore for fillSampledPoints uniforms
+    this.fillSampledPointsUniformStore ||= new UniformStore({
+      fillSampledPointsUniforms: {
+        uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
+          pointsTextureSize: 'f32',
+          transformationMatrix: 'mat4x4<f32>',
+          spaceSize: 'f32',
+          screenSize: 'vec2<f32>',
+        },
+        defaultUniforms: {
+          pointsTextureSize: store.pointsTextureSize ?? 0,
+          transformationMatrix: store.transformationMatrix4x4,
+          spaceSize: store.adjustedSpaceSize ?? 0,
+          screenSize: store.screenSize ?? [0, 0],
+        },
+      },
+    })
 
-      this.fillSampledPointsFboCommand = new Model(device, {
-        fs: fillGridWithSampledPointsFrag,
-        vs: fillGridWithSampledPointsVert,
-        topology: 'point-list',
-        vertexCount: data.pointsNumber ?? 0,
-        attributes: {
-          ...(this.sampledPointIndices && { pointIndices: this.sampledPointIndices }),
-        },
-        bufferLayout: [
-          { name: 'pointIndices', format: 'float32x2' },
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true,
-        },
-        bindings: {
-          fillSampledPointsUniforms: this.fillSampledPointsUniformStore.getManagedUniformBuffer(device, 'fillSampledPointsUniforms'),
-          ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
-        },
-        parameters: {
-          depthWriteEnabled: false,
-          depthCompare: 'always',
-        },
-      })
-    }
+    this.fillSampledPointsFboCommand ||= new Model(device, {
+      fs: fillGridWithSampledPointsFrag,
+      vs: fillGridWithSampledPointsVert,
+      topology: 'point-list',
+      vertexCount: data.pointsNumber ?? 0,
+      attributes: {
+        ...(this.sampledPointIndices && { pointIndices: this.sampledPointIndices }),
+      },
+      bufferLayout: [
+        { name: 'pointIndices', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        fillSampledPointsUniforms: this.fillSampledPointsUniformStore.getManagedUniformBuffer(device, 'fillSampledPointsUniforms'),
+        ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
+      },
+      parameters: {
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      },
+    })
 
-    if (!this.drawHighlightedCommand) {
-      if (!this.drawHighlightedVertexCoordBuffer) {
-        this.drawHighlightedVertexCoordBuffer = device.createBuffer({
-          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-        })
-      }
+    this.drawHighlightedVertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
 
-      if (!this.drawHighlightedUniformStore) {
-        this.drawHighlightedUniformStore = new UniformStore({
-          drawHighlightedUniforms: {
-            uniformTypes: {
-              // Order MUST match shader declaration order (std140 layout)
-              // Vertex shader uniforms:
-              size: 'f32',
-              transformationMatrix: 'mat4x4<f32>',
-              pointsTextureSize: 'f32',
-              sizeScale: 'f32',
-              spaceSize: 'f32',
-              screenSize: 'vec2<f32>',
-              scalePointsOnZoom: 'f32',
-              pointIndex: 'f32',
-              maxPointSize: 'f32',
-              color: 'vec4<f32>',
-              universalPointOpacity: 'f32',
-              greyoutOpacity: 'f32',
-              isDarkenGreyout: 'f32',
-              backgroundColor: 'vec4<f32>',
-              greyoutColor: 'vec4<f32>',
-              // Fragment shader uniforms (width is in same block):
-              width: 'f32',
-            },
-            defaultUniforms: {
-              size: 1,
-              transformationMatrix: store.transformationMatrix4x4,
-              pointsTextureSize: store.pointsTextureSize ?? 0,
-              sizeScale: config.pointSizeScale ?? 1,
-              spaceSize: store.adjustedSpaceSize ?? 0,
-              screenSize: store.screenSize ?? [0, 0],
-              scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
-              pointIndex: -1,
-              maxPointSize: store.maxPointSize ?? 100,
-              color: [0, 0, 0, 1] as [number, number, number, number],
-              universalPointOpacity: config.pointOpacity ?? 1,
-              greyoutOpacity: config.pointGreyoutOpacity ?? -1,
-              isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0,
-              backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
-              greyoutColor: (store.greyoutPointColor ?? [0, 0, 0, 1]) as [number, number, number, number],
-              width: 0.85,
-            },
-          },
-        })
-      }
+    this.drawHighlightedUniformStore ||= new UniformStore({
+      drawHighlightedUniforms: {
+        uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
+          // Vertex shader uniforms:
+          size: 'f32',
+          transformationMatrix: 'mat4x4<f32>',
+          pointsTextureSize: 'f32',
+          sizeScale: 'f32',
+          spaceSize: 'f32',
+          screenSize: 'vec2<f32>',
+          scalePointsOnZoom: 'f32',
+          pointIndex: 'f32',
+          maxPointSize: 'f32',
+          color: 'vec4<f32>',
+          universalPointOpacity: 'f32',
+          greyoutOpacity: 'f32',
+          isDarkenGreyout: 'f32',
+          backgroundColor: 'vec4<f32>',
+          greyoutColor: 'vec4<f32>',
+          // Fragment shader uniforms (width is in same block):
+          width: 'f32',
+        },
+        defaultUniforms: {
+          size: 1,
+          transformationMatrix: store.transformationMatrix4x4,
+          pointsTextureSize: store.pointsTextureSize ?? 0,
+          sizeScale: config.pointSizeScale ?? 1,
+          spaceSize: store.adjustedSpaceSize ?? 0,
+          screenSize: store.screenSize ?? [0, 0],
+          scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
+          pointIndex: -1,
+          maxPointSize: store.maxPointSize ?? 100,
+          color: [0, 0, 0, 1] as [number, number, number, number],
+          universalPointOpacity: config.pointOpacity ?? 1,
+          greyoutOpacity: config.pointGreyoutOpacity ?? -1,
+          isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0,
+          backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
+          greyoutColor: (store.greyoutPointColor ?? [0, 0, 0, 1]) as [number, number, number, number],
+          width: 0.85,
+        },
+      },
+    })
 
-      this.drawHighlightedCommand = new Model(device, {
-        fs: drawHighlightedFrag,
-        vs: drawHighlightedVert,
-        topology: 'triangle-strip',
-        vertexCount: 4,
-        attributes: {
-          vertexCoord: this.drawHighlightedVertexCoordBuffer,
-        },
-        bufferLayout: [
-          { name: 'vertexCoord', format: 'float32x2' },
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true,
-        },
-        bindings: {
-          drawHighlightedUniforms: this.drawHighlightedUniformStore.getManagedUniformBuffer(device, 'drawHighlightedUniforms'),
-          ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
-          ...(this.greyoutStatusTexture && { pointGreyoutStatusTexture: this.greyoutStatusTexture }),
-        },
-        parameters: {
-          blend: true,
-          blendColorOperation: 'add',
-          blendColorSrcFactor: 'src-alpha',
-          blendColorDstFactor: 'one-minus-src-alpha',
-          blendAlphaOperation: 'add',
-          blendAlphaSrcFactor: 'one',
-          blendAlphaDstFactor: 'one-minus-src-alpha',
-          depthWriteEnabled: false,
-          depthCompare: 'always',
-        },
-      })
-    }
+    this.drawHighlightedCommand ||= new Model(device, {
+      fs: drawHighlightedFrag,
+      vs: drawHighlightedVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.drawHighlightedVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        drawHighlightedUniforms: this.drawHighlightedUniformStore.getManagedUniformBuffer(device, 'drawHighlightedUniforms'),
+        ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
+        ...(this.greyoutStatusTexture && { pointGreyoutStatusTexture: this.greyoutStatusTexture }),
+      },
+      parameters: {
+        blend: true,
+        blendColorOperation: 'add',
+        blendColorSrcFactor: 'src-alpha',
+        blendColorDstFactor: 'one-minus-src-alpha',
+        blendAlphaOperation: 'add',
+        blendAlphaSrcFactor: 'one',
+        blendAlphaDstFactor: 'one-minus-src-alpha',
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      },
+    })
 
-    if (!this.trackPointsCommand) {
-      // Create vertex buffer for quad
-      if (!this.trackPointsVertexCoordBuffer) {
-        this.trackPointsVertexCoordBuffer = device.createBuffer({
-          data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-        })
-      }
+    // Create vertex buffer for quad
+    this.trackPointsVertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
 
-      // Create UniformStore for trackPoints uniforms
-      if (!this.trackPointsUniformStore) {
-        this.trackPointsUniformStore = new UniformStore({
-          trackPointsUniforms: {
-            uniformTypes: {
-              // Order MUST match shader declaration order (std140 layout)
-              pointsTextureSize: 'f32',
-            },
-            defaultUniforms: {
-              pointsTextureSize: store.pointsTextureSize ?? 0,
-            },
-          },
-        })
-      }
+    // Create UniformStore for trackPoints uniforms
+    this.trackPointsUniformStore ||= new UniformStore({
+      trackPointsUniforms: {
+        uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
+          pointsTextureSize: 'f32',
+        },
+        defaultUniforms: {
+          pointsTextureSize: store.pointsTextureSize ?? 0,
+        },
+      },
+    })
 
-      this.trackPointsCommand = new Model(device, {
-        fs: trackPositionsFrag,
-        vs: updateVert,
-        topology: 'triangle-strip',
-        vertexCount: 4,
-        attributes: {
-          vertexCoord: this.trackPointsVertexCoordBuffer,
-        },
-        bufferLayout: [
-          { name: 'vertexCoord', format: 'float32x2' },
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true,
-        },
-        bindings: {
-          trackPointsUniforms: this.trackPointsUniformStore.getManagedUniformBuffer(device, 'trackPointsUniforms'),
-          ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
-          ...(this.trackedIndicesTexture && { trackedIndices: this.trackedIndicesTexture }),
-        },
-      })
-    }
+    this.trackPointsCommand ||= new Model(device, {
+      fs: trackPositionsFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.trackPointsVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        trackPointsUniforms: this.trackPointsUniformStore.getManagedUniformBuffer(device, 'trackPointsUniforms'),
+        ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
+        ...(this.trackedIndicesTexture && { trackedIndices: this.trackedIndicesTexture }),
+      },
+    })
   }
 
   public updateColor (): void {
@@ -1277,22 +1219,20 @@ export class Points extends CoreModule {
       this.imageCount = 0
       this.imageAtlasCoordsTextureSize = 0
       // Create dummy textures so bindings are always available
-      if (!this.imageAtlasCoordsTexture) {
-        this.imageAtlasCoordsTexture = device.createTexture({
-          data: new Float32Array(4).fill(0),
-          width: 1,
-          height: 1,
-          format: 'rgba32float',
-        })
-      }
-      if (!this.imageAtlasTexture) {
-        this.imageAtlasTexture = device.createTexture({
-          data: new Uint8Array(4).fill(0),
-          width: 1,
-          height: 1,
-          format: 'rgba8unorm',
-        })
-      }
+      this.imageAtlasCoordsTexture ||= device.createTexture({
+        data: new Float32Array(4).fill(0),
+        width: 1,
+        height: 1,
+        format: 'rgba32float',
+      })
+
+      this.imageAtlasTexture ||= device.createTexture({
+        data: new Uint8Array(4).fill(0),
+        width: 1,
+        height: 1,
+        format: 'rgba8unorm',
+      })
+
       return
     }
 

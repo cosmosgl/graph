@@ -18,48 +18,42 @@ export class ForceMouse extends CoreModule {
     const { device, points } = this
     if (!points) return
 
-    if (!this.vertexCoordBuffer || this.vertexCoordBuffer.destroyed) {
-      this.vertexCoordBuffer = device.createBuffer({
-        data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-      })
-    }
+    this.vertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
 
-    if (!this.uniformStore) {
-      this.uniformStore = new UniformStore({
-        forceMouseUniforms: {
-          uniformTypes: {
-            repulsion: 'f32',
-            mousePos: 'vec2<f32>',
-          },
+    this.uniformStore ||= new UniformStore({
+      forceMouseUniforms: {
+        uniformTypes: {
+          repulsion: 'f32',
+          mousePos: 'vec2<f32>',
         },
-      })
-    }
+      },
+    })
 
-    if (!this.runCommand) {
-      this.runCommand = new Model(device, {
-        fs: forceFrag,
-        vs: updateVert,
-        topology: 'triangle-strip',
-        vertexCount: 4,
-        attributes: {
-          vertexCoord: this.vertexCoordBuffer,
-        },
-        bufferLayout: [
-          { name: 'vertexCoord', format: 'float32x2' },
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true,
-        },
-        bindings: {
-          forceMouseUniforms: this.uniformStore.getManagedUniformBuffer(device, 'forceMouseUniforms'),
-          positionsTexture: points.previousPositionTexture!,
-        },
-        parameters: {
-          depthWriteEnabled: false,
-          depthCompare: 'always',
-        },
-      })
-    }
+    this.runCommand ||= new Model(device, {
+      fs: forceFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.vertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        forceMouseUniforms: this.uniformStore.getManagedUniformBuffer(device, 'forceMouseUniforms'),
+        positionsTexture: points.previousPositionTexture!,
+      },
+      parameters: {
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      },
+    })
   }
 
   public run (renderPass?: RenderPass): void {

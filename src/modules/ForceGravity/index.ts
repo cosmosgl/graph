@@ -19,49 +19,43 @@ export class ForceGravity extends CoreModule {
     const { device, points, store } = this
     if (!points || !store.pointsTextureSize) return
 
-    if (!this.vertexCoordBuffer || this.vertexCoordBuffer.destroyed) {
-      this.vertexCoordBuffer = device.createBuffer({
-        data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-      })
-    }
+    this.vertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
 
-    if (!this.uniformStore) {
-      this.uniformStore = new UniformStore({
-        forceGravityUniforms: {
-          uniformTypes: {
-            gravity: 'f32',
-            spaceSize: 'f32',
-            alpha: 'f32',
-          },
+    this.uniformStore ||= new UniformStore({
+      forceGravityUniforms: {
+        uniformTypes: {
+          gravity: 'f32',
+          spaceSize: 'f32',
+          alpha: 'f32',
         },
-      })
-    }
+      },
+    })
 
-    if (!this.runCommand) {
-      this.runCommand = new Model(device, {
-        fs: forceFrag,
-        vs: updateVert,
-        topology: 'triangle-strip',
-        vertexCount: 4,
-        attributes: {
-          vertexCoord: this.vertexCoordBuffer,
-        },
-        bufferLayout: [
-          { name: 'vertexCoord', format: 'float32x2' },
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true,
-        },
-        bindings: {
-          forceGravityUniforms: this.uniformStore.getManagedUniformBuffer(device, 'forceGravityUniforms'),
-          positionsTexture: points.previousPositionTexture!,
-        },
-        parameters: {
-          depthWriteEnabled: false,
-          depthCompare: 'always',
-        },
-      })
-    }
+    this.runCommand ||= new Model(device, {
+      fs: forceFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.vertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        forceGravityUniforms: this.uniformStore.getManagedUniformBuffer(device, 'forceGravityUniforms'),
+        positionsTexture: points.previousPositionTexture!,
+      },
+      parameters: {
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      },
+    })
   }
 
   public run (renderPass?: RenderPass): void {
