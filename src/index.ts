@@ -14,7 +14,7 @@ import { ForceGravity } from '@/graph/modules/ForceGravity'
 import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
 import { ForceManyBody } from '@/graph/modules/ForceManyBody'
 import { ForceMouse } from '@/graph/modules/ForceMouse'
-import { Clusters } from '@/graph/modules/Clusters'
+// import { Clusters } from '@/graph/modules/Clusters'
 import { FPSMonitor } from '@/graph/modules/FPSMonitor'
 import { GraphData } from '@/graph/modules/GraphData'
 import { Lines } from '@/graph/modules/Lines'
@@ -44,7 +44,7 @@ export class Graph {
   private forceLinkIncoming: ForceLink | undefined
   private forceLinkOutgoing: ForceLink | undefined
   private forceMouse: ForceMouse | undefined
-  private clusters: Clusters | undefined
+  // private clusters: Clusters | undefined
   private zoomInstance = new Zoom(this.store, this.config)
   private dragInstance = new Drag(this.store, this.config)
 
@@ -75,7 +75,7 @@ export class Graph {
   private isLinkColorUpdateNeeded = false
   private isLinkWidthUpdateNeeded = false
   private isLinkArrowUpdateNeeded = false
-  private isPointClusterUpdateNeeded = false
+  // private isPointClusterUpdateNeeded = false
   private isForceManyBodyUpdateNeeded = false
   private isForceLinkUpdateNeeded = false
   private isForceCenterUpdateNeeded = false
@@ -192,7 +192,7 @@ export class Graph {
           this.forceLinkOutgoing = new ForceLink(device, this.config, this.store, this.graph, this.points)
           this.forceMouse = new ForceMouse(device, this.config, this.store, this.graph, this.points)
         }
-        this.clusters = new Clusters(device, this.config, this.store, this.graph, this.points)
+        // this.clusters = new Clusters(device, this.config, this.store, this.graph, this.points)
 
         this.store.backgroundColor = getRgbaColor(this.config.backgroundColor)
         this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor ?? defaultConfigValues.hoveredPointRingColor)
@@ -359,7 +359,7 @@ export class Graph {
     this.isPointShapeUpdateNeeded = true
     this.isPointImageIndicesUpdateNeeded = true
     this.isPointImageSizesUpdateNeeded = true
-    this.isPointClusterUpdateNeeded = true
+    // this.isPointClusterUpdateNeeded = true
     this.isForceManyBodyUpdateNeeded = true
     this.isForceLinkUpdateNeeded = true
     this.isForceCenterUpdateNeeded = true
@@ -574,57 +574,57 @@ export class Graph {
     this.isForceLinkUpdateNeeded = true
   }
 
-  /**
-   * Sets the point clusters for the graph.
-   *
-   * @param {(number | undefined)[]} pointClusters - Array of cluster indices for each point in the graph.
-   *   - Index: Each index corresponds to a point.
-   *   - Values: Integers starting from 0; `undefined` indicates that a point does not belong to any cluster and will not be affected by cluster forces.
-   * @example
-   *   `[0, 1, 0, 2, undefined, 1]` maps points to clusters: point 0 and 2 to cluster 0, point 1 to cluster 1, and point 3 to cluster 2.
-   * Points 4 is unclustered.
-   * @note Clusters without specified positions via `setClusterPositions` will be positioned at their centermass by default.
-   */
-  public setPointClusters (pointClusters: (number | undefined)[]): void {
-    if (this._isDestroyed) return
-    if (this.ensureDevice(() => this.setPointClusters(pointClusters))) return
-    this.graph.inputPointClusters = pointClusters
-    this.isPointClusterUpdateNeeded = true
-  }
+  // /**
+  //  * Sets the point clusters for the graph.
+  //  *
+  //  * @param {(number | undefined)[]} pointClusters - Array of cluster indices for each point in the graph.
+  //  *   - Index: Each index corresponds to a point.
+  //  *   - Values: Integers starting from 0; `undefined` indicates that a point does not belong to any cluster and will not be affected by cluster forces.
+  //  * @example
+  //  *   `[0, 1, 0, 2, undefined, 1]` maps points to clusters: point 0 and 2 to cluster 0, point 1 to cluster 1, and point 3 to cluster 2.
+  //  * Points 4 is unclustered.
+  //  * @note Clusters without specified positions via `setClusterPositions` will be positioned at their centermass by default.
+  //  */
+  // public setPointClusters (pointClusters: (number | undefined)[]): void {
+  //   if (this._isDestroyed) return
+  //   if (this.ensureDevice(() => this.setPointClusters(pointClusters))) return
+  //   this.graph.inputPointClusters = pointClusters
+  //   this.isPointClusterUpdateNeeded = true
+  // }
 
-  /**
-   * Sets the positions of the point clusters for the graph.
-   *
-   * @param {(number | undefined)[]} clusterPositions - Array of cluster positions.
-   *   - Every two elements represent the x and y coordinates for a cluster position.
-   *   - `undefined` means the cluster's position is not defined and will use centermass positioning instead.
-   * @example
-   *   `[10, 20, 30, 40, undefined, undefined]` places the first cluster at (10, 20) and the second at (30, 40);
-   * the third cluster will be positioned at its centermass automatically.
-   */
-  public setClusterPositions (clusterPositions: (number | undefined)[]): void {
-    if (this._isDestroyed) return
-    if (this.ensureDevice(() => this.setClusterPositions(clusterPositions))) return
-    this.graph.inputClusterPositions = clusterPositions
-    this.isPointClusterUpdateNeeded = true
-  }
+  // /**
+  //  * Sets the positions of the point clusters for the graph.
+  //  *
+  //  * @param {(number | undefined)[]} clusterPositions - Array of cluster positions.
+  //  *   - Every two elements represent the x and y coordinates for a cluster position.
+  //  *   - `undefined` means the cluster's position is not defined and will use centermass positioning instead.
+  //  * @example
+  //  *   `[10, 20, 30, 40, undefined, undefined]` places the first cluster at (10, 20) and the second at (30, 40);
+  //  * the third cluster will be positioned at its centermass automatically.
+  //  */
+  // public setClusterPositions (clusterPositions: (number | undefined)[]): void {
+  //   if (this._isDestroyed) return
+  //   if (this.ensureDevice(() => this.setClusterPositions(clusterPositions))) return
+  //   this.graph.inputClusterPositions = clusterPositions
+  //   this.isPointClusterUpdateNeeded = true
+  // }
 
-  /**
-   * Sets the force strength coefficients for clustering points in the graph.
-   *
-   * This method allows you to customize the forces acting on individual points during the clustering process.
-   * The force coefficients determine the strength of the forces applied to each point.
-   *
-   * @param {Float32Array} clusterStrength - A Float32Array of force strength coefficients for each point in the format [coeff1, coeff2, ..., coeffn],
-   * where `n` is the index of the point.
-   * Example: `new Float32Array([1, 0.4, 0.3])` sets the force coefficient for point 0 to 1, point 1 to 0.4, and point 2 to 0.3.
-   */
-  public setPointClusterStrength (clusterStrength: Float32Array): void {
-    if (this._isDestroyed) return
-    if (this.ensureDevice(() => this.setPointClusterStrength(clusterStrength))) return
-    this.graph.inputClusterStrength = clusterStrength
-    this.isPointClusterUpdateNeeded = true
-  }
+  // /**
+  //  * Sets the force strength coefficients for clustering points in the graph.
+  //  *
+  //  * This method allows you to customize the forces acting on individual points during the clustering process.
+  //  * The force coefficients determine the strength of the forces applied to each point.
+  //  *
+  //  * @param {Float32Array} clusterStrength - A Float32Array of force strength coefficients for each point in the format [coeff1, coeff2, ..., coeffn],
+  //  * where `n` is the index of the point.
+  //  * Example: `new Float32Array([1, 0.4, 0.3])` sets the force coefficient for point 0 to 1, point 1 to 0.4, and point 2 to 0.3.
+  //  */
+  // public setPointClusterStrength (clusterStrength: Float32Array): void {
+  //   if (this._isDestroyed) return
+  //   if (this.ensureDevice(() => this.setPointClusterStrength(clusterStrength))) return
+  //   this.graph.inputClusterStrength = clusterStrength
+  //   this.isPointClusterUpdateNeeded = true
+  // }
 
   /**
    * Sets which points are pinned (fixed) in position.
@@ -795,28 +795,28 @@ export class Graph {
     return positions
   }
 
-  /**
-   * Get current X and Y coordinates of the clusters.
-   * @returns Array of point cluster.
-   */
-  public getClusterPositions (): number[] {
-    if (this._isDestroyed || !this.device || !this.clusters) return []
-    if (this.graph.pointClusters === undefined || this.clusters.clusterCount === undefined) return []
-    this.clusters.calculateCentermass()
-    const positions: number[] = []
-    const clusterPositionsPixels = readPixels(this.device, this.clusters.centermassFbo as Framebuffer)
-    positions.length = this.clusters.clusterCount * 2
-    for (let i = 0; i < positions.length / 2; i += 1) {
-      const sumX = clusterPositionsPixels[i * 4 + 0]
-      const sumY = clusterPositionsPixels[i * 4 + 1]
-      const sumN = clusterPositionsPixels[i * 4 + 2]
-      if (sumX !== undefined && sumY !== undefined && sumN !== undefined) {
-        positions[i * 2] = sumX / sumN
-        positions[i * 2 + 1] = sumY / sumN
-      }
-    }
-    return positions
-  }
+  // /**
+  //  * Get current X and Y coordinates of the clusters.
+  //  * @returns Array of point cluster.
+  //  */
+  // public getClusterPositions (): number[] {
+  //   if (this._isDestroyed || !this.device || !this.clusters) return []
+  //   if (this.graph.pointClusters === undefined || this.clusters.clusterCount === undefined) return []
+  //   this.clusters.calculateCentermass()
+  //   const positions: number[] = []
+  //   const clusterPositionsPixels = readPixels(this.device, this.clusters.centermassFbo as Framebuffer)
+  //   positions.length = this.clusters.clusterCount * 2
+  //   for (let i = 0; i < positions.length / 2; i += 1) {
+  //     const sumX = clusterPositionsPixels[i * 4 + 0]
+  //     const sumY = clusterPositionsPixels[i * 4 + 1]
+  //     const sumN = clusterPositionsPixels[i * 4 + 2]
+  //     if (sumX !== undefined && sumY !== undefined && sumN !== undefined) {
+  //       positions[i * 2] = sumX / sumN
+  //       positions[i * 2 + 1] = sumY / sumN
+  //     }
+  //   }
+  //   return positions
+  // }
 
   /**
    * Center and zoom in/out the view to fit all points in the scene.
@@ -1300,7 +1300,7 @@ export class Graph {
     // Destroy all module resources before destroying the device
     this.points?.destroy()
     this.lines?.destroy()
-    this.clusters?.destroy()
+    // this.clusters?.destroy()
     this.forceGravity?.destroy()
     this.forceCenter?.destroy()
     this.forceManyBody?.destroy()
@@ -1361,7 +1361,7 @@ export class Graph {
       this.forceLinkOutgoing?.create(LinkDirection.OUTGOING)
     }
     if (this.isForceCenterUpdateNeeded) this.forceCenter?.create()
-    if (this.isPointClusterUpdateNeeded) this.clusters?.create()
+    // if (this.isPointClusterUpdateNeeded) this.clusters?.create()
 
     this.isPointPositionsUpdateNeeded = false
     this.isPointColorUpdateNeeded = false
@@ -1373,7 +1373,7 @@ export class Graph {
     this.isLinkColorUpdateNeeded = false
     this.isLinkWidthUpdateNeeded = false
     this.isLinkArrowUpdateNeeded = false
-    this.isPointClusterUpdateNeeded = false
+    // this.isPointClusterUpdateNeeded = false
     this.isForceManyBodyUpdateNeeded = false
     this.isForceLinkUpdateNeeded = false
     this.isForceCenterUpdateNeeded = false
@@ -1513,10 +1513,10 @@ export class Graph {
         this.points?.updatePosition()
       }
 
-      if (this.graph.pointClusters || this.graph.clusterPositions) {
-        this.clusters?.run()
-        this.points?.updatePosition()
-      }
+      // if (this.graph.pointClusters || this.graph.clusterPositions) {
+      //   this.clusters?.run()
+      //   this.points?.updatePosition()
+      // }
 
       // Alpha decay and progress
       this.store.alpha += this.store.addAlpha(this.config.simulationDecay ?? defaultConfigValues.simulation.decay)
@@ -1537,7 +1537,7 @@ export class Graph {
   }
 
   private initPrograms (): void {
-    if (this._isDestroyed || !this.points || !this.lines || !this.clusters) return
+    if (this._isDestroyed || !this.points || !this.lines /* || !this.clusters */) return
     this.points.initPrograms()
     this.lines.initPrograms()
     this.forceGravity?.initPrograms()
@@ -1546,7 +1546,7 @@ export class Graph {
     this.forceLinkIncoming?.initPrograms()
     this.forceLinkOutgoing?.initPrograms()
     this.forceMouse?.initPrograms()
-    this.clusters.initPrograms()
+    // this.clusters.initPrograms()
   }
 
   /**
