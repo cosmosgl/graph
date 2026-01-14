@@ -20,7 +20,6 @@ import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import trackPositionsFrag from '@/graph/modules/Points/track-positions.frag?raw'
 import dragPointFrag from '@/graph/modules/Points/drag-point.frag?raw'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
-import clearFrag from '@/graph/modules/Shared/clear.frag?raw'
 import { readPixels } from '@/graph/helper'
 import { createAtlasDataFromImageData } from '@/graph/modules/Points/atlas-utils'
 
@@ -59,8 +58,6 @@ export class Points extends CoreModule {
   private findPointsOnAreaSelectionCommand: Model | undefined
   private findPointsOnPolygonSelectionCommand: Model | undefined
   private findHoveredPointCommand: Model | undefined
-  private clearHoveredFboCommand: Model | undefined
-  private clearSampledPointsFboCommand: Model | undefined
   private fillSampledPointsFboCommand: Model | undefined
   private trackPointsCommand: Model | undefined
   // Vertex buffers for quad rendering (Model doesn't destroy them automatically)
@@ -68,8 +65,6 @@ export class Points extends CoreModule {
   private dragPointVertexCoordBuffer: Buffer | undefined
   private findPointsOnAreaSelectionVertexCoordBuffer: Buffer | undefined
   private findPointsOnPolygonSelectionVertexCoordBuffer: Buffer | undefined
-  private clearHoveredFboVertexCoordBuffer: Buffer | undefined
-  private clearSampledPointsFboVertexCoordBuffer: Buffer | undefined
   private drawHighlightedVertexCoordBuffer: Buffer | undefined
   private trackPointsVertexCoordBuffer: Buffer | undefined
   private trackedIndices: number[] | undefined
@@ -764,24 +759,6 @@ export class Points extends CoreModule {
       },
     })
 
-    // Create vertex buffer for quad
-    this.clearHoveredFboVertexCoordBuffer ||= device.createBuffer({
-      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-    })
-
-    this.clearHoveredFboCommand ||= new Model(device, {
-      fs: clearFrag,
-      vs: updateVert,
-      topology: 'triangle-strip',
-      vertexCount: 4,
-      attributes: {
-        vertexCoord: this.clearHoveredFboVertexCoordBuffer,
-      },
-      bufferLayout: [
-        { name: 'vertexCoord', format: 'float32x2' },
-      ],
-    })
-
     // Create UniformStore for findHoveredPoint uniforms
     this.findHoveredPointUniformStore ||= new UniformStore({
       findHoveredPointUniforms: {
@@ -836,24 +813,6 @@ export class Points extends CoreModule {
         depthCompare: 'always',
         blend: false, // Disable blending - we want to overwrite, not blend
       },
-    })
-
-    // Create vertex buffer for quad
-    this.clearSampledPointsFboVertexCoordBuffer ||= device.createBuffer({
-      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-    })
-
-    this.clearSampledPointsFboCommand ||= new Model(device, {
-      fs: clearFrag,
-      vs: updateVert,
-      topology: 'triangle-strip',
-      vertexCount: 4,
-      attributes: {
-        vertexCoord: this.clearSampledPointsFboVertexCoordBuffer,
-      },
-      bufferLayout: [
-        { name: 'vertexCoord', format: 'float32x2' },
-      ],
     })
 
     // Create UniformStore for fillSampledPoints uniforms
@@ -1720,14 +1679,6 @@ export class Points extends CoreModule {
   public findHoveredPoint (): void {
     if (!this.hoveredFbo || this.hoveredFbo.destroyed) return
 
-    if (this.clearHoveredFboCommand) {
-      const clearPass = this.device.beginRenderPass({
-        framebuffer: this.hoveredFbo,
-      })
-      this.clearHoveredFboCommand.draw(clearPass)
-      clearPass.end()
-    }
-
     if (!this.findHoveredPointCommand || !this.findHoveredPointUniformStore) return
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
 
@@ -1759,6 +1710,7 @@ export class Points extends CoreModule {
 
     const renderPass = this.device.beginRenderPass({
       framebuffer: this.hoveredFbo,
+      clearColor: [0, 0, 0, 0],
     })
     this.findHoveredPointCommand.draw(renderPass)
     renderPass.end()
@@ -1872,15 +1824,6 @@ export class Points extends CoreModule {
     const positions = new Map<number, [number, number]>()
     if (!this.sampledPointsFbo || this.sampledPointsFbo.destroyed) return positions
 
-    // Clear sampled points FBO
-    if (this.clearSampledPointsFboCommand) {
-      const clearPass = this.device.beginRenderPass({
-        framebuffer: this.sampledPointsFbo,
-      })
-      this.clearSampledPointsFboCommand.draw(clearPass)
-      clearPass.end()
-    }
-
     // Fill sampled points FBO
     if (this.fillSampledPointsFboCommand && this.fillSampledPointsUniformStore && this.sampledPointsFbo) {
       if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return positions
@@ -1903,6 +1846,7 @@ export class Points extends CoreModule {
 
       const fillPass = this.device.beginRenderPass({
         framebuffer: this.sampledPointsFbo,
+        clearColor: [0, 0, 0, 0],
       })
       this.fillSampledPointsFboCommand.draw(fillPass)
       fillPass.end()
@@ -1927,15 +1871,6 @@ export class Points extends CoreModule {
     const positions: number[] = []
     if (!this.sampledPointsFbo || this.sampledPointsFbo.destroyed) return { indices, positions }
 
-    // Clear sampled points FBO
-    if (this.clearSampledPointsFboCommand) {
-      const clearPass = this.device.beginRenderPass({
-        framebuffer: this.sampledPointsFbo,
-      })
-      this.clearSampledPointsFboCommand.draw(clearPass)
-      clearPass.end()
-    }
-
     // Fill sampled points FBO
     if (this.fillSampledPointsFboCommand && this.fillSampledPointsUniformStore && this.sampledPointsFbo) {
       if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return { indices, positions }
@@ -1958,6 +1893,7 @@ export class Points extends CoreModule {
 
       const fillPass = this.device.beginRenderPass({
         framebuffer: this.sampledPointsFbo,
+        clearColor: [0, 0, 0, 0],
       })
       this.fillSampledPointsFboCommand.draw(fillPass)
       fillPass.end()
@@ -2018,10 +1954,6 @@ export class Points extends CoreModule {
     this.findPointsOnPolygonSelectionCommand = undefined
     this.findHoveredPointCommand?.destroy()
     this.findHoveredPointCommand = undefined
-    this.clearHoveredFboCommand?.destroy()
-    this.clearHoveredFboCommand = undefined
-    this.clearSampledPointsFboCommand?.destroy()
-    this.clearSampledPointsFboCommand = undefined
     this.fillSampledPointsFboCommand?.destroy()
     this.fillSampledPointsFboCommand = undefined
     this.trackPointsCommand?.destroy()
@@ -2172,14 +2104,6 @@ export class Points extends CoreModule {
       this.findPointsOnPolygonSelectionVertexCoordBuffer.destroy()
     }
     this.findPointsOnPolygonSelectionVertexCoordBuffer = undefined
-    if (this.clearHoveredFboVertexCoordBuffer && !this.clearHoveredFboVertexCoordBuffer.destroyed) {
-      this.clearHoveredFboVertexCoordBuffer.destroy()
-    }
-    this.clearHoveredFboVertexCoordBuffer = undefined
-    if (this.clearSampledPointsFboVertexCoordBuffer && !this.clearSampledPointsFboVertexCoordBuffer.destroyed) {
-      this.clearSampledPointsFboVertexCoordBuffer.destroy()
-    }
-    this.clearSampledPointsFboVertexCoordBuffer = undefined
     if (this.drawHighlightedVertexCoordBuffer && !this.drawHighlightedVertexCoordBuffer.destroyed) {
       this.drawHighlightedVertexCoordBuffer.destroy()
     }

@@ -7,7 +7,6 @@ import forceFrag from '@/graph/modules/ForceManyBody/force-level.frag?raw'
 import forceCenterFrag from '@/graph/modules/ForceManyBody/force-centermass.frag?raw'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
-import clearFrag from '@/graph/modules/Shared/clear.frag?raw'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
 type LevelTarget = {
@@ -21,12 +20,10 @@ export class ForceManyBody extends CoreModule {
   private levels = 0
   private levelTargets = new Map<number, LevelTarget>()
 
-  private clearLevelsCommand: Model | undefined
   private calculateLevelsCommand: Model | undefined
   private forceCommand: Model | undefined
   private forceFromItsOwnCentermassCommand: Model | undefined
 
-  private clearLevelsVertexCoordBuffer: Buffer | undefined
   private forceVertexCoordBuffer: Buffer | undefined
 
   private calculateLevelsUniformStore: UniformStore<{
@@ -181,23 +178,6 @@ export class ForceManyBody extends CoreModule {
   public initPrograms (): void {
     const { device, store, data, points } = this
     if (!data.pointsNumber || !points || !store.pointsTextureSize) return
-
-    // Clear levels command (fullscreen quad)
-    this.clearLevelsVertexCoordBuffer ||= device.createBuffer({
-      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-    })
-    this.clearLevelsCommand ||= new Model(device, {
-      fs: clearFrag,
-      vs: updateVert,
-      topology: 'triangle-strip',
-      vertexCount: 4,
-      attributes: {
-        vertexCoord: this.clearLevelsVertexCoordBuffer,
-      },
-      bufferLayout: [
-        { name: 'vertexCoord', format: 'float32x2' },
-      ],
-    })
 
     // Calculate levels command (point list)
     this.calculateLevelsUniformStore ||= new UniformStore({
@@ -373,8 +353,6 @@ export class ForceManyBody extends CoreModule {
    */
   public destroy (): void {
     // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
-    this.clearLevelsCommand?.destroy()
-    this.clearLevelsCommand = undefined
     this.calculateLevelsCommand?.destroy()
     this.calculateLevelsCommand = undefined
     this.forceCommand?.destroy()
@@ -415,10 +393,6 @@ export class ForceManyBody extends CoreModule {
       this.pointIndices.destroy()
     }
     this.pointIndices = undefined
-    if (this.clearLevelsVertexCoordBuffer && !this.clearLevelsVertexCoordBuffer.destroyed) {
-      this.clearLevelsVertexCoordBuffer.destroy()
-    }
-    this.clearLevelsVertexCoordBuffer = undefined
     if (this.forceVertexCoordBuffer && !this.forceVertexCoordBuffer.destroyed) {
       this.forceVertexCoordBuffer.destroy()
     }
@@ -427,7 +401,7 @@ export class ForceManyBody extends CoreModule {
 
   private drawLevels (): void {
     const { device, store, data, points } = this
-    if (!points || !data.pointsNumber || !this.calculateLevelsCommand || !this.calculateLevelsUniformStore || !this.clearLevelsCommand) return
+    if (!points || !data.pointsNumber || !this.calculateLevelsCommand || !this.calculateLevelsUniformStore) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
 
     for (let level = 0; level < this.levels; level += 1) {
@@ -456,7 +430,6 @@ export class ForceManyBody extends CoreModule {
         clearColor: [0, 0, 0, 0],
       })
 
-      this.clearLevelsCommand.draw(levelPass)
       this.calculateLevelsCommand.draw(levelPass)
 
       levelPass.end()

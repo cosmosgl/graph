@@ -6,14 +6,12 @@ import calculateCentermassVert from '@/graph/modules/Clusters/calculate-centerma
 import forceFrag from '@/graph/modules/Clusters/force-cluster.frag?raw'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
-import clearFrag from '@/graph/modules/Shared/clear.frag?raw'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
 export class Clusters extends CoreModule {
   public centermassFbo: Framebuffer | undefined
   public clusterCount: number | undefined
 
-  private clearCentermassCommand: Model | undefined
   private calculateCentermassCommand: Model | undefined
   private applyForcesCommand: Model | undefined
   private clusterTexture: Texture | undefined
@@ -23,8 +21,6 @@ export class Clusters extends CoreModule {
   private pointIndices: Buffer | undefined
   private clustersTextureSize: number | undefined
 
-  // Attribute buffers that need manual cleanup (Model doesn't destroy them)
-  private clearCentermassVertexCoordBuffer: Buffer | undefined
   private applyForcesVertexCoordBuffer: Buffer | undefined
 
   // Track previous sizes to detect changes
@@ -256,24 +252,6 @@ export class Clusters extends CoreModule {
     // Use same check as create() and run() for consistency
     if (data.pointsNumber === undefined || (!data.pointClusters && !data.clusterPositions)) return
 
-    // Create and track vertexCoord buffer
-    this.clearCentermassVertexCoordBuffer ||= device.createBuffer({
-      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-    })
-
-    this.clearCentermassCommand ||= new Model(device, {
-      fs: clearFrag,
-      vs: updateVert,
-      topology: 'triangle-strip',
-      vertexCount: 4,
-      attributes: {
-        vertexCoord: this.clearCentermassVertexCoordBuffer,
-      },
-      bufferLayout: [
-        { name: 'vertexCoord', format: 'float32x2' }, // 2 floats per vertex
-      ],
-    })
-
     // Create UniformStore for calculateCentermass uniforms
     this.calculateCentermassUniformStore ||= new UniformStore({
       calculateCentermassUniforms: {
@@ -399,9 +377,9 @@ export class Clusters extends CoreModule {
     // Create a RenderPass for the centermass framebuffer
     const centermassPass = this.device.beginRenderPass({
       framebuffer: this.centermassFbo,
+      clearColor: [0, 0, 0, 0],
     })
 
-    this.clearCentermassCommand?.draw(centermassPass)
     this.calculateCentermassCommand.draw(centermassPass)
 
     centermassPass.end()
@@ -467,8 +445,6 @@ export class Clusters extends CoreModule {
    */
   public destroy (): void {
     // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
-    this.clearCentermassCommand?.destroy()
-    this.clearCentermassCommand = undefined
     this.calculateCentermassCommand?.destroy()
     this.calculateCentermassCommand = undefined
     this.applyForcesCommand?.destroy()
@@ -509,10 +485,6 @@ export class Clusters extends CoreModule {
       this.pointIndices.destroy()
     }
     this.pointIndices = undefined
-    if (this.clearCentermassVertexCoordBuffer && !this.clearCentermassVertexCoordBuffer.destroyed) {
-      this.clearCentermassVertexCoordBuffer.destroy()
-    }
-    this.clearCentermassVertexCoordBuffer = undefined
     if (this.applyForcesVertexCoordBuffer && !this.applyForcesVertexCoordBuffer.destroyed) {
       this.applyForcesVertexCoordBuffer.destroy()
     }
