@@ -6,7 +6,6 @@ import calculateCentermassVert from '@/graph/modules/ForceCenter/calculate-cente
 import forceFrag from '@/graph/modules/ForceCenter/force-center.frag?raw'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
-import clearFrag from '@/graph/modules/Shared/clear.frag?raw'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
 export class ForceCenter extends CoreModule {
@@ -14,11 +13,9 @@ export class ForceCenter extends CoreModule {
   private centermassFbo: Framebuffer | undefined
   private pointIndices: Buffer | undefined
 
-  private clearCentermassCommand: Model | undefined
   private calculateCentermassCommand: Model | undefined
   private runCommand: Model | undefined
 
-  private clearVertexCoordBuffer: Buffer | undefined
   private forceVertexCoordBuffer: Buffer | undefined
 
   private calculateUniformStore: UniformStore<{
@@ -86,11 +83,6 @@ export class ForceCenter extends CoreModule {
     if (!this.centermassFbo || this.centermassFbo.destroyed || !this.centermassTexture || this.centermassTexture.destroyed) return
     if (!this.pointIndices) return
 
-    // Fullscreen quad buffer (shared by clear and force passes)
-    this.clearVertexCoordBuffer ||= device.createBuffer({
-      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-    })
-
     this.forceVertexCoordBuffer ||= device.createBuffer({
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
     })
@@ -109,23 +101,6 @@ export class ForceCenter extends CoreModule {
           centerForce: 'f32',
           alpha: 'f32',
         },
-      },
-    })
-
-    this.clearCentermassCommand ||= new Model(device, {
-      fs: clearFrag,
-      vs: updateVert,
-      topology: 'triangle-strip',
-      vertexCount: 4,
-      attributes: {
-        vertexCoord: this.clearVertexCoordBuffer,
-      },
-      bufferLayout: [
-        { name: 'vertexCoord', format: 'float32x2' },
-      ],
-      parameters: {
-        depthWriteEnabled: false,
-        depthCompare: 'always',
       },
     })
 
@@ -196,7 +171,7 @@ export class ForceCenter extends CoreModule {
     // Skip if sizes changed and create() wasn't called yet
     if (store.pointsTextureSize !== this.previousPointsTextureSize) return
 
-    // Clear centermass then accumulate
+    // Clear centermass framebuffer and accumulate point positions
     const centermassPass = device.beginRenderPass({
       framebuffer: this.centermassFbo,
       clearColor: [0, 0, 0, 0],
@@ -212,7 +187,6 @@ export class ForceCenter extends CoreModule {
       positionsTexture: points.previousPositionTexture!,
     })
 
-    // No need to draw clear model separately; pass clearColor already zeroed
     this.calculateCentermassCommand.draw(centermassPass)
     centermassPass.end()
 
@@ -244,8 +218,6 @@ export class ForceCenter extends CoreModule {
    */
   public destroy (): void {
     // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
-    this.clearCentermassCommand?.destroy()
-    this.clearCentermassCommand = undefined
     this.calculateCentermassCommand?.destroy()
     this.calculateCentermassCommand = undefined
     this.runCommand?.destroy()
@@ -274,10 +246,6 @@ export class ForceCenter extends CoreModule {
       this.pointIndices.destroy()
     }
     this.pointIndices = undefined
-    if (this.clearVertexCoordBuffer && !this.clearVertexCoordBuffer.destroyed) {
-      this.clearVertexCoordBuffer.destroy()
-    }
-    this.clearVertexCoordBuffer = undefined
     if (this.forceVertexCoordBuffer && !this.forceVertexCoordBuffer.destroyed) {
       this.forceVertexCoordBuffer.destroy()
     }
