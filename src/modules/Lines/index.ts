@@ -198,10 +198,11 @@ export class Lines extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         drawLineUniforms: this.drawLineUniformStore.getManagedUniformBuffer(device, 'drawLineUniforms'),
         drawLineFragmentUniforms: this.drawLineUniformStore.getManagedUniformBuffer(device, 'drawLineFragmentUniforms'),
-        ...(this.points?.currentPositionTexture && { positionsTexture: this.points.currentPositionTexture }),
-        ...(this.points?.greyoutStatusTexture && { pointGreyoutStatus: this.points.greyoutStatusTexture }),
+        // All texture bindings will be set dynamically in draw() method
       },
       /**
          * Blending behavior for link index rendering (renderMode: 1.0 - hover detection):
@@ -260,14 +261,19 @@ export class Lines extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         hoveredLineIndexUniforms: this.hoveredLineIndexUniformStore.getManagedUniformBuffer(device, 'hoveredLineIndexUniforms'),
-        ...(this.linkIndexTexture && { linkIndexTexture: this.linkIndexTexture }),
+        // All texture bindings will be set dynamically in findHoveredLine() method
       },
     })
   }
 
   public draw (renderPass: RenderPass): void {
-    if (!this.pointABuffer || !this.pointBBuffer) return
+    const { config, points, store } = this
+    if (!points || !this.pointABuffer || !this.pointBBuffer) return
+    if (!points.currentPositionTexture || points.currentPositionTexture.destroyed) return
+    if (!points.greyoutStatusTexture || points.greyoutStatusTexture.destroyed) return
     if (!this.colorBuffer) this.updateColor()
     if (!this.widthBuffer) this.updateWidth()
     if (!this.arrowBuffer) this.updateArrow()
@@ -275,7 +281,6 @@ export class Lines extends CoreModule {
     if (!this.drawCurveCommand || !this.drawLineUniformStore) return
 
     // Update uniforms
-    const { config, store } = this
     this.drawLineUniformStore.setUniforms({
       drawLineUniforms: {
         transformationMatrix: store.transformationMatrix4x4,
@@ -303,12 +308,10 @@ export class Lines extends CoreModule {
       },
     })
 
-    // Update bindings dynamically (use textures directly from points module)
+    // Update texture bindings dynamically
     this.drawCurveCommand.setBindings({
-      drawLineUniforms: this.drawLineUniformStore.getManagedUniformBuffer(this.device, 'drawLineUniforms'),
-      drawLineFragmentUniforms: this.drawLineUniformStore.getManagedUniformBuffer(this.device, 'drawLineFragmentUniforms'),
-      ...(this.points?.currentPositionTexture && { positionsTexture: this.points.currentPositionTexture }),
-      ...(this.points?.greyoutStatusTexture && { pointGreyoutStatus: this.points.greyoutStatusTexture }),
+      positionsTexture: points.currentPositionTexture,
+      pointGreyoutStatus: points.greyoutStatusTexture,
     })
 
     // Update instance count
@@ -576,11 +579,15 @@ export class Lines extends CoreModule {
   }
 
   public findHoveredLine (): void {
+    const { config, points, store } = this
+    if (!points) return
+    if (!points.currentPositionTexture || points.currentPositionTexture.destroyed) return
+    if (!points.greyoutStatusTexture || points.greyoutStatusTexture.destroyed) return
     if (!this.data.linksNumber || !this.store.isLinkHoveringEnabled) return
     if (!this.linkIndexFbo || !this.drawCurveCommand || !this.drawLineUniformStore) return
+    if (!this.linkIndexTexture || this.linkIndexTexture.destroyed) return
 
     // Update uniforms for index rendering
-    const { config, store } = this
     this.drawLineUniformStore.setUniforms({
       drawLineUniforms: {
         transformationMatrix: store.transformationMatrix4x4,
@@ -608,11 +615,10 @@ export class Lines extends CoreModule {
       },
     })
 
+    // Update texture bindings dynamically
     this.drawCurveCommand.setBindings({
-      drawLineUniforms: this.drawLineUniformStore.getManagedUniformBuffer(this.device, 'drawLineUniforms'),
-      drawLineFragmentUniforms: this.drawLineUniformStore.getManagedUniformBuffer(this.device, 'drawLineFragmentUniforms'),
-      ...(this.points?.currentPositionTexture && { positionsTexture: this.points.currentPositionTexture }),
-      ...(this.points?.greyoutStatusTexture && { pointGreyoutStatus: this.points.greyoutStatusTexture }),
+      positionsTexture: points.currentPositionTexture,
+      pointGreyoutStatus: points.greyoutStatusTexture,
     })
 
     // Update instance count
@@ -635,9 +641,9 @@ export class Lines extends CoreModule {
         },
       })
 
+      // Update texture bindings dynamically
       this.hoveredLineIndexCommand.setBindings({
-        hoveredLineIndexUniforms: this.hoveredLineIndexUniformStore.getManagedUniformBuffer(this.device, 'hoveredLineIndexUniforms'),
-        ...(this.linkIndexTexture && { linkIndexTexture: this.linkIndexTexture }),
+        linkIndexTexture: this.linkIndexTexture,
       })
 
       const hoverPass = this.device.beginRenderPass({
