@@ -118,8 +118,10 @@ export class ForceCenter extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         calculateCentermassUniforms: this.calculateUniformStore.getManagedUniformBuffer(device, 'calculateCentermassUniforms'),
-        positionsTexture: points.previousPositionTexture!,
+        // All texture bindings will be set dynamically in run() method
       },
       parameters: {
         blend: true,
@@ -150,9 +152,10 @@ export class ForceCenter extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         forceCenterUniforms: this.forceUniformStore.getManagedUniformBuffer(device, 'forceCenterUniforms'),
-        positionsTexture: points.previousPositionTexture!,
-        centermassTexture: this.centermassTexture,
+        // All texture bindings will be set dynamically in run() method
       },
       parameters: {
         depthWriteEnabled: false,
@@ -182,9 +185,9 @@ export class ForceCenter extends CoreModule {
         pointsTextureSize: store.pointsTextureSize ?? 0,
       },
     })
+    // Update texture bindings dynamically
     this.calculateCentermassCommand.setBindings({
-      calculateCentermassUniforms: this.calculateUniformStore.getManagedUniformBuffer(device, 'calculateCentermassUniforms'),
-      positionsTexture: points.previousPositionTexture!,
+      positionsTexture: points.previousPositionTexture,
     })
 
     this.calculateCentermassCommand.draw(centermassPass)
@@ -197,9 +200,9 @@ export class ForceCenter extends CoreModule {
         alpha: store.alpha,
       },
     })
+    // Update texture bindings dynamically
     this.runCommand.setBindings({
-      forceCenterUniforms: this.forceUniformStore.getManagedUniformBuffer(device, 'forceCenterUniforms'),
-      positionsTexture: points.previousPositionTexture!,
+      positionsTexture: points.previousPositionTexture,
       centermassTexture: this.centermassTexture,
     })
 

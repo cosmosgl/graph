@@ -202,12 +202,10 @@ export class ForceLink extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         forceLinkUniforms: this.uniformStore.getManagedUniformBuffer(device, 'forceLinkUniforms'),
-        positionsTexture: points.previousPositionTexture!,
-        linkInfoTexture: this.linkFirstIndicesAndAmountTexture,
-        linkIndicesTexture: this.indicesTexture,
-        linkPropertiesTexture: this.biasAndStrengthTexture,
-        linkRandomDistanceTexture: this.randomDistanceTexture,
+        // All texture bindings will be set dynamically in run() method
       },
       parameters: {
         depthWriteEnabled: false,
@@ -246,8 +244,7 @@ export class ForceLink extends CoreModule {
     })
 
     this.runCommand.setBindings({
-      forceLinkUniforms: this.uniformStore.getManagedUniformBuffer(device, 'forceLinkUniforms'),
-      positionsTexture: points.previousPositionTexture!,
+      positionsTexture: points.previousPositionTexture,
       linkInfoTexture: this.linkFirstIndicesAndAmountTexture,
       linkIndicesTexture: this.indicesTexture,
       linkPropertiesTexture: this.biasAndStrengthTexture,

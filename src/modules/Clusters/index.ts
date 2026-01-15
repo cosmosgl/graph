@@ -248,7 +248,7 @@ export class Clusters extends CoreModule {
   }
 
   public initPrograms (): void {
-    const { device, store, data, points } = this
+    const { device, store, data } = this
     // Use same check as create() and run() for consistency
     if (data.pointsNumber === undefined || (!data.pointClusters && !data.clusterPositions)) return
 
@@ -281,10 +281,10 @@ export class Clusters extends CoreModule {
         USE_UNIFORM_BUFFERS: true, // Enable uniform buffers
       },
       bindings: {
-        // Uniform buffer via UniformStore (WebGPU-compatible)
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         calculateCentermassUniforms: this.calculateCentermassUniformStore.getManagedUniformBuffer(device, 'calculateCentermassUniforms'),
-        ...(this.clusterTexture && { clusterTexture: this.clusterTexture }),
-        ...(points?.previousPositionTexture && { positionsTexture: points.previousPositionTexture }),
+        // All texture bindings will be set dynamically in calculateCentermass() method
       },
       parameters: {
         blend: true,
@@ -335,13 +335,10 @@ export class Clusters extends CoreModule {
         USE_UNIFORM_BUFFERS: true, // Enable uniform buffers
       },
       bindings: {
-        // Uniform buffer via UniformStore (WebGPU-compatible)
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         applyForcesUniforms: this.applyForcesUniformStore.getManagedUniformBuffer(device, 'applyForcesUniforms'),
-        ...(this.clusterTexture && { clusterTexture: this.clusterTexture }),
-        ...(this.centermassTexture && { centermassTexture: this.centermassTexture }),
-        ...(this.clusterPositionsTexture && { clusterPositionsTexture: this.clusterPositionsTexture }),
-        ...(this.clusterForceCoefficientTexture && { clusterForceCoefficient: this.clusterForceCoefficientTexture }),
-        ...(points?.previousPositionTexture && { positionsTexture: points.previousPositionTexture }),
+        // All texture bindings will be set dynamically in run() method
       },
     })
   }
@@ -367,9 +364,8 @@ export class Clusters extends CoreModule {
       },
     })
 
-    // Update bindings dynamically
+    // Update texture bindings dynamically
     this.calculateCentermassCommand.setBindings({
-      calculateCentermassUniforms: this.calculateCentermassUniformStore.getManagedUniformBuffer(this.device, 'calculateCentermassUniforms'),
       clusterTexture: this.clusterTexture,
       positionsTexture: this.points.previousPositionTexture,
     })
@@ -413,9 +409,8 @@ export class Clusters extends CoreModule {
       },
     })
 
-    // Update bindings dynamically
+    // Update texture bindings dynamically
     this.applyForcesCommand.setBindings({
-      applyForcesUniforms: this.applyForcesUniformStore.getManagedUniformBuffer(this.device, 'applyForcesUniforms'),
       clusterTexture: this.clusterTexture,
       centermassTexture: this.centermassTexture,
       clusterPositionsTexture: this.clusterPositionsTexture,
