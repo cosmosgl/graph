@@ -210,8 +210,10 @@ export class ForceManyBody extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         calculateLevelsUniforms: this.calculateLevelsUniformStore.getManagedUniformBuffer(device, 'calculateLevelsUniforms'),
-        positionsTexture: points.previousPositionTexture!,
+        // All texture bindings will be set dynamically in drawLevels() method
       },
       parameters: {
         blend: true,
@@ -269,8 +271,10 @@ export class ForceManyBody extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         forceUniforms: this.forceUniformStore.getManagedUniformBuffer(device, 'forceUniforms'),
-        positionsTexture: points.previousPositionTexture!,
+        // All texture bindings will be set dynamically in drawForces() method
       },
       parameters: {
         blend: true,
@@ -320,9 +324,10 @@ export class ForceManyBody extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         forceCenterUniforms: this.forceCenterUniformStore.getManagedUniformBuffer(device, 'forceCenterUniforms'),
-        positionsTexture: points.previousPositionTexture!,
-        randomValues: this.randomValuesTexture!,
+        // All texture bindings will be set dynamically in drawForces() method
       },
       parameters: {
         blend: true,
@@ -420,9 +425,9 @@ export class ForceManyBody extends CoreModule {
       })
 
       this.calculateLevelsCommand.setVertexCount(data.pointsNumber)
+      // Update texture bindings dynamically
       this.calculateLevelsCommand.setBindings({
-        calculateLevelsUniforms: this.calculateLevelsUniformStore.getManagedUniformBuffer(device, 'calculateLevelsUniforms'),
-        positionsTexture: points.previousPositionTexture!,
+        positionsTexture: points.previousPositionTexture,
       })
 
       const levelPass = device.beginRenderPass({
@@ -442,17 +447,6 @@ export class ForceManyBody extends CoreModule {
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
     if (!this.randomValuesTexture || this.randomValuesTexture.destroyed) return
     if (!renderPass && (!points.velocityFbo || points.velocityFbo.destroyed)) return
-
-    // Update bindings shared for both force commands
-    this.forceCommand.setBindings({
-      forceUniforms: this.forceUniformStore.getManagedUniformBuffer(device, 'forceUniforms'),
-      positionsTexture: points.previousPositionTexture!,
-    })
-    this.forceFromItsOwnCentermassCommand.setBindings({
-      forceCenterUniforms: this.forceCenterUniformStore.getManagedUniformBuffer(device, 'forceCenterUniforms'),
-      positionsTexture: points.previousPositionTexture!,
-      randomValues: this.randomValuesTexture!,
-    })
 
     const drawPass = renderPass ?? device.beginRenderPass({
       framebuffer: points.velocityFbo,
@@ -475,9 +469,9 @@ export class ForceManyBody extends CoreModule {
         },
       })
 
+      // Update texture bindings dynamically
       this.forceCommand.setBindings({
-        forceUniforms: this.forceUniformStore.getManagedUniformBuffer(device, 'forceUniforms'),
-        positionsTexture: points.previousPositionTexture!,
+        positionsTexture: points.previousPositionTexture,
         levelFbo: target.texture,
       })
 
@@ -492,10 +486,11 @@ export class ForceManyBody extends CoreModule {
             repulsion: this.config.simulationRepulsion ?? 0,
           },
         })
+
+        // Update texture bindings dynamically
         this.forceFromItsOwnCentermassCommand.setBindings({
-          forceCenterUniforms: this.forceCenterUniformStore.getManagedUniformBuffer(device, 'forceCenterUniforms'),
-          positionsTexture: points.previousPositionTexture!,
-          randomValues: this.randomValuesTexture!,
+          positionsTexture: points.previousPositionTexture,
+          randomValues: this.randomValuesTexture,
           levelFbo: target.texture,
         })
         this.forceFromItsOwnCentermassCommand.draw(drawPass)

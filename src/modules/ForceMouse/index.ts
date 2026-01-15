@@ -46,8 +46,10 @@ export class ForceMouse extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         forceMouseUniforms: this.uniformStore.getManagedUniformBuffer(device, 'forceMouseUniforms'),
-        positionsTexture: points.previousPositionTexture!,
+        // All texture bindings will be set dynamically in run() method
       },
       parameters: {
         depthWriteEnabled: false,
@@ -69,9 +71,9 @@ export class ForceMouse extends CoreModule {
       },
     })
 
+    // Update texture bindings dynamically
     this.runCommand.setBindings({
-      forceMouseUniforms: this.uniformStore.getManagedUniformBuffer(device, 'forceMouseUniforms'),
-      positionsTexture: points.previousPositionTexture!,
+      positionsTexture: points.previousPositionTexture,
     })
 
     const pass = renderPass ?? device.beginRenderPass({

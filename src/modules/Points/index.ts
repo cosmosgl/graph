@@ -494,10 +494,10 @@ export class Points extends CoreModule {
           USE_UNIFORM_BUFFERS: true,
         },
         bindings: {
+          // Create uniform buffer binding
+          // Update it later by calling uniformStore.setUniforms()
           updatePositionUniforms: this.updatePositionUniformStore.getManagedUniformBuffer(device, 'updatePositionUniforms'),
-          ...(this.previousPositionTexture && { positionsTexture: this.previousPositionTexture }),
-          ...(this.velocityTexture && { velocity: this.velocityTexture }),
-          ...(this.pinnedStatusTexture && { pinnedStatusTexture: this.pinnedStatusTexture }),
+          // All texture bindings will be set dynamically in updatePosition() method
         },
       })
     }
@@ -537,8 +537,10 @@ export class Points extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         dragPointUniforms: this.dragPointUniformStore.getManagedUniformBuffer(device, 'dragPointUniforms'),
-        ...(this.previousPositionTexture && { positionsTexture: this.previousPositionTexture }),
+        // All texture bindings will be set dynamically in drag() method
       },
     })
 
@@ -638,12 +640,11 @@ export class Points extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer(device, 'drawVertexUniforms'),
         drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer(device, 'drawFragmentUniforms'),
-        ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
-        ...(this.greyoutStatusTexture && { pointGreyoutStatus: this.greyoutStatusTexture }),
-        ...(this.imageAtlasTexture && { imageAtlasTexture: this.imageAtlasTexture }),
-        ...(this.imageAtlasCoordsTexture && { imageAtlasCoords: this.imageAtlasCoordsTexture }),
+        // All texture bindings will be set dynamically in draw() method
       },
       parameters: {
         blend: true,
@@ -707,9 +708,10 @@ export class Points extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         findPointsOnAreaSelectionUniforms: this.findPointsOnAreaSelectionUniformStore.getManagedUniformBuffer(device, 'findPointsOnAreaSelectionUniforms'),
-        ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
-        ...(this.sizeTexture && { pointSize: this.sizeTexture }),
+        // All texture bindings will be set dynamically in findPointsOnAreaSelection() method
       },
     })
 
@@ -752,10 +754,11 @@ export class Points extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         findPointsOnPolygonSelectionUniforms: this.findPointsOnPolygonSelectionUniformStore
           .getManagedUniformBuffer(device, 'findPointsOnPolygonSelectionUniforms'),
-        ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
-        ...(this.polygonPathTexture && { polygonPathTexture: this.polygonPathTexture }),
+        // All texture bindings will be set dynamically in findPointsOnPolygonSelection() method
       },
     })
 
@@ -805,8 +808,10 @@ export class Points extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         findHoveredPointUniforms: this.findHoveredPointUniformStore.getManagedUniformBuffer(device, 'findHoveredPointUniforms'),
-        ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
+        // All texture bindings will be set dynamically in findHoveredPoint() method
       },
       parameters: {
         depthWriteEnabled: false,
@@ -849,8 +854,10 @@ export class Points extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         fillSampledPointsUniforms: this.fillSampledPointsUniformStore.getManagedUniformBuffer(device, 'fillSampledPointsUniforms'),
-        ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
+        // All texture bindings will be set dynamically in getSampledPointPositionsMap() and getSampledPoints() methods
       },
       parameters: {
         depthWriteEnabled: false,
@@ -921,9 +928,10 @@ export class Points extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         drawHighlightedUniforms: this.drawHighlightedUniformStore.getManagedUniformBuffer(device, 'drawHighlightedUniforms'),
-        ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
-        ...(this.greyoutStatusTexture && { pointGreyoutStatusTexture: this.greyoutStatusTexture }),
+        // All texture bindings will be set dynamically in draw() method
       },
       parameters: {
         blend: true,
@@ -971,9 +979,10 @@ export class Points extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
         trackPointsUniforms: this.trackPointsUniformStore.getManagedUniformBuffer(device, 'trackPointsUniforms'),
-        ...(this.currentPositionTexture && { positionsTexture: this.currentPositionTexture }),
-        ...(this.trackedIndicesTexture && { trackedIndices: this.trackedIndicesTexture }),
+        // All texture bindings will be set dynamically in trackPoints() method
       },
     })
   }
@@ -1305,8 +1314,8 @@ export class Points extends CoreModule {
       },
     })
 
+    // Update texture bindings dynamically
     this.trackPointsCommand.setBindings({
-      trackPointsUniforms: this.trackPointsUniformStore.getManagedUniformBuffer(this.device, 'trackPointsUniforms'),
       positionsTexture: this.currentPositionTexture,
       trackedIndices: this.trackedIndicesTexture,
     })
@@ -1386,9 +1395,8 @@ export class Points extends CoreModule {
         drawFragmentUniforms: baseFragmentUniforms,
       })
 
+      // Update texture bindings dynamically
       this.drawCommand.setBindings({
-        drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer(this.device, 'drawVertexUniforms'),
-        drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer(this.device, 'drawFragmentUniforms'),
         positionsTexture: this.currentPositionTexture,
         pointGreyoutStatus: this.greyoutStatusTexture,
         imageAtlasTexture: this.imageAtlasTexture,
@@ -1407,9 +1415,8 @@ export class Points extends CoreModule {
         drawFragmentUniforms: baseFragmentUniforms,
       })
 
+      // Update texture bindings dynamically
       this.drawCommand.setBindings({
-        drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer(this.device, 'drawVertexUniforms'),
-        drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer(this.device, 'drawFragmentUniforms'),
         positionsTexture: this.currentPositionTexture,
         pointGreyoutStatus: this.greyoutStatusTexture,
         imageAtlasTexture: this.imageAtlasTexture,
@@ -1428,9 +1435,8 @@ export class Points extends CoreModule {
         drawFragmentUniforms: baseFragmentUniforms,
       })
 
+      // Update texture bindings dynamically
       this.drawCommand.setBindings({
-        drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer(this.device, 'drawVertexUniforms'),
-        drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer(this.device, 'drawFragmentUniforms'),
         positionsTexture: this.currentPositionTexture,
         pointGreyoutStatus: this.greyoutStatusTexture,
         imageAtlasTexture: this.imageAtlasTexture,
@@ -1465,8 +1471,8 @@ export class Points extends CoreModule {
           width: 0.85,
         },
       })
+      // Update texture bindings dynamically
       this.drawHighlightedCommand.setBindings({
-        drawHighlightedUniforms: this.drawHighlightedUniformStore.getManagedUniformBuffer(this.device, 'drawHighlightedUniforms'),
         positionsTexture: this.currentPositionTexture,
         pointGreyoutStatusTexture: this.greyoutStatusTexture,
       })
@@ -1497,8 +1503,8 @@ export class Points extends CoreModule {
           width: 0.85,
         },
       })
+      // Update texture bindings dynamically
       this.drawHighlightedCommand.setBindings({
-        drawHighlightedUniforms: this.drawHighlightedUniformStore.getManagedUniformBuffer(this.device, 'drawHighlightedUniforms'),
         positionsTexture: this.currentPositionTexture,
         pointGreyoutStatusTexture: this.greyoutStatusTexture,
       })
@@ -1519,8 +1525,8 @@ export class Points extends CoreModule {
       },
     })
 
+    // Update texture bindings dynamically
     this.updatePositionCommand.setBindings({
-      updatePositionUniforms: this.updatePositionUniformStore.getManagedUniformBuffer(this.device, 'updatePositionUniforms'),
       positionsTexture: this.previousPositionTexture,
       velocity: this.velocityTexture,
       pinnedStatusTexture: this.pinnedStatusTexture,
@@ -1548,8 +1554,8 @@ export class Points extends CoreModule {
       },
     })
 
+    // Update texture bindings dynamically
     this.dragPointCommand.setBindings({
-      dragPointUniforms: this.dragPointUniformStore.getManagedUniformBuffer(this.device, 'dragPointUniforms'),
       positionsTexture: this.previousPositionTexture,
     })
 
@@ -1583,8 +1589,8 @@ export class Points extends CoreModule {
       },
     })
 
+    // Update texture bindings dynamically
     this.findPointsOnAreaSelectionCommand.setBindings({
-      findPointsOnAreaSelectionUniforms: this.findPointsOnAreaSelectionUniformStore.getManagedUniformBuffer(this.device, 'findPointsOnAreaSelectionUniforms'),
       positionsTexture: this.currentPositionTexture,
       pointSize: this.sizeTexture,
     })
@@ -1610,9 +1616,8 @@ export class Points extends CoreModule {
       },
     })
 
+    // Update texture bindings dynamically
     this.findPointsOnPolygonSelectionCommand.setBindings({
-      findPointsOnPolygonSelectionUniforms: this.findPointsOnPolygonSelectionUniformStore
-        .getManagedUniformBuffer(this.device, 'findPointsOnPolygonSelectionUniforms'),
       positionsTexture: this.currentPositionTexture,
       polygonPathTexture: this.polygonPathTexture,
     })
@@ -1703,8 +1708,8 @@ export class Points extends CoreModule {
       },
     })
 
+    // Update texture bindings dynamically
     this.findHoveredPointCommand.setBindings({
-      findHoveredPointUniforms: this.findHoveredPointUniformStore.getManagedUniformBuffer(this.device, 'findHoveredPointUniforms'),
       positionsTexture: this.currentPositionTexture,
     })
 
@@ -1839,8 +1844,8 @@ export class Points extends CoreModule {
         },
       })
 
+      // Update texture bindings dynamically
       this.fillSampledPointsFboCommand.setBindings({
-        fillSampledPointsUniforms: this.fillSampledPointsUniformStore.getManagedUniformBuffer(this.device, 'fillSampledPointsUniforms'),
         positionsTexture: this.currentPositionTexture,
       })
 
@@ -1886,8 +1891,8 @@ export class Points extends CoreModule {
         },
       })
 
+      // Update texture bindings dynamically
       this.fillSampledPointsFboCommand.setBindings({
-        fillSampledPointsUniforms: this.fillSampledPointsUniformStore.getManagedUniformBuffer(this.device, 'fillSampledPointsUniforms'),
         positionsTexture: this.currentPositionTexture,
       })
 
