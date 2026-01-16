@@ -100,6 +100,10 @@ export class Graph {
     // Start device creation immediately (fire and forget)
     this.deviceInitPromise = this.createDevice(canvas)
       .then(device => {
+        if (this._isDestroyed) {
+          device.destroy()
+          return device
+        }
         this.device = device
 
         const w = canvas.clientWidth
