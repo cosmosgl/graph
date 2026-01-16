@@ -2,6 +2,51 @@ import { Meta } from "@storybook/blocks";
 
 <Meta title="API Reference" />
 
+### <a name="graph_constructor" href="#graph_constructor">#</a> new <b>Graph</b>(<i>div</i>, [<i>config</i>], [<i>devicePromise</i>])
+
+Creates a new Graph instance for visualizing network graphs.
+
+* **`div`** (HTMLDivElement): The HTML div element that will contain the graph canvas. The canvas will be automatically appended to this div.
+* **`config`** (Object, optional): Configuration object for customizing graph behavior, appearance, and interaction settings. See [Configuration](../?path=/docs/configuration--docs) for available options.
+* **`devicePromise`** (Promise&lt;Device&gt;, optional): Optional promise that resolves to a Luma.gl Device instance. If provided, this device will be used instead of creating a new one internally.
+
+  **Requirements:**
+  - The device must have an HTMLCanvasElement canvas context (not OffscreenCanvas).
+  - Compute-only devices are not supported.
+  - The canvas from the device will be automatically appended to the provided div if it's not already present in the DOM.
+
+  **Example:**
+  ```javascript
+  import { Graph } from '@cosmos.gl/graph'
+  import { luma } from '@luma.gl/core'
+  import { webgl2Adapter } from '@luma.gl/webgl'
+
+  const div = document.querySelector('div')
+  const config = { spaceSize: 4096 }
+
+  // Create a custom device
+  const devicePromise = luma.createDevice({
+    type: 'webgl',
+    adapters: [webgl2Adapter],
+    createCanvasContext: {
+      useDevicePixels: window.devicePixelRatio || 2,
+      autoResize: true,
+    },
+  })
+
+  // Use the custom device when creating the graph
+  const graph = new Graph(div, config, devicePromise)
+  ```
+
+**Basic Example:**
+```javascript
+import { Graph } from '@cosmos.gl/graph'
+
+const div = document.querySelector('div')
+const config = { spaceSize: 4096 }
+const graph = new Graph(div, config)
+```
+
 ### <a name="set_config" href="#set_config">#</a> graph.<b>setConfig</b>(<i>config</i>)
 
 This method sets the [cosmos.gl configuration](../?path=/docs/configuration--docs). The changes are applied in real-time.

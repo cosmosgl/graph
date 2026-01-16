@@ -85,136 +85,145 @@ export class Graph {
 
   public constructor (
     div: HTMLDivElement,
-    config?: GraphConfigInterface
+    config?: GraphConfigInterface,
+    devicePromise?: Promise<Device>
   ) {
     if (config) this.config.init(config)
 
-    this.store.div = div
-    const canvas = document.createElement('canvas')
-    canvas.style.width = '100%'
-    canvas.style.height = '100%'
-    this.store.div.appendChild(canvas)
-    this.addAttribution()
-    this.canvas = canvas
+    if (devicePromise) {
+      this.deviceInitPromise = devicePromise
+    } else {
+      const canvas = document.createElement('canvas')
+      this.deviceInitPromise = this.createDevice(canvas)
+    }
 
-    // Start device creation immediately (fire and forget)
-    this.deviceInitPromise = this.createDevice(canvas)
-      .then(device => {
-        if (this._isDestroyed) {
-          device.destroy()
-          return device
-        }
-        this.device = device
-
-        const w = canvas.clientWidth
-        const h = canvas.clientHeight
-
-        canvas.width = w * this.config.pixelRatio
-        canvas.height = h * this.config.pixelRatio
-
-        this.store.adjustSpaceSize(this.config.spaceSize, this.device.limits.maxTextureDimension2D)
-        this.store.setWebGLMaxTextureSize(this.device.limits.maxTextureDimension2D)
-        this.store.updateScreenSize(w, h)
-
-        this.canvasD3Selection = select<HTMLCanvasElement, undefined>(this.canvas)
-        this.canvasD3Selection
-          .on('mouseenter.cosmos', () => { this._isMouseOnCanvas = true })
-          .on('mousemove.cosmos', () => { this._isMouseOnCanvas = true })
-          .on('mouseleave.cosmos', (event) => {
-            this._isMouseOnCanvas = false
-            this.currentEvent = event
-
-            // Clear point hover state and trigger callback if needed
-            if (this.store.hoveredPoint !== undefined && this.config.onPointMouseOut) {
-              this.config.onPointMouseOut(event)
-            }
-
-            // Clear link hover state and trigger callback if needed
-            if (this.store.hoveredLinkIndex !== undefined && this.config.onLinkMouseOut) {
-              this.config.onLinkMouseOut(event)
-            }
-
-            // Reset right-click flag
-            this.isRightClickMouse = false
-
-            // Clear hover states
-            this.store.hoveredPoint = undefined
-            this.store.hoveredLinkIndex = undefined
-
-            // Update cursor style after clearing hover states
-            this.updateCanvasCursor()
-          })
-        select(document)
-          .on('keydown.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
-          .on('keyup.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
-        this.zoomInstance.behavior
-          .on('start.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => { this.currentEvent = e })
-          .on('zoom.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
-            const userDriven = !!e.sourceEvent
-            if (userDriven) this.updateMousePosition(e.sourceEvent)
-            this.currentEvent = e
-          })
-          .on('end.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => { this.currentEvent = e })
-        this.dragInstance.behavior
-          .on('start.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
-            this.currentEvent = e
-            this.updateCanvasCursor()
-          })
-          .on('drag.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
-            if (this.dragInstance.isActive) {
-              this.updateMousePosition(e)
-            }
-            this.currentEvent = e
-          })
-          .on('end.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
-            this.currentEvent = e
-            this.updateCanvasCursor()
-          })
-        this.canvasD3Selection
-          .call(this.dragInstance.behavior)
-          .call(this.zoomInstance.behavior)
-          .on('click', this.onClick.bind(this))
-          .on('mousemove', this.onMouseMove.bind(this))
-          .on('contextmenu', this.onRightClickMouse.bind(this))
-        if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
-        this.setZoomLevel(this.config.initialZoomLevel ?? 1)
-
-        const pointSizeRange = (device as WebGLDevice).gl.getParameter(GL.ALIASED_POINT_SIZE_RANGE) as [number, number]
-        this.store.maxPointSize = (pointSizeRange?.[1] ?? MAX_POINT_SIZE) / this.config.pixelRatio
-
-        // Initialize simulation state based on enableSimulation config
-        // If simulation is disabled, start with isSimulationRunning = false
-        this.store.isSimulationRunning = this.config.enableSimulation
-
-        this.points = new Points(device, this.config, this.store, this.graph)
-        this.lines = new Lines(device, this.config, this.store, this.graph, this.points)
-        if (this.config.enableSimulation) {
-          this.forceGravity = new ForceGravity(device, this.config, this.store, this.graph, this.points)
-          this.forceCenter = new ForceCenter(device, this.config, this.store, this.graph, this.points)
-          this.forceManyBody = new ForceManyBody(device, this.config, this.store, this.graph, this.points)
-          this.forceLinkIncoming = new ForceLink(device, this.config, this.store, this.graph, this.points)
-          this.forceLinkOutgoing = new ForceLink(device, this.config, this.store, this.graph, this.points)
-          this.forceMouse = new ForceMouse(device, this.config, this.store, this.graph, this.points)
-        }
-        this.clusters = new Clusters(device, this.config, this.store, this.graph, this.points)
-
-        this.store.backgroundColor = getRgbaColor(this.config.backgroundColor)
-        this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor ?? defaultConfigValues.hoveredPointRingColor)
-        this.store.setFocusedPointRingColor(this.config.focusedPointRingColor ?? defaultConfigValues.focusedPointRingColor)
-        if (this.config.focusedPointIndex !== undefined) {
-          this.store.setFocusedPoint(this.config.focusedPointIndex)
-        }
-        this.store.setGreyoutPointColor(this.config.pointGreyoutColor ?? defaultGreyoutPointColor)
-        this.store.setHoveredLinkColor(this.config.hoveredLinkColor ?? defaultConfigValues.hoveredLinkColor)
-
-        this.store.updateLinkHoveringEnabled(this.config)
-
-        if (this.config.showFPSMonitor) this.fpsMonitor = new FPSMonitor(this.canvas)
-
-        if (this.config.randomSeed !== undefined) this.store.addRandomSeed(this.config.randomSeed)
-
+    this.deviceInitPromise.then(device => {
+      if (this._isDestroyed) {
+        device.destroy()
         return device
-      })
+      }
+      this.device = device
+      const deviceCanvasContext = this.validateDevice(device)
+      this.store.div = div
+      const deviceCanvas = deviceCanvasContext.canvas as HTMLCanvasElement
+      // Ensure canvas is in the div
+      if (deviceCanvas.parentNode !== this.store.div) {
+        if (deviceCanvas.parentNode) {
+          deviceCanvas.parentNode.removeChild(deviceCanvas)
+        }
+        this.store.div.appendChild(deviceCanvas)
+      }
+      this.addAttribution()
+      deviceCanvas.style.width = '100%'
+      deviceCanvas.style.height = '100%'
+      this.canvas = deviceCanvas
+
+      const w = this.canvas.clientWidth
+      const h = this.canvas.clientHeight
+
+      this.store.adjustSpaceSize(this.config.spaceSize, this.device.limits.maxTextureDimension2D)
+      this.store.setWebGLMaxTextureSize(this.device.limits.maxTextureDimension2D)
+      this.store.updateScreenSize(w, h)
+
+      this.canvasD3Selection = select<HTMLCanvasElement, undefined>(this.canvas)
+      this.canvasD3Selection
+        .on('mouseenter.cosmos', () => { this._isMouseOnCanvas = true })
+        .on('mousemove.cosmos', () => { this._isMouseOnCanvas = true })
+        .on('mouseleave.cosmos', (event) => {
+          this._isMouseOnCanvas = false
+          this.currentEvent = event
+
+          // Clear point hover state and trigger callback if needed
+          if (this.store.hoveredPoint !== undefined && this.config.onPointMouseOut) {
+            this.config.onPointMouseOut(event)
+          }
+
+          // Clear link hover state and trigger callback if needed
+          if (this.store.hoveredLinkIndex !== undefined && this.config.onLinkMouseOut) {
+            this.config.onLinkMouseOut(event)
+          }
+
+          // Reset right-click flag
+          this.isRightClickMouse = false
+
+          // Clear hover states
+          this.store.hoveredPoint = undefined
+          this.store.hoveredLinkIndex = undefined
+
+          // Update cursor style after clearing hover states
+          this.updateCanvasCursor()
+        })
+      select(document)
+        .on('keydown.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
+        .on('keyup.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
+      this.zoomInstance.behavior
+        .on('start.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => { this.currentEvent = e })
+        .on('zoom.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
+          const userDriven = !!e.sourceEvent
+          if (userDriven) this.updateMousePosition(e.sourceEvent)
+          this.currentEvent = e
+        })
+        .on('end.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => { this.currentEvent = e })
+      this.dragInstance.behavior
+        .on('start.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
+          this.currentEvent = e
+          this.updateCanvasCursor()
+        })
+        .on('drag.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
+          if (this.dragInstance.isActive) {
+            this.updateMousePosition(e)
+          }
+          this.currentEvent = e
+        })
+        .on('end.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
+          this.currentEvent = e
+          this.updateCanvasCursor()
+        })
+      this.canvasD3Selection
+        .call(this.dragInstance.behavior)
+        .call(this.zoomInstance.behavior)
+        .on('click', this.onClick.bind(this))
+        .on('mousemove', this.onMouseMove.bind(this))
+        .on('contextmenu', this.onRightClickMouse.bind(this))
+      if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
+      this.setZoomLevel(this.config.initialZoomLevel ?? 1)
+
+      const pointSizeRange = (device as WebGLDevice).gl.getParameter(GL.ALIASED_POINT_SIZE_RANGE) as [number, number]
+      this.store.maxPointSize = (pointSizeRange?.[1] ?? MAX_POINT_SIZE) / this.config.pixelRatio
+
+      // Initialize simulation state based on enableSimulation config
+      // If simulation is disabled, start with isSimulationRunning = false
+      this.store.isSimulationRunning = this.config.enableSimulation
+
+      this.points = new Points(device, this.config, this.store, this.graph)
+      this.lines = new Lines(device, this.config, this.store, this.graph, this.points)
+      if (this.config.enableSimulation) {
+        this.forceGravity = new ForceGravity(device, this.config, this.store, this.graph, this.points)
+        this.forceCenter = new ForceCenter(device, this.config, this.store, this.graph, this.points)
+        this.forceManyBody = new ForceManyBody(device, this.config, this.store, this.graph, this.points)
+        this.forceLinkIncoming = new ForceLink(device, this.config, this.store, this.graph, this.points)
+        this.forceLinkOutgoing = new ForceLink(device, this.config, this.store, this.graph, this.points)
+        this.forceMouse = new ForceMouse(device, this.config, this.store, this.graph, this.points)
+      }
+      this.clusters = new Clusters(device, this.config, this.store, this.graph, this.points)
+
+      this.store.backgroundColor = getRgbaColor(this.config.backgroundColor)
+      this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor ?? defaultConfigValues.hoveredPointRingColor)
+      this.store.setFocusedPointRingColor(this.config.focusedPointRingColor ?? defaultConfigValues.focusedPointRingColor)
+      if (this.config.focusedPointIndex !== undefined) {
+        this.store.setFocusedPoint(this.config.focusedPointIndex)
+      }
+      this.store.setGreyoutPointColor(this.config.pointGreyoutColor ?? defaultGreyoutPointColor)
+      this.store.setHoveredLinkColor(this.config.hoveredLinkColor ?? defaultConfigValues.hoveredLinkColor)
+
+      this.store.updateLinkHoveringEnabled(this.config)
+
+      if (this.config.showFPSMonitor) this.fpsMonitor = new FPSMonitor(this.canvas)
+
+      if (this.config.randomSeed !== undefined) this.store.addRandomSeed(this.config.randomSeed)
+
+      return device
+    })
       .catch(error => {
         console.error('Device initialization failed:', error)
         throw error
@@ -1424,6 +1433,24 @@ export class Graph {
       return true
     }
     return false
+  }
+
+  /**
+   * Validates that a device has the required HTMLCanvasElement canvas context.
+   * Cosmos requires an HTMLCanvasElement canvas context and does not support
+   * OffscreenCanvas or compute-only devices.
+   * @param device - The device to validate
+   * @returns The validated canvas context (guaranteed to be non-null and HTMLCanvasElement type)
+   * @throws Error if the device does not meet Cosmos requirements
+   */
+  private validateDevice (device: Device): NonNullable<Device['canvasContext']> {
+    const deviceCanvasContext = device.canvasContext
+    // Cosmos requires an HTMLCanvasElement canvas context.
+    // OffscreenCanvas and compute-only devices are not supported.
+    if (deviceCanvasContext === null || deviceCanvasContext.type === 'offscreen-canvas') {
+      throw new Error('Device must have an HTMLCanvasElement canvas context. OffscreenCanvas and compute-only devices are not supported.')
+    }
+    return deviceCanvasContext
   }
 
   /**
