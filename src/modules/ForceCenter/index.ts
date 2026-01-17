@@ -58,18 +58,17 @@ export class ForceCenter extends CoreModule {
       colorAttachments: [this.centermassTexture],
     })
 
-    const indexData = createIndexesForBuffer(pointsTextureSize)
-    if (!this.pointIndices || this.pointIndices.byteLength !== indexData.byteLength) {
-      this.pointIndices?.destroy()
+    // Update pointIndices buffer if pointsTextureSize changed
+    if (!this.pointIndices || this.previousPointsTextureSize !== store.pointsTextureSize) {
+      if (this.pointIndices && !this.pointIndices.destroyed) {
+        this.pointIndices.destroy()
+      }
+      const indexData = createIndexesForBuffer(store.pointsTextureSize)
       this.pointIndices = device.createBuffer({
         data: indexData,
         usage: Buffer.VERTEX | Buffer.COPY_DST,
       })
-    } else {
-      this.pointIndices.write(indexData)
-    }
-    if (this.calculateCentermassCommand) {
-      this.calculateCentermassCommand.setAttributes({
+      this.calculateCentermassCommand?.setAttributes({
         pointIndices: this.pointIndices,
       })
     }
@@ -81,7 +80,6 @@ export class ForceCenter extends CoreModule {
     const { device, store, points } = this
     if (!points || !store.pointsTextureSize) return
     if (!this.centermassFbo || this.centermassFbo.destroyed || !this.centermassTexture || this.centermassTexture.destroyed) return
-    if (!this.pointIndices) return
 
     this.forceVertexCoordBuffer ||= device.createBuffer({
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
@@ -109,7 +107,7 @@ export class ForceCenter extends CoreModule {
       vs: calculateCentermassVert,
       topology: 'point-list',
       attributes: {
-        pointIndices: this.pointIndices,
+        ...this.pointIndices && { pointIndices: this.pointIndices },
       },
       bufferLayout: [
         { name: 'pointIndices', format: 'float32x2' },
@@ -173,6 +171,9 @@ export class ForceCenter extends CoreModule {
 
     // Skip if sizes changed and create() wasn't called yet
     if (store.pointsTextureSize !== this.previousPointsTextureSize) return
+
+    // Ensure pointIndices is set (Model might exist but attributes not set yet)
+    if (!this.pointIndices) return
 
     // Clear centermass framebuffer and accumulate point positions
     const centermassPass = device.beginRenderPass({

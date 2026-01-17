@@ -234,9 +234,7 @@ export class Clusters extends CoreModule {
         data: indexData,
         usage: Buffer.VERTEX | Buffer.COPY_DST,
       })
-    }
-    if (this.calculateCentermassCommand) {
-      this.calculateCentermassCommand.setAttributes({
+      this.calculateCentermassCommand?.setAttributes({
         pointIndices: this.pointIndices,
       })
     }
@@ -272,7 +270,7 @@ export class Clusters extends CoreModule {
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       attributes: {
-        pointIndices: this.pointIndices!,
+        ...this.pointIndices && { pointIndices: this.pointIndices },
       },
       bufferLayout: [
         { name: 'pointIndices', format: 'float32x2' }, // 2 floats per vertex
@@ -348,6 +346,8 @@ export class Clusters extends CoreModule {
     if (!this.calculateCentermassCommand || !this.calculateCentermassUniformStore) {
       return
     }
+    // Ensure pointIndices is set (Model might exist but attributes not set yet)
+    if (!this.pointIndices) return
 
     if (!this.centermassFbo || this.centermassFbo.destroyed) return
     if (!this.clusterTexture || this.clusterTexture.destroyed) return
