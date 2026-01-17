@@ -1,13 +1,28 @@
-// The fragment shader calculates the velocity of a point based on its position
-// and the positions of other points in different levels of a spatial hierarchy.
-
-#ifdef GL_ES
+#version 300 es
 precision highp float;
-#endif
 
 uniform sampler2D positionsTexture;
 uniform sampler2D levelFbo;
 
+#ifdef USE_UNIFORM_BUFFERS
+layout(std140) uniform forceUniforms {
+  float level;
+  float levels;
+  float levelTextureSize;
+  float repulsion;
+  float alpha;
+  float spaceSize;
+  float theta;
+} force;
+
+#define level force.level
+#define levels force.levels
+#define levelTextureSize force.levelTextureSize
+#define repulsion force.repulsion
+#define alpha force.alpha
+#define spaceSize force.spaceSize
+#define theta force.theta
+#else
 uniform float level;
 uniform float levels;
 uniform float levelTextureSize;
@@ -15,14 +30,16 @@ uniform float repulsion;
 uniform float alpha;
 uniform float spaceSize;
 uniform float theta;
+#endif
 
-varying vec2 textureCoords;
+in vec2 textureCoords;
+out vec4 fragColor;
 
 const float MAX_LEVELS_NUM = 14.0;
 
 vec2 calculateAdditionalVelocity (vec2 ij, vec2 pp) {
   vec2 add = vec2(0.0);
-  vec4 centermass = texture2D(levelFbo, ij);
+  vec4 centermass = texture(levelFbo, ij);
   if (centermass.r > 0.0 && centermass.g > 0.0 && centermass.b > 0.0) {
     vec2 centermassPosition = vec2(centermass.rg / centermass.b);
     vec2 distVector = pp - centermassPosition;
@@ -41,7 +58,7 @@ vec2 calculateAdditionalVelocity (vec2 ij, vec2 pp) {
 }
 
 void main() {
-  vec4 pointPosition = texture2D(positionsTexture, textureCoords);
+  vec4 pointPosition = texture(positionsTexture, textureCoords);
   float x = pointPosition.x;
   float y = pointPosition.y;
 
@@ -117,5 +134,5 @@ void main() {
     }
   }
 
-  gl_FragColor = velocity;
+  fragColor = velocity;
 }

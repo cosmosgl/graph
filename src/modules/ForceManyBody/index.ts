@@ -1,223 +1,499 @@
-import regl from 'regl'
+import { Buffer, Framebuffer, RenderPass, Texture, UniformStore } from '@luma.gl/core'
+import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
-import calculateLevelFrag from '@/graph/modules/ForceManyBody/calculate-level.frag'
-import calculateLevelVert from '@/graph/modules/ForceManyBody/calculate-level.vert'
-import forceFrag from '@/graph/modules/ForceManyBody/force-level.frag'
-import forceCenterFrag from '@/graph/modules/ForceManyBody/force-centermass.frag'
-import { createIndexesForBuffer, createQuadBuffer } from '@/graph/modules/Shared/buffer'
-import clearFrag from '@/graph/modules/Shared/clear.frag'
-import updateVert from '@/graph/modules/Shared/quad.vert'
+import calculateLevelFrag from '@/graph/modules/ForceManyBody/calculate-level.frag?raw'
+import calculateLevelVert from '@/graph/modules/ForceManyBody/calculate-level.vert?raw'
+import forceFrag from '@/graph/modules/ForceManyBody/force-level.frag?raw'
+import forceCenterFrag from '@/graph/modules/ForceManyBody/force-centermass.frag?raw'
+import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
+import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
+import updateVert from '@/graph/modules/Shared/quad.vert?raw'
+
+type LevelTarget = {
+  texture: Texture;
+  fbo: Framebuffer;
+}
 
 export class ForceManyBody extends CoreModule {
-  private randomValuesFbo: regl.Framebuffer2D | undefined
-  private levelsFbos = new Map<string, regl.Framebuffer2D>()
-  private clearLevelsCommand: regl.DrawCommand | undefined
-  private clearVelocityCommand: regl.DrawCommand | undefined
-  private calculateLevelsCommand: regl.DrawCommand | undefined
-  private forceCommand: regl.DrawCommand | undefined
-  private forceFromItsOwnCentermassCommand: regl.DrawCommand | undefined
-  private quadtreeLevels = 0
-  private randomValuesTexture: regl.Texture2D | undefined
-  private pointIndices: regl.Buffer | undefined
+  private randomValuesTexture: Texture | undefined
+  private pointIndices: Buffer | undefined
+  private levels = 0
+  private levelTargets = new Map<number, LevelTarget>()
+
+  private calculateLevelsCommand: Model | undefined
+  private forceCommand: Model | undefined
+  private forceFromItsOwnCentermassCommand: Model | undefined
+
+  private forceVertexCoordBuffer: Buffer | undefined
+
+  private calculateLevelsUniformStore: UniformStore<{
+    calculateLevelsUniforms: {
+      pointsTextureSize: number;
+      levelTextureSize: number;
+      cellSize: number;
+    };
+  }> | undefined
+
+  private forceUniformStore: UniformStore<{
+    forceUniforms: {
+      level: number;
+      levels: number;
+      levelTextureSize: number;
+      alpha: number;
+      repulsion: number;
+      spaceSize: number;
+      theta: number;
+    };
+  }> | undefined
+
+  private forceCenterUniformStore: UniformStore<{
+    forceCenterUniforms: {
+      levelTextureSize: number;
+      alpha: number;
+      repulsion: number;
+    };
+  }> | undefined
+
+  private previousPointsTextureSize: number | undefined
+  private previousSpaceSize: number | undefined
 
   public create (): void {
-    const { reglInstance, store } = this
+    const { device, store } = this
     if (!store.pointsTextureSize) return
-    this.quadtreeLevels = Math.log2(store.adjustedSpaceSize)
-    for (let i = 0; i < this.quadtreeLevels; i += 1) {
-      const levelTextureSize = Math.pow(2, i + 1)
-      if (!this.levelsFbos.has(`level[${i}]`)) {
-        this.levelsFbos.set(`level[${i}]`, reglInstance.framebuffer())
-      }
-      const fbo = this.levelsFbos.get(`level[${i}]`)
-      if (fbo) {
-        fbo({
-          shape: [levelTextureSize, levelTextureSize],
-          colorType: 'float',
-          depth: false,
-          stencil: false,
+
+    this.levels = Math.log2(store.adjustedSpaceSize)
+
+    // Allocate quadtree levels
+    for (let level = 0; level < this.levels; level += 1) {
+      const levelTextureSize = Math.pow(2, level + 1)
+      const existingTarget = this.levelTargets.get(level)
+
+      if (
+        existingTarget &&
+        existingTarget.texture.width === levelTextureSize &&
+        existingTarget.texture.height === levelTextureSize
+      ) {
+        // Clear existing texture data to zero
+        existingTarget.texture.copyImageData({
+          data: new Float32Array(levelTextureSize * levelTextureSize * 4).fill(0),
+          bytesPerRow: getBytesPerRow('rgba32float', levelTextureSize),
+          mipLevel: 0,
+          x: 0,
+          y: 0,
         })
+        continue
+      }
+
+      // Destroy old resources if size changed
+      if (existingTarget) {
+        if (!existingTarget.texture.destroyed) existingTarget.texture.destroy()
+        if (!existingTarget.fbo.destroyed) existingTarget.fbo.destroy()
+      }
+
+      const texture = device.createTexture({
+        width: levelTextureSize,
+        height: levelTextureSize,
+        format: 'rgba32float',
+        usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
+      })
+      texture.copyImageData({
+        data: new Float32Array(levelTextureSize * levelTextureSize * 4).fill(0),
+        bytesPerRow: getBytesPerRow('rgba32float', levelTextureSize),
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+      const fbo = device.createFramebuffer({
+        width: levelTextureSize,
+        height: levelTextureSize,
+        colorAttachments: [texture],
+      })
+      this.levelTargets.set(level, { texture, fbo })
+    }
+
+    // Drop any stale higher-level buffers if space size shrank
+    for (const [level, target] of Array.from(this.levelTargets.entries())) {
+      if (level >= this.levels) {
+        if (!target.texture.destroyed) target.texture.destroy()
+        if (!target.fbo.destroyed) target.fbo.destroy()
+        this.levelTargets.delete(level)
       }
     }
-    // Create random number to prevent point to stick together in one coordinate
-    const randomValuesState = new Float32Array(store.pointsTextureSize * store.pointsTextureSize * 4)
-    for (let i = 0; i < store.pointsTextureSize * store.pointsTextureSize; ++i) {
+
+    // Random jitter texture to prevent sticking
+    const totalPixels = store.pointsTextureSize * store.pointsTextureSize
+    const randomValuesState = new Float32Array(totalPixels * 4)
+    for (let i = 0; i < totalPixels; ++i) {
       randomValuesState[i * 4] = store.getRandomFloat(-1, 1) * 0.00001
       randomValuesState[i * 4 + 1] = store.getRandomFloat(-1, 1) * 0.00001
     }
 
-    if (!this.randomValuesTexture) this.randomValuesTexture = reglInstance.texture()
-    this.randomValuesTexture({
+    const recreateRandomValuesTexture =
+      !this.randomValuesTexture ||
+      this.randomValuesTexture.destroyed ||
+      this.randomValuesTexture.width !== store.pointsTextureSize ||
+      this.randomValuesTexture.height !== store.pointsTextureSize
+
+    if (recreateRandomValuesTexture) {
+      if (this.randomValuesTexture && !this.randomValuesTexture.destroyed) {
+        this.randomValuesTexture.destroy()
+      }
+      this.randomValuesTexture = device.createTexture({
+        width: store.pointsTextureSize,
+        height: store.pointsTextureSize,
+        format: 'rgba32float',
+        usage: Texture.SAMPLE | Texture.COPY_DST,
+      })
+    }
+    this.randomValuesTexture!.copyImageData({
       data: randomValuesState,
-      shape: [store.pointsTextureSize, store.pointsTextureSize, 4],
-      type: 'float',
-    })
-    if (!this.randomValuesFbo) this.randomValuesFbo = reglInstance.framebuffer()
-    this.randomValuesFbo({
-      color: this.randomValuesTexture,
-      depth: false,
-      stencil: false,
+      bytesPerRow: getBytesPerRow('rgba32float', store.pointsTextureSize),
+      mipLevel: 0,
+      x: 0,
+      y: 0,
     })
 
-    if (!this.pointIndices) this.pointIndices = reglInstance.buffer(0)
-    this.pointIndices(createIndexesForBuffer(store.pointsTextureSize))
+    // Update pointIndices buffer if pointsTextureSize changed
+    if (!this.pointIndices || this.previousPointsTextureSize !== store.pointsTextureSize) {
+      if (this.pointIndices && !this.pointIndices.destroyed) {
+        this.pointIndices.destroy()
+      }
+      const indexData = createIndexesForBuffer(store.pointsTextureSize)
+      this.pointIndices = device.createBuffer({
+        data: indexData,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+      })
+      this.calculateLevelsCommand?.setAttributes({
+        pointIndices: this.pointIndices,
+      })
+    }
+
+    this.previousPointsTextureSize = store.pointsTextureSize
+    this.previousSpaceSize = store.adjustedSpaceSize
   }
 
   public initPrograms (): void {
-    const { reglInstance, config, store, data, points } = this
-    if (!this.clearLevelsCommand) {
-      this.clearLevelsCommand = reglInstance({
-        frag: clearFrag,
-        vert: updateVert,
-        framebuffer: (_: regl.DefaultContext, props: { levelFbo: regl.Framebuffer2D }) => props.levelFbo,
-        primitive: 'triangle strip',
-        count: 4,
-        attributes: { vertexCoord: createQuadBuffer(reglInstance) },
-      })
+    const { device, store, data, points } = this
+    if (!data.pointsNumber || !points || !store.pointsTextureSize) return
+
+    // Calculate levels command (point list)
+    this.calculateLevelsUniformStore ||= new UniformStore({
+      calculateLevelsUniforms: {
+        uniformTypes: {
+          pointsTextureSize: 'f32',
+          levelTextureSize: 'f32',
+          cellSize: 'f32',
+        },
+        defaultUniforms: {
+          pointsTextureSize: store.pointsTextureSize,
+          levelTextureSize: 0,
+          cellSize: 0,
+        },
+      },
+    })
+
+    this.calculateLevelsCommand ||= new Model(device, {
+      fs: calculateLevelFrag,
+      vs: calculateLevelVert,
+      topology: 'point-list',
+      vertexCount: data.pointsNumber,
+      attributes: {
+        ...this.pointIndices && { pointIndices: this.pointIndices },
+      },
+      bufferLayout: [
+        { name: 'pointIndices', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
+        calculateLevelsUniforms: this.calculateLevelsUniformStore.getManagedUniformBuffer(device, 'calculateLevelsUniforms'),
+        // All texture bindings will be set dynamically in drawLevels() method
+      },
+      parameters: {
+        blend: true,
+        blendColorOperation: 'add',
+        blendColorSrcFactor: 'one',
+        blendColorDstFactor: 'one',
+        blendAlphaOperation: 'add',
+        blendAlphaSrcFactor: 'one',
+        blendAlphaDstFactor: 'one',
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      },
+    })
+
+    // Force command (fullscreen quad)
+    this.forceUniformStore ||= new UniformStore({
+      forceUniforms: {
+        uniformTypes: {
+          level: 'f32',
+          levels: 'f32',
+          levelTextureSize: 'f32',
+          alpha: 'f32',
+          repulsion: 'f32',
+          spaceSize: 'f32',
+          theta: 'f32',
+        },
+        defaultUniforms: {
+          level: 0,
+          levels: this.levels,
+          levelTextureSize: 0,
+          alpha: store.alpha,
+          repulsion: this.config.simulationRepulsion ?? 0,
+          spaceSize: store.adjustedSpaceSize ?? 0,
+          theta: this.config.simulationRepulsionTheta ?? 0,
+        },
+      },
+    })
+
+    this.forceVertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
+
+    this.forceCommand ||= new Model(device, {
+      fs: forceFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.forceVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
+        forceUniforms: this.forceUniformStore.getManagedUniformBuffer(device, 'forceUniforms'),
+        // All texture bindings will be set dynamically in drawForces() method
+      },
+      parameters: {
+        blend: true,
+        blendColorOperation: 'add',
+        blendColorSrcFactor: 'one',
+        blendColorDstFactor: 'one',
+        blendAlphaOperation: 'add',
+        blendAlphaSrcFactor: 'one',
+        blendAlphaDstFactor: 'one',
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      },
+    })
+
+    // Force-from-centermass command (fullscreen quad)
+    this.forceCenterUniformStore ||= new UniformStore({
+      forceCenterUniforms: {
+        uniformTypes: {
+          levelTextureSize: 'f32',
+          alpha: 'f32',
+          repulsion: 'f32',
+        },
+        defaultUniforms: {
+          levelTextureSize: 0,
+          alpha: store.alpha,
+          repulsion: this.config.simulationRepulsion ?? 0,
+        },
+      },
+    })
+
+    this.forceFromItsOwnCentermassCommand ||= new Model(device, {
+      fs: forceCenterFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.forceVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
+        forceCenterUniforms: this.forceCenterUniformStore.getManagedUniformBuffer(device, 'forceCenterUniforms'),
+        // All texture bindings will be set dynamically in drawForces() method
+      },
+      parameters: {
+        blend: true,
+        blendColorOperation: 'add',
+        blendColorSrcFactor: 'one',
+        blendColorDstFactor: 'one',
+        blendAlphaOperation: 'add',
+        blendAlphaSrcFactor: 'one',
+        blendAlphaDstFactor: 'one',
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      },
+    })
+  }
+
+  public run (renderPass?: RenderPass): void {
+    // Skip if sizes changed and create() wasn't called yet
+    if (this.store.pointsTextureSize !== this.previousPointsTextureSize || this.store.adjustedSpaceSize !== this.previousSpaceSize) {
+      return
     }
-    if (!this.calculateLevelsCommand) {
-      this.calculateLevelsCommand = reglInstance({
-        frag: calculateLevelFrag,
-        vert: calculateLevelVert,
-        framebuffer: (_: regl.DefaultContext, props: { levelFbo: regl.Framebuffer2D; levelTextureSize: number; cellSize: number }) => props.levelFbo,
-        primitive: 'points',
-        count: () => data.pointsNumber ?? 0,
-        attributes: {
-          pointIndices: {
-            buffer: this.pointIndices,
-            size: 2,
-          },
-        },
-        uniforms: {
-          positionsTexture: () => points?.previousPositionFbo,
-          pointsTextureSize: () => store.pointsTextureSize,
-          levelTextureSize: (_: regl.DefaultContext, props: { levelTextureSize: number }) => props.levelTextureSize,
-          cellSize: (_: regl.DefaultContext, props: { cellSize: number }) => props.cellSize,
-        },
-        blend: {
-          enable: true,
-          func: {
-            src: 'one',
-            dst: 'one',
-          },
-          equation: {
-            rgb: 'add',
-            alpha: 'add',
-          },
-        },
-        depth: { enable: false, mask: false },
-        stencil: { enable: false },
-      })
+    this.drawLevels()
+    this.drawForces(renderPass)
+  }
+
+  /**
+   * Destruction order matters
+   * Models -> Framebuffers -> Textures -> UniformStores -> Buffers
+   */
+  public destroy (): void {
+    // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
+    this.calculateLevelsCommand?.destroy()
+    this.calculateLevelsCommand = undefined
+    this.forceCommand?.destroy()
+    this.forceCommand = undefined
+    this.forceFromItsOwnCentermassCommand?.destroy()
+    this.forceFromItsOwnCentermassCommand = undefined
+
+    // 2. Destroy Framebuffers (before textures they reference)
+    for (const target of this.levelTargets.values()) {
+      if (target.fbo && !target.fbo.destroyed) {
+        target.fbo.destroy()
+      }
     }
 
-    if (!this.forceCommand) {
-      this.forceCommand = reglInstance({
-        frag: forceFrag,
-        vert: updateVert,
-        framebuffer: () => points?.velocityFbo as regl.Framebuffer2D,
-        primitive: 'triangle strip',
-        count: 4,
-        attributes: { vertexCoord: createQuadBuffer(reglInstance) },
-        uniforms: {
-          positionsTexture: () => points?.previousPositionFbo,
-          level: (_, props: { levelFbo: regl.Framebuffer2D; levelTextureSize: number; level: number }) => props.level,
-          levels: this.quadtreeLevels,
-          levelFbo: (_, props) => props.levelFbo,
-          levelTextureSize: (_, props) => props.levelTextureSize,
-          alpha: () => store.alpha,
-          repulsion: () => config.simulationRepulsion,
-          spaceSize: () => store.adjustedSpaceSize,
-          theta: () => config.simulationRepulsionTheta,
-        },
-        blend: {
-          enable: true,
-          func: {
-            src: 'one',
-            dst: 'one',
-          },
-          equation: {
-            rgb: 'add',
-            alpha: 'add',
-          },
-        },
-        depth: { enable: false, mask: false },
-        stencil: { enable: false },
-      })
+    // 3. Destroy Textures
+    if (this.randomValuesTexture && !this.randomValuesTexture.destroyed) {
+      this.randomValuesTexture.destroy()
     }
+    this.randomValuesTexture = undefined
 
-    if (!this.forceFromItsOwnCentermassCommand) {
-      this.forceFromItsOwnCentermassCommand = reglInstance({
-        frag: forceCenterFrag,
-        vert: updateVert,
-        framebuffer: () => points?.velocityFbo as regl.Framebuffer2D,
-        primitive: 'triangle strip',
-        count: 4,
-        attributes: { vertexCoord: createQuadBuffer(reglInstance) },
-        uniforms: {
-          positionsTexture: () => points?.previousPositionFbo,
-          randomValues: () => this.randomValuesFbo,
-          levelFbo: (_, props: { levelFbo: regl.Framebuffer2D; levelTextureSize: number }) => props.levelFbo,
-          levelTextureSize: (_, props) => props.levelTextureSize,
-          alpha: () => store.alpha,
-          repulsion: () => config.simulationRepulsion,
-          spaceSize: () => store.adjustedSpaceSize,
-        },
-        blend: {
-          enable: true,
-          func: {
-            src: 'one',
-            dst: 'one',
-          },
-          equation: {
-            rgb: 'add',
-            alpha: 'add',
-          },
-        },
-        depth: { enable: false, mask: false },
-        stencil: { enable: false },
-      })
+    for (const target of this.levelTargets.values()) {
+      if (target.texture && !target.texture.destroyed) {
+        target.texture.destroy()
+      }
     }
+    this.levelTargets.clear()
 
-    if (!this.clearVelocityCommand) {
-      this.clearVelocityCommand = reglInstance({
-        frag: clearFrag,
-        vert: updateVert,
-        framebuffer: () => points?.velocityFbo as regl.Framebuffer2D,
-        primitive: 'triangle strip',
-        count: 4,
-        attributes: { vertexCoord: createQuadBuffer(reglInstance) },
+    // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
+    this.calculateLevelsUniformStore?.destroy()
+    this.calculateLevelsUniformStore = undefined
+    this.forceUniformStore?.destroy()
+    this.forceUniformStore = undefined
+    this.forceCenterUniformStore?.destroy()
+    this.forceCenterUniformStore = undefined
+
+    // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
+    if (this.pointIndices && !this.pointIndices.destroyed) {
+      this.pointIndices.destroy()
+    }
+    this.pointIndices = undefined
+    if (this.forceVertexCoordBuffer && !this.forceVertexCoordBuffer.destroyed) {
+      this.forceVertexCoordBuffer.destroy()
+    }
+    this.forceVertexCoordBuffer = undefined
+  }
+
+  private drawLevels (): void {
+    const { device, store, data, points } = this
+    if (!points || !data.pointsNumber || !this.calculateLevelsCommand || !this.calculateLevelsUniformStore) return
+    if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
+    // Ensure pointIndices is set (Model might exist but attributes not set yet)
+    if (!this.pointIndices) return
+
+    for (let level = 0; level < this.levels; level += 1) {
+      const target = this.levelTargets.get(level)
+      if (!target || target.fbo.destroyed || target.texture.destroyed) continue
+
+      const levelTextureSize = Math.pow(2, level + 1)
+      const cellSize = (store.adjustedSpaceSize ?? 0) / levelTextureSize
+
+      this.calculateLevelsUniformStore.setUniforms({
+        calculateLevelsUniforms: {
+          pointsTextureSize: store.pointsTextureSize ?? 0,
+          levelTextureSize,
+          cellSize,
+        },
       })
+
+      this.calculateLevelsCommand.setVertexCount(data.pointsNumber)
+      // Update texture bindings dynamically
+      this.calculateLevelsCommand.setBindings({
+        positionsTexture: points.previousPositionTexture,
+      })
+
+      const levelPass = device.beginRenderPass({
+        framebuffer: target.fbo,
+        clearColor: [0, 0, 0, 0],
+      })
+
+      this.calculateLevelsCommand.draw(levelPass)
+
+      levelPass.end()
     }
   }
 
-  public run (): void {
-    const { store } = this
-    for (let i = 0; i < this.quadtreeLevels; i += 1) {
-      this.clearLevelsCommand?.({ levelFbo: this.levelsFbos.get(`level[${i}]`) })
-      const levelTextureSize = Math.pow(2, i + 1)
-      const cellSize = store.adjustedSpaceSize / levelTextureSize
-      this.calculateLevelsCommand?.({
-        levelFbo: this.levelsFbos.get(`level[${i}]`),
-        levelTextureSize,
-        cellSize,
-      })
-    }
-    this.clearVelocityCommand?.()
-    for (let i = 0; i < this.quadtreeLevels; i += 1) {
-      const levelTextureSize = Math.pow(2, i + 1)
-      this.forceCommand?.({
-        levelFbo: this.levelsFbos.get(`level[${i}]`),
-        levelTextureSize,
-        level: i,
+  private drawForces (renderPass?: RenderPass): void {
+    const { device, store, points } = this
+    if (!points || !this.forceCommand || !this.forceUniformStore || !this.forceFromItsOwnCentermassCommand || !this.forceCenterUniformStore) return
+    if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
+    if (!this.randomValuesTexture || this.randomValuesTexture.destroyed) return
+    if (!renderPass && (!points.velocityFbo || points.velocityFbo.destroyed)) return
+
+    const drawPass = renderPass ?? device.beginRenderPass({
+      framebuffer: points.velocityFbo,
+    })
+
+    for (let level = 0; level < this.levels; level += 1) {
+      const target = this.levelTargets.get(level)
+      if (!target || target.texture.destroyed) continue
+      const levelTextureSize = Math.pow(2, level + 1)
+
+      this.forceUniformStore.setUniforms({
+        forceUniforms: {
+          level,
+          levels: this.levels,
+          levelTextureSize,
+          alpha: store.alpha,
+          repulsion: this.config.simulationRepulsion ?? 0,
+          spaceSize: store.adjustedSpaceSize ?? 0,
+          theta: this.config.simulationRepulsionTheta ?? 0,
+        },
       })
 
-      if (i === this.quadtreeLevels - 1) {
-        this.forceFromItsOwnCentermassCommand?.({
-          levelFbo: this.levelsFbos.get(`level[${i}]`),
-          levelTextureSize,
-          level: i,
+      // Update texture bindings dynamically
+      this.forceCommand.setBindings({
+        positionsTexture: points.previousPositionTexture,
+        levelFbo: target.texture,
+      })
+
+      this.forceCommand.draw(drawPass)
+
+      // Only the deepest level uses the centermass fallback
+      if (level === this.levels - 1) {
+        this.forceCenterUniformStore.setUniforms({
+          forceCenterUniforms: {
+            levelTextureSize,
+            alpha: store.alpha,
+            repulsion: this.config.simulationRepulsion ?? 0,
+          },
         })
+
+        // Update texture bindings dynamically
+        this.forceFromItsOwnCentermassCommand.setBindings({
+          positionsTexture: points.previousPositionTexture,
+          randomValues: this.randomValuesTexture,
+          levelFbo: target.texture,
+        })
+        this.forceFromItsOwnCentermassCommand.draw(drawPass)
       }
+    }
+
+    if (!renderPass) {
+      drawPass.end()
     }
   }
 }

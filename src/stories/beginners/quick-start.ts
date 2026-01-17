@@ -1,6 +1,6 @@
 import { Graph, GraphConfigInterface } from '@cosmos.gl/graph'
 
-export const quickStart = (): { graph: Graph; div: HTMLDivElement} => {
+export const quickStart = (): { graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
   const div = document.createElement('div')
   div.style.height = '100vh'
   div.style.width = '100%'
@@ -46,5 +46,9 @@ export const quickStart = (): { graph: Graph; div: HTMLDivElement} => {
 
   graph.render()
 
-  return { div, graph }
+  const destroy = (): void => {
+    graph.destroy()
+  }
+
+  return { div, graph, destroy }
 }
