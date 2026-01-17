@@ -153,20 +153,17 @@ export class ForceManyBody extends CoreModule {
       y: 0,
     })
 
-    // Point index buffer
-    const indexData = createIndexesForBuffer(store.pointsTextureSize)
-    const requiredByteLength = indexData.byteLength
-    if (!this.pointIndices || this.pointIndices.byteLength !== requiredByteLength) {
-      this.pointIndices?.destroy()
+    // Update pointIndices buffer if pointsTextureSize changed
+    if (!this.pointIndices || this.previousPointsTextureSize !== store.pointsTextureSize) {
+      if (this.pointIndices && !this.pointIndices.destroyed) {
+        this.pointIndices.destroy()
+      }
+      const indexData = createIndexesForBuffer(store.pointsTextureSize)
       this.pointIndices = device.createBuffer({
         data: indexData,
         usage: Buffer.VERTEX | Buffer.COPY_DST,
       })
-    } else {
-      this.pointIndices.write(indexData)
-    }
-    if (this.calculateLevelsCommand) {
-      this.calculateLevelsCommand.setAttributes({
+      this.calculateLevelsCommand?.setAttributes({
         pointIndices: this.pointIndices,
       })
     }
@@ -201,7 +198,7 @@ export class ForceManyBody extends CoreModule {
       topology: 'point-list',
       vertexCount: data.pointsNumber,
       attributes: {
-        pointIndices: this.pointIndices!,
+        ...this.pointIndices && { pointIndices: this.pointIndices },
       },
       bufferLayout: [
         { name: 'pointIndices', format: 'float32x2' },
@@ -305,10 +302,6 @@ export class ForceManyBody extends CoreModule {
       },
     })
 
-    this.forceVertexCoordBuffer ||= device.createBuffer({
-      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-    })
-
     this.forceFromItsOwnCentermassCommand ||= new Model(device, {
       fs: forceCenterFrag,
       vs: updateVert,
@@ -408,6 +401,8 @@ export class ForceManyBody extends CoreModule {
     const { device, store, data, points } = this
     if (!points || !data.pointsNumber || !this.calculateLevelsCommand || !this.calculateLevelsUniformStore) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
+    // Ensure pointIndices is set (Model might exist but attributes not set yet)
+    if (!this.pointIndices) return
 
     for (let level = 0; level < this.levels; level += 1) {
       const target = this.levelTargets.get(level)
