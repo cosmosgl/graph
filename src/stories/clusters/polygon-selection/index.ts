@@ -3,11 +3,11 @@ import { createCosmos } from '../../create-cosmos'
 import { generateMeshData } from '../../generate-mesh-data'
 import { PolygonSelection } from './polygon'
 
-export const polygonSelection = async (): Promise<{div: HTMLDivElement; graph: Graph; destroy: () => void }> => {
+export const polygonSelection = (): {div: HTMLDivElement; graph: Graph; destroy: () => void } => {
   const nClusters = 25
   const { pointPositions, pointColors, pointClusters } = generateMeshData(150, 150, nClusters, 1.0)
 
-  const { div, graph, destroy: baseDestroy } = await createCosmos({
+  const { div, graph, destroy: baseDestroy } = createCosmos({
     pointPositions,
     pointColors,
     pointClusters,
