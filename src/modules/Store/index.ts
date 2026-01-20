@@ -190,10 +190,23 @@ export class Store {
   /**
    * If the config parameter `spaceSize` exceeds the limits of WebGL,
    * it reduces the space size without changing the config parameter.
+   * Ensures `spaceSize` is always a positive number >= 2 (required for Math.log2).
    */
   public adjustSpaceSize (configSpaceSize: number, webglMaxTextureSize: number): void {
+    if (configSpaceSize <= 0 || !isFinite(configSpaceSize)) {
+      console.error(`Invalid spaceSize value: ${configSpaceSize}. Using default value of ${defaultConfigValues.spaceSize}`)
+      configSpaceSize = defaultConfigValues.spaceSize
+    }
+    // Enforce minimum value of 2 (since we use Math.log2, minimum should be 2^1 = 2)
+    const minSpaceSize = 2
+    if (configSpaceSize < minSpaceSize) {
+      console.warn(`spaceSize (${configSpaceSize}) is too small. Using minimum value of ${minSpaceSize}`)
+      configSpaceSize = minSpaceSize
+    }
+
+    // Handle WebGL limits - ensure result is still >= minSpaceSize
     if (configSpaceSize >= webglMaxTextureSize) {
-      this.adjustedSpaceSize = webglMaxTextureSize / 2
+      this.adjustedSpaceSize = Math.max(webglMaxTextureSize / 2, minSpaceSize)
       console.warn(`The \`spaceSize\` has been reduced to ${this.adjustedSpaceSize} due to WebGL limits`)
     } else this.adjustedSpaceSize = configSpaceSize
   }
