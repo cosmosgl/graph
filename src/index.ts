@@ -1274,6 +1274,7 @@ export class Graph {
    */
   public destroy (): void {
     if (this._isDestroyed) return
+    this._isDestroyed = true
     window.clearTimeout(this._fitViewOnInitTimeoutID)
     this.stopFrames()
 
@@ -1344,8 +1345,6 @@ export class Graph {
 
     this.canvasD3Selection = undefined
     this.attributionDivElement = undefined
-
-    this._isDestroyed = true
   }
 
   /**
@@ -1425,6 +1424,7 @@ export class Graph {
     if (!this.device) {
       this.deviceInitPromise
         .then(() => {
+          if (this._isDestroyed) return
           callback()
         })
         .catch(error => {
