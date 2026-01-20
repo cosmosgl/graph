@@ -3,7 +3,7 @@ import { createClusterLabels } from '../create-cluster-labels'
 import { createCosmos } from '../create-cosmos'
 import { generateMeshData } from '../generate-mesh-data'
 
-export const withLabels = async (): Promise<{div: HTMLDivElement; graph: Graph; destroy: () => void }> => {
+export const withLabels = (): {div: HTMLDivElement; graph: Graph; destroy: () => void } => {
   let nClusters = 2
   const { pointPositions, pointColors, pointClusters } = generateMeshData(100, 100, nClusters, 1.0)
 
