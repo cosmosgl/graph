@@ -1,4 +1,4 @@
-import { Buffer, RenderPass, Texture, UniformStore } from '@luma.gl/core'
+import { Buffer, Texture, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
 import { forceFrag } from '@/graph/modules/ForceLink/force-spring'
@@ -214,12 +214,13 @@ export class ForceLink extends CoreModule {
     })
   }
 
-  public run (renderPass?: RenderPass): void {
+  public run (): void {
     const { device, store, points } = this
-    if (!points || !this.runCommand || !this.uniformStore) return
+    if (!points) return
+    if (!this.runCommand || !this.uniformStore) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
     if (!this.linkFirstIndicesAndAmountTexture || !this.indicesTexture || !this.biasAndStrengthTexture || !this.randomDistanceTexture) return
-    if (!renderPass && (!points.velocityFbo || points.velocityFbo.destroyed)) return
+    if (!points.velocityFbo || points.velocityFbo.destroyed) return
 
     // Skip if sizes changed and create() wasn't called again
     if (
@@ -251,13 +252,12 @@ export class ForceLink extends CoreModule {
       linkRandomDistanceTexture: this.randomDistanceTexture,
     })
 
-    const pass = renderPass ?? device.beginRenderPass({
+    const pass = device.beginRenderPass({
       framebuffer: points.velocityFbo,
+      clearColor: [0, 0, 0, 0],
     })
-
     this.runCommand.draw(pass)
-
-    if (!renderPass) pass.end()
+    pass.end()
   }
 
   /**

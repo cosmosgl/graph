@@ -1,4 +1,4 @@
-import { Buffer, Framebuffer, RenderPass, Texture, UniformStore } from '@luma.gl/core'
+import { Buffer, Framebuffer, Texture, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
 import calculateCentermassFrag from '@/graph/modules/ForceCenter/calculate-centermass.frag?raw'
@@ -162,12 +162,13 @@ export class ForceCenter extends CoreModule {
     })
   }
 
-  public run (renderPass?: RenderPass): void {
+  public run (): void {
     const { device, store, points } = this
-    if (!points || !this.centermassFbo || !this.centermassTexture) return
+    if (!points) return
     if (!this.calculateCentermassCommand || !this.calculateUniformStore || !this.runCommand || !this.forceUniformStore) return
+    if (!this.centermassFbo || !this.centermassTexture) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
-    if (!renderPass && (!points.velocityFbo || points.velocityFbo.destroyed)) return
+    if (!points.velocityFbo || points.velocityFbo.destroyed) return
 
     // Skip if sizes changed and create() wasn't called yet
     if (store.pointsTextureSize !== this.previousPointsTextureSize) return
@@ -207,13 +208,13 @@ export class ForceCenter extends CoreModule {
       centermassTexture: this.centermassTexture,
     })
 
-    const pass = renderPass ?? device.beginRenderPass({
+    const pass = device.beginRenderPass({
       framebuffer: points.velocityFbo,
+      clearColor: [0, 0, 0, 0],
     })
 
     this.runCommand.draw(pass)
-
-    if (!renderPass) pass.end()
+    pass.end()
   }
 
   /**

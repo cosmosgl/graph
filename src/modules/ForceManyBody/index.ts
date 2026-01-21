@@ -1,4 +1,4 @@
-import { Buffer, Framebuffer, RenderPass, Texture, UniformStore } from '@luma.gl/core'
+import { Buffer, Framebuffer, Texture, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
 import calculateLevelFrag from '@/graph/modules/ForceManyBody/calculate-level.frag?raw'
@@ -336,13 +336,13 @@ export class ForceManyBody extends CoreModule {
     })
   }
 
-  public run (renderPass?: RenderPass): void {
+  public run (): void {
     // Skip if sizes changed and create() wasn't called yet
     if (this.store.pointsTextureSize !== this.previousPointsTextureSize || this.store.adjustedSpaceSize !== this.previousSpaceSize) {
       return
     }
     this.drawLevels()
-    this.drawForces(renderPass)
+    this.drawForces()
   }
 
   /**
@@ -399,8 +399,10 @@ export class ForceManyBody extends CoreModule {
 
   private drawLevels (): void {
     const { device, store, data, points } = this
-    if (!points || !data.pointsNumber || !this.calculateLevelsCommand || !this.calculateLevelsUniformStore) return
+    if (!points) return
+    if (!this.calculateLevelsCommand || !this.calculateLevelsUniformStore) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
+    if (!data.pointsNumber) return
     // Ensure pointIndices is set (Model might exist but attributes not set yet)
     if (!this.pointIndices) return
 
@@ -436,15 +438,18 @@ export class ForceManyBody extends CoreModule {
     }
   }
 
-  private drawForces (renderPass?: RenderPass): void {
+  private drawForces (): void {
     const { device, store, points } = this
-    if (!points || !this.forceCommand || !this.forceUniformStore || !this.forceFromItsOwnCentermassCommand || !this.forceCenterUniformStore) return
+    if (!points) return
+    if (!this.forceCommand || !this.forceUniformStore) return
+    if (!this.forceFromItsOwnCentermassCommand || !this.forceCenterUniformStore) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
     if (!this.randomValuesTexture || this.randomValuesTexture.destroyed) return
-    if (!renderPass && (!points.velocityFbo || points.velocityFbo.destroyed)) return
+    if (!points.velocityFbo || points.velocityFbo.destroyed) return
 
-    const drawPass = renderPass ?? device.beginRenderPass({
+    const drawPass = device.beginRenderPass({
       framebuffer: points.velocityFbo,
+      clearColor: [0, 0, 0, 0],
     })
 
     for (let level = 0; level < this.levels; level += 1) {
@@ -492,8 +497,6 @@ export class ForceManyBody extends CoreModule {
       }
     }
 
-    if (!renderPass) {
-      drawPass.end()
-    }
+    drawPass.end()
   }
 }

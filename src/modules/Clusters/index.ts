@@ -1,4 +1,4 @@
-import { Framebuffer, Buffer, Texture, UniformStore, RenderPass } from '@luma.gl/core'
+import { Framebuffer, Buffer, Texture, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
 import calculateCentermassFrag from '@/graph/modules/Clusters/calculate-centermass.frag?raw'
@@ -342,16 +342,16 @@ export class Clusters extends CoreModule {
   }
 
   public calculateCentermass (): void {
-    // Add safety check
-    if (!this.calculateCentermassCommand || !this.calculateCentermassUniformStore) {
-      return
-    }
+    const { device, points } = this
+    if (!points) return
+
+    if (!this.calculateCentermassCommand || !this.calculateCentermassUniformStore) return
     // Ensure pointIndices is set (Model might exist but attributes not set yet)
     if (!this.pointIndices) return
 
     if (!this.centermassFbo || this.centermassFbo.destroyed) return
     if (!this.clusterTexture || this.clusterTexture.destroyed) return
-    if (!this.points?.previousPositionTexture || this.points.previousPositionTexture.destroyed) return
+    if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
 
     // Update vertex count dynamically (using same fallback logic as initialization)
     this.calculateCentermassCommand.setVertexCount(this.data.pointsNumber ?? 0)
@@ -367,11 +367,11 @@ export class Clusters extends CoreModule {
     // Update texture bindings dynamically
     this.calculateCentermassCommand.setBindings({
       clusterTexture: this.clusterTexture,
-      positionsTexture: this.points.previousPositionTexture,
+      positionsTexture: points.previousPositionTexture,
     })
 
     // Create a RenderPass for the centermass framebuffer
-    const centermassPass = this.device.beginRenderPass({
+    const centermassPass = device.beginRenderPass({
       framebuffer: this.centermassFbo,
       clearColor: [0, 0, 0, 0],
     })
@@ -381,7 +381,7 @@ export class Clusters extends CoreModule {
     centermassPass.end()
   }
 
-  public run (renderPass?: RenderPass): void {
+  public run (): void {
     if (!this.data.pointClusters && !this.data.clusterPositions) return
 
     // Calculate centermass (creates its own RenderPass - different framebuffer)
@@ -398,7 +398,7 @@ export class Clusters extends CoreModule {
     if (!this.clusterPositionsTexture || this.clusterPositionsTexture.destroyed) return
     if (!this.clusterForceCoefficientTexture || this.clusterForceCoefficientTexture.destroyed) return
     if (!this.points?.previousPositionTexture || this.points.previousPositionTexture.destroyed) return
-    if (!this.points?.velocityFbo || this.points.velocityFbo.destroyed) return
+    if (!this.points.velocityFbo || this.points.velocityFbo.destroyed) return
 
     // Update UniformStore with current values
     this.applyForcesUniformStore.setUniforms({
@@ -418,20 +418,13 @@ export class Clusters extends CoreModule {
       positionsTexture: this.points.previousPositionTexture,
     })
 
-    // Use provided render pass or create one if not provided (backward compatibility)
-    if (renderPass) {
-      // Use the provided render pass (created in simulation loop)
-      this.applyForcesCommand.draw(renderPass)
-    } else {
-      // Create a RenderPass for the velocity framebuffer (fallback for backward compatibility)
-      const velocityPass = this.device.beginRenderPass({
-        framebuffer: this.points.velocityFbo,
-      })
+    const pass = this.device.beginRenderPass({
+      framebuffer: this.points.velocityFbo,
+      clearColor: [0, 0, 0, 0],
+    })
 
-      this.applyForcesCommand.draw(velocityPass)
-
-      velocityPass.end()
-    }
+    this.applyForcesCommand.draw(pass)
+    pass.end()
   }
 
   /**
