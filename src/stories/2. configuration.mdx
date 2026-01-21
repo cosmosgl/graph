@@ -44,7 +44,7 @@ import { Meta } from "@storybook/blocks";
 | linkVisibilityDistanceRange | The range defines the minimum and maximum link visibility distance in pixels.<br /><br />The link will be fully opaque when its length is less than the first number in the array, and will have `linkVisibilityMinTransparency` transparency when its length is greater than the second number in the array.<br /><br />This distance is defined in screen space coordinates and will change as you zoom in and out (e.g. links become longer when you zoom in, and shorter when you zoom out). | `[50, 150]` |
 | linkVisibilityMinTransparency | The transparency value that the link will have when its length reaches the maximum link distance value from `linkVisibilityDistanceRange`. | `0.25` |
 | showFPSMonitor | Show WebGL performance monitor | `false` |
-| pixelRatio | Pixel ratio for the canvas. Higher values use more GPU memory but provide better quality on high-DPI displays | `window.devicePixelRatio \|\| 2` |
+| pixelRatio | Pixel ratio for the canvas. Higher values use more GPU memory but provide better quality on high-DPI displays.<br /><br />**Note:** This value always overrides the luma.gl Device's `useDevicePixels` setting, even when providing an external device via the `devicePromise` parameter. | `window.devicePixelRatio \|\| 2` |
 | scalePointsOnZoom | Increase/decrease point size when zooming | `false` |
 | initialZoomLevel | Initial zoom level (set once during initialization) | `undefined` |
 | enableZoom | Enables zooming interactions | `true` |
