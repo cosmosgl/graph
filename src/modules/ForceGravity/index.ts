@@ -1,4 +1,4 @@
-import { Buffer, RenderPass, UniformStore } from '@luma.gl/core'
+import { Buffer, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
 import forceFrag from '@/graph/modules/ForceGravity/force-gravity.frag?raw'
@@ -60,11 +60,12 @@ export class ForceGravity extends CoreModule {
     })
   }
 
-  public run (renderPass?: RenderPass): void {
+  public run (): void {
     const { device, points, store } = this
-    if (!points || !this.runCommand || !this.uniformStore) return
+    if (!points) return
+    if (!this.runCommand || !this.uniformStore) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
-    if (!renderPass && (!points.velocityFbo || points.velocityFbo.destroyed)) return
+    if (!points.velocityFbo || points.velocityFbo.destroyed) return
 
     this.uniformStore.setUniforms({
       forceGravityUniforms: {
@@ -79,13 +80,12 @@ export class ForceGravity extends CoreModule {
       positionsTexture: points.previousPositionTexture,
     })
 
-    const pass = renderPass ?? device.beginRenderPass({
+    const pass = device.beginRenderPass({
       framebuffer: points.velocityFbo,
+      clearColor: [0, 0, 0, 0],
     })
-
     this.runCommand.draw(pass)
-
-    if (!renderPass) pass.end()
+    pass.end()
   }
 
   /**
