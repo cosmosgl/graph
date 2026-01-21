@@ -86,8 +86,8 @@ export class ForceManyBody extends CoreModule {
 
       // Destroy old resources if size changed
       if (existingTarget) {
-        if (!existingTarget.texture.destroyed) existingTarget.texture.destroy()
         if (!existingTarget.fbo.destroyed) existingTarget.fbo.destroy()
+        if (!existingTarget.texture.destroyed) existingTarget.texture.destroy()
       }
 
       const texture = device.createTexture({
@@ -114,8 +114,8 @@ export class ForceManyBody extends CoreModule {
     // Drop any stale higher-level buffers if space size shrank
     for (const [level, target] of Array.from(this.levelTargets.entries())) {
       if (level >= this.levels) {
-        if (!target.texture.destroyed) target.texture.destroy()
         if (!target.fbo.destroyed) target.fbo.destroy()
+        if (!target.texture.destroyed) target.texture.destroy()
         this.levelTargets.delete(level)
       }
     }
