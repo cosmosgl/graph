@@ -104,6 +104,12 @@ export class Graph {
       }
       this.device = device
       const deviceCanvasContext = this.validateDevice(device)
+
+      // If external device was provided, sync its useDevicePixels with config.pixelRatio
+      if (devicePromise) {
+        deviceCanvasContext.setProps({ useDevicePixels: this.config.pixelRatio })
+      }
+
       this.store.div = div
       const deviceCanvas = deviceCanvasContext.canvas as HTMLCanvasElement
       // Ensure canvas is in the div

@@ -14,6 +14,8 @@ Creates a new Graph instance for visualizing network graphs.
   - The device must have an HTMLCanvasElement canvas context (not OffscreenCanvas).
   - Compute-only devices are not supported.
   - The canvas from the device will be automatically appended to the provided div if it's not already present in the DOM.
+  
+  **Important:** When providing an external device, the Graph's `config.pixelRatio` setting will override the device's `useDevicePixels` value to ensure consistency. If you need a specific pixel ratio, set it explicitly in the config (e.g., `{ pixelRatio: 1 }`). If not specified, it defaults to `window.devicePixelRatio || 2`.
 
   **Example:**
   ```javascript
@@ -29,7 +31,6 @@ Creates a new Graph instance for visualizing network graphs.
     type: 'webgl',
     adapters: [webgl2Adapter],
     createCanvasContext: {
-      useDevicePixels: window.devicePixelRatio || 2,
       autoResize: true,
     },
   })
