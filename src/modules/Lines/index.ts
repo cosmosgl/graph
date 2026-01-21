@@ -272,9 +272,10 @@ export class Lines extends CoreModule {
 
   public draw (renderPass: RenderPass): void {
     const { config, points, store } = this
-    if (!points || !this.pointABuffer || !this.pointBBuffer) return
+    if (!points) return
     if (!points.currentPositionTexture || points.currentPositionTexture.destroyed) return
     if (!points.greyoutStatusTexture || points.greyoutStatusTexture.destroyed) return
+    if (!this.pointABuffer || !this.pointBBuffer) this.updatePointsBuffer()
     if (!this.colorBuffer) this.updateColor()
     if (!this.widthBuffer) this.updateWidth()
     if (!this.arrowBuffer) this.updateArrow()
@@ -378,6 +379,7 @@ export class Lines extends CoreModule {
   public updatePointsBuffer (): void {
     const { device, data, store } = this
     if (data.linksNumber === undefined || data.links === undefined) return
+    if (!store.pointsTextureSize) return // Guard against 0/undefined
 
     // Create separate buffers for pointA and pointB
     const pointAData = new Float32Array(data.linksNumber * 2)
