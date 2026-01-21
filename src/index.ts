@@ -1522,14 +1522,6 @@ export class Graph {
       (isSimulationRunning && !(this.zoomInstance.isRunning && !this.config.enableSimulationDuringZoom))
 
     if (shouldRunSimulation) {
-      // Clear velocity buffer once per frame before applying forces
-      if (this.points?.velocityFbo && !this.points.velocityFbo.destroyed && this.device) {
-        const velocityClearPass = this.device.beginRenderPass({
-          framebuffer: this.points.velocityFbo,
-          clearColor: [0, 0, 0, 0],
-        })
-        velocityClearPass.end()
-      }
       if (simulationGravity) {
         this.forceGravity?.run()
         this.points?.updatePosition()
