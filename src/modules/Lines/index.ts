@@ -8,6 +8,7 @@ import hoveredLineIndexVert from '@/graph/modules/Lines/hovered-line-index.vert?
 import { defaultConfigValues } from '@/graph/variables'
 import { getCurveLineGeometry } from '@/graph/modules/Lines/geometry'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
+import { ensureVec2, ensureVec4 } from '@/graph/modules/Shared/uniform-utils'
 
 export class Lines extends CoreModule {
   public linkIndexFbo: Framebuffer | undefined
@@ -35,7 +36,7 @@ export class Lines extends CoreModule {
       linkArrowsSizeScale: number;
       spaceSize: number;
       screenSize: [number, number];
-      linkVisibilityDistanceRange: number[];
+      linkVisibilityDistanceRange: [number, number];
       linkVisibilityMinTransparency: number;
       linkOpacity: number;
       greyoutOpacity: number;
@@ -46,7 +47,7 @@ export class Lines extends CoreModule {
       maxPointSize: number;
       renderMode: number;
       hoveredLinkIndex: number;
-      hoveredLinkColor: number[];
+      hoveredLinkColor: [number, number, number, number];
       hoveredLinkWidthIncrease: number;
     };
     drawLineFragmentUniforms: {
@@ -56,7 +57,7 @@ export class Lines extends CoreModule {
 
   private hoveredLineIndexUniformStore: UniformStore<{
     hoveredLineIndexUniforms: {
-      mousePosition: number[];
+      mousePosition: [number, number];
       screenSize: [number, number];
     };
   }> | undefined
@@ -145,8 +146,8 @@ export class Lines extends CoreModule {
           widthScale: config.linkWidthScale ?? 1,
           linkArrowsSizeScale: config.linkArrowsSizeScale ?? 1,
           spaceSize: store.adjustedSpaceSize ?? 0,
-          screenSize: store.screenSize ?? [0, 0],
-          linkVisibilityDistanceRange: config.linkVisibilityDistanceRange ?? [0, 0],
+          screenSize: ensureVec2(store.screenSize, [0, 0]),
+          linkVisibilityDistanceRange: ensureVec2(config.linkVisibilityDistanceRange, [0, 0]),
           linkVisibilityMinTransparency: config.linkVisibilityMinTransparency ?? 0,
           linkOpacity: config.linkOpacity ?? 1,
           greyoutOpacity: config.linkGreyoutOpacity ?? 1,
@@ -157,7 +158,7 @@ export class Lines extends CoreModule {
           maxPointSize: store.maxPointSize ?? 100,
           renderMode: 0.0,
           hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
-          hoveredLinkColor: store.hoveredLinkColor ?? [-1, -1, -1, -1],
+          hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
           hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease ?? 0,
         },
       },
@@ -240,8 +241,8 @@ export class Lines extends CoreModule {
           screenSize: 'vec2<f32>',
         },
         defaultUniforms: {
-          mousePosition: store.screenMousePosition ?? [0, 0],
-          screenSize: store.screenSize ?? [0, 0],
+          mousePosition: ensureVec2(store.screenMousePosition, [0, 0]),
+          screenSize: ensureVec2(store.screenSize, [0, 0]),
         },
       },
     })
@@ -288,8 +289,8 @@ export class Lines extends CoreModule {
         widthScale: config.linkWidthScale ?? 1,
         linkArrowsSizeScale: config.linkArrowsSizeScale ?? 1,
         spaceSize: store.adjustedSpaceSize ?? 0,
-        screenSize: store.screenSize ?? [0, 0],
-        linkVisibilityDistanceRange: config.linkVisibilityDistanceRange ?? [0, 0],
+        screenSize: ensureVec2(store.screenSize, [0, 0]),
+        linkVisibilityDistanceRange: ensureVec2(config.linkVisibilityDistanceRange, [0, 0]),
         linkVisibilityMinTransparency: config.linkVisibilityMinTransparency ?? 0,
         linkOpacity: config.linkOpacity ?? 1,
         greyoutOpacity: config.linkGreyoutOpacity ?? 1,
@@ -300,7 +301,7 @@ export class Lines extends CoreModule {
         maxPointSize: store.maxPointSize ?? 100,
         renderMode: 0.0, // Normal rendering
         hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
-        hoveredLinkColor: store.hoveredLinkColor ?? [-1, -1, -1, -1],
+        hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
         hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease ?? 0,
       },
       drawLineFragmentUniforms: {
@@ -595,8 +596,8 @@ export class Lines extends CoreModule {
         widthScale: config.linkWidthScale ?? 1,
         linkArrowsSizeScale: config.linkArrowsSizeScale ?? 1,
         spaceSize: store.adjustedSpaceSize ?? 0,
-        screenSize: store.screenSize ?? [0, 0],
-        linkVisibilityDistanceRange: config.linkVisibilityDistanceRange ?? [0, 0],
+        screenSize: ensureVec2(store.screenSize, [0, 0]),
+        linkVisibilityDistanceRange: ensureVec2(config.linkVisibilityDistanceRange, [0, 0]),
         linkVisibilityMinTransparency: config.linkVisibilityMinTransparency ?? 0,
         linkOpacity: config.linkOpacity ?? 1,
         greyoutOpacity: config.linkGreyoutOpacity ?? 1,
@@ -607,7 +608,7 @@ export class Lines extends CoreModule {
         maxPointSize: store.maxPointSize ?? 100,
         renderMode: 1.0, // Index rendering for picking
         hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
-        hoveredLinkColor: store.hoveredLinkColor ?? [-1, -1, -1, -1],
+        hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
         hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease ?? 0,
       },
       drawLineFragmentUniforms: {
@@ -636,8 +637,8 @@ export class Lines extends CoreModule {
     if (this.hoveredLineIndexCommand && this.hoveredLineIndexFbo && this.hoveredLineIndexUniformStore) {
       this.hoveredLineIndexUniformStore.setUniforms({
         hoveredLineIndexUniforms: {
-          mousePosition: store.screenMousePosition ?? [0, 0],
-          screenSize: store.screenSize ?? [0, 0],
+          mousePosition: ensureVec2(store.screenMousePosition, [0, 0]),
+          screenSize: ensureVec2(store.screenSize, [0, 0]),
         },
       })
 
