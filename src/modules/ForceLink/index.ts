@@ -3,6 +3,7 @@ import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
 import { forceFrag } from '@/graph/modules/ForceLink/force-spring'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
+import { ensureVec2 } from '@/graph/modules/Shared/uniform-utils'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
 export enum LinkDirection {
@@ -234,10 +235,7 @@ export class ForceLink extends CoreModule {
       forceLinkUniforms: {
         linkSpring: this.config.simulationLinkSpring ?? 0,
         linkDistance: this.config.simulationLinkDistance ?? 0,
-        linkDistRandomVariationRange: [
-          this.config.simulationLinkDistRandomVariationRange?.[0] ?? 0,
-          this.config.simulationLinkDistRandomVariationRange?.[1] ?? 0,
-        ],
+        linkDistRandomVariationRange: ensureVec2(this.config.simulationLinkDistRandomVariationRange, [0, 0]),
         pointsTextureSize: store.pointsTextureSize,
         linksTextureSize: store.linksTextureSize,
         alpha: store.alpha,

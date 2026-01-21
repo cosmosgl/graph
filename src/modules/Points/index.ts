@@ -21,6 +21,7 @@ import trackPositionsFrag from '@/graph/modules/Points/track-positions.frag?raw'
 import dragPointFrag from '@/graph/modules/Points/drag-point.frag?raw'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 import { readPixels } from '@/graph/helper'
+import { ensureVec2, ensureVec4 } from '@/graph/modules/Shared/uniform-utils'
 import { createAtlasDataFromImageData } from '@/graph/modules/Points/atlas-utils'
 
 export class Points extends CoreModule {
@@ -516,7 +517,7 @@ export class Points extends CoreModule {
           index: 'f32',
         },
         defaultUniforms: {
-          mousePos: (store.mousePosition as [number, number]) ?? [0, 0],
+          mousePos: ensureVec2(store.mousePosition, [0, 0]),
           index: store.hoveredPoint?.index ?? -1,
         },
       },
@@ -586,9 +587,9 @@ export class Points extends CoreModule {
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale ?? 1,
           spaceSize: store.adjustedSpaceSize ?? 0,
-          screenSize: store.screenSize ?? [0, 0],
-          greyoutColor: (store.greyoutPointColor ?? [0, 0, 0, 1]) as [number, number, number, number],
-          backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
+          screenSize: ensureVec2(store.screenSize, [0, 0]),
+          greyoutColor: ensureVec4(store.greyoutPointColor, [0, 0, 0, 1]),
+          backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
           scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0, // Convert boolean to float
           maxPointSize: store.maxPointSize ?? 100,
           isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
@@ -610,7 +611,7 @@ export class Points extends CoreModule {
           greyoutOpacity: config.pointGreyoutOpacity ?? -1,
           pointOpacity: config.pointOpacity ?? 1,
           isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
-          backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
+          backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
         },
       },
     })
@@ -682,11 +683,11 @@ export class Points extends CoreModule {
         defaultUniforms: {
           sizeScale: config.pointSizeScale ?? 1,
           spaceSize: store.adjustedSpaceSize ?? 0,
-          screenSize: store.screenSize ?? [0, 0],
+          screenSize: ensureVec2(store.screenSize, [0, 0]),
           ratio: config.pixelRatio ?? defaultConfigValues.pixelRatio,
           transformationMatrix: store.transformationMatrix4x4,
-          selection0: (store.selectedArea?.[0] ?? [0, 0]) as [number, number],
-          selection1: (store.selectedArea?.[1] ?? [0, 0]) as [number, number],
+          selection0: ensureVec2(store.selectedArea?.[0], [0, 0]),
+          selection1: ensureVec2(store.selectedArea?.[1], [0, 0]),
           scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
           maxPointSize: store.maxPointSize ?? 100,
         },
@@ -732,7 +733,7 @@ export class Points extends CoreModule {
         },
         defaultUniforms: {
           spaceSize: store.adjustedSpaceSize ?? 0,
-          screenSize: store.screenSize ?? [0, 0],
+          screenSize: ensureVec2(store.screenSize, [0, 0]),
           transformationMatrix: store.transformationMatrix4x4,
           polygonPathLength: this.polygonPathLength,
         },
@@ -781,10 +782,10 @@ export class Points extends CoreModule {
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale ?? 1,
           spaceSize: store.adjustedSpaceSize ?? 0,
-          screenSize: store.screenSize ?? [0, 0],
+          screenSize: ensureVec2(store.screenSize, [0, 0]),
           ratio: config.pixelRatio ?? defaultConfigValues.pixelRatio,
           transformationMatrix: store.transformationMatrix4x4,
-          mousePosition: store.screenMousePosition ?? [0, 0],
+          mousePosition: ensureVec2(store.screenMousePosition, [0, 0]),
           scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
           maxPointSize: store.maxPointSize ?? 100,
         },
@@ -834,7 +835,7 @@ export class Points extends CoreModule {
           pointsTextureSize: store.pointsTextureSize ?? 0,
           transformationMatrix: store.transformationMatrix4x4,
           spaceSize: store.adjustedSpaceSize ?? 0,
-          screenSize: store.screenSize ?? [0, 0],
+          screenSize: ensureVec2(store.screenSize, [0, 0]),
         },
       },
     })
@@ -898,16 +899,16 @@ export class Points extends CoreModule {
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale ?? 1,
           spaceSize: store.adjustedSpaceSize ?? 0,
-          screenSize: store.screenSize ?? [0, 0],
+          screenSize: ensureVec2(store.screenSize, [0, 0]),
           scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
           pointIndex: -1,
           maxPointSize: store.maxPointSize ?? 100,
-          color: [0, 0, 0, 1] as [number, number, number, number],
+          color: [0, 0, 0, 1],
           universalPointOpacity: config.pointOpacity ?? 1,
           greyoutOpacity: config.pointGreyoutOpacity ?? -1,
           isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0,
-          backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
-          greyoutColor: (store.greyoutPointColor ?? [0, 0, 0, 1]) as [number, number, number, number],
+          backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
+          greyoutColor: ensureVec4(store.greyoutPointColor, [0, 0, 0, 1]),
           width: 0.85,
         },
       },
@@ -1365,9 +1366,9 @@ export class Points extends CoreModule {
       pointsTextureSize: store.pointsTextureSize ?? 0,
       sizeScale: config.pointSizeScale ?? 1,
       spaceSize: store.adjustedSpaceSize ?? 0,
-      screenSize: store.screenSize ?? [0, 0],
-      greyoutColor: (store.greyoutPointColor ?? [-1, -1, -1, -1]) as [number, number, number, number],
-      backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
+      screenSize: ensureVec2(store.screenSize, [0, 0]),
+      greyoutColor: ensureVec4(store.greyoutPointColor, [-1, -1, -1, -1]),
+      backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
       scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0, // Convert boolean to float
       maxPointSize: store.maxPointSize ?? 100,
       isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
@@ -1380,7 +1381,7 @@ export class Points extends CoreModule {
       greyoutOpacity: config.pointGreyoutOpacity ?? -1,
       pointOpacity: config.pointOpacity ?? 1,
       isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
-      backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
+      backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
     }
 
     // Render in layers: unselected points first (behind), then selected points (in front)
@@ -1458,16 +1459,16 @@ export class Points extends CoreModule {
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale ?? 1,
           spaceSize: store.adjustedSpaceSize ?? 0,
-          screenSize: store.screenSize ?? [0, 0],
+          screenSize: ensureVec2(store.screenSize, [0, 0]),
           scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
           pointIndex: store.hoveredPoint.index,
           maxPointSize: store.maxPointSize ?? 100,
-          color: (store.hoveredPointRingColor as [number, number, number, number]),
+          color: ensureVec4(store.hoveredPointRingColor, [0, 0, 0, 1]),
           universalPointOpacity: config.pointOpacity ?? 1,
           greyoutOpacity: config.pointGreyoutOpacity ?? -1,
           isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0,
-          backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
-          greyoutColor: (store.greyoutPointColor ?? [0, 0, 0, 1]) as [number, number, number, number],
+          backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
+          greyoutColor: ensureVec4(store.greyoutPointColor, [0, 0, 0, 1]),
           width: 0.85,
         },
       })
@@ -1490,16 +1491,16 @@ export class Points extends CoreModule {
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale ?? 1,
           spaceSize: store.adjustedSpaceSize ?? 0,
-          screenSize: store.screenSize ?? [0, 0],
+          screenSize: ensureVec2(store.screenSize, [0, 0]),
           scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
           pointIndex: store.focusedPoint.index,
           maxPointSize: store.maxPointSize ?? 100,
-          color: (store.focusedPointRingColor as [number, number, number, number]),
+          color: ensureVec4(store.focusedPointRingColor, [0, 0, 0, 1]),
           universalPointOpacity: config.pointOpacity ?? 1,
           greyoutOpacity: config.pointGreyoutOpacity ?? -1,
           isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0,
-          backgroundColor: store.backgroundColor ?? [0, 0, 0, 1],
-          greyoutColor: (store.greyoutPointColor ?? [0, 0, 0, 1]) as [number, number, number, number],
+          backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
+          greyoutColor: ensureVec4(store.greyoutPointColor, [0, 0, 0, 1]),
           width: 0.85,
         },
       })
@@ -1549,7 +1550,7 @@ export class Points extends CoreModule {
 
     this.dragPointUniformStore.setUniforms({
       dragPointUniforms: {
-        mousePos: (this.store.mousePosition as [number, number]) ?? [0, 0],
+        mousePos: ensureVec2(this.store.mousePosition, [0, 0]),
         index: this.store.hoveredPoint?.index ?? -1,
       },
     })
@@ -1578,12 +1579,12 @@ export class Points extends CoreModule {
     this.findPointsOnAreaSelectionUniformStore.setUniforms({
       findPointsOnAreaSelectionUniforms: {
         spaceSize: this.store.adjustedSpaceSize ?? 0,
-        screenSize: this.store.screenSize ?? [0, 0],
+        screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         sizeScale: this.config.pointSizeScale ?? 1,
         transformationMatrix: this.store.transformationMatrix4x4,
         ratio: this.config.pixelRatio ?? defaultConfigValues.pixelRatio,
-        selection0: (this.store.selectedArea?.[0] ?? [0, 0]) as [number, number],
-        selection1: (this.store.selectedArea?.[1] ?? [0, 0]) as [number, number],
+        selection0: ensureVec2(this.store.selectedArea?.[0], [0, 0]),
+        selection1: ensureVec2(this.store.selectedArea?.[1], [0, 0]),
         scalePointsOnZoom: (this.config.scalePointsOnZoom ?? true) ? 1 : 0, // Convert boolean to number
         maxPointSize: this.store.maxPointSize ?? 100,
       },
@@ -1610,7 +1611,7 @@ export class Points extends CoreModule {
     this.findPointsOnPolygonSelectionUniformStore.setUniforms({
       findPointsOnPolygonSelectionUniforms: {
         spaceSize: this.store.adjustedSpaceSize ?? 0,
-        screenSize: this.store.screenSize ?? [0, 0],
+        screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         transformationMatrix: this.store.transformationMatrix4x4,
         polygonPathLength: this.polygonPathLength,
       },
@@ -1701,9 +1702,9 @@ export class Points extends CoreModule {
         pointsTextureSize: this.store.pointsTextureSize ?? 0,
         transformationMatrix: this.store.transformationMatrix4x4,
         spaceSize: this.store.adjustedSpaceSize ?? 0,
-        screenSize: this.store.screenSize ?? [0, 0],
+        screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         scalePointsOnZoom: (this.config.scalePointsOnZoom ?? true) ? 1 : 0,
-        mousePosition: (this.store.screenMousePosition ?? [0, 0]) as [number, number],
+        mousePosition: ensureVec2(this.store.screenMousePosition, [0, 0]),
         maxPointSize: this.store.maxPointSize ?? 100,
       },
     })
@@ -1840,7 +1841,7 @@ export class Points extends CoreModule {
           pointsTextureSize: this.store.pointsTextureSize ?? 0,
           transformationMatrix: this.store.transformationMatrix4x4,
           spaceSize: this.store.adjustedSpaceSize ?? 0,
-          screenSize: this.store.screenSize ?? [0, 0],
+          screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         },
       })
 
@@ -1887,7 +1888,7 @@ export class Points extends CoreModule {
           pointsTextureSize: this.store.pointsTextureSize ?? 0,
           transformationMatrix: this.store.transformationMatrix4x4,
           spaceSize: this.store.adjustedSpaceSize ?? 0,
-          screenSize: this.store.screenSize ?? [0, 0],
+          screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         },
       })
 
