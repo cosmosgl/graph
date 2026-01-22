@@ -6,47 +6,30 @@ import { Meta } from "@storybook/blocks";
 
 Creates a new Graph instance for visualizing network graphs.
 
-* **`div`** (HTMLDivElement): The HTML div element that will contain the graph canvas. The canvas will be automatically appended to this div.
-* **`config`** (Object, optional): Configuration object for customizing graph behavior, appearance, and interaction settings. See [Configuration](../?path=/docs/configuration--docs) for available options.
-* **`devicePromise`** (Promise&lt;Device&gt;, optional): Optional promise that resolves to a Luma.gl Device instance. If provided, this device will be used instead of creating a new one internally.
-
-  **Requirements:**
-  - The device must have an HTMLCanvasElement canvas context (not OffscreenCanvas).
-  - Compute-only devices are not supported.
-  - The canvas from the device will be automatically appended to the provided div if it's not already present in the DOM.
-  
-  **Important:** When providing an external device, the Graph's `config.pixelRatio` setting will override the device's `useDevicePixels` value to ensure consistency. If you need a specific pixel ratio, set it explicitly in the config (e.g., `{ pixelRatio: 1 }`). If not specified, it defaults to `window.devicePixelRatio || 2`.
-
-  **Example:**
-  ```javascript
-  import { Graph } from '@cosmos.gl/graph'
-  import { luma } from '@luma.gl/core'
-  import { webgl2Adapter } from '@luma.gl/webgl'
-
-  const div = document.querySelector('div')
-  const config = { spaceSize: 4096 }
-
-  // Create a custom device
-  const devicePromise = luma.createDevice({
-    type: 'webgl',
-    adapters: [webgl2Adapter],
-    createCanvasContext: {
-      autoResize: true,
-    },
-  })
-
-  // Use the custom device when creating the graph
-  const graph = new Graph(div, config, devicePromise)
-  ```
+**Parameters:**
+* **`div`** (HTMLDivElement): The container element for the graph canvas.
+* **`config`** (Object, optional): Configuration options for appearance, behavior, and interactions. See [Configuration](../?path=/docs/configuration--docs) for details.
+* **`devicePromise`** (Promise&lt;Device&gt;, optional): Advanced - provide your own Luma.gl Device for sharing across multiple graphs. See [Using a Custom Device](#custom-device) below.
 
 **Basic Example:**
 ```javascript
 import { Graph } from '@cosmos.gl/graph'
 
 const div = document.querySelector('div')
-const config = { spaceSize: 4096 }
-const graph = new Graph(div, config)
+const graph = new Graph(div, { spaceSize: 4096 })
 ```
+
+#### <a name="custom-device" href="#custom-device">#</a> Using a Custom Device
+
+For advanced use cases, you can provide your own Luma.gl Device.
+
+**Important:** When you provide a custom device, **you are responsible for destroying it**. Graph will not destroy external devices when `graph.destroy()` is called.
+
+**Requirements:**
+- Must have an HTMLCanvasElement canvas context (OffscreenCanvas not supported)
+- Cannot be a compute-only device
+
+**See example:** [Pinned Points](?path=/story/examples-beginners--pinned-points) demonstrates using an external device.
 
 ### <a name="set_config" href="#set_config">#</a> graph.<b>setConfig</b>(<i>config</i>)
 
@@ -580,7 +563,9 @@ Runs one step of the simulation manually. Works even when the simulation is paus
 
 ### <a name="destroy" href="#destroy">#</a> graph.<b>destroy</b>()
 
-Destroys the current cosmos.gl instance.
+Destroys the current cosmos.gl instance and cleans up all resources.
+
+**Note:** If the Graph was created with an external device (via the `devicePromise` parameter), the device will NOT be destroyed. The user is responsible for destroying externally provided devices when they are no longer needed. If the Graph created its own device internally, the device will be destroyed automatically.
 
 ### <a name="create" href="#create">#</a> graph.<b>create</b>()
 

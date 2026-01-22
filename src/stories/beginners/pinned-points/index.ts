@@ -3,7 +3,7 @@ import { luma } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
 import { generateData } from './data-gen'
 
-export const pinnedPoints = (): { graph: Graph; div: HTMLDivElement} => {
+export const pinnedPoints = (): { graph: Graph; div: HTMLDivElement; destroy: () => void } => {
   const div = document.createElement('div')
   div.style.height = '100vh'
   div.style.width = '100%'
@@ -26,8 +26,6 @@ export const pinnedPoints = (): { graph: Graph; div: HTMLDivElement} => {
     createCanvasContext: {
       useDevicePixels: window.devicePixelRatio || 2,
       autoResize: true,
-      width: undefined,
-      height: undefined,
     },
   })
 
@@ -70,5 +68,10 @@ export const pinnedPoints = (): { graph: Graph; div: HTMLDivElement} => {
   graph.zoom(0.8)
   graph.render()
 
-  return { div, graph }
+  // Cleanup function to destroy the external device
+  const destroy = (): void => {
+    devicePromise.then(device => device.destroy())
+  }
+
+  return { div, graph, destroy }
 }
