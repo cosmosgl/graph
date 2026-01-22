@@ -27,7 +27,8 @@ import { defaultConfigValues, defaultScaleToZoom, defaultGreyoutPointColor, defa
 export class Graph {
   public config = new GraphConfig()
   public graph = new GraphData(this.config)
-  private canvas: HTMLCanvasElement
+  /** Canvas element, assigned asynchronously during device initialization */
+  private canvas!: HTMLCanvasElement
   private attributionDivElement: HTMLElement | undefined
   private canvasD3Selection: Selection<HTMLCanvasElement, undefined, null, undefined> | undefined
   private device: Device | undefined
