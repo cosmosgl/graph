@@ -706,6 +706,7 @@ export class Graph {
           clearStencil: 0,
         })
         clearPass.end()
+        this.device.submit()
       }
       return
     }
@@ -1350,6 +1351,7 @@ export class Graph {
           clearStencil: 0,
         })
         clearPass.end()
+        this.device.submit()
         this.device.destroy()
       }
     }
