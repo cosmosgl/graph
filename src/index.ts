@@ -32,6 +32,12 @@ export class Graph {
   private canvasD3Selection: Selection<HTMLCanvasElement, undefined, null, undefined> | undefined
   private device: Device | undefined
   private deviceInitPromise: Promise<Device>
+  /**
+   * Tracks whether this Graph instance owns the device and should destroy it on cleanup.
+   * Set to `true` when Graph creates its own device, `false` when using an external device.
+   * When `false`, the external device lifecycle is managed by the user.
+   */
+  private shouldDestroyDevice: boolean
   private requestAnimationFrameId = 0
   private isRightClickMouse = false
 
@@ -92,14 +98,19 @@ export class Graph {
 
     if (devicePromise) {
       this.deviceInitPromise = devicePromise
+      this.shouldDestroyDevice = false // External device - Graph does not own it
     } else {
       const canvas = document.createElement('canvas')
       this.deviceInitPromise = this.createDevice(canvas)
+      this.shouldDestroyDevice = true // Graph created the device and owns it
     }
 
     this.deviceInitPromise.then(device => {
       if (this._isDestroyed) {
-        device.destroy()
+        // Only destroy the device if Graph owns it
+        if (this.shouldDestroyDevice) {
+          device.destroy()
+        }
         return device
       }
       this.device = device
@@ -1329,17 +1340,21 @@ export class Graph {
     this.forceMouse?.destroy()
 
     if (this.device) {
-      // Clears the canvas after particle system is destroyed
-      const clearPass = this.device.beginRenderPass({
-        clearColor: this.store.backgroundColor,
-        clearDepth: 1,
-        clearStencil: 0,
-      })
-      clearPass.end()
-      this.device.destroy()
+      // Only clear and destroy the device if Graph owns it
+      if (this.shouldDestroyDevice) {
+        // Clears the canvas after particle system is destroyed
+        const clearPass = this.device.beginRenderPass({
+          clearColor: this.store.backgroundColor,
+          clearDepth: 1,
+          clearStencil: 0,
+        })
+        clearPass.end()
+        this.device.destroy()
+      }
     }
 
-    if (this.canvas && this.canvas.parentNode) {
+    // Only remove canvas if Graph owns the device (canvas was created by Graph)
+    if (this.shouldDestroyDevice && this.canvas && this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas)
     }
 
