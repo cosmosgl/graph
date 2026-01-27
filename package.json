@@ -1,6 +1,6 @@
 {
   "name": "@cosmos.gl/graph",
-  "version": "2.6.2",
+  "version": "2.6.3",
   "description": "GPU-based force graph layout and rendering",
   "jsdelivr": "dist/index.min.js",
   "main": "dist/index.js",
