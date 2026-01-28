@@ -19,7 +19,7 @@ import { FPSMonitor } from '@/graph/modules/FPSMonitor'
 import { GraphData } from '@/graph/modules/GraphData'
 import { Lines } from '@/graph/modules/Lines'
 import { Points } from '@/graph/modules/Points'
-import { Store, ALPHA_MIN, MAX_POINT_SIZE, MAX_HOVER_DETECTION_DELAY, type Hovered } from '@/graph/modules/Store'
+import { Store, ALPHA_MIN, MAX_POINT_SIZE, MAX_HOVER_DETECTION_DELAY, MIN_MOUSE_MOVEMENT_THRESHOLD, type Hovered } from '@/graph/modules/Store'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
 import { defaultConfigValues, defaultScaleToZoom, defaultGreyoutPointColor, defaultBackgroundColor } from '@/graph/variables'
@@ -67,6 +67,21 @@ export class Graph {
    * If the mouse is not on the Canvas, the `findHoveredPoint` or `findHoveredLine` method will not be executed.
    */
   private _isMouseOnCanvas = false
+  /**
+   * Last mouse position for detecting significant mouse movement
+   */
+  private _lastMouseX = 0
+  private _lastMouseY = 0
+  /**
+   * Last checked mouse position for hover detection
+   */
+  private _lastCheckedMouseX = 0
+  private _lastCheckedMouseY = 0
+  /**
+   * Force hover detection on next frame, bypassing mouse movement check.
+   * Set when scene changes but mouse stays still (after simulation or zoom ends).
+   */
+  private _shouldForceHoverDetection = false
   /**
    * After setting data and render graph at a first time, the fit logic will run
    * */
@@ -145,8 +160,16 @@ export class Graph {
 
       this.canvasD3Selection = select<HTMLCanvasElement, undefined>(this.canvas)
       this.canvasD3Selection
-        .on('mouseenter.cosmos', () => { this._isMouseOnCanvas = true })
-        .on('mousemove.cosmos', () => { this._isMouseOnCanvas = true })
+        .on('mouseenter.cosmos', (event) => {
+          this._isMouseOnCanvas = true
+          this._lastMouseX = event.clientX
+          this._lastMouseY = event.clientY
+        })
+        .on('mousemove.cosmos', (event) => {
+          this._isMouseOnCanvas = true
+          this._lastMouseX = event.clientX
+          this._lastMouseY = event.clientY
+        })
         .on('mouseleave.cosmos', (event) => {
           this._isMouseOnCanvas = false
           this.currentEvent = event
@@ -181,7 +204,11 @@ export class Graph {
           if (userDriven) this.updateMousePosition(e.sourceEvent)
           this.currentEvent = e
         })
-        .on('end.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => { this.currentEvent = e })
+        .on('end.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
+          this.currentEvent = e
+          // Force hover detection on next frame since zoom may have changed what's under the mouse
+          this._shouldForceHoverDetection = true
+        })
       this.dragInstance.behavior
         .on('start.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
           this.currentEvent = e
@@ -1701,6 +1728,8 @@ export class Graph {
     this.store.isSimulationRunning = false
     this.store.simulationProgress = 1
     this.config.onSimulationEnd?.()
+    // Force hover detection on next frame since points may have moved under stationary mouse
+    this._shouldForceHoverDetection = true
   }
 
   private onClick (event: MouseEvent): void {
@@ -1810,6 +1839,24 @@ export class Graph {
       this._findHoveredItemExecutionCount += 1
       return
     }
+
+    // Check if mouse has moved significantly since last hover detection
+    const deltaX = Math.abs(this._lastMouseX - this._lastCheckedMouseX)
+    const deltaY = Math.abs(this._lastMouseY - this._lastCheckedMouseY)
+    const mouseMoved = deltaX > MIN_MOUSE_MOVEMENT_THRESHOLD || deltaY > MIN_MOUSE_MOVEMENT_THRESHOLD
+
+    // Skip if mouse hasn't moved AND not forced
+    if (!mouseMoved && !this._shouldForceHoverDetection) {
+      return
+    }
+
+    // Update last checked position
+    this._lastCheckedMouseX = this._lastMouseX
+    this._lastCheckedMouseY = this._lastMouseY
+
+    // Reset force flag after use
+    this._shouldForceHoverDetection = false
+
     this._findHoveredItemExecutionCount = 0
     this.findHoveredPoint()
 
