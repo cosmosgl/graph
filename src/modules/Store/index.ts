@@ -210,6 +210,13 @@ export class Store {
       configSpaceSize = minSpaceSize
     }
 
+    // Validate webglMaxTextureSize
+    if (!Number.isFinite(webglMaxTextureSize) || webglMaxTextureSize <= 0) {
+      console.warn(`Invalid webglMaxTextureSize: ${webglMaxTextureSize}. Using configSpaceSize without WebGL limit adjustment.`)
+      this.adjustedSpaceSize = configSpaceSize
+      return
+    }
+
     // Handle WebGL limits - ensure result is still >= minSpaceSize
     if (configSpaceSize >= webglMaxTextureSize) {
       this.adjustedSpaceSize = Math.max(webglMaxTextureSize / 2, minSpaceSize)
