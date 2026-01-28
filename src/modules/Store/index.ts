@@ -15,6 +15,12 @@ export const MAX_POINT_SIZE = 64
  */
 export const MAX_HOVER_DETECTION_DELAY = 4
 
+/**
+ * Minimum mouse movement threshold (in pixels) to trigger hover detection.
+ * If the mouse moves less than this distance, hover detection will be skipped to save performance.
+ */
+export const MIN_MOUSE_MOVEMENT_THRESHOLD = 2
+
 export type Hovered = { index: number; position: [ number, number ] }
 type Focused = { index: number }
 
