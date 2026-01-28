@@ -7,7 +7,7 @@ export const withLabels = (): {div: HTMLDivElement; graph: Graph; destroy: () =>
   let nClusters = 2
   const { pointPositions, pointColors, pointClusters } = generateMeshData(100, 100, nClusters, 1.0)
 
-  const { div, graph } = createCosmos({
+  const { div, graph, destroy: baseDestroy } = createCosmos({
     pointPositions,
     pointColors,
     pointClusters,
@@ -47,6 +47,7 @@ export const withLabels = (): {div: HTMLDivElement; graph: Graph; destroy: () =>
 
   const destroy = (): void => {
     clearInterval(interval)
+    baseDestroy?.()
   }
 
   return { div, graph, destroy }

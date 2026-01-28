@@ -56,7 +56,7 @@ interface DependencyNode {
   color: [number, number, number, number];
 }
 
-export const imageExample = async (): Promise<{div: HTMLDivElement; graph: Graph }> => {
+export const imageExample = (): {div: HTMLDivElement; graph: Graph; destroy?: () => void } => {
   // Create container div
   const div = document.createElement('div')
   div.style.height = '100vh'
@@ -204,11 +204,25 @@ export const imageExample = async (): Promise<{div: HTMLDivElement; graph: Graph
       },
     })
 
-    const imageDataArray = await loadPngImages([swiftUrl, boxUrl, toolboxUrl, legoUrl, sUrl])
+    // Guard flag to prevent async callbacks from executing after destruction
+    let isDestroyed = false
 
-    // Set images and their indices
-    graph.setImageData(imageDataArray)
-    graph.setPointImageIndices(imageIndices)
+    // Load images asynchronously and set them when ready
+    loadPngImages([swiftUrl, boxUrl, toolboxUrl, legoUrl, sUrl]).then((imageDataArray) => {
+      // Check if graph has been destroyed before calling any methods
+      if (isDestroyed) {
+        return
+      }
+      // Set images and their indices
+      graph.setImageData(imageDataArray)
+      graph.setPointImageIndices(imageIndices)
+      graph.render()
+    }).catch((error) => {
+      // Only log error if graph hasn't been destroyed
+      if (!isDestroyed) {
+        console.error('Error loading images:', error)
+      }
+    })
 
     // Set all data
     graph.setPointPositions(pointPositions)
@@ -225,7 +239,12 @@ export const imageExample = async (): Promise<{div: HTMLDivElement; graph: Graph
 
     graph.render()
 
-    return { div, graph }
+    const destroy = (): void => {
+      isDestroyed = true
+      graph.destroy()
+    }
+
+    return { div, graph, destroy }
   } catch (error) {
     console.error('Error creating Xcode dependency graph:', error)
     div.innerHTML = `

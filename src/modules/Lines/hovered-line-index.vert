@@ -1,8 +1,10 @@
-attribute vec2 position;
+#version 300 es
+#ifdef GL_ES
+precision highp float;
+#endif
 
-varying vec2 vTexCoord;
+in vec2 vertexCoord;
 
 void main() {
-  vTexCoord = position * 0.5 + 0.5;
-  gl_Position = vec4(position, 0.0, 1.0);
+  gl_Position = vec4(vertexCoord, 0.0, 1.0);
 } 

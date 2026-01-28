@@ -2,7 +2,7 @@ import { Graph } from '@cosmos.gl/graph'
 import { generateData } from './data-gen'
 import './style.css'
 
-export const basicSetUp = (): { graph: Graph; div: HTMLDivElement} => {
+export const basicSetUp = (): { graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
   const div = document.createElement('div')
   div.className = 'app'
 
@@ -159,5 +159,9 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement} => {
   selectPointsInAreaButton.addEventListener('click', selectPointsInArea)
   actionsDiv.appendChild(selectPointsInAreaButton)
 
-  return { div, graph }
+  const destroy = (): void => {
+    graph.destroy()
+  }
+
+  return { div, graph, destroy }
 }

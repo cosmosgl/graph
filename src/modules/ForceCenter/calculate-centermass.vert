@@ -1,16 +1,24 @@
-#ifdef GL_ES
+#version 300 es
 precision highp float;
-#endif
 
 uniform sampler2D positionsTexture;
+
+#ifdef USE_UNIFORM_BUFFERS
+layout(std140) uniform calculateCentermassUniforms {
+  float pointsTextureSize;
+} calculateCentermass;
+
+#define pointsTextureSize calculateCentermass.pointsTextureSize
+#else
 uniform float pointsTextureSize;
+#endif
 
-attribute vec2 pointIndices;
+in vec2 pointIndices;
 
-varying vec4 rgba;
+out vec4 rgba;
 
 void main() {
-  vec4 pointPosition = texture2D(positionsTexture, pointIndices / pointsTextureSize);
+  vec4 pointPosition = texture(positionsTexture, pointIndices / pointsTextureSize);
   rgba = vec4(pointPosition.xy, 1.0, 0.0);
 
   gl_Position = vec4(0.0, 0.0, 0.0, 1.0);

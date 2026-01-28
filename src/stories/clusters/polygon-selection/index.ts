@@ -7,7 +7,7 @@ export const polygonSelection = (): {div: HTMLDivElement; graph: Graph; destroy:
   const nClusters = 25
   const { pointPositions, pointColors, pointClusters } = generateMeshData(150, 150, nClusters, 1.0)
 
-  const { div, graph } = createCosmos({
+  const { div, graph, destroy: baseDestroy } = createCosmos({
     pointPositions,
     pointColors,
     pointClusters,
@@ -45,6 +45,7 @@ export const polygonSelection = (): {div: HTMLDivElement; graph: Graph; destroy:
     if (actionsDiv.parentNode) {
       actionsDiv.parentNode.removeChild(actionsDiv)
     }
+    baseDestroy?.()
   }
 
   return { div, graph, destroy }

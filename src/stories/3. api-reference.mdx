@@ -2,6 +2,35 @@ import { Meta } from "@storybook/blocks";
 
 <Meta title="API Reference" />
 
+### <a name="graph_constructor" href="#graph_constructor">#</a> new <b>Graph</b>(<i>div</i>, [<i>config</i>], [<i>devicePromise</i>])
+
+Creates a new Graph instance for visualizing network graphs.
+
+**Parameters:**
+* **`div`** (HTMLDivElement): The container element for the graph canvas.
+* **`config`** (Object, optional): Configuration options for appearance, behavior, and interactions. See [Configuration](../?path=/docs/configuration--docs) for details.
+* **`devicePromise`** (Promise&lt;Device&gt;, optional): Advanced - provide your own Luma.gl Device for sharing across multiple graphs. See [Using a Custom Device](#custom-device) below.
+
+**Basic Example:**
+```javascript
+import { Graph } from '@cosmos.gl/graph'
+
+const div = document.querySelector('div')
+const graph = new Graph(div, { spaceSize: 4096 })
+```
+
+#### <a name="custom-device" href="#custom-device">#</a> Using a Custom Device
+
+For advanced use cases, you can provide your own Luma.gl Device.
+
+**Important:** When you provide a custom device, **you are responsible for destroying it**. Graph will not destroy external devices when `graph.destroy()` is called.
+
+**Requirements:**
+- Must have an HTMLCanvasElement canvas context (OffscreenCanvas not supported)
+- Cannot be a compute-only device
+
+**See example:** [Pinned Points](?path=/story/examples-beginners--pinned-points) demonstrates using an external device.
+
 ### <a name="set_config" href="#set_config">#</a> graph.<b>setConfig</b>(<i>config</i>)
 
 This method sets the [cosmos.gl configuration](../?path=/docs/configuration--docs). The changes are applied in real-time.
@@ -534,7 +563,9 @@ Runs one step of the simulation manually. Works even when the simulation is paus
 
 ### <a name="destroy" href="#destroy">#</a> graph.<b>destroy</b>()
 
-Destroys the current cosmos.gl instance.
+Destroys the current cosmos.gl instance and cleans up all resources.
+
+**Note:** If the Graph was created with an external device (via the `devicePromise` parameter), the device will NOT be destroyed. The user is responsible for destroying externally provided devices when they are no longer needed. If the Graph created its own device internally, the device will be destroyed automatically.
 
 ### <a name="create" href="#create">#</a> graph.<b>create</b>()
 

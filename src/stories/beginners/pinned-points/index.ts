@@ -1,7 +1,9 @@
 import { Graph } from '@cosmos.gl/graph'
+import { luma } from '@luma.gl/core'
+import { webgl2Adapter } from '@luma.gl/webgl'
 import { generateData } from './data-gen'
 
-export const pinnedPoints = (): { graph: Graph; div: HTMLDivElement} => {
+export const pinnedPoints = (): { graph: Graph; div: HTMLDivElement; destroy: () => void } => {
   const div = document.createElement('div')
   div.style.height = '100vh'
   div.style.width = '100%'
@@ -18,6 +20,15 @@ export const pinnedPoints = (): { graph: Graph; div: HTMLDivElement} => {
   })
   div.appendChild(infoPanel)
 
+  const devicePromise = luma.createDevice({
+    type: 'webgl',
+    adapters: [webgl2Adapter],
+    createCanvasContext: {
+      useDevicePixels: window.devicePixelRatio || 2,
+      autoResize: true,
+    },
+  })
+
   const graph = new Graph(div, {
     spaceSize: 4096,
     backgroundColor: '#2d313a',
@@ -28,7 +39,7 @@ export const pinnedPoints = (): { graph: Graph; div: HTMLDivElement} => {
     simulationGravity: 0.05,
     simulationDecay: 10000000,
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
-  })
+  }, devicePromise)
 
   const { pointPositions, links, pointColors } = generateData(100)
 
@@ -57,5 +68,11 @@ export const pinnedPoints = (): { graph: Graph; div: HTMLDivElement} => {
   graph.zoom(0.8)
   graph.render()
 
-  return { div, graph }
+  // Cleanup function to destroy the external device
+  const destroy = (): void => {
+    graph.destroy()
+    devicePromise.then(device => device.destroy())
+  }
+
+  return { div, graph, destroy }
 }
