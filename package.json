@@ -19,7 +19,8 @@
     "lint": "eslint --cache ./src --ext .ts --ignore-path .gitignore",
     "lint:staged": "npx lint-staged",
     "storybook": "storybook dev -p 6006",
-    "build:storybook": "storybook build"
+    "build:storybook": "storybook build",
+    "prepublishOnly": "npm run build:vite"
   },
   "engines": {
     "node": ">=12.2.0",
