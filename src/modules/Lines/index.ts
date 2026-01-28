@@ -259,7 +259,16 @@ export class Lines extends CoreModule {
 
   public findHoveredLine (): void {
     if (!this.data.linksNumber || !this.store.isLinkHoveringEnabled) return
-    if (!this.linkIndexFbo) this.updateLinkIndexFbo()
+
+    // Ensure all required buffers are initialized before hover detection
+    if (!this.pointsBuffer) return
+    if (!this.linkIndexFbo) return
+    if (!this.linkIndexBuffer) return
+    if (!this.colorBuffer) return
+    if (!this.widthBuffer) return
+    if (!this.arrowBuffer) return
+    if (!this.curveLineGeometry || !this.curveLineBuffer) return
+
     this.reglInstance.clear({
       framebuffer: this.linkIndexFbo as regl.Framebuffer2D,
       color: [0, 0, 0, 0],

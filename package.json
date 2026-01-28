@@ -1,6 +1,6 @@
 {
   "name": "@cosmos.gl/graph",
-  "version": "2.6.2",
+  "version": "2.6.4",
   "description": "GPU-based force graph layout and rendering",
   "jsdelivr": "dist/index.min.js",
   "main": "dist/index.js",
@@ -19,7 +19,8 @@
     "lint": "eslint --cache ./src --ext .ts --ignore-path .gitignore",
     "lint:staged": "npx lint-staged",
     "storybook": "storybook dev -p 6006",
-    "build:storybook": "storybook build"
+    "build:storybook": "storybook build",
+    "prepublishOnly": "npm run build:vite"
   },
   "engines": {
     "node": ">=12.2.0",
