@@ -3,6 +3,7 @@ import { Model } from '@luma.gl/engine'
 // import { scaleLinear } from 'd3-scale'
 // import { extent } from 'd3-array'
 import { CoreModule } from '@/graph/modules/core-module'
+import type { Mat4Array } from '@/graph/modules/Store'
 import { defaultConfigValues } from '@/graph/variables'
 import drawPointsFrag from '@/graph/modules/Points/draw-points.frag?raw'
 import drawPointsVert from '@/graph/modules/Points/draw-points.vert?raw'
@@ -99,7 +100,7 @@ export class Points extends CoreModule {
       ratio: number;
       sizeScale: number;
       pointsTextureSize: number;
-      transformationMatrix: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+      transformationMatrix: Mat4Array;
       spaceSize: number;
       screenSize: [number, number];
       greyoutColor: [number, number, number, number];
@@ -126,7 +127,7 @@ export class Points extends CoreModule {
       spaceSize: number;
       screenSize: [number, number];
       sizeScale: number;
-      transformationMatrix: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+      transformationMatrix: Mat4Array;
       ratio: number;
       selection0: [number, number];
       selection1: [number, number];
@@ -139,7 +140,7 @@ export class Points extends CoreModule {
     findPointsOnPolygonSelectionUniforms: {
       spaceSize: number;
       screenSize: [number, number];
-      transformationMatrix: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+      transformationMatrix: Mat4Array;
       polygonPathLength: number;
     };
   }> | undefined
@@ -149,7 +150,7 @@ export class Points extends CoreModule {
       ratio: number;
       sizeScale: number;
       pointsTextureSize: number;
-      transformationMatrix: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+      transformationMatrix: Mat4Array;
       spaceSize: number;
       screenSize: [number, number];
       scalePointsOnZoom: number;
@@ -161,7 +162,7 @@ export class Points extends CoreModule {
   private fillSampledPointsUniformStore: UniformStore<{
     fillSampledPointsUniforms: {
       pointsTextureSize: number;
-      transformationMatrix: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+      transformationMatrix: Mat4Array;
       spaceSize: number;
       screenSize: [number, number];
     };
@@ -175,7 +176,7 @@ export class Points extends CoreModule {
       size: number;
       sizeScale: number;
       pointsTextureSize: number;
-      transformationMatrix: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+      transformationMatrix: Mat4Array;
       spaceSize: number;
       screenSize: [number, number];
       scalePointsOnZoom: number; // f32 in shader, not boolean
@@ -570,12 +571,7 @@ export class Points extends CoreModule {
         defaultUniforms: {
           // Order MUST match uniformTypes and shader declaration
           ratio: config.pixelRatio ?? defaultConfigValues.pixelRatio,
-          transformationMatrix: ((): [
-                number, number, number, number,
-                number, number, number, number,
-                number, number, number, number,
-                number, number, number, number
-              ] => {
+          transformationMatrix: ((): Mat4Array => {
             const t = store.transform ?? [1, 0, 0, 0, 1, 0, 0, 0, 1]
             return [
               t[0], t[1], t[2], 0,
