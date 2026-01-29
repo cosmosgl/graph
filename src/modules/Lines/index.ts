@@ -1,6 +1,7 @@
 import { Framebuffer, Buffer, Texture, UniformStore, RenderPass } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
+import type { Mat4Array } from '@/graph/modules/Store'
 import drawLineFrag from '@/graph/modules/Lines/draw-curve-line.frag?raw'
 import drawLineVert from '@/graph/modules/Lines/draw-curve-line.vert?raw'
 import hoveredLineIndexFrag from '@/graph/modules/Lines/hovered-line-index.frag?raw'
@@ -30,7 +31,7 @@ export class Lines extends CoreModule {
   // Uniform stores for scalar uniforms
   private drawLineUniformStore: UniformStore<{
     drawLineUniforms: {
-      transformationMatrix: [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number];
+      transformationMatrix: Mat4Array;
       pointsTextureSize: number;
       widthScale: number;
       linkArrowsSizeScale: number;

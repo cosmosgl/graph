@@ -28,7 +28,7 @@ type Focused = { index: number }
  * Type alias for a 4x4 matrix stored as a 16-element array in column-major order.
  * Used for std140 uniform buffer layout compatibility.
  */
-type Mat4Array = [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number]
+export type Mat4Array = [number, number, number, number, number, number, number, number, number, number, number, number, number, number, number, number]
 
 export class Store {
   public pointsTextureSize = 0
