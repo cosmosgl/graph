@@ -245,10 +245,10 @@ export class Points extends CoreModule {
 
     // Create currentPositionTexture and framebuffer
     if (!this.currentPositionTexture || this.currentPositionTexture.width !== pointsTextureSize || this.currentPositionTexture.height !== pointsTextureSize) {
-      if (this.currentPositionTexture) {
+      if (this.currentPositionTexture && !this.currentPositionTexture.destroyed) {
         this.currentPositionTexture.destroy()
       }
-      if (this.currentPositionFbo) {
+      if (this.currentPositionFbo && !this.currentPositionFbo.destroyed) {
         this.currentPositionFbo.destroy()
       }
       this.currentPositionTexture = device.createTexture({
@@ -282,10 +282,10 @@ export class Points extends CoreModule {
     if (!this.previousPositionTexture ||
         this.previousPositionTexture.width !== pointsTextureSize ||
         this.previousPositionTexture.height !== pointsTextureSize) {
-      if (this.previousPositionTexture) {
+      if (this.previousPositionTexture && !this.previousPositionTexture.destroyed) {
         this.previousPositionTexture.destroy()
       }
-      if (this.previousPositionFbo) {
+      if (this.previousPositionFbo && !this.previousPositionFbo.destroyed) {
         this.previousPositionFbo.destroy()
       }
       this.previousPositionTexture = device.createTexture({
@@ -319,10 +319,10 @@ export class Points extends CoreModule {
       // Create velocityTexture and framebuffer
       const velocityData = new Float32Array(pointsTextureSize * pointsTextureSize * 4).fill(0)
       if (!this.velocityTexture || this.velocityTexture.width !== pointsTextureSize || this.velocityTexture.height !== pointsTextureSize) {
-        if (this.velocityTexture) {
+        if (this.velocityTexture && !this.velocityTexture.destroyed) {
           this.velocityTexture.destroy()
         }
-        if (this.velocityFbo) {
+        if (this.velocityFbo && !this.velocityFbo.destroyed) {
           this.velocityFbo.destroy()
         }
         this.velocityTexture = device.createTexture({
@@ -355,10 +355,10 @@ export class Points extends CoreModule {
 
     // Create selectedTexture and framebuffer
     if (!this.selectedTexture || this.selectedTexture.width !== pointsTextureSize || this.selectedTexture.height !== pointsTextureSize) {
-      if (this.selectedTexture) {
+      if (this.selectedTexture && !this.selectedTexture.destroyed) {
         this.selectedTexture.destroy()
       }
-      if (this.selectedFbo) {
+      if (this.selectedFbo && !this.selectedFbo.destroyed) {
         this.selectedFbo.destroy()
       }
       this.selectedTexture = device.createTexture({
@@ -400,7 +400,9 @@ export class Points extends CoreModule {
     const requiredByteLength = indexData.byteLength
 
     if (!this.drawPointIndices || this.drawPointIndices.byteLength !== requiredByteLength) {
-      this.drawPointIndices?.destroy()
+      if (this.drawPointIndices && !this.drawPointIndices.destroyed) {
+        this.drawPointIndices.destroy()
+      }
       this.drawPointIndices = device.createBuffer({
         data: indexData,
         usage: Buffer.VERTEX | Buffer.COPY_DST,
@@ -416,7 +418,9 @@ export class Points extends CoreModule {
     }
 
     if (!this.hoveredPointIndices || this.hoveredPointIndices.byteLength !== requiredByteLength) {
-      this.hoveredPointIndices?.destroy()
+      if (this.hoveredPointIndices && !this.hoveredPointIndices.destroyed) {
+        this.hoveredPointIndices.destroy()
+      }
       this.hoveredPointIndices = device.createBuffer({
         data: indexData,
         usage: Buffer.VERTEX | Buffer.COPY_DST,
@@ -426,7 +430,9 @@ export class Points extends CoreModule {
     }
 
     if (!this.sampledPointIndices || this.sampledPointIndices.byteLength !== requiredByteLength) {
-      this.sampledPointIndices?.destroy()
+      if (this.sampledPointIndices && !this.sampledPointIndices.destroyed) {
+        this.sampledPointIndices.destroy()
+      }
       this.sampledPointIndices = device.createBuffer({
         data: indexData,
         usage: Buffer.VERTEX | Buffer.COPY_DST,
@@ -992,7 +998,9 @@ export class Points extends CoreModule {
     const requiredByteLength = colorData.byteLength
 
     if (!this.colorBuffer || this.colorBuffer.byteLength !== requiredByteLength) {
-      this.colorBuffer?.destroy()
+      if (this.colorBuffer && !this.colorBuffer.destroyed) {
+        this.colorBuffer.destroy()
+      }
       this.colorBuffer = device.createBuffer({
         data: colorData,
         usage: Buffer.VERTEX | Buffer.COPY_DST,
@@ -1022,7 +1030,7 @@ export class Points extends CoreModule {
     }
 
     if (!this.greyoutStatusTexture || this.greyoutStatusTexture.width !== pointsTextureSize || this.greyoutStatusTexture.height !== pointsTextureSize) {
-      if (this.greyoutStatusTexture) {
+      if (this.greyoutStatusTexture && !this.greyoutStatusTexture.destroyed) {
         this.greyoutStatusTexture.destroy()
       }
       this.greyoutStatusTexture = device.createTexture({
@@ -1064,7 +1072,7 @@ export class Points extends CoreModule {
     }
 
     if (!this.pinnedStatusTexture || this.pinnedStatusTexture.width !== pointsTextureSize || this.pinnedStatusTexture.height !== pointsTextureSize) {
-      if (this.pinnedStatusTexture) {
+      if (this.pinnedStatusTexture && !this.pinnedStatusTexture.destroyed) {
         this.pinnedStatusTexture.destroy()
       }
       this.pinnedStatusTexture = device.createTexture({
@@ -1098,7 +1106,9 @@ export class Points extends CoreModule {
     const requiredByteLength = sizeData.byteLength
 
     if (!this.sizeBuffer || this.sizeBuffer.byteLength !== requiredByteLength) {
-      this.sizeBuffer?.destroy()
+      if (this.sizeBuffer && !this.sizeBuffer.destroyed) {
+        this.sizeBuffer.destroy()
+      }
       this.sizeBuffer = device.createBuffer({
         data: sizeData,
         usage: Buffer.VERTEX | Buffer.COPY_DST,
@@ -1118,7 +1128,7 @@ export class Points extends CoreModule {
     }
 
     if (!this.sizeTexture || this.sizeTexture.width !== pointsTextureSize || this.sizeTexture.height !== pointsTextureSize) {
-      if (this.sizeTexture) {
+      if (this.sizeTexture && !this.sizeTexture.destroyed) {
         this.sizeTexture.destroy()
       }
       this.sizeTexture = device.createTexture({
@@ -1152,7 +1162,9 @@ export class Points extends CoreModule {
     const requiredByteLength = shapeData.byteLength
 
     if (!this.shapeBuffer || this.shapeBuffer.byteLength !== requiredByteLength) {
-      this.shapeBuffer?.destroy()
+      if (this.shapeBuffer && !this.shapeBuffer.destroyed) {
+        this.shapeBuffer.destroy()
+      }
       this.shapeBuffer = device.createBuffer({
         data: shapeData,
         usage: Buffer.VERTEX | Buffer.COPY_DST,
@@ -1175,7 +1187,9 @@ export class Points extends CoreModule {
     const requiredByteLength = imageIndicesData.byteLength
 
     if (!this.imageIndicesBuffer || this.imageIndicesBuffer.byteLength !== requiredByteLength) {
-      this.imageIndicesBuffer?.destroy()
+      if (this.imageIndicesBuffer && !this.imageIndicesBuffer.destroyed) {
+        this.imageIndicesBuffer.destroy()
+      }
       this.imageIndicesBuffer = device.createBuffer({
         data: imageIndicesData,
         usage: Buffer.VERTEX | Buffer.COPY_DST,
@@ -1198,7 +1212,9 @@ export class Points extends CoreModule {
     const requiredByteLength = imageSizesData.byteLength
 
     if (!this.imageSizesBuffer || this.imageSizesBuffer.byteLength !== requiredByteLength) {
-      this.imageSizesBuffer?.destroy()
+      if (this.imageSizesBuffer && !this.imageSizesBuffer.destroyed) {
+        this.imageSizesBuffer.destroy()
+      }
       this.imageSizesBuffer = device.createBuffer({
         data: imageSizesData,
         usage: Buffer.VERTEX | Buffer.COPY_DST,
@@ -1248,7 +1264,9 @@ export class Points extends CoreModule {
     this.imageAtlasCoordsTextureSize = atlasCoordsSize
 
     // Recreate atlas texture to avoid row-stride/format issues
-    this.imageAtlasTexture?.destroy()
+    if (this.imageAtlasTexture && !this.imageAtlasTexture.destroyed) {
+      this.imageAtlasTexture.destroy()
+    }
     this.imageAtlasTexture = device.createTexture({
       width: atlasSize,
       height: atlasSize,
@@ -1264,7 +1282,9 @@ export class Points extends CoreModule {
     })
 
     // Recreate coords texture
-    this.imageAtlasCoordsTexture?.destroy()
+    if (this.imageAtlasCoordsTexture && !this.imageAtlasCoordsTexture.destroyed) {
+      this.imageAtlasCoordsTexture.destroy()
+    }
     this.imageAtlasCoordsTexture = device.createTexture({
       width: atlasCoordsSize,
       height: atlasCoordsSize,

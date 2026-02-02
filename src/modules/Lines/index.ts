@@ -564,7 +564,9 @@ export class Lines extends CoreModule {
     }
 
     if (!this.curveLineBuffer || this.curveLineBuffer.byteLength !== flatGeometry.byteLength) {
-      this.curveLineBuffer?.destroy()
+      if (this.curveLineBuffer && !this.curveLineBuffer.destroyed) {
+        this.curveLineBuffer.destroy()
+      }
       this.curveLineBuffer = device.createBuffer({
         data: flatGeometry,
         usage: Buffer.VERTEX | Buffer.COPY_DST,
