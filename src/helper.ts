@@ -1,6 +1,10 @@
 import { color as d3Color } from 'd3-color'
 import { Device, Framebuffer } from '@luma.gl/core'
+import { WebGLDevice } from '@luma.gl/webgl'
+import { GL } from '@luma.gl/constants'
 import DOMPurify from 'dompurify'
+
+import { MAX_POINT_SIZE } from '@/graph/modules/Store'
 
 export const isFunction = <T>(a: T): boolean => typeof a === 'function'
 export const isArray = <T>(a: unknown | T[]): a is T[] => Array.isArray(a)
@@ -71,6 +75,8 @@ export function rgbToBrightness (r: number, g: number, b: number): number {
  * - Consider batching the migration to avoid inconsistencies
  *
  * Current status: Deprecated but still functional. Keeping for now until full migration can be planned.
+ *
+ * @note Cosmos currently supports WebGL only; support for other device types will be added later.
  */
 export function readPixels (device: Device, fbo: Framebuffer, sourceX = 0, sourceY = 0, sourceWidth?: number, sourceHeight?: number): Float32Array {
   // Let luma.gl auto-allocate based on texture format
@@ -81,6 +87,27 @@ export function readPixels (device: Device, fbo: Framebuffer, sourceX = 0, sourc
     sourceWidth,
     sourceHeight,
   }) as Float32Array
+}
+
+/**
+ * Returns the maximum point size supported by the device, scaled by pixel ratio.
+ * For WebGL devices, reads the limit from the context; for other device types, uses MAX_POINT_SIZE from Store.
+ * @param device - The luma.gl device
+ * @param pixelRatio - Device pixel ratio to scale the result
+ * @returns Maximum point size (device limit / pixelRatio)
+ */
+export function getMaxPointSize (device: Device, pixelRatio: number): number {
+  switch (device.info.type) {
+  case 'webgl': {
+    const range = (device as WebGLDevice).gl.getParameter(GL.ALIASED_POINT_SIZE_RANGE) as [number, number]
+    return (range?.[1] ?? MAX_POINT_SIZE) / pixelRatio
+  }
+  case 'webgpu':
+    // Will be implemented when WebGPU support is added
+    return MAX_POINT_SIZE / pixelRatio
+  default:
+    return MAX_POINT_SIZE / pixelRatio
+  }
 }
 
 export function clamp (num: number, min: number, max: number): number {

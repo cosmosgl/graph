@@ -4,11 +4,10 @@ import { easeQuadInOut, easeQuadIn, easeQuadOut } from 'd3-ease'
 import { D3ZoomEvent } from 'd3-zoom'
 import { D3DragEvent } from 'd3-drag'
 import { Device, Framebuffer, luma } from '@luma.gl/core'
-import { WebGLDevice, webgl2Adapter } from '@luma.gl/webgl'
-import { GL } from '@luma.gl/constants'
+import { webgl2Adapter } from '@luma.gl/webgl'
 
 import { GraphConfig, GraphConfigInterface } from '@/graph/config'
-import { getRgbaColor, readPixels, sanitizeHtml } from '@/graph/helper'
+import { getRgbaColor, getMaxPointSize, readPixels, sanitizeHtml } from '@/graph/helper'
 import { ForceCenter } from '@/graph/modules/ForceCenter'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
 import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
@@ -19,7 +18,7 @@ import { FPSMonitor } from '@/graph/modules/FPSMonitor'
 import { GraphData } from '@/graph/modules/GraphData'
 import { Lines } from '@/graph/modules/Lines'
 import { Points } from '@/graph/modules/Points'
-import { Store, ALPHA_MIN, MAX_POINT_SIZE, MAX_HOVER_DETECTION_DELAY, MIN_MOUSE_MOVEMENT_THRESHOLD, type Hovered } from '@/graph/modules/Store'
+import { Store, ALPHA_MIN, MAX_HOVER_DETECTION_DELAY, MIN_MOUSE_MOVEMENT_THRESHOLD, type Hovered } from '@/graph/modules/Store'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
 import { defaultConfigValues, defaultScaleToZoom, defaultGreyoutPointColor, defaultBackgroundColor } from '@/graph/variables'
@@ -233,8 +232,7 @@ export class Graph {
       if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
       this.setZoomLevel(this.config.initialZoomLevel ?? 1)
 
-      const pointSizeRange = (device as WebGLDevice).gl.getParameter(GL.ALIASED_POINT_SIZE_RANGE) as [number, number]
-      this.store.maxPointSize = (pointSizeRange?.[1] ?? MAX_POINT_SIZE) / this.config.pixelRatio
+      this.store.maxPointSize = getMaxPointSize(device, this.config.pixelRatio)
 
       // Initialize simulation state based on enableSimulation config
       // If simulation is disabled, start with isSimulationRunning = false
@@ -364,8 +362,7 @@ export class Graph {
         this.device.canvasContext.setProps({ useDevicePixels: this.config.pixelRatio })
 
         // Recalculate maxPointSize with new pixelRatio
-        const pointSizeRange = (this.device as WebGLDevice).gl.getParameter(GL.ALIASED_POINT_SIZE_RANGE) as [number, number]
-        this.store.maxPointSize = (pointSizeRange?.[1] ?? MAX_POINT_SIZE) / this.config.pixelRatio
+        this.store.maxPointSize = getMaxPointSize(this.device, this.config.pixelRatio)
       }
     }
     if (prevConfig.spaceSize !== this.config.spaceSize) {
