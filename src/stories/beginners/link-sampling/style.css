@@ -1,0 +1,10 @@
+.link-sampling-demo {
+  position: relative;
+}
+
+.link-sampling-labels {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+

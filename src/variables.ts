@@ -56,6 +56,7 @@ export const defaultConfigValues = {
   fitViewPadding: 0.1,
   fitViewDuration: 250,
   pointSamplingDistance: 150,
+  linkSamplingDistance: 150,
   attribution: '',
   rescalePositions: undefined,
   enableRightClickRepulsion: false,
