@@ -9,8 +9,8 @@ layout(std140) uniform forceUniforms {
   float level;
   float levels;
   float levelTextureSize;
-  float repulsion;
   float alpha;
+  float repulsion;
   float spaceSize;
   float theta;
 } force;
@@ -18,8 +18,8 @@ layout(std140) uniform forceUniforms {
 #define level force.level
 #define levels force.levels
 #define levelTextureSize force.levelTextureSize
-#define repulsion force.repulsion
 #define alpha force.alpha
+#define repulsion force.repulsion
 #define spaceSize force.spaceSize
 #define theta force.theta
 #else

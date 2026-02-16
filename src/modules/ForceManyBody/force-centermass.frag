@@ -8,8 +8,8 @@ uniform sampler2D randomValues;
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceCenterUniforms {
   float levelTextureSize;
-  float repulsion;
   float alpha;
+  float repulsion;
 } forceCenter;
 
 #define levelTextureSize forceCenter.levelTextureSize
@@ -17,8 +17,8 @@ layout(std140) uniform forceCenterUniforms {
 #define alpha forceCenter.alpha
 #else
 uniform float levelTextureSize;
-uniform float repulsion;
 uniform float alpha;
+uniform float repulsion;
 #endif
 
 in vec2 textureCoords;
