@@ -685,8 +685,8 @@ export class Lines extends CoreModule {
     }
   }
 
-  public getSampledLinkPositionsMap (): Map<number, [number, number]> {
-    const positions = new Map<number, [number, number]>()
+  public getSampledLinkPositionsMap (): Map<number, [number, number, number]> {
+    const positions = new Map<number, [number, number, number]>()
     if (!this.sampledLinksFbo || this.sampledLinksFbo.destroyed) return positions
     const points = this.points
     if (!points?.currentPositionTexture || points.currentPositionTexture.destroyed) return positions
@@ -710,32 +710,33 @@ export class Lines extends CoreModule {
 
       const fillPass = this.device.beginRenderPass({
         framebuffer: this.sampledLinksFbo,
-        clearColor: [0, 0, 0, 0],
+        clearColor: [-1, -1, -1, -1],
       })
       this.fillSampledLinksFboCommand.draw(fillPass)
       fillPass.end()
     }
 
-    const pixels = readPixels(this.device, this.sampledLinksFbo as Framebuffer)
+    const pixels = readPixels(this.device, this.sampledLinksFbo)
     for (let i = 0; i < pixels.length / 4; i++) {
       const index = pixels[i * 4]
-      const isNotEmpty = !!pixels[i * 4 + 1]
-      const x = pixels[i * 4 + 2]
-      const y = pixels[i * 4 + 3]
+      const x = pixels[i * 4 + 1]
+      const y = pixels[i * 4 + 2]
+      const angle = pixels[i * 4 + 3]
 
-      if (isNotEmpty && index !== undefined && x !== undefined && y !== undefined) {
-        positions.set(Math.round(index), [x, y])
+      if (index !== undefined && index >= 0 && x !== undefined && y !== undefined && angle !== undefined) {
+        positions.set(Math.round(index), [x, y, angle])
       }
     }
     return positions
   }
 
-  public getSampledLinks (): { indices: number[]; positions: number[] } {
+  public getSampledLinks (): { indices: number[]; positions: number[]; angles: number[] } {
     const indices: number[] = []
     const positions: number[] = []
-    if (!this.sampledLinksFbo || this.sampledLinksFbo.destroyed) return { indices, positions }
+    const angles: number[] = []
+    if (!this.sampledLinksFbo || this.sampledLinksFbo.destroyed) return { indices, positions, angles }
     const points = this.points
-    if (!points?.currentPositionTexture || points.currentPositionTexture.destroyed) return { indices, positions }
+    if (!points?.currentPositionTexture || points.currentPositionTexture.destroyed) return { indices, positions, angles }
 
     if (this.fillSampledLinksFboCommand && this.fillSampledLinksUniformStore && this.sampledLinksFbo) {
       this.fillSampledLinksFboCommand.setVertexCount(this.data.linksNumber ?? 0)
@@ -756,25 +757,26 @@ export class Lines extends CoreModule {
 
       const fillPass = this.device.beginRenderPass({
         framebuffer: this.sampledLinksFbo,
-        clearColor: [0, 0, 0, 0],
+        clearColor: [-1, -1, -1, -1],
       })
       this.fillSampledLinksFboCommand.draw(fillPass)
       fillPass.end()
     }
 
-    const pixels = readPixels(this.device, this.sampledLinksFbo as Framebuffer)
+    const pixels = readPixels(this.device, this.sampledLinksFbo)
     for (let i = 0; i < pixels.length / 4; i++) {
       const index = pixels[i * 4]
-      const isNotEmpty = !!pixels[i * 4 + 1]
-      const x = pixels[i * 4 + 2]
-      const y = pixels[i * 4 + 3]
+      const x = pixels[i * 4 + 1]
+      const y = pixels[i * 4 + 2]
+      const angle = pixels[i * 4 + 3]
 
-      if (isNotEmpty && index !== undefined && x !== undefined && y !== undefined) {
+      if (index !== undefined && index >= 0 && x !== undefined && y !== undefined && angle !== undefined) {
         indices.push(Math.round(index))
         positions.push(x, y)
+        angles.push(angle)
       }
     }
-    return { indices, positions }
+    return { indices, positions, angles }
   }
 
   public findHoveredLine (): void {

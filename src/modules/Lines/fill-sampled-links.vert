@@ -45,6 +45,9 @@ void main() {
   vec2 a = posA.rg;
   vec2 b = posB.rg;
 
+  vec2 tangent = b - a;
+  float angle = -atan(tangent.y, tangent.x);
+
   vec2 mid;
   if (curvedLinkSegments <= 1.0) {
     mid = (a + b) * 0.5;
@@ -69,7 +72,7 @@ void main() {
   #endif
 
   vec2 pointScreenPosition = (final.xy + 1.0) * screenSize / 2.0;
-  rgba = vec4(linkIndices, 1.0, mid.x, mid.y);
+  rgba = vec4(linkIndices, mid.x, mid.y, angle);
   float i = (pointScreenPosition.x + 0.5) / screenSize.x;
   float j = (pointScreenPosition.y + 0.5) / screenSize.y;
   gl_Position = vec4(2.0 * vec2(i, j) - 1.0, 0.0, 1.0);

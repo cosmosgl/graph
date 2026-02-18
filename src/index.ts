@@ -1210,22 +1210,24 @@ export class Graph {
   }
 
   /**
-   * For the links that are currently visible on the screen, get a sample of link indices with their midpoint coordinates.
+   * For the links that are currently visible on the screen, get a sample of link indices with their midpoint coordinates and angle.
    * The resulting number of links will depend on the `linkSamplingDistance` configuration property,
    * and the sampled links will be evenly distributed (one link per grid cell, based on link midpoint in screen space).
+   * Each value is [x, y, angle]: position in data space; angle in radians for screen-space rotation (0 = right, positive = clockwise, e.g. for CSS rotation).
    */
-  public getSampledLinkPositionsMap (): Map<number, [number, number]> {
+  public getSampledLinkPositionsMap (): Map<number, [number, number, number]> {
     if (this._isDestroyed || !this.lines) return new Map()
     return this.lines.getSampledLinkPositionsMap()
   }
 
   /**
-   * For the links that are currently visible on the screen, get a sample of link indices and midpoint positions.
+   * For the links that are currently visible on the screen, get a sample of link indices, midpoint positions, and angles.
    * The resulting number of links will depend on the `linkSamplingDistance` configuration property,
    * and the sampled links will be evenly distributed.
+   * Positions are in data space; angles are in radians for screen-space rotation (0 = right, positive = clockwise, e.g. for CSS rotation).
    */
-  public getSampledLinks (): { indices: number[]; positions: number[] } {
-    if (this._isDestroyed || !this.lines) return { indices: [], positions: [] }
+  public getSampledLinks (): { indices: number[]; positions: number[]; angles: number[] } {
+    if (this._isDestroyed || !this.lines) return { indices: [], positions: [], angles: [] }
     return this.lines.getSampledLinks()
   }
 
