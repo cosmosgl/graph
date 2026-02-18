@@ -31,6 +31,7 @@ export const linkSampling = (): { div: HTMLDivElement; graph: Graph; destroy?: (
     linkDefaultWidth: 2,
     curvedLinks: true,
     enableSimulation: false,
+    linkSamplingDistance: 50,
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
     onZoom: () => linkLabels.update(graph),
     onDragEnd: () => linkLabels.update(graph),

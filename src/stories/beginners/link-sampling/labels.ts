@@ -15,18 +15,11 @@ function rgbaToCss (r: number, g: number, b: number, a: number): string {
   return `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${a})`
 }
 
-function labelStyle (borderColor: string): string {
+function labelStyle (textColor: string): string {
   return [
-    'background: rgba(24, 26, 32, 0.88)',
-    `border: 1px solid ${borderColor}`,
-    'padding: 4px 8px',
-    'border-radius: 6px',
-    'color: rgba(255, 255, 255, 0.9)',
+    'background: none',
+    `color: ${textColor}`,
     'font-weight: 500',
-    'letter-spacing: 0.03em',
-    'white-space: nowrap',
-    'box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2)',
-    'font-family: Nunito Sans, -apple-system, Segoe UI, Helvetica, Arial, sans-serif',
   ].join('; ')
 }
 
@@ -55,12 +48,12 @@ export class LinkSamplingLabels {
       const target = links != null ? Math.round(links[linkIdx * 2 + 1] ?? 0) : -1
       const text = target >= 0 ? `${source} → ${target}` : String(linkIdx)
 
-      let borderColor = 'rgba(120, 120, 140, 0.8)'
+      let textColor = 'rgba(120, 120, 140, 0.9)'
       if (linkColors.length >= (linkIdx + 1) * 4) {
         const r = linkColors[linkIdx * 4] ?? 0
         const g = linkColors[linkIdx * 4 + 1] ?? 0
         const b = linkColors[linkIdx * 4 + 2] ?? 0
-        borderColor = rgbaToCss(r, g, b, 1)
+        textColor = rgbaToCss(r, g, b, 0.9)
       }
 
       labelOptions.push({
@@ -69,9 +62,9 @@ export class LinkSamplingLabels {
         x: screenX,
         y: screenY + LABEL_OFFSET_Y,
         rotation: rotationDeg,
-        fontSize: 10,
+        fontSize: 12,
         opacity: 0.9,
-        style: labelStyle(borderColor),
+        style: labelStyle(textColor),
       })
     }
 
