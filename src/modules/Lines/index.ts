@@ -456,6 +456,7 @@ export class Lines extends CoreModule {
     if (dist === 0) dist = defaultConfigValues.linkSamplingDistance
     const w = Math.ceil(screenSize[0] / dist)
     const h = Math.ceil(screenSize[1] / dist)
+    if (w === 0 || h === 0) return
 
     if (!this.sampledLinksFbo || this.sampledLinksFbo.width !== w || this.sampledLinksFbo.height !== h) {
       if (this.sampledLinksFbo && !this.sampledLinksFbo.destroyed) {
