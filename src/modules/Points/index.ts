@@ -2193,10 +2193,11 @@ export class Points extends CoreModule {
 
     // Calculate uniform scale factor to fit data within effective space
     const scaleFactor = effectiveSpaceSize / range
-    // Center the data horizontally by adding padding on x-axis
-    const offsetX = ((range - w) / 2) * scaleFactor
-    // Center the data vertically by adding padding on y-axis
-    const offsetY = ((range - h) / 2) * scaleFactor
+    // Shift to center the scaled data within the full [0, spaceSize] space
+    const centerOffset = (spaceSize - effectiveSpaceSize) / 2
+    // Pad the shorter axis so both axes are centered within the square bounding box
+    const offsetX = ((range - w) / 2) * scaleFactor + centerOffset
+    const offsetY = ((range - h) / 2) * scaleFactor + centerOffset
 
     this.scaleX = (x: number): number => (x - minX) * scaleFactor + offsetX
     this.scaleY = (y: number): number => (y - minY) * scaleFactor + offsetY
