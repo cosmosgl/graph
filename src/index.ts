@@ -1776,6 +1776,29 @@ export class Graph {
 
   private onRightClickMouse (event: MouseEvent): void {
     event.preventDefault()
+
+    this.config.onRightClick?.(
+      this.store.hoveredPoint?.index,
+      this.store.hoveredPoint?.position,
+      event
+    )
+
+    if (this.store.hoveredPoint) {
+      this.config.onPointRightClick?.(
+        this.store.hoveredPoint.index,
+        this.store.hoveredPoint.position,
+        event
+      )
+    } else if (this.store.hoveredLinkIndex !== undefined) {
+      this.config.onLinkRightClick?.(
+        this.store.hoveredLinkIndex,
+        event
+      )
+    } else {
+      this.config.onBackgroundRightClick?.(
+        event
+      )
+    }
   }
 
   private resizeCanvas (forceResize = false): void {

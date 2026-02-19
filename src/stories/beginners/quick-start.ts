@@ -18,8 +18,12 @@ export const quickStart = (): { graph: Graph; div: HTMLDivElement; destroy?: () 
     fitViewPadding: 0.3, // centers the graph width padding of ~30% of screen
     rescalePositions: true, // rescale positions
     enableDrag: true, // enable dragging points
-    onPointClick: pointIndex => { console.log('Clicked point index: ', pointIndex) },
+    onPointClick: (pointIndex, pointPosition) => { console.log('Clicked point index: ', pointIndex, ' at position: ', pointPosition) },
+    onPointRightClick: (pointIndex, pointPosition) => { console.log('Right clicked point index: ', pointIndex, ' at position: ', pointPosition) },
+    onLinkClick: linkIndex => { console.log('Clicked link index: ', linkIndex) },
+    onLinkRightClick: linkIndex => { console.log('Right clicked link index: ', linkIndex) },
     onBackgroundClick: () => { console.log('Clicked background') },
+    onBackgroundRightClick: () => { console.log('Right clicked background') },
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
   /* ... */
   }

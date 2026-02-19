@@ -94,10 +94,14 @@ cosmos.gl layout algorithm was inspired by the [d3-force](https://github.com/d3/
 | onSimulationPause | Called when simulation pauses |
 | onSimulationUnpause | Called when simulation unpauses |
 | onSimulationRestart | **[DEPRECATED]** Called when simulation restarts. Use `onSimulationUnpause` instead |
-| onClick | Called on canvas click with point index and position |
-| onPointClick | Called when a point is clicked |
-| onLinkClick | Called when a link is clicked |
+| onClick | Called on canvas click, with point index and position if exists |
+| onPointClick | Called when a point is clicked, with point index and position |
+| onLinkClick | Called when a link is clicked, with link index |
 | onBackgroundClick | Called when the background (empty space) is clicked |
+| onRightClick | Called when a context menu trigger (typically right click) occurs on the canvas, with point index and position if exists |
+| onPointRightClick | Called when a context menu trigger occurs on a point, with point index and position |
+| onLinkRightClick | Called when a context menu trigger occurs on a link, with link index |
+| onBackgroundRightClick | Called when a context menu trigger occurs on the background (empty space) |
 | onMouseMove | Called on mouse movement with hover info |
 | onPointMouseOver | Called when pointer enters a point |
 | onPointMouseOut | Called when pointer leaves a point |
