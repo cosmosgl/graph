@@ -383,6 +383,7 @@ export class Graph {
     }
 
     if (prevConfig.onLinkClick !== this.config.onLinkClick ||
+        prevConfig.onLinkRightClick !== this.config.onLinkRightClick ||
         prevConfig.onLinkMouseOver !== this.config.onLinkMouseOver ||
         prevConfig.onLinkMouseOut !== this.config.onLinkMouseOut) {
       this.store.updateLinkHoveringEnabled(this.config)

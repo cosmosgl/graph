@@ -276,8 +276,8 @@ export class Store {
     this.greyoutPointColor[3] = convertedRgba[3]
   }
 
-  public updateLinkHoveringEnabled (config: Pick<GraphConfigInterface, 'onLinkClick' | 'onLinkMouseOver' | 'onLinkMouseOut'>): void {
-    this.isLinkHoveringEnabled = !!(config.onLinkClick || config.onLinkMouseOver || config.onLinkMouseOut)
+  public updateLinkHoveringEnabled (config: Pick<GraphConfigInterface, 'onLinkClick' | 'onLinkRightClick' | 'onLinkMouseOver' | 'onLinkMouseOut'>): void {
+    this.isLinkHoveringEnabled = !!(config.onLinkClick || config.onLinkRightClick || config.onLinkMouseOver || config.onLinkMouseOut)
     if (!this.isLinkHoveringEnabled) {
       this.hoveredLinkIndex = undefined
     }
