@@ -740,8 +740,14 @@ export class Graph {
     if (this._isFirstRenderAfterInit && fitViewOnInit && initialZoomLevel === undefined) {
       this._fitViewOnInitTimeoutID = window.setTimeout(() => {
         if (fitViewByPointIndices) this.fitViewByPointIndices(fitViewByPointIndices, fitViewDuration, fitViewPadding)
-        else if (fitViewByPointsInRect) this.setZoomTransformByPointPositions(fitViewByPointsInRect, fitViewDuration, undefined, fitViewPadding)
-        else this.fitView(fitViewDuration, fitViewPadding)
+        else if (fitViewByPointsInRect) {
+          this.setZoomTransformByPointPositions(
+            new Float32Array(this.flatten(fitViewByPointsInRect)),
+            fitViewDuration,
+            undefined,
+            fitViewPadding
+          )
+        } else this.fitView(fitViewDuration, fitViewPadding)
       }, fitViewDelay)
     }
     // Update graph and start frames
@@ -772,9 +778,9 @@ export class Graph {
     const distance = this.zoomInstance.getDistanceToPoint([posX, posY])
     const zoomLevel = canZoomOut ? scale : Math.max(this.getZoomLevel(), scale)
     if (distance < Math.min(screenSize[0], screenSize[1])) {
-      this.setZoomTransformByPointPositions([posX, posY], duration, zoomLevel)
+      this.setZoomTransformByPointPositions(new Float32Array([posX, posY]), duration, zoomLevel)
     } else {
-      const transform = this.zoomInstance.getTransform([[posX, posY]], zoomLevel)
+      const transform = this.zoomInstance.getTransform([posX, posY], zoomLevel)
       const middle = this.zoomInstance.getMiddlePointTransform([posX, posY])
       this.canvasD3Selection
         .transition()
@@ -885,38 +891,62 @@ export class Graph {
 
     if (this.ensureDevice(() => this.fitView(duration, padding))) return
 
-    this.setZoomTransformByPointPositions(this.getPointPositions(), duration, undefined, padding)
+    this.setZoomTransformByPointPositions(new Float32Array(this.getPointPositions()), duration, undefined, padding)
   }
 
   /**
    * Center and zoom in/out the view to fit points by their indices in the scene.
+   * @param indices Point indices to fit in the view.
    * @param duration Duration of the center and zoom in/out animation in milliseconds (`250` by default).
-   * @param padding Padding around the viewport in percentage
+   * @param padding Padding around the viewport in percentage (`0.1` by default).
    */
   public fitViewByPointIndices (indices: number[], duration = 250, padding = 0.1): void {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.fitViewByPointIndices(indices, duration, padding))) return
     const positionsArray = this.getPointPositions()
-    const positions = new Array(indices.length * 2)
+    const positions = new Float32Array(indices.length * 2)
     for (const [i, index] of indices.entries()) {
-      positions[i * 2] = positionsArray[index * 2]
-      positions[i * 2 + 1] = positionsArray[index * 2 + 1]
+      positions[i * 2] = positionsArray[index * 2] as number
+      positions[i * 2 + 1] = positionsArray[index * 2 + 1] as number
     }
     this.setZoomTransformByPointPositions(positions, duration, undefined, padding)
   }
 
   /**
    * Center and zoom in/out the view to fit points by their positions in the scene.
+   * @param positions Flat array of point coordinates as `[x0, y0, x1, y1, ...]`.
    * @param duration Duration of the center and zoom in/out animation in milliseconds (`250` by default).
-   * @param padding Padding around the viewport in percentage
+   * @param padding Padding around the viewport in percentage (`0.1` by default).
    */
   public fitViewByPointPositions (positions: number[], duration = 250, padding = 0.1): void {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.fitViewByPointPositions(positions, duration, padding))) return
 
-    this.setZoomTransformByPointPositions(positions, duration, undefined, padding)
+    this.setZoomTransformByPointPositions(new Float32Array(positions), duration, undefined, padding)
+  }
+
+  /**
+   * Sets the zoom transform so that the given point positions fit in the viewport, with optional animation.
+   *
+   * @param positions Flat array of point coordinates as `[x0, y0, x1, y1, ...]`.
+   * @param duration Animation duration in milliseconds. Default `250`.
+   * @param scale Optional scale factor; if omitted, scale is chosen to fit the positions.
+   * @param padding Padding around the viewport as a fraction (e.g. `0.1` = 10%). Default `0.1`.
+   */
+  public setZoomTransformByPointPositions (positions: Float32Array, duration = 250, scale?: number, padding = 0.1): void {
+    if (this._isDestroyed) return
+
+    if (this.ensureDevice(() => this.setZoomTransformByPointPositions(positions, duration, scale, padding))) return
+
+    this.resizeCanvas()
+    const transform = this.zoomInstance.getTransform(positions, scale, padding)
+    this.canvasD3Selection
+      ?.transition()
+      .ease(easeQuadInOut)
+      .duration(duration)
+      .call(this.zoomInstance.behavior.transform, transform)
   }
 
   /**
@@ -1817,23 +1847,13 @@ export class Graph {
       // Note: canvas.width and canvas.height are managed by luma.gl's autoResize
       // We only update our internal state and dependent components
       this.canvasD3Selection
-        ?.call(this.zoomInstance.behavior.transform, this.zoomInstance.getTransform([centerPosition], k))
+        ?.call(this.zoomInstance.behavior.transform, this.zoomInstance.getTransform(centerPosition, k))
       this.points?.updateSampledPointsGrid()
       // Only update link index FBO if link hovering is enabled
       if (this.store.isLinkHoveringEnabled) {
         this.lines?.updateLinkIndexFbo()
       }
     }
-  }
-
-  private setZoomTransformByPointPositions (positions: number[], duration = 250, scale?: number, padding?: number): void {
-    this.resizeCanvas()
-    const transform = this.zoomInstance.getTransform(this.pair(positions), scale, padding)
-    this.canvasD3Selection
-      ?.transition()
-      .ease(easeQuadInOut)
-      .duration(duration)
-      .call(this.zoomInstance.behavior.transform, transform)
   }
 
   private updateZoomDragBehaviors (): void {

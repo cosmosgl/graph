@@ -1,5 +1,4 @@
 import { zoom, ZoomTransform, zoomIdentity, D3ZoomEvent } from 'd3-zoom'
-import { extent } from 'd3-array'
 import { mat3 } from 'gl-matrix'
 import { Store } from '@/graph/modules/Store'
 import { GraphConfigInterface } from '@/graph/config'
@@ -47,23 +46,34 @@ export class Zoom {
   }
 
   /**
-   * Get the zoom transform that will fit the given point positions into the viewport
+   * Returns the zoom transform that fits the given point positions into the viewport.
    *
-   * @param positions An array of point positions in the form `[x, y]`
-   * @param scale An optional scale factor to apply to the transform
-   * @param padding Padding around the viewport in percentage
+   * @param positions Flat array of point coordinates as `[x0, y0, x1, y1, ...]` (number[] or Float32Array).
+   * @param scale Optional scale factor to apply to the transform.
+   * @param padding Padding around the viewport as a fraction of the viewport size (e.g. 0.1 = 10%).
+   * @returns The zoom transform that fits the positions.
    */
-  public getTransform (positions: [number, number][], scale?: number, padding = 0.1): ZoomTransform {
+  public getTransform (positions: number[] | Float32Array, scale?: number, padding = 0.1): ZoomTransform {
     if (positions.length === 0) return this.eventTransform
     const { store: { screenSize } } = this
     const width = screenSize[0]
     const height = screenSize[1]
-    const xExtent = extent(positions.map(d => d[0])) as [number, number]
-    const yExtent = extent(positions.map(d => d[1])) as [number, number]
-    xExtent[0] = this.store.scaleX(xExtent[0])
-    xExtent[1] = this.store.scaleX(xExtent[1])
-    yExtent[0] = this.store.scaleY(yExtent[0])
-    yExtent[1] = this.store.scaleY(yExtent[1])
+
+    let minX = Infinity
+    let maxX = -Infinity
+    let minY = Infinity
+    let maxY = -Infinity
+    for (let i = 0; i < positions.length; i += 2) {
+      const x = positions[i] as number
+      const y = positions[i + 1] as number
+      if (x < minX) minX = x
+      if (x > maxX) maxX = x
+      if (y < minY) minY = y
+      if (y > maxY) maxY = y
+    }
+
+    const xExtent: [number, number] = [this.store.scaleX(minX), this.store.scaleX(maxX)]
+    const yExtent: [number, number] = [this.store.scaleY(minY), this.store.scaleY(maxY)]
     // Adjust extent with one screen pixel if one point coordinate is set
     if (xExtent[0] === xExtent[1]) {
       xExtent[0] -= 0.5
@@ -91,7 +101,7 @@ export class Zoom {
 
   public getDistanceToPoint (position: [number, number]): number {
     const { x, y, k } = this.eventTransform
-    const point = this.getTransform([position], k)
+    const point = this.getTransform(position, k)
     const dx = x - point.x
     const dy = y - point.y
     return Math.sqrt(dx * dx + dy * dy)
