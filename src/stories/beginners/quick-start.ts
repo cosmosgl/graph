@@ -19,11 +19,11 @@ export const quickStart = (): { graph: Graph; div: HTMLDivElement; destroy?: () 
     rescalePositions: true, // rescale positions
     enableDrag: true, // enable dragging points
     onPointClick: (pointIndex, pointPosition) => { console.log('Clicked point index: ', pointIndex, ' at position: ', pointPosition) },
-    onPointRightClick: (pointIndex, pointPosition) => { console.log('Right clicked point index: ', pointIndex, ' at position: ', pointPosition) },
+    onPointContextMenu: (pointIndex, pointPosition) => { console.log('Context menu triggered on point index: ', pointIndex, ' at position: ', pointPosition) },
     onLinkClick: linkIndex => { console.log('Clicked link index: ', linkIndex) },
-    onLinkRightClick: linkIndex => { console.log('Right clicked link index: ', linkIndex) },
+    onLinkContextMenu: linkIndex => { console.log('Context menu triggered on link index: ', linkIndex) },
     onBackgroundClick: () => { console.log('Clicked background') },
-    onBackgroundRightClick: () => { console.log('Right clicked background') },
+    onBackgroundContextMenu: () => { console.log('Context menu triggered on background') },
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
   /* ... */
   }

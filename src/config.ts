@@ -406,7 +406,7 @@ export interface GraphConfigInterface {
    * `(index: number | undefined, pointPosition: [number, number] | undefined, event: MouseEvent) => void`.
    * Default value: `undefined`
    */
-  onRightClick?: (
+  onContextMenu?: (
     index: number | undefined, pointPosition: [number, number] | undefined, event: MouseEvent
   ) => void;
 
@@ -417,7 +417,7 @@ export interface GraphConfigInterface {
    * `(index: number, pointPosition: [number, number], event: MouseEvent) => void`.
    * Default value: `undefined`
    */
-  onPointRightClick?: (
+  onPointContextMenu?: (
     index: number,
     pointPosition: [number, number],
     event: MouseEvent
@@ -429,7 +429,7 @@ export interface GraphConfigInterface {
    * `(linkIndex: number, event: MouseEvent) => void`.
    * Default value: `undefined`
    */
-  onLinkRightClick?: (
+  onLinkContextMenu?: (
     linkIndex: number,
     event: MouseEvent
   ) => void;
@@ -440,7 +440,7 @@ export interface GraphConfigInterface {
    * `(event: MouseEvent) => void`.
    * Default value: `undefined`
    */
-  onBackgroundRightClick?: (
+  onBackgroundContextMenu?: (
     event: MouseEvent
   ) => void;
 
@@ -739,10 +739,10 @@ export class GraphConfig implements GraphConfigInterface {
   public onPointClick: GraphConfigInterface['onPointClick'] = undefined
   public onLinkClick: GraphConfigInterface['onLinkClick'] = undefined
   public onBackgroundClick: GraphConfigInterface['onBackgroundClick'] = undefined
-  public onRightClick: GraphConfigInterface['onRightClick'] = undefined
-  public onPointRightClick: GraphConfigInterface['onPointRightClick'] = undefined
-  public onLinkRightClick: GraphConfigInterface['onLinkRightClick'] = undefined
-  public onBackgroundRightClick: GraphConfigInterface['onBackgroundRightClick'] = undefined
+  public onContextMenu: GraphConfigInterface['onContextMenu'] = undefined
+  public onPointContextMenu: GraphConfigInterface['onPointContextMenu'] = undefined
+  public onLinkContextMenu: GraphConfigInterface['onLinkContextMenu'] = undefined
+  public onBackgroundContextMenu: GraphConfigInterface['onBackgroundContextMenu'] = undefined
   public onMouseMove: GraphConfigInterface['onMouseMove'] = undefined
   public onPointMouseOver: GraphConfigInterface['onPointMouseOver'] = undefined
   public onPointMouseOut: GraphConfigInterface['onPointMouseOut'] = undefined
