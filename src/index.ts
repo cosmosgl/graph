@@ -228,7 +228,7 @@ export class Graph {
         .call(this.zoomInstance.behavior)
         .on('click', this.onClick.bind(this))
         .on('mousemove', this.onMouseMove.bind(this))
-        .on('contextmenu', this.onRightClickMouse.bind(this))
+        .on('contextmenu', this.onContextMenu.bind(this))
       if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
       this.setZoomLevel(this.config.initialZoomLevel ?? 1)
 
@@ -383,7 +383,7 @@ export class Graph {
     }
 
     if (prevConfig.onLinkClick !== this.config.onLinkClick ||
-        prevConfig.onLinkRightClick !== this.config.onLinkRightClick ||
+        prevConfig.onLinkContextMenu !== this.config.onLinkContextMenu ||
         prevConfig.onLinkMouseOver !== this.config.onLinkMouseOver ||
         prevConfig.onLinkMouseOut !== this.config.onLinkMouseOut) {
       this.store.updateLinkHoveringEnabled(this.config)
@@ -1775,28 +1775,28 @@ export class Graph {
     )
   }
 
-  private onRightClickMouse (event: MouseEvent): void {
+  private onContextMenu (event: MouseEvent): void {
     event.preventDefault()
 
-    this.config.onRightClick?.(
+    this.config.onContextMenu?.(
       this.store.hoveredPoint?.index,
       this.store.hoveredPoint?.position,
       event
     )
 
     if (this.store.hoveredPoint) {
-      this.config.onPointRightClick?.(
+      this.config.onPointContextMenu?.(
         this.store.hoveredPoint.index,
         this.store.hoveredPoint.position,
         event
       )
     } else if (this.store.hoveredLinkIndex !== undefined) {
-      this.config.onLinkRightClick?.(
+      this.config.onLinkContextMenu?.(
         this.store.hoveredLinkIndex,
         event
       )
     } else {
-      this.config.onBackgroundRightClick?.(
+      this.config.onBackgroundContextMenu?.(
         event
       )
     }
