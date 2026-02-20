@@ -89,12 +89,6 @@ float map(float value, float min1, float max1, float min2, float max2) {
   return min2 + (value - min1) * (max2 - min2) / (max1 - min1);
 }
 
-vec2 conicParametricCurve(vec2 A, vec2 B, vec2 ControlPoint, float t, float w) {
-  vec2 divident = (1.0 - t) * (1.0 - t) * A + 2.0 * (1.0 - t) * t * w * ControlPoint + t * t * B;
-  float divisor = (1.0 - t) * (1.0 - t) + 2.0 * (1.0 - t) * t * w + t * t;
-  return divident / divisor;
-}
-
 float calculateLinkWidth(float width) {
   float linkWidth;
   if (scaleLinksOnZoom > 0.0) {

@@ -533,6 +533,37 @@ The sample aims to distribute points evenly across the visible area.
   - **`indices`**: Array of point indices for the sampled points
   - **`positions`**: Flat array of coordinates in the format `[x1, y1, x2, y2, ..., xn, yn]`, where the coordinates correspond to the points at the same index positions in the `indices` array.
 
+### <a name="get_sampled_link_positions_map" href="#get_sampled_link_positions_map">#</a> graph.<b>getSampledLinkPositionsMap</b>()
+
+This method provides a sampling of link positions from the links that are currently visible on the screen. It returns a `Map` from link index to a tuple of midpoint coordinates and angle: `[x, y, angle]`. Positions are in data space; angle is in radians for screen-space rotation (0 = right, positive = clockwise, e.g. for CSS rotation).
+
+The number of sampled links is determined by the `linkSamplingDistance` [configuration property](../?path=/docs/configuration--docs). This property controls the density of the sampled links:
+* A higher value for `linkSamplingDistance` results in fewer sampled links.
+* A lower value results in more sampled links.
+
+The sample distributes links evenly (one link per grid cell, based on link midpoint in screen space).
+
+**Returns:**
+
+* A `Map<number, [number, number, number]>` where each key is a link index and each value is `[x, y, angle]` (midpoint in data space, angle in radians).
+
+### <a name="get_sampled_links" href="#get_sampled_links">#</a> graph.<b>getSampledLinks</b>()
+
+This method provides an optimized way to retrieve link indices, midpoint positions, and angles for links that are currently visible on the screen. Unlike `getSampledLinkPositionsMap`, this method returns the data as arrays rather than a Map.
+
+The number of sampled links is determined by the `linkSamplingDistance` [configuration property](../?path=/docs/configuration--docs). This property controls the density of the sampled links:
+* A higher value for `linkSamplingDistance` results in fewer sampled links.
+* A lower value results in more sampled links.
+
+The sample distributes links evenly across the visible area.
+
+**Returns:**
+
+* An object containing:
+  - **`indices`**: Array of link indices for the sampled links
+  - **`positions`**: Flat array of coordinates in the format `[x1, y1, x2, y2, ..., xn, yn]`, where each pair is the midpoint of the link at the same index in `indices` (in data space)
+  - **`angles`**: Array of angles in radians for screen-space rotation (0 = right, positive = clockwise), one per sampled link
+
 ### <a name="start" href="#start">#</a> graph.<b>start</b>([<i>alpha</i>])
 
 Starts the simulation. This method only controls the simulation state, not rendering. Rendering is started automatically by `render()`.
