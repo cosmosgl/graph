@@ -380,6 +380,15 @@ The `fitViewByPointPositions` method centers and zooms the view to fit the point
 * **`duration`** (Number, optional): The duration of the animation in milliseconds. Default is 250 ms.
 * **`padding`** (Number, optional): The padding around the viewport in percentage. This value should be between 0 and 1. Default is 0.1 (10% padding).
 
+### <a name="set_zoom_transform_by_point_positions" href="#set_zoom_transform_by_point_positions">#</a> graph.<b>setZoomTransformByPointPositions</b>(<i>positions</i>, [<i>duration</i>], [<i>scale</i>], [<i>padding</i>])
+
+Sets the zoom transform so that the given point positions fit in the viewport, with optional animation. If the device is not yet initialized, the operation is deferred until the graph is ready (same as `fitView` and `fitViewByPointPositions`).
+
+* **`positions`** (Float32Array): Flat array of point coordinates as `[x0, y0, x1, y1, ...]`.
+* **`duration`** (Number, optional): Animation duration in milliseconds. Default is 250.
+* **`scale`** (Number, optional): Scale factor; if omitted, scale is chosen to fit the positions.
+* **`padding`** (Number, optional): Padding around the viewport as a fraction (e.g. 0.1 = 10%). Default is 0.1.
+
 ### <a name="get_points_in_rect" href="#get_points_in_rect">#</a> graph.<b>getPointsInRect</b>(<i>selection</i>)
 
 Get points as a Float32Array within a rectangular area defined by two corner points `[[left, top], [right, bottom]]`. The `left` and `right` values represent the horizontal position in pixels, relative to the left edge of the canvas, with `0` being the leftmost position and the width of the canvas being the rightmost position.
