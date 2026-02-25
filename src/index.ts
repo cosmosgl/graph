@@ -1944,7 +1944,8 @@ export class Graph {
       this.config.onPointMouseOver?.(
         this.store.hoveredPoint.index,
         this.store.hoveredPoint.position,
-        this.currentEvent
+        this.currentEvent,
+        this.store.selectedIndices?.includes(this.store.hoveredPoint.index) ?? false
       )
     }
     if (isMouseout) this.config.onPointMouseOut?.(this.currentEvent)

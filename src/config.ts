@@ -458,16 +458,17 @@ export interface GraphConfigInterface {
   /**
    * Callback function that will be called when a point appears under the mouse
    * as a result of a mouse event, zooming and panning, or movement of points.
-   * The point index will be passed as the first argument, position as the second argument
-   * and the corresponding mouse event or D3's zoom event as the third argument:
-   * `(index: number, pointPosition: [number, number], event: MouseEvent | D3DragEvent<HTMLCanvasElement, undefined, Hovered>
-   * | D3ZoomEvent<HTMLCanvasElement, undefined> | undefined) => void`.
+   * The point index will be passed as the first argument, position as the second argument,
+   * the corresponding mouse event or D3's zoom event as the third argument, and whether
+   * the hovered point is selected as the fourth argument:
+   * `(index: number, pointPosition: [number, number], event: MouseEvent | D3DragEvent<HTMLCanvasElement, undefined, Hovered> | D3ZoomEvent<HTMLCanvasElement, undefined> | undefined, isSelected: boolean) => void`.
    * Default value: `undefined`
    */
   onPointMouseOver?: (
     index: number,
     pointPosition: [number, number],
-    event: MouseEvent | D3DragEvent<HTMLCanvasElement, undefined, Hovered> | D3ZoomEvent<HTMLCanvasElement, undefined> | undefined
+    event: MouseEvent | D3DragEvent<HTMLCanvasElement, undefined, Hovered> | D3ZoomEvent<HTMLCanvasElement, undefined> | undefined,
+    isSelected: boolean
   ) => void;
 
   /**

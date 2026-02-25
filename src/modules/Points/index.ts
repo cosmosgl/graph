@@ -156,6 +156,8 @@ export class Points extends CoreModule {
       scalePointsOnZoom: number;
       mousePosition: [number, number];
       maxPointSize: number;
+      skipSelected: number;
+      skipUnselected: number;
     };
   }> | undefined
 
@@ -779,6 +781,8 @@ export class Points extends CoreModule {
           mousePosition: 'vec2<f32>',
           scalePointsOnZoom: 'f32',
           maxPointSize: 'f32',
+          skipSelected: 'f32',
+          skipUnselected: 'f32',
         },
         defaultUniforms: {
           pointsTextureSize: store.pointsTextureSize ?? 0,
@@ -790,6 +794,8 @@ export class Points extends CoreModule {
           mousePosition: ensureVec2(store.screenMousePosition, [0, 0]),
           scalePointsOnZoom: (config.scalePointsOnZoom ?? true) ? 1 : 0,
           maxPointSize: store.maxPointSize ?? 100,
+          skipSelected: 0,
+          skipUnselected: 0,
         },
       },
     })
@@ -1703,6 +1709,8 @@ export class Points extends CoreModule {
 
     if (!this.findHoveredPointCommand || !this.findHoveredPointUniformStore) return
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
+    if (!this.greyoutStatusTexture) this.updateGreyoutStatus()
+    if (!this.greyoutStatusTexture || this.greyoutStatusTexture.destroyed) return
 
     this.findHoveredPointCommand.setVertexCount(this.data.pointsNumber ?? 0)
 
@@ -1711,30 +1719,61 @@ export class Points extends CoreModule {
       ...(this.sizeBuffer && { size: this.sizeBuffer }),
     })
 
-    this.findHoveredPointUniformStore.setUniforms({
-      findHoveredPointUniforms: {
-        ratio: this.config.pixelRatio ?? defaultConfigValues.pixelRatio,
-        sizeScale: this.config.pointSizeScale ?? 1,
-        pointsTextureSize: this.store.pointsTextureSize ?? 0,
-        transformationMatrix: this.store.transformationMatrix4x4,
-        spaceSize: this.store.adjustedSpaceSize ?? 0,
-        screenSize: ensureVec2(this.store.screenSize, [0, 0]),
-        scalePointsOnZoom: (this.config.scalePointsOnZoom ?? true) ? 1 : 0,
-        mousePosition: ensureVec2(this.store.screenMousePosition, [0, 0]),
-        maxPointSize: this.store.maxPointSize ?? 100,
-      },
-    })
+    const baseUniforms = {
+      ratio: this.config.pixelRatio ?? defaultConfigValues.pixelRatio,
+      sizeScale: this.config.pointSizeScale ?? 1,
+      pointsTextureSize: this.store.pointsTextureSize ?? 0,
+      transformationMatrix: this.store.transformationMatrix4x4,
+      spaceSize: this.store.adjustedSpaceSize ?? 0,
+      screenSize: ensureVec2(this.store.screenSize, [0, 0]),
+      scalePointsOnZoom: (this.config.scalePointsOnZoom ?? true) ? 1 : 0,
+      mousePosition: ensureVec2(this.store.screenMousePosition, [0, 0]),
+      maxPointSize: this.store.maxPointSize ?? 100,
+    }
 
-    // Update texture bindings dynamically
-    this.findHoveredPointCommand.setBindings({
+    const bindings = {
       positionsTexture: this.currentPositionTexture,
-    })
+      pointGreyoutStatus: this.greyoutStatusTexture,
+    }
 
     const renderPass = this.device.beginRenderPass({
       framebuffer: this.hoveredFbo,
       clearColor: [0, 0, 0, 0],
     })
-    this.findHoveredPointCommand.draw(renderPass)
+
+    if (this.store.selectedIndices && this.store.selectedIndices.length > 0) {
+      // Same two-pass order as drawing: unselected first, then selected (top-most wins)
+      this.findHoveredPointUniformStore.setUniforms({
+        findHoveredPointUniforms: {
+          ...baseUniforms,
+          skipSelected: 1,
+          skipUnselected: 0,
+        },
+      })
+      this.findHoveredPointCommand.setBindings(bindings)
+      this.findHoveredPointCommand.draw(renderPass)
+
+      this.findHoveredPointUniformStore.setUniforms({
+        findHoveredPointUniforms: {
+          ...baseUniforms,
+          skipSelected: 0,
+          skipUnselected: 1,
+        },
+      })
+      this.findHoveredPointCommand.setBindings(bindings)
+      this.findHoveredPointCommand.draw(renderPass)
+    } else {
+      this.findHoveredPointUniformStore.setUniforms({
+        findHoveredPointUniforms: {
+          ...baseUniforms,
+          skipSelected: 0,
+          skipUnselected: 0,
+        },
+      })
+      this.findHoveredPointCommand.setBindings(bindings)
+      this.findHoveredPointCommand.draw(renderPass)
+    }
+
     renderPass.end()
   }
 
