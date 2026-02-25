@@ -7,10 +7,6 @@
       "@cosmos.gl/graph": ["src/"],
       "@cosmos.gl/graph/*": ["src/*"],
     },
-    "plugins": [{
-      "transform": "@zerollup/ts-transform-paths",
-      "exclude": ["*"]
-      }],
     "target": "es2019",
     "module": "esnext",
     "moduleResolution": "node",
