@@ -2,20 +2,26 @@ import { Framebuffer, Buffer, Texture, UniformStore, RenderPass } from '@luma.gl
 import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
 import type { Mat4Array } from '@/graph/modules/Store'
+import { conicParametricCurveModule } from '@/graph/modules/Lines/conic-curve-module'
 import drawLineFrag from '@/graph/modules/Lines/draw-curve-line.frag?raw'
 import drawLineVert from '@/graph/modules/Lines/draw-curve-line.vert?raw'
+import fillGridWithSampledLinksFrag from '@/graph/modules/Lines/fill-sampled-links.frag?raw'
+import fillGridWithSampledLinksVert from '@/graph/modules/Lines/fill-sampled-links.vert?raw'
 import hoveredLineIndexFrag from '@/graph/modules/Lines/hovered-line-index.frag?raw'
 import hoveredLineIndexVert from '@/graph/modules/Lines/hovered-line-index.vert?raw'
 import { defaultConfigValues } from '@/graph/variables'
 import { getCurveLineGeometry } from '@/graph/modules/Lines/geometry'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import { ensureVec2, ensureVec4 } from '@/graph/modules/Shared/uniform-utils'
+import { readPixels } from '@/graph/helper'
 
 export class Lines extends CoreModule {
   public linkIndexFbo: Framebuffer | undefined
   public hoveredLineIndexFbo: Framebuffer | undefined
+  public sampledLinksFbo: Framebuffer | undefined
   private drawCurveCommand: Model | undefined
   private hoveredLineIndexCommand: Model | undefined
+  private fillSampledLinksFboCommand: Model | undefined
   private pointABuffer: Buffer | undefined
   private pointBBuffer: Buffer | undefined
   private colorBuffer: Buffer | undefined
@@ -27,6 +33,17 @@ export class Lines extends CoreModule {
   private quadBuffer: Buffer | undefined
   private linkIndexTexture: Texture | undefined
   private hoveredLineIndexTexture: Texture | undefined
+  private fillSampledLinksUniformStore: UniformStore<{
+    fillSampledLinksUniforms: {
+      pointsTextureSize: number;
+      transformationMatrix: Mat4Array;
+      spaceSize: number;
+      screenSize: [number, number];
+      curvedWeight: number;
+      curvedLinkControlPointDistance: number;
+      curvedLinkSegments: number;
+    };
+  }> | undefined
 
   // Uniform stores for scalar uniforms
   private drawLineUniformStore: UniformStore<{
@@ -67,7 +84,7 @@ export class Lines extends CoreModule {
   private previousScreenSize: [number, number] | undefined
 
   public initPrograms (): void {
-    const { device, config, store } = this
+    const { device, config, store, data } = this
 
     this.updateLinkIndexFbo()
 
@@ -176,6 +193,7 @@ export class Lines extends CoreModule {
     this.drawCurveCommand ||= new Model(device, {
       vs: drawLineVert,
       fs: drawLineFrag,
+      modules: [conicParametricCurveModule],
       topology: 'triangle-strip',
       vertexCount: this.curveLineGeometry?.length ?? 0,
       attributes: {
@@ -269,6 +287,61 @@ export class Lines extends CoreModule {
         // All texture bindings will be set dynamically in findHoveredLine() method
       },
     })
+
+    // Sampled links (for getSampledLinks / getSampledLinkPositionsMap)
+    this.fillSampledLinksUniformStore ||= new UniformStore({
+      fillSampledLinksUniforms: {
+        uniformTypes: {
+          pointsTextureSize: 'f32',
+          transformationMatrix: 'mat4x4<f32>',
+          spaceSize: 'f32',
+          screenSize: 'vec2<f32>',
+          curvedWeight: 'f32',
+          curvedLinkControlPointDistance: 'f32',
+          curvedLinkSegments: 'f32',
+        },
+        defaultUniforms: {
+          pointsTextureSize: store.pointsTextureSize ?? 0,
+          transformationMatrix: store.transformationMatrix4x4,
+          spaceSize: store.adjustedSpaceSize ?? 0,
+          screenSize: ensureVec2(store.screenSize, [0, 0]),
+          curvedWeight: config.curvedLinkWeight ?? 0,
+          curvedLinkControlPointDistance: config.curvedLinkControlPointDistance ?? 0,
+          curvedLinkSegments: config.curvedLinks ? config.curvedLinkSegments ?? defaultConfigValues.curvedLinkSegments : 1,
+        },
+      },
+    })
+
+    this.fillSampledLinksFboCommand ||= new Model(device, {
+      fs: fillGridWithSampledLinksFrag,
+      vs: fillGridWithSampledLinksVert,
+      modules: [conicParametricCurveModule],
+      topology: 'point-list',
+      vertexCount: data.linksNumber ?? 0,
+      attributes: {
+        ...(this.pointABuffer && { pointA: this.pointABuffer }),
+        ...(this.pointBBuffer && { pointB: this.pointBBuffer }),
+        ...(this.linkIndexBuffer && { linkIndices: this.linkIndexBuffer }),
+      },
+      bufferLayout: [
+        { name: 'pointA', format: 'float32x2' },
+        { name: 'pointB', format: 'float32x2' },
+        { name: 'linkIndices', format: 'float32' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        fillSampledLinksUniforms: this.fillSampledLinksUniformStore.getManagedUniformBuffer(device, 'fillSampledLinksUniforms'),
+      },
+      parameters: {
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+        blend: false,
+      },
+    })
+
+    this.updateSampledLinksGrid()
   }
 
   public draw (renderPass: RenderPass): void {
@@ -377,6 +450,26 @@ export class Lines extends CoreModule {
     }
   }
 
+  public updateSampledLinksGrid (): void {
+    const { store: { screenSize }, config: { linkSamplingDistance }, device } = this
+    let dist = linkSamplingDistance ?? Math.min(...screenSize) / 2
+    if (dist === 0) dist = defaultConfigValues.linkSamplingDistance
+    const w = Math.ceil(screenSize[0] / dist)
+    const h = Math.ceil(screenSize[1] / dist)
+    if (w === 0 || h === 0) return
+
+    if (!this.sampledLinksFbo || this.sampledLinksFbo.width !== w || this.sampledLinksFbo.height !== h) {
+      if (this.sampledLinksFbo && !this.sampledLinksFbo.destroyed) {
+        this.sampledLinksFbo.destroy()
+      }
+      this.sampledLinksFbo = device.createFramebuffer({
+        width: w,
+        height: h,
+        colorAttachments: ['rgba32float'],
+      })
+    }
+  }
+
   public updatePointsBuffer (): void {
     const { device, data, store } = this
     if (data.linksNumber === undefined || data.links === undefined) return
@@ -450,6 +543,15 @@ export class Lines extends CoreModule {
         linkIndices: this.linkIndexBuffer,
       })
     }
+    if (this.fillSampledLinksFboCommand) {
+      this.fillSampledLinksFboCommand.setAttributes({
+        pointA: this.pointABuffer,
+        pointB: this.pointBBuffer,
+        linkIndices: this.linkIndexBuffer,
+      })
+    }
+
+    this.updateSampledLinksGrid()
   }
 
   public updateColor (): void {
@@ -584,6 +686,100 @@ export class Lines extends CoreModule {
     }
   }
 
+  public getSampledLinkPositionsMap (): Map<number, [number, number, number]> {
+    const positions = new Map<number, [number, number, number]>()
+    if (!this.sampledLinksFbo || this.sampledLinksFbo.destroyed) return positions
+    const points = this.points
+    if (!points?.currentPositionTexture || points.currentPositionTexture.destroyed) return positions
+
+    if (this.fillSampledLinksFboCommand && this.fillSampledLinksUniformStore && this.sampledLinksFbo) {
+      this.fillSampledLinksFboCommand.setVertexCount(this.data.linksNumber ?? 0)
+      this.fillSampledLinksUniformStore.setUniforms({
+        fillSampledLinksUniforms: {
+          pointsTextureSize: this.store.pointsTextureSize ?? 0,
+          transformationMatrix: this.store.transformationMatrix4x4,
+          spaceSize: this.store.adjustedSpaceSize ?? 0,
+          screenSize: ensureVec2(this.store.screenSize, [0, 0]),
+          curvedWeight: this.config.curvedLinkWeight ?? 0,
+          curvedLinkControlPointDistance: this.config.curvedLinkControlPointDistance ?? 0,
+          curvedLinkSegments: this.config.curvedLinks ? this.config.curvedLinkSegments ?? defaultConfigValues.curvedLinkSegments : 1,
+        },
+      })
+      this.fillSampledLinksFboCommand.setBindings({
+        positionsTexture: points.currentPositionTexture,
+      })
+
+      const fillPass = this.device.beginRenderPass({
+        framebuffer: this.sampledLinksFbo,
+        clearColor: [-1, -1, -1, -1],
+      })
+      this.fillSampledLinksFboCommand.draw(fillPass)
+      fillPass.end()
+    }
+
+    const pixels = readPixels(this.device, this.sampledLinksFbo)
+    for (let i = 0; i < pixels.length / 4; i++) {
+      const index = pixels[i * 4]
+      const x = pixels[i * 4 + 1]
+      const y = pixels[i * 4 + 2]
+      const angle = pixels[i * 4 + 3]
+
+      if (index !== undefined && index >= 0 && x !== undefined && y !== undefined && angle !== undefined) {
+        positions.set(Math.round(index), [x, y, angle])
+      }
+    }
+    return positions
+  }
+
+  public getSampledLinks (): { indices: number[]; positions: number[]; angles: number[] } {
+    const indices: number[] = []
+    const positions: number[] = []
+    const angles: number[] = []
+    if (!this.sampledLinksFbo || this.sampledLinksFbo.destroyed) return { indices, positions, angles }
+    const points = this.points
+    if (!points?.currentPositionTexture || points.currentPositionTexture.destroyed) return { indices, positions, angles }
+
+    if (this.fillSampledLinksFboCommand && this.fillSampledLinksUniformStore && this.sampledLinksFbo) {
+      this.fillSampledLinksFboCommand.setVertexCount(this.data.linksNumber ?? 0)
+      this.fillSampledLinksUniformStore.setUniforms({
+        fillSampledLinksUniforms: {
+          pointsTextureSize: this.store.pointsTextureSize ?? 0,
+          transformationMatrix: this.store.transformationMatrix4x4,
+          spaceSize: this.store.adjustedSpaceSize ?? 0,
+          screenSize: ensureVec2(this.store.screenSize, [0, 0]),
+          curvedWeight: this.config.curvedLinkWeight ?? 0,
+          curvedLinkControlPointDistance: this.config.curvedLinkControlPointDistance ?? 0,
+          curvedLinkSegments: this.config.curvedLinks ? this.config.curvedLinkSegments ?? defaultConfigValues.curvedLinkSegments : 1,
+        },
+      })
+      this.fillSampledLinksFboCommand.setBindings({
+        positionsTexture: points.currentPositionTexture,
+      })
+
+      const fillPass = this.device.beginRenderPass({
+        framebuffer: this.sampledLinksFbo,
+        clearColor: [-1, -1, -1, -1],
+      })
+      this.fillSampledLinksFboCommand.draw(fillPass)
+      fillPass.end()
+    }
+
+    const pixels = readPixels(this.device, this.sampledLinksFbo)
+    for (let i = 0; i < pixels.length / 4; i++) {
+      const index = pixels[i * 4]
+      const x = pixels[i * 4 + 1]
+      const y = pixels[i * 4 + 2]
+      const angle = pixels[i * 4 + 3]
+
+      if (index !== undefined && index >= 0 && x !== undefined && y !== undefined && angle !== undefined) {
+        indices.push(Math.round(index))
+        positions.push(x, y)
+        angles.push(angle)
+      }
+    }
+    return { indices, positions, angles }
+  }
+
   public findHoveredLine (): void {
     const { config, points, store } = this
     if (!points) return
@@ -670,12 +866,18 @@ export class Lines extends CoreModule {
     this.drawCurveCommand = undefined
     this.hoveredLineIndexCommand?.destroy()
     this.hoveredLineIndexCommand = undefined
+    this.fillSampledLinksFboCommand?.destroy()
+    this.fillSampledLinksFboCommand = undefined
 
     // 2. Destroy Framebuffers (before textures they reference)
     if (this.linkIndexFbo && !this.linkIndexFbo.destroyed) {
       this.linkIndexFbo.destroy()
     }
     this.linkIndexFbo = undefined
+    if (this.sampledLinksFbo && !this.sampledLinksFbo.destroyed) {
+      this.sampledLinksFbo.destroy()
+    }
+    this.sampledLinksFbo = undefined
     if (this.hoveredLineIndexFbo && !this.hoveredLineIndexFbo.destroyed) {
       this.hoveredLineIndexFbo.destroy()
     }
@@ -696,6 +898,8 @@ export class Lines extends CoreModule {
     this.drawLineUniformStore = undefined
     this.hoveredLineIndexUniformStore?.destroy()
     this.hoveredLineIndexUniformStore = undefined
+    this.fillSampledLinksUniformStore?.destroy()
+    this.fillSampledLinksUniformStore = undefined
 
     // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
     if (this.pointABuffer && !this.pointABuffer.destroyed) {

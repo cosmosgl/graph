@@ -637,6 +637,12 @@ export interface GraphConfigInterface {
   */
   pointSamplingDistance?: number;
   /**
+   * Link sampling distance in pixels between neighboring links when calling the `getSampledLinks` method.
+   * This parameter determines how many links will be included in the sample (based on link midpoints in screen space).
+   * Default value: `150`
+   */
+  linkSamplingDistance?: number;
+  /**
    * Controls automatic position adjustment of points in the visible space.
    *
    * When `undefined` (default):
@@ -774,6 +780,7 @@ export class GraphConfig implements GraphConfigInterface {
 
   public randomSeed = undefined
   public pointSamplingDistance = defaultConfigValues.pointSamplingDistance
+  public linkSamplingDistance = defaultConfigValues.linkSamplingDistance
   public attribution = defaultConfigValues.attribution
   public rescalePositions = defaultConfigValues.rescalePositions
 
