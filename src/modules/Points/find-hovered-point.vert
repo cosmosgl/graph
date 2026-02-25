@@ -7,6 +7,7 @@ in vec2 pointIndices;
 in float size;
 
 uniform sampler2D positionsTexture;
+uniform sampler2D pointGreyoutStatus;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform findHoveredPointUniforms {
@@ -19,6 +20,8 @@ layout(std140) uniform findHoveredPointUniforms {
   vec2 mousePosition;
   float scalePointsOnZoom;
   float maxPointSize;
+  float skipSelected;
+  float skipUnselected;
 } findHoveredPoint;
 
 #define pointsTextureSize findHoveredPoint.pointsTextureSize
@@ -30,6 +33,8 @@ layout(std140) uniform findHoveredPointUniforms {
 #define mousePosition findHoveredPoint.mousePosition
 #define scalePointsOnZoom findHoveredPoint.scalePointsOnZoom
 #define maxPointSize findHoveredPoint.maxPointSize
+#define skipSelected findHoveredPoint.skipSelected
+#define skipUnselected findHoveredPoint.skipUnselected
 #else
 uniform float pointsTextureSize;
 uniform float sizeScale;
@@ -40,6 +45,8 @@ uniform mat3 transformationMatrix;
 uniform vec2 mousePosition;
 uniform float scalePointsOnZoom;
 uniform float maxPointSize;
+uniform float skipSelected;
+uniform float skipUnselected;
 #endif
 
 out vec4 rgba;
@@ -61,6 +68,22 @@ float euclideanDistance (float x1, float x2, float y1, float y2) {
 }
 
 void main() {
+  vec4 greyoutStatus = texture(pointGreyoutStatus, (pointIndices + 0.5) / pointsTextureSize);
+  float isSelected = (greyoutStatus.r == 0.0) ? 1.0 : 0.0;
+
+  if (skipSelected > 0.0 && isSelected > 0.0) {
+    rgba = vec4(0.0);
+    gl_Position = vec4(0.5, 0.5, 0.0, 1.0);
+    gl_PointSize = 1.0;
+    return;
+  }
+  if (skipUnselected > 0.0 && isSelected <= 0.0) {
+    rgba = vec4(0.0);
+    gl_Position = vec4(0.5, 0.5, 0.0, 1.0);
+    gl_PointSize = 1.0;
+    return;
+  }
+
   vec4 pointPosition = texture(positionsTexture, (pointIndices + 0.5) / pointsTextureSize);
   vec2 point = pointPosition.rg;
 
