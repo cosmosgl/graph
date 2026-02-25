@@ -16,6 +16,7 @@
   "parserOptions": {
     "project": ["./tsconfig.json", "./src/stories/tsconfig.json"]
   },
+  "ignorePatterns": ["vite.config.ts"],
   "rules": {
     "object-curly-spacing": ["error", "always"],
     "prefer-template": "error",

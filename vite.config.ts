@@ -34,7 +34,7 @@ export default defineConfig(() => {
       },
     },
     plugins: [
-      dts(),
+      dts({ entryRoot: 'src' }),
     ],
     resolve: {
       alias: {
