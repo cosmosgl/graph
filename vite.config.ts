@@ -7,6 +7,8 @@ import dts from 'vite-plugin-dts'
 export default defineConfig(() => {
   const config: UserConfig = {
     build: {
+      outDir: 'dist',
+      emptyOutDir: true,
       lib: {
         entry: resolve(__dirname, 'src/index.ts'),
         name: 'Cosmos',
