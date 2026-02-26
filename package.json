@@ -13,7 +13,7 @@
     "CITATION.cff"
   ],
   "scripts": {
-    "build": "vite build",
+    "build": "vite build --mode es && vite build --mode umd",
     "watch": "vite build --watch",
     "lint": "eslint --cache ./src --ext .ts --ignore-path .gitignore",
     "lint:staged": "npx lint-staged",
