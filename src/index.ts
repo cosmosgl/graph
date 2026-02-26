@@ -2019,4 +2019,5 @@ export class Graph {
 export type { GraphConfigInterface } from './config'
 export { PointShape } from './modules/GraphData'
 
+export * from './variables'
 export * from './helper'

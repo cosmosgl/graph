@@ -11,7 +11,8 @@ export const defaultBackgroundColor = '#222222'
 
 export const defaultConfigValues = {
   enableSimulation: true,
-  spaceSize: 8192,
+  /** Setting to 4096 because larger values crash the graph on iOS. More info: https://github.com/cosmosgl/graph/issues/203 */
+  spaceSize: 4096,
   pointSizeScale: 1,
   linkWidthScale: 1,
   linkArrowsSizeScale: 1,
