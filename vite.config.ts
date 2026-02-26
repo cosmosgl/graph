@@ -27,22 +27,6 @@ export default defineConfig(({ mode }) => {
       minify: true,
       rollupOptions: {
         external: isUMD ? [] : external,
-        ...(isUMD && {
-          output: {
-            globals: {
-              'd3-selection': 'd3',
-              'd3-ease': 'd3',
-              'd3-color': 'd3',
-              'd3-scale': 'd3',
-              'd3-array': 'd3',
-              'd3-zoom': 'd3',
-              'd3-drag': 'd3',
-              'd3-transition': 'd3',
-              'gl-matrix': 'glMatrix',
-              random: 'random',
-            },
-          },
-        }),
       },
     },
     plugins: isUMD ? [] : [dts({ entryRoot: 'src' })],
