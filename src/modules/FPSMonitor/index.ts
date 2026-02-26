@@ -1,6 +1,6 @@
 
 import { select } from 'd3-selection'
-import GLBench from 'gl-bench/dist/gl-bench'
+import GLBench from 'gl-bench'
 import { benchCSS } from './css'
 
 export class FPSMonitor {
