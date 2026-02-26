@@ -1,6 +1,6 @@
 import { scaleLinear, scaleSequential } from 'd3-scale'
 import { interpolateWarm } from 'd3-scale-chromatic'
-import { getRgbaColor } from '@cosmos.gl/graph'
+import { getRgbaColor, defaultConfigValues } from '@cosmos.gl/graph'
 
 function getRandom (min: number, max: number): number {
   return Math.random() * (max - min) + min
@@ -47,11 +47,7 @@ export function generateMeshData (
   const pointColors = new Float32Array(n * m * 4)
   const pointSizes = new Float32Array(n * m)
 
-  // The maximum texture size can vary between devices and WebGL versions
-  // The space size should be less than the maximum texture size to ensure better visual quality of the generated mesh.
-  const gl = document.createElement('canvas').getContext('webgl')
-  const spaceSize = (gl?.getParameter(gl.MAX_TEXTURE_SIZE) ?? 16384) / 2
-  gl?.getExtension('WEBGL_lose_context')?.loseContext()
+  const spaceSize = defaultConfigValues.spaceSize
 
   for (let clusterIndex = 0; clusterIndex < nClusters; clusterIndex += 1) {
     const [x, y] = getPositionOnCircle(radius(clusterIndex), 15 * Math.PI * (clusterIndex / nClusters), spaceSize / 2)

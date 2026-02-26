@@ -1,4 +1,4 @@
-import { Graph, GraphConfigInterface } from '@cosmos.gl/graph'
+import { Graph, GraphConfigInterface, defaultConfigValues } from '@cosmos.gl/graph'
 
 export type CosmosStoryProps = GraphConfigInterface & {
   pointPositions: Float32Array;
@@ -21,6 +21,7 @@ export const createCosmos = (props: CosmosStoryProps): { div: HTMLDivElement; gr
   div.style.width = '100%'
 
   const config: GraphConfigInterface = {
+    spaceSize: defaultConfigValues.spaceSize,
     backgroundColor: '#2d313a',
     pointDefaultSize: 3,
     pointDefaultColor: '#4B5BBF',
