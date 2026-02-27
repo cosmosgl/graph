@@ -8,7 +8,7 @@ import { Meta } from "@storybook/blocks";
 |---|---|---|
 | enableSimulation | If set to `false`, the simulation will not run. This property will be applied only on component initialization and it can't be changed using the `setConfig` method | `true` |
 | backgroundColor | Canvas background color | `#222222` |
-| spaceSize | Simulation space size (max 8192) | `8192` |
+| spaceSize | Simulation space size (default 4096; larger values may crash on some devices, e.g. iOS) | `4096` |
 | pointDefaultColor | The default color to use for points when no point colors are provided, or if the color value in the array is `undefined` or `null`. This can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255 | `#b3b3b3` |
 | pointColor | **[DEPRECATED]** Use `pointDefaultColor` instead. The default color to use for points when no point colors are provided... | `#b3b3b3` |
 | pointGreyoutOpacity | Greyed out point opacity value when the selection is active | `undefined` |
