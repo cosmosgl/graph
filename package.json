@@ -1,6 +1,6 @@
 {
   "name": "@cosmos.gl/graph",
-  "version": "3.0.0-beta.2",
+  "version": "3.0.0-beta.4",
   "description": "GPU-based force graph layout and rendering",
   "jsdelivr": "dist/index.min.js",
   "main": "dist/index.js",
@@ -13,7 +13,7 @@
     "CITATION.cff"
   ],
   "scripts": {
-    "build": "vite build",
+    "build": "vite build --mode es && vite build --mode umd",
     "watch": "vite build --watch",
     "lint": "eslint --cache ./src --ext .ts --ignore-path .gitignore",
     "lint:staged": "npx lint-staged",
@@ -68,7 +68,7 @@
     "remark-gfm": "^4.0.0",
     "storybook": "^8.4.5",
     "typescript": "^5.5.2",
-    "vite": "^6.3.4",
+    "vite": "^6.4.1",
     "vite-plugin-dts": "^4.3.0"
   },
   "dependencies": {

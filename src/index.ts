@@ -26,12 +26,13 @@ import { defaultConfigValues, defaultScaleToZoom, defaultGreyoutPointColor, defa
 export class Graph {
   public config = new GraphConfig()
   public graph = new GraphData(this.config)
+  /** Promise that resolves with the luma device when the graph is ready. Await or `.then()` to run after init. */
+  public readonly deviceInitPromise: Promise<Device>
   /** Canvas element, assigned asynchronously during device initialization */
   private canvas!: HTMLCanvasElement
   private attributionDivElement: HTMLElement | undefined
   private canvasD3Selection: Selection<HTMLCanvasElement, undefined, null, undefined> | undefined
   private device: Device | undefined
-  private deviceInitPromise: Promise<Device>
   /**
    * Tracks whether this Graph instance owns the device and should destroy it on cleanup.
    * Set to `true` when Graph creates its own device, `false` when using an external device.
