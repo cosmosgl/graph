@@ -32,8 +32,8 @@ export interface GraphConfigInterface {
    */
   backgroundColor?: string | [number, number, number, number];
   /**
-   * Simulation space size (max 8192).
-   * Default value: `8192`
+   * Simulation space size.
+   * Default value: `4096` (larger values may crash on some devices, e.g. iOS; see https://github.com/cosmosgl/graph/issues/203).
    */
   spaceSize?: number;
 
