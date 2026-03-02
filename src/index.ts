@@ -124,7 +124,7 @@ export class Graph {
       this.shouldDestroyDevice = true // Graph created the device and owns it
     }
 
-    this.deviceInitPromise.then(device => {
+    const setupPromise = this.deviceInitPromise.then(device => {
       if (this._isDestroyed) {
         // Only destroy the device if Graph owns it
         if (this.shouldDestroyDevice) {
@@ -279,7 +279,7 @@ export class Graph {
         throw error
       })
 
-    this.ready = this.deviceInitPromise.then(() => undefined)
+    this.ready = setupPromise.then(() => undefined)
   }
 
   /**
