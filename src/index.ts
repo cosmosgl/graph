@@ -27,11 +27,10 @@ export class Graph {
   public config = new GraphConfig()
   public graph = new GraphData(this.config)
   /** Promise that resolves when the graph is fully initialized and ready to use */
-  public ready: Promise<void>
+  public readonly ready: Promise<void>
   /** Whether the graph has completed initialization */
   public isReady = false
-  /** Promise that resolves with the luma device when the graph is ready. Await or `.then()` to run after init. */
-  public readonly deviceInitPromise: Promise<Device>
+  private readonly deviceInitPromise: Promise<Device>
   /** Canvas element, assigned asynchronously during device initialization */
   private canvas!: HTMLCanvasElement
   private attributionDivElement: HTMLElement | undefined
