@@ -600,6 +600,32 @@ This method retrieves the current X and Y coordinates of all points in the graph
 
 This method returns an array of cluster positions, where each pair of elements represents the x and y coordinates of a cluster.
 
+### <a name="ready" href="#ready">#</a> graph.<b>ready</b>
+
+A `Promise<void>` that resolves when the graph has completed initialization and is ready to use.
+
+**Example:**
+```javascript
+const graph = new Graph(div, config)
+graph.setPointPositions(pointPositions)
+graph.render()
+
+await graph.ready
+// Graph is now fully initialized
+const positions = graph.getPointPositions()
+```
+
+### <a name="is_ready" href="#is_ready">#</a> graph.<b>isReady</b>
+
+A boolean property that indicates whether the graph has completed initialization (`true`) or is still initializing (`false`). Use it to check readiness without awaiting a promise.
+
+**Example:**
+```javascript
+if (graph.isReady) {
+  const positions = graph.getPointPositions()
+}
+```
+
 ### <a name="progress" href="#progress">#</a> graph.<b>progress</b>
 
 Returns the current progress of the graph simulation as a float value between 0 (start) and 1 (end). This method can be called at any time during the simulation to get the current progress percentage.
