@@ -26,6 +26,10 @@ import { defaultConfigValues, defaultScaleToZoom, defaultGreyoutPointColor, defa
 export class Graph {
   public config = new GraphConfig()
   public graph = new GraphData(this.config)
+  /** Promise that resolves when the graph is fully initialized and ready to use */
+  public ready: Promise<void>
+  /** Whether the graph has completed initialization */
+  public isReady = false
   /** Promise that resolves with the luma device when the graph is ready. Await or `.then()` to run after init. */
   public readonly deviceInitPromise: Promise<Device>
   /** Canvas element, assigned asynchronously during device initialization */
@@ -130,6 +134,7 @@ export class Graph {
         return device
       }
       this.device = device
+      this.isReady = true
       const deviceCanvasContext = this.validateDevice(device)
 
       // If external device was provided, sync its useDevicePixels with config.pixelRatio
@@ -269,9 +274,13 @@ export class Graph {
       return device
     })
       .catch(error => {
+        this.device = undefined
+        this.isReady = false
         console.error('Device initialization failed:', error)
         throw error
       })
+
+    this.ready = this.deviceInitPromise.then(() => undefined)
   }
 
   /**
@@ -1350,6 +1359,7 @@ export class Graph {
   public destroy (): void {
     if (this._isDestroyed) return
     this._isDestroyed = true
+    this.isReady = false
     window.clearTimeout(this._fitViewOnInitTimeoutID)
     this.stopFrames()
 
@@ -1501,8 +1511,8 @@ export class Graph {
    * @returns true if device was not ready and operation was queued, false if device is ready
    */
   private ensureDevice (callback: () => void): boolean {
-    if (!this.device) {
-      this.deviceInitPromise
+    if (!this.isReady) {
+      this.ready
         .then(() => {
           if (this._isDestroyed) return
           callback()
