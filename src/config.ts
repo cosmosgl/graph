@@ -46,9 +46,6 @@ export interface GraphConfigInterface {
    */
   pointDefaultColor?: string | [number, number, number, number];
 
-  /** @deprecated Use `pointDefaultColor` instead */
-  pointColor?: string | [number, number, number, number];
-
   /**
    * The color to use for points when they are greyed out (when selection is active).
    * This can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values
@@ -80,9 +77,6 @@ export interface GraphConfigInterface {
    * Default value: `4`
   */
   pointDefaultSize?: number;
-
-  /** @deprecated Use `pointDefaultSize` instead */
-  pointSize?: number;
 
   /**
    * Universal opacity value applied to all points.
@@ -152,9 +146,6 @@ export interface GraphConfigInterface {
    */
   linkDefaultColor?: string | [number, number, number, number];
 
-  /** @deprecated Use `linkDefaultColor` instead */
-  linkColor?: string | [number, number, number, number];
-
   /**
    * Universal opacity value applied to all links.
    * This value multiplies with individual link alpha values (if set via setLinkColors).
@@ -174,8 +165,6 @@ export interface GraphConfigInterface {
   */
   linkDefaultWidth?: number;
 
-  /** @deprecated Use `linkDefaultWidth` instead */
-  linkWidth?: number;
   /**
    * The color to use for links when they are hovered.
    * This can be either a hex color string (e.g., '#ff3333') or an array of RGBA values
@@ -227,8 +216,6 @@ export interface GraphConfigInterface {
    */
   linkDefaultArrows?: boolean;
 
-  /** @deprecated Use `linkDefaultArrows` instead */
-  linkArrows?: boolean;
   /**
    * Scale factor for the link arrows size.
    * Default value: `1`
@@ -342,12 +329,7 @@ export interface GraphConfigInterface {
    * Default value: `undefined`
    */
   onSimulationPause?: () => void;
-  /**
-   * Callback function that will be called when the simulation is restarted.
-   * @deprecated Use `onSimulationUnpause` instead. This callback will be removed in a future version.
-   * Default value: `undefined`
-   */
-  onSimulationRestart?: () => void;
+
   /**
    * Callback function that will be called when the simulation is unpaused.
    * Default value: `undefined`
@@ -667,20 +649,10 @@ export class GraphConfig implements GraphConfigInterface {
   public enableSimulation = defaultConfigValues.enableSimulation
   public backgroundColor = defaultBackgroundColor
   public spaceSize = defaultConfigValues.spaceSize
-  public pointColor = defaultPointColor
-  // TODO: When pointColor is removed, change this to:
-  // public pointDefaultColor = defaultPointColor
-  // Currently undefined to allow fallback to deprecated pointColor via nullish coalescing
-  // in GraphData.updatePointColor() (see: this._config.pointDefaultColor ?? this._config.pointColor)
-  public pointDefaultColor = undefined
+  public pointDefaultColor = defaultPointColor
   public pointGreyoutOpacity = defaultGreyoutPointOpacity
   public pointGreyoutColor = defaultGreyoutPointColor
-  public pointSize = defaultPointSize
-  // TODO: When pointSize is removed, change this to:
-  // public pointDefaultSize = defaultPointSize
-  // Currently undefined to allow fallback to deprecated pointSize via nullish coalescing
-  // in GraphData.updatePointSize() (see: this._config.pointDefaultSize ?? this._config.pointSize)
-  public pointDefaultSize = undefined
+  public pointDefaultSize = defaultPointSize
   public pointOpacity = defaultPointOpacity
   public pointSizeScale = defaultConfigValues.pointSizeScale
   public hoveredPointCursor = defaultConfigValues.hoveredPointCursor
@@ -689,20 +661,10 @@ export class GraphConfig implements GraphConfigInterface {
   public hoveredPointRingColor = defaultConfigValues.hoveredPointRingColor
   public focusedPointRingColor = defaultConfigValues.focusedPointRingColor
   public focusedPointIndex = defaultConfigValues.focusedPointIndex
-  public linkColor = defaultLinkColor
-  // TODO: When linkColor is removed, change this to:
-  // public linkDefaultColor = defaultLinkColor
-  // Currently undefined to allow fallback to deprecated linkColor via nullish coalescing
-  // in GraphData.updateLinkColor() (see: this._config.linkDefaultColor ?? this._config.linkColor)
-  public linkDefaultColor = undefined
+  public linkDefaultColor = defaultLinkColor
   public linkOpacity = defaultLinkOpacity
   public linkGreyoutOpacity = defaultGreyoutLinkOpacity
-  public linkWidth = defaultLinkWidth
-  // TODO: When linkWidth is removed, change this to:
-  // public linkDefaultWidth = defaultLinkWidth
-  // Currently undefined to allow fallback to deprecated linkWidth via nullish coalescing
-  // in GraphData.updateLinkWidth() (see: this._config.linkDefaultWidth ?? this._config.linkWidth)
-  public linkDefaultWidth = undefined
+  public linkDefaultWidth = defaultLinkWidth
   public linkWidthScale = defaultConfigValues.linkWidthScale
   public hoveredLinkColor = defaultConfigValues.hoveredLinkColor
   public hoveredLinkWidthIncrease = defaultConfigValues.hoveredLinkWidthIncrease
@@ -711,12 +673,7 @@ export class GraphConfig implements GraphConfigInterface {
   public curvedLinkSegments = defaultConfigValues.curvedLinkSegments
   public curvedLinkWeight = defaultConfigValues.curvedLinkWeight
   public curvedLinkControlPointDistance = defaultConfigValues.curvedLinkControlPointDistance
-  public linkArrows = defaultConfigValues.linkArrows
-  // TODO: When linkArrows is removed, change this to:
-  // public linkDefaultArrows = defaultConfigValues.linkArrows
-  // Currently undefined to allow fallback to deprecated linkArrows via nullish coalescing
-  // in GraphData.updateArrows() (see: this._config.linkDefaultArrows ?? this._config.linkArrows)
-  public linkDefaultArrows = undefined
+  public linkDefaultArrows = defaultConfigValues.linkArrows
   public linkArrowsSizeScale = defaultConfigValues.linkArrowsSizeScale
   public scaleLinksOnZoom = defaultConfigValues.scaleLinksOnZoom
   public linkVisibilityDistanceRange = defaultConfigValues.linkVisibilityDistanceRange
@@ -739,7 +696,6 @@ export class GraphConfig implements GraphConfigInterface {
   public onSimulationTick: GraphConfigInterface['onSimulationTick'] = undefined
   public onSimulationEnd: GraphConfigInterface['onSimulationEnd'] = undefined
   public onSimulationPause: GraphConfigInterface['onSimulationPause'] = undefined
-  public onSimulationRestart: GraphConfigInterface['onSimulationRestart'] = undefined
   public onSimulationUnpause: GraphConfigInterface['onSimulationUnpause'] = undefined
 
   public onClick: GraphConfigInterface['onClick'] = undefined
