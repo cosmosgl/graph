@@ -317,28 +317,23 @@ export class Graph {
     if (this.ensureDevice(() => this.setConfig(config))) return
     const prevConfig = { ...this.config }
     this.config.init(config)
-    if ((prevConfig.pointDefaultColor !== this.config.pointDefaultColor) ||
-      (prevConfig.pointColor !== this.config.pointColor)) {
+    if (prevConfig.pointDefaultColor !== this.config.pointDefaultColor) {
       this.graph.updatePointColor()
       this.points?.updateColor()
     }
-    if ((prevConfig.pointDefaultSize !== this.config.pointDefaultSize) ||
-      (prevConfig.pointSize !== this.config.pointSize)) {
+    if (prevConfig.pointDefaultSize !== this.config.pointDefaultSize) {
       this.graph.updatePointSize()
       this.points?.updateSize()
     }
-    if ((prevConfig.linkDefaultColor !== this.config.linkDefaultColor) ||
-      (prevConfig.linkColor !== this.config.linkColor)) {
+    if (prevConfig.linkDefaultColor !== this.config.linkDefaultColor) {
       this.graph.updateLinkColor()
       this.lines?.updateColor()
     }
-    if ((prevConfig.linkDefaultWidth !== this.config.linkDefaultWidth) ||
-      (prevConfig.linkWidth !== this.config.linkWidth)) {
+    if (prevConfig.linkDefaultWidth !== this.config.linkDefaultWidth) {
       this.graph.updateLinkWidth()
       this.lines?.updateWidth()
     }
-    if ((prevConfig.linkDefaultArrows !== this.config.linkDefaultArrows) ||
-      (prevConfig.linkArrows !== this.config.linkArrows)) {
+    if (prevConfig.linkDefaultArrows !== this.config.linkDefaultArrows) {
       this.graph.updateArrows()
       this.lines?.updateArrow()
     }
@@ -981,18 +976,6 @@ export class Graph {
   }
 
   /**
-   * Get points indices inside a rectangular area.
-   * @param selection - Array of two corner points `[[left, top], [right, bottom]]`.
-   * The `left` and `right` coordinates should be from 0 to the width of the canvas.
-   * The `top` and `bottom` coordinates should be from 0 to the height of the canvas.
-   * @returns A Float32Array containing the indices of points inside a rectangular area.
-   * @deprecated Use `getPointsInRect` instead. This method will be removed in a future version.
-   */
-  public getPointsInRange (selection: [[number, number], [number, number]]): Float32Array {
-    return this.getPointsInRect(selection)
-  }
-
-  /**
    * Get points indices inside a polygon area.
    * @param polygonPath - Array of points `[[x1, y1], [x2, y2], ..., [xn, yn]]` that defines the polygon.
    * The coordinates should be from 0 to the width/height of the canvas.
@@ -1041,16 +1024,6 @@ export class Graph {
       this.store.selectedIndices = null
     }
     this.points.updateGreyoutStatus()
-  }
-
-  /** Select points inside a rectangular area.
-   * @param selection - Array of two corner points `[[left, top], [right, bottom]]`.
-   * The `left` and `right` coordinates should be from 0 to the width of the canvas.
-   * The `top` and `bottom` coordinates should be from 0 to the height of the canvas.
-   * @deprecated Use `selectPointsInRect` instead. This method will be removed in a future version.
-   */
-  public selectPointsInRange (selection: [[number, number], [number, number]] | null): void {
-    return this.selectPointsInRect(selection)
   }
 
   /** Select points inside a polygon area.
@@ -1344,18 +1317,6 @@ export class Graph {
     if (this.ensureDevice(() => this.unpause())) return
     this.store.isSimulationRunning = true
     this.config.onSimulationUnpause?.()
-  }
-
-  /**
-   * Restart/Resume the simulation. This method unpauses a paused
-   * simulation and resumes its execution.
-   * @deprecated Use `unpause()` instead. This method will be removed in a future version.
-   */
-  public restart (): void {
-    if (this._isDestroyed) return
-    if (this.ensureDevice(() => this.restart())) return
-    this.store.isSimulationRunning = true
-    this.config.onSimulationRestart?.()
   }
 
   /**

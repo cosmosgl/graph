@@ -399,12 +399,6 @@ The `top` and `bottom` values represent the vertical position in pixels, relativ
 
 **Returns:** A Float32Array containing the indices of points inside the rectangular area.
 
-### <a name="get_points_in_range" href="#get_points_in_range">#</a> graph.<b>getPointsInRange</b>(<i>selection</i>) <b style={{ color: 'orange' }}>[DEPRECATED]</b>
-
-**⚠️ Deprecated:** Use `getPointsInRect` instead. This method will be removed in a future version.
-
-Get points as a Float32Array within a rectangular area defined by two corner points `[[left, top], [right, bottom]]`. This method has the same functionality as `getPointsInRect`.
-
 ### <a name="select_points_in_rect" href="#select_points_in_rect">#</a> graph.<b>selectPointsInRect</b>(<i>selection</i>)
 
 Select points within a rectangular area defined by two corner points `[[left, top], [right, bottom]]`. The `left` and `right` values represent the horizontal position in pixels, relative to the left edge of the canvas, with `0` being the leftmost position and the width of the canvas being the rightmost position.
@@ -412,12 +406,6 @@ Select points within a rectangular area defined by two corner points `[[left, to
 The `top` and `bottom` values represent the vertical position in pixels, relative to the top edge of the canvas, with `0` being the topmost position and the height of the canvas being the bottommost position.
 
 * **`selection`** (Array | null): An array containing two coordinate arrays representing the corners of the selection rectangle in the format `[[left, top], [right, bottom]]`, or `null` to clear the current selection.
-
-### <a name="select_points_in_range" href="#select_points_in_range">#</a> graph.<b>selectPointsInRange</b>(<i>selection</i>) <b style={{ color: 'orange' }}>[DEPRECATED]</b>
-
-**⚠️ Deprecated:** Use `selectPointsInRect` instead. This method will be removed in a future version.
-
-Select points within a rectangular area defined by two corner points `[[left, top], [right, bottom]]`. This method has the same functionality as `selectPointsInRect`.
 
 ### <a name="get_points_in_polygon" href="#get_points_in_polygon">#</a> graph.<b>getPointsInPolygon</b>(<i>polygonPath</i>)
 
@@ -586,12 +574,6 @@ Pauses the simulation. When paused, the simulation stops running but preserves i
 ### <a name="unpause" href="#unpause">#</a> graph.<b>unpause</b>()
 
 Unpauses (resumes) the simulation. This method resumes a paused simulation and continues its execution from where it was paused.
-
-### <a name="restart" href="#restart">#</a> graph.<b>restart</b>() <b style={{ color: 'orange' }}>[DEPRECATED]</b>
-
-**⚠️ Deprecated:** Use `unpause()` instead. This method will be removed in a future version.
-
-Restarts the current simulation in the graph.
 
 ### <a name="stop" href="#stop">#</a> graph.<b>stop</b>()
 
