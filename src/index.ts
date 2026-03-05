@@ -6,7 +6,7 @@ import { D3DragEvent } from 'd3-drag'
 import { Device, Framebuffer, luma } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
 
-import { GraphConfig, GraphConfigInterface } from '@/graph/config'
+import { mergeConfig, GraphConfigInterface } from '@/graph/config'
 import { getRgbaColor, getMaxPointSize, readPixels, sanitizeHtml } from '@/graph/helper'
 import { ForceCenter } from '@/graph/modules/ForceCenter'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
@@ -21,10 +21,10 @@ import { Points } from '@/graph/modules/Points'
 import { Store, ALPHA_MIN, MAX_HOVER_DETECTION_DELAY, MIN_MOUSE_MOVEMENT_THRESHOLD, type Hovered } from '@/graph/modules/Store'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
-import { defaultConfigValues, defaultScaleToZoom, defaultGreyoutPointColor, defaultBackgroundColor } from '@/graph/variables'
+import { defaultConfigValues } from '@/graph/variables'
 
 export class Graph {
-  public config = new GraphConfig()
+  public config: GraphConfigInterface = { ...defaultConfigValues } as GraphConfigInterface
   public graph = new GraphData(this.config)
   /** Promise that resolves when the graph is fully initialized and ready to use */
   public readonly ready: Promise<void>
@@ -113,7 +113,7 @@ export class Graph {
     config?: GraphConfigInterface,
     devicePromise?: Promise<Device>
   ) {
-    if (config) this.config.init(config)
+    if (config) mergeConfig(this.config, config)
 
     if (devicePromise) {
       this.deviceInitPromise = devicePromise
@@ -158,7 +158,7 @@ export class Graph {
       const w = this.canvas.clientWidth
       const h = this.canvas.clientHeight
 
-      this.store.adjustSpaceSize(this.config.spaceSize, this.device.limits.maxTextureDimension2D)
+      this.store.adjustSpaceSize(this.config.spaceSize ?? defaultConfigValues.spaceSize, this.device.limits.maxTextureDimension2D)
       this.store.setWebGLMaxTextureSize(this.device.limits.maxTextureDimension2D)
       this.store.updateScreenSize(w, h)
 
@@ -237,11 +237,11 @@ export class Graph {
       if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
       this.setZoomLevel(this.config.initialZoomLevel ?? 1)
 
-      this.store.maxPointSize = getMaxPointSize(device, this.config.pixelRatio)
+      this.store.maxPointSize = getMaxPointSize(device, this.config.pixelRatio ?? defaultConfigValues.pixelRatio)
 
       // Initialize simulation state based on enableSimulation config
       // If simulation is disabled, start with isSimulationRunning = false
-      this.store.isSimulationRunning = this.config.enableSimulation
+      this.store.isSimulationRunning = this.config.enableSimulation ?? defaultConfigValues.enableSimulation
 
       this.points = new Points(device, this.config, this.store, this.graph)
       this.lines = new Lines(device, this.config, this.store, this.graph, this.points)
@@ -255,13 +255,13 @@ export class Graph {
       }
       this.clusters = new Clusters(device, this.config, this.store, this.graph, this.points)
 
-      this.store.backgroundColor = getRgbaColor(this.config.backgroundColor)
+      this.store.backgroundColor = getRgbaColor(this.config.backgroundColor ?? defaultConfigValues.backgroundColor)
       this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor ?? defaultConfigValues.hoveredPointRingColor)
       this.store.setFocusedPointRingColor(this.config.focusedPointRingColor ?? defaultConfigValues.focusedPointRingColor)
       if (this.config.focusedPointIndex !== undefined) {
         this.store.setFocusedPoint(this.config.focusedPointIndex)
       }
-      this.store.setGreyoutPointColor(this.config.pointGreyoutColor ?? defaultGreyoutPointColor)
+      this.store.setGreyoutPointColor(this.config.pointGreyoutColor ?? defaultConfigValues.pointGreyoutColor)
       this.store.setHoveredLinkColor(this.config.hoveredLinkColor ?? defaultConfigValues.hoveredLinkColor)
 
       this.store.updateLinkHoveringEnabled(this.config)
@@ -316,7 +316,7 @@ export class Graph {
 
     if (this.ensureDevice(() => this.setConfig(config))) return
     const prevConfig = { ...this.config }
-    this.config.init(config)
+    mergeConfig(this.config, config)
     if (prevConfig.pointDefaultColor !== this.config.pointDefaultColor) {
       this.graph.updatePointColor()
       this.points?.updateColor()
@@ -343,7 +343,7 @@ export class Graph {
     }
 
     if (prevConfig.backgroundColor !== this.config.backgroundColor) {
-      this.store.backgroundColor = getRgbaColor(this.config.backgroundColor ?? defaultBackgroundColor)
+      this.store.backgroundColor = getRgbaColor(this.config.backgroundColor ?? defaultConfigValues.backgroundColor)
     }
     if (prevConfig.hoveredPointRingColor !== this.config.hoveredPointRingColor) {
       this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor ?? defaultConfigValues.hoveredPointRingColor)
@@ -352,7 +352,7 @@ export class Graph {
       this.store.setFocusedPointRingColor(this.config.focusedPointRingColor ?? defaultConfigValues.focusedPointRingColor)
     }
     if (prevConfig.pointGreyoutColor !== this.config.pointGreyoutColor) {
-      this.store.setGreyoutPointColor(this.config.pointGreyoutColor ?? defaultGreyoutPointColor)
+      this.store.setGreyoutPointColor(this.config.pointGreyoutColor ?? defaultConfigValues.pointGreyoutColor)
     }
     if (prevConfig.hoveredLinkColor !== this.config.hoveredLinkColor) {
       this.store.setHoveredLinkColor(this.config.hoveredLinkColor ?? defaultConfigValues.hoveredLinkColor)
@@ -363,14 +363,14 @@ export class Graph {
     if (prevConfig.pixelRatio !== this.config.pixelRatio) {
       // Update device's canvas context useDevicePixels
       if (this.device?.canvasContext) {
-        this.device.canvasContext.setProps({ useDevicePixels: this.config.pixelRatio })
+        this.device.canvasContext.setProps({ useDevicePixels: this.config.pixelRatio ?? defaultConfigValues.pixelRatio })
 
         // Recalculate maxPointSize with new pixelRatio
-        this.store.maxPointSize = getMaxPointSize(this.device, this.config.pixelRatio)
+        this.store.maxPointSize = getMaxPointSize(this.device, this.config.pixelRatio ?? defaultConfigValues.pixelRatio)
       }
     }
     if (prevConfig.spaceSize !== this.config.spaceSize) {
-      this.store.adjustSpaceSize(this.config.spaceSize, this.device?.limits.maxTextureDimension2D ?? 4096)
+      this.store.adjustSpaceSize(this.config.spaceSize ?? defaultConfigValues.spaceSize, this.device?.limits.maxTextureDimension2D ?? 4096)
       this.resizeCanvas(true)
       this.update(this.store.isSimulationRunning ? this.store.alpha : 0)
     }
@@ -768,7 +768,7 @@ export class Graph {
    * @param scale Scale value to zoom in or out (`3` by default).
    * @param canZoomOut Set to `false` to prevent zooming out from the point (`true` by default).
    */
-  public zoomToPointByIndex (index: number, duration = 700, scale = defaultScaleToZoom, canZoomOut = true): void {
+  public zoomToPointByIndex (index: number, duration = 700, scale = 3, canZoomOut = true): void {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.zoomToPointByIndex(index, duration, scale, canZoomOut))) return
@@ -1614,7 +1614,7 @@ export class Graph {
       }
 
       // Alpha decay and progress
-      this.store.alpha += this.store.addAlpha(this.config.simulationDecay ?? defaultConfigValues.simulation.decay)
+      this.store.alpha += this.store.addAlpha(this.config.simulationDecay ?? defaultConfigValues.simulationDecay)
       if (this.isRightClickMouse && this.config.enableRightClickRepulsion) {
         this.store.alpha = Math.max(this.store.alpha, 0.1)
       }
@@ -1980,10 +1980,10 @@ export class Graph {
     const { hoveredPointCursor, hoveredLinkCursor } = this.config
     if (this.dragInstance.isActive) select(this.canvas).style('cursor', 'grabbing')
     else if (this.store.hoveredPoint) {
-      if (!this.config.enableDrag || this.store.isSpaceKeyPressed) select(this.canvas).style('cursor', hoveredPointCursor)
+      if (!this.config.enableDrag || this.store.isSpaceKeyPressed) select(this.canvas).style('cursor', hoveredPointCursor ?? defaultConfigValues.hoveredPointCursor)
       else select(this.canvas).style('cursor', 'grab')
     } else if (this.store.isLinkHoveringEnabled && this.store.hoveredLinkIndex !== undefined) {
-      select(this.canvas).style('cursor', hoveredLinkCursor)
+      select(this.canvas).style('cursor', hoveredLinkCursor ?? defaultConfigValues.hoveredLinkCursor)
     } else select(this.canvas).style('cursor', null)
   }
 
