@@ -1,20 +1,6 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import { D3ZoomEvent } from 'd3-zoom'
 import { D3DragEvent } from 'd3-drag'
-import {
-  defaultPointColor,
-  defaultGreyoutPointOpacity,
-  defaultGreyoutPointColor,
-  defaultPointOpacity,
-  defaultPointSize,
-  defaultLinkColor,
-  defaultGreyoutLinkOpacity,
-  defaultLinkOpacity,
-  defaultLinkWidth,
-  defaultBackgroundColor,
-  defaultConfigValues,
-} from '@/graph/variables'
-import { isPlainObject } from '@/graph/helper'
 import { type Hovered } from '@/graph/modules/Store'
 
 export interface GraphConfigInterface {
@@ -552,7 +538,7 @@ export interface GraphConfigInterface {
   initialZoomLevel?: number;
   /**
    * Enables or disables zooming in and out.
-   * Default: `true`
+   * Default value: `true`
    */
   enableZoom?: boolean;
   /**
@@ -615,13 +601,13 @@ export interface GraphConfigInterface {
   /**
    * Point sampling distance in pixels between neighboring points when calling the `getSampledPointPositionsMap` method.
    * This parameter determines how many points will be included in the sample.
-   * Default value: `150`
+   * Default value: `100`
   */
   pointSamplingDistance?: number;
   /**
    * Link sampling distance in pixels between neighboring links when calling the `getSampledLinks` method.
    * This parameter determines how many links will be included in the sample (based on link midpoints in screen space).
-   * Default value: `150`
+   * Default value: `100`
    */
   linkSamplingDistance?: number;
   /**
@@ -635,129 +621,33 @@ export interface GraphConfigInterface {
    * When explicitly set:
    * - `true`: Forces points positions to be rescaled
    * - `false`: Forces points positions to not be rescaled
+   *
+   * Default value: `undefined`
    */
   rescalePositions?: boolean | undefined;
   /**
    * Controls the text shown in the bottom right corner.
    * - When a non-empty string is provided: Displays the string as HTML
    * - When empty string or not provided: No text is displayed
+   *
+   * Default value: `''`
    */
   attribution?: string;
 }
 
-export class GraphConfig implements GraphConfigInterface {
-  public enableSimulation = defaultConfigValues.enableSimulation
-  public backgroundColor = defaultBackgroundColor
-  public spaceSize = defaultConfigValues.spaceSize
-  public pointDefaultColor = defaultPointColor
-  public pointGreyoutOpacity = defaultGreyoutPointOpacity
-  public pointGreyoutColor = defaultGreyoutPointColor
-  public pointDefaultSize = defaultPointSize
-  public pointOpacity = defaultPointOpacity
-  public pointSizeScale = defaultConfigValues.pointSizeScale
-  public hoveredPointCursor = defaultConfigValues.hoveredPointCursor
-  public hoveredLinkCursor = defaultConfigValues.hoveredLinkCursor
-  public renderHoveredPointRing = defaultConfigValues.renderHoveredPointRing
-  public hoveredPointRingColor = defaultConfigValues.hoveredPointRingColor
-  public focusedPointRingColor = defaultConfigValues.focusedPointRingColor
-  public focusedPointIndex = defaultConfigValues.focusedPointIndex
-  public linkDefaultColor = defaultLinkColor
-  public linkOpacity = defaultLinkOpacity
-  public linkGreyoutOpacity = defaultGreyoutLinkOpacity
-  public linkDefaultWidth = defaultLinkWidth
-  public linkWidthScale = defaultConfigValues.linkWidthScale
-  public hoveredLinkColor = defaultConfigValues.hoveredLinkColor
-  public hoveredLinkWidthIncrease = defaultConfigValues.hoveredLinkWidthIncrease
-  public renderLinks = defaultConfigValues.renderLinks
-  public curvedLinks = defaultConfigValues.curvedLinks
-  public curvedLinkSegments = defaultConfigValues.curvedLinkSegments
-  public curvedLinkWeight = defaultConfigValues.curvedLinkWeight
-  public curvedLinkControlPointDistance = defaultConfigValues.curvedLinkControlPointDistance
-  public linkDefaultArrows = defaultConfigValues.linkArrows
-  public linkArrowsSizeScale = defaultConfigValues.linkArrowsSizeScale
-  public scaleLinksOnZoom = defaultConfigValues.scaleLinksOnZoom
-  public linkVisibilityDistanceRange = defaultConfigValues.linkVisibilityDistanceRange
-  public linkVisibilityMinTransparency = defaultConfigValues.linkVisibilityMinTransparency
+/**
+ * Requires all keys from T to be present, while preserving
+ * the original value types (including `| undefined` for optional properties).
+ */
+export type Complete<T> = { [K in keyof Required<T>]: T[K] }
 
-  public simulationDecay = defaultConfigValues.simulation.decay
-  public simulationGravity = defaultConfigValues.simulation.gravity
-  public simulationCenter = defaultConfigValues.simulation.center
-  public simulationRepulsion = defaultConfigValues.simulation.repulsion
-  public simulationRepulsionTheta = defaultConfigValues.simulation.repulsionTheta
-  public simulationLinkSpring = defaultConfigValues.simulation.linkSpring
-  public simulationLinkDistance = defaultConfigValues.simulation.linkDistance
-  public simulationLinkDistRandomVariationRange = defaultConfigValues.simulation.linkDistRandomVariationRange
-  public simulationRepulsionFromMouse = defaultConfigValues.simulation.repulsionFromMouse
-  public enableRightClickRepulsion = defaultConfigValues.enableRightClickRepulsion
-  public simulationFriction = defaultConfigValues.simulation.friction
-  public simulationCluster = defaultConfigValues.simulation.cluster
-
-  public onSimulationStart: GraphConfigInterface['onSimulationStart'] = undefined
-  public onSimulationTick: GraphConfigInterface['onSimulationTick'] = undefined
-  public onSimulationEnd: GraphConfigInterface['onSimulationEnd'] = undefined
-  public onSimulationPause: GraphConfigInterface['onSimulationPause'] = undefined
-  public onSimulationUnpause: GraphConfigInterface['onSimulationUnpause'] = undefined
-
-  public onClick: GraphConfigInterface['onClick'] = undefined
-  public onPointClick: GraphConfigInterface['onPointClick'] = undefined
-  public onLinkClick: GraphConfigInterface['onLinkClick'] = undefined
-  public onBackgroundClick: GraphConfigInterface['onBackgroundClick'] = undefined
-  public onContextMenu: GraphConfigInterface['onContextMenu'] = undefined
-  public onPointContextMenu: GraphConfigInterface['onPointContextMenu'] = undefined
-  public onLinkContextMenu: GraphConfigInterface['onLinkContextMenu'] = undefined
-  public onBackgroundContextMenu: GraphConfigInterface['onBackgroundContextMenu'] = undefined
-  public onMouseMove: GraphConfigInterface['onMouseMove'] = undefined
-  public onPointMouseOver: GraphConfigInterface['onPointMouseOver'] = undefined
-  public onPointMouseOut: GraphConfigInterface['onPointMouseOut'] = undefined
-  public onLinkMouseOver: GraphConfigInterface['onLinkMouseOver'] = undefined
-  public onLinkMouseOut: GraphConfigInterface['onLinkMouseOut'] = undefined
-  public onZoomStart: GraphConfigInterface['onZoomStart'] = undefined
-  public onZoom: GraphConfigInterface['onZoom'] = undefined
-  public onZoomEnd: GraphConfigInterface['onZoomEnd'] = undefined
-  public onDragStart: GraphConfigInterface['onDragStart'] = undefined
-  public onDrag: GraphConfigInterface['onDrag'] = undefined
-  public onDragEnd: GraphConfigInterface['onDragEnd'] = undefined
-
-  public showFPSMonitor = defaultConfigValues.showFPSMonitor
-
-  public pixelRatio = defaultConfigValues.pixelRatio
-
-  public scalePointsOnZoom = defaultConfigValues.scalePointsOnZoom
-  public initialZoomLevel = undefined
-  public enableZoom = defaultConfigValues.enableZoom
-  public enableSimulationDuringZoom = defaultConfigValues.enableSimulationDuringZoom
-  public enableDrag = defaultConfigValues.enableDrag
-  public fitViewOnInit = defaultConfigValues.fitViewOnInit
-  public fitViewDelay = defaultConfigValues.fitViewDelay
-  public fitViewPadding = defaultConfigValues.fitViewPadding
-  public fitViewDuration = defaultConfigValues.fitViewDuration
-  public fitViewByPointsInRect = undefined
-  public fitViewByPointIndices = undefined
-
-  public randomSeed = undefined
-  public pointSamplingDistance = defaultConfigValues.pointSamplingDistance
-  public linkSamplingDistance = defaultConfigValues.linkSamplingDistance
-  public attribution = defaultConfigValues.attribution
-  public rescalePositions = defaultConfigValues.rescalePositions
-
-  public init (config: GraphConfigInterface): void {
-    (Object.keys(config) as (keyof GraphConfigInterface)[])
-      .forEach(configParameter => {
-        this.deepMergeConfig(this.getConfig(), config, configParameter)
-      })
-  }
-
-  public deepMergeConfig <T> (current: T, next: T, key: keyof T): void {
-    if (isPlainObject(current[key]) && isPlainObject(next[key])) {
-      // eslint-disable-next-line @typescript-eslint/ban-types
-      (Object.keys(next[key] as Object) as (keyof T[keyof T])[])
-        .forEach(configParameter => {
-          this.deepMergeConfig(current[key], next[key], configParameter)
-        })
-    } else current[key] = next[key]
-  }
-
-  private getConfig (): GraphConfigInterface {
-    return this
-  }
+/**
+ * Shallow-merges partial config into an existing config object (mutates target).
+ * Use this so all references to config (GraphData, Zoom, Drag, etc.) stay in sync.
+ */
+export function mergeConfig (
+  target: GraphConfigInterface,
+  source: Partial<GraphConfigInterface>
+): void {
+  Object.assign(target, source)
 }

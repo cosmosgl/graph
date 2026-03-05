@@ -1,68 +1,129 @@
-export const defaultPointColor = '#b3b3b3'
-export const defaultGreyoutPointOpacity = undefined
-export const defaultGreyoutPointColor = undefined
-export const defaultPointOpacity = 1.0
-export const defaultPointSize = 4
-export const defaultLinkColor = '#666666'
-export const defaultGreyoutLinkOpacity = 0.1
-export const defaultLinkOpacity = 1.0
-export const defaultLinkWidth = 1
-export const defaultBackgroundColor = '#222222'
+import type { GraphConfigInterface, Complete } from '@/graph/config'
 
+/**
+ * Default values for all graph configuration properties.
+ */
 export const defaultConfigValues = {
+  // General
   enableSimulation: true,
+  backgroundColor: '#222222',
   /** Setting to 4096 because larger values crash the graph on iOS. More info: https://github.com/cosmosgl/graph/issues/203 */
   spaceSize: 4096,
+
+  // Points
+  pointDefaultColor: '#b3b3b3',
+  pointDefaultSize: 4,
+  pointOpacity: 1.0,
+  pointGreyoutOpacity: undefined,
+  pointGreyoutColor: undefined,
   pointSizeScale: 1,
-  linkWidthScale: 1,
-  linkArrowsSizeScale: 1,
+  scalePointsOnZoom: false,
+
+  // Point interaction
+  hoveredPointCursor: 'auto',
+  renderHoveredPointRing: false,
+  hoveredPointRingColor: 'white',
+  focusedPointRingColor: 'white',
+  focusedPointIndex: undefined,
+
+  // Links
   renderLinks: true,
+  linkDefaultColor: '#666666',
+  linkDefaultWidth: 1,
+  linkOpacity: 1.0,
+  linkGreyoutOpacity: 0.1,
+  linkWidthScale: 1,
+  scaleLinksOnZoom: false,
   curvedLinks: false,
   curvedLinkSegments: 19,
   curvedLinkWeight: 0.8,
   curvedLinkControlPointDistance: 0.5,
-  linkArrows: false,
+  linkDefaultArrows: false,
+  linkArrowsSizeScale: 1,
   linkVisibilityDistanceRange: [50, 150],
   linkVisibilityMinTransparency: 0.25,
-  hoveredPointCursor: 'auto',
+
+  // Link interaction
   hoveredLinkCursor: 'auto',
-  renderHoveredPointRing: false,
-  hoveredPointRingColor: 'white',
   hoveredLinkColor: undefined,
   hoveredLinkWidthIncrease: 5,
-  focusedPointRingColor: 'white',
-  focusedPointIndex: undefined,
-  simulation: {
-    decay: 5000,
-    gravity: 0.25,
-    center: 0,
-    repulsion: 1.0,
-    repulsionTheta: 1.15,
-    linkSpring: 1,
-    linkDistance: 10,
-    linkDistRandomVariationRange: [1, 1.2],
-    repulsionFromMouse: 2,
-    friction: 0.85,
-    cluster: 0.1,
-  },
+
+  // Simulation
+  simulationDecay: 5000,
+  simulationGravity: 0.25,
+  simulationCenter: 0,
+  simulationRepulsion: 1.0,
+  simulationRepulsionTheta: 1.15,
+  simulationLinkSpring: 1,
+  simulationLinkDistance: 10,
+  simulationLinkDistRandomVariationRange: [1, 1.2],
+  simulationRepulsionFromMouse: 2,
+  simulationFriction: 0.85,
+  simulationCluster: 0.1,
+  enableRightClickRepulsion: false,
+
+  // Simulation callbacks
+  onSimulationStart: undefined,
+  onSimulationTick: undefined,
+  onSimulationEnd: undefined,
+  onSimulationPause: undefined,
+  onSimulationUnpause: undefined,
+
+  // Interaction callbacks
+  onClick: undefined,
+  onPointClick: undefined,
+  onLinkClick: undefined,
+  onBackgroundClick: undefined,
+  onContextMenu: undefined,
+  onPointContextMenu: undefined,
+  onLinkContextMenu: undefined,
+  onBackgroundContextMenu: undefined,
+  onMouseMove: undefined,
+  onPointMouseOver: undefined,
+  onPointMouseOut: undefined,
+  onLinkMouseOver: undefined,
+  onLinkMouseOut: undefined,
+
+  // Zoom and pan callbacks
+  onZoomStart: undefined,
+  onZoom: undefined,
+  onZoomEnd: undefined,
+
+  // Drag callbacks
+  onDragStart: undefined,
+  onDrag: undefined,
+  onDragEnd: undefined,
+
+  // Display
   showFPSMonitor: false,
   pixelRatio: typeof window !== 'undefined' ? window.devicePixelRatio || 2 : 2,
-  scalePointsOnZoom: false,
-  scaleLinksOnZoom: false,
+
+  // Zoom and pan
   enableZoom: true,
   enableSimulationDuringZoom: false,
+  initialZoomLevel: undefined,
+
+  // Drag
   enableDrag: false,
+
+  // Fit view
   fitViewOnInit: true,
   fitViewDelay: 250,
   fitViewPadding: 0.1,
   fitViewDuration: 250,
+  fitViewByPointsInRect: undefined,
+  fitViewByPointIndices: undefined,
+
+  // Sampling
   pointSamplingDistance: 100,
   linkSamplingDistance: 100,
-  attribution: '',
-  rescalePositions: undefined,
-  enableRightClickRepulsion: false,
-}
 
+  // Miscellaneous
+  randomSeed: undefined,
+  rescalePositions: undefined,
+  attribution: '',
+} satisfies Complete<GraphConfigInterface>
+
+// Internal constants (not part of GraphConfigInterface)
 export const hoveredPointRingOpacity = 0.7
 export const focusedPointRingOpacity = 0.95
-export const defaultScaleToZoom = 3
