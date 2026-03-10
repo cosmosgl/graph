@@ -235,6 +235,8 @@ export class Graph {
         .on('mousemove', this.onMouseMove.bind(this))
         .on('contextmenu', this.onContextMenu.bind(this))
       if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
+      // Zoom level 1 means no zoom (100% scale). defaultConfigValues.initialZoomLevel is undefined,
+      // so we fall back to 1 here as the neutral zoom level when no initial zoom is configured.
       this.setZoomLevel(this.config.initialZoomLevel ?? 1)
 
       this.store.maxPointSize = getMaxPointSize(device, this.config.pixelRatio ?? defaultConfigValues.pixelRatio)
