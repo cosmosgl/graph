@@ -1,6 +1,7 @@
 import { Buffer, Framebuffer, Texture, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
+import { defaultConfigValues } from '@/graph/variables'
 import calculateLevelFrag from '@/graph/modules/ForceManyBody/calculate-level.frag?raw'
 import calculateLevelVert from '@/graph/modules/ForceManyBody/calculate-level.vert?raw'
 import forceFrag from '@/graph/modules/ForceManyBody/force-level.frag?raw'
@@ -242,9 +243,9 @@ export class ForceManyBody extends CoreModule {
           levels: this.levels,
           levelTextureSize: 0,
           alpha: store.alpha,
-          repulsion: this.config.simulationRepulsion ?? 0,
-          spaceSize: store.adjustedSpaceSize ?? 0,
-          theta: this.config.simulationRepulsionTheta ?? 0,
+          repulsion: this.config.simulationRepulsion ?? defaultConfigValues.simulationRepulsion,
+          spaceSize: store.adjustedSpaceSize,
+          theta: this.config.simulationRepulsionTheta ?? defaultConfigValues.simulationRepulsionTheta,
         },
       },
     })
@@ -297,7 +298,7 @@ export class ForceManyBody extends CoreModule {
         defaultUniforms: {
           levelTextureSize: 0,
           alpha: store.alpha,
-          repulsion: this.config.simulationRepulsion ?? 0,
+          repulsion: this.config.simulationRepulsion ?? defaultConfigValues.simulationRepulsion,
         },
       },
     })
@@ -411,7 +412,7 @@ export class ForceManyBody extends CoreModule {
       if (!target || target.fbo.destroyed || target.texture.destroyed) continue
 
       const levelTextureSize = Math.pow(2, level + 1)
-      const cellSize = (store.adjustedSpaceSize ?? 0) / levelTextureSize
+      const cellSize = store.adjustedSpaceSize / levelTextureSize
 
       this.calculateLevelsUniformStore.setUniforms({
         calculateLevelsUniforms: {
@@ -463,9 +464,9 @@ export class ForceManyBody extends CoreModule {
           levels: this.levels,
           levelTextureSize,
           alpha: store.alpha,
-          repulsion: this.config.simulationRepulsion ?? 0,
-          spaceSize: store.adjustedSpaceSize ?? 0,
-          theta: this.config.simulationRepulsionTheta ?? 0,
+          repulsion: this.config.simulationRepulsion ?? defaultConfigValues.simulationRepulsion,
+          spaceSize: store.adjustedSpaceSize,
+          theta: this.config.simulationRepulsionTheta ?? defaultConfigValues.simulationRepulsionTheta,
         },
       })
 
@@ -483,7 +484,7 @@ export class ForceManyBody extends CoreModule {
           forceCenterUniforms: {
             levelTextureSize,
             alpha: store.alpha,
-            repulsion: this.config.simulationRepulsion ?? 0,
+            repulsion: this.config.simulationRepulsion ?? defaultConfigValues.simulationRepulsion,
           },
         })
 

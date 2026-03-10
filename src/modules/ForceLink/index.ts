@@ -1,6 +1,7 @@
 import { Buffer, Texture, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
+import { defaultConfigValues } from '@/graph/variables'
 import { forceFrag } from '@/graph/modules/ForceLink/force-spring'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import { ensureVec2 } from '@/graph/modules/Shared/uniform-utils'
@@ -233,8 +234,8 @@ export class ForceLink extends CoreModule {
 
     this.uniformStore.setUniforms({
       forceLinkUniforms: {
-        linkSpring: this.config.simulationLinkSpring ?? 0,
-        linkDistance: this.config.simulationLinkDistance ?? 0,
+        linkSpring: this.config.simulationLinkSpring ?? defaultConfigValues.simulationLinkSpring,
+        linkDistance: this.config.simulationLinkDistance ?? defaultConfigValues.simulationLinkDistance,
         linkDistRandomVariationRange: ensureVec2(this.config.simulationLinkDistRandomVariationRange, [0, 0]),
         pointsTextureSize: store.pointsTextureSize,
         linksTextureSize: store.linksTextureSize,
