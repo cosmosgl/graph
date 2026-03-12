@@ -7,17 +7,17 @@ uniform sampler2D positionsTexture;
 uniform sampler2D polygonPathTexture; // Texture containing polygon path points
 
 #ifdef USE_UNIFORM_BUFFERS
-layout(std140) uniform findPointsOnPolygonSelectionUniforms {
+layout(std140) uniform findPointsInPolygonUniforms {
   float spaceSize;
   vec2 screenSize;
   mat4 transformationMatrix;
   float polygonPathLength;
-} findPointsOnPolygonSelection;
+} findPointsInPolygon;
 
-#define spaceSize findPointsOnPolygonSelection.spaceSize
-#define screenSize findPointsOnPolygonSelection.screenSize
-#define transformationMatrix findPointsOnPolygonSelection.transformationMatrix
-#define polygonPathLength int(findPointsOnPolygonSelection.polygonPathLength)
+#define spaceSize findPointsInPolygon.spaceSize
+#define screenSize findPointsInPolygon.screenSize
+#define transformationMatrix findPointsInPolygon.transformationMatrix
+#define polygonPathLength int(findPointsInPolygon.polygonPathLength)
 #else
 uniform int polygonPathLength;
 uniform float spaceSize;

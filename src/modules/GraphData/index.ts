@@ -341,8 +341,58 @@ export class GraphData {
     this._calculateDegrees()
   }
 
-  public getAdjacentIndices (index: number): number[] | undefined {
-    return [...(this.sourceIndexToTargetIndices?.[index]?.map(d => d[0]) || []), ...(this.targetIndexToSourceIndices?.[index]?.map(d => d[0]) || [])]
+  /**
+   * Returns unique point indices that are neighbors of the given point(s) —
+   * i.e., connected by a link in either direction.
+   * @param pointIndices - A single point index or an array of point indices.
+   * @returns Array of neighboring point indices.
+   */
+  public getNeighboringPointIndices (pointIndices: number | number[]): number[] {
+    const indices = Array.isArray(pointIndices) ? pointIndices : [pointIndices]
+    const result = new Set<number>()
+    for (const index of indices) {
+      for (const [pointIndex] of this.sourceIndexToTargetIndices?.[index] ?? []) result.add(pointIndex)
+      for (const [pointIndex] of this.targetIndexToSourceIndices?.[index] ?? []) result.add(pointIndex)
+    }
+    return [...result]
+  }
+
+  /**
+   * Returns unique link indices where both the source and target endpoints
+   * are within the given point(s). Only links fully contained in the set are returned.
+   * @param pointIndices - A single point index or an array of point indices.
+   * @returns Array of link indices connecting points within the provided set.
+   */
+  public getConnectedLinkIndices (pointIndices: number | number[]): number[] {
+    const indices = Array.isArray(pointIndices) ? pointIndices : [pointIndices]
+    const indexSet = new Set(indices)
+    const result: number[] = []
+    for (const index of indexSet) {
+      for (const [targetIndex, linkIndex] of this.sourceIndexToTargetIndices?.[index] ?? []) {
+        if (indexSet.has(targetIndex)) result.push(linkIndex)
+      }
+    }
+    return result
+  }
+
+  /**
+   * Returns unique point indices at the endpoints (source and target) of the given link(s).
+   * @param linkIndices - A single link index or an array of link indices.
+   * @returns Array of point indices at the ends of the provided links.
+   */
+  public getConnectedPointIndices (linkIndices: number | number[]): number[] {
+    const indices = Array.isArray(linkIndices) ? linkIndices : [linkIndices]
+    const result = new Set<number>()
+    if (this.links === undefined) return []
+    const linksNumber = this.linksNumber ?? 0
+    for (const linkIndex of indices) {
+      if (linkIndex < 0 || linkIndex >= linksNumber) continue
+      const sourceIndex = this.links[linkIndex * 2]
+      const targetIndex = this.links[linkIndex * 2 + 1]
+      if (sourceIndex !== undefined) result.add(sourceIndex)
+      if (targetIndex !== undefined) result.add(targetIndex)
+    }
+    return [...result]
   }
 
   private _createAdjacencyLists (): void {

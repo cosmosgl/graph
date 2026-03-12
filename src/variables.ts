@@ -27,6 +27,9 @@ export const defaultConfigValues = {
   hoveredPointRingColor: 'white',
   focusedPointRingColor: 'white',
   focusedPointIndex: undefined,
+  highlightedPointIndices: undefined,
+  outlinedPointIndices: undefined,
+  outlinedPointRingColor: 'white',
 
   // Links
   renderLinks: true,
@@ -49,6 +52,9 @@ export const defaultConfigValues = {
   hoveredLinkCursor: 'auto',
   hoveredLinkColor: undefined,
   hoveredLinkWidthIncrease: 5,
+  highlightedLinkIndices: undefined,
+  focusedLinkIndex: undefined,
+  focusedLinkWidthIncrease: 5,
 
   // Simulation
   simulationDecay: 5000,

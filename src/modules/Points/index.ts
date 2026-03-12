@@ -7,8 +7,8 @@ import type { Mat4Array } from '@/graph/modules/Store'
 import { defaultConfigValues } from '@/graph/variables'
 import drawPointsFrag from '@/graph/modules/Points/draw-points.frag?raw'
 import drawPointsVert from '@/graph/modules/Points/draw-points.vert?raw'
-import findPointsOnAreaSelectionFrag from '@/graph/modules/Points/find-points-on-area-selection.frag?raw'
-import findPointsOnPolygonSelectionFrag from '@/graph/modules/Points/find-points-on-polygon-selection.frag?raw'
+import findPointsInRectFrag from '@/graph/modules/Points/find-points-in-rect.frag?raw'
+import findPointsInPolygonFrag from '@/graph/modules/Points/find-points-in-polygon.frag?raw'
 import drawHighlightedFrag from '@/graph/modules/Points/draw-highlighted.frag?raw'
 import drawHighlightedVert from '@/graph/modules/Points/draw-highlighted.vert?raw'
 import findHoveredPointFrag from '@/graph/modules/Points/find-hovered-point.frag?raw'
@@ -29,7 +29,7 @@ export class Points extends CoreModule {
   public currentPositionFbo: Framebuffer | undefined
   public previousPositionFbo: Framebuffer | undefined
   public velocityFbo: Framebuffer | undefined
-  public selectedFbo: Framebuffer | undefined
+  public searchFbo: Framebuffer | undefined
   public hoveredFbo: Framebuffer | undefined
   public scaleX: ((x: number) => number) | undefined
   public scaleY: ((y: number) => number) | undefined
@@ -40,8 +40,7 @@ export class Points extends CoreModule {
   public currentPositionTexture: Texture | undefined
   public previousPositionTexture: Texture | undefined
   public velocityTexture: Texture | undefined
-  // Add texture property for greyout status (public for Lines module access)
-  public greyoutStatusTexture: Texture | undefined
+  public pointStatusTexture: Texture | undefined
   /**
    * Whether the cached cluster centroid positions are still valid.
    * Set to `false` in `swapFbo()` whenever GPU point positions change (simulation tick or drag).
@@ -64,20 +63,20 @@ export class Points extends CoreModule {
   private drawHighlightedCommand: Model | undefined
   private updatePositionCommand: Model | undefined
   private dragPointCommand: Model | undefined
-  private findPointsOnAreaSelectionCommand: Model | undefined
-  private findPointsOnPolygonSelectionCommand: Model | undefined
+  private findPointsInRectCommand: Model | undefined
+  private findPointsInPolygonCommand: Model | undefined
   private findHoveredPointCommand: Model | undefined
   private fillSampledPointsFboCommand: Model | undefined
   private trackPointsCommand: Model | undefined
   // Vertex buffers for quad rendering (Model doesn't destroy them automatically)
   private updatePositionVertexCoordBuffer: Buffer | undefined
   private dragPointVertexCoordBuffer: Buffer | undefined
-  private findPointsOnAreaSelectionVertexCoordBuffer: Buffer | undefined
-  private findPointsOnPolygonSelectionVertexCoordBuffer: Buffer | undefined
+  private findPointsInRectVertexCoordBuffer: Buffer | undefined
+  private findPointsInPolygonVertexCoordBuffer: Buffer | undefined
   private drawHighlightedVertexCoordBuffer: Buffer | undefined
   private trackPointsVertexCoordBuffer: Buffer | undefined
   private trackedIndices: number[] | undefined
-  private selectedTexture: Texture | undefined
+  private searchTexture: Texture | undefined
   private pinnedStatusTexture: Texture | undefined
   private sizeTexture: Texture | undefined
   private trackedIndicesTexture: Texture | undefined
@@ -115,8 +114,8 @@ export class Points extends CoreModule {
       scalePointsOnZoom: number;
       maxPointSize: number;
       isDarkenGreyout: number;
-      skipSelected: number;
-      skipUnselected: number;
+      skipHighlighted: number;
+      skipGreyed: number;
       hasImages: number;
       imageCount: number;
       imageAtlasCoordsTextureSize: number;
@@ -126,25 +125,27 @@ export class Points extends CoreModule {
       pointOpacity: number;
       isDarkenGreyout: number;
       backgroundColor: [number, number, number, number];
+      outlineColor: [number, number, number, number];
+      outlineWidth: number;
     };
   }> | undefined
 
-  private findPointsOnAreaSelectionUniformStore: UniformStore<{
-    findPointsOnAreaSelectionUniforms: {
+  private findPointsInRectUniformStore: UniformStore<{
+    findPointsInRectUniforms: {
       spaceSize: number;
       screenSize: [number, number];
       sizeScale: number;
       transformationMatrix: Mat4Array;
       ratio: number;
-      selection0: [number, number];
-      selection1: [number, number];
+      rect0: [number, number];
+      rect1: [number, number];
       scalePointsOnZoom: number;
       maxPointSize: number;
     };
   }> | undefined
 
-  private findPointsOnPolygonSelectionUniformStore: UniformStore<{
-    findPointsOnPolygonSelectionUniforms: {
+  private findPointsInPolygonUniformStore: UniformStore<{
+    findPointsInPolygonUniforms: {
       spaceSize: number;
       screenSize: [number, number];
       transformationMatrix: Mat4Array;
@@ -163,8 +164,8 @@ export class Points extends CoreModule {
       scalePointsOnZoom: number;
       mousePosition: [number, number];
       maxPointSize: number;
-      skipSelected: number;
-      skipUnselected: number;
+      skipHighlighted: number;
+      skipGreyed: number;
     };
   }> | undefined
 
@@ -362,33 +363,33 @@ export class Points extends CoreModule {
       }
     }
 
-    // Create selectedTexture and framebuffer
-    if (!this.selectedTexture || this.selectedTexture.width !== pointsTextureSize || this.selectedTexture.height !== pointsTextureSize) {
-      if (this.selectedTexture && !this.selectedTexture.destroyed) {
-        this.selectedTexture.destroy()
+    // Create searchTexture and framebuffer
+    if (!this.searchTexture || this.searchTexture.width !== pointsTextureSize || this.searchTexture.height !== pointsTextureSize) {
+      if (this.searchTexture && !this.searchTexture.destroyed) {
+        this.searchTexture.destroy()
       }
-      if (this.selectedFbo && !this.selectedFbo.destroyed) {
-        this.selectedFbo.destroy()
+      if (this.searchFbo && !this.searchFbo.destroyed) {
+        this.searchFbo.destroy()
       }
-      this.selectedTexture = device.createTexture({
+      this.searchTexture = device.createTexture({
         width: pointsTextureSize,
         height: pointsTextureSize,
         format: 'rgba32float',
       })
-      this.selectedTexture.copyImageData({
+      this.searchTexture.copyImageData({
         data: initialState,
         bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
         mipLevel: 0,
         x: 0,
         y: 0,
       })
-      this.selectedFbo = device.createFramebuffer({
+      this.searchFbo = device.createFramebuffer({
         width: pointsTextureSize,
         height: pointsTextureSize,
-        colorAttachments: [this.selectedTexture],
+        colorAttachments: [this.searchTexture],
       })
     } else {
-      this.selectedTexture.copyImageData({
+      this.searchTexture.copyImageData({
         data: initialState,
         bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
         mipLevel: 0,
@@ -455,7 +456,7 @@ export class Points extends CoreModule {
       })
     }
 
-    this.updateGreyoutStatus()
+    this.updatePointStatus()
     this.updatePinnedStatus()
     this.updateSampledPointsGrid()
 
@@ -474,7 +475,7 @@ export class Points extends CoreModule {
     if (!this.shapeBuffer) this.updateShape()
     if (!this.imageIndicesBuffer) this.updateImageIndices()
     if (!this.imageSizesBuffer) this.updateImageSizes()
-    if (!this.greyoutStatusTexture) this.updateGreyoutStatus()
+    if (!this.pointStatusTexture) this.updatePointStatus()
     if (config.enableSimulation) {
       // Create vertex buffer for quad
       this.updatePositionVertexCoordBuffer ||= device.createBuffer({
@@ -577,8 +578,8 @@ export class Points extends CoreModule {
           scalePointsOnZoom: 'f32',
           maxPointSize: 'f32',
           isDarkenGreyout: 'f32',
-          skipSelected: 'f32',
-          skipUnselected: 'f32',
+          skipHighlighted: 'f32',
+          skipGreyed: 'f32',
           hasImages: 'f32',
           imageCount: 'f32',
           imageAtlasCoordsTextureSize: 'f32',
@@ -604,8 +605,8 @@ export class Points extends CoreModule {
           scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0, // Convert boolean to float
           maxPointSize: store.maxPointSize,
           isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
-          skipSelected: 0, // Default to 0 (false)
-          skipUnselected: 0, // Default to 0 (false)
+          skipHighlighted: 0, // Default to 0 (false)
+          skipGreyed: 0, // Default to 0 (false)
           hasImages: (this.imageCount > 0) ? 1 : 0, // Convert boolean to float
           imageCount: this.imageCount,
           imageAtlasCoordsTextureSize: this.imageAtlasCoordsTextureSize ?? 0,
@@ -617,6 +618,8 @@ export class Points extends CoreModule {
           pointOpacity: 'f32',
           isDarkenGreyout: 'f32',
           backgroundColor: 'vec4<f32>',
+          outlineColor: 'vec4<f32>',
+          outlineWidth: 'f32',
         },
         defaultUniforms: {
           // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
@@ -624,6 +627,8 @@ export class Points extends CoreModule {
           pointOpacity: config.pointOpacity,
           isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
           backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
+          outlineColor: ensureVec4(store.outlinedPointRingColor, [1, 1, 1, 1]),
+          outlineWidth: 0.9,
         },
       },
     })
@@ -673,13 +678,13 @@ export class Points extends CoreModule {
     })
 
     // Create vertex buffer for quad
-    this.findPointsOnAreaSelectionVertexCoordBuffer ||= device.createBuffer({
+    this.findPointsInRectVertexCoordBuffer ||= device.createBuffer({
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
     })
 
-    // Create UniformStore for findPointsOnAreaSelection uniforms
-    this.findPointsOnAreaSelectionUniformStore ||= new UniformStore({
-      findPointsOnAreaSelectionUniforms: {
+    // Create UniformStore for findPointsInRect uniforms
+    this.findPointsInRectUniformStore ||= new UniformStore({
+      findPointsInRectUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
           sizeScale: 'f32',
@@ -687,8 +692,8 @@ export class Points extends CoreModule {
           screenSize: 'vec2<f32>',
           ratio: 'f32',
           transformationMatrix: 'mat4x4<f32>',
-          selection0: 'vec2<f32>',
-          selection1: 'vec2<f32>',
+          rect0: 'vec2<f32>',
+          rect1: 'vec2<f32>',
           scalePointsOnZoom: 'f32',
           maxPointSize: 'f32',
         },
@@ -698,21 +703,21 @@ export class Points extends CoreModule {
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           ratio: config.pixelRatio,
           transformationMatrix: store.transformationMatrix4x4,
-          selection0: ensureVec2(store.selectedArea?.[0], [0, 0]),
-          selection1: ensureVec2(store.selectedArea?.[1], [0, 0]),
+          rect0: ensureVec2(store.searchArea?.[0], [0, 0]),
+          rect1: ensureVec2(store.searchArea?.[1], [0, 0]),
           scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0,
           maxPointSize: store.maxPointSize,
         },
       },
     })
 
-    this.findPointsOnAreaSelectionCommand ||= new Model(device, {
-      fs: findPointsOnAreaSelectionFrag,
+    this.findPointsInRectCommand ||= new Model(device, {
+      fs: findPointsInRectFrag,
       vs: updateVert,
       topology: 'triangle-strip',
       vertexCount: 4,
       attributes: {
-        vertexCoord: this.findPointsOnAreaSelectionVertexCoordBuffer,
+        vertexCoord: this.findPointsInRectVertexCoordBuffer,
       },
       bufferLayout: [
         { name: 'vertexCoord', format: 'float32x2' },
@@ -723,19 +728,19 @@ export class Points extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        findPointsOnAreaSelectionUniforms: this.findPointsOnAreaSelectionUniformStore.getManagedUniformBuffer(device, 'findPointsOnAreaSelectionUniforms'),
-        // All texture bindings will be set dynamically in findPointsOnAreaSelection() method
+        findPointsInRectUniforms: this.findPointsInRectUniformStore.getManagedUniformBuffer(device, 'findPointsInRectUniforms'),
+        // All texture bindings will be set dynamically in findPointsInRect() method
       },
     })
 
     // Create vertex buffer for quad
-    this.findPointsOnPolygonSelectionVertexCoordBuffer ||= device.createBuffer({
+    this.findPointsInPolygonVertexCoordBuffer ||= device.createBuffer({
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
     })
 
-    // Create UniformStore for findPointsOnPolygonSelection uniforms
-    this.findPointsOnPolygonSelectionUniformStore ||= new UniformStore({
-      findPointsOnPolygonSelectionUniforms: {
+    // Create UniformStore for findPointsInPolygon uniforms
+    this.findPointsInPolygonUniformStore ||= new UniformStore({
+      findPointsInPolygonUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
           spaceSize: 'f32',
@@ -752,13 +757,13 @@ export class Points extends CoreModule {
       },
     })
 
-    this.findPointsOnPolygonSelectionCommand ||= new Model(device, {
-      fs: findPointsOnPolygonSelectionFrag,
+    this.findPointsInPolygonCommand ||= new Model(device, {
+      fs: findPointsInPolygonFrag,
       vs: updateVert,
       topology: 'triangle-strip',
       vertexCount: 4,
       attributes: {
-        vertexCoord: this.findPointsOnPolygonSelectionVertexCoordBuffer,
+        vertexCoord: this.findPointsInPolygonVertexCoordBuffer,
       },
       bufferLayout: [
         { name: 'vertexCoord', format: 'float32x2' },
@@ -769,9 +774,9 @@ export class Points extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        findPointsOnPolygonSelectionUniforms: this.findPointsOnPolygonSelectionUniformStore
-          .getManagedUniformBuffer(device, 'findPointsOnPolygonSelectionUniforms'),
-        // All texture bindings will be set dynamically in findPointsOnPolygonSelection() method
+        findPointsInPolygonUniforms: this.findPointsInPolygonUniformStore
+          .getManagedUniformBuffer(device, 'findPointsInPolygonUniforms'),
+        // All texture bindings will be set dynamically in findPointsInPolygon() method
       },
     })
 
@@ -789,8 +794,8 @@ export class Points extends CoreModule {
           mousePosition: 'vec2<f32>',
           scalePointsOnZoom: 'f32',
           maxPointSize: 'f32',
-          skipSelected: 'f32',
-          skipUnselected: 'f32',
+          skipHighlighted: 'f32',
+          skipGreyed: 'f32',
         },
         defaultUniforms: {
           pointsTextureSize: store.pointsTextureSize ?? 0,
@@ -802,8 +807,8 @@ export class Points extends CoreModule {
           mousePosition: ensureVec2(store.screenMousePosition, [0, 0]),
           scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0,
           maxPointSize: store.maxPointSize,
-          skipSelected: 0,
-          skipUnselected: 0,
+          skipHighlighted: 0,
+          skipGreyed: 0,
         },
       },
     })
@@ -1032,44 +1037,55 @@ export class Points extends CoreModule {
     }
   }
 
-  public updateGreyoutStatus (): void {
-    const { device, store: { selectedIndices, pointsTextureSize } } = this
-    if (!pointsTextureSize) return
+  public updatePointStatus (): void {
+    const { device, config, data, store: { pointsTextureSize } } = this
+    if (!pointsTextureSize || data.pointsNumber === undefined) return
 
-    // Greyout status: 0 - false, highlighted or normal point; 1 - true, greyout point
-    const initialState = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
-      .fill(selectedIndices ? 1 : 0)
+    const { highlightedPointIndices, outlinedPointIndices } = config
+    const hasHighlighting = highlightedPointIndices !== undefined
+    const hasOutlining = outlinedPointIndices !== undefined
 
-    if (selectedIndices) {
-      for (const selectedIndex of selectedIndices) {
-        initialState[selectedIndex * 4] = 0
+    // Point status texture channels:
+    // R = greyout (0 = highlighted/normal, 1 = greyed)
+    // G = outlined (0 = no ring, 1 = draw ring)
+    const state = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
+
+    if (hasHighlighting) {
+      // Fill R channel with 1 (all greyed by default)
+      for (let i = 0; i < state.length; i += 4) state[i] = 1
+      // Clear R channel for highlighted points
+      for (const idx of highlightedPointIndices) {
+        if (idx >= 0 && idx < data.pointsNumber) state[idx * 4] = 0
       }
     }
 
-    if (!this.greyoutStatusTexture || this.greyoutStatusTexture.width !== pointsTextureSize || this.greyoutStatusTexture.height !== pointsTextureSize) {
-      if (this.greyoutStatusTexture && !this.greyoutStatusTexture.destroyed) {
-        this.greyoutStatusTexture.destroy()
+    if (hasOutlining) {
+      // Set G channel for outlined points
+      for (const idx of outlinedPointIndices) {
+        if (idx >= 0 && idx < data.pointsNumber) state[idx * 4 + 1] = 1
       }
-      this.greyoutStatusTexture = device.createTexture({
+    }
+
+    const copyData = {
+      data: state,
+      bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
+      mipLevel: 0,
+      x: 0,
+      y: 0,
+    }
+
+    if (!this.pointStatusTexture || this.pointStatusTexture.width !== pointsTextureSize || this.pointStatusTexture.height !== pointsTextureSize) {
+      if (this.pointStatusTexture && !this.pointStatusTexture.destroyed) {
+        this.pointStatusTexture.destroy()
+      }
+      this.pointStatusTexture = device.createTexture({
         width: pointsTextureSize,
         height: pointsTextureSize,
         format: 'rgba32float',
       })
-      this.greyoutStatusTexture.copyImageData({
-        data: initialState,
-        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
-      })
+      this.pointStatusTexture.copyImageData(copyData)
     } else {
-      this.greyoutStatusTexture.copyImageData({
-        data: initialState,
-        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
-      })
+      this.pointStatusTexture.copyImageData(copyData)
     }
   }
 
@@ -1379,7 +1395,7 @@ export class Points extends CoreModule {
 
     if (!this.drawCommand || !this.drawUniformStore) return
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
-    if (!this.greyoutStatusTexture || this.greyoutStatusTexture.destroyed) return
+    if (!this.pointStatusTexture || this.pointStatusTexture.destroyed) return
     if (!this.imageAtlasTexture || !this.imageAtlasCoordsTexture) {
       this.createAtlas()
       if (!this.imageAtlasTexture || !this.imageAtlasCoordsTexture) return
@@ -1424,64 +1440,65 @@ export class Points extends CoreModule {
       pointOpacity: config.pointOpacity,
       isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
       backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
+      outlineColor: ensureVec4(store.outlinedPointRingColor, [1, 1, 1, 1]),
+      outlineWidth: 0.9,
     }
 
-    // Render in layers: unselected points first (behind), then selected points (in front)
-    if (store.selectedIndices && store.selectedIndices.length > 0) {
-      // First draw unselected points (they will appear behind)
+    const hasHighlighting = config.highlightedPointIndices !== undefined
+
+    // Render in layers: greyed points first (behind), then highlighted points (in front)
+    if (hasHighlighting) {
+      // First draw greyed points (they will appear behind)
       this.drawUniformStore.setUniforms({
         drawVertexUniforms: {
           ...baseVertexUniforms,
-          skipSelected: 1, // Skip selected points (1.0 for true)
-          skipUnselected: 0, // Draw unselected points (0.0 for false)
+          skipHighlighted: 1,
+          skipGreyed: 0,
         },
         drawFragmentUniforms: baseFragmentUniforms,
       })
 
-      // Update texture bindings dynamically
       this.drawCommand.setBindings({
         positionsTexture: this.currentPositionTexture,
-        pointGreyoutStatus: this.greyoutStatusTexture,
+        pointStatus: this.pointStatusTexture,
         imageAtlasTexture: this.imageAtlasTexture,
         imageAtlasCoords: this.imageAtlasCoordsTexture,
       })
 
       this.drawCommand.draw(renderPass)
 
-      // Then draw selected points (they will appear in front)
+      // Then draw highlighted points (they will appear in front)
       this.drawUniformStore.setUniforms({
         drawVertexUniforms: {
           ...baseVertexUniforms,
-          skipSelected: 0, // Draw selected points (0.0 for false)
-          skipUnselected: 1, // Skip unselected points (1.0 for true)
+          skipHighlighted: 0,
+          skipGreyed: 1,
         },
         drawFragmentUniforms: baseFragmentUniforms,
       })
 
-      // Update texture bindings dynamically
       this.drawCommand.setBindings({
         positionsTexture: this.currentPositionTexture,
-        pointGreyoutStatus: this.greyoutStatusTexture,
+        pointStatus: this.pointStatusTexture,
         imageAtlasTexture: this.imageAtlasTexture,
         imageAtlasCoords: this.imageAtlasCoordsTexture,
       })
 
       this.drawCommand.draw(renderPass)
     } else {
-      // If no selection, draw all points
+      // If no highlighting, draw all points
       this.drawUniformStore.setUniforms({
         drawVertexUniforms: {
           ...baseVertexUniforms,
-          skipSelected: 0, // Draw all points (0.0 for false)
-          skipUnselected: 0, // Draw all points (0.0 for false)
+          skipHighlighted: 0,
+          skipGreyed: 0,
         },
         drawFragmentUniforms: baseFragmentUniforms,
       })
 
-      // Update texture bindings dynamically
       this.drawCommand.setBindings({
         positionsTexture: this.currentPositionTexture,
-        pointGreyoutStatus: this.greyoutStatusTexture,
+        pointStatus: this.pointStatusTexture,
         imageAtlasTexture: this.imageAtlasTexture,
         imageAtlasCoords: this.imageAtlasCoordsTexture,
       })
@@ -1492,7 +1509,7 @@ export class Points extends CoreModule {
     // Draw highlighted point rings if enabled
     if (config.renderHoveredPointRing && store.hoveredPoint && this.drawHighlightedCommand && this.drawHighlightedUniformStore) {
       if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
-      if (!this.greyoutStatusTexture || this.greyoutStatusTexture.destroyed) return
+      if (!this.pointStatusTexture || this.pointStatusTexture.destroyed) return
       const pointSize = data.pointSizes?.[store.hoveredPoint.index] ?? 1
       const imageSize = data.pointImageSizes?.[store.hoveredPoint.index] ?? pointSize
       this.drawHighlightedUniformStore.setUniforms({
@@ -1519,14 +1536,14 @@ export class Points extends CoreModule {
       // Update texture bindings dynamically
       this.drawHighlightedCommand.setBindings({
         positionsTexture: this.currentPositionTexture,
-        pointGreyoutStatusTexture: this.greyoutStatusTexture,
+        pointStatus: this.pointStatusTexture,
       })
       this.drawHighlightedCommand.draw(renderPass)
     }
 
     if (store.focusedPoint && this.drawHighlightedCommand && this.drawHighlightedUniformStore) {
       if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
-      if (!this.greyoutStatusTexture || this.greyoutStatusTexture.destroyed) return
+      if (!this.pointStatusTexture || this.pointStatusTexture.destroyed) return
       const pointSize = data.pointSizes?.[store.focusedPoint.index] ?? 1
       const imageSize = data.pointImageSizes?.[store.focusedPoint.index] ?? pointSize
       this.drawHighlightedUniformStore.setUniforms({
@@ -1553,7 +1570,7 @@ export class Points extends CoreModule {
       // Update texture bindings dynamically
       this.drawHighlightedCommand.setBindings({
         positionsTexture: this.currentPositionTexture,
-        pointGreyoutStatusTexture: this.greyoutStatusTexture,
+        pointStatus: this.pointStatusTexture,
       })
       this.drawHighlightedCommand.draw(renderPass)
     }
@@ -1621,45 +1638,46 @@ export class Points extends CoreModule {
     this.isPositionsUpToDate = false
   }
 
-  public findPointsOnAreaSelection (): void {
-    if (!this.findPointsOnAreaSelectionCommand || !this.findPointsOnAreaSelectionUniformStore || !this.selectedFbo || this.selectedFbo.destroyed) return
-    if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
-    if (!this.sizeTexture || this.sizeTexture.destroyed) return
+  public findPointsInRect (): boolean {
+    if (!this.findPointsInRectCommand || !this.findPointsInRectUniformStore || !this.searchFbo || this.searchFbo.destroyed) return false
+    if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return false
+    if (!this.sizeTexture || this.sizeTexture.destroyed) return false
 
-    this.findPointsOnAreaSelectionUniformStore.setUniforms({
-      findPointsOnAreaSelectionUniforms: {
+    this.findPointsInRectUniformStore.setUniforms({
+      findPointsInRectUniforms: {
         spaceSize: this.store.adjustedSpaceSize,
         screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         sizeScale: this.config.pointSizeScale,
         transformationMatrix: this.store.transformationMatrix4x4,
         ratio: this.config.pixelRatio,
-        selection0: ensureVec2(this.store.selectedArea?.[0], [0, 0]),
-        selection1: ensureVec2(this.store.selectedArea?.[1], [0, 0]),
+        rect0: ensureVec2(this.store.searchArea?.[0], [0, 0]),
+        rect1: ensureVec2(this.store.searchArea?.[1], [0, 0]),
         scalePointsOnZoom: this.config.scalePointsOnZoom ? 1 : 0, // Convert boolean to number
         maxPointSize: this.store.maxPointSize,
       },
     })
 
     // Update texture bindings dynamically
-    this.findPointsOnAreaSelectionCommand.setBindings({
+    this.findPointsInRectCommand.setBindings({
       positionsTexture: this.currentPositionTexture,
       pointSize: this.sizeTexture,
     })
 
     const renderPass = this.device.beginRenderPass({
-      framebuffer: this.selectedFbo,
+      framebuffer: this.searchFbo,
     })
-    this.findPointsOnAreaSelectionCommand.draw(renderPass)
+    this.findPointsInRectCommand.draw(renderPass)
     renderPass.end()
+    return true
   }
 
-  public findPointsOnPolygonSelection (): void {
-    if (!this.findPointsOnPolygonSelectionCommand || !this.findPointsOnPolygonSelectionUniformStore || !this.selectedFbo || this.selectedFbo.destroyed) return
-    if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
-    if (!this.polygonPathTexture || this.polygonPathTexture.destroyed) return
+  public findPointsInPolygon (): boolean {
+    if (!this.findPointsInPolygonCommand || !this.findPointsInPolygonUniformStore || !this.searchFbo || this.searchFbo.destroyed) return false
+    if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return false
+    if (!this.polygonPathTexture || this.polygonPathTexture.destroyed) return false
 
-    this.findPointsOnPolygonSelectionUniformStore.setUniforms({
-      findPointsOnPolygonSelectionUniforms: {
+    this.findPointsInPolygonUniformStore.setUniforms({
+      findPointsInPolygonUniforms: {
         spaceSize: this.store.adjustedSpaceSize,
         screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         transformationMatrix: this.store.transformationMatrix4x4,
@@ -1668,16 +1686,17 @@ export class Points extends CoreModule {
     })
 
     // Update texture bindings dynamically
-    this.findPointsOnPolygonSelectionCommand.setBindings({
+    this.findPointsInPolygonCommand.setBindings({
       positionsTexture: this.currentPositionTexture,
       polygonPathTexture: this.polygonPathTexture,
     })
 
     const renderPass = this.device.beginRenderPass({
-      framebuffer: this.selectedFbo,
+      framebuffer: this.searchFbo,
     })
-    this.findPointsOnPolygonSelectionCommand.draw(renderPass)
+    this.findPointsInPolygonCommand.draw(renderPass)
     renderPass.end()
+    return true
   }
 
   public updatePolygonPath (polygonPath: [number, number][]): void {
@@ -1737,8 +1756,8 @@ export class Points extends CoreModule {
 
     if (!this.findHoveredPointCommand || !this.findHoveredPointUniformStore) return
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
-    if (!this.greyoutStatusTexture) this.updateGreyoutStatus()
-    if (!this.greyoutStatusTexture || this.greyoutStatusTexture.destroyed) return
+    if (!this.pointStatusTexture) this.updatePointStatus()
+    if (!this.pointStatusTexture || this.pointStatusTexture.destroyed) return
 
     this.findHoveredPointCommand.setVertexCount(this.data.pointsNumber ?? 0)
 
@@ -1762,7 +1781,7 @@ export class Points extends CoreModule {
 
     const bindings = {
       positionsTexture: this.currentPositionTexture,
-      pointGreyoutStatus: this.greyoutStatusTexture,
+      pointStatus: this.pointStatusTexture,
     }
 
     const renderPass = this.device.beginRenderPass({
@@ -1770,13 +1789,14 @@ export class Points extends CoreModule {
       clearColor: [0, 0, 0, 0],
     })
 
-    if (this.store.selectedIndices && this.store.selectedIndices.length > 0) {
-      // Same two-pass order as drawing: unselected first, then selected (top-most wins)
+    const hasHighlighting = this.config.highlightedPointIndices !== undefined
+    if (hasHighlighting) {
+      // Same two-pass order as drawing: greyed first, then highlighted (top-most wins)
       this.findHoveredPointUniformStore.setUniforms({
         findHoveredPointUniforms: {
           ...baseUniforms,
-          skipSelected: 1,
-          skipUnselected: 0,
+          skipHighlighted: 1,
+          skipGreyed: 0,
         },
       })
       this.findHoveredPointCommand.setBindings(bindings)
@@ -1785,8 +1805,8 @@ export class Points extends CoreModule {
       this.findHoveredPointUniformStore.setUniforms({
         findHoveredPointUniforms: {
           ...baseUniforms,
-          skipSelected: 0,
-          skipUnselected: 1,
+          skipHighlighted: 0,
+          skipGreyed: 1,
         },
       })
       this.findHoveredPointCommand.setBindings(bindings)
@@ -1795,8 +1815,8 @@ export class Points extends CoreModule {
       this.findHoveredPointUniformStore.setUniforms({
         findHoveredPointUniforms: {
           ...baseUniforms,
-          skipSelected: 0,
-          skipUnselected: 0,
+          skipHighlighted: 0,
+          skipGreyed: 0,
         },
       })
       this.findHoveredPointCommand.setBindings(bindings)
@@ -2038,10 +2058,10 @@ export class Points extends CoreModule {
     this.updatePositionCommand = undefined
     this.dragPointCommand?.destroy()
     this.dragPointCommand = undefined
-    this.findPointsOnAreaSelectionCommand?.destroy()
-    this.findPointsOnAreaSelectionCommand = undefined
-    this.findPointsOnPolygonSelectionCommand?.destroy()
-    this.findPointsOnPolygonSelectionCommand = undefined
+    this.findPointsInRectCommand?.destroy()
+    this.findPointsInRectCommand = undefined
+    this.findPointsInPolygonCommand?.destroy()
+    this.findPointsInPolygonCommand = undefined
     this.findHoveredPointCommand?.destroy()
     this.findHoveredPointCommand = undefined
     this.fillSampledPointsFboCommand?.destroy()
@@ -2062,10 +2082,10 @@ export class Points extends CoreModule {
       this.velocityFbo.destroy()
     }
     this.velocityFbo = undefined
-    if (this.selectedFbo && !this.selectedFbo.destroyed) {
-      this.selectedFbo.destroy()
+    if (this.searchFbo && !this.searchFbo.destroyed) {
+      this.searchFbo.destroy()
     }
-    this.selectedFbo = undefined
+    this.searchFbo = undefined
     if (this.hoveredFbo && !this.hoveredFbo.destroyed) {
       this.hoveredFbo.destroy()
     }
@@ -2092,14 +2112,14 @@ export class Points extends CoreModule {
       this.velocityTexture.destroy()
     }
     this.velocityTexture = undefined
-    if (this.selectedTexture && !this.selectedTexture.destroyed) {
-      this.selectedTexture.destroy()
+    if (this.searchTexture && !this.searchTexture.destroyed) {
+      this.searchTexture.destroy()
     }
-    this.selectedTexture = undefined
-    if (this.greyoutStatusTexture && !this.greyoutStatusTexture.destroyed) {
-      this.greyoutStatusTexture.destroy()
+    this.searchTexture = undefined
+    if (this.pointStatusTexture && !this.pointStatusTexture.destroyed) {
+      this.pointStatusTexture.destroy()
     }
-    this.greyoutStatusTexture = undefined
+    this.pointStatusTexture = undefined
     if (this.sizeTexture && !this.sizeTexture.destroyed) {
       this.sizeTexture.destroy()
     }
@@ -2132,10 +2152,10 @@ export class Points extends CoreModule {
     this.dragPointUniformStore = undefined
     this.drawUniformStore?.destroy()
     this.drawUniformStore = undefined
-    this.findPointsOnAreaSelectionUniformStore?.destroy()
-    this.findPointsOnAreaSelectionUniformStore = undefined
-    this.findPointsOnPolygonSelectionUniformStore?.destroy()
-    this.findPointsOnPolygonSelectionUniformStore = undefined
+    this.findPointsInRectUniformStore?.destroy()
+    this.findPointsInRectUniformStore = undefined
+    this.findPointsInPolygonUniformStore?.destroy()
+    this.findPointsInPolygonUniformStore = undefined
     this.findHoveredPointUniformStore?.destroy()
     this.findHoveredPointUniformStore = undefined
     this.fillSampledPointsUniformStore?.destroy()
@@ -2186,14 +2206,14 @@ export class Points extends CoreModule {
       this.dragPointVertexCoordBuffer.destroy()
     }
     this.dragPointVertexCoordBuffer = undefined
-    if (this.findPointsOnAreaSelectionVertexCoordBuffer && !this.findPointsOnAreaSelectionVertexCoordBuffer.destroyed) {
-      this.findPointsOnAreaSelectionVertexCoordBuffer.destroy()
+    if (this.findPointsInRectVertexCoordBuffer && !this.findPointsInRectVertexCoordBuffer.destroyed) {
+      this.findPointsInRectVertexCoordBuffer.destroy()
     }
-    this.findPointsOnAreaSelectionVertexCoordBuffer = undefined
-    if (this.findPointsOnPolygonSelectionVertexCoordBuffer && !this.findPointsOnPolygonSelectionVertexCoordBuffer.destroyed) {
-      this.findPointsOnPolygonSelectionVertexCoordBuffer.destroy()
+    this.findPointsInRectVertexCoordBuffer = undefined
+    if (this.findPointsInPolygonVertexCoordBuffer && !this.findPointsInPolygonVertexCoordBuffer.destroyed) {
+      this.findPointsInPolygonVertexCoordBuffer.destroy()
     }
-    this.findPointsOnPolygonSelectionVertexCoordBuffer = undefined
+    this.findPointsInPolygonVertexCoordBuffer = undefined
     if (this.drawHighlightedVertexCoordBuffer && !this.drawHighlightedVertexCoordBuffer.destroyed) {
       this.drawHighlightedVertexCoordBuffer.destroy()
     }

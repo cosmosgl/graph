@@ -19,6 +19,8 @@ export class Lines extends CoreModule {
   public linkIndexFbo: Framebuffer | undefined
   public hoveredLineIndexFbo: Framebuffer | undefined
   public sampledLinksFbo: Framebuffer | undefined
+  public linkStatusTexture: Texture | undefined
+  private linkStatusTextureSize = 0
   private drawCurveCommand: Model | undefined
   private hoveredLineIndexCommand: Model | undefined
   private fillSampledLinksFboCommand: Model | undefined
@@ -67,6 +69,10 @@ export class Lines extends CoreModule {
       hoveredLinkIndex: number;
       hoveredLinkColor: [number, number, number, number];
       hoveredLinkWidthIncrease: number;
+      isLinkHighlightingActive: number;
+      linkStatusTextureSize: number;
+      focusedLinkIndex: number;
+      focusedLinkWidthIncrease: number;
     };
     drawLineFragmentUniforms: {
       renderMode: number;
@@ -157,6 +163,10 @@ export class Lines extends CoreModule {
           hoveredLinkIndex: 'f32',
           hoveredLinkColor: 'vec4<f32>',
           hoveredLinkWidthIncrease: 'f32',
+          isLinkHighlightingActive: 'f32',
+          linkStatusTextureSize: 'f32',
+          focusedLinkIndex: 'f32',
+          focusedLinkWidthIncrease: 'f32',
         },
         defaultUniforms: {
           transformationMatrix: store.transformationMatrix4x4,
@@ -178,6 +188,10 @@ export class Lines extends CoreModule {
           hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
           hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
           hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease,
+          isLinkHighlightingActive: 0,
+          linkStatusTextureSize: 0,
+          focusedLinkIndex: config.focusedLinkIndex ?? -1,
+          focusedLinkWidthIncrease: config.focusedLinkWidthIncrease,
         },
       },
       drawLineFragmentUniforms: {
@@ -342,19 +356,21 @@ export class Lines extends CoreModule {
     })
 
     this.updateSampledLinksGrid()
+    this.updateLinkStatus()
   }
 
   public draw (renderPass: RenderPass): void {
     const { config, points, store } = this
     if (!points) return
     if (!points.currentPositionTexture || points.currentPositionTexture.destroyed) return
-    if (!points.greyoutStatusTexture || points.greyoutStatusTexture.destroyed) return
     if (!this.pointABuffer || !this.pointBBuffer) this.updatePointsBuffer()
     if (!this.colorBuffer) this.updateColor()
     if (!this.widthBuffer) this.updateWidth()
     if (!this.arrowBuffer) this.updateArrow()
     if (!this.curveLineGeometry) this.updateCurveLineGeometry()
-    if (!this.drawCurveCommand || !this.drawLineUniformStore) return
+    if (!this.drawCurveCommand || !this.drawLineUniformStore || !this.linkStatusTexture) return
+
+    const hasHighlighting = config.highlightedLinkIndices !== undefined
 
     // Update uniforms
     this.drawLineUniformStore.setUniforms({
@@ -378,6 +394,10 @@ export class Lines extends CoreModule {
         hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
         hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
         hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease,
+        isLinkHighlightingActive: hasHighlighting ? 1 : 0,
+        linkStatusTextureSize: this.linkStatusTextureSize,
+        focusedLinkIndex: config.focusedLinkIndex ?? -1,
+        focusedLinkWidthIncrease: config.focusedLinkWidthIncrease,
       },
       drawLineFragmentUniforms: {
         renderMode: 0.0, // Normal rendering
@@ -387,7 +407,7 @@ export class Lines extends CoreModule {
     // Update texture bindings dynamically
     this.drawCurveCommand.setBindings({
       positionsTexture: points.currentPositionTexture,
-      pointGreyoutStatus: points.greyoutStatusTexture,
+      linkStatus: this.linkStatusTexture,
     })
 
     // Update instance count
@@ -552,6 +572,7 @@ export class Lines extends CoreModule {
     }
 
     this.updateSampledLinksGrid()
+    if (this.config.highlightedLinkIndices !== undefined) this.updateLinkStatus()
   }
 
   public updateColor (): void {
@@ -651,6 +672,71 @@ export class Lines extends CoreModule {
       this.drawCurveCommand.setAttributes({
         arrow: this.arrowBuffer,
       })
+    }
+  }
+
+  public updateLinkStatus (): void {
+    const { device, config, data } = this
+    const linksNumber = data.linksNumber ?? 0
+
+    // No links yet — ensure a placeholder texture exists so luma.gl always has
+    // a valid binding for the linkStatus sampler (it silently skips the draw
+    // call if any declared sampler is unbound).
+    if (!linksNumber) {
+      if (!this.linkStatusTexture) this.ensureLinkStatusPlaceholder()
+      return
+    }
+
+    const { highlightedLinkIndices } = config
+
+    // Highlighting cleared — keep the existing texture to avoid GPU alloc churn,
+    // but set the size to 0 so the shader knows not to sample it
+    // (the isLinkHighlightingActive uniform is set to 0 when highlighting is off).
+    // If no texture exists yet (first call), create a 1×1 placeholder.
+    if (highlightedLinkIndices === undefined) {
+      if (!this.linkStatusTexture) this.ensureLinkStatusPlaceholder()
+      this.linkStatusTextureSize = 0
+      return
+    }
+
+    // Calculate texture size (square texture large enough for all links)
+    const textureSize = Math.ceil(Math.sqrt(linksNumber))
+    this.linkStatusTextureSize = textureSize
+
+    const state = new Float32Array(textureSize * textureSize * 4)
+
+    // Mark all links as greyed out (R=1)
+    for (let i = 0; i < linksNumber; i++) {
+      state[i * 4] = 1
+    }
+    // Un-grey highlighted links
+    for (const idx of highlightedLinkIndices) {
+      if (idx >= 0 && idx < linksNumber) {
+        state[idx * 4] = 0
+      }
+    }
+
+    const copyData = {
+      data: state,
+      bytesPerRow: getBytesPerRow('rgba32float', textureSize),
+      mipLevel: 0,
+      x: 0,
+      y: 0,
+    }
+
+    if (!this.linkStatusTexture || this.linkStatusTexture.width !== textureSize || this.linkStatusTexture.height !== textureSize) {
+      if (this.linkStatusTexture && !this.linkStatusTexture.destroyed) {
+        this.linkStatusTexture.destroy()
+      }
+      this.linkStatusTexture = device.createTexture({
+        width: textureSize,
+        height: textureSize,
+        format: 'rgba32float',
+        usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
+      })
+      this.linkStatusTexture.copyImageData(copyData)
+    } else {
+      this.linkStatusTexture.copyImageData(copyData)
     }
   }
 
@@ -784,10 +870,11 @@ export class Lines extends CoreModule {
     const { config, points, store } = this
     if (!points) return
     if (!points.currentPositionTexture || points.currentPositionTexture.destroyed) return
-    if (!points.greyoutStatusTexture || points.greyoutStatusTexture.destroyed) return
     if (!this.data.linksNumber || !this.store.isLinkHoveringEnabled) return
-    if (!this.linkIndexFbo || !this.drawCurveCommand || !this.drawLineUniformStore) return
+    if (!this.linkIndexFbo || !this.drawCurveCommand || !this.drawLineUniformStore || !this.linkStatusTexture) return
     if (!this.linkIndexTexture || this.linkIndexTexture.destroyed) return
+
+    const hasHighlighting = config.highlightedLinkIndices !== undefined
 
     // Update uniforms for index rendering
     this.drawLineUniformStore.setUniforms({
@@ -811,6 +898,10 @@ export class Lines extends CoreModule {
         hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
         hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
         hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease,
+        isLinkHighlightingActive: hasHighlighting ? 1 : 0,
+        linkStatusTextureSize: this.linkStatusTextureSize,
+        focusedLinkIndex: config.focusedLinkIndex ?? -1,
+        focusedLinkWidthIncrease: config.focusedLinkWidthIncrease,
       },
       drawLineFragmentUniforms: {
         renderMode: 1.0, // Index rendering for picking
@@ -820,7 +911,7 @@ export class Lines extends CoreModule {
     // Update texture bindings dynamically
     this.drawCurveCommand.setBindings({
       positionsTexture: points.currentPositionTexture,
-      pointGreyoutStatus: points.greyoutStatusTexture,
+      linkStatus: this.linkStatusTexture,
     })
 
     // Update instance count
@@ -892,6 +983,10 @@ export class Lines extends CoreModule {
       this.hoveredLineIndexTexture.destroy()
     }
     this.hoveredLineIndexTexture = undefined
+    if (this.linkStatusTexture && !this.linkStatusTexture.destroyed) {
+      this.linkStatusTexture.destroy()
+    }
+    this.linkStatusTexture = undefined
 
     // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
     this.drawLineUniformStore?.destroy()
@@ -934,5 +1029,21 @@ export class Lines extends CoreModule {
       this.quadBuffer.destroy()
     }
     this.quadBuffer = undefined
+  }
+
+  // Creates a 1×1 placeholder texture for the linkStatus sampler if none exists.
+  // luma.gl silently skips the draw call when any declared sampler is unbound,
+  // so this ensures a valid binding is always available. The shader won't sample
+  // the placeholder — the isLinkHighlightingActive uniform guards that branch.
+  private ensureLinkStatusPlaceholder (): void {
+    if (this.linkStatusTexture && !this.linkStatusTexture.destroyed) return
+    this.linkStatusTexture = this.device.createTexture({
+      width: 1,
+      height: 1,
+      format: 'rgba32float',
+      usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
+      data: new Float32Array(4).fill(0),
+    })
+    this.linkStatusTextureSize = 0
   }
 }
