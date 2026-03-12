@@ -1,6 +1,6 @@
 import { drag } from 'd3-drag'
 import { Store } from '@/graph/modules/Store'
-import { GraphConfigInterface } from '@/graph/config'
+import { type GraphConfigInterface } from '@/graph/config'
 
 export class Drag {
   public readonly store: Store
@@ -14,16 +14,16 @@ export class Drag {
       if (this.store.hoveredPoint) {
         this.store.draggingPointIndex = this.store.hoveredPoint.index
         this.isActive = true
-        this.config?.onDragStart?.(e)
+        this.config.onDragStart?.(e)
       }
     })
     .on('drag', (e) => {
-      this.config?.onDrag?.(e)
+      this.config.onDrag?.(e)
     })
     .on('end', (e) => {
       this.isActive = false
       this.store.draggingPointIndex = undefined
-      this.config?.onDragEnd?.(e)
+      this.config.onDragEnd?.(e)
     })
 
   public constructor (store: Store, config: GraphConfigInterface) {

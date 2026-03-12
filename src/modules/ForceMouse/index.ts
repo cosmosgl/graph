@@ -1,7 +1,7 @@
 import { Buffer, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
-import { defaultConfigValues } from '@/graph/variables'
+
 import forceFrag from '@/graph/modules/ForceMouse/force-mouse.frag?raw'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 import { ensureVec2 } from '@/graph/modules/Shared/uniform-utils'
@@ -69,7 +69,7 @@ export class ForceMouse extends CoreModule {
 
     this.uniformStore.setUniforms({
       forceMouseUniforms: {
-        repulsion: this.config.simulationRepulsionFromMouse ?? defaultConfigValues.simulationRepulsionFromMouse,
+        repulsion: this.config.simulationRepulsionFromMouse,
         mousePos: ensureVec2(store.mousePosition, [0, 0]),
       },
     })

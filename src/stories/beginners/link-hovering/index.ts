@@ -1,4 +1,4 @@
-import { Graph, GraphConfigInterface } from '@cosmos.gl/graph'
+import { Graph, type GraphConfig } from '@cosmos.gl/graph'
 import { generateData } from './data-generator'
 import './style.css'
 
@@ -13,7 +13,7 @@ export const linkHovering = (): { div: HTMLDivElement; graph: Graph; destroy?: (
   div.style.position = 'relative'
 
   // Configure graph
-  const config: GraphConfigInterface = {
+  const config: GraphConfig = {
     backgroundColor: '#2d313a',
     scalePointsOnZoom: true,
     linkDefaultArrows: false,

@@ -1,7 +1,7 @@
 import { Framebuffer, Buffer, Texture, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
-import { defaultConfigValues } from '@/graph/variables'
+
 import calculateCentermassFrag from '@/graph/modules/Clusters/calculate-centermass.frag?raw'
 import calculateCentermassVert from '@/graph/modules/Clusters/calculate-centermass.vert?raw'
 import forceFrag from '@/graph/modules/Clusters/force-cluster.frag?raw'
@@ -309,7 +309,7 @@ export class Clusters extends CoreModule {
         defaultUniforms: {
           alpha: store.alpha,
           clustersTextureSize: (this.clustersTextureSize ?? 0),
-          clusterCoefficient: this.config.simulationCluster ?? defaultConfigValues.simulationCluster,
+          clusterCoefficient: this.config.simulationCluster,
         },
       },
     })
@@ -406,7 +406,7 @@ export class Clusters extends CoreModule {
       applyForcesUniforms: {
         alpha: this.store.alpha,
         clustersTextureSize: (this.clustersTextureSize ?? 0),
-        clusterCoefficient: this.config.simulationCluster ?? defaultConfigValues.simulationCluster,
+        clusterCoefficient: this.config.simulationCluster,
       },
     })
 

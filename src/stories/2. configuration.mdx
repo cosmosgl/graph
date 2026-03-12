@@ -4,6 +4,11 @@ import { Meta } from "@storybook/blocks";
 
 # cosmos.gl configuration properties
 
+All configuration properties are optional. When creating a graph or calling `setConfig()`, any omitted properties will use their default values.
+
+> **Note:** `setConfig()` fully resets the configuration to defaults before applying the provided values.
+> Properties not included in the call will revert to their defaults, not retain their previous values.
+
 | Property | Description | Default |
 |---|---|---|
 | enableSimulation | If set to `false`, the simulation will not run. This property will be applied only on component initialization and it can't be changed using the `setConfig` method | `true` |

@@ -1,7 +1,7 @@
 import { zoom, ZoomTransform, zoomIdentity, D3ZoomEvent } from 'd3-zoom'
 import { mat3 } from 'gl-matrix'
 import { Store } from '@/graph/modules/Store'
-import { GraphConfigInterface } from '@/graph/config'
+import { type GraphConfigInterface } from '@/graph/config'
 import { clamp } from '@/graph/helper'
 
 export class Zoom {
@@ -13,7 +13,7 @@ export class Zoom {
     .on('start', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
       this.isRunning = true
       const userDriven = !!e.sourceEvent
-      this.config?.onZoomStart?.(e, userDriven)
+      this.config.onZoomStart?.(e, userDriven)
     })
     .on('zoom', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
       this.eventTransform = e.transform
@@ -29,13 +29,13 @@ export class Zoom {
       mat3.scale(transform, transform, [1, -1])
 
       const userDriven = !!e.sourceEvent
-      this.config?.onZoom?.(e, userDriven)
+      this.config.onZoom?.(e, userDriven)
     })
     .on('end', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
       this.isRunning = false
 
       const userDriven = !!e.sourceEvent
-      this.config?.onZoomEnd?.(e, userDriven)
+      this.config.onZoomEnd?.(e, userDriven)
     })
 
   public isRunning = false

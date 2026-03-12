@@ -1,7 +1,7 @@
 import { Buffer, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
-import { defaultConfigValues } from '@/graph/variables'
+
 import forceFrag from '@/graph/modules/ForceGravity/force-gravity.frag?raw'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
@@ -70,7 +70,7 @@ export class ForceGravity extends CoreModule {
 
     this.uniformStore.setUniforms({
       forceGravityUniforms: {
-        gravity: this.config.simulationGravity ?? defaultConfigValues.simulationGravity,
+        gravity: this.config.simulationGravity,
         spaceSize: store.adjustedSpaceSize,
         alpha: store.alpha,
       },
