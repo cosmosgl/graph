@@ -1,11 +1,11 @@
-import { Graph, GraphConfigInterface } from '@cosmos.gl/graph'
+import { Graph, type GraphConfig } from '@cosmos.gl/graph'
 
 export const quickStart = (): { graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
   const div = document.createElement('div')
   div.style.height = '100vh'
   div.style.width = '100%'
 
-  const config: GraphConfigInterface = {
+  const config: GraphConfig = {
     spaceSize: 4096,
     backgroundColor: '#2d313a',
     pointDefaultColor: '#F069B4',

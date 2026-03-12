@@ -483,7 +483,7 @@ export class Points extends CoreModule {
             spaceSize: 'f32',
           },
           defaultUniforms: {
-            friction: config.simulationFriction ?? defaultConfigValues.simulationFriction,
+            friction: config.simulationFriction,
             spaceSize: store.adjustedSpaceSize,
           },
         },
@@ -578,7 +578,7 @@ export class Points extends CoreModule {
         },
         defaultUniforms: {
           // Order MUST match uniformTypes and shader declaration
-          ratio: config.pixelRatio ?? defaultConfigValues.pixelRatio,
+          ratio: config.pixelRatio,
           transformationMatrix: ((): Mat4Array => {
             const t = store.transform ?? [1, 0, 0, 0, 1, 0, 0, 0, 1]
             return [
@@ -589,12 +589,12 @@ export class Points extends CoreModule {
             ]
           })(),
           pointsTextureSize: store.pointsTextureSize ?? 0,
-          sizeScale: config.pointSizeScale ?? defaultConfigValues.pointSizeScale,
+          sizeScale: config.pointSizeScale,
           spaceSize: store.adjustedSpaceSize,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           greyoutColor: ensureVec4(store.greyoutPointColor, [0, 0, 0, 1]),
           backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
-          scalePointsOnZoom: (config.scalePointsOnZoom ?? defaultConfigValues.scalePointsOnZoom) ? 1 : 0, // Convert boolean to float
+          scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0, // Convert boolean to float
           maxPointSize: store.maxPointSize,
           isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
           skipSelected: 0, // Default to 0 (false)
@@ -614,7 +614,7 @@ export class Points extends CoreModule {
         defaultUniforms: {
           // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
           greyoutOpacity: config.pointGreyoutOpacity ?? -1,
-          pointOpacity: config.pointOpacity ?? defaultConfigValues.pointOpacity,
+          pointOpacity: config.pointOpacity,
           isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
           backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
         },
@@ -686,14 +686,14 @@ export class Points extends CoreModule {
           maxPointSize: 'f32',
         },
         defaultUniforms: {
-          sizeScale: config.pointSizeScale ?? defaultConfigValues.pointSizeScale,
+          sizeScale: config.pointSizeScale,
           spaceSize: store.adjustedSpaceSize,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
-          ratio: config.pixelRatio ?? defaultConfigValues.pixelRatio,
+          ratio: config.pixelRatio,
           transformationMatrix: store.transformationMatrix4x4,
           selection0: ensureVec2(store.selectedArea?.[0], [0, 0]),
           selection1: ensureVec2(store.selectedArea?.[1], [0, 0]),
-          scalePointsOnZoom: (config.scalePointsOnZoom ?? defaultConfigValues.scalePointsOnZoom) ? 1 : 0,
+          scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0,
           maxPointSize: store.maxPointSize,
         },
       },
@@ -787,13 +787,13 @@ export class Points extends CoreModule {
         },
         defaultUniforms: {
           pointsTextureSize: store.pointsTextureSize ?? 0,
-          sizeScale: config.pointSizeScale ?? defaultConfigValues.pointSizeScale,
+          sizeScale: config.pointSizeScale,
           spaceSize: store.adjustedSpaceSize,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
-          ratio: config.pixelRatio ?? defaultConfigValues.pixelRatio,
+          ratio: config.pixelRatio,
           transformationMatrix: store.transformationMatrix4x4,
           mousePosition: ensureVec2(store.screenMousePosition, [0, 0]),
-          scalePointsOnZoom: (config.scalePointsOnZoom ?? defaultConfigValues.scalePointsOnZoom) ? 1 : 0,
+          scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0,
           maxPointSize: store.maxPointSize,
           skipSelected: 0,
           skipUnselected: 0,
@@ -906,14 +906,14 @@ export class Points extends CoreModule {
           size: 1,
           transformationMatrix: store.transformationMatrix4x4,
           pointsTextureSize: store.pointsTextureSize ?? 0,
-          sizeScale: config.pointSizeScale ?? defaultConfigValues.pointSizeScale,
+          sizeScale: config.pointSizeScale,
           spaceSize: store.adjustedSpaceSize,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
-          scalePointsOnZoom: (config.scalePointsOnZoom ?? defaultConfigValues.scalePointsOnZoom) ? 1 : 0,
+          scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0,
           pointIndex: -1,
           maxPointSize: store.maxPointSize,
           color: [0, 0, 0, 1],
-          universalPointOpacity: config.pointOpacity ?? defaultConfigValues.pointOpacity,
+          universalPointOpacity: config.pointOpacity,
           // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
           greyoutOpacity: config.pointGreyoutOpacity ?? -1,
           isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0,
@@ -1386,15 +1386,15 @@ export class Points extends CoreModule {
     // Base uniforms that don't change between layers
     // Convert booleans to floats (1.0 or 0.0) since uniform type is 'f32'
     const baseVertexUniforms = {
-      ratio: config.pixelRatio ?? defaultConfigValues.pixelRatio,
+      ratio: config.pixelRatio,
       transformationMatrix: store.transformationMatrix4x4,
       pointsTextureSize: store.pointsTextureSize ?? 0,
-      sizeScale: config.pointSizeScale ?? defaultConfigValues.pointSizeScale,
+      sizeScale: config.pointSizeScale,
       spaceSize: store.adjustedSpaceSize,
       screenSize: ensureVec2(store.screenSize, [0, 0]),
       greyoutColor: ensureVec4(store.greyoutPointColor, [-1, -1, -1, -1]),
       backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
-      scalePointsOnZoom: (config.scalePointsOnZoom ?? defaultConfigValues.scalePointsOnZoom) ? 1 : 0, // Convert boolean to float
+      scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0, // Convert boolean to float
       maxPointSize: store.maxPointSize,
       isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
       hasImages: (this.imageCount > 0) ? 1 : 0, // Convert boolean to float
@@ -1405,7 +1405,7 @@ export class Points extends CoreModule {
     const baseFragmentUniforms = {
       // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
       greyoutOpacity: config.pointGreyoutOpacity ?? -1,
-      pointOpacity: config.pointOpacity ?? defaultConfigValues.pointOpacity,
+      pointOpacity: config.pointOpacity,
       isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
       backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
     }
@@ -1483,14 +1483,14 @@ export class Points extends CoreModule {
           size: pointSize,
           transformationMatrix: store.transformationMatrix4x4,
           pointsTextureSize: store.pointsTextureSize ?? 0,
-          sizeScale: config.pointSizeScale ?? defaultConfigValues.pointSizeScale,
+          sizeScale: config.pointSizeScale,
           spaceSize: store.adjustedSpaceSize,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
-          scalePointsOnZoom: (config.scalePointsOnZoom ?? defaultConfigValues.scalePointsOnZoom) ? 1 : 0,
+          scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0,
           pointIndex: store.hoveredPoint.index,
           maxPointSize: store.maxPointSize,
           color: ensureVec4(store.hoveredPointRingColor, [0, 0, 0, 1]),
-          universalPointOpacity: config.pointOpacity ?? defaultConfigValues.pointOpacity,
+          universalPointOpacity: config.pointOpacity,
           // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
           greyoutOpacity: config.pointGreyoutOpacity ?? -1,
           isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0,
@@ -1516,14 +1516,14 @@ export class Points extends CoreModule {
           size: pointSize,
           transformationMatrix: store.transformationMatrix4x4,
           pointsTextureSize: store.pointsTextureSize ?? 0,
-          sizeScale: config.pointSizeScale ?? defaultConfigValues.pointSizeScale,
+          sizeScale: config.pointSizeScale,
           spaceSize: store.adjustedSpaceSize,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
-          scalePointsOnZoom: (config.scalePointsOnZoom ?? defaultConfigValues.scalePointsOnZoom) ? 1 : 0,
+          scalePointsOnZoom: (config.scalePointsOnZoom) ? 1 : 0,
           pointIndex: store.focusedPoint.index,
           maxPointSize: store.maxPointSize,
           color: ensureVec4(store.focusedPointRingColor, [0, 0, 0, 1]),
-          universalPointOpacity: config.pointOpacity ?? defaultConfigValues.pointOpacity,
+          universalPointOpacity: config.pointOpacity,
           // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
           greyoutOpacity: config.pointGreyoutOpacity ?? -1,
           isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0,
@@ -1549,7 +1549,7 @@ export class Points extends CoreModule {
 
     this.updatePositionUniformStore.setUniforms({
       updatePositionUniforms: {
-        friction: this.config.simulationFriction ?? defaultConfigValues.simulationFriction,
+        friction: this.config.simulationFriction,
         spaceSize: this.store.adjustedSpaceSize,
       },
     })
@@ -1608,12 +1608,12 @@ export class Points extends CoreModule {
       findPointsOnAreaSelectionUniforms: {
         spaceSize: this.store.adjustedSpaceSize,
         screenSize: ensureVec2(this.store.screenSize, [0, 0]),
-        sizeScale: this.config.pointSizeScale ?? defaultConfigValues.pointSizeScale,
+        sizeScale: this.config.pointSizeScale,
         transformationMatrix: this.store.transformationMatrix4x4,
-        ratio: this.config.pixelRatio ?? defaultConfigValues.pixelRatio,
+        ratio: this.config.pixelRatio,
         selection0: ensureVec2(this.store.selectedArea?.[0], [0, 0]),
         selection1: ensureVec2(this.store.selectedArea?.[1], [0, 0]),
-        scalePointsOnZoom: (this.config.scalePointsOnZoom ?? defaultConfigValues.scalePointsOnZoom) ? 1 : 0, // Convert boolean to number
+        scalePointsOnZoom: this.config.scalePointsOnZoom ? 1 : 0, // Convert boolean to number
         maxPointSize: this.store.maxPointSize,
       },
     })
@@ -1726,13 +1726,13 @@ export class Points extends CoreModule {
     })
 
     const baseUniforms = {
-      ratio: this.config.pixelRatio ?? defaultConfigValues.pixelRatio,
-      sizeScale: this.config.pointSizeScale ?? defaultConfigValues.pointSizeScale,
+      ratio: this.config.pixelRatio,
+      sizeScale: this.config.pointSizeScale,
       pointsTextureSize: this.store.pointsTextureSize ?? 0,
       transformationMatrix: this.store.transformationMatrix4x4,
       spaceSize: this.store.adjustedSpaceSize,
       screenSize: ensureVec2(this.store.screenSize, [0, 0]),
-      scalePointsOnZoom: (this.config.scalePointsOnZoom ?? defaultConfigValues.scalePointsOnZoom) ? 1 : 0,
+      scalePointsOnZoom: this.config.scalePointsOnZoom ? 1 : 0,
       mousePosition: ensureVec2(this.store.screenMousePosition, [0, 0]),
       maxPointSize: this.store.maxPointSize,
     }

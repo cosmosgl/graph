@@ -6,7 +6,7 @@ import { D3DragEvent } from 'd3-drag'
 import { Device, Framebuffer, luma } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
 
-import { mergeConfig, GraphConfigInterface } from '@/graph/config'
+import { mergeConfig, GraphConfigInterface, type GraphConfig } from '@/graph/config'
 import { getRgbaColor, getMaxPointSize, readPixels, sanitizeHtml } from '@/graph/helper'
 import { ForceCenter } from '@/graph/modules/ForceCenter'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
@@ -24,7 +24,8 @@ import { Drag } from '@/graph/modules/Drag'
 import { defaultConfigValues } from '@/graph/variables'
 
 export class Graph {
-  public config: GraphConfigInterface = { ...defaultConfigValues } as GraphConfigInterface
+  /** Current graph configuration. Always fully populated with default values for any unset properties. */
+  public config: GraphConfigInterface = { ...defaultConfigValues }
   public graph = new GraphData(this.config)
   /** Promise that resolves when the graph is fully initialized and ready to use */
   public readonly ready: Promise<void>
@@ -108,9 +109,14 @@ export class Graph {
 
   private _isDestroyed = false
 
+  /**
+   * Create a new Graph instance.
+   * @param div - Container element for the graph canvas.
+   * @param config - Optional configuration. Unset properties use default values.
+   */
   public constructor (
     div: HTMLDivElement,
-    config?: GraphConfigInterface,
+    config?: GraphConfig,
     devicePromise?: Promise<Device>
   ) {
     if (config) mergeConfig(this.config, config)
@@ -158,7 +164,7 @@ export class Graph {
       const w = this.canvas.clientWidth
       const h = this.canvas.clientHeight
 
-      this.store.adjustSpaceSize(this.config.spaceSize ?? defaultConfigValues.spaceSize, this.device.limits.maxTextureDimension2D)
+      this.store.adjustSpaceSize(this.config.spaceSize, this.device.limits.maxTextureDimension2D)
       this.store.setWebGLMaxTextureSize(this.device.limits.maxTextureDimension2D)
       this.store.updateScreenSize(w, h)
 
@@ -239,11 +245,11 @@ export class Graph {
       // so we fall back to 1 here as the neutral zoom level when no initial zoom is configured.
       this.setZoomLevel(this.config.initialZoomLevel ?? 1)
 
-      this.store.maxPointSize = getMaxPointSize(device, this.config.pixelRatio ?? defaultConfigValues.pixelRatio)
+      this.store.maxPointSize = getMaxPointSize(device, this.config.pixelRatio)
 
       // Initialize simulation state based on enableSimulation config
       // If simulation is disabled, start with isSimulationRunning = false
-      this.store.isSimulationRunning = this.config.enableSimulation ?? defaultConfigValues.enableSimulation
+      this.store.isSimulationRunning = this.config.enableSimulation
 
       this.points = new Points(device, this.config, this.store, this.graph)
       this.lines = new Lines(device, this.config, this.store, this.graph, this.points)
@@ -257,14 +263,14 @@ export class Graph {
       }
       this.clusters = new Clusters(device, this.config, this.store, this.graph, this.points)
 
-      this.store.backgroundColor = getRgbaColor(this.config.backgroundColor ?? defaultConfigValues.backgroundColor)
-      this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor ?? defaultConfigValues.hoveredPointRingColor)
-      this.store.setFocusedPointRingColor(this.config.focusedPointRingColor ?? defaultConfigValues.focusedPointRingColor)
+      this.store.backgroundColor = getRgbaColor(this.config.backgroundColor)
+      this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor)
+      this.store.setFocusedPointRingColor(this.config.focusedPointRingColor)
       if (this.config.focusedPointIndex !== undefined) {
         this.store.setFocusedPoint(this.config.focusedPointIndex)
       }
-      this.store.setGreyoutPointColor(this.config.pointGreyoutColor ?? defaultConfigValues.pointGreyoutColor)
-      this.store.setHoveredLinkColor(this.config.hoveredLinkColor ?? defaultConfigValues.hoveredLinkColor)
+      this.store.setGreyoutPointColor(this.config.pointGreyoutColor)
+      this.store.setHoveredLinkColor(this.config.hoveredLinkColor)
 
       this.store.updateLinkHoveringEnabled(this.config)
 
@@ -310,10 +316,15 @@ export class Graph {
   }
 
   /**
-   * Set or update Cosmos configuration. The changes will be applied in real time.
-   * @param config Cosmos configuration object.
+   * Apply a new configuration. Changes take effect immediately.
+   *
+   * **Important:** Every call fully resets the configuration to defaults first,
+   * then applies the provided values on top. Properties not included in `config`
+   * will revert to their default values — they are not preserved from the previous call.
+   *
+   * @param config - Configuration object. Only include the properties you want to set.
    */
-  public setConfig (config: Partial<GraphConfigInterface>): void {
+  public setConfig (config: GraphConfig): void {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.setConfig(config))) return
@@ -345,19 +356,19 @@ export class Graph {
     }
 
     if (prevConfig.backgroundColor !== this.config.backgroundColor) {
-      this.store.backgroundColor = getRgbaColor(this.config.backgroundColor ?? defaultConfigValues.backgroundColor)
+      this.store.backgroundColor = getRgbaColor(this.config.backgroundColor)
     }
     if (prevConfig.hoveredPointRingColor !== this.config.hoveredPointRingColor) {
-      this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor ?? defaultConfigValues.hoveredPointRingColor)
+      this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor)
     }
     if (prevConfig.focusedPointRingColor !== this.config.focusedPointRingColor) {
-      this.store.setFocusedPointRingColor(this.config.focusedPointRingColor ?? defaultConfigValues.focusedPointRingColor)
+      this.store.setFocusedPointRingColor(this.config.focusedPointRingColor)
     }
     if (prevConfig.pointGreyoutColor !== this.config.pointGreyoutColor) {
-      this.store.setGreyoutPointColor(this.config.pointGreyoutColor ?? defaultConfigValues.pointGreyoutColor)
+      this.store.setGreyoutPointColor(this.config.pointGreyoutColor)
     }
     if (prevConfig.hoveredLinkColor !== this.config.hoveredLinkColor) {
-      this.store.setHoveredLinkColor(this.config.hoveredLinkColor ?? defaultConfigValues.hoveredLinkColor)
+      this.store.setHoveredLinkColor(this.config.hoveredLinkColor)
     }
     if (prevConfig.focusedPointIndex !== this.config.focusedPointIndex) {
       this.store.setFocusedPoint(this.config.focusedPointIndex)
@@ -365,14 +376,14 @@ export class Graph {
     if (prevConfig.pixelRatio !== this.config.pixelRatio) {
       // Update device's canvas context useDevicePixels
       if (this.device?.canvasContext) {
-        this.device.canvasContext.setProps({ useDevicePixels: this.config.pixelRatio ?? defaultConfigValues.pixelRatio })
+        this.device.canvasContext.setProps({ useDevicePixels: this.config.pixelRatio })
 
         // Recalculate maxPointSize with new pixelRatio
-        this.store.maxPointSize = getMaxPointSize(this.device, this.config.pixelRatio ?? defaultConfigValues.pixelRatio)
+        this.store.maxPointSize = getMaxPointSize(this.device, this.config.pixelRatio)
       }
     }
     if (prevConfig.spaceSize !== this.config.spaceSize) {
-      this.store.adjustSpaceSize(this.config.spaceSize ?? defaultConfigValues.spaceSize, this.device?.limits.maxTextureDimension2D ?? 4096)
+      this.store.adjustSpaceSize(this.config.spaceSize, this.device?.limits.maxTextureDimension2D ?? 4096)
       this.resizeCanvas(true)
       this.update(this.store.isSimulationRunning ? this.store.alpha : 0)
     }
@@ -1616,7 +1627,7 @@ export class Graph {
       }
 
       // Alpha decay and progress
-      this.store.alpha += this.store.addAlpha(this.config.simulationDecay ?? defaultConfigValues.simulationDecay)
+      this.store.alpha += this.store.addAlpha(this.config.simulationDecay)
       if (this.isRightClickMouse && this.config.enableRightClickRepulsion) {
         this.store.alpha = Math.max(this.store.alpha, 0.1)
       }
@@ -1982,10 +1993,10 @@ export class Graph {
     const { hoveredPointCursor, hoveredLinkCursor } = this.config
     if (this.dragInstance.isActive) select(this.canvas).style('cursor', 'grabbing')
     else if (this.store.hoveredPoint) {
-      if (!this.config.enableDrag || this.store.isSpaceKeyPressed) select(this.canvas).style('cursor', hoveredPointCursor ?? defaultConfigValues.hoveredPointCursor)
+      if (!this.config.enableDrag || this.store.isSpaceKeyPressed) select(this.canvas).style('cursor', hoveredPointCursor)
       else select(this.canvas).style('cursor', 'grab')
     } else if (this.store.isLinkHoveringEnabled && this.store.hoveredLinkIndex !== undefined) {
-      select(this.canvas).style('cursor', hoveredLinkCursor ?? defaultConfigValues.hoveredLinkCursor)
+      select(this.canvas).style('cursor', hoveredLinkCursor)
     } else select(this.canvas).style('cursor', null)
   }
 
@@ -2012,7 +2023,7 @@ export class Graph {
   }
 }
 
-export type { GraphConfigInterface } from './config'
+export type { GraphConfig } from './config'
 export { PointShape } from './modules/GraphData'
 
 export * from './variables'

@@ -27,7 +27,7 @@ export const moscowMetroStations = (): {graph: Graph; div: HTMLDivElement; destr
 
   let rescalePositions = true
 
-  const graph = new Graph(graphDiv, {
+  const config = {
     backgroundColor: '#2d313a',
     scalePointsOnZoom: false,
     rescalePositions,
@@ -36,7 +36,9 @@ export const moscowMetroStations = (): {graph: Graph; div: HTMLDivElement; destr
     enableDrag: false,
     fitViewOnInit: true,
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
-  })
+  }
+
+  const graph = new Graph(graphDiv, config)
 
   const pointColors = getPointColors(moscowMetroCoords)
 
@@ -52,7 +54,7 @@ export const moscowMetroStations = (): {graph: Graph; div: HTMLDivElement; destr
   disableEnableRescaleButton.addEventListener('click', () => {
     rescalePositions = !rescalePositions
     disableEnableRescaleButton.textContent = rescalePositions ? 'Disable Rescale' : 'Enable Rescale'
-    graph.setConfig({ rescalePositions })
+    graph.setConfig({ ...config, rescalePositions })
     graph.setPointPositions(new Float32Array(moscowMetroCoords))
     graph.render()
     graph.fitView()

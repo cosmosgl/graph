@@ -2,6 +2,7 @@
 import { D3ZoomEvent } from 'd3-zoom'
 import { D3DragEvent } from 'd3-drag'
 import { type Hovered } from '@/graph/modules/Store'
+import { defaultConfigValues } from '@/graph/variables'
 
 export interface GraphConfigInterface {
   /**
@@ -10,18 +11,18 @@ export interface GraphConfigInterface {
    * can't be changed using the `setConfig` method.
    * Default value: `true`
    */
-  enableSimulation?: boolean;
+  enableSimulation: boolean;
   /**
    * Canvas background color.
    * Can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values.
    * Default value: '#222222'
    */
-  backgroundColor?: string | [number, number, number, number];
+  backgroundColor: string | [number, number, number, number];
   /**
    * Simulation space size.
    * Default value: `4096` (larger values may crash on some devices, e.g. iOS; see https://github.com/cosmosgl/graph/issues/203).
    */
-  spaceSize?: number;
+  spaceSize: number;
 
   /**
    * The default color to use for points when no point colors are provided,
@@ -30,7 +31,7 @@ export interface GraphConfigInterface {
    * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255.
    * Default value: '#b3b3b3'
    */
-  pointDefaultColor?: string | [number, number, number, number];
+  pointDefaultColor: string | [number, number, number, number];
 
   /**
    * The color to use for points when they are greyed out (when selection is active).
@@ -62,7 +63,7 @@ export interface GraphConfigInterface {
    * if the size value in the array is `undefined` or `null`.
    * Default value: `4`
   */
-  pointDefaultSize?: number;
+  pointDefaultSize: number;
 
   /**
    * Universal opacity value applied to all points.
@@ -70,45 +71,45 @@ export interface GraphConfigInterface {
    * Useful for dynamically controlling opacity of all points without updating individual RGBA arrays.
    * Default value: `1.0`
    */
-  pointOpacity?: number;
+  pointOpacity: number;
 
   /**
    * Scale factor for the point size.
    * Default value: `1`
    */
-  pointSizeScale?: number;
+  pointSizeScale: number;
 
   /**
    * Cursor style to use when hovering over a point
    * Default value: `auto`
    */
-  hoveredPointCursor?: string;
+  hoveredPointCursor: string;
 
   /**
    * Cursor style to use when hovering over a link
    * Default value: `auto`
    */
-  hoveredLinkCursor?: string;
+  hoveredLinkCursor: string;
 
   /**
    * Turns ring rendering around a point on hover on / off
    * Default value: `false`
    */
-  renderHoveredPointRing?: boolean;
+  renderHoveredPointRing: boolean;
 
   /**
    * Hovered point ring color hex value.
    * Can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values.
    * Default value: `white`
    */
-  hoveredPointRingColor?: string | [number, number, number, number];
+  hoveredPointRingColor: string | [number, number, number, number];
 
   /**
    * Focused point ring color hex value.
    * Can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values.
    * Default value: `white`
    */
-  focusedPointRingColor?: string | [number, number, number, number];
+  focusedPointRingColor: string | [number, number, number, number];
 
   /**
    * Set focus on a point by index.  A ring will be highlighted around the focused point.
@@ -121,7 +122,7 @@ export interface GraphConfigInterface {
    * Turns link rendering on / off.
    * Default value: `true`
    */
-  renderLinks?: boolean;
+  renderLinks: boolean;
 
   /**
    * The default color to use for links when no link colors are provided,
@@ -130,7 +131,7 @@ export interface GraphConfigInterface {
    * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255.
    * Default value: '#666666'
    */
-  linkDefaultColor?: string | [number, number, number, number];
+  linkDefaultColor: string | [number, number, number, number];
 
   /**
    * Universal opacity value applied to all links.
@@ -138,18 +139,18 @@ export interface GraphConfigInterface {
    * Useful for dynamically controlling opacity of all links without updating individual RGBA arrays.
    * Default value: `1.0`
    */
-  linkOpacity?: number;
+  linkOpacity: number;
 
   /**
    * Greyed out link opacity value when the selection is active.
    * Default value: `0.1`
   */
-  linkGreyoutOpacity?: number;
+  linkGreyoutOpacity: number;
   /**
    * The default width value to use for links when no link widths are provided or if the width value in the array is `undefined` or `null`.
    * Default value: `1`
   */
-  linkDefaultWidth?: number;
+  linkDefaultWidth: number;
 
   /**
    * The color to use for links when they are hovered.
@@ -163,50 +164,50 @@ export interface GraphConfigInterface {
    * The hovered width is calculated as: originalWidth + hoveredLinkWidthIncrease
    * Default value: `5`
    */
-  hoveredLinkWidthIncrease?: number;
+  hoveredLinkWidthIncrease: number;
   /**
    * Scale factor for the link width.
    * Default value: `1`
    */
-  linkWidthScale?: number;
+  linkWidthScale: number;
   /**
    * Increase or decrease the size of the links when zooming in or out.
    * Default value: `false`
    */
-  scaleLinksOnZoom?: boolean;
+  scaleLinksOnZoom: boolean;
   /**
    * If set to true, links are rendered as curved lines.
    * Otherwise as straight lines.
    * Default value: `false`
    */
-  curvedLinks?: boolean;
+  curvedLinks: boolean;
   /**
    * Number of segments in a curved line.
    * Default value: `19`.
    */
-  curvedLinkSegments?: number;
+  curvedLinkSegments: number;
   /**
    * Weight affects the shape of the curve.
    * Default value: `0.8`.
    */
-  curvedLinkWeight?: number;
+  curvedLinkWeight: number;
   /**
    * Defines the position of the control point of the curve on the normal from the centre of the line.
    * If set to 1 then the control point is at a distance equal to the length of the line.
    * Default value: `0.5`
    */
-  curvedLinkControlPointDistance?: number;
+  curvedLinkControlPointDistance: number;
   /**
    * The default link arrow value that controls whether or not to display link arrows.
    * Default value: `false`
    */
-  linkDefaultArrows?: boolean;
+  linkDefaultArrows: boolean;
 
   /**
    * Scale factor for the link arrows size.
    * Default value: `1`
    */
-  linkArrowsSizeScale?: number;
+  linkArrowsSizeScale: number;
   /**
    * The range defines the minimum and maximum link visibility distance in pixels.
    * The link will be fully opaque when its length is less than the first number in the array,
@@ -216,78 +217,78 @@ export interface GraphConfigInterface {
    * (e.g. links become longer when you zoom in, and shorter when you zoom out).
    * Default value: `[50, 150]`
    */
-  linkVisibilityDistanceRange?: number[];
+  linkVisibilityDistanceRange: number[];
   /**
    * The transparency value that the link will have when its length reaches
    * the maximum link distance value from `linkVisibilityDistanceRange`.
    * Default value: `0.25`
    */
-  linkVisibilityMinTransparency?: number;
+  linkVisibilityMinTransparency: number;
 
   /**
    * Decay coefficient. Use smaller values if you want the simulation to "cool down" slower.
    * Default value: `5000`
    */
-  simulationDecay?: number;
+  simulationDecay: number;
     /**
    * Gravity force coefficient.
    * Default value: `0.25`
    */
-  simulationGravity?: number;
+  simulationGravity: number;
   /**
    * Centering to center mass force coefficient.
    * Default value: `0`
    */
-  simulationCenter?: number;
+  simulationCenter: number;
   /**
    * Repulsion force coefficient.
    * Default value: `1.0`
    */
-  simulationRepulsion?: number;
+  simulationRepulsion: number;
   /**
    * Decreases / increases the detalization of the Many-Body force calculations.
    * Default value: `1.15`
    */
-  simulationRepulsionTheta?: number;
+  simulationRepulsionTheta: number;
   /**
    * Link spring force coefficient.
    * Default value: `1`
    */
-  simulationLinkSpring?: number;
+  simulationLinkSpring: number;
   /**
    * Minimum link distance.
    * Default value: `10`
    */
-  simulationLinkDistance?: number;
+  simulationLinkDistance: number;
   /**
    * Range of random link distance values.
    * Default value: `[1, 1.2]`
    */
-  simulationLinkDistRandomVariationRange?: number[];
+  simulationLinkDistRandomVariationRange: number[];
   /**
    * Repulsion coefficient from mouse position.
    * The repulsion force is activated by pressing the right mouse button.
    * Default value: `2`
    */
-  simulationRepulsionFromMouse?: number;
+  simulationRepulsionFromMouse: number;
   /**
    * Enable or disable the repulsion force from mouse when right-clicking.
    * When set to `true`, holding the right mouse button will activate the mouse repulsion force.
    * When set to `false`, right-clicking will not trigger any repulsion force.
    * Default value: `false`
    */
-  enableRightClickRepulsion?: boolean;
+  enableRightClickRepulsion: boolean;
   /**
    * Friction coefficient.
    * Values range from 0 (high friction, stops quickly) to 1 (no friction, keeps moving).
    * Default value: `0.85`
    */
-  simulationFriction?: number;
+  simulationFriction: number;
   /**
    * Cluster coefficient.
    * Default value: `0.1`
    */
-  simulationCluster?: number;
+  simulationCluster: number;
 
   /**
    * Callback function that will be called when the simulation starts.
@@ -519,17 +520,17 @@ export interface GraphConfigInterface {
    * Show WebGL performance monitor.
    * Default value: `false`
    */
-  showFPSMonitor?: boolean;
+  showFPSMonitor: boolean;
   /**
    * Pixel ratio for the canvas. Higher values use more GPU memory but provide better quality on high-DPI displays.
    * Default value: `window.devicePixelRatio || 2`
    */
-  pixelRatio?: number;
+  pixelRatio: number;
   /**
    * Increase or decrease the size of the points when zooming in or out.
    * Default value: `false`
    */
-  scalePointsOnZoom?: boolean;
+  scalePointsOnZoom: boolean;
   /**
    * Initial zoom level. Can be set once during graph initialization.
    * If set, `fitViewOnInit` value will be ignored.
@@ -540,43 +541,43 @@ export interface GraphConfigInterface {
    * Enables or disables zooming in and out.
    * Default value: `true`
    */
-  enableZoom?: boolean;
+  enableZoom: boolean;
   /**
    * Controls whether the simulation remains active during zoom operations.
    * When set to `true`, the simulation continues running while zooming.
    * When set to `false`, the simulation pauses during zoom operations.
    * Default value: `false`
    */
-  enableSimulationDuringZoom?: boolean;
+  enableSimulationDuringZoom: boolean;
   /**
    * Enables or disables dragging of points in the graph.
    * Default value: `false`
    */
-  enableDrag?: boolean;
+  enableDrag: boolean;
   /**
    * Whether to center and zoom the view to fit all points in the scene on initialization or not.
    * Ignored if `initialZoomLevel` is set.
    * Default: `true`
    */
-  fitViewOnInit?: boolean;
+  fitViewOnInit: boolean;
   /**
    * Delay in milliseconds before fitting the view when `fitViewOnInit` is enabled.
    * Useful if you want the layout to stabilize a bit before fitting.
    * Default: `250`
    */
-  fitViewDelay?: number;
+  fitViewDelay: number;
   /**
    * Padding to apply when fitting the view to show all points.
    * This value is added to the calculated bounding box to provide some extra space around the points.
    * This is used when the `fitViewOnInit` option is enabled.
    * Default: `0.1`
    */
-  fitViewPadding?: number;
+  fitViewPadding: number;
   /**
    * Duration in milliseconds for fitting the view to show all points when fitViewOnInit is enabled.
    * Default: `250`
    */
-  fitViewDuration?: number;
+  fitViewDuration: number;
   /**
    * When `fitViewOnInit` is set to `true`, fits the view to show the points within a rectangle
    * defined by its two corner coordinates `[[left, bottom], [right, top]]` in the scene space.
@@ -603,13 +604,13 @@ export interface GraphConfigInterface {
    * This parameter determines how many points will be included in the sample.
    * Default value: `100`
   */
-  pointSamplingDistance?: number;
+  pointSamplingDistance: number;
   /**
    * Link sampling distance in pixels between neighboring links when calling the `getSampledLinks` method.
    * This parameter determines how many links will be included in the sample (based on link midpoints in screen space).
    * Default value: `100`
    */
-  linkSamplingDistance?: number;
+  linkSamplingDistance: number;
   /**
    * Controls automatic position adjustment of points in the visible space.
    *
@@ -632,7 +633,7 @@ export interface GraphConfigInterface {
    *
    * Default value: `''`
    */
-  attribution?: string;
+  attribution: string;
 }
 
 /**
@@ -642,12 +643,26 @@ export interface GraphConfigInterface {
 export type Complete<T> = { [K in keyof Required<T>]: T[K] }
 
 /**
- * Shallow-merges partial config into an existing config object (mutates target).
- * Use this so all references to config (GraphData, Zoom, Drag, etc.) stay in sync.
+ * Configuration options for the Graph constructor and `setConfig()` method.
+ * All properties are optional — any omitted properties will use their default values.
+ *
+ * Note: calling `setConfig()` fully resets the configuration to defaults before
+ * applying the provided values. Properties not included in the call will revert
+ * to their defaults, not retain their previous values.
+ */
+export type GraphConfig = Partial<GraphConfigInterface>
+
+/**
+ * Resets config to defaults, then overlays the provided config on top.
+ * Mutates `target` in place so all modules sharing the same config reference
+ * (GraphData, Zoom, Drag, CoreModule subclasses, etc.) stay in sync.
+ *
+ * Every call fully resets to `defaultConfigValues` first — there are no
+ * partial updates. Properties not present in `source` revert to their defaults.
  */
 export function mergeConfig (
   target: GraphConfigInterface,
-  source: Partial<GraphConfigInterface>
+  source: GraphConfig
 ): void {
-  Object.assign(target, source)
+  Object.assign(target, defaultConfigValues, source)
 }

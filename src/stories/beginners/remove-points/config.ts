@@ -1,6 +1,6 @@
-import { GraphConfigInterface } from '@cosmos.gl/graph'
+import { type GraphConfig } from '@cosmos.gl/graph'
 
-export const config: GraphConfigInterface = {
+export const config: GraphConfig = {
   spaceSize: 4096,
   backgroundColor: '#2d313a',
   pointDefaultSize: 4,

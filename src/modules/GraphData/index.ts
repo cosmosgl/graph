@@ -1,6 +1,5 @@
 import { getRgbaColor, isNumber } from '@/graph/helper'
-import { GraphConfigInterface } from '@/graph/config'
-import { defaultConfigValues } from '@/graph/variables'
+import { type GraphConfigInterface } from '@/graph/config'
 
 export enum PointShape {
   Circle = 0,
@@ -89,7 +88,7 @@ export class GraphData {
     }
 
     // Sets point colors to default values from config if the input is missing or does not match input points number.
-    const defaultRgba = getRgbaColor(this._config.pointDefaultColor ?? defaultConfigValues.pointDefaultColor)
+    const defaultRgba = getRgbaColor(this._config.pointDefaultColor)
     if (this.inputPointColors === undefined || this.inputPointColors.length / 4 !== this.pointsNumber) {
       this.pointColors = new Float32Array(this.pointsNumber * 4)
       for (let i = 0; i < this.pointColors.length / 4; i++) {
@@ -119,7 +118,7 @@ export class GraphData {
     }
 
     // Sets point sizes to default values from config if the input is missing or does not match input points number.
-    const defaultSize = this._config.pointDefaultSize ?? defaultConfigValues.pointDefaultSize
+    const defaultSize = this._config.pointDefaultSize
     if (this.inputPointSizes === undefined || this.inputPointSizes.length !== this.pointsNumber) {
       this.pointSizes = new Float32Array(this.pointsNumber).fill(defaultSize)
     } else {
@@ -198,7 +197,7 @@ export class GraphData {
     }
 
     // Sets point image sizes to point sizes if the input is missing or does not match input points number.
-    const defaultSize = this._config.pointDefaultSize ?? defaultConfigValues.pointDefaultSize
+    const defaultSize = this._config.pointDefaultSize
     if (this.inputPointImageSizes === undefined || this.inputPointImageSizes.length !== this.pointsNumber) {
       this.pointImageSizes = this.pointSizes ? new Float32Array(this.pointSizes) : new Float32Array(this.pointsNumber).fill(defaultSize)
     } else {
@@ -225,7 +224,7 @@ export class GraphData {
     }
 
     // Sets link colors to default values from config if the input is missing or does not match input links number.
-    const defaultRgba = getRgbaColor(this._config.linkDefaultColor ?? defaultConfigValues.linkDefaultColor)
+    const defaultRgba = getRgbaColor(this._config.linkDefaultColor)
     if (this.inputLinkColors === undefined || this.inputLinkColors.length / 4 !== this.linksNumber) {
       this.linkColors = new Float32Array(this.linksNumber * 4)
 
@@ -256,7 +255,7 @@ export class GraphData {
     }
 
     // Sets link widths to default values from config if the input is missing or does not match input links number.
-    const defaultWidth = this._config.linkDefaultWidth ?? defaultConfigValues.linkDefaultWidth
+    const defaultWidth = this._config.linkDefaultWidth
     if (this.inputLinkWidths === undefined || this.inputLinkWidths.length !== this.linksNumber) {
       this.linkWidths = new Float32Array(this.linksNumber).fill(defaultWidth)
     } else {
@@ -279,7 +278,7 @@ export class GraphData {
     }
 
     // Sets link arrows to default values from config if the input is missing or does not match input links number.
-    const defaultArrows = this._config.linkDefaultArrows ?? defaultConfigValues.linkDefaultArrows
+    const defaultArrows = this._config.linkDefaultArrows
     if (this.linkArrowsBoolean === undefined || this.linkArrowsBoolean.length !== this.linksNumber) {
       this.linkArrows = new Array(this.linksNumber).fill(+defaultArrows)
     } else {

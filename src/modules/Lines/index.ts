@@ -161,23 +161,23 @@ export class Lines extends CoreModule {
         defaultUniforms: {
           transformationMatrix: store.transformationMatrix4x4,
           pointsTextureSize: store.pointsTextureSize,
-          widthScale: config.linkWidthScale ?? defaultConfigValues.linkWidthScale,
-          linkArrowsSizeScale: config.linkArrowsSizeScale ?? defaultConfigValues.linkArrowsSizeScale,
+          widthScale: config.linkWidthScale,
+          linkArrowsSizeScale: config.linkArrowsSizeScale,
           spaceSize: store.adjustedSpaceSize,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           linkVisibilityDistanceRange: ensureVec2(config.linkVisibilityDistanceRange, [0, 0]),
-          linkVisibilityMinTransparency: config.linkVisibilityMinTransparency ?? defaultConfigValues.linkVisibilityMinTransparency,
-          linkOpacity: config.linkOpacity ?? defaultConfigValues.linkOpacity,
-          greyoutOpacity: config.linkGreyoutOpacity ?? defaultConfigValues.linkGreyoutOpacity,
-          curvedWeight: config.curvedLinkWeight ?? defaultConfigValues.curvedLinkWeight,
-          curvedLinkControlPointDistance: config.curvedLinkControlPointDistance ?? defaultConfigValues.curvedLinkControlPointDistance,
-          curvedLinkSegments: config.curvedLinks ? config.curvedLinkSegments ?? defaultConfigValues.curvedLinkSegments : 1,
-          scaleLinksOnZoom: (config.scaleLinksOnZoom ?? defaultConfigValues.scaleLinksOnZoom) ? 1 : 0,
+          linkVisibilityMinTransparency: config.linkVisibilityMinTransparency,
+          linkOpacity: config.linkOpacity,
+          greyoutOpacity: config.linkGreyoutOpacity,
+          curvedWeight: config.curvedLinkWeight,
+          curvedLinkControlPointDistance: config.curvedLinkControlPointDistance,
+          curvedLinkSegments: config.curvedLinks ? config.curvedLinkSegments : 1,
+          scaleLinksOnZoom: config.scaleLinksOnZoom ? 1 : 0,
           maxPointSize: store.maxPointSize,
           renderMode: 0.0,
           hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
           hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
-          hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease ?? defaultConfigValues.hoveredLinkWidthIncrease,
+          hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease,
         },
       },
       drawLineFragmentUniforms: {
@@ -305,9 +305,9 @@ export class Lines extends CoreModule {
           transformationMatrix: store.transformationMatrix4x4,
           spaceSize: store.adjustedSpaceSize,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
-          curvedWeight: config.curvedLinkWeight ?? defaultConfigValues.curvedLinkWeight,
-          curvedLinkControlPointDistance: config.curvedLinkControlPointDistance ?? defaultConfigValues.curvedLinkControlPointDistance,
-          curvedLinkSegments: config.curvedLinks ? config.curvedLinkSegments ?? defaultConfigValues.curvedLinkSegments : 1,
+          curvedWeight: config.curvedLinkWeight,
+          curvedLinkControlPointDistance: config.curvedLinkControlPointDistance,
+          curvedLinkSegments: config.curvedLinks ? config.curvedLinkSegments : 1,
         },
       },
     })
@@ -361,23 +361,23 @@ export class Lines extends CoreModule {
       drawLineUniforms: {
         transformationMatrix: store.transformationMatrix4x4,
         pointsTextureSize: store.pointsTextureSize,
-        widthScale: config.linkWidthScale ?? defaultConfigValues.linkWidthScale,
-        linkArrowsSizeScale: config.linkArrowsSizeScale ?? defaultConfigValues.linkArrowsSizeScale,
+        widthScale: config.linkWidthScale,
+        linkArrowsSizeScale: config.linkArrowsSizeScale,
         spaceSize: store.adjustedSpaceSize,
         screenSize: ensureVec2(store.screenSize, [0, 0]),
         linkVisibilityDistanceRange: ensureVec2(config.linkVisibilityDistanceRange, [0, 0]),
-        linkVisibilityMinTransparency: config.linkVisibilityMinTransparency ?? defaultConfigValues.linkVisibilityMinTransparency,
-        linkOpacity: config.linkOpacity ?? defaultConfigValues.linkOpacity,
-        greyoutOpacity: config.linkGreyoutOpacity ?? defaultConfigValues.linkGreyoutOpacity,
-        curvedWeight: config.curvedLinkWeight ?? defaultConfigValues.curvedLinkWeight,
-        curvedLinkControlPointDistance: config.curvedLinkControlPointDistance ?? defaultConfigValues.curvedLinkControlPointDistance,
-        curvedLinkSegments: config.curvedLinks ? config.curvedLinkSegments ?? defaultConfigValues.curvedLinkSegments : 1,
-        scaleLinksOnZoom: (config.scaleLinksOnZoom ?? defaultConfigValues.scaleLinksOnZoom) ? 1 : 0,
+        linkVisibilityMinTransparency: config.linkVisibilityMinTransparency,
+        linkOpacity: config.linkOpacity,
+        greyoutOpacity: config.linkGreyoutOpacity,
+        curvedWeight: config.curvedLinkWeight,
+        curvedLinkControlPointDistance: config.curvedLinkControlPointDistance,
+        curvedLinkSegments: config.curvedLinks ? config.curvedLinkSegments : 1,
+        scaleLinksOnZoom: config.scaleLinksOnZoom ? 1 : 0,
         maxPointSize: store.maxPointSize,
         renderMode: 0.0, // Normal rendering
         hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
         hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
-        hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease ?? defaultConfigValues.hoveredLinkWidthIncrease,
+        hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease,
       },
       drawLineFragmentUniforms: {
         renderMode: 0.0, // Normal rendering
@@ -656,7 +656,7 @@ export class Lines extends CoreModule {
 
   public updateCurveLineGeometry (): void {
     const { device, config: { curvedLinks, curvedLinkSegments } } = this
-    this.curveLineGeometry = getCurveLineGeometry(curvedLinks ? curvedLinkSegments ?? defaultConfigValues.curvedLinkSegments : 1)
+    this.curveLineGeometry = getCurveLineGeometry(curvedLinks ? curvedLinkSegments : 1)
 
     // Flatten the 2D array to 1D
     const flatGeometry = new Float32Array(this.curveLineGeometry.length * 2)
@@ -700,9 +700,9 @@ export class Lines extends CoreModule {
           transformationMatrix: this.store.transformationMatrix4x4,
           spaceSize: this.store.adjustedSpaceSize,
           screenSize: ensureVec2(this.store.screenSize, [0, 0]),
-          curvedWeight: this.config.curvedLinkWeight ?? defaultConfigValues.curvedLinkWeight,
-          curvedLinkControlPointDistance: this.config.curvedLinkControlPointDistance ?? defaultConfigValues.curvedLinkControlPointDistance,
-          curvedLinkSegments: this.config.curvedLinks ? this.config.curvedLinkSegments ?? defaultConfigValues.curvedLinkSegments : 1,
+          curvedWeight: this.config.curvedLinkWeight,
+          curvedLinkControlPointDistance: this.config.curvedLinkControlPointDistance,
+          curvedLinkSegments: this.config.curvedLinks ? this.config.curvedLinkSegments : 1,
         },
       })
       this.fillSampledLinksFboCommand.setBindings({
@@ -747,9 +747,9 @@ export class Lines extends CoreModule {
           transformationMatrix: this.store.transformationMatrix4x4,
           spaceSize: this.store.adjustedSpaceSize,
           screenSize: ensureVec2(this.store.screenSize, [0, 0]),
-          curvedWeight: this.config.curvedLinkWeight ?? defaultConfigValues.curvedLinkWeight,
-          curvedLinkControlPointDistance: this.config.curvedLinkControlPointDistance ?? defaultConfigValues.curvedLinkControlPointDistance,
-          curvedLinkSegments: this.config.curvedLinks ? this.config.curvedLinkSegments ?? defaultConfigValues.curvedLinkSegments : 1,
+          curvedWeight: this.config.curvedLinkWeight,
+          curvedLinkControlPointDistance: this.config.curvedLinkControlPointDistance,
+          curvedLinkSegments: this.config.curvedLinks ? this.config.curvedLinkSegments : 1,
         },
       })
       this.fillSampledLinksFboCommand.setBindings({
@@ -794,23 +794,23 @@ export class Lines extends CoreModule {
       drawLineUniforms: {
         transformationMatrix: store.transformationMatrix4x4,
         pointsTextureSize: store.pointsTextureSize,
-        widthScale: config.linkWidthScale ?? defaultConfigValues.linkWidthScale,
-        linkArrowsSizeScale: config.linkArrowsSizeScale ?? defaultConfigValues.linkArrowsSizeScale,
+        widthScale: config.linkWidthScale,
+        linkArrowsSizeScale: config.linkArrowsSizeScale,
         spaceSize: store.adjustedSpaceSize,
         screenSize: ensureVec2(store.screenSize, [0, 0]),
         linkVisibilityDistanceRange: ensureVec2(config.linkVisibilityDistanceRange, [0, 0]),
-        linkVisibilityMinTransparency: config.linkVisibilityMinTransparency ?? defaultConfigValues.linkVisibilityMinTransparency,
-        linkOpacity: config.linkOpacity ?? defaultConfigValues.linkOpacity,
-        greyoutOpacity: config.linkGreyoutOpacity ?? defaultConfigValues.linkGreyoutOpacity,
-        curvedWeight: config.curvedLinkWeight ?? defaultConfigValues.curvedLinkWeight,
-        curvedLinkControlPointDistance: config.curvedLinkControlPointDistance ?? defaultConfigValues.curvedLinkControlPointDistance,
-        curvedLinkSegments: config.curvedLinks ? config.curvedLinkSegments ?? defaultConfigValues.curvedLinkSegments : 1,
-        scaleLinksOnZoom: (config.scaleLinksOnZoom ?? defaultConfigValues.scaleLinksOnZoom) ? 1 : 0,
+        linkVisibilityMinTransparency: config.linkVisibilityMinTransparency,
+        linkOpacity: config.linkOpacity,
+        greyoutOpacity: config.linkGreyoutOpacity,
+        curvedWeight: config.curvedLinkWeight,
+        curvedLinkControlPointDistance: config.curvedLinkControlPointDistance,
+        curvedLinkSegments: config.curvedLinks ? config.curvedLinkSegments : 1,
+        scaleLinksOnZoom: config.scaleLinksOnZoom ? 1 : 0,
         maxPointSize: store.maxPointSize,
         renderMode: 1.0, // Index rendering for picking
         hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
         hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
-        hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease ?? defaultConfigValues.hoveredLinkWidthIncrease,
+        hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease,
       },
       drawLineFragmentUniforms: {
         renderMode: 1.0, // Index rendering for picking

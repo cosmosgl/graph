@@ -1,4 +1,4 @@
-import { Graph, GraphConfigInterface } from '@cosmos.gl/graph'
+import { Graph, type GraphConfig } from '@cosmos.gl/graph'
 import { generateLinkSamplingDemoData } from './data'
 import { LinkSamplingLabels } from './labels'
 import './style.css'
@@ -23,7 +23,7 @@ export const linkSampling = (): { div: HTMLDivElement; graph: Graph; destroy?: (
 
   const linkLabels = new LinkSamplingLabels(labelsContainer)
 
-  const config: GraphConfigInterface = {
+  const config: GraphConfig = {
     backgroundColor: '#252830',
     pointDefaultColor: '#adb5c7',
     scalePointsOnZoom: true,
