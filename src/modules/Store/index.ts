@@ -38,10 +38,9 @@ export class Store {
   public screenSize: [number, number] = [0, 0]
   public mousePosition = [0, 0]
   public screenMousePosition = [0, 0]
-  public selectedArea = [[0, 0], [0, 0]]
+  public searchArea = [[0, 0], [0, 0]]
   public isSimulationRunning = false
   public simulationProgress = 0
-  public selectedIndices: Float32Array | null = null
   public maxPointSize = MAX_POINT_SIZE
   public hoveredPoint: Hovered | undefined = undefined
   public focusedPoint: Focused | undefined = undefined
@@ -54,6 +53,7 @@ export class Store {
 
   public hoveredPointRingColor = [1, 1, 1, hoveredPointRingOpacity]
   public focusedPointRingColor = [1, 1, 1, focusedPointRingOpacity]
+  public outlinedPointRingColor = [1, 1, 1, 1]
   public hoveredLinkColor = [-1, -1, -1, -1]
   // -1 means that the color is not set
   public greyoutPointColor = [-1, -1, -1, -1]
@@ -262,6 +262,14 @@ export class Store {
     this.focusedPointRingColor[0] = convertedRgba[0]
     this.focusedPointRingColor[1] = convertedRgba[1]
     this.focusedPointRingColor[2] = convertedRgba[2]
+  }
+
+  public setOutlinedPointRingColor (color: string | [number, number, number, number]): void {
+    const convertedRgba = getRgbaColor(color)
+    this.outlinedPointRingColor[0] = convertedRgba[0]
+    this.outlinedPointRingColor[1] = convertedRgba[1]
+    this.outlinedPointRingColor[2] = convertedRgba[2]
+    this.outlinedPointRingColor[3] = convertedRgba[3]
   }
 
   public setGreyoutPointColor (color: string | [number, number, number, number] | undefined): void {

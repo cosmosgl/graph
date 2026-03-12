@@ -18,14 +18,15 @@ export const polygonSelection = (): {div: HTMLDivElement; graph: Graph; destroy:
     backgroundColor: '#1a1a2e',
     pointGreyoutOpacity: 0.2,
     onBackgroundClick: (): void => {
-      graph.unselectPoints()
+      graph.setConfigPartial({ highlightedPointIndices: undefined })
     },
   })
 
   graph.setZoomLevel(0.4)
 
   const polygonSelection = new PolygonSelection(div, (polygonPoints) => {
-    graph.selectPointsInPolygon(polygonPoints)
+    const indices = graph.findPointsInPolygon(polygonPoints)
+    graph.setConfigPartial({ highlightedPointIndices: indices })
   })
 
   const actionsDiv = document.createElement('div')
