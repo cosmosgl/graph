@@ -11,7 +11,7 @@ in float imageIndex;
 in float imageSize;
 
 uniform sampler2D positionsTexture;
-uniform sampler2D pointGreyoutStatus;
+uniform sampler2D pointStatus;
 uniform sampler2D imageAtlasCoords;
 
 #ifdef USE_UNIFORM_BUFFERS
@@ -27,8 +27,8 @@ layout(std140) uniform drawVertexUniforms {
   float scalePointsOnZoom;
   float maxPointSize;
   float isDarkenGreyout;
-  float skipSelected;
-  float skipUnselected;
+  float skipHighlighted;
+  float skipGreyed;
   float hasImages;
   float imageCount;
   float imageAtlasCoordsTextureSize;
@@ -45,8 +45,8 @@ layout(std140) uniform drawVertexUniforms {
 #define scalePointsOnZoom drawVertex.scalePointsOnZoom
 #define maxPointSize drawVertex.maxPointSize
 #define isDarkenGreyout drawVertex.isDarkenGreyout
-#define skipSelected drawVertex.skipSelected
-#define skipUnselected drawVertex.skipUnselected
+#define skipHighlighted drawVertex.skipHighlighted
+#define skipGreyed drawVertex.skipGreyed
 #define hasImages drawVertex.hasImages
 #define imageCount drawVertex.imageCount
 #define imageAtlasCoordsTextureSize drawVertex.imageAtlasCoordsTextureSize
@@ -62,8 +62,8 @@ uniform vec4 backgroundColor;
 uniform float scalePointsOnZoom;
 uniform float maxPointSize;
 uniform float isDarkenGreyout;
-uniform float skipSelected;
-uniform float skipUnselected;
+uniform float skipHighlighted;
+uniform float skipGreyed;
 uniform float hasImages;
 uniform float imageCount;
 uniform float imageAtlasCoordsTextureSize;
@@ -71,6 +71,7 @@ uniform float imageAtlasCoordsTextureSize;
 
 out float pointShape;
 out float isGreyedOut;
+out float isOutlined;
 out vec4 shapeColor;
 out vec4 imageAtlasUV;
 out float shapeSize;
@@ -80,7 +81,7 @@ out float overallSize;
 float calculatePointSize(float size) {
   float pSize;
 
-  if (scalePointsOnZoom > 0.0) { 
+  if (scalePointsOnZoom > 0.0) {
     pSize = size * ratio * transformationMatrix[0][0];
   } else {
     pSize = size * ratio * min(5.0, max(1.0, transformationMatrix[0][0] * 0.01));
@@ -89,24 +90,27 @@ float calculatePointSize(float size) {
   return min(pSize, maxPointSize * ratio);
 }
 
-void main() {    
-  // Check greyout status for selective rendering
-  vec4 greyoutStatus = texture(pointGreyoutStatus, (pointIndices + 0.5) / pointsTextureSize);
-  isGreyedOut = greyoutStatus.r;
-  float isSelected = (greyoutStatus.r == 0.0) ? 1.0 : 0.0;
-  
+const float outlineRingScale = 1.3;
+
+void main() {
+  // Read point status texture: R = greyout, G = outlined
+  vec4 status = texture(pointStatus, (pointIndices + 0.5) / pointsTextureSize);
+  isGreyedOut = status.r;
+  isOutlined = status.g;
+  float isHighlighted = (status.r == 0.0) ? 1.0 : 0.0;
+
   // Discard point based on rendering mode
-  if (skipSelected > 0.0 && isSelected > 0.0) {
-    gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // Move off-screen
+  if (skipHighlighted > 0.0 && isHighlighted > 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     gl_PointSize = 0.0;
     return;
   }
-  if (skipUnselected > 0.0 && isSelected <= 0.0) {
-    gl_Position = vec4(2.0, 2.0, 2.0, 1.0); // Move off-screen
+  if (skipGreyed > 0.0 && isHighlighted <= 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     gl_PointSize = 0.0;
     return;
   }
-  
+
   // Position
   vec4 pointPosition = texture(positionsTexture, (pointIndices + 0.5) / pointsTextureSize);
   vec2 point = pointPosition.rg;
@@ -114,11 +118,11 @@ void main() {
   // Transform point position to normalized device coordinates
   // Convert from space coordinates [0, spaceSize] to normalized [-1, 1]
   vec2 normalizedPosition = 2.0 * point / spaceSize - 1.0;
-  
+
   // Apply aspect ratio correction - this is needed to map the square space to the rectangular screen
   // The transformation matrix handles zoom/pan, but we need this to handle aspect ratio
   normalizedPosition *= spaceSize / screenSize;
-  
+
   #ifdef USE_UNIFORM_BUFFERS
   mat3 transformMat3 = mat3(transformationMatrix);
   vec3 finalPosition = transformMat3 * vec3(normalizedPosition, 1);
@@ -130,9 +134,15 @@ void main() {
   // Calculate sizes for shape and image
   float shapeSizeValue = calculatePointSize(size * sizeScale);
   float imageSizeValue = calculatePointSize(imageSize * sizeScale);
-  
+
   // Use the larger of the two sizes for the overall point size
   float overallSizeValue = max(shapeSizeValue, imageSizeValue);
+
+  // Scale up point to fit outline ring
+  if (isOutlined > 0.0) {
+    overallSizeValue *= outlineRingScale;
+  }
+
   gl_PointSize = overallSizeValue;
 
   // Pass size information to fragment shader
@@ -143,28 +153,24 @@ void main() {
   shapeColor = color;
   pointShape = shape;
 
-  // Adjust alpha of selected points
+  // Adjust color of greyed out points
   if (isGreyedOut > 0.0) {
     if (greyoutColor[0] != -1.0) {
       shapeColor = greyoutColor;
     } else {
       // If greyoutColor is not set, make color lighter or darker based on isDarkenGreyout
-      float blendFactor = 0.65; // Controls how much to modify (0.0 = original, 1.0 = target color)
-      
+      float blendFactor = 0.65;
+
       #ifdef USE_UNIFORM_BUFFERS
       if (isDarkenGreyout > 0.0) {
-        // Darken the color
         shapeColor.rgb = mix(shapeColor.rgb, vec3(0.2), blendFactor);
       } else {
-        // Lighten the color
         shapeColor.rgb = mix(shapeColor.rgb, max(backgroundColor.rgb, vec3(0.8)), blendFactor);
       }
       #else
       if (isDarkenGreyout > 0.0) {
-        // Darken the color
         shapeColor.rgb = mix(shapeColor.rgb, vec3(0.2), blendFactor);
       } else {
-        // Lighten the color
         shapeColor.rgb = mix(shapeColor.rgb, max(backgroundColor.rgb, vec3(0.8)), blendFactor);
       }
       #endif
@@ -175,12 +181,9 @@ void main() {
   if (hasImages <= 0.0 || imageIndex < 0.0 || imageIndex >= imageCount) {
     imageAtlasUV = vec4(-1.0);
   } else {
-    // Calculate image atlas UV coordinates based on imageIndex
     float atlasCoordIndex = imageIndex;
-    // Calculate the position in the texture grid
     float texX = mod(atlasCoordIndex, imageAtlasCoordsTextureSize);
     float texY = floor(atlasCoordIndex / imageAtlasCoordsTextureSize);
-    // Convert to texture coordinates (0.0 to 1.0)
     vec2 atlasCoordTexCoord = (vec2(texX, texY) + 0.5) / imageAtlasCoordsTextureSize;
     vec4 atlasCoords = texture(imageAtlasCoords, atlasCoordTexCoord);
     imageAtlasUV = atlasCoords;
@@ -189,15 +192,12 @@ void main() {
   if (hasImages <= 0.0 || imageIndex < 0.0 || imageIndex >= imageCount) {
     imageAtlasUV = vec4(-1.0);
   } else {
-    // Calculate image atlas UV coordinates based on imageIndex
     float atlasCoordIndex = imageIndex;
-    // Calculate the position in the texture grid
     float texX = mod(atlasCoordIndex, imageAtlasCoordsTextureSize);
     float texY = floor(atlasCoordIndex / imageAtlasCoordsTextureSize);
-    // Convert to texture coordinates (0.0 to 1.0)
     vec2 atlasCoordTexCoord = (vec2(texX, texY) + 0.5) / imageAtlasCoordsTextureSize;
     vec4 atlasCoords = texture(imageAtlasCoords, atlasCoordTexCoord);
     imageAtlasUV = atlasCoords;
   }
   #endif
-} 
+}

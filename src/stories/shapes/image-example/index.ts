@@ -193,14 +193,18 @@ export const imageExample = (): {div: HTMLDivElement; graph: Graph; destroy?: ()
       hoveredPointRingColor: 'white',
       renderHoveredPointRing: true,
 
-      // Add click handler for point and background selection
+      // Add click handler for point highlighting
       onPointClick: (pointIndex: number): void => {
-        // Use built-in functionality to select the clicked point and its neighbors
-        graph.selectPointByIndex(pointIndex, true)
+        const adjacentPoints = graph.getAdjacentIndices(pointIndex)
+        const highlightedPointIndices = [pointIndex, ...adjacentPoints]
+        const highlightedLinkIndices = graph.getAdjacentLinkIndices(highlightedPointIndices)
+        graph.setConfig({ highlightedPointIndices, highlightedLinkIndices })
       },
       onBackgroundClick: (): void => {
-        // Clear selection when clicking on background
-        graph.unselectPoints()
+        graph.setConfig({
+          highlightedPointIndices: undefined,
+          highlightedLinkIndices: undefined,
+        })
       },
     })
 

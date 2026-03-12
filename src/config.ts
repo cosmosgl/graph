@@ -33,7 +33,7 @@ export interface GraphConfigInterface {
   pointDefaultColor?: string | [number, number, number, number];
 
   /**
-   * The color to use for points when they are greyed out (when selection is active).
+   * The color to use for points when they are greyed out (when highlighting is active).
    * This can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values
    * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255.
    *
@@ -48,7 +48,7 @@ export interface GraphConfigInterface {
   pointGreyoutColor?: string | [number, number, number, number];
 
   /**
-   * Opacity value for points when they are greyed out (when selection is active).
+   * Opacity value for points when they are greyed out (when highlighting is active).
    * Values range from 0 (completely transparent) to 1 (fully opaque).
    *
    * If defined, this value will override the alpha/opacity component of `pointGreyoutColor`.
@@ -111,11 +111,35 @@ export interface GraphConfigInterface {
   focusedPointRingColor?: string | [number, number, number, number];
 
   /**
-   * Set focus on a point by index.  A ring will be highlighted around the focused point.
+   * Set focus on a point by index. A ring will be rendered around the focused point.
+   * The focused ring is larger than outline rings to create a clear visual hierarchy.
    * When set to `undefined`, no point is focused.
    * Default value: `undefined`
    */
   focusedPointIndex?: number;
+
+  /**
+   * Array of point indices to highlight. When set, all points NOT in this array will be
+   * greyed out. An empty array `[]` activates highlighting with all points greyed out.
+   * Set to `undefined` to clear highlighting and show all points normally.
+   * Default value: `undefined`
+   */
+  highlightedPointIndices?: number[];
+
+  /**
+   * Array of point indices to draw an outline ring around. The outline ring is a circle
+   * rendered around the point regardless of the point's shape. When a point is both
+   * outlined and greyed out (not highlighted), the ring color is dimmed to match.
+   * Default value: `undefined`
+   */
+  outlinedPointIndices?: number[];
+
+  /**
+   * Color of the outline ring drawn around outlined points.
+   * Can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values.
+   * Default value: `'white'`
+   */
+  outlinedPointRingColor?: string | [number, number, number, number];
 
   /**
    * Turns link rendering on / off.
@@ -141,10 +165,33 @@ export interface GraphConfigInterface {
   linkOpacity?: number;
 
   /**
-   * Greyed out link opacity value when the selection is active.
+   * Greyed out link opacity value when link highlighting is active.
    * Default value: `0.1`
   */
   linkGreyoutOpacity?: number;
+
+  /**
+   * Array of link indices to highlight. When set, all links NOT in this array will be
+   * greyed out. An empty array `[]` activates highlighting with all links greyed out.
+   * Set to `undefined` to clear highlighting and show all links normally.
+   * Link highlighting is independent of point highlighting.
+   * Default value: `undefined`
+   */
+  highlightedLinkIndices?: number[];
+
+  /**
+   * Set focus on a link by index. The focused link will be rendered with extra width.
+   * When set to `undefined`, no link is focused.
+   * Default value: `undefined`
+   */
+  focusedLinkIndex?: number;
+
+  /**
+   * Number of pixels to add to the link width when focused.
+   * The focused width is calculated as: originalWidth + focusedLinkWidthIncrease
+   * Default value: `5`
+   */
+  focusedLinkWidthIncrease?: number;
   /**
    * The default width value to use for links when no link widths are provided or if the width value in the array is `undefined` or `null`.
    * Default value: `1`
@@ -427,16 +474,18 @@ export interface GraphConfigInterface {
    * Callback function that will be called when a point appears under the mouse
    * as a result of a mouse event, zooming and panning, or movement of points.
    * The point index will be passed as the first argument, position as the second argument,
-   * the corresponding mouse event or D3's zoom event as the third argument, and whether
-   * the hovered point is selected as the fourth argument:
-   * `(index: number, pointPosition: [number, number], event: MouseEvent | D3DragEvent<HTMLCanvasElement, undefined, Hovered> | D3ZoomEvent<HTMLCanvasElement, undefined> | undefined, isSelected: boolean) => void`.
+   * the corresponding mouse event or D3's zoom event as the third argument,
+   * whether the hovered point is highlighted as the fourth argument,
+   * and whether the hovered point is outlined as the fifth argument:
+   * `(index, pointPosition, event, isHighlighted, isOutlined) => void`.
    * Default value: `undefined`
    */
   onPointMouseOver?: (
     index: number,
     pointPosition: [number, number],
     event: MouseEvent | D3DragEvent<HTMLCanvasElement, undefined, Hovered> | D3ZoomEvent<HTMLCanvasElement, undefined> | undefined,
-    isSelected: boolean
+    isHighlighted: boolean,
+    isOutlined: boolean
   ) => void;
 
   /**

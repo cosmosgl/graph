@@ -25,6 +25,7 @@ const config = {
   pointSize: 4,
   linkColor: '#666666',
   linkWidth: 1,
+  linkArrows: false,
 }
 
 // After (v3)
@@ -33,6 +34,7 @@ const config = {
   pointDefaultSize: 4,
   linkDefaultColor: '#666666',
   linkDefaultWidth: 1,
+  linkDefaultArrows: false,
 }
 ```
 
@@ -43,9 +45,60 @@ The following methods and callbacks were deprecated in v2 and have been fully re
 | Deprecated (v2) | Replacement (v3) |
 |---|---|
 | `restart()` | `unpause()` |
-| `getPointsInRange()` | `getPointsInRect()` |
-| `selectPointsInRange()` | `selectPointsInRect()` |
+| `getPointsInRange()` | `findPointsInRect(rect)` |
+| `selectPointsInRange()` | `findPointsInRect(rect)` then `setConfig({ highlightedPointIndices })` |
 | `onSimulationRestart` callback | `onSimulationUnpause` |
+
+#### Selection Replaced by Config-Driven Highlighting and Outlining
+
+The imperative selection API has been removed. Point and link visual states are now controlled entirely through `setConfig()`:
+
+**Removed methods:**
+- `selectPoint()` / `selectPointByIndex()` — use `setConfig({ focusedPointIndex })` instead
+- `selectPointsByIndices()` — use `setConfig({ highlightedPointIndices })` instead
+- `selectPointsInRect()` — use `findPointsInRect()` then `setConfig({ highlightedPointIndices })` instead
+- `selectPointsInPolygon()` — use `findPointsInPolygon()` then `setConfig({ highlightedPointIndices })` instead
+- `unselectPoints()` — use `setConfig({ highlightedPointIndices: undefined, highlightedLinkIndices: undefined })` instead
+- `getSelectedIndices()` — track highlighted indices in your own state
+
+**New config properties for points:**
+- `highlightedPointIndices` — array of point indices to highlight (`[]` = all greyed, `undefined` = no highlighting)
+- `outlinedPointIndices` — array of point indices to render with an outline ring
+- `outlinedPointRingColor` — color of the outline ring (default: `'white'`)
+- `focusedPointIndex` — index of a single focused point (renders a larger ring)
+- `focusedPointRingColor` — color of the focused point ring (default: `'white'`)
+
+**New config properties for links:**
+- `highlightedLinkIndices` — array of link indices to highlight (`[]` = all greyed, `undefined` = no highlighting)
+- `focusedLinkIndex` — index of a single focused link (renders wider)
+- `focusedLinkWidthIncrease` — extra pixels added to focused link width (default: `5`)
+
+**New methods:**
+- `findPointsInRect(rect)` — returns `Promise<number[]>` of point indices in a rectangular area
+- `findPointsInPolygon(polygonPath)` — returns `Promise<number[]>` of point indices in a polygon area
+- `getAdjacentLinkIndices(pointIndices)` — returns link indices where both endpoints are in the given point set
+
+**Key differences from v2:**
+- Point and link highlighting are independent — greying out points does not grey out links automatically
+- `[]` and `undefined` have different meanings: `[]` activates highlighting with everything greyed, `undefined` clears highlighting entirely
+- `getAdjacentLinkIndices()` only returns links where both source and target are in the provided set
+
+```ts
+// Before (v2)
+graph.selectPointsByIndices([0, 1, 2])
+
+// After (v3)
+graph.setConfig({
+  highlightedPointIndices: [0, 1, 2],
+  highlightedLinkIndices: graph.getAdjacentLinkIndices([0, 1, 2]),
+})
+
+// Clear highlighting
+graph.setConfig({
+  highlightedPointIndices: undefined,
+  highlightedLinkIndices: undefined,
+})
+```
 
 #### Removed Config Options
 
@@ -89,7 +142,7 @@ if (graph.isReady) {
 
 ---
 
-## Migration to v2.0
+## Migrating to v2.0
 
 ### Introduction
 
@@ -104,7 +157,7 @@ This update is centered on enhancing data performance by utilizing formats direc
 The `setData` method has been replaced with `setPointPositions` and `setLinks`. These new methods accept `Float32Array`, which are directly used to create WebGL textures.
 
 **Before:**
-```js
+```ts
 graph.setData(
   [{ id: 'a' }, { id: 'b' }], // Nodes
   [{ source: 'a', target: 'b' }] // Links
@@ -112,7 +165,7 @@ graph.setData(
 ```
 
 **After:**
-```js
+```ts
 graph.setPointPositions(new Float32Array([
   400, 400, // x and y of the first point
   500, 500, // x and y of the second point
@@ -127,12 +180,12 @@ graph.setLinks(new Float32Array([
 Accessor functions for styling such as `nodeColor`, `nodeSize`, `linkColor`, `linkWidth`, and `linkArrows`, have been eliminated. You can now set these attributes directly using `Float32Array`.
 
 **Before:**
-```js
+```ts
 config.nodeColor = node => node.color;
 ```
 
 **After:**
-```js
+```ts
 graph.setPointColors(new Float32Array([
   0.5, 0.5, 1, 1, // r, g, b, alpha for the first point
   0.5, 1, 0.5, 1, // r, g, b, alpha for the second point
@@ -144,7 +197,7 @@ graph.setPointColors(new Float32Array([
 The configuration object is now flat instead of nested.
 
 **Before:**
-```js
+```ts
 const config = {
   backgroundColor: 'black',
   simulation: {
@@ -157,7 +210,7 @@ const config = {
 ```
 
 **After:**
-```js
+```ts
 const config = {
   backgroundColor: 'black',
   simulationRepulsion: 0.5,
@@ -170,13 +223,13 @@ const config = {
 In version 2.0, the initialization of the graph now requires a `div` element instead of a `canvas` element.
 
 **Before:**
-```js
+```ts
 const canvas = document.getElementById('myCanvas')
 const graph = new Graph(canvas, config)
 ```
 
 **After:**
-```js
+```ts
 const div = document.getElementById('myDiv')
 const graph = new Graph(div, config)
 ```

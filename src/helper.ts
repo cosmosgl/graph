@@ -90,6 +90,18 @@ export function readPixels (device: Device, fbo: Framebuffer, sourceX = 0, sourc
 }
 
 /**
+ * Extracts point indices from a pixel readback buffer.
+ * Every 4th value (R channel) is checked — non-zero means the point at that index was found.
+ */
+export function extractIndicesFromPixels (pixels: Float32Array): number[] {
+  const result: number[] = []
+  for (let i = 0; i < pixels.length; i += 4) {
+    if (pixels[i] !== 0) result.push(i / 4)
+  }
+  return result
+}
+
+/**
  * Returns the maximum point size supported by the device, scaled by pixel ratio.
  * For WebGL devices, reads the limit from the context; for other device types, uses MAX_POINT_SIZE from Store.
  * @param device - The luma.gl device
