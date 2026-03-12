@@ -439,70 +439,41 @@ Sets the zoom transform so that the given point positions fit in the viewport, w
 * **`scale`** (Number, optional): Scale factor; if omitted, scale is chosen to fit the positions.
 * **`padding`** (Number, optional): Padding around the viewport as a fraction (e.g. 0.1 = 10%). Default is 0.1.
 
-### <a name="get_points_in_rect" href="#get_points_in_rect">#</a> graph.<b>getPointsInRect</b>(<i>selection</i>)
+### <a name="find_points_in_rect" href="#find_points_in_rect">#</a> graph.<b>findPointsInRect</b>(<i>rect</i>)
 
-Get points as a Float32Array within a rectangular area defined by two corner points `[[left, top], [right, bottom]]`. The `left` and `right` values represent the horizontal position in pixels, relative to the left edge of the canvas, with `0` being the leftmost position and the width of the canvas being the rightmost position.
+Find points within a rectangular area defined by two corner points `[[left, top], [right, bottom]]`. The coordinates are in screen pixel coordinates.
 
-The `top` and `bottom` values represent the vertical position in pixels, relative to the top edge of the canvas, with `0` being the topmost position and the height of the canvas being the bottommost position.
+**Must be called when the graph is ready** (e.g. after `await graph.ready` or inside `graph.ready.then(...)`). If called before initialization completes, returns an empty array.
 
-* **`selection`** (Array): An array containing two coordinate arrays representing the corners of the selection rectangle in the format `[[left, top], [right, bottom]]`.
+* **`rect`** (Array): An array containing two coordinate arrays in the format `[[left, top], [right, bottom]]`.
 
-**Returns:** A Float32Array containing the indices of points inside the rectangular area.
+**Returns:** A `number[]` of point indices inside the rectangular area.
 
-### <a name="select_points_in_rect" href="#select_points_in_rect">#</a> graph.<b>selectPointsInRect</b>(<i>selection</i>)
+### <a name="find_points_in_polygon" href="#find_points_in_polygon">#</a> graph.<b>findPointsInPolygon</b>(<i>polygonPath</i>)
 
-Select points within a rectangular area defined by two corner points `[[left, top], [right, bottom]]`. The `left` and `right` values represent the horizontal position in pixels, relative to the left edge of the canvas, with `0` being the leftmost position and the width of the canvas being the rightmost position.
+Find points within a polygon area defined by an array of coordinate points.
 
-The `top` and `bottom` values represent the vertical position in pixels, relative to the top edge of the canvas, with `0` being the topmost position and the height of the canvas being the bottommost position.
+**Must be called when the graph is ready** (e.g. after `await graph.ready` or inside `graph.ready.then(...)`). If called before initialization completes, returns an empty array.
 
-* **`selection`** (Array | null): An array containing two coordinate arrays representing the corners of the selection rectangle in the format `[[left, top], [right, bottom]]`, or `null` to clear the current selection.
+* **`polygonPath`** (Array): An array of coordinate points in the format `[[x1, y1], [x2, y2], ..., [xN, yN]]`. The coordinates are in screen pixel coordinates. The polygon requires at least 3 points.
 
-### <a name="get_points_in_polygon" href="#get_points_in_polygon">#</a> graph.<b>getPointsInPolygon</b>(<i>polygonPath</i>)
+**Returns:** A `number[]` of point indices inside the polygon area.
 
-Get points as a Float32Array within a polygon area defined by an array of coordinate points.
+### <a name="get_adjacent_indices" href="#get_adjacent_indices">#</a> graph.<b>getAdjacentIndices</b>(<i>pointIndices</i>)
 
-* **`polygonPath`** (Array): An array of coordinate points in the format `[[x1, y1], [x2, y2], ..., [xN, yN]]` that defines the polygon. The coordinates should be in pixels relative to the canvas, where:
-  - **`x`**: Horizontal position from 0 to the width of the canvas
-  - **`y`**: Vertical position from 0 to the height of the canvas
-  - The polygon requires at least 3 points to form a valid selection area
+Returns an array of point indices that are adjacent to the given point(s).
 
-**Returns:** A Float32Array containing the indices of points inside the polygon area.
+* **`pointIndices`** (Number | Number[]): A single point index or an array of point indices.
 
-### <a name="select_points_in_polygon" href="#select_points_in_polygon">#</a> graph.<b>selectPointsInPolygon</b>(<i>polygonPath</i>)
+**Returns:** A unique `number[]` of adjacent point indices.
 
-Select points within a polygon area defined by an array of coordinate points. This method combines the functionality of `getPointsInPolygon` with point selection, making the identified points visually selected in the graph.
+### <a name="get_adjacent_link_indices" href="#get_adjacent_link_indices">#</a> graph.<b>getAdjacentLinkIndices</b>(<i>pointIndices</i>)
 
-* **`polygonPath`** (Array | null): An array of coordinate points in the format `[[x1, y1], [x2, y2], ..., [xN, yN]]` that defines the polygon, or `null` to clear the current selection. The coordinates should be in pixels relative to the canvas, where:
-  - **`x`**: Horizontal position from 0 to the width of the canvas  
-  - **`y`**: Vertical position from 0 to the height of the canvas
-  - The polygon requires at least 3 points to form a valid selection area
+Returns an array of link indices where both the source and target endpoints are within the given point set.
 
-### <a name="select_point_by_index" href="#select_point_by_index">#</a> graph.<b>selectPointByIndex</b>(<i>index</i>, [<i>selectAdjacentPoints</i>])
+* **`pointIndices`** (Number | Number[]): A single point index or an array of point indices.
 
-This method selects a point in the graph based on its index.
-
-* **`index`** (Number): The index of the point to be selected.
-* **`selectAdjacentPoints`** (Boolean, optional): If set to `true`, adjacent points to the specified index will also be selected. The default value is `false`.
-
-### <a name="select_points_by_indices" href="#select_points_by_indices">#</a> graph.<b>selectPointsByIndices</b>(<i>indices</i>)
-
-This method selects multiple points in the graph based on their indices.
-
-* **`indices`** (Array): An array of numbers representing the indices of the points to be selected.
-
-### <a name="unselect_points" href="#unselect_points">#</a> graph.<b>unselectPoints</b>()
-
-This method unselects all currently selected points in the graph.
-
-### <a name="get_selected_indices" href="#get_selected_indices">#</a> graph.<b>getSelectedIndices</b>()
-
-This method returns an array of indices corresponding to the currently selected points in the graph.
-
-### <a name="get_adjacent_indices" href="#get_adjacent_indices">#</a> graph.<b>getAdjacentIndices</b>(<i>index</i>)
-
-This method returns an array of indices that are adjacent to a specific point in the graph, identified by its <i>index</i>.
-
-* **`index`** (Number): The index of the point whose adjacent points are to be retrieved.
+**Returns:** A unique `number[]` of link indices where both endpoints are in the provided point set.
 
 ### <a name="space_to_screen_position" href="#space_to_screen_position">#</a> graph.<b>spaceToScreenPosition</b>(<i>coordinates</i>)
 

@@ -7,7 +7,7 @@ import { Device, Framebuffer, luma } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
 
 import { applyConfig, createDefaultConfig, resetConfigToDefaults, GraphConfigInterface, type GraphConfig } from '@/graph/config'
-import { getRgbaColor, getMaxPointSize, readPixels, sanitizeHtml } from '@/graph/helper'
+import { getRgbaColor, getMaxPointSize, readPixels, extractIndicesFromPixels, sanitizeHtml } from '@/graph/helper'
 import { ForceCenter } from '@/graph/modules/ForceCenter'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
 import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
@@ -269,6 +269,7 @@ export class Graph {
         this.store.setFocusedPoint(this.config.focusedPointIndex)
       }
       this.store.setGreyoutPointColor(this.config.pointGreyoutColor)
+      this.store.setOutlinedPointRingColor(this.config.outlinedPointRingColor)
       this.store.setHoveredLinkColor(this.config.hoveredLinkColor)
 
       this.store.updateLinkHoveringEnabled(this.config)
@@ -912,175 +913,71 @@ export class Graph {
   }
 
   /**
-   * Get points indices inside a rectangular area.
-   * @param selection - Array of two corner points `[[left, top], [right, bottom]]`.
-   * The `left` and `right` coordinates should be from 0 to the width of the canvas.
-   * The `top` and `bottom` coordinates should be from 0 to the height of the canvas.
-   * @returns A Float32Array containing the indices of points inside a rectangular area.
+   * Find point indices inside a rectangular area.
+   *
+   * **Important:** This method is synchronous and must only be called when the graph is ready.
+   * Ensure `await graph.ready` has resolved (or use the result inside `graph.ready.then(...)`) before
+   * calling. If called before initialization completes, returns an empty array.
+   *
+   * @param rect - Array of two corner points `[[left, top], [right, bottom]]`.
+   * The coordinates should be from 0 to the width/height of the canvas.
+   * @returns Array of point indices inside the rectangle.
    */
-  public getPointsInRect (selection: [[number, number], [number, number]]): Float32Array {
-    if (this._isDestroyed || !this.device || !this.points) return new Float32Array()
-    const h = this.store.screenSize[1]
-    this.store.selectedArea = [[selection[0][0], (h - selection[1][1])], [selection[1][0], (h - selection[0][1])]]
-    this.points.findPointsOnAreaSelection()
-    const pixels = readPixels(this.device, this.points.selectedFbo as Framebuffer)
+  public findPointsInRect (rect: [[number, number], [number, number]]): number[] {
+    if (this._isDestroyed) return []
+    if (!this.isReady || !this.device || !this.points) return []
 
-    return pixels
-      .map((pixel, i) => {
-        if (i % 4 === 0 && pixel !== 0) return i / 4
-        else return -1
-      })
-      .filter(d => d !== -1)
+    const h = this.store.screenSize[1]
+    this.store.searchArea = [[rect[0][0], (h - rect[1][1])], [rect[1][0], (h - rect[0][1])]]
+    if (!this.points.findPointsInRect()) return []
+    return extractIndicesFromPixels(readPixels(this.device, this.points.searchFbo as Framebuffer))
   }
 
   /**
-   * Get points indices inside a polygon area.
+   * Find point indices inside a polygon area.
+   *
+   * **Important:** This method is synchronous and must only be called when the graph is ready.
+   * Ensure `await graph.ready` has resolved (or use the result inside `graph.ready.then(...)`) before
+   * calling. If called before initialization completes, returns an empty array.
+   *
    * @param polygonPath - Array of points `[[x1, y1], [x2, y2], ..., [xn, yn]]` that defines the polygon.
    * The coordinates should be from 0 to the width/height of the canvas.
-   * @returns A Float32Array containing the indices of points inside the polygon area.
+   * @returns Array of point indices inside the polygon.
    */
-  public getPointsInPolygon (polygonPath: [number, number][]): Float32Array {
-    if (this._isDestroyed || !this.device || !this.points) return new Float32Array()
-    if (polygonPath.length < 3) return new Float32Array() // Need at least 3 points for a polygon
+  public findPointsInPolygon (polygonPath: [number, number][]): number[] {
+    if (this._isDestroyed) return []
+    if (!this.isReady || !this.device || !this.points) return []
+
+    if (polygonPath.length < 3) {
+      console.warn('Polygon path requires at least 3 points to form a polygon.')
+      return []
+    }
 
     const h = this.store.screenSize[1]
-    // Convert coordinates to WebGL coordinate system (flip Y)
     const convertedPath = polygonPath.map(([x, y]) => [x, h - y] as [number, number])
     this.points.updatePolygonPath(convertedPath)
-    this.points.findPointsOnPolygonSelection()
-    const pixels = readPixels(this.device, this.points.selectedFbo as Framebuffer)
-
-    return pixels
-      .map((pixel, i) => {
-        if (i % 4 === 0 && pixel !== 0) return i / 4
-        else return -1
-      })
-      .filter(d => d !== -1)
-  }
-
-  /** Select points inside a rectangular area.
-   * @param selection - Array of two corner points `[[left, top], [right, bottom]]`.
-   * The `left` and `right` coordinates should be from 0 to the width of the canvas.
-   * The `top` and `bottom` coordinates should be from 0 to the height of the canvas. */
-  public selectPointsInRect (selection: [[number, number], [number, number]] | null): void {
-    if (this._isDestroyed) return
-
-    if (this.ensureDevice(() => this.selectPointsInRect(selection))) return
-    if (!this.device || !this.points) return
-    if (selection) {
-      const h = this.store.screenSize[1]
-      this.store.selectedArea = [[selection[0][0], (h - selection[1][1])], [selection[1][0], (h - selection[0][1])]]
-      this.points.findPointsOnAreaSelection()
-      const pixels = readPixels(this.device, this.points.selectedFbo as Framebuffer)
-      this.store.selectedIndices = pixels
-        .map((pixel, i) => {
-          if (i % 4 === 0 && pixel !== 0) return i / 4
-          else return -1
-        })
-        .filter(d => d !== -1)
-    } else {
-      this.store.selectedIndices = null
-    }
-    this.points.updateGreyoutStatus()
-  }
-
-  /** Select points inside a polygon area.
-   * @param polygonPath - Array of points `[[x1, y1], [x2, y2], ..., [xn, yn]]` that defines the polygon.
-   * The coordinates should be from 0 to the width/height of the canvas.
-   * Set to null to clear selection. */
-  public selectPointsInPolygon (polygonPath: [number, number][] | null): void {
-    if (this._isDestroyed) return
-
-    if (this.ensureDevice(() => this.selectPointsInPolygon(polygonPath))) return
-    if (!this.device || !this.points) return
-    if (polygonPath) {
-      if (polygonPath.length < 3) {
-        console.warn('Polygon path requires at least 3 points to form a polygon.')
-        return
-      }
-
-      const h = this.store.screenSize[1]
-      // Convert coordinates to WebGL coordinate system (flip Y)
-      const convertedPath = polygonPath.map(([x, y]) => [x, h - y] as [number, number])
-      this.points.updatePolygonPath(convertedPath)
-      this.points.findPointsOnPolygonSelection()
-      const pixels = readPixels(this.device, this.points.selectedFbo as Framebuffer)
-      this.store.selectedIndices = pixels
-        .map((pixel, i) => {
-          if (i % 4 === 0 && pixel !== 0) return i / 4
-          else return -1
-        })
-        .filter(d => d !== -1)
-    } else {
-      this.store.selectedIndices = null
-    }
-    this.points.updateGreyoutStatus()
+    if (!this.points.findPointsInPolygon()) return []
+    return extractIndicesFromPixels(readPixels(this.device, this.points.searchFbo as Framebuffer))
   }
 
   /**
-   * Select a point by index. If you want the adjacent points to get selected too, provide `true` as the second argument.
-   * @param index The index of the point in the array of points.
-   * @param selectAdjacentPoints When set to `true`, selects adjacent points (`false` by default).
+   * Get point indices that are adjacent to the given point(s).
+   * @param pointIndices A single point index or an array of point indices.
+   * @returns Deduplicated array of adjacent point indices.
    */
-  public selectPointByIndex (index: number, selectAdjacentPoints = false): void {
-    if (this._isDestroyed) return
-    if (this.ensureDevice(() => this.selectPointByIndex(index, selectAdjacentPoints))) return
-    if (selectAdjacentPoints) {
-      const adjacentIndices = this.graph.getAdjacentIndices(index) ?? []
-      this.selectPointsByIndices([index, ...adjacentIndices])
-    } else this.selectPointsByIndices([index])
+  public getAdjacentIndices (pointIndices: number | number[]): number[] {
+    if (this._isDestroyed) return []
+    return this.graph.getAdjacentIndices(pointIndices)
   }
 
   /**
-   * Select multiples points by their indices.
-   * @param indices Array of points indices.
+   * Get link indices that are adjacent to the given point(s).
+   * @param pointIndices A single point index or an array of point indices.
+   * @returns Deduplicated array of adjacent link indices.
    */
-  public selectPointsByIndices (indices?: (number | undefined)[] | null): void {
-    if (this._isDestroyed) return
-    if (this.ensureDevice(() => this.selectPointsByIndices(indices))) return
-    if (!this.points) return
-    if (!indices) {
-      this.store.selectedIndices = null
-    } else if (indices.length === 0) {
-      this.store.selectedIndices = new Float32Array()
-    } else {
-      this.store.selectedIndices = new Float32Array(indices.filter(d => d !== undefined))
-    }
-
-    this.points.updateGreyoutStatus()
-  }
-
-  /**
-   * Unselect all points.
-   */
-  public unselectPoints (): void {
-    if (this._isDestroyed) return
-    if (this.ensureDevice(() => this.unselectPoints())) return
-    if (!this.points) return
-    this.store.selectedIndices = null
-    this.points.updateGreyoutStatus()
-  }
-
-  /**
-   * Get indices of points that are currently selected.
-   * @returns Array of selected indices of points.
-   */
-  public getSelectedIndices (): number[] | null {
-    if (this._isDestroyed) return null
-    const { selectedIndices } = this.store
-    if (!selectedIndices) return null
-    return Array.from(selectedIndices)
-  }
-
-  /**
-   * Get indices that are adjacent to a specific point by its index.
-   * @param index Index of the point.
-   * @returns Array of adjacent indices.
-   */
-
-  public getAdjacentIndices (index: number): number[] | undefined {
-    if (this._isDestroyed) return undefined
-    return this.graph.getAdjacentIndices(index)
+  public getAdjacentLinkIndices (pointIndices: number | number[]): number[] {
+    if (this._isDestroyed) return []
+    return this.graph.getAdjacentLinkIndices(pointIndices)
   }
 
   /**
@@ -1504,6 +1401,16 @@ export class Graph {
     }
     if (prevConfig.focusedPointIndex !== this.config.focusedPointIndex) {
       this.store.setFocusedPoint(this.config.focusedPointIndex)
+    }
+    if (prevConfig.outlinedPointRingColor !== this.config.outlinedPointRingColor) {
+      this.store.setOutlinedPointRingColor(this.config.outlinedPointRingColor)
+    }
+    if (prevConfig.highlightedPointIndices !== this.config.highlightedPointIndices ||
+        prevConfig.outlinedPointIndices !== this.config.outlinedPointIndices) {
+      this.points?.updatePointStatus()
+    }
+    if (prevConfig.highlightedLinkIndices !== this.config.highlightedLinkIndices) {
+      this.lines?.updateLinkStatus()
     }
     if (prevConfig.pixelRatio !== this.config.pixelRatio) {
       // Update device's canvas context useDevicePixels
@@ -1988,11 +1895,15 @@ export class Graph {
     }
 
     if (isMouseover && this.store.hoveredPoint) {
+      const idx = this.store.hoveredPoint.index
+      const isHighlighted = this.config.highlightedPointIndices?.includes(idx) ?? false
+      const isOutlined = this.config.outlinedPointIndices?.includes(idx) ?? false
       this.config.onPointMouseOver?.(
         this.store.hoveredPoint.index,
         this.store.hoveredPoint.position,
         this.currentEvent,
-        this.store.selectedIndices?.includes(this.store.hoveredPoint.index) ?? false
+        isHighlighted,
+        isOutlined
       )
     }
     if (isMouseout) this.config.onPointMouseOut?.(this.currentEvent)
