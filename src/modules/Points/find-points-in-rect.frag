@@ -7,35 +7,35 @@ uniform sampler2D positionsTexture;
 uniform sampler2D pointSize;
 
 #ifdef USE_UNIFORM_BUFFERS
-layout(std140) uniform findPointsOnAreaSelectionUniforms {
+layout(std140) uniform findPointsInRectUniforms {
   float sizeScale;
   float spaceSize;
   vec2 screenSize;
   float ratio;
   mat4 transformationMatrix;
-  vec2 selection0;
-  vec2 selection1;
+  vec2 rect0;
+  vec2 rect1;
   float scalePointsOnZoom;
   float maxPointSize;
-} findPointsOnAreaSelection;
+} findPointsInRect;
 
-#define sizeScale findPointsOnAreaSelection.sizeScale
-#define spaceSize findPointsOnAreaSelection.spaceSize
-#define screenSize findPointsOnAreaSelection.screenSize
-#define ratio findPointsOnAreaSelection.ratio
-#define transformationMatrix findPointsOnAreaSelection.transformationMatrix
-#define selection0 findPointsOnAreaSelection.selection0
-#define selection1 findPointsOnAreaSelection.selection1
-#define scalePointsOnZoom findPointsOnAreaSelection.scalePointsOnZoom
-#define maxPointSize findPointsOnAreaSelection.maxPointSize
+#define sizeScale findPointsInRect.sizeScale
+#define spaceSize findPointsInRect.spaceSize
+#define screenSize findPointsInRect.screenSize
+#define ratio findPointsInRect.ratio
+#define transformationMatrix findPointsInRect.transformationMatrix
+#define rect0 findPointsInRect.rect0
+#define rect1 findPointsInRect.rect1
+#define scalePointsOnZoom findPointsInRect.scalePointsOnZoom
+#define maxPointSize findPointsInRect.maxPointSize
 #else
 uniform float sizeScale;
 uniform float spaceSize;
 uniform vec2 screenSize;
 uniform float ratio;
 uniform mat3 transformationMatrix;
-uniform vec2 selection0;
-uniform vec2 selection1;
+uniform vec2 rect0;
+uniform vec2 rect1;
 uniform float scalePointsOnZoom;
 uniform float maxPointSize;
 #endif
@@ -75,10 +75,10 @@ void main() {
   vec4 pSize = texture(pointSize, textureCoords);
   float size = pSize.r * sizeScale;
 
-  float left = 2.0 * (selection0.x - 0.5 * pointSizeF(size)) / screenSize.x - 1.0;
-  float right = 2.0 * (selection1.x + 0.5 * pointSizeF(size)) / screenSize.x - 1.0;
-  float top =  2.0 * (selection0.y - 0.5 * pointSizeF(size)) / screenSize.y - 1.0;
-  float bottom =  2.0 * (selection1.y + 0.5 * pointSizeF(size)) / screenSize.y - 1.0;
+  float left = 2.0 * (rect0.x - 0.5 * pointSizeF(size)) / screenSize.x - 1.0;
+  float right = 2.0 * (rect1.x + 0.5 * pointSizeF(size)) / screenSize.x - 1.0;
+  float top =  2.0 * (rect0.y - 0.5 * pointSizeF(size)) / screenSize.y - 1.0;
+  float bottom =  2.0 * (rect1.y + 0.5 * pointSizeF(size)) / screenSize.y - 1.0;
 
   fragColor = vec4(0.0, 0.0, pointPosition.r, pointPosition.g);
   if (final.x >= left && final.x <= right && final.y >= top && final.y <= bottom) {
