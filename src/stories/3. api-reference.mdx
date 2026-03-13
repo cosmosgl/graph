@@ -33,7 +33,9 @@ For advanced use cases, you can provide your own Luma.gl Device.
 
 ### <a name="set_config" href="#set_config">#</a> graph.<b>setConfig</b>(<i>config</i>)
 
-Apply a new [configuration](../?path=/docs/configuration--docs). Changes take effect immediately.
+Apply a new [configuration](../?path=/docs/configuration--docs). Most changes take effect immediately.
+
+Some initialization-only options, such as `enableSimulation`, are applied only when the graph is created.
 
 **Important:** Every call fully resets the configuration to defaults first, then applies the provided values on top. Properties not included in `config` will revert to their default values — they are **not** preserved from the previous call.
 

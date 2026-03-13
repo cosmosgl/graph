@@ -652,17 +652,35 @@ export type Complete<T> = { [K in keyof Required<T>]: T[K] }
  */
 export type GraphConfig = Partial<GraphConfigInterface>
 
+/** Shallow-clones arrays to avoid shared references; passes other values through. */
+const cloneConfigValue = <T>(value: T): T =>
+  Array.isArray(value) ? ([...value] as T) : value
+
 /**
- * Resets config to defaults, then overlays the provided config on top.
- * Mutates `target` in place so all modules sharing the same config reference
- * (GraphData, Zoom, Drag, CoreModule subclasses, etc.) stay in sync.
+ * Resets `target` to defaults, then applies `source` values on top.
+ * Mutates `target` in place so all modules sharing the config reference stay in sync.
  *
- * Every call fully resets to `defaultConfigValues` first — there are no
- * partial updates. Properties not present in `source` revert to their defaults.
+ * - Properties not in `source` revert to defaults (no partial updates).
+ * - Explicit `undefined` values in `source` are skipped so defaults are preserved.
+ * - Array values are shallow-cloned to prevent shared references.
  */
 export function mergeConfig (
   target: GraphConfigInterface,
   source: GraphConfig
 ): void {
-  Object.assign(target, defaultConfigValues, source)
+  // Reset all properties back to defaults, cloning arrays to avoid shared references
+  const defaults: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(defaultConfigValues)) {
+    defaults[key] = cloneConfigValue(value)
+  }
+  Object.assign(target, defaults)
+
+  // Apply source values on top, skipping undefined so defaults are preserved
+  const overrides: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(source)) {
+    if (value !== undefined) {
+      overrides[key] = cloneConfigValue(value)
+    }
+  }
+  Object.assign(target, overrides)
 }
