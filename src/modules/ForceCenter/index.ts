@@ -1,6 +1,7 @@
 import { Buffer, Framebuffer, Texture, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
+
 import calculateCentermassFrag from '@/graph/modules/ForceCenter/calculate-centermass.frag?raw'
 import calculateCentermassVert from '@/graph/modules/ForceCenter/calculate-centermass.vert?raw'
 import forceFrag from '@/graph/modules/ForceCenter/force-center.frag?raw'
@@ -198,7 +199,7 @@ export class ForceCenter extends CoreModule {
     // Apply center force into velocity
     this.forceUniformStore.setUniforms({
       forceCenterUniforms: {
-        centerForce: this.config.simulationCenter ?? 0,
+        centerForce: this.config.simulationCenter,
         alpha: store.alpha,
       },
     })

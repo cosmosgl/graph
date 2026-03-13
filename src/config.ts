@@ -1,21 +1,8 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import { D3ZoomEvent } from 'd3-zoom'
 import { D3DragEvent } from 'd3-drag'
-import {
-  defaultPointColor,
-  defaultGreyoutPointOpacity,
-  defaultGreyoutPointColor,
-  defaultPointOpacity,
-  defaultPointSize,
-  defaultLinkColor,
-  defaultGreyoutLinkOpacity,
-  defaultLinkOpacity,
-  defaultLinkWidth,
-  defaultBackgroundColor,
-  defaultConfigValues,
-} from '@/graph/variables'
-import { isPlainObject } from '@/graph/helper'
 import { type Hovered } from '@/graph/modules/Store'
+import { defaultConfigValues } from '@/graph/variables'
 
 export interface GraphConfigInterface {
   /**
@@ -24,18 +11,18 @@ export interface GraphConfigInterface {
    * can't be changed using the `setConfig` method.
    * Default value: `true`
    */
-  enableSimulation?: boolean;
+  enableSimulation: boolean;
   /**
    * Canvas background color.
    * Can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values.
    * Default value: '#222222'
    */
-  backgroundColor?: string | [number, number, number, number];
+  backgroundColor: string | [number, number, number, number];
   /**
    * Simulation space size.
    * Default value: `4096` (larger values may crash on some devices, e.g. iOS; see https://github.com/cosmosgl/graph/issues/203).
    */
-  spaceSize?: number;
+  spaceSize: number;
 
   /**
    * The default color to use for points when no point colors are provided,
@@ -44,7 +31,7 @@ export interface GraphConfigInterface {
    * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255.
    * Default value: '#b3b3b3'
    */
-  pointDefaultColor?: string | [number, number, number, number];
+  pointDefaultColor: string | [number, number, number, number];
 
   /**
    * The color to use for points when they are greyed out (when selection is active).
@@ -76,7 +63,7 @@ export interface GraphConfigInterface {
    * if the size value in the array is `undefined` or `null`.
    * Default value: `4`
   */
-  pointDefaultSize?: number;
+  pointDefaultSize: number;
 
   /**
    * Universal opacity value applied to all points.
@@ -84,45 +71,45 @@ export interface GraphConfigInterface {
    * Useful for dynamically controlling opacity of all points without updating individual RGBA arrays.
    * Default value: `1.0`
    */
-  pointOpacity?: number;
+  pointOpacity: number;
 
   /**
    * Scale factor for the point size.
    * Default value: `1`
    */
-  pointSizeScale?: number;
+  pointSizeScale: number;
 
   /**
    * Cursor style to use when hovering over a point
    * Default value: `auto`
    */
-  hoveredPointCursor?: string;
+  hoveredPointCursor: string;
 
   /**
    * Cursor style to use when hovering over a link
    * Default value: `auto`
    */
-  hoveredLinkCursor?: string;
+  hoveredLinkCursor: string;
 
   /**
    * Turns ring rendering around a point on hover on / off
    * Default value: `false`
    */
-  renderHoveredPointRing?: boolean;
+  renderHoveredPointRing: boolean;
 
   /**
    * Hovered point ring color hex value.
    * Can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values.
    * Default value: `white`
    */
-  hoveredPointRingColor?: string | [number, number, number, number];
+  hoveredPointRingColor: string | [number, number, number, number];
 
   /**
    * Focused point ring color hex value.
    * Can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values.
    * Default value: `white`
    */
-  focusedPointRingColor?: string | [number, number, number, number];
+  focusedPointRingColor: string | [number, number, number, number];
 
   /**
    * Set focus on a point by index.  A ring will be highlighted around the focused point.
@@ -135,7 +122,7 @@ export interface GraphConfigInterface {
    * Turns link rendering on / off.
    * Default value: `true`
    */
-  renderLinks?: boolean;
+  renderLinks: boolean;
 
   /**
    * The default color to use for links when no link colors are provided,
@@ -144,7 +131,7 @@ export interface GraphConfigInterface {
    * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255.
    * Default value: '#666666'
    */
-  linkDefaultColor?: string | [number, number, number, number];
+  linkDefaultColor: string | [number, number, number, number];
 
   /**
    * Universal opacity value applied to all links.
@@ -152,18 +139,18 @@ export interface GraphConfigInterface {
    * Useful for dynamically controlling opacity of all links without updating individual RGBA arrays.
    * Default value: `1.0`
    */
-  linkOpacity?: number;
+  linkOpacity: number;
 
   /**
    * Greyed out link opacity value when the selection is active.
    * Default value: `0.1`
   */
-  linkGreyoutOpacity?: number;
+  linkGreyoutOpacity: number;
   /**
    * The default width value to use for links when no link widths are provided or if the width value in the array is `undefined` or `null`.
    * Default value: `1`
   */
-  linkDefaultWidth?: number;
+  linkDefaultWidth: number;
 
   /**
    * The color to use for links when they are hovered.
@@ -177,50 +164,50 @@ export interface GraphConfigInterface {
    * The hovered width is calculated as: originalWidth + hoveredLinkWidthIncrease
    * Default value: `5`
    */
-  hoveredLinkWidthIncrease?: number;
+  hoveredLinkWidthIncrease: number;
   /**
    * Scale factor for the link width.
    * Default value: `1`
    */
-  linkWidthScale?: number;
+  linkWidthScale: number;
   /**
    * Increase or decrease the size of the links when zooming in or out.
    * Default value: `false`
    */
-  scaleLinksOnZoom?: boolean;
+  scaleLinksOnZoom: boolean;
   /**
    * If set to true, links are rendered as curved lines.
    * Otherwise as straight lines.
    * Default value: `false`
    */
-  curvedLinks?: boolean;
+  curvedLinks: boolean;
   /**
    * Number of segments in a curved line.
    * Default value: `19`.
    */
-  curvedLinkSegments?: number;
+  curvedLinkSegments: number;
   /**
    * Weight affects the shape of the curve.
    * Default value: `0.8`.
    */
-  curvedLinkWeight?: number;
+  curvedLinkWeight: number;
   /**
    * Defines the position of the control point of the curve on the normal from the centre of the line.
    * If set to 1 then the control point is at a distance equal to the length of the line.
    * Default value: `0.5`
    */
-  curvedLinkControlPointDistance?: number;
+  curvedLinkControlPointDistance: number;
   /**
    * The default link arrow value that controls whether or not to display link arrows.
    * Default value: `false`
    */
-  linkDefaultArrows?: boolean;
+  linkDefaultArrows: boolean;
 
   /**
    * Scale factor for the link arrows size.
    * Default value: `1`
    */
-  linkArrowsSizeScale?: number;
+  linkArrowsSizeScale: number;
   /**
    * The range defines the minimum and maximum link visibility distance in pixels.
    * The link will be fully opaque when its length is less than the first number in the array,
@@ -230,78 +217,78 @@ export interface GraphConfigInterface {
    * (e.g. links become longer when you zoom in, and shorter when you zoom out).
    * Default value: `[50, 150]`
    */
-  linkVisibilityDistanceRange?: number[];
+  linkVisibilityDistanceRange: number[];
   /**
    * The transparency value that the link will have when its length reaches
    * the maximum link distance value from `linkVisibilityDistanceRange`.
    * Default value: `0.25`
    */
-  linkVisibilityMinTransparency?: number;
+  linkVisibilityMinTransparency: number;
 
   /**
    * Decay coefficient. Use smaller values if you want the simulation to "cool down" slower.
    * Default value: `5000`
    */
-  simulationDecay?: number;
+  simulationDecay: number;
     /**
    * Gravity force coefficient.
    * Default value: `0.25`
    */
-  simulationGravity?: number;
+  simulationGravity: number;
   /**
    * Centering to center mass force coefficient.
    * Default value: `0`
    */
-  simulationCenter?: number;
+  simulationCenter: number;
   /**
    * Repulsion force coefficient.
    * Default value: `1.0`
    */
-  simulationRepulsion?: number;
+  simulationRepulsion: number;
   /**
    * Decreases / increases the detalization of the Many-Body force calculations.
    * Default value: `1.15`
    */
-  simulationRepulsionTheta?: number;
+  simulationRepulsionTheta: number;
   /**
    * Link spring force coefficient.
    * Default value: `1`
    */
-  simulationLinkSpring?: number;
+  simulationLinkSpring: number;
   /**
    * Minimum link distance.
    * Default value: `10`
    */
-  simulationLinkDistance?: number;
+  simulationLinkDistance: number;
   /**
    * Range of random link distance values.
    * Default value: `[1, 1.2]`
    */
-  simulationLinkDistRandomVariationRange?: number[];
+  simulationLinkDistRandomVariationRange: number[];
   /**
    * Repulsion coefficient from mouse position.
    * The repulsion force is activated by pressing the right mouse button.
    * Default value: `2`
    */
-  simulationRepulsionFromMouse?: number;
+  simulationRepulsionFromMouse: number;
   /**
    * Enable or disable the repulsion force from mouse when right-clicking.
    * When set to `true`, holding the right mouse button will activate the mouse repulsion force.
    * When set to `false`, right-clicking will not trigger any repulsion force.
    * Default value: `false`
    */
-  enableRightClickRepulsion?: boolean;
+  enableRightClickRepulsion: boolean;
   /**
    * Friction coefficient.
    * Values range from 0 (high friction, stops quickly) to 1 (no friction, keeps moving).
    * Default value: `0.85`
    */
-  simulationFriction?: number;
+  simulationFriction: number;
   /**
    * Cluster coefficient.
    * Default value: `0.1`
    */
-  simulationCluster?: number;
+  simulationCluster: number;
 
   /**
    * Callback function that will be called when the simulation starts.
@@ -533,17 +520,17 @@ export interface GraphConfigInterface {
    * Show WebGL performance monitor.
    * Default value: `false`
    */
-  showFPSMonitor?: boolean;
+  showFPSMonitor: boolean;
   /**
    * Pixel ratio for the canvas. Higher values use more GPU memory but provide better quality on high-DPI displays.
    * Default value: `window.devicePixelRatio || 2`
    */
-  pixelRatio?: number;
+  pixelRatio: number;
   /**
    * Increase or decrease the size of the points when zooming in or out.
    * Default value: `false`
    */
-  scalePointsOnZoom?: boolean;
+  scalePointsOnZoom: boolean;
   /**
    * Initial zoom level. Can be set once during graph initialization.
    * If set, `fitViewOnInit` value will be ignored.
@@ -552,45 +539,45 @@ export interface GraphConfigInterface {
   initialZoomLevel?: number;
   /**
    * Enables or disables zooming in and out.
-   * Default: `true`
+   * Default value: `true`
    */
-  enableZoom?: boolean;
+  enableZoom: boolean;
   /**
    * Controls whether the simulation remains active during zoom operations.
    * When set to `true`, the simulation continues running while zooming.
    * When set to `false`, the simulation pauses during zoom operations.
    * Default value: `false`
    */
-  enableSimulationDuringZoom?: boolean;
+  enableSimulationDuringZoom: boolean;
   /**
    * Enables or disables dragging of points in the graph.
    * Default value: `false`
    */
-  enableDrag?: boolean;
+  enableDrag: boolean;
   /**
    * Whether to center and zoom the view to fit all points in the scene on initialization or not.
    * Ignored if `initialZoomLevel` is set.
    * Default: `true`
    */
-  fitViewOnInit?: boolean;
+  fitViewOnInit: boolean;
   /**
    * Delay in milliseconds before fitting the view when `fitViewOnInit` is enabled.
    * Useful if you want the layout to stabilize a bit before fitting.
    * Default: `250`
    */
-  fitViewDelay?: number;
+  fitViewDelay: number;
   /**
    * Padding to apply when fitting the view to show all points.
    * This value is added to the calculated bounding box to provide some extra space around the points.
    * This is used when the `fitViewOnInit` option is enabled.
    * Default: `0.1`
    */
-  fitViewPadding?: number;
+  fitViewPadding: number;
   /**
    * Duration in milliseconds for fitting the view to show all points when fitViewOnInit is enabled.
    * Default: `250`
    */
-  fitViewDuration?: number;
+  fitViewDuration: number;
   /**
    * When `fitViewOnInit` is set to `true`, fits the view to show the points within a rectangle
    * defined by its two corner coordinates `[[left, bottom], [right, top]]` in the scene space.
@@ -615,15 +602,15 @@ export interface GraphConfigInterface {
   /**
    * Point sampling distance in pixels between neighboring points when calling the `getSampledPointPositionsMap` method.
    * This parameter determines how many points will be included in the sample.
-   * Default value: `150`
+   * Default value: `100`
   */
-  pointSamplingDistance?: number;
+  pointSamplingDistance: number;
   /**
    * Link sampling distance in pixels between neighboring links when calling the `getSampledLinks` method.
    * This parameter determines how many links will be included in the sample (based on link midpoints in screen space).
-   * Default value: `150`
+   * Default value: `100`
    */
-  linkSamplingDistance?: number;
+  linkSamplingDistance: number;
   /**
    * Controls automatic position adjustment of points in the visible space.
    *
@@ -635,129 +622,65 @@ export interface GraphConfigInterface {
    * When explicitly set:
    * - `true`: Forces points positions to be rescaled
    * - `false`: Forces points positions to not be rescaled
+   *
+   * Default value: `undefined`
    */
   rescalePositions?: boolean | undefined;
   /**
    * Controls the text shown in the bottom right corner.
    * - When a non-empty string is provided: Displays the string as HTML
    * - When empty string or not provided: No text is displayed
+   *
+   * Default value: `''`
    */
-  attribution?: string;
+  attribution: string;
 }
 
-export class GraphConfig implements GraphConfigInterface {
-  public enableSimulation = defaultConfigValues.enableSimulation
-  public backgroundColor = defaultBackgroundColor
-  public spaceSize = defaultConfigValues.spaceSize
-  public pointDefaultColor = defaultPointColor
-  public pointGreyoutOpacity = defaultGreyoutPointOpacity
-  public pointGreyoutColor = defaultGreyoutPointColor
-  public pointDefaultSize = defaultPointSize
-  public pointOpacity = defaultPointOpacity
-  public pointSizeScale = defaultConfigValues.pointSizeScale
-  public hoveredPointCursor = defaultConfigValues.hoveredPointCursor
-  public hoveredLinkCursor = defaultConfigValues.hoveredLinkCursor
-  public renderHoveredPointRing = defaultConfigValues.renderHoveredPointRing
-  public hoveredPointRingColor = defaultConfigValues.hoveredPointRingColor
-  public focusedPointRingColor = defaultConfigValues.focusedPointRingColor
-  public focusedPointIndex = defaultConfigValues.focusedPointIndex
-  public linkDefaultColor = defaultLinkColor
-  public linkOpacity = defaultLinkOpacity
-  public linkGreyoutOpacity = defaultGreyoutLinkOpacity
-  public linkDefaultWidth = defaultLinkWidth
-  public linkWidthScale = defaultConfigValues.linkWidthScale
-  public hoveredLinkColor = defaultConfigValues.hoveredLinkColor
-  public hoveredLinkWidthIncrease = defaultConfigValues.hoveredLinkWidthIncrease
-  public renderLinks = defaultConfigValues.renderLinks
-  public curvedLinks = defaultConfigValues.curvedLinks
-  public curvedLinkSegments = defaultConfigValues.curvedLinkSegments
-  public curvedLinkWeight = defaultConfigValues.curvedLinkWeight
-  public curvedLinkControlPointDistance = defaultConfigValues.curvedLinkControlPointDistance
-  public linkDefaultArrows = defaultConfigValues.linkArrows
-  public linkArrowsSizeScale = defaultConfigValues.linkArrowsSizeScale
-  public scaleLinksOnZoom = defaultConfigValues.scaleLinksOnZoom
-  public linkVisibilityDistanceRange = defaultConfigValues.linkVisibilityDistanceRange
-  public linkVisibilityMinTransparency = defaultConfigValues.linkVisibilityMinTransparency
+/**
+ * Requires all keys from T to be present, while preserving
+ * the original value types (including `| undefined` for optional properties).
+ */
+export type Complete<T> = { [K in keyof Required<T>]: T[K] }
 
-  public simulationDecay = defaultConfigValues.simulation.decay
-  public simulationGravity = defaultConfigValues.simulation.gravity
-  public simulationCenter = defaultConfigValues.simulation.center
-  public simulationRepulsion = defaultConfigValues.simulation.repulsion
-  public simulationRepulsionTheta = defaultConfigValues.simulation.repulsionTheta
-  public simulationLinkSpring = defaultConfigValues.simulation.linkSpring
-  public simulationLinkDistance = defaultConfigValues.simulation.linkDistance
-  public simulationLinkDistRandomVariationRange = defaultConfigValues.simulation.linkDistRandomVariationRange
-  public simulationRepulsionFromMouse = defaultConfigValues.simulation.repulsionFromMouse
-  public enableRightClickRepulsion = defaultConfigValues.enableRightClickRepulsion
-  public simulationFriction = defaultConfigValues.simulation.friction
-  public simulationCluster = defaultConfigValues.simulation.cluster
+/**
+ * Configuration options for the Graph constructor and `setConfig()` method.
+ * All properties are optional — any omitted properties will use their default values.
+ *
+ * Note: calling `setConfig()` fully resets the configuration to defaults before
+ * applying the provided values. Properties not included in the call will revert
+ * to their defaults, not retain their previous values.
+ */
+export type GraphConfig = Partial<GraphConfigInterface>
 
-  public onSimulationStart: GraphConfigInterface['onSimulationStart'] = undefined
-  public onSimulationTick: GraphConfigInterface['onSimulationTick'] = undefined
-  public onSimulationEnd: GraphConfigInterface['onSimulationEnd'] = undefined
-  public onSimulationPause: GraphConfigInterface['onSimulationPause'] = undefined
-  public onSimulationUnpause: GraphConfigInterface['onSimulationUnpause'] = undefined
+/** Shallow-clones arrays to avoid shared references; passes other values through. */
+const cloneConfigValue = <T>(value: T): T =>
+  Array.isArray(value) ? ([...value] as T) : value
 
-  public onClick: GraphConfigInterface['onClick'] = undefined
-  public onPointClick: GraphConfigInterface['onPointClick'] = undefined
-  public onLinkClick: GraphConfigInterface['onLinkClick'] = undefined
-  public onBackgroundClick: GraphConfigInterface['onBackgroundClick'] = undefined
-  public onContextMenu: GraphConfigInterface['onContextMenu'] = undefined
-  public onPointContextMenu: GraphConfigInterface['onPointContextMenu'] = undefined
-  public onLinkContextMenu: GraphConfigInterface['onLinkContextMenu'] = undefined
-  public onBackgroundContextMenu: GraphConfigInterface['onBackgroundContextMenu'] = undefined
-  public onMouseMove: GraphConfigInterface['onMouseMove'] = undefined
-  public onPointMouseOver: GraphConfigInterface['onPointMouseOver'] = undefined
-  public onPointMouseOut: GraphConfigInterface['onPointMouseOut'] = undefined
-  public onLinkMouseOver: GraphConfigInterface['onLinkMouseOver'] = undefined
-  public onLinkMouseOut: GraphConfigInterface['onLinkMouseOut'] = undefined
-  public onZoomStart: GraphConfigInterface['onZoomStart'] = undefined
-  public onZoom: GraphConfigInterface['onZoom'] = undefined
-  public onZoomEnd: GraphConfigInterface['onZoomEnd'] = undefined
-  public onDragStart: GraphConfigInterface['onDragStart'] = undefined
-  public onDrag: GraphConfigInterface['onDrag'] = undefined
-  public onDragEnd: GraphConfigInterface['onDragEnd'] = undefined
-
-  public showFPSMonitor = defaultConfigValues.showFPSMonitor
-
-  public pixelRatio = defaultConfigValues.pixelRatio
-
-  public scalePointsOnZoom = defaultConfigValues.scalePointsOnZoom
-  public initialZoomLevel = undefined
-  public enableZoom = defaultConfigValues.enableZoom
-  public enableSimulationDuringZoom = defaultConfigValues.enableSimulationDuringZoom
-  public enableDrag = defaultConfigValues.enableDrag
-  public fitViewOnInit = defaultConfigValues.fitViewOnInit
-  public fitViewDelay = defaultConfigValues.fitViewDelay
-  public fitViewPadding = defaultConfigValues.fitViewPadding
-  public fitViewDuration = defaultConfigValues.fitViewDuration
-  public fitViewByPointsInRect = undefined
-  public fitViewByPointIndices = undefined
-
-  public randomSeed = undefined
-  public pointSamplingDistance = defaultConfigValues.pointSamplingDistance
-  public linkSamplingDistance = defaultConfigValues.linkSamplingDistance
-  public attribution = defaultConfigValues.attribution
-  public rescalePositions = defaultConfigValues.rescalePositions
-
-  public init (config: GraphConfigInterface): void {
-    (Object.keys(config) as (keyof GraphConfigInterface)[])
-      .forEach(configParameter => {
-        this.deepMergeConfig(this.getConfig(), config, configParameter)
-      })
+/**
+ * Resets `target` to defaults, then applies `source` values on top.
+ * Mutates `target` in place so all modules sharing the config reference stay in sync.
+ *
+ * - Properties not in `source` revert to defaults (no partial updates).
+ * - Explicit `undefined` values in `source` are skipped so defaults are preserved.
+ * - Array values are shallow-cloned to prevent shared references.
+ */
+export function mergeConfig (
+  target: GraphConfigInterface,
+  source: GraphConfig
+): void {
+  // Reset all properties back to defaults, cloning arrays to avoid shared references
+  const defaults: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(defaultConfigValues)) {
+    defaults[key] = cloneConfigValue(value)
   }
+  Object.assign(target, defaults)
 
-  public deepMergeConfig <T> (current: T, next: T, key: keyof T): void {
-    if (isPlainObject(current[key]) && isPlainObject(next[key])) {
-      // eslint-disable-next-line @typescript-eslint/ban-types
-      (Object.keys(next[key] as Object) as (keyof T[keyof T])[])
-        .forEach(configParameter => {
-          this.deepMergeConfig(current[key], next[key], configParameter)
-        })
-    } else current[key] = next[key]
+  // Apply source values on top, skipping undefined so defaults are preserved
+  const overrides: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(source)) {
+    if (value !== undefined) {
+      overrides[key] = cloneConfigValue(value)
+    }
   }
-
-  private getConfig (): GraphConfigInterface {
-    return this
-  }
+  Object.assign(target, overrides)
 }

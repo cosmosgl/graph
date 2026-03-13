@@ -6,7 +6,7 @@ import { D3DragEvent } from 'd3-drag'
 import { Device, Framebuffer, luma } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
 
-import { GraphConfig, GraphConfigInterface } from '@/graph/config'
+import { mergeConfig, GraphConfigInterface, type GraphConfig } from '@/graph/config'
 import { getRgbaColor, getMaxPointSize, readPixels, sanitizeHtml } from '@/graph/helper'
 import { ForceCenter } from '@/graph/modules/ForceCenter'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
@@ -21,10 +21,11 @@ import { Points } from '@/graph/modules/Points'
 import { Store, ALPHA_MIN, MAX_HOVER_DETECTION_DELAY, MIN_MOUSE_MOVEMENT_THRESHOLD, type Hovered } from '@/graph/modules/Store'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
-import { defaultConfigValues, defaultScaleToZoom, defaultGreyoutPointColor, defaultBackgroundColor } from '@/graph/variables'
+import { defaultConfigValues } from '@/graph/variables'
 
 export class Graph {
-  public config = new GraphConfig()
+  /** Current graph configuration. Always fully populated with default values for any unset properties. */
+  public config: GraphConfigInterface = { ...defaultConfigValues }
   public graph = new GraphData(this.config)
   /** Promise that resolves when the graph is fully initialized and ready to use */
   public readonly ready: Promise<void>
@@ -108,12 +109,17 @@ export class Graph {
 
   private _isDestroyed = false
 
+  /**
+   * Create a new Graph instance.
+   * @param div - Container element for the graph canvas.
+   * @param config - Optional configuration. Unset properties use default values.
+   */
   public constructor (
     div: HTMLDivElement,
-    config?: GraphConfigInterface,
+    config?: GraphConfig,
     devicePromise?: Promise<Device>
   ) {
-    if (config) this.config.init(config)
+    if (config) mergeConfig(this.config, config)
 
     if (devicePromise) {
       this.deviceInitPromise = devicePromise
@@ -235,6 +241,8 @@ export class Graph {
         .on('mousemove', this.onMouseMove.bind(this))
         .on('contextmenu', this.onContextMenu.bind(this))
       if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
+      // Zoom level 1 means no zoom (100% scale). defaultConfigValues.initialZoomLevel is undefined,
+      // so we fall back to 1 here as the neutral zoom level when no initial zoom is configured.
       this.setZoomLevel(this.config.initialZoomLevel ?? 1)
 
       this.store.maxPointSize = getMaxPointSize(device, this.config.pixelRatio)
@@ -256,13 +264,13 @@ export class Graph {
       this.clusters = new Clusters(device, this.config, this.store, this.graph, this.points)
 
       this.store.backgroundColor = getRgbaColor(this.config.backgroundColor)
-      this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor ?? defaultConfigValues.hoveredPointRingColor)
-      this.store.setFocusedPointRingColor(this.config.focusedPointRingColor ?? defaultConfigValues.focusedPointRingColor)
+      this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor)
+      this.store.setFocusedPointRingColor(this.config.focusedPointRingColor)
       if (this.config.focusedPointIndex !== undefined) {
         this.store.setFocusedPoint(this.config.focusedPointIndex)
       }
-      this.store.setGreyoutPointColor(this.config.pointGreyoutColor ?? defaultGreyoutPointColor)
-      this.store.setHoveredLinkColor(this.config.hoveredLinkColor ?? defaultConfigValues.hoveredLinkColor)
+      this.store.setGreyoutPointColor(this.config.pointGreyoutColor)
+      this.store.setHoveredLinkColor(this.config.hoveredLinkColor)
 
       this.store.updateLinkHoveringEnabled(this.config)
 
@@ -308,15 +316,20 @@ export class Graph {
   }
 
   /**
-   * Set or update Cosmos configuration. The changes will be applied in real time.
-   * @param config Cosmos configuration object.
+   * Apply a new configuration. Changes take effect immediately.
+   *
+   * **Important:** Every call fully resets the configuration to defaults first,
+   * then applies the provided values on top. Properties not included in `config`
+   * will revert to their default values — they are not preserved from the previous call.
+   *
+   * @param config - Configuration object. Only include the properties you want to set.
    */
-  public setConfig (config: Partial<GraphConfigInterface>): void {
+  public setConfig (config: GraphConfig): void {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.setConfig(config))) return
     const prevConfig = { ...this.config }
-    this.config.init(config)
+    mergeConfig(this.config, config)
     if (prevConfig.pointDefaultColor !== this.config.pointDefaultColor) {
       this.graph.updatePointColor()
       this.points?.updateColor()
@@ -343,19 +356,19 @@ export class Graph {
     }
 
     if (prevConfig.backgroundColor !== this.config.backgroundColor) {
-      this.store.backgroundColor = getRgbaColor(this.config.backgroundColor ?? defaultBackgroundColor)
+      this.store.backgroundColor = getRgbaColor(this.config.backgroundColor)
     }
     if (prevConfig.hoveredPointRingColor !== this.config.hoveredPointRingColor) {
-      this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor ?? defaultConfigValues.hoveredPointRingColor)
+      this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor)
     }
     if (prevConfig.focusedPointRingColor !== this.config.focusedPointRingColor) {
-      this.store.setFocusedPointRingColor(this.config.focusedPointRingColor ?? defaultConfigValues.focusedPointRingColor)
+      this.store.setFocusedPointRingColor(this.config.focusedPointRingColor)
     }
     if (prevConfig.pointGreyoutColor !== this.config.pointGreyoutColor) {
-      this.store.setGreyoutPointColor(this.config.pointGreyoutColor ?? defaultGreyoutPointColor)
+      this.store.setGreyoutPointColor(this.config.pointGreyoutColor)
     }
     if (prevConfig.hoveredLinkColor !== this.config.hoveredLinkColor) {
-      this.store.setHoveredLinkColor(this.config.hoveredLinkColor ?? defaultConfigValues.hoveredLinkColor)
+      this.store.setHoveredLinkColor(this.config.hoveredLinkColor)
     }
     if (prevConfig.focusedPointIndex !== this.config.focusedPointIndex) {
       this.store.setFocusedPoint(this.config.focusedPointIndex)
@@ -768,7 +781,7 @@ export class Graph {
    * @param scale Scale value to zoom in or out (`3` by default).
    * @param canZoomOut Set to `false` to prevent zooming out from the point (`true` by default).
    */
-  public zoomToPointByIndex (index: number, duration = 700, scale = defaultScaleToZoom, canZoomOut = true): void {
+  public zoomToPointByIndex (index: number, duration = 700, scale = 3, canZoomOut = true): void {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.zoomToPointByIndex(index, duration, scale, canZoomOut))) return
@@ -1614,7 +1627,7 @@ export class Graph {
       }
 
       // Alpha decay and progress
-      this.store.alpha += this.store.addAlpha(this.config.simulationDecay ?? defaultConfigValues.simulation.decay)
+      this.store.alpha += this.store.addAlpha(this.config.simulationDecay)
       if (this.isRightClickMouse && this.config.enableRightClickRepulsion) {
         this.store.alpha = Math.max(this.store.alpha, 0.1)
       }
@@ -2010,7 +2023,7 @@ export class Graph {
   }
 }
 
-export type { GraphConfigInterface } from './config'
+export type { GraphConfig } from './config'
 export { PointShape } from './modules/GraphData'
 
 export * from './variables'

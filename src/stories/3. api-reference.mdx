@@ -33,9 +33,22 @@ For advanced use cases, you can provide your own Luma.gl Device.
 
 ### <a name="set_config" href="#set_config">#</a> graph.<b>setConfig</b>(<i>config</i>)
 
-This method sets the [cosmos.gl configuration](../?path=/docs/configuration--docs). The changes are applied in real-time.
+Apply a new [configuration](../?path=/docs/configuration--docs). Most changes take effect immediately.
 
-* **`config`** (Object): The configuration object adhering to cosmos.gl configuration properties.
+Some initialization-only options, such as `enableSimulation`, are applied only when the graph is created.
+
+**Important:** Every call fully resets the configuration to defaults first, then applies the provided values on top. Properties not included in `config` will revert to their default values — they are **not** preserved from the previous call.
+
+* **`config`** (GraphConfig): Configuration object. Only include the properties you want to set; omitted properties use defaults.
+
+**Example:**
+```javascript
+// First call: sets backgroundColor and enables drag
+graph.setConfig({ backgroundColor: '#000', enableDrag: true })
+
+// Second call: only sets backgroundColor — enableDrag reverts to its default (false)
+graph.setConfig({ backgroundColor: '#111' })
+```
 
 ### <a name="set_point_positions" href="#set_point_positions">#</a> graph.<b>setPointPositions</b>(<i>pointPositions</i>, [<i>dontRescale</i>])
 

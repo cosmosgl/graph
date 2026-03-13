@@ -1,5 +1,5 @@
 import { getRgbaColor, isNumber } from '@/graph/helper'
-import { GraphConfig } from '@/graph/config'
+import { type GraphConfigInterface } from '@/graph/config'
 
 export enum PointShape {
   Circle = 0,
@@ -60,9 +60,9 @@ export class GraphData {
   public inDegree: number[] | undefined
   public outDegree: number[] | undefined
 
-  private _config: GraphConfig
+  private _config: GraphConfigInterface
 
-  public constructor (config: GraphConfig) {
+  public constructor (config: GraphConfigInterface) {
     this._config = config
   }
 

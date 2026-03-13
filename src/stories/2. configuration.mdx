@@ -4,6 +4,11 @@ import { Meta } from "@storybook/blocks";
 
 # cosmos.gl configuration properties
 
+All configuration properties are optional. When creating a graph or calling `setConfig()`, any omitted properties will use their default values.
+
+> **Note:** `setConfig()` fully resets the configuration to defaults before applying the provided values.
+> Properties not included in the call will revert to their defaults, not retain their previous values.
+
 | Property | Description | Default |
 |---|---|---|
 | enableSimulation | If set to `false`, the simulation will not run. This property will be applied only on component initialization and it can't be changed using the `setConfig` method | `true` |
@@ -74,7 +79,7 @@ cosmos.gl layout algorithm was inspired by the [d3-force](https://github.com/d3/
 | simulationRepulsionTheta | Decreases / increases the detalization of the Many-Body force calculations. | 0.3 – 2.0 | `1.15` |
 | simulationLinkSpring | Link spring force coefficient | 0.0 – 2.0 | `1.0` |
 | simulationLinkDistance | Minimum link distance | 1 – 20 | `10` |
-| simulationLinkDistRandomVariationRange | Link distance randomness multiplier range | [0.8 – 1.2,<br/> 1.2 – 2.0] | `[1.0, 1.2]` |
+| simulationLinkDistRandomVariationRange | Link distance randomness multiplier range | [0.8 – 1.2,<br/> 1.2 – 2.0] | `[1, 1.2]` |
 | simulationRepulsionFromMouse | Repulsion from the mouse pointer force coefficient. The repulsion force is activated by pressing the right mouse button. | 0.0 – 5.0 | `2.0`
 | enableRightClickRepulsion | Enable or disable the repulsion force from mouse when right-clicking. When set to `true`, holding the right mouse button will activate the mouse repulsion force. When set to `false`, right-clicking will not trigger any repulsion force. | - | `false` |
 | simulationFriction | Friction coefficient. Values range from `0` (high friction, stops quickly) to `1` (no friction, keeps moving). | 0.0 – 1.0 | `0.85` |

@@ -19,7 +19,7 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement; destroy?: () 
   actionsHeader.textContent = 'Actions'
   actionsDiv.appendChild(actionsHeader)
 
-  const graph = new Graph(graphDiv, {
+  const config = {
     spaceSize: 4096,
     backgroundColor: '#2d313a',
     pointDefaultSize: 4,
@@ -48,7 +48,9 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement; destroy?: () 
       console.log('Clicked background')
     },
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
-  })
+  }
+
+  const graph = new Graph(graphDiv, config)
 
   const { pointPositions, links } = generateData()
   graph.setPointPositions(pointPositions)
@@ -89,6 +91,7 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement; destroy?: () 
 
   pauseButton.addEventListener('click', togglePause)
   graph.setConfig({
+    ...config,
     onSimulationEnd: (): void => {
       pause()
     },

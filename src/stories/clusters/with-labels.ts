@@ -15,15 +15,12 @@ export const withLabels = (): {div: HTMLDivElement; graph: Graph; destroy: () =>
     simulationCluster: 0.25,
     simulationRepulsion: 10,
     pointDefaultSize: 10,
+    onZoom: () => updateClusterLabels(graph),
+    onSimulationTick: () => updateClusterLabels(graph),
   })
 
   const updateClusterLabels = createClusterLabels({ div })
   graph.setZoomLevel(0.3)
-
-  graph.setConfig({
-    onZoom: updateClusterLabels.bind(this, graph),
-    onSimulationTick: updateClusterLabels.bind(this, graph),
-  })
 
   let increasing = true
   const interval = setInterval(() => {
