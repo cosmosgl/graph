@@ -6,7 +6,7 @@ import { D3DragEvent } from 'd3-drag'
 import { Device, Framebuffer, luma } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
 
-import { mergeConfig, applyConfig, GraphConfigInterface, type GraphConfig } from '@/graph/config'
+import { mergeConfig, applyConfig, createDefaultConfig, GraphConfigInterface, type GraphConfig } from '@/graph/config'
 import { getRgbaColor, getMaxPointSize, readPixels, sanitizeHtml } from '@/graph/helper'
 import { ForceCenter } from '@/graph/modules/ForceCenter'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
@@ -21,11 +21,10 @@ import { Points } from '@/graph/modules/Points'
 import { Store, ALPHA_MIN, MAX_HOVER_DETECTION_DELAY, MIN_MOUSE_MOVEMENT_THRESHOLD, type Hovered } from '@/graph/modules/Store'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
-import { defaultConfigValues } from '@/graph/variables'
 
 export class Graph {
   /** Current graph configuration. Always fully populated with default values for any unset properties. */
-  public config: GraphConfigInterface = { ...defaultConfigValues }
+  public config: GraphConfigInterface = createDefaultConfig()
   public graph = new GraphData(this.config)
   /** Promise that resolves when the graph is fully initialized and ready to use */
   public readonly ready: Promise<void>
