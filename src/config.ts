@@ -631,6 +631,9 @@ export interface GraphConfigInterface {
    * - When a non-empty string is provided: Displays the string as HTML
    * - When empty string or not provided: No text is displayed
    *
+   * This property is applied only on component initialization and
+   * can't be changed using the `setConfig` or `setConfigPartial` methods.
+   *
    * Default value: `''`
    */
   attribution: string;
