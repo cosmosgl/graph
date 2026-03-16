@@ -329,6 +329,7 @@ export class Graph {
     if (this.ensureDevice(() => this.setConfig(config))) return
     const prevConfig = { ...this.config }
     mergeConfig(this.config, config)
+    this.preserveInitOnlyFields(prevConfig)
     this.updateStateFromConfig(prevConfig)
   }
 
@@ -346,6 +347,7 @@ export class Graph {
     if (this.ensureDevice(() => this.setConfigPartial(config))) return
     const prevConfig = { ...this.config }
     applyConfig(this.config, config, true)
+    this.preserveInitOnlyFields(prevConfig)
     this.updateStateFromConfig(prevConfig)
   }
 
@@ -1439,6 +1441,17 @@ export class Graph {
     }
 
     return arr
+  }
+
+  /**
+   * Restores init-only fields (`enableSimulation`, `initialZoomLevel`, `randomSeed`, `attribution`)
+   * to their pre-update values, preventing runtime changes via setConfig/setConfigPartial.
+   */
+  private preserveInitOnlyFields (prevConfig: GraphConfigInterface): void {
+    this.config.enableSimulation = prevConfig.enableSimulation
+    this.config.initialZoomLevel = prevConfig.initialZoomLevel
+    this.config.randomSeed = prevConfig.randomSeed
+    this.config.attribution = prevConfig.attribution
   }
 
   /**
