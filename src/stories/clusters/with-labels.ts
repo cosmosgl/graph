@@ -15,11 +15,13 @@ export const withLabels = (): {div: HTMLDivElement; graph: Graph; destroy: () =>
     simulationCluster: 0.25,
     simulationRepulsion: 10,
     pointDefaultSize: 10,
-    onZoom: () => updateClusterLabels(graph),
-    onSimulationTick: () => updateClusterLabels(graph),
   })
 
   const updateClusterLabels = createClusterLabels({ div })
+  graph.setConfigPartial({
+    onZoom: () => updateClusterLabels(graph),
+    onSimulationTick: () => updateClusterLabels(graph),
+  })
   graph.setZoomLevel(0.3)
 
   let increasing = true

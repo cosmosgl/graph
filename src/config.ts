@@ -657,8 +657,37 @@ const cloneConfigValue = <T>(value: T): T =>
   Array.isArray(value) ? ([...value] as T) : value
 
 /**
+ * Applies only the provided `source` values onto `target`, leaving all other
+ * properties unchanged.
+ *
+ * Mutates `target` in place (via `Object.assign`) rather than replacing it,
+ * because multiple modules (Zoom, Store, etc.) hold a reference to the same config object.
+ *
+ * - When `useDefaultsForUndefined` is `false` (default): explicit `undefined` values in `source` are skipped.
+ * - When `useDefaultsForUndefined` is `true`: explicit `undefined` values are replaced with their defaults.
+ * - Array values are shallow-cloned to prevent shared references.
+ */
+export function applyConfig (
+  target: GraphConfigInterface,
+  source: GraphConfig,
+  useDefaultsForUndefined = false
+): void {
+  const overrides: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(source)) {
+    if (value !== undefined) {
+      overrides[key] = cloneConfigValue(value)
+    } else if (useDefaultsForUndefined) {
+      overrides[key] = cloneConfigValue((defaultConfigValues as Record<string, unknown>)[key])
+    }
+  }
+  Object.assign(target, overrides)
+}
+
+/**
  * Resets `target` to defaults, then applies `source` values on top.
- * Mutates `target` in place so all modules sharing the config reference stay in sync.
+ *
+ * Mutates `target` in place (via `Object.assign`) rather than replacing it,
+ * because multiple modules (Zoom, Store, etc.) hold a reference to the same config object.
  *
  * - Properties not in `source` revert to defaults (no partial updates).
  * - Explicit `undefined` values in `source` are skipped so defaults are preserved.
@@ -668,19 +697,12 @@ export function mergeConfig (
   target: GraphConfigInterface,
   source: GraphConfig
 ): void {
-  // Reset all properties back to defaults, cloning arrays to avoid shared references
+  // Reset all properties to defaults
   const defaults: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(defaultConfigValues)) {
     defaults[key] = cloneConfigValue(value)
   }
   Object.assign(target, defaults)
 
-  // Apply source values on top, skipping undefined so defaults are preserved
-  const overrides: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(source)) {
-    if (value !== undefined) {
-      overrides[key] = cloneConfigValue(value)
-    }
-  }
-  Object.assign(target, overrides)
+  applyConfig(target, source)
 }
