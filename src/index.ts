@@ -6,7 +6,7 @@ import { D3DragEvent } from 'd3-drag'
 import { Device, Framebuffer, luma } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
 
-import { mergeConfig, applyConfig, createDefaultConfig, GraphConfigInterface, type GraphConfig } from '@/graph/config'
+import { applyConfig, createDefaultConfig, resetConfigToDefaults, GraphConfigInterface, type GraphConfig } from '@/graph/config'
 import { getRgbaColor, getMaxPointSize, readPixels, sanitizeHtml } from '@/graph/helper'
 import { ForceCenter } from '@/graph/modules/ForceCenter'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
@@ -118,7 +118,7 @@ export class Graph {
     config?: GraphConfig,
     devicePromise?: Promise<Device>
   ) {
-    if (config) mergeConfig(this.config, config)
+    if (config) applyConfig(this.config, config)
 
     if (devicePromise) {
       this.deviceInitPromise = devicePromise
@@ -327,10 +327,8 @@ export class Graph {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.setConfig(config))) return
-    const prevConfig = { ...this.config }
-    mergeConfig(this.config, config)
-    this.preserveInitOnlyFields(prevConfig)
-    this.updateStateFromConfig(prevConfig)
+    resetConfigToDefaults(this.config)
+    this.setConfigPartial(config)
   }
 
   /**
