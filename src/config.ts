@@ -656,6 +656,15 @@ export type GraphConfig = Partial<GraphConfigInterface>
 const cloneConfigValue = <T>(value: T): T =>
   Array.isArray(value) ? ([...value] as T) : value
 
+/** Returns a fresh copy of `defaultConfigValues` with arrays cloned to prevent shared references. */
+export function createDefaultConfig (): GraphConfigInterface {
+  const defaults: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(defaultConfigValues)) {
+    defaults[key] = cloneConfigValue(value)
+  }
+  return defaults as unknown as GraphConfigInterface
+}
+
 /**
  * Applies only the provided `source` values onto `target`, leaving all other
  * properties unchanged.
@@ -697,12 +706,7 @@ export function mergeConfig (
   target: GraphConfigInterface,
   source: GraphConfig
 ): void {
-  // Reset all properties to defaults
-  const defaults: Record<string, unknown> = {}
-  for (const [key, value] of Object.entries(defaultConfigValues)) {
-    defaults[key] = cloneConfigValue(value)
-  }
-  Object.assign(target, defaults)
+  Object.assign(target, createDefaultConfig())
 
   applyConfig(target, source)
 }
