@@ -50,6 +50,28 @@ graph.setConfig({ backgroundColor: '#000', enableDrag: true })
 graph.setConfig({ backgroundColor: '#111' })
 ```
 
+### <a name="set_config_partial" href="#set_config_partial">#</a> graph.<b>setConfigPartial</b>(<i>config</i>)
+
+Partially update the [configuration](../?path=/docs/configuration--docs). Only the provided properties will be changed; all other properties retain their current values.
+
+Unlike `setConfig()`, this method does **not** reset to defaults first — it only applies the properties you provide.
+
+Properties set to `undefined` will be reset to their default values.
+
+* **`config`** (GraphConfig): Configuration object with only the properties to update.
+
+**Example:**
+```javascript
+// Sets backgroundColor and enables drag
+graph.setConfig({ backgroundColor: '#000', enableDrag: true })
+
+// Updates only backgroundColor — enableDrag stays true
+graph.setConfigPartial({ backgroundColor: '#111' })
+
+// Resets backgroundColor to its default — enableDrag still stays true
+graph.setConfigPartial({ backgroundColor: undefined })
+```
+
 ### <a name="set_point_positions" href="#set_point_positions">#</a> graph.<b>setPointPositions</b>(<i>pointPositions</i>, [<i>dontRescale</i>])
 
 This method sets the positions of points in a cosmos.gl graph using the provided coordinates array.

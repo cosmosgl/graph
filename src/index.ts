@@ -6,7 +6,7 @@ import { D3DragEvent } from 'd3-drag'
 import { Device, Framebuffer, luma } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
 
-import { mergeConfig, GraphConfigInterface, type GraphConfig } from '@/graph/config'
+import { mergeConfig, applyConfig, GraphConfigInterface, type GraphConfig } from '@/graph/config'
 import { getRgbaColor, getMaxPointSize, readPixels, sanitizeHtml } from '@/graph/helper'
 import { ForceCenter } from '@/graph/modules/ForceCenter'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
@@ -330,81 +330,24 @@ export class Graph {
     if (this.ensureDevice(() => this.setConfig(config))) return
     const prevConfig = { ...this.config }
     mergeConfig(this.config, config)
-    if (prevConfig.pointDefaultColor !== this.config.pointDefaultColor) {
-      this.graph.updatePointColor()
-      this.points?.updateColor()
-    }
-    if (prevConfig.pointDefaultSize !== this.config.pointDefaultSize) {
-      this.graph.updatePointSize()
-      this.points?.updateSize()
-    }
-    if (prevConfig.linkDefaultColor !== this.config.linkDefaultColor) {
-      this.graph.updateLinkColor()
-      this.lines?.updateColor()
-    }
-    if (prevConfig.linkDefaultWidth !== this.config.linkDefaultWidth) {
-      this.graph.updateLinkWidth()
-      this.lines?.updateWidth()
-    }
-    if (prevConfig.linkDefaultArrows !== this.config.linkDefaultArrows) {
-      this.graph.updateArrows()
-      this.lines?.updateArrow()
-    }
-    if (prevConfig.curvedLinkSegments !== this.config.curvedLinkSegments ||
-      prevConfig.curvedLinks !== this.config.curvedLinks) {
-      this.lines?.updateCurveLineGeometry()
-    }
+    this.updateStateFromConfig(prevConfig)
+  }
 
-    if (prevConfig.backgroundColor !== this.config.backgroundColor) {
-      this.store.backgroundColor = getRgbaColor(this.config.backgroundColor)
-    }
-    if (prevConfig.hoveredPointRingColor !== this.config.hoveredPointRingColor) {
-      this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor)
-    }
-    if (prevConfig.focusedPointRingColor !== this.config.focusedPointRingColor) {
-      this.store.setFocusedPointRingColor(this.config.focusedPointRingColor)
-    }
-    if (prevConfig.pointGreyoutColor !== this.config.pointGreyoutColor) {
-      this.store.setGreyoutPointColor(this.config.pointGreyoutColor)
-    }
-    if (prevConfig.hoveredLinkColor !== this.config.hoveredLinkColor) {
-      this.store.setHoveredLinkColor(this.config.hoveredLinkColor)
-    }
-    if (prevConfig.focusedPointIndex !== this.config.focusedPointIndex) {
-      this.store.setFocusedPoint(this.config.focusedPointIndex)
-    }
-    if (prevConfig.pixelRatio !== this.config.pixelRatio) {
-      // Update device's canvas context useDevicePixels
-      if (this.device?.canvasContext) {
-        this.device.canvasContext.setProps({ useDevicePixels: this.config.pixelRatio })
+  /**
+   * Partially updates the graph configuration. Only the provided properties
+   * will be changed; all other properties retain their current values.
+   *
+   * Properties set to `undefined` will be reset to their default values.
+   *
+   * @param config - A partial configuration object with the properties to update.
+   */
+  public setConfigPartial (config: GraphConfig): void {
+    if (this._isDestroyed) return
 
-        // Recalculate maxPointSize with new pixelRatio
-        this.store.maxPointSize = getMaxPointSize(this.device, this.config.pixelRatio)
-      }
-    }
-    if (prevConfig.spaceSize !== this.config.spaceSize) {
-      this.store.adjustSpaceSize(this.config.spaceSize, this.device?.limits.maxTextureDimension2D ?? 4096)
-      this.resizeCanvas(true)
-      this.update(this.store.isSimulationRunning ? this.store.alpha : 0)
-    }
-    if (prevConfig.showFPSMonitor !== this.config.showFPSMonitor) {
-      if (this.config.showFPSMonitor) {
-        this.fpsMonitor = new FPSMonitor(this.canvas)
-      } else {
-        this.fpsMonitor?.destroy()
-        this.fpsMonitor = undefined
-      }
-    }
-    if (prevConfig.enableZoom !== this.config.enableZoom || prevConfig.enableDrag !== this.config.enableDrag) {
-      this.updateZoomDragBehaviors()
-    }
-
-    if (prevConfig.onLinkClick !== this.config.onLinkClick ||
-        prevConfig.onLinkContextMenu !== this.config.onLinkContextMenu ||
-        prevConfig.onLinkMouseOver !== this.config.onLinkMouseOver ||
-        prevConfig.onLinkMouseOut !== this.config.onLinkMouseOut) {
-      this.store.updateLinkHoveringEnabled(this.config)
-    }
+    if (this.ensureDevice(() => this.setConfigPartial(config))) return
+    const prevConfig = { ...this.config }
+    applyConfig(this.config, config, true)
+    this.updateStateFromConfig(prevConfig)
   }
 
   /**
@@ -1497,6 +1440,88 @@ export class Graph {
     }
 
     return arr
+  }
+
+  /**
+   * Compares the previous config snapshot with the current `this.config` and
+   * applies any necessary side effects (updating renderers, store, behaviors, etc.).
+   */
+  private updateStateFromConfig (prevConfig: GraphConfigInterface): void {
+    if (prevConfig.pointDefaultColor !== this.config.pointDefaultColor) {
+      this.graph.updatePointColor()
+      this.points?.updateColor()
+    }
+    if (prevConfig.pointDefaultSize !== this.config.pointDefaultSize) {
+      this.graph.updatePointSize()
+      this.points?.updateSize()
+    }
+    if (prevConfig.linkDefaultColor !== this.config.linkDefaultColor) {
+      this.graph.updateLinkColor()
+      this.lines?.updateColor()
+    }
+    if (prevConfig.linkDefaultWidth !== this.config.linkDefaultWidth) {
+      this.graph.updateLinkWidth()
+      this.lines?.updateWidth()
+    }
+    if (prevConfig.linkDefaultArrows !== this.config.linkDefaultArrows) {
+      this.graph.updateArrows()
+      this.lines?.updateArrow()
+    }
+    if (prevConfig.curvedLinkSegments !== this.config.curvedLinkSegments ||
+      prevConfig.curvedLinks !== this.config.curvedLinks) {
+      this.lines?.updateCurveLineGeometry()
+    }
+
+    if (prevConfig.backgroundColor !== this.config.backgroundColor) {
+      this.store.backgroundColor = getRgbaColor(this.config.backgroundColor)
+    }
+    if (prevConfig.hoveredPointRingColor !== this.config.hoveredPointRingColor) {
+      this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor)
+    }
+    if (prevConfig.focusedPointRingColor !== this.config.focusedPointRingColor) {
+      this.store.setFocusedPointRingColor(this.config.focusedPointRingColor)
+    }
+    if (prevConfig.pointGreyoutColor !== this.config.pointGreyoutColor) {
+      this.store.setGreyoutPointColor(this.config.pointGreyoutColor)
+    }
+    if (prevConfig.hoveredLinkColor !== this.config.hoveredLinkColor) {
+      this.store.setHoveredLinkColor(this.config.hoveredLinkColor)
+    }
+    if (prevConfig.focusedPointIndex !== this.config.focusedPointIndex) {
+      this.store.setFocusedPoint(this.config.focusedPointIndex)
+    }
+    if (prevConfig.pixelRatio !== this.config.pixelRatio) {
+      // Update device's canvas context useDevicePixels
+      if (this.device?.canvasContext) {
+        this.device.canvasContext.setProps({ useDevicePixels: this.config.pixelRatio })
+
+        // Recalculate maxPointSize with new pixelRatio
+        this.store.maxPointSize = getMaxPointSize(this.device, this.config.pixelRatio)
+      }
+    }
+    if (prevConfig.spaceSize !== this.config.spaceSize) {
+      this.store.adjustSpaceSize(this.config.spaceSize, this.device?.limits.maxTextureDimension2D ?? 4096)
+      this.resizeCanvas(true)
+      this.update(this.store.isSimulationRunning ? this.store.alpha : 0)
+    }
+    if (prevConfig.showFPSMonitor !== this.config.showFPSMonitor) {
+      if (this.config.showFPSMonitor) {
+        this.fpsMonitor = new FPSMonitor(this.canvas)
+      } else {
+        this.fpsMonitor?.destroy()
+        this.fpsMonitor = undefined
+      }
+    }
+    if (prevConfig.enableZoom !== this.config.enableZoom || prevConfig.enableDrag !== this.config.enableDrag) {
+      this.updateZoomDragBehaviors()
+    }
+
+    if (prevConfig.onLinkClick !== this.config.onLinkClick ||
+        prevConfig.onLinkContextMenu !== this.config.onLinkContextMenu ||
+        prevConfig.onLinkMouseOver !== this.config.onLinkMouseOver ||
+        prevConfig.onLinkMouseOut !== this.config.onLinkMouseOut) {
+      this.store.updateLinkHoveringEnabled(this.config)
+    }
   }
 
   /**
