@@ -327,8 +327,11 @@ export class Graph {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.setConfig(config))) return
+    const prevConfig = { ...this.config }
     resetConfigToDefaults(this.config)
-    this.setConfigPartial(config)
+    applyConfig(this.config, config)
+    this.preserveInitOnlyFields(prevConfig)
+    this.updateStateFromConfig(prevConfig)
   }
 
   /**
