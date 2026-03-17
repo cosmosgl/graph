@@ -72,6 +72,20 @@ graph.setConfig({ simulationRepulsion: 0.5 }) // ⚠️ all other config values 
 graph.setConfigPartial({ simulationRepulsion: 0.5 }) // ✅ other values preserved
 ```
 
+#### `GraphConfigInterface` Is No Longer Exported
+
+`GraphConfigInterface` is no longer exported from the package. Use `GraphConfig` instead.
+
+```ts
+// Before (v2)
+import { GraphConfigInterface } from '@cosmograph/cosmos'
+const config: GraphConfigInterface = { /* ... */ }
+
+// After (v3)
+import { GraphConfig } from '@cosmograph/cosmos'
+const config: GraphConfig = { /* ... */ }
+```
+
 #### Init-Only Config Fields
 
 The following config properties can only be set during initialization (via `new Graph(div, config)`) and are ignored by `setConfig()` and `setConfigPartial()`:
