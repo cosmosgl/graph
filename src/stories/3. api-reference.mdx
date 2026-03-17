@@ -641,7 +641,7 @@ Destroys the current cosmos.gl instance and cleans up all resources.
 
 ### <a name="create" href="#create">#</a> graph.<b>create</b>()
 
-Updates and recreates the graph visualization based on pending changes.
+Applies pending data changes (positions, colors, sizes, shapes, links, forces, clusters) to the graph visualization. Call this after setting data via methods like `setPointPositions`, `setPointColors`, `setLinks`, etc. if you need to apply changes without calling `render()`.
 
 ### <a name="flatten" href="#flatten">#</a> graph.<b>flatten</b>(<i>pointPositions</i>)
 
