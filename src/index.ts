@@ -388,7 +388,7 @@ export class Graph {
    *
    * @param {Float32Array} pointColors - A Float32Array representing the colors of points in the format [r1, g1, b1, a1, r2, g2, b2, a2, ..., rn, gn, bn, an],
    * where each color is represented in RGBA format.
-   * Example: `new Float32Array([255, 0, 0, 1, 0, 255, 0, 1])` sets the first point to red and the second point to green.
+   * Example: `new Float32Array([1, 0, 0, 1, 0, 1, 0, 1])` sets the first point to red and the second point to green.
   */
   public setPointColors (pointColors: Float32Array): void {
     if (this._isDestroyed) return
@@ -519,7 +519,7 @@ export class Graph {
    *
    * @param {Float32Array} linkColors - A Float32Array representing the colors of links in the format [r1, g1, b1, a1, r2, g2, b2, a2, ..., rn, gn, bn, an],
    * where each color is in RGBA format.
-   * Example: `new Float32Array([255, 0, 0, 1, 0, 255, 0, 1])` sets the first link to red and the second link to green.
+   * Example: `new Float32Array([1, 0, 0, 1, 0, 1, 0, 1])` sets the first link to red and the second link to green.
    */
   public setLinkColors (linkColors: Float32Array): void {
     if (this._isDestroyed) return
@@ -822,7 +822,7 @@ export class Graph {
 
   /**
    * Get current X and Y coordinates of the clusters.
-   * @returns Array of point cluster.
+   * @returns Array of cluster positions.
    */
   public getClusterPositions (): number[] {
     if (this._isDestroyed || !this.device || !this.clusters) return []
@@ -1378,7 +1378,9 @@ export class Graph {
   }
 
   /**
-   * Updates and recreates the graph visualization based on pending changes.
+   * Applies pending data changes (positions, colors, sizes, shapes, links, forces, clusters)
+   * to the graph visualization. Call this after setting data via methods like `setPointPositions`,
+   * `setPointColors`, `setLinks`, etc. if you need to apply changes without calling `render()`.
    */
   public create (): void {
     if (this._isDestroyed) return

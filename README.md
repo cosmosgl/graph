@@ -75,6 +75,24 @@ graph.render()
 
 ---
 
+### What's New in v3.0?
+
+cosmos.gl v3.0 brings a new rendering engine, async initialization, and several new features:
+
+- **luma.gl (WebGL 2)** — rendering ported from regl to [luma.gl](https://luma.gl/), with support for sharing a custom `Device` across multiple graphs via `new Graph(div, config, devicePromise)`.
+- **Async initialization** — the constructor returns immediately; all public methods queue until the device is ready. Use `graph.ready` / `graph.isReady` to know when the graph is usable.
+- **Simulation control** — rendering is now separate from simulation. The simulation starts automatically by default; use `start()`, `stop()`, `pause()`, and `unpause()` to control it independently.
+- **Link sampling** — sample visible links on screen with `getSampledLinks()` and `getSampledLinkPositionsMap()` for rendering labels or overlays along links.
+- **Context menu support** — new callbacks for right-click interactions: `onContextMenu`, `onPointContextMenu`, `onLinkContextMenu`, `onBackgroundContextMenu`.
+- **Fit viewport to points** — `setZoomTransformByPointPositions()` zooms and pans to fit a set of points into view.
+- **Hover improvements** — `onPointMouseOver` now includes an `isSelected` parameter; hover correctly highlights the topmost point when points overlap.
+- **Config API changes** — `setConfig()` now resets all values to defaults before applying; use the new `setConfigPartial()` to update individual properties without resetting the rest.
+- **Init-only config fields** — `enableSimulation`, `initialZoomLevel`, `randomSeed`, and `attribution` can only be set during initialization and are preserved across config updates.
+- **Exported defaults** — `defaultConfigValues` is now part of the public API.
+- **Optimized hover detection** — skips GPU work when the mouse hasn't moved.
+
+Check the [Migration Guide](./migration-notes.md) for upgrading from v2.
+
 ### What's New in v2.0?
 
 cosmos.gl v2.0 introduces significant improvements in performance and data handling:
@@ -86,7 +104,7 @@ cosmos.gl v2.0 introduces significant improvements in performance and data handl
 - New Point Clustering force (`setPointClusters`, `setClusterPositions` and `setPointClusterStrength`).
 - Ability to drag points.
 
-Check the [Migration Guide](./cosmos-2-0-migration-notes.md) for details.
+Check the [Migration Guide](./migration-notes.md) for upgrading from v1.
 
 ---
 
@@ -116,7 +134,7 @@ Check the [Migration Guide](./cosmos-2-0-migration-notes.md) for details.
 - 🧑‍💻 [Quick Start](https://cosmosgl.github.io/graph/?path=/docs/welcome-to-cosmos--docs)
 - 🛠 [Configuration](https://cosmosgl.github.io/graph/?path=/docs/configuration--docs)
 - ⚙️ [API Reference](https://cosmosgl.github.io/graph/?path=/docs/api-reference--docs)
-- 🚀 [Migration Guide](https://github.com/cosmosgl/graph/blob/main/cosmos-2-0-migration-notes.md)
+- 🚀 [Migration Guide](https://github.com/cosmosgl/graph/blob/main/migration-notes.md)
 
 ---
 
