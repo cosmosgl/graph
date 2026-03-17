@@ -58,6 +58,29 @@ These options have been removed with no replacement:
 - **`spaceSize`**: `8192` → `4096` — values above `4096` can crash the graph on iOS.
 - **`pixelRatio`**: `2` → `window.devicePixelRatio || 2` — the canvas now matches the display's native pixel ratio by default, which may change rendering quality and GPU memory usage.
 
+#### `setConfig` Now Resets to Defaults
+
+`setConfig()` now fully resets the configuration to default values before applying the provided properties. Any omitted properties will revert to their defaults rather than retaining their previous values.
+
+Use the new `setConfigPartial()` method to update only specific properties while keeping everything else unchanged.
+
+```ts
+// setConfig resets all values to defaults, then applies the provided ones
+graph.setConfig({ simulationRepulsion: 0.5 }) // ⚠️ all other config values reset
+
+// setConfigPartial only updates the provided properties
+graph.setConfigPartial({ simulationRepulsion: 0.5 }) // ✅ other values preserved
+```
+
+#### Init-Only Config Fields
+
+The following config properties can only be set during initialization (via `new Graph(div, config)`) and are ignored by `setConfig()` and `setConfigPartial()`:
+
+- `enableSimulation`
+- `initialZoomLevel`
+- `randomSeed`
+- `attribution`
+
 #### Simulation and Rendering Are Now Separate
 
 - `render()` no longer restarts the simulation — it only starts the render loop.

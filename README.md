@@ -86,6 +86,8 @@ cosmos.gl v3.0 brings a new rendering engine, async initialization, and several 
 - **Context menu support** — new callbacks for right-click interactions: `onContextMenu`, `onPointContextMenu`, `onLinkContextMenu`, `onBackgroundContextMenu`.
 - **Fit viewport to points** — `setZoomTransformByPointPositions()` zooms and pans to fit a set of points into view.
 - **Hover improvements** — `onPointMouseOver` now includes an `isSelected` parameter; hover correctly highlights the topmost point when points overlap.
+- **Config API changes** — `setConfig()` now resets all values to defaults before applying; use the new `setConfigPartial()` to update individual properties without resetting the rest.
+- **Init-only config fields** — `enableSimulation`, `initialZoomLevel`, `randomSeed`, and `attribution` can only be set during initialization and are preserved across config updates.
 - **Exported defaults** — `defaultConfigValues` is now part of the public API.
 - **Optimized hover detection** — skips GPU work when the mouse hasn't moved.
 
