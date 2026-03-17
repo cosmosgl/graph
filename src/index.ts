@@ -1391,7 +1391,9 @@ export class Graph {
   }
 
   /**
-   * Updates and recreates the graph visualization based on pending changes.
+   * Applies pending data changes (positions, colors, sizes, shapes, links, forces, clusters)
+   * to the graph visualization. Call this after setting data via methods like `setPointPositions`,
+   * `setPointColors`, `setLinks`, etc. if you need to apply changes without calling `render()`.
    */
   public create (): void {
     if (this._isDestroyed) return
