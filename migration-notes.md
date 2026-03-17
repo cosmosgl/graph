@@ -83,9 +83,9 @@ The following config properties can only be set during initialization (via `new 
 
 #### Simulation and Rendering Are Now Separate
 
-- `render()` no longer restarts the simulation — it only starts the render loop.
-- `start()` no longer starts the render loop — it only controls simulation state.
-- `step()` no longer pauses the simulation — it only runs one simulation step.
+- `render()` — starts the render loop only; it no longer restarts the simulation.
+- `start()` — resets and begins the simulation (alpha, progress, running state) without starting the render loop. Call `render()` separately to begin drawing.
+- `step()` — runs exactly one simulation tick, leaving the running state untouched. Previously, this also paused the simulation.
 
 #### Async Initialization
 

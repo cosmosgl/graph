@@ -8,7 +8,7 @@ export interface GraphConfigInterface {
   /**
    * If set to `false`, the simulation will not run.
    * This property will be applied only on component initialization and it
-   * can't be changed using the `setConfig` method.
+   * can't be changed using the `setConfig` or `setConfigPartial` methods.
    * Default value: `true`
    */
   enableSimulation: boolean;
@@ -41,7 +41,7 @@ export interface GraphConfigInterface {
    * If not provided, the color will be the same as the point's original color,
    * but darkened or lightened depending on the background color.
    *
-   * If `pointGreyoutOpacity` is also defined, it will override the alpha/opacity component
+   * If `pointGreyoutOpacity` is also defined, it will be multiplied with the final alpha
    * of this color.
    *
    * Default value: `undefined`
@@ -49,10 +49,11 @@ export interface GraphConfigInterface {
   pointGreyoutColor?: string | [number, number, number, number];
 
   /**
-   * Opacity value for points when they are greyed out (when selection is active).
+   * Opacity multiplier for points when they are greyed out (when selection is active).
    * Values range from 0 (completely transparent) to 1 (fully opaque).
    *
-   * If defined, this value will override the alpha/opacity component of `pointGreyoutColor`.
+   * When defined, this value is multiplied with the point's final alpha instead of the
+   * default `pointOpacity`. When `undefined`, greyed-out points use `pointOpacity` as their multiplier.
    *
    * Default value: `undefined`
    */
@@ -532,7 +533,8 @@ export interface GraphConfigInterface {
    */
   scalePointsOnZoom: boolean;
   /**
-   * Initial zoom level. Can be set once during graph initialization.
+   * Initial zoom level. This property will be applied only on component initialization and it
+   * can't be changed using the `setConfig` or `setConfigPartial` methods.
    * If set, `fitViewOnInit` value will be ignored.
    * Default value: `undefined`
    */
@@ -568,7 +570,7 @@ export interface GraphConfigInterface {
   fitViewDelay: number;
   /**
    * Padding to apply when fitting the view to show all points.
-   * This value is added to the calculated bounding box to provide some extra space around the points.
+   * This value should be between 0 and 1, and is added to the calculated bounding box to provide some extra space around the points.
    * This is used when the `fitViewOnInit` option is enabled.
    * Default: `0.1`
    */
@@ -595,7 +597,7 @@ export interface GraphConfigInterface {
    * the randomness of the layout across different simulation runs.
    * It is useful when you want the graph to always look the same on same datasets.
    * This property will be applied only on component initialization and it
-   * can't be changed using the `setConfig` method.
+   * can't be changed using the `setConfig` or `setConfigPartial` methods.
    * Default value: undefined
    */
   randomSeed?: number | string;

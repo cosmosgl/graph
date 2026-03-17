@@ -361,6 +361,21 @@ This method sets the force strength coefficients for clustering points in the gr
   ```
   This example sets the force coefficient for point 0 to 1, point 1 to 0.4, and point 2 to 0.3.
 
+### <a name="set_pinned_points" href="#set_pinned_points">#</a> graph.<b>setPinnedPoints</b>(<i>pinnedIndices</i>)
+
+Sets which points are pinned (fixed) in position. Pinned points do not move due to physics forces (gravity, repulsion, link forces, etc.) but still participate in force calculations and can be dragged by the user if `enableDrag` is true.
+
+* **`pinnedIndices`** (`number[] | null`): Array of point indices to pin. Set to `[]` or `null` to unpin all points.
+* **Example:**
+  ```javascript
+  // Pin points 0 and 5
+  graph.setPinnedPoints([0, 5])
+
+  // Unpin all points
+  graph.setPinnedPoints([])
+  graph.setPinnedPoints(null)
+  ```
+
 ### <a name="render" href="#render">#</a> graph.<b>render</b>([<i>simulationAlpha</i>])
 
 The `render` method renders the graph and starts rendering. It does NOT modify simulation state - use `start()`, `stop()`, `pause()`, or `unpause()` to control the simulation.
@@ -497,7 +512,7 @@ This method method is used to convert X and Y point coordinates from the space c
 
 ### <a name="screen_to_space_position" href="#screen_to_space_position">#</a> graph.<b>screenToSpacePosition</b>(<i>coordinates</i>)
 
-This` method converts X and Y point coordinates from the screen coordinate system (which is used for rendering the graph on the display) to the space coordinate system (which is typically used for graph data).
+This method converts X and Y point coordinates from the screen coordinate system (which is used for rendering the graph on the display) to the space coordinate system (which is typically used for graph data).
 
 * **`coordinates`** (Array): An array of two numbers in the format `[x, y]`, representing the X and Y coordinates in the screen coordinate system.
 
@@ -626,7 +641,7 @@ Destroys the current cosmos.gl instance and cleans up all resources.
 
 ### <a name="create" href="#create">#</a> graph.<b>create</b>()
 
-Creates a new cosmos.gl instance.
+Updates and recreates the graph visualization based on pending changes.
 
 ### <a name="flatten" href="#flatten">#</a> graph.<b>flatten</b>(<i>pointPositions</i>)
 
