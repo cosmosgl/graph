@@ -1470,6 +1470,10 @@ export class Graph {
       this.graph.updatePointSize()
       this.points?.updateSize()
     }
+    if (prevConfig.pointDefaultShape !== this.config.pointDefaultShape) {
+      this.graph.updatePointShape()
+      this.points?.updateShape()
+    }
     if (prevConfig.linkDefaultColor !== this.config.linkDefaultColor) {
       this.graph.updateLinkColor()
       this.lines?.updateColor()

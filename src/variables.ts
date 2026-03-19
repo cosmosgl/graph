@@ -13,6 +13,7 @@ export const defaultConfigValues = {
   // Points
   pointDefaultColor: '#b3b3b3',
   pointDefaultSize: 4,
+  pointDefaultShape: 0,
   pointOpacity: 1.0,
   pointGreyoutOpacity: undefined,
   pointGreyoutColor: undefined,
