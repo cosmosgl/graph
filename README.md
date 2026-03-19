@@ -88,6 +88,7 @@ cosmos.gl v3.0 brings a new rendering engine, async initialization, and several 
 - **Hover improvements** — `onPointMouseOver` now includes an `isSelected` parameter; hover correctly highlights the topmost point when points overlap.
 - **Config API changes** — `setConfig()` now resets all values to defaults before applying; use the new `setConfigPartial()` to update individual properties without resetting the rest.
 - **Init-only config fields** — `enableSimulation`, `initialZoomLevel`, `randomSeed`, and `attribution` can only be set during initialization and are preserved across config updates.
+- **Default point shape** — new `pointDefaultShape` config property lets you set the fallback shape for all points (e.g., `PointShape.Star`) when no per-point shapes are provided.
 - **Exported defaults** — `defaultConfigValues` is now part of the public API.
 - **Optimized hover detection** — skips GPU work when the mouse hasn't moved.
 

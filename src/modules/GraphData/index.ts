@@ -132,9 +132,8 @@ export class GraphData {
   }
 
   /**
-   * Updates the point shapes based on the input data or default shape.
-   * Default behavior: Circle (0).
-  * Images are rendered above shapes.
+   * Updates the point shapes based on the input data or default config value.
+   * Images are rendered above shapes.
    */
   public updatePointShape (): void {
     if (this.pointsNumber === undefined) {
@@ -142,8 +141,10 @@ export class GraphData {
       return
     }
 
-    // Determine default shape: Circle
-    const defaultShape = PointShape.Circle
+    const configShape = this._config.pointDefaultShape
+    const defaultShape = (configShape >= 0 && configShape <= 8)
+      ? configShape
+      : PointShape.Circle
 
     // Sets point shapes to default values if the input is missing or does not match input points number.
     if (this.inputPointShapes === undefined || this.inputPointShapes.length !== this.pointsNumber) {
