@@ -39,12 +39,12 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement; destroy?: () 
     simulationGravity: 0.1,
     simulationDecay: 100000,
     onPointClick: (index: number): void => {
-      graph.selectPointByIndex(index)
+      graph.setConfigPartial({ highlightedPointIndices: [index], outlinedPointIndices: [index], highlightedLinkIndices: [] })
       graph.zoomToPointByIndex(index)
       console.log('Clicked point index: ', index)
     },
     onBackgroundClick: (): void => {
-      graph.unselectPoints()
+      graph.setConfigPartial({ highlightedPointIndices: undefined, outlinedPointIndices: undefined, highlightedLinkIndices: undefined })
       console.log('Clicked background')
     },
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
@@ -97,7 +97,7 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement; destroy?: () 
     },
   })
 
-  // Zoom and Select
+  // Zoom and Highlight
   function getRandomPointIndex (): number {
     return Math.floor((Math.random() * pointPositions.length) / 2)
   }
@@ -113,18 +113,18 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement; destroy?: () 
   function zoomIn (): void {
     const pointIndex = getRandomPointIndex()
     graph.zoomToPointByIndex(pointIndex)
-    graph.selectPointByIndex(pointIndex)
+    graph.setConfigPartial({ highlightedPointIndices: [pointIndex], highlightedLinkIndices: [] })
     pause()
   }
 
-  function selectPoint (): void {
+  function highlightPoint (): void {
     const pointIndex = getRandomPointIndex()
-    graph.selectPointByIndex(pointIndex)
+    graph.setConfigPartial({ highlightedPointIndices: [pointIndex], highlightedLinkIndices: [] })
     graph.fitView()
     pause()
   }
 
-  function selectPointsInArea (): void {
+  function highlightPointsInArea (): void {
     const w = div.clientWidth
     const h = div.clientHeight
     const left = getRandomInRange([w / 4, w / 2])
@@ -132,10 +132,12 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement; destroy?: () 
     const top = getRandomInRange([h / 4, h / 2])
     const bottom = getRandomInRange([top, (h * 3) / 4])
     pause()
-    graph.selectPointsInRect([
+    const indices = graph.findPointsInRect([
       [left, top],
       [right, bottom],
     ])
+    const highlightedLinkIndices = graph.getAdjacentLinkIndices(indices)
+    graph.setConfigPartial({ highlightedPointIndices: indices, highlightedLinkIndices })
   }
 
   const fitViewButton = document.createElement('div')
@@ -150,17 +152,17 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement; destroy?: () 
   zoomButton.addEventListener('click', zoomIn)
   actionsDiv.appendChild(zoomButton)
 
-  const selectPointButton = document.createElement('div')
-  selectPointButton.className = 'action'
-  selectPointButton.textContent = 'Select a point'
-  selectPointButton.addEventListener('click', selectPoint)
-  actionsDiv.appendChild(selectPointButton)
+  const highlightPointButton = document.createElement('div')
+  highlightPointButton.className = 'action'
+  highlightPointButton.textContent = 'Highlight a point'
+  highlightPointButton.addEventListener('click', highlightPoint)
+  actionsDiv.appendChild(highlightPointButton)
 
-  const selectPointsInAreaButton = document.createElement('div')
-  selectPointsInAreaButton.className = 'action'
-  selectPointsInAreaButton.textContent = 'Select points in a rectangular area'
-  selectPointsInAreaButton.addEventListener('click', selectPointsInArea)
-  actionsDiv.appendChild(selectPointsInAreaButton)
+  const highlightPointsInAreaButton = document.createElement('div')
+  highlightPointsInAreaButton.className = 'action'
+  highlightPointsInAreaButton.textContent = 'Highlight points in a rectangular area'
+  highlightPointsInAreaButton.addEventListener('click', highlightPointsInArea)
+  actionsDiv.appendChild(highlightPointsInAreaButton)
 
   const destroy = (): void => {
     graph.destroy()

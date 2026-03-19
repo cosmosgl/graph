@@ -17,8 +17,8 @@ All configuration properties are optional. When creating a graph or calling `set
 | backgroundColor | Canvas background color | `#222222` |
 | spaceSize | Simulation space size (default 4096; larger values may crash on some devices, e.g. iOS) | `4096` |
 | pointDefaultColor | The default color to use for points when no point colors are provided, or if the color value in the array is `undefined` or `null`. This can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255 | `#b3b3b3` |
-| pointGreyoutOpacity | Opacity multiplier for points when they are greyed out (when selection is active). Values range from 0 (completely transparent) to 1 (fully opaque). When defined, this value is multiplied with the point's final alpha instead of the default `pointOpacity`. When `undefined`, greyed-out points use `pointOpacity` as their multiplier. | `undefined` |
-| pointGreyoutColor | The color to use for points when they are greyed out (when selection is active). This can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255. If not provided, the color will be the same as the point's original color, but darkened or lightened depending on the background color. If `pointGreyoutOpacity` is also defined, it will be multiplied with the final alpha of this color. | `undefined` |
+| pointGreyoutOpacity | Opacity multiplier for greyed-out points when highlighting is active. When set, used instead of `pointOpacity` for greyed-out points. | `undefined` |
+| pointGreyoutColor | The color to use for points when they are greyed-out (when highlighting is active). This can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255. If not provided, the color will be the same as the point's original color, but darkened or lightened depending on the background color. If `pointGreyoutOpacity` is also defined, it will be multiplied with the final alpha of this color. | `undefined` |
 | pointDefaultSize | The default size value to use for points when no point sizes are provided or if the size value in the array is `undefined` or `null` | `4` |
 | pointOpacity | Universal opacity value applied to all points. This value multiplies with individual point alpha values (if set via setPointColors). Useful for dynamically controlling opacity of all points without updating individual RGBA arrays. | `1.0` |
 | pointSizeScale | Scale factor for the point size | `1` |
@@ -27,15 +27,21 @@ All configuration properties are optional. When creating a graph or calling `set
 | renderHoveredPointRing | Turns ring rendering around a point on hover on / off | `false` |
 | hoveredPointRingColor | Hovered point ring color hex value or an array of RGBA values | `white` |
 | focusedPointRingColor | Focused point ring color hex value or an array of RGBA values | `white` |
-| focusedPointIndex | Set focus on a point by index. A ring will be highlighted around the focused point. When set to `undefined`, no point is focused. | `undefined` |
+| focusedPointIndex | Set focus on a point by index. A ring will be rendered around the focused point. When set to `undefined`, no point is focused. | `undefined` |
+| highlightedPointIndices | Array of point indices to highlight. Non-highlighted points are greyed out. `[]` greys out all points. Set to `undefined` to clear highlighting. | `undefined` |
+| outlinedPointIndices | Array of point indices to render with an outline ring. Independent of highlighting. | `undefined` |
+| outlinedPointRingColor | Color of the outline ring. Hex string or RGBA array. | `white` |
 | renderLinks | Turns link rendering on / off | `true` |
 | linkDefaultColor | The default color to use for links when no link colors are provided, or if the color value in the array is `undefined` or `null`. This can be either a hex color string (e.g., '#666666') or an array of RGBA values in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255 | `#666666` |
 | linkOpacity | Universal opacity value applied to all links. This value multiplies with individual link alpha values (if set via setLinkColors). Useful for dynamically controlling opacity of all links without updating individual RGBA arrays. | `1.0` |
-| linkGreyoutOpacity | Greyed out link opacity value when the selection is active | `0.1` |
+| linkGreyoutOpacity | Greyed-out link opacity value when link highlighting is active | `0.1` |
 | linkDefaultWidth | The default width value to use for links when no link widths are provided or if the width value in the array is `undefined` or `null` | `1` |
 | linkWidthScale | Scale factor for the link width | `1` |
 | hoveredLinkColor | The color to use for links when they are hovered. This can be either a hex color string (e.g., '#ff3333') or an array of RGBA values in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255 | `undefined` |
 | hoveredLinkWidthIncrease | Number of pixels to add to the link width when hovered | `5` |
+| highlightedLinkIndices | Array of link indices to highlight. Non-highlighted links are greyed out. `[]` greys out all links. Set to `undefined` to clear highlighting. | `undefined` |
+| focusedLinkIndex | Set focus on a link by index. The focused link will be rendered wider. When set to `undefined`, no link is focused. | `undefined` |
+| focusedLinkWidthIncrease | Number of pixels to add to the link width when focused | `5` |
 | scaleLinksOnZoom | Increase/decrease link width when zooming | `false` |
 | curvedLinks | If set to true, links are rendered as curved lines. Otherwise as straight lines | `false` |
 | curvedLinkSegments | Number of segments in a curved line | `19` |
@@ -105,7 +111,7 @@ cosmos.gl layout algorithm was inspired by the [d3-force](https://github.com/d3/
 | onLinkContextMenu | Called when a context menu trigger occurs on a link, with link index |
 | onBackgroundContextMenu | Called when a context menu trigger occurs on the background (empty space) |
 | onMouseMove | Called on mouse movement with hover info |
-| onPointMouseOver | Called when pointer enters a point, with index, position, event, and whether the point is selected |
+| onPointMouseOver | Called when pointer enters a point, with index, position, event, isHighlighted, and isOutlined |
 | onPointMouseOut | Called when pointer leaves a point |
 | onLinkMouseOver | Called when pointer enters a link |
 | onLinkMouseOut | Called when pointer leaves a link |

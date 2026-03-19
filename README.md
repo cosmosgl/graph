@@ -31,7 +31,7 @@ npm install @cosmos.gl/graph
 
 Get the data, [configure](https://cosmosgl.github.io/graph/?path=/docs/configuration--docs) the graph and run the simulation:
 
-```javascript
+```ts
 import { Graph } from '@cosmos.gl/graph'
 
 const div = document.querySelector('div')
@@ -85,7 +85,8 @@ cosmos.gl v3.0 brings a new rendering engine, async initialization, and several 
 - **Link sampling** — sample visible links on screen with `getSampledLinks()` and `getSampledLinkPositionsMap()` for rendering labels or overlays along links.
 - **Context menu support** — new callbacks for right-click interactions: `onContextMenu`, `onPointContextMenu`, `onLinkContextMenu`, `onBackgroundContextMenu`.
 - **Fit viewport to points** — `setZoomTransformByPointPositions()` zooms and pans to fit a set of points into view.
-- **Hover improvements** — `onPointMouseOver` now includes an `isSelected` parameter; hover correctly highlights the topmost point when points overlap.
+- **Config-driven highlighting** — imperative selection methods replaced by `highlightedPointIndices`, `highlightedLinkIndices`, `outlinedPointIndices`, `focusedPointIndex`, and `focusedLinkIndex` config properties. Points and links are highlighted independently. New `findPointsInRect()`, `findPointsInPolygon()`, and `getAdjacentLinkIndices()` methods.
+- **Hover improvements** — `onPointMouseOver` now includes `isHighlighted` and `isOutlined` parameters; hover correctly highlights the topmost point when points overlap.
 - **Config API changes** — `setConfig()` now resets all values to defaults before applying; use the new `setConfigPartial()` to update individual properties without resetting the rest.
 - **Init-only config fields** — `enableSimulation`, `initialZoomLevel`, `randomSeed`, and `attribution` can only be set during initialization and are preserved across config updates.
 - **Exported defaults** — `defaultConfigValues` is now part of the public API.

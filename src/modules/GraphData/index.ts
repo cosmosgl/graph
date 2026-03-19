@@ -341,8 +341,40 @@ export class GraphData {
     this._calculateDegrees()
   }
 
-  public getAdjacentIndices (index: number): number[] | undefined {
-    return [...(this.sourceIndexToTargetIndices?.[index]?.map(d => d[0]) || []), ...(this.targetIndexToSourceIndices?.[index]?.map(d => d[0]) || [])]
+  /**
+   * Returns unique point indices that are connected to the given point(s) by a link.
+   * @param pointIndices - A single point index or an array of point indices.
+   * @returns Array of adjacent point indices (neighbors).
+   */
+  public getAdjacentIndices (pointIndices: number | number[]): number[] {
+    const indices = Array.isArray(pointIndices) ? pointIndices : [pointIndices]
+    const result = new Set<number>()
+    for (const index of indices) {
+      for (const [pointIndex] of this.sourceIndexToTargetIndices?.[index] ?? []) result.add(pointIndex)
+      for (const [pointIndex] of this.targetIndexToSourceIndices?.[index] ?? []) result.add(pointIndex)
+    }
+    return [...result]
+  }
+
+  /**
+   * Returns unique link indices where both the source and target endpoints
+   * are within the given point(s). Only links fully contained in the set are returned.
+   * @param pointIndices - A single point index or an array of point indices.
+   * @returns Array of link indices connecting points within the provided set.
+   */
+  public getAdjacentLinkIndices (pointIndices: number | number[]): number[] {
+    const indices = Array.isArray(pointIndices) ? pointIndices : [pointIndices]
+    const indexSet = new Set(indices)
+    const result = new Set<number>()
+    for (const index of indices) {
+      for (const [targetIndex, linkIndex] of this.sourceIndexToTargetIndices?.[index] ?? []) {
+        if (indexSet.has(targetIndex)) result.add(linkIndex)
+      }
+      for (const [sourceIndex, linkIndex] of this.targetIndexToSourceIndices?.[index] ?? []) {
+        if (indexSet.has(sourceIndex)) result.add(linkIndex)
+      }
+    }
+    return [...result]
   }
 
   private _createAdjacencyLists (): void {
