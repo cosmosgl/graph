@@ -67,6 +67,15 @@ export interface GraphConfigInterface {
   pointDefaultSize: number;
 
   /**
+   * The default shape to use for points when no point shapes are provided via `setPointShapes()`,
+   * or if the shape value in the array is `undefined`, `null`, or invalid.
+   * Use the `PointShape` enum values (e.g., `PointShape.Circle`, `PointShape.Star`).
+   * Valid values range from 0 (Circle) to 8 (None).
+   * Default value: `0` (Circle)
+   */
+  pointDefaultShape: number;
+
+  /**
    * Universal opacity value applied to all points.
    * This value multiplies with individual point alpha values (if set via setPointColors).
    * Useful for dynamically controlling opacity of all points without updating individual RGBA arrays.
