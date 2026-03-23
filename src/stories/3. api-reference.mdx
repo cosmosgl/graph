@@ -370,7 +370,7 @@ The `render` method renders the graph and starts rendering. It does NOT modify s
   - If positive: Sets alpha to that value.
   - If `undefined`: Keeps current alpha value.
 
-### <a name="zoom_to_point_by_index" href="#zoom_to_point_by_index">#</a> graph.<b>zoomToPointByIndex</b>(<i>index</i>, [<i>duration</i>], [<i>scale</i>], [<i>canZoomOut</i>])
+### <a name="zoom_to_point_by_index" href="#zoom_to_point_by_index">#</a> graph.<b>zoomToPointByIndex</b>(<i>index</i>, [<i>duration</i>], [<i>scale</i>], [<i>canZoomOut</i>], [<i>enableSimulation</i>])
 
 This method centers the view on the specified point (by its <i>index</i>) and zooms in with a given animation <i>duration</i> and <i>scale</i> value.
 
@@ -378,44 +378,49 @@ This method centers the view on the specified point (by its <i>index</i>) and zo
 * **`duration`** (Number, optional): The animation duration in milliseconds. Default is 700.
 * **`scale`** (Number, optional): The zoom scale. Default is 3.
 * **`canZoomOut`** (Boolean, optional): If set to `false`, prevents zooming out. Default is `true`.
+* **`enableSimulation`** (Boolean, optional): Whether to run the simulation during the zoom transition. Overrides the `enableSimulationDuringZoom` config for this call. Default is `true`.
 
-### <a name="set_zoom_level" href="#set_zoom_level">#</a> graph.<b>setZoomLevel</b>(<i>value</i>, [<i>duration</i>])
+### <a name="set_zoom_level" href="#set_zoom_level">#</a> graph.<b>setZoomLevel</b>(<i>value</i>, [<i>duration</i>], [<i>enableSimulation</i>])
 
 This method sets the zoom level of the graph view.
 
 * **`value`** (Number): The desired zoom level. Higher values result in a closer zoom, while lower values zoom out.
 * **`duration`** (Number, optional): The duration of the zoom animation in milliseconds. If not provided, the default value is `0`, meaning the zoom level will change instantly without any animation.
+* **`enableSimulation`** (Boolean, optional): Whether to run the simulation during the zoom transition. Overrides the `enableSimulationDuringZoom` config for this call. Default is `true`.
 
 ### <a name="get_zoom_level" href="#get_zoom_level">#</a> graph.<b>getZoomLevel</b>()
 
 This method retrieves the current zoom level of the graph view.
 
-### <a name="fit_view" href="#fit_view">#</a> graph.<b>fitView</b>([<i>duration</i>], [<i>padding</i>])
+### <a name="fit_view" href="#fit_view">#</a> graph.<b>fitView</b>([<i>duration</i>], [<i>padding</i>], [<i>enableSimulation</i>])
 
 This method centers and zooms the view to fit all points within the scene.
 
 * **`duration`** (Number, optional): The duration of the zoom animation in milliseconds. If not provided, the default value is `250` milliseconds. This allows the view to smoothly transition to fit all points. A value of `0` can be used for an instant fit without any animation.
 * **`padding`** (Number, optional): The padding around the viewport in percentage. This value should be between 0 and 1. Default is 0.1 (10% padding).
+* **`enableSimulation`** (Boolean, optional): Whether to run the simulation during the zoom transition. Overrides the `enableSimulationDuringZoom` config for this call. Default is `true`.
 
 The `fitView` method is particularly useful when you want to ensure that all points in the graph are visible within the currently displayed viewport. By fitting the view to include all points, users can get a complete overview of the entire graph.
 
-### <a name="fit_view_by_point_indices" href="#fit_view_by_point_indices">#</a> graph.<b>fitViewByPointIndices</b>(<i>indices</i>, [<i>duration</i>], [<i>padding</i>])
+### <a name="fit_view_by_point_indices" href="#fit_view_by_point_indices">#</a> graph.<b>fitViewByPointIndices</b>(<i>indices</i>, [<i>duration</i>], [<i>padding</i>], [<i>enableSimulation</i>])
 
 The `fitViewByPointIndices` method centers and zooms the view to fit the points specified by their <i>indices</i> in the scene, with an optional animation <i>duration</i> and <i>padding</i>.
 
 * **`indices`** (Array): An array of point indices to fit in the view.
 * **`duration`** (Number, optional): The duration of the animation in milliseconds. Default is 250 ms.
 * **`padding`** (Number, optional): The padding around the viewport in percentage. This value should be between 0 and 1. Default is 0.1 (10% padding).
+* **`enableSimulation`** (Boolean, optional): Whether to run the simulation during the zoom transition. Overrides the `enableSimulationDuringZoom` config for this call. Default is `true`.
 
-### <a name="fit_view_by_point_positions" href="#fit_view_by_point_positions">#</a> graph.<b>fitViewByPointPositions</b>(<i>positions</i>, [<i>duration</i>], [<i>padding</i>])
+### <a name="fit_view_by_point_positions" href="#fit_view_by_point_positions">#</a> graph.<b>fitViewByPointPositions</b>(<i>positions</i>, [<i>duration</i>], [<i>padding</i>], [<i>enableSimulation</i>])
 
 The `fitViewByPointPositions` method centers and zooms the view to fit the points specified by their <i>positions</i> in the scene, with an optional animation <i>duration</i> and <i>padding</i>.
 
 * **`positions`** (Array): An array of point positions to fit in the view.
 * **`duration`** (Number, optional): The duration of the animation in milliseconds. Default is 250 ms.
 * **`padding`** (Number, optional): The padding around the viewport in percentage. This value should be between 0 and 1. Default is 0.1 (10% padding).
+* **`enableSimulation`** (Boolean, optional): Whether to run the simulation during the zoom transition. Overrides the `enableSimulationDuringZoom` config for this call. Default is `true`.
 
-### <a name="set_zoom_transform_by_point_positions" href="#set_zoom_transform_by_point_positions">#</a> graph.<b>setZoomTransformByPointPositions</b>(<i>positions</i>, [<i>duration</i>], [<i>scale</i>], [<i>padding</i>])
+### <a name="set_zoom_transform_by_point_positions" href="#set_zoom_transform_by_point_positions">#</a> graph.<b>setZoomTransformByPointPositions</b>(<i>positions</i>, [<i>duration</i>], [<i>scale</i>], [<i>padding</i>], [<i>enableSimulation</i>])
 
 Sets the zoom transform so that the given point positions fit in the viewport, with optional animation. If the device is not yet initialized, the operation is deferred until the graph is ready (same as `fitView` and `fitViewByPointPositions`).
 
@@ -423,6 +428,7 @@ Sets the zoom transform so that the given point positions fit in the viewport, w
 * **`duration`** (Number, optional): Animation duration in milliseconds. Default is 250.
 * **`scale`** (Number, optional): Scale factor; if omitted, scale is chosen to fit the positions.
 * **`padding`** (Number, optional): Padding around the viewport as a fraction (e.g. 0.1 = 10%). Default is 0.1.
+* **`enableSimulation`** (Boolean, optional): Whether to run the simulation during the zoom transition. Overrides the `enableSimulationDuringZoom` config for this call. Default is `true`.
 
 ### <a name="get_points_in_rect" href="#get_points_in_rect">#</a> graph.<b>getPointsInRect</b>(<i>selection</i>)
 
@@ -686,12 +692,13 @@ A boolean property of the graph object that indicates whether the graph simulati
 
 A number property of the graph object that represents the maximum point size the user's hardware can render using the `gl.POINTS` primitive in WebGL. This value varies between different GPUs and is a limitation of the WebGL rendering context.
 
-### <a name="zoom" href="#zoom">#</a> graph.<b>zoom</b>(<i>value</i>, [<i>duration</i>])
+### <a name="zoom" href="#zoom">#</a> graph.<b>zoom</b>(<i>value</i>, [<i>duration</i>], [<i>enableSimulation</i>])
 
 This method sets the zoom level of the graph view (alias for setZoomLevel).
 
 * **`value`** (Number): The desired zoom level. Higher values result in a closer zoom, while lower values zoom out.
 * **`duration`** (Number, optional): The duration of the zoom animation in milliseconds. If not provided, the default value is `0`, meaning the zoom level will change instantly without any animation.
+* **`enableSimulation`** (Boolean, optional): Whether to run the simulation during the zoom transition. Overrides the `enableSimulationDuringZoom` config for this call. Default is `true`.
 
 ### <a name="get_scale_x" href="#get_scale_x">#</a> graph.<b>getScaleX</b>()
 

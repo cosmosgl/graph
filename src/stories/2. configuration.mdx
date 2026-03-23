@@ -50,7 +50,7 @@ All configuration properties are optional. When creating a graph or calling `set
 | scalePointsOnZoom | Increase/decrease point size when zooming | `false` |
 | initialZoomLevel | Initial zoom level (set once during initialization) | `undefined` |
 | enableZoom | Enables zooming interactions | `true` |
-| enableSimulationDuringZoom | Keep simulation running during zoom operations | `false` |
+| enableSimulationDuringZoom | Keep simulation running during zoom operations. Note: initialization zoom (e.g. `fitViewOnInit`) always runs with simulation enabled regardless of this setting. Individual zoom method calls can override this value via their `enableSimulation` parameter. | `false` |
 | enableDrag | Enable/disable point dragging | `false` |
 | fitViewOnInit | Auto-zoom to fit all points on initialization | `true` |
 | fitViewDelay | Delay before fitting view when enabled in milliseconds | `250` |
