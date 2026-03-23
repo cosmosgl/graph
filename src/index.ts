@@ -725,11 +725,12 @@ export class Graph {
    * @param duration Duration of the animation transition in milliseconds (`700` by default).
    * @param scale Scale value to zoom in or out (`3` by default).
    * @param canZoomOut Set to `false` to prevent zooming out from the point (`true` by default).
+   * @param enableSimulation Whether to run the simulation during the zoom transition (`true` by default).
    */
-  public zoomToPointByIndex (index: number, duration = 700, scale = 3, canZoomOut = true): void {
+  public zoomToPointByIndex (index: number, duration = 700, scale = 3, canZoomOut = true, enableSimulation = true): void {
     if (this._isDestroyed) return
 
-    if (this.ensureDevice(() => this.zoomToPointByIndex(index, duration, scale, canZoomOut))) return
+    if (this.ensureDevice(() => this.zoomToPointByIndex(index, duration, scale, canZoomOut, enableSimulation))) return
     if (!this.device || !this.points || !this.canvasD3Selection) return
     const { store: { screenSize } } = this
     const positionPixels = readPixels(this.device, this.points.currentPositionFbo as Framebuffer)
@@ -740,8 +741,10 @@ export class Graph {
     const distance = this.zoomInstance.getDistanceToPoint([posX, posY])
     const zoomLevel = canZoomOut ? scale : Math.max(this.getZoomLevel(), scale)
     if (distance < Math.min(screenSize[0], screenSize[1])) {
-      this.setZoomTransformByPointPositions(new Float32Array([posX, posY]), duration, zoomLevel)
+      this.setZoomTransformByPointPositions(new Float32Array([posX, posY]), duration, zoomLevel, undefined, enableSimulation)
     } else {
+      // Override the config's `enableSimulationDuringZoom` for this programmatic zoom transition.
+      this.zoomInstance.shouldEnableSimulationDuringZoomOverride = enableSimulation
       const transform = this.zoomInstance.getTransform([posX, posY], zoomLevel)
       const middle = this.zoomInstance.getMiddlePointTransform([posX, posY])
       this.canvasD3Selection
@@ -760,25 +763,29 @@ export class Graph {
    * Zoom the view in or out to the specified zoom level.
    * @param value Zoom level
    * @param duration Duration of the zoom in/out transition.
+   * @param enableSimulation Whether to run the simulation during the zoom transition (`true` by default).
    */
 
-  public zoom (value: number, duration = 0): void {
+  public zoom (value: number, duration = 0, enableSimulation = true): void {
     if (this._isDestroyed) return
-    this.setZoomLevel(value, duration)
+    this.setZoomLevel(value, duration, enableSimulation)
   }
 
   /**
    * Zoom the view in or out to the specified zoom level.
    * @param value Zoom level
    * @param duration Duration of the zoom in/out transition.
+   * @param enableSimulation Whether to run the simulation during the zoom transition (`true` by default).
    */
-  public setZoomLevel (value: number, duration = 0): void {
+  public setZoomLevel (value: number, duration = 0, enableSimulation = true): void {
     if (this._isDestroyed) return
 
-    if (this.ensureDevice(() => this.setZoomLevel(value, duration))) return
+    if (this.ensureDevice(() => this.setZoomLevel(value, duration, enableSimulation))) return
 
     if (!this.canvasD3Selection) return
 
+    // Override the config's `enableSimulationDuringZoom` for this programmatic zoom transition.
+    this.zoomInstance.shouldEnableSimulationDuringZoomOverride = enableSimulation
     if (duration === 0) {
       this.canvasD3Selection
         .call(this.zoomInstance.behavior.scaleTo, value)
@@ -847,13 +854,14 @@ export class Graph {
    * Center and zoom in/out the view to fit all points in the scene.
    * @param duration Duration of the center and zoom in/out animation in milliseconds (`250` by default).
    * @param padding Padding around the viewport in percentage (`0.1` by default).
+   * @param enableSimulation Whether to run the simulation during the zoom transition (`true` by default).
    */
-  public fitView (duration = 250, padding = 0.1): void {
+  public fitView (duration = 250, padding = 0.1, enableSimulation = true): void {
     if (this._isDestroyed) return
 
-    if (this.ensureDevice(() => this.fitView(duration, padding))) return
+    if (this.ensureDevice(() => this.fitView(duration, padding, enableSimulation))) return
 
-    this.setZoomTransformByPointPositions(new Float32Array(this.getPointPositions()), duration, undefined, padding)
+    this.setZoomTransformByPointPositions(new Float32Array(this.getPointPositions()), duration, undefined, padding, enableSimulation)
   }
 
   /**
@@ -861,18 +869,19 @@ export class Graph {
    * @param indices Point indices to fit in the view.
    * @param duration Duration of the center and zoom in/out animation in milliseconds (`250` by default).
    * @param padding Padding around the viewport in percentage (`0.1` by default).
+   * @param enableSimulation Whether to run the simulation during the zoom transition (`true` by default).
    */
-  public fitViewByPointIndices (indices: number[], duration = 250, padding = 0.1): void {
+  public fitViewByPointIndices (indices: number[], duration = 250, padding = 0.1, enableSimulation = true): void {
     if (this._isDestroyed) return
 
-    if (this.ensureDevice(() => this.fitViewByPointIndices(indices, duration, padding))) return
+    if (this.ensureDevice(() => this.fitViewByPointIndices(indices, duration, padding, enableSimulation))) return
     const positionsArray = this.getPointPositions()
     const positions = new Float32Array(indices.length * 2)
     for (const [i, index] of indices.entries()) {
       positions[i * 2] = positionsArray[index * 2] as number
       positions[i * 2 + 1] = positionsArray[index * 2 + 1] as number
     }
-    this.setZoomTransformByPointPositions(positions, duration, undefined, padding)
+    this.setZoomTransformByPointPositions(positions, duration, undefined, padding, enableSimulation)
   }
 
   /**
@@ -880,13 +889,14 @@ export class Graph {
    * @param positions Flat array of point coordinates as `[x0, y0, x1, y1, ...]`.
    * @param duration Duration of the center and zoom in/out animation in milliseconds (`250` by default).
    * @param padding Padding around the viewport in percentage (`0.1` by default).
+   * @param enableSimulation Whether to run the simulation during the zoom transition (`true` by default).
    */
-  public fitViewByPointPositions (positions: number[], duration = 250, padding = 0.1): void {
+  public fitViewByPointPositions (positions: number[], duration = 250, padding = 0.1, enableSimulation = true): void {
     if (this._isDestroyed) return
 
-    if (this.ensureDevice(() => this.fitViewByPointPositions(positions, duration, padding))) return
+    if (this.ensureDevice(() => this.fitViewByPointPositions(positions, duration, padding, enableSimulation))) return
 
-    this.setZoomTransformByPointPositions(new Float32Array(positions), duration, undefined, padding)
+    this.setZoomTransformByPointPositions(new Float32Array(positions), duration, undefined, padding, enableSimulation)
   }
 
   /**
@@ -896,12 +906,15 @@ export class Graph {
    * @param duration Animation duration in milliseconds. Default `250`.
    * @param scale Optional scale factor; if omitted, scale is chosen to fit the positions.
    * @param padding Padding around the viewport as a fraction (e.g. `0.1` = 10%). Default `0.1`.
+   * @param enableSimulation Whether to run the simulation during the zoom transition (`true` by default).
    */
-  public setZoomTransformByPointPositions (positions: Float32Array, duration = 250, scale?: number, padding = 0.1): void {
+  public setZoomTransformByPointPositions (positions: Float32Array, duration = 250, scale?: number, padding = 0.1, enableSimulation = true): void {
     if (this._isDestroyed) return
 
-    if (this.ensureDevice(() => this.setZoomTransformByPointPositions(positions, duration, scale, padding))) return
+    if (this.ensureDevice(() => this.setZoomTransformByPointPositions(positions, duration, scale, padding, enableSimulation))) return
 
+    // Override the config's `enableSimulationDuringZoom` for this programmatic zoom transition.
+    this.zoomInstance.shouldEnableSimulationDuringZoomOverride = enableSimulation
     this.resizeCanvas()
     const transform = this.zoomInstance.getTransform(positions, scale, padding)
     this.canvasD3Selection
@@ -1635,8 +1648,9 @@ export class Graph {
     // Main simulation forces
     // If forceExecution is true (from step()), always run
     // Otherwise, respect isSimulationRunning and zoom state
+    const enableSimulationDuringZoom = this.zoomInstance.shouldEnableSimulationDuringZoomOverride ?? this.config.enableSimulationDuringZoom
     const shouldRunSimulation = forceExecution ||
-      (isSimulationRunning && !(this.zoomInstance.isRunning && !this.config.enableSimulationDuringZoom))
+      (isSimulationRunning && !(this.zoomInstance.isRunning && !enableSimulationDuringZoom))
 
     if (shouldRunSimulation) {
       if (simulationGravity) {

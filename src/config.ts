@@ -543,9 +543,11 @@ export interface GraphConfigInterface {
    */
   enableZoom: boolean;
   /**
-   * Controls whether the simulation remains active during zoom operations.
+   * Controls whether the simulation remains active during interactive (user-driven) zoom operations.
    * When set to `true`, the simulation continues running while zooming.
    * When set to `false`, the simulation pauses during zoom operations.
+   * Programmatic zoom methods (e.g., `zoomToPointByIndex`, `fitView`) default to running the simulation
+   * regardless of this setting, but can be controlled via their `enableSimulation` parameter.
    * Default value: `false`
    */
   enableSimulationDuringZoom: boolean;

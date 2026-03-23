@@ -12,7 +12,12 @@ export class Zoom {
     .scaleExtent([0.001, Infinity])
     .on('start', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
       this.isRunning = true
+      // User-driven zooms (scroll, pinch) clear any programmatic override
+      // so they fall back to the config value.
       const userDriven = !!e.sourceEvent
+      if (userDriven) {
+        this.shouldEnableSimulationDuringZoomOverride = undefined
+      }
       this.config.onZoomStart?.(e, userDriven)
     })
     .on('zoom', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
@@ -39,6 +44,10 @@ export class Zoom {
     })
 
   public isRunning = false
+  /** Per-call override for `enableSimulationDuringZoom` config, set by programmatic zoom methods.
+   * Stale value after transition ends is harmless since `isRunning` is `false` at that point.
+   * Cleared on user-driven zoom start. */
+  public shouldEnableSimulationDuringZoomOverride: boolean | undefined = undefined
 
   public constructor (store: Store, config: GraphConfigInterface) {
     this.store = store
