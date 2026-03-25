@@ -1,5 +1,6 @@
 import { getRgbaColor, isNumber } from '@/graph/helper'
 import { type GraphConfigInterface } from '@/graph/config'
+import { defaultConfigValues } from '@/graph/variables'
 
 export enum PointShape {
   Circle = 0,
@@ -141,10 +142,9 @@ export class GraphData {
       return
     }
 
-    const configShape = this._config.pointDefaultShape
-    const defaultShape = (configShape >= 0 && configShape <= 8)
-      ? configShape
-      : PointShape.Circle
+    const { pointDefaultShape } = this._config
+    const configShape = typeof pointDefaultShape === 'string' ? Number(pointDefaultShape) : pointDefaultShape
+    const defaultShape = (configShape >= 0 && configShape <= 8) ? configShape : defaultConfigValues.pointDefaultShape
 
     // Sets point shapes to default values if the input is missing or does not match input points number.
     if (this.inputPointShapes === undefined || this.inputPointShapes.length !== this.pointsNumber) {

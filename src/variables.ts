@@ -1,4 +1,5 @@
 import type { GraphConfigInterface, Complete } from '@/graph/config'
+import { PointShape } from '@/graph/modules/GraphData'
 
 /**
  * Default values for all graph configuration properties.
@@ -13,7 +14,7 @@ export const defaultConfigValues = {
   // Points
   pointDefaultColor: '#b3b3b3',
   pointDefaultSize: 4,
-  pointDefaultShape: 0,
+  pointDefaultShape: PointShape.Circle,
   pointOpacity: 1.0,
   pointGreyoutOpacity: undefined,
   pointGreyoutColor: undefined,
