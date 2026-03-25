@@ -24,15 +24,15 @@ export function getRgbaColor (value: string | [number, number, number, number]):
   } else {
     const color = d3Color(value)
     const rgb = color?.rgb()
-    rgba = [rgb?.r || 0, rgb?.g || 0, rgb?.b || 0, color?.opacity ?? 1]
+    rgba = [
+      (rgb?.r ?? 0) / 255,
+      (rgb?.g ?? 0) / 255,
+      (rgb?.b ?? 0) / 255,
+      color?.opacity ?? 1,
+    ]
   }
 
-  return [
-    rgba[0] / 255,
-    rgba[1] / 255,
-    rgba[2] / 255,
-    rgba[3],
-  ]
+  return rgba
 }
 
 export function rgbToBrightness (r: number, g: number, b: number): number {
