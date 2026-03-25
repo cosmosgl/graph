@@ -3,6 +3,7 @@ import { D3ZoomEvent } from 'd3-zoom'
 import { D3DragEvent } from 'd3-drag'
 import { type Hovered } from '@/graph/modules/Store'
 import { defaultConfigValues } from '@/graph/variables'
+import { PointShape } from '@/graph/modules/GraphData'
 
 export interface GraphConfigInterface {
   /**
@@ -69,11 +70,10 @@ export interface GraphConfigInterface {
   /**
    * The default shape to use for points when no point shapes are provided via `setPointShapes()`,
    * or if the shape value in the array is `undefined`, `null`, or invalid.
-   * Use the `PointShape` enum values (e.g., `PointShape.Circle`, `PointShape.Star`).
-   * Valid values range from 0 (Circle) to 8 (None).
-   * Default value: `0` (Circle)
+   * Accepts a `PointShape` enum value (e.g., `PointShape.Circle`), a plain number (e.g., `2`), or a numeric string (e.g., `"2"`).
+   * Default value: `PointShape.Circle`
    */
-  pointDefaultShape: number;
+  pointDefaultShape: PointShape | `${PointShape}`;
 
   /**
    * Universal opacity value applied to all points.
