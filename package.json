@@ -6,7 +6,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "license": "MIT",
-  "repository": "git://github.com/cosmos.gl/graph.git",
+  "repository": "git://github.com/cosmosgl/graph.git",
   "type": "module",
   "files": [
     "dist",
