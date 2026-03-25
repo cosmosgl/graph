@@ -47,6 +47,33 @@ The following methods and callbacks were deprecated in v2 and have been fully re
 | `selectPointsInRange()` | `selectPointsInRect()` |
 | `onSimulationRestart` callback | `onSimulationUnpause` |
 
+#### Color Tuple Range Is Now Strictly Normalized (`0..1`)
+
+RGBA tuple config values now use normalized channel values only:
+- Old (v2-style): `[r, g, b, a]` with RGB in `0..255`
+- New (v3): `[r, g, b, a]` with all channels in `0..1`
+
+This applies to tuple-based color config values such as:
+- `backgroundColor`
+- `pointDefaultColor`
+- `pointGreyoutColor`
+- `hoveredPointRingColor`
+- `focusedPointRingColor`
+- `outlinedPointRingColor`
+- `linkDefaultColor`
+- `hoveredLinkColor`
+
+If your app passes tuples with RGB in `0..255`, convert them before passing to graph config:
+
+```ts
+const toNormalizedRgba = ([r, g, b, a]: [number, number, number, number]): [number, number, number, number] => [
+  r / 255,
+  g / 255,
+  b / 255,
+  a,
+]
+```
+
 #### Removed Config Options
 
 These options have been removed with no replacement:

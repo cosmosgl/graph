@@ -28,7 +28,7 @@ export interface GraphConfigInterface {
    * The default color to use for points when no point colors are provided,
    * or if the color value in the array is `undefined` or `null`.
    * This can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values
-   * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255.
+   * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 1.
    * Default value: '#b3b3b3'
    */
   pointDefaultColor: string | [number, number, number, number];
@@ -36,7 +36,7 @@ export interface GraphConfigInterface {
   /**
    * The color to use for points when they are greyed out (when selection is active).
    * This can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values
-   * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255.
+   * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 1.
    *
    * If not provided, the color will be the same as the point's original color,
    * but darkened or lightened depending on the background color.
@@ -129,7 +129,7 @@ export interface GraphConfigInterface {
    * The default color to use for links when no link colors are provided,
    * or if the color value in the array is `undefined` or `null`.
    * This can be either a hex color string (e.g., '#666666') or an array of RGBA values
-   * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255.
+   * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 1.
    * Default value: '#666666'
    */
   linkDefaultColor: string | [number, number, number, number];
@@ -156,7 +156,7 @@ export interface GraphConfigInterface {
   /**
    * The color to use for links when they are hovered.
    * This can be either a hex color string (e.g., '#ff3333') or an array of RGBA values
-   * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 255.
+   * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 1.
    * Default value: `undefined`
    */
   hoveredLinkColor?: string | [number, number, number, number];
