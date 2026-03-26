@@ -714,6 +714,8 @@ export class Graph {
     }
     // Update graph and start frames
     this.update(simulationAlpha)
+    // Re-detect hover on the next frame since data may have changed under a stationary mouse
+    this._shouldForceHoverDetection = true
     this.startFrames()
 
     this._isFirstRenderAfterInit = false
@@ -1626,7 +1628,6 @@ export class Graph {
     this.store.linksTextureSize = Math.ceil(Math.sqrt((graph.linksNumber ?? 0) * 2))
     this.create()
     this.initPrograms()
-    this.store.hoveredPoint = undefined
     this.store.alpha = simulationAlpha
   }
 
