@@ -187,6 +187,13 @@ void main() {
   if (renderMode > 0.0) {
     // Add 5 pixels padding for better hover detection
     linkWidthPx += 5.0 / transformationMatrix[0][0];
+    // Match the visible-pass width increases so the pickable area covers the full rendered link
+    if (hoveredLinkIndex == linkIndex) {
+      linkWidthPx += hoveredLinkWidthIncrease / transformationMatrix[0][0];
+    }
+    if (focusedLinkIndex == linkIndex) {
+      linkWidthPx += focusedLinkWidthIncrease / transformationMatrix[0][0];
+    }
   } else {
     // Add pixel increase if this is the hovered link
     if (hoveredLinkIndex == linkIndex) {
