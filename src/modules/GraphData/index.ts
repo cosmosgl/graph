@@ -60,7 +60,6 @@ export class GraphData {
   public degree: number[] | undefined
   public inDegree: number[] | undefined
   public outDegree: number[] | undefined
-
   private _config: GraphConfigInterface
 
   public constructor (config: GraphConfigInterface) {
