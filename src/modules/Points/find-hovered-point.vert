@@ -5,6 +5,7 @@ precision highp float;
 
 in vec2 pointIndices;
 in float size;
+in float imageSize;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D pointGreyoutStatus;
@@ -97,7 +98,9 @@ void main() {
   vec3 finalPosition = transformationMatrix * vec3(normalizedPosition, 1);
   #endif
 
-  float pointRadius = 0.5 * calculatePointSize(size * sizeScale);
+  float shapeSizeValue = calculatePointSize(size * sizeScale);
+  float imageSizeValue = calculatePointSize(imageSize * sizeScale);
+  float pointRadius = 0.5 * max(shapeSizeValue, imageSizeValue);
   vec2 pointScreenPosition = (finalPosition.xy + 1.0) * screenSize / 2.0;
   
   rgba = vec4(0.0);

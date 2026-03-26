@@ -1135,7 +1135,10 @@ export class Graph {
    */
   public getPointRadiusByIndex (index: number): number | undefined {
     if (this._isDestroyed) return undefined
-    return this.graph.pointSizes?.[index]
+    const shapeSize = this.graph.pointSizes?.[index]
+    const imageSize = this.graph.pointImageSizes?.[index]
+    if (shapeSize === undefined && imageSize === undefined) return undefined
+    return Math.max(shapeSize ?? 0, imageSize ?? 0)
   }
 
   /**

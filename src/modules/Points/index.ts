@@ -809,10 +809,12 @@ export class Points extends CoreModule {
       attributes: {
         ...(this.hoveredPointIndices && { pointIndices: this.hoveredPointIndices }),
         ...(this.sizeBuffer && { size: this.sizeBuffer }),
+        ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
       },
       bufferLayout: [
         { name: 'pointIndices', format: 'float32x2' },
         { name: 'size', format: 'float32' },
+        { name: 'imageSize', format: 'float32' },
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
@@ -1132,7 +1134,9 @@ export class Points extends CoreModule {
 
     const initialState = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
     for (let i = 0; i < data.pointsNumber; i++) {
-      initialState[i * 4] = data.pointSizes[i] as number
+      const shapeSize = data.pointSizes[i] as number
+      const imageSize = data.pointImageSizes?.[i] ?? shapeSize
+      initialState[i * 4] = Math.max(shapeSize, imageSize)
     }
 
     if (!this.sizeTexture || this.sizeTexture.width !== pointsTextureSize || this.sizeTexture.height !== pointsTextureSize) {
@@ -1232,6 +1236,11 @@ export class Points extends CoreModule {
     }
     if (this.drawCommand) {
       this.drawCommand.setAttributes({
+        imageSize: this.imageSizesBuffer,
+      })
+    }
+    if (this.findHoveredPointCommand) {
+      this.findHoveredPointCommand.setAttributes({
         imageSize: this.imageSizesBuffer,
       })
     }
@@ -1478,9 +1487,10 @@ export class Points extends CoreModule {
       if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
       if (!this.greyoutStatusTexture || this.greyoutStatusTexture.destroyed) return
       const pointSize = data.pointSizes?.[store.hoveredPoint.index] ?? 1
+      const imageSize = data.pointImageSizes?.[store.hoveredPoint.index] ?? pointSize
       this.drawHighlightedUniformStore.setUniforms({
         drawHighlightedUniforms: {
-          size: pointSize,
+          size: Math.max(pointSize, imageSize),
           transformationMatrix: store.transformationMatrix4x4,
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale,
@@ -1511,9 +1521,10 @@ export class Points extends CoreModule {
       if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
       if (!this.greyoutStatusTexture || this.greyoutStatusTexture.destroyed) return
       const pointSize = data.pointSizes?.[store.focusedPoint.index] ?? 1
+      const imageSize = data.pointImageSizes?.[store.focusedPoint.index] ?? pointSize
       this.drawHighlightedUniformStore.setUniforms({
         drawHighlightedUniforms: {
-          size: pointSize,
+          size: Math.max(pointSize, imageSize),
           transformationMatrix: store.transformationMatrix4x4,
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale,
@@ -1723,6 +1734,7 @@ export class Points extends CoreModule {
     this.findHoveredPointCommand.setAttributes({
       ...(this.hoveredPointIndices && { pointIndices: this.hoveredPointIndices }),
       ...(this.sizeBuffer && { size: this.sizeBuffer }),
+      ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
     })
 
     const baseUniforms = {
