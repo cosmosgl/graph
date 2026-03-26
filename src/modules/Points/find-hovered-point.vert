@@ -108,7 +108,7 @@ void main() {
   
   if (euclideanDistance(pointScreenPosition.x, mousePosition.x, pointScreenPosition.y, mousePosition.y) < pointRadius / ratio) {
     float index = pointIndices.g * pointsTextureSize + pointIndices.r;
-    rgba = vec4(index, size, pointPosition.xy);
+    rgba = vec4(index, max(size, imageSize), pointPosition.xy);
     gl_Position = vec4(-0.5, -0.5, 0.0, 1.0);
   }
 
