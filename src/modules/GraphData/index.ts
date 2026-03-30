@@ -349,8 +349,10 @@ export class GraphData {
    */
   public getNeighboringPointIndices (pointIndices: number | number[]): number[] {
     const indices = Array.isArray(pointIndices) ? pointIndices : [pointIndices]
+    const pointsNumber = this.pointsNumber ?? 0
     const result = new Set<number>()
     for (const index of indices) {
+      if (index < 0 || index >= pointsNumber) continue
       for (const [pointIndex] of this.sourceIndexToTargetIndices?.[index] ?? []) result.add(pointIndex)
       for (const [pointIndex] of this.targetIndexToSourceIndices?.[index] ?? []) result.add(pointIndex)
     }
@@ -365,14 +367,16 @@ export class GraphData {
    */
   public getConnectedLinkIndices (pointIndices: number | number[]): number[] {
     const indices = Array.isArray(pointIndices) ? pointIndices : [pointIndices]
+    const pointsNumber = this.pointsNumber ?? 0
     const indexSet = new Set(indices)
-    const result: number[] = []
+    const result = new Set<number>()
     for (const index of indexSet) {
+      if (index < 0 || index >= pointsNumber) continue
       for (const [targetIndex, linkIndex] of this.sourceIndexToTargetIndices?.[index] ?? []) {
-        if (indexSet.has(targetIndex)) result.push(linkIndex)
+        if (indexSet.has(targetIndex)) result.add(linkIndex)
       }
     }
-    return result
+    return [...result]
   }
 
   /**
