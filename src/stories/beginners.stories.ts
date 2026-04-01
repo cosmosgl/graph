@@ -9,6 +9,7 @@ import { removePoints } from './beginners/remove-points'
 import { linkHovering } from './beginners/link-hovering'
 import { linkSampling } from './beginners/link-sampling'
 import { pinnedPoints } from './beginners/pinned-points'
+import { exploreConnections } from './beginners/explore-connections'
 
 import quickStartStoryRaw from './beginners/quick-start?raw'
 import basicSetUpStoryRaw from './beginners/basic-set-up/index?raw'
@@ -31,6 +32,9 @@ import linkSamplingStoryLabelsRaw from './beginners/link-sampling/labels.ts?raw'
 import linkSamplingStoryCssRaw from './beginners/link-sampling/style.css?raw'
 import pinnedPointsStoryRaw from './beginners/pinned-points/index?raw'
 import pinnedPointsStoryDataGenRaw from './beginners/pinned-points/data-gen.ts?raw'
+import exploreConnectionsStoryRaw from './beginners/explore-connections/index?raw'
+import exploreConnectionsStoryDataGenRaw from './beginners/explore-connections/data-gen?raw'
+import exploreConnectionsStoryCssRaw from './beginners/explore-connections/style.css?raw'
 
 // More on how to set up stories at: https://storybook.js.org/docs/writing-stories#default-export
 const meta: Meta<CosmosStoryProps> = {
@@ -153,6 +157,18 @@ export const PinnedPoints: Story = {
     sourceCode: [
       { name: 'Story', code: pinnedPointsStoryRaw },
       { name: 'data-gen.ts', code: pinnedPointsStoryDataGenRaw },
+    ],
+  },
+}
+
+export const ExploreConnections: Story = {
+  ...createStory(exploreConnections),
+  name: 'Explore Connections',
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: exploreConnectionsStoryRaw },
+      { name: 'data-gen.ts', code: exploreConnectionsStoryDataGenRaw },
+      { name: 'style.css', code: exploreConnectionsStoryCssRaw },
     ],
   },
 }

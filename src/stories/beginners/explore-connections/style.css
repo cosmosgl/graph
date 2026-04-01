@@ -1,0 +1,30 @@
+body {
+  font-family: "Nunito Sans", -apple-system, ".SFNSText-Regular", "San Francisco", BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  margin: 0px;
+}
+
+.app {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+}
+
+.graph {
+  width: 100%;
+  height: 100vh;
+}
+
+.info-panel {
+  position: absolute;
+  bottom: 16px;
+  left: 16px;
+  color: #aab;
+  font-size: 11pt;
+  pointer-events: none;
+  line-height: 1.5;
+}
+
+.info-panel .hint {
+  opacity: 0.6;
+  font-size: 10pt;
+}
