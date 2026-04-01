@@ -1895,24 +1895,46 @@ export class Graph {
     this._shouldForceHoverDetection = false
 
     this._findHoveredItemExecutionCount = 0
-    this.findHoveredPoint()
+
+    // Two-phase hover detection: first update state, then fire callbacks.
+    // This guarantees mouseout fires before mouseover when transitioning
+    // between element types (e.g. link → point).
+    const point = this.findHoveredPoint()
+    let link = { mouseover: false, mouseout: false }
 
     if (this.graph.linksNumber && this.store.isLinkHoveringEnabled) {
-      this.findHoveredLine()
+      link = this.findHoveredLine()
     } else if (this.store.hoveredLinkIndex !== undefined) {
       // Clear stale hoveredLinkIndex when there are no links
-      const wasHovered = this.store.hoveredLinkIndex !== undefined
+      link.mouseout = true
       this.store.hoveredLinkIndex = undefined
-      if (wasHovered && this.config.onLinkMouseOut) {
-        this.config.onLinkMouseOut(this.currentEvent)
-      }
+    }
+
+    // Fire mouseout events first
+    if (point.mouseout) this.config.onPointMouseOut?.(this.currentEvent)
+    if (link.mouseout) this.config.onLinkMouseOut?.(this.currentEvent)
+
+    // Then fire mouseover events
+    if (point.mouseover && this.store.hoveredPoint) {
+      const idx = this.store.hoveredPoint.index
+      this.config.onPointMouseOver?.(
+        this.store.hoveredPoint.index,
+        this.store.hoveredPoint.position,
+        this.currentEvent,
+        this.store.highlightedPointSet?.has(idx) ?? false,
+        this.store.outlinedPointSet?.has(idx) ?? false
+      )
+    }
+    if (link.mouseover && this.store.hoveredLinkIndex !== undefined) {
+      this.config.onLinkMouseOver?.(this.store.hoveredLinkIndex)
     }
 
     this.updateCanvasCursor()
   }
 
-  private findHoveredPoint (): void {
-    if (this._isDestroyed || !this.device || !this.points) return
+  /** Detect hovered point and update store state. Returns flags for deferred callback firing. */
+  private findHoveredPoint (): { mouseover: boolean; mouseout: boolean } {
+    if (this._isDestroyed || !this.device || !this.points) return { mouseover: false, mouseout: false }
     this.points.findHoveredPoint()
     let isMouseover = false
     let isMouseout = false
@@ -1936,35 +1958,24 @@ export class Graph {
       this.store.hoveredPoint = undefined
     }
 
-    if (isMouseover && this.store.hoveredPoint) {
-      const idx = this.store.hoveredPoint.index
-      const isHighlighted = this.store.highlightedPointSet?.has(idx) ?? false
-      const isOutlined = this.store.outlinedPointSet?.has(idx) ?? false
-      this.config.onPointMouseOver?.(
-        this.store.hoveredPoint.index,
-        this.store.hoveredPoint.position,
-        this.currentEvent,
-        isHighlighted,
-        isOutlined
-      )
-    }
-    if (isMouseout) this.config.onPointMouseOut?.(this.currentEvent)
+    return { mouseover: isMouseover, mouseout: isMouseout }
   }
 
-  private findHoveredLine (): void {
-    if (this._isDestroyed || !this.lines) return
+  /** Detect hovered link and update store state. Returns flags for deferred callback firing. */
+  private findHoveredLine (): { mouseover: boolean; mouseout: boolean } {
+    if (this._isDestroyed || !this.lines) return { mouseover: false, mouseout: false }
     if (this.store.hoveredPoint) {
-      if (this.store.hoveredLinkIndex !== undefined) {
+      const wasLinkHovered = this.store.hoveredLinkIndex !== undefined
+      if (wasLinkHovered) {
         this.store.hoveredLinkIndex = undefined
-        this.config.onLinkMouseOut?.(this.currentEvent)
       }
-      return
+      return { mouseover: false, mouseout: wasLinkHovered }
     }
     this.lines.findHoveredLine()
     let isMouseover = false
     let isMouseout = false
 
-    if (!this.device) return
+    if (!this.device) return { mouseover: false, mouseout: false }
     const pixels = readPixels(this.device, this.lines.hoveredLineIndexFbo!)
     const hoveredLineIndex = pixels[0] as number
 
@@ -1976,10 +1987,7 @@ export class Graph {
       this.store.hoveredLinkIndex = undefined
     }
 
-    if (isMouseover && this.store.hoveredLinkIndex !== undefined) {
-      this.config.onLinkMouseOver?.(this.store.hoveredLinkIndex)
-    }
-    if (isMouseout) this.config.onLinkMouseOut?.(this.currentEvent)
+    return { mouseover: isMouseover, mouseout: isMouseout }
   }
 
   private updateCanvasCursor (): void {
