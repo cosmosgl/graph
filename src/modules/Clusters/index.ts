@@ -5,6 +5,7 @@ import { CoreModule } from '@/graph/modules/core-module'
 import calculateCentermassFrag from '@/graph/modules/Clusters/calculate-centermass.frag?raw'
 import calculateCentermassVert from '@/graph/modules/Clusters/calculate-centermass.vert?raw'
 import forceFrag from '@/graph/modules/Clusters/force-cluster.frag?raw'
+import { readPixels } from '@/graph/helper'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
@@ -22,6 +23,13 @@ export class Clusters extends CoreModule {
   private pointIndices: Buffer | undefined
   private clustersTextureSize: number | undefined
 
+  /**
+   * Cached result of the last `getCentroidPositions()` computation.
+   * Populated when the simulation is inactive to avoid redundant GPU render passes and readbacks.
+   * Nulled in `create()` and `destroy()` to handle structural changes (e.g. `setPointPositions`,
+   * `setPointClusters`). Positional changes are handled separately via `Points.areClusterCentroidsUpToDate`.
+   */
+  private cachedCentroidPositions: number[] | null = null
   private applyForcesVertexCoordBuffer: Buffer | undefined
 
   // Track previous sizes to detect changes
@@ -46,6 +54,7 @@ export class Clusters extends CoreModule {
   }> | undefined
 
   public create (): void {
+    this.cachedCentroidPositions = null
     const { device, store, data } = this
     const { pointsTextureSize } = store
     if (data.pointsNumber === undefined || (!data.pointClusters && !data.clusterPositions)) return
@@ -382,6 +391,42 @@ export class Clusters extends CoreModule {
     centermassPass.end()
   }
 
+  public getCentroidPositions (): number[] {
+    const { config: { enableSimulation }, store: { isSimulationRunning } } = this
+    const simulationInactive = !enableSimulation || !isSimulationRunning
+
+    // Return cache when simulation is stopped and positions haven't changed
+    if (simulationInactive && this.points?.areClusterCentroidsUpToDate && this.cachedCentroidPositions) {
+      return this.cachedCentroidPositions
+    }
+
+    this.calculateCentermass()
+
+    // Guard: calculateCentermass() may return early if GPU resources aren't ready
+    if (!this.centermassFbo || this.centermassFbo.destroyed || this.clusterCount === undefined) return []
+
+    const pixels = readPixels(this.device, this.centermassFbo)
+    const positions: number[] = []
+    positions.length = this.clusterCount * 2
+    for (let i = 0; i < positions.length / 2; i += 1) {
+      const sumX = pixels[i * 4 + 0]
+      const sumY = pixels[i * 4 + 1]
+      const sumN = pixels[i * 4 + 2]
+      if (sumX !== undefined && sumY !== undefined && sumN !== undefined) {
+        positions[i * 2] = sumX / sumN
+        positions[i * 2 + 1] = sumY / sumN
+      }
+    }
+
+    // Warm the cache when simulation is inactive
+    if (simulationInactive && this.points) {
+      this.cachedCentroidPositions = positions
+      this.points.areClusterCentroidsUpToDate = true
+    }
+
+    return positions
+  }
+
   public run (): void {
     if (!this.data.pointClusters && !this.data.clusterPositions) return
 
@@ -433,6 +478,7 @@ export class Clusters extends CoreModule {
    * Models -> Framebuffers -> Textures -> UniformStores -> Buffers
    */
   public destroy (): void {
+    this.cachedCentroidPositions = null
     // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
     this.calculateCentermassCommand?.destroy()
     this.calculateCentermassCommand = undefined

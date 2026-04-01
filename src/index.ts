@@ -836,20 +836,7 @@ export class Graph {
   public getClusterPositions (): number[] {
     if (this._isDestroyed || !this.device || !this.clusters) return []
     if (this.graph.pointClusters === undefined || this.clusters.clusterCount === undefined) return []
-    this.clusters.calculateCentermass()
-    const positions: number[] = []
-    const clusterPositionsPixels = readPixels(this.device, this.clusters.centermassFbo as Framebuffer)
-    positions.length = this.clusters.clusterCount * 2
-    for (let i = 0; i < positions.length / 2; i += 1) {
-      const sumX = clusterPositionsPixels[i * 4 + 0]
-      const sumY = clusterPositionsPixels[i * 4 + 1]
-      const sumN = clusterPositionsPixels[i * 4 + 2]
-      if (sumX !== undefined && sumY !== undefined && sumN !== undefined) {
-        positions[i * 2] = sumX / sumN
-        positions[i * 2 + 1] = sumY / sumN
-      }
-    }
-    return positions
+    return this.clusters.getCentroidPositions()
   }
 
   /**

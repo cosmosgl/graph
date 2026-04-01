@@ -42,6 +42,13 @@ export class Points extends CoreModule {
   public velocityTexture: Texture | undefined
   // Add texture property for greyout status (public for Lines module access)
   public greyoutStatusTexture: Texture | undefined
+  /**
+   * Whether the cached cluster centroid positions are still valid.
+   * Set to `false` in `swapFbo()` whenever GPU point positions change (simulation tick or drag).
+   * Set to `true` by `Clusters.getCentroidPositions()` after a fresh computation.
+   * Used together with `Clusters.cachedCentroidPositions` to skip redundant GPU readbacks.
+   */
+  public areClusterCentroidsUpToDate = false
   private colorBuffer: Buffer | undefined
   private sizeBuffer: Buffer | undefined
   private shapeBuffer: Buffer | undefined
@@ -2208,6 +2215,7 @@ export class Points extends CoreModule {
     this.previousPositionFbo = this.currentPositionFbo
     this.currentPositionTexture = tempTexture
     this.currentPositionFbo = tempFbo
+    this.areClusterCentroidsUpToDate = false
   }
 
   private rescaleInitialNodePositions (): void {
