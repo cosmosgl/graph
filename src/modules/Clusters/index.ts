@@ -391,7 +391,8 @@ export class Clusters extends CoreModule {
     centermassPass.end()
   }
 
-  public getCentroidPositions (): number[] {
+  /** Do not mutate the returned array; it may be the internal cache. */
+  public getCentroidPositions (): Readonly<number[]> {
     const { config: { enableSimulation }, store: { isSimulationRunning } } = this
     const simulationInactive = !enableSimulation || !isSimulationRunning
 

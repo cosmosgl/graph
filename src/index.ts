@@ -831,9 +831,9 @@ export class Graph {
 
   /**
    * Get current X and Y coordinates of the clusters.
-   * @returns Array of cluster positions.
+   * @returns Array of cluster positions in `[x0, y0, x1, y1, ...]` order. Do not mutate the returned array.
    */
-  public getClusterPositions (): number[] {
+  public getClusterPositions (): Readonly<number[]> {
     if (this._isDestroyed || !this.device || !this.clusters) return []
     if (this.graph.pointClusters === undefined || this.clusters.clusterCount === undefined) return []
     return this.clusters.getCentroidPositions()
