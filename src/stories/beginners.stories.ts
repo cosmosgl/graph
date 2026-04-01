@@ -52,7 +52,7 @@ export const QuickStart: Story = {
 
 export const BasicSetUp: Story = {
   ...createStory(basicSetUp),
-  name: '100x100 grid',
+  name: 'Actions',
   parameters: {
     sourceCode: [
       { name: 'Story', code: basicSetUpStoryRaw },
