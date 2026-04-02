@@ -2,7 +2,7 @@ import { Graph } from '@cosmos.gl/graph'
 import { generateData } from './data-gen'
 import './style.css'
 
-export const basicSetUp = (): { graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
+export const actions = (): { graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
   const div = document.createElement('div')
   div.className = 'app'
 
@@ -19,6 +19,9 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement; destroy?: () 
   actionsHeader.textContent = 'Actions'
   actionsDiv.appendChild(actionsHeader)
 
+  const defaultLinkColor = '#5F74C2'
+  const highlightLinkColor = '#7080D0'
+
   const config = {
     spaceSize: 4096,
     backgroundColor: '#2d313a',
@@ -26,7 +29,7 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement; destroy?: () 
     pointDefaultColor: '#4B5BBF',
     linkDefaultWidth: 0.6,
     scalePointsOnZoom: true,
-    linkDefaultColor: '#5F74C2',
+    linkDefaultColor: defaultLinkColor,
     linkDefaultArrows: false,
     linkGreyoutOpacity: 0,
     curvedLinks: true,
@@ -39,12 +42,22 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement; destroy?: () 
     simulationGravity: 0.1,
     simulationDecay: 100000,
     onPointClick: (index: number): void => {
-      graph.setConfigPartial({ highlightedPointIndices: [index], outlinedPointIndices: [index], highlightedLinkIndices: [] })
+      graph.setConfigPartial({
+        highlightedPointIndices: [index],
+        outlinedPointIndices: [index],
+        highlightedLinkIndices: [],
+        linkDefaultColor: defaultLinkColor,
+      })
       graph.zoomToPointByIndex(index)
       console.log('Clicked point index: ', index)
     },
     onBackgroundClick: (): void => {
-      graph.setConfigPartial({ highlightedPointIndices: undefined, outlinedPointIndices: undefined, highlightedLinkIndices: undefined })
+      graph.setConfigPartial({
+        highlightedPointIndices: undefined,
+        outlinedPointIndices: undefined,
+        highlightedLinkIndices: undefined,
+        linkDefaultColor: defaultLinkColor,
+      })
       console.log('Clicked background')
     },
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
@@ -113,13 +126,21 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement; destroy?: () 
   function zoomIn (): void {
     const pointIndex = getRandomPointIndex()
     graph.zoomToPointByIndex(pointIndex)
-    graph.setConfigPartial({ highlightedPointIndices: [pointIndex], highlightedLinkIndices: [] })
+    graph.setConfigPartial({
+      highlightedPointIndices: [pointIndex],
+      highlightedLinkIndices: [],
+      linkDefaultColor: defaultLinkColor,
+    })
     pause()
   }
 
   function highlightPoint (): void {
     const pointIndex = getRandomPointIndex()
-    graph.setConfigPartial({ highlightedPointIndices: [pointIndex], highlightedLinkIndices: [] })
+    graph.setConfigPartial({
+      highlightedPointIndices: [pointIndex],
+      highlightedLinkIndices: [],
+      linkDefaultColor: defaultLinkColor,
+    })
     graph.fitView()
     pause()
   }
@@ -137,7 +158,11 @@ export const basicSetUp = (): { graph: Graph; div: HTMLDivElement; destroy?: () 
       [right, bottom],
     ])
     const highlightedLinkIndices = graph.getConnectedLinkIndices(indices)
-    graph.setConfigPartial({ highlightedPointIndices: indices, highlightedLinkIndices })
+    graph.setConfigPartial({
+      highlightedPointIndices: indices,
+      highlightedLinkIndices,
+      linkDefaultColor: highlightLinkColor,
+    })
   }
 
   const fitViewButton = document.createElement('div')
