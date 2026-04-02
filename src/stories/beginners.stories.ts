@@ -3,7 +3,7 @@ import type { Meta } from '@storybook/html'
 import { createStory, Story } from '@/graph/stories/create-story'
 import { CosmosStoryProps } from './create-cosmos'
 import { quickStart } from './beginners/quick-start'
-import { basicSetUp } from './beginners/basic-set-up'
+import { actions } from './beginners/actions'
 import { pointLabels } from './beginners/point-labels'
 import { removePoints } from './beginners/remove-points'
 import { linkHovering } from './beginners/link-hovering'
@@ -12,9 +12,9 @@ import { pinnedPoints } from './beginners/pinned-points'
 import { exploreConnections } from './beginners/explore-connections'
 
 import quickStartStoryRaw from './beginners/quick-start?raw'
-import basicSetUpStoryRaw from './beginners/basic-set-up/index?raw'
-import basicSetUpStoryCssRaw from './beginners/basic-set-up/style.css?raw'
-import basicSetUpStoryDataGenRaw from './beginners/basic-set-up/data-gen?raw'
+import actionsStoryRaw from './beginners/actions/index?raw'
+import actionsStoryCssRaw from './beginners/actions/style.css?raw'
+import actionsStoryDataGenRaw from './beginners/actions/data-gen?raw'
 import pointLabelsStoryRaw from './beginners/point-labels/index?raw'
 import pointLabelsStoryDataRaw from './beginners/point-labels/data.ts?raw'
 import pointLabelsStoryLabelsRaw from './beginners/point-labels/labels.ts?raw'
@@ -50,14 +50,13 @@ export const QuickStart: Story = {
   },
 }
 
-export const BasicSetUp: Story = {
-  ...createStory(basicSetUp),
-  name: 'Actions',
+export const Actions: Story = {
+  ...createStory(actions),
   parameters: {
     sourceCode: [
-      { name: 'Story', code: basicSetUpStoryRaw },
-      { name: 'style.css', code: basicSetUpStoryCssRaw },
-      { name: 'data-gen', code: basicSetUpStoryDataGenRaw },
+      { name: 'Story', code: actionsStoryRaw },
+      { name: 'style.css', code: actionsStoryCssRaw },
+      { name: 'data-gen', code: actionsStoryDataGenRaw },
     ],
   },
 }

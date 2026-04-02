@@ -112,7 +112,7 @@ Check the [Migration Guide](./migration-notes.md) for upgrading from v1.
 
 ### Examples
 
-- [Basic Set-Up](https://cosmosgl.github.io/graph/?path=/story/examples-beginners--basic-set-up)
+- [Actions](https://cosmosgl.github.io/graph/?path=/story/examples-beginners--actions)
 
 ---
 
