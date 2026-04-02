@@ -10,7 +10,7 @@ in float arrow;
 in float linkIndices;
 
 uniform sampler2D positionsTexture;
-uniform sampler2D pointGreyoutStatus;
+uniform sampler2D linkStatus;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform drawLineUniforms {
@@ -33,6 +33,10 @@ layout(std140) uniform drawLineUniforms {
   float hoveredLinkIndex;
   vec4 hoveredLinkColor;
   float hoveredLinkWidthIncrease;
+  float isLinkHighlightingActive;
+  float linkStatusTextureSize;
+  float focusedLinkIndex;
+  float focusedLinkWidthIncrease;
 } drawLine;
 
 #define transformationMatrix drawLine.transformationMatrix
@@ -54,6 +58,10 @@ layout(std140) uniform drawLineUniforms {
 #define hoveredLinkIndex drawLine.hoveredLinkIndex
 #define hoveredLinkColor drawLine.hoveredLinkColor
 #define hoveredLinkWidthIncrease drawLine.hoveredLinkWidthIncrease
+#define isLinkHighlightingActive drawLine.isLinkHighlightingActive
+#define linkStatusTextureSize drawLine.linkStatusTextureSize
+#define focusedLinkIndex drawLine.focusedLinkIndex
+#define focusedLinkWidthIncrease drawLine.focusedLinkWidthIncrease
 #else
 uniform mat3 transformationMatrix;
 uniform float pointsTextureSize;
@@ -75,6 +83,10 @@ uniform float renderMode;
 uniform float hoveredLinkIndex;
 uniform vec4 hoveredLinkColor;
 uniform float hoveredLinkWidthIncrease;
+uniform float isLinkHighlightingActive;
+uniform float linkStatusTextureSize;
+uniform float focusedLinkIndex;
+uniform float focusedLinkWidthIncrease;
 #endif
 
 out vec4 rgbaColor;
@@ -126,10 +138,7 @@ void main() {
 
   vec2 pointTexturePosA = (pointA + 0.5) / pointsTextureSize;
   vec2 pointTexturePosB = (pointB + 0.5) / pointsTextureSize;
-  
-  vec4 greyoutStatusA = texture(pointGreyoutStatus, pointTexturePosA);
-  vec4 greyoutStatusB = texture(pointGreyoutStatus, pointTexturePosB);
-  
+
   vec4 pointPositionA = texture(positionsTexture, pointTexturePosA);
   vec4 pointPositionB = texture(positionsTexture, pointTexturePosB);
   vec2 a = pointPositionA.xy;
@@ -178,10 +187,21 @@ void main() {
   if (renderMode > 0.0) {
     // Add 5 pixels padding for better hover detection
     linkWidthPx += 5.0 / transformationMatrix[0][0];
-  } else {
-      // Add pixel increase if this is the hovered link
+    // Match the visible-pass width increases so the pickable area covers the full rendered link
     if (hoveredLinkIndex == linkIndex) {
       linkWidthPx += hoveredLinkWidthIncrease / transformationMatrix[0][0];
+    }
+    if (focusedLinkIndex == linkIndex) {
+      linkWidthPx += focusedLinkWidthIncrease / transformationMatrix[0][0];
+    }
+  } else {
+    // Add pixel increase if this is the hovered link
+    if (hoveredLinkIndex == linkIndex) {
+      linkWidthPx += hoveredLinkWidthIncrease / transformationMatrix[0][0];
+    }
+    // Add pixel increase if this is the focused link
+    if (focusedLinkIndex == linkIndex) {
+      linkWidthPx += focusedLinkWidthIncrease / transformationMatrix[0][0];
     }
   }
   float smoothingPx = 0.5 / transformationMatrix[0][0];
@@ -195,9 +215,15 @@ void main() {
   // Adjust opacity based on link distance
   float opacity = color.a * linkOpacity * max(linkVisibilityMinTransparency, map(linkDistPx, linkVisibilityDistanceRange.g, linkVisibilityDistanceRange.r, 0.0, 1.0));
 
-  // Apply greyed out opacity if either endpoint is greyed out
-  if (greyoutStatusA.r > 0.0 || greyoutStatusB.r > 0.0) {
-    opacity *= greyoutOpacity;
+  // Apply greyed-out opacity from link status texture
+  if (isLinkHighlightingActive > 0.0 && linkStatusTextureSize > 0.0) {
+    float texX = mod(linkIndices, linkStatusTextureSize);
+    float texY = floor(linkIndices / linkStatusTextureSize);
+    vec2 linkStatusCoord = (vec2(texX, texY) + 0.5) / linkStatusTextureSize;
+    vec4 linkStatusValue = texture(linkStatus, linkStatusCoord);
+    if (linkStatusValue.r > 0.0) {
+      opacity *= greyoutOpacity;
+    }
   }
 
   // Pass final color to fragment shader

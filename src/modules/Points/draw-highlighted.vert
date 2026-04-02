@@ -6,7 +6,7 @@ precision highp float;
 in vec2 vertexCoord;
 
 uniform sampler2D positionsTexture;
-uniform sampler2D pointGreyoutStatusTexture;
+uniform sampler2D pointStatus;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform drawHighlightedUniforms {
@@ -87,7 +87,7 @@ void main () {
 
   rgbColor = color.rgb;
   pointOpacity = color.a * universalPointOpacity;
-  vec4 greyoutStatus = texture(pointGreyoutStatusTexture, textureCoordinates / pointsTextureSize);
+  vec4 greyoutStatus = texture(pointStatus, textureCoordinates / pointsTextureSize);
   if (greyoutStatus.r > 0.0) {
     if (greyoutColor[0] != -1.0) {
       rgbColor = greyoutColor.rgb;

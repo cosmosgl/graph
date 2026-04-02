@@ -11,22 +11,29 @@ layout(std140) uniform drawFragmentUniforms {
   float pointOpacity;
   float isDarkenGreyout;
   vec4 backgroundColor;
+  vec4 outlineColor;
+  float outlineWidth;
 } drawFragment;
 
 #define greyoutOpacity drawFragment.greyoutOpacity
 #define pointOpacity drawFragment.pointOpacity
 #define isDarkenGreyout drawFragment.isDarkenGreyout
 #define backgroundColor drawFragment.backgroundColor
+#define outlineColor drawFragment.outlineColor
+#define outlineWidth drawFragment.outlineWidth
 #else
 uniform float greyoutOpacity;
 uniform float pointOpacity;
 uniform float isDarkenGreyout;
 uniform vec4 backgroundColor;
+uniform vec4 outlineColor;
+uniform float outlineWidth;
 #endif
 
 
 in float pointShape;
 in float isGreyedOut;
+in float isOutlined;
 in vec4 shapeColor;
 in vec4 imageAtlasUV;
 in float shapeSize;
@@ -256,4 +263,31 @@ void main() {
         mix(finalShapeColor.rgb, finalImageColor.rgb, finalImageColor.a),
         finalPointAlpha
     );
+
+    // Render outline ring around the point
+    if (isOutlined > 0.0) {
+        float r = length(pointCoord);
+        const float ringSmoothing = 1.025;
+        float outerEdge = smoothstep(r, r * ringSmoothing, 1.0);
+        float innerEdge = smoothstep(outlineWidth, outlineWidth * ringSmoothing, r);
+        float ringAlpha = outerEdge * innerEdge;
+
+        // Grey out the ring color when the point is greyed
+        vec3 ringColor = outlineColor.rgb;
+        if (isGreyedOut > 0.0) {
+            float blendFactor = 0.65;
+            if (isDarkenGreyout > 0.0) {
+                ringColor = mix(ringColor, vec3(0.2), blendFactor);
+            } else {
+                ringColor = mix(ringColor, max(backgroundColor.rgb, vec3(0.8)), blendFactor);
+            }
+        }
+
+        float ringOpacity = ringAlpha * outlineColor.a;
+        // Composite ring on top of existing fragment
+        fragColor = vec4(
+            mix(fragColor.rgb, ringColor, ringOpacity),
+            max(fragColor.a, ringOpacity)
+        );
+    }
 }

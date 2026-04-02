@@ -3,17 +3,18 @@ import type { Meta } from '@storybook/html'
 import { createStory, Story } from '@/graph/stories/create-story'
 import { CosmosStoryProps } from './create-cosmos'
 import { quickStart } from './beginners/quick-start'
-import { basicSetUp } from './beginners/basic-set-up'
+import { actions } from './beginners/actions'
 import { pointLabels } from './beginners/point-labels'
 import { removePoints } from './beginners/remove-points'
 import { linkHovering } from './beginners/link-hovering'
 import { linkSampling } from './beginners/link-sampling'
 import { pinnedPoints } from './beginners/pinned-points'
+import { exploreConnections } from './beginners/explore-connections'
 
 import quickStartStoryRaw from './beginners/quick-start?raw'
-import basicSetUpStoryRaw from './beginners/basic-set-up/index?raw'
-import basicSetUpStoryCssRaw from './beginners/basic-set-up/style.css?raw'
-import basicSetUpStoryDataGenRaw from './beginners/basic-set-up/data-gen?raw'
+import actionsStoryRaw from './beginners/actions/index?raw'
+import actionsStoryCssRaw from './beginners/actions/style.css?raw'
+import actionsStoryDataGenRaw from './beginners/actions/data-gen?raw'
 import pointLabelsStoryRaw from './beginners/point-labels/index?raw'
 import pointLabelsStoryDataRaw from './beginners/point-labels/data.ts?raw'
 import pointLabelsStoryLabelsRaw from './beginners/point-labels/labels.ts?raw'
@@ -31,6 +32,9 @@ import linkSamplingStoryLabelsRaw from './beginners/link-sampling/labels.ts?raw'
 import linkSamplingStoryCssRaw from './beginners/link-sampling/style.css?raw'
 import pinnedPointsStoryRaw from './beginners/pinned-points/index?raw'
 import pinnedPointsStoryDataGenRaw from './beginners/pinned-points/data-gen.ts?raw'
+import exploreConnectionsStoryRaw from './beginners/explore-connections/index?raw'
+import exploreConnectionsStoryDataGenRaw from './beginners/explore-connections/data-gen?raw'
+import exploreConnectionsStoryCssRaw from './beginners/explore-connections/style.css?raw'
 
 // More on how to set up stories at: https://storybook.js.org/docs/writing-stories#default-export
 const meta: Meta<CosmosStoryProps> = {
@@ -46,14 +50,13 @@ export const QuickStart: Story = {
   },
 }
 
-export const BasicSetUp: Story = {
-  ...createStory(basicSetUp),
-  name: '100x100 grid',
+export const Actions: Story = {
+  ...createStory(actions),
   parameters: {
     sourceCode: [
-      { name: 'Story', code: basicSetUpStoryRaw },
-      { name: 'style.css', code: basicSetUpStoryCssRaw },
-      { name: 'data-gen', code: basicSetUpStoryDataGenRaw },
+      { name: 'Story', code: actionsStoryRaw },
+      { name: 'style.css', code: actionsStoryCssRaw },
+      { name: 'data-gen', code: actionsStoryDataGenRaw },
     ],
   },
 }
@@ -153,6 +156,18 @@ export const PinnedPoints: Story = {
     sourceCode: [
       { name: 'Story', code: pinnedPointsStoryRaw },
       { name: 'data-gen.ts', code: pinnedPointsStoryDataGenRaw },
+    ],
+  },
+}
+
+export const ExploreConnections: Story = {
+  ...createStory(exploreConnections),
+  name: 'Explore Connections',
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: exploreConnectionsStoryRaw },
+      { name: 'data-gen.ts', code: exploreConnectionsStoryDataGenRaw },
+      { name: 'style.css', code: exploreConnectionsStoryCssRaw },
     ],
   },
 }
