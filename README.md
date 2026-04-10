@@ -117,9 +117,9 @@ Check the [Migration Guide](./migration-notes.md) for upgrading from v1.
 
 ### Showcase (via [cosmograph.app](https://cosmograph.app))
 
-- [Silk Road Case: Bitcoin Transactions](https://cosmograph.app/run/?data=https://cosmograph.app/data/184R7cFG-4lv.csv) ([📄 Read more](https://medium.com/@cosmograph.app/visualizing-darknet-6846dec7f1d7))
-- [ABACUS Shell](https://cosmograph.app/run/?data=https://cosmograph.app/data/ABACUS_shell_hd.csv) ([source](http://sparse.tamu.edu/Puri/ABACUS_shell_hd))
-- [The MathWorks, Inc: symmetric positive definite matrix](https://cosmograph.app/run/?data=https://cosmograph.app/data/Kuu.csv) ([source](https://sparse.tamu.edu/MathWorks/Kuu))
+- [Silk Road Case: Bitcoin Transactions](https://run.cosmograph.app/public/987cf266-fd90-4940-b52d-f75a1e006237) ([📄 Read more](https://medium.com/@cosmograph.app/visualizing-darknet-6846dec7f1d7))
+- [ABACUS Shell](https://run.cosmograph.app/public/b099a861-47ba-4110-b778-c4ef0f29644f) ([source](http://sparse.tamu.edu/Puri/ABACUS_shell_hd))
+- [The MathWorks, Inc: symmetric positive definite matrix](https://run.cosmograph.app/public/cb6f43f2-71c7-47de-97c5-d86ac549cfed) ([source](https://sparse.tamu.edu/MathWorks/Kuu))
 
 ---
 
