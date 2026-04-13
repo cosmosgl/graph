@@ -1638,39 +1638,51 @@ export class Graph {
 
     // Right-click repulsion (runs regardless of isSimulationRunning)
     if (this.isRightClickMouse && this.config.enableRightClickRepulsion) {
+      this.points?.swapFbo()
       this.forceMouse?.run()
       this.points?.updatePosition()
     }
 
-    // Main simulation forces
-    // If forceExecution is true (from step()), always run
-    // Otherwise, respect isSimulationRunning and zoom state
+    // Main simulation forces gate:
+    // If forceExecution is true (from step()), always run.
+    // Otherwise, respect isSimulationRunning and zoom state.
     const enableSimulationDuringZoom = this.zoomInstance.shouldEnableSimulationDuringZoomOverride ?? this.config.enableSimulationDuringZoom
     const shouldRunSimulation = forceExecution ||
       (isSimulationRunning && !(this.zoomInstance.isRunning && !enableSimulationDuringZoom))
 
+    // Swap-before-write: every GPU position write is preceded by swapFbo(). The swap makes
+    // `previous` point to the freshest data so updatePosition() reads it
+    // and writes the new result into `current`. After each swap+write pair
+    // `current` holds the latest positions — the draw pass, hover detection,
+    // trackPoints and the next frame all read from `current`.
     if (shouldRunSimulation) {
       if (simulationGravity) {
+        this.points?.swapFbo()
         this.forceGravity?.run()
         this.points?.updatePosition()
       }
 
       if (simulationCenter) {
+        this.points?.swapFbo()
         this.forceCenter?.run()
         this.points?.updatePosition()
       }
 
+      this.points?.swapFbo()
       this.forceManyBody?.run()
       this.points?.updatePosition()
 
       if (this.store.linksTextureSize) {
+        this.points?.swapFbo()
         this.forceLinkIncoming?.run()
         this.points?.updatePosition()
+        this.points?.swapFbo()
         this.forceLinkOutgoing?.run()
         this.points?.updatePosition()
       }
 
       if (this.graph.pointClusters || this.graph.clusterPositions) {
+        this.points?.swapFbo()
         this.clusters?.run()
         this.points?.updatePosition()
       }
@@ -1771,8 +1783,11 @@ export class Graph {
       this.points?.draw(drawRenderPass)
 
       if (this.dragInstance.isActive) {
-        // To prevent the dragged point from suddenly jumping, run the drag function twice
-        this.points?.drag()
+        // Swap-before-write: after the swap, `previous` holds the freshest positions so drag()
+        // reads those and writes the drag result into `current`. This runs
+        // after points.draw() above — the drag result becomes visible on
+        // the next frame; trackPoints() picks it up immediately below.
+        this.points?.swapFbo()
         this.points?.drag()
         // Update tracked positions after drag, even when simulation is disabled
         this.points?.trackPoints()
