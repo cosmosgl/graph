@@ -1585,7 +1585,9 @@ export class Points extends CoreModule {
     this.updatePositionCommand.draw(renderPass)
     renderPass.end()
 
-    this.swapFbo()
+    // swapFbo() must be called before this method so that
+    // `previousPositionTexture` holds the freshest positions for the shader
+    // to read. After this call, `currentPositionFbo` holds the new result.
     // Invalidate tracked positions cache since positions have changed
     this.isPositionsUpToDate = false
   }
@@ -1612,7 +1614,9 @@ export class Points extends CoreModule {
     this.dragPointCommand.draw(renderPass)
     renderPass.end()
 
-    this.swapFbo()
+    // swapFbo() must be called before this method so that
+    // `previousPositionTexture` holds the freshest positions for the shader
+    // to read. After this call, `currentPositionFbo` holds the drag result.
     // Invalidate tracked positions cache since positions have changed
     this.isPositionsUpToDate = false
   }
@@ -2200,7 +2204,7 @@ export class Points extends CoreModule {
     this.trackPointsVertexCoordBuffer = undefined
   }
 
-  private swapFbo (): void {
+  public swapFbo (): void {
     // Swap textures and framebuffers
     // Safety check: ensure resources exist and aren't destroyed before swapping
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed ||
