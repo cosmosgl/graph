@@ -35,7 +35,7 @@ For advanced use cases, you can provide your own Luma.gl Device.
 
 Apply a new [configuration](../?path=/docs/configuration--docs). Most changes take effect immediately.
 
-Some initialization-only options, such as `enableSimulation`, are applied only when the graph is created.
+Some initialization-only options, such as `initialZoomLevel`, `randomSeed`, and `attribution`, are applied only when the graph is created. `enableSimulation` can be changed at runtime.
 
 **Important:** Every call fully resets the configuration to defaults first, then applies the provided values on top. Properties not included in `config` will revert to their default values — they are **not** preserved from the previous call.
 
@@ -57,6 +57,8 @@ Partially update the [configuration](../?path=/docs/configuration--docs). Only t
 Unlike `setConfig()`, this method does **not** reset to defaults first — it only applies the properties you provide.
 
 Properties set to `undefined` will be reset to their default values.
+
+This includes `enableSimulation`, which can be toggled without recreating the graph instance.
 
 * **`config`** (GraphConfig): Configuration object with only the properties to update.
 
@@ -81,6 +83,8 @@ This method sets the positions of points in a cosmos.gl graph using the provided
   - `true`: Don't rescale the points.
   - `false` or `undefined` (default): Use the behavior defined by `config.rescalePositions`.
 
+On the next `render()`, points animate from their previous positions to the new ones using `transitionDuration` and `transitionEasing`. The first render after initialization always snaps (there is no prior state to animate from). See [Transitions](../?path=/docs/configuration--docs#transitions) in the configuration docs.
+
 **Example:**
 ```javascript
 graph.setPointPositions(new Float32Array([1, 2, 3, 4, 5, 6]));
@@ -98,6 +102,8 @@ This method sets the colors for points in a cosmos.gl graph.
     - **`a`**: Alpha value (0.0-1.0, where 0 is fully transparent and 1 is fully opaque)
 
 Each group of four values (`r`, `g`, `b`, `a`) represents the color of a single point in the graph. The order of the colors in the array corresponds to the order of the points in the graph's data.
+
+On the next `render()`, point colors animate from their previous values to the new ones using `transitionDuration` and `transitionEasing`. See [Transitions](../?path=/docs/configuration--docs#transitions) in the configuration docs.
 
 **Example:**
 
@@ -125,6 +131,8 @@ This method sets the sizes for the graph points.
 * **`pointSizes`** (Float32Array): A Float32Array representing the sizes of points in the format `[size1, size2, ..., sizeN]`, where each `size` value corresponds to the size of the point at the same index in the graph's data.
 
 Each size value in the array specifies the size of a point using the same order as the points in the graph data. 
+
+On the next `render()`, point sizes animate from their previous values to the new ones using `transitionDuration` and `transitionEasing`. See [Transitions](../?path=/docs/configuration--docs#transitions) in the configuration docs.
 
 **Example:**
 ```javascript
@@ -267,6 +275,8 @@ graph.render();
 
 In this example, the `linkColors` array contains three sets of four elements, each representing the RGBA color for a single link. The first set `[1, 0, 0, 1]` sets the first link to red, the second set `[0, 1, 0, 1]` sets the second link to green, and the third set `[0, 0, 1, 1]` sets the third link to blue.
 
+On the next `render()`, link colors animate from their previous values to the new ones using `transitionDuration` and `transitionEasing`. See [Transitions](../?path=/docs/configuration--docs#transitions) in the configuration docs.
+
 ### <a name="get_link_colors" href="#get_link_colors">#</a> graph.<b>getLinkColors</b>()
 
 This method retrieves the current colors of the graph links that were previously set using `setLinkColors`.
@@ -288,6 +298,8 @@ graph.render();
 ```
 
 In this example, the `linkWidths` array contains three numerical values. The first value `1` sets the width of the first link, the second value `2` sets the width of the second link, and the third value `3` sets the width of the third link.
+
+On the next `render()`, link widths animate from their previous values to the new ones using `transitionDuration` and `transitionEasing`. See [Transitions](../?path=/docs/configuration--docs#transitions) in the configuration docs.
 
 ### <a name="get_link_widths" href="#get_link_widths">#</a> graph.<b>getLinkWidths</b>()
 
@@ -385,6 +397,8 @@ The `render` method renders the graph and starts rendering. It does NOT modify s
   - If positive: Sets alpha to that value.
   - If `undefined`: Keeps current alpha value.
 
+**Transitions:** If any setter (`setPointPositions`, `setPointColors`, `setPointSizes`, `setLinkColors`, `setLinkWidths`) has queued changes and `transitionDuration > 0`, `render()` starts an animated transition. When the simulation is running, it auto-pauses for the duration of the transition (and `onSimulationPause` fires). The first render after initialization always snaps position changes — there is no prior state to animate from. See [Transitions](../?path=/docs/configuration--docs#transitions) in the configuration docs.
+
 ### <a name="zoom_to_point_by_index" href="#zoom_to_point_by_index">#</a> graph.<b>zoomToPointByIndex</b>(<i>index</i>, [<i>duration</i>], [<i>scale</i>], [<i>canZoomOut</i>], [<i>enableSimulation</i>])
 
 This method centers the view on the specified point (by its <i>index</i>) and zooms in with a given animation <i>duration</i> and <i>scale</i> value.
@@ -416,6 +430,8 @@ This method centers and zooms the view to fit all points within the scene.
 * **`enableSimulation`** (Boolean, optional): Whether to run the simulation during the zoom transition. Overrides the `enableSimulationDuringZoom` config for this call. Default is `true`.
 
 The `fitView` method is particularly useful when you want to ensure that all points in the graph are visible within the currently displayed viewport. By fitting the view to include all points, users can get a complete overview of the entire graph.
+
+**Note:** While a position transition is active, `fitView` frames the target positions (the latest `setPointPositions` argument), not the interpolated positions currently on screen. The same applies to `fitViewByPointIndices`.
 
 ### <a name="fit_view_by_point_indices" href="#fit_view_by_point_indices">#</a> graph.<b>fitViewByPointIndices</b>(<i>indices</i>, [<i>duration</i>], [<i>padding</i>], [<i>enableSimulation</i>])
 
@@ -609,6 +625,8 @@ Pauses the simulation. When paused, the simulation stops running but preserves i
 ### <a name="unpause" href="#unpause">#</a> graph.<b>unpause</b>()
 
 Unpauses (resumes) the simulation. This method resumes a paused simulation and continues its execution from where it was paused.
+
+If a transition is currently active when `unpause()` is called, the transition is ended as interrupted (`onTransitionEnd(true)` fires) and the simulation resumes from the current mid-animation positions.
 
 ### <a name="stop" href="#stop">#</a> graph.<b>stop</b>()
 
