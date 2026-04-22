@@ -27,7 +27,13 @@ export class Lines extends CoreModule {
   private pointABuffer: Buffer | undefined
   private pointBBuffer: Buffer | undefined
   private colorBuffer: Buffer | undefined
+  private sourceColorBuffer: Buffer | undefined
+  private targetColorBuffer: Buffer | undefined
+  private previousColorData: Float32Array | undefined
   private widthBuffer: Buffer | undefined
+  private sourceWidthBuffer: Buffer | undefined
+  private targetWidthBuffer: Buffer | undefined
+  private previousWidthData: Float32Array | undefined
   private arrowBuffer: Buffer | undefined
   private curveLineGeometry: number[][] | undefined
   private curveLineBuffer: Buffer | undefined
@@ -35,6 +41,9 @@ export class Lines extends CoreModule {
   private quadBuffer: Buffer | undefined
   private linkIndexTexture: Texture | undefined
   private hoveredLineIndexTexture: Texture | undefined
+  private transitionProgress = 1
+  private shouldAnimateLinkColors = false
+  private shouldAnimateLinkWidths = false
   private fillSampledLinksUniformStore: UniformStore<{
     fillSampledLinksUniforms: {
       pointsTextureSize: number;
@@ -73,6 +82,9 @@ export class Lines extends CoreModule {
       linkStatusTextureSize: number;
       focusedLinkIndex: number;
       focusedLinkWidthIncrease: number;
+      transitionProgress: number;
+      animateColors: number;
+      animateWidths: number;
     };
     drawLineFragmentUniforms: {
       renderMode: number;
@@ -167,6 +179,9 @@ export class Lines extends CoreModule {
           linkStatusTextureSize: 'f32',
           focusedLinkIndex: 'f32',
           focusedLinkWidthIncrease: 'f32',
+          transitionProgress: 'f32',
+          animateColors: 'f32',
+          animateWidths: 'f32',
         },
         defaultUniforms: {
           transformationMatrix: store.transformationMatrix4x4,
@@ -192,6 +207,9 @@ export class Lines extends CoreModule {
           linkStatusTextureSize: 0,
           focusedLinkIndex: config.focusedLinkIndex ?? -1,
           focusedLinkWidthIncrease: config.focusedLinkWidthIncrease,
+          transitionProgress: 1,
+          animateColors: 0,
+          animateWidths: 0,
         },
       },
       drawLineFragmentUniforms: {
@@ -214,8 +232,10 @@ export class Lines extends CoreModule {
         ...this.curveLineBuffer && { position: this.curveLineBuffer },
         ...this.pointABuffer && { pointA: this.pointABuffer },
         ...this.pointBBuffer && { pointB: this.pointBBuffer },
-        ...this.colorBuffer && { color: this.colorBuffer },
-        ...this.widthBuffer && { width: this.widthBuffer },
+        ...this.sourceColorBuffer && { sourceColor: this.sourceColorBuffer },
+        ...this.targetColorBuffer && { targetColor: this.targetColorBuffer },
+        ...this.sourceWidthBuffer && { sourceWidth: this.sourceWidthBuffer },
+        ...this.targetWidthBuffer && { targetWidth: this.targetWidthBuffer },
         ...this.arrowBuffer && { arrow: this.arrowBuffer },
         ...this.linkIndexBuffer && { linkIndices: this.linkIndexBuffer },
       },
@@ -223,8 +243,10 @@ export class Lines extends CoreModule {
         { name: 'position', format: 'float32x2' },
         { name: 'pointA', format: 'float32x2', stepMode: 'instance' },
         { name: 'pointB', format: 'float32x2', stepMode: 'instance' },
-        { name: 'color', format: 'float32x4', stepMode: 'instance' },
-        { name: 'width', format: 'float32', stepMode: 'instance' },
+        { name: 'sourceColor', format: 'float32x4', stepMode: 'instance' },
+        { name: 'targetColor', format: 'float32x4', stepMode: 'instance' },
+        { name: 'sourceWidth', format: 'float32', stepMode: 'instance' },
+        { name: 'targetWidth', format: 'float32', stepMode: 'instance' },
         { name: 'arrow', format: 'float32', stepMode: 'instance' },
         { name: 'linkIndices', format: 'float32', stepMode: 'instance' },
       ],
@@ -398,6 +420,9 @@ export class Lines extends CoreModule {
         linkStatusTextureSize: this.linkStatusTextureSize,
         focusedLinkIndex: config.focusedLinkIndex ?? -1,
         focusedLinkWidthIncrease: config.focusedLinkWidthIncrease,
+        transitionProgress: this.transitionProgress,
+        animateColors: this.shouldAnimateLinkColors ? 1 : 0,
+        animateWidths: this.shouldAnimateLinkWidths ? 1 : 0,
       },
       drawLineFragmentUniforms: {
         renderMode: 0.0, // Normal rendering
@@ -576,65 +601,49 @@ export class Lines extends CoreModule {
   }
 
   public updateColor (): void {
-    const { device, data } = this
+    const { data } = this
     const linksNumber = data.linksNumber ?? 0
     const colorData = data.linkColors ?? new Float32Array(linksNumber * 4).fill(0)
+    const { source, target, previous } = this.updateAttributeBuffers(
+      colorData,
+      this.sourceColorBuffer,
+      this.targetColorBuffer,
+      this.previousColorData,
+      4
+    )
+    this.sourceColorBuffer = source
+    this.targetColorBuffer = target
+    this.previousColorData = previous
+    this.colorBuffer = target
 
-    if (!this.colorBuffer) {
-      this.colorBuffer = device.createBuffer({
-        data: colorData,
-        usage: Buffer.VERTEX | Buffer.COPY_DST,
-      })
-    } else {
-      // Check if buffer needs to be resized
-      const currentSize = (this.colorBuffer.byteLength ?? 0) / (Float32Array.BYTES_PER_ELEMENT * 4)
-      if (currentSize !== linksNumber) {
-        if (this.colorBuffer && !this.colorBuffer.destroyed) {
-          this.colorBuffer.destroy()
-        }
-        this.colorBuffer = device.createBuffer({
-          data: colorData,
-          usage: Buffer.VERTEX | Buffer.COPY_DST,
-        })
-      } else {
-        this.colorBuffer.write(colorData)
-      }
-    }
     if (this.drawCurveCommand) {
       this.drawCurveCommand.setAttributes({
-        color: this.colorBuffer,
+        ...(this.sourceColorBuffer && { sourceColor: this.sourceColorBuffer }),
+        ...(this.targetColorBuffer && { targetColor: this.targetColorBuffer }),
       })
     }
   }
 
   public updateWidth (): void {
-    const { device, data } = this
+    const { data } = this
     const linksNumber = data.linksNumber ?? 0
     const widthData = data.linkWidths ?? new Float32Array(linksNumber).fill(0)
+    const { source, target, previous } = this.updateAttributeBuffers(
+      widthData,
+      this.sourceWidthBuffer,
+      this.targetWidthBuffer,
+      this.previousWidthData,
+      1
+    )
+    this.sourceWidthBuffer = source
+    this.targetWidthBuffer = target
+    this.previousWidthData = previous
+    this.widthBuffer = target
 
-    if (!this.widthBuffer) {
-      this.widthBuffer = device.createBuffer({
-        data: widthData,
-        usage: Buffer.VERTEX | Buffer.COPY_DST,
-      })
-    } else {
-      // Check if buffer needs to be resized
-      const currentSize = (this.widthBuffer.byteLength ?? 0) / Float32Array.BYTES_PER_ELEMENT
-      if (currentSize !== linksNumber) {
-        if (this.widthBuffer && !this.widthBuffer.destroyed) {
-          this.widthBuffer.destroy()
-        }
-        this.widthBuffer = device.createBuffer({
-          data: widthData,
-          usage: Buffer.VERTEX | Buffer.COPY_DST,
-        })
-      } else {
-        this.widthBuffer.write(widthData)
-      }
-    }
     if (this.drawCurveCommand) {
       this.drawCurveCommand.setAttributes({
-        width: this.widthBuffer,
+        ...(this.sourceWidthBuffer && { sourceWidth: this.sourceWidthBuffer }),
+        ...(this.targetWidthBuffer && { targetWidth: this.targetWidthBuffer }),
       })
     }
   }
@@ -902,6 +911,9 @@ export class Lines extends CoreModule {
         linkStatusTextureSize: this.linkStatusTextureSize,
         focusedLinkIndex: config.focusedLinkIndex ?? -1,
         focusedLinkWidthIncrease: config.focusedLinkWidthIncrease,
+        transitionProgress: this.transitionProgress,
+        animateColors: this.shouldAnimateLinkColors ? 1 : 0,
+        animateWidths: this.shouldAnimateLinkWidths ? 1 : 0,
       },
       drawLineFragmentUniforms: {
         renderMode: 1.0, // Index rendering for picking
@@ -945,6 +957,12 @@ export class Lines extends CoreModule {
       this.hoveredLineIndexCommand.draw(hoverPass)
       hoverPass.end()
     }
+  }
+
+  public setTransitionProgress (progress: number, animateColors = false, animateWidths = false): void {
+    this.transitionProgress = progress
+    this.shouldAnimateLinkColors = animateColors
+    this.shouldAnimateLinkWidths = animateWidths
   }
 
   /**
@@ -1009,10 +1027,28 @@ export class Lines extends CoreModule {
       this.colorBuffer.destroy()
     }
     this.colorBuffer = undefined
+    if (this.sourceColorBuffer && !this.sourceColorBuffer.destroyed) {
+      this.sourceColorBuffer.destroy()
+    }
+    this.sourceColorBuffer = undefined
+    if (this.targetColorBuffer && !this.targetColorBuffer.destroyed) {
+      this.targetColorBuffer.destroy()
+    }
+    this.targetColorBuffer = undefined
+    this.previousColorData = undefined
     if (this.widthBuffer && !this.widthBuffer.destroyed) {
       this.widthBuffer.destroy()
     }
     this.widthBuffer = undefined
+    if (this.sourceWidthBuffer && !this.sourceWidthBuffer.destroyed) {
+      this.sourceWidthBuffer.destroy()
+    }
+    this.sourceWidthBuffer = undefined
+    if (this.targetWidthBuffer && !this.targetWidthBuffer.destroyed) {
+      this.targetWidthBuffer.destroy()
+    }
+    this.targetWidthBuffer = undefined
+    this.previousWidthData = undefined
     if (this.arrowBuffer && !this.arrowBuffer.destroyed) {
       this.arrowBuffer.destroy()
     }
@@ -1045,5 +1081,59 @@ export class Lines extends CoreModule {
       data: new Float32Array(4).fill(0),
     })
     this.linkStatusTextureSize = 0
+  }
+
+  private updateAttributeBuffers (
+    targetData: Float32Array,
+    sourceBuffer: Buffer | undefined,
+    targetBuffer: Buffer | undefined,
+    previousData: Float32Array | undefined,
+    tupleSize: 1 | 4
+  ): { source: Buffer; target: Buffer; previous: Float32Array } {
+    const oldCount = previousData ? previousData.length / tupleSize : 0
+    const newCount = targetData.length / tupleSize
+    const sameCount = oldCount === newCount
+
+    // Reuse both buffers when the topology is unchanged so the old target becomes the next source.
+    if (sameCount &&
+        sourceBuffer && !sourceBuffer.destroyed &&
+        targetBuffer && !targetBuffer.destroyed) {
+      const nextSource = targetBuffer
+      const nextTarget = sourceBuffer
+      nextTarget.write(targetData)
+      return {
+        source: nextSource,
+        target: nextTarget,
+        previous: new Float32Array(targetData),
+      }
+    }
+
+    const sourceData = new Float32Array(targetData.length)
+    const sharedCount = Math.min(oldCount, newCount)
+    for (let i = 0; i < sharedCount * tupleSize; i += 1) {
+      sourceData[i] = previousData?.[i] ?? targetData[i] ?? 0
+    }
+    for (let i = sharedCount * tupleSize; i < targetData.length; i += 1) {
+      sourceData[i] = targetData[i] ?? 0
+    }
+
+    if (sourceBuffer && !sourceBuffer.destroyed) {
+      sourceBuffer.destroy()
+    }
+    if (targetBuffer && !targetBuffer.destroyed) {
+      targetBuffer.destroy()
+    }
+
+    return {
+      source: this.device.createBuffer({
+        data: sourceData,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+      }),
+      target: this.device.createBuffer({
+        data: targetData,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+      }),
+      previous: new Float32Array(targetData),
+    }
   }
 }

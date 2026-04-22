@@ -19,6 +19,7 @@ import { GraphData } from '@/graph/modules/GraphData'
 import { Lines } from '@/graph/modules/Lines'
 import { Points } from '@/graph/modules/Points'
 import { Store, ALPHA_MIN, MAX_HOVER_DETECTION_DELAY, MIN_MOUSE_MOVEMENT_THRESHOLD, type Hovered } from '@/graph/modules/Store'
+import { Transition, TransitionProperty } from '@/graph/modules/Transition'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
 
@@ -56,7 +57,8 @@ export class Graph {
   private forceMouse: ForceMouse | undefined
   private clusters: Clusters | undefined
   private zoomInstance = new Zoom(this.store, this.config)
-  private dragInstance = new Drag(this.store, this.config)
+  private transition = new Transition(this.config)
+  private dragInstance = new Drag(this.store, this.config, this.transition)
 
   private fpsMonitor: FPSMonitor | undefined
 
@@ -251,6 +253,7 @@ export class Graph {
       this.store.isSimulationRunning = this.config.enableSimulation
 
       this.points = new Points(device, this.config, this.store, this.graph)
+      this.points.transition = this.transition
       this.lines = new Lines(device, this.config, this.store, this.graph, this.points)
       if (this.config.enableSimulation) {
         this.forceGravity = new ForceGravity(device, this.config, this.store, this.graph, this.points)
@@ -372,6 +375,9 @@ export class Graph {
     this.graph.inputPointPositions = pointPositions
     this.points!.shouldSkipRescale = dontRescale
     this.isPointPositionsUpdateNeeded = true
+    if (this.points?.currentPositionTexture) {
+      this.transition.queue(TransitionProperty.Positions)
+    }
     // Links related texture depends on point positions, so we need to update it
     this.isLinksUpdateNeeded = true
     // Point related textures depend on point positions length, so we need to update them
@@ -399,6 +405,7 @@ export class Graph {
     if (this.ensureDevice(() => this.setPointColors(pointColors))) return
     this.graph.inputPointColors = pointColors
     this.isPointColorUpdateNeeded = true
+    this.transition.queue(TransitionProperty.PointColors)
   }
 
   /**
@@ -424,6 +431,7 @@ export class Graph {
     if (this.ensureDevice(() => this.setPointSizes(pointSizes))) return
     this.graph.inputPointSizes = pointSizes
     this.isPointSizeUpdateNeeded = true
+    this.transition.queue(TransitionProperty.PointSizes)
   }
 
   /**
@@ -529,6 +537,7 @@ export class Graph {
     if (this.ensureDevice(() => this.setLinkColors(linkColors))) return
     this.graph.inputLinkColors = linkColors
     this.isLinkColorUpdateNeeded = true
+    this.transition.queue(TransitionProperty.LinkColors)
   }
 
   /**
@@ -554,6 +563,7 @@ export class Graph {
     if (this.ensureDevice(() => this.setLinkWidths(linkWidths))) return
     this.graph.inputLinkWidths = linkWidths
     this.isLinkWidthUpdateNeeded = true
+    this.transition.queue(TransitionProperty.LinkWidths)
   }
 
   /**
@@ -717,6 +727,24 @@ export class Graph {
     }
     // Update graph and start frames
     this.update(simulationAlpha)
+
+    // Animated transitions (duration > 0) should not compete with live force updates.
+    // If a transition is pending, simulation is running, and this is not the first render
+    // after init, pause before the transition cycle starts. The first-render skip avoids
+    // treating the default transitionDuration as an intentional animation on load.
+    if (this.transition.isPending &&
+        this.store.isSimulationRunning &&
+        this.config.transitionDuration > 0 &&
+        !this._isFirstRenderAfterInit) {
+      this.store.isSimulationRunning = false
+      this.config.onSimulationPause?.()
+    }
+
+    if (this.transition.isPending && !this.points?.currentPositionTexture) {
+      this.transition.abort()
+    }
+
+    this.transition.start()
     // Re-detect hover on the next frame since data may have changed under a stationary mouse
     this._shouldForceHoverDetection = true
     this.startFrames()
@@ -852,8 +880,7 @@ export class Graph {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.fitView(duration, padding, enableSimulation))) return
-
-    this.setZoomTransformByPointPositions(new Float32Array(this.getPointPositions()), duration, undefined, padding, enableSimulation)
+    this.setZoomTransformByPointPositions(this.getFitViewPositions(), duration, undefined, padding, enableSimulation)
   }
 
   /**
@@ -867,7 +894,7 @@ export class Graph {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.fitViewByPointIndices(indices, duration, padding, enableSimulation))) return
-    const positionsArray = this.getPointPositions()
+    const positionsArray = this.getFitViewPositions()
     const positions = new Float32Array(indices.length * 2)
     for (const [i, index] of indices.entries()) {
       positions[i * 2] = positionsArray[index * 2] as number
@@ -1145,9 +1172,11 @@ export class Graph {
 
     if (this.ensureDevice(() => this.start(alpha))) return
 
+    if (!this.config.enableSimulation) return
     if (!this.graph.pointsNumber) return
+    if (this.store.isSimulationRunning) return
 
-    // Always set simulation as running when start() is called
+    // Ignore repeated start() calls while simulation is already running.
     this.store.isSimulationRunning = true
     this.store.simulationProgress = 0
     this.store.alpha = alpha
@@ -1162,10 +1191,11 @@ export class Graph {
    */
   public stop (): void {
     if (this._isDestroyed) return
+    const wasSimulationActive = this.store.isSimulationRunning || this.store.alpha > 0 || this.store.simulationProgress > 0
     this.store.isSimulationRunning = false
     this.store.simulationProgress = 0
     this.store.alpha = 0
-    this.config.onSimulationEnd?.()
+    if (wasSimulationActive) this.config.onSimulationEnd?.()
   }
 
   /**
@@ -1176,6 +1206,7 @@ export class Graph {
   public pause (): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.pause())) return
+    if (!this.store.isSimulationRunning) return
     this.store.isSimulationRunning = false
     this.config.onSimulationPause?.()
   }
@@ -1187,6 +1218,11 @@ export class Graph {
   public unpause (): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.unpause())) return
+    if (!this.config.enableSimulation) return
+    if (this.store.isSimulationRunning) return
+    if (this.transition.isActive) {
+      this.transition.end(true)
+    }
     this.store.isSimulationRunning = true
     this.config.onSimulationUnpause?.()
   }
@@ -1214,6 +1250,7 @@ export class Graph {
     if (this._isDestroyed) return
     this._isDestroyed = true
     this.isReady = false
+    this.transition.abort()
     window.clearTimeout(this._fitViewOnInitTimeoutID)
     this.stopFrames()
 
@@ -1361,14 +1398,26 @@ export class Graph {
   }
 
   /**
-   * Restores init-only fields (`enableSimulation`, `initialZoomLevel`, `randomSeed`, `attribution`)
+   * Restores init-only fields (`initialZoomLevel`, `randomSeed`, `attribution`)
    * to their pre-update values, preventing runtime changes via setConfig/setConfigPartial.
    */
   private preserveInitOnlyFields (prevConfig: GraphConfigInterface): void {
-    this.config.enableSimulation = prevConfig.enableSimulation
     this.config.initialZoomLevel = prevConfig.initialZoomLevel
     this.config.randomSeed = prevConfig.randomSeed
     this.config.attribution = prevConfig.attribution
+  }
+
+  private getFitViewPositions (): Float32Array {
+    const useTargetPositions =
+      this.transition.isActive &&
+      this.transition.isActiveFor(TransitionProperty.Positions) &&
+      !!this.graph.pointPositions
+
+    if (useTargetPositions && this.graph.pointPositions) {
+      return new Float32Array(this.graph.pointPositions)
+    }
+
+    return new Float32Array(this.getPointPositions())
   }
 
   /**
@@ -1376,6 +1425,8 @@ export class Graph {
    * applies any necessary side effects (updating renderers, store, behaviors, etc.).
    */
   private updateStateFromConfig (prevConfig: GraphConfigInterface): void {
+    this.applyEnableSimulationConfigChange(prevConfig)
+
     if (prevConfig.pointDefaultColor !== this.config.pointDefaultColor) {
       this.graph.updatePointColor()
       this.points?.updateColor()
@@ -1471,6 +1522,38 @@ export class Graph {
         prevConfig.onLinkMouseOut !== this.config.onLinkMouseOut) {
       this.store.updateLinkHoveringEnabled(this.config)
     }
+  }
+
+  /**
+   * Applies `enableSimulation` lifecycle changes triggered by config updates.
+   */
+  private applyEnableSimulationConfigChange (prevConfig: GraphConfigInterface): void {
+    if (prevConfig.enableSimulation === this.config.enableSimulation) return
+
+    if (this.config.enableSimulation) {
+      this.transition.end(true)
+      this.ensureSimulationModules()
+      this.points?.ensureSimulationResources()
+      this.isForceManyBodyUpdateNeeded = true
+      this.isForceLinkUpdateNeeded = true
+      this.isForceCenterUpdateNeeded = true
+      // Rebuild simulation resources before binding programs to them.
+      this.create()
+      this.initPrograms()
+      this.store.simulationProgress = 0
+      this.store.alpha = 1
+      this.store.isSimulationRunning = true
+      this._shouldForceHoverDetection = true
+      this.config.onSimulationStart?.()
+      return
+    }
+
+    this.store.isSimulationRunning = false
+    this.store.alpha = 0
+    this.store.simulationProgress = 0
+    this._shouldForceHoverDetection = true
+    this.config.onSimulationEnd?.()
+    this.destroySimulationModules()
   }
 
   /**
@@ -1643,6 +1726,33 @@ export class Graph {
     this.clusters.initPrograms()
   }
 
+  private ensureSimulationModules (): void {
+    if (!this.device || !this.points) return
+
+    this.forceGravity ||= new ForceGravity(this.device, this.config, this.store, this.graph, this.points)
+    this.forceCenter ||= new ForceCenter(this.device, this.config, this.store, this.graph, this.points)
+    this.forceManyBody ||= new ForceManyBody(this.device, this.config, this.store, this.graph, this.points)
+    this.forceLinkIncoming ||= new ForceLink(this.device, this.config, this.store, this.graph, this.points)
+    this.forceLinkOutgoing ||= new ForceLink(this.device, this.config, this.store, this.graph, this.points)
+    this.forceMouse ||= new ForceMouse(this.device, this.config, this.store, this.graph, this.points)
+  }
+
+  private destroySimulationModules (): void {
+    this.forceGravity?.destroy()
+    this.forceGravity = undefined
+    this.forceCenter?.destroy()
+    this.forceCenter = undefined
+    this.forceManyBody?.destroy()
+    this.forceManyBody = undefined
+    this.forceLinkIncoming?.destroy()
+    this.forceLinkIncoming = undefined
+    this.forceLinkOutgoing?.destroy()
+    this.forceLinkOutgoing = undefined
+    this.forceMouse?.destroy()
+    this.forceMouse = undefined
+    this.points?.destroySimulationResources()
+  }
+
   /**
    * The rendering loop - schedules itself to run continuously
    */
@@ -1674,8 +1784,26 @@ export class Graph {
     if (this._isDestroyed) return
     if (!this.store.pointsTextureSize) return
 
+    const frameNow = now ?? performance.now()
     this.fpsMonitor?.begin()
     this.resizeCanvas()
+
+    const shouldInterpolatePositions = this.transition.isActiveFor(TransitionProperty.Positions)
+    const shouldAnimatePointColors = this.transition.isActiveFor(TransitionProperty.PointColors)
+    const shouldAnimatePointSizes = this.transition.isActiveFor(TransitionProperty.PointSizes)
+    const shouldAnimateLinkColors = this.transition.isActiveFor(TransitionProperty.LinkColors)
+    const shouldAnimateLinkWidths = this.transition.isActiveFor(TransitionProperty.LinkWidths)
+    if (this.transition.isActive) {
+      this.transition.step(frameNow)
+
+      if (shouldInterpolatePositions) {
+        this.points?.interpolatePosition(this.transition.progress)
+      }
+    }
+
+    this.points?.setTransitionProgress(this.transition.progress, shouldAnimatePointColors, shouldAnimatePointSizes)
+    this.lines?.setTransitionProgress(this.transition.progress, shouldAnimateLinkColors, shouldAnimateLinkWidths)
+
     if (!this.dragInstance.isActive) {
       this.findHoveredItem()
     }
@@ -1722,7 +1850,7 @@ export class Graph {
       this.device.submit()
     }
 
-    this.fpsMonitor?.end(now ?? performance.now())
+    this.fpsMonitor?.end(frameNow)
 
     this.currentEvent = undefined
   }
@@ -2026,6 +2154,7 @@ export class Graph {
 
 export type { GraphConfig } from './config'
 export { PointShape } from './modules/GraphData'
+export { TransitionEasing } from './modules/Transition'
 
 export * from './variables'
 export * from './helper'

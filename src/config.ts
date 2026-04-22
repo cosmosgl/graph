@@ -4,15 +4,42 @@ import { D3DragEvent } from 'd3-drag'
 import { type Hovered } from '@/graph/modules/Store'
 import { defaultConfigValues } from '@/graph/variables'
 import { PointShape } from '@/graph/modules/GraphData'
+import { type TransitionEasing } from '@/graph/modules/Transition'
 
 export interface GraphConfigInterface {
   /**
    * If set to `false`, the simulation will not run.
-   * This property will be applied only on component initialization and it
-   * can't be changed using the `setConfig` or `setConfigPartial` methods.
+   * Can be toggled at runtime using `setConfig` or `setConfigPartial`.
    * Default value: `true`
    */
   enableSimulation: boolean;
+  /**
+   * Transition duration in milliseconds.
+   * Default value: `800`
+   */
+  transitionDuration: number;
+  /**
+   * Easing curve for transitions.
+   * Default value: `TransitionEasing.CubicInOut`
+   */
+  transitionEasing: TransitionEasing | `${TransitionEasing}`;
+  /**
+   * Callback function that will be called when a transition starts.
+   * Default value: `undefined`
+   */
+  onTransitionStart?: () => void;
+  /**
+   * Callback function that will be called on every transition frame.
+   * The `progress` value ranges from 0 to 1.
+   * Default value: `undefined`
+   */
+  onTransition?: (progress: number) => void;
+  /**
+   * Callback function that will be called when a transition ends.
+   * `interrupted` is `true` when a transition was replaced or aborted before completion.
+   * Default value: `undefined`
+   */
+  onTransitionEnd?: (interrupted: boolean) => void;
   /**
    * Canvas background color.
    * Can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values.
