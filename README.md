@@ -88,7 +88,10 @@ cosmos.gl v3.0 brings a new rendering engine, async initialization, and several 
 - **Config-driven highlighting** — imperative selection methods replaced by `highlightedPointIndices`, `highlightedLinkIndices`, and `outlinedPointIndices` config properties. Points and links are highlighted independently. Focused points are rendered with rings via `focusedPointIndex`; focused links are rendered wider via `focusedLinkIndex`. New `findPointsInRect()`, `findPointsInPolygon()`, `getNeighboringPointIndices()`, `getConnectedLinkIndices()`, and `getConnectedPointIndices()` methods.
 - **Hover improvements** — `onPointMouseOver` now includes `isHighlighted` and `isOutlined` parameters; hover correctly highlights the topmost point when points overlap.
 - **Config API changes** — `setConfig()` now resets all values to defaults before applying; use the new `setConfigPartial()` to update individual properties without resetting the rest.
-- **Init-only config fields** — `enableSimulation`, `initialZoomLevel`, `randomSeed`, and `attribution` can only be set during initialization and are preserved across config updates.
+- **Init-only config fields** — `initialZoomLevel`, `randomSeed`, and `attribution` can only be set during initialization and are preserved across config updates.
+- **Runtime simulation toggle** — `enableSimulation` can now be changed at runtime via `setConfig()` or `setConfigPartial()`.
+- **GPU transitions** — point positions, point colors/sizes, and link colors/widths now animate by default (`transitionDuration: 800`, `transitionEasing: TransitionEasing.CubicInOut`). Use `transitionDuration: 0` to keep snap updates.
+- **Transition callbacks** — use `onTransitionStart`, `onTransition`, and `onTransitionEnd` to track transition lifecycle and progress.
 - **Default point shape** — new `pointDefaultShape` config property lets you set the fallback shape for all points when no per-point shapes are provided. Accepts a `PointShape` enum value (e.g., `PointShape.Star`), a plain number (e.g., `6`), or a numeric string (e.g., `"6"`).
 - **Exported defaults** — `defaultConfigValues` is now part of the public API.
 - **Optimized hover detection** — skips GPU work when the mouse hasn't moved.
