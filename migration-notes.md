@@ -176,10 +176,37 @@ const config: GraphConfig = { /* ... */ }
 
 The following config properties can only be set during initialization (via `new Graph(div, config)`) and are ignored by `setConfig()` and `setConfigPartial()`:
 
-- `enableSimulation`
 - `initialZoomLevel`
 - `randomSeed`
 - `attribution`
+
+`enableSimulation` is runtime-switchable in v3 and can be changed via `setConfig()` and `setConfigPartial()`.
+
+#### Transitions Enabled by Default
+
+`transitionDuration` is a new config property in v3, and its default is `800`. Because of that, after the first render, updates such as `setPointPositions(...); render()` animate instead of snapping immediately.
+
+To preserve snap behavior from earlier versions, set:
+
+```ts
+const graph = new Graph(div, {
+  transitionDuration: 0,
+})
+```
+
+Or disable transitions for a single update cycle:
+
+```ts
+graph.setConfigPartial({ transitionDuration: 0 })
+graph.setPointPositions(nextPositions)
+graph.render()
+graph.setConfigPartial({ transitionDuration: 800 })
+```
+
+You can track transition lifecycle via:
+- `onTransitionStart`
+- `onTransition` (eased progress in `[0, 1]`)
+- `onTransitionEnd` (`interrupted: boolean`)
 
 #### Simulation and Rendering Are Now Separate
 
