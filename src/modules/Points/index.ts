@@ -16,6 +16,7 @@ import findHoveredPointVert from '@/graph/modules/Points/find-hovered-point.vert
 import fillGridWithSampledPointsFrag from '@/graph/modules/Points/fill-sampled-points.frag?raw'
 import fillGridWithSampledPointsVert from '@/graph/modules/Points/fill-sampled-points.vert?raw'
 import updatePositionFrag from '@/graph/modules/Points/update-position.frag?raw'
+import interpolatePositionFrag from '@/graph/modules/Points/interpolate-position.frag?raw'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import trackPositionsFrag from '@/graph/modules/Points/track-positions.frag?raw'
@@ -24,10 +25,15 @@ import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 import { readPixels } from '@/graph/helper'
 import { ensureVec2, ensureVec4 } from '@/graph/modules/Shared/uniform-utils'
 import { createAtlasDataFromImageData } from '@/graph/modules/Points/atlas-utils'
+import { buildPositionTextureData, buildSourcePositionTextureData } from '@/graph/modules/Points/position-utils'
+import { Transition } from '@/graph/modules/Transition'
 
 export class Points extends CoreModule {
+  public transition: Transition | undefined
   public currentPositionFbo: Framebuffer | undefined
   public previousPositionFbo: Framebuffer | undefined
+  public sourcePositionFbo: Framebuffer | undefined
+  public targetPositionFbo: Framebuffer | undefined
   public velocityFbo: Framebuffer | undefined
   public searchFbo: Framebuffer | undefined
   public hoveredFbo: Framebuffer | undefined
@@ -41,6 +47,8 @@ export class Points extends CoreModule {
   public previousPositionTexture: Texture | undefined
   public velocityTexture: Texture | undefined
   public pointStatusTexture: Texture | undefined
+  public sourcePositionTexture: Texture | undefined
+  public targetPositionTexture: Texture | undefined
   /**
    * Whether the cached cluster centroid positions are still valid.
    * Set to `false` in `swapFbo()` whenever GPU point positions change (simulation tick or drag).
@@ -49,7 +57,13 @@ export class Points extends CoreModule {
    */
   public areClusterCentroidsUpToDate = false
   private colorBuffer: Buffer | undefined
+  private sourceColorBuffer: Buffer | undefined
+  private targetColorBuffer: Buffer | undefined
+  private previousColorData: Float32Array | undefined
   private sizeBuffer: Buffer | undefined
+  private sourceSizeBuffer: Buffer | undefined
+  private targetSizeBuffer: Buffer | undefined
+  private previousSizeData: Float32Array | undefined
   private shapeBuffer: Buffer | undefined
   private imageIndicesBuffer: Buffer | undefined
   private imageSizesBuffer: Buffer | undefined
@@ -62,6 +76,7 @@ export class Points extends CoreModule {
   private drawCommand: Model | undefined
   private drawHighlightedCommand: Model | undefined
   private updatePositionCommand: Model | undefined
+  private interpolatePositionCommand: Model | undefined
   private dragPointCommand: Model | undefined
   private findPointsInRectCommand: Model | undefined
   private findPointsInPolygonCommand: Model | undefined
@@ -70,6 +85,7 @@ export class Points extends CoreModule {
   private trackPointsCommand: Model | undefined
   // Vertex buffers for quad rendering (Model doesn't destroy them automatically)
   private updatePositionVertexCoordBuffer: Buffer | undefined
+  private interpolatePositionVertexCoordBuffer: Buffer | undefined
   private dragPointVertexCoordBuffer: Buffer | undefined
   private findPointsInRectVertexCoordBuffer: Buffer | undefined
   private findPointsInPolygonVertexCoordBuffer: Buffer | undefined
@@ -85,12 +101,21 @@ export class Points extends CoreModule {
   private drawPointIndices: Buffer | undefined
   private hoveredPointIndices: Buffer | undefined
   private sampledPointIndices: Buffer | undefined
+  private transitionProgress = 1
+  private shouldAnimatePointColors = false
+  private shouldAnimatePointSizes = false
 
   // Uniform stores for scalar uniforms
   private updatePositionUniformStore: UniformStore<{
     updatePositionUniforms: {
       friction: number;
       spaceSize: number;
+    };
+  }> | undefined
+
+  private interpolatePositionUniformStore: UniformStore<{
+    interpolatePositionUniforms: {
+      progress: number;
     };
   }> | undefined
 
@@ -119,6 +144,9 @@ export class Points extends CoreModule {
       hasImages: number;
       imageCount: number;
       imageAtlasCoordsTextureSize: number;
+      transitionProgress: number;
+      animateColors: number;
+      animateSizes: number;
     };
     drawFragmentUniforms: {
       greyoutOpacity: number;
@@ -205,28 +233,11 @@ export class Points extends CoreModule {
     };
   }> | undefined
 
-  public updatePositions (): void {
+  public updatePositions (): boolean {
     const { device, store, data, config: { rescalePositions, enableSimulation } } = this
 
     const { pointsTextureSize } = store
-    if (!pointsTextureSize || !data.pointPositions || data.pointsNumber === undefined) return
-
-    // Create initial state array with exact size needed for RGBA32Float texture
-    // Ensure it's a new contiguous buffer (not a view) with the exact size
-    const textureDataSize = pointsTextureSize * pointsTextureSize * 4
-    const initialState = new Float32Array(textureDataSize)
-
-    const expectedBytes = pointsTextureSize * pointsTextureSize * 4 * 4 // width * height * 4 components * 4 bytes
-    const actualBytes = initialState.byteLength
-    if (actualBytes !== expectedBytes) {
-      console.error('Texture data size mismatch:', {
-        pointsTextureSize,
-        expectedBytes,
-        actualBytes,
-        textureDataSize,
-        dataLength: initialState.length,
-      })
-    }
+    if (!pointsTextureSize || !data.pointPositions || data.pointsNumber === undefined) return false
 
     let shouldRescale = rescalePositions
     // If rescalePositions isn't specified in config and simulation is disabled, default to true
@@ -247,40 +258,19 @@ export class Points extends CoreModule {
     // Reset temporary flag
     this.shouldSkipRescale = undefined
 
-    for (let i = 0; i < data.pointsNumber; ++i) {
-      initialState[i * 4 + 0] = data.pointPositions[i * 2 + 0] as number
-      initialState[i * 4 + 1] = data.pointPositions[i * 2 + 1] as number
-      initialState[i * 4 + 2] = i
-    }
+    const sourceCount = data.sourcePointsNumber
+    const targetCount = data.targetPointsNumber
+    const sameCount = sourceCount === targetCount
+    const shouldAnimate =
+      this.transition?.isPending === true &&
+      this.config.transitionDuration > 0 &&
+      !!this.currentPositionTexture
 
-    // Create currentPositionTexture and framebuffer
-    if (!this.currentPositionTexture || this.currentPositionTexture.width !== pointsTextureSize || this.currentPositionTexture.height !== pointsTextureSize) {
-      if (this.currentPositionTexture && !this.currentPositionTexture.destroyed) {
-        this.currentPositionTexture.destroy()
-      }
-      if (this.currentPositionFbo && !this.currentPositionFbo.destroyed) {
-        this.currentPositionFbo.destroy()
-      }
-      this.currentPositionTexture = device.createTexture({
-        width: pointsTextureSize,
-        height: pointsTextureSize,
-        format: 'rgba32float',
-      })
-      this.currentPositionTexture.copyImageData({
-        data: initialState,
-        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
-      })
-      this.currentPositionFbo = device.createFramebuffer({
-        width: pointsTextureSize,
-        height: pointsTextureSize,
-        colorAttachments: [this.currentPositionTexture],
-      })
-    } else {
-      this.currentPositionTexture.copyImageData({
-        data: initialState,
+    const targetState = buildPositionTextureData(data.pointPositions, pointsTextureSize, targetCount)
+
+    const writePositionTexture = (tex: Texture, positionData: Float32Array): void => {
+      tex.copyImageData({
+        data: positionData,
         bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
         mipLevel: 0,
         x: 0,
@@ -288,80 +278,46 @@ export class Points extends CoreModule {
       })
     }
 
-    // Create previousPositionTexture and framebuffer
-    if (!this.previousPositionTexture ||
-        this.previousPositionTexture.width !== pointsTextureSize ||
-        this.previousPositionTexture.height !== pointsTextureSize) {
-      if (this.previousPositionTexture && !this.previousPositionTexture.destroyed) {
-        this.previousPositionTexture.destroy()
-      }
-      if (this.previousPositionFbo && !this.previousPositionFbo.destroyed) {
-        this.previousPositionFbo.destroy()
-      }
-      this.previousPositionTexture = device.createTexture({
-        width: pointsTextureSize,
-        height: pointsTextureSize,
-        format: 'rgba32float',
-      })
-      this.previousPositionTexture.copyImageData({
-        data: initialState,
-        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
-      })
-      this.previousPositionFbo = device.createFramebuffer({
-        width: pointsTextureSize,
-        height: pointsTextureSize,
-        colorAttachments: [this.previousPositionTexture],
-      })
-    } else {
-      this.previousPositionTexture.copyImageData({
-        data: initialState,
-        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
-      })
-    }
-
-    if (this.config.enableSimulation) {
-      // Create velocityTexture and framebuffer
-      const velocityData = new Float32Array(pointsTextureSize * pointsTextureSize * 4).fill(0)
-      if (!this.velocityTexture || this.velocityTexture.width !== pointsTextureSize || this.velocityTexture.height !== pointsTextureSize) {
-        if (this.velocityTexture && !this.velocityTexture.destroyed) {
-          this.velocityTexture.destroy()
+    // Populate source/target position textures for the transition:
+    //   - same count: GPU-to-GPU copy of current → source (no CPU transfer).
+    //   - count changed: CPU readback of current, carry over shared indices,
+    //     fill new indices from target.
+    //   - no prior frame (first render): source = target (nothing to animate from).
+    if (shouldAnimate) {
+      this.createTransitionResources()
+      if (this.sourcePositionTexture && this.targetPositionTexture) {
+        if (sameCount) {
+          const currentPositionTexture = this.currentPositionTexture
+          if (currentPositionTexture && !currentPositionTexture.destroyed) {
+            const commandEncoder = this.device.createCommandEncoder()
+            commandEncoder.copyTextureToTexture({
+              sourceTexture: currentPositionTexture,
+              destinationTexture: this.sourcePositionTexture,
+              width: pointsTextureSize,
+              height: pointsTextureSize,
+            })
+            this.device.submit(commandEncoder.finish())
+          }
+        } else if (this.currentPositionFbo) {
+          const previousPositionPixels = readPixels(device, this.currentPositionFbo as Framebuffer)
+          const sourceData = buildSourcePositionTextureData(
+            previousPositionPixels,
+            targetState,
+            Math.min(sourceCount, targetCount),
+            targetCount,
+            pointsTextureSize
+          )
+          writePositionTexture(this.sourcePositionTexture, sourceData)
+        } else {
+          writePositionTexture(this.sourcePositionTexture, targetState)
         }
-        if (this.velocityFbo && !this.velocityFbo.destroyed) {
-          this.velocityFbo.destroy()
-        }
-        this.velocityTexture = device.createTexture({
-          width: pointsTextureSize,
-          height: pointsTextureSize,
-          format: 'rgba32float',
-        })
-        this.velocityTexture.copyImageData({
-          data: velocityData,
-          bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
-          mipLevel: 0,
-          x: 0,
-          y: 0,
-        })
-        this.velocityFbo = device.createFramebuffer({
-          width: pointsTextureSize,
-          height: pointsTextureSize,
-          colorAttachments: [this.velocityTexture],
-        })
-      } else {
-        this.velocityTexture.copyImageData({
-          data: velocityData,
-          bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
-          mipLevel: 0,
-          x: 0,
-          y: 0,
-        })
+
+        writePositionTexture(this.targetPositionTexture, targetState)
       }
     }
+
+    this.createOrUpdatePositionTextures(targetState, pointsTextureSize)
+    if (this.config.enableSimulation) this.ensureSimulationResources()
 
     // Create searchTexture and framebuffer
     if (!this.searchTexture || this.searchTexture.width !== pointsTextureSize || this.searchTexture.height !== pointsTextureSize) {
@@ -377,7 +333,7 @@ export class Points extends CoreModule {
         format: 'rgba32float',
       })
       this.searchTexture.copyImageData({
-        data: initialState,
+        data: targetState,
         bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
         mipLevel: 0,
         x: 0,
@@ -390,7 +346,7 @@ export class Points extends CoreModule {
       })
     } else {
       this.searchTexture.copyImageData({
-        data: initialState,
+        data: targetState,
         bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
         mipLevel: 0,
         x: 0,
@@ -461,6 +417,7 @@ export class Points extends CoreModule {
     this.updateSampledPointsGrid()
 
     this.trackPointsByIndices()
+    return shouldAnimate
   }
 
   public initPrograms (): void {
@@ -476,49 +433,7 @@ export class Points extends CoreModule {
     if (!this.imageIndicesBuffer) this.updateImageIndices()
     if (!this.imageSizesBuffer) this.updateImageSizes()
     if (!this.pointStatusTexture) this.updatePointStatus()
-    if (config.enableSimulation) {
-      // Create vertex buffer for quad
-      this.updatePositionVertexCoordBuffer ||= device.createBuffer({
-        data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-      })
-
-      // Create UniformStore for updatePosition uniforms
-      this.updatePositionUniformStore ||= new UniformStore({
-        updatePositionUniforms: {
-          uniformTypes: {
-            // Order MUST match shader declaration order (std140 layout)
-            friction: 'f32',
-            spaceSize: 'f32',
-          },
-          defaultUniforms: {
-            friction: config.simulationFriction,
-            spaceSize: store.adjustedSpaceSize,
-          },
-        },
-      })
-
-      this.updatePositionCommand ||= new Model(device, {
-        fs: updatePositionFrag,
-        vs: updateVert,
-        topology: 'triangle-strip',
-        vertexCount: 4,
-        attributes: {
-          vertexCoord: this.updatePositionVertexCoordBuffer,
-        },
-        bufferLayout: [
-          { name: 'vertexCoord', format: 'float32x2' },
-        ],
-        defines: {
-          USE_UNIFORM_BUFFERS: true,
-        },
-        bindings: {
-          // Create uniform buffer binding
-          // Update it later by calling uniformStore.setUniforms()
-          updatePositionUniforms: this.updatePositionUniformStore.getManagedUniformBuffer(device, 'updatePositionUniforms'),
-          // All texture bindings will be set dynamically in updatePosition() method
-        },
-      })
-    }
+    if (config.enableSimulation) this.ensureUpdatePositionProgram()
 
     // Create vertex buffer for quad
     this.dragPointVertexCoordBuffer ||= device.createBuffer({
@@ -583,6 +498,9 @@ export class Points extends CoreModule {
           hasImages: 'f32',
           imageCount: 'f32',
           imageAtlasCoordsTextureSize: 'f32',
+          transitionProgress: 'f32',
+          animateColors: 'f32',
+          animateSizes: 'f32',
         },
         defaultUniforms: {
           // Order MUST match uniformTypes and shader declaration
@@ -610,6 +528,9 @@ export class Points extends CoreModule {
           hasImages: (this.imageCount > 0) ? 1 : 0, // Convert boolean to float
           imageCount: this.imageCount,
           imageAtlasCoordsTextureSize: this.imageAtlasCoordsTextureSize ?? 0,
+          transitionProgress: 1,
+          animateColors: 0,
+          animateSizes: 0,
         },
       },
       drawFragmentUniforms: {
@@ -640,16 +561,20 @@ export class Points extends CoreModule {
       vertexCount: data.pointsNumber ?? 0,
       attributes: {
         ...(this.drawPointIndices && { pointIndices: this.drawPointIndices }),
-        ...(this.sizeBuffer && { size: this.sizeBuffer }),
-        ...(this.colorBuffer && { color: this.colorBuffer }),
+        ...(this.sourceSizeBuffer && { sourceSize: this.sourceSizeBuffer }),
+        ...(this.targetSizeBuffer && { targetSize: this.targetSizeBuffer }),
+        ...(this.sourceColorBuffer && { sourceColor: this.sourceColorBuffer }),
+        ...(this.targetColorBuffer && { targetColor: this.targetColorBuffer }),
         ...(this.shapeBuffer && { shape: this.shapeBuffer }),
         ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
         ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
       },
       bufferLayout: [
         { name: 'pointIndices', format: 'float32x2' },
-        { name: 'size', format: 'float32' },
-        { name: 'color', format: 'float32x4' },
+        { name: 'sourceSize', format: 'float32' },
+        { name: 'targetSize', format: 'float32' },
+        { name: 'sourceColor', format: 'float32x4' },
+        { name: 'targetColor', format: 'float32x4' },
         { name: 'shape', format: 'float32' },
         { name: 'imageIndex', format: 'float32' },
         { name: 'imageSize', format: 'float32' },
@@ -1013,26 +938,26 @@ export class Points extends CoreModule {
   }
 
   public updateColor (): void {
-    const { device, store: { pointsTextureSize }, data } = this
+    const { store: { pointsTextureSize }, data } = this
     if (!pointsTextureSize) return
 
-    const colorData = data.pointColors as Float32Array
-    const requiredByteLength = colorData.byteLength
+    const colorData = data.pointColors ?? new Float32Array((data.pointsNumber ?? 0) * 4).fill(0)
+    const { source, target, previous } = this.updateAttributeBuffers(
+      colorData,
+      this.sourceColorBuffer,
+      this.targetColorBuffer,
+      this.previousColorData,
+      4
+    )
+    this.sourceColorBuffer = source
+    this.targetColorBuffer = target
+    this.previousColorData = previous
+    this.colorBuffer = target
 
-    if (!this.colorBuffer || this.colorBuffer.byteLength !== requiredByteLength) {
-      if (this.colorBuffer && !this.colorBuffer.destroyed) {
-        this.colorBuffer.destroy()
-      }
-      this.colorBuffer = device.createBuffer({
-        data: colorData,
-        usage: Buffer.VERTEX | Buffer.COPY_DST,
-      })
-    } else {
-      this.colorBuffer.write(colorData)
-    }
     if (this.drawCommand) {
       this.drawCommand.setAttributes({
-        color: this.colorBuffer,
+        ...(this.sourceColorBuffer && { sourceColor: this.sourceColorBuffer }),
+        ...(this.targetColorBuffer && { targetColor: this.targetColorBuffer }),
       })
     }
   }
@@ -1133,31 +1058,31 @@ export class Points extends CoreModule {
 
   public updateSize (): void {
     const { device, store: { pointsTextureSize }, data } = this
-    if (!pointsTextureSize || data.pointsNumber === undefined || data.pointSizes === undefined) return
+    if (!pointsTextureSize || data.pointsNumber === undefined) return
 
-    const sizeData = data.pointSizes
-    const requiredByteLength = sizeData.byteLength
+    const sizeData = data.pointSizes ?? new Float32Array(data.pointsNumber).fill(0)
+    const { source, target, previous } = this.updateAttributeBuffers(
+      sizeData,
+      this.sourceSizeBuffer,
+      this.targetSizeBuffer,
+      this.previousSizeData,
+      1
+    )
+    this.sourceSizeBuffer = source
+    this.targetSizeBuffer = target
+    this.previousSizeData = previous
+    this.sizeBuffer = target
 
-    if (!this.sizeBuffer || this.sizeBuffer.byteLength !== requiredByteLength) {
-      if (this.sizeBuffer && !this.sizeBuffer.destroyed) {
-        this.sizeBuffer.destroy()
-      }
-      this.sizeBuffer = device.createBuffer({
-        data: sizeData,
-        usage: Buffer.VERTEX | Buffer.COPY_DST,
-      })
-    } else {
-      this.sizeBuffer.write(sizeData)
-    }
     if (this.drawCommand) {
       this.drawCommand.setAttributes({
-        size: this.sizeBuffer,
+        ...(this.sourceSizeBuffer && { sourceSize: this.sourceSizeBuffer }),
+        ...(this.targetSizeBuffer && { targetSize: this.targetSizeBuffer }),
       })
     }
 
     const initialState = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
     for (let i = 0; i < data.pointsNumber; i++) {
-      const shapeSize = data.pointSizes[i] as number
+      const shapeSize = sizeData[i] as number
       const imageSize = data.pointImageSizes?.[i] ?? shapeSize
       initialState[i * 4] = Math.max(shapeSize, imageSize)
     }
@@ -1166,12 +1091,13 @@ export class Points extends CoreModule {
       if (this.sizeTexture && !this.sizeTexture.destroyed) {
         this.sizeTexture.destroy()
       }
-      this.sizeTexture = device.createTexture({
+      const sizeTexture = device.createTexture({
         width: pointsTextureSize,
         height: pointsTextureSize,
         format: 'rgba32float',
       })
-      this.sizeTexture.copyImageData({
+      this.sizeTexture = sizeTexture
+      sizeTexture.copyImageData({
         data: initialState,
         bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
         mipLevel: 0,
@@ -1385,6 +1311,12 @@ export class Points extends CoreModule {
     renderPass.end()
   }
 
+  public setTransitionProgress (progress: number, animateColors = false, animateSizes = false): void {
+    this.transitionProgress = progress
+    this.shouldAnimatePointColors = animateColors
+    this.shouldAnimatePointSizes = animateSizes
+  }
+
   public draw (renderPass: RenderPass): void {
     const { data, config, store } = this
     if (!this.colorBuffer) this.updateColor()
@@ -1432,6 +1364,9 @@ export class Points extends CoreModule {
       hasImages: (this.imageCount > 0) ? 1 : 0, // Convert boolean to float
       imageCount: this.imageCount,
       imageAtlasCoordsTextureSize: this.imageAtlasCoordsTextureSize ?? 0,
+      transitionProgress: this.transitionProgress,
+      animateColors: this.shouldAnimatePointColors ? 1 : 0,
+      animateSizes: this.shouldAnimatePointSizes ? 1 : 0,
     }
 
     const baseFragmentUniforms = {
@@ -2054,6 +1989,8 @@ export class Points extends CoreModule {
     this.drawCommand = undefined
     this.drawHighlightedCommand?.destroy()
     this.drawHighlightedCommand = undefined
+    this.interpolatePositionCommand?.destroy()
+    this.interpolatePositionCommand = undefined
     this.updatePositionCommand?.destroy()
     this.updatePositionCommand = undefined
     this.dragPointCommand?.destroy()
@@ -2078,6 +2015,14 @@ export class Points extends CoreModule {
       this.previousPositionFbo.destroy()
     }
     this.previousPositionFbo = undefined
+    if (this.sourcePositionFbo && !this.sourcePositionFbo.destroyed) {
+      this.sourcePositionFbo.destroy()
+    }
+    this.sourcePositionFbo = undefined
+    if (this.targetPositionFbo && !this.targetPositionFbo.destroyed) {
+      this.targetPositionFbo.destroy()
+    }
+    this.targetPositionFbo = undefined
     if (this.velocityFbo && !this.velocityFbo.destroyed) {
       this.velocityFbo.destroy()
     }
@@ -2108,6 +2053,14 @@ export class Points extends CoreModule {
       this.previousPositionTexture.destroy()
     }
     this.previousPositionTexture = undefined
+    if (this.sourcePositionTexture && !this.sourcePositionTexture.destroyed) {
+      this.sourcePositionTexture.destroy()
+    }
+    this.sourcePositionTexture = undefined
+    if (this.targetPositionTexture && !this.targetPositionTexture.destroyed) {
+      this.targetPositionTexture.destroy()
+    }
+    this.targetPositionTexture = undefined
     if (this.velocityTexture && !this.velocityTexture.destroyed) {
       this.velocityTexture.destroy()
     }
@@ -2146,6 +2099,8 @@ export class Points extends CoreModule {
     this.pinnedStatusTexture = undefined
 
     // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
+    this.interpolatePositionUniformStore?.destroy()
+    this.interpolatePositionUniformStore = undefined
     this.updatePositionUniformStore?.destroy()
     this.updatePositionUniformStore = undefined
     this.dragPointUniformStore?.destroy()
@@ -2170,10 +2125,28 @@ export class Points extends CoreModule {
       this.colorBuffer.destroy()
     }
     this.colorBuffer = undefined
+    if (this.sourceColorBuffer && !this.sourceColorBuffer.destroyed) {
+      this.sourceColorBuffer.destroy()
+    }
+    this.sourceColorBuffer = undefined
+    if (this.targetColorBuffer && !this.targetColorBuffer.destroyed) {
+      this.targetColorBuffer.destroy()
+    }
+    this.targetColorBuffer = undefined
+    this.previousColorData = undefined
     if (this.sizeBuffer && !this.sizeBuffer.destroyed) {
       this.sizeBuffer.destroy()
     }
     this.sizeBuffer = undefined
+    if (this.sourceSizeBuffer && !this.sourceSizeBuffer.destroyed) {
+      this.sourceSizeBuffer.destroy()
+    }
+    this.sourceSizeBuffer = undefined
+    if (this.targetSizeBuffer && !this.targetSizeBuffer.destroyed) {
+      this.targetSizeBuffer.destroy()
+    }
+    this.targetSizeBuffer = undefined
+    this.previousSizeData = undefined
     if (this.shapeBuffer && !this.shapeBuffer.destroyed) {
       this.shapeBuffer.destroy()
     }
@@ -2202,6 +2175,10 @@ export class Points extends CoreModule {
       this.updatePositionVertexCoordBuffer.destroy()
     }
     this.updatePositionVertexCoordBuffer = undefined
+    if (this.interpolatePositionVertexCoordBuffer && !this.interpolatePositionVertexCoordBuffer.destroyed) {
+      this.interpolatePositionVertexCoordBuffer.destroy()
+    }
+    this.interpolatePositionVertexCoordBuffer = undefined
     if (this.dragPointVertexCoordBuffer && !this.dragPointVertexCoordBuffer.destroyed) {
       this.dragPointVertexCoordBuffer.destroy()
     }
@@ -2224,6 +2201,212 @@ export class Points extends CoreModule {
     this.trackPointsVertexCoordBuffer = undefined
   }
 
+  public ensureSimulationResources (): void {
+    const { store: { pointsTextureSize }, device } = this
+    if (!pointsTextureSize) return
+    this.ensureUpdatePositionProgram()
+
+    const velocityData = new Float32Array(pointsTextureSize * pointsTextureSize * 4).fill(0)
+    if (!this.velocityTexture || this.velocityTexture.width !== pointsTextureSize || this.velocityTexture.height !== pointsTextureSize) {
+      if (this.velocityTexture && !this.velocityTexture.destroyed) {
+        this.velocityTexture.destroy()
+      }
+      if (this.velocityFbo && !this.velocityFbo.destroyed) {
+        this.velocityFbo.destroy()
+      }
+      this.velocityTexture = device.createTexture({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+      })
+      this.velocityTexture.copyImageData({
+        data: velocityData,
+        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+      this.velocityFbo = device.createFramebuffer({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        colorAttachments: [this.velocityTexture],
+      })
+    } else {
+      this.velocityTexture.copyImageData({
+        data: velocityData,
+        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
+    }
+  }
+
+  public createTransitionResources (): void {
+    const { store: { pointsTextureSize }, device } = this
+    if (!pointsTextureSize) return
+
+    const emptyData = new Float32Array(pointsTextureSize * pointsTextureSize * 4).fill(0)
+    const textureUsage = Texture.SAMPLE | Texture.RENDER | Texture.COPY_SRC | Texture.COPY_DST
+
+    if (!this.sourcePositionTexture || this.sourcePositionTexture.width !== pointsTextureSize || this.sourcePositionTexture.height !== pointsTextureSize) {
+      if (this.sourcePositionTexture && !this.sourcePositionTexture.destroyed) {
+        this.sourcePositionTexture.destroy()
+      }
+      if (this.sourcePositionFbo && !this.sourcePositionFbo.destroyed) {
+        this.sourcePositionFbo.destroy()
+      }
+      this.sourcePositionTexture = device.createTexture({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+        usage: textureUsage,
+      })
+      this.sourcePositionFbo = device.createFramebuffer({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        colorAttachments: [this.sourcePositionTexture],
+      })
+    }
+    this.sourcePositionTexture.copyImageData({
+      data: emptyData,
+      bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
+      mipLevel: 0,
+      x: 0,
+      y: 0,
+    })
+
+    if (!this.targetPositionTexture || this.targetPositionTexture.width !== pointsTextureSize || this.targetPositionTexture.height !== pointsTextureSize) {
+      if (this.targetPositionTexture && !this.targetPositionTexture.destroyed) {
+        this.targetPositionTexture.destroy()
+      }
+      if (this.targetPositionFbo && !this.targetPositionFbo.destroyed) {
+        this.targetPositionFbo.destroy()
+      }
+      this.targetPositionTexture = device.createTexture({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+        usage: textureUsage,
+      })
+      this.targetPositionFbo = device.createFramebuffer({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        colorAttachments: [this.targetPositionTexture],
+      })
+    }
+    this.targetPositionTexture.copyImageData({
+      data: emptyData,
+      bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
+      mipLevel: 0,
+      x: 0,
+      y: 0,
+    })
+
+    this.interpolatePositionVertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
+
+    this.interpolatePositionUniformStore ||= new UniformStore({
+      interpolatePositionUniforms: {
+        uniformTypes: {
+          progress: 'f32',
+        },
+        defaultUniforms: {
+          progress: 0,
+        },
+      },
+    })
+
+    this.interpolatePositionCommand ||= new Model(device, {
+      fs: interpolatePositionFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.interpolatePositionVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        interpolatePositionUniforms: this.interpolatePositionUniformStore.getManagedUniformBuffer(device, 'interpolatePositionUniforms'),
+      },
+    })
+  }
+
+  public destroyTransitionResources (): void {
+    this.interpolatePositionCommand?.destroy()
+    this.interpolatePositionCommand = undefined
+    this.interpolatePositionUniformStore?.destroy()
+    this.interpolatePositionUniformStore = undefined
+    if (this.interpolatePositionVertexCoordBuffer && !this.interpolatePositionVertexCoordBuffer.destroyed) {
+      this.interpolatePositionVertexCoordBuffer.destroy()
+    }
+    this.interpolatePositionVertexCoordBuffer = undefined
+    if (this.sourcePositionFbo && !this.sourcePositionFbo.destroyed) {
+      this.sourcePositionFbo.destroy()
+    }
+    this.sourcePositionFbo = undefined
+    if (this.sourcePositionTexture && !this.sourcePositionTexture.destroyed) {
+      this.sourcePositionTexture.destroy()
+    }
+    this.sourcePositionTexture = undefined
+    if (this.targetPositionFbo && !this.targetPositionFbo.destroyed) {
+      this.targetPositionFbo.destroy()
+    }
+    this.targetPositionFbo = undefined
+    if (this.targetPositionTexture && !this.targetPositionTexture.destroyed) {
+      this.targetPositionTexture.destroy()
+    }
+    this.targetPositionTexture = undefined
+  }
+
+  public interpolatePosition (progress: number): void {
+    if (!this.interpolatePositionCommand || !this.interpolatePositionUniformStore) return
+    if (!this.sourcePositionTexture || this.sourcePositionTexture.destroyed) return
+    if (!this.targetPositionTexture || this.targetPositionTexture.destroyed) return
+    if (!this.currentPositionFbo || this.currentPositionFbo.destroyed) return
+
+    this.interpolatePositionUniformStore.setUniforms({
+      interpolatePositionUniforms: {
+        progress,
+      },
+    })
+    this.interpolatePositionCommand.setBindings({
+      sourceTexture: this.sourcePositionTexture,
+      targetTexture: this.targetPositionTexture,
+    })
+
+    const renderPass = this.device.beginRenderPass({
+      framebuffer: this.currentPositionFbo,
+    })
+    this.interpolatePositionCommand.draw(renderPass)
+    renderPass.end()
+  }
+
+  public destroySimulationResources (): void {
+    this.updatePositionCommand?.destroy()
+    this.updatePositionCommand = undefined
+    this.updatePositionUniformStore?.destroy()
+    this.updatePositionUniformStore = undefined
+    if (this.updatePositionVertexCoordBuffer && !this.updatePositionVertexCoordBuffer.destroyed) {
+      this.updatePositionVertexCoordBuffer.destroy()
+    }
+    this.updatePositionVertexCoordBuffer = undefined
+    if (this.velocityFbo && !this.velocityFbo.destroyed) {
+      this.velocityFbo.destroy()
+    }
+    this.velocityFbo = undefined
+    if (this.velocityTexture && !this.velocityTexture.destroyed) {
+      this.velocityTexture.destroy()
+    }
+    this.velocityTexture = undefined
+  }
+
   public swapFbo (): void {
     // Swap textures and framebuffers
     // Safety check: ensure resources exist and aren't destroyed before swapping
@@ -2240,6 +2423,164 @@ export class Points extends CoreModule {
     this.currentPositionTexture = tempTexture
     this.currentPositionFbo = tempFbo
     this.areClusterCentroidsUpToDate = false
+  }
+
+  private updateAttributeBuffers (
+    targetData: Float32Array,
+    sourceBuffer: Buffer | undefined,
+    targetBuffer: Buffer | undefined,
+    previousData: Float32Array | undefined,
+    tupleSize: 1 | 4
+  ): { source: Buffer; target: Buffer; previous: Float32Array } {
+    const oldCount = previousData ? previousData.length / tupleSize : 0
+    const newCount = targetData.length / tupleSize
+    const sameCount = oldCount === newCount
+
+    // Reuse both buffers when the topology is unchanged so the old target becomes the next source.
+    if (sameCount &&
+        sourceBuffer && !sourceBuffer.destroyed &&
+        targetBuffer && !targetBuffer.destroyed) {
+      const nextSource = targetBuffer
+      const nextTarget = sourceBuffer
+      nextTarget.write(targetData)
+      return {
+        source: nextSource,
+        target: nextTarget,
+        previous: new Float32Array(targetData),
+      }
+    }
+
+    const sourceData = new Float32Array(targetData.length)
+    const sharedCount = Math.min(oldCount, newCount)
+    for (let i = 0; i < sharedCount * tupleSize; i += 1) {
+      sourceData[i] = previousData?.[i] ?? (targetData[i] as number)
+    }
+    for (let i = sharedCount * tupleSize; i < targetData.length; i += 1) {
+      sourceData[i] = targetData[i] as number
+    }
+
+    if (sourceBuffer && !sourceBuffer.destroyed) {
+      sourceBuffer.destroy()
+    }
+    if (targetBuffer && !targetBuffer.destroyed) {
+      targetBuffer.destroy()
+    }
+
+    return {
+      source: this.device.createBuffer({
+        data: sourceData,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+      }),
+      target: this.device.createBuffer({
+        data: targetData,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+      }),
+      previous: new Float32Array(targetData),
+    }
+  }
+
+  private createOrUpdatePositionTextures (positionData: Float32Array, pointsTextureSize: number): void {
+    // Create currentPositionTexture and framebuffer
+    if (!this.currentPositionTexture || this.currentPositionTexture.width !== pointsTextureSize || this.currentPositionTexture.height !== pointsTextureSize) {
+      if (this.currentPositionTexture && !this.currentPositionTexture.destroyed) {
+        this.currentPositionTexture.destroy()
+      }
+      if (this.currentPositionFbo && !this.currentPositionFbo.destroyed) {
+        this.currentPositionFbo.destroy()
+      }
+      this.currentPositionTexture = this.device.createTexture({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+      })
+      this.currentPositionFbo = this.device.createFramebuffer({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        colorAttachments: [this.currentPositionTexture],
+      })
+    }
+    this.currentPositionTexture.copyImageData({
+      data: positionData,
+      bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
+      mipLevel: 0,
+      x: 0,
+      y: 0,
+    })
+
+    // Create previousPositionTexture and framebuffer
+    if (!this.previousPositionTexture ||
+        this.previousPositionTexture.width !== pointsTextureSize ||
+        this.previousPositionTexture.height !== pointsTextureSize) {
+      if (this.previousPositionTexture && !this.previousPositionTexture.destroyed) {
+        this.previousPositionTexture.destroy()
+      }
+      if (this.previousPositionFbo && !this.previousPositionFbo.destroyed) {
+        this.previousPositionFbo.destroy()
+      }
+      this.previousPositionTexture = this.device.createTexture({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+      })
+      this.previousPositionFbo = this.device.createFramebuffer({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        colorAttachments: [this.previousPositionTexture],
+      })
+    }
+    this.previousPositionTexture.copyImageData({
+      data: positionData,
+      bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
+      mipLevel: 0,
+      x: 0,
+      y: 0,
+    })
+
+    this.areClusterCentroidsUpToDate = false
+    this.isPositionsUpToDate = false
+  }
+
+  private ensureUpdatePositionProgram (): void {
+    const { device, config, store } = this
+    this.updatePositionVertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
+
+    this.updatePositionUniformStore ||= new UniformStore({
+      updatePositionUniforms: {
+        uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
+          friction: 'f32',
+          spaceSize: 'f32',
+        },
+        defaultUniforms: {
+          friction: config.simulationFriction,
+          spaceSize: store.adjustedSpaceSize,
+        },
+      },
+    })
+
+    this.updatePositionCommand ||= new Model(device, {
+      fs: updatePositionFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.updatePositionVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        // Create uniform buffer binding
+        // Update it later by calling uniformStore.setUniforms()
+        updatePositionUniforms: this.updatePositionUniformStore.getManagedUniformBuffer(device, 'updatePositionUniforms'),
+        // All texture bindings will be set dynamically in updatePosition() method
+      },
+    })
   }
 
   private rescaleInitialNodePositions (): void {

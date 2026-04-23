@@ -1,0 +1,35 @@
+/* Minimal panel, same spirit as beginners/basic-set-up (100×100 grid). */
+.app {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+}
+
+.graph {
+  width: 100%;
+  height: 100%;
+}
+
+.actions {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  z-index: 1;
+  color: #ccc;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  align-items: flex-start;
+}
+
+.action {
+  margin-left: 2px;
+  font-size: 10pt;
+  text-decoration: underline;
+  cursor: pointer;
+  user-select: none;
+}
+
+.action:hover {
+  color: #fff;
+}

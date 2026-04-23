@@ -13,7 +13,9 @@ All configuration properties are optional. When creating a graph or calling `set
 
 | Property | Description | Default |
 |---|---|---|
-| enableSimulation | If set to `false`, the simulation will not run. This property will be applied only on component initialization and it can't be changed using the `setConfig` or `setConfigPartial` methods | `true` |
+| enableSimulation | If set to `false`, the simulation will not run. This property can be changed at runtime using `setConfig()` or `setConfigPartial()`. Re-enabling simulation recreates the required simulation resources immediately. | `true` |
+| transitionDuration | Duration in milliseconds of the animated transitions applied when point positions, point colors, point sizes, link colors, or link widths change via the corresponding setters.<br /><br />Set to `0` (or any value `<= 0`) to disable animated transitions and snap to the new state instead. See [Transitions](#transitions) below for details and migration notes. | `800` |
+| transitionEasing | Easing curve used for animated transitions. Accepts a `TransitionEasing` enum value (e.g. `TransitionEasing.CubicInOut`) or its string literal (e.g. `'cubic-in-out'`).<br /><br />Allowed values: `linear`, `quad-in`, `quad-out`, `quad-in-out`, `cubic-in`, `cubic-out`, `cubic-in-out`, `sin-in`, `sin-out`, `sin-in-out`, `exp-in`, `exp-out`, `exp-in-out`, `circle-in`, `circle-out`, `circle-in-out`. | `TransitionEasing.CubicInOut` |
 | backgroundColor | Canvas background color | `#222222` |
 | spaceSize | Simulation space size (default 4096; larger values may crash on some devices, e.g. iOS) | `4096` |
 | pointDefaultColor | The default color to use for points when no point colors are provided, or if the color value in the array is `undefined` or `null`. This can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values in the format `[red, green, blue, alpha]` where each value is a number between 0 and 1 | `#b3b3b3` |
@@ -103,6 +105,9 @@ cosmos.gl layout algorithm was inspired by the [d3-force](https://github.com/d3/
 | onSimulationEnd | Called when simulation stops |
 | onSimulationPause | Called when simulation pauses |
 | onSimulationUnpause | Called when simulation unpauses |
+| onTransitionStart | Called when an animated transition starts (see [Transitions](#transitions)) |
+| onTransition | Called on every transition frame with the eased `progress` value in the `[0, 1]` range: `(progress: number) => void` |
+| onTransitionEnd | Called when a transition ends. `interrupted` is `true` when the transition was replaced by a new one or ended early (e.g. by `unpause()` or by setting `transitionDuration` to `0` mid-flight): `(interrupted: boolean) => void` |
 | onClick | Called on canvas click, with point index and position if exists |
 | onPointClick | Called when a point is clicked, with point index and position |
 | onLinkClick | Called when a link is clicked, with link index |
@@ -122,6 +127,28 @@ cosmos.gl layout algorithm was inspired by the [d3-force](https://github.com/d3/
 | onDragStart | Called when dragging starts |
 | onDrag | Called during dragging |
 | onDragEnd | Called when dragging ends |
+
+## <a name="transitions" href="#transitions">#</a> Transitions
+
+By default, changes made through the following setters are animated on the next `render()` call:
+
+- `setPointPositions`
+- `setPointColors`
+- `setPointSizes`
+- `setLinkColors`
+- `setLinkWidths`
+
+A single transition cycle tracks every animated property in one shared timeline, driven by `transitionDuration` (default `800` ms) and `transitionEasing` (default `TransitionEasing.CubicInOut`). Set `transitionDuration: 0` to disable animations and snap to the new state instead.
+
+**First render after init.** Position setters always snap on the very first render — there is no prior state to interpolate from. The auto-pause rule described below is also skipped for the first render.
+
+**Auto-pause.** When `render()` fires with a pending transition, `transitionDuration > 0`, and the simulation running (and it is not the first render), the simulation is paused before the transition starts and `onSimulationPause` fires. The simulation stays paused for the duration of the transition — you can resume it with `unpause()` at any time, which interrupts the transition (`onTransitionEnd(true)` fires).
+
+**`fitView` during a transition.** `fitView()` and `fitViewByPointIndices()` frame the target positions (the latest `setPointPositions` argument), not the interpolated positions currently on screen.
+
+**Toggling `enableSimulation` mid-transition.** Turning simulation on while a transition is active interrupts it (`onTransitionEnd(true)` fires) and the simulation starts from the current mid-animation positions. Turning simulation off leaves an active transition untouched.
+
+**Migration.** The `transitionDuration` default of `800` ms means `setPointPositions(...); render()` after the first render now animates instead of snapping. To keep the old snap behavior, set `transitionDuration: 0` at construction time, or toggle it per-update via `setConfigPartial({ transitionDuration: 0 })`.
 
 ---
 Copyright [OpenJS Foundation](https://openjsf.org) and cosmos.gl contributors. All rights reserved. The [OpenJS Foundation](https://openjsf.org) has registered trademarks and uses trademarks.  For a list of trademarks of the [OpenJS Foundation](https://openjsf.org), please see our [Trademark Policy](https://trademark-policy.openjsf.org/) and [Trademark List](https://trademark-list.openjsf.org/).  Trademarks and logos not indicated on the [list of OpenJS Foundation trademarks](https://trademark-list.openjsf.org) are trademarks™ or registered® trademarks of their respective holders. Use of them does not imply any affiliation with or endorsement by them.

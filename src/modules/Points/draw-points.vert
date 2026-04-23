@@ -4,8 +4,10 @@ precision highp float;
 #endif
 
 in vec2 pointIndices;
-in float size;
-in vec4 color;
+in float sourceSize;
+in float targetSize;
+in vec4 sourceColor;
+in vec4 targetColor;
 in float shape;
 in float imageIndex;
 in float imageSize;
@@ -32,6 +34,9 @@ layout(std140) uniform drawVertexUniforms {
   float hasImages;
   float imageCount;
   float imageAtlasCoordsTextureSize;
+  float transitionProgress;
+  float animateColors;
+  float animateSizes;
 } drawVertex;
 
 #define ratio drawVertex.ratio
@@ -50,6 +55,9 @@ layout(std140) uniform drawVertexUniforms {
 #define hasImages drawVertex.hasImages
 #define imageCount drawVertex.imageCount
 #define imageAtlasCoordsTextureSize drawVertex.imageAtlasCoordsTextureSize
+#define transitionProgress drawVertex.transitionProgress
+#define animateColors drawVertex.animateColors
+#define animateSizes drawVertex.animateSizes
 #else
 uniform float ratio;
 uniform mat3 transformationMatrix;
@@ -67,6 +75,9 @@ uniform float skipGreyed;
 uniform float hasImages;
 uniform float imageCount;
 uniform float imageAtlasCoordsTextureSize;
+uniform float transitionProgress;
+uniform float animateColors;
+uniform float animateSizes;
 #endif
 
 out float pointShape;
@@ -131,8 +142,15 @@ void main() {
   #endif
   gl_Position = vec4(finalPosition.rg, 0, 1);
 
+  float pointSize = animateSizes > 0.0
+    ? mix(sourceSize, targetSize, transitionProgress)
+    : targetSize;
+  vec4 pointColor = animateColors > 0.0
+    ? mix(sourceColor, targetColor, transitionProgress)
+    : targetColor;
+
   // Calculate sizes for shape and image
-  float shapeSizeValue = calculatePointSize(size * sizeScale);
+  float shapeSizeValue = calculatePointSize(pointSize * sizeScale);
   float imageSizeValue = calculatePointSize(imageSize * sizeScale);
 
   // Use the larger of the two sizes for the overall point size
@@ -152,7 +170,7 @@ void main() {
   imageSizeVarying = imageSizeValue;
   overallSize = overallSizeValue;
 
-  shapeColor = color;
+  shapeColor = pointColor;
   pointShape = shape;
 
   // Adjust color of greyed-out points
