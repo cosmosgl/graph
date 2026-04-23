@@ -1,7 +1,6 @@
 /**
  * Demonstrates GPU-driven point position transitions: a 200k-point cloud sampled
- * from a painting auto-loops between the picture layout and a sequence of tile
- * scatters, with a color-clustered scatter reveal on start.
+ * from a painting auto-loops between the picture layout and a sequence of tile scatters.
  */
 
 import { Graph, defaultConfigValues, TransitionEasing } from '@cosmos.gl/graph'
@@ -9,7 +8,6 @@ import { Graph, defaultConfigValues, TransitionEasing } from '@cosmos.gl/graph'
 import './transition.css'
 import { loadPointData } from './point-data'
 import {
-  createColorClusteredScatterPositions,
   createPicturePositions,
   createTileScatterPositions,
 } from './transition-helpers'
@@ -38,12 +36,6 @@ export const pointTransition = async (): Promise<{
   let loopIntervalId: ReturnType<typeof setInterval> | undefined
 
   const picturePositions = createPicturePositions(cols, rows, spaceSize, aspect)
-  const scatterPositions = createColorClusteredScatterPositions(
-    cols,
-    rows,
-    spaceSize,
-    pictureColors
-  )
 
   const div = document.createElement('div')
   div.className = 'app'
@@ -103,19 +95,11 @@ export const pointTransition = async (): Promise<{
       'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
   })
 
-  // First render: snap the color-clustered scatter — the picture pre-disassembled
-  // into palette blobs. Second render: queue the picture and let the transition
-  // interpolate scatter → picture; fitView frames the target.
-  graph.setPointPositions(scatterPositions)
+  graph.setPointPositions(picturePositions)
   graph.setPointColors(pictureColors)
   graph.render()
-
-  graph.setPointPositions(picturePositions)
-  requestAnimationFrame(() => {
-    graph.render()
-    graph.fitView()
-    startLoop()
-  })
+  graph.fitView()
+  startLoop()
 
   fitViewAction.addEventListener('click', () => {
     graph.fitView()

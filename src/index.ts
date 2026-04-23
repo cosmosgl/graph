@@ -728,11 +728,10 @@ export class Graph {
     // Update graph and start frames
     this.update(simulationAlpha)
 
-    // Animated transitions (duration > 0) should not compete with live force updates.
-    // If a transition is pending, simulation is running, and this is not the first render
-    // after init, pause before the transition cycle starts. The first-render skip avoids
-    // treating the default transitionDuration as an intentional animation on load.
-    if (this.transition.isPending &&
+    // Position transitions must not compete with live force updates — pause the simulation
+    // so physics and GPU interpolation don't fight over the same coordinates.
+    // Color/size transitions are independent of physics and must not pause the simulation.
+    if (this.transition.isPendingFor(TransitionProperty.Positions) &&
         this.store.isSimulationRunning &&
         this.config.transitionDuration > 0 &&
         !this._isFirstRenderAfterInit) {
