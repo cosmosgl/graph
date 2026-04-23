@@ -2,6 +2,7 @@ import { type GraphConfig } from '@cosmos.gl/graph'
 
 export const config: GraphConfig = {
   spaceSize: 4096,
+  transitionDuration: 0,
   backgroundColor: '#2d313a',
   pointDefaultSize: 4,
   pointDefaultColor: '#4B5BBF',

@@ -29,6 +29,7 @@ export const moscowMetroStations = (): {graph: Graph; div: HTMLDivElement; destr
 
   const config = {
     backgroundColor: '#2d313a',
+    transitionDuration: 0,
     scalePointsOnZoom: false,
     rescalePositions,
     pointDefaultColor: '#FEE08B',

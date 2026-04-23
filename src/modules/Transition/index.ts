@@ -80,6 +80,11 @@ export class Transition {
     return this.activeProperties.size > 0
   }
 
+  /** Reports whether a specific property is queued and awaiting `start()`. */
+  public isPendingFor (property: TransitionProperty): boolean {
+    return this.pendingProperties.has(property)
+  }
+
   /** Reports whether a specific property is part of the active cycle. */
   public isActiveFor (property: TransitionProperty): boolean {
     return this.activeProperties.has(property)

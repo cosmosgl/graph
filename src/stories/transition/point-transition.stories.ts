@@ -14,7 +14,7 @@ import pointDataRaw from './point-data?raw'
 import transitionHelpersRaw from './transition-helpers?raw'
 
 const meta: Meta<CosmosStoryProps> = {
-  title: 'Examples/Beginners',
+  title: 'Examples/Transitions',
 }
 
 export const PointTransition: Story = {

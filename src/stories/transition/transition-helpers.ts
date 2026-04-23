@@ -50,68 +50,6 @@ function hash01 (key: number): number {
   return x - Math.floor(x)
 }
 
-/**
- * Pre-reveal scatter where points are clustered by color into blobs
- * placed at random spots across the space.
- *
- * For each point we quantize its RGB into a coarse bucket; each bucket
- * gets a deterministic (bucket-seeded) center and radius; the point
- * lands somewhere inside that disk. The result is a field of colored
- * patches — the picture's palette disassembled across space — that then
- * reassembles into the image on the transition.
- */
-export function createColorClusteredScatterPositions (
-  cols: number,
-  rows: number,
-  spaceSize: number,
-  colors: Float32Array
-): Float32Array {
-  const total = cols * rows
-  const out = new Float32Array(total * 2)
-
-  // 4 levels/channel → up to 64 color buckets. Coarse enough that
-  // visually-similar pixels land in the same blob.
-  const levels = 4
-  const quantize = (v: number): number =>
-    Math.min(levels - 1, Math.max(0, Math.floor(v * levels)))
-  const bucketKey = (i: number): number => {
-    const r = colors[i * 4] ?? 0
-    const g = colors[i * 4 + 1] ?? 0
-    const b = colors[i * 4 + 2] ?? 0
-    return quantize(r) * levels * levels + quantize(g) * levels + quantize(b)
-  }
-
-  // Blob radius relative to the space — big enough that neighbors blend,
-  // small enough to read as distinct patches.
-  const blobRadius = spaceSize * 0.08
-  const margin = blobRadius
-  const innerSize = spaceSize - margin * 2
-
-  const blobs = new Map<number, { cx: number; cy: number }>()
-  const getBlob = (key: number): { cx: number; cy: number } => {
-    let blob = blobs.get(key)
-    if (!blob) {
-      blob = {
-        cx: margin + hash01(key + 1) * innerSize,
-        cy: margin + hash01((key + 1) * 97) * innerSize,
-      }
-      blobs.set(key, blob)
-    }
-    return blob
-  }
-
-  for (let i = 0; i < total; i += 1) {
-    const { cx, cy } = getBlob(bucketKey(i))
-    const angle = hash01(i + 12345) * Math.PI * 2
-    // sqrt for uniform disk sampling, so points don't pile up at the center.
-    const dist = Math.sqrt(hash01(i + 67890)) * blobRadius
-    out[i * 2] = cx + Math.cos(angle) * dist
-    out[i * 2 + 1] = cy + Math.sin(angle) * dist
-  }
-
-  return out
-}
-
 /** Builds an n×n tile scatter by rigidly shifting each tile block. */
 export function createTileScatterPositions (
   cols: number,
