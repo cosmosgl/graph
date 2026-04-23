@@ -268,8 +268,10 @@ void main() {
     if (isOutlined > 0.0) {
         float r = length(pointCoord);
         const float ringSmoothing = 1.025;
-        float outerEdge = smoothstep(r, r * ringSmoothing, 1.0);
-        float innerEdge = smoothstep(outlineWidth, outlineWidth * ringSmoothing, r);
+        float rSafe = max(r, 1e-6);
+        float wSafe = max(outlineWidth, 1e-6);
+        float outerEdge = smoothstep(rSafe, rSafe * ringSmoothing, 1.0);
+        float innerEdge = smoothstep(wSafe, wSafe * ringSmoothing, r);
         float ringAlpha = outerEdge * innerEdge;
 
         // Grey out the ring color when the point is greyed

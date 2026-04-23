@@ -45,7 +45,7 @@ function buildBranch (
 ): TreeNode[] {
   if (depth > maxDepth) return []
 
-  const numChildren = childrenPerLevel[depth - 1] ?? 2
+  const numChildren = childrenPerLevel[depth - 2] ?? 2
   const children: TreeNode[] = []
 
   for (let i = 0; i < numChildren; i++) {
