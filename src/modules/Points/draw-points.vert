@@ -138,9 +138,11 @@ void main() {
   // Use the larger of the two sizes for the overall point size
   float overallSizeValue = max(shapeSizeValue, imageSizeValue);
 
-  // Scale up point to fit outline ring
+  // Scale up point sprite to fit outline ring; clamp to hardware gl_PointSize limit so the
+  // sprite never gets silently clipped — the point body is unaffected, only the ring narrows.
   if (isOutlined > 0.0) {
     overallSizeValue *= outlineRingScale;
+    overallSizeValue = min(overallSizeValue, maxPointSize * ratio);
   }
 
   gl_PointSize = overallSizeValue;
