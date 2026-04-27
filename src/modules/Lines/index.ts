@@ -26,11 +26,9 @@ export class Lines extends CoreModule {
   private fillSampledLinksFboCommand: Model | undefined
   private pointABuffer: Buffer | undefined
   private pointBBuffer: Buffer | undefined
-  private colorBuffer: Buffer | undefined
   private sourceColorBuffer: Buffer | undefined
   private targetColorBuffer: Buffer | undefined
   private previousColorData: Float32Array | undefined
-  private widthBuffer: Buffer | undefined
   private sourceWidthBuffer: Buffer | undefined
   private targetWidthBuffer: Buffer | undefined
   private previousWidthData: Float32Array | undefined
@@ -133,14 +131,6 @@ export class Lines extends CoreModule {
     })
     this.pointBBuffer ||= device.createBuffer({
       data: new Float32Array(linksNumber * 2),
-      usage: Buffer.VERTEX | Buffer.COPY_DST,
-    })
-    this.colorBuffer ||= device.createBuffer({
-      data: new Float32Array(linksNumber * 4),
-      usage: Buffer.VERTEX | Buffer.COPY_DST,
-    })
-    this.widthBuffer ||= device.createBuffer({
-      data: new Float32Array(linksNumber),
       usage: Buffer.VERTEX | Buffer.COPY_DST,
     })
     this.arrowBuffer ||= device.createBuffer({
@@ -386,8 +376,8 @@ export class Lines extends CoreModule {
     if (!points) return
     if (!points.currentPositionTexture || points.currentPositionTexture.destroyed) return
     if (!this.pointABuffer || !this.pointBBuffer) this.updatePointsBuffer()
-    if (!this.colorBuffer) this.updateColor()
-    if (!this.widthBuffer) this.updateWidth()
+    if (!this.targetColorBuffer) this.updateColor()
+    if (!this.targetWidthBuffer) this.updateWidth()
     if (!this.arrowBuffer) this.updateArrow()
     if (!this.curveLineGeometry) this.updateCurveLineGeometry()
     if (!this.drawCurveCommand || !this.drawLineUniformStore || !this.linkStatusTexture) return
@@ -614,7 +604,6 @@ export class Lines extends CoreModule {
     this.sourceColorBuffer = source
     this.targetColorBuffer = target
     this.previousColorData = previous
-    this.colorBuffer = target
 
     if (this.drawCurveCommand) {
       this.drawCurveCommand.setAttributes({
@@ -638,7 +627,6 @@ export class Lines extends CoreModule {
     this.sourceWidthBuffer = source
     this.targetWidthBuffer = target
     this.previousWidthData = previous
-    this.widthBuffer = target
 
     if (this.drawCurveCommand) {
       this.drawCurveCommand.setAttributes({
@@ -1023,10 +1011,6 @@ export class Lines extends CoreModule {
       this.pointBBuffer.destroy()
     }
     this.pointBBuffer = undefined
-    if (this.colorBuffer && !this.colorBuffer.destroyed) {
-      this.colorBuffer.destroy()
-    }
-    this.colorBuffer = undefined
     if (this.sourceColorBuffer && !this.sourceColorBuffer.destroyed) {
       this.sourceColorBuffer.destroy()
     }
@@ -1036,10 +1020,6 @@ export class Lines extends CoreModule {
     }
     this.targetColorBuffer = undefined
     this.previousColorData = undefined
-    if (this.widthBuffer && !this.widthBuffer.destroyed) {
-      this.widthBuffer.destroy()
-    }
-    this.widthBuffer = undefined
     if (this.sourceWidthBuffer && !this.sourceWidthBuffer.destroyed) {
       this.sourceWidthBuffer.destroy()
     }

@@ -16,6 +16,9 @@ export interface GraphConfigInterface {
   /**
    * Transition duration in milliseconds.
    * Default value: `800`
+   * @note When a position transition is triggered via `setPointPositions()`, the simulation
+   * is automatically paused for the duration and remains paused afterwards so forces do not
+   * pull nodes away from the target layout. Call `unpause()` to resume the simulation explicitly.
    */
   transitionDuration: number;
   /**
