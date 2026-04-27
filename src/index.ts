@@ -367,6 +367,8 @@ export class Graph {
    * @param {boolean | undefined} dontRescale - For this call only, don't rescale the points.
    *   - `true`: Don't rescale.
    *   - `false` or `undefined` (default): Use the behavior defined by `config.rescalePositions`.
+   * @note If `transitionDuration > 0` and the simulation is running, the simulation is automatically
+   * paused for the transition and remains paused afterwards. Call `unpause()` to resume it.
    */
   public setPointPositions (pointPositions: Float32Array, dontRescale?: boolean | undefined): void {
     if (this._isDestroyed) return
@@ -730,6 +732,9 @@ export class Graph {
 
     // Position transitions must not compete with live force updates — pause the simulation
     // so physics and GPU interpolation don't fight over the same coordinates.
+    // The simulation is intentionally left paused after the transition ends: calling
+    // setPointPositions() implies the user wants to explore a specific layout, not have
+    // forces immediately pull nodes away from it. Call unpause() to resume explicitly.
     // Color/size transitions are independent of physics and must not pause the simulation.
     if (this.transition.isPendingFor(TransitionProperty.Positions) &&
         this.store.isSimulationRunning &&
@@ -1220,6 +1225,9 @@ export class Graph {
     if (!this.config.enableSimulation) return
     if (this.store.isSimulationRunning) return
     if (this.transition.isActive) {
+      // Interrupt any active transition. If it includes positions, leave the
+      // current position texture at the last interpolated frame so simulation
+      // resumes from the same coordinates currently shown on screen.
       this.transition.end(true)
     }
     this.store.isSimulationRunning = true
@@ -1530,6 +1538,9 @@ export class Graph {
     if (prevConfig.enableSimulation === this.config.enableSimulation) return
 
     if (this.config.enableSimulation) {
+      // Interrupt any active transition. If it includes positions, leave the
+      // current position texture at the last interpolated frame so simulation
+      // resumes from the same coordinates currently shown on screen.
       this.transition.end(true)
       this.ensureSimulationModules()
       this.points?.ensureSimulationResources()
@@ -1547,11 +1558,12 @@ export class Graph {
       return
     }
 
+    const wasSimulationActive = this.store.isSimulationRunning || this.store.alpha > 0 || this.store.simulationProgress > 0
     this.store.isSimulationRunning = false
     this.store.alpha = 0
     this.store.simulationProgress = 0
     this._shouldForceHoverDetection = true
-    this.config.onSimulationEnd?.()
+    if (wasSimulationActive) this.config.onSimulationEnd?.()
     this.destroySimulationModules()
   }
 
@@ -1999,6 +2011,10 @@ export class Graph {
 
   private findHoveredItem (): void {
     if (this._isDestroyed || !this._isMouseOnCanvas) return
+    // Skip hover detection while a transition is animating — point sizes and link widths
+    // are interpolated in the draw shaders but the hover shaders read the target buffers
+    // directly, so the hit area would mismatch the visible geometry.
+    if (this.transition.isActive) return
     if (this._findHoveredItemExecutionCount < MAX_HOVER_DETECTION_DELAY) {
       this._findHoveredItemExecutionCount += 1
       return

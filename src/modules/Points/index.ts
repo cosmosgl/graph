@@ -56,11 +56,9 @@ export class Points extends CoreModule {
    * Used together with `Clusters.cachedCentroidPositions` to skip redundant GPU readbacks.
    */
   public areClusterCentroidsUpToDate = false
-  private colorBuffer: Buffer | undefined
   private sourceColorBuffer: Buffer | undefined
   private targetColorBuffer: Buffer | undefined
   private previousColorData: Float32Array | undefined
-  private sizeBuffer: Buffer | undefined
   private sourceSizeBuffer: Buffer | undefined
   private targetSizeBuffer: Buffer | undefined
   private previousSizeData: Float32Array | undefined
@@ -72,6 +70,12 @@ export class Points extends CoreModule {
   private trackedPositionsFbo: Framebuffer | undefined
   private sampledPointsFbo: Framebuffer | undefined
   private trackedPositions: Map<number, [number, number]> | undefined
+  /**
+   * Guards the CPU-side `trackedPositions` cache in `getTrackedPositionsMap()`.
+   * Set to `true` after a successful readback when the simulation is inactive;
+   * must be set to `false` whenever `currentPositionFbo` is written to
+   * (simulation step, drag, position transition) so the next call re-reads from the GPU.
+   */
   private isPositionsUpToDate = false
   private drawCommand: Model | undefined
   private drawHighlightedCommand: Model | undefined
@@ -427,8 +431,8 @@ export class Points extends CoreModule {
       this.createAtlas()
     }
     // Ensure buffers exist before Model creation (Model needs attributes at creation time)
-    if (!this.colorBuffer) this.updateColor()
-    if (!this.sizeBuffer) this.updateSize()
+    if (!this.targetColorBuffer) this.updateColor()
+    if (!this.targetSizeBuffer) this.updateSize()
     if (!this.shapeBuffer) this.updateShape()
     if (!this.imageIndicesBuffer) this.updateImageIndices()
     if (!this.imageSizesBuffer) this.updateImageSizes()
@@ -745,7 +749,7 @@ export class Points extends CoreModule {
       vertexCount: data.pointsNumber ?? 0,
       attributes: {
         ...(this.hoveredPointIndices && { pointIndices: this.hoveredPointIndices }),
-        ...(this.sizeBuffer && { size: this.sizeBuffer }),
+        ...(this.targetSizeBuffer && { size: this.targetSizeBuffer }),
         ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
       },
       bufferLayout: [
@@ -941,7 +945,8 @@ export class Points extends CoreModule {
     const { store: { pointsTextureSize }, data } = this
     if (!pointsTextureSize) return
 
-    const colorData = data.pointColors ?? new Float32Array((data.pointsNumber ?? 0) * 4).fill(0)
+    // GraphData.updatePointColor() always populates pointColors before this runs
+    const colorData = data.pointColors as Float32Array
     const { source, target, previous } = this.updateAttributeBuffers(
       colorData,
       this.sourceColorBuffer,
@@ -952,7 +957,6 @@ export class Points extends CoreModule {
     this.sourceColorBuffer = source
     this.targetColorBuffer = target
     this.previousColorData = previous
-    this.colorBuffer = target
 
     if (this.drawCommand) {
       this.drawCommand.setAttributes({
@@ -1060,7 +1064,8 @@ export class Points extends CoreModule {
     const { device, store: { pointsTextureSize }, data } = this
     if (!pointsTextureSize || data.pointsNumber === undefined) return
 
-    const sizeData = data.pointSizes ?? new Float32Array(data.pointsNumber).fill(0)
+    // GraphData.updatePointSize() always populates pointSizes before this runs
+    const sizeData = data.pointSizes as Float32Array
     const { source, target, previous } = this.updateAttributeBuffers(
       sizeData,
       this.sourceSizeBuffer,
@@ -1071,7 +1076,6 @@ export class Points extends CoreModule {
     this.sourceSizeBuffer = source
     this.targetSizeBuffer = target
     this.previousSizeData = previous
-    this.sizeBuffer = target
 
     if (this.drawCommand) {
       this.drawCommand.setAttributes({
@@ -1319,8 +1323,8 @@ export class Points extends CoreModule {
 
   public draw (renderPass: RenderPass): void {
     const { data, config, store } = this
-    if (!this.colorBuffer) this.updateColor()
-    if (!this.sizeBuffer) this.updateSize()
+    if (!this.targetColorBuffer) this.updateColor()
+    if (!this.targetSizeBuffer) this.updateSize()
     if (!this.shapeBuffer) this.updateShape()
     if (!this.imageIndicesBuffer) this.updateImageIndices()
     if (!this.imageSizesBuffer) this.updateImageSizes()
@@ -1698,7 +1702,7 @@ export class Points extends CoreModule {
 
     this.findHoveredPointCommand.setAttributes({
       ...(this.hoveredPointIndices && { pointIndices: this.hoveredPointIndices }),
-      ...(this.sizeBuffer && { size: this.sizeBuffer }),
+      ...(this.targetSizeBuffer && { size: this.targetSizeBuffer }),
       ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
     })
 
@@ -1980,9 +1984,9 @@ export class Points extends CoreModule {
   }
 
   /**
-   * Destruction order matters
-   * Models -> Framebuffers -> Textures -> UniformStores -> Buffers
-   * */
+   * Destroy luma.gl resources in ownership order:
+   * Models -> Framebuffers -> Textures -> UniformStores -> Buffers.
+   */
   public destroy (): void {
     // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
     this.drawCommand?.destroy()
@@ -2121,10 +2125,6 @@ export class Points extends CoreModule {
     this.trackPointsUniformStore = undefined
 
     // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
-    if (this.colorBuffer && !this.colorBuffer.destroyed) {
-      this.colorBuffer.destroy()
-    }
-    this.colorBuffer = undefined
     if (this.sourceColorBuffer && !this.sourceColorBuffer.destroyed) {
       this.sourceColorBuffer.destroy()
     }
@@ -2134,10 +2134,6 @@ export class Points extends CoreModule {
     }
     this.targetColorBuffer = undefined
     this.previousColorData = undefined
-    if (this.sizeBuffer && !this.sizeBuffer.destroyed) {
-      this.sizeBuffer.destroy()
-    }
-    this.sizeBuffer = undefined
     if (this.sourceSizeBuffer && !this.sourceSizeBuffer.destroyed) {
       this.sourceSizeBuffer.destroy()
     }
@@ -2208,11 +2204,11 @@ export class Points extends CoreModule {
 
     const velocityData = new Float32Array(pointsTextureSize * pointsTextureSize * 4).fill(0)
     if (!this.velocityTexture || this.velocityTexture.width !== pointsTextureSize || this.velocityTexture.height !== pointsTextureSize) {
-      if (this.velocityTexture && !this.velocityTexture.destroyed) {
-        this.velocityTexture.destroy()
-      }
       if (this.velocityFbo && !this.velocityFbo.destroyed) {
         this.velocityFbo.destroy()
+      }
+      if (this.velocityTexture && !this.velocityTexture.destroyed) {
+        this.velocityTexture.destroy()
       }
       this.velocityTexture = device.createTexture({
         width: pointsTextureSize,
@@ -2250,11 +2246,11 @@ export class Points extends CoreModule {
     const textureUsage = Texture.SAMPLE | Texture.RENDER | Texture.COPY_SRC | Texture.COPY_DST
 
     if (!this.sourcePositionTexture || this.sourcePositionTexture.width !== pointsTextureSize || this.sourcePositionTexture.height !== pointsTextureSize) {
-      if (this.sourcePositionTexture && !this.sourcePositionTexture.destroyed) {
-        this.sourcePositionTexture.destroy()
-      }
       if (this.sourcePositionFbo && !this.sourcePositionFbo.destroyed) {
         this.sourcePositionFbo.destroy()
+      }
+      if (this.sourcePositionTexture && !this.sourcePositionTexture.destroyed) {
+        this.sourcePositionTexture.destroy()
       }
       this.sourcePositionTexture = device.createTexture({
         width: pointsTextureSize,
@@ -2277,11 +2273,11 @@ export class Points extends CoreModule {
     })
 
     if (!this.targetPositionTexture || this.targetPositionTexture.width !== pointsTextureSize || this.targetPositionTexture.height !== pointsTextureSize) {
-      if (this.targetPositionTexture && !this.targetPositionTexture.destroyed) {
-        this.targetPositionTexture.destroy()
-      }
       if (this.targetPositionFbo && !this.targetPositionFbo.destroyed) {
         this.targetPositionFbo.destroy()
+      }
+      if (this.targetPositionTexture && !this.targetPositionTexture.destroyed) {
+        this.targetPositionTexture.destroy()
       }
       this.targetPositionTexture = device.createTexture({
         width: pointsTextureSize,
@@ -2386,6 +2382,9 @@ export class Points extends CoreModule {
     })
     this.interpolatePositionCommand.draw(renderPass)
     renderPass.end()
+
+    this.isPositionsUpToDate = false
+    this.areClusterCentroidsUpToDate = false
   }
 
   public destroySimulationResources (): void {
