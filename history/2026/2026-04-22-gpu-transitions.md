@@ -2,7 +2,7 @@
 
 # GPU transitions for positions and attributes
 
-**Commits:** e2af399, a9272fd
+**Commits:** c5fd30e, 75b1a15, 74e0567
 
 ## Why
 
@@ -27,7 +27,11 @@ onTransitionEnd?:   (interrupted: boolean) => void
 
 **First render after init.** Position setters never animate — there's no prior state to interpolate from. The auto-pause rule is also skipped. Attribute setters fire transition callbacks, but since there's no prior attribute data either, source equals target and the result is a visual snap.
 
-**Auto-pause.** When `render()` sees a pending transition with `transitionDuration > 0` and a running simulation (and it's not the first render), the simulation pauses before the transition starts and `onSimulationPause` fires.
+**Auto-pause (position transitions only).** When `render()` sees a pending **position** transition with `transitionDuration > 0` and a running simulation (and it's not the first render), the simulation pauses before the transition starts and `onSimulationPause` fires. The simulation **stays paused after the transition ends** — `setPointPositions()` signals the user wants to explore a specific layout, not have forces immediately pull nodes away from it. Call `unpause()` to resume explicitly. Color and size transitions don't compete with force updates and never pause the simulation.
+
+**Hover during transitions.** Hover detection is skipped while any transition is active. Hover shaders read the target buffers, which would mismatch the interpolated geometry currently on screen.
+
+**Cache invalidation.** Position and centroid caches are invalidated each frame during a position transition so `getTrackedPointPositionsMap()` / `getTrackedPointPositionsArray()` and centroid getters return the interpolated values, not stale post-transition targets — important when the simulation is paused and there's no other refresh driving cache turnover.
 
 **`fitView` during transition.** `fitView()` and `fitViewByPointIndices()` frame the target positions (`graph.pointPositions`), not the interpolated positions currently on screen.
 
@@ -49,18 +53,19 @@ All rows assume a setter ran (e.g. `setPointPositions`) so a transition is **pen
 
 ### Initial state at `render()`
 
-Each row is the state when `render()` fires. The last two columns show what happens if you flip each config via `setConfigPartial` from that state.
+Each row is the state when `render()` fires. The last two columns show what happens if you flip each config via `setConfigPartial` from that state. Auto-pause applies to **position** transitions only — color/size transitions never pause the simulation.
 
 | `enableSimulation` + `transitionDuration` | Behavior | `enableSimulation` switch | `transitionDuration` switch |
 |---|---|---|---|
 | `false` + `≤0` (no simulation, no transition) | Snap. No simulation, no transition cycle. | `→ true`: starts simulation, creates modules and resources, fires `onSimulationStart`. | `→ >0`: next animation uses the new duration. |
 | `false` + `>0` (no simulation, transition) | Animate. No simulation to pause. | `→ true`: interrupts the transition (`onTransitionEnd(true)`), then starts simulation from current positions, fires `onSimulationStart`. | `→ ≤0`: next `start()` snaps. A running transition ends with `onTransitionEnd(true)` on the next step. |
 | `true` + `≤0` (simulation, no transition) | Snap. Simulation keeps running. | `→ false`: stops simulation, destroys simulation-only resources, fires `onSimulationEnd`. | `→ >0`: next animation uses the new duration. |
-| `true` + `>0` (simulation, transition) | Animate. **Simulation auto-pauses**; `onSimulationPause` fires. | `→ false`: stops simulation, destroys simulation-only resources, fires `onSimulationEnd`. | `→ ≤0`: next `start()` snaps. A running transition ends with `onTransitionEnd(true)` on the next step. |
+| `true` + `>0` (simulation, **position** transition) | Animate. **Simulation auto-pauses and stays paused after** the transition ends; `onSimulationPause` fires. Call `unpause()` to resume. | `→ false`: stops simulation, destroys simulation-only resources, fires `onSimulationEnd`. | `→ ≤0`: next `start()` snaps. A running transition ends with `onTransitionEnd(true)` on the next step. |
+| `true` + `>0` (simulation, **color/size** transition) | Animate. Simulation keeps running — color/size transitions don't compete with forces. | `→ false`: stops simulation, destroys simulation-only resources, fires `onSimulationEnd`. | `→ ≤0`: next `start()` snaps. A running transition ends with `onTransitionEnd(true)` on the next step. |
 
 ## Migration
 
-The new `transitionDuration` config defaults to `800` ms, so calling `setPointPositions(...); render()` after the first render will now animate instead of snap — and if the simulation is running, it will auto-pause for the duration of the animation.
+The new `transitionDuration` config defaults to `800` ms, so calling `setPointPositions(...); render()` after the first render will now animate instead of snap — and if the simulation is running, it will auto-pause for the duration of the animation **and stay paused afterwards**. Call `graph.unpause()` to resume forces.
 
 To keep the old snap behavior, set `transitionDuration: 0` in your config:
 
@@ -79,7 +84,7 @@ graph.setConfigPartial({ transitionDuration: 800 }) // restore if needed
 
 ## Example
 
-`src/stories/transition/` (Storybook: **Examples / Beginners → Point Transition**) — a 200k-point cloud sampled from Bryullov's *Horsewoman* (1832) that auto-loops between the picture layout and a sequence of tile scatters. Demonstrates `transitionDuration`, `TransitionEasing`, and the `onTransitionStart` / `onTransition` / `onTransitionEnd` callbacks in a self-contained, runnable setup.
+`src/stories/transition/` (Storybook: **Examples / Transitions → Point Transition**) — a 200k-point cloud sampled from Bryullov's *Horsewoman* (1832) that auto-loops between the picture layout and a sequence of tile scatters. Demonstrates `transitionDuration`, `TransitionEasing`, and the `onTransitionStart` / `onTransition` / `onTransitionEnd` callbacks in a self-contained, runnable setup.
 
 ## Future work
 

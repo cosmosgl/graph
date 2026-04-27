@@ -10,7 +10,7 @@ what actions will and will not be tolerated.
 We use Storybook to simplify the development process. You can start it by running `npm run storybook` in the root directory.
 If you've added a new feature, changed the configuration or public methods, please add a new example with its source code to Storybook if applicable and suggest changes to the docs.
 For non-trivial changes, consider adding a short note in `history/` to capture **why** the change happened.
-Use `history/README.md` for guidance, `history/PROMPT.md` to draft it with any LLM, or run `/history <why>` in Claude Code to let it gather context and write the file automatically.
+Use `history/README.md` for guidance, `history/PROMPT.md` to draft it with any LLM, or run `/history <why>` in Claude Code to let it gather context and write the file automatically. For follow-up commits that extend a topic that already has an entry, use `/history --update` to revise the latest entry in place.
 
 ## Pull Requests
 We actively welcome pull requests. If you want to submit one, please follow the following process:

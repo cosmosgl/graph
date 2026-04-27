@@ -37,5 +37,6 @@ What changed, what's worth knowing later — tradeoffs, caveats, migration steps
 **Writing options:**
 - Yourself: write directly.
 - With an LLM: use [`PROMPT.md`](./PROMPT.md).
+- In Claude Code: `/history <why>` drafts a new entry; `/history --update` revises the latest entry in place when follow-up commits extend the same topic.
 
 See recent files under `history/` for examples — they're the real source of truth on style.
