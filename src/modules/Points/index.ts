@@ -2436,6 +2436,7 @@ export class Points extends CoreModule {
     const sameCount = oldCount === newCount
 
     // Reuse both buffers when the topology is unchanged so the old target becomes the next source.
+    // TODO: Rare edge case - smooth in-flight attribute transitions when updates arrive mid-animation.
     if (sameCount &&
         sourceBuffer && !sourceBuffer.destroyed &&
         targetBuffer && !targetBuffer.destroyed) {

@@ -377,7 +377,8 @@ export class Graph {
     this.graph.inputPointPositions = pointPositions
     this.points!.shouldSkipRescale = dontRescale
     this.isPointPositionsUpdateNeeded = true
-    if (this.points?.currentPositionTexture) {
+    const currentPositionTexture = this.points?.currentPositionTexture
+    if (currentPositionTexture && !currentPositionTexture.destroyed) {
       this.transition.queue(TransitionProperty.Positions)
     }
     // Links related texture depends on point positions, so we need to update it
@@ -744,7 +745,8 @@ export class Graph {
       this.config.onSimulationPause?.()
     }
 
-    if (this.transition.isPending && !this.points?.currentPositionTexture) {
+    const currentPositionTexture = this.points?.currentPositionTexture
+    if (this.transition.isPending && (!currentPositionTexture || currentPositionTexture.destroyed)) {
       this.transition.abort()
     }
 
