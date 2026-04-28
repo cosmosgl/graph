@@ -397,7 +397,7 @@ The `render` method renders the graph and starts rendering. It does NOT modify s
   - If positive: Sets alpha to that value.
   - If `undefined`: Keeps current alpha value.
 
-**Transitions:** If any setter (`setPointPositions`, `setPointColors`, `setPointSizes`, `setLinkColors`, `setLinkWidths`) has queued changes and `transitionDuration > 0`, `render()` starts an animated transition. When the simulation is running, it auto-pauses for the duration of the transition (and `onSimulationPause` fires). The first render after initialization always snaps position changes — there is no prior state to animate from. See [Transitions](../?path=/docs/configuration--docs#transitions) in the configuration docs.
+**Transitions:** If any setter (`setPointPositions`, `setPointColors`, `setPointSizes`, `setLinkColors`, `setLinkWidths`) has queued changes and `transitionDuration > 0`, `render()` starts an animated transition. When the simulation is running, only **position** transitions auto-pause it (and `onSimulationPause` fires), and the simulation stays paused afterwards until `unpause()` is called. The first render after initialization always snaps position changes — there is no prior state to animate from. See [Transitions](../?path=/docs/configuration--docs#transitions) in the configuration docs.
 
 ### <a name="zoom_to_point_by_index" href="#zoom_to_point_by_index">#</a> graph.<b>zoomToPointByIndex</b>(<i>index</i>, [<i>duration</i>], [<i>scale</i>], [<i>canZoomOut</i>], [<i>enableSimulation</i>])
 

@@ -2014,10 +2014,9 @@ export class Graph {
 
   private findHoveredItem (): void {
     if (this._isDestroyed || !this._isMouseOnCanvas) return
-    // Skip hover detection while a transition is animating — point sizes and link widths
-    // are interpolated in the draw shaders but the hover shaders read the target buffers
-    // directly, so the hit area would mismatch the visible geometry.
-    if (this.transition.isActive) return
+    // TODO: Hover can stay enabled during point size transitions once point picking
+    // consumes the same interpolated point sizes as the draw pass.
+    if (this.transition.isActiveFor(TransitionProperty.PointSizes)) return
     if (this._findHoveredItemExecutionCount < MAX_HOVER_DETECTION_DELAY) {
       this._findHoveredItemExecutionCount += 1
       return
