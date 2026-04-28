@@ -2,7 +2,7 @@
 
 # GPU transitions for positions and attributes
 
-**Commits:** c5fd30e, 75b1a15, 74e0567
+**Commits:** c5fd30e, 75b1a15, 74e0567, b775c4c, 45a12f4
 
 ## Why
 
@@ -89,3 +89,4 @@ graph.setConfigPartial({ transitionDuration: 800 }) // restore if needed
 ## Future work
 
 - **Separate timelines per property.** One clock runs all animations today, so a new one cuts the previous off. Goal: independent timelines per property (or per setter call).
+- **Mid-animation attribute updates.** Point and link attribute transitions reuse their source/target buffers when topology stays the same, but smoothing updates that arrive in the middle of an already-running attribute transition is still a known edge case.
