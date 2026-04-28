@@ -618,6 +618,8 @@ Starts the simulation. This method only controls the simulation state, not rende
 
 * **`alpha`** (Number, optional): A number between `0` and `1` representing the initial energy of the simulation. The default value is `1` if not provided. A higher `alpha` value results in more initial energy for the simulation.
 
+If the simulation is already running, calling `start(alpha)` reheats it by resetting `alpha` and `simulationProgress` without firing `onSimulationStart` again.
+
 ### <a name="pause" href="#pause">#</a> graph.<b>pause</b>()
 
 Pauses the simulation. When paused, the simulation stops running but preserves its current state (progress, alpha). Can be resumed using the `unpause()` method.

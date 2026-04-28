@@ -1171,6 +1171,9 @@ export class Graph {
   /**
    * Start the simulation.
    * This only controls the simulation state, not rendering.
+   * If the simulation is already running, calling `start(alpha)` reheats it by
+   * resetting `alpha` and `simulationProgress` without firing
+   * `onSimulationStart` again.
    * @param alpha Value from 0 to 1. The higher the value, the more initial energy the simulation will get.
    */
   public start (alpha = 1): void {
@@ -1180,13 +1183,11 @@ export class Graph {
 
     if (!this.config.enableSimulation) return
     if (!this.graph.pointsNumber) return
-    if (this.store.isSimulationRunning) return
-
-    // Ignore repeated start() calls while simulation is already running.
+    const wasRunning = this.store.isSimulationRunning
     this.store.isSimulationRunning = true
     this.store.simulationProgress = 0
     this.store.alpha = alpha
-    this.config.onSimulationStart?.()
+    if (!wasRunning) this.config.onSimulationStart?.()
 
     // Note: Does NOT start frames - that's handled separately
   }
