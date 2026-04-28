@@ -29,7 +29,7 @@ onTransitionEnd?:   (interrupted: boolean) => void
 
 **Auto-pause (position transitions only).** When `render()` sees a pending **position** transition with `transitionDuration > 0` and a running simulation (and it's not the first render), the simulation pauses before the transition starts and `onSimulationPause` fires. The simulation **stays paused after the transition ends** — `setPointPositions()` signals the user wants to explore a specific layout, not have forces immediately pull nodes away from it. Call `unpause()` to resume explicitly. Color and size transitions don't compete with force updates and never pause the simulation.
 
-**Hover during transitions.** Hover detection is skipped while any transition is active. Hover shaders read the target buffers, which would mismatch the interpolated geometry currently on screen.
+**Hover during transitions.** Hover detection is skipped only during point size transitions. Point hover picking still reads target point sizes rather than interpolated sizes, so hit-testing would otherwise mismatch the geometry currently on screen. Position and link hover continue to use the interpolated current positions.
 
 **Cache invalidation.** Position and centroid caches are invalidated each frame during a position transition so `getTrackedPointPositionsMap()` / `getTrackedPointPositionsArray()` and centroid getters return the interpolated values, not stale post-transition targets — important when the simulation is paused and there's no other refresh driving cache turnover.
 
