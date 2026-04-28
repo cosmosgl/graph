@@ -26,7 +26,7 @@ import { readPixels } from '@/graph/helper'
 import { ensureVec2, ensureVec4 } from '@/graph/modules/Shared/uniform-utils'
 import { createAtlasDataFromImageData } from '@/graph/modules/Points/atlas-utils'
 import { buildPositionTextureData, buildSourcePositionTextureData } from '@/graph/modules/Points/position-utils'
-import { Transition } from '@/graph/modules/Transition'
+import { Transition, TransitionProperty } from '@/graph/modules/Transition'
 
 export class Points extends CoreModule {
   public transition: Transition | undefined
@@ -266,7 +266,7 @@ export class Points extends CoreModule {
     const targetCount = data.targetPointsNumber
     const sameCount = sourceCount === targetCount
     const shouldAnimate =
-      this.transition?.isPending === true &&
+      this.transition?.isPendingFor(TransitionProperty.Positions) === true &&
       this.config.transitionDuration > 0 &&
       !!this.currentPositionTexture
 
