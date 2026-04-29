@@ -142,7 +142,7 @@ export class Transition {
    * - Progress < 1 → update `progress`; fire `onTransition(eased)`.
    * - Progress reaches 1 → fire `onTransition(1)` then `onTransitionEnd(false)`.
    */
-  public step (nowMs: number): void {
+  public step (): void {
     if (!this.isActive) return
 
     const { transitionDuration } = this.config
@@ -152,7 +152,7 @@ export class Transition {
       return
     }
 
-    const linear = Math.min((nowMs - this.startTime) / transitionDuration, 1)
+    const linear = Math.min((performance.now() - this.startTime) / transitionDuration, 1)
     const eased = this.applyEasing(linear)
     this.progress = eased
     this.config.onTransition?.(eased)

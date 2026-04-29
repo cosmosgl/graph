@@ -1809,7 +1809,7 @@ export class Graph {
     const shouldAnimateLinkColors = this.transition.isActiveFor(TransitionProperty.LinkColors)
     const shouldAnimateLinkWidths = this.transition.isActiveFor(TransitionProperty.LinkWidths)
     if (this.transition.isActive) {
-      this.transition.step(frameNow)
+      this.transition.step()
 
       if (shouldInterpolatePositions) {
         this.points?.interpolatePosition(this.transition.progress)
