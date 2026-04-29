@@ -620,6 +620,8 @@ Starts the simulation. This method only controls the simulation state, not rende
 
 If the simulation is already running, calling `start(alpha)` reheats it by resetting `alpha` and `simulationProgress` without firing `onSimulationStart` again.
 
+If a **position** transition is currently active when `start()` is called, the transition is ended as interrupted (`onTransitionEnd(true)` fires) and the simulation runs from the current mid-animation positions.
+
 ### <a name="pause" href="#pause">#</a> graph.<b>pause</b>()
 
 Pauses the simulation. When paused, the simulation stops running but preserves its current state (progress, alpha). Can be resumed using the `unpause()` method.
@@ -628,7 +630,7 @@ Pauses the simulation. When paused, the simulation stops running but preserves i
 
 Unpauses (resumes) the simulation. This method resumes a paused simulation and continues its execution from where it was paused.
 
-If a transition is currently active when `unpause()` is called, the transition is ended as interrupted (`onTransitionEnd(true)` fires) and the simulation resumes from the current mid-animation positions.
+If a **position** transition is currently active when `unpause()` is called, the transition is ended as interrupted (`onTransitionEnd(true)` fires) and the simulation resumes from the current mid-animation positions.
 
 ### <a name="stop" href="#stop">#</a> graph.<b>stop</b>()
 

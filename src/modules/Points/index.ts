@@ -17,7 +17,7 @@ import fillGridWithSampledPointsFrag from '@/graph/modules/Points/fill-sampled-p
 import fillGridWithSampledPointsVert from '@/graph/modules/Points/fill-sampled-points.vert?raw'
 import updatePositionFrag from '@/graph/modules/Points/update-position.frag?raw'
 import interpolatePositionFrag from '@/graph/modules/Points/interpolate-position.frag?raw'
-import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
+import { createIndexesForBuffer, updateAttributeBuffers } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import trackPositionsFrag from '@/graph/modules/Points/track-positions.frag?raw'
 import dragPointFrag from '@/graph/modules/Points/drag-point.frag?raw'
@@ -947,7 +947,8 @@ export class Points extends CoreModule {
 
     // GraphData.updatePointColor() always populates pointColors before this runs
     const colorData = data.pointColors as Float32Array
-    const { source, target, previous } = this.updateAttributeBuffers(
+    const { source, target, previous } = updateAttributeBuffers(
+      this.device,
       colorData,
       this.sourceColorBuffer,
       this.targetColorBuffer,
@@ -1066,7 +1067,8 @@ export class Points extends CoreModule {
 
     // GraphData.updatePointSize() always populates pointSizes before this runs
     const sizeData = data.pointSizes as Float32Array
-    const { source, target, previous } = this.updateAttributeBuffers(
+    const { source, target, previous } = updateAttributeBuffers(
+      this.device,
       sizeData,
       this.sourceSizeBuffer,
       this.targetSizeBuffer,
@@ -2422,61 +2424,6 @@ export class Points extends CoreModule {
     this.currentPositionTexture = tempTexture
     this.currentPositionFbo = tempFbo
     this.areClusterCentroidsUpToDate = false
-  }
-
-  private updateAttributeBuffers (
-    targetData: Float32Array,
-    sourceBuffer: Buffer | undefined,
-    targetBuffer: Buffer | undefined,
-    previousData: Float32Array | undefined,
-    tupleSize: 1 | 4
-  ): { source: Buffer; target: Buffer; previous: Float32Array } {
-    const oldCount = previousData ? previousData.length / tupleSize : 0
-    const newCount = targetData.length / tupleSize
-    const sameCount = oldCount === newCount
-
-    // Reuse both buffers when the topology is unchanged so the old target becomes the next source.
-    // TODO: Rare edge case - smooth in-flight attribute transitions when updates arrive mid-animation.
-    if (sameCount &&
-        sourceBuffer && !sourceBuffer.destroyed &&
-        targetBuffer && !targetBuffer.destroyed) {
-      const nextSource = targetBuffer
-      const nextTarget = sourceBuffer
-      nextTarget.write(targetData)
-      return {
-        source: nextSource,
-        target: nextTarget,
-        previous: new Float32Array(targetData),
-      }
-    }
-
-    const sourceData = new Float32Array(targetData.length)
-    const sharedCount = Math.min(oldCount, newCount)
-    for (let i = 0; i < sharedCount * tupleSize; i += 1) {
-      sourceData[i] = previousData?.[i] ?? (targetData[i] as number)
-    }
-    for (let i = sharedCount * tupleSize; i < targetData.length; i += 1) {
-      sourceData[i] = targetData[i] as number
-    }
-
-    if (sourceBuffer && !sourceBuffer.destroyed) {
-      sourceBuffer.destroy()
-    }
-    if (targetBuffer && !targetBuffer.destroyed) {
-      targetBuffer.destroy()
-    }
-
-    return {
-      source: this.device.createBuffer({
-        data: sourceData,
-        usage: Buffer.VERTEX | Buffer.COPY_DST,
-      }),
-      target: this.device.createBuffer({
-        data: targetData,
-        usage: Buffer.VERTEX | Buffer.COPY_DST,
-      }),
-      previous: new Float32Array(targetData),
-    }
   }
 
   private createOrUpdatePositionTextures (positionData: Float32Array, pointsTextureSize: number): void {
