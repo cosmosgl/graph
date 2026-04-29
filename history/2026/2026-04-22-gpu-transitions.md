@@ -2,7 +2,7 @@
 
 # GPU transitions for positions and attributes
 
-**Commits:** c5fd30e, 75b1a15, 74e0567, b775c4c, 45a12f4
+**Commits:** c5fd30e, 75b1a15, 74e0567, b775c4c, 45a12f4, 579801d, 5006eea, fed8dcd, 6256b66, cd32f59
 
 ## Why
 
@@ -29,7 +29,7 @@ onTransitionEnd?:   (interrupted: boolean) => void
 
 **Auto-pause (position transitions only).** When `render()` sees a pending **position** transition with `transitionDuration > 0` and a running simulation (and it's not the first render), the simulation pauses before the transition starts and `onSimulationPause` fires. The simulation **stays paused after the transition ends** — `setPointPositions()` signals the user wants to explore a specific layout, not have forces immediately pull nodes away from it. Call `unpause()` to resume explicitly. Color and size transitions don't compete with force updates and never pause the simulation.
 
-**Hover during transitions.** Hover detection is skipped only during point size transitions. Point hover picking still reads target point sizes rather than interpolated sizes, so hit-testing would otherwise mismatch the geometry currently on screen. Position and link hover continue to use the interpolated current positions.
+**Hover and drag during transitions.** Hover detection is skipped only during point size transitions — point hover picking reads target point sizes rather than interpolated sizes, so hit-testing would otherwise mismatch the geometry currently on screen. Position and link hover continue to use the interpolated current positions. Drag start is blocked during point position **and** point size transitions: starting a drag mid-position-transition would mean grabbing a point whose on-screen location is still moving under the cursor, and mid-size-transition the hit area would mismatch the visible point.
 
 **Cache invalidation.** Position and centroid caches are invalidated each frame during a position transition so `getTrackedPointPositionsMap()` / `getTrackedPointPositionsArray()` and centroid getters return the interpolated values, not stale post-transition targets — important when the simulation is paused and there's no other refresh driving cache turnover.
 
@@ -44,8 +44,10 @@ graph.setConfigPartial({ enableSimulation: true })
 graph.setConfigPartial({ enableSimulation: false })
 ```
 
-- `false → true`: creates simulation modules and GPU resources, fires `onSimulationStart`. If a transition is mid-flight, it's interrupted first (`onTransitionEnd(true)`), and the simulation starts from the current mid-animation positions.
+- `false → true`: creates simulation modules and GPU resources, fires `onSimulationStart`. If a transition is mid-flight, it's interrupted first (`onTransitionEnd(true)`) and the simulation starts from the current mid-animation positions. Any **queued but not yet started** position transition is also dropped, so the next `render()` doesn't immediately auto-pause the simulation it just enabled.
 - `true → false`: stops the simulation, destroys simulation-only modules and GPU resources, fires `onSimulationEnd`. Any active transition keeps playing — its state is untouched.
+
+`start()` and `unpause()` only interrupt a transition when **positions** are animating; an active color/size cycle keeps running. Repeated `start(alpha)` calls now reheat the simulation by resetting `alpha` and `simulationProgress`, but `onSimulationStart` only fires on a stopped/paused → running transition, not on every reheat.
 
 ## Behavior matrix
 

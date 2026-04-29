@@ -29,7 +29,7 @@ Use this when recent commits extend or correct a topic that already has an entry
 3. Run `git show --stat` on the new commit(s) to see what changed.
 4. Read the existing entry in full so updates stay consistent with its structure and tone.
 5. Update the entry in place with `Edit`:
-   - Append the new commit hashes to the **Commits** line (replace stale/squashed hashes if needed).
+   - Append the new commit hashes to the **Commits** line (replace stale/squashed hashes if needed). **Skip commits that only touch `history/`** — entries that exist solely to refine the history doc itself shouldn't be listed as commits the entry "covers".
    - Revise sections affected by the new commits (behavior matrices, migration notes, examples, API names) so the doc reflects the current state — not an addendum tacked on the end.
    - Keep the original filename and date — the file represents the topic, not the latest commit.
    - Anything left ambiguous by the commit messages: leave a `<!-- TODO: ... -->` rather than guessing.
