@@ -4,8 +4,10 @@ precision highp float;
 #endif
 
 in vec2 position, pointA, pointB;
-in vec4 color;
-in float width;
+in vec4 sourceColor;
+in vec4 targetColor;
+in float sourceWidth;
+in float targetWidth;
 in float arrow;
 in float linkIndices;
 
@@ -37,6 +39,9 @@ layout(std140) uniform drawLineUniforms {
   float linkStatusTextureSize;
   float focusedLinkIndex;
   float focusedLinkWidthIncrease;
+  float transitionProgress;
+  float animateColors;
+  float animateWidths;
 } drawLine;
 
 #define transformationMatrix drawLine.transformationMatrix
@@ -62,6 +67,9 @@ layout(std140) uniform drawLineUniforms {
 #define linkStatusTextureSize drawLine.linkStatusTextureSize
 #define focusedLinkIndex drawLine.focusedLinkIndex
 #define focusedLinkWidthIncrease drawLine.focusedLinkWidthIncrease
+#define transitionProgress drawLine.transitionProgress
+#define animateColors drawLine.animateColors
+#define animateWidths drawLine.animateWidths
 #else
 uniform mat3 transformationMatrix;
 uniform float pointsTextureSize;
@@ -87,6 +95,9 @@ uniform float isLinkHighlightingActive;
 uniform float linkStatusTextureSize;
 uniform float focusedLinkIndex;
 uniform float focusedLinkWidthIncrease;
+uniform float transitionProgress;
+uniform float animateColors;
+uniform float animateWidths;
 #endif
 
 out vec4 rgbaColor;
@@ -155,9 +166,16 @@ void main() {
 
   // Convert link distance to screen pixels
   float linkDistPx = linkDist * transformationMatrix[0][0];
+
+  float lineWidthBase = animateWidths > 0.0
+    ? mix(sourceWidth, targetWidth, transitionProgress)
+    : targetWidth;
+  vec4 lineColor = animateColors > 0.0
+    ? mix(sourceColor, targetColor, transitionProgress)
+    : targetColor;
   
   // Calculate line width using the width scale
-  float linkWidth = width * widthScale;
+  float linkWidth = lineWidthBase * widthScale;
   float k = 2.0;
   // Arrow width is proportionally larger than the line width
   float arrowWidth = linkWidth * k;
@@ -211,9 +229,9 @@ void main() {
 
 
   // Calculate final color with opacity based on link distance
-  vec3 rgbColor = color.rgb;
+  vec3 rgbColor = lineColor.rgb;
   // Adjust opacity based on link distance
-  float opacity = color.a * linkOpacity * max(linkVisibilityMinTransparency, map(linkDistPx, linkVisibilityDistanceRange.g, linkVisibilityDistanceRange.r, 0.0, 1.0));
+  float opacity = lineColor.a * linkOpacity * max(linkVisibilityMinTransparency, map(linkDistPx, linkVisibilityDistanceRange.g, linkVisibilityDistanceRange.r, 0.0, 1.0));
 
   // Apply greyed-out opacity from link status texture
   if (isLinkHighlightingActive > 0.0 && linkStatusTextureSize > 0.0) {

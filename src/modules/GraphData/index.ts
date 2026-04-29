@@ -31,6 +31,18 @@ export class GraphData {
   public inputPinnedPoints: number[] | undefined
 
   public pointPositions: Float32Array | undefined
+  /**
+   * Number of points before the latest data update.
+   * Used as the `from` value for point transitions.
+   * This lets transitions handle added or removed points correctly.
+   */
+  public sourcePointsNumber = 0
+  /**
+   * Number of points after the latest data update.
+   * Used as the `to` value for point transitions.
+   * This lets transitions handle added or removed points correctly.
+   */
+  public targetPointsNumber = 0
   public pointColors: Float32Array | undefined
   public pointSizes: Float32Array | undefined
   public pointShapes: Float32Array | undefined
@@ -75,7 +87,9 @@ export class GraphData {
   }
 
   public updatePoints (): void {
+    this.sourcePointsNumber = this.pointPositions ? this.pointPositions.length / 2 : 0
     this.pointPositions = this.inputPointPositions
+    this.targetPointsNumber = this.pointPositions ? this.pointPositions.length / 2 : 0
   }
 
   /**

@@ -1,5 +1,6 @@
 import type { GraphConfigInterface, Complete } from '@/graph/config'
 import { PointShape } from '@/graph/modules/GraphData'
+import { TransitionEasing } from '@/graph/modules/Transition'
 
 /**
  * Default values for all graph configuration properties.
@@ -7,6 +8,8 @@ import { PointShape } from '@/graph/modules/GraphData'
 export const defaultConfigValues = {
   // General
   enableSimulation: true,
+  transitionDuration: 800,
+  transitionEasing: TransitionEasing.CubicInOut,
   backgroundColor: '#222222',
   /** Setting to 4096 because larger values crash the graph on iOS. More info: https://github.com/cosmosgl/graph/issues/203 */
   spaceSize: 4096,
@@ -76,6 +79,11 @@ export const defaultConfigValues = {
   onSimulationEnd: undefined,
   onSimulationPause: undefined,
   onSimulationUnpause: undefined,
+
+  // Transition callbacks
+  onTransitionStart: undefined,
+  onTransition: undefined,
+  onTransitionEnd: undefined,
 
   // Interaction callbacks
   onClick: undefined,
