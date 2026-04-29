@@ -203,6 +203,8 @@ graph.render()
 graph.setConfigPartial({ transitionDuration: 800 })
 ```
 
+**Auto-pause.** When a position transition runs while the simulation is on, the simulation auto-pauses for the transition and **stays paused afterwards**. Call `graph.unpause()` to resume forces. Set `transitionDuration: 0` to keep the v2 snap-and-keep-running behavior.
+
 You can track transition lifecycle via:
 - `onTransitionStart`
 - `onTransition` (eased progress in `[0, 1]`)

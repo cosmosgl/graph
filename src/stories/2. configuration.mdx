@@ -107,7 +107,7 @@ cosmos.gl layout algorithm was inspired by the [d3-force](https://github.com/d3/
 | onSimulationUnpause | Called when simulation unpauses |
 | onTransitionStart | Called when an animated transition starts (see [Transitions](#transitions)) |
 | onTransition | Called on every transition frame with the eased `progress` value in the `[0, 1]` range: `(progress: number) => void` |
-| onTransitionEnd | Called when a transition ends. `interrupted` is `true` when the transition was replaced by a new one or ended early (e.g. by `unpause()` or by setting `transitionDuration` to `0` mid-flight): `(interrupted: boolean) => void` |
+| onTransitionEnd | Called when a transition ends. `interrupted` is `true` when the transition was replaced or ended early (e.g. by setting `transitionDuration` to `0` mid-flight, or toggling `enableSimulation` mid-flight): `(interrupted: boolean) => void` |
 | onClick | Called on canvas click, with point index and position if exists |
 | onPointClick | Called when a point is clicked, with point index and position |
 | onLinkClick | Called when a link is clicked, with link index |
@@ -142,11 +142,11 @@ A single transition cycle tracks every animated property in one shared timeline,
 
 **First render after init.** Position setters always snap on the very first render — there is no prior state to interpolate from. The auto-pause rule described below is also skipped for the first render.
 
-**Auto-pause.** When `render()` fires with a pending **position** transition, `transitionDuration > 0`, and the simulation running (and it is not the first render), the simulation is paused before the transition starts and `onSimulationPause` fires. The simulation stays paused after the transition ends until you resume it with `unpause()`, which interrupts any still-active transition (`onTransitionEnd(true)` fires).
+**Auto-pause.** When `render()` fires with a pending **position** transition, `transitionDuration > 0`, and the simulation running (and it is not the first render), the simulation is paused before the transition starts and `onSimulationPause` fires. The simulation stays paused after the transition ends until you resume it with `unpause()`.
 
 **`fitView` during a transition.** `fitView()` and `fitViewByPointIndices()` frame the target positions (the latest `setPointPositions` argument), not the interpolated positions currently on screen.
 
-**Toggling `enableSimulation` mid-transition.** Turning simulation on while a transition is active interrupts it (`onTransitionEnd(true)` fires) and the simulation starts from the current mid-animation positions. Turning simulation off leaves an active transition untouched.
+**Toggling `enableSimulation` mid-transition.** Turning simulation on while a transition is active interrupts it (`onTransitionEnd(true)` fires) and the simulation starts from the current mid-animation positions. Any queued position transition is also dropped to avoid auto-pause on the next render. Turning simulation off leaves an active transition untouched.
 
 **Migration.** The `transitionDuration` default of `800` ms means `setPointPositions(...); render()` after the first render now animates instead of snapping. To keep the old snap behavior, set `transitionDuration: 0` at construction time, or toggle it per-update via `setConfigPartial({ transitionDuration: 0 })`.
 
