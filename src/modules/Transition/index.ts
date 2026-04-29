@@ -95,6 +95,11 @@ export class Transition {
     this.pendingProperties.add(property)
   }
 
+  /** Removes a property from the pending queue without affecting the active cycle. */
+  public dequeue (property: TransitionProperty): void {
+    this.pendingProperties.delete(property)
+  }
+
   /**
    * Starts a queued transition cycle.
    *
@@ -160,6 +165,8 @@ export class Transition {
    *
    * - No active cycle → no-op.
    * - Otherwise → fire `onTransitionEnd(interrupted)`.
+   *
+   * TODO: support per-property end.
    */
   public end (interrupted: boolean): void {
     if (!this.isActive) return

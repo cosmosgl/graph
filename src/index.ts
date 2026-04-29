@@ -1183,6 +1183,10 @@ export class Graph {
 
     if (!this.config.enableSimulation) return
     if (!this.graph.pointsNumber) return
+    if (this.transition.isActiveFor(TransitionProperty.Positions)) {
+      // Avoids running simulation against mid-interpolation positions.
+      this.transition.end(true)
+    }
     const wasRunning = this.store.isSimulationRunning
     this.store.isSimulationRunning = true
     this.store.simulationProgress = 0
@@ -1227,10 +1231,8 @@ export class Graph {
     if (this.ensureDevice(() => this.unpause())) return
     if (!this.config.enableSimulation) return
     if (this.store.isSimulationRunning) return
-    if (this.transition.isActive) {
-      // Interrupt any active transition. If it includes positions, leave the
-      // current position texture at the last interpolated frame so simulation
-      // resumes from the same coordinates currently shown on screen.
+    if (this.transition.isActiveFor(TransitionProperty.Positions)) {
+      // Avoids running simulation against mid-interpolation positions.
       this.transition.end(true)
     }
     this.store.isSimulationRunning = true
@@ -1541,10 +1543,9 @@ export class Graph {
     if (prevConfig.enableSimulation === this.config.enableSimulation) return
 
     if (this.config.enableSimulation) {
-      // Interrupt any active transition. If it includes positions, leave the
-      // current position texture at the last interpolated frame so simulation
-      // resumes from the same coordinates currently shown on screen.
+      // Avoids running simulation against mid-interpolation positions.
       this.transition.end(true)
+      this.transition.dequeue(TransitionProperty.Positions)
       this.ensureSimulationModules()
       this.points?.ensureSimulationResources()
       this.isForceManyBodyUpdateNeeded = true
