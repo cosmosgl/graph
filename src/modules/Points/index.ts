@@ -67,6 +67,15 @@ export class Points extends CoreModule {
   private imageSizesBuffer: Buffer | undefined
   private imageAtlasCoordsTexture: Texture | undefined
   private imageAtlasCoordsTextureSize: number | undefined
+  /**
+   * Tracking pipeline — point positions read via `Graph.getTrackedPointPositionsMap()`:
+   *
+   *   currentPositionTexture ──trackPoints()──▶ trackedPositionsFbo ──readPixels──▶ trackedPositions Map
+   *   (source of truth)         (GPU draw)         (GPU cache)          (on demand)        (CPU cache)
+   *
+   * `trackPoints()` must run after every write to `currentPositionTexture`
+   * (see its JSDoc). `trackPointsByIndices()` does the one-time setup.
+   */
   private trackedPositionsFbo: Framebuffer | undefined
   private sampledPointsFbo: Framebuffer | undefined
   private trackedPositions: Map<number, [number, number]> | undefined
@@ -420,7 +429,9 @@ export class Points extends CoreModule {
     this.updatePinnedStatus()
     this.updateSampledPointsGrid()
 
-    this.trackPointsByIndices()
+    // Animated path: render loop refreshes after each `interpolatePosition()`.
+    // No-animate path: no loop will run — seed once here.
+    if (!shouldAnimate) this.trackPoints()
     return shouldAnimate
   }
 
@@ -1292,6 +1303,16 @@ export class Points extends CoreModule {
     }
   }
 
+  /**
+   * Refresh `trackedPositionsFbo` from `currentPositionTexture` (one GPU draw,
+   * no CPU sync). Must run after every write to `currentPositionTexture`:
+   * - `updatePosition()` — simulation tick
+   * - `drag()` — pointer drag
+   * - `interpolatePosition()` — each frame of a position transition
+   * - `createOrUpdatePositionTextures()` — CPU upload (`setPointPositions`, no-animate)
+   *
+   * `trackPointsByIndices()` self-calls after reallocating; no manual follow-up needed.
+   */
   public trackPoints (): void {
     if (!this.trackedIndices?.length || !this.trackPointsCommand || !this.trackPointsUniformStore ||
         !this.trackedPositionsFbo || this.trackedPositionsFbo.destroyed) return
