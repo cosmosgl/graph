@@ -1813,6 +1813,7 @@ export class Graph {
 
       if (shouldInterpolatePositions) {
         this.points?.interpolatePosition(this.transition.progress)
+        this.points?.trackPoints()
       }
     }
 
