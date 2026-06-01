@@ -107,7 +107,7 @@ cosmos.gl layout algorithm was inspired by the [d3-force](https://github.com/d3/
 | onSimulationUnpause | Called when simulation unpauses |
 | onTransitionStart | Called when an animated transition starts (see [Transitions](#transitions)) |
 | onTransition | Called on every transition frame with the eased `progress` value in the `[0, 1]` range: `(progress: number) => void` |
-| onTransitionEnd | Called when a transition ends. `interrupted` is `true` when the transition was replaced or ended early (e.g. by setting `transitionDuration` to `0` mid-flight, or toggling `enableSimulation` mid-flight): `(interrupted: boolean) => void` |
+| onTransitionEnd | Called when a transition ends. `interrupted` is `true` when the transition was replaced or ended early — specifically: a new transition cycle starts before the current one finishes, `transitionDuration` is set to `0` mid-flight, `enableSimulation` is turned on mid-flight, or `start()` / `unpause()` is called while a position transition is active. Otherwise `false`: `(interrupted: boolean) => void` |
 | onClick | Called on canvas click, with point index and position if exists |
 | onPointClick | Called when a point is clicked, with point index and position |
 | onLinkClick | Called when a link is clicked, with link index |
