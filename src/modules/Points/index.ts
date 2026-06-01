@@ -42,12 +42,47 @@ export class Points extends CoreModule {
   public shouldSkipRescale: boolean | undefined
   public imageAtlasTexture: Texture | undefined
   public imageCount = 0
-  // Add texture properties for position data (public for Clusters module access)
+  /**
+   * Where each point is right now. Every reader of point positions — draw,
+   * hover, tracking, `getPointPositions()`, `getTrackedPointPositionsMap()` —
+   * reads this texture and trusts it matches what's on screen.
+   *
+   * New contents come from one of four places:
+   *   - `interpolatePosition()` — each frame while a transition is running
+   *   - `updatePosition()`      — each simulation tick
+   *   - `drag()`                — while dragging a point
+   *   - `writePositionTexture()` from `updatePositions()` — direct CPU upload
+   *     when no transition is running, and to fill a newly created texture
+   *     before any shader reads it
+   *
+   * To preserve the "matches what's on screen" invariant, we only upload from
+   * the CPU when no shader is about to write to it. `updatePositions()` makes
+   * that call.
+   */
   public currentPositionTexture: Texture | undefined
+  /**
+   * Holds the previous frame of positions so simulation and drag shaders can
+   * read it while writing the new frame into `currentPositionTexture` in the
+   * same render pass (a single texture cannot be both read and written in one
+   * pass). `swapFbo()` rotates current and previous each frame.
+   */
   public previousPositionTexture: Texture | undefined
   public velocityTexture: Texture | undefined
   public pointStatusTexture: Texture | undefined
+  /**
+   * Start of a position transition — the "from" positions blended by
+   * `interpolatePosition()`. Populated by `updatePositions()` when an animated
+   * `setPointPositions()` arrives, either via a fast GPU copy of
+   * `currentPositionTexture` (same point count) or a CPU-side remap when the
+   * count changed. Untouched outside an active transition.
+   */
   public sourcePositionTexture: Texture | undefined
+  /**
+   * End of a position transition — the "to" positions blended by
+   * `interpolatePosition()`. Populated by `updatePositions()` from the latest
+   * `setPointPositions()` argument when a transition starts. Untouched outside
+   * an active transition.
+   */
   public targetPositionTexture: Texture | undefined
   /**
    * Whether the cached cluster centroid positions are still valid.
@@ -281,21 +316,14 @@ export class Points extends CoreModule {
 
     const targetState = buildPositionTextureData(data.pointPositions, pointsTextureSize, targetCount)
 
-    const writePositionTexture = (tex: Texture, positionData: Float32Array): void => {
-      tex.copyImageData({
-        data: positionData,
-        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
-      })
-    }
-
-    // Populate source/target position textures for the transition:
-    //   - same count: GPU-to-GPU copy of current → source (no CPU transfer).
-    //   - count changed: CPU readback of current, carry over shared indices,
-    //     fill new indices from target.
-    //   - no prior frame (first render): source = target (nothing to animate from).
+    // Position transition: `interpolatePosition()` blends source → target each frame.
+    // Target is always the new layout.
+    //
+    // How we build source:
+    //   · Same point count — GPU copy of what's on screen
+    //   · Count changed — CPU readback + remap (`animatedSourceData`)
+    //   · No readable prior frame — source = target
+    let animatedSourceData: Float32Array | undefined
     if (shouldAnimate) {
       this.createTransitionResources()
       if (this.sourcePositionTexture && this.targetPositionTexture) {
@@ -313,23 +341,39 @@ export class Points extends CoreModule {
           }
         } else if (this.currentPositionFbo) {
           const previousPositionPixels = readPixels(device, this.currentPositionFbo as Framebuffer)
-          const sourceData = buildSourcePositionTextureData(
+          animatedSourceData = buildSourcePositionTextureData(
             previousPositionPixels,
             targetState,
             Math.min(sourceCount, targetCount),
             targetCount,
             pointsTextureSize
           )
-          writePositionTexture(this.sourcePositionTexture, sourceData)
+          this.writePositionTexture(this.sourcePositionTexture, animatedSourceData, pointsTextureSize)
         } else {
-          writePositionTexture(this.sourcePositionTexture, targetState)
+          this.writePositionTexture(this.sourcePositionTexture, targetState, pointsTextureSize)
         }
 
-        writePositionTexture(this.targetPositionTexture, targetState)
+        this.writePositionTexture(this.targetPositionTexture, targetState, pointsTextureSize)
       }
     }
 
-    this.createOrUpdatePositionTextures(targetState, pointsTextureSize)
+    // current/previous are what draw and tracking read from.
+    //
+    // How we fill them:
+    //   · Snap — upload final layout to both
+    //   · Animate + count changed — upload remapped source to both (recreated textures must
+    //     not be empty or show the target before the first interpolate frame)
+    //   · Animate + same count — skip upload; buffers still show the last frame
+    this.ensurePositionTextures(pointsTextureSize)
+    if (!shouldAnimate) {
+      this.writePositionTexture(this.currentPositionTexture!, targetState, pointsTextureSize)
+      this.writePositionTexture(this.previousPositionTexture!, targetState, pointsTextureSize)
+    } else if (animatedSourceData) {
+      this.writePositionTexture(this.currentPositionTexture!, animatedSourceData, pointsTextureSize)
+      this.writePositionTexture(this.previousPositionTexture!, animatedSourceData, pointsTextureSize)
+    }
+    this.areClusterCentroidsUpToDate = false
+    this.isPositionsUpToDate = false
     if (this.config.enableSimulation) this.ensureSimulationResources()
 
     // Create searchTexture and framebuffer
@@ -1309,7 +1353,8 @@ export class Points extends CoreModule {
    * - `updatePosition()` — simulation tick
    * - `drag()` — pointer drag
    * - `interpolatePosition()` — each frame of a position transition
-   * - `createOrUpdatePositionTextures()` — CPU upload (`setPointPositions`, no-animate)
+   * - `writePositionTexture()` — CPU upload from `updatePositions` (`setPointPositions`,
+   *   non-animated path; or animated path when the texture had to be recreated)
    *
    * `trackPointsByIndices()` self-calls after reallocating; no manual follow-up needed.
    */
@@ -2447,8 +2492,11 @@ export class Points extends CoreModule {
     this.areClusterCentroidsUpToDate = false
   }
 
-  private createOrUpdatePositionTextures (positionData: Float32Array, pointsTextureSize: number): void {
-    // Create currentPositionTexture and framebuffer
+  /**
+   * Makes sure the GPU has current and previous position textures at the right size.
+   * This method only allocates; `updatePositions()` is responsible for putting data in them.
+   */
+  private ensurePositionTextures (pointsTextureSize: number): void {
     if (!this.currentPositionTexture || this.currentPositionTexture.width !== pointsTextureSize || this.currentPositionTexture.height !== pointsTextureSize) {
       if (this.currentPositionTexture && !this.currentPositionTexture.destroyed) {
         this.currentPositionTexture.destroy()
@@ -2467,15 +2515,7 @@ export class Points extends CoreModule {
         colorAttachments: [this.currentPositionTexture],
       })
     }
-    this.currentPositionTexture.copyImageData({
-      data: positionData,
-      bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
-      mipLevel: 0,
-      x: 0,
-      y: 0,
-    })
 
-    // Create previousPositionTexture and framebuffer
     if (!this.previousPositionTexture ||
         this.previousPositionTexture.width !== pointsTextureSize ||
         this.previousPositionTexture.height !== pointsTextureSize) {
@@ -2496,16 +2536,17 @@ export class Points extends CoreModule {
         colorAttachments: [this.previousPositionTexture],
       })
     }
-    this.previousPositionTexture.copyImageData({
-      data: positionData,
+  }
+
+  /** CPU→GPU upload of position data into an existing RGBA32F texture. */
+  private writePositionTexture (tex: Texture, data: Float32Array, pointsTextureSize: number): void {
+    tex.copyImageData({
+      data,
       bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
       mipLevel: 0,
       x: 0,
       y: 0,
     })
-
-    this.areClusterCentroidsUpToDate = false
-    this.isPositionsUpToDate = false
   }
 
   private ensureUpdatePositionProgram (): void {
