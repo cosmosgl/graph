@@ -23,6 +23,10 @@ import { Transition, TransitionProperty } from '@/graph/modules/Transition'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
 
+/** Touch/pen long-press → context menu thresholds. */
+const LONG_PRESS_DURATION_MS = 500
+const LONG_PRESS_MOVE_THRESHOLD_PX = 10
+
 export class Graph {
   /** Current graph configuration. Always fully populated with default values for any unset properties. */
   public config: GraphConfigInterface = createDefaultConfig()
@@ -45,6 +49,22 @@ export class Graph {
   private shouldDestroyDevice: boolean
   private requestAnimationFrameId = 0
   private isRightClickMouse = false
+  /**
+   * Touch/pen long-press timer. Set on pointerdown for non-mouse pointers and
+   * cancelled on pointerup, pointercancel, or movement past
+   * LONG_PRESS_MOVE_THRESHOLD_PX. When it fires, the contextmenu callback chain
+   * runs and the synthesized click is suppressed.
+   */
+  private _longPressTimerId: number | undefined
+  private _longPressStartX = 0
+  private _longPressStartY = 0
+  /**
+   * Set when long-press fires contextmenu (or a browser-dispatched contextmenu
+   * handles itself) so the synthesized click that follows the same touch is
+   * dropped instead of routed to onPointClick/onBackgroundClick/onLinkClick.
+   * Consumed by onClick; also cleared on next pointerdown.
+   */
+  private _shouldSuppressNextClick = false
 
   private store = new Store()
   private points: Points | undefined
@@ -69,9 +89,9 @@ export class Graph {
    */
   private _findHoveredItemExecutionCount = 0
   /**
-   * If the mouse is not on the Canvas, the `findHoveredPoint` or `findHoveredLine` method will not be executed.
+   * If no pointer is over the Canvas, the `findHoveredPoint` or `findHoveredLine` method will not be executed.
    */
-  private _isMouseOnCanvas = false
+  private _isPointerOnCanvas = false
   /**
    * Last mouse position for detecting significant mouse movement
    */
@@ -161,6 +181,7 @@ export class Graph {
       deviceCanvas.style.width = '100%'
       deviceCanvas.style.height = '100%'
       this.canvas = deviceCanvas
+      this.updateCanvasTouchAction()
 
       const w = this.canvas.clientWidth
       const h = this.canvas.clientHeight
@@ -171,18 +192,37 @@ export class Graph {
 
       this.canvasD3Selection = select<HTMLCanvasElement, undefined>(this.canvas)
       this.canvasD3Selection
-        .on('mouseenter.cosmos', (event) => {
-          this._isMouseOnCanvas = true
+        .on('pointerenter.cosmos', (event: PointerEvent) => {
+          if (!event.isPrimary) return
+          this._isPointerOnCanvas = true
           this._lastMouseX = event.clientX
           this._lastMouseY = event.clientY
         })
-        .on('mousemove.cosmos', (event) => {
-          this._isMouseOnCanvas = true
+        .on('pointermove.cosmos', (event: PointerEvent) => {
+          if (!event.isPrimary) return
+          this._isPointerOnCanvas = true
           this._lastMouseX = event.clientX
           this._lastMouseY = event.clientY
+          // Cancel a pending long-press if the finger drifted past the threshold —
+          // the user is clearly panning/dragging, not holding to open a context menu.
+          if (this._longPressTimerId !== undefined) {
+            const dx = Math.abs(event.clientX - this._longPressStartX)
+            const dy = Math.abs(event.clientY - this._longPressStartY)
+            if (dx > LONG_PRESS_MOVE_THRESHOLD_PX || dy > LONG_PRESS_MOVE_THRESHOLD_PX) {
+              this.cancelLongPress()
+            }
+          }
         })
-        .on('mouseleave.cosmos', (event) => {
-          this._isMouseOnCanvas = false
+        .on('pointerleave.cosmos pointercancel.cosmos', (event: PointerEvent) => {
+          // Non-primary pointers (e.g. second finger of a pinch) leaving must not
+          // flip _isPointerOnCanvas or clear hover — the primary pointer is still down.
+          if (!event.isPrimary) return
+          this.cancelLongPress()
+          this._isPointerOnCanvas = false
+          // Touch tap: pointerdown → pointerup → pointerleave → click
+          // Clearing here would empty hoveredPoint before click reads it.
+          // Keep it — the next tap overwrites it anyway.
+          if (event.pointerType !== 'mouse') return
           this.currentEvent = event
 
           // Clear point hover state and trigger callback if needed
@@ -204,6 +244,42 @@ export class Graph {
 
           // Update cursor style after clearing hover states
           this.updateCanvasCursor()
+        })
+        .on('pointerdown.cosmos', (event: PointerEvent) => {
+          if (!event.isPrimary) return
+          this.currentEvent = event
+          // A new gesture starts fresh — drop any stale suppress flag.
+          this._shouldSuppressNextClick = false
+          // Touch fires no pointermove before touchstart, so hoveredPoint is empty
+          // when d3-drag checks it. Pick here so drag starts, not zoom.
+          // updateMousePosition first — findHoveredItem reads what it writes.
+          this._lastMouseX = event.clientX
+          this._lastMouseY = event.clientY
+          this.updateMousePosition(event)
+          this.findHoveredItem(true)
+
+          // Touch/pen long-press → contextmenu. The mouse path already gets
+          // contextmenu from the browser; this fills the gap for touch where
+          // long-press doesn't reliably dispatch contextmenu on canvas.
+          if (event.pointerType !== 'mouse') {
+            this._longPressStartX = event.clientX
+            this._longPressStartY = event.clientY
+            this.cancelLongPress()
+            this._longPressTimerId = window.setTimeout(() => {
+              this._longPressTimerId = undefined
+              if (this._isDestroyed) return
+              // Re-pick in case points moved during the hold (simulation may have
+              // shifted them under the stationary finger).
+              this.findHoveredItem(true)
+              this._shouldSuppressNextClick = true
+              this.fireContextMenu(event)
+            }, LONG_PRESS_DURATION_MS)
+          }
+        })
+        .on('pointerup.cosmos', (event: PointerEvent) => {
+          if (!event.isPrimary) return
+          // Finger lifted before the long-press window expired — it's a tap.
+          this.cancelLongPress()
         })
       select(document)
         .on('keydown.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
@@ -239,7 +315,7 @@ export class Graph {
         .call(this.dragInstance.behavior)
         .call(this.zoomInstance.behavior)
         .on('click', this.onClick.bind(this))
-        .on('mousemove', this.onMouseMove.bind(this))
+        .on('pointermove', this.onPointerMove.bind(this))
         .on('contextmenu', this.onContextMenu.bind(this))
       if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
       // Zoom level 1 means no zoom (100% scale). defaultConfigValues.initialZoomLevel is undefined,
@@ -1264,16 +1340,19 @@ export class Graph {
     this.isReady = false
     this.transition.abort()
     window.clearTimeout(this._fitViewOnInitTimeoutID)
+    this.cancelLongPress()
     this.stopFrames()
 
     // Remove all event listeners
     if (this.canvasD3Selection) {
       this.canvasD3Selection
-        .on('mouseenter.cosmos', null)
-        .on('mousemove.cosmos', null)
-        .on('mouseleave.cosmos', null)
+        .on('pointerenter.cosmos', null)
+        .on('pointermove.cosmos', null)
+        .on('pointerleave.cosmos pointercancel.cosmos', null)
+        .on('pointerdown.cosmos', null)
+        .on('pointerup.cosmos', null)
         .on('click', null)
-        .on('mousemove', null)
+        .on('pointermove', null)
         .on('contextmenu', null)
         .on('.drag', null)
         .on('.zoom', null)
@@ -1900,6 +1979,12 @@ export class Graph {
   }
 
   private onClick (event: MouseEvent): void {
+    if (this._shouldSuppressNextClick) {
+      // Long-press just fired contextmenu for this same touch; drop the
+      // synthesized click so callers don't see a click + contextmenu pair.
+      this._shouldSuppressNextClick = false
+      return
+    }
     this.config.onClick?.(
       this.store.hoveredPoint?.index,
       this.store.hoveredPoint?.position,
@@ -1933,10 +2018,13 @@ export class Graph {
     this.store.screenMousePosition = [mouseX, (this.store.screenSize[1] - mouseY)]
   }
 
-  private onMouseMove (event: MouseEvent): void {
+  private onPointerMove (event: PointerEvent): void {
+    // Skip non-primary pointers (e.g. second finger of a pinch) so callbacks
+    // and mouse-position state stay tied to a single pointer per gesture.
+    if (!event.isPrimary) return
     this.currentEvent = event
     this.updateMousePosition(event)
-    this.isRightClickMouse = event.which === 3
+    this.isRightClickMouse = (event.buttons & 2) !== 0
     this.config.onMouseMove?.(
       this.store.hoveredPoint?.index,
       this.store.hoveredPoint?.position,
@@ -1946,7 +2034,27 @@ export class Graph {
 
   private onContextMenu (event: MouseEvent): void {
     event.preventDefault()
+    // The browser may fire contextmenu on its own during a long-press (Android
+    // Chrome does this on some elements). Cancel our timer so we don't also
+    // fire it, and suppress the click that some browsers still synthesize after.
+    this.cancelLongPress()
+    this._shouldSuppressNextClick = true
+    this.fireContextMenu(event)
+  }
 
+  /** Clear the pending touch/pen long-press timer, if any. */
+  private cancelLongPress (): void {
+    if (this._longPressTimerId !== undefined) {
+      window.clearTimeout(this._longPressTimerId)
+      this._longPressTimerId = undefined
+    }
+  }
+
+  /**
+   * Dispatch the contextmenu callback chain — shared between the desktop
+   * `contextmenu` handler and the touch/pen long-press timer.
+   */
+  private fireContextMenu (event: MouseEvent): void {
     this.config.onContextMenu?.(
       this.store.hoveredPoint?.index,
       this.store.hoveredPoint?.position,
@@ -2012,14 +2120,27 @@ export class Graph {
         ?.call(this.zoomInstance.behavior)
         .on('wheel.zoom', null)
     }
+
+    this.updateCanvasTouchAction()
   }
 
-  private findHoveredItem (): void {
-    if (this._isDestroyed || !this._isMouseOnCanvas) return
+  /**
+   * Only steal touch gestures when cosmos uses them. With both flags off
+   * the page can scroll over the canvas.
+   */
+  private updateCanvasTouchAction (): void {
+    this.canvas.style.touchAction =
+      this.config.enableDrag || this.config.enableZoom ? 'none' : ''
+  }
+
+  private findHoveredItem (immediate = false): void {
+    if (this._isDestroyed) return
+    if (!immediate && !this._isPointerOnCanvas) return
     // TODO: Hover can stay enabled during point size transitions once point picking
     // consumes the same interpolated point sizes as the draw pass.
+    // Picking is unreliable mid-transition, so we skip even when called immediately.
     if (this.transition.isActiveFor(TransitionProperty.PointSizes)) return
-    if (this._findHoveredItemExecutionCount < MAX_HOVER_DETECTION_DELAY) {
+    if (!immediate && this._findHoveredItemExecutionCount < MAX_HOVER_DETECTION_DELAY) {
       this._findHoveredItemExecutionCount += 1
       return
     }
@@ -2030,7 +2151,7 @@ export class Graph {
     const mouseMoved = deltaX > MIN_MOUSE_MOVEMENT_THRESHOLD || deltaY > MIN_MOUSE_MOVEMENT_THRESHOLD
 
     // Skip if mouse hasn't moved AND not forced
-    if (!mouseMoved && !this._shouldForceHoverDetection) {
+    if (!immediate && !mouseMoved && !this._shouldForceHoverDetection) {
       return
     }
 
