@@ -191,7 +191,8 @@ export class Graph {
       this.store.updateScreenSize(w, h)
 
       this.canvasD3Selection = select<HTMLCanvasElement, undefined>(this.canvas)
-      this.canvasD3Selection
+        .call(this.dragInstance.behavior)
+        .call(this.zoomInstance.behavior)
         .on('pointerenter.cosmos', (event: PointerEvent) => {
           if (!event.isPrimary) return
           this._isPointerOnCanvas = true
@@ -203,6 +204,10 @@ export class Graph {
           this._isPointerOnCanvas = true
           this._lastMouseX = event.clientX
           this._lastMouseY = event.clientY
+          this.currentEvent = event
+          this.updateMousePosition(event)
+          this.isRightClickMouse = (event.buttons & 2) !== 0
+
           // Cancel a pending long-press if the finger drifted past the threshold —
           // the user is clearly panning/dragging, not holding to open a context menu.
           if (this._longPressTimerId !== undefined) {
@@ -212,6 +217,12 @@ export class Graph {
               this.cancelLongPress()
             }
           }
+
+          this.config.onMouseMove?.(
+            this.store.hoveredPoint?.index,
+            this.store.hoveredPoint?.position,
+            this.currentEvent
+          )
         })
         .on('pointerleave.cosmos pointercancel.cosmos', (event: PointerEvent) => {
           // Non-primary pointers (e.g. second finger of a pinch) leaving must not
@@ -284,9 +295,13 @@ export class Graph {
           // release — without this line, forceMouse would keep running.
           this.isRightClickMouse = (event.buttons & 2) !== 0
         })
+        .on('click.cosmos', this.onClick.bind(this))
+        .on('contextmenu.cosmos', this.onContextMenu.bind(this))
+
       select(document)
         .on('keydown.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
         .on('keyup.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
+
       this.zoomInstance.behavior
         .on('start.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => { this.currentEvent = e })
         .on('zoom.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
@@ -299,6 +314,7 @@ export class Graph {
           // Force hover detection on next frame since zoom may have changed what's under the mouse
           this._shouldForceHoverDetection = true
         })
+
       this.dragInstance.behavior
         .on('start.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
           this.currentEvent = e
@@ -314,12 +330,6 @@ export class Graph {
           this.currentEvent = e
           this.updateCanvasCursor()
         })
-      this.canvasD3Selection
-        .call(this.dragInstance.behavior)
-        .call(this.zoomInstance.behavior)
-        .on('click', this.onClick.bind(this))
-        .on('pointermove', this.onPointerMove.bind(this))
-        .on('contextmenu', this.onContextMenu.bind(this))
       if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
       // Zoom level 1 means no zoom (100% scale). defaultConfigValues.initialZoomLevel is undefined,
       // so we fall back to 1 here as the neutral zoom level when no initial zoom is configured.
@@ -1346,24 +1356,17 @@ export class Graph {
     this.cancelLongPress()
     this.stopFrames()
 
-    // Remove all event listeners
+    // Remove all event listeners — `.on('.cosmos', null)` clears every handler
+    // in the `.cosmos` namespace at once (canvas pointer/click/contextmenu and
+    // document key listeners), same trick we use for `.drag` / `.zoom`.
     if (this.canvasD3Selection) {
       this.canvasD3Selection
-        .on('pointerenter.cosmos', null)
-        .on('pointermove.cosmos', null)
-        .on('pointerleave.cosmos pointercancel.cosmos', null)
-        .on('pointerdown.cosmos', null)
-        .on('pointerup.cosmos', null)
-        .on('click', null)
-        .on('pointermove', null)
-        .on('contextmenu', null)
+        .on('.cosmos', null)
         .on('.drag', null)
         .on('.zoom', null)
     }
 
-    select(document)
-      .on('keydown.cosmos', null)
-      .on('keyup.cosmos', null)
+    select(document).on('.cosmos', null)
 
     if (this.zoomInstance?.behavior) {
       this.zoomInstance.behavior
@@ -2019,20 +2022,6 @@ export class Graph {
     if (mouseX === undefined || mouseY === undefined) return
     this.store.mousePosition = this.zoomInstance.convertScreenToSpacePosition([mouseX, mouseY])
     this.store.screenMousePosition = [mouseX, (this.store.screenSize[1] - mouseY)]
-  }
-
-  private onPointerMove (event: PointerEvent): void {
-    // Skip non-primary pointers (e.g. second finger of a pinch) so callbacks
-    // and mouse-position state stay tied to a single pointer per gesture.
-    if (!event.isPrimary) return
-    this.currentEvent = event
-    this.updateMousePosition(event)
-    this.isRightClickMouse = (event.buttons & 2) !== 0
-    this.config.onMouseMove?.(
-      this.store.hoveredPoint?.index,
-      this.store.hoveredPoint?.position,
-      this.currentEvent
-    )
   }
 
   private onContextMenu (event: MouseEvent): void {
