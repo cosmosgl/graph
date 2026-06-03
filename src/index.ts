@@ -280,6 +280,9 @@ export class Graph {
           if (!event.isPrimary) return
           // Finger lifted before the long-press window expired — it's a tap.
           this.cancelLongPress()
+          // pointermove normally updates this flag, but it doesn't fire on a still
+          // release — without this line, forceMouse would keep running.
+          this.isRightClickMouse = (event.buttons & 2) !== 0
         })
       select(document)
         .on('keydown.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
