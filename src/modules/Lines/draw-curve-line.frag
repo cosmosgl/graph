@@ -49,11 +49,8 @@ void main() {
   } else opacity = rgbaColor.a * smoothstep(0.5, 0.5 - smoothing, abs(pos.y));
   
   if (renderMode > 0.0) {
-    if (opacity > 0.0) {
-      fragColor = vec4(linkIndex, 0.0, 0.0, 1.0);
-    } else {
-      fragColor = vec4(-1.0, 0.0, 0.0, 0.0);
-    }
+    if (opacity <= 0.0) discard;
+    fragColor = vec4(linkIndex, 0.0, 0.0, 1.0);
   } else fragColor = vec4(color, opacity);
 
 }

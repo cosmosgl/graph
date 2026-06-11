@@ -260,6 +260,15 @@ export interface GraphConfigInterface {
    */
   scaleLinksOnZoom: boolean;
   /**
+   * Controls alpha blending for link rendering.
+   *
+   * When `true` (default), links are drawn with standard source-over alpha blending,
+   * which is required for transparency, opacity, and antialiased link edges.
+   * Disable if you want much faster links rendering.
+   * Default value: `true`
+   */
+  linkBlending: boolean;
+  /**
    * If set to true, links are rendered as curved lines.
    * Otherwise as straight lines.
    * Default value: `false`

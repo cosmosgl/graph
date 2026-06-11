@@ -1548,6 +1548,9 @@ export class Graph {
       this.graph.updateArrows()
       this.lines?.updateArrow()
     }
+    if (prevConfig.linkBlending !== this.config.linkBlending) {
+      this.lines?.updateLinkBlending()
+    }
     if (prevConfig.curvedLinkSegments !== this.config.curvedLinkSegments ||
       prevConfig.curvedLinks !== this.config.curvedLinks) {
       this.lines?.updateCurveLineGeometry()

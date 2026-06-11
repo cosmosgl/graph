@@ -1,4 +1,4 @@
-import { Framebuffer, Buffer, Texture, UniformStore, RenderPass } from '@luma.gl/core'
+import { Framebuffer, Buffer, Texture, UniformStore, RenderPass, type RenderPipelineParameters } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
 import type { Mat4Array } from '@/graph/modules/Store'
@@ -23,6 +23,7 @@ export class Lines extends CoreModule {
   public linkStatusTexture: Texture | undefined
   private linkStatusTextureSize = 0
   private drawCurveCommand: Model | undefined
+  private isLinkBlendingActive: boolean | undefined
   private hoveredLineIndexCommand: Model | undefined
   private fillSampledLinksFboCommand: Model | undefined
   private pointABuffer: Buffer | undefined
@@ -260,19 +261,10 @@ export class Lines extends CoreModule {
          * - No blending occurs - it's like drawing with a permanent marker
          * - This preserves the exact index values we need for picking/selection
          */
-      parameters: {
-        cullMode: 'back',
-        blend: true,
-        blendColorOperation: 'add',
-        blendColorSrcFactor: 'src-alpha',
-        blendColorDstFactor: 'one-minus-src-alpha',
-        blendAlphaOperation: 'add',
-        blendAlphaSrcFactor: 'one',
-        blendAlphaDstFactor: 'one-minus-src-alpha',
-        depthWriteEnabled: false,
-        depthCompare: 'always',
-      },
+      parameters: this.getLinkBlendParameters(this.config.linkBlending),
     })
+
+    this.isLinkBlendingActive = this.config.linkBlending
 
     // Initialize quad buffer for full-screen rendering
     this.quadBuffer ||= device.createBuffer({
@@ -382,6 +374,8 @@ export class Lines extends CoreModule {
     if (!this.arrowBuffer) this.updateArrow()
     if (!this.curveLineGeometry) this.updateCurveLineGeometry()
     if (!this.drawCurveCommand || !this.drawLineUniformStore || !this.linkStatusTexture) return
+
+    this.updateLinkBlending()
 
     const hasHighlighting = config.highlightedLinkIndices !== undefined
 
@@ -772,6 +766,17 @@ export class Lines extends CoreModule {
     }
   }
 
+  /**
+   * Re-applies the blend state to the link pipelines when `linkBlending` changes.
+   * `setParameters` can trigger a pipeline rebuild, so this only runs on an actual change.
+   */
+  public updateLinkBlending (): void {
+    const blend = this.config.linkBlending
+    if (blend === this.isLinkBlendingActive) return
+    this.drawCurveCommand?.setParameters(this.getLinkBlendParameters(blend))
+    this.isLinkBlendingActive = blend
+  }
+
   public getSampledLinkPositionsMap (): Map<number, [number, number, number]> {
     const positions = new Map<number, [number, number, number]>()
     if (!this.sampledLinksFbo || this.sampledLinksFbo.destroyed) return positions
@@ -874,6 +879,8 @@ export class Lines extends CoreModule {
     if (!this.linkIndexFbo || !this.drawCurveCommand || !this.drawLineUniformStore || !this.linkStatusTexture) return
     if (!this.linkIndexTexture || this.linkIndexTexture.destroyed) return
 
+    this.updateLinkBlending()
+
     const hasHighlighting = config.highlightedLinkIndices !== undefined
 
     // Update uniforms for index rendering
@@ -964,6 +971,7 @@ export class Lines extends CoreModule {
     // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
     this.drawCurveCommand?.destroy()
     this.drawCurveCommand = undefined
+    this.isLinkBlendingActive = undefined
     this.hoveredLineIndexCommand?.destroy()
     this.hoveredLineIndexCommand = undefined
     this.fillSampledLinksFboCommand?.destroy()
@@ -1048,6 +1056,30 @@ export class Lines extends CoreModule {
       this.quadBuffer.destroy()
     }
     this.quadBuffer = undefined
+  }
+
+  /**
+   * Builds the render pipeline parameters for the link draw commands.
+   * With `blend` enabled, uses standard source-over alpha blending; with it disabled,
+   * fragments overwrite the framebuffer directly (no ROP read-modify-write).
+   */
+  private getLinkBlendParameters (blend: boolean): RenderPipelineParameters {
+    const base: RenderPipelineParameters = {
+      cullMode: 'back',
+      depthWriteEnabled: false,
+      depthCompare: 'always',
+    }
+    if (!blend) return { ...base, blend: false }
+    return {
+      ...base,
+      blend: true,
+      blendColorOperation: 'add',
+      blendColorSrcFactor: 'src-alpha',
+      blendColorDstFactor: 'one-minus-src-alpha',
+      blendAlphaOperation: 'add',
+      blendAlphaSrcFactor: 'one',
+      blendAlphaDstFactor: 'one-minus-src-alpha',
+    }
   }
 
   // Creates a 1×1 placeholder texture for the linkStatus sampler if none exists.

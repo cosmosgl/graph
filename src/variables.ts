@@ -42,6 +42,7 @@ export const defaultConfigValues = {
   linkGreyoutOpacity: 0.1,
   linkWidthScale: 1,
   scaleLinksOnZoom: false,
+  linkBlending: true,
   curvedLinks: false,
   curvedLinkSegments: 19,
   curvedLinkWeight: 0.8,
