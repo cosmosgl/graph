@@ -116,17 +116,22 @@ export const collision = (): { graph: Graph; div: HTMLDivElement } => {
     links: new Float32Array(links),
     linkColors,
     linkWidths,
-    simulationCollision: 1,
+    simulationCollision: 0.2,
     simulationCollisionRadius: 0, // Use point sizes for collision radius
-    simulationRepulsion: 0.4,
-    simulationGravity: 0.05,
+    simulationRepulsion: 0.8,
+    simulationGravity: 0.01,
+    simulationCluster: 0.01,
     // Link distance must clear the points' collision radii (sizes up to ~30),
     // otherwise the spring pulls connected points into an unresolvable pile.
     simulationLinkSpring: 0.3,
     simulationLinkDistance: 30,
     simulationDecay: 30000,
     simulationFriction: 0.85,
+    // Fit instantly (no delay, no animation): the camera starts at zoom
+    // level 1 and only frames the points when fitView runs, so any delay
+    // or easing reads as the whole graph sliding across the screen.
     fitViewOnInit: true,
-    fitViewDelay: 500,
+    fitViewDelay: 0,
+    fitViewDuration: 0,
   })
 }
