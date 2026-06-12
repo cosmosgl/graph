@@ -12,7 +12,7 @@ export const collision = (): { graph: Graph; div: HTMLDivElement } => {
   // structure to spread apart (instead of a featureless blob).
   const numClusters = 6
   const numPoints = 600
-  const spaceCenter = 4096
+  const spaceCenter = 2048
 
   const clusterColorScale = scaleSequential(interpolateRainbow).domain([0, numClusters])
 
@@ -43,7 +43,7 @@ export const collision = (): { graph: Graph; div: HTMLDivElement } => {
     pointCluster[i] = cluster
     const [cx, cy] = clusterCenters[cluster]
     const angle = Math.random() * Math.PI * 2
-    const radius = Math.sqrt(Math.random()) * 550
+    const radius = Math.sqrt(Math.random()) * 25
     pointPositions[i * 2] = cx + Math.cos(angle) * radius
     pointPositions[i * 2 + 1] = cy + Math.sin(angle) * radius
   }
@@ -116,22 +116,19 @@ export const collision = (): { graph: Graph; div: HTMLDivElement } => {
     links: new Float32Array(links),
     linkColors,
     linkWidths,
-    simulationCollision: 0.2,
+    simulationCollision: 0.5,
     simulationCollisionRadius: 0, // Use point sizes for collision radius
     simulationRepulsion: 0.8,
-    simulationGravity: 0.01,
+    simulationGravity: 0.1,
     simulationCluster: 0.01,
     // Link distance must clear the points' collision radii (sizes up to ~30),
     // otherwise the spring pulls connected points into an unresolvable pile.
     simulationLinkSpring: 0.3,
-    simulationLinkDistance: 30,
-    simulationDecay: 30000,
-    simulationFriction: 0.85,
-    // Fit instantly (no delay, no animation): the camera starts at zoom
-    // level 1 and only frames the points when fitView runs, so any delay
-    // or easing reads as the whole graph sliding across the screen.
-    fitViewOnInit: true,
-    fitViewDelay: 0,
-    fitViewDuration: 0,
+    simulationLinkDistance: 50,
+    simulationDecay: 100000,
+    simulationFriction: 0.65,
+    fitViewOnInit: false,
+    fitViewDelay: 250,
+    fitViewDuration: 1000,
   })
 }
