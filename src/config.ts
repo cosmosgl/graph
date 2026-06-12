@@ -351,12 +351,12 @@ export interface GraphConfigInterface {
    */
   simulationCollision: number;
   /**
-   * Collision radius. When set to 0, the collision radius is derived from
+   * Collision radius. When set to undefined or 0, the collision radius is derived from
    * point sizes (half of the point size). When set to a positive value,
    * all points use this fixed collision radius.
-   * Default value: `0`
+   * Default value: `undefined`
    */
-  simulationCollisionRadius: number;
+  simulationCollisionRadius: number | undefined;
   /**
    * Extra padding added to each point's collision radius, in space units.
    * Without padding, points settle just touching; with padding, two points

@@ -116,17 +116,18 @@ export const collision = (): { graph: Graph; div: HTMLDivElement } => {
     links: new Float32Array(links),
     linkColors,
     linkWidths,
-    simulationCollision: 0.5,
-    simulationCollisionRadius: 0, // Use point sizes for collision radius
+    simulationCollision: 0.95,
+    simulationCollisionPadding: 2,
+    simulationCollisionRadius: undefined, // Use point sizes for collision radius
     simulationRepulsion: 0.8,
-    simulationGravity: 0.1,
+    simulationGravity: 0.05,
     simulationCluster: 0.01,
     // Link distance must clear the points' collision radii (sizes up to ~30),
     // otherwise the spring pulls connected points into an unresolvable pile.
     simulationLinkSpring: 0.3,
     simulationLinkDistance: 50,
     simulationDecay: 100000,
-    simulationFriction: 0.65,
+    simulationFriction: 0.85,
     fitViewOnInit: false,
     fitViewDelay: 250,
     fitViewDuration: 1000,
