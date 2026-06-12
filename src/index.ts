@@ -108,6 +108,11 @@ export class Graph {
   private isForceCenterUpdateNeeded = false
   private isPointImageSizesUpdateNeeded = false
 
+  // Whether the collision force's GPU resources (grid/size textures, programs)
+  // are allocated and match the current data. Allocated lazily the first time
+  // collision runs, so a graph that never enables it pays no memory cost.
+  private isForceCollisionReady = false
+
   private _isDestroyed = false
 
   /**
@@ -1318,7 +1323,10 @@ export class Graph {
     if (this.isLinkArrowUpdateNeeded) this.lines.updateArrow()
 
     if (this.isForceManyBodyUpdateNeeded) this.forceManyBody?.create()
-    if (this.isForceManyBodyUpdateNeeded || this.isPointSizeUpdateNeeded) this.forceCollision?.create()
+    // Collision grid/size textures depend on point count and sizes. Mark them
+    // stale so they're rebuilt lazily the next time the collision force runs,
+    // rather than reallocating here while collision may be disabled.
+    if (this.isForceManyBodyUpdateNeeded || this.isPointSizeUpdateNeeded) this.isForceCollisionReady = false
     if (this.isForceLinkUpdateNeeded) {
       this.forceLinkIncoming?.create(LinkDirection.INCOMING)
       this.forceLinkOutgoing?.create(LinkDirection.OUTGOING)
@@ -1621,6 +1629,14 @@ export class Graph {
       // corrects the overlap they introduce within the same tick, instead of
       // lagging one frame behind and oscillating against them.
       if (simulationCollision) {
+        // Lazily allocate the collision GPU resources on first use (or after a
+        // data change marked them stale), so a graph that never enables
+        // collision never pays the grid/size-texture memory cost.
+        if (!this.isForceCollisionReady) {
+          this.forceCollision?.create()
+          this.forceCollision?.initPrograms()
+          this.isForceCollisionReady = true
+        }
         this.points?.swapFbo()
         this.forceCollision?.run()
         this.points?.updatePosition()
@@ -1654,7 +1670,7 @@ export class Graph {
     this.forceLinkIncoming?.initPrograms()
     this.forceLinkOutgoing?.initPrograms()
     this.forceMouse?.initPrograms()
-    this.forceCollision?.initPrograms()
+    // ForceCollision programs are built lazily on first use (see runSimulationStep)
     this.clusters.initPrograms()
   }
 
