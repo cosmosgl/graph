@@ -22,23 +22,28 @@ export const collision = (): { graph: Graph; div: HTMLDivElement } => {
   const pointCluster = new Array<number>(numPoints)
   const degree = new Array<number>(numPoints).fill(0)
 
-  // Spread cluster centers around a ring
+  // Spread cluster centers around a wide ring so the clusters start
+  // well separated (close to the resolved layout) rather than piled on
+  // top of each other at the centre.
+  const clusterRingRadius = 1500
   const clusterCenters: [number, number][] = []
   for (let c = 0; c < numClusters; c++) {
     const angle = (c / numClusters) * Math.PI * 2
     clusterCenters.push([
-      spaceCenter + Math.cos(angle) * 600,
-      spaceCenter + Math.sin(angle) * 600,
+      spaceCenter + Math.cos(angle) * clusterRingRadius,
+      spaceCenter + Math.sin(angle) * clusterRingRadius,
     ])
   }
 
-  // Assign points to clusters and seed positions near the cluster center
+  // Assign points to clusters and seed positions spread out around each
+  // cluster centre, so they begin mostly non-overlapping and the
+  // simulation barely has to move them on start-up.
   for (let i = 0; i < numPoints; i++) {
     const cluster = i % numClusters
     pointCluster[i] = cluster
     const [cx, cy] = clusterCenters[cluster]
     const angle = Math.random() * Math.PI * 2
-    const radius = Math.abs((Math.random() + Math.random() + Math.random()) / 3) * 300
+    const radius = Math.sqrt(Math.random()) * 550
     pointPositions[i * 2] = cx + Math.cos(angle) * radius
     pointPositions[i * 2 + 1] = cy + Math.sin(angle) * radius
   }
@@ -59,8 +64,9 @@ export const collision = (): { graph: Graph; div: HTMLDivElement } => {
 
   for (const members of byCluster) {
     for (const point of members) {
-      // Connect to 1-3 random other members of the same cluster
-      const connections = 1 + Math.floor(Math.random() * 3)
+      // Connect to ~1 random other member of the same cluster (occasionally 2),
+      // keeping the graph sparse enough for collision to spread it out.
+      const connections = Math.random() < 0.3 ? 2 : 1
       for (let k = 0; k < connections; k++) {
         const other = members[Math.floor(Math.random() * members.length)]
         addLink(point, other)
@@ -68,9 +74,9 @@ export const collision = (): { graph: Graph; div: HTMLDivElement } => {
     }
   }
 
-  // A handful of bridges between clusters
+  // A few bridges between clusters
   for (let i = 0; i < numPoints; i++) {
-    if (Math.random() < 0.04) {
+    if (Math.random() < 0.02) {
       const other = Math.floor(Math.random() * numPoints)
       if (pointCluster[other] !== pointCluster[i]) addLink(i, other)
     }
@@ -80,7 +86,7 @@ export const collision = (): { graph: Graph; div: HTMLDivElement } => {
   const maxDegree = Math.max(1, ...degree)
   for (let i = 0; i < numPoints; i++) {
     const hubness = degree[i] / maxDegree
-    pointSizes[i] = 4 + hubness * 40 + Math.random() * 8
+    pointSizes[i] = 4 + hubness * 24 + Math.random() * 5
 
     const rgba = getRgbaColor(clusterColorScale(pointCluster[i]))
     pointColors[i * 4] = rgba[0]
@@ -110,15 +116,17 @@ export const collision = (): { graph: Graph; div: HTMLDivElement } => {
     links: new Float32Array(links),
     linkColors,
     linkWidths,
-    simulationCollision: 0.6,
+    simulationCollision: 1,
     simulationCollisionRadius: 0, // Use point sizes for collision radius
-    simulationRepulsion: 0.3,
-    simulationGravity: 0.1,
-    simulationLinkSpring: 0.6,
-    simulationLinkDistance: 8,
-    simulationDecay: 100000,
-    simulationFriction: 0.6,
+    simulationRepulsion: 0.4,
+    simulationGravity: 0.05,
+    // Link distance must clear the points' collision radii (sizes up to ~30),
+    // otherwise the spring pulls connected points into an unresolvable pile.
+    simulationLinkSpring: 0.3,
+    simulationLinkDistance: 30,
+    simulationDecay: 30000,
+    simulationFriction: 0.85,
     fitViewOnInit: true,
-    fitViewDelay: 250,
+    fitViewDelay: 500,
   })
 }
