@@ -9,6 +9,7 @@ import { webgl2Adapter } from '@luma.gl/webgl'
 import { applyConfig, createDefaultConfig, resetConfigToDefaults, GraphConfigInterface, type GraphConfig } from '@/graph/config'
 import { getRgbaColor, getMaxPointSize, readPixels, extractIndicesFromPixels, sanitizeHtml } from '@/graph/helper'
 import { ForceCenter } from '@/graph/modules/ForceCenter'
+import { ForceCollision } from '@/graph/modules/ForceCollision'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
 import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
 import { ForceManyBody } from '@/graph/modules/ForceManyBody'
@@ -54,6 +55,7 @@ export class Graph {
   private forceLinkIncoming: ForceLink | undefined
   private forceLinkOutgoing: ForceLink | undefined
   private forceMouse: ForceMouse | undefined
+  private forceCollision: ForceCollision | undefined
   private clusters: Clusters | undefined
   private zoomInstance = new Zoom(this.store, this.config)
   private dragInstance = new Drag(this.store, this.config)
@@ -259,6 +261,7 @@ export class Graph {
         this.forceLinkIncoming = new ForceLink(device, this.config, this.store, this.graph, this.points)
         this.forceLinkOutgoing = new ForceLink(device, this.config, this.store, this.graph, this.points)
         this.forceMouse = new ForceMouse(device, this.config, this.store, this.graph, this.points)
+        this.forceCollision = new ForceCollision(device, this.config, this.store, this.graph, this.points)
       }
       this.clusters = new Clusters(device, this.config, this.store, this.graph, this.points)
 
@@ -1260,6 +1263,7 @@ export class Graph {
     this.forceLinkIncoming?.destroy()
     this.forceLinkOutgoing?.destroy()
     this.forceMouse?.destroy()
+    this.forceCollision?.destroy()
 
     if (this.device) {
       // Only clear and destroy the device if Graph owns it
@@ -1314,6 +1318,7 @@ export class Graph {
     if (this.isLinkArrowUpdateNeeded) this.lines.updateArrow()
 
     if (this.isForceManyBodyUpdateNeeded) this.forceManyBody?.create()
+    if (this.isForceManyBodyUpdateNeeded || this.isPointSizeUpdateNeeded) this.forceCollision?.create()
     if (this.isForceLinkUpdateNeeded) {
       this.forceLinkIncoming?.create(LinkDirection.INCOMING)
       this.forceLinkOutgoing?.create(LinkDirection.OUTGOING)
@@ -1557,7 +1562,7 @@ export class Graph {
    *     to respect pause/unpause state.
    */
   private runSimulationStep (forceExecution = false): void {
-    const { config: { simulationGravity, simulationCenter, enableSimulation }, store: { isSimulationRunning } } = this
+    const { config: { simulationGravity, simulationCenter, simulationCollision, enableSimulation }, store: { isSimulationRunning } } = this
 
     if (!enableSimulation) return
 
@@ -1596,6 +1601,12 @@ export class Graph {
       this.points?.swapFbo()
       this.forceManyBody?.run()
       this.points?.updatePosition()
+
+      if (simulationCollision) {
+        this.points?.swapFbo()
+        this.forceCollision?.run()
+        this.points?.updatePosition()
+      }
 
       if (this.store.linksTextureSize) {
         this.points?.swapFbo()
@@ -1640,6 +1651,7 @@ export class Graph {
     this.forceLinkIncoming?.initPrograms()
     this.forceLinkOutgoing?.initPrograms()
     this.forceMouse?.initPrograms()
+    this.forceCollision?.initPrograms()
     this.clusters.initPrograms()
   }
 

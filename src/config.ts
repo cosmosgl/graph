@@ -343,6 +343,20 @@ export interface GraphConfigInterface {
    * Default value: `0.1`
    */
   simulationCluster: number;
+  /**
+   * Collision force coefficient. When set to a value greater than 0,
+   * points will push each other apart when they overlap.
+   * Uses a spatial-hash grid, so it scales better than naive O(n²) collision.
+   * Default value: `0`
+   */
+  simulationCollision: number;
+  /**
+   * Collision radius. When set to 0, the collision radius is derived from
+   * point sizes (half of the point size). When set to a positive value,
+   * all points use this fixed collision radius.
+   * Default value: `0`
+   */
+  simulationCollisionRadius: number;
 
   /**
    * Callback function that will be called when the simulation starts.
