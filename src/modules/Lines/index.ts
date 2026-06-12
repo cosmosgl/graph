@@ -16,6 +16,18 @@ import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import { ensureVec2, ensureVec4 } from '@/graph/modules/Shared/uniform-utils'
 import { readPixels } from '@/graph/helper'
 
+type DrawCurveCommandAttributes = {
+  position?: Buffer;
+  pointA?: Buffer;
+  pointB?: Buffer;
+  sourceColor?: Buffer;
+  targetColor?: Buffer;
+  sourceWidth?: Buffer;
+  targetWidth?: Buffer;
+  arrow?: Buffer;
+  linkIndices?: Buffer;
+}
+
 export class Lines extends CoreModule {
   public linkIndexFbo: Framebuffer | undefined
   public hoveredLineIndexFbo: Framebuffer | undefined
@@ -23,6 +35,7 @@ export class Lines extends CoreModule {
   public linkStatusTexture: Texture | undefined
   private linkStatusTextureSize = 0
   private drawCurveCommand: Model | undefined
+  private drawCurvePickingCommand: Model | undefined
   private isLinkBlendingActive: boolean | undefined
   private hoveredLineIndexCommand: Model | undefined
   private fillSampledLinksFboCommand: Model | undefined
@@ -214,57 +227,16 @@ export class Lines extends CoreModule {
       },
     })
 
-    this.drawCurveCommand ||= new Model(device, {
-      vs: drawLineVert,
-      fs: drawLineFrag,
-      modules: [conicParametricCurveModule],
-      topology: 'triangle-strip',
-      vertexCount: this.curveLineGeometry?.length ?? 0,
-      attributes: {
-        ...this.curveLineBuffer && { position: this.curveLineBuffer },
-        ...this.pointABuffer && { pointA: this.pointABuffer },
-        ...this.pointBBuffer && { pointB: this.pointBBuffer },
-        ...this.sourceColorBuffer && { sourceColor: this.sourceColorBuffer },
-        ...this.targetColorBuffer && { targetColor: this.targetColorBuffer },
-        ...this.sourceWidthBuffer && { sourceWidth: this.sourceWidthBuffer },
-        ...this.targetWidthBuffer && { targetWidth: this.targetWidthBuffer },
-        ...this.arrowBuffer && { arrow: this.arrowBuffer },
-        ...this.linkIndexBuffer && { linkIndices: this.linkIndexBuffer },
-      },
-      bufferLayout: [
-        { name: 'position', format: 'float32x2' },
-        { name: 'pointA', format: 'float32x2', stepMode: 'instance' },
-        { name: 'pointB', format: 'float32x2', stepMode: 'instance' },
-        { name: 'sourceColor', format: 'float32x4', stepMode: 'instance' },
-        { name: 'targetColor', format: 'float32x4', stepMode: 'instance' },
-        { name: 'sourceWidth', format: 'float32', stepMode: 'instance' },
-        { name: 'targetWidth', format: 'float32', stepMode: 'instance' },
-        { name: 'arrow', format: 'float32', stepMode: 'instance' },
-        { name: 'linkIndices', format: 'float32', stepMode: 'instance' },
-      ],
-      defines: {
-        USE_UNIFORM_BUFFERS: true,
-      },
-      bindings: {
-        // Create uniform buffer binding
-        // Update it later by calling uniformStore.setUniforms()
-        drawLineUniforms: this.drawLineUniformStore.getManagedUniformBuffer(device, 'drawLineUniforms'),
-        drawLineFragmentUniforms: this.drawLineUniformStore.getManagedUniformBuffer(device, 'drawLineFragmentUniforms'),
-        // All texture bindings will be set dynamically in draw() method
-      },
-      /**
-         * Blending behavior for link index rendering (renderMode: 1.0 - hover detection):
-         *
-         * When rendering link indices to the framebuffer, we use full opacity (1.0).
-         * This means:
-         * - The source color completely overwrites the destination
-         * - No blending occurs - it's like drawing with a permanent marker
-         * - This preserves the exact index values we need for picking/selection
-         */
-      parameters: this.getLinkBlendParameters(this.config.linkBlending),
-    })
+    this.drawCurveCommand ||= this.createDrawCurveCommand(this.getLinkBlendParameters(this.config.linkBlending))
 
     this.isLinkBlendingActive = this.config.linkBlending
+
+    this.drawCurvePickingCommand ||= this.createDrawCurveCommand({
+      cullMode: 'back',
+      depthWriteEnabled: false,
+      depthCompare: 'always',
+      blend: false,
+    })
 
     // Initialize quad buffer for full-screen rendering
     this.quadBuffer ||= device.createBuffer({
@@ -566,13 +538,11 @@ export class Lines extends CoreModule {
     } else {
       this.linkIndexBuffer.write(linkIndices)
     }
-    if (this.drawCurveCommand) {
-      this.drawCurveCommand.setAttributes({
-        pointA: this.pointABuffer,
-        pointB: this.pointBBuffer,
-        linkIndices: this.linkIndexBuffer,
-      })
-    }
+    this.setDrawCurveCommandAttributes({
+      pointA: this.pointABuffer,
+      pointB: this.pointBBuffer,
+      linkIndices: this.linkIndexBuffer,
+    })
     if (this.fillSampledLinksFboCommand) {
       this.fillSampledLinksFboCommand.setAttributes({
         pointA: this.pointABuffer,
@@ -601,12 +571,10 @@ export class Lines extends CoreModule {
     this.targetColorBuffer = target
     this.previousColorData = previous
 
-    if (this.drawCurveCommand) {
-      this.drawCurveCommand.setAttributes({
-        ...(this.sourceColorBuffer && { sourceColor: this.sourceColorBuffer }),
-        ...(this.targetColorBuffer && { targetColor: this.targetColorBuffer }),
-      })
-    }
+    this.setDrawCurveCommandAttributes({
+      ...(this.sourceColorBuffer && { sourceColor: this.sourceColorBuffer }),
+      ...(this.targetColorBuffer && { targetColor: this.targetColorBuffer }),
+    })
   }
 
   public updateWidth (): void {
@@ -625,12 +593,10 @@ export class Lines extends CoreModule {
     this.targetWidthBuffer = target
     this.previousWidthData = previous
 
-    if (this.drawCurveCommand) {
-      this.drawCurveCommand.setAttributes({
-        ...(this.sourceWidthBuffer && { sourceWidth: this.sourceWidthBuffer }),
-        ...(this.targetWidthBuffer && { targetWidth: this.targetWidthBuffer }),
-      })
-    }
+    this.setDrawCurveCommandAttributes({
+      ...(this.sourceWidthBuffer && { sourceWidth: this.sourceWidthBuffer }),
+      ...(this.targetWidthBuffer && { targetWidth: this.targetWidthBuffer }),
+    })
   }
 
   public updateArrow (): void {
@@ -662,11 +628,7 @@ export class Lines extends CoreModule {
         this.arrowBuffer.write(arrowData)
       }
     }
-    if (this.drawCurveCommand) {
-      this.drawCurveCommand.setAttributes({
-        arrow: this.arrowBuffer,
-      })
-    }
+    this.setDrawCurveCommandAttributes({ arrow: this.arrowBuffer })
   }
 
   public updateLinkStatus (): void {
@@ -757,13 +719,9 @@ export class Lines extends CoreModule {
       this.curveLineBuffer.write(flatGeometry)
     }
 
-    // Update vertex count in model if it exists
-    if (this.drawCurveCommand) {
-      this.drawCurveCommand.setAttributes({
-        position: this.curveLineBuffer,
-      })
-      this.drawCurveCommand.setVertexCount(this.curveLineGeometry.length)
-    }
+    this.setDrawCurveCommandAttributes({ position: this.curveLineBuffer })
+    this.drawCurveCommand?.setVertexCount(this.curveLineGeometry.length)
+    this.drawCurvePickingCommand?.setVertexCount(this.curveLineGeometry.length)
   }
 
   /**
@@ -876,10 +834,8 @@ export class Lines extends CoreModule {
     if (!points) return
     if (!points.currentPositionTexture || points.currentPositionTexture.destroyed) return
     if (!this.data.linksNumber || !this.store.isLinkHoveringEnabled) return
-    if (!this.linkIndexFbo || !this.drawCurveCommand || !this.drawLineUniformStore || !this.linkStatusTexture) return
+    if (!this.linkIndexFbo || !this.drawCurvePickingCommand || !this.drawLineUniformStore || !this.linkStatusTexture) return
     if (!this.linkIndexTexture || this.linkIndexTexture.destroyed) return
-
-    this.updateLinkBlending()
 
     const hasHighlighting = config.highlightedLinkIndices !== undefined
 
@@ -919,13 +875,13 @@ export class Lines extends CoreModule {
     })
 
     // Update texture bindings dynamically
-    this.drawCurveCommand.setBindings({
+    this.drawCurvePickingCommand.setBindings({
       positionsTexture: points.currentPositionTexture,
       linkStatus: this.linkStatusTexture,
     })
 
     // Update instance count
-    this.drawCurveCommand.setInstanceCount(this.data.linksNumber ?? 0)
+    this.drawCurvePickingCommand.setInstanceCount(this.data.linksNumber ?? 0)
 
     // Render to index buffer for picking/hover detection
     const indexPass = this.device.beginRenderPass({
@@ -933,7 +889,7 @@ export class Lines extends CoreModule {
       // Clear framebuffer to transparent black (luma.gl default would be opaque black)
       clearColor: [0, 0, 0, 0],
     })
-    this.drawCurveCommand.draw(indexPass)
+    this.drawCurvePickingCommand.draw(indexPass)
     indexPass.end()
 
     if (this.hoveredLineIndexCommand && this.hoveredLineIndexFbo && this.hoveredLineIndexUniformStore) {
@@ -971,6 +927,8 @@ export class Lines extends CoreModule {
     // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
     this.drawCurveCommand?.destroy()
     this.drawCurveCommand = undefined
+    this.drawCurvePickingCommand?.destroy()
+    this.drawCurvePickingCommand = undefined
     this.isLinkBlendingActive = undefined
     this.hoveredLineIndexCommand?.destroy()
     this.hoveredLineIndexCommand = undefined
@@ -1056,6 +1014,58 @@ export class Lines extends CoreModule {
       this.quadBuffer.destroy()
     }
     this.quadBuffer = undefined
+  }
+
+  private createDrawCurveCommand (parameters: RenderPipelineParameters): Model {
+    if (!this.drawLineUniformStore) {
+      throw new Error('Draw line uniforms must be initialized before creating link draw commands')
+    }
+    return new Model(this.device, {
+      vs: drawLineVert,
+      fs: drawLineFrag,
+      modules: [conicParametricCurveModule],
+      topology: 'triangle-strip',
+      vertexCount: this.curveLineGeometry?.length ?? 0,
+      attributes: this.getDrawCurveCommandAttributes(),
+      bufferLayout: [
+        { name: 'position', format: 'float32x2' },
+        { name: 'pointA', format: 'float32x2', stepMode: 'instance' },
+        { name: 'pointB', format: 'float32x2', stepMode: 'instance' },
+        { name: 'sourceColor', format: 'float32x4', stepMode: 'instance' },
+        { name: 'targetColor', format: 'float32x4', stepMode: 'instance' },
+        { name: 'sourceWidth', format: 'float32', stepMode: 'instance' },
+        { name: 'targetWidth', format: 'float32', stepMode: 'instance' },
+        { name: 'arrow', format: 'float32', stepMode: 'instance' },
+        { name: 'linkIndices', format: 'float32', stepMode: 'instance' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        drawLineUniforms: this.drawLineUniformStore.getManagedUniformBuffer(this.device, 'drawLineUniforms'),
+        drawLineFragmentUniforms: this.drawLineUniformStore.getManagedUniformBuffer(this.device, 'drawLineFragmentUniforms'),
+      },
+      parameters,
+    })
+  }
+
+  private getDrawCurveCommandAttributes (): DrawCurveCommandAttributes {
+    const attributes: DrawCurveCommandAttributes = {}
+    if (this.curveLineBuffer) attributes.position = this.curveLineBuffer
+    if (this.pointABuffer) attributes.pointA = this.pointABuffer
+    if (this.pointBBuffer) attributes.pointB = this.pointBBuffer
+    if (this.sourceColorBuffer) attributes.sourceColor = this.sourceColorBuffer
+    if (this.targetColorBuffer) attributes.targetColor = this.targetColorBuffer
+    if (this.sourceWidthBuffer) attributes.sourceWidth = this.sourceWidthBuffer
+    if (this.targetWidthBuffer) attributes.targetWidth = this.targetWidthBuffer
+    if (this.arrowBuffer) attributes.arrow = this.arrowBuffer
+    if (this.linkIndexBuffer) attributes.linkIndices = this.linkIndexBuffer
+    return attributes
+  }
+
+  private setDrawCurveCommandAttributes (attributes: DrawCurveCommandAttributes): void {
+    this.drawCurveCommand?.setAttributes(attributes)
+    this.drawCurvePickingCommand?.setAttributes(attributes)
   }
 
   /**
