@@ -148,5 +148,15 @@ void main() {
     velocity.rg *= damping;
   }
 
+  // Cap the per-pass correction so overlaps resolve by relaxation over a few
+  // frames instead of overshooting in one. Across the 4 offset passes the
+  // total displacement stays within ~40% of this point's collision radius,
+  // which converges without the ping-pong of full-overlap corrections.
+  float maxCorrection = currentCollisionRadius * 0.1;
+  float correction = length(velocity.rg);
+  if (correction > maxCorrection) {
+    velocity.rg *= maxCorrection / correction;
+  }
+
   fragColor = velocity;
 }

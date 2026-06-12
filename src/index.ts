@@ -1602,12 +1602,6 @@ export class Graph {
       this.forceManyBody?.run()
       this.points?.updatePosition()
 
-      if (simulationCollision) {
-        this.points?.swapFbo()
-        this.forceCollision?.run()
-        this.points?.updatePosition()
-      }
-
       if (this.store.linksTextureSize) {
         this.points?.swapFbo()
         this.forceLinkIncoming?.run()
@@ -1620,6 +1614,15 @@ export class Graph {
       if (this.graph.pointClusters || this.graph.clusterPositions) {
         this.points?.swapFbo()
         this.clusters?.run()
+        this.points?.updatePosition()
+      }
+
+      // Collision runs after the attraction forces (links, clusters) so it
+      // corrects the overlap they introduce within the same tick, instead of
+      // lagging one frame behind and oscillating against them.
+      if (simulationCollision) {
+        this.points?.swapFbo()
+        this.forceCollision?.run()
         this.points?.updatePosition()
       }
 
