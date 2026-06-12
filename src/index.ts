@@ -1452,6 +1452,12 @@ export class Graph {
     if (prevConfig.highlightedLinkIndices !== this.config.highlightedLinkIndices) {
       this.lines?.updateLinkStatus()
     }
+    // The collision grid's cell size is derived from the collision radius and
+    // padding, so a change to either requires rebuilding the grid textures.
+    if (prevConfig.simulationCollisionRadius !== this.config.simulationCollisionRadius ||
+        prevConfig.simulationCollisionPadding !== this.config.simulationCollisionPadding) {
+      this.isForceCollisionReady = false
+    }
     if (prevConfig.pixelRatio !== this.config.pixelRatio) {
       // Update device's canvas context useDevicePixels
       if (this.device?.canvasContext) {

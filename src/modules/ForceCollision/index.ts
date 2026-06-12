@@ -50,6 +50,7 @@ export class ForceCollision extends CoreModule {
       alpha: number;
       collisionStrength: number;
       collisionRadius: number;
+      collisionPadding: number;
       pointsNumber: number;
       gridOffset: [number, number];
     };
@@ -70,7 +71,8 @@ export class ForceCollision extends CoreModule {
       ? Math.max(...Array.from(data.pointSizes))
       : defaultSize
     const collisionRadius = config.simulationCollisionRadius ?? 0
-    const effectiveRadius = collisionRadius > 0 ? collisionRadius : maxSize * 0.5
+    const collisionPadding = config.simulationCollisionPadding ?? 0
+    const effectiveRadius = (collisionRadius > 0 ? collisionRadius : maxSize * 0.5) + collisionPadding
 
     // Cell size = collision radius (smaller cells = better accuracy).
     // We use multiple offset passes to catch boundary collisions.
@@ -205,6 +207,7 @@ export class ForceCollision extends CoreModule {
           alpha: 'f32',
           collisionStrength: 'f32',
           collisionRadius: 'f32',
+          collisionPadding: 'f32',
           pointsNumber: 'f32',
           gridOffset: 'vec2<f32>',
         },
@@ -262,6 +265,7 @@ export class ForceCollision extends CoreModule {
     if (store.pointsTextureSize !== this.previousPointsTextureSize || store.adjustedSpaceSize !== this.previousSpaceSize) return
 
     const collisionRadius = config.simulationCollisionRadius ?? 0
+    const collisionPadding = config.simulationCollisionPadding ?? 0
 
     // Step 1: Build the spatial hash grid for each offset pass.
     // Each grid is cleared and accumulated within its own render pass.
@@ -310,6 +314,7 @@ export class ForceCollision extends CoreModule {
           alpha: store.alpha,
           collisionStrength: config.simulationCollision ?? 0,
           collisionRadius,
+          collisionPadding,
           pointsNumber: data.pointsNumber,
           gridOffset,
         },

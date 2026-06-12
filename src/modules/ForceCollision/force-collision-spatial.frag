@@ -14,6 +14,7 @@ layout(std140) uniform forceCollisionUniforms {
   float alpha;
   float collisionStrength;
   float collisionRadius;
+  float collisionPadding;
   float pointsNumber;
   vec2 gridOffset; // Must match the offset used when building the grid
 } forceCollision;
@@ -25,6 +26,7 @@ layout(std140) uniform forceCollisionUniforms {
 #define alpha forceCollision.alpha
 #define collisionStrength forceCollision.collisionStrength
 #define collisionRadius forceCollision.collisionRadius
+#define collisionPadding forceCollision.collisionPadding
 #define pointsNumber forceCollision.pointsNumber
 #define gridOffset forceCollision.gridOffset
 #else
@@ -35,6 +37,7 @@ uniform float spaceSize;
 uniform float alpha;
 uniform float collisionStrength;
 uniform float collisionRadius;
+uniform float collisionPadding;
 uniform float pointsNumber;
 uniform vec2 gridOffset;
 #endif
@@ -58,7 +61,7 @@ void main() {
   // Get current point's size for collision radius
   vec4 currentSizeData = texture(sizeTexture, textureCoords);
   float currentSize = currentSizeData.r;
-  float currentCollisionRadius = collisionRadius > 0.0 ? collisionRadius : currentSize * 0.5;
+  float currentCollisionRadius = (collisionRadius > 0.0 ? collisionRadius : currentSize * 0.5) + collisionPadding;
 
   vec2 currentPos = pointPosition.rg;
 
@@ -103,7 +106,7 @@ void main() {
       // Get average position and size in this cell
       vec2 avgPos = cellData.xy / cellCount;
       float avgSize = cellData.z / cellCount;
-      float otherCollisionRadius = collisionRadius > 0.0 ? collisionRadius : avgSize * 0.5;
+      float otherCollisionRadius = (collisionRadius > 0.0 ? collisionRadius : avgSize * 0.5) + collisionPadding;
 
       // Calculate combined collision radius
       float combinedRadius = currentCollisionRadius + otherCollisionRadius;

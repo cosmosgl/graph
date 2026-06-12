@@ -357,6 +357,13 @@ export interface GraphConfigInterface {
    * Default value: `0`
    */
   simulationCollisionRadius: number;
+  /**
+   * Extra padding added to each point's collision radius, in space units.
+   * Without padding, points settle just touching; with padding, two points
+   * keep a gap of twice this value between their visual edges.
+   * Default value: `0`
+   */
+  simulationCollisionPadding: number;
 
   /**
    * Callback function that will be called when the simulation starts.
