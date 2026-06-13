@@ -65,11 +65,14 @@ export class ForceCollision extends CoreModule {
     const { device, store, data, config } = this
     if (!store.pointsTextureSize || data.pointsNumber === undefined) return
 
-    // Calculate grid size based on space size and collision radius
+    // Calculate grid size based on space size and collision radius.
+    // Scan the size buffer instead of spreading it into Math.max — spreading a
+    // large typed array as arguments can throw a RangeError on big graphs.
     const defaultSize = config.pointDefaultSize ?? defaultConfigValues.pointDefaultSize
-    const maxSize = data.pointSizes
-      ? Math.max(...Array.from(data.pointSizes))
-      : defaultSize
+    let maxSize = defaultSize
+    if (data.pointSizes) {
+      for (const size of data.pointSizes) maxSize = Math.max(maxSize, size)
+    }
     const collisionRadius = config.simulationCollisionRadius ?? 0
     const collisionPadding = config.simulationCollisionPadding ?? 0
     const effectiveRadius = (collisionRadius > 0 ? collisionRadius : maxSize * 0.5) + collisionPadding

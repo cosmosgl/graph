@@ -1605,8 +1605,13 @@ export class Graph {
     }
     // The collision grid's cell size is derived from the collision radius and
     // padding, so a change to either requires rebuilding the grid textures.
+    // In derived-radius mode (radius 0/undefined) the radius — and the size
+    // texture — come from point sizes, so a pointDefaultSize change must also
+    // invalidate the collision resources.
     if (prevConfig.simulationCollisionRadius !== this.config.simulationCollisionRadius ||
-        prevConfig.simulationCollisionPadding !== this.config.simulationCollisionPadding) {
+        prevConfig.simulationCollisionPadding !== this.config.simulationCollisionPadding ||
+        ((this.config.simulationCollisionRadius === undefined || this.config.simulationCollisionRadius === 0) &&
+         prevConfig.pointDefaultSize !== this.config.pointDefaultSize)) {
       this.isForceCollisionReady = false
     }
     if (prevConfig.pixelRatio !== this.config.pixelRatio) {
