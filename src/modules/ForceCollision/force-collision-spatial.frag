@@ -68,9 +68,11 @@ void main() {
   // Apply the same offset used when building the grid
   vec2 offsetPos = currentPos + gridOffset * cellSize;
 
-  // Calculate which grid cell this point is in (with offset)
-  float myCellX = floor(offsetPos.x / cellSize);
-  float myCellY = floor(offsetPos.y / cellSize);
+  // Calculate which grid cell this point is in (with offset).
+  // Clamp to the grid bounds to match build-grid.vert, so a point that drifts
+  // outside the space still reads the edge cell it was binned into.
+  float myCellX = clamp(floor(offsetPos.x / cellSize), 0.0, gridTextureSize - 1.0);
+  float myCellY = clamp(floor(offsetPos.y / cellSize), 0.0, gridTextureSize - 1.0);
 
   // Track total neighbor count for damping
   float totalNeighbors = 0.0;
