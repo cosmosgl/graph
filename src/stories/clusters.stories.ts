@@ -17,7 +17,7 @@ import polygonSelectionStyleRaw from './clusters/polygon-selection/style.css?raw
 import polygonSelectionPolygonRaw from './clusters/polygon-selection/polygon.ts?raw'
 
 const meta: Meta<CosmosStoryProps> = {
-  title: 'Examples/Clusters',
+  title: 'Examples/Forces/Clustering',
   parameters: {
     controls: {
       disable: true,
