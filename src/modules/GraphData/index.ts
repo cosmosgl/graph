@@ -87,6 +87,9 @@ export class GraphData {
   }
 
   public updatePoints (): void {
+    // Don't sync the same positions twice — it breaks animations when points are added or removed.
+    if (this.pointPositions === this.inputPointPositions) return
+
     this.sourcePointsNumber = this.pointPositions ? this.pointPositions.length / 2 : 0
     this.pointPositions = this.inputPointPositions
     this.targetPointsNumber = this.pointPositions ? this.pointPositions.length / 2 : 0
