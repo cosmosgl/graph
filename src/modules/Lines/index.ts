@@ -231,13 +231,6 @@ export class Lines extends CoreModule {
 
     this.isLinkBlendingActive = this.config.linkBlending
 
-    this.drawCurvePickingCommand ||= this.createDrawCurveCommand({
-      cullMode: 'back',
-      depthWriteEnabled: false,
-      depthCompare: 'always',
-      blend: false,
-    })
-
     // Initialize quad buffer for full-screen rendering
     this.quadBuffer ||= device.createBuffer({
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
@@ -725,7 +718,7 @@ export class Lines extends CoreModule {
   }
 
   /**
-   * Re-applies the blend state to the link pipelines when `linkBlending` changes.
+   * Re-applies the blend state to the link pipeline when `linkBlending` changes.
    * `setParameters` can trigger a pipeline rebuild, so this only runs on an actual change.
    */
   public updateLinkBlending (): void {
@@ -834,8 +827,12 @@ export class Lines extends CoreModule {
     if (!points) return
     if (!points.currentPositionTexture || points.currentPositionTexture.destroyed) return
     if (!this.data.linksNumber || !this.store.isLinkHoveringEnabled) return
-    if (!this.linkIndexFbo || !this.drawCurvePickingCommand || !this.drawLineUniformStore || !this.linkStatusTexture) return
+    if (!this.linkIndexFbo || !this.drawLineUniformStore || !this.linkStatusTexture) return
     if (!this.linkIndexTexture || this.linkIndexTexture.destroyed) return
+
+    // Lazily create the picking command (only needed once hovering is in use). It is always
+    // unblended so the index pass writes exact link index values without blending corrupting them.
+    this.drawCurvePickingCommand ||= this.createDrawCurveCommand(this.getLinkBlendParameters(false))
 
     const hasHighlighting = config.highlightedLinkIndices !== undefined
 
@@ -1070,6 +1067,7 @@ export class Lines extends CoreModule {
 
   /**
    * Builds the render pipeline parameters for the link draw commands.
+   * Visible rendering follows `linkBlending`; picking passes `false`.
    * With `blend` enabled, uses standard source-over alpha blending; with it disabled,
    * fragments overwrite the framebuffer directly (no ROP read-modify-write).
    */
