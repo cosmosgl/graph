@@ -18,6 +18,9 @@ export const linkHovering = (): { div: HTMLDivElement; graph: Graph; destroy?: (
     scalePointsOnZoom: true,
     linkDefaultArrows: false,
     curvedLinks: true,
+    // Alpha blending for links. Toggle it off with the checkbox to verify that
+    // link hover detection keeps working when transparency is disabled.
+    linkBlending: true,
     enableSimulation: false,
     hoveredLinkWidthIncrease: 4,
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
@@ -56,6 +59,39 @@ export const linkHovering = (): { div: HTMLDivElement; graph: Graph; destroy?: (
     display: none;
   `
   div.appendChild(infoPanel)
+
+  // Link blending toggle — disabling blending makes link rendering much faster.
+  // It's here so you can confirm hover detection still works without blending.
+  const blendingToggle = document.createElement('label')
+  blendingToggle.style.cssText = `
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: white;
+    font-size: 14px;
+    cursor: pointer;
+    user-select: none;
+  `
+
+  const blendingCheckbox = document.createElement('input')
+  blendingCheckbox.type = 'checkbox'
+  blendingCheckbox.checked = true
+  blendingCheckbox.style.cursor = 'pointer'
+
+  const blendingLabel = document.createElement('span')
+  blendingLabel.textContent = 'Link blending'
+
+  blendingToggle.appendChild(blendingCheckbox)
+  blendingToggle.appendChild(blendingLabel)
+  div.appendChild(blendingToggle)
+
+  blendingCheckbox.addEventListener('change', () => {
+    graph.setConfigPartial({ linkBlending: blendingCheckbox.checked })
+    graph.render()
+  })
 
   const destroy = (): void => {
     graph.destroy()
