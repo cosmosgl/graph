@@ -168,7 +168,7 @@ import { GraphConfigInterface } from '@cosmograph/cosmos'
 const config: GraphConfigInterface = { /* ... */ }
 
 // After (v3)
-import { GraphConfig } from '@cosmograph/cosmos'
+import { GraphConfig } from '@cosmos.gl/graph'
 const config: GraphConfig = { /* ... */ }
 ```
 
@@ -213,7 +213,7 @@ You can track transition lifecycle via:
 #### Simulation and Rendering Are Now Separate
 
 - `render()` — starts the render loop only; it no longer restarts the simulation.
-- `start()` — resets and begins the simulation (alpha, progress, running state) without starting the render loop. Call `render()` separately to begin drawing.
+- `start()` — resets and begins the simulation (alpha, progress, running state) without starting the render loop. Call `render()` separately to begin drawing. Calling `start(alpha)` while the simulation is already running **reheats** it (resets alpha and progress) without firing `onSimulationStart` again.
 - `step()` — runs exactly one simulation tick, leaving the running state untouched. Previously, this also paused the simulation.
 
 #### Async Initialization
