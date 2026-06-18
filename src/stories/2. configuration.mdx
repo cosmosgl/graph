@@ -80,7 +80,7 @@ All configuration properties are optional. When creating a graph or calling `set
 
 ## Simulation configuration
 
-cosmos.gl layout algorithm was inspired by the [d3-force](https://github.com/d3/d3-force#forces) simulation forces: Link, Many-Body, Gravitation, and Centering. It provides several simulation settings to adjust the layout. Each of them can be changed in real time, while the simulation is in progress.
+cosmos.gl layout algorithm was inspired by the [d3-force](https://github.com/d3/d3-force#forces) simulation forces: Link, Many-Body, Gravitation, Centering, and Collision. It provides several simulation settings to adjust the layout. Each of them can be changed in real time, while the simulation is in progress.
 
 | Property | Description  | Recommended range | Default |
 |---|---|---|---|
@@ -96,6 +96,9 @@ cosmos.gl layout algorithm was inspired by the [d3-force](https://github.com/d3/
 | enableRightClickRepulsion | Enable or disable the repulsion force from mouse when right-clicking. When set to `true`, holding the right mouse button will activate the mouse repulsion force. When set to `false`, right-clicking will not trigger any repulsion force. | - | `false` |
 | simulationFriction | Friction coefficient. Values range from `0` (high friction, stops quickly) to `1` (no friction, keeps moving). | 0.0 – 1.0 | `0.85` |
 | simulationCluster | Cluster coefficient | 0.0 – 1.0 | `0.1` |
+| simulationCollision | Collision force coefficient. When greater than `0`, points push each other apart when they overlap, so they don't stack on top of one another. Uses a GPU spatial-hash grid, so it scales to large graphs better than naive O(n²) collision. Set to `0` to disable (its GPU resources are then never allocated). | 0.0 – 1.0 | `0` |
+| simulationCollisionRadius | Collision radius. When `0`, each point's collision radius is derived from its size (half of the point size). When greater than `0`, every point uses this fixed radius regardless of its size. | 0 – 100 | `0` |
+| simulationCollisionPadding | Extra room added to every point's collision radius, in simulation space units. Without padding, points settle just touching; with padding, neighbouring points keep a gap of twice this value between their visual edges. Composes with both size-derived and fixed `simulationCollisionRadius`. | 0 – 50 | `0` |
 
 ## Event Callbacks
 

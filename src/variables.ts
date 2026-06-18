@@ -72,6 +72,9 @@ export const defaultConfigValues = {
   simulationRepulsionFromMouse: 2,
   simulationFriction: 0.85,
   simulationCluster: 0.1,
+  simulationCollision: 0,
+  simulationCollisionRadius: undefined,
+  simulationCollisionPadding: 0,
   enableRightClickRepulsion: false,
 
   // Simulation callbacks

@@ -9,6 +9,7 @@ import { webgl2Adapter } from '@luma.gl/webgl'
 import { applyConfig, createDefaultConfig, resetConfigToDefaults, GraphConfigInterface, type GraphConfig } from '@/graph/config'
 import { getRgbaColor, getMaxPointSize, readPixels, extractIndicesFromPixels, sanitizeHtml } from '@/graph/helper'
 import { ForceCenter } from '@/graph/modules/ForceCenter'
+import { ForceCollision } from '@/graph/modules/ForceCollision'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
 import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
 import { ForceManyBody } from '@/graph/modules/ForceManyBody'
@@ -75,6 +76,7 @@ export class Graph {
   private forceLinkIncoming: ForceLink | undefined
   private forceLinkOutgoing: ForceLink | undefined
   private forceMouse: ForceMouse | undefined
+  private forceCollision: ForceCollision | undefined
   private clusters: Clusters | undefined
   private zoomInstance = new Zoom(this.store, this.config)
   private transition = new Transition(this.config)
@@ -127,6 +129,11 @@ export class Graph {
   private isForceLinkUpdateNeeded = false
   private isForceCenterUpdateNeeded = false
   private isPointImageSizesUpdateNeeded = false
+
+  // Whether the collision force's GPU resources (grid/size textures, programs)
+  // are allocated and match the current data. Allocated lazily the first time
+  // collision runs, so a graph that never enables it pays no memory cost.
+  private isForceCollisionReady = false
 
   private _isDestroyed = false
 
@@ -351,6 +358,7 @@ export class Graph {
         this.forceLinkIncoming = new ForceLink(device, this.config, this.store, this.graph, this.points)
         this.forceLinkOutgoing = new ForceLink(device, this.config, this.store, this.graph, this.points)
         this.forceMouse = new ForceMouse(device, this.config, this.store, this.graph, this.points)
+        this.forceCollision = new ForceCollision(device, this.config, this.store, this.graph, this.points)
       }
       this.clusters = new Clusters(device, this.config, this.store, this.graph, this.points)
 
@@ -1394,6 +1402,7 @@ export class Graph {
     this.forceLinkIncoming?.destroy()
     this.forceLinkOutgoing?.destroy()
     this.forceMouse?.destroy()
+    this.forceCollision?.destroy()
 
     if (this.device) {
       // Only clear and destroy the device if Graph owns it
@@ -1448,6 +1457,10 @@ export class Graph {
     if (this.isLinkArrowUpdateNeeded) this.lines.updateArrow()
 
     if (this.isForceManyBodyUpdateNeeded) this.forceManyBody?.create()
+    // Collision grid/size textures depend on point count and sizes. Mark them
+    // stale so they're rebuilt lazily the next time the collision force runs,
+    // rather than reallocating here while collision may be disabled.
+    if (this.isForceManyBodyUpdateNeeded || this.isPointSizeUpdateNeeded) this.isForceCollisionReady = false
     if (this.isForceLinkUpdateNeeded) {
       this.forceLinkIncoming?.create(LinkDirection.INCOMING)
       this.forceLinkOutgoing?.create(LinkDirection.OUTGOING)
@@ -1589,6 +1602,17 @@ export class Graph {
     }
     if (prevConfig.highlightedLinkIndices !== this.config.highlightedLinkIndices) {
       this.lines?.updateLinkStatus()
+    }
+    // The collision grid's cell size is derived from the collision radius and
+    // padding, so a change to either requires rebuilding the grid textures.
+    // In derived-radius mode (radius 0/undefined) the radius — and the size
+    // texture — come from point sizes, so a pointDefaultSize change must also
+    // invalidate the collision resources.
+    if (prevConfig.simulationCollisionRadius !== this.config.simulationCollisionRadius ||
+        prevConfig.simulationCollisionPadding !== this.config.simulationCollisionPadding ||
+        ((this.config.simulationCollisionRadius === undefined || this.config.simulationCollisionRadius === 0) &&
+         prevConfig.pointDefaultSize !== this.config.pointDefaultSize)) {
+      this.isForceCollisionReady = false
     }
     if (prevConfig.pixelRatio !== this.config.pixelRatio) {
       // Update device's canvas context useDevicePixels
@@ -1743,7 +1767,7 @@ export class Graph {
    *     to respect pause/unpause state.
    */
   private runSimulationStep (forceExecution = false): void {
-    const { config: { simulationGravity, simulationCenter, enableSimulation }, store: { isSimulationRunning } } = this
+    const { config: { simulationGravity, simulationCenter, simulationCollision, enableSimulation }, store: { isSimulationRunning } } = this
 
     if (!enableSimulation) return
 
@@ -1798,6 +1822,23 @@ export class Graph {
         this.points?.updatePosition()
       }
 
+      // Collision runs after the attraction forces (links, clusters) so it
+      // corrects the overlap they introduce within the same tick, instead of
+      // lagging one frame behind and oscillating against them.
+      if (simulationCollision) {
+        // Lazily allocate the collision GPU resources on first use (or after a
+        // data change marked them stale), so a graph that never enables
+        // collision never pays the grid/size-texture memory cost.
+        if (!this.isForceCollisionReady) {
+          this.forceCollision?.create()
+          this.forceCollision?.initPrograms()
+          this.isForceCollisionReady = true
+        }
+        this.points?.swapFbo()
+        this.forceCollision?.run()
+        this.points?.updatePosition()
+      }
+
       // Alpha decay and progress
       this.store.alpha += this.store.addAlpha(this.config.simulationDecay)
       if (this.isRightClickMouse && this.config.enableRightClickRepulsion) {
@@ -1826,6 +1867,7 @@ export class Graph {
     this.forceLinkIncoming?.initPrograms()
     this.forceLinkOutgoing?.initPrograms()
     this.forceMouse?.initPrograms()
+    // ForceCollision programs are built lazily on first use (see runSimulationStep)
     this.clusters.initPrograms()
   }
 
@@ -1838,6 +1880,7 @@ export class Graph {
     this.forceLinkIncoming ||= new ForceLink(this.device, this.config, this.store, this.graph, this.points)
     this.forceLinkOutgoing ||= new ForceLink(this.device, this.config, this.store, this.graph, this.points)
     this.forceMouse ||= new ForceMouse(this.device, this.config, this.store, this.graph, this.points)
+    this.forceCollision ||= new ForceCollision(this.device, this.config, this.store, this.graph, this.points)
   }
 
   private destroySimulationModules (): void {
@@ -1853,6 +1896,10 @@ export class Graph {
     this.forceLinkOutgoing = undefined
     this.forceMouse?.destroy()
     this.forceMouse = undefined
+    this.forceCollision?.destroy()
+    this.forceCollision = undefined
+    // Force lazy re-allocation if collision is re-enabled on a new instance.
+    this.isForceCollisionReady = false
     this.points?.destroySimulationResources()
   }
 
