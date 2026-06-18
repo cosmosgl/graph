@@ -1880,6 +1880,7 @@ export class Graph {
     this.forceLinkIncoming ||= new ForceLink(this.device, this.config, this.store, this.graph, this.points)
     this.forceLinkOutgoing ||= new ForceLink(this.device, this.config, this.store, this.graph, this.points)
     this.forceMouse ||= new ForceMouse(this.device, this.config, this.store, this.graph, this.points)
+    this.forceCollision ||= new ForceCollision(this.device, this.config, this.store, this.graph, this.points)
   }
 
   private destroySimulationModules (): void {
@@ -1895,6 +1896,10 @@ export class Graph {
     this.forceLinkOutgoing = undefined
     this.forceMouse?.destroy()
     this.forceMouse = undefined
+    this.forceCollision?.destroy()
+    this.forceCollision = undefined
+    // Force lazy re-allocation if collision is re-enabled on a new instance.
+    this.isForceCollisionReady = false
     this.points?.destroySimulationResources()
   }
 
