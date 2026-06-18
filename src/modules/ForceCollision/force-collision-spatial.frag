@@ -10,7 +10,6 @@ layout(std140) uniform forceCollisionUniforms {
   float pointsTextureSize;
   float gridTextureSize;
   float cellSize;
-  float spaceSize;
   float alpha;
   float collisionStrength;
   float collisionRadius;
@@ -22,7 +21,6 @@ layout(std140) uniform forceCollisionUniforms {
 #define pointsTextureSize forceCollision.pointsTextureSize
 #define gridTextureSize forceCollision.gridTextureSize
 #define cellSize forceCollision.cellSize
-#define spaceSize forceCollision.spaceSize
 #define alpha forceCollision.alpha
 #define collisionStrength forceCollision.collisionStrength
 #define collisionRadius forceCollision.collisionRadius
@@ -33,7 +31,6 @@ layout(std140) uniform forceCollisionUniforms {
 uniform float pointsTextureSize;
 uniform float gridTextureSize;
 uniform float cellSize;
-uniform float spaceSize;
 uniform float alpha;
 uniform float collisionStrength;
 uniform float collisionRadius;

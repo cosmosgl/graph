@@ -46,7 +46,6 @@ export class ForceCollision extends CoreModule {
       pointsTextureSize: number;
       gridTextureSize: number;
       cellSize: number;
-      spaceSize: number;
       alpha: number;
       collisionStrength: number;
       collisionRadius: number;
@@ -90,22 +89,29 @@ export class ForceCollision extends CoreModule {
     // Recalculate cell size to fit the grid evenly
     this.cellSize = store.adjustedSpaceSize / this.gridTextureSize
 
-    // Allocate one grid framebuffer per offset pass
-    this.destroyGridTargets()
-    this.gridTargets = GRID_OFFSETS.map(() => {
-      const texture = device.createTexture({
-        width: this.gridTextureSize,
-        height: this.gridTextureSize,
-        format: 'rgba32float',
-        usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
+    // Allocate one grid framebuffer per offset pass. These are scratch buffers
+    // (cleared and rebuilt every tick in run()), so reuse them when the grid
+    // dimensions are unchanged instead of reallocating on every create().
+    const gridTargetsValid =
+      this.gridTargets.length === GRID_OFFSETS.length &&
+      this.gridTargets.every((t) => !t.texture.destroyed && !t.fbo.destroyed && t.texture.width === this.gridTextureSize)
+    if (!gridTargetsValid) {
+      this.destroyGridTargets()
+      this.gridTargets = GRID_OFFSETS.map(() => {
+        const texture = device.createTexture({
+          width: this.gridTextureSize,
+          height: this.gridTextureSize,
+          format: 'rgba32float',
+          usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
+        })
+        const fbo = device.createFramebuffer({
+          width: this.gridTextureSize,
+          height: this.gridTextureSize,
+          colorAttachments: [texture],
+        })
+        return { texture, fbo }
       })
-      const fbo = device.createFramebuffer({
-        width: this.gridTextureSize,
-        height: this.gridTextureSize,
-        colorAttachments: [texture],
-      })
-      return { texture, fbo }
-    })
+    }
 
     // Create size texture for collision radius calculation
     const sizeState = new Float32Array(store.pointsTextureSize * store.pointsTextureSize * 4)
@@ -206,7 +212,6 @@ export class ForceCollision extends CoreModule {
           pointsTextureSize: 'f32',
           gridTextureSize: 'f32',
           cellSize: 'f32',
-          spaceSize: 'f32',
           alpha: 'f32',
           collisionStrength: 'f32',
           collisionRadius: 'f32',
@@ -300,6 +305,12 @@ export class ForceCollision extends CoreModule {
 
     // Step 2: Accumulate the collision forces from all offset passes into velocityFbo
     // within a single render pass (cleared once, then blended additively).
+    // The position/size bindings are constant across passes, so set them once;
+    // setBindings merges, so only gridTexture changes per offset in the loop.
+    this.forceCommand.setBindings({
+      positionsTexture: points.previousPositionTexture,
+      sizeTexture: this.sizeTexture,
+    })
     const forcePass = device.beginRenderPass({
       framebuffer: points.velocityFbo,
       clearColor: [0, 0, 0, 0],
@@ -313,7 +324,6 @@ export class ForceCollision extends CoreModule {
           pointsTextureSize: store.pointsTextureSize ?? 0,
           gridTextureSize: this.gridTextureSize,
           cellSize: this.cellSize,
-          spaceSize: store.adjustedSpaceSize,
           alpha: store.alpha,
           collisionStrength: config.simulationCollision ?? 0,
           collisionRadius,
@@ -324,8 +334,6 @@ export class ForceCollision extends CoreModule {
       })
 
       this.forceCommand.setBindings({
-        positionsTexture: points.previousPositionTexture,
-        sizeTexture: this.sizeTexture,
         gridTexture: target.texture,
       })
       this.forceCommand.draw(forcePass)
