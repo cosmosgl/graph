@@ -1,7 +1,7 @@
 # Spatial-hash collision force
 
 **Date:** 2026-06-13
-**Commits:** `6cb1b48`, `566bcba`, `6e41a8a`, `ad860ec`, `8284883`, `9c852f7`
+**Commits:** `6cb1b48`, `566bcba`, `6e41a8a`, `ad860ec`, `8284883`, `9c852f7`, `94dcfd3`
 
 ## Why
 
@@ -36,7 +36,7 @@ Three properties (interface in `src/config.ts`, defaults in `src/variables.ts`,
 | Property | Meaning | Default | Notes |
 |---|---|---|---|
 | `simulationCollision` | Force strength; `0` disables it (and skips all GPU work / allocation). | `0` | Story demos use ~0.2–1.0. |
-| `simulationCollisionRadius` | Fixed collision radius. `0` (or `undefined`) derives it per-point as `size * 0.5`. | `0` | Use a fixed value to decouple physics from visual size. |
+| `simulationCollisionRadius` | Collision radius. `0` and `undefined` are aliases — both derive it per-point as `size * 0.5`; a positive value sets a fixed radius for all points. | `undefined` | Use a fixed value to decouple physics from visual size. |
 | `simulationCollisionPadding` | Extra room added to every radius, so neighbors keep a `2 × padding` gap instead of just touching. | `0` | Composes with both derived and fixed radius. |
 
 ## How it runs each tick (GPU pipeline)
