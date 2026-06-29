@@ -170,6 +170,7 @@ export class ForceCenter extends CoreModule {
     if (!this.centermassFbo || !this.centermassTexture) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
     if (!points.velocityFbo || points.velocityFbo.destroyed) return
+    if (!points.exitTexture || points.exitTexture.destroyed) return
 
     // Skip if sizes changed and create() wasn't called yet
     if (store.pointsTextureSize !== this.previousPointsTextureSize) return
@@ -191,6 +192,7 @@ export class ForceCenter extends CoreModule {
     // Update texture bindings dynamically
     this.calculateCentermassCommand.setBindings({
       positionsTexture: points.previousPositionTexture,
+      exitTexture: points.exitTexture,
     })
 
     this.calculateCentermassCommand.draw(centermassPass)

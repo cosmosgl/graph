@@ -362,6 +362,7 @@ export class Clusters extends CoreModule {
     if (!this.centermassFbo || this.centermassFbo.destroyed) return
     if (!this.clusterTexture || this.clusterTexture.destroyed) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
+    if (!points.exitTexture || points.exitTexture.destroyed) return
 
     // Update vertex count dynamically (using same fallback logic as initialization)
     this.calculateCentermassCommand.setVertexCount(this.data.pointsNumber ?? 0)
@@ -378,6 +379,7 @@ export class Clusters extends CoreModule {
     this.calculateCentermassCommand.setBindings({
       clusterTexture: this.clusterTexture,
       positionsTexture: points.previousPositionTexture,
+      exitTexture: points.exitTexture,
     })
 
     // Create a RenderPass for the centermass framebuffer

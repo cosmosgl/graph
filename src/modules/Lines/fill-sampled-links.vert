@@ -8,6 +8,7 @@ in vec2 pointB;
 in float linkIndices;
 
 uniform sampler2D positionsTexture;
+uniform sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform fillSampledLinksUniforms {
@@ -40,6 +41,14 @@ uniform mat3 transformationMatrix;
 out vec4 rgba;
 
 void main() {
+  // Skip a link touching an absent (faded-out) point. exit.G = current absence.
+  if (texture(exitTexture, (pointA + 0.5) / pointsTextureSize).g > 0.5 ||
+      texture(exitTexture, (pointB + 0.5) / pointsTextureSize).g > 0.5) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = 0.0;
+    return;
+  }
+
   vec4 posA = texture(positionsTexture, (pointA + 0.5) / pointsTextureSize);
   vec4 posB = texture(positionsTexture, (pointB + 0.5) / pointsTextureSize);
   vec2 a = posA.rg;

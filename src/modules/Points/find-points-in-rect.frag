@@ -5,6 +5,7 @@ precision highp float;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D pointSize;
+uniform sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform findPointsInRectUniforms {
@@ -61,6 +62,12 @@ float pointSizeF(float size) {
 }
 
 void main() {
+  // Skip absent (faded-out) points — never select a removed point. exit.G = absent.
+  if (texture(exitTexture, textureCoords).g > 0.5) {
+    fragColor = vec4(0.0);
+    return;
+  }
+
   vec4 pointPosition = texture(positionsTexture, textureCoords);
   vec2 p = 2.0 * pointPosition.rg / spaceSize - 1.0;
   p *= spaceSize / screenSize;

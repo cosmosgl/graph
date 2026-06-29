@@ -3,6 +3,7 @@ export function forceFrag (maxLinks: number): string {
 precision highp float;
 
 uniform sampler2D positionsTexture;
+uniform sampler2D exitTexture;
 uniform sampler2D linkInfoTexture; // Texture storing first link indices and amount
 uniform sampler2D linkIndicesTexture;
 uniform sampler2D linkPropertiesTexture; // Texture storing link bias and strength
@@ -63,6 +64,13 @@ void main() {
         randomMinLinkDist *= linkDistance;
 
         iCount += 1.0;
+
+        // Skip a link to an absent point — its position would poison the spring
+        // force. (exit.G = current absence)
+        vec4 connectedExit = texture(exitTexture, (connectedPointIndex.rg + 0.5) / pointsTextureSize);
+        if (connectedExit.g > 0.5) {
+          continue;
+        }
 
         vec4 connectedPointPosition = texture(positionsTexture, (connectedPointIndex.rg + 0.5) / pointsTextureSize);
         float x = connectedPointPosition.x - (pointPosition.x + velocity.x);

@@ -6,6 +6,7 @@ precision highp float;
 in vec2 pointIndices;
 
 uniform sampler2D positionsTexture;
+uniform sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform fillSampledPointsUniforms {
@@ -29,6 +30,14 @@ uniform mat3 transformationMatrix;
 out vec4 rgba;
 
 void main() {
+  // Keep absent (faded-out) points out of the sample. exit.G = current absence.
+  if (texture(exitTexture, (pointIndices + 0.5) / pointsTextureSize).g > 0.5) {
+    rgba = vec4(0.0);
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = 0.0;
+    return;
+  }
+
   vec4 pointPosition = texture(positionsTexture, (pointIndices + 0.5) / pointsTextureSize);
   vec2 p = 2.0 * pointPosition.rg / spaceSize - 1.0;
   p *= spaceSize / screenSize;

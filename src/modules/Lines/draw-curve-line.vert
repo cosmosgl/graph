@@ -154,7 +154,14 @@ void main() {
   vec4 pointPositionB = texture(positionsTexture, pointTexturePosB);
   vec2 a = pointPositionA.xy;
   vec2 b = pointPositionB.xy;
-  
+
+  // Skip links touching an absent (NaN position) point — interpolating from a NaN
+  // endpoint would produce garbage geometry. Collapse the link off-screen.
+  if (isnan(a.x) || isnan(a.y) || isnan(b.x) || isnan(b.y)) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
+
   // Calculate direction vector and its perpendicular
   vec2 xBasis = b - a;
   vec2 yBasis = normalize(vec2(-xBasis.y, xBasis.x));

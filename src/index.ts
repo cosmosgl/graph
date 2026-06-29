@@ -456,6 +456,26 @@ export class Graph {
   }
 
   /**
+   * Overrides `config.transitionDuration` for the next transition cycle only.
+   *
+   * The next data update (`setPointPositions`, `setPointColors`, …) that triggers
+   * a transition uses this duration instead of the configured one, then the
+   * override clears automatically. Useful to apply a single update without
+   * animation, regardless of `config.transitionDuration`:
+   *
+   * ```ts
+   * graph.setNextTransitionDuration(0) // snap the next update
+   * graph.setPointPositions(positions)
+   * ```
+   *
+   * @param {number | undefined} duration - Duration in milliseconds for the next
+   *   cycle. `0` snaps with no animation; `undefined` falls back to config.
+   */
+  public setNextTransitionDuration (duration?: number): void {
+    this.transition.setNextDuration(duration)
+  }
+
+  /**
    * Sets the positions for the graph points.
    *
    * @param {Float32Array} pointPositions - A Float32Array representing the positions of points in the format [x1, y1, x2, y2, ..., xn, yn],
@@ -466,6 +486,13 @@ export class Graph {
    *   - `false` or `undefined` (default): Use the behavior defined by `config.rescalePositions`.
    * @note If `transitionDuration > 0` and the simulation is running, the simulation is automatically
    * paused for the transition and remains paused afterwards. Call `unpause()` to resume it.
+   * @note A point whose position is `NaN` is treated as **absent**: it fades out in place while every
+   * other point keeps its index and on-screen position (no array compaction, no slide). Set a point to
+   * `NaN` to remove it, and back to a real position to add one — both animate. By default an absent point
+   * fades to nothing; pass per-point `setPointSizes` / `setPointColors` to customize the exit look.
+   * Absent points are excluded from the force layout, so this is safe with the simulation on or off.
+   * cosmos.gl does not auto-compact the gaps — drop them yourself and snap the renumber with
+   * `setNextTransitionDuration(0)`.
    */
   public setPointPositions (pointPositions: Float32Array, dontRescale?: boolean | undefined): void {
     if (this._isDestroyed) return
@@ -477,6 +504,11 @@ export class Graph {
     const currentPositionTexture = this.points?.currentPositionTexture
     if (currentPositionTexture && !currentPositionTexture.destroyed) {
       this.transition.queue(TransitionProperty.Positions)
+      // Also animate size/color so a point removed by a NaN position fades out to
+      // the exit default even when the caller doesn't call setPointSizes/Colors.
+      // No-op when those values are unchanged (source == target).
+      this.transition.queue(TransitionProperty.PointSizes)
+      this.transition.queue(TransitionProperty.PointColors)
     }
     // Links related texture depends on point positions, so we need to update it
     this.isLinksUpdateNeeded = true
@@ -498,6 +530,9 @@ export class Graph {
    * @param {Float32Array} pointColors - A Float32Array representing the colors of points in the format [r1, g1, b1, a1, r2, g2, b2, a2, ..., rn, gn, bn, an],
    * where each color is represented in RGBA format.
    * Example: `new Float32Array([1, 0, 0, 1, 0, 1, 0, 1])` sets the first point to red and the second point to green.
+   * @note A `NaN` channel resolves to the config default for a normal point, or to the exit default
+   * (transparent) for an **absent** point (one whose position is `NaN`) — letting you control how a
+   * removed point fades out (see `setPointPositions`).
   */
   public setPointColors (pointColors: Float32Array): void {
     if (this._isDestroyed) return
@@ -525,6 +560,9 @@ export class Graph {
    * @param {Float32Array} pointSizes - A Float32Array representing the sizes of points in the format [size1, size2, ..., sizen],
    * where `n` is the index of the point.
    * Example: `new Float32Array([10, 20, 30])` sets the first point to size 10, the second point to size 20, and the third point to size 30.
+   * @note A `NaN` size resolves to the config default for a normal point, or to the exit default (`0`)
+   * for an **absent** point (one whose position is `NaN`) — letting you control how a removed point
+   * fades out (see `setPointPositions`).
    */
   public setPointSizes (pointSizes: Float32Array): void {
     if (this._isDestroyed) return
@@ -836,7 +874,7 @@ export class Graph {
     // Color/size transitions are independent of physics and must not pause the simulation.
     if (this.transition.isPendingFor(TransitionProperty.Positions) &&
         this.store.isSimulationRunning &&
-        this.config.transitionDuration > 0 &&
+        this.transition.duration > 0 &&
         !this._isFirstRenderAfterInit) {
       this.store.isSimulationRunning = false
       this.config.onSimulationPause?.()
@@ -1952,7 +1990,7 @@ export class Graph {
       }
     }
 
-    this.points?.setTransitionProgress(this.transition.progress, shouldAnimatePointColors, shouldAnimatePointSizes)
+    this.points?.setTransitionProgress(this.transition.progress, shouldAnimatePointColors, shouldAnimatePointSizes, shouldInterpolatePositions)
     this.lines?.setTransitionProgress(this.transition.progress, shouldAnimateLinkColors, shouldAnimateLinkWidths)
 
     if (!this.dragInstance.isActive) {

@@ -69,6 +69,12 @@ export class Points extends CoreModule {
   public previousPositionTexture: Texture | undefined
   public velocityTexture: Texture | undefined
   public pointStatusTexture: Texture | undefined
+  // Exit status, derived from NaN positions (R = previous absence, G = current
+  // absence; 1 = absent). The single source of truth for "is this point leaving /
+  // gone": draw blends R→G by transition progress for the fade gone-guard, while
+  // the integrator and force modules read G to exclude absent points from physics.
+  // Public so the force modules can sample it.
+  public exitTexture: Texture | undefined
   /**
    * Start of a position transition — the "from" positions blended by
    * `interpolatePosition()`. Populated by `updatePositions()` when an animated
@@ -97,6 +103,12 @@ export class Points extends CoreModule {
   private sourceSizeBuffer: Buffer | undefined
   private targetSizeBuffer: Buffer | undefined
   private previousSizeData: Float32Array | undefined
+  // Previous-frame absence per point (1 = absent), kept so the next `updateExit`
+  // can fill the exit texture's R (previous) channel.
+  private previousExitData: Float32Array | undefined
+  // True when the exit texture is entirely zero (no point absent now or last
+  // frame). Lets `updateExit` skip the alloc + upload on the common no-NaN path.
+  private isExitTextureAllZero = false
   private shapeBuffer: Buffer | undefined
   private imageIndicesBuffer: Buffer | undefined
   private imageSizesBuffer: Buffer | undefined
@@ -152,6 +164,7 @@ export class Points extends CoreModule {
   private transitionProgress = 1
   private shouldAnimatePointColors = false
   private shouldAnimatePointSizes = false
+  private shouldAnimatePointPositions = false
 
   // Uniform stores for scalar uniforms
   private updatePositionUniformStore: UniformStore<{
@@ -311,7 +324,7 @@ export class Points extends CoreModule {
     const sameCount = sourceCount === targetCount
     const shouldAnimate =
       this.transition?.isPendingFor(TransitionProperty.Positions) === true &&
-      this.config.transitionDuration > 0 &&
+      (this.transition?.duration ?? this.config.transitionDuration) > 0 &&
       !!this.currentPositionTexture
 
     const targetState = buildPositionTextureData(data.pointPositions, pointsTextureSize, targetCount)
@@ -471,6 +484,7 @@ export class Points extends CoreModule {
 
     this.updatePointStatus()
     this.updatePinnedStatus()
+    this.updateExit()
     this.updateSampledPointsGrid()
 
     // Animated path: render loop refreshes after each `interpolatePosition()`.
@@ -560,6 +574,7 @@ export class Points extends CoreModule {
           transitionProgress: 'f32',
           animateColors: 'f32',
           animateSizes: 'f32',
+          animatePositions: 'f32',
         },
         defaultUniforms: {
           // Order MUST match uniformTypes and shader declaration
@@ -590,6 +605,7 @@ export class Points extends CoreModule {
           transitionProgress: 1,
           animateColors: 0,
           animateSizes: 0,
+          animatePositions: 0,
         },
       },
       drawFragmentUniforms: {
@@ -1116,6 +1132,69 @@ export class Points extends CoreModule {
     }
   }
 
+  // Builds the exit texture from point positions: R = previous absence, G = current
+  // absence (1 = NaN position). One signal for both pipelines: the draw shader
+  // blends R→G by transition progress (the fade gone-guard), and the integrator
+  // and force shaders read G to skip absent points so a NaN never poisons physics.
+  public updateExit (): void {
+    const { device, store: { pointsTextureSize }, data } = this
+    if (!pointsTextureSize) return
+
+    const count = data.pointsNumber ?? 0
+    const prev = this.previousExitData
+
+    // Cheap scan: current absence per point, and whether anything is absent now.
+    const nextPrevious = new Float32Array(count)
+    let anyAbsentNow = false
+    for (let i = 0; i < count; i++) {
+      const current = data.pointPositions && Number.isNaN(data.pointPositions[i * 2]) ? 1 : 0
+      nextPrevious[i] = current
+      if (current) anyAbsentNow = true
+    }
+    let anyAbsentBefore = false
+    if (prev) for (let i = 0; i < prev.length; i++) if (prev[i]) { anyAbsentBefore = true; break }
+
+    const sameSize = !!this.exitTexture && this.exitTexture.width === pointsTextureSize && this.exitTexture.height === pointsTextureSize
+
+    // Fast path for the common (no-NaN) case: the texture would be all-zero (no R
+    // or G set) and the existing one already is — skip the big alloc + GPU upload.
+    if (!anyAbsentNow && !anyAbsentBefore && sameSize && this.isExitTextureAllZero) {
+      this.previousExitData = nextPrevious
+      return
+    }
+
+    // Build R = previous absence, G = current absence.
+    const state = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
+    for (let i = 0; i < count; i++) {
+      const current = nextPrevious[i]
+      // New slots (no history) start with previous = current, so no spurious fade.
+      const previous = i < (prev?.length ?? 0) ? (prev as Float32Array)[i] : current
+      state[i * 4] = previous
+      state[i * 4 + 1] = current
+    }
+    this.previousExitData = nextPrevious
+
+    if (!this.exitTexture || !sameSize) {
+      if (this.exitTexture && !this.exitTexture.destroyed) {
+        this.exitTexture.destroy()
+      }
+      this.exitTexture = device.createTexture({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+      })
+    }
+    this.exitTexture.copyImageData({
+      data: state,
+      bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
+      mipLevel: 0,
+      x: 0,
+      y: 0,
+    })
+    // The texture is all-zero iff no point is (or was) absent.
+    this.isExitTextureAllZero = !anyAbsentNow && !anyAbsentBefore
+  }
+
   public updateSize (): void {
     const { device, store: { pointsTextureSize }, data } = this
     if (!pointsTextureSize || data.pointsNumber === undefined) return
@@ -1383,16 +1462,18 @@ export class Points extends CoreModule {
     renderPass.end()
   }
 
-  public setTransitionProgress (progress: number, animateColors = false, animateSizes = false): void {
+  public setTransitionProgress (progress: number, animateColors = false, animateSizes = false, animatePositions = false): void {
     this.transitionProgress = progress
     this.shouldAnimatePointColors = animateColors
     this.shouldAnimatePointSizes = animateSizes
+    this.shouldAnimatePointPositions = animatePositions
   }
 
   public draw (renderPass: RenderPass): void {
     const { data, config, store } = this
     if (!this.targetColorBuffer) this.updateColor()
     if (!this.targetSizeBuffer) this.updateSize()
+    if (!this.exitTexture) this.updateExit()
     if (!this.shapeBuffer) this.updateShape()
     if (!this.imageIndicesBuffer) this.updateImageIndices()
     if (!this.imageSizesBuffer) this.updateImageSizes()
@@ -1400,6 +1481,7 @@ export class Points extends CoreModule {
     if (!this.drawCommand || !this.drawUniformStore) return
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
     if (!this.pointStatusTexture || this.pointStatusTexture.destroyed) return
+    if (!this.exitTexture || this.exitTexture.destroyed) return
     if (!this.imageAtlasTexture || !this.imageAtlasCoordsTexture) {
       this.createAtlas()
       if (!this.imageAtlasTexture || !this.imageAtlasCoordsTexture) return
@@ -1439,6 +1521,7 @@ export class Points extends CoreModule {
       transitionProgress: this.transitionProgress,
       animateColors: this.shouldAnimatePointColors ? 1 : 0,
       animateSizes: this.shouldAnimatePointSizes ? 1 : 0,
+      animatePositions: this.shouldAnimatePointPositions ? 1 : 0,
     }
 
     const baseFragmentUniforms = {
@@ -1468,6 +1551,7 @@ export class Points extends CoreModule {
       this.drawCommand.setBindings({
         positionsTexture: this.currentPositionTexture,
         pointStatus: this.pointStatusTexture,
+        exitTexture: this.exitTexture,
         imageAtlasTexture: this.imageAtlasTexture,
         imageAtlasCoords: this.imageAtlasCoordsTexture,
       })
@@ -1487,6 +1571,7 @@ export class Points extends CoreModule {
       this.drawCommand.setBindings({
         positionsTexture: this.currentPositionTexture,
         pointStatus: this.pointStatusTexture,
+        exitTexture: this.exitTexture,
         imageAtlasTexture: this.imageAtlasTexture,
         imageAtlasCoords: this.imageAtlasCoordsTexture,
       })
@@ -1506,6 +1591,7 @@ export class Points extends CoreModule {
       this.drawCommand.setBindings({
         positionsTexture: this.currentPositionTexture,
         pointStatus: this.pointStatusTexture,
+        exitTexture: this.exitTexture,
         imageAtlasTexture: this.imageAtlasTexture,
         imageAtlasCoords: this.imageAtlasCoordsTexture,
       })
@@ -1544,6 +1630,7 @@ export class Points extends CoreModule {
       this.drawHighlightedCommand.setBindings({
         positionsTexture: this.currentPositionTexture,
         pointStatus: this.pointStatusTexture,
+        exitTexture: this.exitTexture,
       })
       this.drawHighlightedCommand.draw(renderPass)
     }
@@ -1578,6 +1665,7 @@ export class Points extends CoreModule {
       this.drawHighlightedCommand.setBindings({
         positionsTexture: this.currentPositionTexture,
         pointStatus: this.pointStatusTexture,
+        exitTexture: this.exitTexture,
       })
       this.drawHighlightedCommand.draw(renderPass)
     }
@@ -1588,6 +1676,7 @@ export class Points extends CoreModule {
     if (!this.previousPositionTexture || this.previousPositionTexture.destroyed) return
     if (!this.velocityTexture || this.velocityTexture.destroyed) return
     if (!this.pinnedStatusTexture || this.pinnedStatusTexture.destroyed) return
+    if (!this.exitTexture || this.exitTexture.destroyed) return
 
     this.updatePositionUniformStore.setUniforms({
       updatePositionUniforms: {
@@ -1601,6 +1690,7 @@ export class Points extends CoreModule {
       positionsTexture: this.previousPositionTexture,
       velocity: this.velocityTexture,
       pinnedStatusTexture: this.pinnedStatusTexture,
+      exitTexture: this.exitTexture,
     })
 
     const renderPass = this.device.beginRenderPass({
@@ -1649,6 +1739,8 @@ export class Points extends CoreModule {
     if (!this.findPointsInRectCommand || !this.findPointsInRectUniformStore || !this.searchFbo || this.searchFbo.destroyed) return false
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return false
     if (!this.sizeTexture || this.sizeTexture.destroyed) return false
+    if (!this.exitTexture) this.updateExit()
+    if (!this.exitTexture || this.exitTexture.destroyed) return false
 
     this.findPointsInRectUniformStore.setUniforms({
       findPointsInRectUniforms: {
@@ -1668,6 +1760,7 @@ export class Points extends CoreModule {
     this.findPointsInRectCommand.setBindings({
       positionsTexture: this.currentPositionTexture,
       pointSize: this.sizeTexture,
+      exitTexture: this.exitTexture,
     })
 
     const renderPass = this.device.beginRenderPass({
@@ -1682,6 +1775,8 @@ export class Points extends CoreModule {
     if (!this.findPointsInPolygonCommand || !this.findPointsInPolygonUniformStore || !this.searchFbo || this.searchFbo.destroyed) return false
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return false
     if (!this.polygonPathTexture || this.polygonPathTexture.destroyed) return false
+    if (!this.exitTexture) this.updateExit()
+    if (!this.exitTexture || this.exitTexture.destroyed) return false
 
     this.findPointsInPolygonUniformStore.setUniforms({
       findPointsInPolygonUniforms: {
@@ -1696,6 +1791,7 @@ export class Points extends CoreModule {
     this.findPointsInPolygonCommand.setBindings({
       positionsTexture: this.currentPositionTexture,
       polygonPathTexture: this.polygonPathTexture,
+      exitTexture: this.exitTexture,
     })
 
     const renderPass = this.device.beginRenderPass({
@@ -1765,6 +1861,8 @@ export class Points extends CoreModule {
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
     if (!this.pointStatusTexture) this.updatePointStatus()
     if (!this.pointStatusTexture || this.pointStatusTexture.destroyed) return
+    if (!this.exitTexture) this.updateExit()
+    if (!this.exitTexture || this.exitTexture.destroyed) return
 
     this.findHoveredPointCommand.setVertexCount(this.data.pointsNumber ?? 0)
 
@@ -1789,6 +1887,7 @@ export class Points extends CoreModule {
     const bindings = {
       positionsTexture: this.currentPositionTexture,
       pointStatus: this.pointStatusTexture,
+      exitTexture: this.exitTexture,
     }
 
     const renderPass = this.device.beginRenderPass({
@@ -1944,6 +2043,8 @@ export class Points extends CoreModule {
     // Fill sampled points FBO
     if (this.fillSampledPointsFboCommand && this.fillSampledPointsUniformStore && this.sampledPointsFbo) {
       if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return positions
+      if (!this.exitTexture) this.updateExit()
+      if (!this.exitTexture || this.exitTexture.destroyed) return positions
       // Update vertex count dynamically
       this.fillSampledPointsFboCommand.setVertexCount(this.data.pointsNumber ?? 0)
 
@@ -1959,6 +2060,7 @@ export class Points extends CoreModule {
       // Update texture bindings dynamically
       this.fillSampledPointsFboCommand.setBindings({
         positionsTexture: this.currentPositionTexture,
+        exitTexture: this.exitTexture,
       })
 
       const fillPass = this.device.beginRenderPass({
@@ -1991,6 +2093,8 @@ export class Points extends CoreModule {
     // Fill sampled points FBO
     if (this.fillSampledPointsFboCommand && this.fillSampledPointsUniformStore && this.sampledPointsFbo) {
       if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return { indices, positions }
+      if (!this.exitTexture) this.updateExit()
+      if (!this.exitTexture || this.exitTexture.destroyed) return { indices, positions }
       // Update vertex count dynamically
       this.fillSampledPointsFboCommand.setVertexCount(this.data.pointsNumber ?? 0)
 
@@ -2006,6 +2110,7 @@ export class Points extends CoreModule {
       // Update texture bindings dynamically
       this.fillSampledPointsFboCommand.setBindings({
         positionsTexture: this.currentPositionTexture,
+        exitTexture: this.exitTexture,
       })
 
       const fillPass = this.device.beginRenderPass({
@@ -2169,6 +2274,11 @@ export class Points extends CoreModule {
       this.pinnedStatusTexture.destroy()
     }
     this.pinnedStatusTexture = undefined
+    if (this.exitTexture && !this.exitTexture.destroyed) {
+      this.exitTexture.destroy()
+    }
+    this.exitTexture = undefined
+    this.isExitTextureAllZero = false
 
     // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
     this.interpolatePositionUniformStore?.destroy()
@@ -2211,6 +2321,7 @@ export class Points extends CoreModule {
     }
     this.targetSizeBuffer = undefined
     this.previousSizeData = undefined
+    this.previousExitData = undefined
     if (this.shapeBuffer && !this.shapeBuffer.destroyed) {
       this.shapeBuffer.destroy()
     }
@@ -2605,14 +2716,38 @@ export class Points extends CoreModule {
     for (let i = 0; i < points.length; i += 2) {
       const x = points[i] as number
       const y = points[i + 1] as number
+      // Skip absent (NaN) points: `Math.min/max(…, NaN)` is `NaN`, which would
+      // poison the extent and rescale every point to NaN (vanishing the graph).
+      if (Number.isNaN(x) || Number.isNaN(y)) continue
       minX = Math.min(minX, x)
       maxX = Math.max(maxX, x)
       minY = Math.min(minY, y)
       maxY = Math.max(maxY, y)
     }
+
+    // No finite points to rescale (all absent).
+    if (!Number.isFinite(minX)) return
+
     const w = maxX - minX
     const h = maxY - minY
     const range = Math.max(w, h)
+
+    // Degenerate bounding box (a single point, or all points coincident): there
+    // is nothing to scale, and dividing by `range === 0` would produce `NaN`
+    // positions, making the points vanish. Center them in the space instead,
+    // preserving any relative offsets.
+    if (range === 0) {
+      const center = spaceSize / 2
+      this.scaleX = (x: number): number => x - minX + center
+      this.scaleY = (y: number): number => y - minY + center
+      for (let i = 0; i < pointsNumber; i++) {
+        const x = points[i * 2] as number
+        if (Number.isNaN(x)) continue // leave absent points NaN
+        this.data.pointPositions[i * 2] = this.scaleX(x)
+        this.data.pointPositions[i * 2 + 1] = this.scaleY(points[i * 2 + 1] as number)
+      }
+      return
+    }
 
     // Do not rescale if the range is greater than the space size (no need to)
     if (range > spaceSize) {
@@ -2643,7 +2778,9 @@ export class Points extends CoreModule {
 
     // Apply scaling to point positions
     for (let i = 0; i < pointsNumber; i++) {
-      this.data.pointPositions[i * 2] = this.scaleX(points[i * 2] as number)
+      const x = points[i * 2] as number
+      if (Number.isNaN(x)) continue // leave absent points NaN
+      this.data.pointPositions[i * 2] = this.scaleX(x)
       this.data.pointPositions[i * 2 + 1] = this.scaleY(points[i * 2 + 1] as number)
     }
   }

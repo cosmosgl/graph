@@ -2,6 +2,11 @@ import { getRgbaColor, isNumber } from '@/graph/helper'
 import { type GraphConfigInterface } from '@/graph/config'
 import { defaultConfigValues } from '@/graph/variables'
 
+// Defaults a `NaN` size/color resolves to for an *exiting* point (NaN position):
+// fade to nothing. (A live point falls back to the config defaults instead.)
+const EXIT_DEFAULT_SIZE = 0
+const EXIT_DEFAULT_COLOR_CHANNEL = 0
+
 export enum PointShape {
   Circle = 0,
   Square = 1,
@@ -109,6 +114,10 @@ export class GraphData {
     if (this.inputPointColors === undefined || this.inputPointColors.length / 4 !== this.pointsNumber) {
       this.pointColors = new Float32Array(this.pointsNumber * 4)
       for (let i = 0; i < this.pointColors.length / 4; i++) {
+        // No color array provided: present points get the config default; exiting
+        // points (NaN position) get the exit default (0 → transparent) so they
+        // still fade out without the caller providing colors.
+        if (Number.isNaN(this.pointPositions?.[i * 2] as number)) continue // leave 0
         this.pointColors[i * 4] = defaultRgba[0]
         this.pointColors[i * 4 + 1] = defaultRgba[1]
         this.pointColors[i * 4 + 2] = defaultRgba[2]
@@ -117,10 +126,14 @@ export class GraphData {
     } else {
       this.pointColors = this.inputPointColors
       for (let i = 0; i < this.pointColors.length / 4; i++) {
-        if (!isNumber(this.pointColors[i * 4])) this.pointColors[i * 4] = defaultRgba[0]
-        if (!isNumber(this.pointColors[i * 4 + 1])) this.pointColors[i * 4 + 1] = defaultRgba[1]
-        if (!isNumber(this.pointColors[i * 4 + 2])) this.pointColors[i * 4 + 2] = defaultRgba[2]
-        if (!isNumber(this.pointColors[i * 4 + 3])) this.pointColors[i * 4 + 3] = defaultRgba[3]
+        // A NaN channel resolves to the exit default (0) for an exiting point
+        // (NaN position), otherwise to the config default.
+        const exiting = Number.isNaN(this.pointPositions?.[i * 2] as number)
+        for (let c = 0; c < 4; c++) {
+          if (!isNumber(this.pointColors[i * 4 + c])) {
+            this.pointColors[i * 4 + c] = exiting ? EXIT_DEFAULT_COLOR_CHANNEL : defaultRgba[c]
+          }
+        }
       }
     }
   }
@@ -138,11 +151,19 @@ export class GraphData {
     const defaultSize = this._config.pointDefaultSize
     if (this.inputPointSizes === undefined || this.inputPointSizes.length !== this.pointsNumber) {
       this.pointSizes = new Float32Array(this.pointsNumber).fill(defaultSize)
+      // No size array provided: exiting points (NaN position) get the exit default
+      // so they still fade out without the caller providing sizes.
+      for (let i = 0; i < this.pointsNumber; i++) {
+        if (Number.isNaN(this.pointPositions?.[i * 2] as number)) this.pointSizes[i] = EXIT_DEFAULT_SIZE
+      }
     } else {
       this.pointSizes = this.inputPointSizes
       for (let i = 0; i < this.pointSizes.length; i++) {
         if (!isNumber(this.pointSizes[i])) {
-          this.pointSizes[i] = defaultSize
+          // NaN resolves to the exit default for an exiting point (NaN
+          // position), otherwise to the config default.
+          const exiting = Number.isNaN(this.pointPositions?.[i * 2] as number)
+          this.pointSizes[i] = exiting ? EXIT_DEFAULT_SIZE : defaultSize
         }
       }
     }

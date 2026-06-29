@@ -14,6 +14,7 @@ in float imageSize;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D pointStatus;
+uniform sampler2D exitTexture;
 uniform sampler2D imageAtlasCoords;
 
 #ifdef USE_UNIFORM_BUFFERS
@@ -37,6 +38,7 @@ layout(std140) uniform drawVertexUniforms {
   float transitionProgress;
   float animateColors;
   float animateSizes;
+  float animatePositions;
 } drawVertex;
 
 #define ratio drawVertex.ratio
@@ -58,6 +60,7 @@ layout(std140) uniform drawVertexUniforms {
 #define transitionProgress drawVertex.transitionProgress
 #define animateColors drawVertex.animateColors
 #define animateSizes drawVertex.animateSizes
+#define animatePositions drawVertex.animatePositions
 #else
 uniform float ratio;
 uniform mat3 transformationMatrix;
@@ -78,6 +81,7 @@ uniform float imageAtlasCoordsTextureSize;
 uniform float transitionProgress;
 uniform float animateColors;
 uniform float animateSizes;
+uniform float animatePositions;
 #endif
 
 out float pointShape;
@@ -122,6 +126,22 @@ void main() {
     return;
   }
 
+  // Exit texture: R = previous absence, G = current absence (1 = absent). During a
+  // position transition, blend R→G to animate the enter/exit; otherwise use G (the
+  // settled current absence) so an unrelated color/size transition can't replay the
+  // ramp. The caller drives the visual fade via setPointSizes/setPointColors; here
+  // we only remove the point once it is fully gone.
+  vec4 exitStatus = texture(exitTexture, (pointIndices + 0.5) / pointsTextureSize);
+  float exit = animatePositions > 0.0
+    ? mix(exitStatus.r, exitStatus.g, transitionProgress)
+    : exitStatus.g;
+  if (exit >= 1.0) {
+    // Fully gone — skip. Also avoids using a NaN position on the snapped path.
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = 0.0;
+    return;
+  }
+
   // Position
   vec4 pointPosition = texture(positionsTexture, (pointIndices + 0.5) / pointsTextureSize);
   vec2 point = pointPosition.rg;
@@ -148,6 +168,7 @@ void main() {
   vec4 pointColor = animateColors > 0.0
     ? mix(sourceColor, targetColor, transitionProgress)
     : targetColor;
+
 
   // Calculate sizes for shape and image
   float shapeSizeValue = calculatePointSize(pointSize * sizeScale);
