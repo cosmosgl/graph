@@ -1,0 +1,173 @@
+/* All rules are scoped under `.add-remove-points` so this story's generic class
+   names (action, graph, panel, …) don't leak into — or get overridden by — other
+   stories' globally-loaded CSS. */
+
+.add-remove-points {
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  font-family: "Nunito Sans", -apple-system, ".SFNSText-Regular", "San Francisco", BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.add-remove-points .graph {
+  width: 100%;
+  height: 100vh;
+}
+
+/* Effect picker + buttons, top-left. */
+.add-remove-points .controls {
+  position: absolute;
+  top: 14px;
+  left: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.add-remove-points .picker {
+  display: flex;
+  gap: 6px;
+}
+
+.add-remove-points .chip {
+  font-size: 10pt;
+  padding: 5px 12px;
+  color: #c7cddb;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.add-remove-points .chip:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.add-remove-points .chip.active {
+  color: #1b1f27;
+  background: #e7ecff;
+  border-color: #e7ecff;
+  font-weight: 700;
+}
+
+.add-remove-points .buttons {
+  display: flex;
+  gap: 6px;
+}
+
+.add-remove-points .action {
+  font-size: 9.5pt;
+  padding: 4px 11px;
+  color: #aeb6cc;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.add-remove-points .action:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* Bottom panel: slot strip + instruction line. */
+.add-remove-points .panel {
+  position: absolute;
+  bottom: 14px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  max-width: 90%;
+  padding: 12px 16px;
+  background: rgba(0, 0, 0, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  user-select: none;
+}
+
+/* The array drawn as a strip of slots. */
+.add-remove-points .slots {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 7px;
+}
+
+.add-remove-points .slots-title {
+  font-size: 9.5pt;
+  color: #aeb6cc;
+}
+
+.add-remove-points .slots-title b {
+  color: #fff;
+}
+
+.add-remove-points .slots-title code {
+  font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  font-size: 9pt;
+  color: #e7ecff;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.add-remove-points .slots-strip {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: 70vw;
+  max-height: 22vh;
+  overflow-y: auto;
+}
+
+.add-remove-points .slot {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  font-size: 9pt;
+  font-weight: 700;
+  color: #fff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+
+/* Faded-out slot — kept in place, holds NaN in the array. */
+.add-remove-points .slot.empty {
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.3);
+  color: #6b7280;
+  font-family: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+  font-size: 7.5pt;
+  font-weight: 400;
+  text-shadow: none;
+}
+
+.add-remove-points .slots-empty {
+  font-size: 9.5pt;
+  color: #6b7280;
+}
+
+/* Instruction line. */
+.add-remove-points .hint {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 10pt;
+  color: #c7cddb;
+  white-space: nowrap;
+}
+
+.add-remove-points .hint b {
+  color: #fff;
+}
+
+.add-remove-points .hint .effect {
+  color: #8b93a7;
+}
