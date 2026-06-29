@@ -733,6 +733,7 @@ export class Lines extends CoreModule {
     if (!this.sampledLinksFbo || this.sampledLinksFbo.destroyed) return positions
     const points = this.points
     if (!points?.currentPositionTexture || points.currentPositionTexture.destroyed) return positions
+    if (!points.exitTexture || points.exitTexture.destroyed) return positions
 
     if (this.fillSampledLinksFboCommand && this.fillSampledLinksUniformStore && this.sampledLinksFbo) {
       this.fillSampledLinksFboCommand.setVertexCount(this.data.linksNumber ?? 0)
@@ -749,6 +750,7 @@ export class Lines extends CoreModule {
       })
       this.fillSampledLinksFboCommand.setBindings({
         positionsTexture: points.currentPositionTexture,
+        exitTexture: points.exitTexture,
       })
 
       const fillPass = this.device.beginRenderPass({
@@ -780,6 +782,7 @@ export class Lines extends CoreModule {
     if (!this.sampledLinksFbo || this.sampledLinksFbo.destroyed) return { indices, positions, angles }
     const points = this.points
     if (!points?.currentPositionTexture || points.currentPositionTexture.destroyed) return { indices, positions, angles }
+    if (!points.exitTexture || points.exitTexture.destroyed) return { indices, positions, angles }
 
     if (this.fillSampledLinksFboCommand && this.fillSampledLinksUniformStore && this.sampledLinksFbo) {
       this.fillSampledLinksFboCommand.setVertexCount(this.data.linksNumber ?? 0)
@@ -796,6 +799,7 @@ export class Lines extends CoreModule {
       })
       this.fillSampledLinksFboCommand.setBindings({
         positionsTexture: points.currentPositionTexture,
+        exitTexture: points.exitTexture,
       })
 
       const fillPass = this.device.beginRenderPass({

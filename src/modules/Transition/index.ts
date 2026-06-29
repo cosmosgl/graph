@@ -65,9 +65,38 @@ export class Transition {
   private pendingProperties = new Set<TransitionProperty>()
   /** Properties currently animating in the running cycle. */
   private activeProperties = new Set<TransitionProperty>()
+  /** One-shot duration (ms) for the next cycle, set via `setNextDuration`. Consumed by `start()`. */
+  private overrideDuration?: number
+  /**
+   * Duration (ms) the running animation remembers for all its frames.
+   *
+   * Matters whenever an animation with a custom duration is playing — especially
+   * if another update can arrive before it finishes: `start()` copies the one-shot
+   * override here and clears the override right away, so an interrupting update
+   * isn't affected by this one's override, while this animation still knows its own
+   * length frame to frame.
+   */
+  private activeDuration = 0
 
   public constructor (config: GraphConfigInterface) {
     this.config = config
+  }
+
+  /**
+   * How long the *next* update's transition should last (ms). A duration of 0 means
+   * the next update snaps instead of animating.
+   *
+   * Priority:
+   *   1. a one-shot override from `setNextTransitionDuration()`, if set;
+   *   2. else the running cycle's duration, if one is active;
+   *   3. else the config default.
+   *
+   * The override wins even mid-animation, so `setNextTransitionDuration(0)` always
+   * snaps the next update. This only affects the next update — a transition that is
+   * already playing keeps its own length (`step()` uses `activeDuration` directly).
+   */
+  public get duration (): number {
+    return this.overrideDuration ?? (this.isActive ? this.activeDuration : this.config.transitionDuration)
   }
 
   /** True while one or more properties are queued via `queue()` awaiting `start()`. */
@@ -101,6 +130,15 @@ export class Transition {
   }
 
   /**
+   * Sets a one-shot duration (ms) for the next cycle only, overriding
+   * `config.transitionDuration`. `0` snaps with no animation; `undefined` falls
+   * back to config. Consumed when the next cycle starts.
+   */
+  public setNextDuration (duration?: number): void {
+    this.overrideDuration = duration
+  }
+
+  /**
    * Starts a queued transition cycle.
    *
    * - No pending queue → no-op.
@@ -113,7 +151,9 @@ export class Transition {
   public start (): void {
     if (!this.isPending) return
 
-    const { transitionDuration } = this.config
+    // Consume the one-shot override (if any) so it applies to this cycle only.
+    const transitionDuration = this.overrideDuration ?? this.config.transitionDuration
+    this.overrideDuration = undefined
 
     if (transitionDuration <= 0) {
       const wasActive = this.isActive
@@ -127,6 +167,7 @@ export class Transition {
       this.end(true)
     }
 
+    this.activeDuration = transitionDuration
     this.startTime = performance.now()
     this.progress = 0
     this.activeProperties = new Set(this.pendingProperties)
@@ -145,7 +186,7 @@ export class Transition {
   public step (): void {
     if (!this.isActive) return
 
-    const { transitionDuration } = this.config
+    const transitionDuration = this.activeDuration
 
     if (transitionDuration <= 0) {
       this.end(true)

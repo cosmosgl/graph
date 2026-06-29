@@ -221,6 +221,7 @@ export class ForceLink extends CoreModule {
     if (!points) return
     if (!this.runCommand || !this.uniformStore) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
+    if (!points.exitTexture || points.exitTexture.destroyed) return
     if (!this.linkFirstIndicesAndAmountTexture || !this.indicesTexture || !this.biasAndStrengthTexture || !this.randomDistanceTexture) return
     if (!points.velocityFbo || points.velocityFbo.destroyed) return
 
@@ -245,6 +246,7 @@ export class ForceLink extends CoreModule {
 
     this.runCommand.setBindings({
       positionsTexture: points.previousPositionTexture,
+      exitTexture: points.exitTexture,
       linkInfoTexture: this.linkFirstIndicesAndAmountTexture,
       linkIndicesTexture: this.indicesTexture,
       linkPropertiesTexture: this.biasAndStrengthTexture,

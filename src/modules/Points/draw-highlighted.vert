@@ -7,6 +7,7 @@ in vec2 vertexCoord;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D pointStatus;
+uniform sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform drawHighlightedUniforms {
@@ -83,6 +84,13 @@ void main () {
   vertexPosition = vertexCoord;
 
   vec2 textureCoordinates = vec2(mod(pointIndex, pointsTextureSize), floor(pointIndex / pointsTextureSize)) + 0.5;
+
+  // Don't draw a highlight/outline for an absent (faded-out) point. exit.G = absent.
+  if (texture(exitTexture, textureCoordinates / pointsTextureSize).g > 0.5) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
+
   vec4 pointPosition = texture(positionsTexture, textureCoordinates / pointsTextureSize);
 
   rgbColor = color.rgb;

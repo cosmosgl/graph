@@ -9,6 +9,7 @@ in float imageSize;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D pointStatus;
+uniform sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform findHoveredPointUniforms {
@@ -69,6 +70,17 @@ float euclideanDistance (float x1, float x2, float y1, float y2) {
 }
 
 void main() {
+  // Skip absent (faded-out) points so hover never lands on a removed one. Their
+  // size/position may still look hittable mid-fade (only alpha faded), so the exit
+  // status is the reliable signal. exit.G = current absence.
+  vec4 exitStatus = texture(exitTexture, (pointIndices + 0.5) / pointsTextureSize);
+  if (exitStatus.g > 0.5) {
+    rgba = vec4(0.0);
+    gl_Position = vec4(0.5, 0.5, 0.0, 1.0);
+    gl_PointSize = 1.0;
+    return;
+  }
+
   vec4 greyoutStatus = texture(pointStatus, (pointIndices + 0.5) / pointsTextureSize);
   float isHighlighted = (greyoutStatus.r == 0.0) ? 1.0 : 0.0;
 
