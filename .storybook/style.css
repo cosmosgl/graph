@@ -1,3 +1,10 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&display=swap');
+
+body {
+  font-family: 'Space Grotesk', sans-serif;
+  font-optical-sizing: auto;
+}
+
 tr:nth-of-type(2n) {
   background-color: #1e2326;
 }
