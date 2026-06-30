@@ -24,7 +24,7 @@ const LOOP_STEPS = [
   undefined,
 ]
 
-export const pointTransition = async (): Promise<{
+export const imageTransition = async (): Promise<{
   graph: Graph;
   div: HTMLDivElement;
   destroy?: () => void;
