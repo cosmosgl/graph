@@ -47,6 +47,16 @@ export class Store {
   public draggingPointIndex: number | undefined = undefined
   public hoveredLinkIndex: number | undefined = undefined
   public adjustedSpaceSize = defaultConfigValues.spaceSize
+  /**
+   * Number of coordinates per point in the current space: `2` (default) or `3`.
+   * Set via `Graph.setSpaceDimensions()` when 3D positions are ingested.
+   */
+  public spaceDimensions: 2 | 3 = 2
+  /**
+   * View-projection matrix of the 3D camera (column-major mat4).
+   * Written by the `Camera` module; consumed by `transformationMatrix4x4` when in 3D mode.
+   */
+  public viewProjection3D: Mat4Array | undefined = undefined
   public isSpaceKeyPressed = false
   public div: HTMLDivElement | undefined
   public webglMaxTextureSize = 16384 // Default fallback value
@@ -71,6 +81,10 @@ export class Store {
 
   public get backgroundColor (): [number, number, number, number] {
     return this._backgroundColor
+  }
+
+  public get is3D (): boolean {
+    return this.spaceDimensions === 3
   }
 
   /**
@@ -161,6 +175,9 @@ export class Store {
    * ```
    */
   public get transformationMatrix4x4 (): Mat4Array {
+    // In 3D mode the camera's view-projection matrix replaces the padded 2D transform.
+    if (this.is3D && this.viewProjection3D) return this.viewProjection3D
+
     const t = this.transform
 
     // Validate transform array length

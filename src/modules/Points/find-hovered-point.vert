@@ -52,13 +52,15 @@ uniform float skipGreyed;
 
 out vec4 rgba;
 
-float calculatePointSize(float size) {
+// Must stay identical to calculatePointSize in draw-points.vert (same `pxPerUnit`
+// semantics), or the hover radius drifts from the rendered point size.
+float calculatePointSize(float size, float pxPerUnit) {
   float pSize;
 
-  if (scalePointsOnZoom > 0.0) { 
-    pSize = size * ratio * transformationMatrix[0][0];
+  if (scalePointsOnZoom > 0.0) {
+    pSize = size * ratio * pxPerUnit;
   } else {
-    pSize = size * ratio * min(5.0, max(1.0, transformationMatrix[0][0] * 0.01));
+    pSize = size * ratio * min(5.0, max(1.0, pxPerUnit * 0.01));
   }
 
   return min(pSize, maxPointSize * ratio);
@@ -86,30 +88,55 @@ void main() {
   }
 
   vec4 pointPosition = texture(positionsTexture, (pointIndices + 0.5) / pointsTextureSize);
+
+  #ifdef SPACE_3D
+  // 3D mode: same projection as draw-points.vert (z in the texture's alpha channel).
+  vec4 clip = transformationMatrix * vec4(pointPosition.rg, pointPosition.a, 1.0);
+  if (clip.w <= 0.0) {
+    // Behind the camera — never a hover candidate.
+    rgba = vec4(0.0);
+    gl_Position = vec4(0.5, 0.5, 0.0, 1.0);
+    gl_PointSize = 1.0;
+    return;
+  }
+  float pxPerUnit = pxPerSpaceUnit(transformationMatrix, screenSize, clip.w);
+  vec2 pointScreenPosition = (clip.xy / clip.w + 1.0) * screenSize / 2.0;
+  #else
   vec2 point = pointPosition.rg;
 
   vec2 normalizedPosition = 2.0 * point / spaceSize - 1.0;
   normalizedPosition *= spaceSize / screenSize;
-  
+
   #ifdef USE_UNIFORM_BUFFERS
   mat3 transformMat3 = mat3(transformationMatrix);
   vec3 finalPosition = transformMat3 * vec3(normalizedPosition, 1);
   #else
   vec3 finalPosition = transformationMatrix * vec3(normalizedPosition, 1);
   #endif
-
-  float shapeSizeValue = calculatePointSize(size * sizeScale);
-  float imageSizeValue = calculatePointSize(imageSize * sizeScale);
-  float pointRadius = 0.5 * max(shapeSizeValue, imageSizeValue);
+  float pxPerUnit = transformationMatrix[0][0];
   vec2 pointScreenPosition = (finalPosition.xy + 1.0) * screenSize / 2.0;
-  
+  #endif
+
+  float shapeSizeValue = calculatePointSize(size * sizeScale, pxPerUnit);
+  float imageSizeValue = calculatePointSize(imageSize * sizeScale, pxPerUnit);
+  float pointRadius = 0.5 * max(shapeSizeValue, imageSizeValue);
+
   rgba = vec4(0.0);
   gl_Position = vec4(0.5, 0.5, 0.0, 1.0);
-  
+
   if (euclideanDistance(pointScreenPosition.x, mousePosition.x, pointScreenPosition.y, mousePosition.y) < pointRadius / ratio) {
     float index = pointIndices.g * pointsTextureSize + pointIndices.r;
     rgba = vec4(index, max(size, imageSize), pointPosition.xy);
+    #ifdef SPACE_3D
+    // Nearest-wins: encode depth into z (the hovered FBO has a depth attachment in
+    // 3D). The highlighted pass (skipGreyed == 1) gets the nearer half of the depth
+    // range so it keeps priority over the greyed pass, matching the 2D two-pass order.
+    float depth01 = clamp(clip.z / clip.w * 0.5 + 0.5, 0.0, 1.0);
+    float priority = (skipHighlighted > 0.0) ? 0.5 : 0.0;
+    gl_Position = vec4(-0.5, -0.5, (priority + 0.5 * depth01) * 2.0 - 1.0, 1.0);
+    #else
     gl_Position = vec4(-0.5, -0.5, 0.0, 1.0);
+    #endif
   }
 
   gl_PointSize = 1.0;

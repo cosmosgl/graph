@@ -1,21 +1,25 @@
 /**
- * Build RGBA32F texture data from a flat `[x, y, x, y, ...]` point positions array.
+ * Build RGBA32F texture data from a flat point positions array:
+ * `[x, y, x, y, ...]` when `dimensions` is `2`, `[x, y, z, x, y, z, ...]` when `3`.
  *
- * Layout per pixel: `[x, y, index, 0]`. The blue channel encodes the point index —
- * `drag-point.frag` reads it to match the drag target. Alpha is unused by shaders.
+ * Layout per pixel: `[x, y, index, z]`. The blue channel encodes the point index —
+ * `drag-point.frag` reads it to match the drag target. Alpha holds the z coordinate
+ * (`0` in 2D mode, where no shader reads it).
  */
 export function buildPositionTextureData (
   pointPositions: Float32Array | undefined,
   pointsTextureSize: number,
-  pointsNumber: number
+  pointsNumber: number,
+  dimensions: 2 | 3 = 2
 ): Float32Array {
   const positionData = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
   if (!pointPositions) return positionData
 
   for (let i = 0; i < pointsNumber; ++i) {
-    positionData[i * 4 + 0] = pointPositions[i * 2 + 0] as number
-    positionData[i * 4 + 1] = pointPositions[i * 2 + 1] as number
+    positionData[i * 4 + 0] = pointPositions[i * dimensions + 0] as number
+    positionData[i * 4 + 1] = pointPositions[i * dimensions + 1] as number
     positionData[i * 4 + 2] = i
+    positionData[i * 4 + 3] = dimensions === 3 ? pointPositions[i * 3 + 2] as number : 0
   }
 
   return positionData
@@ -45,12 +49,14 @@ export function buildSourcePositionTextureData (
     sourceData[i * 4 + 0] = previousPositionPixels[i * 4 + 0] as number
     sourceData[i * 4 + 1] = previousPositionPixels[i * 4 + 1] as number
     sourceData[i * 4 + 2] = i
+    sourceData[i * 4 + 3] = previousPositionPixels[i * 4 + 3] as number
   }
 
   for (let i = sharedCount; i < targetCount; i += 1) {
     sourceData[i * 4 + 0] = targetData[i * 4 + 0] as number
     sourceData[i * 4 + 1] = targetData[i * 4 + 1] as number
     sourceData[i * 4 + 2] = i
+    sourceData[i * 4 + 3] = targetData[i * 4 + 3] as number
   }
 
   return sourceData

@@ -89,13 +89,16 @@ out float shapeSize;
 out float imageSizeVarying;
 out float overallSize;
 
-float calculatePointSize(float size) {
+// `pxPerUnit` is the zoom factor: `transformationMatrix[0][0]` in 2D,
+// perspective-attenuated `pxPerSpaceUnit(...)` in 3D. This function is duplicated in
+// find-hovered-point.vert and must stay identical there, or hover misses points.
+float calculatePointSize(float size, float pxPerUnit) {
   float pSize;
 
   if (scalePointsOnZoom > 0.0) {
-    pSize = size * ratio * transformationMatrix[0][0];
+    pSize = size * ratio * pxPerUnit;
   } else {
-    pSize = size * ratio * min(5.0, max(1.0, transformationMatrix[0][0] * 0.01));
+    pSize = size * ratio * min(5.0, max(1.0, pxPerUnit * 0.01));
   }
 
   return min(pSize, maxPointSize * ratio);
@@ -124,6 +127,21 @@ void main() {
 
   // Position
   vec4 pointPosition = texture(positionsTexture, (pointIndices + 0.5) / pointsTextureSize);
+
+  #ifdef SPACE_3D
+  // 3D mode: transformationMatrix carries the camera's view-projection matrix.
+  // World position (z stored in the texture's alpha channel) maps straight to
+  // clip space; the GPU performs the perspective divide.
+  vec4 clip = transformationMatrix * vec4(pointPosition.rg, pointPosition.a, 1.0);
+  if (clip.w <= 0.0) {
+    // Behind the camera — cull, or the perspective divide would mirror the position.
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = 0.0;
+    return;
+  }
+  gl_Position = clip;
+  float pxPerUnit = pxPerSpaceUnit(transformationMatrix, screenSize, clip.w);
+  #else
   vec2 point = pointPosition.rg;
 
   // Transform point position to normalized device coordinates
@@ -141,6 +159,8 @@ void main() {
   vec3 finalPosition = transformationMatrix * vec3(normalizedPosition, 1);
   #endif
   gl_Position = vec4(finalPosition.rg, 0, 1);
+  float pxPerUnit = transformationMatrix[0][0];
+  #endif
 
   float pointSize = animateSizes > 0.0
     ? mix(sourceSize, targetSize, transitionProgress)
@@ -150,8 +170,8 @@ void main() {
     : targetColor;
 
   // Calculate sizes for shape and image
-  float shapeSizeValue = calculatePointSize(pointSize * sizeScale);
-  float imageSizeValue = calculatePointSize(imageSize * sizeScale);
+  float shapeSizeValue = calculatePointSize(pointSize * sizeScale, pxPerUnit);
+  float imageSizeValue = calculatePointSize(imageSize * sizeScale, pxPerUnit);
 
   // Use the larger of the two sizes for the overall point size
   float overallSizeValue = max(shapeSizeValue, imageSizeValue);

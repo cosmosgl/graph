@@ -73,6 +73,10 @@ All configuration properties are optional. When creating a graph or calling `set
 | linkSamplingDistance | Sampling density for link position methods (used in `getSampledLinks` and `getSampledLinkPositionsMap`) in pixels | `100` |
 | attribution | Controls the text shown in the bottom right corner. Provide HTML content as a string for custom attribution. Empty string hides attribution. Applied only on initialization | `''` |
 | rescalePositions | Control automatic point position adjustment. When undefined: auto-rescale if simulation disabled | `undefined` |
+| cameraFov | Vertical field of view of the 3D camera in degrees. Only used in 3D mode (after `setPointPositions3D`) | `45` |
+| cameraNear | Near clipping plane distance of the 3D camera. Only used in 3D mode | `1` |
+| cameraFar | Far clipping plane distance of the 3D camera. When `undefined`, derived automatically from the camera distance and data extent. Only used in 3D mode | `undefined` |
+| cameraInitialPosition | Initial eye position of the 3D camera as `[x, y, z]`, applied when entering 3D mode. When `undefined`, the camera frames the data bounds automatically | `undefined` |
 
 **Notes:**
 - The attribution text color can be customized using CSS variable `--cosmosgl-attribution-color`.

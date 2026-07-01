@@ -26,6 +26,7 @@ import { readPixels } from '@/graph/helper'
 import { ensureVec2, ensureVec4 } from '@/graph/modules/Shared/uniform-utils'
 import { createAtlasDataFromImageData } from '@/graph/modules/Points/atlas-utils'
 import { buildPositionTextureData, buildSourcePositionTextureData } from '@/graph/modules/Points/position-utils'
+import { space3dModule } from '@/graph/modules/Shared/space3d-module'
 import { Transition, TransitionProperty } from '@/graph/modules/Transition'
 
 export class Points extends CoreModule {
@@ -121,6 +122,13 @@ export class Points extends CoreModule {
    * (simulation step, drag, position transition) so the next call re-reads from the GPU.
    */
   private isPositionsUpToDate = false
+  /**
+   * Space dimensions the mode-dependent Models (draw, picking, highlight ring) were
+   * compiled for. The `SPACE_3D` define and the depth parameters are baked into the
+   * pipeline at Model creation, so `initPrograms` recreates those Models when this
+   * differs from `store.spaceDimensions`.
+   */
+  private programsSpaceDimensions: 2 | 3 = 2
   private drawCommand: Model | undefined
   private drawHighlightedCommand: Model | undefined
   private updatePositionCommand: Model | undefined
@@ -294,6 +302,9 @@ export class Points extends CoreModule {
     // Temporary flag is used to skip rescaling when change point positions or adding new points by function `setPointPositions`
     // This flag overrides any other rescaling settings
     if (this.shouldSkipRescale) shouldRescale = false
+    // Rescaling is a 2D-space concept (stride-2 positions, d3-zoom space mapping);
+    // in 3D mode the camera's fitView handles framing instead.
+    if (store.is3D) shouldRescale = false
 
     if (shouldRescale) {
       this.rescaleInitialNodePositions()
@@ -314,7 +325,7 @@ export class Points extends CoreModule {
       this.config.transitionDuration > 0 &&
       !!this.currentPositionTexture
 
-    const targetState = buildPositionTextureData(data.pointPositions, pointsTextureSize, targetCount)
+    const targetState = buildPositionTextureData(data.pointPositions, pointsTextureSize, targetCount, data.pointDimensions)
 
     // Position transition: `interpolatePosition()` blends source → target each frame.
     // Target is always the new layout.
@@ -411,11 +422,13 @@ export class Points extends CoreModule {
       })
     }
 
-    // Create hoveredFbo (2x2 for hover detection)
+    // Create hoveredFbo (2x2 for hover detection). The depth attachment enables
+    // nearest-wins picking in 3D; in 2D it is inert (depthCompare stays 'always').
     this.hoveredFbo ||= device.createFramebuffer({
       width: 2,
       height: 2,
       colorAttachments: ['rgba32float'],
+      depthStencilAttachment: 'depth16unorm',
     })
 
     // Create buffers
@@ -481,6 +494,23 @@ export class Points extends CoreModule {
 
   public initPrograms (): void {
     const { device, config, store, data } = this
+    // The SPACE_3D define and the depth parameters are baked into the pipeline at
+    // Model creation, so a 2D ↔ 3D mode switch requires recreating the affected Models.
+    if (this.programsSpaceDimensions !== store.spaceDimensions) {
+      this.programsSpaceDimensions = store.spaceDimensions
+      if (this.drawCommand) {
+        this.drawCommand.destroy()
+        this.drawCommand = undefined
+      }
+      if (this.findHoveredPointCommand) {
+        this.findHoveredPointCommand.destroy()
+        this.findHoveredPointCommand = undefined
+      }
+      if (this.drawHighlightedCommand) {
+        this.drawHighlightedCommand.destroy()
+        this.drawHighlightedCommand = undefined
+      }
+    }
     // Ensure textures are created before Model initialization
     if (!this.imageAtlasCoordsTexture || !this.imageAtlasTexture) {
       this.createAtlas()
@@ -616,6 +646,7 @@ export class Points extends CoreModule {
     this.drawCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
+      modules: [space3dModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       attributes: {
@@ -640,6 +671,7 @@ export class Points extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
+        ...(store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
         // Create uniform buffer binding
@@ -656,8 +688,10 @@ export class Points extends CoreModule {
         blendAlphaOperation: 'add',
         blendAlphaSrcFactor: 'one',
         blendAlphaDstFactor: 'one-minus-src-alpha',
-        depthWriteEnabled: false,
-        depthCompare: 'always',
+        // In 3D points write depth (with an alpha-discard in the fragment shader)
+        // so that nearer geometry correctly occludes farther geometry.
+        depthWriteEnabled: store.is3D,
+        depthCompare: store.is3D ? 'less-equal' : 'always',
       },
     })
 
@@ -800,6 +834,7 @@ export class Points extends CoreModule {
     this.findHoveredPointCommand ||= new Model(device, {
       fs: findHoveredPointFrag,
       vs: findHoveredPointVert,
+      modules: [space3dModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       attributes: {
@@ -814,6 +849,7 @@ export class Points extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
+        ...(store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
         // Create uniform buffer binding
@@ -822,8 +858,9 @@ export class Points extends CoreModule {
         // All texture bindings will be set dynamically in findHoveredPoint() method
       },
       parameters: {
-        depthWriteEnabled: false,
-        depthCompare: 'always',
+        // In 3D candidates depth-test against each other so the nearest point wins.
+        depthWriteEnabled: store.is3D,
+        depthCompare: store.is3D ? 'less-equal' : 'always',
         blend: false, // Disable blending - we want to overwrite, not blend
       },
     })
@@ -925,6 +962,7 @@ export class Points extends CoreModule {
     this.drawHighlightedCommand ||= new Model(device, {
       fs: drawHighlightedFrag,
       vs: drawHighlightedVert,
+      modules: [space3dModule],
       topology: 'triangle-strip',
       vertexCount: 4,
       attributes: {
@@ -935,6 +973,7 @@ export class Points extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
+        ...(store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
         // Create uniform buffer binding
@@ -950,8 +989,9 @@ export class Points extends CoreModule {
         blendAlphaOperation: 'add',
         blendAlphaSrcFactor: 'one',
         blendAlphaDstFactor: 'one-minus-src-alpha',
+        // Rings draw last in 3D: depth-tested against points but never writing depth.
         depthWriteEnabled: false,
-        depthCompare: 'always',
+        depthCompare: store.is3D ? 'less-equal' : 'always',
       },
     })
 
@@ -1794,6 +1834,7 @@ export class Points extends CoreModule {
     const renderPass = this.device.beginRenderPass({
       framebuffer: this.hoveredFbo,
       clearColor: [0, 0, 0, 0],
+      clearDepth: 1,
     })
 
     const hasHighlighting = this.config.highlightedPointIndices !== undefined

@@ -143,6 +143,34 @@ float calculateArrowWidth(float arrowWidth) {
   }
 }
 
+#ifdef SPACE_3D
+// 3D variants work in pixels throughout (the quad is extruded in screen space after
+// projection), unlike the 2D functions above which return space units. `pxPerUnit`
+// is the perspective-attenuated zoom factor at the vertex's depth.
+float calculateLinkWidth3D(float width, float pxPerUnit) {
+  float linkWidth;
+  if (scaleLinksOnZoom > 0.0) {
+    linkWidth = width * pxPerUnit;
+  } else {
+    linkWidth = width * min(5.0, max(1.0, pxPerUnit * 0.01));
+  }
+  // Limit link width based on whether it has an arrow
+  if (useArrow > 0.5) {
+    return min(linkWidth, maxPointSize * 2.0);
+  } else {
+    return min(linkWidth, maxPointSize);
+  }
+}
+
+float calculateArrowWidth3D(float arrowWidth, float pxPerUnit) {
+  if (scaleLinksOnZoom > 0.0) {
+    return arrowWidth * pxPerUnit;
+  } else {
+    return arrowWidth * min(5.0, max(1.0, pxPerUnit * 0.01));
+  }
+}
+#endif
+
 void main() {
   pos = position;
   linkIndex = linkIndices;
@@ -152,9 +180,35 @@ void main() {
 
   vec4 pointPositionA = texture(positionsTexture, pointTexturePosA);
   vec4 pointPositionB = texture(positionsTexture, pointTexturePosB);
+
+  #ifdef SPACE_3D
+  // 3D mode: project both endpoints (z lives in the position texture's alpha channel)
+  // and extrude the quad in screen space after projection. Links are straight in 3D —
+  // the conic curvature is a 2D-plane construct.
+  vec4 clipA = transformationMatrix * vec4(pointPositionA.rg, pointPositionA.a, 1.0);
+  vec4 clipB = transformationMatrix * vec4(pointPositionB.rg, pointPositionB.a, 1.0);
+  if (clipA.w <= 0.0 || clipB.w <= 0.0) {
+    // Either endpoint behind the camera — cull the whole link.
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    rgbaColor = vec4(0.0);
+    arrowLength = 0.0;
+    useArrow = 0.0;
+    smoothing = 0.0;
+    arrowWidthFactor = 0.0;
+    return;
+  }
+  vec2 screenA = (clipA.xy / clipA.w) * 0.5 * screenSize;
+  vec2 screenB = (clipB.xy / clipB.w) * 0.5 * screenSize;
+  vec2 segPx = screenB - screenA;
+  float linkDistPx = length(segPx);
+  // Pixels per space unit at this vertex's depth — gives a natural perspective
+  // taper along the link when widths scale with zoom.
+  float clipW = mix(clipA.w, clipB.w, position.x);
+  float pxPerUnit = pxPerSpaceUnit(transformationMatrix, screenSize, clipW);
+  #else
   vec2 a = pointPositionA.xy;
   vec2 b = pointPositionB.xy;
-  
+
   // Calculate direction vector and its perpendicular
   vec2 xBasis = b - a;
   vec2 yBasis = normalize(vec2(-xBasis.y, xBasis.x));
@@ -166,6 +220,7 @@ void main() {
 
   // Convert link distance to screen pixels
   float linkDistPx = linkDist * transformationMatrix[0][0];
+  #endif
 
   float lineWidthBase = animateWidths > 0.0
     ? mix(sourceWidth, targetWidth, transitionProgress)
@@ -185,12 +240,16 @@ void main() {
   float arrowWidthDifference = max(0.0, arrowWidth - linkWidth);
 
   // Calculate arrow width in pixels
-  float arrowWidthPx = calculateArrowWidth(arrowWidth);
-
   // Calculate arrow length proportional to its width
   // 0.866 is approximately sqrt(3)/2 - related to equilateral triangle geometry
   // Cap the length to avoid overly long arrows on short links
+  #ifdef SPACE_3D
+  float arrowWidthPx = calculateArrowWidth3D(arrowWidth, pxPerUnit);
+  arrowLength = min(0.3, (0.866 * arrowWidthPx * 2.0) / max(linkDistPx, 1e-6));
+  #else
+  float arrowWidthPx = calculateArrowWidth(arrowWidth);
   arrowLength = min(0.3, (0.866 * arrowWidthPx * 2.0) / linkDist);
+  #endif
 
   useArrow = arrow;
   if (useArrow > 0.5) {
@@ -199,9 +258,28 @@ void main() {
 
   arrowWidthFactor = arrowWidthDifference / linkWidth;
 
-  // Calculate final link width in pixels with smoothing
+  // Calculate final link width with smoothing.
+  // In 3D everything below is in pixels; in 2D it is in space units (px / zoom factor).
+  #ifdef SPACE_3D
+  float linkWidthPx = calculateLinkWidth3D(linkWidth, pxPerUnit);
+
+  if (renderMode > 0.0) {
+    // Add 5 pixels padding for better hover detection
+    linkWidthPx += 5.0;
+  }
+  // Match the visible-pass width increases so the pickable area covers the full rendered link
+  if (hoveredLinkIndex == linkIndex) {
+    linkWidthPx += hoveredLinkWidthIncrease;
+  }
+  if (focusedLinkIndex == linkIndex) {
+    linkWidthPx += focusedLinkWidthIncrease;
+  }
+  float smoothingPx = 0.5;
+  smoothing = smoothingPx / linkWidthPx;
+  linkWidthPx += smoothingPx;
+  #else
   float linkWidthPx = calculateLinkWidth(linkWidth);
-    
+
   if (renderMode > 0.0) {
     // Add 5 pixels padding for better hover detection
     linkWidthPx += 5.0 / transformationMatrix[0][0];
@@ -225,6 +303,7 @@ void main() {
   float smoothingPx = 0.5 / transformationMatrix[0][0];
   smoothing = smoothingPx / linkWidthPx;
   linkWidthPx += smoothingPx;
+  #endif
 
 
 
@@ -254,33 +333,43 @@ void main() {
     rgbaColor.a *= hoveredLinkColor.a;
   }
 
+  #ifdef SPACE_3D
+  // Straight segment: interpolate in clip space (projectively correct for straight
+  // lines) and offset along the screen-space perpendicular. The offset is
+  // pre-multiplied by w so it survives the perspective divide.
+  vec2 normalPx = linkDistPx > 0.0 ? normalize(vec2(-segPx.y, segPx.x)) : vec2(0.0, 1.0);
+  vec4 clipPosition = mix(clipA, clipB, position.x);
+  clipPosition.xy += normalPx * (linkWidthPx * position.y) * (2.0 / screenSize) * clipPosition.w;
+  gl_Position = clipPosition;
+  #else
   // Calculate position on the curved path
   float t = position.x;
   float w = curvedWeight;
-  
+
   float tPrev = t - 1.0 / curvedLinkSegments;
   float tNext = t + 1.0 / curvedLinkSegments;
-  
+
   vec2 pointCurr = conicParametricCurve(a, b, controlPoint, t, w);
-  
+
   vec2 pointPrev = conicParametricCurve(a, b, controlPoint, max(0.0, tPrev), w);
   vec2 pointNext = conicParametricCurve(a, b, controlPoint, min(tNext, 1.0), w);
-  
+
   vec2 xBasisCurved = pointNext - pointPrev;
   vec2 yBasisCurved = normalize(vec2(-xBasisCurved.y, xBasisCurved.x));
-  
+
   pointCurr += yBasisCurved * linkWidthPx * position.y;
-  
+
   // Transform to clip space coordinates
   vec2 p = 2.0 * pointCurr / spaceSize - 1.0;
   p *= spaceSize / screenSize;
-  
+
   #ifdef USE_UNIFORM_BUFFERS
   mat3 transformMat3 = mat3(transformationMatrix);
   vec3 final = transformMat3 * vec3(p, 1);
   #else
   vec3 final = transformationMatrix * vec3(p, 1);
   #endif
-  
+
   gl_Position = vec4(final.rg, 0, 1);
+  #endif
 }

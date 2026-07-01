@@ -65,13 +65,16 @@ out vec2 vertexPosition;
 out float pointOpacity;
 out vec3 rgbColor;
 
-float calculatePointSize(float pointSize) {
+// `pxPerUnit` is the zoom factor: `transformationMatrix[0][0]` in 2D,
+// perspective-attenuated `pxPerSpaceUnit(...)` in 3D. Mirrors draw-points.vert
+// (without the `ratio` factor — this shader works in CSS pixels).
+float calculatePointSize(float pointSize, float pxPerUnit) {
   float pSize;
 
-  if (scalePointsOnZoom > 0.0) { 
-    pSize = pointSize * transformationMatrix[0][0];
+  if (scalePointsOnZoom > 0.0) {
+    pSize = pointSize * pxPerUnit;
   } else {
-    pSize = pointSize * min(5.0, max(1.0, transformationMatrix[0][0] * 0.01));
+    pSize = pointSize * min(5.0, max(1.0, pxPerUnit * 0.01));
   }
 
   return min(pSize, maxPointSize);
@@ -120,8 +123,22 @@ void main () {
     }
   }
 
+  #ifdef SPACE_3D
+  // 3D mode: project the point center with the view-projection matrix and
+  // billboard the ring quad in screen space (pre-multiplied by w so the offset
+  // survives the perspective divide).
+  vec4 clip = transformationMatrix * vec4(pointPosition.rg, pointPosition.a, 1.0);
+  if (clip.w <= 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
+  float pxPerUnit = pxPerSpaceUnit(transformationMatrix, screenSize, clip.w);
+  float radiusPx = calculatePointSize(size * sizeScale, pxPerUnit) * relativeRingRadius * 0.5;
+  clip.xy += vertexCoord * radiusPx * (2.0 / screenSize) * clip.w;
+  gl_Position = clip;
+  #else
   // Calculate point radius
-  float pointSize = (calculatePointSize(size * sizeScale) * relativeRingRadius) / transformationMatrix[0][0];
+  float pointSize = (calculatePointSize(size * sizeScale, transformationMatrix[0][0]) * relativeRingRadius) / transformationMatrix[0][0];
   float radius = pointSize * 0.5;
 
   // Calculate point position in screen space
@@ -140,6 +157,7 @@ void main () {
   #else
   vec3 final = transformationMatrix * vec3(p, 1);
   #endif
-  
+
   gl_Position = vec4(final.rg, 0, 1);
+  #endif
 }

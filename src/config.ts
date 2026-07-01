@@ -756,6 +756,35 @@ export interface GraphConfigInterface {
    * Default value: `''`
    */
   attribution: string;
+
+  /**
+   * Vertical field of view of the 3D camera in degrees.
+   * Only used in 3D mode (after calling `setPointPositions3D`).
+   * Default value: `45`
+   */
+  cameraFov: number;
+  /**
+   * Near clipping plane distance of the 3D camera.
+   * Only used in 3D mode.
+   * Default value: `1`
+   */
+  cameraNear: number;
+  /**
+   * Far clipping plane distance of the 3D camera.
+   * When `undefined`, the far plane is derived automatically from the
+   * camera distance and the extent of the data.
+   * Only used in 3D mode.
+   * Default value: `undefined`
+   */
+  cameraFar?: number;
+  /**
+   * Initial eye position of the 3D camera as `[x, y, z]`, applied when entering 3D mode.
+   * The camera looks at the center of the data bounds from this position.
+   * When `undefined`, the camera frames the data bounds automatically (like `fitView`).
+   * Only used in 3D mode.
+   * Default value: `undefined`
+   */
+  cameraInitialPosition?: [number, number, number];
 }
 
 /**

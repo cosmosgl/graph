@@ -1,5 +1,19 @@
 # Migration Guide
 
+## New in v3.2: 3D rendering (additive, no breaking changes)
+
+cosmos.gl can now render points and links in 3D. Passing `[x, y, z, ...]` triplets to the new
+`setPointPositions3D(Float32Array)` method switches the instance into 3D mode: a perspective orbit
+camera replaces the 2D pan/zoom (drag rotates, wheel/pinch dollies, Space + drag pans), and
+`getPointPositions3D()` / `spaceToScreenPosition3D()` / the `is3D` getter complement the existing API.
+Calling `setPointPositions` (stride-2) switches back to 2D mode. New config options: `cameraFov`,
+`cameraNear`, `cameraFar`, `cameraInitialPosition`.
+
+3D mode is rendering-only in this release: the force simulation, point dragging, area selection,
+sampling, and clusters are disabled while in 3D (the corresponding methods warn and no-op).
+Hover/click picking, `fitView`, and animated position transitions work in both modes.
+The existing 2D API and data formats are unchanged.
+
 ## Migrating to v3.0
 
 Version 3.0 is largely compatible with the existing v2 API — your core setup code (`new Graph(div, config)`, `setPointPositions()`, `setLinks()`, `setConfig()`, `render()`) continues to work as before. The underlying rendering engine has been ported from [regl](https://github.com/regl-project/regl) to [luma.gl](https://luma.gl/) (WebGL 2), but this is mostly an internal change. The breaking changes are limited to a handful of renamed config options, methods, and adjusted defaults listed below.

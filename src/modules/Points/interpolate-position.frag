@@ -24,5 +24,6 @@ void main() {
   vec4 source = texture(sourceTexture, textureCoords);
   vec4 target = texture(targetTexture, textureCoords);
   vec2 position = mix(source.rg, target.rg, progress);
-  fragColor = vec4(position, source.b, 1.0);
+  // Alpha holds the z coordinate (0 in 2D mode) and must interpolate with x/y.
+  fragColor = vec4(position, source.b, mix(source.a, target.a, progress));
 }

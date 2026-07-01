@@ -23,6 +23,7 @@ import { Store, ALPHA_MIN, MAX_HOVER_DETECTION_DELAY, MIN_MOUSE_MOVEMENT_THRESHO
 import { Transition, TransitionProperty } from '@/graph/modules/Transition'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
+import { Camera } from '@/graph/modules/Camera'
 
 /** Touch/pen long-press → context menu thresholds. */
 const LONG_PRESS_DURATION_MS = 500
@@ -81,6 +82,10 @@ export class Graph {
   private zoomInstance = new Zoom(this.store, this.config)
   private transition = new Transition(this.config)
   private dragInstance = new Drag(this.store, this.config, this.transition)
+  /** Perspective orbit camera; consumes gestures instead of `zoomInstance`/`dragInstance` in 3D mode. */
+  private camera = new Camera(this.store, this.config)
+  /** Whether the 3D camera has been positioned (seeded on first entry into 3D mode). */
+  private _isCameraInitialized = false
 
   private fpsMonitor: FPSMonitor | undefined
 
@@ -418,6 +423,14 @@ export class Graph {
   }
 
   /**
+   * Whether the instance is currently rendering in 3D mode
+   * (after `setPointPositions3D`; `setPointPositions` switches back to 2D).
+   */
+  public get is3D (): boolean {
+    return this.store.is3D
+  }
+
+  /**
    * Apply a new configuration. Changes take effect immediately.
    *
    * **Important:** Every call fully resets the configuration to defaults first,
@@ -472,24 +485,47 @@ export class Graph {
 
     if (this.ensureDevice(() => this.setPointPositions(pointPositions, dontRescale))) return
     this.graph.inputPointPositions = pointPositions
+    this.graph.inputPointDimensions = 2
+    this.setSpaceDimensions(2)
     this.points!.shouldSkipRescale = dontRescale
-    this.isPointPositionsUpdateNeeded = true
-    const currentPositionTexture = this.points?.currentPositionTexture
-    if (currentPositionTexture && !currentPositionTexture.destroyed) {
-      this.transition.queue(TransitionProperty.Positions)
+    this.markPointPositionsDirty()
+  }
+
+  /**
+   * Sets the 3D positions for the graph points and switches the instance into 3D rendering mode.
+   *
+   * @param {Float32Array} pointPositions - A Float32Array representing the positions of points in the format [x1, y1, z1, x2, y2, z2, ..., xn, yn, zn],
+   * where `n` is the index of the point.
+   * Example: `new Float32Array([1, 2, 3, 4, 5, 6])` sets the first point to (1, 2, 3) and the second point to (4, 5, 6).
+   * @note In 3D mode the force simulation, point dragging, area selection, sampling, and clusters are disabled.
+   * Calling `setPointPositions` switches the instance back to 2D mode.
+   * @note If `transitionDuration > 0`, the positions animate from the current layout (z animates from `0`
+   * when switching from 2D mode).
+   */
+  public setPointPositions3D (pointPositions: Float32Array): void {
+    if (this._isDestroyed) return
+
+    if (this.ensureDevice(() => this.setPointPositions3D(pointPositions))) return
+    let positions = pointPositions
+    if (positions.length % 3 !== 0) {
+      console.warn('cosmos.gl: `setPointPositions3D` expects 3 coordinates per point; truncating the incomplete trailing point')
+      positions = positions.subarray(0, positions.length - positions.length % 3)
     }
-    // Links related texture depends on point positions, so we need to update it
-    this.isLinksUpdateNeeded = true
-    // Point related textures depend on point positions length, so we need to update them
-    this.isPointColorUpdateNeeded = true
-    this.isPointSizeUpdateNeeded = true
-    this.isPointShapeUpdateNeeded = true
-    this.isPointImageIndicesUpdateNeeded = true
-    this.isPointImageSizesUpdateNeeded = true
-    this.isPointClusterUpdateNeeded = true
-    this.isForceManyBodyUpdateNeeded = true
-    this.isForceLinkUpdateNeeded = true
-    this.isForceCenterUpdateNeeded = true
+    this.graph.inputPointPositions = positions
+    this.graph.inputPointDimensions = 3
+    this.setSpaceDimensions(3)
+    this.points!.shouldSkipRescale = undefined
+    this.markPointPositionsDirty()
+
+    if (!this._isCameraInitialized) {
+      this._isCameraInitialized = true
+      const { cameraInitialPosition, fitViewPadding } = this.config
+      if (cameraInitialPosition) {
+        this.camera.setEyePosition(cameraInitialPosition, positions, 3)
+      } else if (this.canvasD3Selection) {
+        this.camera.fitToPositions(this.canvasD3Selection, positions, 3, fitViewPadding, 0)
+      }
+    }
   }
 
   /**
@@ -815,7 +851,8 @@ export class Graph {
     if (this._isFirstRenderAfterInit && fitViewOnInit && initialZoomLevel === undefined) {
       this._fitViewOnInitTimeoutID = window.setTimeout(() => {
         if (fitViewByPointIndices) this.fitViewByPointIndices(fitViewByPointIndices, fitViewDuration, fitViewPadding)
-        else if (fitViewByPointsInRect) {
+        else if (fitViewByPointsInRect && !this.store.is3D) {
+          // `fitViewByPointsInRect` is a 2D-space rectangle; in 3D fall through to a full fit.
           this.setZoomTransformByPointPositions(
             new Float32Array(this.flatten(fitViewByPointsInRect)),
             fitViewDuration,
@@ -867,6 +904,7 @@ export class Graph {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.zoomToPointByIndex(index, duration, scale, canZoomOut, enableSimulation))) return
+    if (this.warnIf3D('zoomToPointByIndex')) return
     if (!this.device || !this.points || !this.canvasD3Selection) return
     const { store: { screenSize } } = this
     const positionPixels = readPixels(this.device, this.points.currentPositionFbo as Framebuffer)
@@ -918,6 +956,7 @@ export class Graph {
 
     if (this.ensureDevice(() => this.setZoomLevel(value, duration, enableSimulation))) return
 
+    if (this.warnIf3D('setZoomLevel')) return
     if (!this.canvasD3Selection) return
 
     // Override the config's `enableSimulationDuringZoom` for this programmatic zoom transition.
@@ -939,6 +978,7 @@ export class Graph {
    */
   public getZoomLevel (): number {
     if (this._isDestroyed) return 0
+    if (this.warnIf3D('getZoomLevel')) return 0
     return this.zoomInstance.eventTransform.k
   }
 
@@ -964,6 +1004,30 @@ export class Graph {
   }
 
   /**
+   * Get current X, Y and Z coordinates of the points.
+   * @returns Array of point positions in the format [x1, y1, z1, x2, y2, z2, ..., xn, yn, zn].
+   * Z is `0` in 2D mode.
+   */
+  public getPointPositions3D (): number[] {
+    if (this._isDestroyed || !this.device || !this.points) return []
+    if (this.graph.pointsNumber === undefined) return []
+    const positions: number[] = []
+    const pointPositionsPixels = readPixels(this.device, this.points.currentPositionFbo as Framebuffer)
+    positions.length = this.graph.pointsNumber * 3
+    for (let i = 0; i < this.graph.pointsNumber; i += 1) {
+      const posX = pointPositionsPixels[i * 4 + 0]
+      const posY = pointPositionsPixels[i * 4 + 1]
+      const posZ = pointPositionsPixels[i * 4 + 3]
+      if (posX !== undefined && posY !== undefined) {
+        positions[i * 3] = posX
+        positions[i * 3 + 1] = posY
+        positions[i * 3 + 2] = posZ ?? 0
+      }
+    }
+    return positions
+  }
+
+  /**
    * Get current X and Y coordinates of the clusters.
    * @returns Array of cluster positions in `[x0, y0, x1, y1, ...]` order. Do not mutate the returned array.
    */
@@ -975,6 +1039,8 @@ export class Graph {
 
   /**
    * Center and zoom in/out the view to fit all points in the scene.
+   * In 3D mode the camera frames the bounding sphere of the points instead
+   * (`enableSimulation` has no effect there).
    * @param duration Duration of the center and zoom in/out animation in milliseconds (`250` by default).
    * @param padding Padding around the viewport in percentage (`0.1` by default).
    * @param enableSimulation Whether to run the simulation during the zoom transition (`true` by default).
@@ -983,6 +1049,12 @@ export class Graph {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.fitView(duration, padding, enableSimulation))) return
+    if (this.store.is3D) {
+      if (this.canvasD3Selection) {
+        this.camera.fitToPositions(this.canvasD3Selection, this.getFitViewPositions3D(), 3, padding, duration)
+      }
+      return
+    }
     this.setZoomTransformByPointPositions(this.getFitViewPositions(), duration, undefined, padding, enableSimulation)
   }
 
@@ -997,6 +1069,19 @@ export class Graph {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.fitViewByPointIndices(indices, duration, padding, enableSimulation))) return
+    if (this.store.is3D) {
+      const positionsArray3D = this.getFitViewPositions3D()
+      const positions3D = new Float32Array(indices.length * 3)
+      for (const [i, index] of indices.entries()) {
+        positions3D[i * 3] = positionsArray3D[index * 3] as number
+        positions3D[i * 3 + 1] = positionsArray3D[index * 3 + 1] as number
+        positions3D[i * 3 + 2] = positionsArray3D[index * 3 + 2] as number
+      }
+      if (this.canvasD3Selection) {
+        this.camera.fitToPositions(this.canvasD3Selection, positions3D, 3, padding, duration)
+      }
+      return
+    }
     const positionsArray = this.getFitViewPositions()
     const positions = new Float32Array(indices.length * 2)
     for (const [i, index] of indices.entries()) {
@@ -1008,7 +1093,8 @@ export class Graph {
 
   /**
    * Center and zoom in/out the view to fit points by their positions in the scene.
-   * @param positions Flat array of point coordinates as `[x0, y0, x1, y1, ...]`.
+   * @param positions Flat array of point coordinates as `[x0, y0, x1, y1, ...]`
+   * (`[x0, y0, z0, x1, y1, z1, ...]` in 3D mode).
    * @param duration Duration of the center and zoom in/out animation in milliseconds (`250` by default).
    * @param padding Padding around the viewport in percentage (`0.1` by default).
    * @param enableSimulation Whether to run the simulation during the zoom transition (`true` by default).
@@ -1018,6 +1104,12 @@ export class Graph {
 
     if (this.ensureDevice(() => this.fitViewByPointPositions(positions, duration, padding, enableSimulation))) return
 
+    if (this.store.is3D) {
+      if (this.canvasD3Selection) {
+        this.camera.fitToPositions(this.canvasD3Selection, positions, 3, padding, duration)
+      }
+      return
+    }
     this.setZoomTransformByPointPositions(new Float32Array(positions), duration, undefined, padding, enableSimulation)
   }
 
@@ -1034,6 +1126,7 @@ export class Graph {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.setZoomTransformByPointPositions(positions, duration, scale, padding, enableSimulation))) return
+    if (this.warnIf3D('setZoomTransformByPointPositions', 'use `fitViewByPointPositions` instead')) return
 
     // Override the config's `enableSimulationDuringZoom` for this programmatic zoom transition.
     this.zoomInstance.shouldEnableSimulationDuringZoomOverride = enableSimulation
@@ -1059,6 +1152,7 @@ export class Graph {
    */
   public findPointsInRect (rect: [[number, number], [number, number]]): number[] {
     if (this._isDestroyed) return []
+    if (this.warnIf3D('findPointsInRect')) return []
     if (!this.isReady || !this.device || !this.points) return []
 
     const h = this.store.screenSize[1]
@@ -1080,6 +1174,7 @@ export class Graph {
    */
   public findPointsInPolygon (polygonPath: [number, number][]): number[] {
     if (this._isDestroyed) return []
+    if (this.warnIf3D('findPointsInPolygon')) return []
     if (!this.isReady || !this.device || !this.points) return []
 
     if (polygonPath.length < 3) {
@@ -1131,7 +1226,23 @@ export class Graph {
    */
   public spaceToScreenPosition (spacePosition: [number, number]): [number, number] {
     if (this._isDestroyed) return [0, 0]
+    if (this.warnIf3D('spaceToScreenPosition', 'use `spaceToScreenPosition3D` instead')) return [0, 0]
     return this.zoomInstance.convertSpaceToScreenPosition(spacePosition)
+  }
+
+  /**
+   * Converts a 3D space position to screen coordinates using the current camera (3D mode only).
+   * @param spacePosition Array of x, y and z coordinates in the space coordinate system.
+   * @returns Array of x and y coordinates in the screen coordinate system,
+   * or `[NaN, NaN]` if the position is behind the camera.
+   */
+  public spaceToScreenPosition3D (spacePosition: [number, number, number]): [number, number] {
+    if (this._isDestroyed) return [0, 0]
+    if (!this.store.is3D) {
+      console.warn('cosmos.gl: `spaceToScreenPosition3D` is only available in 3D mode')
+      return [0, 0]
+    }
+    return this.camera.project(spacePosition)
   }
 
   /**
@@ -1141,6 +1252,7 @@ export class Graph {
    */
   public screenToSpacePosition (screenPosition: [number, number]): [number, number] {
     if (this._isDestroyed) return [0, 0]
+    if (this.warnIf3D('screenToSpacePosition')) return [0, 0]
     return this.zoomInstance.convertScreenToSpacePosition(screenPosition)
   }
 
@@ -1151,6 +1263,7 @@ export class Graph {
    */
   public spaceToScreenRadius (spaceRadius: number): number {
     if (this._isDestroyed) return 0
+    if (this.warnIf3D('spaceToScreenRadius')) return 0
     return this.zoomInstance.convertSpaceToScreenRadius(spaceRadius)
   }
 
@@ -1209,6 +1322,7 @@ export class Graph {
    */
   public getSampledPointPositionsMap (): Map<number, [number, number]> {
     if (this._isDestroyed || !this.points) return new Map()
+    if (this.warnIf3D('getSampledPointPositionsMap')) return new Map()
     return this.points.getSampledPointPositionsMap()
   }
 
@@ -1220,6 +1334,7 @@ export class Graph {
    */
   public getSampledPoints (): { indices: number[]; positions: number[] } {
     if (this._isDestroyed || !this.points) return { indices: [], positions: [] }
+    if (this.warnIf3D('getSampledPoints')) return { indices: [], positions: [] }
     return this.points.getSampledPoints()
   }
 
@@ -1231,6 +1346,7 @@ export class Graph {
    */
   public getSampledLinkPositionsMap (): Map<number, [number, number, number]> {
     if (this._isDestroyed || !this.lines) return new Map()
+    if (this.warnIf3D('getSampledLinkPositionsMap')) return new Map()
     return this.lines.getSampledLinkPositionsMap()
   }
 
@@ -1242,6 +1358,7 @@ export class Graph {
    */
   public getSampledLinks (): { indices: number[]; positions: number[]; angles: number[] } {
     if (this._isDestroyed || !this.lines) return { indices: [], positions: [], angles: [] }
+    if (this.warnIf3D('getSampledLinks')) return { indices: [], positions: [], angles: [] }
     return this.lines.getSampledLinks()
   }
 
@@ -1278,6 +1395,7 @@ export class Graph {
 
     if (this.ensureDevice(() => this.start(alpha))) return
 
+    if (this.warnIf3D('start')) return
     if (!this.config.enableSimulation) return
     if (!this.graph.pointsNumber) return
     if (this.transition.isActiveFor(TransitionProperty.Positions)) {
@@ -1326,6 +1444,7 @@ export class Graph {
   public unpause (): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.unpause())) return
+    if (this.warnIf3D('unpause')) return
     if (!this.config.enableSimulation) return
     if (this.store.isSimulationRunning) return
     if (this.transition.isActiveFor(TransitionProperty.Positions)) {
@@ -1345,6 +1464,7 @@ export class Graph {
 
     if (this.ensureDevice(() => this.step())) return
 
+    if (this.warnIf3D('step')) return
     if (!this.config.enableSimulation) return
     if (!this.store.pointsTextureSize) return
 
@@ -1466,7 +1586,8 @@ export class Graph {
       this.forceLinkOutgoing?.create(LinkDirection.OUTGOING)
     }
     if (this.isForceCenterUpdateNeeded) this.forceCenter?.create()
-    if (this.isPointClusterUpdateNeeded) this.clusters?.create()
+    // Clusters are a 2D simulation concept; their centroid textures assume 2D positions.
+    if (this.isPointClusterUpdateNeeded && !this.store.is3D) this.clusters?.create()
 
     this.isPointPositionsUpdateNeeded = false
     this.isPointColorUpdateNeeded = false
@@ -1528,6 +1649,24 @@ export class Graph {
     }
 
     return new Float32Array(this.getPointPositions())
+  }
+
+  /**
+   * 3D counterpart of `getFitViewPositions`: returns `[x, y, z, ...]` triplets —
+   * the transition target positions during an active position transition,
+   * otherwise the current GPU positions.
+   */
+  private getFitViewPositions3D (): Float32Array | number[] {
+    const useTargetPositions =
+      this.transition.isActive &&
+      this.transition.isActiveFor(TransitionProperty.Positions) &&
+      !!this.graph.pointPositions
+
+    if (useTargetPositions && this.graph.pointPositions && this.graph.pointDimensions === 3) {
+      return this.graph.pointPositions
+    }
+
+    return this.getPointPositions3D()
   }
 
   /**
@@ -1639,6 +1778,11 @@ export class Graph {
     if (prevConfig.enableZoom !== this.config.enableZoom || prevConfig.enableDrag !== this.config.enableDrag) {
       this.updateZoomDragBehaviors()
     }
+    if (prevConfig.cameraFov !== this.config.cameraFov ||
+        prevConfig.cameraNear !== this.config.cameraNear ||
+        prevConfig.cameraFar !== this.config.cameraFar) {
+      if (this.store.is3D) this.camera.updateMatrices()
+    }
 
     if (prevConfig.onLinkClick !== this.config.onLinkClick ||
         prevConfig.onLinkContextMenu !== this.config.onLinkContextMenu ||
@@ -1681,6 +1825,60 @@ export class Graph {
     this._shouldForceHoverDetection = true
     if (wasSimulationActive) this.config.onSimulationEnd?.()
     this.destroySimulationModules()
+  }
+
+  /** Marks every texture that depends on point positions (or their count) for rebuild. */
+  private markPointPositionsDirty (): void {
+    this.isPointPositionsUpdateNeeded = true
+    const currentPositionTexture = this.points?.currentPositionTexture
+    if (currentPositionTexture && !currentPositionTexture.destroyed) {
+      this.transition.queue(TransitionProperty.Positions)
+    }
+    // Links related texture depends on point positions, so we need to update it
+    this.isLinksUpdateNeeded = true
+    // Point related textures depend on point positions length, so we need to update them
+    this.isPointColorUpdateNeeded = true
+    this.isPointSizeUpdateNeeded = true
+    this.isPointShapeUpdateNeeded = true
+    this.isPointImageIndicesUpdateNeeded = true
+    this.isPointImageSizesUpdateNeeded = true
+    this.isPointClusterUpdateNeeded = true
+    this.isForceManyBodyUpdateNeeded = true
+    this.isForceLinkUpdateNeeded = true
+    this.isForceCenterUpdateNeeded = true
+  }
+
+  /**
+   * Switches between 2D and 3D rendering modes: swaps the gesture behaviors
+   * (d3-zoom pan/zoom + point drag in 2D, orbit camera in 3D) and stops the
+   * simulation when entering 3D.
+   */
+  private setSpaceDimensions (dimensions: 2 | 3): void {
+    if (this.store.spaceDimensions === dimensions) return
+    this.store.spaceDimensions = dimensions
+
+    if (dimensions === 3) {
+      if (this.store.isSimulationRunning) {
+        this.store.isSimulationRunning = false
+        this.config.onSimulationPause?.()
+      }
+      const [width, height] = this.store.screenSize
+      if (width && height) this.camera.setViewport(width, height)
+    } else {
+      console.warn('cosmos.gl: switching back to 2D mode')
+    }
+
+    this.updateZoomDragBehaviors()
+  }
+
+  /**
+   * Warns that a method is not supported in 3D mode.
+   * @returns `true` when in 3D mode (the caller should bail out), `false` otherwise.
+   */
+  private warnIf3D (methodName: string, hint?: string): boolean {
+    if (!this.store.is3D) return false
+    console.warn(`cosmos.gl: \`${methodName}\` is not supported in 3D mode${hint ? `; ${hint}` : ''}`)
+    return true
   }
 
   /**
@@ -1769,7 +1967,9 @@ export class Graph {
   private runSimulationStep (forceExecution = false): void {
     const { config: { simulationGravity, simulationCenter, simulationCollision, enableSimulation }, store: { isSimulationRunning } } = this
 
-    if (!enableSimulation) return
+    // The force simulation is 2D-only — this single gate covers every force
+    // (gravity, center, many-body, links, clusters, collision, mouse repulsion).
+    if (!enableSimulation || this.store.is3D) return
 
     // Right-click repulsion (runs regardless of isSimulationRunning)
     if (this.isRightClickMouse && this.config.enableRightClickRepulsion) {
@@ -1980,13 +2180,22 @@ export class Graph {
         !!this.graph.linksNumber &&
         this.graph.linksNumber > 0
 
-      if (shouldDrawLinks) {
-        this.lines?.draw(drawRenderPass)
+      if (this.store.is3D) {
+        // In 3D points draw first: they write depth, so links drawn after are
+        // occluded by nearer points and blend over farther ones.
+        this.points?.draw(drawRenderPass)
+        if (shouldDrawLinks) {
+          this.lines?.draw(drawRenderPass)
+        }
+      } else {
+        if (shouldDrawLinks) {
+          this.lines?.draw(drawRenderPass)
+        }
+
+        this.points?.draw(drawRenderPass)
       }
 
-      this.points?.draw(drawRenderPass)
-
-      if (this.dragInstance.isActive) {
+      if (this.dragInstance.isActive && !this.store.is3D) {
         // Swap-before-write: after the swap, `previous` holds the freshest positions so drag()
         // reads those and writes the drag result into `current`. This runs
         // after points.draw() above — the drag result becomes visible on
@@ -2070,7 +2279,11 @@ export class Graph {
     const mouseX = (event as MouseEvent).offsetX ?? (event as D3DragEvent<HTMLCanvasElement, undefined, Hovered>).x
     const mouseY = (event as MouseEvent).offsetY ?? (event as D3DragEvent<HTMLCanvasElement, undefined, Hovered>).y
     if (mouseX === undefined || mouseY === undefined) return
-    this.store.mousePosition = this.zoomInstance.convertScreenToSpacePosition([mouseX, mouseY])
+    // Space-coordinate mouse position is a 2D-zoom concept (consumed by drag and
+    // mouse repulsion, both disabled in 3D); screen position drives picking in both modes.
+    if (!this.store.is3D) {
+      this.store.mousePosition = this.zoomInstance.convertScreenToSpacePosition([mouseX, mouseY])
+    }
     this.store.screenMousePosition = [mouseX, (this.store.screenSize[1] - mouseY)]
   }
 
@@ -2129,16 +2342,21 @@ export class Graph {
 
     // Check if CSS size changed (luma.gl's autoResize handles canvas.width/height automatically)
     if (forceResize || prevW !== w || prevH !== h) {
-      const { k } = this.zoomInstance.eventTransform
-      const centerPosition = this.zoomInstance.convertScreenToSpacePosition([prevW / 2, prevH / 2])
+      if (this.store.is3D) {
+        this.store.updateScreenSize(w, h)
+        this.camera.setViewport(w, h)
+      } else {
+        const { k } = this.zoomInstance.eventTransform
+        const centerPosition = this.zoomInstance.convertScreenToSpacePosition([prevW / 2, prevH / 2])
 
-      this.store.updateScreenSize(w, h)
-      // Note: canvas.width and canvas.height are managed by luma.gl's autoResize
-      // We only update our internal state and dependent components
-      this.canvasD3Selection
-        ?.call(this.zoomInstance.behavior.transform, this.zoomInstance.getTransform(centerPosition, k))
-      this.points?.updateSampledPointsGrid()
-      this.lines?.updateSampledLinksGrid()
+        this.store.updateScreenSize(w, h)
+        // Note: canvas.width and canvas.height are managed by luma.gl's autoResize
+        // We only update our internal state and dependent components
+        this.canvasD3Selection
+          ?.call(this.zoomInstance.behavior.transform, this.zoomInstance.getTransform(centerPosition, k))
+        this.points?.updateSampledPointsGrid()
+        this.lines?.updateSampledLinksGrid()
+      }
       // Only update link index FBO if link hovering is enabled
       if (this.store.isLinkHoveringEnabled) {
         this.lines?.updateLinkIndexFbo()
@@ -2147,6 +2365,21 @@ export class Graph {
   }
 
   private updateZoomDragBehaviors (): void {
+    if (this.store.is3D) {
+      // The orbit camera owns all gestures in 3D: point dragging is not supported,
+      // and the camera behavior replaces the 2D zoom listeners (same `.zoom` namespace).
+      this.canvasD3Selection?.on('.drag', null)
+      if (this.config.enableZoom) {
+        this.canvasD3Selection?.call(this.camera.behavior)
+      } else {
+        this.canvasD3Selection
+          ?.call(this.camera.behavior)
+          .on('wheel.zoom', null)
+      }
+      this.updateCanvasTouchAction()
+      return
+    }
+
     if (this.config.enableDrag) {
       this.canvasD3Selection?.call(this.dragInstance.behavior)
     } else {
@@ -2171,8 +2404,9 @@ export class Graph {
    * the page can scroll over the canvas.
    */
   private updateCanvasTouchAction (): void {
+    // In 3D the orbit camera always consumes drag gestures (rotation).
     this.canvas.style.touchAction =
-      this.config.enableDrag || this.config.enableZoom ? 'none' : ''
+      this.config.enableDrag || this.config.enableZoom || this.store.is3D ? 'none' : ''
   }
 
   private findHoveredItem (immediate = false): void {
@@ -2302,9 +2536,11 @@ export class Graph {
 
   private updateCanvasCursor (): void {
     const { hoveredPointCursor, hoveredLinkCursor } = this.config
+    // Point dragging is disabled in 3D, so the grab cursor would be misleading.
+    const isDragEnabled = this.config.enableDrag && !this.store.is3D
     if (this.dragInstance.isActive) select(this.canvas).style('cursor', 'grabbing')
     else if (this.store.hoveredPoint) {
-      if (!this.config.enableDrag || this.store.isSpaceKeyPressed) select(this.canvas).style('cursor', hoveredPointCursor)
+      if (!isDragEnabled || this.store.isSpaceKeyPressed) select(this.canvas).style('cursor', hoveredPointCursor)
       else select(this.canvas).style('cursor', 'grab')
     } else if (this.store.isLinkHoveringEnabled && this.store.hoveredLinkIndex !== undefined) {
       select(this.canvas).style('cursor', hoveredLinkCursor)

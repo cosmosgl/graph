@@ -292,4 +292,12 @@ void main() {
             max(fragColor.a, ringOpacity)
         );
     }
+
+    #ifdef SPACE_3D
+    // Depth writes are enabled in 3D: the transparent corners of the point sprite
+    // must not write depth, or they would punch invisible holes into points behind.
+    if (fragColor.a < 0.33) {
+        discard;
+    }
+    #endif
 }

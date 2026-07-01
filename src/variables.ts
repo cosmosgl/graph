@@ -142,6 +142,12 @@ export const defaultConfigValues = {
   randomSeed: undefined,
   rescalePositions: undefined,
   attribution: '',
+
+  // 3D camera
+  cameraFov: 45,
+  cameraNear: 1,
+  cameraFar: undefined,
+  cameraInitialPosition: undefined,
 } satisfies Complete<GraphConfigInterface>
 
 // Internal constants (not part of GraphConfigInterface)

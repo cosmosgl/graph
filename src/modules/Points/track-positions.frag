@@ -25,6 +25,7 @@ void main() {
   if (trackedPointIndices.r < 0.0) discard;
   vec4 pointPosition = texture(positionsTexture, (trackedPointIndices.rg + 0.5) / pointsTextureSize);
 
-  fragColor = vec4(pointPosition.rg, 1.0, 1.0);
+  // Blue carries the z coordinate (stored in the position texture's alpha; 0 in 2D mode).
+  fragColor = vec4(pointPosition.rg, pointPosition.a, 1.0);
 }
 

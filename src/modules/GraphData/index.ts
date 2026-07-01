@@ -16,6 +16,12 @@ export enum PointShape {
 
 export class GraphData {
   public inputPointPositions: Float32Array | undefined
+  /**
+   * Number of coordinates per point in `inputPointPositions`:
+   * `2` for `[x, y, ...]`, `3` for `[x, y, z, ...]`. Applied to
+   * `pointDimensions` on `updatePoints()`.
+   */
+  public inputPointDimensions: 2 | 3 = 2
   public inputPointColors: Float32Array | undefined
   public inputPointSizes: Float32Array | undefined
   public inputPointShapes: Float32Array | undefined
@@ -31,6 +37,10 @@ export class GraphData {
   public inputPinnedPoints: number[] | undefined
 
   public pointPositions: Float32Array | undefined
+  /**
+   * Number of coordinates per point in `pointPositions` (see `inputPointDimensions`).
+   */
+  public pointDimensions: 2 | 3 = 2
   /**
    * Number of points before the latest data update.
    * Used as the `from` value for point transitions.
@@ -79,7 +89,7 @@ export class GraphData {
   }
 
   public get pointsNumber (): number | undefined {
-    return this.pointPositions && this.pointPositions.length / 2
+    return this.pointPositions && Math.trunc(this.pointPositions.length / this.pointDimensions)
   }
 
   public get linksNumber (): number | undefined {
@@ -90,9 +100,12 @@ export class GraphData {
     // Don't sync the same positions twice — it breaks animations when points are added or removed.
     if (this.pointPositions === this.inputPointPositions) return
 
-    this.sourcePointsNumber = this.pointPositions ? this.pointPositions.length / 2 : 0
+    // `sourcePointsNumber` uses the pre-update dimensions: the previous positions
+    // may have a different stride than the incoming ones (2D ↔ 3D switch).
+    this.sourcePointsNumber = this.pointPositions ? Math.trunc(this.pointPositions.length / this.pointDimensions) : 0
     this.pointPositions = this.inputPointPositions
-    this.targetPointsNumber = this.pointPositions ? this.pointPositions.length / 2 : 0
+    this.pointDimensions = this.inputPointDimensions
+    this.targetPointsNumber = this.pointPositions ? Math.trunc(this.pointPositions.length / this.pointDimensions) : 0
   }
 
   /**

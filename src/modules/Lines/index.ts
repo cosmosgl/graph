@@ -3,6 +3,7 @@ import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
 import type { Mat4Array } from '@/graph/modules/Store'
 import { conicParametricCurveModule } from '@/graph/modules/Lines/conic-curve-module'
+import { space3dModule } from '@/graph/modules/Shared/space3d-module'
 import drawLineFrag from '@/graph/modules/Lines/draw-curve-line.frag?raw'
 import drawLineVert from '@/graph/modules/Lines/draw-curve-line.vert?raw'
 import fillGridWithSampledLinksFrag from '@/graph/modules/Lines/fill-sampled-links.frag?raw'
@@ -37,6 +38,12 @@ export class Lines extends CoreModule {
   private drawCurveCommand: Model | undefined
   private drawCurvePickingCommand: Model | undefined
   private isLinkBlendingActive: boolean | undefined
+  /**
+   * Space dimensions the link draw/picking Models were compiled for. The `SPACE_3D`
+   * define and the depth/cull parameters are baked into the pipeline at Model creation,
+   * so `initPrograms` recreates those Models when this differs from `store.spaceDimensions`.
+   */
+  private programsSpaceDimensions: 2 | 3 = 2
   private hoveredLineIndexCommand: Model | undefined
   private fillSampledLinksFboCommand: Model | undefined
   private pointABuffer: Buffer | undefined
@@ -116,6 +123,20 @@ export class Lines extends CoreModule {
 
   public initPrograms (): void {
     const { device, config, store, data } = this
+
+    // The SPACE_3D define and the depth/cull parameters are baked into the pipeline at
+    // Model creation, so a 2D ↔ 3D mode switch requires recreating the link Models.
+    if (this.programsSpaceDimensions !== store.spaceDimensions) {
+      this.programsSpaceDimensions = store.spaceDimensions
+      if (this.drawCurveCommand) {
+        this.drawCurveCommand.destroy()
+        this.drawCurveCommand = undefined
+      }
+      if (this.drawCurvePickingCommand) {
+        this.drawCurvePickingCommand.destroy()
+        this.drawCurvePickingCommand = undefined
+      }
+    }
 
     this.updateLinkIndexFbo()
 
@@ -1020,7 +1041,7 @@ export class Lines extends CoreModule {
     return new Model(this.device, {
       vs: drawLineVert,
       fs: drawLineFrag,
-      modules: [conicParametricCurveModule],
+      modules: [conicParametricCurveModule, space3dModule],
       topology: 'triangle-strip',
       vertexCount: this.curveLineGeometry?.length ?? 0,
       attributes: this.getDrawCurveCommandAttributes(),
@@ -1037,6 +1058,7 @@ export class Lines extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
+        ...(this.store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
         drawLineUniforms: this.drawLineUniformStore.getManagedUniformBuffer(this.device, 'drawLineUniforms'),
@@ -1073,9 +1095,13 @@ export class Lines extends CoreModule {
    */
   private getLinkBlendParameters (blend: boolean): RenderPipelineParameters {
     const base: RenderPipelineParameters = {
-      cullMode: 'back',
+      // In 3D the quad is extruded in screen space, which can flip the winding —
+      // back-face culling would drop those quads. Links depth-test against the
+      // points (drawn first) but never write depth, so crossing translucent links
+      // keep blending in draw order.
+      cullMode: this.store.is3D ? 'none' : 'back',
       depthWriteEnabled: false,
-      depthCompare: 'always',
+      depthCompare: this.store.is3D ? 'less-equal' : 'always',
     }
     if (!blend) return { ...base, blend: false }
     return {
