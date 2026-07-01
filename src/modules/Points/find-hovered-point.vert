@@ -75,13 +75,13 @@ void main() {
   float isHighlighted = (greyoutStatus.r == 0.0) ? 1.0 : 0.0;
 
   if (skipHighlighted > 0.0 && isHighlighted > 0.0) {
-    rgba = vec4(0.0);
+    rgba = vec4(-1.0);
     gl_Position = vec4(0.5, 0.5, 0.0, 1.0);
     gl_PointSize = 1.0;
     return;
   }
   if (skipGreyed > 0.0 && isHighlighted <= 0.0) {
-    rgba = vec4(0.0);
+    rgba = vec4(-1.0);
     gl_Position = vec4(0.5, 0.5, 0.0, 1.0);
     gl_PointSize = 1.0;
     return;
@@ -94,7 +94,7 @@ void main() {
   vec4 clip = transformationMatrix * vec4(pointPosition.rg, pointPosition.a, 1.0);
   if (clip.w <= 0.0) {
     // Behind the camera — never a hover candidate.
-    rgba = vec4(0.0);
+    rgba = vec4(-1.0);
     gl_Position = vec4(0.5, 0.5, 0.0, 1.0);
     gl_PointSize = 1.0;
     return;
@@ -121,13 +121,15 @@ void main() {
   float imageSizeValue = calculatePointSize(imageSize * sizeScale, pxPerUnit);
   float pointRadius = 0.5 * max(shapeSizeValue, imageSizeValue);
 
-  rgba = vec4(0.0);
+  rgba = vec4(-1.0);
   gl_Position = vec4(0.5, 0.5, 0.0, 1.0);
 
   if (euclideanDistance(pointScreenPosition.x, mousePosition.x, pointScreenPosition.y, mousePosition.y) < pointRadius / ratio) {
     float index = pointIndices.g * pointsTextureSize + pointIndices.r;
-    rgba = vec4(index, max(size, imageSize), pointPosition.xy);
     #ifdef SPACE_3D
+    // 3D packing: [index, x, y, z] — size is derivable from the index on the CPU,
+    // and validity is signalled by index >= 0 instead.
+    rgba = vec4(index, pointPosition.rg, pointPosition.a);
     // Nearest-wins: encode depth into z (the hovered FBO has a depth attachment in
     // 3D). The highlighted pass (skipGreyed == 1) gets the nearer half of the depth
     // range so it keeps priority over the greyed pass, matching the 2D two-pass order.
@@ -135,6 +137,7 @@ void main() {
     float priority = (skipHighlighted > 0.0) ? 0.5 : 0.0;
     gl_Position = vec4(-0.5, -0.5, (priority + 0.5 * depth01) * 2.0 - 1.0, 1.0);
     #else
+    rgba = vec4(index, max(size, imageSize), pointPosition.xy);
     gl_Position = vec4(-0.5, -0.5, 0.0, 1.0);
     #endif
   }

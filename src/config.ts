@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 import { D3ZoomEvent } from 'd3-zoom'
 import { D3DragEvent } from 'd3-drag'
-import { type Hovered } from '@/graph/modules/Store'
+import { type Hovered, type HoveredPointPosition } from '@/graph/modules/Store'
 import { defaultConfigValues } from '@/graph/variables'
 import { PointShape } from '@/graph/modules/GraphData'
 import { type TransitionEasing } from '@/graph/modules/Transition'
@@ -414,11 +414,11 @@ export interface GraphConfigInterface {
    * The value of the first argument `alpha` will decrease over time as the simulation "cools down".
    * If there's a point under the mouse pointer, its index will be passed as the second argument
    * and position as the third argument:
-   * `(alpha: number, hoveredIndex: number | undefined, pointPosition: [number, number] | undefined) => void`.
+   * `(alpha: number, hoveredIndex: number | undefined, pointPosition: [x, y] | undefined) => void`.
    * Default value: `undefined`
    */
   onSimulationTick?: (
-    alpha: number, hoveredIndex?: number, pointPosition?: [number, number]
+    alpha: number, hoveredIndex?: number, pointPosition?: HoveredPointPosition
     ) => void;
   /**
    * Callback function that will be called when the simulation stops.
@@ -440,24 +440,26 @@ export interface GraphConfigInterface {
   /**
    * Callback function that will be called on every canvas click.
    * If clicked on a point, its index will be passed as the first argument,
-   * position as the second argument and the corresponding mouse event as the third argument:
-   * `(index: number | undefined, pointPosition: [number, number] | undefined, event: MouseEvent) => void`.
+   * position as the second argument (`[x, y]` in 2D mode, `[x, y, z]` in 3D mode)
+   * and the corresponding mouse event as the third argument:
+   * `(index: number | undefined, pointPosition: [x, y] | [x, y, z] | undefined, event: MouseEvent) => void`.
    * Default value: `undefined`
    */
   onClick?: (
-    index: number | undefined, pointPosition: [number, number] | undefined, event: MouseEvent
+    index: number | undefined, pointPosition: HoveredPointPosition | undefined, event: MouseEvent
   ) => void;
 
   /**
    * Callback function that will be called when a point is clicked.
    * The point index will be passed as the first argument,
-   * position as the second argument and the corresponding mouse event as the third argument:
-   * `(index: number, pointPosition: [number, number], event: MouseEvent) => void`.
+   * position as the second argument (`[x, y]` in 2D mode, `[x, y, z]` in 3D mode)
+   * and the corresponding mouse event as the third argument:
+   * `(index: number, pointPosition: [x, y] | [x, y, z], event: MouseEvent) => void`.
    * Default value: `undefined`
    */
   onPointClick?: (
     index: number,
-    pointPosition: [number, number],
+    pointPosition: HoveredPointPosition,
     event: MouseEvent
   ) => void;
 
@@ -485,24 +487,26 @@ export interface GraphConfigInterface {
   /**
    * Callback function that will be called when a context menu trigger (typically right click) happens on the canvas.
    * If triggered on a point, its index will be passed as the first argument,
-   * position as the second argument and the corresponding mouse event as the third argument:
-   * `(index: number | undefined, pointPosition: [number, number] | undefined, event: MouseEvent) => void`.
+   * position as the second argument (`[x, y]` in 2D mode, `[x, y, z]` in 3D mode)
+   * and the corresponding mouse event as the third argument:
+   * `(index: number | undefined, pointPosition: [x, y] | [x, y, z] | undefined, event: MouseEvent) => void`.
    * Default value: `undefined`
    */
   onContextMenu?: (
-    index: number | undefined, pointPosition: [number, number] | undefined, event: MouseEvent
+    index: number | undefined, pointPosition: HoveredPointPosition | undefined, event: MouseEvent
   ) => void;
 
   /**
    * Callback function that will be called when a context menu trigger (typically right click) happens on a point.
    * The point index will be passed as the first argument,
-   * position as the second argument and the corresponding mouse event as the third argument:
-   * `(index: number, pointPosition: [number, number], event: MouseEvent) => void`.
+   * position as the second argument (`[x, y]` in 2D mode, `[x, y, z]` in 3D mode)
+   * and the corresponding mouse event as the third argument:
+   * `(index: number, pointPosition: [x, y] | [x, y, z], event: MouseEvent) => void`.
    * Default value: `undefined`
    */
   onPointContextMenu?: (
     index: number,
-    pointPosition: [number, number],
+    pointPosition: HoveredPointPosition,
     event: MouseEvent
   ) => void;
 
@@ -530,12 +534,13 @@ export interface GraphConfigInterface {
   /**
    * Callback function that will be called when mouse movement happens.
    * If the mouse moves over a point, its index will be passed as the first argument,
-   * position as the second argument and the corresponding mouse event as the third argument:
-   * `(index: number | undefined, pointPosition: [number, number] | undefined, event: MouseEvent) => void`.
+   * position as the second argument (`[x, y]` in 2D mode, `[x, y, z]` in 3D mode)
+   * and the corresponding mouse event as the third argument:
+   * `(index: number | undefined, pointPosition: [x, y] | [x, y, z] | undefined, event: MouseEvent) => void`.
    * Default value: `undefined`
    */
   onMouseMove?: (
-    index: number | undefined, pointPosition: [number, number] | undefined, event: MouseEvent
+    index: number | undefined, pointPosition: HoveredPointPosition | undefined, event: MouseEvent
   ) => void;
 
   /**
@@ -550,7 +555,7 @@ export interface GraphConfigInterface {
    */
   onPointMouseOver?: (
     index: number,
-    pointPosition: [number, number],
+    pointPosition: HoveredPointPosition,
     event: MouseEvent | D3DragEvent<HTMLCanvasElement, undefined, Hovered> | D3ZoomEvent<HTMLCanvasElement, undefined> | undefined,
     isHighlighted: boolean,
     isOutlined: boolean

@@ -21,7 +21,17 @@ export const MAX_HOVER_DETECTION_DELAY = 4
  */
 export const MIN_MOUSE_MOVEMENT_THRESHOLD = 2
 
-export type Hovered = { index: number; position: [ number, number ] }
+/**
+ * Position of a hovered point in space coordinates:
+ * `[x, y]` in 2D mode, `[x, y, z]` in 3D mode.
+ */
+export type HoveredPointPosition = [number, number] | [number, number, number]
+
+/**
+ * Hovered point state. `position` is `[x, y]` in 2D mode and `[x, y, z]` in 3D mode
+ * (space coordinates).
+ */
+export type Hovered = { index: number; position: HoveredPointPosition }
 type Focused = { index: number }
 
 /**

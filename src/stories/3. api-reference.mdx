@@ -91,6 +91,27 @@ graph.setPointPositions(new Float32Array([1, 2, 3, 4, 5, 6]));
 graph.render();
 ```
 
+Calling `setPointPositions` also switches the graph back to 2D mode if it was in [3D mode](#set_point_positions_3d).
+
+### <a name="set_point_positions_3d" href="#set_point_positions_3d">#</a> graph.<b>setPointPositions3D</b>(<i>pointPositions</i>)
+
+This method sets 3D positions for the graph points and switches the instance into **3D rendering mode**: a perspective orbit camera replaces the 2D pan/zoom (drag rotates around the data, mouse wheel / pinch dollies in and out, Space + drag pans), and points and links are rendered with perspective and depth.
+
+* **`pointPositions`** (Float32Array): A Float32Array representing the x, y and z coordinates of points in the format `[x1, y1, z1, x2, y2, z2, ..., xN, yN, zN]`. Each triplet represents the coordinates of a single point.
+
+On the next `render()`, points animate from their previous positions to the new ones using `transitionDuration` and `transitionEasing` (z animates from `0` when switching from 2D mode). Calling [`setPointPositions`](#set_point_positions) switches back to 2D mode.
+
+**3D mode limitations:** the force simulation, point dragging, and area selection (`findPointsInRect` / `findPointsInPolygon`) are disabled in 3D mode — the corresponding methods warn and do nothing. Use the `3D` counterparts of the zoom and sampling APIs: [`fitView`](#fit_view) works in both modes, and [`getSampledPoints3D`](#get_sampled_points_3d) / [`spaceToScreenPosition3D`](#space_to_screen_position_3d) replace their 2D versions. The camera is configured via the `cameraFov`, `cameraNear`, `cameraFar` and `cameraInitialPosition` [configuration properties](../?path=/docs/configuration--docs).
+
+**Example:**
+```javascript
+graph.setPointPositions3D(new Float32Array([
+  100, 200, 300, // Point 1 at (100, 200, 300)
+  400, 500, 600, // Point 2 at (400, 500, 600)
+]));
+graph.render();
+```
+
 ### <a name="set_point_colors" href="#set_point_colors">#</a> graph.<b>setPointColors</b>(<i>pointColors</i>)
 
 This method sets the colors for points in a cosmos.gl graph.
@@ -511,6 +532,16 @@ This method method is used to convert X and Y point coordinates from the space c
 
 * **`coordinates`** (Array): An array of two numbers in the format `[x, y]`, representing the X and Y coordinates in the space coordinate system.
 
+Not available in [3D mode](#set_point_positions_3d) — use [`spaceToScreenPosition3D`](#space_to_screen_position_3d) instead.
+
+### <a name="space_to_screen_position_3d" href="#space_to_screen_position_3d">#</a> graph.<b>spaceToScreenPosition3D</b>(<i>coordinates</i>)
+
+This method converts a 3D space position to screen coordinates using the current camera ([3D mode](#set_point_positions_3d) only). Useful for placing HTML overlays (e.g. labels) over 3D points.
+
+* **`coordinates`** (Array): An array of three numbers in the format `[x, y, z]`, representing the coordinates in the space coordinate system.
+
+**Returns:** An `[x, y]` array in the screen coordinate system, or `[NaN, NaN]` if the position is behind the camera.
+
 ### <a name="screen_to_space_position" href="#screen_to_space_position">#</a> graph.<b>screenToSpacePosition</b>(<i>coordinates</i>)
 
 This method converts X and Y point coordinates from the screen coordinate system (which is used for rendering the graph on the display) to the space coordinate system (which is typically used for graph data).
@@ -565,6 +596,12 @@ The number of sampled points is determined by the `pointSamplingDistance` [confi
 
 The sample aims to distribute points evenly across the visible area.
 
+Not available in [3D mode](#set_point_positions_3d) — use [`getSampledPointPositionsMap3D`](#get_sampled_point_positions_map_3d) instead.
+
+### <a name="get_sampled_point_positions_map_3d" href="#get_sampled_point_positions_map_3d">#</a> graph.<b>getSampledPointPositionsMap3D</b>()
+
+3D counterpart of [`getSampledPointPositionsMap`](#get_sampled_point_positions_map): returns a `Map` where keys are point indices and values are `[x, y, z]` coordinates in data space (z is `0` in 2D mode). Project the returned positions with [`spaceToScreenPosition3D`](#space_to_screen_position_3d) to place labels over 3D points.
+
 ### <a name="get_sampled_points" href="#get_sampled_points">#</a> graph.<b>getSampledPoints</b>()
 
 This method provides an optimized way to retrieve both point indices and positions for sampled points that are currently visible on the screen. Unlike `getSampledPointPositionsMap`, this method returns the data as arrays rather than a Map.
@@ -581,6 +618,12 @@ The sample aims to distribute points evenly across the visible area.
   - **`indices`**: Array of point indices for the sampled points
   - **`positions`**: Flat array of coordinates in the format `[x1, y1, x2, y2, ..., xn, yn]`, where the coordinates correspond to the points at the same index positions in the `indices` array.
 
+Not available in [3D mode](#set_point_positions_3d) — use [`getSampledPoints3D`](#get_sampled_points_3d) instead.
+
+### <a name="get_sampled_points_3d" href="#get_sampled_points_3d">#</a> graph.<b>getSampledPoints3D</b>()
+
+3D counterpart of [`getSampledPoints`](#get_sampled_points): `positions` is a flat array in the format `[x1, y1, z1, x2, y2, z2, ..., xn, yn, zn]` (z is `0` in 2D mode). Project the returned positions with [`spaceToScreenPosition3D`](#space_to_screen_position_3d) to place labels over 3D points.
+
 ### <a name="get_sampled_link_positions_map" href="#get_sampled_link_positions_map">#</a> graph.<b>getSampledLinkPositionsMap</b>()
 
 This method provides a sampling of link positions from the links that are currently visible on the screen. It returns a `Map` from link index to a tuple of midpoint coordinates and angle: `[x, y, angle]`. Positions are in data space; angle is in radians for screen-space rotation (0 = right, positive = clockwise, e.g. for CSS rotation).
@@ -594,6 +637,12 @@ The sample distributes links evenly (one link per grid cell, based on link midpo
 **Returns:**
 
 * A `Map<number, [number, number, number]>` where each key is a link index and each value is `[x, y, angle]` (midpoint in data space, angle in radians).
+
+Not available in [3D mode](#set_point_positions_3d) — use [`getSampledLinkPositionsMap3D`](#get_sampled_link_positions_map_3d) instead.
+
+### <a name="get_sampled_link_positions_map_3d" href="#get_sampled_link_positions_map_3d">#</a> graph.<b>getSampledLinkPositionsMap3D</b>()
+
+3D counterpart of [`getSampledLinkPositionsMap`](#get_sampled_link_positions_map): each value is `[x, y, z, angle]` — the link midpoint in data space (z is `0` in 2D mode) and the screen-space rotation of the projected link in radians.
 
 ### <a name="get_sampled_links" href="#get_sampled_links">#</a> graph.<b>getSampledLinks</b>()
 
@@ -611,6 +660,12 @@ The sample distributes links evenly across the visible area.
   - **`indices`**: Array of link indices for the sampled links
   - **`positions`**: Flat array of coordinates in the format `[x1, y1, x2, y2, ..., xn, yn]`, where each pair is the midpoint of the link at the same index in `indices` (in data space)
   - **`angles`**: Array of angles in radians for screen-space rotation (0 = right, positive = clockwise), one per sampled link
+
+Not available in [3D mode](#set_point_positions_3d) — use [`getSampledLinks3D`](#get_sampled_links_3d) instead.
+
+### <a name="get_sampled_links_3d" href="#get_sampled_links_3d">#</a> graph.<b>getSampledLinks3D</b>()
+
+3D counterpart of [`getSampledLinks`](#get_sampled_links): `positions` is a flat array of link midpoints in the format `[x1, y1, z1, x2, y2, z2, ..., xn, yn, zn]` (z is `0` in 2D mode); `angles` are screen-space rotations of the projected links in radians.
 
 ### <a name="start" href="#start">#</a> graph.<b>start</b>([<i>alpha</i>])
 
@@ -665,6 +720,14 @@ This method converts a flat array of point positions into an array of tuple pair
 ### <a name="get_point_positions" href="#get_point_positions">#</a> graph.<b>getPointPositions</b>()
 
 This method retrieves the current X and Y coordinates of all points in the graph as an array of numbers. The returned array is in the same order as the point positions were added to the graph.
+
+### <a name="get_point_positions_3d" href="#get_point_positions_3d">#</a> graph.<b>getPointPositions3D</b>()
+
+This method retrieves the current X, Y and Z coordinates of all points as an array of numbers in the format `[x1, y1, z1, x2, y2, z2, ..., xN, yN, zN]`. Z is `0` in 2D mode.
+
+### <a name="is_3d" href="#is_3d">#</a> graph.<b>is3D</b>
+
+A boolean property that indicates whether the graph is currently rendering in [3D mode](#set_point_positions_3d) (`true`) or 2D mode (`false`).
 
 ### <a name="get_cluster_positions" href="#get_cluster_positions">#</a> graph.<b>getClusterPositions</b>()
 

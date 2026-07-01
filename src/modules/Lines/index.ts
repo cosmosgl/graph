@@ -136,6 +136,10 @@ export class Lines extends CoreModule {
         this.drawCurvePickingCommand.destroy()
         this.drawCurvePickingCommand = undefined
       }
+      if (this.fillSampledLinksFboCommand) {
+        this.fillSampledLinksFboCommand.destroy()
+        this.fillSampledLinksFboCommand = undefined
+      }
     }
 
     this.updateLinkIndexFbo()
@@ -335,6 +339,7 @@ export class Lines extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
+        ...(store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
         fillSampledLinksUniforms: this.fillSampledLinksUniformStore.getManagedUniformBuffer(device, 'fillSampledLinksUniforms'),
@@ -751,36 +756,8 @@ export class Lines extends CoreModule {
 
   public getSampledLinkPositionsMap (): Map<number, [number, number, number]> {
     const positions = new Map<number, [number, number, number]>()
-    if (!this.sampledLinksFbo || this.sampledLinksFbo.destroyed) return positions
-    const points = this.points
-    if (!points?.currentPositionTexture || points.currentPositionTexture.destroyed) return positions
-
-    if (this.fillSampledLinksFboCommand && this.fillSampledLinksUniformStore && this.sampledLinksFbo) {
-      this.fillSampledLinksFboCommand.setVertexCount(this.data.linksNumber ?? 0)
-      this.fillSampledLinksUniformStore.setUniforms({
-        fillSampledLinksUniforms: {
-          pointsTextureSize: this.store.pointsTextureSize ?? 0,
-          transformationMatrix: this.store.transformationMatrix4x4,
-          spaceSize: this.store.adjustedSpaceSize,
-          screenSize: ensureVec2(this.store.screenSize, [0, 0]),
-          curvedWeight: this.config.curvedLinkWeight,
-          curvedLinkControlPointDistance: this.config.curvedLinkControlPointDistance,
-          curvedLinkSegments: this.config.curvedLinks ? this.config.curvedLinkSegments : 1,
-        },
-      })
-      this.fillSampledLinksFboCommand.setBindings({
-        positionsTexture: points.currentPositionTexture,
-      })
-
-      const fillPass = this.device.beginRenderPass({
-        framebuffer: this.sampledLinksFbo,
-        clearColor: [-1, -1, -1, -1],
-      })
-      this.fillSampledLinksFboCommand.draw(fillPass)
-      fillPass.end()
-    }
-
-    const pixels = readPixels(this.device, this.sampledLinksFbo)
+    const pixels = this.fillAndReadSampledLinksFbo()
+    if (!pixels) return positions
     for (let i = 0; i < pixels.length / 4; i++) {
       const index = pixels[i * 4]
       const x = pixels[i * 4 + 1]
@@ -798,36 +775,8 @@ export class Lines extends CoreModule {
     const indices: number[] = []
     const positions: number[] = []
     const angles: number[] = []
-    if (!this.sampledLinksFbo || this.sampledLinksFbo.destroyed) return { indices, positions, angles }
-    const points = this.points
-    if (!points?.currentPositionTexture || points.currentPositionTexture.destroyed) return { indices, positions, angles }
-
-    if (this.fillSampledLinksFboCommand && this.fillSampledLinksUniformStore && this.sampledLinksFbo) {
-      this.fillSampledLinksFboCommand.setVertexCount(this.data.linksNumber ?? 0)
-      this.fillSampledLinksUniformStore.setUniforms({
-        fillSampledLinksUniforms: {
-          pointsTextureSize: this.store.pointsTextureSize ?? 0,
-          transformationMatrix: this.store.transformationMatrix4x4,
-          spaceSize: this.store.adjustedSpaceSize,
-          screenSize: ensureVec2(this.store.screenSize, [0, 0]),
-          curvedWeight: this.config.curvedLinkWeight,
-          curvedLinkControlPointDistance: this.config.curvedLinkControlPointDistance,
-          curvedLinkSegments: this.config.curvedLinks ? this.config.curvedLinkSegments : 1,
-        },
-      })
-      this.fillSampledLinksFboCommand.setBindings({
-        positionsTexture: points.currentPositionTexture,
-      })
-
-      const fillPass = this.device.beginRenderPass({
-        framebuffer: this.sampledLinksFbo,
-        clearColor: [-1, -1, -1, -1],
-      })
-      this.fillSampledLinksFboCommand.draw(fillPass)
-      fillPass.end()
-    }
-
-    const pixels = readPixels(this.device, this.sampledLinksFbo)
+    const pixels = this.fillAndReadSampledLinksFbo()
+    if (!pixels) return { indices, positions, angles }
     for (let i = 0; i < pixels.length / 4; i++) {
       const index = pixels[i * 4]
       const x = pixels[i * 4 + 1]
@@ -837,6 +786,58 @@ export class Lines extends CoreModule {
       if (index !== undefined && index >= 0 && x !== undefined && y !== undefined && angle !== undefined) {
         indices.push(Math.round(index))
         positions.push(x, y)
+        angles.push(angle)
+      }
+    }
+    return { indices, positions, angles }
+  }
+
+  /**
+   * 3D counterpart of `getSampledLinkPositionsMap`: values are `[x, y, z, angle]`,
+   * where `z` is the link midpoint's z coordinate (`0` in 2D mode) and `angle` is the
+   * screen-space rotation of the projected link.
+   */
+  public getSampledLinkPositionsMap3D (): Map<number, [number, number, number, number]> {
+    const positions = new Map<number, [number, number, number, number]>()
+    const pixels = this.fillAndReadSampledLinksFbo()
+    if (!pixels) return positions
+    const midZByLinkIndex = this.getSampledLinkMidZ(pixels)
+    for (let i = 0; i < pixels.length / 4; i++) {
+      const index = pixels[i * 4]
+      const x = pixels[i * 4 + 1]
+      const y = pixels[i * 4 + 2]
+      const angle = pixels[i * 4 + 3]
+
+      if (index !== undefined && index >= 0 && x !== undefined && y !== undefined && angle !== undefined) {
+        const linkIndex = Math.round(index)
+        positions.set(linkIndex, [x, y, midZByLinkIndex?.get(linkIndex) ?? 0, angle])
+      }
+    }
+    return positions
+  }
+
+  /**
+   * 3D counterpart of `getSampledLinks`: positions are `[x1, y1, z1, x2, y2, z2, ...]`
+   * link midpoints (`z` is `0` in 2D mode); angles are screen-space rotations of the
+   * projected links.
+   */
+  public getSampledLinks3D (): { indices: number[]; positions: number[]; angles: number[] } {
+    const indices: number[] = []
+    const positions: number[] = []
+    const angles: number[] = []
+    const pixels = this.fillAndReadSampledLinksFbo()
+    if (!pixels) return { indices, positions, angles }
+    const midZByLinkIndex = this.getSampledLinkMidZ(pixels)
+    for (let i = 0; i < pixels.length / 4; i++) {
+      const index = pixels[i * 4]
+      const x = pixels[i * 4 + 1]
+      const y = pixels[i * 4 + 2]
+      const angle = pixels[i * 4 + 3]
+
+      if (index !== undefined && index >= 0 && x !== undefined && y !== undefined && angle !== undefined) {
+        const linkIndex = Math.round(index)
+        indices.push(linkIndex)
+        positions.push(x, y, midZByLinkIndex?.get(linkIndex) ?? 0)
         angles.push(angle)
       }
     }
@@ -1032,6 +1033,70 @@ export class Lines extends CoreModule {
       this.quadBuffer.destroy()
     }
     this.quadBuffer = undefined
+  }
+
+  /**
+   * Runs the sampled-links fill pass and reads it back.
+   * Pixel layout: `[linkIndex, midX, midY, angle]`; cells no link wrote keep index `-1`.
+   */
+  private fillAndReadSampledLinksFbo (): Float32Array | undefined {
+    if (!this.sampledLinksFbo || this.sampledLinksFbo.destroyed) return undefined
+    const points = this.points
+    if (!points?.currentPositionTexture || points.currentPositionTexture.destroyed) return undefined
+
+    if (this.fillSampledLinksFboCommand && this.fillSampledLinksUniformStore) {
+      this.fillSampledLinksFboCommand.setVertexCount(this.data.linksNumber ?? 0)
+      this.fillSampledLinksUniformStore.setUniforms({
+        fillSampledLinksUniforms: {
+          pointsTextureSize: this.store.pointsTextureSize ?? 0,
+          transformationMatrix: this.store.transformationMatrix4x4,
+          spaceSize: this.store.adjustedSpaceSize,
+          screenSize: ensureVec2(this.store.screenSize, [0, 0]),
+          curvedWeight: this.config.curvedLinkWeight,
+          curvedLinkControlPointDistance: this.config.curvedLinkControlPointDistance,
+          curvedLinkSegments: this.config.curvedLinks ? this.config.curvedLinkSegments : 1,
+        },
+      })
+      this.fillSampledLinksFboCommand.setBindings({
+        positionsTexture: points.currentPositionTexture,
+      })
+
+      const fillPass = this.device.beginRenderPass({
+        framebuffer: this.sampledLinksFbo,
+        clearColor: [-1, -1, -1, -1],
+      })
+      this.fillSampledLinksFboCommand.draw(fillPass)
+      fillPass.end()
+    }
+
+    return readPixels(this.device, this.sampledLinksFbo)
+  }
+
+  /**
+   * Computes the midpoint z coordinate for each sampled link (3D mode only).
+   * The sampled pixel has no free channel for z — the angle occupies it — so z is
+   * recovered on the CPU from the endpoints' z in the position texture (alpha channel).
+   */
+  private getSampledLinkMidZ (sampledPixels: Float32Array): Map<number, number> | undefined {
+    if (!this.store.is3D) return undefined
+    const links = this.data.links
+    const currentPositionFbo = this.points?.currentPositionFbo
+    if (!links || !currentPositionFbo || currentPositionFbo.destroyed) return undefined
+
+    const positionPixels = readPixels(this.device, currentPositionFbo as Framebuffer)
+    const midZByLinkIndex = new Map<number, number>()
+    for (let i = 0; i < sampledPixels.length / 4; i++) {
+      const index = sampledPixels[i * 4]
+      if (index === undefined || index < 0) continue
+      const linkIndex = Math.round(index)
+      const source = links[linkIndex * 2]
+      const target = links[linkIndex * 2 + 1]
+      if (source === undefined || target === undefined) continue
+      const sourceZ = positionPixels[source * 4 + 3] ?? 0
+      const targetZ = positionPixels[target * 4 + 3] ?? 0
+      midZByLinkIndex.set(linkIndex, (sourceZ + targetZ) / 2)
+    }
+    return midZByLinkIndex
   }
 
   private createDrawCurveCommand (parameters: RenderPipelineParameters): Model {

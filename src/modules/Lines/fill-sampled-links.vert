@@ -42,6 +42,29 @@ out vec4 rgba;
 void main() {
   vec4 posA = texture(positionsTexture, (pointA + 0.5) / pointsTextureSize);
   vec4 posB = texture(positionsTexture, (pointB + 0.5) / pointsTextureSize);
+
+  #ifdef SPACE_3D
+  // 3D mode: links are straight; project both endpoints (z in the texture's alpha
+  // channel), compute the label angle from the projected screen tangent, and place
+  // the sample at the projected 3D midpoint. Midpoint z is recovered on the CPU.
+  vec4 clipA = transformationMatrix * vec4(posA.rg, posA.a, 1.0);
+  vec4 clipB = transformationMatrix * vec4(posB.rg, posB.a, 1.0);
+  vec3 mid3 = (vec3(posA.rg, posA.a) + vec3(posB.rg, posB.a)) * 0.5;
+  vec4 clipMid = transformationMatrix * vec4(mid3, 1.0);
+  if (clipA.w <= 0.0 || clipB.w <= 0.0 || clipMid.w <= 0.0) {
+    // Either endpoint behind the camera — keep the vertex off the sampling grid.
+    rgba = vec4(-1.0);
+    gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+    gl_PointSize = 1.0;
+    return;
+  }
+  vec2 screenA = (clipA.xy / clipA.w + 1.0) * screenSize / 2.0;
+  vec2 screenB = (clipB.xy / clipB.w + 1.0) * screenSize / 2.0;
+  vec2 tangent = screenB - screenA;
+  float angle = -atan(tangent.y, tangent.x);
+  vec2 mid = mid3.xy;
+  vec2 pointScreenPosition = (clipMid.xy / clipMid.w + 1.0) * screenSize / 2.0;
+  #else
   vec2 a = posA.rg;
   vec2 b = posB.rg;
 
@@ -72,6 +95,8 @@ void main() {
   #endif
 
   vec2 pointScreenPosition = (final.xy + 1.0) * screenSize / 2.0;
+  #endif
+
   rgba = vec4(linkIndices, mid.x, mid.y, angle);
   float i = (pointScreenPosition.x + 0.5) / screenSize.x;
   float j = (pointScreenPosition.y + 0.5) / screenSize.y;

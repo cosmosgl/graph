@@ -1322,8 +1322,21 @@ export class Graph {
    */
   public getSampledPointPositionsMap (): Map<number, [number, number]> {
     if (this._isDestroyed || !this.points) return new Map()
-    if (this.warnIf3D('getSampledPointPositionsMap')) return new Map()
+    if (this.warnIf3D('getSampledPointPositionsMap', 'use `getSampledPointPositionsMap3D` instead')) return new Map()
     return this.points.getSampledPointPositionsMap()
+  }
+
+  /**
+   * For the points that are currently visible on the screen, get a sample of point indices
+   * with their X, Y and Z coordinates. 3D counterpart of `getSampledPointPositionsMap` —
+   * project the returned positions with `spaceToScreenPosition3D` to place labels.
+   * The resulting number of points will depend on the `pointSamplingDistance` configuration property.
+   * @returns A Map object where keys are point indices and values are their [x, y, z] coordinates
+   * (z is `0` in 2D mode).
+   */
+  public getSampledPointPositionsMap3D (): Map<number, [number, number, number]> {
+    if (this._isDestroyed || !this.points) return new Map()
+    return this.points.getSampledPointPositionsMap3D()
   }
 
   /**
@@ -1334,8 +1347,21 @@ export class Graph {
    */
   public getSampledPoints (): { indices: number[]; positions: number[] } {
     if (this._isDestroyed || !this.points) return { indices: [], positions: [] }
-    if (this.warnIf3D('getSampledPoints')) return { indices: [], positions: [] }
+    if (this.warnIf3D('getSampledPoints', 'use `getSampledPoints3D` instead')) return { indices: [], positions: [] }
     return this.points.getSampledPoints()
+  }
+
+  /**
+   * For the points that are currently visible on the screen, get a sample of point indices and positions.
+   * 3D counterpart of `getSampledPoints` — project the returned positions with
+   * `spaceToScreenPosition3D` to place labels.
+   * The resulting number of points will depend on the `pointSamplingDistance` configuration property.
+   * @returns An object containing arrays of point indices and positions in the format
+   * [x1, y1, z1, x2, y2, z2, ...] (z is `0` in 2D mode).
+   */
+  public getSampledPoints3D (): { indices: number[]; positions: number[] } {
+    if (this._isDestroyed || !this.points) return { indices: [], positions: [] }
+    return this.points.getSampledPoints3D()
   }
 
   /**
@@ -1346,8 +1372,20 @@ export class Graph {
    */
   public getSampledLinkPositionsMap (): Map<number, [number, number, number]> {
     if (this._isDestroyed || !this.lines) return new Map()
-    if (this.warnIf3D('getSampledLinkPositionsMap')) return new Map()
+    if (this.warnIf3D('getSampledLinkPositionsMap', 'use `getSampledLinkPositionsMap3D` instead')) return new Map()
     return this.lines.getSampledLinkPositionsMap()
+  }
+
+  /**
+   * For the links that are currently visible on the screen, get a sample of link indices with their
+   * midpoint coordinates and angle. 3D counterpart of `getSampledLinkPositionsMap`.
+   * The resulting number of links will depend on the `linkSamplingDistance` configuration property.
+   * Each value is [x, y, z, angle]: midpoint in data space (z is `0` in 2D mode); angle in radians
+   * for screen-space rotation of the projected link (0 = right, positive = clockwise, e.g. for CSS rotation).
+   */
+  public getSampledLinkPositionsMap3D (): Map<number, [number, number, number, number]> {
+    if (this._isDestroyed || !this.lines) return new Map()
+    return this.lines.getSampledLinkPositionsMap3D()
   }
 
   /**
@@ -1358,8 +1396,20 @@ export class Graph {
    */
   public getSampledLinks (): { indices: number[]; positions: number[]; angles: number[] } {
     if (this._isDestroyed || !this.lines) return { indices: [], positions: [], angles: [] }
-    if (this.warnIf3D('getSampledLinks')) return { indices: [], positions: [], angles: [] }
+    if (this.warnIf3D('getSampledLinks', 'use `getSampledLinks3D` instead')) return { indices: [], positions: [], angles: [] }
     return this.lines.getSampledLinks()
+  }
+
+  /**
+   * For the links that are currently visible on the screen, get a sample of link indices, midpoint
+   * positions, and angles. 3D counterpart of `getSampledLinks`.
+   * The resulting number of links will depend on the `linkSamplingDistance` configuration property.
+   * Positions are link midpoints in data space in the format [x1, y1, z1, x2, y2, z2, ...]
+   * (z is `0` in 2D mode); angles are in radians for screen-space rotation of the projected links.
+   */
+  public getSampledLinks3D (): { indices: number[]; positions: number[]; angles: number[] } {
+    if (this._isDestroyed || !this.lines) return { indices: [], positions: [], angles: [] }
+    return this.lines.getSampledLinks3D()
   }
 
   /**
@@ -2345,6 +2395,8 @@ export class Graph {
       if (this.store.is3D) {
         this.store.updateScreenSize(w, h)
         this.camera.setViewport(w, h)
+        this.points?.updateSampledPointsGrid()
+        this.lines?.updateSampledLinksGrid()
       } else {
         const { k } = this.zoomInstance.eventTransform
         const centerPosition = this.zoomInstance.convertScreenToSpacePosition([prevW / 2, prevH / 2])
@@ -2483,19 +2535,26 @@ export class Graph {
     let isMouseover = false
     let isMouseout = false
     const pixels = readPixels(this.device, this.points.hoveredFbo as Framebuffer, 0, 0, 2, 2)
-    // Shader writes: rgba = vec4(index, size, pointPosition.xy)
+    // Shader writes [index, size, x, y] in 2D and [index, x, y, z] in 3D
+    // (validity: size > 0 in 2D, index >= 0 in 3D; the pass clears index to -1).
     const hoveredIndex = pixels[0] as number
-    const pointSize = pixels[1] as number
-    const pointX = pixels[2] as number
-    const pointY = pixels[3] as number
+    let isHovered: boolean
+    let position: [number, number] | [number, number, number]
+    if (this.store.is3D) {
+      isHovered = hoveredIndex >= 0
+      position = [pixels[1] as number, pixels[2] as number, pixels[3] as number]
+    } else {
+      isHovered = (pixels[1] as number) > 0
+      position = [pixels[2] as number, pixels[3] as number]
+    }
 
-    if (pointSize > 0) {
+    if (isHovered) {
       if (this.store.hoveredPoint === undefined || this.store.hoveredPoint.index !== hoveredIndex) {
         isMouseover = true
       }
       this.store.hoveredPoint = {
         index: hoveredIndex,
-        position: [pointX, pointY],
+        position,
       }
     } else {
       if (this.store.hoveredPoint) isMouseout = true

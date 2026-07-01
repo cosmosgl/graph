@@ -9,9 +9,15 @@ camera replaces the 2D pan/zoom (drag rotates, wheel/pinch dollies, Space + drag
 Calling `setPointPositions` (stride-2) switches back to 2D mode. New config options: `cameraFov`,
 `cameraNear`, `cameraFar`, `cameraInitialPosition`.
 
+Hover/click picking, `fitView`, animated position transitions, and point/link sampling work in
+both modes. Sampling in 3D uses the new `getSampledPoints3D` / `getSampledPointPositionsMap3D` /
+`getSampledLinks3D` / `getSampledLinkPositionsMap3D` methods, which return `[x, y, z]` coordinates
+for label placement via `spaceToScreenPosition3D`. In 3D mode the hover/click callbacks
+(`onPointClick`, `onPointMouseOver`, …) receive `[x, y, z]` positions — the `pointPosition`
+callback parameter type widened to `[number, number] | [number, number, number]`.
+
 3D mode is rendering-only in this release: the force simulation, point dragging, area selection,
-sampling, and clusters are disabled while in 3D (the corresponding methods warn and no-op).
-Hover/click picking, `fitView`, and animated position transitions work in both modes.
+and clusters are disabled while in 3D (the corresponding methods warn and no-op).
 The existing 2D API and data formats are unchanged.
 
 ## Migrating to v3.0

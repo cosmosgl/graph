@@ -510,6 +510,10 @@ export class Points extends CoreModule {
         this.drawHighlightedCommand.destroy()
         this.drawHighlightedCommand = undefined
       }
+      if (this.fillSampledPointsFboCommand) {
+        this.fillSampledPointsFboCommand.destroy()
+        this.fillSampledPointsFboCommand = undefined
+      }
     }
     // Ensure textures are created before Model initialization
     if (!this.imageAtlasCoordsTexture || !this.imageAtlasTexture) {
@@ -897,6 +901,7 @@ export class Points extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
+        ...(store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
         // Create uniform buffer binding
@@ -1833,7 +1838,9 @@ export class Points extends CoreModule {
 
     const renderPass = this.device.beginRenderPass({
       framebuffer: this.hoveredFbo,
-      clearColor: [0, 0, 0, 0],
+      // -1 in the index channel marks "no candidate": 3D validity is index >= 0
+      // (in 2D the size channel, cleared to 0, still signals validity).
+      clearColor: [-1, 0, 0, 0],
       clearDepth: 1,
     })
 
@@ -1980,44 +1987,14 @@ export class Points extends CoreModule {
 
   public getSampledPointPositionsMap (): Map<number, [number, number]> {
     const positions = new Map<number, [number, number]>()
-    if (!this.sampledPointsFbo || this.sampledPointsFbo.destroyed) return positions
-
-    // Fill sampled points FBO
-    if (this.fillSampledPointsFboCommand && this.fillSampledPointsUniformStore && this.sampledPointsFbo) {
-      if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return positions
-      // Update vertex count dynamically
-      this.fillSampledPointsFboCommand.setVertexCount(this.data.pointsNumber ?? 0)
-
-      this.fillSampledPointsUniformStore.setUniforms({
-        fillSampledPointsUniforms: {
-          pointsTextureSize: this.store.pointsTextureSize ?? 0,
-          transformationMatrix: this.store.transformationMatrix4x4,
-          spaceSize: this.store.adjustedSpaceSize,
-          screenSize: ensureVec2(this.store.screenSize, [0, 0]),
-        },
-      })
-
-      // Update texture bindings dynamically
-      this.fillSampledPointsFboCommand.setBindings({
-        positionsTexture: this.currentPositionTexture,
-      })
-
-      const fillPass = this.device.beginRenderPass({
-        framebuffer: this.sampledPointsFbo,
-        clearColor: [0, 0, 0, 0],
-      })
-      this.fillSampledPointsFboCommand.draw(fillPass)
-      fillPass.end()
-    }
-
-    const pixels = readPixels(this.device, this.sampledPointsFbo as Framebuffer)
+    const pixels = this.fillAndReadSampledPointsFbo()
+    if (!pixels) return positions
     for (let i = 0; i < pixels.length / 4; i++) {
       const index = pixels[i * 4]
-      const isNotEmpty = !!pixels[i * 4 + 1]
       const x = pixels[i * 4 + 2]
       const y = pixels[i * 4 + 3]
 
-      if (isNotEmpty && index !== undefined && x !== undefined && y !== undefined) {
+      if (index !== undefined && index >= 0 && x !== undefined && y !== undefined) {
         positions.set(index, [x, y])
       }
     }
@@ -2027,47 +2004,63 @@ export class Points extends CoreModule {
   public getSampledPoints (): { indices: number[]; positions: number[] } {
     const indices: number[] = []
     const positions: number[] = []
-    if (!this.sampledPointsFbo || this.sampledPointsFbo.destroyed) return { indices, positions }
-
-    // Fill sampled points FBO
-    if (this.fillSampledPointsFboCommand && this.fillSampledPointsUniformStore && this.sampledPointsFbo) {
-      if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return { indices, positions }
-      // Update vertex count dynamically
-      this.fillSampledPointsFboCommand.setVertexCount(this.data.pointsNumber ?? 0)
-
-      this.fillSampledPointsUniformStore.setUniforms({
-        fillSampledPointsUniforms: {
-          pointsTextureSize: this.store.pointsTextureSize ?? 0,
-          transformationMatrix: this.store.transformationMatrix4x4,
-          spaceSize: this.store.adjustedSpaceSize,
-          screenSize: ensureVec2(this.store.screenSize, [0, 0]),
-        },
-      })
-
-      // Update texture bindings dynamically
-      this.fillSampledPointsFboCommand.setBindings({
-        positionsTexture: this.currentPositionTexture,
-      })
-
-      const fillPass = this.device.beginRenderPass({
-        framebuffer: this.sampledPointsFbo,
-        clearColor: [0, 0, 0, 0],
-      })
-      this.fillSampledPointsFboCommand.draw(fillPass)
-      fillPass.end()
-    }
-
-    const pixels = readPixels(this.device, this.sampledPointsFbo as Framebuffer)
+    const pixels = this.fillAndReadSampledPointsFbo()
+    if (!pixels) return { indices, positions }
 
     for (let i = 0; i < pixels.length / 4; i++) {
       const index = pixels[i * 4]
-      const isNotEmpty = !!pixels[i * 4 + 1]
       const x = pixels[i * 4 + 2]
       const y = pixels[i * 4 + 3]
 
-      if (isNotEmpty && index !== undefined && x !== undefined && y !== undefined) {
+      if (index !== undefined && index >= 0 && x !== undefined && y !== undefined) {
         indices.push(index)
         positions.push(x, y)
+      }
+    }
+
+    return { indices, positions }
+  }
+
+  /**
+   * 3D counterpart of `getSampledPointPositionsMap`: values are `[x, y, z]` triplets
+   * (z is read from the sampled pixel's second channel; `0` in 2D mode).
+   */
+  public getSampledPointPositionsMap3D (): Map<number, [number, number, number]> {
+    const positions = new Map<number, [number, number, number]>()
+    const pixels = this.fillAndReadSampledPointsFbo()
+    if (!pixels) return positions
+    for (let i = 0; i < pixels.length / 4; i++) {
+      const index = pixels[i * 4]
+      const z = this.store.is3D ? pixels[i * 4 + 1] : 0
+      const x = pixels[i * 4 + 2]
+      const y = pixels[i * 4 + 3]
+
+      if (index !== undefined && index >= 0 && x !== undefined && y !== undefined) {
+        positions.set(index, [x, y, z ?? 0])
+      }
+    }
+    return positions
+  }
+
+  /**
+   * 3D counterpart of `getSampledPoints`: positions are `[x1, y1, z1, x2, y2, z2, ...]`
+   * (z is `0` in 2D mode).
+   */
+  public getSampledPoints3D (): { indices: number[]; positions: number[] } {
+    const indices: number[] = []
+    const positions: number[] = []
+    const pixels = this.fillAndReadSampledPointsFbo()
+    if (!pixels) return { indices, positions }
+
+    for (let i = 0; i < pixels.length / 4; i++) {
+      const index = pixels[i * 4]
+      const z = this.store.is3D ? pixels[i * 4 + 1] : 0
+      const x = pixels[i * 4 + 2]
+      const y = pixels[i * 4 + 3]
+
+      if (index !== undefined && index >= 0 && x !== undefined && y !== undefined) {
+        indices.push(index)
+        positions.push(x, y, z ?? 0)
       }
     }
 
@@ -2631,6 +2624,43 @@ export class Points extends CoreModule {
         // All texture bindings will be set dynamically in updatePosition() method
       },
     })
+  }
+
+  /**
+   * Runs the sampled-points fill pass and reads it back.
+   * Pixel layout: `[index, 1 (2D) or z (3D), x, y]`; cells no point wrote keep index `-1`.
+   */
+  private fillAndReadSampledPointsFbo (): Float32Array | undefined {
+    if (!this.sampledPointsFbo || this.sampledPointsFbo.destroyed) return undefined
+
+    if (this.fillSampledPointsFboCommand && this.fillSampledPointsUniformStore) {
+      if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return undefined
+      // Update vertex count dynamically
+      this.fillSampledPointsFboCommand.setVertexCount(this.data.pointsNumber ?? 0)
+
+      this.fillSampledPointsUniformStore.setUniforms({
+        fillSampledPointsUniforms: {
+          pointsTextureSize: this.store.pointsTextureSize ?? 0,
+          transformationMatrix: this.store.transformationMatrix4x4,
+          spaceSize: this.store.adjustedSpaceSize,
+          screenSize: ensureVec2(this.store.screenSize, [0, 0]),
+        },
+      })
+
+      // Update texture bindings dynamically
+      this.fillSampledPointsFboCommand.setBindings({
+        positionsTexture: this.currentPositionTexture,
+      })
+
+      const fillPass = this.device.beginRenderPass({
+        framebuffer: this.sampledPointsFbo,
+        clearColor: [-1, 0, 0, 0],
+      })
+      this.fillSampledPointsFboCommand.draw(fillPass)
+      fillPass.end()
+    }
+
+    return readPixels(this.device, this.sampledPointsFbo as Framebuffer)
   }
 
   private rescaleInitialNodePositions (): void {

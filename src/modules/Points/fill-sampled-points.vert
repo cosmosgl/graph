@@ -30,6 +30,23 @@ out vec4 rgba;
 
 void main() {
   vec4 pointPosition = texture(positionsTexture, (pointIndices + 0.5) / pointsTextureSize);
+  float index = pointIndices.g * pointsTextureSize + pointIndices.r;
+
+  #ifdef SPACE_3D
+  // 3D mode: project with the camera's view-projection matrix (z in the texture's
+  // alpha channel). The second channel carries z instead of the constant validity
+  // flag — validity is index >= 0 (the pass clears the FBO to -1).
+  vec4 clip = transformationMatrix * vec4(pointPosition.rg, pointPosition.a, 1.0);
+  if (clip.w <= 0.0) {
+    // Behind the camera — keep the vertex off the sampling grid.
+    rgba = vec4(-1.0);
+    gl_Position = vec4(2.0, 2.0, 0.0, 1.0);
+    gl_PointSize = 1.0;
+    return;
+  }
+  vec2 pointScreenPosition = (clip.xy / clip.w + 1.0) * screenSize / 2.0;
+  rgba = vec4(index, pointPosition.a, pointPosition.xy);
+  #else
   vec2 p = 2.0 * pointPosition.rg / spaceSize - 1.0;
   p *= spaceSize / screenSize;
   #ifdef USE_UNIFORM_BUFFERS
@@ -41,8 +58,9 @@ void main() {
   #endif
 
   vec2 pointScreenPosition = (final.xy + 1.0) * screenSize / 2.0;
-  float index = pointIndices.g * pointsTextureSize + pointIndices.r;
   rgba = vec4(index, 1.0, pointPosition.xy);
+  #endif
+
   float i = (pointScreenPosition.x + 0.5) / screenSize.x;
   float j = (pointScreenPosition.y + 0.5) / screenSize.y;
   gl_Position = vec4(2.0 * vec2(i, j) - 1.0, 0.0, 1.0);
