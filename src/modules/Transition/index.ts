@@ -133,8 +133,13 @@ export class Transition {
    * Sets a one-shot duration (ms) for the next cycle only, overriding
    * `config.transitionDuration`. `0` snaps with no animation; `undefined` falls
    * back to config. Consumed when the next cycle starts.
+   *
+   * A non-finite duration (NaN, Infinity) is rejected and ignored: it would flow
+   * into `activeDuration` and leave `step()` unable to reach progress 1, so the
+   * cycle would never end.
    */
   public setNextDuration (duration?: number): void {
+    if (duration !== undefined && !Number.isFinite(duration)) return
     this.overrideDuration = duration
   }
 
@@ -222,6 +227,8 @@ export class Transition {
    */
   public abort (): void {
     this.pendingProperties.clear()
+    // Drop the one-shot override too, so it can't leak into a later cycle.
+    this.overrideDuration = undefined
     this.clearActiveCycle()
   }
 

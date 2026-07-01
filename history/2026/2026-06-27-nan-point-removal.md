@@ -102,8 +102,8 @@ snapped renumber shows zero movement.
 
 ```ts
 graph.setNextTransitionDuration(0) // snap the next update only
-graph.setPointPositions(compacted)
-graph.setPointColors(compacted)    // same update → also snaps
+graph.setPointPositions(compactedPositions) // [x0, y0, x1, y1, …]
+graph.setPointColors(compactedColors)        // [r0, g0, b0, a0, …], same update → also snaps
 ```
 
 A pending override wins even mid-animation (the `duration` getter returns it first),

@@ -1166,9 +1166,9 @@ export class Points extends CoreModule {
     // Build R = previous absence, G = current absence.
     const state = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
     for (let i = 0; i < count; i++) {
-      const current = nextPrevious[i]
+      const current = nextPrevious[i] as number
       // New slots (no history) start with previous = current, so no spurious fade.
-      const previous = i < (prev?.length ?? 0) ? (prev as Float32Array)[i] : current
+      const previous = i < (prev?.length ?? 0) ? (prev as Float32Array)[i] as number : current
       state[i * 4] = previous
       state[i * 4 + 1] = current
     }
