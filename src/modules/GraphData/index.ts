@@ -131,7 +131,7 @@ export class GraphData {
         const exiting = Number.isNaN(this.pointPositions?.[i * 2] as number)
         for (let c = 0; c < 4; c++) {
           if (!isNumber(this.pointColors[i * 4 + c])) {
-            this.pointColors[i * 4 + c] = exiting ? EXIT_DEFAULT_COLOR_CHANNEL : defaultRgba[c]
+            this.pointColors[i * 4 + c] = exiting ? EXIT_DEFAULT_COLOR_CHANNEL : (defaultRgba[c] as number)
           }
         }
       }
