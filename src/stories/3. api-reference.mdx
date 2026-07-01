@@ -85,6 +85,17 @@ This method sets the positions of points in a cosmos.gl graph using the provided
 
 On the next `render()`, points animate from their previous positions to the new ones using `transitionDuration` and `transitionEasing`. The first render after initialization always snaps (there is no prior state to animate from). See [Transitions](../?path=/docs/configuration--docs#transitions) in the configuration docs.
 
+**Removing and adding points without an index shuffle.** A point whose position is `NaN` is treated as **absent**: it fades out in place while every other point keeps its index and on-screen position (no array compaction, no slide). Set a point to `NaN` to remove it, and back to a real position to add one — both animate:
+
+```javascript
+// remove point i: it fades out, the rest hold still
+positions[i * 2] = NaN;
+positions[i * 2 + 1] = NaN;
+graph.setPointPositions(positions);
+```
+
+By default an absent point fades to nothing (size and opacity → 0). To customize the exit look, pass per-point values via `setPointSizes` / `setPointColors` (e.g. recolor while fading); a `NaN` entry in those arrays means "use the exit default" for an absent point. This works with the simulation on or off — a `NaN` position is excluded from the force layout rather than corrupting it. Adding a point is the mirror (`NaN → real`, fades in). cosmos.gl does not auto-compact away the gaps — drop them yourself when convenient and snap the renumber with [`setNextTransitionDuration(0)`](#set_next_transition_duration). See the **Examples / Beginners → Add & Remove Points** story.
+
 **Example:**
 ```javascript
 graph.setPointPositions(new Float32Array([1, 2, 3, 4, 5, 6]));
@@ -398,6 +409,22 @@ The `render` method renders the graph and starts rendering. It does NOT modify s
   - If `undefined`: Keeps current alpha value.
 
 **Transitions:** If any setter (`setPointPositions`, `setPointColors`, `setPointSizes`, `setLinkColors`, `setLinkWidths`) has queued changes and `transitionDuration > 0`, `render()` starts an animated transition. When the simulation is running, only **position** transitions auto-pause it (and `onSimulationPause` fires), and the simulation stays paused afterwards until `unpause()` is called. The first render after initialization always snaps position changes — there is no prior state to animate from. See [Transitions](../?path=/docs/configuration--docs#transitions) in the configuration docs.
+
+### <a name="set_next_transition_duration" href="#set_next_transition_duration">#</a> graph.<b>setNextTransitionDuration</b>([<i>duration</i>])
+
+Overrides `config.transitionDuration` for the **next** update only, then clears automatically. Use it to apply a single update without animation (or with a one-off custom duration) regardless of the configured value.
+
+* **`duration`** (Number, optional): Duration in milliseconds for the next transition cycle. `0` snaps (no animation); a positive value animates for that long; `undefined` falls back to `config.transitionDuration`.
+
+The override applies to the whole next update — every setter you call before the next `render()` — and wins even while another transition is still playing. It's the usual way to **compact** a graph that uses `NaN`-position removal: drop the absent slots and renumber without re-animating, so the surviving points (already at their coordinates) show no movement.
+
+**Example:**
+```javascript
+graph.setNextTransitionDuration(0); // snap the next update only
+graph.setPointPositions(compactedPositions);
+graph.setPointColors(compactedColors);
+graph.render();
+```
 
 ### <a name="zoom_to_point_by_index" href="#zoom_to_point_by_index">#</a> graph.<b>zoomToPointByIndex</b>(<i>index</i>, [<i>duration</i>], [<i>scale</i>], [<i>canZoomOut</i>], [<i>enableSimulation</i>])
 

@@ -6,6 +6,7 @@ import { quickStart } from './beginners/quick-start'
 import { actions } from './beginners/actions'
 import { pointLabels } from './beginners/point-labels'
 import { removePoints } from './beginners/remove-points'
+import { addRemovePoints } from './beginners/add-remove-points'
 import { linkHovering } from './beginners/link-hovering'
 import { linkSampling } from './beginners/link-sampling'
 import { pinnedPoints } from './beginners/pinned-points'
@@ -23,6 +24,9 @@ import removePointsStoryRaw from './beginners/remove-points/index?raw'
 import removePointsStoryCssRaw from './beginners/remove-points/style.css?raw'
 import removePointsStoryConfigRaw from './beginners/remove-points/config.ts?raw'
 import removePointsStoryDataGenRaw from './beginners/remove-points/data-gen.ts?raw'
+import addRemovePointsStoryRaw from './beginners/add-remove-points/index?raw'
+import addRemovePointsStoryConfigRaw from './beginners/add-remove-points/config.ts?raw'
+import addRemovePointsStoryCssRaw from './beginners/add-remove-points/style.css?raw'
 import linkHoveringStoryRaw from './beginners/link-hovering/index?raw'
 import linkHoveringStoryDataGenRaw from './beginners/link-hovering/data-generator.ts?raw'
 import linkHoveringStoryCssRaw from './beginners/link-hovering/style.css?raw'
@@ -120,6 +124,18 @@ export const RemovePoints: Story = {
       { name: 'config.ts', code: removePointsStoryConfigRaw },
       { name: 'data-gen.ts', code: removePointsStoryDataGenRaw },
       { name: 'style.css', code: removePointsStoryCssRaw },
+    ],
+  },
+}
+
+export const AddRemovePoints: Story = {
+  ...createStory(addRemovePoints),
+  name: 'Add & Remove Points',
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: addRemovePointsStoryRaw },
+      { name: 'config.ts', code: addRemovePointsStoryConfigRaw },
+      { name: 'style.css', code: addRemovePointsStoryCssRaw },
     ],
   },
 }

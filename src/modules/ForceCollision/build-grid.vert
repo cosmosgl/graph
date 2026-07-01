@@ -3,6 +3,7 @@ precision highp float;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D sizeTexture;
+uniform sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform buildGridUniforms {
@@ -28,6 +29,15 @@ in vec2 pointIndices;
 out vec4 cellData; // xy = position, z = size, w = count (1.0)
 
 void main() {
+  // Absent points must not enter the grid — a NaN position bins to a NaN cell and
+  // poisons the accumulated position/size sum for every point in that cell. (exit.g = absent)
+  vec4 exitStatus = texture(exitTexture, pointIndices / pointsTextureSize);
+  if (exitStatus.g > 0.5) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = 0.0;
+    return;
+  }
+
   vec4 pointPosition = texture(positionsTexture, pointIndices / pointsTextureSize);
   vec4 pointSize = texture(sizeTexture, pointIndices / pointsTextureSize);
 

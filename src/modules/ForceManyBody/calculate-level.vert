@@ -2,6 +2,7 @@
 precision highp float;
 
 uniform sampler2D positionsTexture;
+uniform sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform calculateLevelsUniforms {
@@ -24,6 +25,17 @@ in vec2 pointIndices;
 out vec4 vColor;
 
 void main() {
+  vColor = vec4(0.0);
+
+  // Absent points must not enter the grid — a NaN position bins to a NaN cell and
+  // poisons the centermass that drives repulsion for every point. (exit.G = absent)
+  vec4 exitStatus = texture(exitTexture, pointIndices / pointsTextureSize);
+  if (exitStatus.g > 0.5) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = 0.0;
+    return;
+  }
+
   vec4 pointPosition = texture(positionsTexture, pointIndices / pointsTextureSize);
   vColor = vec4(pointPosition.rg, 1.0, 0.0);
 

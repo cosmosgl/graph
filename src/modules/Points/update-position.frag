@@ -6,6 +6,7 @@ precision highp float;
 uniform sampler2D positionsTexture;
 uniform sampler2D velocity;
 uniform sampler2D pinnedStatusTexture;
+uniform sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform updatePositionUniforms {
@@ -35,6 +36,14 @@ void main() {
   
   // If pinned, don't update position
   if (pinnedStatus.r > 0.5) {
+    fragColor = pointPosition;
+    return;
+  }
+
+  // If absent (current absence = exit.G), leave it untouched — don't integrate or
+  // clamp it (clamping NaN is undefined and could resurrect the point at (0,0)).
+  vec4 exitStatus = texture(exitTexture, textureCoords);
+  if (exitStatus.g > 0.5) {
     fragColor = pointPosition;
     return;
   }

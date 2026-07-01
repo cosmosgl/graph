@@ -266,6 +266,7 @@ export class ForceCollision extends CoreModule {
     if (!this.pointIndices) return
     if (data.pointsNumber === undefined) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
+    if (!points.exitTexture || points.exitTexture.destroyed) return
     if (!points.velocityFbo || points.velocityFbo.destroyed) return
     if (!this.sizeTexture || this.sizeTexture.destroyed) return
     if (this.gridTargets.length !== GRID_OFFSETS.length) return
@@ -281,6 +282,7 @@ export class ForceCollision extends CoreModule {
     this.buildGridCommand.setBindings({
       positionsTexture: points.previousPositionTexture,
       sizeTexture: this.sizeTexture,
+      exitTexture: points.exitTexture,
     })
     for (const [i, gridOffset] of GRID_OFFSETS.entries()) {
       const target = this.gridTargets[i]

@@ -403,6 +403,7 @@ export class ForceManyBody extends CoreModule {
     if (!points) return
     if (!this.calculateLevelsCommand || !this.calculateLevelsUniformStore) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
+    if (!points.exitTexture || points.exitTexture.destroyed) return
     if (!data.pointsNumber) return
     // Ensure pointIndices is set (Model might exist but attributes not set yet)
     if (!this.pointIndices) return
@@ -426,6 +427,7 @@ export class ForceManyBody extends CoreModule {
       // Update texture bindings dynamically
       this.calculateLevelsCommand.setBindings({
         positionsTexture: points.previousPositionTexture,
+        exitTexture: points.exitTexture,
       })
 
       const levelPass = device.beginRenderPass({
