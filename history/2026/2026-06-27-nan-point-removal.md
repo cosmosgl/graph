@@ -2,7 +2,7 @@
 
 # `NaN` positions for stable-identity point removal and addition
 
-**Commits:** 23ef59b, 8ed059f
+**Commits:** 9931bd8, 3985df6, e0a2a0b, f1768c1, 9575554
 
 ## Why
 
@@ -92,23 +92,27 @@ texture's `G` and skip absent points:
 Gravity/mouse/drag are per-point, so the integrator skip covers them. Works with the
 simulation on or off.
 
-## `setNextTransitionDuration(ms?)`
+## `render(simulationAlpha?, transitionDuration?)`
 
-New public method: a one-shot per-call override of `transitionDuration` for the next
-update only, then it auto-clears. `0` snaps. Mainly for **compaction** — after points
+`render` takes a second optional argument: the duration (ms) for any transition this
+render starts, for this call only. `0` snaps. Mainly for **compaction** — after points
 fade out you drop the tombstones and renumber, which must snap (an animated renumber
 would re-introduce the slide); since the surviving points keep their coordinates, a
 snapped renumber shows zero movement.
 
 ```ts
-graph.setNextTransitionDuration(0) // snap the next update only
 graph.setPointPositions(compactedPositions) // [x0, y0, x1, y1, …]
 graph.setPointColors(compactedColors)        // [r0, g0, b0, a0, …], same update → also snaps
+graph.render(undefined, 0)                    // snap this update only
 ```
 
-A pending override wins even mid-animation (the `duration` getter returns it first),
-so it reliably snaps an update issued while another transition is still playing; the
-running animation keeps its own length (`step()` reads `activeDuration` directly).
+`render` sets the duration on the transition (`setDurationOverride`) before the update
+pipeline runs and `start()` consumes it. It must be visible in that window because the
+pipeline (`Points.updatePositions`) reads it to choose animate vs. snap *before* `start()`
+runs. Because `render` sets it before every `start()`, it can't carry into another render —
+the leak the earlier approach was prone to. A transition already playing keeps its own
+length (`step()` reads `activeDuration` directly). An earlier iteration exposed a stateful
+`setNextTransitionDuration(ms?)` setter; it was folded into this argument before release.
 
 ## Picking, highlight & sampling exclude absent points
 
@@ -144,7 +148,7 @@ only means the exit default for an **absent** (NaN-position) one.
 Remove Points**) — a stable slot pool with `NaN` tombstones and a live data panel
 (active vs. tombstoned slots). Buttons demonstrate the full enter/exit matrix (each
 enter style mirroring an exit style), link add, and **Compact** (snapped renumber via
-`setNextTransitionDuration(0)`).
+`render(undefined, 0)`).
 
 ## Out of scope (by design)
 
