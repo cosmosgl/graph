@@ -19,8 +19,9 @@ callback parameter type widened to `[number, number] | [number, number, number]`
 The force simulation also runs in 3D: gravity, centering, link springs, friction, and decay use
 the same `simulation*` configuration options in both modes. Many-body repulsion in 3D is an exact
 O(n²) GPU pass (the 2D quadtree approximation is a planar construct), which is practical up to
-roughly 10–20k points. Point dragging, area selection, collision, clusters, and right-click
-repulsion remain disabled in 3D mode (the corresponding methods warn and no-op).
+roughly 10–20k points. Point dragging (`enableDrag`) works in 3D too — the dragged point moves in
+the camera-facing plane through its position at drag start. Area selection, collision, clusters,
+and right-click repulsion remain disabled in 3D mode (the corresponding methods warn and no-op).
 The existing 2D API and data formats are unchanged.
 
 ## Migrating to v3.0

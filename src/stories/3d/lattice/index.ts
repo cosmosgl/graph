@@ -13,6 +13,9 @@ export const lattice3D = (): { graph: Graph; div: HTMLDivElement; destroy?: () =
     scalePointsOnZoom: true,
     linkDefaultWidth: 1.5,
     linkOpacity: 0.6,
+    renderHoveredPointRing: true,
+    hoveredPointRingColor: '#fff',
+    enableDrag: true, // grab a lattice point and pull — the springs follow
     fitViewOnInit: true,
     fitViewDelay: 1500, // let the lattice untangle before framing it
     transitionDuration: 0,

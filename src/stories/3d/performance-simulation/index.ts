@@ -16,6 +16,9 @@ export const performanceSimulation3D = (): { graph: Graph; div: HTMLDivElement; 
     scalePointsOnZoom: true,
     linkDefaultWidth: 1,
     linkOpacity: 0.25,
+    renderHoveredPointRing: true,
+    hoveredPointRingColor: '#fff',
+    enableDrag: true, // drag points in the camera-facing plane of their depth
     fitViewOnInit: true,
     fitViewDelay: 1000, // let the layout inflate before framing it
     transitionDuration: 0,

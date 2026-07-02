@@ -47,6 +47,17 @@ export class Store {
   public transform = mat3.create()
   public screenSize: [number, number] = [0, 0]
   public mousePosition = [0, 0]
+  /**
+   * Mouse position unprojected into 3D space coordinates during a 3D point drag —
+   * the intersection of the cursor ray with the camera-facing plane through the
+   * dragged point's position at drag start (`dragPlanePoint3D`).
+   */
+  public mousePosition3D: [number, number, number] = [0, 0, 0]
+  /**
+   * Anchor of the 3D drag plane: the dragged point's position when the drag started.
+   * Set by the Drag behavior in 3D mode; `undefined` outside an active 3D drag.
+   */
+  public dragPlanePoint3D: [number, number, number] | undefined = undefined
   public screenMousePosition = [0, 0]
   public searchArea = [[0, 0], [0, 0]]
   public isSimulationRunning = false

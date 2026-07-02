@@ -23,6 +23,12 @@ export class Drag {
     .on('start', (e) => {
       if (this.store.hoveredPoint) {
         this.store.draggingPointIndex = this.store.hoveredPoint.index
+        if (this.store.is3D && this.store.hoveredPoint.position.length === 3) {
+          // In 3D the point is dragged in the camera-facing plane through its
+          // position at drag start (see Camera.unprojectOnPlane).
+          this.store.dragPlanePoint3D = [...this.store.hoveredPoint.position]
+          this.store.mousePosition3D = [...this.store.hoveredPoint.position]
+        }
         this.isActive = true
         this.config.onDragStart?.(e)
       }
@@ -33,6 +39,7 @@ export class Drag {
     .on('end', (e) => {
       this.isActive = false
       this.store.draggingPointIndex = undefined
+      this.store.dragPlanePoint3D = undefined
       this.config.onDragEnd?.(e)
     })
 

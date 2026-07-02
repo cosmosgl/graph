@@ -7,14 +7,14 @@ uniform sampler2D positionsTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform dragPointUniforms {
-  vec2 mousePos;
+  vec4 mousePos; // [x, y, z, unused] — z is only consumed in 3D mode
   float index;
 } dragPoint;
 
 #define mousePos dragPoint.mousePos
 #define index dragPoint.index
 #else
-uniform vec2 mousePos;
+uniform vec4 mousePos;
 uniform float index;
 #endif
 
@@ -28,6 +28,10 @@ void main() {
   // Check if a point is being dragged
   if (index >= 0.0 && index == pointPosition.b) {
     pointPosition.rg = mousePos.rg;
+    #ifdef SPACE_3D
+    // The z coordinate lives in the position alpha channel.
+    pointPosition.a = mousePos.b;
+    #endif
   }
 
   fragColor = pointPosition;

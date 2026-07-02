@@ -103,7 +103,9 @@ On the next `render()`, points animate from their previous positions to the new 
 
 **Simulation in 3D:** the force simulation runs in 3D with the same `simulation*` configuration options — gravity, centering, link springs, friction, and decay all work on 3D coordinates. Many-body repulsion in 3D uses an exact O(n²) GPU pass (instead of the 2D quadtree approximation), which is practical up to roughly 10–20k points.
 
-**3D mode limitations:** point dragging, area selection (`findPointsInRect` / `findPointsInPolygon`), collision, clusters, and right-click repulsion are disabled in 3D mode — the corresponding methods warn and do nothing. Use the `3D` counterparts of the zoom and sampling APIs: [`fitView`](#fit_view) works in both modes, and [`getSampledPoints3D`](#get_sampled_points_3d) / [`spaceToScreenPosition3D`](#space_to_screen_position_3d) replace their 2D versions. The camera is configured via the `cameraFov`, `cameraNear`, `cameraFar` and `cameraInitialPosition` [configuration properties](../?path=/docs/configuration--docs).
+**Dragging in 3D:** with `enableDrag: true`, points can be dragged in 3D — the dragged point moves in the camera-facing plane through its position at drag start. A drag that starts on a hovered point moves the point; everywhere else it orbits the camera.
+
+**3D mode limitations:** area selection (`findPointsInRect` / `findPointsInPolygon`), collision, clusters, and right-click repulsion are disabled in 3D mode — the corresponding methods warn and do nothing. Use the `3D` counterparts of the zoom and sampling APIs: [`fitView`](#fit_view) works in both modes, and [`getSampledPoints3D`](#get_sampled_points_3d) / [`spaceToScreenPosition3D`](#space_to_screen_position_3d) replace their 2D versions. The camera is configured via the `cameraFov`, `cameraNear`, `cameraFar` and `cameraInitialPosition` [configuration properties](../?path=/docs/configuration--docs).
 
 **Example:**
 ```javascript

@@ -498,8 +498,9 @@ export class Graph {
    * where `n` is the index of the point.
    * Example: `new Float32Array([1, 2, 3, 4, 5, 6])` sets the first point to (1, 2, 3) and the second point to (4, 5, 6).
    * @note The force simulation runs in 3D (repulsion uses an exact O(n²) pass — practical up to
-   * roughly 10–20k points). Point dragging, area selection, collision, clusters, and right-click
-   * repulsion are disabled in 3D mode. Calling `setPointPositions` switches the instance back to 2D mode.
+   * roughly 10–20k points), and points can be dragged (in the camera-facing plane of their depth).
+   * Area selection, collision, clusters, and right-click repulsion are disabled in 3D mode.
+   * Calling `setPointPositions` switches the instance back to 2D mode.
    * @note If `transitionDuration > 0`, the positions animate from the current layout (z animates from `0`
    * when switching from 2D mode).
    */
@@ -2240,7 +2241,7 @@ export class Graph {
         this.points?.draw(drawRenderPass)
       }
 
-      if (this.dragInstance.isActive && !this.store.is3D) {
+      if (this.dragInstance.isActive) {
         // Swap-before-write: after the swap, `previous` holds the freshest positions so drag()
         // reads those and writes the drag result into `current`. This runs
         // after points.draw() above — the drag result becomes visible on
@@ -2324,9 +2325,15 @@ export class Graph {
     const mouseX = (event as MouseEvent).offsetX ?? (event as D3DragEvent<HTMLCanvasElement, undefined, Hovered>).x
     const mouseY = (event as MouseEvent).offsetY ?? (event as D3DragEvent<HTMLCanvasElement, undefined, Hovered>).y
     if (mouseX === undefined || mouseY === undefined) return
-    // Space-coordinate mouse position is a 2D-zoom concept (consumed by drag and
-    // mouse repulsion, both disabled in 3D); screen position drives picking in both modes.
-    if (!this.store.is3D) {
+    if (this.store.is3D) {
+      // During a 3D point drag, unproject the cursor onto the camera-facing plane
+      // through the dragged point's position at drag start.
+      if (this.dragInstance.isActive && this.store.dragPlanePoint3D) {
+        this.store.mousePosition3D = this.camera.unprojectOnPlane([mouseX, mouseY], this.store.dragPlanePoint3D)
+      }
+    } else {
+      // Space-coordinate mouse position is a 2D-zoom concept (consumed by drag and
+      // mouse repulsion); screen position drives picking in both modes.
       this.store.mousePosition = this.zoomInstance.convertScreenToSpacePosition([mouseX, mouseY])
     }
     this.store.screenMousePosition = [mouseX, (this.store.screenSize[1] - mouseY)]
@@ -2413,9 +2420,16 @@ export class Graph {
 
   private updateZoomDragBehaviors (): void {
     if (this.store.is3D) {
-      // The orbit camera owns all gestures in 3D: point dragging is not supported,
-      // and the camera behavior replaces the 2D zoom listeners (same `.zoom` namespace).
-      this.canvasD3Selection?.on('.drag', null)
+      // Point dragging binds before the camera so a drag that starts on a hovered
+      // point captures the gesture; everywhere else the camera orbits. The camera
+      // behavior replaces the 2D zoom listeners (same `.zoom` namespace).
+      if (this.config.enableDrag) {
+        this.canvasD3Selection?.call(this.dragInstance.behavior)
+      } else {
+        this.canvasD3Selection
+          ?.call(this.dragInstance.behavior)
+          .on('.drag', null)
+      }
       if (this.config.enableZoom) {
         this.canvasD3Selection?.call(this.camera.behavior)
       } else {
@@ -2590,11 +2604,9 @@ export class Graph {
 
   private updateCanvasCursor (): void {
     const { hoveredPointCursor, hoveredLinkCursor } = this.config
-    // Point dragging is disabled in 3D, so the grab cursor would be misleading.
-    const isDragEnabled = this.config.enableDrag && !this.store.is3D
     if (this.dragInstance.isActive) select(this.canvas).style('cursor', 'grabbing')
     else if (this.store.hoveredPoint) {
-      if (!isDragEnabled || this.store.isSpaceKeyPressed) select(this.canvas).style('cursor', hoveredPointCursor)
+      if (!this.config.enableDrag || this.store.isSpaceKeyPressed) select(this.canvas).style('cursor', hoveredPointCursor)
       else select(this.canvas).style('cursor', 'grab')
     } else if (this.store.isLinkHoveringEnabled && this.store.hoveredLinkIndex !== undefined) {
       select(this.canvas).style('cursor', hoveredLinkCursor)

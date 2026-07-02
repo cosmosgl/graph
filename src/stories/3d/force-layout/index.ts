@@ -15,6 +15,7 @@ export const forceLayout3D = (): { graph: Graph; div: HTMLDivElement; destroy?: 
     linkOpacity: 0.4,
     renderHoveredPointRing: true,
     hoveredPointRingColor: '#fff',
+    enableDrag: true, // drag points in the camera-facing plane of their depth
     fitViewOnInit: true,
     fitViewDelay: 700, // let the layout inflate before framing it
     transitionDuration: 0, // simulation moves points; no need for transitions

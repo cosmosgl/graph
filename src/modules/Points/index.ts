@@ -177,7 +177,7 @@ export class Points extends CoreModule {
 
   private dragPointUniformStore: UniformStore<{
     dragPointUniforms: {
-      mousePos: [number, number];
+      mousePos: [number, number, number, number];
       index: number;
     };
   }> | undefined
@@ -518,6 +518,10 @@ export class Points extends CoreModule {
         this.updatePositionCommand.destroy()
         this.updatePositionCommand = undefined
       }
+      if (this.dragPointCommand) {
+        this.dragPointCommand.destroy()
+        this.dragPointCommand = undefined
+      }
     }
     // Ensure textures are created before Model initialization
     if (!this.imageAtlasCoordsTexture || !this.imageAtlasTexture) {
@@ -542,11 +546,11 @@ export class Points extends CoreModule {
       dragPointUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
-          mousePos: 'vec2<f32>',
+          mousePos: 'vec4<f32>',
           index: 'f32',
         },
         defaultUniforms: {
-          mousePos: ensureVec2(store.mousePosition, [0, 0]),
+          mousePos: [0, 0, 0, 0],
           index: store.hoveredPoint?.index ?? -1,
         },
       },
@@ -565,6 +569,7 @@ export class Points extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
+        ...(store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
         // Create uniform buffer binding
@@ -1669,9 +1674,12 @@ export class Points extends CoreModule {
     if (!this.dragPointCommand || !this.dragPointUniformStore || !this.currentPositionFbo || this.currentPositionFbo.destroyed) return
     if (!this.previousPositionTexture || this.previousPositionTexture.destroyed) return
 
+    const dragPosition: [number, number, number, number] = this.store.is3D
+      ? [...this.store.mousePosition3D, 0]
+      : [this.store.mousePosition[0] ?? 0, this.store.mousePosition[1] ?? 0, 0, 0]
     this.dragPointUniformStore.setUniforms({
       dragPointUniforms: {
-        mousePos: ensureVec2(this.store.mousePosition, [0, 0]),
+        mousePos: dragPosition,
         index: this.store.hoveredPoint?.index ?? -1,
       },
     })

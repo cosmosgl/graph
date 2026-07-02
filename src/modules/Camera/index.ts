@@ -97,6 +97,8 @@ export class Camera {
   private view = mat4.create()
   private projection = mat4.create()
   private viewProjection = mat4.create()
+  /** Camera eye position in space coordinates, updated by `updateMatrices`. */
+  private eye = vec3.create()
   /** Camera distance corresponding to d3-zoom scale `k = 1`; reset on every fit. */
   private baseDistance = 1
   private previousTransform: ZoomTransform = zoomIdentity
@@ -219,18 +221,48 @@ export class Camera {
   }
 
   /**
+   * Unprojects a screen position onto the camera-facing plane through `planePoint`
+   * (the plane perpendicular to the view direction). Used for dragging points in 3D:
+   * the dragged point moves in the plane of its original depth.
+   * @returns The intersection in space coordinates, or `planePoint` when the
+   * ray is parallel to the plane (degenerate case).
+   */
+  public unprojectOnPlane (screenPosition: [number, number], planePoint: [number, number, number]): [number, number, number] {
+    const [width, height] = this.store.screenSize
+    if (!width || !height) return planePoint
+    const inverseViewProjection = mat4.invert(mat4.create(), this.viewProjection)
+    if (!inverseViewProjection) return planePoint
+
+    const ndcX = (2 * screenPosition[0]) / width - 1
+    const ndcY = 1 - (2 * screenPosition[1]) / height
+    // vec3.transformMat4 performs the perspective divide.
+    const rayOrigin = vec3.transformMat4(vec3.create(), [ndcX, ndcY, -1], inverseViewProjection)
+    const rayEnd = vec3.transformMat4(vec3.create(), [ndcX, ndcY, 1], inverseViewProjection)
+    const rayDirection = vec3.normalize(vec3.create(), vec3.sub(vec3.create(), rayEnd, rayOrigin))
+
+    const planeNormal = vec3.normalize(vec3.create(), vec3.sub(vec3.create(), this.target, this.eye))
+    const denominator = vec3.dot(planeNormal, rayDirection)
+    if (Math.abs(denominator) < 1e-9) return planePoint
+    const anchor = vec3.fromValues(planePoint[0], planePoint[1], planePoint[2])
+    const t = vec3.dot(planeNormal, vec3.sub(vec3.create(), anchor, rayOrigin)) / denominator
+    const intersection = vec3.scaleAndAdd(vec3.create(), rayOrigin, rayDirection, t)
+    return [intersection[0], intersection[1], intersection[2]]
+  }
+
+  /**
    * Recomputes the view, projection and view-projection matrices from the current
    * orbit state and publishes the result to the `Store`.
    */
   public updateMatrices (): void {
     const { cameraFov, cameraNear, cameraFar } = this.config
     const sinPolar = Math.sin(this.polar)
-    const eye = vec3.fromValues(
+    vec3.set(
+      this.eye,
       this.target[0] + this.distance * sinPolar * Math.sin(this.azimuth),
       this.target[1] + this.distance * Math.cos(this.polar),
       this.target[2] + this.distance * sinPolar * Math.cos(this.azimuth)
     )
-    mat4.lookAt(this.view, eye, this.target, [0, 1, 0])
+    mat4.lookAt(this.view, this.eye, this.target, [0, 1, 0])
     // The far plane must cover the whole scene even when the camera dollies inside it.
     const far = cameraFar ?? Math.max((this.distance + this.sceneRadius * 2) * 2, cameraNear * 100)
     mat4.perspective(this.projection, cameraFov * Math.PI / 180, this.aspect, cameraNear, far)
