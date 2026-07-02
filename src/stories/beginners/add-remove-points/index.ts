@@ -99,12 +99,12 @@ export const addRemovePoints = (): { graph: Graph; div: HTMLDivElement; destroy?
     `
   }
 
-  /* ~ Push state to the engine ~ */
-  function update (): void {
+  /* ~ Push state to the engine. Pass transitionDuration = 0 to snap (no animation). ~ */
+  function update (transitionDuration?: number): void {
     graph.setPointPositions(new Float32Array(pointPositions))
     graph.setPointColors(new Float32Array(pointColors))
     graph.setPointSizes(new Float32Array(pointSizes))
-    graph.render()
+    graph.render(undefined, transitionDuration)
     renderSlots()
   }
 
@@ -164,10 +164,9 @@ export const addRemovePoints = (): { graph: Graph; div: HTMLDivElement; destroy?
       pointColors[slot * 4 + 1] = 0
       pointColors[slot * 4 + 2] = 0
       pointColors[slot * 4 + 3] = NaN // recolor to red while fading out
-    } else { // 'instant'
-      graph.setNextTransitionDuration(0) // snap — no fade
     }
-    update()
+    // 'instant' needs no channel changes — the render below snaps it with duration 0.
+    update(effect === 'instant' ? 0 : undefined)
   }
 
   /* ~ Compact: drop tombstones and renumber, snapped so nothing visibly moves ~ */
@@ -178,8 +177,7 @@ export const addRemovePoints = (): { graph: Graph; div: HTMLDivElement; destroy?
     pointColors = active.flatMap((slot) => pointColors.slice(slot * 4, slot * 4 + 4))
     pointSizes = active.map((slot) => pointSizes[slot])
     pointIds = active.map((slot) => pointIds[slot])
-    graph.setNextTransitionDuration(0)
-    update()
+    update(0) // snap the renumber so nothing visibly moves
   }
 
   /* ~ Seed a few points so there's something to interact with ~ */
@@ -196,8 +194,7 @@ export const addRemovePoints = (): { graph: Graph; div: HTMLDivElement; destroy?
       pointSizes.push(BASE_SIZE)
       pointIds.push(nextPointId++)
     }
-    graph.setNextTransitionDuration(0)
-    update()
+    update(0) // seed with no animation
     graph.fitView(0, config.fitViewPadding)
   }
 

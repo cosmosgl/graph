@@ -55,6 +55,18 @@ const easingFunctions: Record<TransitionEasing, (t: number) => number> = {
   [TransitionEasing.CircleInOut]: easeCircleInOut,
 }
 
+/**
+ * Drives timed transitions (positions / colors / sizes / …) between data updates.
+ *
+ * Three durations, at three scopes:
+ * - `config.transitionDuration` — the default, **forever**;
+ * - `overrideDuration` — **this render only** (set by `setDurationOverride()` before the update
+ *   pipeline, consumed by `start()`);
+ * - `activeDuration` — **this animation only** (frozen at `start()`, read each frame by `step()`).
+ *
+ * The `duration` getter resolves them in that precedence: the render override, else the running
+ * cycle's duration while one is active, else the config default.
+ */
 export class Transition {
   /** Last eased progress value in the `[0, 1]` range. */
   public progress = 1
@@ -65,16 +77,20 @@ export class Transition {
   private pendingProperties = new Set<TransitionProperty>()
   /** Properties currently animating in the running cycle. */
   private activeProperties = new Set<TransitionProperty>()
-  /** One-shot duration (ms) for the next cycle, set via `setNextDuration`. Consumed by `start()`. */
+  /**
+   * Duration (ms) overriding `config.transitionDuration` for the cycle this render is about to
+   * start. Set by `setDurationOverride()` before the update pipeline (which reads `duration` to
+   * decide animate vs. snap), consumed by `start()`. `render()` sets it before every `start()`,
+   * so an override never carries into another render.
+   */
   private overrideDuration?: number
   /**
    * Duration (ms) the running animation remembers for all its frames.
    *
    * Matters whenever an animation with a custom duration is playing — especially
-   * if another update can arrive before it finishes: `start()` copies the one-shot
-   * override here and clears the override right away, so an interrupting update
-   * isn't affected by this one's override, while this animation still knows its own
-   * length frame to frame.
+   * if another update can arrive before it finishes: `start()` records the cycle's
+   * duration here, so an interrupting update with a different duration doesn't
+   * affect this one, which still knows its own length frame to frame.
    */
   private activeDuration = 0
 
@@ -83,17 +99,12 @@ export class Transition {
   }
 
   /**
-   * How long the *next* update's transition should last (ms). A duration of 0 means
-   * the next update snaps instead of animating.
+   * How long the upcoming transition lasts (ms): the value armed for this render if any, else the
+   * running cycle's duration while one is active, else the config default. A duration of 0 means
+   * the update snaps instead of animating.
    *
-   * Priority:
-   *   1. a one-shot override from `setNextTransitionDuration()`, if set;
-   *   2. else the running cycle's duration, if one is active;
-   *   3. else the config default.
-   *
-   * The override wins even mid-animation, so `setNextTransitionDuration(0)` always
-   * snaps the next update. This only affects the next update — a transition that is
-   * already playing keeps its own length (`step()` uses `activeDuration` directly).
+   * A transition that is already playing keeps its own length (`step()` uses `activeDuration`
+   * directly).
    */
   public get duration (): number {
     return this.overrideDuration ?? (this.isActive ? this.activeDuration : this.config.transitionDuration)
@@ -107,6 +118,15 @@ export class Transition {
   /** True between `start()` and the end of the cycle. */
   public get isActive (): boolean {
     return this.activeProperties.size > 0
+  }
+
+  /**
+   * Overrides `config.transitionDuration` for the transition this render will start, for this
+   * render only. `undefined` (or a non-finite value) falls back to config. Called by `render()`
+   * before the update pipeline runs, and consumed by `start()`.
+   */
+  public setDurationOverride (duration?: number): void {
+    this.overrideDuration = (duration !== undefined && Number.isFinite(duration)) ? duration : undefined
   }
 
   /** Reports whether a specific property is queued and awaiting `start()`. */
@@ -130,35 +150,25 @@ export class Transition {
   }
 
   /**
-   * Sets a one-shot duration (ms) for the next cycle only, overriding
-   * `config.transitionDuration`. `0` snaps with no animation; `undefined` falls
-   * back to config. Consumed when the next cycle starts.
-   *
-   * A non-finite duration (NaN, Infinity) is rejected and ignored: it would flow
-   * into `activeDuration` and leave `step()` unable to reach progress 1, so the
-   * cycle would never end.
-   */
-  public setNextDuration (duration?: number): void {
-    if (duration !== undefined && !Number.isFinite(duration)) return
-    this.overrideDuration = duration
-  }
-
-  /**
    * Starts a queued transition cycle.
    *
    * - No pending queue → no-op.
-   * - `transitionDuration > 0` → begin cycle; fire `onTransitionStart`.
-   * - `transitionDuration <= 0` → pending is discarded; no cycle begins.
+   * - `duration > 0` → begin cycle; fire `onTransitionStart`.
+   * - `duration <= 0` → pending is discarded; no cycle begins.
    *
    * In either non-no-op path, any active cycle is reported as interrupted
    * via `onTransitionEnd(true)` before the new state takes effect.
+   *
+   * Uses the render override from `setDurationOverride()` (if any), else
+   * `config.transitionDuration`, and clears the override so it applies once.
    */
   public start (): void {
-    if (!this.isPending) return
-
-    // Consume the one-shot override (if any) so it applies to this cycle only.
+    // Consume the render override unconditionally, so it can't linger into a later render even
+    // when there's nothing pending to start.
     const transitionDuration = this.overrideDuration ?? this.config.transitionDuration
     this.overrideDuration = undefined
+
+    if (!this.isPending) return
 
     if (transitionDuration <= 0) {
       const wasActive = this.isActive
@@ -227,7 +237,6 @@ export class Transition {
    */
   public abort (): void {
     this.pendingProperties.clear()
-    // Drop the one-shot override too, so it can't leak into a later cycle.
     this.overrideDuration = undefined
     this.clearActiveCycle()
   }
