@@ -456,26 +456,6 @@ export class Graph {
   }
 
   /**
-   * Overrides `config.transitionDuration` for the next transition cycle only.
-   *
-   * The next data update (`setPointPositions`, `setPointColors`, …) that triggers
-   * a transition uses this duration instead of the configured one, then the
-   * override clears automatically. Useful to apply a single update without
-   * animation, regardless of `config.transitionDuration`:
-   *
-   * ```ts
-   * graph.setNextTransitionDuration(0) // snap the next update
-   * graph.setPointPositions(positions)
-   * ```
-   *
-   * @param {number | undefined} duration - Duration in milliseconds for the next
-   *   cycle. `0` snaps with no animation; `undefined` falls back to config.
-   */
-  public setNextTransitionDuration (duration?: number): void {
-    this.transition.setNextDuration(duration)
-  }
-
-  /**
    * Sets the positions for the graph points.
    *
    * @param {Float32Array} pointPositions - A Float32Array representing the positions of points in the format [x1, y1, x2, y2, ..., xn, yn],
@@ -492,7 +472,7 @@ export class Graph {
    * fades to nothing; pass per-point `setPointSizes` / `setPointColors` to customize the exit look.
    * Absent points are excluded from the force layout, so this is safe with the simulation on or off.
    * cosmos.gl does not auto-compact the gaps — drop them yourself and snap the renumber with
-   * `setNextTransitionDuration(0)`.
+   * `render(undefined, 0)`.
    */
   public setPointPositions (pointPositions: Float32Array, dontRescale?: boolean | undefined): void {
     if (this._isDestroyed) return
@@ -827,11 +807,15 @@ export class Graph {
    *   - If 0: Sets alpha to 0, simulation stops after one frame (graph becomes static).
    *   - If positive: Sets alpha to that value.
    *   - If undefined: Keeps current alpha value.
+   * @param {number} [transitionDuration] - Duration in milliseconds for any transition started by
+   *   this render (from a preceding `setPointPositions` / `setPointColors` / … update), for this call
+   *   only. `0` snaps with no animation; `undefined` (default) uses `config.transitionDuration`.
+   *   To snap without changing the alpha, pass `render(undefined, 0)`.
    */
-  public render (simulationAlpha?: number): void {
+  public render (simulationAlpha?: number, transitionDuration?: number): void {
     if (this._isDestroyed) return
 
-    if (this.ensureDevice(() => this.render(simulationAlpha))) return
+    if (this.ensureDevice(() => this.render(simulationAlpha, transitionDuration))) return
     this.graph.update()
     const { fitViewOnInit, fitViewDelay, fitViewPadding, fitViewDuration, fitViewByPointsInRect, fitViewByPointIndices, initialZoomLevel } = this.config
     if (!this.graph.pointsNumber && !this.graph.linksNumber) {
@@ -863,6 +847,10 @@ export class Graph {
         } else this.fitView(fitViewDuration, fitViewPadding)
       }, fitViewDelay)
     }
+    // Set the override before the pipeline: `updatePositions()` (inside `this.update()` below) reads
+    // `transition.duration` to decide animate vs. snap, then `start()` consumes the override.
+    this.transition.setDurationOverride(transitionDuration)
+
     // Update graph and start frames
     this.update(simulationAlpha)
 
