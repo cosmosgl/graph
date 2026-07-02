@@ -67,7 +67,13 @@ void main() {
         vec4 connectedPointPosition = texture(positionsTexture, (connectedPointIndex.rg + 0.5) / pointsTextureSize);
         float x = connectedPointPosition.x - (pointPosition.x + velocity.x);
         float y = connectedPointPosition.y - (pointPosition.y + velocity.y);
+        #ifdef SPACE_3D
+        // z lives in the position alpha channel; z velocity accumulates in the blue channel.
+        float z = connectedPointPosition.a - (pointPosition.a + velocity.b);
+        float l = sqrt(x * x + y * y + z * z);
+        #else
         float l = sqrt(x * x + y * y);
+        #endif
 
         // Apply the link force
         l = max(l, randomMinLinkDist * 0.99);
@@ -79,11 +85,15 @@ void main() {
         y *= l;
         velocity.x += x;
         velocity.y += y;
+        #ifdef SPACE_3D
+        z *= l;
+        velocity.b += z;
+        #endif
       }
     }
   }
 
-  fragColor = vec4(velocity.rg, 0.0, 0.0);
+  fragColor = vec4(velocity.rg, velocity.b, 0.0);
 }
   `
 }

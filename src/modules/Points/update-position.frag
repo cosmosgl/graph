@@ -46,6 +46,14 @@ void main() {
 
   pointPosition.r = clamp(pointPosition.r, 0.0, spaceSize);
   pointPosition.g = clamp(pointPosition.g, 0.0, spaceSize);
-  
+
+  #ifdef SPACE_3D
+  // The z coordinate lives in the position alpha channel and its velocity in
+  // the velocity blue channel; integrate and clamp it like x and y.
+  pointVelocity.b *= friction;
+  pointPosition.a += pointVelocity.b;
+  pointPosition.a = clamp(pointPosition.a, 0.0, spaceSize);
+  #endif
+
   fragColor = pointPosition;
 }

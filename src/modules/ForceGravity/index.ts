@@ -8,6 +8,8 @@ import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 export class ForceGravity extends CoreModule {
   private runCommand: Model | undefined
   private vertexCoordBuffer: Buffer | undefined
+  /** Space dimensions the Model was compiled for; a mode switch recreates it (SPACE_3D define). */
+  private programsSpaceDimensions: 2 | 3 = 2
   private uniformStore: UniformStore<{
     forceGravityUniforms: {
       gravity: number;
@@ -19,6 +21,14 @@ export class ForceGravity extends CoreModule {
   public initPrograms (): void {
     const { device, points, store } = this
     if (!points || !store.pointsTextureSize) return
+
+    if (this.programsSpaceDimensions !== store.spaceDimensions) {
+      this.programsSpaceDimensions = store.spaceDimensions
+      if (this.runCommand) {
+        this.runCommand.destroy()
+        this.runCommand = undefined
+      }
+    }
 
     this.vertexCoordBuffer ||= device.createBuffer({
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
@@ -47,6 +57,7 @@ export class ForceGravity extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
+        ...(store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
         // Create uniform buffer binding

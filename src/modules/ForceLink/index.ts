@@ -17,6 +17,8 @@ export class ForceLink extends CoreModule {
   private indices: Float32Array = new Float32Array()
   private maxPointDegree = 0
   private previousMaxPointDegree: number | undefined
+  /** Space dimensions the Model was compiled for; a mode switch recreates it (SPACE_3D define). */
+  private programsSpaceDimensions: 2 | 3 = 2
   private previousPointsTextureSize: number | undefined
   private previousLinksTextureSize: number | undefined
 
@@ -172,6 +174,14 @@ export class ForceLink extends CoreModule {
     if (!points || !store.pointsTextureSize || !store.linksTextureSize) return
     if (!this.linkFirstIndicesAndAmountTexture || !this.indicesTexture || !this.biasAndStrengthTexture || !this.randomDistanceTexture) return
 
+    if (this.programsSpaceDimensions !== store.spaceDimensions) {
+      this.programsSpaceDimensions = store.spaceDimensions
+      if (this.runCommand) {
+        this.runCommand.destroy()
+        this.runCommand = undefined
+      }
+    }
+
     this.vertexCoordBuffer ||= device.createBuffer({
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
     })
@@ -202,6 +212,7 @@ export class ForceLink extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
+        ...(store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
         // Create uniform buffer binding

@@ -16,8 +16,11 @@ for label placement via `spaceToScreenPosition3D`. In 3D mode the hover/click ca
 (`onPointClick`, `onPointMouseOver`, …) receive `[x, y, z]` positions — the `pointPosition`
 callback parameter type widened to `[number, number] | [number, number, number]`.
 
-3D mode is rendering-only in this release: the force simulation, point dragging, area selection,
-and clusters are disabled while in 3D (the corresponding methods warn and no-op).
+The force simulation also runs in 3D: gravity, centering, link springs, friction, and decay use
+the same `simulation*` configuration options in both modes. Many-body repulsion in 3D is an exact
+O(n²) GPU pass (the 2D quadtree approximation is a planar construct), which is practical up to
+roughly 10–20k points. Point dragging, area selection, collision, clusters, and right-click
+repulsion remain disabled in 3D mode (the corresponding methods warn and no-op).
 The existing 2D API and data formats are unchanged.
 
 ## Migrating to v3.0

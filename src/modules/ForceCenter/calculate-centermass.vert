@@ -19,7 +19,9 @@ out vec4 rgba;
 
 void main() {
   vec4 pointPosition = texture(positionsTexture, pointIndices / pointsTextureSize);
-  rgba = vec4(pointPosition.xy, 1.0, 0.0);
+  // Additive blend accumulates: [sum(x), sum(y), count, sum(z)].
+  // z lives in the position alpha channel and is 0 in 2D mode.
+  rgba = vec4(pointPosition.xy, 1.0, pointPosition.a);
 
   gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
   gl_PointSize = 1.0;

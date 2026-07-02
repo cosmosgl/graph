@@ -497,8 +497,9 @@ export class Graph {
    * @param {Float32Array} pointPositions - A Float32Array representing the positions of points in the format [x1, y1, z1, x2, y2, z2, ..., xn, yn, zn],
    * where `n` is the index of the point.
    * Example: `new Float32Array([1, 2, 3, 4, 5, 6])` sets the first point to (1, 2, 3) and the second point to (4, 5, 6).
-   * @note In 3D mode the force simulation, point dragging, area selection, sampling, and clusters are disabled.
-   * Calling `setPointPositions` switches the instance back to 2D mode.
+   * @note The force simulation runs in 3D (repulsion uses an exact O(n²) pass — practical up to
+   * roughly 10–20k points). Point dragging, area selection, collision, clusters, and right-click
+   * repulsion are disabled in 3D mode. Calling `setPointPositions` switches the instance back to 2D mode.
    * @note If `transitionDuration > 0`, the positions animate from the current layout (z animates from `0`
    * when switching from 2D mode).
    */
@@ -1445,7 +1446,6 @@ export class Graph {
 
     if (this.ensureDevice(() => this.start(alpha))) return
 
-    if (this.warnIf3D('start')) return
     if (!this.config.enableSimulation) return
     if (!this.graph.pointsNumber) return
     if (this.transition.isActiveFor(TransitionProperty.Positions)) {
@@ -1494,7 +1494,6 @@ export class Graph {
   public unpause (): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.unpause())) return
-    if (this.warnIf3D('unpause')) return
     if (!this.config.enableSimulation) return
     if (this.store.isSimulationRunning) return
     if (this.transition.isActiveFor(TransitionProperty.Positions)) {
@@ -1514,7 +1513,6 @@ export class Graph {
 
     if (this.ensureDevice(() => this.step())) return
 
-    if (this.warnIf3D('step')) return
     if (!this.config.enableSimulation) return
     if (!this.store.pointsTextureSize) return
 
@@ -1908,10 +1906,6 @@ export class Graph {
     this.store.spaceDimensions = dimensions
 
     if (dimensions === 3) {
-      if (this.store.isSimulationRunning) {
-        this.store.isSimulationRunning = false
-        this.config.onSimulationPause?.()
-      }
       const [width, height] = this.store.screenSize
       if (width && height) this.camera.setViewport(width, height)
     } else {
@@ -2017,12 +2011,11 @@ export class Graph {
   private runSimulationStep (forceExecution = false): void {
     const { config: { simulationGravity, simulationCenter, simulationCollision, enableSimulation }, store: { isSimulationRunning } } = this
 
-    // The force simulation is 2D-only — this single gate covers every force
-    // (gravity, center, many-body, links, clusters, collision, mouse repulsion).
-    if (!enableSimulation || this.store.is3D) return
+    if (!enableSimulation) return
 
-    // Right-click repulsion (runs regardless of isSimulationRunning)
-    if (this.isRightClickMouse && this.config.enableRightClickRepulsion) {
+    // Right-click repulsion (runs regardless of isSimulationRunning; the mouse
+    // position is a 2D-space concept, so the force is disabled in 3D mode)
+    if (this.isRightClickMouse && this.config.enableRightClickRepulsion && !this.store.is3D) {
       this.points?.swapFbo()
       this.forceMouse?.run()
       this.points?.updatePosition()
@@ -2066,7 +2059,8 @@ export class Graph {
         this.points?.updatePosition()
       }
 
-      if (this.graph.pointClusters || this.graph.clusterPositions) {
+      // Cluster forces use 2D centroid textures and are disabled in 3D mode
+      if ((this.graph.pointClusters || this.graph.clusterPositions) && !this.store.is3D) {
         this.points?.swapFbo()
         this.clusters?.run()
         this.points?.updatePosition()
@@ -2075,7 +2069,8 @@ export class Graph {
       // Collision runs after the attraction forces (links, clusters) so it
       // corrects the overlap they introduce within the same tick, instead of
       // lagging one frame behind and oscillating against them.
-      if (simulationCollision) {
+      // Its spatial-hash grid is 2D, so the force is disabled in 3D mode.
+      if (simulationCollision && !this.store.is3D) {
         // Lazily allocate the collision GPU resources on first use (or after a
         // data change marked them stale), so a graph that never enables
         // collision never pays the grid/size-texture memory cost.

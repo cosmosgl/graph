@@ -16,6 +16,9 @@ export const basic3D = (): { graph: Graph; div: HTMLDivElement; destroy?: () => 
     renderHoveredPointRing: true,
     hoveredPointRingColor: '#fff',
     fitViewOnInit: true,
+    // This story renders the provided positions as-is; the force simulation
+    // (which also works in 3D) would re-layout them.
+    enableSimulation: false,
     onPointClick: (pointIndex, pointPosition) => { console.log('Clicked point index: ', pointIndex, ' at position: ', pointPosition) },
     onLinkClick: linkIndex => { console.log('Clicked link index: ', linkIndex) },
     onBackgroundClick: () => { console.log('Clicked background') },

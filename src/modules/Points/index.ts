@@ -514,6 +514,10 @@ export class Points extends CoreModule {
         this.fillSampledPointsFboCommand.destroy()
         this.fillSampledPointsFboCommand = undefined
       }
+      if (this.updatePositionCommand) {
+        this.updatePositionCommand.destroy()
+        this.updatePositionCommand = undefined
+      }
     }
     // Ensure textures are created before Model initialization
     if (!this.imageAtlasCoordsTexture || !this.imageAtlasTexture) {
@@ -2616,6 +2620,7 @@ export class Points extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
+        ...(store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
         // Create uniform buffer binding

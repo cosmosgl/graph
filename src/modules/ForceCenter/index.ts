@@ -33,6 +33,8 @@ export class ForceCenter extends CoreModule {
   }> | undefined
 
   private previousPointsTextureSize: number | undefined
+  /** Space dimensions the force Model was compiled for; a mode switch recreates it (SPACE_3D define). */
+  private programsSpaceDimensions: 2 | 3 = 2
 
   public create (): void {
     const { device, store } = this
@@ -81,6 +83,16 @@ export class ForceCenter extends CoreModule {
     const { device, store, points } = this
     if (!points || !store.pointsTextureSize) return
     if (!this.centermassFbo || this.centermassFbo.destroyed || !this.centermassTexture || this.centermassTexture.destroyed) return
+
+    // The centermass aggregation shader is mode-agnostic; only the force shader
+    // has a SPACE_3D variant and must be recreated on a mode switch.
+    if (this.programsSpaceDimensions !== store.spaceDimensions) {
+      this.programsSpaceDimensions = store.spaceDimensions
+      if (this.runCommand) {
+        this.runCommand.destroy()
+        this.runCommand = undefined
+      }
+    }
 
     this.forceVertexCoordBuffer ||= device.createBuffer({
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
@@ -149,6 +161,7 @@ export class ForceCenter extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
+        ...(store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
         // Create uniform buffer binding

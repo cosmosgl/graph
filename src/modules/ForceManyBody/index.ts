@@ -6,6 +6,7 @@ import calculateLevelFrag from '@/graph/modules/ForceManyBody/calculate-level.fr
 import calculateLevelVert from '@/graph/modules/ForceManyBody/calculate-level.vert?raw'
 import forceFrag from '@/graph/modules/ForceManyBody/force-level.frag?raw'
 import forceCenterFrag from '@/graph/modules/ForceManyBody/force-centermass.frag?raw'
+import forceBruteForce3DFrag from '@/graph/modules/ForceManyBody/force-many-body-3d.frag?raw'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
@@ -24,6 +25,11 @@ export class ForceManyBody extends CoreModule {
   private calculateLevelsCommand: Model | undefined
   private forceCommand: Model | undefined
   private forceFromItsOwnCentermassCommand: Model | undefined
+  /**
+   * Exact O(n²) repulsion used in 3D mode — the 2D quadtree approximation
+   * (levels + ring sampling) is a planar construct and is skipped in 3D.
+   */
+  private bruteForce3DCommand: Model | undefined
 
   private forceVertexCoordBuffer: Buffer | undefined
 
@@ -55,6 +61,15 @@ export class ForceManyBody extends CoreModule {
     };
   }> | undefined
 
+  private bruteForce3DUniformStore: UniformStore<{
+    forceBruteForceUniforms: {
+      pointsTextureSize: number;
+      pointsNumber: number;
+      alpha: number;
+      repulsion: number;
+    };
+  }> | undefined
+
   private previousPointsTextureSize: number | undefined
   private previousSpaceSize: number | undefined
 
@@ -64,8 +79,18 @@ export class ForceManyBody extends CoreModule {
 
     this.levels = Math.log2(store.adjustedSpaceSize)
 
-    // Allocate quadtree levels
-    for (let level = 0; level < this.levels; level += 1) {
+    if (store.is3D) {
+      // 3D repulsion is brute force — the quadtree levels are not used. Free them
+      // so a 2D → 3D switch releases their GPU memory.
+      for (const target of this.levelTargets.values()) {
+        if (!target.fbo.destroyed) target.fbo.destroy()
+        if (!target.texture.destroyed) target.texture.destroy()
+      }
+      this.levelTargets.clear()
+    }
+
+    // Allocate quadtree levels (2D only)
+    for (let level = 0; store.is3D === false && level < this.levels; level += 1) {
       const levelTextureSize = Math.pow(2, level + 1)
       const existingTarget = this.levelTargets.get(level)
 
@@ -121,12 +146,14 @@ export class ForceManyBody extends CoreModule {
       }
     }
 
-    // Random jitter texture to prevent sticking
+    // Random jitter texture to prevent sticking (the blue channel is the z jitter,
+    // consumed only in 3D mode)
     const totalPixels = store.pointsTextureSize * store.pointsTextureSize
     const randomValuesState = new Float32Array(totalPixels * 4)
     for (let i = 0; i < totalPixels; ++i) {
       randomValuesState[i * 4] = store.getRandomFloat(-1, 1) * 0.00001
       randomValuesState[i * 4 + 1] = store.getRandomFloat(-1, 1) * 0.00001
+      randomValuesState[i * 4 + 2] = store.getRandomFloat(-1, 1) * 0.00001
     }
 
     const recreateRandomValuesTexture =
@@ -335,6 +362,50 @@ export class ForceManyBody extends CoreModule {
         depthCompare: 'always',
       },
     })
+
+    // Brute-force 3D repulsion command (fullscreen quad, 3D mode only)
+    if (store.is3D) {
+      this.bruteForce3DUniformStore ||= new UniformStore({
+        forceBruteForceUniforms: {
+          uniformTypes: {
+            pointsTextureSize: 'f32',
+            pointsNumber: 'f32',
+            alpha: 'f32',
+            repulsion: 'f32',
+          },
+          defaultUniforms: {
+            pointsTextureSize: store.pointsTextureSize,
+            pointsNumber: data.pointsNumber,
+            alpha: store.alpha,
+            repulsion: this.config.simulationRepulsion,
+          },
+        },
+      })
+
+      this.bruteForce3DCommand ||= new Model(device, {
+        fs: forceBruteForce3DFrag,
+        vs: updateVert,
+        topology: 'triangle-strip',
+        vertexCount: 4,
+        attributes: {
+          vertexCoord: this.forceVertexCoordBuffer,
+        },
+        bufferLayout: [
+          { name: 'vertexCoord', format: 'float32x2' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
+        },
+        bindings: {
+          forceBruteForceUniforms: this.bruteForce3DUniformStore.getManagedUniformBuffer(device, 'forceBruteForceUniforms'),
+          // All texture bindings will be set dynamically in drawForces3D() method
+        },
+        parameters: {
+          depthWriteEnabled: false,
+          depthCompare: 'always',
+        },
+      })
+    }
   }
 
   public run (): void {
@@ -342,8 +413,12 @@ export class ForceManyBody extends CoreModule {
     if (this.store.pointsTextureSize !== this.previousPointsTextureSize || this.store.adjustedSpaceSize !== this.previousSpaceSize) {
       return
     }
-    this.drawLevels()
-    this.drawForces()
+    if (this.store.is3D) {
+      this.drawForces3D()
+    } else {
+      this.drawLevels()
+      this.drawForces()
+    }
   }
 
   /**
@@ -358,6 +433,8 @@ export class ForceManyBody extends CoreModule {
     this.forceCommand = undefined
     this.forceFromItsOwnCentermassCommand?.destroy()
     this.forceFromItsOwnCentermassCommand = undefined
+    this.bruteForce3DCommand?.destroy()
+    this.bruteForce3DCommand = undefined
 
     // 2. Destroy Framebuffers (before textures they reference)
     for (const target of this.levelTargets.values()) {
@@ -386,6 +463,8 @@ export class ForceManyBody extends CoreModule {
     this.forceUniformStore = undefined
     this.forceCenterUniformStore?.destroy()
     this.forceCenterUniformStore = undefined
+    this.bruteForce3DUniformStore?.destroy()
+    this.bruteForce3DUniformStore = undefined
 
     // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
     if (this.pointIndices && !this.pointIndices.destroyed) {
@@ -396,6 +475,37 @@ export class ForceManyBody extends CoreModule {
       this.forceVertexCoordBuffer.destroy()
     }
     this.forceVertexCoordBuffer = undefined
+  }
+
+  private drawForces3D (): void {
+    const { device, store, data, points } = this
+    if (!points) return
+    if (!this.bruteForce3DCommand || !this.bruteForce3DUniformStore) return
+    if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
+    if (!this.randomValuesTexture || this.randomValuesTexture.destroyed) return
+    if (!points.velocityFbo || points.velocityFbo.destroyed) return
+
+    this.bruteForce3DUniformStore.setUniforms({
+      forceBruteForceUniforms: {
+        pointsTextureSize: store.pointsTextureSize ?? 0,
+        pointsNumber: data.pointsNumber ?? 0,
+        alpha: store.alpha,
+        repulsion: this.config.simulationRepulsion,
+      },
+    })
+
+    // Update texture bindings dynamically
+    this.bruteForce3DCommand.setBindings({
+      positionsTexture: points.previousPositionTexture,
+      randomValues: this.randomValuesTexture,
+    })
+
+    const drawPass = device.beginRenderPass({
+      framebuffer: points.velocityFbo,
+      clearColor: [0, 0, 0, 0],
+    })
+    this.bruteForce3DCommand.draw(drawPass)
+    drawPass.end()
   }
 
   private drawLevels (): void {
