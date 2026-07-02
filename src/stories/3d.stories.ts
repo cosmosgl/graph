@@ -5,6 +5,7 @@ import { CosmosStoryProps } from './create-cosmos'
 import { basic3D } from './3d/basic'
 import { forceLayout3D } from './3d/force-layout'
 import { lattice3D } from './3d/lattice'
+import { performance3D } from './3d/performance'
 
 import basic3DStoryRaw from './3d/basic/index?raw'
 import basic3DStoryDataGenRaw from './3d/basic/data-gen?raw'
@@ -12,6 +13,8 @@ import forceLayout3DStoryRaw from './3d/force-layout/index?raw'
 import forceLayout3DStoryDataGenRaw from './3d/force-layout/data-gen?raw'
 import lattice3DStoryRaw from './3d/lattice/index?raw'
 import lattice3DStoryDataGenRaw from './3d/lattice/data-gen?raw'
+import performance3DStoryRaw from './3d/performance/index?raw'
+import performance3DStoryDataGenRaw from './3d/performance/data-gen?raw'
 
 const meta: Meta<CosmosStoryProps> = {
   title: 'Examples/3D',
@@ -46,6 +49,17 @@ export const Lattice3D: Story = {
     sourceCode: [
       { name: 'Story', code: lattice3DStoryRaw },
       { name: 'data-gen.ts', code: lattice3DStoryDataGenRaw },
+    ],
+  },
+}
+
+export const Performance3D: Story = {
+  ...createStory(performance3D),
+  name: '100k Points 3D',
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: performance3DStoryRaw },
+      { name: 'data-gen.ts', code: performance3DStoryDataGenRaw },
     ],
   },
 }

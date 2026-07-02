@@ -9,7 +9,7 @@ export const forceLayout3D = (): { graph: Graph; div: HTMLDivElement; destroy?: 
 
   const config: GraphConfig = {
     backgroundColor: '#2d313a',
-    pointDefaultSize: 20,
+    pointDefaultSize: 8,
     scalePointsOnZoom: true,
     linkDefaultWidth: 1,
     linkOpacity: 0.4,
