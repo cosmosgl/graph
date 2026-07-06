@@ -1651,6 +1651,11 @@ export class Graph {
         prevConfig.onLinkMouseOver !== this.config.onLinkMouseOver ||
         prevConfig.onLinkMouseOut !== this.config.onLinkMouseOut) {
       this.store.updateLinkHoveringEnabled(this.config)
+      // The picking FBO is created lazily behind the isLinkHoveringEnabled
+      // flag, so enabling hover at runtime must allocate it — otherwise
+      // findHoveredLine() bails while the readback still consumes the
+      // zero-initialized result texture and reports link 0 as hovered.
+      this.lines?.updateLinkIndexFbo()
     }
   }
 
@@ -2294,8 +2299,11 @@ export class Graph {
     if (!this.device) return { mouseover: false, mouseout: false }
     const pixels = readPixels(this.device, this.lines.hoveredLineIndexFbo!)
     const hoveredLineIndex = pixels[0] as number
+    // The picking shader writes alpha 1 on a hit and (-1, 0, 0, 0) on a miss;
+    // a zero alpha also covers a result texture that was never rendered to.
+    const isHit = (pixels[3] as number) > 0 && hoveredLineIndex >= 0
 
-    if (hoveredLineIndex >= 0) {
+    if (isHit) {
       if (this.store.hoveredLinkIndex !== hoveredLineIndex) isMouseover = true
       this.store.hoveredLinkIndex = hoveredLineIndex
     } else {
