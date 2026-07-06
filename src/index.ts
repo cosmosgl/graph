@@ -2256,6 +2256,9 @@ export class Graph {
   /** Detect hovered point and update store state. Returns flags for deferred callback firing. */
   private findHoveredPoint (): { mouseover: boolean; mouseout: boolean } {
     if (this._isDestroyed || !this.device || !this.points) return { mouseover: false, mouseout: false }
+    // The picking FBO is created in initPrograms(), which first runs on
+    // render() — a pointerdown before that must not read a missing target.
+    if (!this.points.hoveredFbo) return { mouseover: false, mouseout: false }
     this.points.findHoveredPoint()
     let isMouseover = false
     let isMouseout = false
@@ -2297,7 +2300,10 @@ export class Graph {
     let isMouseout = false
 
     if (!this.device) return { mouseover: false, mouseout: false }
-    const pixels = readPixels(this.device, this.lines.hoveredLineIndexFbo!)
+    // The result FBO is created in initPrograms(), which first runs on
+    // render() — a pointerdown before that must not read a missing target.
+    if (!this.lines.hoveredLineIndexFbo) return { mouseover: false, mouseout: false }
+    const pixels = readPixels(this.device, this.lines.hoveredLineIndexFbo)
     const hoveredLineIndex = pixels[0] as number
     // The picking shader writes alpha 1 on a hit and (-1, 0, 0, 0) on a miss;
     // a zero alpha also covers a result texture that was never rendered to.
