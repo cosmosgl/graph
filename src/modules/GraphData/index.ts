@@ -16,18 +16,7 @@ export enum PointShape {
 
 export class GraphData {
   public inputPointPositions: Float32Array | undefined
-  public inputPointColors: Float32Array | undefined
-  public inputPointSizes: Float32Array | undefined
-  public inputPointShapes: Float32Array | undefined
   public inputImageData: ImageData[] | undefined
-  public inputPointImageIndices: Float32Array | undefined
-  public inputPointImageSizes: Float32Array | undefined
-  public inputLinkColors: Float32Array | undefined
-  public inputLinkWidths: Float32Array | undefined
-  public inputLinkStrength: Float32Array | undefined
-  public inputPointClusters: (number | undefined)[] | undefined
-  public inputClusterPositions: (number | undefined)[] | undefined
-  public inputClusterStrength: Float32Array | undefined
   public inputPinnedPoints: number[] | undefined
 
   public pointPositions: Float32Array | undefined
@@ -49,11 +38,9 @@ export class GraphData {
   public pointImageIndices: Float32Array | undefined
   public pointImageSizes: Float32Array | undefined
 
-  public inputLinks: Float32Array | undefined
   public links: Float32Array | undefined
   public linkColors: Float32Array | undefined
   public linkWidths: Float32Array | undefined
-  public linkArrowsBoolean: boolean[] | undefined
   public linkArrows: number[] | undefined
   public linkStrength: Float32Array | undefined
 
@@ -74,6 +61,35 @@ export class GraphData {
   public outDegree: number[] | undefined
   private _config: GraphConfigInterface
 
+  // Input channels sit behind accessors so every assignment marks the channel
+  // dirty and update() can skip revalidating data that did not change.
+  private _inputPointColors: Float32Array | undefined
+  private _inputPointSizes: Float32Array | undefined
+  private _inputPointShapes: Float32Array | undefined
+  private _inputPointImageIndices: Float32Array | undefined
+  private _inputPointImageSizes: Float32Array | undefined
+  private _inputLinks: Float32Array | undefined
+  private _inputLinkColors: Float32Array | undefined
+  private _inputLinkWidths: Float32Array | undefined
+  private _linkArrowsBoolean: boolean[] | undefined
+  private _inputLinkStrength: Float32Array | undefined
+  private _inputPointClusters: (number | undefined)[] | undefined
+  private _inputClusterPositions: (number | undefined)[] | undefined
+  private _inputClusterStrength: Float32Array | undefined
+
+  // Dirty flags start true so the first update() processes every channel.
+  private _arePointColorsDirty = true
+  private _arePointSizesDirty = true
+  private _arePointShapesDirty = true
+  private _arePointImageIndicesDirty = true
+  private _arePointImageSizesDirty = true
+  private _areLinksDirty = true
+  private _areLinkColorsDirty = true
+  private _areLinkWidthsDirty = true
+  private _areLinkArrowsDirty = true
+  private _isLinkStrengthDirty = true
+  private _areClustersDirty = true
+
   public constructor (config: GraphConfigInterface) {
     this._config = config
   }
@@ -84,6 +100,85 @@ export class GraphData {
 
   public get linksNumber (): number | undefined {
     return this.links && this.links.length / 2
+  }
+
+  public get inputPointColors (): Float32Array | undefined { return this._inputPointColors }
+  public get inputPointSizes (): Float32Array | undefined { return this._inputPointSizes }
+  public get inputPointShapes (): Float32Array | undefined { return this._inputPointShapes }
+  public get inputPointImageIndices (): Float32Array | undefined { return this._inputPointImageIndices }
+  public get inputPointImageSizes (): Float32Array | undefined { return this._inputPointImageSizes }
+  public get inputLinks (): Float32Array | undefined { return this._inputLinks }
+  public get inputLinkColors (): Float32Array | undefined { return this._inputLinkColors }
+  public get inputLinkWidths (): Float32Array | undefined { return this._inputLinkWidths }
+  public get linkArrowsBoolean (): boolean[] | undefined { return this._linkArrowsBoolean }
+  public get inputLinkStrength (): Float32Array | undefined { return this._inputLinkStrength }
+  public get inputPointClusters (): (number | undefined)[] | undefined { return this._inputPointClusters }
+  public get inputClusterPositions (): (number | undefined)[] | undefined { return this._inputClusterPositions }
+  public get inputClusterStrength (): Float32Array | undefined { return this._inputClusterStrength }
+
+  public set inputPointColors (value: Float32Array | undefined) {
+    this._inputPointColors = value
+    this._arePointColorsDirty = true
+  }
+
+  public set inputPointSizes (value: Float32Array | undefined) {
+    this._inputPointSizes = value
+    this._arePointSizesDirty = true
+  }
+
+  public set inputPointShapes (value: Float32Array | undefined) {
+    this._inputPointShapes = value
+    this._arePointShapesDirty = true
+  }
+
+  public set inputPointImageIndices (value: Float32Array | undefined) {
+    this._inputPointImageIndices = value
+    this._arePointImageIndicesDirty = true
+  }
+
+  public set inputPointImageSizes (value: Float32Array | undefined) {
+    this._inputPointImageSizes = value
+    this._arePointImageSizesDirty = true
+  }
+
+  public set inputLinks (value: Float32Array | undefined) {
+    this._inputLinks = value
+    this._areLinksDirty = true
+  }
+
+  public set inputLinkColors (value: Float32Array | undefined) {
+    this._inputLinkColors = value
+    this._areLinkColorsDirty = true
+  }
+
+  public set inputLinkWidths (value: Float32Array | undefined) {
+    this._inputLinkWidths = value
+    this._areLinkWidthsDirty = true
+  }
+
+  public set linkArrowsBoolean (value: boolean[] | undefined) {
+    this._linkArrowsBoolean = value
+    this._areLinkArrowsDirty = true
+  }
+
+  public set inputLinkStrength (value: Float32Array | undefined) {
+    this._inputLinkStrength = value
+    this._isLinkStrengthDirty = true
+  }
+
+  public set inputPointClusters (value: (number | undefined)[] | undefined) {
+    this._inputPointClusters = value
+    this._areClustersDirty = true
+  }
+
+  public set inputClusterPositions (value: (number | undefined)[] | undefined) {
+    this._inputClusterPositions = value
+    this._areClustersDirty = true
+  }
+
+  public set inputClusterStrength (value: Float32Array | undefined) {
+    this._inputClusterStrength = value
+    this._areClustersDirty = true
   }
 
   public updatePoints (): void {
@@ -380,24 +475,54 @@ export class GraphData {
     }
   }
 
+  /**
+   * Applies pending input changes. Channels whose input was not re-assigned
+   * since the last update are skipped — revalidating every channel and
+   * rebuilding the adjacency lists on every render() is O(points + links) of
+   * CPU work and allocation that is wasted when nothing changed.
+   */
   public update (): void {
+    // Mirrors the reference guard inside updatePoints(): a new positions array
+    // changes the point count every derived channel is validated against.
+    const pointsChanged = this.pointPositions !== this.inputPointPositions
+    // Link validation depends on the point count, so links (and everything
+    // derived from them) are also refreshed when the positions change.
+    const linksChanged = this._areLinksDirty || pointsChanged
+
     this.updatePoints()
-    this.updatePointColor()
-    this.updatePointSize()
-    this.updatePointShape()
-    this.updatePointImageIndices()
-    this.updatePointImageSizes()
 
-    this.updateLinks()
-    this.updateLinkColor()
-    this.updateLinkWidth()
-    this.updateArrows()
-    this.updateLinkStrength()
+    if (pointsChanged || this._arePointColorsDirty) this.updatePointColor()
+    if (pointsChanged || this._arePointSizesDirty) this.updatePointSize()
+    if (pointsChanged || this._arePointShapesDirty) this.updatePointShape()
+    if (pointsChanged || this._arePointImageIndicesDirty) this.updatePointImageIndices()
+    // Image sizes fall back to a copy of point sizes when not provided,
+    // so they depend on the sizes channel as well.
+    if (pointsChanged || this._arePointImageSizesDirty || this._arePointSizesDirty) this.updatePointImageSizes()
 
-    this.updateClusters()
+    if (linksChanged) this.updateLinks()
+    if (linksChanged || this._areLinkColorsDirty) this.updateLinkColor()
+    if (linksChanged || this._areLinkWidthsDirty) this.updateLinkWidth()
+    if (linksChanged || this._areLinkArrowsDirty) this.updateArrows()
+    if (linksChanged || this._isLinkStrengthDirty) this.updateLinkStrength()
 
-    this._createAdjacencyLists()
-    this._calculateDegrees()
+    if (pointsChanged || this._areClustersDirty) this.updateClusters()
+
+    if (linksChanged) {
+      this._createAdjacencyLists()
+      this._calculateDegrees()
+    }
+
+    this._arePointColorsDirty = false
+    this._arePointSizesDirty = false
+    this._arePointShapesDirty = false
+    this._arePointImageIndicesDirty = false
+    this._arePointImageSizesDirty = false
+    this._areLinksDirty = false
+    this._areLinkColorsDirty = false
+    this._areLinkWidthsDirty = false
+    this._areLinkArrowsDirty = false
+    this._isLinkStrengthDirty = false
+    this._areClustersDirty = false
   }
 
   /**
