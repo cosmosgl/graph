@@ -52,6 +52,7 @@ export class ForceManyBody extends CoreModule {
       levelTextureSize: number;
       alpha: number;
       repulsion: number;
+      cellSize: number;
     };
   }> | undefined
 
@@ -294,11 +295,13 @@ export class ForceManyBody extends CoreModule {
           levelTextureSize: 'f32',
           alpha: 'f32',
           repulsion: 'f32',
+          cellSize: 'f32',
         },
         defaultUniforms: {
           levelTextureSize: 0,
           alpha: store.alpha,
           repulsion: this.config.simulationRepulsion,
+          cellSize: 1,
         },
       },
     })
@@ -453,6 +456,9 @@ export class ForceManyBody extends CoreModule {
       clearColor: [0, 0, 0, 0],
     })
 
+    // `this.levels` is fractional for non-power-of-two space sizes, so the
+    // deepest level actually iterated is ceil(levels) - 1, not levels - 1.
+    const deepestLevel = Math.ceil(this.levels) - 1
     for (let level = 0; level < this.levels; level += 1) {
       const target = this.levelTargets.get(level)
       if (!target || target.texture.destroyed) continue
@@ -479,12 +485,13 @@ export class ForceManyBody extends CoreModule {
       this.forceCommand.draw(drawPass)
 
       // Only the deepest level uses the centermass fallback
-      if (level === this.levels - 1) {
+      if (level === deepestLevel) {
         this.forceCenterUniformStore.setUniforms({
           forceCenterUniforms: {
             levelTextureSize,
             alpha: store.alpha,
             repulsion: this.config.simulationRepulsion,
+            cellSize: store.adjustedSpaceSize / levelTextureSize,
           },
         })
 

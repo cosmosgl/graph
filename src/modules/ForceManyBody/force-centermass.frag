@@ -10,15 +10,18 @@ layout(std140) uniform forceCenterUniforms {
   float levelTextureSize;
   float alpha;
   float repulsion;
+  float cellSize;
 } forceCenter;
 
 #define levelTextureSize forceCenter.levelTextureSize
 #define repulsion forceCenter.repulsion
 #define alpha forceCenter.alpha
+#define cellSize forceCenter.cellSize
 #else
 uniform float levelTextureSize;
 uniform float alpha;
 uniform float repulsion;
+uniform float cellSize;
 #endif
 
 in vec2 textureCoords;
@@ -52,8 +55,12 @@ void main() {
 
   vec4 velocity = vec4(0.0);
 
-  // Calculate additional velocity based on the point position
-  velocity.xy += calculateAdditionalVelocity(pointPosition.xy / levelTextureSize, pointPosition.xy);
+  // Sample the centermass of the cell containing this point. The cell index is
+  // pos / cellSize; +0.5 targets the texel center (cellSize is 1 only when the
+  // space size is a power of two, so pos / levelTextureSize would read the
+  // wrong cell otherwise).
+  vec2 cellIndex = floor(pointPosition.xy / cellSize);
+  velocity.xy += calculateAdditionalVelocity((cellIndex + 0.5) / levelTextureSize, pointPosition.xy);
   // Apply random factor to the velocity
   velocity.xy += velocity.xy * random.rg;
 
