@@ -228,7 +228,49 @@ export class GraphData {
   }
 
   public updateLinks (): void {
-    this.links = this.inputLinks
+    const input = this.inputLinks
+    const pointsNumber = this.pointsNumber
+    if (input === undefined || pointsNumber === undefined) {
+      this.links = input
+      return
+    }
+
+    // Drop links whose endpoints are not valid point indices — out-of-range or
+    // non-integer values silently corrupt the adjacency lists, cause out-of-bounds
+    // writes in the link force, and reach the GPU as garbage texture coordinates.
+    const inputLinksNumber = Math.floor(input.length / 2)
+    let validLinksNumber = 0
+    for (let i = 0; i < inputLinksNumber; i++) {
+      if (this._isValidLink(input[i * 2], input[i * 2 + 1], pointsNumber)) validLinksNumber += 1
+    }
+
+    if (validLinksNumber === inputLinksNumber && input.length % 2 === 0) {
+      this.links = input
+      return
+    }
+
+    if (input.length % 2 !== 0) {
+      console.warn('cosmos.gl: The links array has an odd length; the trailing value was ignored')
+    }
+    if (validLinksNumber !== inputLinksNumber) {
+      console.warn(
+        `cosmos.gl: Dropped ${inputLinksNumber - validLinksNumber} of ${inputLinksNumber} links ` +
+        `whose endpoints are not valid point indices (expected integers in [0, ${pointsNumber}))`
+      )
+    }
+
+    const links = new Float32Array(validLinksNumber * 2)
+    let j = 0
+    for (let i = 0; i < inputLinksNumber; i++) {
+      const source = input[i * 2]
+      const target = input[i * 2 + 1]
+      if (this._isValidLink(source, target, pointsNumber)) {
+        links[j] = source as number
+        links[j + 1] = target as number
+        j += 2
+      }
+    }
+    this.links = links
   }
 
   /**
@@ -436,6 +478,13 @@ export class GraphData {
         this.targetIndexToSourceIndices[targetIndex]?.push([sourceIndex, i])
       }
     }
+  }
+
+  private _isValidLink (source: number | undefined, target: number | undefined, pointsNumber: number): boolean {
+    return source !== undefined && target !== undefined &&
+      Number.isInteger(source) && Number.isInteger(target) &&
+      source >= 0 && source < pointsNumber &&
+      target >= 0 && target < pointsNumber
   }
 
   private _calculateDegrees (): void {
