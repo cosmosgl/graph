@@ -65,8 +65,14 @@ export class ForceLink extends CoreModule {
           // Prevent division by zero
           const bias = degreeSum !== 0 ? degree / degreeSum : 0.5
           const minDegree = Math.min(degree, connectedDegree)
-          // Prevent division by zero
-          let strength = data.linkStrength?.[initialLinkIndex] ?? (1 / Math.max(minDegree, 1))
+          // NaN (and negative/non-finite) strength values slip through `??`;
+          // Math.sqrt would then write NaN into the strength texture, and one
+          // poisoned link makes both endpoints' positions NaN. Fall back to
+          // the degree-based default (which also prevents division by zero).
+          let strength = data.linkStrength?.[initialLinkIndex]
+          if (strength === undefined || !Number.isFinite(strength) || strength < 0) {
+            strength = 1 / Math.max(minDegree, 1)
+          }
           strength = Math.sqrt(strength)
           linkBiasAndStrengthState[linkIndex * 4 + 0] = bias
           linkBiasAndStrengthState[linkIndex * 4 + 1] = strength

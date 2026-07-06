@@ -182,6 +182,13 @@ export class GraphData {
   }
 
   public updatePoints (): void {
+    if (this.inputPointPositions && this.inputPointPositions.length % 2 !== 0) {
+      console.warn('cosmos.gl: The point positions array has an odd length; the trailing value was ignored')
+      // Normalize the stored input (a view, no copy) so later updates compare
+      // equal and a fractional point count never reaches derived array
+      // allocations — new Array(n) throws a RangeError for fractional n.
+      this.inputPointPositions = this.inputPointPositions.subarray(0, this.inputPointPositions.length - 1)
+    }
     // Don't sync the same positions twice — it breaks animations when points are added or removed.
     if (this.pointPositions === this.inputPointPositions) return
 
@@ -443,6 +450,7 @@ export class GraphData {
   public updateLinkStrength (): void {
     if (this.linksNumber === undefined) {
       this.linkStrength = undefined
+      return
     }
 
     if (this.inputLinkStrength === undefined || this.inputLinkStrength.length !== this.linksNumber) {
