@@ -40,7 +40,9 @@ const float MAX_LEVELS_NUM = 14.0;
 vec2 calculateAdditionalVelocity (vec2 ij, vec2 pp) {
   vec2 add = vec2(0.0);
   vec4 centermass = texture(levelFbo, ij);
-  if (centermass.r > 0.0 && centermass.g > 0.0 && centermass.b > 0.0) {
+  // b is the point count — the only reliable occupancy signal. r/g are
+  // coordinate sums, which are legitimately 0 for points on the space boundary.
+  if (centermass.b > 0.0) {
     vec2 centermassPosition = vec2(centermass.rg / centermass.b);
     vec2 distVector = pp - centermassPosition;
     float l = dot(distVector, distVector);

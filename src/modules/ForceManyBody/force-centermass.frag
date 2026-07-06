@@ -31,7 +31,9 @@ out vec4 fragColor;
 vec2 calculateAdditionalVelocity (vec2 ij, vec2 pp) {
   vec2 add = vec2(0.0);
   vec4 centermass = texture(levelFbo, ij);
-  if (centermass.r > 0.0 && centermass.g > 0.0 && centermass.b > 0.0) {
+  // b is the point count — the only reliable occupancy signal. r/g are
+  // coordinate sums, which are legitimately 0 for points on the space boundary.
+  if (centermass.b > 0.0) {
     vec2 centermassPosition = vec2(centermass.rg / centermass.b);
     vec2 distVector = pp - centermassPosition;
     float l = dot(distVector, distVector);
@@ -59,7 +61,9 @@ void main() {
   // pos / cellSize; +0.5 targets the texel center (cellSize is 1 only when the
   // space size is a power of two, so pos / levelTextureSize would read the
   // wrong cell otherwise).
-  vec2 cellIndex = floor(pointPosition.xy / cellSize);
+  // Clamp mirrors the binning in calculate-level.vert so a point on the far
+  // space boundary reads the cell it was actually accumulated into.
+  vec2 cellIndex = clamp(floor(pointPosition.xy / cellSize), 0.0, levelTextureSize - 1.0);
   velocity.xy += calculateAdditionalVelocity((cellIndex + 0.5) / levelTextureSize, pointPosition.xy);
   // Apply random factor to the velocity
   velocity.xy += velocity.xy * random.rg;
