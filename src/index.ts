@@ -28,6 +28,13 @@ import { Drag } from '@/graph/modules/Drag'
 const LONG_PRESS_DURATION_MS = 500
 const LONG_PRESS_MOVE_THRESHOLD_PX = 10
 
+/**
+ * Monotonic counter so each Graph instance gets its own d3 event namespace on
+ * `document` — with a shared namespace, instances replace each other's
+ * handlers and one instance's destroy() removes another's.
+ */
+let graphInstanceCounter = 0
+
 export class Graph {
   /** Current graph configuration. Always fully populated with default values for any unset properties. */
   public config: GraphConfigInterface = createDefaultConfig()
@@ -67,6 +74,7 @@ export class Graph {
    */
   private _shouldSuppressNextClick = false
 
+  private readonly _instanceId = graphInstanceCounter++
   private store = new Store()
   private points: Points | undefined
   private lines: Lines | undefined
@@ -306,8 +314,8 @@ export class Graph {
         .on('contextmenu.cosmos', this.onContextMenu.bind(this))
 
       select(document)
-        .on('keydown.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
-        .on('keyup.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
+        .on(`keydown.cosmos-${this._instanceId}`, (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
+        .on(`keyup.cosmos-${this._instanceId}`, (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
 
       this.zoomInstance.behavior
         .on('start.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => { this.currentEvent = e })
@@ -376,7 +384,7 @@ export class Graph {
 
       this.store.updateLinkHoveringEnabled(this.config)
 
-      if (this.config.showFPSMonitor) this.fpsMonitor = new FPSMonitor(this.canvas)
+      if (this.config.showFPSMonitor) this.fpsMonitor = new FPSMonitor(this.canvas, this.store.div)
 
       if (this.config.randomSeed !== undefined) this.store.addRandomSeed(this.config.randomSeed)
 
@@ -1374,7 +1382,7 @@ export class Graph {
         .on('.zoom', null)
     }
 
-    select(document).on('.cosmos', null)
+    select(document).on(`.cosmos-${this._instanceId}`, null)
 
     if (this.zoomInstance?.behavior) {
       this.zoomInstance.behavior
@@ -1427,8 +1435,6 @@ export class Graph {
     if (this.attributionDivElement && this.attributionDivElement.parentNode) {
       this.attributionDivElement.parentNode.removeChild(this.attributionDivElement)
     }
-
-    document.getElementById('gl-bench-style')?.remove()
 
     this.canvasD3Selection = undefined
     this.attributionDivElement = undefined
@@ -1630,7 +1636,7 @@ export class Graph {
     }
     if (prevConfig.showFPSMonitor !== this.config.showFPSMonitor) {
       if (this.config.showFPSMonitor) {
-        this.fpsMonitor = new FPSMonitor(this.canvas)
+        this.fpsMonitor = new FPSMonitor(this.canvas, this.store.div)
       } else {
         this.fpsMonitor?.destroy()
         this.fpsMonitor = undefined
