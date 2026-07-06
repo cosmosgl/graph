@@ -28,8 +28,8 @@ in vec2 pointIndices;
 out vec4 cellData; // xy = position, z = size, w = count (1.0)
 
 void main() {
-  vec4 pointPosition = texture(positionsTexture, pointIndices / pointsTextureSize);
-  vec4 pointSize = texture(sizeTexture, pointIndices / pointsTextureSize);
+  vec4 pointPosition = texture(positionsTexture, (pointIndices + 0.5) / pointsTextureSize);
+  vec4 pointSize = texture(sizeTexture, (pointIndices + 0.5) / pointsTextureSize);
 
   // Output: position sum, size sum, count
   cellData = vec4(pointPosition.xy, pointSize.r, 1.0);

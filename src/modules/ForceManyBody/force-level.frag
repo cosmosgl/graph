@@ -110,28 +110,28 @@ void main() {
       float m = top + cellSize * n_top + cellSize * i;
 
       if (n < (left + n_left * cellSize) && m < bottom) {
-        velocity.xy += calculateAdditionalVelocity(vec2(n / cellSize, m / cellSize) / levelTextureSize, pointPosition.xy);
+        velocity.xy += calculateAdditionalVelocity((vec2(n, m) / cellSize + 0.5) / levelTextureSize, pointPosition.xy);
       }
 
       n = left + cellSize * i;
       m = top + cellSize * j;
 
       if (n < (right - n_right * cellSize) && m < (top + n_top * cellSize)) {
-        velocity.xy += calculateAdditionalVelocity(vec2(n / cellSize, m / cellSize) / levelTextureSize, pointPosition.xy);
+        velocity.xy += calculateAdditionalVelocity((vec2(n, m) / cellSize + 0.5) / levelTextureSize, pointPosition.xy);
       }
 
       n = right - n_right * cellSize + cellSize * j;
       m = top + cellSize * i;
 
       if (n < right && m < (bottom - n_bottom * cellSize)) {
-        velocity.xy += calculateAdditionalVelocity(vec2(n / cellSize, m / cellSize) / levelTextureSize, pointPosition.xy);
+        velocity.xy += calculateAdditionalVelocity((vec2(n, m) / cellSize + 0.5) / levelTextureSize, pointPosition.xy);
       }
 
       n = left + n_left * cellSize + cellSize * i;
       m = bottom - n_bottom * cellSize + cellSize * j;
 
       if (n < right && m < bottom) {
-        velocity.xy += calculateAdditionalVelocity(vec2(n / cellSize, m / cellSize) / levelTextureSize, pointPosition.xy);
+        velocity.xy += calculateAdditionalVelocity((vec2(n, m) / cellSize + 0.5) / levelTextureSize, pointPosition.xy);
       }
     }
   }
