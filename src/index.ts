@@ -1550,6 +1550,9 @@ export class Graph {
     if (prevConfig.pointDefaultSize !== this.config.pointDefaultSize) {
       this.graph.updatePointSize()
       this.points?.updateSize()
+      // Image sizes default to a copy of point sizes, so they follow this change.
+      this.graph.updatePointImageSizes()
+      this.points?.updateImageSizes()
     }
     if (prevConfig.pointDefaultShape !== this.config.pointDefaultShape) {
       this.graph.updatePointShape()
@@ -1644,6 +1647,12 @@ export class Graph {
     }
     if (prevConfig.enableZoom !== this.config.enableZoom || prevConfig.enableDrag !== this.config.enableDrag) {
       this.updateZoomDragBehaviors()
+    }
+    if (prevConfig.pointSamplingDistance !== this.config.pointSamplingDistance) {
+      this.points?.updateSampledPointsGrid()
+    }
+    if (prevConfig.linkSamplingDistance !== this.config.linkSamplingDistance) {
+      this.lines?.updateSampledLinksGrid()
     }
 
     if (prevConfig.onLinkClick !== this.config.onLinkClick ||

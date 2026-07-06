@@ -10,6 +10,17 @@ export class Zoom {
   public eventTransform = zoomIdentity
   public behavior = zoom<HTMLCanvasElement, undefined>()
     .scaleExtent([0.001, Infinity])
+    .filter((event: MouseEvent | WheelEvent | TouchEvent): boolean => {
+      // With zooming disabled only `wheel.zoom` used to be detached, leaving
+      // double-click and pinch zoom active. Panning must keep working, so
+      // block just the scale-changing gestures here instead.
+      if (!this.config.enableZoom) {
+        if (event.type === 'wheel' || event.type === 'dblclick') return false
+        if ('touches' in event && event.touches.length > 1) return false
+      }
+      // Mirrors d3-zoom's default filter.
+      return (!event.ctrlKey || event.type === 'wheel') && ((event as MouseEvent).button ?? 0) === 0
+    })
     .on('start', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
       this.isRunning = true
       // User-driven zooms (scroll, pinch) clear any programmatic override
