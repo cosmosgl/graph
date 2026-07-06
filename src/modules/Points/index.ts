@@ -2630,10 +2630,11 @@ export class Points extends CoreModule {
     // For sparse datasets: use 10% of space to cluster points closer
       : spaceSize * 0.1
 
-    // Calculate uniform scale factor to fit data within effective space
-    const scaleFactor = effectiveSpaceSize / range
+    // A zero range (single point, or all points sharing one position) would make
+    // scaleFactor Infinity and every position NaN — translate to the space center instead
+    const scaleFactor = range > 0 ? effectiveSpaceSize / range : 1
     // Shift to center the scaled data within the full [0, spaceSize] space
-    const centerOffset = (spaceSize - effectiveSpaceSize) / 2
+    const centerOffset = range > 0 ? (spaceSize - effectiveSpaceSize) / 2 : spaceSize / 2
     // Pad the shorter axis so both axes are centered within the square bounding box
     const offsetX = ((range - w) / 2) * scaleFactor + centerOffset
     const offsetY = ((range - h) / 2) * scaleFactor + centerOffset
