@@ -3,18 +3,22 @@ import { parquetReadObjects } from 'hyparquet'
 import { compressors } from 'hyparquet-compressors'
 
 /**
- * The Silk Road Bitcoin transaction network, rendered in 3D.
+ * The Silk Road Bitcoin transaction network, with a 2D/3D toggle and a pause control.
  *
  * Loads `silkroad-184R7cFG-4lv.parquet` straight from the network and parses it in the browser with
  * hyparquet (https://github.com/hyparam/hyparquet; the file's data pages are GZIP-compressed, so
  * hyparquet-compressors supplies that codec). Each row is a transaction `source -> target` (Bitcoin
  * addresses) with a `value` in satoshis — ~100K transactions between ~26K addresses, with no
- * coordinates, so the 3D GPU force simulation lays the flow network out live. Every address is sized
- * and colored by the total value flowing through it, so the major hubs (markets, mixers, big wallets)
- * stand out as bright gold nodes. Drag to orbit, scroll to zoom.
+ * coordinates, so the GPU force simulation lays the flow network out live. Every address is sized and
+ * colored by the total value flowing through it, so the major hubs stand out as bright gold nodes.
+ *
+ * The "2D / 3D" buttons switch the renderer (rebuilding the graph so it re-lays-out in the chosen
+ * dimension) and "Pause"/"Resume" freezes and resumes the simulation. Drag to orbit (3D) or pan (2D),
+ * scroll to zoom.
  */
 const PARQUET_URL = 'https://d.cosmograph.app/silkroad-184R7cFG-4lv.parquet'
 const SATOSHIS_PER_BTC = 1e8
+const SPACE_SIZE = 4096
 
 export const silkroadTransactions3d = (): { graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
   const div = document.createElement('div')
@@ -27,6 +31,37 @@ export const silkroadTransactions3d = (): { graph: Graph; div: HTMLDivElement; d
   graphDiv.style.inset = '0'
   div.appendChild(graphDiv)
 
+  // ---- Controls (top-left overlay) --------------------------------------------------------------
+  const controls = document.createElement('div')
+  controls.style.cssText = `position:absolute;top:12px;left:12px;z-index:2;display:none;gap:8px;
+    align-items:center;font:600 12px -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;`
+
+  const mkButton = (label: string): HTMLButtonElement => {
+    const b = document.createElement('button')
+    b.textContent = label
+    b.style.cssText = `appearance:none;border:none;color:#e6ebff;background:transparent;
+      padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit;`
+    return b
+  }
+  const panel = (): HTMLDivElement => {
+    const p = document.createElement('div')
+    p.style.cssText = `display:flex;gap:2px;background:rgba(18,20,28,0.72);border:1px solid rgba(255,255,255,0.12);
+      border-radius:8px;padding:3px;backdrop-filter:blur(6px);`
+    return p
+  }
+
+  const modeGroup = panel()
+  const btn2d = mkButton('2D')
+  const btn3d = mkButton('3D')
+  modeGroup.append(btn2d, btn3d)
+
+  const pauseGroup = panel()
+  const btnPause = mkButton('Pause')
+  pauseGroup.append(btnPause)
+
+  controls.append(modeGroup, pauseGroup)
+  div.appendChild(controls)
+
   // Loading overlay (removed once the graph is built).
   const status = document.createElement('div')
   status.style.cssText = `position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);z-index:1;
@@ -36,31 +71,92 @@ export const silkroadTransactions3d = (): { graph: Graph; div: HTMLDivElement; d
   div.appendChild(status)
 
   const config: GraphConfig = {
-    spaceSize: 4096,
+    spaceSize: SPACE_SIZE,
     backgroundColor: '#0a0a14',
-    pointDefaultSize: 2,
+    pointDefaultSize: 1,
     linkDefaultWidth: 0.15,
     linkDefaultColor: '#8a6a30',
-    linkOpacity: 0.22,
+    linkOpacity: 0.5,
     curvedLinks: false,
     enableSimulation: true,
-    simulationGravity: 0,
+    simulationGravity: 0.4,
     simulationRepulsion: 1.5,
-    simulationLinkSpring: 1.0,
+    simulationLinkSpring: 0.5,
     simulationLinkDistance: 10,
     simulationFriction: 0.85,
-    simulationDecay: 100000,
+    simulationDecay: 1000,
     cameraFov: 55,
     fitViewOnInit: false,
-    enableDrag: false, // orbit-only exploration of the whole flow network
+    enableDrag: false,
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
   }
 
-  const graph = new Graph(graphDiv, config)
+  // Graph data (filled once, after the parquet is parsed). Positions are kept for both dimensions so
+  // switching modes re-lays-out from a fresh layout in that dimension.
+  let links = new Float32Array(0)
+  let colors = new Float32Array(0)
+  let sizes = new Float32Array(0)
+  let positions2d = new Float32Array(0)
+  let positions3d = new Float32Array(0)
+  let dataReady = false
+
+  let mode: '2d' | '3d' = '3d'
+  let paused = false
+  let destroyed = false
+  let timeouts: ReturnType<typeof setTimeout>[] = []
+
+  // A graph always exists (created empty up front so we can render immediately and return a handle).
+  let graph = new Graph(graphDiv, config)
   graph.render()
 
-  let destroyed = false
-  const timeouts: ReturnType<typeof setTimeout>[] = []
+  const scheduleRefits = (): void => {
+    graph.fitView(1000)
+    for (const delay of [3000, 8000]) {
+      timeouts.push(setTimeout(() => { if (!destroyed) graph.fitView(1000) }, delay))
+    }
+  }
+
+  // Push the parsed data into the current graph (used for the first build and after a mode switch).
+  const applyData = (): void => {
+    if (mode === '3d') graph.setPointPositions3D(positions3d)
+    else graph.setPointPositions(positions2d)
+    graph.setPointColors(colors)
+    graph.setPointSizes(sizes)
+    graph.setLinks(links)
+    graph.render()
+    if (paused) graph.pause()
+    scheduleRefits()
+  }
+
+  const updateControls = (): void => {
+    btn2d.style.background = mode === '2d' ? 'rgba(255,255,255,0.16)' : 'transparent'
+    btn3d.style.background = mode === '3d' ? 'rgba(255,255,255,0.16)' : 'transparent'
+    btnPause.textContent = paused ? 'Resume' : 'Pause'
+  }
+
+  const setMode = (next: '2d' | '3d'): void => {
+    if (!dataReady || next === mode) return
+    mode = next
+    // Rebuild the graph so the renderer, camera/interaction and layout switch cleanly to the new
+    // dimension (avoids animating a position transition across the 2D↔3D coordinate change).
+    for (const t of timeouts) clearTimeout(t)
+    timeouts = []
+    graph.destroy()
+    graph = new Graph(graphDiv, config)
+    graph.render()
+    applyData()
+    updateControls()
+  }
+
+  btn2d.addEventListener('click', () => setMode('2d'))
+  btn3d.addEventListener('click', () => setMode('3d'))
+  btnPause.addEventListener('click', () => {
+    if (!dataReady) return
+    paused = !paused
+    if (paused) graph.pause()
+    else graph.unpause()
+    updateControls()
+  })
 
   const load = async (): Promise<void> => {
     // 1. Fetch and parse the parquet file with hyparquet (only the columns we need).
@@ -79,7 +175,7 @@ export const silkroadTransactions3d = (): { graph: Graph; div: HTMLDivElement; d
     //    value (satoshis) flowing through each address (in + out).
     status.textContent = 'Building graph…'
     const idToIndex = new Map<string, number>()
-    const links = new Float32Array(rows.length * 2)
+    links = new Float32Array(rows.length * 2)
     const throughput: number[] = []
     let nodeCount = 0
     const indexOf = (id: string): number => {
@@ -102,54 +198,53 @@ export const silkroadTransactions3d = (): { graph: Graph; div: HTMLDivElement; d
       throughput[target] = (throughput[target] ?? 0) + value
     }
 
-    // 3. Positions (a loose sphere so the layout is roughly framed from the start), plus per-node color
-    //    and size scaled by log(total value) — the biggest money hubs become large, bright-gold nodes.
-    const spaceSize = config.spaceSize ?? 4096
-    const center = spaceSize / 2
-    const radius = spaceSize * 0.4
-    // Rank addresses by total value flowing through them and drive size/color off the percentile (with
-    // a gamma curve). Every address moves a large satoshi amount, so an absolute scale washes out;
-    // ranking guarantees the biggest hubs read as large bright nodes while the long tail stays small.
+    // 3. Rank addresses by total value flowing through them and drive size/color off the percentile
+    //    (with a gamma curve). Every address moves a large satoshi amount, so an absolute scale washes
+    //    out; ranking makes the biggest hubs read as large bright nodes while the long tail stays small.
     const order = Array.from({ length: nodeCount }, (_, i) => i)
       .sort((a, b) => (throughput[a] ?? 0) - (throughput[b] ?? 0))
     const percentile = new Float64Array(nodeCount)
     for (let r = 0; r < nodeCount; r++) percentile[order[r] as number] = nodeCount > 1 ? r / (nodeCount - 1) : 0
 
-    const positions = new Float32Array(nodeCount * 3)
-    const colors = new Float32Array(nodeCount * 4)
-    const sizes = new Float32Array(nodeCount)
+    // 4. Initial positions for both dimensions (loose disc in 2D, loose sphere in 3D) plus per-node
+    //    color and size. Colors/sizes are dimension-independent, so they're computed once.
+    const center = SPACE_SIZE / 2
+    const radius = SPACE_SIZE * 0.4
+    positions2d = new Float32Array(nodeCount * 2)
+    positions3d = new Float32Array(nodeCount * 3)
+    colors = new Float32Array(nodeCount * 4)
+    sizes = new Float32Array(nodeCount)
     for (let i = 0; i < nodeCount; i++) {
+      const angle = Math.random() * Math.PI * 2
+      const rad = radius * Math.sqrt(Math.random())
+      positions2d[i * 2] = center + rad * Math.cos(angle)
+      positions2d[i * 2 + 1] = center + rad * Math.sin(angle)
+
       const u = Math.random() * 2 - 1
-      const phi = Math.random() * Math.PI * 2
-      const r = radius * Math.cbrt(Math.random())
+      const r3 = radius * Math.cbrt(Math.random())
       const s = Math.sqrt(1 - u * u)
-      positions[i * 3] = center + r * s * Math.cos(phi)
-      positions[i * 3 + 1] = center + r * s * Math.sin(phi)
-      positions[i * 3 + 2] = center + r * u
+      positions3d[i * 3] = center + r3 * s * Math.cos(angle)
+      positions3d[i * 3 + 1] = center + r3 * s * Math.sin(angle)
+      positions3d[i * 3 + 2] = center + r3 * u
 
       const t = (percentile[i] ?? 0) ** 3 // percentile, gamma-curved so only the top hubs read bright/large
       colors[i * 4] = 0.24 + t * 0.76 // dim slate → warm gold
       colors[i * 4 + 1] = 0.30 + t * 0.52
       colors[i * 4 + 2] = 0.46 - t * 0.22
       colors[i * 4 + 3] = 0.9
-      sizes[i] = 1.2 + t * 13
+      sizes[i] = 2 + t
     }
 
-    // 4. Hand the data to the engine and frame it (refit as the layout expands and settles).
-    graph.setPointPositions3d(positions)
-    graph.setPointColors(colors)
-    graph.setPointSizes(sizes)
-    graph.setLinks(links)
-    graph.render()
-    graph.fitView(1000)
-    for (const delay of [3000, 8000]) {
-      timeouts.push(setTimeout(() => { if (!destroyed) graph.fitView(1000) }, delay))
-    }
+    // 5. First build on the existing (empty) graph, then reveal the controls.
+    dataReady = true
+    applyData()
+    status.remove()
+    controls.style.display = 'flex'
+    updateControls()
 
     const totalBtc = Math.round(throughput.reduce((a, b) => a + b, 0) / 2 / SATOSHIS_PER_BTC)
     console.info(`Silk Road graph: ${nodeCount.toLocaleString()} addresses, ` +
       `${rows.length.toLocaleString()} transactions, ${totalBtc.toLocaleString()} BTC moved`)
-    status.remove()
   }
 
   load().catch((error: unknown) => {
@@ -159,7 +254,7 @@ export const silkroadTransactions3d = (): { graph: Graph; div: HTMLDivElement; d
 
   const destroy = (): void => {
     destroyed = true
-    timeouts.forEach(clearTimeout)
+    for (const t of timeouts) clearTimeout(t)
     graph.destroy()
   }
 
