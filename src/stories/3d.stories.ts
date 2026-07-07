@@ -70,7 +70,7 @@ export const Performance3D: Story = {
 
 export const PerformanceSimulation3D: Story = {
   ...createStory(performanceSimulation3D),
-  name: '20k Points Simulation 3D',
+  name: '100k Points Simulation 3D',
   parameters: {
     sourceCode: [
       { name: 'Story', code: performanceSimulation3DStoryRaw },

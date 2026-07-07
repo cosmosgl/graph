@@ -340,6 +340,7 @@ export interface GraphConfigInterface {
   simulationRepulsion: number;
   /**
    * Decreases / increases the detalization of the Many-Body force calculations.
+   * Not used in 3D mode: the 3D octree samples a fixed neighborhood shell.
    * Default value: `1.15`
    */
   simulationRepulsionTheta: number;

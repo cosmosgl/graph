@@ -497,10 +497,11 @@ export class Graph {
    * @param {Float32Array} pointPositions - A Float32Array representing the positions of points in the format [x1, y1, z1, x2, y2, z2, ..., xn, yn, zn],
    * where `n` is the index of the point.
    * Example: `new Float32Array([1, 2, 3, 4, 5, 6])` sets the first point to (1, 2, 3) and the second point to (4, 5, 6).
-   * @note The force simulation runs in 3D (repulsion uses an exact O(n²) pass — practical up to
-   * roughly 10–20k points), and points can be dragged (in the camera-facing plane of their depth).
-   * Area selection, collision, clusters, and right-click repulsion are disabled in 3D mode.
-   * Calling `setPointPositions` switches the instance back to 2D mode.
+   * @note The force simulation runs in 3D: many-body repulsion uses an octree approximation
+   * above ~4k points (an exact pairwise pass below), and points can be dragged (in the
+   * camera-facing plane of their depth). Area selection, collision, clusters, and right-click
+   * repulsion are disabled in 3D mode. Calling `setPointPositions` switches the instance back
+   * to 2D mode.
    * @note If `transitionDuration > 0`, the positions animate from the current layout (z animates from `0`
    * when switching from 2D mode).
    */
@@ -1813,6 +1814,9 @@ export class Graph {
     }
     if (prevConfig.spaceSize !== this.config.spaceSize) {
       this.store.adjustSpaceSize(this.config.spaceSize, this.device?.limits.maxTextureDimension2D ?? 4096)
+      // The many-body level textures are sized from the space size; without a
+      // rebuild its run() staleness guard would silently disable the force.
+      this.isForceManyBodyUpdateNeeded = true
       this.resizeCanvas(true)
       this.update(this.store.isSimulationRunning ? this.store.alpha : 0)
     }

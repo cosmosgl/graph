@@ -1,7 +1,7 @@
 import { Graph, type GraphConfig } from '@cosmos.gl/graph'
 import { generateClusteredGraph3D } from '../force-layout/data-gen'
 
-const POINTS_NUMBER = 20000
+const POINTS_NUMBER = 100000
 const CLUSTERS_NUMBER = 10
 
 export const performanceSimulation3D = (): { graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
@@ -23,8 +23,9 @@ export const performanceSimulation3D = (): { graph: Graph; div: HTMLDivElement; 
     fitViewDelay: 1000, // let the layout inflate before framing it
     transitionDuration: 0,
     showFPSMonitor: true, // simulation-performance stress test — watch the frame rate
-    // ~20k points is around the practical ceiling of the exact O(n²) 3D repulsion
-    // pass (each tick computes every point pair on the GPU).
+    // Above ~4k points the 3D many-body force uses its octree approximation,
+    // which keeps a live 100k-point layout interactive (the exact O(n²) pass
+    // below the threshold would be ~100× slower here).
     enableSimulation: true,
     simulationGravity: 0.3,
     simulationRepulsion: 1,

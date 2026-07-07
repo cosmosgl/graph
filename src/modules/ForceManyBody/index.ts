@@ -4,16 +4,40 @@ import { CoreModule } from '@/graph/modules/core-module'
 
 import calculateLevelFrag from '@/graph/modules/ForceManyBody/calculate-level.frag?raw'
 import calculateLevelVert from '@/graph/modules/ForceManyBody/calculate-level.vert?raw'
+import calculateLevel3DVert from '@/graph/modules/ForceManyBody/calculate-level-3d.vert?raw'
 import forceFrag from '@/graph/modules/ForceManyBody/force-level.frag?raw'
+import forceLevel3DFrag from '@/graph/modules/ForceManyBody/force-level-3d.frag?raw'
 import forceCenterFrag from '@/graph/modules/ForceManyBody/force-centermass.frag?raw'
+import forceCentermass3DFrag from '@/graph/modules/ForceManyBody/force-centermass-3d.frag?raw'
 import forceBruteForce3DFrag from '@/graph/modules/ForceManyBody/force-many-body-3d.frag?raw'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
+/**
+ * Point count at or below which 3D repulsion uses the exact O(n²) brute-force pass.
+ * Above it, the octree approximation takes over (per-tick cost drops from O(n²)
+ * to roughly O(n log n) at a small accuracy cost).
+ */
+const BRUTE_FORCE_3D_MAX_POINTS = 4096
+
+/** Finest octree grid resolution per axis (128³ tiles into a 1536×1408 texture ≈ 35 MB). */
+const MAX_LEVEL_GRID_SIZE_3D = 128
+
 type LevelTarget = {
   texture: Texture;
   fbo: Framebuffer;
+}
+
+type LevelTarget3D = {
+  texture: Texture;
+  fbo: Framebuffer;
+  /** Cells per axis of the 3D grid this level represents. */
+  gridSize: number;
+  /** z-slice tiles per texture row. */
+  tilesPerRow: number;
+  width: number;
+  height: number;
 }
 
 export class ForceManyBody extends CoreModule {
@@ -21,15 +45,22 @@ export class ForceManyBody extends CoreModule {
   private pointIndices: Buffer | undefined
   private levels = 0
   private levelTargets = new Map<number, LevelTarget>()
+  /** Octree level count in 3D mode; `0` while the brute-force path is active. */
+  private levels3D = 0
+  private levelTargets3D = new Map<number, LevelTarget3D>()
 
   private calculateLevelsCommand: Model | undefined
   private forceCommand: Model | undefined
   private forceFromItsOwnCentermassCommand: Model | undefined
   /**
-   * Exact O(n²) repulsion used in 3D mode — the 2D quadtree approximation
-   * (levels + ring sampling) is a planar construct and is skipped in 3D.
+   * Exact O(n²) repulsion used in 3D mode for graphs up to
+   * `BRUTE_FORCE_3D_MAX_POINTS` points (and as a fallback when the octree
+   * targets are unavailable). Larger graphs use the octree passes below.
    */
   private bruteForce3DCommand: Model | undefined
+  private calculateLevels3DCommand: Model | undefined
+  private forceLevel3DCommand: Model | undefined
+  private forceCentermass3DCommand: Model | undefined
 
   private forceVertexCoordBuffer: Buffer | undefined
 
@@ -70,8 +101,41 @@ export class ForceManyBody extends CoreModule {
     };
   }> | undefined
 
+  private calculateLevels3DUniformStore: UniformStore<{
+    calculateLevels3DUniforms: {
+      pointsTextureSize: number;
+      levelGridSize: number;
+      cellSize: number;
+      tilesPerRow: number;
+      levelTextureWidth: number;
+      levelTextureHeight: number;
+    };
+  }> | undefined
+
+  private forceLevel3DUniformStore: UniformStore<{
+    forceLevel3DUniforms: {
+      levelGridSize: number;
+      cellSize: number;
+      tilesPerRow: number;
+      isFirstLevel: number;
+      alpha: number;
+      repulsion: number;
+    };
+  }> | undefined
+
+  private forceCentermass3DUniformStore: UniformStore<{
+    forceCentermass3DUniforms: {
+      levelGridSize: number;
+      cellSize: number;
+      tilesPerRow: number;
+      alpha: number;
+      repulsion: number;
+    };
+  }> | undefined
+
   private previousPointsTextureSize: number | undefined
   private previousSpaceSize: number | undefined
+  private previousPointsNumber: number | undefined
 
   public create (): void {
     const { device, store } = this
@@ -80,13 +144,18 @@ export class ForceManyBody extends CoreModule {
     this.levels = Math.log2(store.adjustedSpaceSize)
 
     if (store.is3D) {
-      // 3D repulsion is brute force — the quadtree levels are not used. Free them
-      // so a 2D → 3D switch releases their GPU memory.
+      // The 2D quadtree levels are not used in 3D — free them so a 2D → 3D switch
+      // releases their GPU memory, and allocate the octree levels instead.
       for (const target of this.levelTargets.values()) {
         if (!target.fbo.destroyed) target.fbo.destroy()
         if (!target.texture.destroyed) target.texture.destroy()
       }
       this.levelTargets.clear()
+      this.createLevels3D()
+    } else {
+      // Symmetrically, free the octree levels when returning to 2D.
+      this.destroyLevelTargets3D()
+      this.levels3D = 0
     }
 
     // Allocate quadtree levels (2D only)
@@ -194,10 +263,14 @@ export class ForceManyBody extends CoreModule {
       this.calculateLevelsCommand?.setAttributes({
         pointIndices: this.pointIndices,
       })
+      this.calculateLevels3DCommand?.setAttributes({
+        pointIndices: this.pointIndices,
+      })
     }
 
     this.previousPointsTextureSize = store.pointsTextureSize
     this.previousSpaceSize = store.adjustedSpaceSize
+    this.previousPointsNumber = this.data.pointsNumber
   }
 
   public initPrograms (): void {
@@ -398,9 +471,169 @@ export class ForceManyBody extends CoreModule {
         },
         bindings: {
           forceBruteForceUniforms: this.bruteForce3DUniformStore.getManagedUniformBuffer(device, 'forceBruteForceUniforms'),
-          // All texture bindings will be set dynamically in drawForces3D() method
+          // All texture bindings will be set dynamically in drawForcesBruteForce3D() method
         },
         parameters: {
+          depthWriteEnabled: false,
+          depthCompare: 'always',
+        },
+      })
+
+      // Octree aggregation command (point list, additive blend — mirrors calculateLevelsCommand)
+      this.calculateLevels3DUniformStore ||= new UniformStore({
+        calculateLevels3DUniforms: {
+          uniformTypes: {
+            // Order MUST match shader declaration order (std140 layout)
+            pointsTextureSize: 'f32',
+            levelGridSize: 'f32',
+            cellSize: 'f32',
+            tilesPerRow: 'f32',
+            levelTextureWidth: 'f32',
+            levelTextureHeight: 'f32',
+          },
+          defaultUniforms: {
+            pointsTextureSize: store.pointsTextureSize,
+            levelGridSize: 0,
+            cellSize: 0,
+            tilesPerRow: 0,
+            levelTextureWidth: 0,
+            levelTextureHeight: 0,
+          },
+        },
+      })
+
+      this.calculateLevels3DCommand ||= new Model(device, {
+        fs: calculateLevelFrag,
+        vs: calculateLevel3DVert,
+        topology: 'point-list',
+        vertexCount: data.pointsNumber,
+        attributes: {
+          ...this.pointIndices && { pointIndices: this.pointIndices },
+        },
+        bufferLayout: [
+          { name: 'pointIndices', format: 'float32x2' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
+        },
+        bindings: {
+          calculateLevels3DUniforms: this.calculateLevels3DUniformStore.getManagedUniformBuffer(device, 'calculateLevels3DUniforms'),
+          // All texture bindings will be set dynamically in drawLevels3D() method
+        },
+        parameters: {
+          blend: true,
+          blendColorOperation: 'add',
+          blendColorSrcFactor: 'one',
+          blendColorDstFactor: 'one',
+          blendAlphaOperation: 'add',
+          blendAlphaSrcFactor: 'one',
+          blendAlphaDstFactor: 'one',
+          depthWriteEnabled: false,
+          depthCompare: 'always',
+        },
+      })
+
+      // Octree per-level force command (fullscreen quad, additive into velocityFbo)
+      this.forceLevel3DUniformStore ||= new UniformStore({
+        forceLevel3DUniforms: {
+          uniformTypes: {
+            // Order MUST match shader declaration order (std140 layout)
+            levelGridSize: 'f32',
+            cellSize: 'f32',
+            tilesPerRow: 'f32',
+            isFirstLevel: 'f32',
+            alpha: 'f32',
+            repulsion: 'f32',
+          },
+          defaultUniforms: {
+            levelGridSize: 0,
+            cellSize: 0,
+            tilesPerRow: 0,
+            isFirstLevel: 0,
+            alpha: store.alpha,
+            repulsion: this.config.simulationRepulsion,
+          },
+        },
+      })
+
+      this.forceLevel3DCommand ||= new Model(device, {
+        fs: forceLevel3DFrag,
+        vs: updateVert,
+        topology: 'triangle-strip',
+        vertexCount: 4,
+        attributes: {
+          vertexCoord: this.forceVertexCoordBuffer,
+        },
+        bufferLayout: [
+          { name: 'vertexCoord', format: 'float32x2' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
+        },
+        bindings: {
+          forceLevel3DUniforms: this.forceLevel3DUniformStore.getManagedUniformBuffer(device, 'forceLevel3DUniforms'),
+          // All texture bindings will be set dynamically in drawForcesOctree3D() method
+        },
+        parameters: {
+          blend: true,
+          blendColorOperation: 'add',
+          blendColorSrcFactor: 'one',
+          blendColorDstFactor: 'one',
+          blendAlphaOperation: 'add',
+          blendAlphaSrcFactor: 'one',
+          blendAlphaDstFactor: 'one',
+          depthWriteEnabled: false,
+          depthCompare: 'always',
+        },
+      })
+
+      // Octree near-field command (fullscreen quad — mirrors forceFromItsOwnCentermassCommand)
+      this.forceCentermass3DUniformStore ||= new UniformStore({
+        forceCentermass3DUniforms: {
+          uniformTypes: {
+            // Order MUST match shader declaration order (std140 layout)
+            levelGridSize: 'f32',
+            cellSize: 'f32',
+            tilesPerRow: 'f32',
+            alpha: 'f32',
+            repulsion: 'f32',
+          },
+          defaultUniforms: {
+            levelGridSize: 0,
+            cellSize: 0,
+            tilesPerRow: 0,
+            alpha: store.alpha,
+            repulsion: this.config.simulationRepulsion,
+          },
+        },
+      })
+
+      this.forceCentermass3DCommand ||= new Model(device, {
+        fs: forceCentermass3DFrag,
+        vs: updateVert,
+        topology: 'triangle-strip',
+        vertexCount: 4,
+        attributes: {
+          vertexCoord: this.forceVertexCoordBuffer,
+        },
+        bufferLayout: [
+          { name: 'vertexCoord', format: 'float32x2' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
+        },
+        bindings: {
+          forceCentermass3DUniforms: this.forceCentermass3DUniformStore.getManagedUniformBuffer(device, 'forceCentermass3DUniforms'),
+          // All texture bindings will be set dynamically in drawForcesOctree3D() method
+        },
+        parameters: {
+          blend: true,
+          blendColorOperation: 'add',
+          blendColorSrcFactor: 'one',
+          blendColorDstFactor: 'one',
+          blendAlphaOperation: 'add',
+          blendAlphaSrcFactor: 'one',
+          blendAlphaDstFactor: 'one',
           depthWriteEnabled: false,
           depthCompare: 'always',
         },
@@ -410,11 +643,23 @@ export class ForceManyBody extends CoreModule {
 
   public run (): void {
     // Skip if sizes changed and create() wasn't called yet
-    if (this.store.pointsTextureSize !== this.previousPointsTextureSize || this.store.adjustedSpaceSize !== this.previousSpaceSize) {
+    if (
+      this.store.pointsTextureSize !== this.previousPointsTextureSize ||
+      this.store.adjustedSpaceSize !== this.previousSpaceSize ||
+      this.data.pointsNumber !== this.previousPointsNumber
+    ) {
       return
     }
     if (this.store.is3D) {
-      this.drawForces3D()
+      // Octree above the threshold; exact brute force below (and as a defensive
+      // fallback when the octree targets are unavailable).
+      const pointsNumber = this.data.pointsNumber ?? 0
+      if (pointsNumber > BRUTE_FORCE_3D_MAX_POINTS && this.levelTargets3D.size > 0) {
+        this.drawLevels3D()
+        this.drawForcesOctree3D()
+      } else {
+        this.drawForcesBruteForce3D()
+      }
     } else {
       this.drawLevels()
       this.drawForces()
@@ -435,6 +680,12 @@ export class ForceManyBody extends CoreModule {
     this.forceFromItsOwnCentermassCommand = undefined
     this.bruteForce3DCommand?.destroy()
     this.bruteForce3DCommand = undefined
+    this.calculateLevels3DCommand?.destroy()
+    this.calculateLevels3DCommand = undefined
+    this.forceLevel3DCommand?.destroy()
+    this.forceLevel3DCommand = undefined
+    this.forceCentermass3DCommand?.destroy()
+    this.forceCentermass3DCommand = undefined
 
     // 2. Destroy Framebuffers (before textures they reference)
     for (const target of this.levelTargets.values()) {
@@ -456,6 +707,9 @@ export class ForceManyBody extends CoreModule {
     }
     this.levelTargets.clear()
 
+    // Octree targets destroy their FBOs before their textures internally
+    this.destroyLevelTargets3D()
+
     // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
     this.calculateLevelsUniformStore?.destroy()
     this.calculateLevelsUniformStore = undefined
@@ -465,6 +719,12 @@ export class ForceManyBody extends CoreModule {
     this.forceCenterUniformStore = undefined
     this.bruteForce3DUniformStore?.destroy()
     this.bruteForce3DUniformStore = undefined
+    this.calculateLevels3DUniformStore?.destroy()
+    this.calculateLevels3DUniformStore = undefined
+    this.forceLevel3DUniformStore?.destroy()
+    this.forceLevel3DUniformStore = undefined
+    this.forceCentermass3DUniformStore?.destroy()
+    this.forceCentermass3DUniformStore = undefined
 
     // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
     if (this.pointIndices && !this.pointIndices.destroyed) {
@@ -477,7 +737,7 @@ export class ForceManyBody extends CoreModule {
     this.forceVertexCoordBuffer = undefined
   }
 
-  private drawForces3D (): void {
+  private drawForcesBruteForce3D (): void {
     const { device, store, data, points } = this
     if (!points) return
     if (!this.bruteForce3DCommand || !this.bruteForce3DUniformStore) return
@@ -506,6 +766,183 @@ export class ForceManyBody extends CoreModule {
     })
     this.bruteForce3DCommand.draw(drawPass)
     drawPass.end()
+  }
+
+  /** Aggregates points into every octree level texture (mirrors drawLevels). */
+  private drawLevels3D (): void {
+    const { device, store, data, points } = this
+    if (!points) return
+    if (!this.calculateLevels3DCommand || !this.calculateLevels3DUniformStore) return
+    if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
+    if (!data.pointsNumber) return
+    // Ensure pointIndices is set (Model might exist but attributes not set yet)
+    if (!this.pointIndices) return
+
+    for (let level = 0; level < this.levels3D; level += 1) {
+      const target = this.levelTargets3D.get(level)
+      if (!target || target.fbo.destroyed || target.texture.destroyed) continue
+
+      this.calculateLevels3DUniformStore.setUniforms({
+        calculateLevels3DUniforms: {
+          pointsTextureSize: store.pointsTextureSize ?? 0,
+          levelGridSize: target.gridSize,
+          // Computed per level from the space size so the power-of-two halving
+          // chain stays bit-exact between levels (the coverage invariant relies on it).
+          cellSize: store.adjustedSpaceSize / target.gridSize,
+          tilesPerRow: target.tilesPerRow,
+          levelTextureWidth: target.width,
+          levelTextureHeight: target.height,
+        },
+      })
+
+      // Unused points-texture pixels must not aggregate phantom mass into cell (0,0,0)
+      this.calculateLevels3DCommand.setVertexCount(data.pointsNumber)
+      // Update texture bindings dynamically
+      this.calculateLevels3DCommand.setBindings({
+        positionsTexture: points.previousPositionTexture,
+      })
+
+      const levelPass = device.beginRenderPass({
+        framebuffer: target.fbo,
+        clearColor: [0, 0, 0, 0],
+      })
+      this.calculateLevels3DCommand.draw(levelPass)
+      levelPass.end()
+    }
+  }
+
+  /**
+   * Octree repulsion: one additive pass per level into the velocity FBO, then the
+   * near-field pass reading the finest level (mirrors drawForces + the centermass fallback).
+   */
+  private drawForcesOctree3D (): void {
+    const { device, store, points } = this
+    if (!points) return
+    if (!this.forceLevel3DCommand || !this.forceLevel3DUniformStore) return
+    if (!this.forceCentermass3DCommand || !this.forceCentermass3DUniformStore) return
+    if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
+    if (!this.randomValuesTexture || this.randomValuesTexture.destroyed) return
+    if (!points.velocityFbo || points.velocityFbo.destroyed) return
+
+    const drawPass = device.beginRenderPass({
+      framebuffer: points.velocityFbo,
+      clearColor: [0, 0, 0, 0],
+    })
+
+    for (let level = 0; level < this.levels3D; level += 1) {
+      const target = this.levelTargets3D.get(level)
+      if (!target || target.texture.destroyed) continue
+      const cellSize = store.adjustedSpaceSize / target.gridSize
+
+      this.forceLevel3DUniformStore.setUniforms({
+        forceLevel3DUniforms: {
+          levelGridSize: target.gridSize,
+          cellSize,
+          tilesPerRow: target.tilesPerRow,
+          isFirstLevel: level === 0 ? 1 : 0,
+          alpha: store.alpha,
+          repulsion: this.config.simulationRepulsion,
+        },
+      })
+
+      // Update texture bindings dynamically
+      this.forceLevel3DCommand.setBindings({
+        positionsTexture: points.previousPositionTexture,
+        levelTexture: target.texture,
+      })
+      this.forceLevel3DCommand.draw(drawPass)
+
+      // The finest level leaves only the 3³ neighborhood uncovered — the near-field
+      // pass closes it (26 neighbor centroids + the own-cell centermass with jitter).
+      if (level === this.levels3D - 1) {
+        this.forceCentermass3DUniformStore.setUniforms({
+          forceCentermass3DUniforms: {
+            levelGridSize: target.gridSize,
+            cellSize,
+            tilesPerRow: target.tilesPerRow,
+            alpha: store.alpha,
+            repulsion: this.config.simulationRepulsion,
+          },
+        })
+
+        this.forceCentermass3DCommand.setBindings({
+          positionsTexture: points.previousPositionTexture,
+          levelTexture: target.texture,
+          randomValues: this.randomValuesTexture,
+        })
+        this.forceCentermass3DCommand.draw(drawPass)
+      }
+    }
+
+    drawPass.end()
+  }
+
+  /**
+   * Allocates the octree level pyramid: 3D grids of 4³, 8³, … up to an adaptive
+   * finest resolution (~2·∛n cells per axis, capped at MAX_LEVEL_GRID_SIZE_3D),
+   * each flattened into a 2D texture of tiled z-slices. Below the brute-force
+   * threshold the octree is not used, so no targets are kept.
+   * Textures are not zero-filled here — drawLevels3D clears them every tick.
+   */
+  private createLevels3D (): void {
+    const { device } = this
+    const pointsNumber = this.data.pointsNumber ?? 0
+    if (pointsNumber <= BRUTE_FORCE_3D_MAX_POINTS) {
+      this.destroyLevelTargets3D()
+      this.levels3D = 0
+      return
+    }
+
+    const targetGridSize = 2 * Math.cbrt(pointsNumber)
+    const finestGridSize = Math.min(
+      MAX_LEVEL_GRID_SIZE_3D,
+      Math.max(8, Math.pow(2, Math.ceil(Math.log2(targetGridSize))))
+    )
+    this.levels3D = Math.log2(finestGridSize) - 1
+
+    for (let level = 0; level < this.levels3D; level += 1) {
+      const gridSize = Math.pow(2, level + 2)
+      const tilesPerRow = Math.ceil(Math.sqrt(gridSize))
+      const width = gridSize * tilesPerRow
+      const height = gridSize * Math.ceil(gridSize / tilesPerRow)
+
+      const existingTarget = this.levelTargets3D.get(level)
+      if (existingTarget && existingTarget.width === width && existingTarget.height === height) continue
+      if (existingTarget) {
+        if (!existingTarget.fbo.destroyed) existingTarget.fbo.destroy()
+        if (!existingTarget.texture.destroyed) existingTarget.texture.destroy()
+      }
+
+      const texture = device.createTexture({
+        width,
+        height,
+        format: 'rgba32float',
+        usage: Texture.SAMPLE | Texture.RENDER,
+      })
+      const fbo = device.createFramebuffer({
+        width,
+        height,
+        colorAttachments: [texture],
+      })
+      this.levelTargets3D.set(level, { texture, fbo, gridSize, tilesPerRow, width, height })
+    }
+
+    // Drop stale finer levels if the pyramid shrank
+    for (const [level, target] of Array.from(this.levelTargets3D.entries())) {
+      if (level >= this.levels3D) {
+        if (!target.fbo.destroyed) target.fbo.destroy()
+        if (!target.texture.destroyed) target.texture.destroy()
+        this.levelTargets3D.delete(level)
+      }
+    }
+  }
+
+  private destroyLevelTargets3D (): void {
+    for (const target of this.levelTargets3D.values()) {
+      if (!target.fbo.destroyed) target.fbo.destroy()
+      if (!target.texture.destroyed) target.texture.destroy()
+    }
+    this.levelTargets3D.clear()
   }
 
   private drawLevels (): void {

@@ -1,11 +1,10 @@
 #version 300 es
 precision highp float;
 
-// Exact O(n²) 3D repulsion. The 2D force uses a quadtree approximation
-// (calculate-level / force-level), which does not port to 3D without an octree —
-// this brute-force pass is used in 3D mode instead. It matches the 2D force
-// semantics (d3-style clamped inverse-distance falloff) with per-point mass 1,
-// and is practical up to roughly 10–20k points on discrete GPUs.
+// Exact O(n²) 3D repulsion, used for graphs up to BRUTE_FORCE_3D_MAX_POINTS points
+// (larger 3D graphs use the octree passes in calculate-level-3d / force-level-3d /
+// force-centermass-3d). It matches the 2D force semantics (d3-style clamped
+// inverse-distance falloff) with per-point mass 1.
 
 uniform sampler2D positionsTexture;
 uniform sampler2D randomValues;

@@ -86,7 +86,7 @@ All configuration properties are optional. When creating a graph or calling `set
 
 cosmos.gl layout algorithm was inspired by the [d3-force](https://github.com/d3/d3-force#forces) simulation forces: Link, Many-Body, Gravitation, Centering, and Collision. It provides several simulation settings to adjust the layout. Each of them can be changed in real time, while the simulation is in progress.
 
-The simulation also runs in 3D mode (after `setPointPositions3D`) with the same options. Many-body repulsion in 3D uses an exact O(n²) GPU pass instead of the 2D quadtree approximation — practical up to roughly 10–20k points. Collision, clusters, and mouse repulsion are 2D-only and are disabled in 3D mode.
+The simulation also runs in 3D mode (after `setPointPositions3D`) with the same options. Many-body repulsion in 3D uses an octree approximation above ~4k points (an exact O(n²) pairwise pass below), analogous to the 2D quadtree; `simulationRepulsionTheta` is not used in 3D. Collision, clusters, and mouse repulsion are 2D-only and are disabled in 3D mode.
 
 | Property | Description  | Recommended range | Default |
 |---|---|---|---|
