@@ -15,6 +15,13 @@ type LevelTarget = {
   fbo: Framebuffer;
 }
 
+// Maps the `simulationRepulsionKernel` config value to the float the shaders
+// branch on (see the `repulsionKernel > 0.5` check in force-level.frag /
+// force-centermass.frag).
+function repulsionKernelValue (kernel: 'inverse' | 'studentT'): number {
+  return kernel === 'studentT' ? 1 : 0
+}
+
 export class ForceManyBody extends CoreModule {
   private randomValuesTexture: Texture | undefined
   private pointIndices: Buffer | undefined
@@ -44,6 +51,7 @@ export class ForceManyBody extends CoreModule {
       repulsion: number;
       spaceSize: number;
       theta: number;
+      repulsionKernel: number;
     };
   }> | undefined
 
@@ -52,6 +60,7 @@ export class ForceManyBody extends CoreModule {
       levelTextureSize: number;
       alpha: number;
       repulsion: number;
+      repulsionKernel: number;
     };
   }> | undefined
 
@@ -237,6 +246,7 @@ export class ForceManyBody extends CoreModule {
           repulsion: 'f32',
           spaceSize: 'f32',
           theta: 'f32',
+          repulsionKernel: 'f32',
         },
         defaultUniforms: {
           level: 0,
@@ -246,6 +256,7 @@ export class ForceManyBody extends CoreModule {
           repulsion: this.config.simulationRepulsion,
           spaceSize: store.adjustedSpaceSize,
           theta: this.config.simulationRepulsionTheta,
+          repulsionKernel: repulsionKernelValue(this.config.simulationRepulsionKernel),
         },
       },
     })
@@ -294,11 +305,13 @@ export class ForceManyBody extends CoreModule {
           levelTextureSize: 'f32',
           alpha: 'f32',
           repulsion: 'f32',
+          repulsionKernel: 'f32',
         },
         defaultUniforms: {
           levelTextureSize: 0,
           alpha: store.alpha,
           repulsion: this.config.simulationRepulsion,
+          repulsionKernel: repulsionKernelValue(this.config.simulationRepulsionKernel),
         },
       },
     })
@@ -467,6 +480,7 @@ export class ForceManyBody extends CoreModule {
           repulsion: this.config.simulationRepulsion,
           spaceSize: store.adjustedSpaceSize,
           theta: this.config.simulationRepulsionTheta,
+          repulsionKernel: repulsionKernelValue(this.config.simulationRepulsionKernel),
         },
       })
 
@@ -485,6 +499,7 @@ export class ForceManyBody extends CoreModule {
             levelTextureSize,
             alpha: store.alpha,
             repulsion: this.config.simulationRepulsion,
+            repulsionKernel: repulsionKernelValue(this.config.simulationRepulsionKernel),
           },
         })
 

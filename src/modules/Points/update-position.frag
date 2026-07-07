@@ -30,9 +30,10 @@ void main() {
 
   // Check if point is pinned
   // pinnedStatusTexture has the same size and layout as positionsTexture
-  // Each pixel corresponds to a point: red channel > 0.5 means the point is pinned
+  // Each pixel corresponds to a point: red channel > 0.5 means the point is pinned,
+  // green channel is the per-point energy multiplier (1 by default)
   vec4 pinnedStatus = texture(pinnedStatusTexture, textureCoords);
-  
+
   // If pinned, don't update position
   if (pinnedStatus.r > 0.5) {
     fragColor = pointPosition;
@@ -41,6 +42,10 @@ void main() {
 
   // Friction
   pointVelocity.rg *= friction;
+
+  // Per-point energy: every force pass goes through this shader, so scaling
+  // the velocity here is equivalent to scaling the point's alpha in every force
+  pointVelocity.rg *= pinnedStatus.g;
 
   pointPosition.rg += pointVelocity.rg;
 

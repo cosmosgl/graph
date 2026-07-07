@@ -3,6 +3,7 @@ import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
 
 import { forceFrag } from '@/graph/modules/ForceLink/force-spring'
+import { diffuseEnergyFrag } from '@/graph/modules/ForceLink/diffuse-energy'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import { ensureVec2 } from '@/graph/modules/Shared/uniform-utils'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
@@ -21,6 +22,7 @@ export class ForceLink extends CoreModule {
   private previousLinksTextureSize: number | undefined
 
   private runCommand: Model | undefined
+  private diffuseEnergyCommand: Model | undefined
   private vertexCoordBuffer: Buffer | undefined
   private uniformStore: UniformStore<{
     forceLinkUniforms: {
@@ -30,6 +32,14 @@ export class ForceLink extends CoreModule {
       pointsTextureSize: number;
       linksTextureSize: number;
       alpha: number;
+    };
+  }> | undefined
+
+  private diffuseEnergyUniformStore: UniformStore<{
+    diffuseEnergyUniforms: {
+      pointsTextureSize: number;
+      linksTextureSize: number;
+      energyDiffusion: number;
     };
   }> | undefined
 
@@ -66,10 +76,11 @@ export class ForceLink extends CoreModule {
           const bias = degreeSum !== 0 ? degree / degreeSum : 0.5
           const minDegree = Math.min(degree, connectedDegree)
           // Prevent division by zero
-          let strength = data.linkStrength?.[initialLinkIndex] ?? (1 / Math.max(minDegree, 1))
-          strength = Math.sqrt(strength)
+          const strength = data.linkStrength?.[initialLinkIndex] ?? (1 / Math.max(minDegree, 1))
           linkBiasAndStrengthState[linkIndex * 4 + 0] = bias
-          linkBiasAndStrengthState[linkIndex * 4 + 1] = strength
+          linkBiasAndStrengthState[linkIndex * 4 + 1] = Math.sqrt(strength)
+          // Raw (non-sqrt) strength: the energy diffusion conductance
+          linkBiasAndStrengthState[linkIndex * 4 + 2] = strength
           linkDistanceState[linkIndex * 4] = this.store.getRandomFloat(0, 1)
 
           linkIndex += 1
@@ -160,6 +171,8 @@ export class ForceLink extends CoreModule {
     if (this.previousMaxPointDegree !== undefined && this.previousMaxPointDegree !== this.maxPointDegree) {
       this.runCommand?.destroy()
       this.runCommand = undefined
+      this.diffuseEnergyCommand?.destroy()
+      this.diffuseEnergyCommand = undefined
     }
 
     this.previousMaxPointDegree = this.maxPointDegree
@@ -214,6 +227,41 @@ export class ForceLink extends CoreModule {
         depthCompare: 'always',
       },
     })
+
+    this.diffuseEnergyUniformStore ||= new UniformStore({
+      diffuseEnergyUniforms: {
+        uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
+          pointsTextureSize: 'f32',
+          linksTextureSize: 'f32',
+          energyDiffusion: 'f32',
+        },
+      },
+    })
+
+    this.diffuseEnergyCommand ||= new Model(device, {
+      fs: diffuseEnergyFrag(this.maxPointDegree),
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.vertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        diffuseEnergyUniforms: this.diffuseEnergyUniformStore.getManagedUniformBuffer(device, 'diffuseEnergyUniforms'),
+        // All texture bindings will be set dynamically in diffuseEnergy() method
+      },
+      parameters: {
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      },
+    })
   }
 
   public run (): void {
@@ -260,6 +308,50 @@ export class ForceLink extends CoreModule {
   }
 
   /**
+   * Spreads per-point energy one hop along this direction's links
+   * (wavefront max — see design-energy-diffusion.md). Reads the freshest
+   * pinned/energy state and writes the result into the current one, so
+   * `points.swapPinnedStatusFbo()` must be called before this method.
+   */
+  public diffuseEnergy (): void {
+    const { device, store, points } = this
+    if (!points) return
+    if (!this.diffuseEnergyCommand || !this.diffuseEnergyUniformStore) return
+    if (!points.previousPinnedStatusTexture || points.previousPinnedStatusTexture.destroyed) return
+    if (!points.pinnedStatusFbo || points.pinnedStatusFbo.destroyed) return
+    if (!this.linkFirstIndicesAndAmountTexture || !this.indicesTexture || !this.biasAndStrengthTexture) return
+
+    // Skip if sizes changed and create() wasn't called again
+    if (
+      store.pointsTextureSize !== this.previousPointsTextureSize ||
+      store.linksTextureSize !== this.previousLinksTextureSize
+    ) {
+      return
+    }
+
+    this.diffuseEnergyUniformStore.setUniforms({
+      diffuseEnergyUniforms: {
+        pointsTextureSize: store.pointsTextureSize,
+        linksTextureSize: store.linksTextureSize,
+        energyDiffusion: this.config.simulationEnergyDiffusion,
+      },
+    })
+
+    this.diffuseEnergyCommand.setBindings({
+      energyTexture: points.previousPinnedStatusTexture,
+      linkInfoTexture: this.linkFirstIndicesAndAmountTexture,
+      linkIndicesTexture: this.indicesTexture,
+      linkPropertiesTexture: this.biasAndStrengthTexture,
+    })
+
+    const pass = device.beginRenderPass({
+      framebuffer: points.pinnedStatusFbo,
+    })
+    this.diffuseEnergyCommand.draw(pass)
+    pass.end()
+  }
+
+  /**
    * Destruction order matters
    * Models -> Framebuffers -> Textures -> UniformStores -> Buffers
    */
@@ -267,6 +359,8 @@ export class ForceLink extends CoreModule {
     // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
     this.runCommand?.destroy()
     this.runCommand = undefined
+    this.diffuseEnergyCommand?.destroy()
+    this.diffuseEnergyCommand = undefined
 
     // 2. Destroy Framebuffers (before textures they reference)
     // ForceLink has no framebuffers
@@ -292,6 +386,8 @@ export class ForceLink extends CoreModule {
     // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
     this.uniformStore?.destroy()
     this.uniformStore = undefined
+    this.diffuseEnergyUniformStore?.destroy()
+    this.diffuseEnergyUniformStore = undefined
 
     // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
     if (this.vertexCoordBuffer && !this.vertexCoordBuffer.destroyed) {

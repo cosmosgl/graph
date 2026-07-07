@@ -323,6 +323,25 @@ export interface GraphConfigInterface {
    * Default value: `5000`
    */
   simulationDecay: number;
+  /**
+   * Per-tick decay multiplier for the per-point energies set via `setPointEnergies`.
+   * Every simulation tick each point's energy is multiplied by this value; energies
+   * below `0.01` snap to `0` and the point freezes. Unlike `simulationDecay`, which
+   * cools the global simulation alpha, this cools each point individually.
+   * Default value: `1` (no decay — energies stay as set)
+   */
+  simulationEnergyDecay: number;
+  /**
+   * Per-hop falloff for per-point energy diffusion along links. When greater than `0`,
+   * every simulation tick each point's energy is raised to at least
+   * `simulationEnergyDiffusion * linkStrength * neighborEnergy` (the maximum over its
+   * linked neighbors) — so energy injected via `setPointEnergies` ripples outward along
+   * links, spreading further through strong links, and dies out with graph distance.
+   * Combined with `simulationEnergyDecay` this lets a disturbance (e.g. newly added
+   * points) locally wake a frozen layout, which then freezes back on its own.
+   * Default value: `0` (no diffusion)
+   */
+  simulationEnergyDiffusion: number;
     /**
    * Gravity force coefficient.
    * Default value: `0.25`
@@ -343,6 +362,17 @@ export interface GraphConfigInterface {
    * Default value: `1.15`
    */
   simulationRepulsionTheta: number;
+  /**
+   * Shape of the many-body repulsion kernel:
+   * - `'inverse'`: repulsion magnitude falls off like `1 / distance` (the
+   *   2D-gravity / log-potential kernel). Long-range, spreads points evenly.
+   * - `'studentT'`: the t-SNE Student-t kernel, magnitude `distance / (1 + distance²)²`.
+   *   Short-range (`1 / distance³` tail), producing tight, well-separated clusters.
+   *   When switching to `'studentT'`, you will likely need to increase
+   *   `simulationRepulsion` since the force is much shorter-range.
+   * Default value: `'inverse'`
+   */
+  simulationRepulsionKernel: 'inverse' | 'studentT';
   /**
    * Link spring force coefficient.
    * Default value: `1`

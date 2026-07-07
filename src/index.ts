@@ -782,6 +782,58 @@ export class Graph {
   }
 
   /**
+   * Sets a per-point energy multiplier for the simulation.
+   *
+   * Each value scales how strongly the simulation forces move the corresponding point:
+   * - `1`: normal movement (the default for every point),
+   * - `0`: the point does not move, but still repels and attracts others (like a pinned point),
+   * - values in between damp the point's movement, values above `1` amplify it.
+   *
+   * The multiplier is applied on top of the global simulation alpha. This makes it
+   * possible to reheat the simulation (e.g. `start(1)`) while directing the fresh
+   * energy to specific points only — for example, newly added points can travel
+   * into place without disturbing an already settled layout.
+   *
+   * @param {Float32Array | null} pointEnergies - Array of energy multipliers in the format [energy1, energy2, ..., energyn],
+   * where `n` is the index of the point. Points without a value default to `1`.
+   * Set to `null` to reset all points to `1`.
+   * @example
+   *   // Freeze the first two points, give the third one full energy
+   *   graph.setPointEnergies(new Float32Array([0, 0, 1]))
+   *
+   *   // Reset all points to normal
+   *   graph.setPointEnergies(null)
+   */
+  public setPointEnergies (pointEnergies: Float32Array | null): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointEnergies(pointEnergies))) return
+    this.graph.inputPointEnergies = pointEnergies ?? undefined
+    this.points?.updatePinnedStatus()
+  }
+
+  /**
+   * Get the current per-point energy multipliers.
+   *
+   * When `simulationEnergyDecay` / `simulationEnergyDiffusion` are set, energies
+   * evolve on the GPU every simulation tick, so the values can differ from what
+   * was last passed to `setPointEnergies`. A value of `0` means the point is
+   * frozen.
+   *
+   * @returns Array of energy multipliers in the format [energy1, energy2, ..., energyn],
+   * where `n` is the index of the point.
+   */
+  public getPointEnergies (): Float32Array {
+    if (this._isDestroyed || !this.device || !this.points) return new Float32Array()
+    if (this.graph.pointsNumber === undefined || !this.points.pinnedStatusFbo) return new Float32Array()
+    const pixels = readPixels(this.device, this.points.pinnedStatusFbo as Framebuffer)
+    const energies = new Float32Array(this.graph.pointsNumber)
+    for (let i = 0; i < energies.length; i += 1) {
+      energies[i] = pixels[i * 4 + 1] ?? 0
+    }
+    return energies
+  }
+
+  /**
    * Renders the graph and starts rendering.
    * Does NOT modify simulation state - use start(), stop(), pause(), unpause() to control simulation.
    *
@@ -1791,6 +1843,21 @@ export class Graph {
     // `current` holds the latest positions — the draw pass, hover detection,
     // trackPoints and the next frame all read from `current`.
     if (shouldRunSimulation) {
+      // Per-point energy schedule (see design-energy-diffusion.md): first the
+      // wavefront diffusion along links (one hop per direction), then the
+      // uniform decay + freeze threshold. Runs before the forces so they see
+      // this tick's energies.
+      if (this.config.simulationEnergyDiffusion > 0 && this.store.linksTextureSize) {
+        this.points?.swapPinnedStatusFbo()
+        this.forceLinkOutgoing?.diffuseEnergy()
+        this.points?.swapPinnedStatusFbo()
+        this.forceLinkIncoming?.diffuseEnergy()
+      }
+      if (this.config.simulationEnergyDecay !== 1) {
+        this.points?.swapPinnedStatusFbo()
+        this.points?.decayEnergy()
+      }
+
       if (simulationGravity) {
         this.points?.swapFbo()
         this.forceGravity?.run()

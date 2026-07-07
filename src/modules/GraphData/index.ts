@@ -29,6 +29,7 @@ export class GraphData {
   public inputClusterPositions: (number | undefined)[] | undefined
   public inputClusterStrength: Float32Array | undefined
   public inputPinnedPoints: number[] | undefined
+  public inputPointEnergies: Float32Array | undefined
 
   public pointPositions: Float32Array | undefined
   /**

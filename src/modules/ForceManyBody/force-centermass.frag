@@ -10,15 +10,18 @@ layout(std140) uniform forceCenterUniforms {
   float levelTextureSize;
   float alpha;
   float repulsion;
+  float repulsionKernel;
 } forceCenter;
 
 #define levelTextureSize forceCenter.levelTextureSize
 #define repulsion forceCenter.repulsion
 #define alpha forceCenter.alpha
+#define repulsionKernel forceCenter.repulsionKernel
 #else
 uniform float levelTextureSize;
 uniform float alpha;
 uniform float repulsion;
+uniform float repulsionKernel;
 #endif
 
 in vec2 textureCoords;
@@ -34,13 +37,22 @@ vec2 calculateAdditionalVelocity (vec2 ij, vec2 pp) {
     float l = dot(distVector, distVector);
     float dist = sqrt(l);
     if (l > 0.0) {
-      float angle = atan(distVector.y, distVector.x);
       float c = alpha * repulsion * centermass.b;
 
-      float distanceMin2 = 1.0;
-      if (l < distanceMin2) l = sqrt(distanceMin2 * l);
-      float addV = c / sqrt(l);
-      add = addV * vec2(cos(angle), sin(angle));
+      // Keep this branch in sync with force-level.frag.
+      if (repulsionKernel > 0.5) {
+        // 'studentT': t-SNE kernel, magnitude ~ c * dist / (1 + dist^2)^2.
+        // Naturally finite at dist = 0, so no softening needed.
+        float denom = 1.0 + l;
+        add = c * distVector / (denom * denom);
+      } else {
+        // 'inverse' (default): magnitude ~ c / dist
+        float angle = atan(distVector.y, distVector.x);
+        float distanceMin2 = 1.0;
+        if (l < distanceMin2) l = sqrt(distanceMin2 * l);
+        float addV = c / sqrt(l);
+        add = addV * vec2(cos(angle), sin(angle));
+      }
     }
   }
   return add;

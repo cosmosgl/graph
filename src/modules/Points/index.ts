@@ -16,6 +16,7 @@ import findHoveredPointVert from '@/graph/modules/Points/find-hovered-point.vert
 import fillGridWithSampledPointsFrag from '@/graph/modules/Points/fill-sampled-points.frag?raw'
 import fillGridWithSampledPointsVert from '@/graph/modules/Points/fill-sampled-points.vert?raw'
 import updatePositionFrag from '@/graph/modules/Points/update-position.frag?raw'
+import decayEnergyFrag from '@/graph/modules/Points/decay-energy.frag?raw'
 import interpolatePositionFrag from '@/graph/modules/Points/interpolate-position.frag?raw'
 import { createIndexesForBuffer, updateAttributeBuffers } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
@@ -35,6 +36,12 @@ export class Points extends CoreModule {
   public sourcePositionFbo: Framebuffer | undefined
   public targetPositionFbo: Framebuffer | undefined
   public velocityFbo: Framebuffer | undefined
+  // Pinned/energy state ping-pong pair for the GPU energy passes (diffusion
+  // in ForceLink, decay in this module). `pinnedStatusTexture` (private) is
+  // always the current (freshest) state wrapped by `pinnedStatusFbo`:
+  // update-position samples it and CPU uploads target it.
+  public pinnedStatusFbo: Framebuffer | undefined
+  public previousPinnedStatusTexture: Texture | undefined
   public searchFbo: Framebuffer | undefined
   public hoveredFbo: Framebuffer | undefined
   public scaleX: ((x: number) => number) | undefined
@@ -142,6 +149,15 @@ export class Points extends CoreModule {
   private trackedIndices: number[] | undefined
   private searchTexture: Texture | undefined
   private pinnedStatusTexture: Texture | undefined
+  private previousPinnedStatusFbo: Framebuffer | undefined
+  private decayEnergyCommand: Model | undefined
+
+  private decayEnergyUniformStore: UniformStore<{
+    decayEnergyUniforms: {
+      energyDecay: number;
+    };
+  }> | undefined
+
   private sizeTexture: Texture | undefined
   private trackedIndicesTexture: Texture | undefined
   private polygonPathTexture: Texture | undefined
@@ -1078,8 +1094,16 @@ export class Points extends CoreModule {
     const { device, store: { pointsTextureSize }, data } = this
     if (!pointsTextureSize) return
 
-    // Pinned status: 0 - not pinned, 1 - pinned
+    // Red channel — pinned status: 0 - not pinned, 1 - pinned
+    // Green channel — per-point energy: scales the simulation velocity applied
+    // to the point (1 by default)
     const initialState = new Float32Array(pointsTextureSize * pointsTextureSize * 4).fill(0)
+
+    if (data.pointsNumber !== undefined) {
+      for (let i = 0; i < data.pointsNumber; i += 1) {
+        initialState[i * 4 + 1] = data.inputPointEnergies?.[i] ?? 1
+      }
+    }
 
     if (data.inputPinnedPoints && data.pointsNumber !== undefined) {
       for (const pinnedIndex of data.inputPinnedPoints) {
@@ -1090,30 +1114,39 @@ export class Points extends CoreModule {
     }
 
     if (!this.pinnedStatusTexture || this.pinnedStatusTexture.width !== pointsTextureSize || this.pinnedStatusTexture.height !== pointsTextureSize) {
-      if (this.pinnedStatusTexture && !this.pinnedStatusTexture.destroyed) {
-        this.pinnedStatusTexture.destroy()
+      for (const resource of [this.pinnedStatusFbo, this.previousPinnedStatusFbo, this.pinnedStatusTexture, this.previousPinnedStatusTexture]) {
+        if (resource && !resource.destroyed) resource.destroy()
       }
       this.pinnedStatusTexture = device.createTexture({
         width: pointsTextureSize,
         height: pointsTextureSize,
         format: 'rgba32float',
       })
-      this.pinnedStatusTexture.copyImageData({
-        data: initialState,
-        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
+      this.pinnedStatusFbo = device.createFramebuffer({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        colorAttachments: [this.pinnedStatusTexture],
       })
-    } else {
-      this.pinnedStatusTexture.copyImageData({
-        data: initialState,
-        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
+      // The back buffer of the ping-pong pair; the energy passes fully
+      // overwrite it, so it needs no initial data
+      this.previousPinnedStatusTexture = device.createTexture({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+      })
+      this.previousPinnedStatusFbo = device.createFramebuffer({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        colorAttachments: [this.previousPinnedStatusTexture],
       })
     }
+    this.pinnedStatusTexture.copyImageData({
+      data: initialState,
+      bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
+      mipLevel: 0,
+      x: 0,
+      y: 0,
+    })
   }
 
   public updateSize (): void {
@@ -2065,6 +2098,8 @@ export class Points extends CoreModule {
     this.interpolatePositionCommand = undefined
     this.updatePositionCommand?.destroy()
     this.updatePositionCommand = undefined
+    this.decayEnergyCommand?.destroy()
+    this.decayEnergyCommand = undefined
     this.dragPointCommand?.destroy()
     this.dragPointCommand = undefined
     this.findPointsInRectCommand?.destroy()
@@ -2079,6 +2114,14 @@ export class Points extends CoreModule {
     this.trackPointsCommand = undefined
 
     // 2. Destroy Framebuffers (before textures they reference)
+    if (this.pinnedStatusFbo && !this.pinnedStatusFbo.destroyed) {
+      this.pinnedStatusFbo.destroy()
+    }
+    this.pinnedStatusFbo = undefined
+    if (this.previousPinnedStatusFbo && !this.previousPinnedStatusFbo.destroyed) {
+      this.previousPinnedStatusFbo.destroy()
+    }
+    this.previousPinnedStatusFbo = undefined
     if (this.currentPositionFbo && !this.currentPositionFbo.destroyed) {
       this.currentPositionFbo.destroy()
     }
@@ -2169,12 +2212,18 @@ export class Points extends CoreModule {
       this.pinnedStatusTexture.destroy()
     }
     this.pinnedStatusTexture = undefined
+    if (this.previousPinnedStatusTexture && !this.previousPinnedStatusTexture.destroyed) {
+      this.previousPinnedStatusTexture.destroy()
+    }
+    this.previousPinnedStatusTexture = undefined
 
     // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
     this.interpolatePositionUniformStore?.destroy()
     this.interpolatePositionUniformStore = undefined
     this.updatePositionUniformStore?.destroy()
     this.updatePositionUniformStore = undefined
+    this.decayEnergyUniformStore?.destroy()
+    this.decayEnergyUniformStore = undefined
     this.dragPointUniformStore?.destroy()
     this.dragPointUniformStore = undefined
     this.drawUniformStore?.destroy()
@@ -2460,6 +2509,10 @@ export class Points extends CoreModule {
     this.updatePositionCommand = undefined
     this.updatePositionUniformStore?.destroy()
     this.updatePositionUniformStore = undefined
+    this.decayEnergyCommand?.destroy()
+    this.decayEnergyCommand = undefined
+    this.decayEnergyUniformStore?.destroy()
+    this.decayEnergyUniformStore = undefined
     if (this.updatePositionVertexCoordBuffer && !this.updatePositionVertexCoordBuffer.destroyed) {
       this.updatePositionVertexCoordBuffer.destroy()
     }
@@ -2472,6 +2525,55 @@ export class Points extends CoreModule {
       this.velocityTexture.destroy()
     }
     this.velocityTexture = undefined
+  }
+
+  /**
+   * Rotates the pinned/energy state pair so `previousPinnedStatusTexture`
+   * holds the freshest state for an energy pass (ForceLink diffusion or
+   * decayEnergy) to read; the pass writes into `pinnedStatusFbo`, keeping
+   * `pinnedStatusTexture` the current state. Same swap-before-write pattern
+   * as `swapFbo()`.
+   */
+  public swapPinnedStatusFbo (): void {
+    if (!this.pinnedStatusTexture || this.pinnedStatusTexture.destroyed ||
+        !this.previousPinnedStatusTexture || this.previousPinnedStatusTexture.destroyed ||
+        !this.pinnedStatusFbo || this.pinnedStatusFbo.destroyed ||
+        !this.previousPinnedStatusFbo || this.previousPinnedStatusFbo.destroyed) {
+      return
+    }
+    const tempTexture = this.previousPinnedStatusTexture
+    const tempFbo = this.previousPinnedStatusFbo
+    this.previousPinnedStatusTexture = this.pinnedStatusTexture
+    this.previousPinnedStatusFbo = this.pinnedStatusFbo
+    this.pinnedStatusTexture = tempTexture
+    this.pinnedStatusFbo = tempFbo
+  }
+
+  /**
+   * Applies `simulationEnergyDecay` to every point's energy and freezes
+   * points whose energy dropped below the threshold (see decay-energy.frag).
+   * `swapPinnedStatusFbo()` must be called before this method.
+   */
+  public decayEnergy (): void {
+    if (!this.decayEnergyCommand || !this.decayEnergyUniformStore) return
+    if (!this.previousPinnedStatusTexture || this.previousPinnedStatusTexture.destroyed) return
+    if (!this.pinnedStatusFbo || this.pinnedStatusFbo.destroyed) return
+
+    this.decayEnergyUniformStore.setUniforms({
+      decayEnergyUniforms: {
+        energyDecay: this.config.simulationEnergyDecay,
+      },
+    })
+
+    this.decayEnergyCommand.setBindings({
+      energyTexture: this.previousPinnedStatusTexture,
+    })
+
+    const renderPass = this.device.beginRenderPass({
+      framebuffer: this.pinnedStatusFbo,
+    })
+    this.decayEnergyCommand.draw(renderPass)
+    renderPass.end()
   }
 
   public swapFbo (): void {
@@ -2588,6 +2690,37 @@ export class Points extends CoreModule {
         // Update it later by calling uniformStore.setUniforms()
         updatePositionUniforms: this.updatePositionUniformStore.getManagedUniformBuffer(device, 'updatePositionUniforms'),
         // All texture bindings will be set dynamically in updatePosition() method
+      },
+    })
+
+    this.decayEnergyUniformStore ||= new UniformStore({
+      decayEnergyUniforms: {
+        uniformTypes: {
+          energyDecay: 'f32',
+        },
+        defaultUniforms: {
+          energyDecay: config.simulationEnergyDecay,
+        },
+      },
+    })
+
+    this.decayEnergyCommand ||= new Model(device, {
+      fs: decayEnergyFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.updatePositionVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        decayEnergyUniforms: this.decayEnergyUniformStore.getManagedUniformBuffer(device, 'decayEnergyUniforms'),
+        // The energy texture binding is set dynamically in decayEnergy()
       },
     })
   }

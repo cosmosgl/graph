@@ -62,9 +62,12 @@ export const defaultConfigValues = {
 
   // Simulation
   simulationDecay: 5000,
+  simulationEnergyDecay: 1,
+  simulationEnergyDiffusion: 0,
   simulationGravity: 0.25,
   simulationCenter: 0,
   simulationRepulsion: 1.0,
+  simulationRepulsionKernel: 'inverse',
   simulationRepulsionTheta: 1.15,
   simulationLinkSpring: 1,
   simulationLinkDistance: 10,

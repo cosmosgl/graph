@@ -13,6 +13,7 @@ layout(std140) uniform forceUniforms {
   float repulsion;
   float spaceSize;
   float theta;
+  float repulsionKernel;
 } force;
 
 #define level force.level
@@ -22,6 +23,7 @@ layout(std140) uniform forceUniforms {
 #define repulsion force.repulsion
 #define spaceSize force.spaceSize
 #define theta force.theta
+#define repulsionKernel force.repulsionKernel
 #else
 uniform float level;
 uniform float levels;
@@ -30,6 +32,7 @@ uniform float repulsion;
 uniform float alpha;
 uniform float spaceSize;
 uniform float theta;
+uniform float repulsionKernel;
 #endif
 
 in vec2 textureCoords;
@@ -48,10 +51,19 @@ vec2 calculateAdditionalVelocity (vec2 ij, vec2 pp) {
     if (l > 0.0) {
       float c = alpha * repulsion * centermass.b;
 
-      float distanceMin2 = 1.0;
-      if (l < distanceMin2) l = sqrt(distanceMin2 * l);
-      float addV = c / sqrt(l);
-      add = addV * normalize(distVector);
+      // Keep this branch in sync with force-centermass.frag.
+      if (repulsionKernel > 0.5) {
+        // 'studentT': t-SNE kernel, magnitude ~ c * dist / (1 + dist^2)^2.
+        // Naturally finite at dist = 0, so no softening needed.
+        float denom = 1.0 + l;
+        add = c * distVector / (denom * denom);
+      } else {
+        // 'inverse' (default): magnitude ~ c / dist
+        float distanceMin2 = 1.0;
+        if (l < distanceMin2) l = sqrt(distanceMin2 * l);
+        float addV = c / sqrt(l);
+        add = addV * normalize(distVector);
+      }
     }
   }
   return add;
