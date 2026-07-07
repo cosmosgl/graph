@@ -956,8 +956,8 @@ export class ForceManyBody extends CoreModule {
       this.forceLevel3DCommand.draw(drawPass)
 
       // The finest level leaves only the 3³ neighborhood uncovered — the near-field
-      // pass closes it: exact pairwise forces from the depth-peeled slot points
-      // plus each cell's residual centroid.
+      // pass closes it with importance-weighted pairwise forces from the
+      // depth-peeled slot points (unbiased Monte-Carlo of the all-pairs sum).
       if (level === this.levels3D - 1) {
         this.forceNearField3DUniformStore.setUniforms({
           forceNearField3DUniforms: {

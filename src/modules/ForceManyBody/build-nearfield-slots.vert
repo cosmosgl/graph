@@ -9,10 +9,9 @@ precision highp float;
 // point with the smallest per-tick random hash: the depth test keeps the
 // smallest `hashValue` among eligible points, and eligibility excludes points
 // already captured by the previous slot (hash <= previous slot's hash). Running
-// K passes yields K random points per cell, re-randomized every tick via
-// `randomSeed` — so over successive ticks every point of a dense cell gets
-// exact pairwise treatment (Monte-Carlo P3M), while the remainder acts through
-// the residual centroid in force-nearfield-3d.frag.
+// K passes yields a uniform random K-subset per cell, re-randomized every tick
+// via `randomSeed`; force-nearfield-3d.frag turns it into an unbiased estimate
+// of the cell's exact all-pairs repulsion (Monte-Carlo P3M).
 
 uniform sampler2D positionsTexture;
 uniform sampler2D previousSlot;

@@ -3,15 +3,19 @@ precision highp float;
 
 // Near-field pass of the 3D octree repulsion (P3M-style). After the finest level
 // pass, the only un-accumulated region is the 3³ neighborhood of the point's cell.
-// Cell centroids alone exert a purely radial force there, which flattens dense
-// hubs into disks and spikes — so each cell contributes:
-//   - exact point-to-point forces from up to K depth-peeled points (a random
-//     subset re-drawn every tick by build-nearfield-slots.vert, so all points of
-//     a dense cell get pairwise treatment over successive ticks), and
-//   - the residual centroid of the remaining, un-peeled mass (aggregate minus
-//     the peeled points), so no mass is ever lost.
-// The point itself is skipped in the pairwise sum and, when peeled, excluded
-// from the residual too.
+//
+// Cell centroids exert a purely radial force there, which flattens dense hubs
+// into disks and petals — even as a residual for unsampled mass, the centroid
+// bias dominates (tangential repulsion scaled by ~K/n never spreads a dense
+// clump before alpha decays). So the near field is a pure Monte-Carlo estimator
+// instead: the K depth-peeled points of a cell are a uniform random subset
+// (re-drawn every tick by build-nearfield-slots.vert), and weighting each
+// sampled pairwise force by count/sampled makes the expected force equal the
+// exact all-pairs sum — unbiased, no centroid term. Cells holding ≤ K points
+// are sampled exhaustively, so their forces are exact. The per-tick sampling
+// noise acts as annealed jitter: it shrinks with alpha and is precisely what
+// breaks clumps apart. The point itself is excluded from both the sample and
+// the count.
 
 uniform sampler2D positionsTexture;
 uniform sampler2D levelTexture;
@@ -64,16 +68,16 @@ vec3 pairwiseVelocity(vec3 position, vec3 otherPosition, float mass) {
   return addV * normalize(distVector);
 }
 
-// Processes one peeled slot of a cell: adds the exact pairwise force (skipping
-// the point itself) and removes the peeled point from the cell's residual.
-vec3 slotVelocity(vec2 slot, vec3 position, float selfIndex, inout vec4 residual) {
+// One peeled slot of a cell: the unweighted pairwise force from the sampled
+// point, counting it toward the sample size. Empty slots and the point itself
+// contribute nothing.
+vec3 slotVelocity(vec2 slot, vec3 position, float selfIndex, inout float sampled) {
   float index = slot.x;
-  if (index < 0.0) return vec3(0.0);
+  if (index < 0.0 || index == selfIndex) return vec3(0.0);
   int size = int(pointsTextureSize);
   int i = int(index);
   vec4 other = texelFetch(positionsTexture, ivec2(i % size, i / size), 0);
-  residual -= vec4(other.rg, 1.0, other.a);
-  if (index == selfIndex) return vec3(0.0);
+  sampled += 1.0;
   return pairwiseVelocity(position, vec3(other.rg, other.a), 1.0);
 }
 
@@ -99,24 +103,30 @@ void main() {
           (cell.z / rowTiles) * gridSize + cell.y
         );
 
-        // [sum(x), sum(y), count, sum(z)] — becomes the residual as slots are removed
-        vec4 residual = texelFetch(levelTexture, pixel, 0);
-        if (residual.b <= 0.0) continue;
+        // [sum(x), sum(y), count, sum(z)] — only the count is used here.
+        vec4 aggregate = texelFetch(levelTexture, pixel, 0);
+        // The count never includes the point itself in the estimate.
+        bool ownCell = (i == 0 && j == 0 && k == 0);
+        float others = aggregate.b - (ownCell ? 1.0 : 0.0);
+        if (others <= 0.0) continue;
 
+        vec3 pairSum = vec3(0.0);
+        float sampled = 0.0;
         // Sampler arrays cannot be indexed dynamically in GLSL ES 3.0 — unrolled.
-        velocity += slotVelocity(texelFetch(slotTexture0, pixel, 0).rg, position, selfIndex, residual);
-        velocity += slotVelocity(texelFetch(slotTexture1, pixel, 0).rg, position, selfIndex, residual);
-        velocity += slotVelocity(texelFetch(slotTexture2, pixel, 0).rg, position, selfIndex, residual);
-        velocity += slotVelocity(texelFetch(slotTexture3, pixel, 0).rg, position, selfIndex, residual);
-        velocity += slotVelocity(texelFetch(slotTexture4, pixel, 0).rg, position, selfIndex, residual);
-        velocity += slotVelocity(texelFetch(slotTexture5, pixel, 0).rg, position, selfIndex, residual);
-        velocity += slotVelocity(texelFetch(slotTexture6, pixel, 0).rg, position, selfIndex, residual);
-        velocity += slotVelocity(texelFetch(slotTexture7, pixel, 0).rg, position, selfIndex, residual);
+        pairSum += slotVelocity(texelFetch(slotTexture0, pixel, 0).rg, position, selfIndex, sampled);
+        pairSum += slotVelocity(texelFetch(slotTexture1, pixel, 0).rg, position, selfIndex, sampled);
+        pairSum += slotVelocity(texelFetch(slotTexture2, pixel, 0).rg, position, selfIndex, sampled);
+        pairSum += slotVelocity(texelFetch(slotTexture3, pixel, 0).rg, position, selfIndex, sampled);
+        pairSum += slotVelocity(texelFetch(slotTexture4, pixel, 0).rg, position, selfIndex, sampled);
+        pairSum += slotVelocity(texelFetch(slotTexture5, pixel, 0).rg, position, selfIndex, sampled);
+        pairSum += slotVelocity(texelFetch(slotTexture6, pixel, 0).rg, position, selfIndex, sampled);
+        pairSum += slotVelocity(texelFetch(slotTexture7, pixel, 0).rg, position, selfIndex, sampled);
 
-        // Un-peeled remainder acts through its centroid (0.5 guards float dust).
-        if (residual.b > 0.5) {
-          velocity += pairwiseVelocity(position, vec3(residual.r, residual.g, residual.a) / residual.b, residual.b);
-        }
+        // Horvitz–Thompson weighting: the sample is uniform among the cell's
+        // other points (conditioned on whether the point itself was peeled),
+        // so scaling by others/sampled gives E[force] = exact all-pairs sum.
+        // Exhaustively peeled cells (others == sampled) are exact.
+        if (sampled > 0.0) velocity += (others / sampled) * pairSum;
       }
     }
   }
