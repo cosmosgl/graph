@@ -8,7 +8,7 @@ precision highp float;
 // The decomposition tiles space exactly once across the level passes:
 // after level L the only un-accumulated region is the 3³ Chebyshev-1 neighborhood
 // of the point's cell, which the next level refines (its aligned 6³ child block),
-// and which force-centermass-3d.frag finally covers at the finest level.
+// and which force-nearfield-3d.frag finally covers at the finest level.
 // The exclusion shell is fixed at Chebyshev distance 1 — the 2D theta parameter
 // does not apply in 3D.
 

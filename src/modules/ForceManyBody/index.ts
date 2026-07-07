@@ -8,7 +8,9 @@ import calculateLevel3DVert from '@/graph/modules/ForceManyBody/calculate-level-
 import forceFrag from '@/graph/modules/ForceManyBody/force-level.frag?raw'
 import forceLevel3DFrag from '@/graph/modules/ForceManyBody/force-level-3d.frag?raw'
 import forceCenterFrag from '@/graph/modules/ForceManyBody/force-centermass.frag?raw'
-import forceCentermass3DFrag from '@/graph/modules/ForceManyBody/force-centermass-3d.frag?raw'
+import forceNearField3DFrag from '@/graph/modules/ForceManyBody/force-nearfield-3d.frag?raw'
+import buildNearFieldSlotsVert from '@/graph/modules/ForceManyBody/build-nearfield-slots.vert?raw'
+import buildNearFieldSlotsFrag from '@/graph/modules/ForceManyBody/build-nearfield-slots.frag?raw'
 import forceBruteForce3DFrag from '@/graph/modules/ForceManyBody/force-many-body-3d.frag?raw'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
@@ -21,8 +23,19 @@ import updateVert from '@/graph/modules/Shared/quad.vert?raw'
  */
 const BRUTE_FORCE_3D_MAX_POINTS = 4096
 
-/** Finest octree grid resolution per axis (128³ tiles into a 1536×1408 texture ≈ 35 MB). */
-const MAX_LEVEL_GRID_SIZE_3D = 128
+/**
+ * Finest octree grid resolution per axis (64³ tiles into a 512×512 texture).
+ * Also bounds the near-field slot textures, which share the finest level's layout.
+ */
+const MAX_LEVEL_GRID_SIZE_3D = 64
+
+/**
+ * Depth-peeled points per finest-level cell that receive exact pairwise
+ * repulsion each tick. The subset is re-randomized every tick, so points of a
+ * dense cell rotate through exact treatment; the remainder acts through the
+ * cell's residual centroid.
+ */
+const NEAR_FIELD_SLOTS_3D = 8
 
 type LevelTarget = {
   texture: Texture;
@@ -48,6 +61,12 @@ export class ForceManyBody extends CoreModule {
   /** Octree level count in 3D mode; `0` while the brute-force path is active. */
   private levels3D = 0
   private levelTargets3D = new Map<number, LevelTarget3D>()
+  /**
+   * Near-field point slots: NEAR_FIELD_SLOTS_3D textures sharing the finest
+   * level's tiled layout, each holding [point index, hash] per cell — built by
+   * depth peeling every tick (see build-nearfield-slots.vert).
+   */
+  private nearFieldSlotTargets: LevelTarget[] = []
 
   private calculateLevelsCommand: Model | undefined
   private forceCommand: Model | undefined
@@ -60,7 +79,8 @@ export class ForceManyBody extends CoreModule {
   private bruteForce3DCommand: Model | undefined
   private calculateLevels3DCommand: Model | undefined
   private forceLevel3DCommand: Model | undefined
-  private forceCentermass3DCommand: Model | undefined
+  private buildNearFieldSlotsCommand: Model | undefined
+  private forceNearField3DCommand: Model | undefined
 
   private forceVertexCoordBuffer: Buffer | undefined
 
@@ -123,8 +143,22 @@ export class ForceManyBody extends CoreModule {
     };
   }> | undefined
 
-  private forceCentermass3DUniformStore: UniformStore<{
-    forceCentermass3DUniforms: {
+  private buildNearFieldSlotsUniformStore: UniformStore<{
+    buildNearFieldSlotsUniforms: {
+      pointsTextureSize: number;
+      levelGridSize: number;
+      cellSize: number;
+      tilesPerRow: number;
+      levelTextureWidth: number;
+      levelTextureHeight: number;
+      hasPreviousSlot: number;
+      randomSeed: number;
+    };
+  }> | undefined
+
+  private forceNearField3DUniformStore: UniformStore<{
+    forceNearField3DUniforms: {
+      pointsTextureSize: number;
       levelGridSize: number;
       cellSize: number;
       tilesPerRow: number;
@@ -264,6 +298,9 @@ export class ForceManyBody extends CoreModule {
         pointIndices: this.pointIndices,
       })
       this.calculateLevels3DCommand?.setAttributes({
+        pointIndices: this.pointIndices,
+      })
+      this.buildNearFieldSlotsCommand?.setAttributes({
         pointIndices: this.pointIndices,
       })
     }
@@ -587,11 +624,66 @@ export class ForceManyBody extends CoreModule {
         },
       })
 
-      // Octree near-field command (fullscreen quad — mirrors forceFromItsOwnCentermassCommand)
-      this.forceCentermass3DUniformStore ||= new UniformStore({
-        forceCentermass3DUniforms: {
+      // Near-field slot peeling command (point list; the depth test selects the
+      // eligible point with the smallest per-tick hash per cell)
+      this.buildNearFieldSlotsUniformStore ||= new UniformStore({
+        buildNearFieldSlotsUniforms: {
           uniformTypes: {
             // Order MUST match shader declaration order (std140 layout)
+            pointsTextureSize: 'f32',
+            levelGridSize: 'f32',
+            cellSize: 'f32',
+            tilesPerRow: 'f32',
+            levelTextureWidth: 'f32',
+            levelTextureHeight: 'f32',
+            hasPreviousSlot: 'f32',
+            randomSeed: 'f32',
+          },
+          defaultUniforms: {
+            pointsTextureSize: store.pointsTextureSize,
+            levelGridSize: 0,
+            cellSize: 0,
+            tilesPerRow: 0,
+            levelTextureWidth: 0,
+            levelTextureHeight: 0,
+            hasPreviousSlot: 0,
+            randomSeed: 0,
+          },
+        },
+      })
+
+      this.buildNearFieldSlotsCommand ||= new Model(device, {
+        fs: buildNearFieldSlotsFrag,
+        vs: buildNearFieldSlotsVert,
+        topology: 'point-list',
+        vertexCount: data.pointsNumber,
+        attributes: {
+          ...this.pointIndices && { pointIndices: this.pointIndices },
+        },
+        bufferLayout: [
+          { name: 'pointIndices', format: 'float32x2' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
+        },
+        bindings: {
+          buildNearFieldSlotsUniforms: this.buildNearFieldSlotsUniformStore.getManagedUniformBuffer(device, 'buildNearFieldSlotsUniforms'),
+          // All texture bindings will be set dynamically in drawNearFieldSlots() method
+        },
+        parameters: {
+          blend: false,
+          depthWriteEnabled: true,
+          depthCompare: 'less',
+        },
+      })
+
+      // Octree near-field force command (fullscreen quad — the P3M replacement of
+      // the 2D forceFromItsOwnCentermassCommand)
+      this.forceNearField3DUniformStore ||= new UniformStore({
+        forceNearField3DUniforms: {
+          uniformTypes: {
+            // Order MUST match shader declaration order (std140 layout)
+            pointsTextureSize: 'f32',
             levelGridSize: 'f32',
             cellSize: 'f32',
             tilesPerRow: 'f32',
@@ -599,6 +691,7 @@ export class ForceManyBody extends CoreModule {
             repulsion: 'f32',
           },
           defaultUniforms: {
+            pointsTextureSize: store.pointsTextureSize,
             levelGridSize: 0,
             cellSize: 0,
             tilesPerRow: 0,
@@ -608,8 +701,8 @@ export class ForceManyBody extends CoreModule {
         },
       })
 
-      this.forceCentermass3DCommand ||= new Model(device, {
-        fs: forceCentermass3DFrag,
+      this.forceNearField3DCommand ||= new Model(device, {
+        fs: forceNearField3DFrag,
         vs: updateVert,
         topology: 'triangle-strip',
         vertexCount: 4,
@@ -623,7 +716,7 @@ export class ForceManyBody extends CoreModule {
           USE_UNIFORM_BUFFERS: true,
         },
         bindings: {
-          forceCentermass3DUniforms: this.forceCentermass3DUniformStore.getManagedUniformBuffer(device, 'forceCentermass3DUniforms'),
+          forceNearField3DUniforms: this.forceNearField3DUniformStore.getManagedUniformBuffer(device, 'forceNearField3DUniforms'),
           // All texture bindings will be set dynamically in drawForcesOctree3D() method
         },
         parameters: {
@@ -652,10 +745,15 @@ export class ForceManyBody extends CoreModule {
     }
     if (this.store.is3D) {
       // Octree above the threshold; exact brute force below (and as a defensive
-      // fallback when the octree targets are unavailable).
+      // fallback when the octree or near-field targets are unavailable).
       const pointsNumber = this.data.pointsNumber ?? 0
-      if (pointsNumber > BRUTE_FORCE_3D_MAX_POINTS && this.levelTargets3D.size > 0) {
+      if (
+        pointsNumber > BRUTE_FORCE_3D_MAX_POINTS &&
+        this.levelTargets3D.size > 0 &&
+        this.nearFieldSlotTargets.length === NEAR_FIELD_SLOTS_3D
+      ) {
         this.drawLevels3D()
+        this.drawNearFieldSlots()
         this.drawForcesOctree3D()
       } else {
         this.drawForcesBruteForce3D()
@@ -684,8 +782,10 @@ export class ForceManyBody extends CoreModule {
     this.calculateLevels3DCommand = undefined
     this.forceLevel3DCommand?.destroy()
     this.forceLevel3DCommand = undefined
-    this.forceCentermass3DCommand?.destroy()
-    this.forceCentermass3DCommand = undefined
+    this.buildNearFieldSlotsCommand?.destroy()
+    this.buildNearFieldSlotsCommand = undefined
+    this.forceNearField3DCommand?.destroy()
+    this.forceNearField3DCommand = undefined
 
     // 2. Destroy Framebuffers (before textures they reference)
     for (const target of this.levelTargets.values()) {
@@ -723,8 +823,10 @@ export class ForceManyBody extends CoreModule {
     this.calculateLevels3DUniformStore = undefined
     this.forceLevel3DUniformStore?.destroy()
     this.forceLevel3DUniformStore = undefined
-    this.forceCentermass3DUniformStore?.destroy()
-    this.forceCentermass3DUniformStore = undefined
+    this.buildNearFieldSlotsUniformStore?.destroy()
+    this.buildNearFieldSlotsUniformStore = undefined
+    this.forceNearField3DUniformStore?.destroy()
+    this.forceNearField3DUniformStore = undefined
 
     // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
     if (this.pointIndices && !this.pointIndices.destroyed) {
@@ -819,7 +921,8 @@ export class ForceManyBody extends CoreModule {
     const { device, store, points } = this
     if (!points) return
     if (!this.forceLevel3DCommand || !this.forceLevel3DUniformStore) return
-    if (!this.forceCentermass3DCommand || !this.forceCentermass3DUniformStore) return
+    if (!this.forceNearField3DCommand || !this.forceNearField3DUniformStore) return
+    if (this.nearFieldSlotTargets.length !== NEAR_FIELD_SLOTS_3D) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
     if (!this.randomValuesTexture || this.randomValuesTexture.destroyed) return
     if (!points.velocityFbo || points.velocityFbo.destroyed) return
@@ -853,10 +956,12 @@ export class ForceManyBody extends CoreModule {
       this.forceLevel3DCommand.draw(drawPass)
 
       // The finest level leaves only the 3³ neighborhood uncovered — the near-field
-      // pass closes it (26 neighbor centroids + the own-cell centermass with jitter).
+      // pass closes it: exact pairwise forces from the depth-peeled slot points
+      // plus each cell's residual centroid.
       if (level === this.levels3D - 1) {
-        this.forceCentermass3DUniformStore.setUniforms({
-          forceCentermass3DUniforms: {
+        this.forceNearField3DUniformStore.setUniforms({
+          forceNearField3DUniforms: {
+            pointsTextureSize: store.pointsTextureSize ?? 0,
             levelGridSize: target.gridSize,
             cellSize,
             tilesPerRow: target.tilesPerRow,
@@ -865,16 +970,82 @@ export class ForceManyBody extends CoreModule {
           },
         })
 
-        this.forceCentermass3DCommand.setBindings({
+        this.forceNearField3DCommand.setBindings({
           positionsTexture: points.previousPositionTexture,
           levelTexture: target.texture,
           randomValues: this.randomValuesTexture,
+          slotTexture0: this.nearFieldSlotTargets[0]!.texture,
+          slotTexture1: this.nearFieldSlotTargets[1]!.texture,
+          slotTexture2: this.nearFieldSlotTargets[2]!.texture,
+          slotTexture3: this.nearFieldSlotTargets[3]!.texture,
+          slotTexture4: this.nearFieldSlotTargets[4]!.texture,
+          slotTexture5: this.nearFieldSlotTargets[5]!.texture,
+          slotTexture6: this.nearFieldSlotTargets[6]!.texture,
+          slotTexture7: this.nearFieldSlotTargets[7]!.texture,
         })
-        this.forceCentermass3DCommand.draw(drawPass)
+        this.forceNearField3DCommand.draw(drawPass)
       }
     }
 
     drawPass.end()
+  }
+
+  /**
+   * Rebuilds the near-field point slots for this tick: NEAR_FIELD_SLOTS_3D
+   * depth-peeling passes over the points, each capturing the eligible point with
+   * the smallest per-tick random hash per finest-level cell (see
+   * build-nearfield-slots.vert). Re-seeded every tick so dense cells rotate all
+   * their points through exact pairwise treatment.
+   */
+  private drawNearFieldSlots (): void {
+    const { device, store, data, points } = this
+    if (!points) return
+    if (!this.buildNearFieldSlotsCommand || !this.buildNearFieldSlotsUniformStore) return
+    if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
+    if (!data.pointsNumber || !this.pointIndices) return
+    const finest = this.levelTargets3D.get(this.levels3D - 1)
+    if (!finest || finest.texture.destroyed) return
+
+    const randomSeed = store.getRandomFloat(0, 1)
+
+    for (let slot = 0; slot < this.nearFieldSlotTargets.length; slot += 1) {
+      const target = this.nearFieldSlotTargets[slot]
+      if (!target || target.fbo.destroyed) continue
+
+      this.buildNearFieldSlotsUniformStore.setUniforms({
+        buildNearFieldSlotsUniforms: {
+          pointsTextureSize: store.pointsTextureSize ?? 0,
+          levelGridSize: finest.gridSize,
+          cellSize: store.adjustedSpaceSize / finest.gridSize,
+          tilesPerRow: finest.tilesPerRow,
+          levelTextureWidth: finest.width,
+          levelTextureHeight: finest.height,
+          hasPreviousSlot: slot === 0 ? 0 : 1,
+          // The seed is shared by all slots of one tick — peeling relies on a
+          // consistent hash ordering across the passes.
+          randomSeed,
+        },
+      })
+
+      this.buildNearFieldSlotsCommand.setVertexCount(data.pointsNumber)
+      this.buildNearFieldSlotsCommand.setBindings({
+        positionsTexture: points.previousPositionTexture,
+        // Pass 0 never samples previousSlot, but the binding must exist for the
+        // draw to run — any texture that is not the render target works.
+        previousSlot: slot === 0
+          ? points.previousPositionTexture
+          : this.nearFieldSlotTargets[slot - 1]!.texture,
+      })
+
+      const slotPass = device.beginRenderPass({
+        framebuffer: target.fbo,
+        // Cleared slot = empty: index -1 with hash 1 keeps later passes ineligible
+        clearColor: [-1, 1, 0, 0],
+        clearDepth: 1,
+      })
+      this.buildNearFieldSlotsCommand.draw(slotPass)
+      slotPass.end()
+    }
   }
 
   /**
@@ -935,6 +1106,51 @@ export class ForceManyBody extends CoreModule {
         this.levelTargets3D.delete(level)
       }
     }
+
+    // Near-field slot textures share the finest level's tiled layout
+    const finest = this.levelTargets3D.get(this.levels3D - 1)
+    if (finest) this.createNearFieldSlotTargets(finest)
+  }
+
+  /**
+   * Allocates the depth-peeling slot targets ([point index, hash] per cell) plus
+   * a depth attachment each for the peel's smallest-hash selection.
+   */
+  private createNearFieldSlotTargets (finest: LevelTarget3D): void {
+    const { device } = this
+    const existing = this.nearFieldSlotTargets[0]
+    if (
+      existing &&
+      !existing.texture.destroyed &&
+      existing.texture.width === finest.width &&
+      existing.texture.height === finest.height &&
+      this.nearFieldSlotTargets.length === NEAR_FIELD_SLOTS_3D
+    ) return
+
+    this.destroyNearFieldSlotTargets()
+    for (let slot = 0; slot < NEAR_FIELD_SLOTS_3D; slot += 1) {
+      const texture = device.createTexture({
+        width: finest.width,
+        height: finest.height,
+        format: 'rg32float',
+        usage: Texture.SAMPLE | Texture.RENDER,
+      })
+      const fbo = device.createFramebuffer({
+        width: finest.width,
+        height: finest.height,
+        colorAttachments: [texture],
+        depthStencilAttachment: 'depth16unorm',
+      })
+      this.nearFieldSlotTargets.push({ texture, fbo })
+    }
+  }
+
+  private destroyNearFieldSlotTargets (): void {
+    for (const target of this.nearFieldSlotTargets) {
+      if (!target.fbo.destroyed) target.fbo.destroy()
+      if (!target.texture.destroyed) target.texture.destroy()
+    }
+    this.nearFieldSlotTargets = []
   }
 
   private destroyLevelTargets3D (): void {
@@ -943,6 +1159,7 @@ export class ForceManyBody extends CoreModule {
       if (!target.texture.destroyed) target.texture.destroy()
     }
     this.levelTargets3D.clear()
+    this.destroyNearFieldSlotTargets()
   }
 
   private drawLevels (): void {
