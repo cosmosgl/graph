@@ -1,138 +1,97 @@
 #version 300 es
 precision highp float;
 
+// One grid level of precise many-body repulsion (Barnes-Hut-style approximation).
+//
+// Levels are 2D grids of increasing resolution (4², 8², …) holding
+// [sum(x), sum(y), count, 0] per cell. The decomposition tiles space exactly
+// once across the level passes: after level L the only un-accumulated region is
+// the 3×3 Chebyshev-1 neighborhood of the point's cell, which the next level
+// refines (its aligned 6×6 child block), and which force-nearfield.frag finally
+// covers at the finest level. The exclusion shell is fixed at Chebyshev
+// distance 1.
+
 uniform sampler2D positionsTexture;
-uniform sampler2D levelFbo;
+uniform sampler2D levelTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
-layout(std140) uniform forceUniforms {
-  float level;
-  float levels;
-  float levelTextureSize;
+layout(std140) uniform forceLevelPreciseUniforms {
+  float levelGridSize;
+  float cellSize;
+  float isFirstLevel;
   float alpha;
   float repulsion;
-  float spaceSize;
-  float theta;
-} force;
+} forceLevelPrecise;
 
-#define level force.level
-#define levels force.levels
-#define levelTextureSize force.levelTextureSize
-#define alpha force.alpha
-#define repulsion force.repulsion
-#define spaceSize force.spaceSize
-#define theta force.theta
+#define levelGridSize forceLevelPrecise.levelGridSize
+#define cellSize forceLevelPrecise.cellSize
+#define isFirstLevel forceLevelPrecise.isFirstLevel
+#define alpha forceLevelPrecise.alpha
+#define repulsion forceLevelPrecise.repulsion
 #else
-uniform float level;
-uniform float levels;
-uniform float levelTextureSize;
-uniform float repulsion;
+uniform float levelGridSize;
+uniform float cellSize;
+uniform float isFirstLevel;
 uniform float alpha;
-uniform float spaceSize;
-uniform float theta;
+uniform float repulsion;
 #endif
 
 in vec2 textureCoords;
 out vec4 fragColor;
 
-const float MAX_LEVELS_NUM = 14.0;
-
-vec2 calculateAdditionalVelocity (vec2 ij, vec2 pp) {
-  vec2 add = vec2(0.0);
-  vec4 centermass = texture(levelFbo, ij);
-  if (centermass.r > 0.0 && centermass.g > 0.0 && centermass.b > 0.0) {
-    vec2 centermassPosition = vec2(centermass.rg / centermass.b);
-    vec2 distVector = pp - centermassPosition;
-    float l = dot(distVector, distVector);
-    float dist = sqrt(l);
-    if (l > 0.0) {
-      float c = alpha * repulsion * centermass.b;
-
-      float distanceMin2 = 1.0;
-      if (l < distanceMin2) l = sqrt(distanceMin2 * l);
-      float addV = c / sqrt(l);
-      add = addV * normalize(distVector);
-    }
-  }
-  return add;
+// Repulsion from one cell's center of mass — a d3-style clamped
+// inverse-distance falloff.
+vec2 cellVelocity(ivec2 cell, vec2 position) {
+  vec4 centermass = texelFetch(levelTexture, cell, 0);
+  // Count-only guard: zero coordinate sums are legitimate, but dividing by a zero
+  // count would produce NaN that additive blending propagates into the velocity FBO.
+  if (centermass.b <= 0.0) return vec2(0.0);
+  vec2 centermassPosition = centermass.rg / centermass.b;
+  vec2 distVector = position - centermassPosition;
+  float l = dot(distVector, distVector);
+  if (l <= 0.0) return vec2(0.0);
+  float distanceMin2 = 1.0;
+  if (l < distanceMin2) l = sqrt(distanceMin2 * l);
+  float addV = alpha * repulsion * centermass.b / sqrt(l);
+  return addV * normalize(distVector);
 }
 
 void main() {
   vec4 pointPosition = texture(positionsTexture, textureCoords);
-  float x = pointPosition.x;
-  float y = pointPosition.y;
+  vec2 position = pointPosition.rg;
 
-  float left = 0.0;
-  float top = 0.0;
-  float right = spaceSize;
-  float bottom = spaceSize;
+  int gridSize = int(levelGridSize);
+  // Must match the aggregation shader's cell formula exactly.
+  ivec2 pointCell = clamp(ivec2(floor(position / cellSize)), ivec2(0), ivec2(gridSize - 1));
 
-  float n_left = 0.0;
-  float n_top = 0.0;
-  float n_right = 0.0;
-  float n_bottom = 0.0;
+  vec2 velocity = vec2(0.0);
 
-  float cellSize = 0.0;
-
-  // Iterate over levels to adjust the boundaries based on the current level
-  for (float i = 0.0; i < MAX_LEVELS_NUM; i += 1.0) {
-    if (i <= level) {
-      left += cellSize * n_left;
-      top += cellSize * n_top;
-      right -= cellSize * n_right;
-      bottom -= cellSize * n_bottom;
-
-      cellSize = pow(2.0 , levels - i - 1.0);
-
-      float dist_left = x - left;
-      n_left = max(0.0, floor(dist_left / cellSize - theta));
-
-      float dist_top = y - top;
-      n_top = max(0.0, floor(dist_top / cellSize - theta));
-      
-      float dist_right = right - x;
-      n_right = max(0.0, floor(dist_right / cellSize - theta));
-
-      float dist_bottom = bottom - y;
-      n_bottom = max(0.0, floor(dist_bottom / cellSize - theta));
-
+  if (isFirstLevel > 0.5) {
+    // Coarsest level: every cell except the 3×3 neighborhood, which finer levels refine.
+    for (int j = 0; j < gridSize; j += 1) {
+      for (int i = 0; i < gridSize; i += 1) {
+        ivec2 cell = ivec2(i, j);
+        ivec2 cellDist = abs(cell - pointCell);
+        if (max(cellDist.x, cellDist.y) <= 1) continue;
+        velocity += cellVelocity(cell, position);
+      }
     }
-  }
-
-  vec4 velocity = vec4(vec2(0.0), 1.0, 0.0);
-
-  // Calculate the additional velocity based on neighboring cells
-  for (float i = 0.0; i < 12.0; i += 1.0) {
-    for (float j = 0.0; j < 4.0; j += 1.0) {
-      float n = left + cellSize * j;
-      float m = top + cellSize * n_top + cellSize * i;
-
-      if (n < (left + n_left * cellSize) && m < bottom) {
-        velocity.xy += calculateAdditionalVelocity(vec2(n / cellSize, m / cellSize) / levelTextureSize, pointPosition.xy);
-      }
-
-      n = left + cellSize * i;
-      m = top + cellSize * j;
-
-      if (n < (right - n_right * cellSize) && m < (top + n_top * cellSize)) {
-        velocity.xy += calculateAdditionalVelocity(vec2(n / cellSize, m / cellSize) / levelTextureSize, pointPosition.xy);
-      }
-
-      n = right - n_right * cellSize + cellSize * j;
-      m = top + cellSize * i;
-
-      if (n < right && m < (bottom - n_bottom * cellSize)) {
-        velocity.xy += calculateAdditionalVelocity(vec2(n / cellSize, m / cellSize) / levelTextureSize, pointPosition.xy);
-      }
-
-      n = left + n_left * cellSize + cellSize * i;
-      m = bottom - n_bottom * cellSize + cellSize * j;
-
-      if (n < right && m < bottom) {
-        velocity.xy += calculateAdditionalVelocity(vec2(n / cellSize, m / cellSize) / levelTextureSize, pointPosition.xy);
+  } else {
+    // The coarser level left its 3×3 neighborhood unhandled; those cells refine to
+    // the aligned 6×6 child block at this level. Sample it minus this level's own
+    // 3×3 neighborhood (always strictly inside the block).
+    ivec2 base = (pointCell / 2) * 2 - 2;
+    for (int j = 0; j < 6; j += 1) {
+      for (int i = 0; i < 6; i += 1) {
+        ivec2 cell = base + ivec2(i, j);
+        // Bounds check must precede texelFetch (out-of-range fetches are undefined).
+        if (any(lessThan(cell, ivec2(0))) || any(greaterThanEqual(cell, ivec2(gridSize)))) continue;
+        ivec2 cellDist = abs(cell - pointCell);
+        if (max(cellDist.x, cellDist.y) <= 1) continue;
+        velocity += cellVelocity(cell, position);
       }
     }
   }
 
-  fragColor = velocity;
+  fragColor = vec4(velocity, 0.0, 0.0);
 }
