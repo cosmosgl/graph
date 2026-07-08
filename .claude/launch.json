@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "storybook",
+      "runtimeExecutable": "bash",
+      "runtimeArgs": ["-lc", "export NVM_DIR=\"$HOME/.nvm\" && . \"$NVM_DIR/nvm.sh\" && nvm use 22 && npx storybook dev -p 6006 --ci"],
+      "port": 6006
+    }
+  ]
+}

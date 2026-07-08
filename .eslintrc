@@ -1,4 +1,5 @@
 {
+  "root": true,
   "extends": [
     "plugin:@typescript-eslint/recommended",
     "standard"
