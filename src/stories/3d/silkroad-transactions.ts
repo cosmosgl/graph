@@ -73,10 +73,11 @@ export const silkroadTransactions3d = (): { graph: Graph; div: HTMLDivElement; d
   const config: GraphConfig = {
     spaceSize: SPACE_SIZE,
     backgroundColor: '#0a0a14',
-    pointDefaultSize: 1,
-    linkDefaultWidth: 0.15,
+    pointDefaultSize: 2,
+    linkDefaultWidth: 0.5,
     linkDefaultColor: '#8a6a30',
-    linkOpacity: 0.5,
+    linkOpacity: 0.8,
+    scalePointsOnZoom: true,
     curvedLinks: false,
     enableSimulation: true,
     simulationGravity: 0.4,
@@ -109,13 +110,6 @@ export const silkroadTransactions3d = (): { graph: Graph; div: HTMLDivElement; d
   let graph = new Graph(graphDiv, config)
   graph.render()
 
-  const scheduleRefits = (): void => {
-    graph.fitView(1000)
-    for (const delay of [3000, 8000]) {
-      timeouts.push(setTimeout(() => { if (!destroyed) graph.fitView(1000) }, delay))
-    }
-  }
-
   // Push the parsed data into the current graph (used for the first build and after a mode switch).
   const applyData = (): void => {
     if (mode === '3d') graph.setPointPositions3D(positions3d)
@@ -125,7 +119,6 @@ export const silkroadTransactions3d = (): { graph: Graph; div: HTMLDivElement; d
     graph.setLinks(links)
     graph.render()
     if (paused) graph.pause()
-    scheduleRefits()
   }
 
   const updateControls = (): void => {
@@ -232,7 +225,7 @@ export const silkroadTransactions3d = (): { graph: Graph; div: HTMLDivElement; d
       colors[i * 4 + 1] = 0.30 + t * 0.52
       colors[i * 4 + 2] = 0.46 - t * 0.22
       colors[i * 4 + 3] = 0.9
-      sizes[i] = 2 + t
+      sizes[i] = 5 + t * 5
     }
 
     // 5. First build on the existing (empty) graph, then reveal the controls.
