@@ -58,14 +58,15 @@ const easingFunctions: Record<TransitionEasing, (t: number) => number> = {
 /**
  * Drives timed transitions (positions / colors / sizes / …) between data updates.
  *
- * Three durations, at three scopes:
- * - `config.transitionDuration` — the default, **forever**;
- * - `overrideDuration` — **this render only** (set by `setDurationOverride()` before the update
- *   pipeline, consumed by `start()`);
- * - `activeDuration` — **this animation only** (frozen at `start()`, read each frame by `step()`).
+ * Three durations, three scopes:
+ * - `config.transitionDuration` — the default (app lifetime);
+ * - `overrideDuration` — the plan for the next cycle (this render only; armed by
+ *   `setDurationOverride()`, consumed by `start()`);
+ * - `activeDuration` — the running cycle's memory (set by `start()`, paces `step()`).
  *
- * The `duration` getter resolves them in that precedence: the render override, else the running
- * cycle's duration while one is active, else the config default.
+ * The `duration` getter (override, else config) is the single rule for the next cycle: `start()`
+ * resolves through it, so code predicting animate vs. snap always matches what `start()` does.
+ * The cycle's memory never feeds back into that rule.
  */
 export class Transition {
   /** Last eased progress value in the `[0, 1]` range. */
@@ -99,15 +100,12 @@ export class Transition {
   }
 
   /**
-   * How long the upcoming transition lasts (ms): the value armed for this render if any, else the
-   * running cycle's duration while one is active, else the config default. A duration of 0 means
-   * the update snaps instead of animating.
-   *
-   * A transition that is already playing keeps its own length (`step()` uses `activeDuration`
-   * directly).
+   * Duration (ms) the next `start()` will use: the render override if armed, else the config
+   * default. `0` means snap. `start()` resolves through this same getter, so predicting
+   * animate vs. snap before it runs always matches what it does.
    */
   public get duration (): number {
-    return this.overrideDuration ?? (this.isActive ? this.activeDuration : this.config.transitionDuration)
+    return this.overrideDuration ?? this.config.transitionDuration
   }
 
   /** True while one or more properties are queued via `queue()` awaiting `start()`. */
@@ -163,9 +161,8 @@ export class Transition {
    * `config.transitionDuration`, and clears the override so it applies once.
    */
   public start (): void {
-    // Consume the render override unconditionally, so it can't linger into a later render even
-    // when there's nothing pending to start.
-    const transitionDuration = this.overrideDuration ?? this.config.transitionDuration
+    // Consume the override even when nothing is pending, so it can't linger into a later render.
+    const transitionDuration = this.duration
     this.overrideDuration = undefined
 
     if (!this.isPending) return
