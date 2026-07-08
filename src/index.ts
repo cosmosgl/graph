@@ -484,11 +484,15 @@ export class Graph {
     const currentPositionTexture = this.points?.currentPositionTexture
     if (currentPositionTexture && !currentPositionTexture.destroyed) {
       this.transition.queue(TransitionProperty.Positions)
-      // Also animate size/color so a point removed by a NaN position fades out to
-      // the exit default even when the caller doesn't call setPointSizes/Colors.
-      // No-op when those values are unchanged (source == target).
-      this.transition.queue(TransitionProperty.PointSizes)
-      this.transition.queue(TransitionProperty.PointColors)
+      // The exit/enter fade of a removed (NaN) or revived point is carried by size/color
+      // transitions, so queue them when a point's absence flipped even though the caller
+      // didn't call setPointSizes/Colors. Only then: an active size transition disables
+      // hover picking for its whole duration (see findHoveredItem), so a pure move must
+      // not activate one.
+      if (this.graph.hasPointAbsenceChanged()) {
+        this.transition.queue(TransitionProperty.PointSizes)
+        this.transition.queue(TransitionProperty.PointColors)
+      }
     }
     // Links related texture depends on point positions, so we need to update it
     this.isLinksUpdateNeeded = true

@@ -101,6 +101,24 @@ export class GraphData {
   }
 
   /**
+   * Reports whether any point's absence (`NaN` position) differs between the applied
+   * positions and the pending input, over their shared length — i.e. whether the pending
+   * update removes (`real → NaN`) or revives (`NaN → real`) a point. Slots beyond the
+   * shared length don't count: a slot that enters already absent has nothing to fade,
+   * and a dropped slot no longer exists.
+   */
+  public hasPointAbsenceChanged (): boolean {
+    const previous = this.pointPositions
+    const next = this.inputPointPositions
+    if (!previous || !next || previous === next) return false
+    const sharedCount = Math.min(previous.length, next.length) / 2
+    for (let i = 0; i < sharedCount; i++) {
+      if (Number.isNaN(previous[i * 2] as number) !== Number.isNaN(next[i * 2] as number)) return true
+    }
+    return false
+  }
+
+  /**
    * Updates the point colors based on the input data or default config value.
    */
   public updatePointColor (): void {
