@@ -49,6 +49,12 @@ export class Graph {
    */
   private shouldDestroyDevice: boolean
   private requestAnimationFrameId = 0
+  /**
+   * With on-demand rendering nothing polls the canvas size while idle;
+   * this observer schedules a redraw on element resize. The actual
+   * screen-size/zoom-transform update stays in resizeCanvas() inside the frame.
+   */
+  private resizeObserver: ResizeObserver | undefined
   private isRightClickMouse = false
   /**
    * Touch/pen long-press timer. Set on pointerdown for non-mouse pointers and
@@ -203,6 +209,14 @@ export class Graph {
       ])
       if (this._isDestroyed) return device
 
+      // With on-demand rendering there is no per-frame resize polling, so a resize while
+      // the loop is idle must schedule a frame itself; the actual resize work still runs
+      // in-frame (resizeCanvas), and luma's own observer resizes the drawing buffer.
+      if (typeof ResizeObserver !== 'undefined') {
+        this.resizeObserver = new ResizeObserver(() => { this.requestRender() })
+        this.resizeObserver.observe(this.canvas)
+      }
+
       const w = this.canvas.clientWidth
       const h = this.canvas.clientHeight
 
@@ -218,6 +232,9 @@ export class Graph {
           this._isPointerOnCanvas = true
           this._lastMouseX = event.clientX
           this._lastMouseY = event.clientY
+          // Drain any hover work that accumulated while the pointer was away
+          // (forced hover check or unchecked mouse movement).
+          this.requestRender()
         })
         .on('pointermove.cosmos', (event: PointerEvent) => {
           if (!event.isPrimary) return
@@ -243,6 +260,8 @@ export class Graph {
             this.store.hoveredPoint?.position,
             this.currentEvent
           )
+
+          this.requestRender()
         })
         .on('pointerleave.cosmos pointercancel.cosmos', (event: PointerEvent) => {
           // Non-primary pointers (e.g. second finger of a pinch) leaving must not
@@ -275,6 +294,9 @@ export class Graph {
 
           // Update cursor style after clearing hover states
           this.updateCanvasCursor()
+
+          // Hover ring / link highlight was cleared — redraw without it
+          this.requestRender()
         })
         .on('pointerdown.cosmos', (event: PointerEvent) => {
           if (!event.isPrimary) return
@@ -288,6 +310,8 @@ export class Graph {
           this._lastMouseY = event.clientY
           this.updateMousePosition(event)
           this.findHoveredItem(true)
+          // The immediate pick may have shown/moved the hover ring
+          this.requestRender()
 
           // Touch/pen long-press → contextmenu. The mouse path already gets
           // contextmenu from the browser; this fills the gap for touch where
@@ -302,6 +326,7 @@ export class Graph {
               // Re-pick in case points moved during the hold (simulation may have
               // shifted them under the stationary finger).
               this.findHoveredItem(true)
+              this.requestRender()
               this._shouldSuppressNextClick = true
               this.fireContextMenu(event)
             }, LONG_PRESS_DURATION_MS)
@@ -323,32 +348,42 @@ export class Graph {
         .on('keyup.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
 
       this.zoomInstance.behavior
-        .on('start.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => { this.currentEvent = e })
+        .on('start.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
+          this.currentEvent = e
+          this.requestRender()
+        })
         .on('zoom.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
           const userDriven = !!e.sourceEvent
           if (userDriven) this.updateMousePosition(e.sourceEvent)
           this.currentEvent = e
+          this.requestRender()
         })
         .on('end.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
           this.currentEvent = e
           // Force hover detection on next frame since zoom may have changed what's under the mouse
           this._shouldForceHoverDetection = true
+          this.requestRender()
         })
 
       this.dragInstance.behavior
         .on('start.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
           this.currentEvent = e
           this.updateCanvasCursor()
+          this.requestRender()
         })
         .on('drag.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
           if (this.dragInstance.isActive) {
             this.updateMousePosition(e)
           }
           this.currentEvent = e
+          this.requestRender()
         })
         .on('end.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
           this.currentEvent = e
           this.updateCanvasCursor()
+          // The drag GPU write happens after the draw pass, so the final
+          // position only becomes visible on the frame scheduled here.
+          this.requestRender()
         })
       if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
       // Zoom level 1 means no zoom (100% scale). defaultConfigValues.initialZoomLevel is undefined,
@@ -603,6 +638,7 @@ export class Graph {
     if (this.ensureDevice(() => this.setImageData(imageDataArray))) return
     this.graph.inputImageData = imageDataArray
     this.points?.createAtlas()
+    this.requestRender()
   }
 
   /**
@@ -855,6 +891,7 @@ export class Graph {
     if (this.ensureDevice(() => this.setPinnedPoints(pinnedIndices))) return
     this.graph.inputPinnedPoints = pinnedIndices && pinnedIndices.length > 0 ? pinnedIndices : undefined
     this.points?.updatePinnedStatus()
+    this.requestRender()
   }
 
   /**
@@ -934,7 +971,7 @@ export class Graph {
     this.transition.start()
     // Re-detect hover on the next frame since data may have changed under a stationary mouse
     this._shouldForceHoverDetection = true
-    this.startFrames()
+    this.requestRender()
 
     this._isFirstRenderAfterInit = false
   }
@@ -1399,7 +1436,8 @@ export class Graph {
     this.store.alpha = alpha
     if (!wasRunning) this.config.onSimulationStart?.()
 
-    // Note: Does NOT start frames - that's handled separately
+    // No-op before the first render() — frame() bails while there's nothing renderable
+    this.requestRender()
   }
 
   /**
@@ -1443,6 +1481,7 @@ export class Graph {
     }
     this.store.isSimulationRunning = true
     this.config.onSimulationUnpause?.()
+    this.requestRender()
   }
 
   /**
@@ -1459,6 +1498,8 @@ export class Graph {
 
     // Run one simulation step, forcing execution regardless of isSimulationRunning
     this.runSimulationStep(true)
+    // A manual step outside the loop is invisible until drawn
+    this.requestRender()
   }
 
   /**
@@ -1472,6 +1513,8 @@ export class Graph {
     window.clearTimeout(this._fitViewOnInitTimeoutID)
     this.cancelLongPress()
     this.stopFrames()
+    this.resizeObserver?.disconnect()
+    this.resizeObserver = undefined
 
     // Remove all event listeners — `.on('.cosmos', null)` clears every handler
     // in the `.cosmos` namespace at once (canvas pointer/click/contextmenu and
@@ -1593,6 +1636,9 @@ export class Graph {
     this.isForceManyBodyUpdateNeeded = false
     this.isForceLinkUpdateNeeded = false
     this.isForceCenterUpdateNeeded = false
+
+    // Public contract: applies data changes without render() — draw them
+    this.requestRender()
   }
 
   /**
@@ -1766,6 +1812,9 @@ export class Graph {
         prevConfig.onLinkMouseOut !== this.config.onLinkMouseOut) {
       this.store.updateLinkHoveringEnabled(this.config)
     }
+
+    // Config changes above apply visual state immediately — draw it
+    this.requestRender()
   }
 
   /**
@@ -2024,26 +2073,78 @@ export class Graph {
   }
 
   /**
-   * The rendering loop - schedules itself to run continuously
+   * Schedules a frame if none is pending. The RAF callback renders once and
+   * reschedules only while `shouldKeepRendering()` — when the scene is static,
+   * no frames run at all.
    */
   private frame (): void {
     if (this._isDestroyed) return
-
-    // Check if simulation should end BEFORE scheduling next frame
-    // This prevents one extra frame from running after simulation ends
-    const { store: { alpha, isSimulationRunning } } = this
-    if (alpha < ALPHA_MIN && isSimulationRunning) {
-      this.end()
-    }
+    if (this.requestAnimationFrameId) return // frame already scheduled
+    // Nothing renderable: before the first render(), or after render() cleared
+    // the data. Without this guard a later pointermove would resurrect drawing
+    // of stale GPU buffers (empty-data render() stops frames but doesn't clear
+    // pointsTextureSize).
+    if (!this.store.pointsTextureSize || (!this.graph.pointsNumber && !this.graph.linksNumber)) return
 
     this.requestAnimationFrameId = window.requestAnimationFrame((now) => {
+      this.requestAnimationFrameId = 0
+
+      // Check if simulation should end BEFORE rendering
+      // This prevents one extra simulation step after alpha decays below ALPHA_MIN
+      const { store: { alpha, isSimulationRunning } } = this
+      if (alpha < ALPHA_MIN && isSimulationRunning) {
+        this.end()
+      }
+
       this.renderFrame(now)
 
-      // Continue the loop (even after simulation ends)
-      if (!this._isDestroyed) {
+      if (!this._isDestroyed && this.shouldKeepRendering()) {
         this.frame()
       }
     })
+  }
+
+  /**
+   * Request a redraw. No-op if a frame is already scheduled. All internal
+   * events that can change visual state funnel through this.
+   */
+  private requestRender (): void {
+    if (this._isDestroyed) return
+    this.frame()
+  }
+
+  /**
+   * Whether the loop must continue past the current frame — true while any
+   * continuous activity can still change visual state.
+   */
+  private shouldKeepRendering (): boolean {
+    // gl-bench derives FPS from frame cadence; keep the loop continuous while
+    // the monitor is shown so its numbers stay meaningful.
+    if (this.fpsMonitor) return true
+    if (this.store.isSimulationRunning) return true // alpha floor handled by end() in frame()
+    // Not isPending: only render()'s transition.start() activates a pending
+    // transition, and render() schedules frames right after — while a
+    // queued-but-never-rendered transition must not keep the loop alive.
+    if (this.transition.isActive) return true
+    if (this.dragInstance.isActive) return true
+    if (this.zoomInstance.isRunning) return true // user gesture or programmatic d3 transition
+    // Right-click repulsion runs regardless of isSimulationRunning (see runSimulationStep)
+    if (this.isRightClickMouse && this.config.enableRightClickRepulsion) return true
+    return this.hasPendingHoverWork()
+  }
+
+  /**
+   * Whether findHoveredItem() still has work to do. Keeps the loop alive
+   * through the hover throttle (up to MAX_HOVER_DETECTION_DELAY frames) until
+   * detection actually executes — which updates _lastCheckedMouseX/Y and
+   * consumes _shouldForceHoverDetection, turning this false.
+   */
+  private hasPendingHoverWork (): boolean {
+    if (!this._isPointerOnCanvas) return false
+    if (this._shouldForceHoverDetection) return true
+    const deltaX = Math.abs(this._lastMouseX - this._lastCheckedMouseX)
+    const deltaY = Math.abs(this._lastMouseY - this._lastCheckedMouseY)
+    return deltaX > MIN_MOUSE_MOVEMENT_THRESHOLD || deltaY > MIN_MOUSE_MOVEMENT_THRESHOLD
   }
 
   /**
@@ -2131,15 +2232,6 @@ export class Graph {
       window.cancelAnimationFrame(this.requestAnimationFrameId)
       this.requestAnimationFrameId = 0 // Reset to 0
     }
-  }
-
-  /**
-   * Starts continuous rendering
-   */
-  private startFrames (): void {
-    if (this._isDestroyed) return
-    this.stopFrames() // Stop any existing rendering
-    this.frame() // Start the loop
   }
 
   /**
