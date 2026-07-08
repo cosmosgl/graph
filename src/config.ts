@@ -372,7 +372,10 @@ export interface GraphConfigInterface {
    */
   simulationRepulsion: number;
   /**
-   * Decreases / increases the detalization of the Many-Body force calculations.
+   * @deprecated No longer used. The many-body force now repels close points
+   * individually (exact all-pairs up to 4,096 points, a grid pyramid with an
+   * unbiased Monte-Carlo near field above), so there is no theta approximation
+   * to tune. This option is kept for backward compatibility and has no effect.
    * Default value: `1.15`
    */
   simulationRepulsionTheta: number;

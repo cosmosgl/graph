@@ -92,7 +92,7 @@ cosmos.gl layout algorithm was inspired by the [d3-force](https://github.com/d3/
 | simulationGravity | Gravity force coefficient | 0.0 – 1.0 | `0.25` |
 | simulationCenter | Centering force coefficient | 0.0 – 1.0 | `0.0` |
 | simulationRepulsion | Repulsion force coefficient | 0.0 – 2.0 | `1.0` |
-| simulationRepulsionTheta | Decreases / increases the detalization of the Many-Body force calculations. | 0.3 – 2.0 | `1.15` |
+| simulationRepulsionTheta | **Deprecated, no effect.** The Many-Body force now repels close points individually (a grid pyramid with an unbiased Monte-Carlo near field), so there is no theta approximation to tune. | - | `1.15` |
 | simulationLinkSpring | Link spring force coefficient | 0.0 – 2.0 | `1.0` |
 | simulationLinkDistance | Minimum link distance | 1 – 20 | `10` |
 | simulationLinkDistRandomVariationRange | Link distance randomness multiplier range | [0.8 – 1.2,<br/> 1.2 – 2.0] | `[1, 1.2]` |
