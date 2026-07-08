@@ -13,6 +13,7 @@ in float linkIndices;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D linkStatus;
+uniform sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform drawLineUniforms {
@@ -42,6 +43,7 @@ layout(std140) uniform drawLineUniforms {
   float transitionProgress;
   float animateColors;
   float animateWidths;
+  float animatePositions;
 } drawLine;
 
 #define transformationMatrix drawLine.transformationMatrix
@@ -70,6 +72,7 @@ layout(std140) uniform drawLineUniforms {
 #define transitionProgress drawLine.transitionProgress
 #define animateColors drawLine.animateColors
 #define animateWidths drawLine.animateWidths
+#define animatePositions drawLine.animatePositions
 #else
 uniform mat3 transformationMatrix;
 uniform float pointsTextureSize;
@@ -98,6 +101,7 @@ uniform float focusedLinkWidthIncrease;
 uniform float transitionProgress;
 uniform float animateColors;
 uniform float animateWidths;
+uniform float animatePositions;
 #endif
 
 out vec4 rgbaColor;
@@ -156,8 +160,33 @@ void main() {
   vec2 b = pointPositionB.xy;
 
   // Skip links touching an absent (NaN position) point — interpolating from a NaN
-  // endpoint would produce garbage geometry. Collapse the link off-screen.
+  // endpoint would produce garbage geometry. Collapse the link off-screen. This only
+  // catches snap removals: an animated removal freezes the endpoint at its last real
+  // position, so absence must be read from the exit texture below.
   if (isnan(a.x) || isnan(a.y) || isnan(b.x) || isnan(b.y)) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
+
+  // Exit status of both endpoints (R = previous absence, G = current absence). A link
+  // is only as present as its endpoints.
+  vec4 exitStatusA = texture(exitTexture, pointTexturePosA);
+  vec4 exitStatusB = texture(exitTexture, pointTexturePosB);
+
+  // Picking must not report a link to a removed point even mid-fade — same rule as
+  // point picking, which excludes on current absence.
+  if (renderMode > 0.0 && (exitStatusA.g > 0.5 || exitStatusB.g > 0.5)) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
+
+  // Visible pass: fade the link with the same animated exit ramp the point fade uses
+  // (blend R→G during a position transition, settled G otherwise), so a removed
+  // point's links fade out in sync with it instead of dangling at full opacity.
+  float exitA = animatePositions > 0.0 ? mix(exitStatusA.r, exitStatusA.g, transitionProgress) : exitStatusA.g;
+  float exitB = animatePositions > 0.0 ? mix(exitStatusB.r, exitStatusB.g, transitionProgress) : exitStatusB.g;
+  float exitPresence = (1.0 - exitA) * (1.0 - exitB);
+  if (exitPresence <= 0.0) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
   }
@@ -239,6 +268,8 @@ void main() {
   vec3 rgbColor = lineColor.rgb;
   // Adjust opacity based on link distance
   float opacity = lineColor.a * linkOpacity * max(linkVisibilityMinTransparency, map(linkDistPx, linkVisibilityDistanceRange.g, linkVisibilityDistanceRange.r, 0.0, 1.0));
+  // Fade with the exit ramp of the endpoints (1 = both fully present).
+  opacity *= exitPresence;
 
   // Apply greyed-out opacity from link status texture
   if (isLinkHighlightingActive > 0.0 && linkStatusTextureSize > 0.0) {

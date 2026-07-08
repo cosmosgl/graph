@@ -1983,7 +1983,7 @@ export class Graph {
     }
 
     this.points?.setTransitionProgress(this.transition.progress, shouldAnimatePointColors, shouldAnimatePointSizes, shouldInterpolatePositions)
-    this.lines?.setTransitionProgress(this.transition.progress, shouldAnimateLinkColors, shouldAnimateLinkWidths)
+    this.lines?.setTransitionProgress(this.transition.progress, shouldAnimateLinkColors, shouldAnimateLinkWidths, shouldInterpolatePositions)
 
     if (!this.dragInstance.isActive) {
       this.findHoveredItem()

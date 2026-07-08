@@ -57,6 +57,7 @@ export class Lines extends CoreModule {
   private transitionProgress = 1
   private shouldAnimateLinkColors = false
   private shouldAnimateLinkWidths = false
+  private shouldAnimatePositions = false
   private fillSampledLinksUniformStore: UniformStore<{
     fillSampledLinksUniforms: {
       pointsTextureSize: number;
@@ -187,6 +188,7 @@ export class Lines extends CoreModule {
           transitionProgress: 'f32',
           animateColors: 'f32',
           animateWidths: 'f32',
+          animatePositions: 'f32',
         },
         defaultUniforms: {
           transformationMatrix: store.transformationMatrix4x4,
@@ -215,6 +217,7 @@ export class Lines extends CoreModule {
           transitionProgress: 1,
           animateColors: 0,
           animateWidths: 0,
+          animatePositions: 0,
         },
       },
       drawLineFragmentUniforms: {
@@ -333,6 +336,8 @@ export class Lines extends CoreModule {
     const { config, points, store } = this
     if (!points) return
     if (!points.currentPositionTexture || points.currentPositionTexture.destroyed) return
+    if (!points.exitTexture) points.updateExit()
+    if (!points.exitTexture || points.exitTexture.destroyed) return
     if (!this.pointABuffer || !this.pointBBuffer) this.updatePointsBuffer()
     if (!this.targetColorBuffer) this.updateColor()
     if (!this.targetWidthBuffer) this.updateWidth()
@@ -373,6 +378,7 @@ export class Lines extends CoreModule {
         transitionProgress: this.transitionProgress,
         animateColors: this.shouldAnimateLinkColors ? 1 : 0,
         animateWidths: this.shouldAnimateLinkWidths ? 1 : 0,
+        animatePositions: this.shouldAnimatePositions ? 1 : 0,
       },
       drawLineFragmentUniforms: {
         renderMode: 0.0, // Normal rendering
@@ -383,6 +389,7 @@ export class Lines extends CoreModule {
     this.drawCurveCommand.setBindings({
       positionsTexture: points.currentPositionTexture,
       linkStatus: this.linkStatusTexture,
+      exitTexture: points.exitTexture,
     })
 
     // Update instance count
@@ -830,6 +837,8 @@ export class Lines extends CoreModule {
     const { config, points, store } = this
     if (!points) return
     if (!points.currentPositionTexture || points.currentPositionTexture.destroyed) return
+    if (!points.exitTexture) points.updateExit()
+    if (!points.exitTexture || points.exitTexture.destroyed) return
     if (!this.data.linksNumber || !this.store.isLinkHoveringEnabled) return
     if (!this.linkIndexFbo || !this.drawLineUniformStore || !this.linkStatusTexture) return
     if (!this.linkIndexTexture || this.linkIndexTexture.destroyed) return
@@ -869,6 +878,7 @@ export class Lines extends CoreModule {
         transitionProgress: this.transitionProgress,
         animateColors: this.shouldAnimateLinkColors ? 1 : 0,
         animateWidths: this.shouldAnimateLinkWidths ? 1 : 0,
+        animatePositions: this.shouldAnimatePositions ? 1 : 0,
       },
       drawLineFragmentUniforms: {
         renderMode: 1.0, // Index rendering for picking
@@ -879,6 +889,7 @@ export class Lines extends CoreModule {
     this.drawCurvePickingCommand.setBindings({
       positionsTexture: points.currentPositionTexture,
       linkStatus: this.linkStatusTexture,
+      exitTexture: points.exitTexture,
     })
 
     // Update instance count
@@ -914,10 +925,11 @@ export class Lines extends CoreModule {
     }
   }
 
-  public setTransitionProgress (progress: number, animateColors = false, animateWidths = false): void {
+  public setTransitionProgress (progress: number, animateColors = false, animateWidths = false, animatePositions = false): void {
     this.transitionProgress = progress
     this.shouldAnimateLinkColors = animateColors
     this.shouldAnimateLinkWidths = animateWidths
+    this.shouldAnimatePositions = animatePositions
   }
 
   /**

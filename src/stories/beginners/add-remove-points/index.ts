@@ -61,6 +61,10 @@ export const addRemovePoints = (): { graph: Graph; div: HTMLDivElement; destroy?
   let pointColors: number[] = []
   let pointSizes: number[] = []
   let pointIds: number[] = []
+  // Links as pairs of slot indices. Links to a removed (NaN) point stay in the array
+  // on purpose: the engine fades them out with the point and keeps them out of
+  // physics and picking. Compact drops them together with the tombstoned slots.
+  let links: number[] = []
   let nextPointId = 0
   let effect: Effect = 'grow'
 
@@ -104,8 +108,25 @@ export const addRemovePoints = (): { graph: Graph; div: HTMLDivElement; destroy?
     graph.setPointPositions(new Float32Array(pointPositions))
     graph.setPointColors(new Float32Array(pointColors))
     graph.setPointSizes(new Float32Array(pointSizes))
+    graph.setLinks(new Float32Array(links))
     graph.render(undefined, transitionDuration)
     renderSlots()
+  }
+
+  /* ~ Nearest active slot to (x, y) — a new point gets linked to it ~ */
+  function nearestActiveSlot (x: number, y: number): number | undefined {
+    let nearest: number | undefined
+    let nearestDistance = Infinity
+    for (const slot of activeSlots()) {
+      const dx = (pointPositions[slot * 2] as number) - x
+      const dy = (pointPositions[slot * 2 + 1] as number) - y
+      const distance = dx * dx + dy * dy
+      if (distance < nearestDistance) {
+        nearestDistance = distance
+        nearest = slot
+      }
+    }
+    return nearest
   }
 
   /* ~ Add a point at (x, y), fading in per the current effect ~ */
@@ -113,6 +134,9 @@ export const addRemovePoints = (): { graph: Graph; div: HTMLDivElement; destroy?
     const slot = slotCount()
     const [r, g, b] = randomColor()
     pointIds.push(nextPointId++)
+    // Link the new point to its nearest neighbor. The link fades in with the point.
+    const neighbor = nearestActiveSlot(x, y)
+    if (neighbor !== undefined) links.push(neighbor, slot)
 
     if (effect === 'instant') {
       // Single-phase: a new slot appears at its values immediately (no animation).
@@ -166,6 +190,7 @@ export const addRemovePoints = (): { graph: Graph; div: HTMLDivElement; destroy?
       pointColors[slot * 4 + 3] = NaN // recolor to red while fading out
     }
     // 'instant' needs no channel changes — the render below snaps it with duration 0.
+    // Links to this point are left in the array: the engine fades them out with it.
     update(effect === 'instant' ? 0 : undefined)
   }
 
@@ -173,6 +198,16 @@ export const addRemovePoints = (): { graph: Graph; div: HTMLDivElement; destroy?
   function compact (): void {
     const active = activeSlots()
     if (active.length === slotCount()) return
+    // Renumbering invalidates slot indices, so links must be remapped too — and links
+    // to tombstoned slots are dropped for real here.
+    const oldToNew = new Map(active.map((slot, newSlot) => [slot, newSlot]))
+    const remappedLinks: number[] = []
+    for (let i = 0; i < links.length; i += 2) {
+      const source = oldToNew.get(links[i] as number)
+      const target = oldToNew.get(links[i + 1] as number)
+      if (source !== undefined && target !== undefined) remappedLinks.push(source, target)
+    }
+    links = remappedLinks
     pointPositions = active.flatMap((slot) => [pointPositions[slot * 2], pointPositions[slot * 2 + 1]])
     pointColors = active.flatMap((slot) => pointColors.slice(slot * 4, slot * 4 + 4))
     pointSizes = active.map((slot) => pointSizes[slot])
@@ -186,6 +221,7 @@ export const addRemovePoints = (): { graph: Graph; div: HTMLDivElement; destroy?
     pointColors = []
     pointSizes = []
     pointIds = []
+    links = []
     nextPointId = 0
     for (let i = 0; i < 6; i += 1) {
       const angle = (i / 6) * Math.PI * 2
@@ -193,6 +229,7 @@ export const addRemovePoints = (): { graph: Graph; div: HTMLDivElement; destroy?
       pointColors.push(...randomColor())
       pointSizes.push(BASE_SIZE)
       pointIds.push(nextPointId++)
+      links.push(i, (i + 1) % 6) // ring of links between the seed points
     }
     update(0) // seed with no animation
     graph.fitView(0, config.fitViewPadding)
