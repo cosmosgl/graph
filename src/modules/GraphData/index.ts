@@ -33,6 +33,12 @@ export class GraphData {
   public inputLinkStrength: Float32Array | undefined
   public inputPointClusters: (number | undefined)[] | undefined
   public inputClusterPositions: (number | undefined)[] | undefined
+  /**
+   * Number of coordinates per cluster in `inputClusterPositions`:
+   * `2` for `[x, y, ...]`, `3` for `[x, y, z, ...]`. Applied to
+   * `clusterPositionsDimensions` on `updateClusters()`.
+   */
+  public inputClusterPositionsDimensions: 2 | 3 = 2
   public inputClusterStrength: Float32Array | undefined
   public inputPinnedPoints: number[] | undefined
 
@@ -69,6 +75,8 @@ export class GraphData {
 
   public pointClusters: (number | undefined)[] | undefined
   public clusterPositions: (number | undefined)[] | undefined
+  /** Number of coordinates per cluster in `clusterPositions` (see `inputClusterPositionsDimensions`). */
+  public clusterPositionsDimensions: 2 | 3 = 2
   public clusterStrength: Float32Array | undefined
 
   /**
@@ -343,6 +351,7 @@ export class GraphData {
       this.clusterPositions = undefined
     } else {
       this.clusterPositions = this.inputClusterPositions
+      this.clusterPositionsDimensions = this.inputClusterPositionsDimensions
     }
     if (this.inputClusterStrength === undefined || this.inputClusterStrength.length !== this.pointsNumber) {
       this.clusterStrength = undefined

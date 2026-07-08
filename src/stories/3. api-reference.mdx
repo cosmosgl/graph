@@ -105,7 +105,7 @@ On the next `render()`, points animate from their previous positions to the new 
 
 **Dragging in 3D:** with `enableDrag: true`, points can be dragged in 3D — the dragged point moves in the camera-facing plane through its position at drag start. A drag that starts on a hovered point moves the point; everywhere else it orbits the camera.
 
-**3D mode limitations:** area selection (`findPointsInRect` / `findPointsInPolygon`), collision, clusters, and right-click repulsion are disabled in 3D mode — the corresponding methods warn and do nothing. Use the `3D` counterparts of the zoom and sampling APIs: [`fitView`](#fit_view) works in both modes, and [`getSampledPoints3D`](#get_sampled_points_3d) / [`spaceToScreenPosition3D`](#space_to_screen_position_3d) replace their 2D versions. The camera is configured via the `cameraFov`, `cameraNear`, `cameraFar` and `cameraInitialPosition` [configuration properties](../?path=/docs/configuration--docs).
+**3D mode limitations:** area selection (`findPointsInRect` / `findPointsInPolygon`) and right-click repulsion are disabled in 3D mode — the corresponding methods warn and do nothing. Collision and cluster forces run in 3D; `setClusterPositions3D` and `getClusterPositions3D` are the 3D counterparts of the cluster-position APIs. Use the `3D` counterparts of the zoom and sampling APIs: [`fitView`](#fit_view) works in both modes, and [`getSampledPoints3D`](#get_sampled_points_3d) / [`spaceToScreenPosition3D`](#space_to_screen_position_3d) replace their 2D versions. The camera is configured via the `cameraFov`, `cameraNear`, `cameraFar` and `cameraInitialPosition` [configuration properties](../?path=/docs/configuration--docs).
 
 **Example:**
 ```javascript

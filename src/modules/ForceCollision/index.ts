@@ -16,12 +16,28 @@ type GridTarget = {
 }
 
 // Grid offsets for multiple passes (improves collision detection at cell boundaries)
-const GRID_OFFSETS: [number, number][] = [
-  [0.0, 0.0],
-  [0.5, 0.0],
-  [0.0, 0.5],
-  [0.5, 0.5],
+const GRID_OFFSETS_2D: [number, number, number][] = [
+  [0.0, 0.0, 0.0],
+  [0.5, 0.0, 0.0],
+  [0.0, 0.5, 0.0],
+  [0.5, 0.5, 0.0],
 ]
+
+// 3D: every half-cell corner shift, so boundary collisions are caught on all axes
+const GRID_OFFSETS_3D: [number, number, number][] = [
+  [0.0, 0.0, 0.0],
+  [0.5, 0.0, 0.0],
+  [0.0, 0.5, 0.0],
+  [0.5, 0.5, 0.0],
+  [0.0, 0.0, 0.5],
+  [0.5, 0.0, 0.5],
+  [0.0, 0.5, 0.5],
+  [0.5, 0.5, 0.5],
+]
+
+// Cells per axis cap for the 3D grid: 64³ z-slices tiled into a 512×512 texture
+// (~4MB rgba32float) — bounds the memory of the 8 offset-pass scratch grids
+const MAX_GRID_SIZE_3D = 64
 
 export class ForceCollision extends CoreModule {
   private gridTargets: GridTarget[] = []
@@ -31,13 +47,18 @@ export class ForceCollision extends CoreModule {
 
   private buildGridCommand: Model | undefined
   private forceCommand: Model | undefined
+  /** Space dimensions the Models were compiled for; a mode switch recreates them (SPACE_3D define). */
+  private programsSpaceDimensions: 2 | 3 = 2
 
   private buildGridUniformStore: UniformStore<{
     buildGridUniforms: {
       pointsTextureSize: number;
       gridTextureSize: number;
       cellSize: number;
-      gridOffset: [number, number];
+      tilesPerRow: number;
+      gridTextureWidth: number;
+      gridTextureHeight: number;
+      gridOffset: [number, number, number];
     };
   }> | undefined
 
@@ -51,11 +72,17 @@ export class ForceCollision extends CoreModule {
       collisionRadius: number;
       collisionPadding: number;
       pointsNumber: number;
-      gridOffset: [number, number];
+      tilesPerRow: number;
+      passesCount: number;
+      gridOffset: [number, number, number];
     };
   }> | undefined
 
   private gridTextureSize = 0
+  /** Grid texture dimensions in pixels (square in 2D; z-slices tiled in 3D) */
+  private gridTextureWidth = 0
+  private gridTextureHeight = 0
+  private tilesPerRow = 1
   private cellSize = 0
   private previousPointsTextureSize: number | undefined
   private previousSpaceSize: number | undefined
@@ -80,33 +107,52 @@ export class ForceCollision extends CoreModule {
     // We use multiple offset passes to catch boundary collisions.
     this.cellSize = Math.max(effectiveRadius, 8)
 
-    // Grid texture size = space size / cell size, clamped to reasonable values
-    this.gridTextureSize = Math.min(
-      512,
-      Math.max(32, Math.ceil(store.adjustedSpaceSize / this.cellSize))
-    )
-
-    // Recalculate cell size to fit the grid evenly
-    this.cellSize = store.adjustedSpaceSize / this.gridTextureSize
+    if (store.is3D) {
+      // 3D: a cubic grid of z-slices tiled into a 2D texture (same layout as the
+      // octree levels), with a tighter per-axis cap to bound the memory of the
+      // 8 offset-pass scratch grids
+      this.gridTextureSize = Math.min(
+        MAX_GRID_SIZE_3D,
+        Math.max(8, Math.ceil(store.adjustedSpaceSize / this.cellSize))
+      )
+      this.cellSize = store.adjustedSpaceSize / this.gridTextureSize
+      this.tilesPerRow = Math.ceil(Math.sqrt(this.gridTextureSize))
+      this.gridTextureWidth = this.gridTextureSize * this.tilesPerRow
+      this.gridTextureHeight = this.gridTextureSize * Math.ceil(this.gridTextureSize / this.tilesPerRow)
+    } else {
+      // Grid texture size = space size / cell size, clamped to reasonable values
+      this.gridTextureSize = Math.min(
+        512,
+        Math.max(32, Math.ceil(store.adjustedSpaceSize / this.cellSize))
+      )
+      // Recalculate cell size to fit the grid evenly
+      this.cellSize = store.adjustedSpaceSize / this.gridTextureSize
+      this.tilesPerRow = 1
+      this.gridTextureWidth = this.gridTextureSize
+      this.gridTextureHeight = this.gridTextureSize
+    }
 
     // Allocate one grid framebuffer per offset pass. These are scratch buffers
     // (cleared and rebuilt every tick in run()), so reuse them when the grid
     // dimensions are unchanged instead of reallocating on every create().
+    const offsets = store.is3D ? GRID_OFFSETS_3D : GRID_OFFSETS_2D
     const gridTargetsValid =
-      this.gridTargets.length === GRID_OFFSETS.length &&
-      this.gridTargets.every((t) => !t.texture.destroyed && !t.fbo.destroyed && t.texture.width === this.gridTextureSize)
+      this.gridTargets.length === offsets.length &&
+      this.gridTargets.every((t) =>
+        !t.texture.destroyed && !t.fbo.destroyed &&
+        t.texture.width === this.gridTextureWidth && t.texture.height === this.gridTextureHeight)
     if (!gridTargetsValid) {
       this.destroyGridTargets()
-      this.gridTargets = GRID_OFFSETS.map(() => {
+      this.gridTargets = offsets.map(() => {
         const texture = device.createTexture({
-          width: this.gridTextureSize,
-          height: this.gridTextureSize,
+          width: this.gridTextureWidth,
+          height: this.gridTextureHeight,
           format: 'rgba32float',
           usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
         })
         const fbo = device.createFramebuffer({
-          width: this.gridTextureSize,
-          height: this.gridTextureSize,
+          width: this.gridTextureWidth,
+          height: this.gridTextureHeight,
           colorAttachments: [texture],
         })
         return { texture, fbo }
@@ -162,14 +208,27 @@ export class ForceCollision extends CoreModule {
     const { device, store, data } = this
     if (!data.pointsNumber || !store.pointsTextureSize) return
 
+    // A 2D↔3D mode switch changes the compiled shaders (SPACE_3D define) — recreate the Models
+    if (this.programsSpaceDimensions !== store.spaceDimensions) {
+      this.programsSpaceDimensions = store.spaceDimensions
+      this.buildGridCommand?.destroy()
+      this.buildGridCommand = undefined
+      this.forceCommand?.destroy()
+      this.forceCommand = undefined
+    }
+
     // Build-grid command: positions each point into its grid cell (additive accumulation)
     this.buildGridUniformStore ||= new UniformStore({
       buildGridUniforms: {
         uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
           pointsTextureSize: 'f32',
           gridTextureSize: 'f32',
           cellSize: 'f32',
-          gridOffset: 'vec2<f32>',
+          tilesPerRow: 'f32',
+          gridTextureWidth: 'f32',
+          gridTextureHeight: 'f32',
+          gridOffset: 'vec3<f32>',
         },
       },
     })
@@ -187,6 +246,7 @@ export class ForceCollision extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
+        ...(store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
         buildGridUniforms: this.buildGridUniformStore.getManagedUniformBuffer(device, 'buildGridUniforms'),
@@ -209,6 +269,7 @@ export class ForceCollision extends CoreModule {
     this.forceUniformStore ||= new UniformStore({
       forceCollisionUniforms: {
         uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
           pointsTextureSize: 'f32',
           gridTextureSize: 'f32',
           cellSize: 'f32',
@@ -217,7 +278,9 @@ export class ForceCollision extends CoreModule {
           collisionRadius: 'f32',
           collisionPadding: 'f32',
           pointsNumber: 'f32',
-          gridOffset: 'vec2<f32>',
+          tilesPerRow: 'f32',
+          passesCount: 'f32',
+          gridOffset: 'vec3<f32>',
         },
       },
     })
@@ -239,6 +302,7 @@ export class ForceCollision extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
+        ...(store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
         forceCollisionUniforms: this.forceUniformStore.getManagedUniformBuffer(device, 'forceCollisionUniforms'),
@@ -268,9 +332,12 @@ export class ForceCollision extends CoreModule {
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
     if (!points.velocityFbo || points.velocityFbo.destroyed) return
     if (!this.sizeTexture || this.sizeTexture.destroyed) return
-    if (this.gridTargets.length !== GRID_OFFSETS.length) return
-    // Skip if sizes changed and create() wasn't called yet
+    const offsets = store.is3D ? GRID_OFFSETS_3D : GRID_OFFSETS_2D
+    if (this.gridTargets.length !== offsets.length) return
+    // Skip if sizes changed and create() wasn't called yet, or the Models were
+    // compiled for the other space mode
     if (store.pointsTextureSize !== this.previousPointsTextureSize || store.adjustedSpaceSize !== this.previousSpaceSize) return
+    if (this.programsSpaceDimensions !== store.spaceDimensions) return
 
     const collisionRadius = config.simulationCollisionRadius ?? 0
     const collisionPadding = config.simulationCollisionPadding ?? 0
@@ -280,9 +347,10 @@ export class ForceCollision extends CoreModule {
     this.buildGridCommand.setVertexCount(data.pointsNumber)
     this.buildGridCommand.setBindings({
       positionsTexture: points.previousPositionTexture,
-      sizeTexture: this.sizeTexture,
+      // The 3D grid payload has no size sum, so its shader has no sizeTexture sampler
+      ...(store.is3D ? {} : { sizeTexture: this.sizeTexture }),
     })
-    for (const [i, gridOffset] of GRID_OFFSETS.entries()) {
+    for (const [i, gridOffset] of offsets.entries()) {
       const target = this.gridTargets[i]
       if (!target || target.fbo.destroyed || target.texture.destroyed) continue
 
@@ -291,6 +359,9 @@ export class ForceCollision extends CoreModule {
           pointsTextureSize: store.pointsTextureSize ?? 0,
           gridTextureSize: this.gridTextureSize,
           cellSize: this.cellSize,
+          tilesPerRow: this.tilesPerRow,
+          gridTextureWidth: this.gridTextureWidth,
+          gridTextureHeight: this.gridTextureHeight,
           gridOffset,
         },
       })
@@ -315,7 +386,7 @@ export class ForceCollision extends CoreModule {
       framebuffer: points.velocityFbo,
       clearColor: [0, 0, 0, 0],
     })
-    for (const [i, gridOffset] of GRID_OFFSETS.entries()) {
+    for (const [i, gridOffset] of offsets.entries()) {
       const target = this.gridTargets[i]
       if (!target || target.texture.destroyed) continue
 
@@ -329,6 +400,8 @@ export class ForceCollision extends CoreModule {
           collisionRadius,
           collisionPadding,
           pointsNumber: data.pointsNumber,
+          tilesPerRow: this.tilesPerRow,
+          passesCount: offsets.length,
           gridOffset,
         },
       })

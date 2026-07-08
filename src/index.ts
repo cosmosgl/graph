@@ -498,10 +498,10 @@ export class Graph {
    * where `n` is the index of the point.
    * Example: `new Float32Array([1, 2, 3, 4, 5, 6])` sets the first point to (1, 2, 3) and the second point to (4, 5, 6).
    * @note The force simulation runs in 3D: many-body repulsion uses an octree approximation
-   * above ~4k points (an exact pairwise pass below), and points can be dragged (in the
-   * camera-facing plane of their depth). Area selection, collision, clusters, and right-click
-   * repulsion are disabled in 3D mode. Calling `setPointPositions` switches the instance back
-   * to 2D mode.
+   * above ~4k points (an exact pairwise pass below), collision and cluster forces use
+   * 3D spatial grids, and points can be dragged (in the camera-facing plane of their depth).
+   * Area selection and right-click repulsion are disabled in 3D mode.
+   * Calling `setPointPositions` switches the instance back to 2D mode.
    * @note If `transitionDuration > 0`, the positions animate from the current layout (z animates from `0`
    * when switching from 2D mode).
    */
@@ -771,11 +771,35 @@ export class Graph {
    * @example
    *   `[10, 20, 30, 40, undefined, undefined]` places the first cluster at (10, 20) and the second at (30, 40);
    * the third cluster will be positioned at its centermass automatically.
+   * @note In 3D mode these positions pin only x and y; z follows the cluster's centermass.
+   * Use `setClusterPositions3D` to pin all three coordinates.
    */
   public setClusterPositions (clusterPositions: (number | undefined)[]): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setClusterPositions(clusterPositions))) return
     this.graph.inputClusterPositions = clusterPositions
+    this.graph.inputClusterPositionsDimensions = 2
+    this.isPointClusterUpdateNeeded = true
+  }
+
+  /**
+   * Sets the 3D positions of the point clusters for the graph.
+   *
+   * @param {(number | undefined)[]} clusterPositions - Array of cluster positions.
+   *   - Every three elements represent the x, y and z coordinates for a cluster position.
+   *   - `undefined` means the coordinate is not defined: a cluster with undefined x or y
+   *     uses centermass positioning entirely; an undefined z pins only x and y while z
+   *     follows the cluster's centermass.
+   * @example
+   *   `[10, 20, 30, undefined, undefined, undefined]` places the first cluster at (10, 20, 30);
+   * the second cluster will be positioned at its centermass automatically.
+   * @note In 2D mode the z coordinates are ignored.
+   */
+  public setClusterPositions3D (clusterPositions: (number | undefined)[]): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setClusterPositions3D(clusterPositions))) return
+    this.graph.inputClusterPositions = clusterPositions
+    this.graph.inputClusterPositionsDimensions = 3
     this.isPointClusterUpdateNeeded = true
   }
 
@@ -1038,6 +1062,17 @@ export class Graph {
     if (this._isDestroyed || !this.device || !this.clusters) return []
     if (this.graph.pointClusters === undefined || this.clusters.clusterCount === undefined) return []
     return this.clusters.getCentroidPositions()
+  }
+
+  /**
+   * Get current X, Y and Z coordinates of the clusters.
+   * @returns Array of cluster positions in `[x0, y0, z0, x1, y1, z1, ...]` order
+   * (z is `0` in 2D mode). Do not mutate the returned array.
+   */
+  public getClusterPositions3D (): Readonly<number[]> {
+    if (this._isDestroyed || !this.device || !this.clusters) return []
+    if (this.graph.pointClusters === undefined || this.clusters.clusterCount === undefined) return []
+    return this.clusters.getCentroidPositions3D()
   }
 
   /**
@@ -1636,8 +1671,7 @@ export class Graph {
       this.forceLinkOutgoing?.create(LinkDirection.OUTGOING)
     }
     if (this.isForceCenterUpdateNeeded) this.forceCenter?.create()
-    // Clusters are a 2D simulation concept; their centroid textures assume 2D positions.
-    if (this.isPointClusterUpdateNeeded && !this.store.is3D) this.clusters?.create()
+    if (this.isPointClusterUpdateNeeded) this.clusters?.create()
 
     this.isPointPositionsUpdateNeeded = false
     this.isPointColorUpdateNeeded = false
@@ -1910,6 +1944,9 @@ export class Graph {
     if (this.store.spaceDimensions === dimensions) return
     this.store.spaceDimensions = dimensions
 
+    // The collision grid layout and shaders are mode-specific — rebuild lazily on next use
+    this.isForceCollisionReady = false
+
     if (dimensions === 3) {
       const [width, height] = this.store.screenSize
       if (width && height) this.camera.setViewport(width, height)
@@ -2064,8 +2101,7 @@ export class Graph {
         this.points?.updatePosition()
       }
 
-      // Cluster forces use 2D centroid textures and are disabled in 3D mode
-      if ((this.graph.pointClusters || this.graph.clusterPositions) && !this.store.is3D) {
+      if (this.graph.pointClusters || this.graph.clusterPositions) {
         this.points?.swapFbo()
         this.clusters?.run()
         this.points?.updatePosition()
@@ -2074,8 +2110,7 @@ export class Graph {
       // Collision runs after the attraction forces (links, clusters) so it
       // corrects the overlap they introduce within the same tick, instead of
       // lagging one frame behind and oscillating against them.
-      // Its spatial-hash grid is 2D, so the force is disabled in 3D mode.
-      if (simulationCollision && !this.store.is3D) {
+      if (simulationCollision) {
         // Lazily allocate the collision GPU resources on first use (or after a
         // data change marked them stale), so a graph that never enables
         // collision never pays the grid/size-texture memory cost.

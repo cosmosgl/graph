@@ -1,0 +1,7 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "storybook", "runtimeExecutable": "/Users/nikitarokotyan/.nvm/versions/node/v20.10.0/bin/node", "runtimeArgs": ["node_modules/storybook/bin/index.cjs", "dev", "-p", "6006", "--ci", "--quiet"], "port": 6006 },
+    { "name": "storybook-verify", "runtimeExecutable": "/Users/nikitarokotyan/.nvm/versions/node/v20.10.0/bin/node", "runtimeArgs": ["node_modules/storybook/bin/index.cjs", "dev", "-p", "6016", "--ci", "--quiet"], "port": 6016 }
+  ]
+}

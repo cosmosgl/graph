@@ -21,8 +21,13 @@ the same `simulation*` configuration options in both modes. Many-body repulsion 
 octree approximation above ~4k points (an exact O(n²) pairwise pass below), analogous to the 2D
 quadtree; `simulationRepulsionTheta` is not used in 3D.
 Point dragging (`enableDrag`) works in 3D too — the dragged point moves in
-the camera-facing plane through its position at drag start. Area selection, collision, clusters,
-and right-click repulsion remain disabled in 3D mode (the corresponding methods warn and no-op).
+the camera-facing plane through its position at drag start. Collision (`simulationCollision`)
+and cluster forces (`setPointClusters` / `setPointClusterStrength`) also run in 3D over 3D
+spatial grids; `setClusterPositions3D` / `getClusterPositions3D` are the `[x, y, z]` counterparts
+of the cluster-position APIs (in 3D, `setClusterPositions` pins only x/y and z follows the
+cluster centroid; the collision force approximates neighbor radii with each point's own radius
+unless `simulationCollisionRadius` is set). Area selection and right-click repulsion remain
+disabled in 3D mode (the corresponding methods warn and no-op).
 The existing 2D API and data formats are unchanged.
 
 ## Migrating to v3.0

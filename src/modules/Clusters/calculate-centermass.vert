@@ -25,7 +25,13 @@ out vec4 rgba;
 
 void main() {
   vec4 pointPosition = texture(positionsTexture, pointIndices / pointsTextureSize);
+  // Payload accumulated per cluster pixel: [sum(x), sum(y), count, sum(z)].
+  // The position texture stores z in the alpha channel in 3D mode.
+#ifdef SPACE_3D
+  rgba = vec4(pointPosition.xy, 1.0, pointPosition.a);
+#else
   rgba = vec4(pointPosition.xy, 1.0, 0.0);
+#endif
 
   vec4 pointClusterIndices = texture(clusterTexture, pointIndices / pointsTextureSize);
   vec2 xy = vec2(0.0);

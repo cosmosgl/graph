@@ -16,6 +16,8 @@ export class Clusters extends CoreModule {
 
   private calculateCentermassCommand: Model | undefined
   private applyForcesCommand: Model | undefined
+  /** Space dimensions the Models were compiled for; a mode switch recreates them (SPACE_3D define). */
+  private programsSpaceDimensions: 2 | 3 = 2
   private clusterTexture: Texture | undefined
   private clusterPositionsTexture: Texture | undefined
   private clusterForceCoefficientTexture: Texture | undefined
@@ -24,12 +26,13 @@ export class Clusters extends CoreModule {
   private clustersTextureSize: number | undefined
 
   /**
-   * Cached result of the last `getCentroidPositions()` computation.
+   * Cached result of the last centroid computation (tagged with its stride, since
+   * `getCentroidPositions` and `getCentroidPositions3D` share it).
    * Populated when the simulation is inactive to avoid redundant GPU render passes and readbacks.
    * Nulled in `create()` and `destroy()` to handle structural changes (e.g. `setPointPositions`,
    * `setPointClusters`). Positional changes are handled separately via `Points.areClusterCentroidsUpToDate`.
    */
-  private cachedCentroidPositions: number[] | null = null
+  private cachedCentroidPositions: { dimensions: 2 | 3; positions: number[] } | null = null
   private applyForcesVertexCoordBuffer: Buffer | undefined
 
   // Track previous sizes to detect changes
@@ -80,9 +83,14 @@ export class Clusters extends CoreModule {
     const clusterPositions = new Float32Array(clustersTextureDataSize).fill(-1)
     const clusterForceCoefficient = new Float32Array(pointsTextureDataSize).fill(1)
     if (data.clusterPositions) {
+      // Texture layout per cluster: [x, y, z, unused]; -1 marks an undefined
+      // coordinate (z stays -1 for 2D input — in 3D mode the force shader then
+      // lets z follow the cluster's centroid)
+      const stride = data.clusterPositionsDimensions
       for (let cluster = 0; cluster < this.clusterCount; ++cluster) {
-        clusterPositions[cluster * 4 + 0] = data.clusterPositions[cluster * 2 + 0] ?? -1
-        clusterPositions[cluster * 4 + 1] = data.clusterPositions[cluster * 2 + 1] ?? -1
+        clusterPositions[cluster * 4 + 0] = data.clusterPositions[cluster * stride + 0] ?? -1
+        clusterPositions[cluster * 4 + 1] = data.clusterPositions[cluster * stride + 1] ?? -1
+        if (stride === 3) clusterPositions[cluster * 4 + 2] = data.clusterPositions[cluster * stride + 2] ?? -1
       }
     }
 
@@ -260,6 +268,15 @@ export class Clusters extends CoreModule {
     // Use same check as create() and run() for consistency
     if (data.pointsNumber === undefined || (!data.pointClusters && !data.clusterPositions)) return
 
+    // A 2D↔3D mode switch changes the compiled shaders (SPACE_3D define) — recreate the Models
+    if (this.programsSpaceDimensions !== store.spaceDimensions) {
+      this.programsSpaceDimensions = store.spaceDimensions
+      this.calculateCentermassCommand?.destroy()
+      this.calculateCentermassCommand = undefined
+      this.applyForcesCommand?.destroy()
+      this.applyForcesCommand = undefined
+    }
+
     // Create UniformStore for calculateCentermass uniforms
     this.calculateCentermassUniformStore ||= new UniformStore({
       calculateCentermassUniforms: {
@@ -287,6 +304,7 @@ export class Clusters extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true, // Enable uniform buffers
+        ...(store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
         // Create uniform buffer binding
@@ -341,6 +359,7 @@ export class Clusters extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true, // Enable uniform buffers
+        ...(store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
         // Create uniform buffer binding
@@ -393,39 +412,15 @@ export class Clusters extends CoreModule {
 
   /** Do not mutate the returned array; it may be the internal cache. */
   public getCentroidPositions (): Readonly<number[]> {
-    const { config: { enableSimulation }, store: { isSimulationRunning } } = this
-    const simulationInactive = !enableSimulation || !isSimulationRunning
+    return this.computeCentroidPositions(2)
+  }
 
-    // Return cache when simulation is stopped and positions haven't changed
-    if (simulationInactive && this.points?.areClusterCentroidsUpToDate && this.cachedCentroidPositions) {
-      return this.cachedCentroidPositions
-    }
-
-    this.calculateCentermass()
-
-    // Guard: calculateCentermass() may return early if GPU resources aren't ready
-    if (!this.centermassFbo || this.centermassFbo.destroyed || this.clusterCount === undefined) return []
-
-    const pixels = readPixels(this.device, this.centermassFbo)
-    const positions: number[] = []
-    positions.length = this.clusterCount * 2
-    for (let i = 0; i < positions.length / 2; i += 1) {
-      const sumX = pixels[i * 4 + 0]
-      const sumY = pixels[i * 4 + 1]
-      const sumN = pixels[i * 4 + 2]
-      if (sumX !== undefined && sumY !== undefined && sumN !== undefined) {
-        positions[i * 2] = sumX / sumN
-        positions[i * 2 + 1] = sumY / sumN
-      }
-    }
-
-    // Warm the cache when simulation is inactive
-    if (simulationInactive && this.points) {
-      this.cachedCentroidPositions = positions
-      this.points.areClusterCentroidsUpToDate = true
-    }
-
-    return positions
+  /**
+   * 3D variant of `getCentroidPositions`: `[x0, y0, z0, x1, y1, z1, ...]`
+   * (z is `0` in 2D mode). Do not mutate the returned array; it may be the internal cache.
+   */
+  public getCentroidPositions3D (): Readonly<number[]> {
+    return this.computeCentroidPositions(3)
   }
 
   public run (): void {
@@ -525,5 +520,51 @@ export class Clusters extends CoreModule {
       this.applyForcesVertexCoordBuffer.destroy()
     }
     this.applyForcesVertexCoordBuffer = undefined
+  }
+
+  /**
+   * Reads the cluster centroids back from the centermass texture
+   * ([sum(x), sum(y), count, sum(z)] per cluster) with the requested stride.
+   */
+  private computeCentroidPositions (dimensions: 2 | 3): Readonly<number[]> {
+    const { config: { enableSimulation }, store: { isSimulationRunning } } = this
+    const simulationInactive = !enableSimulation || !isSimulationRunning
+
+    // Return cache when simulation is stopped and positions haven't changed
+    if (
+      simulationInactive &&
+      this.points?.areClusterCentroidsUpToDate &&
+      this.cachedCentroidPositions?.dimensions === dimensions
+    ) {
+      return this.cachedCentroidPositions.positions
+    }
+
+    this.calculateCentermass()
+
+    // Guard: calculateCentermass() may return early if GPU resources aren't ready
+    if (!this.centermassFbo || this.centermassFbo.destroyed || this.clusterCount === undefined) return []
+
+    const pixels = readPixels(this.device, this.centermassFbo)
+    const positions: number[] = []
+    positions.length = this.clusterCount * dimensions
+    for (let i = 0; i < this.clusterCount; i += 1) {
+      const sumX = pixels[i * 4 + 0]
+      const sumY = pixels[i * 4 + 1]
+      const sumN = pixels[i * 4 + 2]
+      const sumZ = pixels[i * 4 + 3]
+      if (sumX !== undefined && sumY !== undefined && sumN !== undefined) {
+        positions[i * dimensions] = sumX / sumN
+        positions[i * dimensions + 1] = sumY / sumN
+        if (dimensions === 3) positions[i * dimensions + 2] = (sumZ ?? 0) / sumN
+      }
+    }
+
+    // Warm the cache when simulation is inactive
+    if (simulationInactive && this.points) {
+      this.cachedCentroidPositions = { dimensions, positions }
+      this.points.areClusterCentroidsUpToDate = true
+    }
+
+    return positions
   }
 }
