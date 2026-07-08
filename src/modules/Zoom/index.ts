@@ -75,11 +75,17 @@ export class Zoom {
     for (let i = 0; i < positions.length; i += 2) {
       const x = positions[i] as number
       const y = positions[i + 1] as number
+      // Skip non-finite positions (absent/removed points) — they must not affect the extent.
+      if (!Number.isFinite(x) || !Number.isFinite(y)) continue
       if (x < minX) minX = x
       if (x > maxX) maxX = x
       if (y < minY) minY = y
       if (y > maxY) maxY = y
     }
+
+    // No finite position to fit (e.g. every given point is absent): keep the current view.
+    // Proceeding would produce a NaN transform and blank the canvas.
+    if (!Number.isFinite(minX) || !Number.isFinite(minY)) return this.eventTransform
 
     const xExtent: [number, number] = [this.store.scaleX(minX), this.store.scaleX(maxX)]
     const yExtent: [number, number] = [this.store.scaleY(minY), this.store.scaleY(maxY)]
@@ -117,6 +123,9 @@ export class Zoom {
   }
 
   public getMiddlePointTransform (position: [number, number]): ZoomTransform {
+    // A non-finite target has no middle point — keep the current view rather than
+    // emitting a NaN transform.
+    if (!Number.isFinite(position[0]) || !Number.isFinite(position[1])) return this.eventTransform
     const { store: { screenSize }, eventTransform: { x, y, k } } = this
     const width = screenSize[0]
     const height = screenSize[1]

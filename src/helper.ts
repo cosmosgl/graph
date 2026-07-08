@@ -131,6 +131,14 @@ export function isNumber (value: number | undefined | null | typeof NaN): boolea
 }
 
 /**
+ * Reports whether the point at `index` is absent (removed): its position is `NaN`.
+ * A point is absent when either coordinate is `NaN`.
+ */
+export function isPointAbsent (pointPositions: Float32Array, index: number): boolean {
+  return Number.isNaN(pointPositions[index * 2] as number) || Number.isNaN(pointPositions[index * 2 + 1] as number)
+}
+
+/**
  * Sanitizes HTML content to prevent XSS attacks using DOMPurify
  *
  * This function is used internally to sanitize HTML content before setting innerHTML,

@@ -7,7 +7,7 @@ import { Device, Framebuffer, luma } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
 
 import { applyConfig, createDefaultConfig, resetConfigToDefaults, GraphConfigInterface, type GraphConfig } from '@/graph/config'
-import { getRgbaColor, getMaxPointSize, readPixels, extractIndicesFromPixels, sanitizeHtml } from '@/graph/helper'
+import { getRgbaColor, getMaxPointSize, readPixels, extractIndicesFromPixels, sanitizeHtml, isPointAbsent } from '@/graph/helper'
 import { ForceCenter } from '@/graph/modules/ForceCenter'
 import { ForceCollision } from '@/graph/modules/ForceCollision'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
@@ -892,12 +892,19 @@ export class Graph {
    * @param scale Scale value to zoom in or out (`3` by default).
    * @param canZoomOut Set to `false` to prevent zooming out from the point (`true` by default).
    * @param enableSimulation Whether to run the simulation during the zoom transition (`true` by default).
+   * @note An **absent** point (removed via a `NaN` position — see `setPointPositions`) is not a
+   * zoom target: the call is a no-op, same as hover and selection never landing on one.
    */
   public zoomToPointByIndex (index: number, duration = 700, scale = 3, canZoomOut = true, enableSimulation = true): void {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.zoomToPointByIndex(index, duration, scale, canZoomOut, enableSimulation))) return
     if (!this.device || !this.points || !this.canvasD3Selection) return
+    // An absent (removed) point is not a zoom target. Checked on the input array: after
+    // an animated removal the GPU readback below still holds the point's frozen last
+    // real position, not NaN, so the readback can't tell absent from present.
+    const pointPositions = this.graph.pointPositions
+    if (!pointPositions || isPointAbsent(pointPositions, index)) return
     const { store: { screenSize } } = this
     const positionPixels = readPixels(this.device, this.points.currentPositionFbo as Framebuffer)
     if (index === undefined) return
