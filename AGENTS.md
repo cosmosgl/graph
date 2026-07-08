@@ -26,9 +26,15 @@ contribution process, see `CONTRIBUTING.md`, `CHARTER.md`, `CODE_OF_CONDUCT.md`,
   `configuration.mdx` / `api-reference.mdx` docs — the best worked examples of building the input arrays.
 - `helper.ts` — utilities (e.g. `getRgbaColor`: parse a CSS/hex color into a normalized RGBA tuple).
 
-`migration-notes.md` is the authoritative history of data-format and config changes (v1→v3: the move to
-`Float32Array` ingest, the v3 config renames, RGBA normalized to 0..1). Read it before touching the
-public API or config keys.
+`migration-notes.md` documents **breaking changes only** — data-format and config changes that require
+users to update their code (v1→v3: the move to `Float32Array` ingest, the v3 config renames, RGBA
+normalized to 0..1). Read it before touching the public API or config keys. Do **not** add an entry here
+for non-breaking work (new features, internal rewrites, backward-compatible additions) — that goes in
+`history/` instead.
+
+`history/` is the running log of **why** changes happened (intent and tradeoffs; git records the *what*).
+Entries live at `history/YYYY/YYYY-MM-DD-topic.md`; see `history/PROMPT.md` for the format, or run the
+`history` skill (`/history <why>`), which drafts one.
 
 ## Data model in one paragraph
 
@@ -56,7 +62,8 @@ example if you changed behavior/config/public API, then open a PR. Contributions
 
 ## Commits
 
-Sign off every commit: `git commit -s` (adds the `Signed-off-by` trailer). The repo enforces **DCO**
+Sign off every commit: `git commit -s` (adds the `Signed-off-by` trailer). When amending or rebasing
+existing commits, `git rebase --signoff <base>` adds it to each. The repo enforces **DCO**
 (`.github/dco.yml`) and rejects unsigned commits from non-members. AI/tool-assisted commits also
 carry a `Co-authored-by:` trailer (see the log).
 
