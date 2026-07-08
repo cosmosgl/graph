@@ -22,7 +22,7 @@ import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import trackPositionsFrag from '@/graph/modules/Points/track-positions.frag?raw'
 import dragPointFrag from '@/graph/modules/Points/drag-point.frag?raw'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
-import { readPixels } from '@/graph/helper'
+import { readPixels, isPointAbsent } from '@/graph/helper'
 import { ensureVec2, ensureVec4 } from '@/graph/modules/Shared/uniform-utils'
 import { createAtlasDataFromImageData } from '@/graph/modules/Points/atlas-utils'
 import { buildPositionTextureData, buildSourcePositionTextureData } from '@/graph/modules/Points/position-utils'
@@ -2023,6 +2023,10 @@ export class Points extends CoreModule {
       const y = pixels[i * 4 + 1]
       const index = this.trackedIndices[i]
       if (x !== undefined && y !== undefined && index !== undefined) {
+        // Omit absent (removed) points — the tracked FBO holds their frozen last
+        // coordinate, which must not be reported as a live position. A missing key
+        // is the map's way of saying "this point is gone".
+        if (this.data.pointPositions && isPointAbsent(this.data.pointPositions, index)) continue
         tracked.set(index, [x, y])
       }
     }
@@ -2149,6 +2153,14 @@ export class Points extends CoreModule {
       const y = pixels[i * 4 + 1]
       const index = this.trackedIndices[i]
       if (x !== undefined && y !== undefined && index !== undefined) {
+        // An absent (removed) point reads back as NaN. Unlike the map (which omits
+        // it), the array must keep the slot so positions stay aligned with the
+        // tracked indices.
+        if (this.data.pointPositions && isPointAbsent(this.data.pointPositions, index)) {
+          positions[i * 2] = NaN
+          positions[i * 2 + 1] = NaN
+          continue
+        }
         positions[i * 2] = x
         positions[i * 2 + 1] = y
       }
