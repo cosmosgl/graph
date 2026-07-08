@@ -13,6 +13,7 @@
     "CITATION.cff"
   ],
   "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
     "build": "vite build --mode es && vite build --mode umd",
     "watch": "vite build --watch",
     "lint": "eslint --cache ./src --ext .ts --ignore-path .gitignore",

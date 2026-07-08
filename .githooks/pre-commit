@@ -1,0 +1,41 @@
+#!/bin/sh
+# Version-controlled pre-commit hook.
+#
+# Enabled via `git config core.hooksPath .githooks` (set automatically by the
+# `prepare` npm script). Because it lives in the tracked tree it is present in
+# every worktree, and because it resolves the toolchain from the nearest
+# node_modules ABOVE the working tree, it also works from git worktrees that have
+# no node_modules of their own — they share the parent checkout's dependencies.
+# (The old .git/hooks/pre-commit hardcoded ./node_modules, which a fresh worktree
+# doesn't have, so commits failed there until you ran `npm install` by hand.)
+set -e
+
+# lint-staged and eslint need a modern Node (>= 18, per package.json "engines").
+# Fail with a clear, actionable message instead of a cryptic runtime SyntaxError
+# when a commit is triggered from a shell/IDE where an old Node is still on PATH
+# (e.g. the default before `nvm use`).
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-commit: 'node' not found on PATH. If you use nvm, run 'nvm use' before committing." >&2
+  exit 1
+fi
+node_major="$(node -v | sed 's/^v\([0-9]*\).*/\1/')"
+if [ "$node_major" -lt 18 ]; then
+  echo "pre-commit: Node $(node -v) is too old for lint-staged/eslint (need >= 18)." >&2
+  echo "            If you use nvm, run 'nvm use' (or set a newer default) before committing." >&2
+  exit 1
+fi
+
+# Walk up from the working-tree root to the first node_modules that has lint-staged.
+dir="$(pwd)"
+while [ "$dir" != "/" ] && [ ! -x "$dir/node_modules/.bin/lint-staged" ]; do
+  dir="$(dirname "$dir")"
+done
+
+if [ ! -x "$dir/node_modules/.bin/lint-staged" ]; then
+  echo "pre-commit: lint-staged not found — run 'npm install' in this repo." >&2
+  exit 1
+fi
+
+# Run from the current working tree so staged files and package.json resolve
+# against this worktree, using the toolchain found above.
+exec "$dir/node_modules/.bin/lint-staged"
