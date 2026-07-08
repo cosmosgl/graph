@@ -5,6 +5,7 @@ import { CosmosStoryProps } from './create-cosmos'
 import { meshWithHoles } from './misc/mesh-with-holes'
 import { fullMesh } from './misc/full-mesh'
 import { onDemandRendering } from './misc/on-demand-rendering'
+import { pointOcclusionCulling } from './misc/point-occlusion-culling'
 import { repulsionBenchmark } from './misc/repulsion-benchmark'
 
 import createCosmosRaw from './create-cosmos?raw'
@@ -12,6 +13,7 @@ import generateMeshDataRaw from './generate-mesh-data?raw'
 import meshWithHolesRaw from './misc/mesh-with-holes?raw'
 import fullMeshRaw from './misc/full-mesh?raw'
 import onDemandRenderingRaw from './misc/on-demand-rendering?raw'
+import pointOcclusionCullingRaw from './misc/point-occlusion-culling?raw'
 import repulsionBenchmarkRaw from './misc/repulsion-benchmark?raw'
 
 // More on how to set up stories at: https://storybook.js.org/docs/writing-stories#default-export
@@ -39,6 +41,17 @@ export const MeshWithHoles: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: meshWithHolesRaw },
+      ...sourceCodeAddonParams,
+    ],
+  },
+}
+
+export const PointOcclusionCulling: Story = {
+  ...createStory(pointOcclusionCulling),
+  name: 'Point Occlusion Culling',
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: pointOcclusionCullingRaw },
       ...sourceCodeAddonParams,
     ],
   },

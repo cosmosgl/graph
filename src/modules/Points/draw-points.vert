@@ -41,6 +41,7 @@ layout(std140) uniform drawVertexUniforms {
   float animatePositions;
   vec4 pointDefaultColor;
   float pointDefaultSize;
+  float pointsNumber;
 } drawVertex;
 
 #define ratio drawVertex.ratio
@@ -65,6 +66,7 @@ layout(std140) uniform drawVertexUniforms {
 #define animatePositions drawVertex.animatePositions
 #define pointDefaultColor drawVertex.pointDefaultColor
 #define pointDefaultSize drawVertex.pointDefaultSize
+#define pointsNumber drawVertex.pointsNumber
 #else
 uniform float ratio;
 uniform mat3 transformationMatrix;
@@ -88,6 +90,7 @@ uniform float animateSizes;
 uniform float animatePositions;
 uniform vec4 pointDefaultColor;
 uniform float pointDefaultSize;
+uniform float pointsNumber;
 #endif
 
 out float pointShape;
@@ -183,7 +186,11 @@ void main() {
   #else
   vec3 finalPosition = transformationMatrix * vec3(normalizedPosition, 1);
   #endif
-  gl_Position = vec4(finalPosition.rg, 0, 1);
+  // Depth encodes stacking order: higher point index = drawn on top = nearer
+  // (smaller z). Harmless when depth testing is off (depthCompare 'always').
+  float linearIndex = pointIndices.y * pointsTextureSize + pointIndices.x;
+  float depthZ = 1.0 - 2.0 * (linearIndex + 0.5) / max(pointsNumber, 1.0);
+  gl_Position = vec4(finalPosition.rg, depthZ, 1.0);
 
   // Resolve NaN channels against the animated exit ramp before mixing — default
   // sizes/colors of an entering or leaving point fade with the ramp regardless of

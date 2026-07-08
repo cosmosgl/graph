@@ -13,6 +13,7 @@ layout(std140) uniform drawFragmentUniforms {
   vec4 backgroundColor;
   vec4 outlineColor;
   float outlineWidth;
+  float renderMode;
 } drawFragment;
 
 #define greyoutOpacity drawFragment.greyoutOpacity
@@ -21,6 +22,7 @@ layout(std140) uniform drawFragmentUniforms {
 #define backgroundColor drawFragment.backgroundColor
 #define outlineColor drawFragment.outlineColor
 #define outlineWidth drawFragment.outlineWidth
+#define renderMode drawFragment.renderMode
 #else
 uniform float greyoutOpacity;
 uniform float pointOpacity;
@@ -28,6 +30,7 @@ uniform float isDarkenGreyout;
 uniform vec4 backgroundColor;
 uniform vec4 outlineColor;
 uniform float outlineWidth;
+uniform float renderMode;
 #endif
 
 
@@ -44,6 +47,10 @@ out vec4 fragColor;
 
 // Smoothing controls the smoothness of the point's edge
 const float smoothing = 0.9;
+
+// Occlusion culling splits fragments between the opaque core pass (renderMode 1)
+// and the blended fringe pass (renderMode 2) at this final-alpha threshold
+const float OPAQUE_ALPHA_THRESHOLD = 0.999;
 
 // Shape constants
 const float CIRCLE = 0.0;
@@ -291,5 +298,14 @@ void main() {
             mix(fragColor.rgb, ringColor, ringOpacity),
             max(fragColor.a, ringOpacity)
         );
+    }
+
+    // Occlusion culling: split every fragment between the opaque core pass
+    // (depth-writing, unblended) and the blended fringe pass. The same
+    // final-alpha rule runs in both passes so each fragment renders exactly once.
+    if (renderMode > 1.5) {
+        if (fragColor.a >= OPAQUE_ALPHA_THRESHOLD) discard; // already drawn by core pass
+    } else if (renderMode > 0.5) {
+        if (fragColor.a < OPAQUE_ALPHA_THRESHOLD) discard;  // left for fringe pass
     }
 }
