@@ -61,6 +61,12 @@ export class Transition {
 
   private readonly config: GraphConfigInterface
   private startTime = 0
+  /**
+   * Duration captured at `start()`. `step()` must not read the live config
+   * value: changing `transitionDuration` mid-cycle would make progress jump
+   * (backwards for a larger value, forward for a smaller one).
+   */
+  private duration = 0
   /** Properties queued via `queue()`, awaiting `start()` to consume them. */
   private pendingProperties = new Set<TransitionProperty>()
   /** Properties currently animating in the running cycle. */
@@ -128,6 +134,7 @@ export class Transition {
     }
 
     this.startTime = performance.now()
+    this.duration = transitionDuration
     this.progress = 0
     this.activeProperties = new Set(this.pendingProperties)
     this.pendingProperties.clear()
@@ -145,14 +152,12 @@ export class Transition {
   public step (): void {
     if (!this.isActive) return
 
-    const { transitionDuration } = this.config
-
-    if (transitionDuration <= 0) {
+    if (this.duration <= 0) {
       this.end(true)
       return
     }
 
-    const linear = Math.min((performance.now() - this.startTime) / transitionDuration, 1)
+    const linear = Math.min((performance.now() - this.startTime) / this.duration, 1)
     const eased = this.applyEasing(linear)
     this.progress = eased
     this.config.onTransition?.(eased)

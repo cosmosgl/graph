@@ -52,6 +52,7 @@ export class ForceManyBody extends CoreModule {
       levelTextureSize: number;
       alpha: number;
       repulsion: number;
+      cellSize: number;
     };
   }> | undefined
 
@@ -69,19 +70,16 @@ export class ForceManyBody extends CoreModule {
       const levelTextureSize = Math.pow(2, level + 1)
       const existingTarget = this.levelTargets.get(level)
 
+      // No need to clear retained (or fresh) level textures here: drawLevels()
+      // begins every level's render pass with clearColor [0, 0, 0, 0] before
+      // anything samples it, and run() is gated until create() has run.
+      // Zero-filling them through CPU arrays cost ~350 MB of allocation and
+      // upload per data update at the default space size.
       if (
         existingTarget &&
         existingTarget.texture.width === levelTextureSize &&
         existingTarget.texture.height === levelTextureSize
       ) {
-        // Clear existing texture data to zero
-        existingTarget.texture.copyImageData({
-          data: new Float32Array(levelTextureSize * levelTextureSize * 4).fill(0),
-          bytesPerRow: getBytesPerRow('rgba32float', levelTextureSize),
-          mipLevel: 0,
-          x: 0,
-          y: 0,
-        })
         continue
       }
 
@@ -96,13 +94,6 @@ export class ForceManyBody extends CoreModule {
         height: levelTextureSize,
         format: 'rgba32float',
         usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
-      })
-      texture.copyImageData({
-        data: new Float32Array(levelTextureSize * levelTextureSize * 4).fill(0),
-        bytesPerRow: getBytesPerRow('rgba32float', levelTextureSize),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
       })
       const fbo = device.createFramebuffer({
         width: levelTextureSize,
@@ -294,11 +285,13 @@ export class ForceManyBody extends CoreModule {
           levelTextureSize: 'f32',
           alpha: 'f32',
           repulsion: 'f32',
+          cellSize: 'f32',
         },
         defaultUniforms: {
           levelTextureSize: 0,
           alpha: store.alpha,
           repulsion: this.config.simulationRepulsion,
+          cellSize: 1,
         },
       },
     })
@@ -453,6 +446,9 @@ export class ForceManyBody extends CoreModule {
       clearColor: [0, 0, 0, 0],
     })
 
+    // `this.levels` is fractional for non-power-of-two space sizes, so the
+    // deepest level actually iterated is ceil(levels) - 1, not levels - 1.
+    const deepestLevel = Math.ceil(this.levels) - 1
     for (let level = 0; level < this.levels; level += 1) {
       const target = this.levelTargets.get(level)
       if (!target || target.texture.destroyed) continue
@@ -479,12 +475,13 @@ export class ForceManyBody extends CoreModule {
       this.forceCommand.draw(drawPass)
 
       // Only the deepest level uses the centermass fallback
-      if (level === this.levels - 1) {
+      if (level === deepestLevel) {
         this.forceCenterUniformStore.setUniforms({
           forceCenterUniforms: {
             levelTextureSize,
             alpha: store.alpha,
             repulsion: this.config.simulationRepulsion,
+            cellSize: store.adjustedSpaceSize / levelTextureSize,
           },
         })
 

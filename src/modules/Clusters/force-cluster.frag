@@ -37,9 +37,9 @@ void main() {
   // no cluster, so no forces
   if (pointClusterIndices.x >= 0.0 && pointClusterIndices.y >= 0.0) {
     // positioning points to custom cluster position or either to the center of mass
-    vec2 clusterPositions = texture(clusterPositionsTexture, pointClusterIndices.xy / clustersTextureSize).xy;
+    vec2 clusterPositions = texture(clusterPositionsTexture, (pointClusterIndices.xy + 0.5) / clustersTextureSize).xy;
     if (clusterPositions.x < 0.0 || clusterPositions.y < 0.0) {
-      vec4 centermassValues = texture(centermassTexture, pointClusterIndices.xy / clustersTextureSize);
+      vec4 centermassValues = texture(centermassTexture, (pointClusterIndices.xy + 0.5) / clustersTextureSize);
       clusterPositions = centermassValues.xy / centermassValues.b;
     }
     vec4 clusterCustomCoeff = texture(clusterForceCoefficient, textureCoords);

@@ -93,18 +93,25 @@ void main() {
       float cellCount = cellData.w;
       if (cellCount < 0.5) continue; // Empty cell
 
-      // Scale force by number of points in cell
-      // Subtract 1 if this is our own cell to avoid self-collision
+      // In the point's own cell the accumulated sums include the point itself,
+      // which biases the average position toward the point (halving the
+      // measured distance for a 2-point cell) — remove the self-contribution
+      // before averaging, and skip the cell if the point is alone in it.
       float effectiveCount = cellCount;
+      vec2 sumPos = cellData.xy;
+      float sumSize = cellData.z;
       if (dx == 0 && dy == 0) {
-        effectiveCount = max(0.0, cellCount - 1.0);
+        effectiveCount = cellCount - 1.0;
+        sumPos -= currentPos;
+        sumSize -= currentSize;
       }
+      if (effectiveCount < 0.5) continue;
 
       totalNeighbors += effectiveCount;
 
-      // Get average position and size in this cell
-      vec2 avgPos = cellData.xy / cellCount;
-      float avgSize = cellData.z / cellCount;
+      // Get average position and size of the other points in this cell
+      vec2 avgPos = sumPos / effectiveCount;
+      float avgSize = sumSize / effectiveCount;
       float otherCollisionRadius = (collisionRadius > 0.0 ? collisionRadius : avgSize * 0.5) + collisionPadding;
 
       // Calculate combined collision radius

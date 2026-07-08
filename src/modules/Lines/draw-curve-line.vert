@@ -157,10 +157,12 @@ void main() {
   
   // Calculate direction vector and its perpendicular
   vec2 xBasis = b - a;
-  vec2 yBasis = normalize(vec2(-xBasis.y, xBasis.x));
-
-  // Calculate link distance and control point for curved link
   float linkDist = length(xBasis);
+  // Self-loops (a == b) have no direction — normalize(vec2(0.0)) yields NaN
+  // vertices and the link (or others sharing the strip) silently disappears.
+  vec2 yBasis = linkDist > 0.0 ? normalize(vec2(-xBasis.y, xBasis.x)) : vec2(0.0, 1.0);
+
+  // Calculate control point for curved link
   float h = curvedLinkControlPointDistance;
   vec2 controlPoint = (a + b) / 2.0 + yBasis * linkDist * h;
 
@@ -190,7 +192,8 @@ void main() {
   // Calculate arrow length proportional to its width
   // 0.866 is approximately sqrt(3)/2 - related to equilateral triangle geometry
   // Cap the length to avoid overly long arrows on short links
-  arrowLength = min(0.3, (0.866 * arrowWidthPx * 2.0) / linkDist);
+  // (max() keeps zero-length self-loops from dividing by zero)
+  arrowLength = min(0.3, (0.866 * arrowWidthPx * 2.0) / max(linkDist, 1e-6));
 
   useArrow = arrow;
   if (useArrow > 0.5) {

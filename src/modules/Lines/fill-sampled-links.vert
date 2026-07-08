@@ -53,8 +53,9 @@ void main() {
     mid = (a + b) * 0.5;
   } else if (curvedLinkControlPointDistance != 0.0 && curvedWeight != 0.0) {
     vec2 xBasis = b - a;
-    vec2 yBasis = normalize(vec2(-xBasis.y, xBasis.x));
     float linkDist = length(xBasis);
+    // Self-loops (a == b) have no direction — normalize(vec2(0.0)) yields NaN.
+    vec2 yBasis = linkDist > 0.0 ? normalize(vec2(-xBasis.y, xBasis.x)) : vec2(0.0, 1.0);
     float h = curvedLinkControlPointDistance;
     vec2 controlPoint = (a + b) / 2.0 + yBasis * linkDist * h;
     mid = conicParametricCurve(a, b, controlPoint, 0.5, curvedWeight);

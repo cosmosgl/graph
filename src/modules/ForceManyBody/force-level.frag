@@ -40,7 +40,9 @@ const float MAX_LEVELS_NUM = 14.0;
 vec2 calculateAdditionalVelocity (vec2 ij, vec2 pp) {
   vec2 add = vec2(0.0);
   vec4 centermass = texture(levelFbo, ij);
-  if (centermass.r > 0.0 && centermass.g > 0.0 && centermass.b > 0.0) {
+  // b is the point count — the only reliable occupancy signal. r/g are
+  // coordinate sums, which are legitimately 0 for points on the space boundary.
+  if (centermass.b > 0.0) {
     vec2 centermassPosition = vec2(centermass.rg / centermass.b);
     vec2 distVector = pp - centermassPosition;
     float l = dot(distVector, distVector);
@@ -108,28 +110,28 @@ void main() {
       float m = top + cellSize * n_top + cellSize * i;
 
       if (n < (left + n_left * cellSize) && m < bottom) {
-        velocity.xy += calculateAdditionalVelocity(vec2(n / cellSize, m / cellSize) / levelTextureSize, pointPosition.xy);
+        velocity.xy += calculateAdditionalVelocity((vec2(n, m) / cellSize + 0.5) / levelTextureSize, pointPosition.xy);
       }
 
       n = left + cellSize * i;
       m = top + cellSize * j;
 
       if (n < (right - n_right * cellSize) && m < (top + n_top * cellSize)) {
-        velocity.xy += calculateAdditionalVelocity(vec2(n / cellSize, m / cellSize) / levelTextureSize, pointPosition.xy);
+        velocity.xy += calculateAdditionalVelocity((vec2(n, m) / cellSize + 0.5) / levelTextureSize, pointPosition.xy);
       }
 
       n = right - n_right * cellSize + cellSize * j;
       m = top + cellSize * i;
 
       if (n < right && m < (bottom - n_bottom * cellSize)) {
-        velocity.xy += calculateAdditionalVelocity(vec2(n / cellSize, m / cellSize) / levelTextureSize, pointPosition.xy);
+        velocity.xy += calculateAdditionalVelocity((vec2(n, m) / cellSize + 0.5) / levelTextureSize, pointPosition.xy);
       }
 
       n = left + n_left * cellSize + cellSize * i;
       m = bottom - n_bottom * cellSize + cellSize * j;
 
       if (n < right && m < bottom) {
-        velocity.xy += calculateAdditionalVelocity(vec2(n / cellSize, m / cellSize) / levelTextureSize, pointPosition.xy);
+        velocity.xy += calculateAdditionalVelocity((vec2(n, m) / cellSize + 0.5) / levelTextureSize, pointPosition.xy);
       }
     }
   }

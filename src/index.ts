@@ -28,6 +28,13 @@ import { Drag } from '@/graph/modules/Drag'
 const LONG_PRESS_DURATION_MS = 500
 const LONG_PRESS_MOVE_THRESHOLD_PX = 10
 
+/**
+ * Monotonic counter so each Graph instance gets its own d3 event namespace on
+ * `document` — with a shared namespace, instances replace each other's
+ * handlers and one instance's destroy() removes another's.
+ */
+let graphInstanceCounter = 0
+
 export class Graph {
   /** Current graph configuration. Always fully populated with default values for any unset properties. */
   public config: GraphConfigInterface = createDefaultConfig()
@@ -67,6 +74,7 @@ export class Graph {
    */
   private _shouldSuppressNextClick = false
 
+  private readonly _instanceId = graphInstanceCounter++
   private store = new Store()
   private points: Points | undefined
   private lines: Lines | undefined
@@ -306,8 +314,8 @@ export class Graph {
         .on('contextmenu.cosmos', this.onContextMenu.bind(this))
 
       select(document)
-        .on('keydown.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
-        .on('keyup.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
+        .on(`keydown.cosmos-${this._instanceId}`, (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
+        .on(`keyup.cosmos-${this._instanceId}`, (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
 
       this.zoomInstance.behavior
         .on('start.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => { this.currentEvent = e })
@@ -376,7 +384,7 @@ export class Graph {
 
       this.store.updateLinkHoveringEnabled(this.config)
 
-      if (this.config.showFPSMonitor) this.fpsMonitor = new FPSMonitor(this.canvas)
+      if (this.config.showFPSMonitor) this.fpsMonitor = new FPSMonitor(this.canvas, this.store.div)
 
       if (this.config.randomSeed !== undefined) this.store.addRandomSeed(this.config.randomSeed)
 
@@ -1064,7 +1072,7 @@ export class Graph {
     const h = this.store.screenSize[1]
     this.store.searchArea = [[rect[0][0], (h - rect[1][1])], [rect[1][0], (h - rect[0][1])]]
     if (!this.points.findPointsInRect()) return []
-    return extractIndicesFromPixels(readPixels(this.device, this.points.searchFbo as Framebuffer))
+    return extractIndicesFromPixels(readPixels(this.device, this.points.searchFbo as Framebuffer), this.graph.pointsNumber)
   }
 
   /**
@@ -1091,7 +1099,7 @@ export class Graph {
     const convertedPath = polygonPath.map(([x, y]) => [x, h - y] as [number, number])
     this.points.updatePolygonPath(convertedPath)
     if (!this.points.findPointsInPolygon()) return []
-    return extractIndicesFromPixels(readPixels(this.device, this.points.searchFbo as Framebuffer))
+    return extractIndicesFromPixels(readPixels(this.device, this.points.searchFbo as Framebuffer), this.graph.pointsNumber)
   }
 
   /**
@@ -1374,7 +1382,7 @@ export class Graph {
         .on('.zoom', null)
     }
 
-    select(document).on('.cosmos', null)
+    select(document).on(`.cosmos-${this._instanceId}`, null)
 
     if (this.zoomInstance?.behavior) {
       this.zoomInstance.behavior
@@ -1427,8 +1435,6 @@ export class Graph {
     if (this.attributionDivElement && this.attributionDivElement.parentNode) {
       this.attributionDivElement.parentNode.removeChild(this.attributionDivElement)
     }
-
-    document.getElementById('gl-bench-style')?.remove()
 
     this.canvasD3Selection = undefined
     this.attributionDivElement = undefined
@@ -1544,6 +1550,9 @@ export class Graph {
     if (prevConfig.pointDefaultSize !== this.config.pointDefaultSize) {
       this.graph.updatePointSize()
       this.points?.updateSize()
+      // Image sizes default to a copy of point sizes, so they follow this change.
+      this.graph.updatePointImageSizes()
+      this.points?.updateImageSizes()
     }
     if (prevConfig.pointDefaultShape !== this.config.pointDefaultShape) {
       this.graph.updatePointShape()
@@ -1630,7 +1639,7 @@ export class Graph {
     }
     if (prevConfig.showFPSMonitor !== this.config.showFPSMonitor) {
       if (this.config.showFPSMonitor) {
-        this.fpsMonitor = new FPSMonitor(this.canvas)
+        this.fpsMonitor = new FPSMonitor(this.canvas, this.store.div)
       } else {
         this.fpsMonitor?.destroy()
         this.fpsMonitor = undefined
@@ -1639,12 +1648,23 @@ export class Graph {
     if (prevConfig.enableZoom !== this.config.enableZoom || prevConfig.enableDrag !== this.config.enableDrag) {
       this.updateZoomDragBehaviors()
     }
+    if (prevConfig.pointSamplingDistance !== this.config.pointSamplingDistance) {
+      this.points?.updateSampledPointsGrid()
+    }
+    if (prevConfig.linkSamplingDistance !== this.config.linkSamplingDistance) {
+      this.lines?.updateSampledLinksGrid()
+    }
 
     if (prevConfig.onLinkClick !== this.config.onLinkClick ||
         prevConfig.onLinkContextMenu !== this.config.onLinkContextMenu ||
         prevConfig.onLinkMouseOver !== this.config.onLinkMouseOver ||
         prevConfig.onLinkMouseOut !== this.config.onLinkMouseOut) {
       this.store.updateLinkHoveringEnabled(this.config)
+      // The picking FBO is created lazily behind the isLinkHoveringEnabled
+      // flag, so enabling hover at runtime must allocate it — otherwise
+      // findHoveredLine() bails while the readback still consumes the
+      // zero-initialized result texture and reports link 0 as hovered.
+      this.lines?.updateLinkIndexFbo()
     }
   }
 
@@ -2245,6 +2265,9 @@ export class Graph {
   /** Detect hovered point and update store state. Returns flags for deferred callback firing. */
   private findHoveredPoint (): { mouseover: boolean; mouseout: boolean } {
     if (this._isDestroyed || !this.device || !this.points) return { mouseover: false, mouseout: false }
+    // The picking FBO is created in initPrograms(), which first runs on
+    // render() — a pointerdown before that must not read a missing target.
+    if (!this.points.hoveredFbo) return { mouseover: false, mouseout: false }
     this.points.findHoveredPoint()
     let isMouseover = false
     let isMouseout = false
@@ -2286,10 +2309,16 @@ export class Graph {
     let isMouseout = false
 
     if (!this.device) return { mouseover: false, mouseout: false }
-    const pixels = readPixels(this.device, this.lines.hoveredLineIndexFbo!)
+    // The result FBO is created in initPrograms(), which first runs on
+    // render() — a pointerdown before that must not read a missing target.
+    if (!this.lines.hoveredLineIndexFbo) return { mouseover: false, mouseout: false }
+    const pixels = readPixels(this.device, this.lines.hoveredLineIndexFbo)
     const hoveredLineIndex = pixels[0] as number
+    // The picking shader writes alpha 1 on a hit and (-1, 0, 0, 0) on a miss;
+    // a zero alpha also covers a result texture that was never rendered to.
+    const isHit = (pixels[3] as number) > 0 && hoveredLineIndex >= 0
 
-    if (hoveredLineIndex >= 0) {
+    if (isHit) {
       if (this.store.hoveredLinkIndex !== hoveredLineIndex) isMouseover = true
       this.store.hoveredLinkIndex = hoveredLineIndex
     } else {

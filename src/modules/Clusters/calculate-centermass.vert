@@ -24,10 +24,10 @@ in vec2 pointIndices;
 out vec4 rgba;
 
 void main() {
-  vec4 pointPosition = texture(positionsTexture, pointIndices / pointsTextureSize);
+  vec4 pointPosition = texture(positionsTexture, (pointIndices + 0.5) / pointsTextureSize);
   rgba = vec4(pointPosition.xy, 1.0, 0.0);
 
-  vec4 pointClusterIndices = texture(clusterTexture, pointIndices / pointsTextureSize);
+  vec4 pointClusterIndices = texture(clusterTexture, (pointIndices + 0.5) / pointsTextureSize);
   vec2 xy = vec2(0.0);
   if (pointClusterIndices.x >= 0.0 && pointClusterIndices.y >= 0.0) {
     xy = 2.0 * (pointClusterIndices.xy + 0.5) / clustersTextureSize - 1.0;

@@ -92,11 +92,16 @@ export function readPixels (device: Device, fbo: Framebuffer, sourceX = 0, sourc
 /**
  * Extracts point indices from a pixel readback buffer.
  * Every 4th value (R channel) is checked — non-zero means the point at that index was found.
+ * @param maxCount - Number of real points in the texture. The texture is square,
+ * so texels past this count are padding; padding texels hold position (0, 0) and
+ * would otherwise be reported as phantom indices whenever the space origin falls
+ * inside the searched area.
  */
-export function extractIndicesFromPixels (pixels: Float32Array): number[] {
+export function extractIndicesFromPixels (pixels: Float32Array, maxCount?: number): number[] {
   const result: number[] = []
-  for (let i = 0; i < pixels.length; i += 4) {
-    if (pixels[i] !== 0) result.push(i / 4)
+  const count = Math.min(pixels.length / 4, maxCount ?? Infinity)
+  for (let i = 0; i < count; i++) {
+    if (pixels[i * 4] !== 0) result.push(i)
   }
   return result
 }
