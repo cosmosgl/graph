@@ -982,6 +982,9 @@ export class Graph {
   /**
    * Get current X and Y coordinates of the points.
    * @returns Array of point positions.
+   * @note An **absent** point (removed via a `NaN` position — see `setPointPositions`) reads back
+   * as `NaN`, mirroring the input — not as its last on-screen coordinate. This keeps removal
+   * detectable from the read-back and keeps absent points out of `fitView`.
    */
   public getPointPositions (): number[] {
     if (this._isDestroyed || !this.device || !this.points) return []
@@ -990,6 +993,14 @@ export class Graph {
     const pointPositionsPixels = readPixels(this.device, this.points.currentPositionFbo as Framebuffer)
     positions.length = this.graph.pointsNumber * 2
     for (let i = 0; i < this.graph.pointsNumber; i += 1) {
+      // An absent point reads back as NaN: the position texture keeps its frozen
+      // last coordinate (the fade renders from it), which must not read back as a
+      // live position.
+      if (this.graph.pointPositions && isPointAbsent(this.graph.pointPositions, i)) {
+        positions[i * 2] = NaN
+        positions[i * 2 + 1] = NaN
+        continue
+      }
       const posX = pointPositionsPixels[i * 4 + 0]
       const posY = pointPositionsPixels[i * 4 + 1]
       if (posX !== undefined && posY !== undefined) {
@@ -1221,6 +1232,10 @@ export class Graph {
    * Do not mutate the returned map - it may affect future calls.
    * @returns A ReadonlyMap where keys are point indices and values are their corresponding X and Y coordinates in the [number, number] format.
    * @see trackPointPositionsByIndices To set which points should be tracked
+   * @note An **absent** tracked point (removed via a `NaN` position — see `setPointPositions`) is
+   * omitted from the map — a missing key means "this point is gone". React to absence yourself
+   * (e.g. hide its label); the entry disappears as soon as the point is removed, even while its
+   * fade-out is still playing.
    */
   public getTrackedPointPositionsMap (): ReadonlyMap<number, [number, number]> {
     if (this._isDestroyed || !this.points) return new Map()
@@ -1232,6 +1247,8 @@ export class Graph {
    * @returns Array of point positions in the format [x1, y1, x2, y2, ..., xn, yn] for tracked points only.
    * The positions are ordered by the tracking indices (same order as provided to trackPointPositionsByIndices).
    * Returns an empty array if no points are being tracked.
+   * @note An **absent** tracked point (removed via a `NaN` position) reads back as `NaN` — the slot
+   * is kept so positions stay aligned with the tracked indices.
    */
   public getTrackedPointPositionsArray (): number[] {
     if (this._isDestroyed || !this.points) return []

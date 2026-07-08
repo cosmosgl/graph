@@ -156,8 +156,14 @@ enter style mirroring an exit style), link add, and **Compact** (snapped renumbe
   auto-compact — by design. Only the caller knows what indices are tied to (ids,
   links, selection), so the engine renumbering underneath them would break those.
   Callers reuse freed slots on add, or **Compact** when convenient.
-- **Link-level absence tracking** — intentionally not added; callers drop a removed
-  point's links, with the line shader as a safety net.
-- **Position tracking** (`getTrackedPointPositionsMap`) — a raw read-back of the
-  indices the caller asked for; caller-owned, left as-is. Drag is covered
-  transitively (hover never returns an absent point).
+- **Link-level absence tracking** — no per-link absence state; a link is as absent as
+  its endpoints. (Follow-up: the line shader fades a link out with the exit ramp of
+  its endpoints and excludes it from link picking, so callers only drop removed
+  points' links when they compact.)
+- ~~**Position tracking** (`getTrackedPointPositionsMap`) — caller-owned, left
+  as-is.~~ Superseded by a follow-up: read-backs are honest about absence. An absent
+  point is omitted from the tracked map, and reads back as `NaN` from
+  `getPointPositions` / `getTrackedPointPositionsArray` (slots kept for index
+  alignment) — never as its frozen last on-screen coordinate. `fitView` therefore
+  ignores absent points. Drag is covered transitively (hover never returns an absent
+  point).
