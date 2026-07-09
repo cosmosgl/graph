@@ -90,9 +90,11 @@ export class GraphData {
 
   /**
    * Parsed `pointDefaultColor`, cached between updates (`updatePointColor`
-   * invalidates it, so config changes are picked up).
+   * invalidates it, so config changes are picked up). Public so the draw pass can
+   * feed it to the shader's `pointDefaultColor` uniform without re-parsing the
+   * config color string every frame.
    */
-  private get defaultRgba (): [number, number, number, number] {
+  public get defaultRgba (): [number, number, number, number] {
     this._defaultRgba ??= getRgbaColor(this._config.pointDefaultColor)
     return this._defaultRgba
   }

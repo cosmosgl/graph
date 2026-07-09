@@ -676,9 +676,9 @@ export class Points extends CoreModule {
       defines: {
         USE_UNIFORM_BUFFERS: true,
         // Exit defaults shared with the CPU resolvers (variables.ts) — formatted as
-        // GLSL float literals.
-        EXIT_DEFAULT_SIZE: EXIT_DEFAULT_SIZE.toFixed(1),
-        EXIT_DEFAULT_COLOR_CHANNEL: EXIT_DEFAULT_COLOR_CHANNEL.toFixed(1),
+        // exact GLSL float literals (`.toFixed` would round non-integer values).
+        EXIT_DEFAULT_SIZE: Number.isInteger(EXIT_DEFAULT_SIZE) ? EXIT_DEFAULT_SIZE.toFixed(1) : String(EXIT_DEFAULT_SIZE),
+        EXIT_DEFAULT_COLOR_CHANNEL: Number.isInteger(EXIT_DEFAULT_COLOR_CHANNEL) ? EXIT_DEFAULT_COLOR_CHANNEL.toFixed(1) : String(EXIT_DEFAULT_COLOR_CHANNEL),
       },
       bindings: {
         // Create uniform buffer binding
@@ -1262,7 +1262,9 @@ export class Points extends CoreModule {
 
     const initialState = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
     for (let i = 0; i < data.pointsNumber; i++) {
-      const shapeSize = sizeData[i] as number
+      // Resolve the raw size: a NaN ("use the default") would poison Math.max and
+      // give the point a NaN radius in the rect-selection shader.
+      const shapeSize = data.getResolvedPointSize(i)
       const imageSize = data.pointImageSizes?.[i] ?? shapeSize
       initialState[i * 4] = Math.max(shapeSize, imageSize)
     }
@@ -1562,7 +1564,8 @@ export class Points extends CoreModule {
       animateColors: this.shouldAnimatePointColors ? 1 : 0,
       animateSizes: this.shouldAnimatePointSizes ? 1 : 0,
       animatePositions: this.shouldAnimatePointPositions ? 1 : 0,
-      pointDefaultColor: ensureVec4(getRgbaColor(config.pointDefaultColor), [0, 0, 0, 1]),
+      // Cached parse — draw() runs per frame, so no color-string parsing here.
+      pointDefaultColor: ensureVec4(data.defaultRgba, [0, 0, 0, 1]),
       pointDefaultSize: config.pointDefaultSize,
     }
 
