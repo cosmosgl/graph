@@ -28,6 +28,9 @@ import { createAtlasDataFromImageData } from '@/graph/modules/Points/atlas-utils
 import { buildPositionTextureData, buildSourcePositionTextureData } from '@/graph/modules/Points/position-utils'
 import { Transition, TransitionProperty } from '@/graph/modules/Transition'
 
+/** Exact GLSL float literal for a shader `#define` (`.toFixed` would round non-integers). */
+const glslFloatLiteral = (value: number): string => (Number.isInteger(value) ? value.toFixed(1) : String(value))
+
 export class Points extends CoreModule {
   public transition: Transition | undefined
   public currentPositionFbo: Framebuffer | undefined
@@ -673,13 +676,14 @@ export class Points extends CoreModule {
         { name: 'imageIndex', format: 'float32' },
         { name: 'imageSize', format: 'float32' },
       ],
+      // Cast: luma types `defines` boolean-only, but its runtime injects any value
+      // verbatim as `#define KEY value` — which is how the shared exit defaults
+      // (variables.ts) reach the shader.
       defines: {
         USE_UNIFORM_BUFFERS: true,
-        // Exit defaults shared with the CPU resolvers (variables.ts) — formatted as
-        // exact GLSL float literals (`.toFixed` would round non-integer values).
-        EXIT_DEFAULT_SIZE: Number.isInteger(EXIT_DEFAULT_SIZE) ? EXIT_DEFAULT_SIZE.toFixed(1) : String(EXIT_DEFAULT_SIZE),
-        EXIT_DEFAULT_COLOR_CHANNEL: Number.isInteger(EXIT_DEFAULT_COLOR_CHANNEL) ? EXIT_DEFAULT_COLOR_CHANNEL.toFixed(1) : String(EXIT_DEFAULT_COLOR_CHANNEL),
-      },
+        EXIT_DEFAULT_SIZE: glslFloatLiteral(EXIT_DEFAULT_SIZE),
+        EXIT_DEFAULT_COLOR_CHANNEL: glslFloatLiteral(EXIT_DEFAULT_COLOR_CHANNEL),
+      } as unknown as Record<string, boolean>,
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()

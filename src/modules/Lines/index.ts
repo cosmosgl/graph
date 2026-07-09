@@ -99,6 +99,7 @@ export class Lines extends CoreModule {
       transitionProgress: number;
       animateColors: number;
       animateWidths: number;
+      animatePositions: number;
     };
     drawLineFragmentUniforms: {
       renderMode: number;
