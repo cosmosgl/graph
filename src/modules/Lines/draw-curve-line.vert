@@ -10,10 +10,12 @@ in float sourceWidth;
 in float targetWidth;
 in float arrow;
 in float linkIndices;
+in float linkStyle;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D linkStatus;
 uniform sampler2D exitTexture;
+uniform sampler2D pointColorsTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform drawLineUniforms {
@@ -44,6 +46,7 @@ layout(std140) uniform drawLineUniforms {
   float animateColors;
   float animateWidths;
   float animatePositions;
+  vec4 pointDefaultColor;
 } drawLine;
 
 #define transformationMatrix drawLine.transformationMatrix
@@ -73,6 +76,7 @@ layout(std140) uniform drawLineUniforms {
 #define animateColors drawLine.animateColors
 #define animateWidths drawLine.animateWidths
 #define animatePositions drawLine.animatePositions
+#define pointDefaultColor drawLine.pointDefaultColor
 #else
 uniform mat3 transformationMatrix;
 uniform float pointsTextureSize;
@@ -102,6 +106,7 @@ uniform float transitionProgress;
 uniform float animateColors;
 uniform float animateWidths;
 uniform float animatePositions;
+uniform vec4 pointDefaultColor;
 #endif
 
 out vec4 rgbaColor;
@@ -111,9 +116,22 @@ out float useArrow;
 out float smoothing;
 out float arrowWidthFactor;
 out float linkIndex;
+flat out float vLinkStyle;
+out float vLinkDashSpan;
+out float vLinkDashWidth;
+out vec4 vEndpointColorA;
+out vec4 vEndpointColorB;
 
 float map(float value, float min1, float max1, float min2, float max2) {
   return min2 + (value - min1) * (max2 - min2) / (max1 - min1);
+}
+
+// Resolves NaN color channels the way the point draw shader does: NaN means "use the
+// default" — the config default, blended toward the exit default as the endpoint fades
+// out. Mirrors resolveColor in draw-points.vert.
+vec4 resolveColor(vec4 color, float exitRamp) {
+  vec4 defaultColor = mix(pointDefaultColor, vec4(EXIT_DEFAULT_COLOR_CHANNEL), exitRamp);
+  return mix(color, defaultColor, isnan(color));
 }
 
 float calculateLinkWidth(float width) {
@@ -150,6 +168,7 @@ float calculateArrowWidth(float arrowWidth) {
 void main() {
   pos = position;
   linkIndex = linkIndices;
+  vLinkStyle = linkStyle;
 
   vec2 pointTexturePosA = (pointA + 0.5) / pointsTextureSize;
   vec2 pointTexturePosB = (pointB + 0.5) / pointsTextureSize;
@@ -191,6 +210,12 @@ void main() {
     return;
   }
 
+  // Sample the source/target point colors so the fragment shader can build a gradient
+  // along the link. The texture mirrors GraphData.pointColors, so channels may be NaN
+  // ("use the default") — resolve them with the endpoint's exit ramp, like the point draw.
+  vEndpointColorA = resolveColor(texture(pointColorsTexture, pointTexturePosA), exitA);
+  vEndpointColorB = resolveColor(texture(pointColorsTexture, pointTexturePosB), exitB);
+
   // Calculate direction vector and its perpendicular
   vec2 xBasis = b - a;
   vec2 yBasis = normalize(vec2(-xBasis.y, xBasis.x));
@@ -202,6 +227,13 @@ void main() {
 
   // Convert link distance to screen pixels
   float linkDistPx = linkDist * transformationMatrix[0][0];
+
+  // Dash/dot pattern space. When links keep a constant on-screen size (scaleLinksOnZoom = false)
+  // the pattern is measured in screen pixels (fixed dash size, but it slides as the link's
+  // on-screen length changes with zoom). When links scale with zoom it is measured in world units,
+  // which locks the pattern to the link so it scales with zoom instead of crawling.
+  float dashUnitScale = scaleLinksOnZoom > 0.0 ? 1.0 : transformationMatrix[0][0];
+  vLinkDashSpan = linkDist * dashUnitScale;
 
   float lineWidthBase = animateWidths > 0.0
     ? mix(sourceWidth, targetWidth, transitionProgress)
@@ -261,6 +293,11 @@ void main() {
   float smoothingPx = 0.5 / transformationMatrix[0][0];
   smoothing = smoothingPx / linkWidthPx;
   linkWidthPx += smoothingPx;
+
+  // Link thickness expressed in the dash pattern's space, so dotted-link dots match the stroke width.
+  // linkWidthPx is in world units; `dashUnitScale` converts it to screen px (scaleLinksOnZoom = false)
+  // or keeps it in world units (scaleLinksOnZoom = true), matching vLinkDashSpan.
+  vLinkDashWidth = linkWidthPx * dashUnitScale;
 
 
 

@@ -1,5 +1,5 @@
 import type { GraphConfigInterface, Complete } from '@/graph/config'
-import { PointShape } from '@/graph/modules/GraphData'
+import { PointShape, LinkStyle } from '@/graph/modules/GraphData'
 import { TransitionEasing } from '@/graph/modules/Transition'
 
 /**
@@ -38,6 +38,10 @@ export const defaultConfigValues = {
   renderLinks: true,
   linkDefaultColor: '#666666',
   linkDefaultWidth: 1,
+  linkDefaultStyle: LinkStyle.Solid,
+  linkDashLength: 8,
+  linkDashGap: 4,
+  linkColorInterpolateFromEndpoints: false,
   linkOpacity: 1.0,
   linkGreyoutOpacity: 0.1,
   linkWidthScale: 1,

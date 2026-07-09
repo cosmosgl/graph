@@ -14,6 +14,12 @@ export enum PointShape {
   None = 8
 }
 
+export enum LinkStyle {
+  Solid = 0,
+  Dashed = 1,
+  Dotted = 2
+}
+
 export class GraphData {
   public inputPointPositions: Float32Array | undefined
   public inputPointColors: Float32Array | undefined
@@ -24,6 +30,7 @@ export class GraphData {
   public inputPointImageSizes: Float32Array | undefined
   public inputLinkColors: Float32Array | undefined
   public inputLinkWidths: Float32Array | undefined
+  public inputLinkStyles: Float32Array | undefined
   public inputLinkStrength: Float32Array | undefined
   public inputPointClusters: (number | undefined)[] | undefined
   public inputClusterPositions: (number | undefined)[] | undefined
@@ -53,6 +60,7 @@ export class GraphData {
   public links: Float32Array | undefined
   public linkColors: Float32Array | undefined
   public linkWidths: Float32Array | undefined
+  public linkStyles: Float32Array | undefined
   public linkArrowsBoolean: boolean[] | undefined
   public linkArrows: number[] | undefined
   public linkStrength: Float32Array | undefined
@@ -314,6 +322,34 @@ export class GraphData {
   }
 
   /**
+   * Updates the link styles (stroke patterns) based on the input data or default config value.
+   */
+  public updateLinkStyles (): void {
+    if (this.linksNumber === undefined) {
+      this.linkStyles = undefined
+      return
+    }
+
+    const { linkDefaultStyle } = this._config
+    const configStyle = typeof linkDefaultStyle === 'string' ? Number(linkDefaultStyle) : linkDefaultStyle
+    const defaultStyle = (configStyle >= 0 && configStyle <= 2) ? configStyle : defaultConfigValues.linkDefaultStyle
+
+    // Sets link styles to default values if the input is missing or does not match input links number.
+    if (this.inputLinkStyles === undefined || this.inputLinkStyles.length !== this.linksNumber) {
+      this.linkStyles = new Float32Array(this.linksNumber).fill(defaultStyle)
+    } else {
+      this.linkStyles = new Float32Array(this.inputLinkStyles)
+      const linkStyles = this.linkStyles
+      for (let i = 0; i < linkStyles.length; i++) {
+        const style = linkStyles[i]
+        if (style == null || !isNumber(style) || style < 0 || style > 2) {
+          linkStyles[i] = defaultStyle
+        }
+      }
+    }
+  }
+
+  /**
    * Updates the link arrows based on the input data or default config value.
    */
   public updateArrows (): void {
@@ -378,6 +414,7 @@ export class GraphData {
     this.updateLinkColor()
     this.updateLinkWidth()
     this.updateArrows()
+    this.updateLinkStyles()
     this.updateLinkStrength()
 
     this.updateClusters()
