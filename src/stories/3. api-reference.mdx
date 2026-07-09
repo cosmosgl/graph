@@ -336,6 +336,38 @@ graph.render();
 
 In this example, the `linkArrows` array contains three boolean values. The first value `true` sets an arrow on the first link, the second value `false` leaves the second link without an arrow, and the third value `true` sets an arrow on the third link.
 
+### <a name="set_link_styles" href="#set_link_styles">#</a> graph.<b>setLinkStyles</b>(<i>linkStyles</i>)
+
+This method sets the styles (stroke patterns) for the graph links.
+
+* **`linkStyles`** (Float32Array): A Float32Array representing the style of each link in the format `[style1, style2, ..., styleN]`, where each `style` value corresponds to the style of the link at the same index in the graph's data. Each style value should be one of the available `LinkStyle` constants:
+
+| Style Value | Style Name |
+|-------------|------------|
+| 0 | Solid |
+| 1 | Dashed |
+| 2 | Dotted |
+
+Invalid style values will default to the `linkDefaultStyle` config value (`LinkStyle.Solid` by default). Dash length and gap are controlled globally via the `linkDashLength` and `linkDashGap` config options, and dotted dots are sized to the link width. By default the pattern is sized in screen pixels and shifts along a link as you zoom; enable `scaleLinksOnZoom` to lock the pattern to the link (it then scales with zoom instead of shifting). The stroke pattern is orthogonal to `linkColorInterpolateFromEndpoints`, so a dashed or dotted link can also be a gradient.
+
+**Example:**
+```javascript
+import { Graph, LinkStyle } from '@cosmos.gl/graph'
+
+graph.setLinkStyles(new Float32Array([
+  LinkStyle.Solid,  // Solid for first link
+  LinkStyle.Dashed, // Dashed for second link
+  LinkStyle.Dotted  // Dotted for third link
+]));
+graph.render();
+```
+
+### <a name="get_link_styles" href="#get_link_styles">#</a> graph.<b>getLinkStyles</b>()
+
+This method retrieves the current styles of the graph links that were previously set using `setLinkStyles`.
+
+**Returns:** A Float32Array representing the style of each link in the format `[style1, style2, ..., styleN]`, where each `style` value corresponds to the style of the link at the same index in the graph's data. Returns an empty Float32Array if no link styles are set.
+
 ### <a name="set_link_strength" href="#set_link_strength">#</a> graph.<b>setLinkStrength</b>(<i>linkStrength</i>)
 
 This method sets the strength of the graph links.
