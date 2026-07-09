@@ -24,6 +24,7 @@ layout(std140) uniform findHoveredPointUniforms {
   float maxPointSize;
   float skipHighlighted;
   float skipGreyed;
+  float pointDefaultSize;
 } findHoveredPoint;
 
 #define pointsTextureSize findHoveredPoint.pointsTextureSize
@@ -37,6 +38,7 @@ layout(std140) uniform findHoveredPointUniforms {
 #define maxPointSize findHoveredPoint.maxPointSize
 #define skipHighlighted findHoveredPoint.skipHighlighted
 #define skipGreyed findHoveredPoint.skipGreyed
+#define pointDefaultSize findHoveredPoint.pointDefaultSize
 #else
 uniform float pointsTextureSize;
 uniform float sizeScale;
@@ -49,6 +51,7 @@ uniform float scalePointsOnZoom;
 uniform float maxPointSize;
 uniform float skipHighlighted;
 uniform float skipGreyed;
+uniform float pointDefaultSize;
 #endif
 
 out vec4 rgba;
@@ -110,17 +113,21 @@ void main() {
   vec3 finalPosition = transformationMatrix * vec3(normalizedPosition, 1);
   #endif
 
-  float shapeSizeValue = calculatePointSize(size * sizeScale);
+  // Resolve a NaN size at read time. The absent-point guard above already returned,
+  // so a NaN here means "use the config default".
+  float resolvedSize = isnan(size) ? pointDefaultSize : size;
+
+  float shapeSizeValue = calculatePointSize(resolvedSize * sizeScale);
   float imageSizeValue = calculatePointSize(imageSize * sizeScale);
   float pointRadius = 0.5 * max(shapeSizeValue, imageSizeValue);
   vec2 pointScreenPosition = (finalPosition.xy + 1.0) * screenSize / 2.0;
-  
+
   rgba = vec4(0.0);
   gl_Position = vec4(0.5, 0.5, 0.0, 1.0);
-  
+
   if (euclideanDistance(pointScreenPosition.x, mousePosition.x, pointScreenPosition.y, mousePosition.y) < pointRadius / ratio) {
     float index = pointIndices.g * pointsTextureSize + pointIndices.r;
-    rgba = vec4(index, max(size, imageSize), pointPosition.xy);
+    rgba = vec4(index, max(resolvedSize, imageSize), pointPosition.xy);
     gl_Position = vec4(-0.5, -0.5, 0.0, 1.0);
   }
 

@@ -483,16 +483,10 @@ export class Graph {
     this.isPointPositionsUpdateNeeded = true
     const currentPositionTexture = this.points?.currentPositionTexture
     if (currentPositionTexture && !currentPositionTexture.destroyed) {
+      // Only positions: the exit/enter fade of default-valued (NaN) channels is
+      // driven by the exit ramp in the draw shader, so no size/color transition is
+      // needed for a removal — and hover picking stays live during the fade.
       this.transition.queue(TransitionProperty.Positions)
-      // The exit/enter fade of a removed (NaN) or revived point is carried by size/color
-      // transitions, so queue them when a point's absence flipped even though the caller
-      // didn't call setPointSizes/Colors. Only then: an active size transition disables
-      // hover picking for its whole duration (see findHoveredItem), so a pure move must
-      // not activate one.
-      if (this.graph.hasPointAbsenceChanged()) {
-        this.transition.queue(TransitionProperty.PointSizes)
-        this.transition.queue(TransitionProperty.PointColors)
-      }
     }
     // Links related texture depends on point positions, so we need to update it
     this.isLinksUpdateNeeded = true
@@ -528,14 +522,25 @@ export class Graph {
   }
 
   /**
-   * Gets the current colors of the graph points.
+   * Gets the current colors of the graph points, as rendered: `NaN` channels are
+   * resolved to the config default (or the exit default for an absent point).
    *
-   * @returns {Float32Array} A Float32Array representing the colors of points in the format [r1, g1, b1, a1, r2, g2, b2, a2, ..., rn, gn, bn, an],
+   * @returns {Float32Array} A **new** Float32Array (a snapshot — safe to mutate, computed on
+   * each call) of point colors in the format [r1, g1, b1, a1, r2, g2, b2, a2, ..., rn, gn, bn, an],
    * where each color is in RGBA format. Returns an empty Float32Array if no point colors are set.
    */
   public getPointColors (): Float32Array {
     if (this._isDestroyed) return new Float32Array()
-    return this.graph.pointColors ?? new Float32Array()
+    if (this.graph.pointColors === undefined || this.graph.pointsNumber === undefined) return new Float32Array()
+    // Resolve on demand into a fresh array: internally colors stay raw (NaN =
+    // "use the default"), and the caller's input array is never modified.
+    const resolved = new Float32Array(this.graph.pointsNumber * 4)
+    for (let i = 0; i < this.graph.pointsNumber; i++) {
+      for (let channel = 0; channel < 4; channel++) {
+        resolved[i * 4 + channel] = this.graph.getResolvedPointColorChannel(i, channel)
+      }
+    }
+    return resolved
   }
 
   /**
@@ -617,14 +622,22 @@ export class Graph {
   }
 
   /**
-   * Gets the current sizes of the graph points.
+   * Gets the current sizes of the graph points, as rendered: `NaN` sizes are
+   * resolved to the config default (or the exit default for an absent point).
    *
-   * @returns {Float32Array} A Float32Array representing the sizes of points in the format [size1, size2, ..., sizen],
+   * @returns {Float32Array} A **new** Float32Array (a snapshot — safe to mutate, computed on
+   * each call) of point sizes in the format [size1, size2, ..., sizen],
    * where `n` is the index of the point. Returns an empty Float32Array if no point sizes are set.
    */
   public getPointSizes (): Float32Array {
     if (this._isDestroyed) return new Float32Array()
-    return this.graph.pointSizes ?? new Float32Array()
+    if (this.graph.pointSizes === undefined || this.graph.pointsNumber === undefined) return new Float32Array()
+    // Resolve on demand into a fresh array — see getPointColors.
+    const resolved = new Float32Array(this.graph.pointsNumber)
+    for (let i = 0; i < this.graph.pointsNumber; i++) {
+      resolved[i] = this.graph.getResolvedPointSize(i)
+    }
+    return resolved
   }
 
   /**
@@ -1209,10 +1222,11 @@ export class Graph {
    */
   public getPointRadiusByIndex (index: number): number | undefined {
     if (this._isDestroyed) return undefined
-    const shapeSize = this.graph.pointSizes?.[index]
+    if (this.graph.pointSizes === undefined && this.graph.pointImageSizes === undefined) return undefined
+    if (index < 0 || index >= (this.graph.pointsNumber ?? 0)) return undefined
+    const shapeSize = this.graph.getResolvedPointSize(index)
     const imageSize = this.graph.pointImageSizes?.[index]
-    if (shapeSize === undefined && imageSize === undefined) return undefined
-    return Math.max(shapeSize ?? 0, imageSize ?? 0)
+    return Math.max(shapeSize, imageSize ?? 0)
   }
 
   /**

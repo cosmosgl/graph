@@ -69,8 +69,10 @@ export class ForceCollision extends CoreModule {
     // large typed array as arguments can throw a RangeError on big graphs.
     const defaultSize = config.pointDefaultSize ?? defaultConfigValues.pointDefaultSize
     let maxSize = defaultSize
-    if (data.pointSizes) {
-      for (const size of data.pointSizes) maxSize = Math.max(maxSize, size)
+    if (data.pointSizes && data.pointsNumber !== undefined) {
+      // Resolve sizes: raw input arrays may hold NaN ("use the default"), which
+      // would poison Math.max.
+      for (let i = 0; i < data.pointsNumber; i++) maxSize = Math.max(maxSize, data.getResolvedPointSize(i))
     }
     const collisionRadius = config.simulationCollisionRadius ?? 0
     const collisionPadding = config.simulationCollisionPadding ?? 0
@@ -116,7 +118,7 @@ export class ForceCollision extends CoreModule {
     // Create size texture for collision radius calculation
     const sizeState = new Float32Array(store.pointsTextureSize * store.pointsTextureSize * 4)
     for (let i = 0; i < data.pointsNumber; i++) {
-      sizeState[i * 4] = data.pointSizes?.[i] ?? defaultSize
+      sizeState[i * 4] = data.getResolvedPointSize(i)
     }
 
     const recreateSizeTexture =

@@ -4,7 +4,7 @@ import { Model } from '@luma.gl/engine'
 // import { extent } from 'd3-array'
 import { CoreModule } from '@/graph/modules/core-module'
 import type { Mat4Array } from '@/graph/modules/Store'
-import { defaultConfigValues } from '@/graph/variables'
+import { defaultConfigValues, EXIT_DEFAULT_SIZE, EXIT_DEFAULT_COLOR_CHANNEL } from '@/graph/variables'
 import drawPointsFrag from '@/graph/modules/Points/draw-points.frag?raw'
 import drawPointsVert from '@/graph/modules/Points/draw-points.vert?raw'
 import findPointsInRectFrag from '@/graph/modules/Points/find-points-in-rect.frag?raw'
@@ -22,7 +22,7 @@ import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import trackPositionsFrag from '@/graph/modules/Points/track-positions.frag?raw'
 import dragPointFrag from '@/graph/modules/Points/drag-point.frag?raw'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
-import { readPixels, isPointAbsent } from '@/graph/helper'
+import { readPixels, isPointAbsent, getRgbaColor } from '@/graph/helper'
 import { ensureVec2, ensureVec4 } from '@/graph/modules/Shared/uniform-utils'
 import { createAtlasDataFromImageData } from '@/graph/modules/Points/atlas-utils'
 import { buildPositionTextureData, buildSourcePositionTextureData } from '@/graph/modules/Points/position-utils'
@@ -219,6 +219,9 @@ export class Points extends CoreModule {
       transitionProgress: number;
       animateColors: number;
       animateSizes: number;
+      animatePositions: number;
+      pointDefaultColor: [number, number, number, number];
+      pointDefaultSize: number;
     };
     drawFragmentUniforms: {
       greyoutOpacity: number;
@@ -266,6 +269,7 @@ export class Points extends CoreModule {
       maxPointSize: number;
       skipHighlighted: number;
       skipGreyed: number;
+      pointDefaultSize: number;
     };
   }> | undefined
 
@@ -586,6 +590,8 @@ export class Points extends CoreModule {
           animateColors: 'f32',
           animateSizes: 'f32',
           animatePositions: 'f32',
+          pointDefaultColor: 'vec4<f32>',
+          pointDefaultSize: 'f32',
         },
         defaultUniforms: {
           // Order MUST match uniformTypes and shader declaration
@@ -617,6 +623,8 @@ export class Points extends CoreModule {
           animateColors: 0,
           animateSizes: 0,
           animatePositions: 0,
+          pointDefaultColor: ensureVec4(getRgbaColor(config.pointDefaultColor), [0, 0, 0, 1]),
+          pointDefaultSize: config.pointDefaultSize,
         },
       },
       drawFragmentUniforms: {
@@ -667,6 +675,10 @@ export class Points extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
+        // Exit defaults shared with the CPU resolvers (variables.ts) — formatted as
+        // GLSL float literals.
+        EXIT_DEFAULT_SIZE: EXIT_DEFAULT_SIZE.toFixed(1),
+        EXIT_DEFAULT_COLOR_CHANNEL: EXIT_DEFAULT_COLOR_CHANNEL.toFixed(1),
       },
       bindings: {
         // Create uniform buffer binding
@@ -807,6 +819,7 @@ export class Points extends CoreModule {
           maxPointSize: 'f32',
           skipHighlighted: 'f32',
           skipGreyed: 'f32',
+          pointDefaultSize: 'f32',
         },
         defaultUniforms: {
           pointsTextureSize: store.pointsTextureSize ?? 0,
@@ -820,6 +833,7 @@ export class Points extends CoreModule {
           maxPointSize: store.maxPointSize,
           skipHighlighted: 0,
           skipGreyed: 0,
+          pointDefaultSize: config.pointDefaultSize,
         },
       },
     })
@@ -1548,6 +1562,8 @@ export class Points extends CoreModule {
       animateColors: this.shouldAnimatePointColors ? 1 : 0,
       animateSizes: this.shouldAnimatePointSizes ? 1 : 0,
       animatePositions: this.shouldAnimatePointPositions ? 1 : 0,
+      pointDefaultColor: ensureVec4(getRgbaColor(config.pointDefaultColor), [0, 0, 0, 1]),
+      pointDefaultSize: config.pointDefaultSize,
     }
 
     const baseFragmentUniforms = {
@@ -1629,7 +1645,7 @@ export class Points extends CoreModule {
     if (config.renderHoveredPointRing && store.hoveredPoint && this.drawHighlightedCommand && this.drawHighlightedUniformStore) {
       if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
       if (!this.pointStatusTexture || this.pointStatusTexture.destroyed) return
-      const pointSize = data.pointSizes?.[store.hoveredPoint.index] ?? 1
+      const pointSize = data.getResolvedPointSize(store.hoveredPoint.index)
       const imageSize = data.pointImageSizes?.[store.hoveredPoint.index] ?? pointSize
       this.drawHighlightedUniformStore.setUniforms({
         drawHighlightedUniforms: {
@@ -1664,7 +1680,7 @@ export class Points extends CoreModule {
     if (store.focusedPoint && this.drawHighlightedCommand && this.drawHighlightedUniformStore) {
       if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
       if (!this.pointStatusTexture || this.pointStatusTexture.destroyed) return
-      const pointSize = data.pointSizes?.[store.focusedPoint.index] ?? 1
+      const pointSize = data.getResolvedPointSize(store.focusedPoint.index)
       const imageSize = data.pointImageSizes?.[store.focusedPoint.index] ?? pointSize
       this.drawHighlightedUniformStore.setUniforms({
         drawHighlightedUniforms: {
@@ -1908,6 +1924,7 @@ export class Points extends CoreModule {
       scalePointsOnZoom: this.config.scalePointsOnZoom ? 1 : 0,
       mousePosition: ensureVec2(this.store.screenMousePosition, [0, 0]),
       maxPointSize: this.store.maxPointSize,
+      pointDefaultSize: this.config.pointDefaultSize,
     }
 
     const bindings = {

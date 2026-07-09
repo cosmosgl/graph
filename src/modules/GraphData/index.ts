@@ -1,11 +1,6 @@
 import { getRgbaColor, isNumber, isPointAbsent } from '@/graph/helper'
 import { type GraphConfigInterface } from '@/graph/config'
-import { defaultConfigValues } from '@/graph/variables'
-
-// Defaults a `NaN` size/color resolves to for an *exiting* point (NaN position):
-// fade to nothing. (A live point falls back to the config defaults instead.)
-const EXIT_DEFAULT_SIZE = 0
-const EXIT_DEFAULT_COLOR_CHANNEL = 0
+import { defaultConfigValues, EXIT_DEFAULT_SIZE, EXIT_DEFAULT_COLOR_CHANNEL } from '@/graph/variables'
 
 export enum PointShape {
   Circle = 0,
@@ -78,6 +73,8 @@ export class GraphData {
   public inDegree: number[] | undefined
   public outDegree: number[] | undefined
   private _config: GraphConfigInterface
+  /** Lazily parsed `pointDefaultColor` — see the `defaultRgba` getter. */
+  private _defaultRgba: [number, number, number, number] | undefined
 
   public constructor (config: GraphConfigInterface) {
     this._config = config
@@ -91,6 +88,15 @@ export class GraphData {
     return this.links && this.links.length / 2
   }
 
+  /**
+   * Parsed `pointDefaultColor`, cached between updates (`updatePointColor`
+   * invalidates it, so config changes are picked up).
+   */
+  private get defaultRgba (): [number, number, number, number] {
+    this._defaultRgba ??= getRgbaColor(this._config.pointDefaultColor)
+    return this._defaultRgba
+  }
+
   public updatePoints (): void {
     // Don't sync the same positions twice — it breaks animations when points are added or removed.
     if (this.pointPositions === this.inputPointPositions) return
@@ -98,24 +104,6 @@ export class GraphData {
     this.sourcePointsNumber = this.pointPositions ? this.pointPositions.length / 2 : 0
     this.pointPositions = this.inputPointPositions
     this.targetPointsNumber = this.pointPositions ? this.pointPositions.length / 2 : 0
-  }
-
-  /**
-   * Reports whether any point's absence (`NaN` position) differs between the applied
-   * positions and the pending input, over their shared length — i.e. whether the pending
-   * update removes (`real → NaN`) or revives (`NaN → real`) a point. Slots beyond the
-   * shared length don't count: a slot that enters already absent has nothing to fade,
-   * and a dropped slot no longer exists.
-   */
-  public hasPointAbsenceChanged (): boolean {
-    const previous = this.pointPositions
-    const next = this.inputPointPositions
-    if (!previous || !next || previous === next) return false
-    const sharedCount = Math.min(previous.length, next.length) / 2
-    for (let i = 0; i < sharedCount; i++) {
-      if (isPointAbsent(previous, i) !== isPointAbsent(next, i)) return true
-    }
-    return false
   }
 
   /**
@@ -127,33 +115,30 @@ export class GraphData {
       return
     }
 
-    // Sets point colors to default values from config if the input is missing or does not match input points number.
-    const defaultRgba = getRgbaColor(this._config.pointDefaultColor)
+    // NaN channels are not resolved here — the caller's array is used as-is (never
+    // edited), and resolution happens at read time: the draw shader resolves NaN
+    // against the point's absence and the config default, and CPU consumers go
+    // through `getResolvedPointColorChannel`/`getResolvedPointSize`. A missing or
+    // mismatched input becomes an all-NaN array: "resolve every channel".
+    this._defaultRgba = undefined // config may have changed — re-parse lazily
     if (this.inputPointColors === undefined || this.inputPointColors.length / 4 !== this.pointsNumber) {
-      this.pointColors = new Float32Array(this.pointsNumber * 4)
-      for (let i = 0; i < this.pointColors.length / 4; i++) {
-        // No color array provided: present points get the config default; exiting
-        // points (NaN position) get the exit default (0 → transparent) so they
-        // still fade out without the caller providing colors.
-        if (this.pointPositions && isPointAbsent(this.pointPositions, i)) continue // leave 0
-        this.pointColors[i * 4] = defaultRgba[0]
-        this.pointColors[i * 4 + 1] = defaultRgba[1]
-        this.pointColors[i * 4 + 2] = defaultRgba[2]
-        this.pointColors[i * 4 + 3] = defaultRgba[3]
-      }
+      this.pointColors = new Float32Array(this.pointsNumber * 4).fill(NaN)
     } else {
       this.pointColors = this.inputPointColors
-      for (let i = 0; i < this.pointColors.length / 4; i++) {
-        // A NaN channel resolves to the exit default (0) for an exiting point
-        // (NaN position), otherwise to the config default.
-        const exiting = this.pointPositions !== undefined && isPointAbsent(this.pointPositions, i)
-        for (let c = 0; c < 4; c++) {
-          if (!isNumber(this.pointColors[i * 4 + c])) {
-            this.pointColors[i * 4 + c] = exiting ? EXIT_DEFAULT_COLOR_CHANNEL : (defaultRgba[c] as number)
-          }
-        }
-      }
     }
+  }
+
+  /**
+   * Resolves one color channel of a point the way the draw shader does: a `NaN`
+   * channel means the exit default (transparent) for an **absent** point, the
+   * config default otherwise. The CPU mirror of the shader rule, for consumers
+   * that read colors outside the GPU.
+   */
+  public getResolvedPointColorChannel (index: number, channel: number): number {
+    const raw = this.pointColors?.[index * 4 + channel]
+    if (isNumber(raw)) return raw as number
+    if (this.pointPositions && isPointAbsent(this.pointPositions, index)) return EXIT_DEFAULT_COLOR_CHANNEL
+    return this.defaultRgba[channel] as number
   }
 
   /**
@@ -165,26 +150,26 @@ export class GraphData {
       return
     }
 
-    // Sets point sizes to default values from config if the input is missing or does not match input points number.
-    const defaultSize = this._config.pointDefaultSize
+    // Like updatePointColor: no resolution here — read-time resolution in the draw
+    // shader / `getResolvedPointSize`, and the caller's array is never edited.
     if (this.inputPointSizes === undefined || this.inputPointSizes.length !== this.pointsNumber) {
-      this.pointSizes = new Float32Array(this.pointsNumber).fill(defaultSize)
-      // No size array provided: exiting points (NaN position) get the exit default
-      // so they still fade out without the caller providing sizes.
-      for (let i = 0; i < this.pointsNumber; i++) {
-        if (this.pointPositions && isPointAbsent(this.pointPositions, i)) this.pointSizes[i] = EXIT_DEFAULT_SIZE
-      }
+      this.pointSizes = new Float32Array(this.pointsNumber).fill(NaN)
     } else {
       this.pointSizes = this.inputPointSizes
-      for (let i = 0; i < this.pointSizes.length; i++) {
-        if (!isNumber(this.pointSizes[i])) {
-          // NaN resolves to the exit default for an exiting point (NaN
-          // position), otherwise to the config default.
-          const exiting = this.pointPositions !== undefined && isPointAbsent(this.pointPositions, i)
-          this.pointSizes[i] = exiting ? EXIT_DEFAULT_SIZE : defaultSize
-        }
-      }
     }
+  }
+
+  /**
+   * Resolves a point's size the way the draw shader does: `NaN` means the exit
+   * default (`0`) for an **absent** point, the config default otherwise. The CPU
+   * mirror of the shader rule, for consumers that read sizes outside the GPU
+   * (collision, hover ring, read-back).
+   */
+  public getResolvedPointSize (index: number): number {
+    const raw = this.pointSizes?.[index]
+    if (isNumber(raw)) return raw as number
+    if (this.pointPositions && isPointAbsent(this.pointPositions, index)) return EXIT_DEFAULT_SIZE
+    return this._config.pointDefaultSize
   }
 
   /**
@@ -253,14 +238,16 @@ export class GraphData {
     }
 
     // Sets point image sizes to point sizes if the input is missing or does not match input points number.
-    const defaultSize = this._config.pointDefaultSize
+    // Point sizes are read through the resolver: the raw array may hold NaN
+    // ("use the default"), which must not reach the image-size buffer.
     if (this.inputPointImageSizes === undefined || this.inputPointImageSizes.length !== this.pointsNumber) {
-      this.pointImageSizes = this.pointSizes ? new Float32Array(this.pointSizes) : new Float32Array(this.pointsNumber).fill(defaultSize)
+      this.pointImageSizes = new Float32Array(this.pointsNumber)
+      for (let i = 0; i < this.pointsNumber; i++) this.pointImageSizes[i] = this.getResolvedPointSize(i)
     } else {
       this.pointImageSizes = new Float32Array(this.inputPointImageSizes)
       for (let i = 0; i < this.pointImageSizes.length; i++) {
         if (!isNumber(this.pointImageSizes[i])) {
-          this.pointImageSizes[i] = this.pointSizes?.[i] ?? defaultSize
+          this.pointImageSizes[i] = this.getResolvedPointSize(i)
         }
       }
     }

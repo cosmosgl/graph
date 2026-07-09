@@ -39,6 +39,8 @@ layout(std140) uniform drawVertexUniforms {
   float animateColors;
   float animateSizes;
   float animatePositions;
+  vec4 pointDefaultColor;
+  float pointDefaultSize;
 } drawVertex;
 
 #define ratio drawVertex.ratio
@@ -61,6 +63,8 @@ layout(std140) uniform drawVertexUniforms {
 #define animateColors drawVertex.animateColors
 #define animateSizes drawVertex.animateSizes
 #define animatePositions drawVertex.animatePositions
+#define pointDefaultColor drawVertex.pointDefaultColor
+#define pointDefaultSize drawVertex.pointDefaultSize
 #else
 uniform float ratio;
 uniform mat3 transformationMatrix;
@@ -82,6 +86,8 @@ uniform float transitionProgress;
 uniform float animateColors;
 uniform float animateSizes;
 uniform float animatePositions;
+uniform vec4 pointDefaultColor;
+uniform float pointDefaultSize;
 #endif
 
 out float pointShape;
@@ -106,6 +112,23 @@ float calculatePointSize(float size) {
 }
 
 const float outlineRingScale = 1.3;
+
+// Read-time resolution of NaN channels — input arrays are used verbatim and never
+// edited, so "use the default" stays encoded as NaN all the way to the GPU. A NaN
+// resolves to the config default blended toward the exit default along the animated
+// exit ramp (0 = present, 1 = gone), so the enter/exit fade of default-valued
+// channels drives itself — no size/color transition needed for a removal. Explicit
+// (real) values pass through. EXIT_DEFAULT_* are #defines injected from variables.ts,
+// shared with the CPU resolvers (GraphData.getResolvedPoint*).
+float resolveSize(float size, float exitRamp) {
+  if (!isnan(size)) return size;
+  return mix(pointDefaultSize, EXIT_DEFAULT_SIZE, exitRamp);
+}
+
+vec4 resolveColor(vec4 color, float exitRamp) {
+  vec4 defaultColor = mix(pointDefaultColor, vec4(EXIT_DEFAULT_COLOR_CHANNEL), exitRamp);
+  return mix(color, defaultColor, isnan(color));
+}
 
 void main() {
   // Read point status texture: R = greyout, G = outlined
@@ -162,12 +185,15 @@ void main() {
   #endif
   gl_Position = vec4(finalPosition.rg, 0, 1);
 
+  // Resolve NaN channels against the animated exit ramp before mixing — default
+  // sizes/colors of an entering or leaving point fade with the ramp regardless of
+  // whether a size/color transition is active.
   float pointSize = animateSizes > 0.0
-    ? mix(sourceSize, targetSize, transitionProgress)
-    : targetSize;
+    ? mix(resolveSize(sourceSize, exit), resolveSize(targetSize, exit), transitionProgress)
+    : resolveSize(targetSize, exit);
   vec4 pointColor = animateColors > 0.0
-    ? mix(sourceColor, targetColor, transitionProgress)
-    : targetColor;
+    ? mix(resolveColor(sourceColor, exit), resolveColor(targetColor, exit), transitionProgress)
+    : resolveColor(targetColor, exit);
 
 
   // Calculate sizes for shape and image

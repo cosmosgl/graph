@@ -147,3 +147,11 @@ export const defaultConfigValues = {
 // Internal constants (not part of GraphConfigInterface)
 export const hoveredPointRingOpacity = 0.7
 export const focusedPointRingOpacity = 0.95
+
+/**
+ * What a `NaN` size/color channel of an **absent** (removed) point resolves to:
+ * fade to nothing. The single source for both resolution sites — the CPU mirrors
+ * (`GraphData.getResolvedPoint*`) and the draw shader (injected as `#define`s).
+ */
+export const EXIT_DEFAULT_SIZE = 0
+export const EXIT_DEFAULT_COLOR_CHANNEL = 0
