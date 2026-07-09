@@ -19,6 +19,7 @@ import { FPSMonitor } from '@/graph/modules/FPSMonitor'
 import { GraphData } from '@/graph/modules/GraphData'
 import { Lines } from '@/graph/modules/Lines'
 import { Points } from '@/graph/modules/Points'
+import { numberArraysEqual } from '@/graph/modules/Points/picking-utils'
 import { Store, ALPHA_MIN, MAX_HOVER_DETECTION_DELAY, MIN_MOUSE_MOVEMENT_THRESHOLD, type Hovered } from '@/graph/modules/Store'
 import { Transition, TransitionProperty } from '@/graph/modules/Transition'
 import { Zoom } from '@/graph/modules/Zoom'
@@ -87,11 +88,11 @@ export class Graph {
   private currentEvent: D3ZoomEvent<HTMLCanvasElement, undefined> | D3DragEvent<HTMLCanvasElement, undefined, Hovered> | MouseEvent | undefined
   /**
    * The value of `_findHoveredItemExecutionCount` is incremented by 1 on each animation frame.
-   * When the counter reaches MAX_HOVER_DETECTION_DELAY (default 4), it is reset to 0 and the `findHoveredPoint` or `findHoveredLine` method is executed.
+   * When the counter reaches MAX_HOVER_DETECTION_DELAY (default 4), it is reset to 0 and hover detection runs.
    */
   private _findHoveredItemExecutionCount = 0
   /**
-   * If no pointer is over the Canvas, the `findHoveredPoint` or `findHoveredLine` method will not be executed.
+   * If no pointer is over the Canvas, hover detection will not be executed.
    */
   private _isPointerOnCanvas = false
   /**
@@ -109,6 +110,11 @@ export class Graph {
    * Set when scene changes but mouse stays still (after simulation or zoom ends).
    */
   private _shouldForceHoverDetection = false
+  /**
+   * View transform the picking buffer was last validated against; a change
+   * (zoom, resize) marks the buffer stale (see updatePickingBufferStaleness).
+   */
+  private _lastPickingMatrix: number[] = []
   /**
    * After setting data and render graph at a first time, the fit logic will run
    * */
@@ -1844,6 +1850,7 @@ export class Graph {
       this.points?.swapFbo()
       this.forceMouse?.run()
       this.points?.updatePosition()
+      if (this.points) this.points.isPickingBufferStale = true
     }
 
     // Main simulation forces gate:
@@ -1906,6 +1913,9 @@ export class Graph {
         this.forceCollision?.run()
         this.points?.updatePosition()
       }
+
+      // Simulation moved the points — the picking buffer no longer matches them
+      if (this.points) this.points.isPickingBufferStale = true
 
       // Alpha decay and progress
       this.store.alpha += this.store.addAlpha(this.config.simulationDecay)
@@ -2017,6 +2027,7 @@ export class Graph {
       if (shouldInterpolatePositions) {
         this.points?.interpolatePosition(this.transition.progress)
         this.points?.trackPoints()
+        if (this.points) this.points.isPickingBufferStale = true
       }
     }
 
@@ -2024,6 +2035,9 @@ export class Graph {
     this.lines?.setTransitionProgress(this.transition.progress, shouldAnimateLinkColors, shouldAnimateLinkWidths, shouldInterpolatePositions)
 
     if (!this.dragInstance.isActive) {
+      // Collect the result of a previously issued async pick (if the GPU is done)
+      // before possibly issuing a new one.
+      this.resolvePendingPick()
       this.findHoveredItem()
     }
 
@@ -2063,6 +2077,7 @@ export class Graph {
         this.points?.drag()
         // Update tracked positions after drag, even when simulation is disabled
         this.points?.trackPoints()
+        if (this.points) this.points.isPickingBufferStale = true
       }
 
       drawRenderPass.end()
@@ -2211,6 +2226,8 @@ export class Graph {
       if (this.store.isLinkHoveringEnabled) {
         this.lines?.updateLinkIndexFbo()
       }
+      // The picking buffer is sized to the screen; a resize invalidates it.
+      if (this.points) this.points.isPickingBufferStale = true
     }
   }
 
@@ -2274,10 +2291,52 @@ export class Graph {
 
     this._findHoveredItemExecutionCount = 0
 
+    // The view transform is an input to the picking buffer — a zoom or resize
+    // since the last detection invalidates it.
+    this.updatePickingBufferStaleness()
+
+    if (immediate) {
+      // Clicks, drag starts and long-presses need the result within the same
+      // event — take the small synchronous window read.
+      this.processHoverResult(this.points?.pickPointSync() ?? null)
+    } else {
+      // Frame-loop hover reads asynchronously (PBO + fence): the result is
+      // collected by resolvePendingPick() one or more frames later, so the
+      // pipeline never stalls on a readback.
+      this.points?.requestPickPoint()
+    }
+  }
+
+  /** Marks the picking buffer stale when the view transform changed since the last check. */
+  private updatePickingBufferStaleness (): void {
+    const matrix = this.store.transformationMatrix4x4
+    if (!this.points || numberArraysEqual(this._lastPickingMatrix, matrix)) return
+    this._lastPickingMatrix = Array.from(matrix)
+    this.points.isPickingBufferStale = true
+  }
+
+  /** Applies the result of an async pick once the GPU readback completes. */
+  private resolvePendingPick (): void {
+    // Always drain the readback (takePickResult consumes it), but discard a
+    // result that landed after the pointer left the canvas: pointerleave already
+    // cleared hover, and re-applying a pick for a cursor that's gone would leave
+    // it stuck. The synchronous hover path likewise skips when off-canvas.
+    const picked = this.points?.takePickResult()
+    if (picked === undefined || !this._isPointerOnCanvas) return
+    this.processHoverResult(picked)
+  }
+
+  /**
+   * Applies a pick result and fires the hover callbacks. On the async path the
+   * pointer event that triggered the pick is already gone, so `currentEvent`
+   * may be undefined — same as for detections forced without a fresh event.
+   */
+  private processHoverResult (picked: Hovered | null): void {
+    if (this._isDestroyed) return
     // Two-phase hover detection: first update state, then fire callbacks.
     // This guarantees mouseout fires before mouseover when transitioning
     // between element types (e.g. link → point).
-    const point = this.findHoveredPoint()
+    const point = this.applyPickedPoint(picked)
     let link = { mouseover: false, mouseout: false }
 
     if (this.graph.linksNumber && this.store.isLinkHoveringEnabled) {
@@ -2310,27 +2369,16 @@ export class Graph {
     this.updateCanvasCursor()
   }
 
-  /** Detect hovered point and update store state. Returns flags for deferred callback firing. */
-  private findHoveredPoint (): { mouseover: boolean; mouseout: boolean } {
-    if (this._isDestroyed || !this.device || !this.points) return { mouseover: false, mouseout: false }
-    this.points.findHoveredPoint()
+  /** Applies a picked point to the store. Returns flags for deferred callback firing. */
+  private applyPickedPoint (picked: Hovered | null): { mouseover: boolean; mouseout: boolean } {
     let isMouseover = false
     let isMouseout = false
-    const pixels = readPixels(this.device, this.points.hoveredFbo as Framebuffer, 0, 0, 2, 2)
-    // Shader writes: rgba = vec4(index, size, pointPosition.xy)
-    const hoveredIndex = pixels[0] as number
-    const pointSize = pixels[1] as number
-    const pointX = pixels[2] as number
-    const pointY = pixels[3] as number
 
-    if (pointSize > 0) {
-      if (this.store.hoveredPoint === undefined || this.store.hoveredPoint.index !== hoveredIndex) {
+    if (picked) {
+      if (this.store.hoveredPoint === undefined || this.store.hoveredPoint.index !== picked.index) {
         isMouseover = true
       }
-      this.store.hoveredPoint = {
-        index: hoveredIndex,
-        position: [pointX, pointY],
-      }
+      this.store.hoveredPoint = picked
     } else {
       if (this.store.hoveredPoint) isMouseout = true
       this.store.hoveredPoint = undefined
