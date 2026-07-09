@@ -1,4 +1,4 @@
-import { getRgbaColor, isNumber } from '@/graph/helper'
+import { getRgbaColor, isNumber, isPointAbsent } from '@/graph/helper'
 import { type GraphConfigInterface } from '@/graph/config'
 import { defaultConfigValues } from '@/graph/variables'
 
@@ -113,7 +113,7 @@ export class GraphData {
     if (!previous || !next || previous === next) return false
     const sharedCount = Math.min(previous.length, next.length) / 2
     for (let i = 0; i < sharedCount; i++) {
-      if (Number.isNaN(previous[i * 2] as number) !== Number.isNaN(next[i * 2] as number)) return true
+      if (isPointAbsent(previous, i) !== isPointAbsent(next, i)) return true
     }
     return false
   }
@@ -135,7 +135,7 @@ export class GraphData {
         // No color array provided: present points get the config default; exiting
         // points (NaN position) get the exit default (0 → transparent) so they
         // still fade out without the caller providing colors.
-        if (Number.isNaN(this.pointPositions?.[i * 2] as number)) continue // leave 0
+        if (this.pointPositions && isPointAbsent(this.pointPositions, i)) continue // leave 0
         this.pointColors[i * 4] = defaultRgba[0]
         this.pointColors[i * 4 + 1] = defaultRgba[1]
         this.pointColors[i * 4 + 2] = defaultRgba[2]
@@ -146,7 +146,7 @@ export class GraphData {
       for (let i = 0; i < this.pointColors.length / 4; i++) {
         // A NaN channel resolves to the exit default (0) for an exiting point
         // (NaN position), otherwise to the config default.
-        const exiting = Number.isNaN(this.pointPositions?.[i * 2] as number)
+        const exiting = this.pointPositions !== undefined && isPointAbsent(this.pointPositions, i)
         for (let c = 0; c < 4; c++) {
           if (!isNumber(this.pointColors[i * 4 + c])) {
             this.pointColors[i * 4 + c] = exiting ? EXIT_DEFAULT_COLOR_CHANNEL : (defaultRgba[c] as number)
@@ -172,7 +172,7 @@ export class GraphData {
       // No size array provided: exiting points (NaN position) get the exit default
       // so they still fade out without the caller providing sizes.
       for (let i = 0; i < this.pointsNumber; i++) {
-        if (Number.isNaN(this.pointPositions?.[i * 2] as number)) this.pointSizes[i] = EXIT_DEFAULT_SIZE
+        if (this.pointPositions && isPointAbsent(this.pointPositions, i)) this.pointSizes[i] = EXIT_DEFAULT_SIZE
       }
     } else {
       this.pointSizes = this.inputPointSizes
@@ -180,7 +180,7 @@ export class GraphData {
         if (!isNumber(this.pointSizes[i])) {
           // NaN resolves to the exit default for an exiting point (NaN
           // position), otherwise to the config default.
-          const exiting = Number.isNaN(this.pointPositions?.[i * 2] as number)
+          const exiting = this.pointPositions !== undefined && isPointAbsent(this.pointPositions, i)
           this.pointSizes[i] = exiting ? EXIT_DEFAULT_SIZE : defaultSize
         }
       }

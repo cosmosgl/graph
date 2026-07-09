@@ -85,7 +85,7 @@ This method sets the positions of points in a cosmos.gl graph using the provided
 
 On the next `render()`, points animate from their previous positions to the new ones using `transitionDuration` and `transitionEasing`. The first render after initialization always snaps (there is no prior state to animate from). See [Transitions](../?path=/docs/configuration--docs#transitions) in the configuration docs.
 
-**Removing and adding points without an index shuffle.** A point whose position is `NaN` is treated as **absent**: it fades out in place while every other point keeps its index and on-screen position (no array compaction, no slide). Set a point to `NaN` to remove it, and back to a real position to add one — both animate:
+**Removing and adding points without an index shuffle.** A point whose position is `NaN` (either coordinate) is treated as **absent**: it fades out in place while every other point keeps its index and on-screen position (no array compaction, no slide). Set a point to `NaN` to remove it, and back to a real position to add one — both animate:
 
 ```javascript
 // remove point i: it fades out, the rest hold still
