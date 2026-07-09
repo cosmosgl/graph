@@ -3,7 +3,7 @@ import { D3ZoomEvent } from 'd3-zoom'
 import { D3DragEvent } from 'd3-drag'
 import { type Hovered } from '@/graph/modules/Store'
 import { defaultConfigValues } from '@/graph/variables'
-import { PointShape } from '@/graph/modules/GraphData'
+import { PointShape, LinkStyle } from '@/graph/modules/GraphData'
 import { type TransitionEasing } from '@/graph/modules/Transition'
 
 export interface GraphConfigInterface {
@@ -235,6 +235,39 @@ export interface GraphConfigInterface {
    * Default value: `1`
   */
   linkDefaultWidth: number;
+
+  /**
+   * The default style (stroke pattern) to use for links when no link styles are provided via `setLinkStyles()`,
+   * or if the style value in the array is `undefined`, `null`, or invalid.
+   * Accepts a `LinkStyle` enum value (e.g., `LinkStyle.Solid`), a plain number (e.g., `1`), or a numeric string (e.g., `"1"`).
+   * `0` = Solid, `1` = Dashed, `2` = Dotted.
+   * Default value: `LinkStyle.Solid`
+   */
+  linkDefaultStyle: LinkStyle | `${LinkStyle}`;
+  /**
+   * Dash length for dashed links (`LinkStyle.Dashed`).
+   * When `scaleLinksOnZoom` is `false` (default), this is a size in screen pixels: dashes keep a
+   * constant on-screen size, but the pattern shifts along a link as its on-screen length changes
+   * with zoom. When `scaleLinksOnZoom` is `true`, it is measured in graph space, which locks the
+   * pattern to the link so it scales with zoom instead of shifting.
+   * Default value: `8`
+   */
+  linkDashLength: number;
+  /**
+   * Gap between dashes (dashed links) or between dots (dotted links). Uses the same units as
+   * `linkDashLength` — screen pixels, or graph space when `scaleLinksOnZoom` is `true`.
+   * Default value: `4`
+   */
+  linkDashGap: number;
+  /**
+   * If `true`, each link's color is interpolated along its length from the color of its source point
+   * to the color of its target point (derived from the point colors set via `setPointColors()`).
+   * This overrides the per-link RGB color from `setLinkColors()` (link opacity, greyout, and hover still apply).
+   * It works orthogonally to the link stroke pattern, so a dashed or dotted link can also be a gradient.
+   * Note: on curved links the gradient (and dash/dot spacing) is approximate.
+   * Default value: `false`
+   */
+  linkColorInterpolateFromEndpoints: boolean;
 
   /**
    * The color to use for links when they are hovered.

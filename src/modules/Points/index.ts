@@ -86,6 +86,14 @@ export class Points extends CoreModule {
    */
   public exitTexture: Texture | undefined
   /**
+   * Mirrors the current point colors into a texture (RGBA32F, sized `pointsTextureSize`)
+   * so the Lines shader can sample each link's endpoint colors for gradient links
+   * (`linkColorInterpolateFromEndpoints`). Written by `updateColor()`. Like
+   * `GraphData.pointColors`, channels may be NaN ("use the default") — the lines
+   * shader resolves them at read time, mirroring the point draw shader.
+   */
+  public pointColorsTexture: Texture | undefined
+  /**
    * Start of a position transition — the "from" positions blended by
    * `interpolatePosition()`. Populated by `updatePositions()` when an animated
    * `setPointPositions()` arrives, either via a fast GPU copy of
@@ -1042,7 +1050,7 @@ export class Points extends CoreModule {
   }
 
   public updateColor (): void {
-    const { store: { pointsTextureSize }, data } = this
+    const { device, store: { pointsTextureSize }, data } = this
     if (!pointsTextureSize) return
 
     // GraphData.updatePointColor() always populates pointColors before this runs
@@ -1064,6 +1072,34 @@ export class Points extends CoreModule {
         ...(this.sourceColorBuffer && { sourceColor: this.sourceColorBuffer }),
         ...(this.targetColorBuffer && { targetColor: this.targetColorBuffer }),
       })
+    }
+
+    // Mirror point colors into a texture so the Lines shader can sample endpoint colors
+    // for gradient links. The layout matches the positions/status textures: point `i`
+    // maps to texel `i` (row-major), so a straight copy of `colorData` is correct.
+    // NaN channels ("use the default") are copied through raw; the lines vertex shader
+    // resolves them at read time with the same rule as draw-points.vert.
+    const colorTextureData = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
+    colorTextureData.set(colorData.subarray(0, Math.min(colorData.length, colorTextureData.length)))
+    const copyData = {
+      data: colorTextureData,
+      bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
+      mipLevel: 0,
+      x: 0,
+      y: 0,
+    }
+    if (!this.pointColorsTexture || this.pointColorsTexture.width !== pointsTextureSize || this.pointColorsTexture.height !== pointsTextureSize) {
+      if (this.pointColorsTexture && !this.pointColorsTexture.destroyed) {
+        this.pointColorsTexture.destroy()
+      }
+      this.pointColorsTexture = device.createTexture({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+      })
+      this.pointColorsTexture.copyImageData(copyData)
+    } else {
+      this.pointColorsTexture.copyImageData(copyData)
     }
   }
 
@@ -2312,6 +2348,10 @@ export class Points extends CoreModule {
       this.pointStatusTexture.destroy()
     }
     this.pointStatusTexture = undefined
+    if (this.pointColorsTexture && !this.pointColorsTexture.destroyed) {
+      this.pointColorsTexture.destroy()
+    }
+    this.pointColorsTexture = undefined
     if (this.sizeTexture && !this.sizeTexture.destroyed) {
       this.sizeTexture.destroy()
     }

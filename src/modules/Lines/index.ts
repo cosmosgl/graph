@@ -9,12 +9,15 @@ import fillGridWithSampledLinksFrag from '@/graph/modules/Lines/fill-sampled-lin
 import fillGridWithSampledLinksVert from '@/graph/modules/Lines/fill-sampled-links.vert?raw'
 import hoveredLineIndexFrag from '@/graph/modules/Lines/hovered-line-index.frag?raw'
 import hoveredLineIndexVert from '@/graph/modules/Lines/hovered-line-index.vert?raw'
-import { defaultConfigValues } from '@/graph/variables'
+import { defaultConfigValues, EXIT_DEFAULT_COLOR_CHANNEL } from '@/graph/variables'
 import { getCurveLineGeometry } from '@/graph/modules/Lines/geometry'
 import { updateAttributeBuffers } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import { ensureVec2, ensureVec4 } from '@/graph/modules/Shared/uniform-utils'
-import { readPixels } from '@/graph/helper'
+import { readPixels, getRgbaColor } from '@/graph/helper'
+
+// GLSL requires float literals in #define'd expressions ("0" would be an int)
+const glslFloatLiteral = (value: number): string => (Number.isInteger(value) ? value.toFixed(1) : String(value))
 
 type DrawCurveCommandAttributes = {
   position?: Buffer;
@@ -26,6 +29,7 @@ type DrawCurveCommandAttributes = {
   targetWidth?: Buffer;
   arrow?: Buffer;
   linkIndices?: Buffer;
+  linkStyle?: Buffer;
 }
 
 export class Lines extends CoreModule {
@@ -48,6 +52,7 @@ export class Lines extends CoreModule {
   private targetWidthBuffer: Buffer | undefined
   private previousWidthData: Float32Array | undefined
   private arrowBuffer: Buffer | undefined
+  private linkStyleBuffer: Buffer | undefined
   private curveLineGeometry: number[][] | undefined
   private curveLineBuffer: Buffer | undefined
   private linkIndexBuffer: Buffer | undefined
@@ -100,9 +105,13 @@ export class Lines extends CoreModule {
       animateColors: number;
       animateWidths: number;
       animatePositions: number;
+      pointDefaultColor: [number, number, number, number];
     };
     drawLineFragmentUniforms: {
       renderMode: number;
+      linkDashLength: number;
+      linkDashGap: number;
+      linkColorInterpolateFromEndpoints: number;
     };
   }> | undefined
 
@@ -154,6 +163,10 @@ export class Lines extends CoreModule {
       data: new Float32Array(linksNumber),
       usage: Buffer.VERTEX | Buffer.COPY_DST,
     })
+    this.linkStyleBuffer ||= device.createBuffer({
+      data: new Float32Array(linksNumber),
+      usage: Buffer.VERTEX | Buffer.COPY_DST,
+    })
     this.linkIndexBuffer ||= device.createBuffer({
       data: new Float32Array(linksNumber),
       usage: Buffer.VERTEX | Buffer.COPY_DST,
@@ -190,6 +203,7 @@ export class Lines extends CoreModule {
           animateColors: 'f32',
           animateWidths: 'f32',
           animatePositions: 'f32',
+          pointDefaultColor: 'vec4<f32>',
         },
         defaultUniforms: {
           transformationMatrix: store.transformationMatrix4x4,
@@ -219,14 +233,21 @@ export class Lines extends CoreModule {
           animateColors: 0,
           animateWidths: 0,
           animatePositions: 0,
+          pointDefaultColor: ensureVec4(getRgbaColor(config.pointDefaultColor), [0, 0, 0, 1]),
         },
       },
       drawLineFragmentUniforms: {
         uniformTypes: {
           renderMode: 'f32',
+          linkDashLength: 'f32',
+          linkDashGap: 'f32',
+          linkColorInterpolateFromEndpoints: 'f32',
         },
         defaultUniforms: {
           renderMode: 0.0,
+          linkDashLength: config.linkDashLength,
+          linkDashGap: config.linkDashGap,
+          linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
         },
       },
     })
@@ -343,6 +364,7 @@ export class Lines extends CoreModule {
     if (!this.targetColorBuffer) this.updateColor()
     if (!this.targetWidthBuffer) this.updateWidth()
     if (!this.arrowBuffer) this.updateArrow()
+    if (!this.linkStyleBuffer) this.updateStyle()
     if (!this.curveLineGeometry) this.updateCurveLineGeometry()
     if (!this.drawCurveCommand || !this.drawLineUniformStore || !this.linkStatusTexture) return
 
@@ -380,9 +402,14 @@ export class Lines extends CoreModule {
         animateColors: this.shouldAnimateLinkColors ? 1 : 0,
         animateWidths: this.shouldAnimateLinkWidths ? 1 : 0,
         animatePositions: this.shouldAnimatePositions ? 1 : 0,
+        // Cached parse — draw() runs per frame, so no color-string parsing here.
+        pointDefaultColor: ensureVec4(this.data.defaultRgba, [0, 0, 0, 1]),
       },
       drawLineFragmentUniforms: {
         renderMode: 0.0, // Normal rendering
+        linkDashLength: config.linkDashLength,
+        linkDashGap: config.linkDashGap,
+        linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
       },
     })
 
@@ -391,6 +418,9 @@ export class Lines extends CoreModule {
       positionsTexture: points.currentPositionTexture,
       linkStatus: this.linkStatusTexture,
       exitTexture: points.exitTexture,
+      // Endpoint colors for gradient links; fall back to the positions texture (same format/size)
+      // so the sampler is always bound even before the first point-color write.
+      pointColorsTexture: points.pointColorsTexture ?? points.currentPositionTexture,
     })
 
     // Update instance count
@@ -630,6 +660,36 @@ export class Lines extends CoreModule {
       }
     }
     this.setDrawCurveCommandAttributes({ arrow: this.arrowBuffer })
+  }
+
+  public updateStyle (): void {
+    const { device, data } = this
+    const linksNumber = data.linksNumber ?? 0
+    const styleData = data.linkStyles
+      ? new Float32Array(data.linkStyles)
+      : new Float32Array(linksNumber).fill(0)
+
+    if (!this.linkStyleBuffer) {
+      this.linkStyleBuffer = device.createBuffer({
+        data: styleData,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+      })
+    } else {
+      // Check if buffer needs to be resized
+      const currentSize = (this.linkStyleBuffer.byteLength ?? 0) / Float32Array.BYTES_PER_ELEMENT
+      if (currentSize !== linksNumber) {
+        if (this.linkStyleBuffer && !this.linkStyleBuffer.destroyed) {
+          this.linkStyleBuffer.destroy()
+        }
+        this.linkStyleBuffer = device.createBuffer({
+          data: styleData,
+          usage: Buffer.VERTEX | Buffer.COPY_DST,
+        })
+      } else {
+        this.linkStyleBuffer.write(styleData)
+      }
+    }
+    this.setDrawCurveCommandAttributes({ linkStyle: this.linkStyleBuffer })
   }
 
   public updateLinkStatus (): void {
@@ -880,9 +940,13 @@ export class Lines extends CoreModule {
         animateColors: this.shouldAnimateLinkColors ? 1 : 0,
         animateWidths: this.shouldAnimateLinkWidths ? 1 : 0,
         animatePositions: this.shouldAnimatePositions ? 1 : 0,
+        pointDefaultColor: ensureVec4(this.data.defaultRgba, [0, 0, 0, 1]),
       },
       drawLineFragmentUniforms: {
         renderMode: 1.0, // Index rendering for picking
+        linkDashLength: config.linkDashLength,
+        linkDashGap: config.linkDashGap,
+        linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
       },
     })
 
@@ -891,6 +955,7 @@ export class Lines extends CoreModule {
       positionsTexture: points.currentPositionTexture,
       linkStatus: this.linkStatusTexture,
       exitTexture: points.exitTexture,
+      pointColorsTexture: points.pointColorsTexture ?? points.currentPositionTexture,
     })
 
     // Update instance count
@@ -1016,6 +1081,10 @@ export class Lines extends CoreModule {
       this.arrowBuffer.destroy()
     }
     this.arrowBuffer = undefined
+    if (this.linkStyleBuffer && !this.linkStyleBuffer.destroyed) {
+      this.linkStyleBuffer.destroy()
+    }
+    this.linkStyleBuffer = undefined
     if (this.curveLineBuffer && !this.curveLineBuffer.destroyed) {
       this.curveLineBuffer.destroy()
     }
@@ -1051,10 +1120,14 @@ export class Lines extends CoreModule {
         { name: 'targetWidth', format: 'float32', stepMode: 'instance' },
         { name: 'arrow', format: 'float32', stepMode: 'instance' },
         { name: 'linkIndices', format: 'float32', stepMode: 'instance' },
+        { name: 'linkStyle', format: 'float32', stepMode: 'instance' },
       ],
+      // The exit-default color channel (variables.ts) reaches the shader as a #define,
+      // like in the Points draw command.
       defines: {
         USE_UNIFORM_BUFFERS: true,
-      },
+        EXIT_DEFAULT_COLOR_CHANNEL: glslFloatLiteral(EXIT_DEFAULT_COLOR_CHANNEL),
+      } as unknown as Record<string, boolean>,
       bindings: {
         drawLineUniforms: this.drawLineUniformStore.getManagedUniformBuffer(this.device, 'drawLineUniforms'),
         drawLineFragmentUniforms: this.drawLineUniformStore.getManagedUniformBuffer(this.device, 'drawLineFragmentUniforms'),
@@ -1074,6 +1147,7 @@ export class Lines extends CoreModule {
     if (this.targetWidthBuffer) attributes.targetWidth = this.targetWidthBuffer
     if (this.arrowBuffer) attributes.arrow = this.arrowBuffer
     if (this.linkIndexBuffer) attributes.linkIndices = this.linkIndexBuffer
+    if (this.linkStyleBuffer) attributes.linkStyle = this.linkStyleBuffer
     return attributes
   }
 
