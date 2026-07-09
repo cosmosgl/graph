@@ -58,6 +58,16 @@ export function getPickingWindow (
 }
 
 /**
+ * Reads a 1×1 [index, _, _, validity] pixel from the link index buffer.
+ * Alpha > 0 marks a rasterized link (the buffer clears to transparent black,
+ * so link index 0 stays distinguishable from "empty").
+ */
+export function resolvePickedLinkIndex (pixels: Float32Array): number | undefined {
+  const index = pixels[0] as number
+  return (pixels[3] as number) > 0 && index >= 0 ? index : undefined
+}
+
+/**
  * Scans a `PICKING_WINDOW_SIZE`² block of [index, x, y, _] pixels and returns
  * the valid candidate (index >= 0) nearest the cursor, or `undefined` if the
  * window is empty. `cursorX`/`cursorY` are in window-local buffer pixels.
