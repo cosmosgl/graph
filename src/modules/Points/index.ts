@@ -1147,7 +1147,7 @@ export class Points extends CoreModule {
     const nextPrevious = new Float32Array(count)
     let anyAbsentNow = false
     for (let i = 0; i < count; i++) {
-      const current = data.pointPositions && Number.isNaN(data.pointPositions[i * 2]) ? 1 : 0
+      const current = data.pointPositions && isPointAbsent(data.pointPositions, i) ? 1 : 0
       nextPrevious[i] = current
       if (current) anyAbsentNow = true
     }
@@ -2730,7 +2730,7 @@ export class Points extends CoreModule {
       const y = points[i + 1] as number
       // Skip absent (NaN) points: `Math.min/max(…, NaN)` is `NaN`, which would
       // poison the extent and rescale every point to NaN (vanishing the graph).
-      if (Number.isNaN(x) || Number.isNaN(y)) continue
+      if (isPointAbsent(points, i / 2)) continue
       minX = Math.min(minX, x)
       maxX = Math.max(maxX, x)
       minY = Math.min(minY, y)
@@ -2753,9 +2753,8 @@ export class Points extends CoreModule {
       this.scaleX = (x: number): number => x - minX + center
       this.scaleY = (y: number): number => y - minY + center
       for (let i = 0; i < pointsNumber; i++) {
-        const x = points[i * 2] as number
-        if (Number.isNaN(x)) continue // leave absent points NaN
-        this.data.pointPositions[i * 2] = this.scaleX(x)
+        if (isPointAbsent(points, i)) continue // leave absent points NaN
+        this.data.pointPositions[i * 2] = this.scaleX(points[i * 2] as number)
         this.data.pointPositions[i * 2 + 1] = this.scaleY(points[i * 2 + 1] as number)
       }
       return
@@ -2790,9 +2789,8 @@ export class Points extends CoreModule {
 
     // Apply scaling to point positions
     for (let i = 0; i < pointsNumber; i++) {
-      const x = points[i * 2] as number
-      if (Number.isNaN(x)) continue // leave absent points NaN
-      this.data.pointPositions[i * 2] = this.scaleX(x)
+      if (isPointAbsent(points, i)) continue // leave absent points NaN
+      this.data.pointPositions[i * 2] = this.scaleX(points[i * 2] as number)
       this.data.pointPositions[i * 2 + 1] = this.scaleY(points[i * 2 + 1] as number)
     }
   }

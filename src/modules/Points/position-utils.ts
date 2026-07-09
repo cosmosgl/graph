@@ -1,3 +1,5 @@
+import { isPointAbsent } from '@/graph/helper'
+
 /**
  * Build RGBA32F texture data from a flat `[x, y, x, y, ...]` point positions array.
  *
@@ -13,8 +15,11 @@ export function buildPositionTextureData (
   if (!pointPositions) return positionData
 
   for (let i = 0; i < pointsNumber; ++i) {
-    positionData[i * 4 + 0] = pointPositions[i * 2 + 0] as number
-    positionData[i * 4 + 1] = pointPositions[i * 2 + 1] as number
+    // Normalize a half-NaN position to fully NaN: absence is all-or-nothing by the
+    // time it reaches the GPU, so shaders can test a single channel.
+    const absent = isPointAbsent(pointPositions, i)
+    positionData[i * 4 + 0] = absent ? NaN : pointPositions[i * 2 + 0] as number
+    positionData[i * 4 + 1] = absent ? NaN : pointPositions[i * 2 + 1] as number
     positionData[i * 4 + 2] = i
   }
 

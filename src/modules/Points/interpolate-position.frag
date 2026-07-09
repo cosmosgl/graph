@@ -23,7 +23,8 @@ out vec4 fragColor;
 void main() {
   vec4 source = texture(sourceTexture, textureCoords);
   vec4 target = texture(targetTexture, textureCoords);
-  // NaN means absent. Hold the real side so the point stays put while it fades,
+  // NaN means absent (ingest normalizes half-NaN to full-NaN, so checking one
+  // channel suffices). Hold the real side so the point stays put while it fades,
   // never interpolating to/from NaN:
   //   · exiting  (target NaN): freeze at source.
   //   · entering (source NaN): appear at target (no slide in from NaN).

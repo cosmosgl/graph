@@ -466,7 +466,7 @@ export class Graph {
    *   - `false` or `undefined` (default): Use the behavior defined by `config.rescalePositions`.
    * @note If `transitionDuration > 0` and the simulation is running, the simulation is automatically
    * paused for the transition and remains paused afterwards. Call `unpause()` to resume it.
-   * @note A point whose position is `NaN` is treated as **absent**: it fades out in place while every
+   * @note A point whose position is `NaN` (either coordinate) is treated as **absent**: it fades out in place while every
    * other point keeps its index and on-screen position (no array compaction, no slide). Set a point to
    * `NaN` to remove it, and back to a real position to add one — both animate. By default an absent point
    * fades to nothing; pass per-point `setPointSizes` / `setPointColors` to customize the exit look.
