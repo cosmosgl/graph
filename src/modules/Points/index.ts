@@ -69,11 +69,18 @@ export class Points extends CoreModule {
   public previousPositionTexture: Texture | undefined
   public velocityTexture: Texture | undefined
   public pointStatusTexture: Texture | undefined
-  // Exit status, derived from NaN positions (R = previous absence, G = current
-  // absence; 1 = absent). The single source of truth for "is this point leaving /
-  // gone": draw blends R→G by transition progress for the fade gone-guard, while
-  // the integrator and force modules read G to exclude absent points from physics.
-  // Public so the force modules can sample it.
+  /**
+   * Exit status, derived from NaN positions (R = previous absence, G = current
+   * absence; 1 = absent). The single source of truth for "is this point leaving /
+   * gone": draw blends R→G by transition progress for the fade gone-guard, while
+   * the integrator and force modules read G to exclude absent points from physics.
+   * Public so the force modules can sample it.
+   *
+   * While no point is (or was) absent — the common no-NaN case — this is a 1×1
+   * all-zero stand-in: any sample returns "present", the texel stays
+   * cache-resident so the per-vertex fetch costs ~nothing, and the full-size
+   * texture is never allocated.
+   */
   public exitTexture: Texture | undefined
   /**
    * Start of a position transition — the "from" positions blended by
@@ -103,12 +110,16 @@ export class Points extends CoreModule {
   private sourceSizeBuffer: Buffer | undefined
   private targetSizeBuffer: Buffer | undefined
   private previousSizeData: Float32Array | undefined
-  // Previous-frame absence per point (1 = absent), kept so the next `updateExit`
-  // can fill the exit texture's R (previous) channel.
+  /**
+   * Previous-frame absence per point (1 = absent), kept so the next `updateExit`
+   * can fill the exit texture's R (previous) channel.
+   */
   private previousExitData: Float32Array | undefined
-  // True when the exit texture is entirely zero (no point absent now or last
-  // frame). Lets `updateExit` skip the alloc + upload on the common no-NaN path.
-  private isExitTextureAllZero = false
+  /**
+   * Whether any point is absent as of the latest update (= any(`previousExitData`)),
+   * stored so the next `updateExit` doesn't rescan for it.
+   */
+  private hasAnyAbsentPoint = false
   private shapeBuffer: Buffer | undefined
   private imageIndicesBuffer: Buffer | undefined
   private imageSizesBuffer: Buffer | undefined
@@ -1132,48 +1143,65 @@ export class Points extends CoreModule {
     }
   }
 
-  // Builds the exit texture from point positions: R = previous absence, G = current
-  // absence (1 = NaN position). One signal for both pipelines: the draw shader
-  // blends R→G by transition progress (the fade gone-guard), and the integrator
-  // and force shaders read G to skip absent points so a NaN never poisons physics.
+  /**
+   * Builds the exit texture from point positions: R = previous absence, G = current
+   * absence (1 = NaN position). One signal for both pipelines: the draw shader
+   * blends R→G by transition progress (the fade gone-guard), and the integrator
+   * and force shaders read G to skip absent points so a NaN never poisons physics.
+   * The texture is rg32float — two channels are all the state there is.
+   */
   public updateExit (): void {
     const { device, store: { pointsTextureSize }, data } = this
     if (!pointsTextureSize) return
 
     const count = data.pointsNumber ?? 0
     const prev = this.previousExitData
+    const anyAbsentBefore = this.hasAnyAbsentPoint
 
     // Cheap scan: current absence per point, and whether anything is absent now.
-    const nextPrevious = new Float32Array(count)
+    const currentAbsence = new Float32Array(count)
     let anyAbsentNow = false
     for (let i = 0; i < count; i++) {
       const current = data.pointPositions && isPointAbsent(data.pointPositions, i) ? 1 : 0
-      nextPrevious[i] = current
+      currentAbsence[i] = current
       if (current) anyAbsentNow = true
     }
-    let anyAbsentBefore = false
-    if (prev) for (let i = 0; i < prev.length; i++) if (prev[i]) { anyAbsentBefore = true; break }
+    this.previousExitData = currentAbsence
+    this.hasAnyAbsentPoint = anyAbsentNow
 
-    const sameSize = !!this.exitTexture && this.exitTexture.width === pointsTextureSize && this.exitTexture.height === pointsTextureSize
-
-    // Fast path for the common (no-NaN) case: the texture would be all-zero (no R
-    // or G set) and the existing one already is — skip the big alloc + GPU upload.
-    if (!anyAbsentNow && !anyAbsentBefore && sameSize && this.isExitTextureAllZero) {
-      this.previousExitData = nextPrevious
+    // Common (no-NaN) case: every texel would be zero, so bind a 1×1 all-zero
+    // stand-in instead of a pointsTextureSize² texture. Any sample of it returns
+    // "present", it stays cache-resident so the per-vertex fetch in the hot shaders
+    // costs ~nothing, and the full-size texture is never allocated or uploaded.
+    if (!anyAbsentNow && !anyAbsentBefore) {
+      if (this.exitTexture && !this.exitTexture.destroyed && this.exitTexture.width === 1) return
+      if (this.exitTexture && !this.exitTexture.destroyed) {
+        this.exitTexture.destroy()
+      }
+      this.exitTexture = device.createTexture({ width: 1, height: 1, format: 'rg32float' })
+      this.exitTexture.copyImageData({
+        data: new Float32Array(2),
+        bytesPerRow: getBytesPerRow('rg32float', 1),
+        mipLevel: 0,
+        x: 0,
+        y: 0,
+      })
       return
     }
 
-    // Build R = previous absence, G = current absence.
-    const state = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
+    // Build R = previous absence, G = current absence (RG pairs, one per texel).
+    const state = new Float32Array(pointsTextureSize * pointsTextureSize * 2)
     for (let i = 0; i < count; i++) {
-      const current = nextPrevious[i] as number
+      const current = currentAbsence[i] as number
       // New slots (no history) start with previous = current, so no spurious fade.
       const previous = i < (prev?.length ?? 0) ? (prev as Float32Array)[i] as number : current
-      state[i * 4] = previous
-      state[i * 4 + 1] = current
+      state[i * 2] = previous
+      state[i * 2 + 1] = current
     }
-    this.previousExitData = nextPrevious
 
+    // The 1×1 stand-in (or a stale size after a texture resize) fails this check
+    // and is replaced by the full-size texture.
+    const sameSize = !!this.exitTexture && this.exitTexture.width === pointsTextureSize && this.exitTexture.height === pointsTextureSize
     if (!this.exitTexture || !sameSize) {
       if (this.exitTexture && !this.exitTexture.destroyed) {
         this.exitTexture.destroy()
@@ -1181,18 +1209,16 @@ export class Points extends CoreModule {
       this.exitTexture = device.createTexture({
         width: pointsTextureSize,
         height: pointsTextureSize,
-        format: 'rgba32float',
+        format: 'rg32float',
       })
     }
     this.exitTexture.copyImageData({
       data: state,
-      bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
+      bytesPerRow: getBytesPerRow('rg32float', pointsTextureSize),
       mipLevel: 0,
       x: 0,
       y: 0,
     })
-    // The texture is all-zero iff no point is (or was) absent.
-    this.isExitTextureAllZero = !anyAbsentNow && !anyAbsentBefore
   }
 
   public updateSize (): void {
@@ -2290,7 +2316,7 @@ export class Points extends CoreModule {
       this.exitTexture.destroy()
     }
     this.exitTexture = undefined
-    this.isExitTextureAllZero = false
+    this.hasAnyAbsentPoint = false
 
     // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
     this.interpolatePositionUniformStore?.destroy()
@@ -2737,8 +2763,14 @@ export class Points extends CoreModule {
       maxY = Math.max(maxY, y)
     }
 
-    // No finite points to rescale (all absent).
-    if (!Number.isFinite(minX)) return
+    // No finite points to rescale (all absent): no scale exists for this data —
+    // clear any previous dataset's closures so getScaleX/getScaleY don't report a
+    // stale mapping (same contract as the range > spaceSize branch below).
+    if (!Number.isFinite(minX)) {
+      this.scaleX = undefined
+      this.scaleY = undefined
+      return
+    }
 
     const w = maxX - minX
     const h = maxY - minY
