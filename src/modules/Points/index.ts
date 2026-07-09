@@ -3,7 +3,7 @@ import { Model } from '@luma.gl/engine'
 // import { scaleLinear } from 'd3-scale'
 // import { extent } from 'd3-array'
 import { CoreModule } from '@/graph/modules/core-module'
-import type { Mat4Array } from '@/graph/modules/Store'
+import type { Mat4Array, Hovered } from '@/graph/modules/Store'
 import { defaultConfigValues, EXIT_DEFAULT_SIZE, EXIT_DEFAULT_COLOR_CHANNEL } from '@/graph/variables'
 import drawPointsFrag from '@/graph/modules/Points/draw-points.frag?raw'
 import drawPointsVert from '@/graph/modules/Points/draw-points.vert?raw'
@@ -11,8 +11,8 @@ import findPointsInRectFrag from '@/graph/modules/Points/find-points-in-rect.fra
 import findPointsInPolygonFrag from '@/graph/modules/Points/find-points-in-polygon.frag?raw'
 import drawHighlightedFrag from '@/graph/modules/Points/draw-highlighted.frag?raw'
 import drawHighlightedVert from '@/graph/modules/Points/draw-highlighted.vert?raw'
-import findHoveredPointFrag from '@/graph/modules/Points/find-hovered-point.frag?raw'
-import findHoveredPointVert from '@/graph/modules/Points/find-hovered-point.vert?raw'
+import fillPickingBufferFrag from '@/graph/modules/Points/fill-picking-buffer.frag?raw'
+import fillPickingBufferVert from '@/graph/modules/Points/fill-picking-buffer.vert?raw'
 import fillGridWithSampledPointsFrag from '@/graph/modules/Points/fill-sampled-points.frag?raw'
 import fillGridWithSampledPointsVert from '@/graph/modules/Points/fill-sampled-points.vert?raw'
 import updatePositionFrag from '@/graph/modules/Points/update-position.frag?raw'
@@ -26,6 +26,9 @@ import { readPixels, isPointAbsent, getRgbaColor } from '@/graph/helper'
 import { ensureVec2, ensureVec4 } from '@/graph/modules/Shared/uniform-utils'
 import { createAtlasDataFromImageData } from '@/graph/modules/Points/atlas-utils'
 import { buildPositionTextureData, buildSourcePositionTextureData } from '@/graph/modules/Points/position-utils'
+import { PickingReadback } from '@/graph/modules/Points/picking-readback'
+import { PICKING_RESOLUTION_SCALE, PICKING_WINDOW_SIZE } from '@/graph/modules/Points/picking-constants'
+import { getPickingBufferSize, getPickingWindow, resolveNearestPickedPoint, type PickingWindow } from '@/graph/modules/Points/picking-utils'
 import { Transition, TransitionProperty } from '@/graph/modules/Transition'
 
 /** Exact GLSL float literal for a shader `#define` (`.toFixed` would round non-integers). */
@@ -39,7 +42,20 @@ export class Points extends CoreModule {
   public targetPositionFbo: Framebuffer | undefined
   public velocityFbo: Framebuffer | undefined
   public searchFbo: Framebuffer | undefined
-  public hoveredFbo: Framebuffer | undefined
+  /**
+   * Screen-space picking buffer: [index, x, y] per pixel (index -1 = empty),
+   * at a reduced resolution. Filled by `updatePickingBuffer()` only when the
+   * scene changed (`isPickingBufferStale`); hover then just reads a small
+   * window under the cursor, so picking cost is independent of the point count
+   * while the scene is static.
+   */
+  public pickingFbo: Framebuffer | undefined
+  /**
+   * Set when point positions / sizes / highlight status / the view transform
+   * changed since the picking buffer was last filled. Graph marks it from the
+   * frame loop; Points marks it on data updates.
+   */
+  public isPickingBufferStale = true
   public scaleX: ((x: number) => number) | undefined
   public scaleY: ((y: number) => number) | undefined
   public shouldSkipRescale: boolean | undefined
@@ -154,7 +170,7 @@ export class Points extends CoreModule {
   private dragPointCommand: Model | undefined
   private findPointsInRectCommand: Model | undefined
   private findPointsInPolygonCommand: Model | undefined
-  private findHoveredPointCommand: Model | undefined
+  private fillPickingBufferCommand: Model | undefined
   private fillSampledPointsFboCommand: Model | undefined
   private trackPointsCommand: Model | undefined
   // Vertex buffers for quad rendering (Model doesn't destroy them automatically)
@@ -167,6 +183,10 @@ export class Points extends CoreModule {
   private trackPointsVertexCoordBuffer: Buffer | undefined
   private trackedIndices: number[] | undefined
   private searchTexture: Texture | undefined
+  private pickingTexture: Texture | undefined
+  private pickingReadback: PickingReadback | undefined
+  /** Cursor window issued to the async readback, in picking-buffer pixels. */
+  private issuedPickingWindow: PickingWindow | undefined
   private pinnedStatusTexture: Texture | undefined
   private sizeTexture: Texture | undefined
   private trackedIndicesTexture: Texture | undefined
@@ -259,8 +279,8 @@ export class Points extends CoreModule {
     };
   }> | undefined
 
-  private findHoveredPointUniformStore: UniformStore<{
-    findHoveredPointUniforms: {
+  private fillPickingBufferUniformStore: UniformStore<{
+    fillPickingBufferUniforms: {
       ratio: number;
       sizeScale: number;
       pointsTextureSize: number;
@@ -268,7 +288,7 @@ export class Points extends CoreModule {
       spaceSize: number;
       screenSize: [number, number];
       scalePointsOnZoom: number;
-      mousePosition: [number, number];
+      pickingPixelRatio: number;
       maxPointSize: number;
       skipHighlighted: number;
       skipGreyed: number;
@@ -442,12 +462,9 @@ export class Points extends CoreModule {
       })
     }
 
-    // Create hoveredFbo (2x2 for hover detection)
-    this.hoveredFbo ||= device.createFramebuffer({
-      width: 2,
-      height: 2,
-      colorAttachments: ['rgba32float'],
-    })
+    // The picking buffer is (re)created lazily in updatePickingBuffer(); new
+    // point data invalidates whatever it currently holds.
+    this.isPickingBufferStale = true
 
     // Create buffers
     const indexData = createIndexesForBuffer(store.pointsTextureSize)
@@ -807,9 +824,9 @@ export class Points extends CoreModule {
       },
     })
 
-    // Create UniformStore for findHoveredPoint uniforms
-    this.findHoveredPointUniformStore ||= new UniformStore({
-      findHoveredPointUniforms: {
+    // Create UniformStore for fillPickingBuffer uniforms
+    this.fillPickingBufferUniformStore ||= new UniformStore({
+      fillPickingBufferUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
           pointsTextureSize: 'f32',
@@ -817,8 +834,8 @@ export class Points extends CoreModule {
           spaceSize: 'f32',
           screenSize: 'vec2<f32>',
           ratio: 'f32',
+          pickingPixelRatio: 'f32',
           transformationMatrix: 'mat4x4<f32>',
-          mousePosition: 'vec2<f32>',
           scalePointsOnZoom: 'f32',
           maxPointSize: 'f32',
           skipHighlighted: 'f32',
@@ -831,8 +848,8 @@ export class Points extends CoreModule {
           spaceSize: store.adjustedSpaceSize,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           ratio: config.pixelRatio,
+          pickingPixelRatio: PICKING_RESOLUTION_SCALE,
           transformationMatrix: store.transformationMatrix4x4,
-          mousePosition: ensureVec2(store.screenMousePosition, [0, 0]),
           scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0,
           maxPointSize: store.maxPointSize,
           skipHighlighted: 0,
@@ -842,9 +859,9 @@ export class Points extends CoreModule {
       },
     })
 
-    this.findHoveredPointCommand ||= new Model(device, {
-      fs: findHoveredPointFrag,
-      vs: findHoveredPointVert,
+    this.fillPickingBufferCommand ||= new Model(device, {
+      fs: fillPickingBufferFrag,
+      vs: fillPickingBufferVert,
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       attributes: {
@@ -863,8 +880,8 @@ export class Points extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        findHoveredPointUniforms: this.findHoveredPointUniformStore.getManagedUniformBuffer(device, 'findHoveredPointUniforms'),
-        // All texture bindings will be set dynamically in findHoveredPoint() method
+        fillPickingBufferUniforms: this.fillPickingBufferUniformStore.getManagedUniformBuffer(device, 'fillPickingBufferUniforms'),
+        // All texture bindings will be set dynamically in updatePickingBuffer() method
       },
       parameters: {
         depthWriteEnabled: false,
@@ -1070,6 +1087,8 @@ export class Points extends CoreModule {
   public updatePointStatus (): void {
     const { device, config, data, store: { pointsTextureSize } } = this
     if (!pointsTextureSize || data.pointsNumber === undefined) return
+    // Highlight status feeds the picking priority passes
+    this.isPickingBufferStale = true
 
     const { highlightedPointIndices, outlinedPointIndices } = config
     const hasHighlighting = highlightedPointIndices !== undefined
@@ -1242,6 +1261,8 @@ export class Points extends CoreModule {
   public updateSize (): void {
     const { device, store: { pointsTextureSize }, data } = this
     if (!pointsTextureSize || data.pointsNumber === undefined) return
+    // Point sizes define the pickable sprite footprints
+    this.isPickingBufferStale = true
 
     // GraphData.updatePointSize() always populates pointSizes before this runs
     const sizeData = data.pointSizes as Float32Array
@@ -1374,11 +1395,12 @@ export class Points extends CoreModule {
         imageSize: this.imageSizesBuffer,
       })
     }
-    if (this.findHoveredPointCommand) {
-      this.findHoveredPointCommand.setAttributes({
+    if (this.fillPickingBufferCommand) {
+      this.fillPickingBufferCommand.setAttributes({
         imageSize: this.imageSizesBuffer,
       })
     }
+    this.isPickingBufferStale = true
   }
 
   public createAtlas (): void {
@@ -1903,33 +1925,42 @@ export class Points extends CoreModule {
     }
   }
 
-  public findHoveredPoint (): void {
-    if (!this.hoveredFbo || this.hoveredFbo.destroyed) return
+  /**
+   * Re-renders the screen-space picking buffer ([index, x, y] per pixel).
+   * Runs only when `isPickingBufferStale` — while the scene is static, hover
+   * detection re-reads the existing buffer and never touches the point set.
+   */
+  public updatePickingBuffer (): void {
+    if (!this.isPickingBufferStale) return
+    if (!this.ensurePickingBuffer()) return
+    if (!this.pickingFbo || this.pickingFbo.destroyed) return
 
-    if (!this.findHoveredPointCommand || !this.findHoveredPointUniformStore) return
+    if (!this.fillPickingBufferCommand || !this.fillPickingBufferUniformStore) return
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
     if (!this.pointStatusTexture) this.updatePointStatus()
     if (!this.pointStatusTexture || this.pointStatusTexture.destroyed) return
     if (!this.exitTexture) this.updateExit()
     if (!this.exitTexture || this.exitTexture.destroyed) return
 
-    this.findHoveredPointCommand.setVertexCount(this.data.pointsNumber ?? 0)
+    this.fillPickingBufferCommand.setVertexCount(this.data.pointsNumber ?? 0)
 
-    this.findHoveredPointCommand.setAttributes({
+    this.fillPickingBufferCommand.setAttributes({
       ...(this.hoveredPointIndices && { pointIndices: this.hoveredPointIndices }),
       ...(this.targetSizeBuffer && { size: this.targetSizeBuffer }),
       ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
     })
 
+    const screenSize = ensureVec2(this.store.screenSize, [0, 0])
     const baseUniforms = {
       ratio: this.config.pixelRatio,
       sizeScale: this.config.pointSizeScale,
       pointsTextureSize: this.store.pointsTextureSize ?? 0,
       transformationMatrix: this.store.transformationMatrix4x4,
       spaceSize: this.store.adjustedSpaceSize,
-      screenSize: ensureVec2(this.store.screenSize, [0, 0]),
+      screenSize,
       scalePointsOnZoom: this.config.scalePointsOnZoom ? 1 : 0,
-      mousePosition: ensureVec2(this.store.screenMousePosition, [0, 0]),
+      // Sprite sizes are computed in CSS px and rasterized into the smaller buffer
+      pickingPixelRatio: screenSize[0] > 0 ? (this.pickingFbo.width / screenSize[0]) : PICKING_RESOLUTION_SCALE,
       maxPointSize: this.store.maxPointSize,
       pointDefaultSize: this.config.pointDefaultSize,
     }
@@ -1941,45 +1972,97 @@ export class Points extends CoreModule {
     }
 
     const renderPass = this.device.beginRenderPass({
-      framebuffer: this.hoveredFbo,
-      clearColor: [0, 0, 0, 0],
+      framebuffer: this.pickingFbo,
+      // -1 in the index channel marks "no candidate" (validity is index >= 0)
+      clearColor: [-1, 0, 0, 0],
+      clearDepth: 1,
     })
 
     const hasHighlighting = this.config.highlightedPointIndices !== undefined
     if (hasHighlighting) {
       // Same two-pass order as drawing: greyed first, then highlighted (top-most wins)
-      this.findHoveredPointUniformStore.setUniforms({
-        findHoveredPointUniforms: {
+      this.fillPickingBufferUniformStore.setUniforms({
+        fillPickingBufferUniforms: {
           ...baseUniforms,
           skipHighlighted: 1,
           skipGreyed: 0,
         },
       })
-      this.findHoveredPointCommand.setBindings(bindings)
-      this.findHoveredPointCommand.draw(renderPass)
+      this.fillPickingBufferCommand.setBindings(bindings)
+      this.fillPickingBufferCommand.draw(renderPass)
 
-      this.findHoveredPointUniformStore.setUniforms({
-        findHoveredPointUniforms: {
+      this.fillPickingBufferUniformStore.setUniforms({
+        fillPickingBufferUniforms: {
           ...baseUniforms,
           skipHighlighted: 0,
           skipGreyed: 1,
         },
       })
-      this.findHoveredPointCommand.setBindings(bindings)
-      this.findHoveredPointCommand.draw(renderPass)
+      this.fillPickingBufferCommand.setBindings(bindings)
+      this.fillPickingBufferCommand.draw(renderPass)
     } else {
-      this.findHoveredPointUniformStore.setUniforms({
-        findHoveredPointUniforms: {
+      this.fillPickingBufferUniformStore.setUniforms({
+        fillPickingBufferUniforms: {
           ...baseUniforms,
           skipHighlighted: 0,
           skipGreyed: 0,
         },
       })
-      this.findHoveredPointCommand.setBindings(bindings)
-      this.findHoveredPointCommand.draw(renderPass)
+      this.fillPickingBufferCommand.setBindings(bindings)
+      this.fillPickingBufferCommand.draw(renderPass)
     }
 
     renderPass.end()
+    this.isPickingBufferStale = false
+  }
+
+  /**
+   * Synchronous pick at the current cursor position: refreshes the picking
+   * buffer if stale and reads the cursor window with a blocking `readPixels`.
+   * Reserved for interactions that need the result in the same event (clicks,
+   * drag starts) — frame-loop hover uses the async path instead.
+   */
+  public pickPointSync (): Hovered | undefined {
+    this.updatePickingBuffer()
+    const window = this.getCursorPickingWindow()
+    if (!window || !this.pickingFbo || this.pickingFbo.destroyed) return undefined
+    const pixels = readPixels(this.device, this.pickingFbo, window.x, window.y, PICKING_WINDOW_SIZE, PICKING_WINDOW_SIZE)
+    return resolveNearestPickedPoint(pixels, window.centerX - window.x, window.centerY - window.y)
+  }
+
+  /**
+   * Starts an asynchronous pick at the current cursor position (no-op while a
+   * previous one is still in flight). The result is collected one or more
+   * frames later via `takePickResult()` — no GPU→CPU stall.
+   */
+  public requestPickPoint (): void {
+    this.updatePickingBuffer()
+    if (!this.pickingFbo || this.pickingFbo.destroyed) return
+    const gl = (this.device as unknown as { gl?: WebGL2RenderingContext }).gl
+    const handle = (this.pickingFbo as unknown as { handle?: WebGLFramebuffer }).handle
+    if (!gl || !handle) return // non-WebGL backend: the sync path still works
+
+    this.pickingReadback ||= new PickingReadback(gl, PICKING_WINDOW_SIZE * PICKING_WINDOW_SIZE * 4)
+    if (this.pickingReadback.inFlight) return
+    const window = this.getCursorPickingWindow()
+    if (!window) return
+    if (this.pickingReadback.issue(handle, window.x, window.y, PICKING_WINDOW_SIZE, PICKING_WINDOW_SIZE)) {
+      this.issuedPickingWindow = window
+    }
+  }
+
+  /**
+   * Collects the result of a `requestPickPoint()` once the GPU finished the
+   * copy. Returns `undefined` while nothing is ready, `null` for "no point
+   * under the cursor", or the picked point.
+   */
+  public takePickResult (): Hovered | null | undefined {
+    if (!this.pickingReadback || !this.issuedPickingWindow) return undefined
+    const pixels = this.pickingReadback.poll()
+    if (!pixels) return undefined
+    const window = this.issuedPickingWindow
+    this.issuedPickingWindow = undefined
+    return resolveNearestPickedPoint(pixels, window.centerX - window.x, window.centerY - window.y) ?? null
   }
 
   public trackPointsByIndices (indices?: number[] | undefined): void {
@@ -2238,12 +2321,15 @@ export class Points extends CoreModule {
     this.findPointsInRectCommand = undefined
     this.findPointsInPolygonCommand?.destroy()
     this.findPointsInPolygonCommand = undefined
-    this.findHoveredPointCommand?.destroy()
-    this.findHoveredPointCommand = undefined
+    this.fillPickingBufferCommand?.destroy()
+    this.fillPickingBufferCommand = undefined
     this.fillSampledPointsFboCommand?.destroy()
     this.fillSampledPointsFboCommand = undefined
     this.trackPointsCommand?.destroy()
     this.trackPointsCommand = undefined
+    this.pickingReadback?.destroy()
+    this.pickingReadback = undefined
+    this.issuedPickingWindow = undefined
 
     // 2. Destroy Framebuffers (before textures they reference)
     if (this.currentPositionFbo && !this.currentPositionFbo.destroyed) {
@@ -2270,10 +2356,10 @@ export class Points extends CoreModule {
       this.searchFbo.destroy()
     }
     this.searchFbo = undefined
-    if (this.hoveredFbo && !this.hoveredFbo.destroyed) {
-      this.hoveredFbo.destroy()
+    if (this.pickingFbo && !this.pickingFbo.destroyed) {
+      this.pickingFbo.destroy()
     }
-    this.hoveredFbo = undefined
+    this.pickingFbo = undefined
     if (this.trackedPositionsFbo && !this.trackedPositionsFbo.destroyed) {
       this.trackedPositionsFbo.destroy()
     }
@@ -2308,6 +2394,10 @@ export class Points extends CoreModule {
       this.searchTexture.destroy()
     }
     this.searchTexture = undefined
+    if (this.pickingTexture && !this.pickingTexture.destroyed) {
+      this.pickingTexture.destroy()
+    }
+    this.pickingTexture = undefined
     if (this.pointStatusTexture && !this.pointStatusTexture.destroyed) {
       this.pointStatusTexture.destroy()
     }
@@ -2355,8 +2445,8 @@ export class Points extends CoreModule {
     this.findPointsInRectUniformStore = undefined
     this.findPointsInPolygonUniformStore?.destroy()
     this.findPointsInPolygonUniformStore = undefined
-    this.findHoveredPointUniformStore?.destroy()
-    this.findHoveredPointUniformStore = undefined
+    this.fillPickingBufferUniformStore?.destroy()
+    this.fillPickingBufferUniformStore = undefined
     this.fillSampledPointsUniformStore?.destroy()
     this.fillSampledPointsUniformStore = undefined
     this.drawHighlightedUniformStore?.destroy()
@@ -2720,6 +2810,62 @@ export class Points extends CoreModule {
       x: 0,
       y: 0,
     })
+  }
+
+  /**
+   * (Re)creates the picking buffer to match the current screen size (see
+   * `getPickingBufferSize` for the resolution/cap tradeoff). Returns `false`
+   * while the screen size is unknown.
+   */
+  private ensurePickingBuffer (): boolean {
+    const { device, store } = this
+    const [screenWidth, screenHeight] = store.screenSize
+    if (!screenWidth || !screenHeight) return false
+    const { width, height } = getPickingBufferSize(screenWidth, screenHeight)
+
+    if (this.pickingTexture && !this.pickingTexture.destroyed &&
+      this.pickingTexture.width === width && this.pickingTexture.height === height) return true
+
+    // A read issued against the old framebuffer would return pixels of a
+    // destroyed target — drop it.
+    this.pickingReadback?.cancel()
+    this.issuedPickingWindow = undefined
+    if (this.pickingFbo && !this.pickingFbo.destroyed) this.pickingFbo.destroy()
+    if (this.pickingTexture && !this.pickingTexture.destroyed) this.pickingTexture.destroy()
+    this.pickingTexture = device.createTexture({
+      width,
+      height,
+      format: 'rgba32float',
+      usage: Texture.SAMPLE | Texture.RENDER,
+    })
+    // The depth attachment is inert in 2D (depthCompare stays 'always'); it is
+    // kept so 3D nearest-wins picking can layer back cleanly later.
+    this.pickingFbo = device.createFramebuffer({
+      width,
+      height,
+      colorAttachments: [this.pickingTexture],
+      depthStencilAttachment: 'depth16unorm',
+    })
+    this.isPickingBufferStale = true
+    return true
+  }
+
+  /**
+   * The cursor-centered read window in the current picking buffer, or
+   * `undefined` while the buffer or screen size is unknown.
+   */
+  private getCursorPickingWindow (): PickingWindow | undefined {
+    if (!this.pickingFbo || this.pickingFbo.destroyed) return undefined
+    const [screenWidth, screenHeight] = this.store.screenSize
+    if (!screenWidth || !screenHeight) return undefined
+    return getPickingWindow(
+      this.pickingFbo.width,
+      this.pickingFbo.height,
+      this.store.screenMousePosition[0]!,
+      this.store.screenMousePosition[1]!,
+      screenWidth,
+      screenHeight
+    )
   }
 
   private ensureUpdatePositionProgram (): void {
