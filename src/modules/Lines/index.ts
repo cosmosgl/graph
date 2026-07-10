@@ -8,8 +8,7 @@ import drawLineFrag from '@/graph/modules/Lines/draw-curve-line.frag?raw'
 import drawLineVert from '@/graph/modules/Lines/draw-curve-line.vert?raw'
 import fillGridWithSampledLinksFrag from '@/graph/modules/Lines/fill-sampled-links.frag?raw'
 import fillGridWithSampledLinksVert from '@/graph/modules/Lines/fill-sampled-links.vert?raw'
-import hoveredLineIndexFrag from '@/graph/modules/Lines/hovered-line-index.frag?raw'
-import hoveredLineIndexVert from '@/graph/modules/Lines/hovered-line-index.vert?raw'
+import { PickingReadback, resolvePickedLinkIndex } from '@/graph/modules/Points/picking-readback'
 import { defaultConfigValues } from '@/graph/variables'
 import { getCurveLineGeometry } from '@/graph/modules/Lines/geometry'
 import { updateAttributeBuffers } from '@/graph/modules/Shared/buffer'
@@ -30,8 +29,21 @@ type DrawCurveCommandAttributes = {
 }
 
 export class Lines extends CoreModule {
+  /**
+   * Screen-space link index buffer: [index, 0, 0, validity] per pixel (alpha
+   * 0 = empty), at screen resolution. Filled by `updateLinkIndexBuffer()` only
+   * when the scene changed (`isLinkIndexBufferStale`); hover then just reads
+   * the pixel under the cursor, so link picking cost is independent of the
+   * link count while the scene is static.
+   */
   public linkIndexFbo: Framebuffer | undefined
-  public hoveredLineIndexFbo: Framebuffer | undefined
+  /**
+   * Set when link geometry (point positions, widths, arrows, curvature,
+   * status) or the view transform changed since the link index buffer was
+   * last filled. Graph marks it from the frame loop; Lines marks it on data
+   * updates.
+   */
+  public isLinkIndexBufferStale = true
   public sampledLinksFbo: Framebuffer | undefined
   public linkStatusTexture: Texture | undefined
   private linkStatusTextureSize = 0
@@ -44,7 +56,7 @@ export class Lines extends CoreModule {
    * so `initPrograms` recreates those Models when this differs from `store.spaceDimensions`.
    */
   private programsSpaceDimensions: 2 | 3 = 2
-  private hoveredLineIndexCommand: Model | undefined
+  private pickingReadback: PickingReadback | undefined
   private fillSampledLinksFboCommand: Model | undefined
   private pointABuffer: Buffer | undefined
   private pointBBuffer: Buffer | undefined
@@ -58,9 +70,7 @@ export class Lines extends CoreModule {
   private curveLineGeometry: number[][] | undefined
   private curveLineBuffer: Buffer | undefined
   private linkIndexBuffer: Buffer | undefined
-  private quadBuffer: Buffer | undefined
   private linkIndexTexture: Texture | undefined
-  private hoveredLineIndexTexture: Texture | undefined
   private transitionProgress = 1
   private shouldAnimateLinkColors = false
   private shouldAnimateLinkWidths = false
@@ -111,13 +121,6 @@ export class Lines extends CoreModule {
     };
   }> | undefined
 
-  private hoveredLineIndexUniformStore: UniformStore<{
-    hoveredLineIndexUniforms: {
-      mousePosition: [number, number];
-      screenSize: [number, number];
-    };
-  }> | undefined
-
   // Track previous screen size to detect changes
   private previousScreenSize: [number, number] | undefined
 
@@ -143,20 +146,8 @@ export class Lines extends CoreModule {
     }
 
     this.updateLinkIndexFbo()
-
-    // Initialize the hovered line index FBO
-    this.hoveredLineIndexTexture ||= device.createTexture({
-      width: 1,
-      height: 1,
-      format: 'rgba32float',
-      usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
-      data: new Float32Array(4).fill(0),
-    })
-    this.hoveredLineIndexFbo ||= device.createFramebuffer({
-      width: 1,
-      height: 1,
-      colorAttachments: [this.hoveredLineIndexTexture],
-    })
+    // New programs invalidate whatever the link index buffer currently holds
+    this.isLinkIndexBufferStale = true
 
     // Ensure geometry buffer exists (create empty if needed)
     if (!this.curveLineGeometry) {
@@ -255,47 +246,6 @@ export class Lines extends CoreModule {
     this.drawCurveCommand ||= this.createDrawCurveCommand(this.getLinkBlendParameters(this.config.linkBlending))
 
     this.isLinkBlendingActive = this.config.linkBlending
-
-    // Initialize quad buffer for full-screen rendering
-    this.quadBuffer ||= device.createBuffer({
-      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
-      usage: Buffer.VERTEX | Buffer.COPY_DST,
-    })
-
-    this.hoveredLineIndexUniformStore ||= new UniformStore({
-      hoveredLineIndexUniforms: {
-        uniformTypes: {
-          mousePosition: 'vec2<f32>',
-          screenSize: 'vec2<f32>',
-        },
-        defaultUniforms: {
-          mousePosition: ensureVec2(store.screenMousePosition, [0, 0]),
-          screenSize: ensureVec2(store.screenSize, [0, 0]),
-        },
-      },
-    })
-
-    this.hoveredLineIndexCommand ||= new Model(device, {
-      vs: hoveredLineIndexVert,
-      fs: hoveredLineIndexFrag,
-      topology: 'triangle-strip',
-      vertexCount: 4,
-      attributes: {
-        vertexCoord: this.quadBuffer,
-      },
-      bufferLayout: [
-        { name: 'vertexCoord', format: 'float32x2' },
-      ],
-      defines: {
-        USE_UNIFORM_BUFFERS: true,
-      },
-      bindings: {
-        // Create uniform buffer binding
-        // Update it later by calling uniformStore.setUniforms()
-        hoveredLineIndexUniforms: this.hoveredLineIndexUniformStore.getManagedUniformBuffer(device, 'hoveredLineIndexUniforms'),
-        // All texture bindings will be set dynamically in findHoveredLine() method
-      },
-    })
 
     // Sampled links (for getSampledLinks / getSampledLinkPositionsMap)
     this.fillSampledLinksUniformStore ||= new UniformStore({
@@ -437,6 +387,9 @@ export class Lines extends CoreModule {
       this.previousScreenSize?.[1] !== screenHeight
 
     if (!this.linkIndexTexture || screenSizeChanged) {
+      // A read issued against the old framebuffer would return pixels of a
+      // destroyed target — drop it.
+      this.pickingReadback?.cancel()
       // Destroy old framebuffer and texture if they exist
       if (this.linkIndexFbo && !this.linkIndexFbo.destroyed) {
         this.linkIndexFbo.destroy()
@@ -468,6 +421,7 @@ export class Lines extends CoreModule {
       })
 
       this.previousScreenSize = [screenWidth, screenHeight]
+      this.isLinkIndexBufferStale = true
     }
   }
 
@@ -495,6 +449,8 @@ export class Lines extends CoreModule {
     const { device, data, store } = this
     if (data.linksNumber === undefined || data.links === undefined) return
     if (!store.pointsTextureSize) return // Guard against 0/undefined
+    // New link endpoints invalidate the rasterized link index buffer
+    this.isLinkIndexBufferStale = true
 
     // Create separate buffers for pointA and pointB
     const pointAData = new Float32Array(data.linksNumber * 2)
@@ -577,6 +533,9 @@ export class Lines extends CoreModule {
   public updateColor (): void {
     const { data } = this
     const linksNumber = data.linksNumber ?? 0
+    // The index pass discards fully transparent fragments, so a link's color
+    // alpha gates its pickability
+    this.isLinkIndexBufferStale = true
     const colorData = data.linkColors ?? new Float32Array(linksNumber * 4).fill(0)
     const { source, target, previous } = updateAttributeBuffers(
       this.device,
@@ -599,6 +558,8 @@ export class Lines extends CoreModule {
   public updateWidth (): void {
     const { data } = this
     const linksNumber = data.linksNumber ?? 0
+    // Link widths define the pickable footprints
+    this.isLinkIndexBufferStale = true
     const widthData = data.linkWidths ?? new Float32Array(linksNumber).fill(0)
     const { source, target, previous } = updateAttributeBuffers(
       this.device,
@@ -620,6 +581,8 @@ export class Lines extends CoreModule {
 
   public updateArrow (): void {
     const { device, data } = this
+    // Arrow heads are part of the rasterized link footprint
+    this.isLinkIndexBufferStale = true
     // linkArrows is number[] not Float32Array, so we need to convert it
     // Ensure we have the right size even if linkArrows is undefined
     const linksNumber = data.linksNumber ?? 0
@@ -653,6 +616,8 @@ export class Lines extends CoreModule {
   public updateLinkStatus (): void {
     const { device, config, data } = this
     const linksNumber = data.linksNumber ?? 0
+    // Highlight status feeds the index pass
+    this.isLinkIndexBufferStale = true
 
     // No links yet — ensure a placeholder texture exists so luma.gl always has
     // a valid binding for the linkStatus sampler (it silently skips the draw
@@ -717,6 +682,8 @@ export class Lines extends CoreModule {
 
   public updateCurveLineGeometry (): void {
     const { device, config: { curvedLinks, curvedLinkSegments } } = this
+    // Curvature changes the rasterized link shapes
+    this.isLinkIndexBufferStale = true
     this.curveLineGeometry = getCurveLineGeometry(curvedLinks ? curvedLinkSegments : 1)
 
     // Flatten the 2D array to 1D
@@ -844,7 +811,19 @@ export class Lines extends CoreModule {
     return { indices, positions, angles }
   }
 
-  public findHoveredLine (): void {
+  /**
+   * Re-renders the screen-space link index buffer ([index, 0, 0, validity] per
+   * pixel). Runs only when `isLinkIndexBufferStale` — while the scene is
+   * static, hover detection re-reads the existing buffer and never touches the
+   * link set. The pass renders through the 3D-aware draw shaders (renderMode 1),
+   * so perspective, curved links and behind-camera culling match the visible links.
+   */
+  public updateLinkIndexBuffer (): void {
+    if (!this.isLinkIndexBufferStale) return
+    // Self-healing: (re)creates the buffer when missing or the screen resized
+    // (no-op unless hovering is enabled).
+    this.updateLinkIndexFbo()
+
     const { config, points, store } = this
     if (!points) return
     if (!points.currentPositionTexture || points.currentPositionTexture.destroyed) return
@@ -910,29 +889,62 @@ export class Lines extends CoreModule {
     })
     this.drawCurvePickingCommand.draw(indexPass)
     indexPass.end()
+    this.isLinkIndexBufferStale = false
+  }
 
-    if (this.hoveredLineIndexCommand && this.hoveredLineIndexFbo && this.hoveredLineIndexUniformStore) {
-      this.hoveredLineIndexUniformStore.setUniforms({
-        hoveredLineIndexUniforms: {
-          mousePosition: ensureVec2(store.screenMousePosition, [0, 0]),
-          screenSize: ensureVec2(store.screenSize, [0, 0]),
-        },
-      })
+  /**
+   * Synchronous link pick at the current cursor position: refreshes the link
+   * index buffer if stale and reads the cursor pixel with a blocking
+   * `readPixels`. Reserved for interactions that need the result in the same
+   * event (clicks, long-presses) — frame-loop hover uses the async path.
+   */
+  public pickLinkSync (): number | undefined {
+    this.updateLinkIndexBuffer()
+    const pixel = this.getCursorPickingPixel()
+    if (!pixel || !this.linkIndexFbo || this.linkIndexFbo.destroyed) return undefined
+    const pixels = readPixels(this.device, this.linkIndexFbo, pixel.x, pixel.y, 1, 1)
+    return resolvePickedLinkIndex(pixels)
+  }
 
-      // Update texture bindings dynamically
-      this.hoveredLineIndexCommand.setBindings({
-        linkIndexTexture: this.linkIndexTexture,
-      })
+  /**
+   * Starts an asynchronous link pick at the current cursor position (no-op
+   * while a previous one is still in flight). The result is collected one or
+   * more frames later via `takePickLinkResult()` — no GPU→CPU stall.
+   */
+  public requestPickLink (): void {
+    this.updateLinkIndexBuffer()
+    if (!this.linkIndexFbo || this.linkIndexFbo.destroyed) return
+    const gl = (this.device as unknown as { gl?: WebGL2RenderingContext }).gl
+    const handle = (this.linkIndexFbo as unknown as { handle?: WebGLFramebuffer }).handle
+    if (!gl || !handle) return // non-WebGL backend: the sync path still works
 
-      const hoverPass = this.device.beginRenderPass({
-        framebuffer: this.hoveredLineIndexFbo,
-      })
-      this.hoveredLineIndexCommand.draw(hoverPass)
-      hoverPass.end()
-    }
+    this.pickingReadback ||= new PickingReadback(gl, 4)
+    if (this.pickingReadback.inFlight) return
+    const pixel = this.getCursorPickingPixel()
+    if (!pixel) return
+    this.pickingReadback.issue(handle, pixel.x, pixel.y, 1, 1)
+  }
+
+  /**
+   * Collects the result of a `requestPickLink()` once the GPU finished the
+   * copy. Returns `undefined` while nothing is ready, `null` for "no link
+   * under the cursor", or the picked link index.
+   */
+  public takePickLinkResult (): number | null | undefined {
+    if (!this.pickingReadback) return undefined
+    const pixels = this.pickingReadback.poll()
+    if (!pixels) return undefined
+    return resolvePickedLinkIndex(pixels) ?? null
   }
 
   public setTransitionProgress (progress: number, animateColors = false, animateWidths = false): void {
+    // An animating transition changes the rasterized links each frame: widths
+    // move the footprints, and color alpha gates pickability (the index pass
+    // discards fully transparent fragments). Position interpolation is marked
+    // from the frame loop (markPickingBuffersStale) alongside the point buffer.
+    if (progress !== this.transitionProgress && (animateColors || animateWidths)) {
+      this.isLinkIndexBufferStale = true
+    }
     this.transitionProgress = progress
     this.shouldAnimateLinkColors = animateColors
     this.shouldAnimateLinkWidths = animateWidths
@@ -949,10 +961,10 @@ export class Lines extends CoreModule {
     this.drawCurvePickingCommand?.destroy()
     this.drawCurvePickingCommand = undefined
     this.isLinkBlendingActive = undefined
-    this.hoveredLineIndexCommand?.destroy()
-    this.hoveredLineIndexCommand = undefined
     this.fillSampledLinksFboCommand?.destroy()
     this.fillSampledLinksFboCommand = undefined
+    this.pickingReadback?.destroy()
+    this.pickingReadback = undefined
 
     // 2. Destroy Framebuffers (before textures they reference)
     if (this.linkIndexFbo && !this.linkIndexFbo.destroyed) {
@@ -963,20 +975,12 @@ export class Lines extends CoreModule {
       this.sampledLinksFbo.destroy()
     }
     this.sampledLinksFbo = undefined
-    if (this.hoveredLineIndexFbo && !this.hoveredLineIndexFbo.destroyed) {
-      this.hoveredLineIndexFbo.destroy()
-    }
-    this.hoveredLineIndexFbo = undefined
 
     // 3. Destroy Textures
     if (this.linkIndexTexture && !this.linkIndexTexture.destroyed) {
       this.linkIndexTexture.destroy()
     }
     this.linkIndexTexture = undefined
-    if (this.hoveredLineIndexTexture && !this.hoveredLineIndexTexture.destroyed) {
-      this.hoveredLineIndexTexture.destroy()
-    }
-    this.hoveredLineIndexTexture = undefined
     if (this.linkStatusTexture && !this.linkStatusTexture.destroyed) {
       this.linkStatusTexture.destroy()
     }
@@ -985,8 +989,6 @@ export class Lines extends CoreModule {
     // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
     this.drawLineUniformStore?.destroy()
     this.drawLineUniformStore = undefined
-    this.hoveredLineIndexUniformStore?.destroy()
-    this.hoveredLineIndexUniformStore = undefined
     this.fillSampledLinksUniformStore?.destroy()
     this.fillSampledLinksUniformStore = undefined
 
@@ -1029,10 +1031,24 @@ export class Lines extends CoreModule {
       this.linkIndexBuffer.destroy()
     }
     this.linkIndexBuffer = undefined
-    if (this.quadBuffer && !this.quadBuffer.destroyed) {
-      this.quadBuffer.destroy()
+  }
+
+  /**
+   * The cursor pixel in the link index buffer (1:1 with the screen in CSS px;
+   * `screenMousePosition` is already bottom-left-origin, matching the
+   * framebuffer orientation), or `undefined` while the buffer or screen size
+   * is unknown. Matches the old lookup shader: `floor(mouse / screen * size)`.
+   */
+  private getCursorPickingPixel (): { x: number; y: number } | undefined {
+    if (!this.linkIndexFbo || this.linkIndexFbo.destroyed) return undefined
+    const [screenWidth, screenHeight] = this.store.screenSize
+    if (!screenWidth || !screenHeight) return undefined
+    const x = Math.floor(this.store.screenMousePosition[0]! * (this.linkIndexFbo.width / screenWidth))
+    const y = Math.floor(this.store.screenMousePosition[1]! * (this.linkIndexFbo.height / screenHeight))
+    return {
+      x: Math.min(Math.max(x, 0), this.linkIndexFbo.width - 1),
+      y: Math.min(Math.max(y, 0), this.linkIndexFbo.height - 1),
     }
-    this.quadBuffer = undefined
   }
 
   /**

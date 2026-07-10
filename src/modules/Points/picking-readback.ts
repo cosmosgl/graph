@@ -11,6 +11,16 @@
  * fence), so this helper drives the raw WebGL2 objects itself, saving and
  * restoring the framebuffer binding the same way luma's own copy helpers do.
  */
+/**
+ * Reads a 1×1 [index, _, _, validity] pixel from the link index buffer.
+ * Alpha > 0 marks a rasterized link (the buffer clears to transparent black,
+ * so link index 0 stays distinguishable from "empty").
+ */
+export function resolvePickedLinkIndex (pixels: Float32Array): number | undefined {
+  const index = pixels[0] as number
+  return (pixels[3] as number) > 0 && index >= 0 ? index : undefined
+}
+
 export class PickingReadback {
   private gl: WebGL2RenderingContext
   private buffer: WebGLBuffer | null = null
