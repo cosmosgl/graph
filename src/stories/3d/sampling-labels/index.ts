@@ -32,6 +32,7 @@ export const samplingLabels3D = (): { graph: Graph; div: HTMLDivElement; destroy
   div.appendChild(labelsDiv)
 
   const config: GraphConfig = {
+    spaceDimensions: 3,
     backgroundColor: '#2d313a',
     pointDefaultSize: 8,
     scalePointsOnZoom: true,
@@ -56,7 +57,7 @@ export const samplingLabels3D = (): { graph: Graph; div: HTMLDivElement; destroy
   const graph = new Graph(graphDiv, config)
 
   const data = generateClusteredGraph3D(3000, 6)
-  graph.setPointPositions3D(data.pointPositions)
+  graph.setPointPositions(data.pointPositions, { dimensions: 3 })
   graph.setPointColors(data.pointColors)
   graph.setLinks(data.links)
   graph.render()

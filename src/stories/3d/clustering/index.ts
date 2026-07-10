@@ -10,6 +10,7 @@ export const clustering3D = (): { graph: Graph; div: HTMLDivElement; destroy?: (
   div.style.position = 'relative'
 
   const config: GraphConfig = {
+    spaceDimensions: 3,
     spaceSize: SPACE_SIZE,
     backgroundColor: '#2d313a',
     pointDefaultSize: 6,
@@ -32,7 +33,7 @@ export const clustering3D = (): { graph: Graph; div: HTMLDivElement; destroy?: (
   const graph = new Graph(div, config)
 
   const data = generateClusteredPoints3D(4000, 6)
-  graph.setPointPositions3D(data.pointPositions)
+  graph.setPointPositions(data.pointPositions, { dimensions: 3 })
   graph.setPointColors(data.pointColors)
   graph.setPointClusters(data.pointClusters)
   graph.render()
@@ -46,7 +47,7 @@ export const clustering3D = (): { graph: Graph; div: HTMLDivElement; destroy?: (
   restartButton.style.cssText = buttonStyle
   restartButton.addEventListener('click', () => {
     const newData = generateClusteredPoints3D(4000, 6)
-    graph.setPointPositions3D(newData.pointPositions)
+    graph.setPointPositions(newData.pointPositions, { dimensions: 3 })
     graph.setPointColors(newData.pointColors)
     graph.setPointClusters(newData.pointClusters)
     graph.render()

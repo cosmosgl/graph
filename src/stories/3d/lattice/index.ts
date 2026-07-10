@@ -8,6 +8,7 @@ export const lattice3D = (): { graph: Graph; div: HTMLDivElement; destroy?: () =
   div.style.position = 'relative'
 
   const config: GraphConfig = {
+    spaceDimensions: 3,
     backgroundColor: '#2d313a',
     pointDefaultSize: 12,
     scalePointsOnZoom: true,
@@ -31,7 +32,7 @@ export const lattice3D = (): { graph: Graph; div: HTMLDivElement; destroy?: () =
   const graph = new Graph(div, config)
 
   const data = generateCubeLattice3D(10)
-  graph.setPointPositions3D(data.pointPositions)
+  graph.setPointPositions(data.pointPositions, { dimensions: 3 })
   graph.setPointColors(data.pointColors)
   graph.setLinks(data.links)
   graph.render()
@@ -45,7 +46,7 @@ export const lattice3D = (): { graph: Graph; div: HTMLDivElement; destroy?: () =
   restartButton.style.cssText = buttonStyle
   restartButton.addEventListener('click', () => {
     const newData = generateCubeLattice3D(10)
-    graph.setPointPositions3D(newData.pointPositions)
+    graph.setPointPositions(newData.pointPositions, { dimensions: 3 })
     graph.render()
     graph.start()
   })

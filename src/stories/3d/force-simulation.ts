@@ -12,6 +12,7 @@ export const forceSimulation3d = (): { graph: Graph; div: HTMLDivElement; destro
   div.style.width = '100%'
 
   const config: GraphConfig = {
+    spaceDimensions: 3,
     spaceSize: 4096,
     backgroundColor: '#0b0e1a',
     pointDefaultSize: 5,
@@ -75,7 +76,7 @@ export const forceSimulation3d = (): { graph: Graph; div: HTMLDivElement; destro
     if (i % 25 === 0) links.push(i, Math.floor(Math.random() * n))
   }
 
-  graph.setPointPositions3D(positions)
+  graph.setPointPositions(positions, { dimensions: 3 })
   graph.setPointColors(colors)
   graph.setLinks(new Float32Array(links))
   graph.render()

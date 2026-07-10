@@ -54,6 +54,19 @@ export interface GraphConfigInterface {
    * Default value: `4096` (larger values may crash on some devices, e.g. iOS; see https://github.com/cosmosgl/graph/issues/203).
    */
   spaceSize: number;
+  /**
+   * Rendering and simulation space dimensionality.
+   * `2` — flat pan/zoom view (d3-zoom); `3` — perspective orbit camera
+   * (drag rotates, wheel/pinch dollies, Shift/Space + drag pans). The force
+   * simulation and its spatial structures run in the same dimensionality.
+   *
+   * Independent of the ingested data: 2D positions viewed in 3D lie in the
+   * `z = 0` plane, and 3D positions viewed in 2D are projected top-down
+   * (their z is preserved). Can be changed at runtime via `setConfig` /
+   * `setConfigPartial` to switch modes without re-ingesting data.
+   * Default value: `2`
+   */
+  spaceDimensions: 2 | 3;
 
   /**
    * The default color to use for points when no point colors are provided,

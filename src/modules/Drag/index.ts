@@ -18,7 +18,10 @@ export class Drag {
         this.transition.isActiveFor(TransitionProperty.Positions) ||
         this.transition.isActiveFor(TransitionProperty.PointSizes)
       ) return undefined
-      return this.store.hoveredPoint && !this.store.isSpaceKeyPressed ? { x: event.x, y: event.y } : undefined
+      // Shift/Space are the camera-pan modifiers — while either is held, yield
+      // the gesture to the view instead of dragging the hovered point.
+      const isShiftPressed = (event.sourceEvent as { shiftKey?: boolean } | undefined)?.shiftKey === true
+      return this.store.hoveredPoint && !this.store.isSpaceKeyPressed && !isShiftPressed ? { x: event.x, y: event.y } : undefined
     })
     .on('start', (e) => {
       if (this.store.hoveredPoint) {

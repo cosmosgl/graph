@@ -11,6 +11,7 @@ export const performanceSimulation3D = (): { graph: Graph; div: HTMLDivElement; 
   div.style.position = 'relative'
 
   const config: GraphConfig = {
+    spaceDimensions: 3,
     backgroundColor: '#12141a',
     pointDefaultSize: 8,
     scalePointsOnZoom: true,
@@ -38,7 +39,7 @@ export const performanceSimulation3D = (): { graph: Graph; div: HTMLDivElement; 
   const graph = new Graph(div, config)
 
   const data = generateClusteredGraph3D(POINTS_NUMBER, CLUSTERS_NUMBER)
-  graph.setPointPositions3D(data.pointPositions)
+  graph.setPointPositions(data.pointPositions, { dimensions: 3 })
   graph.setPointColors(data.pointColors)
   graph.setLinks(data.links)
   graph.render()
@@ -52,7 +53,7 @@ export const performanceSimulation3D = (): { graph: Graph; div: HTMLDivElement; 
   restartButton.style.cssText = buttonStyle
   restartButton.addEventListener('click', () => {
     const newData = generateClusteredGraph3D(POINTS_NUMBER, CLUSTERS_NUMBER)
-    graph.setPointPositions3D(newData.pointPositions)
+    graph.setPointPositions(newData.pointPositions, { dimensions: 3 })
     graph.setPointColors(newData.pointColors)
     graph.setLinks(newData.links)
     graph.render()

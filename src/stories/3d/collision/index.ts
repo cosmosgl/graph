@@ -8,6 +8,7 @@ export const collision3D = (): { graph: Graph; div: HTMLDivElement; destroy?: ()
   div.style.position = 'relative'
 
   const config: GraphConfig = {
+    spaceDimensions: 3,
     backgroundColor: '#2d313a',
     scalePointsOnZoom: true,
     renderHoveredPointRing: true,
@@ -22,15 +23,15 @@ export const collision3D = (): { graph: Graph; div: HTMLDivElement; destroy?: ()
     enableSimulation: true,
     simulationGravity: 0.5,
     simulationRepulsion: 0,
-    simulationCollision: 1,
+    simulationCollision: 0.5,
     simulationFriction: 0.85,
-    simulationDecay: 3000,
+    // simulationDecay: 3000,
   }
 
   const graph = new Graph(div, config)
 
   const data = generateCollisionPoints3D(600)
-  graph.setPointPositions3D(data.pointPositions)
+  graph.setPointPositions(data.pointPositions, { dimensions: 3 })
   graph.setPointColors(data.pointColors)
   graph.setPointSizes(data.pointSizes)
   graph.render()
@@ -44,7 +45,7 @@ export const collision3D = (): { graph: Graph; div: HTMLDivElement; destroy?: ()
   restartButton.style.cssText = buttonStyle
   restartButton.addEventListener('click', () => {
     const newData = generateCollisionPoints3D(600)
-    graph.setPointPositions3D(newData.pointPositions)
+    graph.setPointPositions(newData.pointPositions, { dimensions: 3 })
     graph.setPointColors(newData.pointColors)
     graph.setPointSizes(newData.pointSizes)
     graph.render()

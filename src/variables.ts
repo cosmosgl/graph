@@ -13,6 +13,7 @@ export const defaultConfigValues = {
   backgroundColor: '#222222',
   /** Setting to 4096 because larger values crash the graph on iOS. More info: https://github.com/cosmosgl/graph/issues/203 */
   spaceSize: 4096,
+  spaceDimensions: 2 as 2 | 3,
 
   // Points
   pointDefaultColor: '#b3b3b3',

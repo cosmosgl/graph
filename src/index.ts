@@ -155,6 +155,7 @@ export class Graph {
     devicePromise?: Promise<Device>
   ) {
     if (config) applyConfig(this.config, config)
+    this.store.spaceDimensions = this.config.spaceDimensions
 
     if (devicePromise) {
       this.deviceInitPromise = devicePromise
@@ -203,10 +204,11 @@ export class Graph {
       this.store.adjustSpaceSize(this.config.spaceSize, this.device.limits.maxTextureDimension2D)
       this.store.setWebGLMaxTextureSize(this.device.limits.maxTextureDimension2D)
       this.store.updateScreenSize(w, h)
+      // resizeCanvas() only reacts to size *changes*, so the camera's viewport
+      // (projection aspect) must be seeded here for a graph created in 3D mode.
+      if (this.store.is3D) this.camera.setViewport(w, h)
 
       this.canvasD3Selection = select<HTMLCanvasElement, undefined>(this.canvas)
-        .call(this.dragInstance.behavior)
-        .call(this.zoomInstance.behavior)
         .on('pointerenter.cosmos', (event: PointerEvent) => {
           if (!event.isPrimary) return
           this._isPointerOnCanvas = true
@@ -337,7 +339,9 @@ export class Graph {
           this.currentEvent = e
           this.updateCanvasCursor()
         })
-      if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
+      // Bind the gesture behaviors for the initial mode (2D pan/zoom + drag, or
+      // the orbit camera in 3D), honoring the enableZoom/enableDrag flags.
+      this.updateZoomDragBehaviors()
       // Zoom level 1 means no zoom (100% scale). defaultConfigValues.initialZoomLevel is undefined,
       // so we fall back to 1 here as the neutral zoom level when no initial zoom is configured.
       this.setZoomLevel(this.config.initialZoomLevel ?? 1)
@@ -440,6 +444,9 @@ export class Graph {
     const prevConfig = { ...this.config }
     resetConfigToDefaults(this.config)
     applyConfig(this.config, config)
+    // The rendering mode is sticky: a full config reset must not silently flip
+    // an app out of 3D — only an explicit `spaceDimensions` value changes it.
+    if (config.spaceDimensions === undefined) this.config.spaceDimensions = prevConfig.spaceDimensions
     this.preserveInitOnlyFields(prevConfig)
     this.updateStateFromConfig(prevConfig)
   }
@@ -465,69 +472,62 @@ export class Graph {
   /**
    * Sets the positions for the graph points.
    *
-   * @param {Float32Array} pointPositions - A Float32Array representing the positions of points in the format [x1, y1, x2, y2, ..., xn, yn],
-   * where `n` is the index of the point.
-   * Example: `new Float32Array([1, 2, 3, 4, 5, 6])` sets the first point to (1, 2), the second point to (3, 4), and so on.
-   * @param {boolean | undefined} dontRescale - For this call only, don't rescale the points.
-   *   - `true`: Don't rescale.
-   *   - `false` or `undefined` (default): Use the behavior defined by `config.rescalePositions`.
+   * The data dimensionality is independent of the rendering mode — control the
+   * view with the `spaceDimensions` configuration property. 2D positions viewed
+   * in 3D lie in the `z = 0` plane; 3D positions viewed in 2D are projected
+   * top-down (their z is preserved).
+   *
+   * @param {Float32Array} pointPositions - A Float32Array of point coordinates:
+   * `[x1, y1, x2, y2, ...]` with `options.dimensions: 2` (default), or
+   * `[x1, y1, z1, x2, y2, z2, ...]` with `options.dimensions: 3`.
+   * @param {Object | boolean} [options] - Options object:
+   *   - `dimensions` (2 | 3): Coordinates per point in `pointPositions` (`2` by default).
+   *   - `dontRescale` (boolean): For this call only, don't rescale the points into the
+   *     `[0, spaceSize]` space. When `false`/`undefined`, `config.rescalePositions` decides.
+   *
+   *   Passing a boolean is deprecated shorthand for `{ dontRescale }`.
    * @note If `transitionDuration > 0` and the simulation is running, the simulation is automatically
    * paused for the transition and remains paused afterwards. Call `unpause()` to resume it.
+   * When switching data from 2D to 3D, z animates from `0`.
    */
-  public setPointPositions (pointPositions: Float32Array, dontRescale?: boolean | undefined): void {
+  public setPointPositions (pointPositions: Float32Array, options?: { dimensions?: 2 | 3; dontRescale?: boolean } | boolean): void {
     if (this._isDestroyed) return
 
-    if (this.ensureDevice(() => this.setPointPositions(pointPositions, dontRescale))) return
-    this.graph.inputPointPositions = pointPositions
-    this.graph.inputPointDimensions = 2
-    this.setSpaceDimensions(2)
+    if (this.ensureDevice(() => this.setPointPositions(pointPositions, options))) return
+    const { dimensions = 2, dontRescale } =
+      typeof options === 'boolean' ? { dimensions: 2 as const, dontRescale: options } : options ?? {}
+    let positions = pointPositions
+    if (positions.length % dimensions !== 0) {
+      console.warn(`cosmos.gl: \`setPointPositions\` expects ${dimensions} coordinates per point; truncating the incomplete trailing point`)
+      positions = positions.subarray(0, positions.length - positions.length % dimensions)
+    }
+    this.graph.inputPointPositions = positions
+    this.graph.inputPointDimensions = dimensions
     this.points!.shouldSkipRescale = dontRescale
     this.markPointPositionsDirty()
+    this.maybeInitializeCamera()
   }
 
   /**
-   * Sets the 3D positions for the graph points and switches the instance into 3D rendering mode.
+   * Sets 3D positions for the graph points and switches the instance into 3D rendering mode.
    *
-   * @param {Float32Array} pointPositions - A Float32Array representing the positions of points in the format [x1, y1, z1, x2, y2, z2, ..., xn, yn, zn],
-   * where `n` is the index of the point.
-   * Example: `new Float32Array([1, 2, 3, 4, 5, 6])` sets the first point to (1, 2, 3) and the second point to (4, 5, 6).
-   * @note The force simulation runs in 3D: many-body repulsion uses an octree approximation
-   * above ~4k points (an exact pairwise pass below), collision and cluster forces use
-   * 3D spatial grids, and points can be dragged (in the camera-facing plane of their depth).
-   * Area selection is disabled in 3D mode.
-   * Calling `setPointPositions` switches the instance back to 2D mode.
-   * @note If `transitionDuration > 0`, the positions animate from the current layout (z animates from `0`
-   * when switching from 2D mode).
+   * @deprecated Use `setPointPositions(positions, { dimensions: 3 })` with the
+   * `spaceDimensions: 3` configuration property instead. Note that unlike this
+   * method's legacy behavior, `setPointPositions` never changes the rendering
+   * mode — switch back to 2D with `setConfigPartial({ spaceDimensions: 2 })`.
+   *
+   * @param {Float32Array} pointPositions - A Float32Array of `[x1, y1, z1, x2, y2, z2, ...]` point coordinates.
    * @param {boolean} [dontRescale] - When `true`, skips the one-time rescaling of the provided
-   * positions into the `[0, spaceSize]` cube (mirrors the `setPointPositions` parameter).
+   * positions into the `[0, spaceSize]` cube.
    */
   public setPointPositions3D (pointPositions: Float32Array, dontRescale?: boolean | undefined): void {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.setPointPositions3D(pointPositions, dontRescale))) return
-    let positions = pointPositions
-    if (positions.length % 3 !== 0) {
-      console.warn('cosmos.gl: `setPointPositions3D` expects 3 coordinates per point; truncating the incomplete trailing point')
-      positions = positions.subarray(0, positions.length - positions.length % 3)
-    }
-    this.graph.inputPointPositions = positions
-    this.graph.inputPointDimensions = 3
+    // Legacy behavior: the 3D data setter also switches the view into 3D.
+    this.config.spaceDimensions = 3
     this.setSpaceDimensions(3)
-    this.points!.shouldSkipRescale = dontRescale
-    this.markPointPositionsDirty()
-
-    if (!this._isCameraInitialized) {
-      this._isCameraInitialized = true
-      const { cameraInitialPosition, fitViewPadding } = this.config
-      if (cameraInitialPosition) {
-        this.camera.setEyePosition(cameraInitialPosition, positions, 3)
-        // Re-seed the gesture baseline — otherwise the first wheel after this
-        // programmatic placement would dolly from a stale distance.
-        if (this.canvasD3Selection) this.camera.reseedZoomState(this.canvasD3Selection)
-      } else if (this.canvasD3Selection) {
-        this.camera.fitToPositions(this.canvasD3Selection, positions, 3, fitViewPadding, 0)
-      }
-    }
+    this.setPointPositions(pointPositions, { dimensions: 3, dontRescale })
   }
 
   /**
@@ -1169,11 +1169,18 @@ export class Graph {
     this.zoomInstance.shouldEnableSimulationDuringZoomOverride = enableSimulation
     this.resizeCanvas()
     const transform = this.zoomInstance.getTransform(positions, scale, padding)
-    this.canvasD3Selection
-      ?.transition()
-      .ease(easeQuadInOut)
-      .duration(duration)
-      .call(this.zoomInstance.behavior.transform, transform)
+    if (duration <= 0) {
+      // Apply synchronously — a zero-duration d3 transition still needs a timer
+      // tick, which never comes in a hidden/background tab (mirrors the 3D
+      // camera's synchronous duration-0 fit).
+      this.canvasD3Selection?.call(this.zoomInstance.behavior.transform, transform)
+    } else {
+      this.canvasD3Selection
+        ?.transition()
+        .ease(easeQuadInOut)
+        .duration(duration)
+        .call(this.zoomInstance.behavior.transform, transform)
+    }
   }
 
   /**
@@ -1313,14 +1320,15 @@ export class Graph {
    * Set the 3D orbit camera's state for programmatic camera control (3D mode only).
    * Cancels an in-progress `fitView` animation.
    * @param state Any subset of `target`, `distance`, `azimuth` and `polar`.
+   * @param duration Animation duration in milliseconds; `0` (default) applies instantly.
    */
-  public setCameraState (state: Partial<Camera3dState>): void {
+  public setCameraState (state: Partial<Camera3dState>, duration = 0): void {
     if (this._isDestroyed) return
     if (!this.store.is3D) {
       console.warn('cosmos.gl: `setCameraState` is only available in 3D mode')
       return
     }
-    this.camera.setState(state, this.canvasD3Selection)
+    this.camera.setState(state, this.canvasD3Selection, duration)
   }
 
   /**
@@ -1904,6 +1912,9 @@ export class Graph {
     if (prevConfig.enableZoom !== this.config.enableZoom || prevConfig.enableDrag !== this.config.enableDrag) {
       this.updateZoomDragBehaviors()
     }
+    if (prevConfig.spaceDimensions !== this.config.spaceDimensions) {
+      this.setSpaceDimensions(this.config.spaceDimensions)
+    }
     if (prevConfig.cameraFov !== this.config.cameraFov ||
         prevConfig.cameraNear !== this.config.cameraNear ||
         prevConfig.cameraFar !== this.config.cameraFar) {
@@ -1976,8 +1987,8 @@ export class Graph {
 
   /**
    * Switches between 2D and 3D rendering modes: swaps the gesture behaviors
-   * (d3-zoom pan/zoom + point drag in 2D, orbit camera in 3D) and stops the
-   * simulation when entering 3D.
+   * (d3-zoom pan/zoom + point drag in 2D, orbit camera in 3D) and rebuilds
+   * the mode-specific GPU resources lazily.
    */
   private setSpaceDimensions (dimensions: 2 | 3): void {
     if (this.store.spaceDimensions === dimensions) return
@@ -1985,13 +1996,98 @@ export class Graph {
 
     // The collision grid layout and shaders are mode-specific — rebuild lazily on next use
     this.isForceCollisionReady = false
+    // The many-body level textures are mode-specific too (2D quadtree levels vs
+    // 3D octree slices). Under data-driven switching markPointPositionsDirty()
+    // requested their rebuild; a config-driven switch must do it explicitly or
+    // run()'s staleness guard silently disables the force and the layout
+    // collapses under gravity with no repulsion.
+    this.forceManyBody?.create()
+    // The SPACE_3D define is baked into the pipelines at Model creation; each
+    // module's initPrograms() recreates its Models when the mode changed. Under
+    // data-driven switching this ran via the data-update path — a config-driven
+    // switch has no data change, so trigger it explicitly.
+    this.initPrograms()
 
     if (dimensions === 3) {
       const [width, height] = this.store.screenSize
       if (width && height) this.camera.setViewport(width, height)
+      // Carry the current 2D framing into the orbit camera so the projection
+      // switch doesn't jump; falls back to the data fit when there is no live
+      // 2D framing to match yet.
+      if (!this.handOffFramingTo3D()) this.maybeInitializeCamera()
+    } else {
+      this.handOffFramingTo2D()
     }
 
     this.updateZoomDragBehaviors()
+  }
+
+  /**
+   * Seeds the orbit camera to reproduce the current 2D framing: top-down pose
+   * (matching the 2D orientation) over the same screen-center point, at the
+   * distance whose perspective scale at the target plane equals the 2D zoom
+   * scale `k` — the projection switch then keeps every point (near the target
+   * plane) at the same screen position.
+   * @returns `false` when there is no viewport to match yet.
+   */
+  private handOffFramingTo3D (): boolean {
+    const [w, h] = this.store.screenSize
+    if (!w || !h) return false
+    const k = this.zoomInstance.eventTransform.k
+    const center = this.zoomInstance.convertScreenToSpacePosition([w / 2, h / 2])
+    const fovY = this.config.cameraFov * Math.PI / 180
+    // Perspective px-per-space-unit at the target plane is h / (2·d·tan(fov/2));
+    // equating it with the 2D scale k gives the matching camera distance.
+    const distance = h / (2 * k * Math.tan(fovY / 2))
+    this.camera.setState({
+      target: [center[0], center[1], this.store.adjustedSpaceSize / 2],
+      distance,
+      azimuth: 0, // looks down -z with +y up — the 2D orientation
+      polar: Math.PI / 2,
+    }, this.canvasD3Selection)
+    this._isCameraInitialized = true
+    return true
+  }
+
+  /**
+   * Seeds the 2D zoom transform to reproduce the current 3D framing: the
+   * camera's target projects to the screen center at the equivalent zoom
+   * scale. Exact when the camera is in the top-down pose (e.g. after an
+   * animated `setCameraState({ azimuth: 0, polar: Math.PI / 2 })`).
+   */
+  private handOffFramingTo2D (): void {
+    const [w, h] = this.store.screenSize
+    if (!w || !h || !this._isCameraInitialized) return
+    const { target, distance } = this.camera.getState()
+    const fovY = this.config.cameraFov * Math.PI / 180
+    const k = h / (2 * distance * Math.tan(fovY / 2))
+    const transform = this.zoomInstance.getTransform([target[0], target[1]], k)
+    this.canvasD3Selection?.call(this.zoomInstance.behavior.transform, transform)
+  }
+
+  /**
+   * Seeds the 3D camera the first time 3D mode and point data are both
+   * available: places it at `cameraInitialPosition` when configured,
+   * otherwise frames the data (2D data is framed in the `z = 0` plane).
+   */
+  private maybeInitializeCamera (): void {
+    if (this._isCameraInitialized || !this.store.is3D) return
+    const positions = this.graph.inputPointPositions
+    if (!positions || positions.length === 0) return
+    const dimensions = this.graph.inputPointDimensions
+    this._isCameraInitialized = true
+    const { cameraInitialPosition, fitViewPadding } = this.config
+    if (cameraInitialPosition) {
+      this.camera.setEyePosition(cameraInitialPosition, positions, dimensions)
+      // Re-seed the gesture baseline — otherwise the first wheel after this
+      // programmatic placement would dolly from a stale distance.
+      if (this.canvasD3Selection) this.camera.reseedZoomState(this.canvasD3Selection)
+    } else if (this.canvasD3Selection) {
+      this.camera.fitToPositions(this.canvasD3Selection, positions, dimensions, fitViewPadding, 0)
+    } else {
+      // No canvas selection yet — let a later call seed the camera once it exists.
+      this._isCameraInitialized = false
+    }
   }
 
   /**

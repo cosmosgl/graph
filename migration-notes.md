@@ -2,15 +2,31 @@
 
 ## New in v3.2: 3D rendering
 
-cosmos.gl can now render points and links in 3D. Passing `[x, y, z, ...]` triplets to the new
-`setPointPositions3D(Float32Array, dontRescale?)` method switches the instance into 3D mode: a
-perspective orbit camera replaces the 2D pan/zoom (drag rotates, wheel/pinch dollies, Space + drag
-pans), and `getPointPositions3D()` / `spaceToScreenPosition3D()` / `screenToSpacePosition3D()` /
-the `is3D` getter complement the existing API. The camera can be controlled programmatically via
+cosmos.gl can now render points and links in 3D. The rendering mode is controlled by the new
+`spaceDimensions` config option (`2` — flat pan/zoom view, `3` — perspective orbit camera: drag
+rotates, wheel/pinch dollies, Shift/Space + drag pans) and can be changed at runtime via
+`setConfig`/`setConfigPartial` without re-ingesting data. It is sticky across `setConfig()`
+resets — only an explicit value changes it.
+
+The data dimensionality is independent of the mode: `setPointPositions(positions, { dimensions:
+2 | 3, dontRescale? })` declares the input stride. 2D positions viewed in 3D lie in the `z = 0`
+plane; 3D positions viewed in 2D are projected top-down (z preserved). The legacy
+`setPointPositions3D(positions, dontRescale?)` remains as a deprecated alias that also switches
+the mode to 3D. The `dontRescale` boolean second parameter of `setPointPositions` is deprecated
+in favor of the options object.
+
+Runtime mode switches keep the live point coordinates (the layout in the new dimension continues
+from the previous one; z freezes in 2D and resumes in 3D) and carry the on-screen framing across
+the projection switch: entering 3D seeds the camera top-down over the current 2D view at the
+matching scale, and returning to 2D seeds the equivalent zoom transform.
+`setCameraState(state, duration?)` accepts an animation duration for choreographed transitions.
+
+`getPointPositions3D()` / `spaceToScreenPosition3D()` / `screenToSpacePosition3D()` / the `is3D`
+getter complement the existing API. The camera can be controlled programmatically via
 `getCameraState()` / `setCameraState({ target, distance, azimuth, polar })` (the `Camera3dState`
-type is exported). Calling `setPointPositions` (stride-2) switches back to 2D mode. New config
-options: `cameraFov`, `cameraNear`, `cameraFar`, `cameraInitialPosition` — when `cameraNear` /
-`cameraFar` are left `undefined`, the clipping planes adapt to the camera distance and data extent.
+type is exported). New config options: `spaceDimensions`, `cameraFov`, `cameraNear`, `cameraFar`,
+`cameraInitialPosition` — when `cameraNear` / `cameraFar` are left `undefined`, the clipping
+planes adapt to the camera distance and data extent.
 
 **Breaking change:** the right-click mouse-repulsion force has been removed — the
 `enableRightClickRepulsion` and `simulationRepulsionFromMouse` config options no longer exist.

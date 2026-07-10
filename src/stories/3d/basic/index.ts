@@ -8,6 +8,8 @@ export const basic3D = (): { graph: Graph; div: HTMLDivElement; destroy?: () => 
   div.style.position = 'relative'
 
   const config: GraphConfig = {
+    // 3D rendering mode: drag orbits the camera, wheel/pinch dollies, Shift/Space + drag pans.
+    spaceDimensions: 3,
     backgroundColor: '#2d313a',
     pointDefaultSize: 8,
     scalePointsOnZoom: true,
@@ -27,9 +29,7 @@ export const basic3D = (): { graph: Graph; div: HTMLDivElement; destroy?: () => 
   const graph = new Graph(div, config)
 
   const data = generateClusters3D(10000, 5)
-  // Passing [x, y, z, ...] triplets switches the graph into 3D rendering mode:
-  // drag orbits the camera, wheel/pinch dollies, Space + drag pans.
-  graph.setPointPositions3D(data.pointPositions)
+  graph.setPointPositions(data.pointPositions, { dimensions: 3 })
   graph.setPointColors(data.pointColors)
   graph.setLinks(data.links)
   graph.render()
@@ -46,11 +46,15 @@ export const basic3D = (): { graph: Graph; div: HTMLDivElement; destroy?: () => 
   layoutButton.addEventListener('click', () => {
     isSphereLayout = !isSphereLayout
     const pointsNumber = data.pointPositions.length / 3
-    graph.setPointPositions3D(isSphereLayout ? generateSphereLayout3D(pointsNumber) : data.pointPositions)
+    graph.setPointPositions(isSphereLayout ? generateSphereLayout3D(pointsNumber) : data.pointPositions, { dimensions: 3 })
     graph.render()
   })
   buttonsDiv.appendChild(layoutButton)
 
+  // The rendering mode is decoupled from the data: switching `spaceDimensions`
+  // re-projects the same positions without re-ingesting them (in 2D the view is
+  // a top-down projection and z is preserved), and the on-screen framing is
+  // handed across the projection switch.
   let is2D = false
   const modeButton = document.createElement('button')
   modeButton.textContent = 'Switch to 2D'
@@ -58,22 +62,7 @@ export const basic3D = (): { graph: Graph; div: HTMLDivElement; destroy?: () => 
   modeButton.addEventListener('click', () => {
     is2D = !is2D
     modeButton.textContent = is2D ? 'Switch to 3D' : 'Switch to 2D'
-    if (is2D) {
-      // Drop the z coordinate — the graph animates back into the 2D plane.
-      const pointsNumber = data.pointPositions.length / 3
-      const positions2D = new Float32Array(pointsNumber * 2)
-      for (let i = 0; i < pointsNumber; i += 1) {
-        positions2D[i * 2 + 0] = data.pointPositions[i * 3 + 0] as number
-        positions2D[i * 2 + 1] = data.pointPositions[i * 3 + 1] as number
-      }
-      graph.setPointPositions(positions2D, true)
-    } else {
-      graph.setPointPositions3D(isSphereLayout
-        ? generateSphereLayout3D(data.pointPositions.length / 3)
-        : data.pointPositions)
-    }
-    graph.render()
-    graph.fitView()
+    graph.setConfigPartial({ spaceDimensions: is2D ? 2 : 3 })
   })
   buttonsDiv.appendChild(modeButton)
 

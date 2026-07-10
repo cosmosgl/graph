@@ -63,7 +63,7 @@ function getBoundingSphere (positions: number[] | Float32Array, dimensions: 2 | 
  * the view-projection matrix that replaces the 2D zoom transform in `Store.transformationMatrix4x4`.
  *
  * Gestures reuse d3-zoom: transform deltas are consumed — drag rotates (or pans the target
- * while the Space key is pressed), wheel/pinch dollies via the scale factor `k`
+ * while Shift or Space is held), wheel/pinch dollies via the scale factor `k`
  * (`distance = baseDistance / k`). After programmatic fits the d3-zoom state is re-seeded
  * to identity so gesture math stays consistent.
  *
@@ -100,7 +100,11 @@ export class Camera {
         } else {
           const dx = transform.x - this.previousTransform.x
           const dy = transform.y - this.previousTransform.y
-          if (this.store.isSpaceKeyPressed) this.pan(dx, dy)
+          // Shift + drag (or Space + drag) pans the target in the camera plane;
+          // a plain drag orbits. Shift is read from the source event so the
+          // gesture can flip mid-drag.
+          const isShiftPressed = (e.sourceEvent as { shiftKey?: boolean } | undefined)?.shiftKey === true
+          if (this.store.isSpaceKeyPressed || isShiftPressed) this.pan(dx, dy)
           else this.rotate(dx, dy)
         }
         this.updateMatrices()
@@ -159,16 +163,40 @@ export class Camera {
   }
 
   /**
-   * Applies a partial orbit state for programmatic camera control.
-   * Cancels an in-progress fit animation and re-seeds the d3-zoom gesture
-   * baseline so the next wheel/drag continues from the new state.
+   * Applies a partial orbit state for programmatic camera control, optionally
+   * animated. Cancels an in-progress fit animation (the two share a transition
+   * slot) and re-seeds the d3-zoom gesture baseline so the next wheel/drag
+   * continues from the new state.
    */
-  public setState (state: Partial<Camera3dState>, selection?: Selection<HTMLCanvasElement, undefined, null, undefined>): void {
+  public setState (state: Partial<Camera3dState>, selection?: Selection<HTMLCanvasElement, undefined, null, undefined>, duration = 0): void {
     selection?.interrupt('cosmosCameraFit')
-    if (state.target) vec3.set(this.target, state.target[0], state.target[1], state.target[2])
-    if (state.distance !== undefined) this.distance = Math.max(state.distance, 1e-3)
-    if (state.azimuth !== undefined) this.azimuth = state.azimuth
-    if (state.polar !== undefined) this.polar = clamp(state.polar, MIN_POLAR_OFFSET, Math.PI - MIN_POLAR_OFFSET)
+    const from = this.getState()
+    const to: Camera3dState = { ...from, ...state }
+    to.distance = Math.max(to.distance, 1e-3)
+    to.polar = clamp(to.polar, MIN_POLAR_OFFSET, Math.PI - MIN_POLAR_OFFSET)
+
+    if (duration > 0 && selection) {
+      const fromTarget = vec3.fromValues(from.target[0], from.target[1], from.target[2])
+      const toTarget = vec3.fromValues(to.target[0], to.target[1], to.target[2])
+      selection
+        .transition('cosmosCameraFit')
+        .ease(easeQuadInOut)
+        .duration(duration)
+        .tween('cosmos-camera-state', () => (t: number) => {
+          vec3.lerp(this.target, fromTarget, toTarget, t)
+          this.distance = from.distance + (to.distance - from.distance) * t
+          this.azimuth = from.azimuth + (to.azimuth - from.azimuth) * t
+          this.polar = from.polar + (to.polar - from.polar) * t
+          this.updateMatrices()
+        })
+        .on('end', () => this.reseedZoomState(selection))
+      return
+    }
+
+    vec3.set(this.target, to.target[0], to.target[1], to.target[2])
+    this.distance = to.distance
+    this.azimuth = to.azimuth
+    this.polar = to.polar
     this.updateMatrices()
     if (selection) this.reseedZoomState(selection)
   }

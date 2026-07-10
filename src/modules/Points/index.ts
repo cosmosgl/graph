@@ -2863,7 +2863,9 @@ export class Points extends CoreModule {
   }
 
   private rescaleInitialNodePositions (): void {
-    if (this.store.is3D) {
+    // Keyed on the data stride, not the rendering mode — 2D data viewed in 3D
+    // still rescales with the 2D routine (z stays 0).
+    if (this.data.pointDimensions === 3) {
       this.rescaleInitialNodePositions3D()
       return
     }

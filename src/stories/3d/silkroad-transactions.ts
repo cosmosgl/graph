@@ -12,9 +12,10 @@ import { compressors } from 'hyparquet-compressors'
  * coordinates, so the GPU force simulation lays the flow network out live. Every address is sized and
  * colored by the total value flowing through it, so the major hubs stand out as bright gold nodes.
  *
- * The "2D / 3D" buttons switch the renderer (rebuilding the graph so it re-lays-out in the chosen
- * dimension) and "Pause"/"Resume" freezes and resumes the simulation. Drag to orbit (3D) or pan (2D),
- * scroll to zoom.
+ * The "2D / 3D" buttons switch the rendering mode in place: the layout in the new dimension
+ * continues from the live coordinates of the previous one (the framing is carried across the
+ * projection switch, and the camera glides through the top-down pose so the cut is seamless).
+ * "Pause"/"Resume" freezes and resumes the simulation. Drag to orbit (3D) or pan (2D), scroll to zoom.
  */
 const PARQUET_URL = 'https://d.cosmograph.app/silkroad-184R7cFG-4lv.parquet'
 const SATOSHIS_PER_BTC = 1e8
@@ -72,6 +73,7 @@ export const silkroadTransactions3d = (): { graph: Graph; div: HTMLDivElement; d
 
   const config: GraphConfig = {
     spaceSize: SPACE_SIZE,
+    spaceDimensions: 3,
     backgroundColor: '#0a0a14',
     pointDefaultSize: 2,
     linkDefaultWidth: 0.5,
@@ -79,41 +81,40 @@ export const silkroadTransactions3d = (): { graph: Graph; div: HTMLDivElement; d
     linkOpacity: 0.8,
     scalePointsOnZoom: true,
     curvedLinks: false,
+    enableDrag: true,
     enableSimulation: true,
     simulationGravity: 0.4,
     simulationRepulsion: 1.5,
-    simulationLinkSpring: 0.5,
+    simulationLinkSpring: 0.15,
     simulationLinkDistance: 10,
     simulationFriction: 0.85,
+    simulationCollision: 0.75,
+    simulationCollisionPadding: 2,
     simulationDecay: 1000,
     cameraFov: 55,
     fitViewOnInit: false,
-    enableDrag: false,
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
   }
 
-  // Graph data (filled once, after the parquet is parsed). Positions are kept for both dimensions so
-  // switching modes re-lays-out from a fresh layout in that dimension.
+  // Graph data (filled once, after the parquet is parsed). Only the initial 3D positions are kept:
+  // mode switches keep the live coordinates, so the next layout continues from the previous one.
   let links = new Float32Array(0)
   let colors = new Float32Array(0)
   let sizes = new Float32Array(0)
-  let positions2d = new Float32Array(0)
   let positions3d = new Float32Array(0)
   let dataReady = false
 
   let mode: '2d' | '3d' = '3d'
   let paused = false
   let destroyed = false
-  let timeouts: ReturnType<typeof setTimeout>[] = []
+  const timeouts: ReturnType<typeof setTimeout>[] = []
 
-  // A graph always exists (created empty up front so we can render immediately and return a handle).
-  let graph = new Graph(graphDiv, config)
+  const graph = new Graph(graphDiv, config)
   graph.render()
 
-  // Push the parsed data into the current graph (used for the first build and after a mode switch).
+  // Push the parsed data into the graph (first build only — mode switches don't re-ingest).
   const applyData = (): void => {
-    if (mode === '3d') graph.setPointPositions3D(positions3d)
-    else graph.setPointPositions(positions2d)
+    graph.setPointPositions(positions3d, { dimensions: 3 })
     graph.setPointColors(colors)
     graph.setPointSizes(sizes)
     graph.setLinks(links)
@@ -127,17 +128,29 @@ export const silkroadTransactions3d = (): { graph: Graph; div: HTMLDivElement; d
     btnPause.textContent = paused ? 'Resume' : 'Pause'
   }
 
+  // Switch the rendering mode in place: positions stay on the GPU, so the layout in the new
+  // dimension starts from the coordinates of the previous one (z freezes in 2D and resumes in 3D),
+  // and the engine hands the on-screen framing across the projection switch.
   const setMode = (next: '2d' | '3d'): void => {
     if (!dataReady || next === mode) return
     mode = next
-    // Rebuild the graph so the renderer, camera/interaction and layout switch cleanly to the new
-    // dimension (avoids animating a position transition across the 2D↔3D coordinate change).
-    for (const t of timeouts) clearTimeout(t)
-    timeouts = []
-    graph.destroy()
-    graph = new Graph(graphDiv, config)
-    graph.render()
-    applyData()
+    paused = false
+    if (next === '2d') {
+      // Glide to the top-down pose first — from there the perspective→flat cut is seamless —
+      // then flatten and re-energize the simulation to settle the layout in 2D.
+      graph.setCameraState({ azimuth: 0, polar: Math.PI / 2 }, 500)
+      timeouts.push(setTimeout(() => {
+        if (destroyed) return
+        graph.setConfigPartial({ spaceDimensions: 2 })
+        graph.start(0.6)
+      }, 520))
+    } else {
+      // Enter 3D at the matched top-down framing, re-energize so the flat layout opens into
+      // depth, and swing the camera out to reveal it.
+      graph.setConfigPartial({ spaceDimensions: 3 })
+      graph.start(0.6)
+      graph.setCameraState({ azimuth: 0.6, polar: Math.PI / 2.4 }, 700)
+    }
     updateControls()
   }
 
@@ -199,20 +212,14 @@ export const silkroadTransactions3d = (): { graph: Graph; div: HTMLDivElement; d
     const percentile = new Float64Array(nodeCount)
     for (let r = 0; r < nodeCount; r++) percentile[order[r] as number] = nodeCount > 1 ? r / (nodeCount - 1) : 0
 
-    // 4. Initial positions for both dimensions (loose disc in 2D, loose sphere in 3D) plus per-node
-    //    color and size. Colors/sizes are dimension-independent, so they're computed once.
+    // 4. Initial positions (a loose sphere) plus per-node color and size.
     const center = SPACE_SIZE / 2
     const radius = SPACE_SIZE * 0.4
-    positions2d = new Float32Array(nodeCount * 2)
     positions3d = new Float32Array(nodeCount * 3)
     colors = new Float32Array(nodeCount * 4)
     sizes = new Float32Array(nodeCount)
     for (let i = 0; i < nodeCount; i++) {
       const angle = Math.random() * Math.PI * 2
-      const rad = radius * Math.sqrt(Math.random())
-      positions2d[i * 2] = center + rad * Math.cos(angle)
-      positions2d[i * 2 + 1] = center + rad * Math.sin(angle)
-
       const u = Math.random() * 2 - 1
       const r3 = radius * Math.cbrt(Math.random())
       const s = Math.sqrt(1 - u * u)

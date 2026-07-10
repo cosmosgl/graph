@@ -20,6 +20,7 @@ export const stressTest3d = (): { graph: Graph; div: HTMLDivElement; destroy?: (
   div.style.width = '100%'
 
   const config: GraphConfig = {
+    spaceDimensions: 3,
     spaceSize: 4096,
     backgroundColor: '#0a0a14',
     pointDefaultSize: 2,
@@ -105,7 +106,7 @@ export const stressTest3d = (): { graph: Graph; div: HTMLDivElement; destroy?: (
     if (i > 0 && Math.random() < 0.02) links.push(i, Math.floor(Math.random() * i)) // sparse bridge
   }
 
-  graph.setPointPositions3D(positions)
+  graph.setPointPositions(positions, { dimensions: 3 })
   graph.setPointColors(colors)
   graph.setLinks(new Float32Array(links))
   graph.render()
