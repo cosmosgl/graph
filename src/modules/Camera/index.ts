@@ -352,6 +352,9 @@ export class Camera {
     mat4.perspective(this.projection, cameraFov * Math.PI / 180, this.aspect, near, far)
     mat4.multiply(this.viewProjection, this.projection, this.view)
     this.store.viewProjection3D = this.viewProjectionMatrix
+    // Eye-space depth extent of the scene sphere, for the point shaders' depth cueing.
+    this.store.depthFadeRange[0] = Math.max(this.distance - this.sceneRadius, 0)
+    this.store.depthFadeRange[1] = this.distance + this.sceneRadius
   }
 
   /**

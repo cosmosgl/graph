@@ -145,6 +145,25 @@ export interface GraphConfigInterface {
   pointOcclusionCulling: boolean;
 
   /**
+   * 3D depth cueing: fades point colors toward the background with distance
+   * from the camera, so nearer points visibly pop in front of farther ones.
+   * The value is the fade strength at the far edge of the scene, from `0`
+   * (disabled) to `1` (fully faded into the background).
+   * Only used in 3D mode (`spaceDimensions: 3`).
+   * Default value: `0.4`
+   */
+  pointDepthFade: number;
+
+  /**
+   * Shade circle points as lit spheres (impostor shading with a soft headlight)
+   * in 3D mode, so overlapping points read as separate volumes. Applies to
+   * circle-shaped points only; other shapes render flat as before.
+   * Only used in 3D mode (`spaceDimensions: 3`).
+   * Default value: `false`
+   */
+  pointSphereShading: boolean;
+
+  /**
    * Cursor style to use when hovering over a point
    * Default value: `auto`
    */

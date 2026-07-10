@@ -14,6 +14,7 @@ layout(std140) uniform drawFragmentUniforms {
   vec4 outlineColor;
   float outlineWidth;
   float renderMode;
+  float sphereShading;
 } drawFragment;
 
 #define greyoutOpacity drawFragment.greyoutOpacity
@@ -23,6 +24,7 @@ layout(std140) uniform drawFragmentUniforms {
 #define outlineColor drawFragment.outlineColor
 #define outlineWidth drawFragment.outlineWidth
 #define renderMode drawFragment.renderMode
+#define sphereShading drawFragment.sphereShading
 #else
 uniform float greyoutOpacity;
 uniform float pointOpacity;
@@ -31,6 +33,7 @@ uniform vec4 backgroundColor;
 uniform vec4 outlineColor;
 uniform float outlineWidth;
 uniform float renderMode;
+uniform float sphereShading;
 #endif
 
 
@@ -42,6 +45,7 @@ in vec4 imageAtlasUV;
 in float shapeSize;
 in float imageSizeVarying;
 in float overallSize;
+in float depthFadeVarying;
 
 out vec4 fragColor;
 
@@ -301,6 +305,21 @@ void main() {
     }
 
     #ifdef SPACE_3D
+    // Impostor sphere shading: light circle sprites as spheres (soft headlight
+    // from the upper left) so overlapping points read as separate volumes.
+    // gl_PointCoord's y is screen-down, so it's negated for the normal's up.
+    if (sphereShading > 0.5 && pointShape < 0.5) {
+        float r2 = dot(pointCoord, pointCoord);
+        vec3 sphereNormal = normalize(vec3(pointCoord.x, -pointCoord.y, sqrt(max(1.0 - r2, 0.0))));
+        const vec3 lightDirection = vec3(-0.324443, 0.486664, 0.811107); // normalize(vec3(-0.4, 0.6, 1.0))
+        float diffuse = 0.72 + 0.28 * max(dot(sphereNormal, lightDirection), 0.0);
+        fragColor.rgb *= diffuse;
+    }
+
+    // Depth cueing: recede distant points toward the background (strength and
+    // range computed per point in the vertex shader).
+    fragColor.rgb = mix(fragColor.rgb, backgroundColor.rgb, depthFadeVarying);
+
     // Depth writes are enabled in 3D: the transparent corners of the point sprite
     // must not write depth, or they would punch invisible holes into points behind.
     if (fragColor.a < 0.33) {

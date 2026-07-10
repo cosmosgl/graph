@@ -78,6 +78,12 @@ export class Store {
    * Written by the `Camera` module; consumed by `transformationMatrix4x4` when in 3D mode.
    */
   public viewProjection3D: Mat4Array | undefined = undefined
+  /**
+   * Eye-space depth range of the scene sphere (`cameraDistance ± sceneRadius`),
+   * written by the `Camera` module. Drives the 3D depth-cueing fade in the
+   * point shaders (`pointDepthFade`).
+   */
+  public depthFadeRange: [number, number] = [0, 1]
   public isSpaceKeyPressed = false
   public div: HTMLDivElement | undefined
   public webglMaxTextureSize = 16384 // Default fallback value

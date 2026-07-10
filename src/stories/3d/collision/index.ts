@@ -26,6 +26,10 @@ export const collision3D = (): { graph: Graph; div: HTMLDivElement; destroy?: ()
     simulationCollision: 0.5,
     simulationFriction: 0.85,
     // simulationDecay: 3000,
+    // Depth cues: fade far points toward the background and shade the discs as
+    // lit spheres, so the packed ball reads front-to-back (toggles below).
+    pointDepthFade: 0.4,
+    pointSphereShading: true,
   }
 
   const graph = new Graph(div, config)
@@ -62,11 +66,36 @@ export const collision3D = (): { graph: Graph; div: HTMLDivElement; destroy?: ()
   toggleButton.addEventListener('click', () => {
     collisionEnabled = !collisionEnabled
     toggleButton.textContent = `Collision: ${collisionEnabled ? 'on' : 'off'}`
-    graph.setConfig({ simulationCollision: collisionEnabled ? 1 : 0 })
+    // setConfigPartial: a full setConfig would reset every other option
+    graph.setConfigPartial({ simulationCollision: collisionEnabled ? 1 : 0 })
     // Full alpha: un-packing a collapsed pile needs more energy than settling does
     graph.start(collisionEnabled ? 1 : 0.3)
   })
   buttonsDiv.appendChild(toggleButton)
+
+  // Depth-cue toggles: compare how the packed ball reads with and without
+  // sphere shading and depth fade.
+  let shadingEnabled = true
+  const shadingButton = document.createElement('button')
+  shadingButton.textContent = 'Shading: on'
+  shadingButton.style.cssText = buttonStyle
+  shadingButton.addEventListener('click', () => {
+    shadingEnabled = !shadingEnabled
+    shadingButton.textContent = `Shading: ${shadingEnabled ? 'on' : 'off'}`
+    graph.setConfigPartial({ pointSphereShading: shadingEnabled })
+  })
+  buttonsDiv.appendChild(shadingButton)
+
+  let depthFadeEnabled = true
+  const depthFadeButton = document.createElement('button')
+  depthFadeButton.textContent = 'Depth fade: on'
+  depthFadeButton.style.cssText = buttonStyle
+  depthFadeButton.addEventListener('click', () => {
+    depthFadeEnabled = !depthFadeEnabled
+    depthFadeButton.textContent = `Depth fade: ${depthFadeEnabled ? 'on' : 'off'}`
+    graph.setConfigPartial({ pointDepthFade: depthFadeEnabled ? 0.4 : 0 })
+  })
+  buttonsDiv.appendChild(depthFadeButton)
 
   const fitViewButton = document.createElement('button')
   fitViewButton.textContent = 'Fit view'

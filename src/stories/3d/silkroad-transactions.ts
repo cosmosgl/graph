@@ -92,6 +92,7 @@ export const silkroadTransactions3d = (): { graph: Graph; div: HTMLDivElement; d
     simulationCollisionPadding: 2,
     simulationDecay: 1000,
     cameraFov: 55,
+    pointSphereShading: true,
     fitViewOnInit: false,
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
   }

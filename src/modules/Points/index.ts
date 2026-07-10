@@ -298,6 +298,9 @@ export class Points extends CoreModule {
       animateColors: number;
       animateSizes: number;
       pointsNumber: number;
+      pointDepthFade: number;
+      depthFadeNear: number;
+      depthFadeFar: number;
     };
     drawFragmentUniforms: {
       greyoutOpacity: number;
@@ -307,6 +310,7 @@ export class Points extends CoreModule {
       outlineColor: [number, number, number, number];
       outlineWidth: number;
       renderMode: number;
+      sphereShading: number;
     };
   }> | undefined
 
@@ -710,6 +714,9 @@ export class Points extends CoreModule {
           animateColors: 'f32',
           animateSizes: 'f32',
           pointsNumber: 'f32',
+          pointDepthFade: 'f32',
+          depthFadeNear: 'f32',
+          depthFadeFar: 'f32',
         },
         defaultUniforms: {
           // Order MUST match uniformTypes and shader declaration
@@ -741,6 +748,9 @@ export class Points extends CoreModule {
           animateColors: 0,
           animateSizes: 0,
           pointsNumber: data.pointsNumber ?? 0,
+          pointDepthFade: 0,
+          depthFadeNear: 0,
+          depthFadeFar: 1,
         },
       },
       drawFragmentUniforms: {
@@ -752,6 +762,7 @@ export class Points extends CoreModule {
           outlineColor: 'vec4<f32>',
           outlineWidth: 'f32',
           renderMode: 'f32',
+          sphereShading: 'f32',
         },
         defaultUniforms: {
           // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
@@ -762,6 +773,7 @@ export class Points extends CoreModule {
           outlineColor: ensureVec4(store.outlinedPointRingColor, [1, 1, 1, 1]),
           outlineWidth: 0.9,
           renderMode: 0,
+          sphereShading: 0,
         },
       },
     })
@@ -1665,6 +1677,11 @@ export class Points extends CoreModule {
       animateColors: this.shouldAnimatePointColors ? 1 : 0,
       animateSizes: this.shouldAnimatePointSizes ? 1 : 0,
       pointsNumber: data.pointsNumber,
+      // 3D depth cueing: fade strength and the eye-depth range of the scene
+      // sphere (written by the camera each time its matrices update)
+      pointDepthFade: store.is3D ? config.pointDepthFade : 0,
+      depthFadeNear: store.depthFadeRange[0],
+      depthFadeFar: store.depthFadeRange[1],
     }
 
     const baseFragmentUniforms = {
@@ -1676,6 +1693,7 @@ export class Points extends CoreModule {
       outlineColor: ensureVec4(store.outlinedPointRingColor, [1, 1, 1, 1]),
       outlineWidth: 0.9,
       renderMode: 0,
+      sphereShading: store.is3D && config.pointSphereShading ? 1 : 0,
     }
 
     const textureBindings = {

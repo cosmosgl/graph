@@ -38,6 +38,9 @@ layout(std140) uniform drawVertexUniforms {
   float animateColors;
   float animateSizes;
   float pointsNumber;
+  float pointDepthFade;
+  float depthFadeNear;
+  float depthFadeFar;
 } drawVertex;
 
 #define ratio drawVertex.ratio
@@ -60,6 +63,9 @@ layout(std140) uniform drawVertexUniforms {
 #define animateColors drawVertex.animateColors
 #define animateSizes drawVertex.animateSizes
 #define pointsNumber drawVertex.pointsNumber
+#define pointDepthFade drawVertex.pointDepthFade
+#define depthFadeNear drawVertex.depthFadeNear
+#define depthFadeFar drawVertex.depthFadeFar
 #else
 uniform float ratio;
 uniform mat3 transformationMatrix;
@@ -81,6 +87,9 @@ uniform float transitionProgress;
 uniform float animateColors;
 uniform float animateSizes;
 uniform float pointsNumber;
+uniform float pointDepthFade;
+uniform float depthFadeNear;
+uniform float depthFadeFar;
 #endif
 
 out float pointShape;
@@ -91,6 +100,7 @@ out vec4 imageAtlasUV;
 out float shapeSize;
 out float imageSizeVarying;
 out float overallSize;
+out float depthFadeVarying;
 
 // `pxPerUnit` is the zoom factor: `transformationMatrix[0][0]` in 2D,
 // perspective-attenuated `pxPerSpaceUnit(...)` in 3D. This function is duplicated in
@@ -143,6 +153,10 @@ void main() {
     return;
   }
   gl_Position = clip;
+  // Depth cueing: 0 at the near edge of the scene sphere, up to `pointDepthFade`
+  // at the far edge. clip.w is the eye-space distance under a perspective
+  // projection; the range is the camera distance ± the fitted scene radius.
+  depthFadeVarying = pointDepthFade * smoothstep(depthFadeNear, depthFadeFar, clip.w);
   float pxPerUnit = pxPerSpaceUnit(transformationMatrix, screenSize, clip.w);
   #else
   vec2 point = pointPosition.rg;
@@ -168,6 +182,7 @@ void main() {
   float linearIndex = pointIndices.y * pointsTextureSize + pointIndices.x;
   float depthZ = 1.0 - 2.0 * (linearIndex + 0.5) / max(pointsNumber, 1.0);
   gl_Position = vec4(finalPosition.rg, depthZ, 1.0);
+  depthFadeVarying = 0.0;
   float pxPerUnit = transformationMatrix[0][0];
   #endif
 

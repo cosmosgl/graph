@@ -13,6 +13,7 @@ export const clustering3D = (): { graph: Graph; div: HTMLDivElement; destroy?: (
     spaceDimensions: 3,
     spaceSize: SPACE_SIZE,
     backgroundColor: '#2d313a',
+    pointSphereShading: true,
     pointDefaultSize: 6,
     scalePointsOnZoom: true,
     enableDrag: true,
@@ -25,7 +26,8 @@ export const clustering3D = (): { graph: Graph; div: HTMLDivElement; destroy?: (
     enableSimulation: true,
     simulationGravity: 0.15,
     simulationRepulsion: 0.5,
-    simulationCluster: 0.35,
+    simulationCluster: 0.05,
+    simulationCollision: 0.5,
     simulationFriction: 0.85,
     simulationDecay: 3000,
   }
