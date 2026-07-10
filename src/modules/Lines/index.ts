@@ -1159,14 +1159,18 @@ export class Lines extends CoreModule {
    * fragments overwrite the framebuffer directly (no ROP read-modify-write).
    */
   private getLinkBlendParameters (blend: boolean): RenderPipelineParameters {
+    const is3d = this.store.is3D
     const base: RenderPipelineParameters = {
       // In 3D the quad is extruded in screen space, which can flip the winding —
       // back-face culling would drop those quads. Links depth-test against the
-      // points (drawn first) but never write depth, so crossing translucent links
-      // keep blending in draw order.
-      cullMode: this.store.is3D ? 'none' : 'back',
-      depthWriteEnabled: false,
-      depthCompare: this.store.is3D ? 'less-equal' : 'always',
+      // points (drawn first). Translucent (blended) links must NOT write depth:
+      // their anti-aliased edges would otherwise reject the farther links behind
+      // them and leave a dark outline hugging every link — they keep blending in
+      // draw order instead. Opaque links (blend disabled) do write depth, so the
+      // camera-nearest link wins where links cross.
+      cullMode: is3d ? 'none' : 'back',
+      depthWriteEnabled: is3d && !blend,
+      depthCompare: is3d ? 'less-equal' : 'always',
     }
     if (!blend) return { ...base, blend: false }
     return {

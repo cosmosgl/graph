@@ -44,9 +44,10 @@ void main() {
   vec4 posB = texture(positionsTexture, (pointB + 0.5) / pointsTextureSize);
 
   #ifdef SPACE_3D
-  // 3D mode: links are straight; project both endpoints (z in the texture's alpha
-  // channel), compute the label angle from the projected screen tangent, and place
-  // the sample at the projected 3D midpoint. Midpoint z is recovered on the CPU.
+  // 3D mode: project both endpoints (z in the texture's alpha channel), compute the
+  // label angle from the projected screen tangent, and place the sample at the
+  // projected chord midpoint (even when links render curved — the curve's midpoint
+  // tangent is chord-parallel anyway). Midpoint z is recovered on the CPU.
   vec4 clipA = transformationMatrix * vec4(posA.rg, posA.a, 1.0);
   vec4 clipB = transformationMatrix * vec4(posB.rg, posB.a, 1.0);
   vec3 mid3 = (vec3(posA.rg, posA.a) + vec3(posB.rg, posB.a)) * 0.5;

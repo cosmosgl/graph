@@ -183,12 +183,33 @@ void main() {
 
   #ifdef SPACE_3D
   // 3D mode: project both endpoints (z lives in the position texture's alpha channel)
-  // and extrude the quad in screen space after projection. Links are straight in 3D —
-  // the conic curvature is a 2D-plane construct.
-  vec4 clipA = transformationMatrix * vec4(pointPositionA.rg, pointPositionA.a, 1.0);
-  vec4 clipB = transformationMatrix * vec4(pointPositionB.rg, pointPositionB.a, 1.0);
-  if (clipA.w <= 0.0 || clipB.w <= 0.0) {
-    // Either endpoint behind the camera — cull the whole link.
+  // and extrude the quad in screen space after projection. Curved links are rational
+  // Bezier curves evaluated in world space, bent within the plane facing the camera so
+  // they read as curved from any orbit angle; with curvature off (a single segment) or
+  // a zero control-point distance the link stays a straight clip-space segment.
+  vec3 a3 = vec3(pointPositionA.rg, pointPositionA.a);
+  vec3 b3 = vec3(pointPositionB.rg, pointPositionB.a);
+  vec4 clipA = transformationMatrix * vec4(a3, 1.0);
+  vec4 clipB = transformationMatrix * vec4(b3, 1.0);
+  bool isCurved = curvedLinkSegments > 1.0 && curvedLinkControlPointDistance != 0.0;
+
+  vec3 controlPoint3 = (a3 + b3) * 0.5;
+  // Clip w is affine in world position and the curve stays inside the convex hull of
+  // {a, b, control point} (given a non-negative curve weight), so the minimum over
+  // those three bounds w along the whole curve. Straight links only need the endpoints.
+  float minW = min(clipA.w, clipB.w);
+  if (isCurved) {
+    vec3 dirLink = b3 - a3;
+    // Bend within the camera-facing plane; fall back to world-up (then world-x) when
+    // the link is (nearly) parallel to the view direction.
+    vec3 bend = cross(cameraForward(transformationMatrix), dirLink);
+    if (dot(bend, bend) < 1e-6) bend = cross(dirLink, vec3(0.0, 1.0, 0.0));
+    if (dot(bend, bend) < 1e-6) bend = vec3(1.0, 0.0, 0.0);
+    controlPoint3 += normalize(bend) * length(dirLink) * curvedLinkControlPointDistance;
+    minW = min(minW, (transformationMatrix * vec4(controlPoint3, 1.0)).w);
+  }
+  if (minW <= 0.0) {
+    // Some part of the link can reach behind the camera — cull the whole link.
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     rgbaColor = vec4(0.0);
     arrowLength = 0.0;
@@ -200,11 +221,30 @@ void main() {
   vec2 screenA = (clipA.xy / clipA.w) * 0.5 * screenSize;
   vec2 screenB = (clipB.xy / clipB.w) * 0.5 * screenSize;
   vec2 segPx = screenB - screenA;
+  // Projected chord length in pixels — drives the visibility fade and the arrow
+  // proportions for curved links too, matching 2D (which also uses the chord).
   float linkDistPx = length(segPx);
+
+  // Centerline point for this vertex and the screen-space tangent to extrude along.
+  vec4 clipCurr;
+  vec2 tangentPx;
+  if (isCurved) {
+    float tCurr = position.x;
+    float tPrev = max(0.0, tCurr - 1.0 / curvedLinkSegments);
+    float tNext = min(1.0, tCurr + 1.0 / curvedLinkSegments);
+    clipCurr = transformationMatrix * vec4(conicParametricCurve(a3, b3, controlPoint3, tCurr, curvedWeight), 1.0);
+    vec4 clipPrev = transformationMatrix * vec4(conicParametricCurve(a3, b3, controlPoint3, tPrev, curvedWeight), 1.0);
+    vec4 clipNext = transformationMatrix * vec4(conicParametricCurve(a3, b3, controlPoint3, tNext, curvedWeight), 1.0);
+    // Every curve sample has w > 0 (guarded above), so the divides are safe.
+    tangentPx = (clipNext.xy / clipNext.w - clipPrev.xy / clipPrev.w) * 0.5 * screenSize;
+  } else {
+    // Straight segment: interpolate in clip space (projectively correct for straight lines).
+    clipCurr = mix(clipA, clipB, position.x);
+    tangentPx = segPx;
+  }
   // Pixels per space unit at this vertex's depth — gives a natural perspective
   // taper along the link when widths scale with zoom.
-  float clipW = mix(clipA.w, clipB.w, position.x);
-  float pxPerUnit = pxPerSpaceUnit(transformationMatrix, screenSize, clipW);
+  float pxPerUnit = pxPerSpaceUnit(transformationMatrix, screenSize, clipCurr.w);
   #else
   vec2 a = pointPositionA.xy;
   vec2 b = pointPositionB.xy;
@@ -334,13 +374,11 @@ void main() {
   }
 
   #ifdef SPACE_3D
-  // Straight segment: interpolate in clip space (projectively correct for straight
-  // lines) and offset along the screen-space perpendicular. The offset is
-  // pre-multiplied by w so it survives the perspective divide.
-  vec2 normalPx = linkDistPx > 0.0 ? normalize(vec2(-segPx.y, segPx.x)) : vec2(0.0, 1.0);
-  vec4 clipPosition = mix(clipA, clipB, position.x);
-  clipPosition.xy += normalPx * (linkWidthPx * position.y) * (2.0 / screenSize) * clipPosition.w;
-  gl_Position = clipPosition;
+  // Offset the centerline point along the screen-space perpendicular of its tangent.
+  // The offset is pre-multiplied by w so it survives the perspective divide.
+  vec2 normalPx = dot(tangentPx, tangentPx) > 0.0 ? normalize(vec2(-tangentPx.y, tangentPx.x)) : vec2(0.0, 1.0);
+  clipCurr.xy += normalPx * (linkWidthPx * position.y) * (2.0 / screenSize) * clipCurr.w;
+  gl_Position = clipCurr;
   #else
   // Calculate position on the curved path
   float t = position.x;
