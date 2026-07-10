@@ -178,7 +178,7 @@ export class ForceManyBody extends CoreModule {
     if (!data.pointsNumber || !points || !store.pointsTextureSize) return
 
     // Calculate levels command (point list)
-    this.calculateLevelsUniformStore ||= new UniformStore({
+    this.calculateLevelsUniformStore ||= new UniformStore(device, {
       calculateLevelsUniforms: {
         uniformTypes: {
           pointsTextureSize: 'f32',
@@ -210,7 +210,7 @@ export class ForceManyBody extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        calculateLevelsUniforms: this.calculateLevelsUniformStore.getManagedUniformBuffer(device, 'calculateLevelsUniforms'),
+        calculateLevelsUniforms: this.calculateLevelsUniformStore.getManagedUniformBuffer('calculateLevelsUniforms'),
         // All texture bindings will be set dynamically in drawLevels() method
       },
       parameters: {
@@ -227,7 +227,7 @@ export class ForceManyBody extends CoreModule {
     })
 
     // Force command (fullscreen quad)
-    this.forceUniformStore ||= new UniformStore({
+    this.forceUniformStore ||= new UniformStore(device, {
       forceUniforms: {
         uniformTypes: {
           level: 'f32',
@@ -271,7 +271,7 @@ export class ForceManyBody extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        forceUniforms: this.forceUniformStore.getManagedUniformBuffer(device, 'forceUniforms'),
+        forceUniforms: this.forceUniformStore.getManagedUniformBuffer('forceUniforms'),
         // All texture bindings will be set dynamically in drawForces() method
       },
       parameters: {
@@ -288,7 +288,7 @@ export class ForceManyBody extends CoreModule {
     })
 
     // Force-from-centermass command (fullscreen quad)
-    this.forceCenterUniformStore ||= new UniformStore({
+    this.forceCenterUniformStore ||= new UniformStore(device, {
       forceCenterUniforms: {
         uniformTypes: {
           levelTextureSize: 'f32',
@@ -320,7 +320,7 @@ export class ForceManyBody extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        forceCenterUniforms: this.forceCenterUniformStore.getManagedUniformBuffer(device, 'forceCenterUniforms'),
+        forceCenterUniforms: this.forceCenterUniformStore.getManagedUniformBuffer('forceCenterUniforms'),
         // All texture bindings will be set dynamically in drawForces() method
       },
       parameters: {

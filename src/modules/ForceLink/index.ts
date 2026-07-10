@@ -176,7 +176,7 @@ export class ForceLink extends CoreModule {
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
     })
 
-    this.uniformStore ||= new UniformStore({
+    this.uniformStore ||= new UniformStore(device, {
       forceLinkUniforms: {
         uniformTypes: {
           linkSpring: 'f32',
@@ -206,7 +206,7 @@ export class ForceLink extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        forceLinkUniforms: this.uniformStore.getManagedUniformBuffer(device, 'forceLinkUniforms'),
+        forceLinkUniforms: this.uniformStore.getManagedUniformBuffer('forceLinkUniforms'),
         // All texture bindings will be set dynamically in run() method
       },
       parameters: {

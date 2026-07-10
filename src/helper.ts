@@ -1,8 +1,7 @@
 import { color as d3Color } from 'd3-color'
 import { Device, Framebuffer } from '@luma.gl/core'
 import { WebGLDevice } from '@luma.gl/webgl'
-import { GL } from '@luma.gl/constants'
-import DOMPurify from 'dompurify'
+import DOMPurify, { type Config as DOMPurifyConfig } from 'dompurify'
 
 import { MAX_POINT_SIZE } from '@/graph/modules/Store'
 
@@ -111,7 +110,8 @@ export function extractIndicesFromPixels (pixels: Float32Array): number[] {
 export function getMaxPointSize (device: Device, pixelRatio: number): number {
   switch (device.info.type) {
   case 'webgl': {
-    const range = (device as WebGLDevice).gl.getParameter(GL.ALIASED_POINT_SIZE_RANGE) as [number, number]
+    const gl = (device as WebGLDevice).gl
+    const range = gl.getParameter(gl.ALIASED_POINT_SIZE_RANGE) as [number, number]
     return (range?.[1] ?? MAX_POINT_SIZE) / pixelRatio
   }
   case 'webgpu':
@@ -149,7 +149,7 @@ export function isPointAbsent (pointPositions: Float32Array, index: number): boo
  * @param options Optional DOMPurify configuration options to override defaults
  * @returns Sanitized HTML string safe for innerHTML usage
  */
-export function sanitizeHtml (html: string, options?: DOMPurify.Config): string {
+export function sanitizeHtml (html: string, options?: DOMPurifyConfig): string {
   return DOMPurify.sanitize(html, {
     // Default configuration: allow common safe HTML elements and attributes
     ALLOWED_TAGS: ['a', 'b', 'i', 'em', 'strong', 'span', 'div', 'p', 'br'],

@@ -24,7 +24,7 @@ export class ForceMouse extends CoreModule {
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
     })
 
-    this.uniformStore ||= new UniformStore({
+    this.uniformStore ||= new UniformStore(device, {
       forceMouseUniforms: {
         uniformTypes: {
           repulsion: 'f32',
@@ -50,7 +50,7 @@ export class ForceMouse extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        forceMouseUniforms: this.uniformStore.getManagedUniformBuffer(device, 'forceMouseUniforms'),
+        forceMouseUniforms: this.uniformStore.getManagedUniformBuffer('forceMouseUniforms'),
         // All texture bindings will be set dynamically in run() method
       },
       parameters: {

@@ -165,7 +165,7 @@ export class ForceCollision extends CoreModule {
     if (!data.pointsNumber || !store.pointsTextureSize) return
 
     // Build-grid command: positions each point into its grid cell (additive accumulation)
-    this.buildGridUniformStore ||= new UniformStore({
+    this.buildGridUniformStore ||= new UniformStore(device, {
       buildGridUniforms: {
         uniformTypes: {
           pointsTextureSize: 'f32',
@@ -191,7 +191,7 @@ export class ForceCollision extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
-        buildGridUniforms: this.buildGridUniformStore.getManagedUniformBuffer(device, 'buildGridUniforms'),
+        buildGridUniforms: this.buildGridUniformStore.getManagedUniformBuffer('buildGridUniforms'),
         // Texture bindings set dynamically in run()
       },
       parameters: {
@@ -208,7 +208,7 @@ export class ForceCollision extends CoreModule {
     })
 
     // Collision force command: reads the spatial hash grid (additive accumulation)
-    this.forceUniformStore ||= new UniformStore({
+    this.forceUniformStore ||= new UniformStore(device, {
       forceCollisionUniforms: {
         uniformTypes: {
           pointsTextureSize: 'f32',
@@ -243,7 +243,7 @@ export class ForceCollision extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
-        forceCollisionUniforms: this.forceUniformStore.getManagedUniformBuffer(device, 'forceCollisionUniforms'),
+        forceCollisionUniforms: this.forceUniformStore.getManagedUniformBuffer('forceCollisionUniforms'),
         // Texture bindings set dynamically in run()
       },
       parameters: {

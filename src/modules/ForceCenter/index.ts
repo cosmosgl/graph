@@ -86,7 +86,7 @@ export class ForceCenter extends CoreModule {
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
     })
 
-    this.calculateUniformStore ||= new UniformStore({
+    this.calculateUniformStore ||= new UniformStore(device, {
       calculateCentermassUniforms: {
         uniformTypes: {
           pointsTextureSize: 'f32',
@@ -94,7 +94,7 @@ export class ForceCenter extends CoreModule {
       },
     })
 
-    this.forceUniformStore ||= new UniformStore({
+    this.forceUniformStore ||= new UniformStore(device, {
       forceCenterUniforms: {
         uniformTypes: {
           centerForce: 'f32',
@@ -119,7 +119,7 @@ export class ForceCenter extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        calculateCentermassUniforms: this.calculateUniformStore.getManagedUniformBuffer(device, 'calculateCentermassUniforms'),
+        calculateCentermassUniforms: this.calculateUniformStore.getManagedUniformBuffer('calculateCentermassUniforms'),
         // All texture bindings will be set dynamically in run() method
       },
       parameters: {
@@ -153,7 +153,7 @@ export class ForceCenter extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        forceCenterUniforms: this.forceUniformStore.getManagedUniformBuffer(device, 'forceCenterUniforms'),
+        forceCenterUniforms: this.forceUniformStore.getManagedUniformBuffer('forceCenterUniforms'),
         // All texture bindings will be set dynamically in run() method
       },
       parameters: {

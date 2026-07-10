@@ -172,7 +172,7 @@ export class Lines extends CoreModule {
     })
 
     // Create UniformStore for drawLine uniforms
-    this.drawLineUniformStore ||= new UniformStore({
+    this.drawLineUniformStore ||= new UniformStore(device, {
       drawLineUniforms: {
         uniformTypes: {
           transformationMatrix: 'mat4x4<f32>',
@@ -265,7 +265,7 @@ export class Lines extends CoreModule {
       usage: Buffer.VERTEX | Buffer.COPY_DST,
     })
 
-    this.hoveredLineIndexUniformStore ||= new UniformStore({
+    this.hoveredLineIndexUniformStore ||= new UniformStore(device, {
       hoveredLineIndexUniforms: {
         uniformTypes: {
           mousePosition: 'vec2<f32>',
@@ -295,13 +295,13 @@ export class Lines extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        hoveredLineIndexUniforms: this.hoveredLineIndexUniformStore.getManagedUniformBuffer(device, 'hoveredLineIndexUniforms'),
+        hoveredLineIndexUniforms: this.hoveredLineIndexUniformStore.getManagedUniformBuffer('hoveredLineIndexUniforms'),
         // All texture bindings will be set dynamically in findHoveredLine() method
       },
     })
 
     // Sampled links (for getSampledLinks / getSampledLinkPositionsMap)
-    this.fillSampledLinksUniformStore ||= new UniformStore({
+    this.fillSampledLinksUniformStore ||= new UniformStore(device, {
       fillSampledLinksUniforms: {
         uniformTypes: {
           pointsTextureSize: 'f32',
@@ -344,7 +344,7 @@ export class Lines extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
-        fillSampledLinksUniforms: this.fillSampledLinksUniformStore.getManagedUniformBuffer(device, 'fillSampledLinksUniforms'),
+        fillSampledLinksUniforms: this.fillSampledLinksUniformStore.getManagedUniformBuffer('fillSampledLinksUniforms'),
       },
       parameters: {
         depthWriteEnabled: false,
@@ -1101,8 +1101,8 @@ export class Lines extends CoreModule {
         EXIT_DEFAULT_COLOR_CHANNEL: glslFloatLiteral(EXIT_DEFAULT_COLOR_CHANNEL),
       } as unknown as Record<string, boolean>,
       bindings: {
-        drawLineUniforms: this.drawLineUniformStore.getManagedUniformBuffer(this.device, 'drawLineUniforms'),
-        drawLineFragmentUniforms: this.drawLineUniformStore.getManagedUniformBuffer(this.device, 'drawLineFragmentUniforms'),
+        drawLineUniforms: this.drawLineUniformStore.getManagedUniformBuffer('drawLineUniforms'),
+        drawLineFragmentUniforms: this.drawLineUniformStore.getManagedUniformBuffer('drawLineFragmentUniforms'),
       },
       parameters,
     })
