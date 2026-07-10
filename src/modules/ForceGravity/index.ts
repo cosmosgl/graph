@@ -24,7 +24,7 @@ export class ForceGravity extends CoreModule {
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
     })
 
-    this.uniformStore ||= new UniformStore({
+    this.uniformStore ||= new UniformStore(device, {
       forceGravityUniforms: {
         uniformTypes: {
           gravity: 'f32',
@@ -51,7 +51,7 @@ export class ForceGravity extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        forceGravityUniforms: this.uniformStore.getManagedUniformBuffer(device, 'forceGravityUniforms'),
+        forceGravityUniforms: this.uniformStore.getManagedUniformBuffer('forceGravityUniforms'),
         // All texture bindings will be set dynamically in run() method
       },
       parameters: {

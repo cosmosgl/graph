@@ -538,7 +538,7 @@ export class Points extends CoreModule {
     })
 
     // Create UniformStore for dragPoint uniforms
-    this.dragPointUniformStore ||= new UniformStore({
+    this.dragPointUniformStore ||= new UniformStore(device, {
       dragPointUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
@@ -569,13 +569,13 @@ export class Points extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        dragPointUniforms: this.dragPointUniformStore.getManagedUniformBuffer(device, 'dragPointUniforms'),
+        dragPointUniforms: this.dragPointUniformStore.getManagedUniformBuffer('dragPointUniforms'),
         // All texture bindings will be set dynamically in drag() method
       },
     })
 
     // Create UniformStore for draw uniforms
-    this.drawUniformStore ||= new UniformStore({
+    this.drawUniformStore ||= new UniformStore(device, {
       drawVertexUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
@@ -693,8 +693,8 @@ export class Points extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer(device, 'drawVertexUniforms'),
-        drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer(device, 'drawFragmentUniforms'),
+        drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer('drawVertexUniforms'),
+        drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer('drawFragmentUniforms'),
         // All texture bindings will be set dynamically in draw() method
       },
       parameters: {
@@ -716,7 +716,7 @@ export class Points extends CoreModule {
     })
 
     // Create UniformStore for findPointsInRect uniforms
-    this.findPointsInRectUniformStore ||= new UniformStore({
+    this.findPointsInRectUniformStore ||= new UniformStore(device, {
       findPointsInRectUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
@@ -761,7 +761,7 @@ export class Points extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        findPointsInRectUniforms: this.findPointsInRectUniformStore.getManagedUniformBuffer(device, 'findPointsInRectUniforms'),
+        findPointsInRectUniforms: this.findPointsInRectUniformStore.getManagedUniformBuffer('findPointsInRectUniforms'),
         // All texture bindings will be set dynamically in findPointsInRect() method
       },
     })
@@ -772,7 +772,7 @@ export class Points extends CoreModule {
     })
 
     // Create UniformStore for findPointsInPolygon uniforms
-    this.findPointsInPolygonUniformStore ||= new UniformStore({
+    this.findPointsInPolygonUniformStore ||= new UniformStore(device, {
       findPointsInPolygonUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
@@ -808,13 +808,13 @@ export class Points extends CoreModule {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
         findPointsInPolygonUniforms: this.findPointsInPolygonUniformStore
-          .getManagedUniformBuffer(device, 'findPointsInPolygonUniforms'),
+          .getManagedUniformBuffer('findPointsInPolygonUniforms'),
         // All texture bindings will be set dynamically in findPointsInPolygon() method
       },
     })
 
     // Create UniformStore for findHoveredPoint uniforms
-    this.findHoveredPointUniformStore ||= new UniformStore({
+    this.findHoveredPointUniformStore ||= new UniformStore(device, {
       findHoveredPointUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
@@ -869,7 +869,7 @@ export class Points extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        findHoveredPointUniforms: this.findHoveredPointUniformStore.getManagedUniformBuffer(device, 'findHoveredPointUniforms'),
+        findHoveredPointUniforms: this.findHoveredPointUniformStore.getManagedUniformBuffer('findHoveredPointUniforms'),
         // All texture bindings will be set dynamically in findHoveredPoint() method
       },
       parameters: {
@@ -880,7 +880,7 @@ export class Points extends CoreModule {
     })
 
     // Create UniformStore for fillSampledPoints uniforms
-    this.fillSampledPointsUniformStore ||= new UniformStore({
+    this.fillSampledPointsUniformStore ||= new UniformStore(device, {
       fillSampledPointsUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
@@ -915,7 +915,7 @@ export class Points extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        fillSampledPointsUniforms: this.fillSampledPointsUniformStore.getManagedUniformBuffer(device, 'fillSampledPointsUniforms'),
+        fillSampledPointsUniforms: this.fillSampledPointsUniformStore.getManagedUniformBuffer('fillSampledPointsUniforms'),
         // All texture bindings will be set dynamically in getSampledPointPositionsMap() and getSampledPoints() methods
       },
       parameters: {
@@ -928,7 +928,7 @@ export class Points extends CoreModule {
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
     })
 
-    this.drawHighlightedUniformStore ||= new UniformStore({
+    this.drawHighlightedUniformStore ||= new UniformStore(device, {
       drawHighlightedUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
@@ -990,7 +990,7 @@ export class Points extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        drawHighlightedUniforms: this.drawHighlightedUniformStore.getManagedUniformBuffer(device, 'drawHighlightedUniforms'),
+        drawHighlightedUniforms: this.drawHighlightedUniformStore.getManagedUniformBuffer('drawHighlightedUniforms'),
         // All texture bindings will be set dynamically in draw() method
       },
       parameters: {
@@ -1012,7 +1012,7 @@ export class Points extends CoreModule {
     })
 
     // Create UniformStore for trackPoints uniforms
-    this.trackPointsUniformStore ||= new UniformStore({
+    this.trackPointsUniformStore ||= new UniformStore(device, {
       trackPointsUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
@@ -1041,7 +1041,7 @@ export class Points extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        trackPointsUniforms: this.trackPointsUniformStore.getManagedUniformBuffer(device, 'trackPointsUniforms'),
+        trackPointsUniforms: this.trackPointsUniformStore.getManagedUniformBuffer('trackPointsUniforms'),
         // All texture bindings will be set dynamically in trackPoints() method
       },
     })
@@ -2588,7 +2588,7 @@ export class Points extends CoreModule {
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
     })
 
-    this.interpolatePositionUniformStore ||= new UniformStore({
+    this.interpolatePositionUniformStore ||= new UniformStore(device, {
       interpolatePositionUniforms: {
         uniformTypes: {
           progress: 'f32',
@@ -2614,7 +2614,7 @@ export class Points extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
-        interpolatePositionUniforms: this.interpolatePositionUniformStore.getManagedUniformBuffer(device, 'interpolatePositionUniforms'),
+        interpolatePositionUniforms: this.interpolatePositionUniformStore.getManagedUniformBuffer('interpolatePositionUniforms'),
       },
     })
   }
@@ -2772,7 +2772,7 @@ export class Points extends CoreModule {
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
     })
 
-    this.updatePositionUniformStore ||= new UniformStore({
+    this.updatePositionUniformStore ||= new UniformStore(device, {
       updatePositionUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
@@ -2803,7 +2803,7 @@ export class Points extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        updatePositionUniforms: this.updatePositionUniformStore.getManagedUniformBuffer(device, 'updatePositionUniforms'),
+        updatePositionUniforms: this.updatePositionUniformStore.getManagedUniformBuffer('updatePositionUniforms'),
         // All texture bindings will be set dynamically in updatePosition() method
       },
     })
