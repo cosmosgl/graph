@@ -74,6 +74,12 @@ export class Camera {
   public readonly store: Store
   public readonly config: GraphConfigInterface
   public isRunning = false
+  /**
+   * Called on every animated-move tick (fit / setState tweens). The tweens run
+   * on d3's own timer, outside the render loop — with on-demand rendering each
+   * tick must schedule its own redraw through this hook.
+   */
+  public onUpdate: (() => void) | undefined
 
   /** Orbit center in space coordinates. */
   public target = vec3.create()
@@ -188,6 +194,7 @@ export class Camera {
           this.azimuth = from.azimuth + (to.azimuth - from.azimuth) * t
           this.polar = from.polar + (to.polar - from.polar) * t
           this.updateMatrices()
+          this.onUpdate?.()
         })
         .on('end', () => this.reseedZoomState(selection))
       return
@@ -265,6 +272,7 @@ export class Camera {
           vec3.lerp(this.target, fromTarget, target, t)
           this.distance = fromDistance + (distance - fromDistance) * t
           this.updateMatrices()
+          this.onUpdate?.()
         })
         .on('end', () => this.reseedZoomState(selection))
     }

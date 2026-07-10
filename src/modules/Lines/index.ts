@@ -124,6 +124,11 @@ export class Lines extends CoreModule {
   // Track previous screen size to detect changes
   private previousScreenSize: [number, number] | undefined
 
+  /** Whether an async link-pick readback is awaiting its GPU fence (the render loop must keep polling). */
+  public get isPickInFlight (): boolean {
+    return this.pickingReadback?.inFlight ?? false
+  }
+
   public initPrograms (): void {
     const { device, config, store, data } = this
 

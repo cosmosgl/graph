@@ -321,6 +321,11 @@ export class Points extends CoreModule {
     };
   }> | undefined
 
+  /** Whether an async pick readback is awaiting its GPU fence (the render loop must keep polling). */
+  public get isPickInFlight (): boolean {
+    return this.pickingReadback?.inFlight ?? false
+  }
+
   public updatePositions (): boolean {
     const { device, store, data, config: { rescalePositions, enableSimulation } } = this
 
