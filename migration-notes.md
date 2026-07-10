@@ -1,13 +1,19 @@
 # Migration Guide
 
-## New in v3.2: 3D rendering (additive, no breaking changes)
+## New in v3.2: 3D rendering
 
 cosmos.gl can now render points and links in 3D. Passing `[x, y, z, ...]` triplets to the new
-`setPointPositions3D(Float32Array)` method switches the instance into 3D mode: a perspective orbit
-camera replaces the 2D pan/zoom (drag rotates, wheel/pinch dollies, Space + drag pans), and
-`getPointPositions3D()` / `spaceToScreenPosition3D()` / the `is3D` getter complement the existing API.
-Calling `setPointPositions` (stride-2) switches back to 2D mode. New config options: `cameraFov`,
-`cameraNear`, `cameraFar`, `cameraInitialPosition`.
+`setPointPositions3D(Float32Array, dontRescale?)` method switches the instance into 3D mode: a
+perspective orbit camera replaces the 2D pan/zoom (drag rotates, wheel/pinch dollies, Space + drag
+pans), and `getPointPositions3D()` / `spaceToScreenPosition3D()` / `screenToSpacePosition3D()` /
+the `is3D` getter complement the existing API. The camera can be controlled programmatically via
+`getCameraState()` / `setCameraState({ target, distance, azimuth, polar })` (the `Camera3dState`
+type is exported). Calling `setPointPositions` (stride-2) switches back to 2D mode. New config
+options: `cameraFov`, `cameraNear`, `cameraFar`, `cameraInitialPosition` — when `cameraNear` /
+`cameraFar` are left `undefined`, the clipping planes adapt to the camera distance and data extent.
+
+**Breaking change:** the right-click mouse-repulsion force has been removed — the
+`enableRightClickRepulsion` and `simulationRepulsionFromMouse` config options no longer exist.
 
 Hover/click picking, `fitView`, animated position transitions, and point/link sampling work in
 both modes. Sampling in 3D uses the new `getSampledPoints3D` / `getSampledPointPositionsMap3D` /
@@ -26,8 +32,9 @@ and cluster forces (`setPointClusters` / `setPointClusterStrength`) also run in 
 spatial grids; `setClusterPositions3D` / `getClusterPositions3D` are the `[x, y, z]` counterparts
 of the cluster-position APIs (in 3D, `setClusterPositions` pins only x/y and z follows the
 cluster centroid; the collision force approximates neighbor radii with each point's own radius
-unless `simulationCollisionRadius` is set). Area selection and right-click repulsion remain
-disabled in 3D mode (the corresponding methods warn and no-op).
+unless `simulationCollisionRadius` is set). Area selection remains disabled in 3D mode (the
+corresponding methods warn and no-op). Curved links (`curvedLinks`) and link arrows render in 3D:
+the curve bends in a camera-facing plane, and opaque (unblended) links write depth.
 The existing 2D API and data formats are unchanged.
 
 ## Migrating to v3.0

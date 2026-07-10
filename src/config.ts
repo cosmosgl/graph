@@ -360,19 +360,6 @@ export interface GraphConfigInterface {
    */
   simulationLinkDistRandomVariationRange: number[];
   /**
-   * Repulsion coefficient from mouse position.
-   * The repulsion force is activated by pressing the right mouse button.
-   * Default value: `2`
-   */
-  simulationRepulsionFromMouse: number;
-  /**
-   * Enable or disable the repulsion force from mouse when right-clicking.
-   * When set to `true`, holding the right mouse button will activate the mouse repulsion force.
-   * When set to `false`, right-clicking will not trigger any repulsion force.
-   * Default value: `false`
-   */
-  enableRightClickRepulsion: boolean;
-  /**
    * Friction coefficient.
    * Values range from 0 (high friction, stops quickly) to 1 (no friction, keeps moving).
    * Default value: `0.85`
@@ -771,10 +758,12 @@ export interface GraphConfigInterface {
   cameraFov: number;
   /**
    * Near clipping plane distance of the 3D camera.
+   * When `undefined`, the near plane adapts to the camera distance and the
+   * extent of the data, keeping depth-buffer precision usable at any scene scale.
    * Only used in 3D mode.
-   * Default value: `1`
+   * Default value: `undefined`
    */
-  cameraNear: number;
+  cameraNear?: number;
   /**
    * Far clipping plane distance of the 3D camera.
    * When `undefined`, the far plane is derived automatically from the

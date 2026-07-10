@@ -12,6 +12,26 @@ import { clamp } from '@/graph/helper'
  */
 const MIN_POLAR_OFFSET = 0.01
 
+/**
+ * Dolly limits relative to the fitted scene's bounding-sphere radius: the camera
+ * distance stays within `[MIN_DOLLY_SCENE_RADII, MAX_DOLLY_SCENE_RADII] × sceneRadius`,
+ * so gestures can neither dolly through the scene center nor lose it in the distance.
+ */
+const MIN_DOLLY_SCENE_RADII = 0.05
+const MAX_DOLLY_SCENE_RADII = 20
+
+/**
+ * Orbit state of the 3D camera. `target` is the look-at point in space coordinates;
+ * `distance` is the eye's distance from it; `azimuth` and `polar` are the orbit
+ * angles in radians (`polar` measured from the +y axis).
+ */
+export type Camera3dState = {
+  target: [number, number, number];
+  distance: number;
+  azimuth: number;
+  polar: number;
+}
+
 function getBoundingSphere (positions: number[] | Float32Array, dimensions: 2 | 3): { center: vec3; radius: number } {
   let minX = Infinity; let maxX = -Infinity
   let minY = Infinity; let maxY = -Infinity
@@ -126,6 +146,31 @@ export class Camera {
     this.distance = distance
     vec3.copy(this.target, target)
     this.updateMatrices()
+  }
+
+  /** Current orbit state (target in space coordinates, distance, and azimuth/polar in radians). */
+  public getState (): Camera3dState {
+    return {
+      target: [this.target[0], this.target[1], this.target[2]],
+      distance: this.distance,
+      azimuth: this.azimuth,
+      polar: this.polar,
+    }
+  }
+
+  /**
+   * Applies a partial orbit state for programmatic camera control.
+   * Cancels an in-progress fit animation and re-seeds the d3-zoom gesture
+   * baseline so the next wheel/drag continues from the new state.
+   */
+  public setState (state: Partial<Camera3dState>, selection?: Selection<HTMLCanvasElement, undefined, null, undefined>): void {
+    selection?.interrupt('cosmosCameraFit')
+    if (state.target) vec3.set(this.target, state.target[0], state.target[1], state.target[2])
+    if (state.distance !== undefined) this.distance = Math.max(state.distance, 1e-3)
+    if (state.azimuth !== undefined) this.azimuth = state.azimuth
+    if (state.polar !== undefined) this.polar = clamp(state.polar, MIN_POLAR_OFFSET, Math.PI - MIN_POLAR_OFFSET)
+    this.updateMatrices()
+    if (selection) this.reseedZoomState(selection)
   }
 
   /**
@@ -263,11 +308,30 @@ export class Camera {
       this.target[2] + this.distance * sinPolar * Math.cos(this.azimuth)
     )
     mat4.lookAt(this.view, this.eye, this.target, [0, 1, 0])
-    // The far plane must cover the whole scene even when the camera dollies inside it.
-    const far = cameraFar ?? Math.max((this.distance + this.sceneRadius * 2) * 2, cameraNear * 100)
-    mat4.perspective(this.projection, cameraFov * Math.PI / 180, this.aspect, cameraNear, far)
+    // Unless overridden, tie near/far to the current distance and scene size: the scene
+    // sphere spans at most `distance ± 2·sceneRadius` from the eye (the target may sit on the
+    // sphere's edge), and a tight range keeps depth-buffer precision usable at any scale.
+    const near = cameraNear ?? Math.max(this.distance - this.sceneRadius * 2, this.sceneRadius * 0.01)
+    const far = Math.max(cameraFar ?? (this.distance + this.sceneRadius * 2), near * 1.01)
+    mat4.perspective(this.projection, cameraFov * Math.PI / 180, this.aspect, near, far)
     mat4.multiply(this.viewProjection, this.projection, this.view)
     this.store.viewProjection3D = this.viewProjectionMatrix
+  }
+
+  /**
+   * Resets d3-zoom to the identity transform so that `k = 1` corresponds to the
+   * current camera distance. Without this, the first wheel event after a
+   * programmatic fit would jump to a stale dolly level. Also refreshes the dolly
+   * limits (`distance = baseDistance / k`, so the scale extent bounds map inversely
+   * onto the allowed distance range).
+   */
+  public reseedZoomState (selection: Selection<HTMLCanvasElement, undefined, null, undefined>): void {
+    this.baseDistance = this.distance
+    this.behavior.scaleExtent([
+      this.baseDistance / (this.sceneRadius * MAX_DOLLY_SCENE_RADII),
+      this.baseDistance / (this.sceneRadius * MIN_DOLLY_SCENE_RADII),
+    ])
+    selection.call(this.behavior.transform, zoomIdentity)
   }
 
   private rotate (dx: number, dy: number): void {
@@ -284,15 +348,5 @@ export class Camera {
     const v = this.view
     vec3.scaleAndAdd(this.target, this.target, [v[0], v[4], v[8]], -dx * worldPerPixel)
     vec3.scaleAndAdd(this.target, this.target, [v[1], v[5], v[9]], dy * worldPerPixel)
-  }
-
-  /**
-   * Resets d3-zoom to the identity transform so that `k = 1` corresponds to the
-   * current camera distance. Without this, the first wheel event after a
-   * programmatic fit would jump to a stale dolly level.
-   */
-  private reseedZoomState (selection: Selection<HTMLCanvasElement, undefined, null, undefined>): void {
-    this.baseDistance = this.distance
-    selection.call(this.behavior.transform, zoomIdentity)
   }
 }

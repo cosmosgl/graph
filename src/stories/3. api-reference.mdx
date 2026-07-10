@@ -93,11 +93,12 @@ graph.render();
 
 Calling `setPointPositions` also switches the graph back to 2D mode if it was in [3D mode](#set_point_positions_3d).
 
-### <a name="set_point_positions_3d" href="#set_point_positions_3d">#</a> graph.<b>setPointPositions3D</b>(<i>pointPositions</i>)
+### <a name="set_point_positions_3d" href="#set_point_positions_3d">#</a> graph.<b>setPointPositions3D</b>(<i>pointPositions</i>, <i>dontRescale</i>)
 
 This method sets 3D positions for the graph points and switches the instance into **3D rendering mode**: a perspective orbit camera replaces the 2D pan/zoom (drag rotates around the data, mouse wheel / pinch dollies in and out, Space + drag pans), and points and links are rendered with perspective and depth.
 
 * **`pointPositions`** (Float32Array): A Float32Array representing the x, y and z coordinates of points in the format `[x1, y1, z1, x2, y2, z2, ..., xN, yN, zN]`. Each triplet represents the coordinates of a single point.
+* **`dontRescale`** (Boolean, optional): When `true`, skips the one-time rescaling of the provided positions into the `[0, spaceSize]` cube (mirrors the [`setPointPositions`](#set_point_positions) parameter).
 
 On the next `render()`, points animate from their previous positions to the new ones using `transitionDuration` and `transitionEasing` (z animates from `0` when switching from 2D mode). Calling [`setPointPositions`](#set_point_positions) switches back to 2D mode.
 
@@ -105,7 +106,7 @@ On the next `render()`, points animate from their previous positions to the new 
 
 **Dragging in 3D:** with `enableDrag: true`, points can be dragged in 3D — the dragged point moves in the camera-facing plane through its position at drag start. A drag that starts on a hovered point moves the point; everywhere else it orbits the camera.
 
-**3D mode limitations:** area selection (`findPointsInRect` / `findPointsInPolygon`) and right-click repulsion are disabled in 3D mode — the corresponding methods warn and do nothing. Collision and cluster forces run in 3D; `setClusterPositions3D` and `getClusterPositions3D` are the 3D counterparts of the cluster-position APIs. Use the `3D` counterparts of the zoom and sampling APIs: [`fitView`](#fit_view) works in both modes, and [`getSampledPoints3D`](#get_sampled_points_3d) / [`spaceToScreenPosition3D`](#space_to_screen_position_3d) replace their 2D versions. The camera is configured via the `cameraFov`, `cameraNear`, `cameraFar` and `cameraInitialPosition` [configuration properties](../?path=/docs/configuration--docs).
+**3D mode limitations:** area selection (`findPointsInRect` / `findPointsInPolygon`) is disabled in 3D mode — the corresponding methods warn and do nothing. Collision and cluster forces run in 3D; `setClusterPositions3D` and `getClusterPositions3D` are the 3D counterparts of the cluster-position APIs. Use the `3D` counterparts of the zoom and sampling APIs: [`fitView`](#fit_view) works in both modes, and [`getSampledPoints3D`](#get_sampled_points_3d) / [`spaceToScreenPosition3D`](#space_to_screen_position_3d) / [`screenToSpacePosition3D`](#screen_to_space_position_3d) replace their 2D versions. The camera is configured via the `cameraFov`, `cameraNear`, `cameraFar` and `cameraInitialPosition` [configuration properties](../?path=/docs/configuration--docs), and controlled at runtime via [`getCameraState`](#get_camera_state) / [`setCameraState`](#set_camera_state).
 
 **Example:**
 ```javascript
@@ -551,6 +552,28 @@ This method converts a 3D space position to screen coordinates using the current
 This method converts X and Y point coordinates from the screen coordinate system (which is used for rendering the graph on the display) to the space coordinate system (which is typically used for graph data).
 
 * **`coordinates`** (Array): An array of two numbers in the format `[x, y]`, representing the X and Y coordinates in the screen coordinate system.
+
+Not available in [3D mode](#set_point_positions_3d) — use [`screenToSpacePosition3D`](#screen_to_space_position_3d) instead.
+
+### <a name="screen_to_space_position_3d" href="#screen_to_space_position_3d">#</a> graph.<b>screenToSpacePosition3D</b>(<i>coordinates</i>)
+
+This method converts screen coordinates to a 3D space position ([3D mode](#set_point_positions_3d) only). The screen point is unprojected onto the camera-facing plane through the current orbit target, i.e. the returned position sits at the target's depth.
+
+* **`coordinates`** (Array): An array of two numbers in the format `[x, y]`, representing the X and Y coordinates in the screen coordinate system.
+
+**Returns:** An `[x, y, z]` array in the space coordinate system.
+
+### <a name="get_camera_state" href="#get_camera_state">#</a> graph.<b>getCameraState</b>()
+
+Returns the 3D orbit camera's current state ([3D mode](#set_point_positions_3d) only): `{ target, distance, azimuth, polar }`, where `target` is the look-at point in space coordinates, `distance` is the eye's distance from it, and `azimuth` / `polar` are the orbit angles in radians (`polar` measured from the +y axis).
+
+**Returns:** A `Camera3dState` object, or `undefined` in 2D mode.
+
+### <a name="set_camera_state" href="#set_camera_state">#</a> graph.<b>setCameraState</b>(<i>state</i>)
+
+Sets the 3D orbit camera's state for programmatic camera control ([3D mode](#set_point_positions_3d) only). Cancels an in-progress [`fitView`](#fit_view) animation and re-seeds the gesture state so subsequent wheel/drag interactions continue from the new state.
+
+* **`state`** (Object): Any subset of `target` (`[x, y, z]` in space coordinates), `distance` (Number), `azimuth` (Number, radians) and `polar` (Number, radians).
 
 ### <a name="space_to_screen_radius" href="#space_to_screen_radius">#</a> graph.<b>spaceToScreenRadius</b>(<i>radius</i>)
 

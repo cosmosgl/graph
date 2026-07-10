@@ -13,7 +13,6 @@ import { ForceCollision } from '@/graph/modules/ForceCollision'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
 import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
 import { ForceManyBody } from '@/graph/modules/ForceManyBody'
-import { ForceMouse } from '@/graph/modules/ForceMouse'
 import { Clusters } from '@/graph/modules/Clusters'
 import { FPSMonitor } from '@/graph/modules/FPSMonitor'
 import { GraphData } from '@/graph/modules/GraphData'
@@ -23,7 +22,7 @@ import { Store, ALPHA_MIN, MAX_HOVER_DETECTION_DELAY, MIN_MOUSE_MOVEMENT_THRESHO
 import { Transition, TransitionProperty } from '@/graph/modules/Transition'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
-import { Camera } from '@/graph/modules/Camera'
+import { Camera, type Camera3dState } from '@/graph/modules/Camera'
 
 /** Touch/pen long-press → context menu thresholds. */
 const LONG_PRESS_DURATION_MS = 500
@@ -50,7 +49,6 @@ export class Graph {
    */
   private shouldDestroyDevice: boolean
   private requestAnimationFrameId = 0
-  private isRightClickMouse = false
   /**
    * Touch/pen long-press timer. Set on pointerdown for non-mouse pointers and
    * cancelled on pointerup, pointercancel, or movement past
@@ -76,7 +74,6 @@ export class Graph {
   private forceManyBody: ForceManyBody | undefined
   private forceLinkIncoming: ForceLink | undefined
   private forceLinkOutgoing: ForceLink | undefined
-  private forceMouse: ForceMouse | undefined
   private forceCollision: ForceCollision | undefined
   private clusters: Clusters | undefined
   private zoomInstance = new Zoom(this.store, this.config)
@@ -223,7 +220,6 @@ export class Graph {
           this._lastMouseY = event.clientY
           this.currentEvent = event
           this.updateMousePosition(event)
-          this.isRightClickMouse = (event.buttons & 2) !== 0
 
           // Cancel a pending long-press if the finger drifted past the threshold —
           // the user is clearly panning/dragging, not holding to open a context menu.
@@ -262,9 +258,6 @@ export class Graph {
           if (this.store.hoveredLinkIndex !== undefined && this.config.onLinkMouseOut) {
             this.config.onLinkMouseOut(event)
           }
-
-          // Reset right-click flag
-          this.isRightClickMouse = false
 
           // Clear hover states
           this.store.hoveredPoint = undefined
@@ -308,9 +301,6 @@ export class Graph {
           if (!event.isPrimary) return
           // Finger lifted before the long-press window expired — it's a tap.
           this.cancelLongPress()
-          // pointermove normally updates this flag, but it doesn't fire on a still
-          // release — without this line, forceMouse would keep running.
-          this.isRightClickMouse = (event.buttons & 2) !== 0
         })
         .on('click.cosmos', this.onClick.bind(this))
         .on('contextmenu.cosmos', this.onContextMenu.bind(this))
@@ -367,7 +357,6 @@ export class Graph {
         this.forceManyBody = new ForceManyBody(device, this.config, this.store, this.graph, this.points)
         this.forceLinkIncoming = new ForceLink(device, this.config, this.store, this.graph, this.points)
         this.forceLinkOutgoing = new ForceLink(device, this.config, this.store, this.graph, this.points)
-        this.forceMouse = new ForceMouse(device, this.config, this.store, this.graph, this.points)
         this.forceCollision = new ForceCollision(device, this.config, this.store, this.graph, this.points)
       }
       this.clusters = new Clusters(device, this.config, this.store, this.graph, this.points)
@@ -505,15 +494,17 @@ export class Graph {
    * @note The force simulation runs in 3D: many-body repulsion uses an octree approximation
    * above ~4k points (an exact pairwise pass below), collision and cluster forces use
    * 3D spatial grids, and points can be dragged (in the camera-facing plane of their depth).
-   * Area selection and right-click repulsion are disabled in 3D mode.
+   * Area selection is disabled in 3D mode.
    * Calling `setPointPositions` switches the instance back to 2D mode.
    * @note If `transitionDuration > 0`, the positions animate from the current layout (z animates from `0`
    * when switching from 2D mode).
+   * @param {boolean} [dontRescale] - When `true`, skips the one-time rescaling of the provided
+   * positions into the `[0, spaceSize]` cube (mirrors the `setPointPositions` parameter).
    */
-  public setPointPositions3D (pointPositions: Float32Array): void {
+  public setPointPositions3D (pointPositions: Float32Array, dontRescale?: boolean | undefined): void {
     if (this._isDestroyed) return
 
-    if (this.ensureDevice(() => this.setPointPositions3D(pointPositions))) return
+    if (this.ensureDevice(() => this.setPointPositions3D(pointPositions, dontRescale))) return
     let positions = pointPositions
     if (positions.length % 3 !== 0) {
       console.warn('cosmos.gl: `setPointPositions3D` expects 3 coordinates per point; truncating the incomplete trailing point')
@@ -522,7 +513,7 @@ export class Graph {
     this.graph.inputPointPositions = positions
     this.graph.inputPointDimensions = 3
     this.setSpaceDimensions(3)
-    this.points!.shouldSkipRescale = undefined
+    this.points!.shouldSkipRescale = dontRescale
     this.markPointPositionsDirty()
 
     if (!this._isCameraInitialized) {
@@ -530,6 +521,9 @@ export class Graph {
       const { cameraInitialPosition, fitViewPadding } = this.config
       if (cameraInitialPosition) {
         this.camera.setEyePosition(cameraInitialPosition, positions, 3)
+        // Re-seed the gesture baseline — otherwise the first wheel after this
+        // programmatic placement would dolly from a stale distance.
+        if (this.canvasD3Selection) this.camera.reseedZoomState(this.canvasD3Selection)
       } else if (this.canvasD3Selection) {
         this.camera.fitToPositions(this.canvasD3Selection, positions, 3, fitViewPadding, 0)
       }
@@ -1289,13 +1283,54 @@ export class Graph {
   }
 
   /**
+   * Converts screen coordinates to a 3D space position (3D mode only).
+   * The screen point is unprojected onto the camera-facing plane through the
+   * current orbit target, i.e. the returned position sits at the target's depth.
+   * @param screenPosition Array of x and y coordinates in the screen coordinate system.
+   * @returns Array of x, y and z coordinates in the space coordinate system.
+   */
+  public screenToSpacePosition3D (screenPosition: [number, number]): [number, number, number] {
+    if (this._isDestroyed) return [0, 0, 0]
+    if (!this.store.is3D) {
+      console.warn('cosmos.gl: `screenToSpacePosition3D` is only available in 3D mode')
+      return [0, 0, 0]
+    }
+    const target = this.camera.target
+    return this.camera.unprojectOnPlane(screenPosition, [target[0], target[1], target[2]])
+  }
+
+  /**
+   * Get the 3D orbit camera's current state (3D mode only).
+   * @returns The camera state (`target`, `distance`, `azimuth`, `polar`),
+   * or `undefined` in 2D mode.
+   */
+  public getCameraState (): Camera3dState | undefined {
+    if (this._isDestroyed || !this.store.is3D) return undefined
+    return this.camera.getState()
+  }
+
+  /**
+   * Set the 3D orbit camera's state for programmatic camera control (3D mode only).
+   * Cancels an in-progress `fitView` animation.
+   * @param state Any subset of `target`, `distance`, `azimuth` and `polar`.
+   */
+  public setCameraState (state: Partial<Camera3dState>): void {
+    if (this._isDestroyed) return
+    if (!this.store.is3D) {
+      console.warn('cosmos.gl: `setCameraState` is only available in 3D mode')
+      return
+    }
+    this.camera.setState(state, this.canvasD3Selection)
+  }
+
+  /**
    * Converts the X and Y point coordinates from the screen coordinate system to the space coordinate system.
    * @param screenPosition Array of x and y coordinates in the screen coordinate system.
    * @returns Array of x and y coordinates in the space coordinate system.
    */
   public screenToSpacePosition (screenPosition: [number, number]): [number, number] {
     if (this._isDestroyed) return [0, 0]
-    if (this.warnIf3D('screenToSpacePosition')) return [0, 0]
+    if (this.warnIf3D('screenToSpacePosition', 'use `screenToSpacePosition3D` instead')) return [0, 0]
     return this.zoomInstance.convertScreenToSpacePosition(screenPosition)
   }
 
@@ -1611,7 +1646,6 @@ export class Graph {
     this.forceManyBody?.destroy()
     this.forceLinkIncoming?.destroy()
     this.forceLinkOutgoing?.destroy()
-    this.forceMouse?.destroy()
     this.forceCollision?.destroy()
 
     if (this.device) {
@@ -1955,8 +1989,6 @@ export class Graph {
     if (dimensions === 3) {
       const [width, height] = this.store.screenSize
       if (width && height) this.camera.setViewport(width, height)
-    } else {
-      console.warn('cosmos.gl: switching back to 2D mode')
     }
 
     this.updateZoomDragBehaviors()
@@ -2060,15 +2092,6 @@ export class Graph {
 
     if (!enableSimulation) return
 
-    // Right-click repulsion (runs regardless of isSimulationRunning; the mouse
-    // position is a 2D-space concept, so the force is disabled in 3D mode)
-    if (this.isRightClickMouse && this.config.enableRightClickRepulsion && !this.store.is3D) {
-      this.points?.swapFbo()
-      this.forceMouse?.run()
-      this.points?.updatePosition()
-      if (this.points) this.points.isPickingBufferStale = true
-    }
-
     // Main simulation forces gate:
     // If forceExecution is true (from step()), always run.
     // Otherwise, respect isSimulationRunning and zoom state.
@@ -2135,9 +2158,6 @@ export class Graph {
 
       // Alpha decay and progress
       this.store.alpha += this.store.addAlpha(this.config.simulationDecay)
-      if (this.isRightClickMouse && this.config.enableRightClickRepulsion) {
-        this.store.alpha = Math.max(this.store.alpha, 0.1)
-      }
       this.store.simulationProgress = Math.sqrt(Math.min(1, ALPHA_MIN / this.store.alpha))
 
       this.config.onSimulationTick?.(
@@ -2160,7 +2180,6 @@ export class Graph {
     this.forceCenter?.initPrograms()
     this.forceLinkIncoming?.initPrograms()
     this.forceLinkOutgoing?.initPrograms()
-    this.forceMouse?.initPrograms()
     // ForceCollision programs are built lazily on first use (see runSimulationStep)
     this.clusters.initPrograms()
   }
@@ -2173,7 +2192,6 @@ export class Graph {
     this.forceManyBody ||= new ForceManyBody(this.device, this.config, this.store, this.graph, this.points)
     this.forceLinkIncoming ||= new ForceLink(this.device, this.config, this.store, this.graph, this.points)
     this.forceLinkOutgoing ||= new ForceLink(this.device, this.config, this.store, this.graph, this.points)
-    this.forceMouse ||= new ForceMouse(this.device, this.config, this.store, this.graph, this.points)
     this.forceCollision ||= new ForceCollision(this.device, this.config, this.store, this.graph, this.points)
   }
 
@@ -2188,8 +2206,6 @@ export class Graph {
     this.forceLinkIncoming = undefined
     this.forceLinkOutgoing?.destroy()
     this.forceLinkOutgoing = undefined
-    this.forceMouse?.destroy()
-    this.forceMouse = undefined
     this.forceCollision?.destroy()
     this.forceCollision = undefined
     // Force lazy re-allocation if collision is re-enabled on a new instance.
@@ -2719,6 +2735,7 @@ export class Graph {
 }
 
 export type { GraphConfig } from './config'
+export type { Camera3dState } from './modules/Camera'
 export { PointShape } from './modules/GraphData'
 export { TransitionEasing } from './modules/Transition'
 

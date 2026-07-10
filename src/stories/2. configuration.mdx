@@ -74,7 +74,7 @@ All configuration properties are optional. When creating a graph or calling `set
 | attribution | Controls the text shown in the bottom right corner. Provide HTML content as a string for custom attribution. Empty string hides attribution. Applied only on initialization | `''` |
 | rescalePositions | Control automatic point position adjustment. When undefined: auto-rescale if simulation disabled | `undefined` |
 | cameraFov | Vertical field of view of the 3D camera in degrees. Only used in 3D mode (after `setPointPositions3D`) | `45` |
-| cameraNear | Near clipping plane distance of the 3D camera. Only used in 3D mode | `1` |
+| cameraNear | Near clipping plane distance of the 3D camera. When `undefined`, adapts to the camera distance and data extent for usable depth-buffer precision. Only used in 3D mode | `undefined` |
 | cameraFar | Far clipping plane distance of the 3D camera. When `undefined`, derived automatically from the camera distance and data extent. Only used in 3D mode | `undefined` |
 | cameraInitialPosition | Initial eye position of the 3D camera as `[x, y, z]`, applied when entering 3D mode. When `undefined`, the camera frames the data bounds automatically | `undefined` |
 
@@ -98,8 +98,6 @@ The simulation also runs in 3D mode (after `setPointPositions3D`) with the same 
 | simulationLinkSpring | Link spring force coefficient | 0.0 – 2.0 | `1.0` |
 | simulationLinkDistance | Minimum link distance | 1 – 20 | `10` |
 | simulationLinkDistRandomVariationRange | Link distance randomness multiplier range | [0.8 – 1.2,<br/> 1.2 – 2.0] | `[1, 1.2]` |
-| simulationRepulsionFromMouse | Repulsion from the mouse pointer force coefficient. The repulsion force is activated by pressing the right mouse button. | 0.0 – 5.0 | `2.0`
-| enableRightClickRepulsion | Enable or disable the repulsion force from mouse when right-clicking. When set to `true`, holding the right mouse button will activate the mouse repulsion force. When set to `false`, right-clicking will not trigger any repulsion force. | - | `false` |
 | simulationFriction | Friction coefficient. Values range from `0` (high friction, stops quickly) to `1` (no friction, keeps moving). | 0.0 – 1.0 | `0.85` |
 | simulationCluster | Cluster coefficient | 0.0 – 1.0 | `0.1` |
 | simulationCollision | Collision force coefficient. When greater than `0`, points push each other apart when they overlap, so they don't stack on top of one another. Uses a GPU spatial-hash grid, so it scales to large graphs better than naive O(n²) collision. Set to `0` to disable (its GPU resources are then never allocated). | 0.0 – 1.0 | `0` |

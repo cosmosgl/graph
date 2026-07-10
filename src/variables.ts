@@ -69,13 +69,11 @@ export const defaultConfigValues = {
   simulationLinkSpring: 1,
   simulationLinkDistance: 10,
   simulationLinkDistRandomVariationRange: [1, 1.2],
-  simulationRepulsionFromMouse: 2,
   simulationFriction: 0.85,
   simulationCluster: 0.1,
   simulationCollision: 0,
   simulationCollisionRadius: undefined,
   simulationCollisionPadding: 0,
-  enableRightClickRepulsion: false,
 
   // Simulation callbacks
   onSimulationStart: undefined,
@@ -145,7 +143,7 @@ export const defaultConfigValues = {
 
   // 3D camera
   cameraFov: 45,
-  cameraNear: 1,
+  cameraNear: undefined,
   cameraFar: undefined,
   cameraInitialPosition: undefined,
 } satisfies Complete<GraphConfigInterface>

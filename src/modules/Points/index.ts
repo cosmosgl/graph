@@ -334,9 +334,6 @@ export class Points extends CoreModule {
     // Temporary flag is used to skip rescaling when change point positions or adding new points by function `setPointPositions`
     // This flag overrides any other rescaling settings
     if (this.shouldSkipRescale) shouldRescale = false
-    // Rescaling is a 2D-space concept (stride-2 positions, d3-zoom space mapping);
-    // in 3D mode the camera's fitView handles framing instead.
-    if (store.is3D) shouldRescale = false
 
     if (shouldRescale) {
       this.rescaleInitialNodePositions()
@@ -2866,6 +2863,10 @@ export class Points extends CoreModule {
   }
 
   private rescaleInitialNodePositions (): void {
+    if (this.store.is3D) {
+      this.rescaleInitialNodePositions3D()
+      return
+    }
     const { config: { spaceSize } } = this
     if (!this.data.pointPositions || !spaceSize) return
 
@@ -2918,6 +2919,49 @@ export class Points extends CoreModule {
     for (let i = 0; i < pointsNumber; i++) {
       this.data.pointPositions[i * 2] = this.scaleX(points[i * 2] as number)
       this.data.pointPositions[i * 2 + 1] = this.scaleY(points[i * 2 + 1] as number)
+    }
+  }
+
+  /**
+   * 3D counterpart of {@link rescaleInitialNodePositions}: fits arbitrary-scale `[x, y, z, ...]`
+   * input into the `[0, spaceSize]` cube with a single uniform scale factor (preserving the point
+   * cloud's shape) and centers it. Keeps out-of-range input inside the simulation's position clamp.
+   * The 2D-only `scaleX`/`scaleY` helpers (d3-zoom space mapping) are left undefined in 3D mode.
+   */
+  private rescaleInitialNodePositions3D (): void {
+    const { config: { spaceSize } } = this
+    const points = this.data.pointPositions
+    if (!points || !spaceSize) return
+    this.scaleX = undefined
+    this.scaleY = undefined
+
+    const pointsNumber = points.length / 3
+    let minX = Infinity; let maxX = -Infinity
+    let minY = Infinity; let maxY = -Infinity
+    let minZ = Infinity; let maxZ = -Infinity
+    for (let i = 0; i < points.length; i += 3) {
+      const x = points[i] as number
+      const y = points[i + 1] as number
+      const z = points[i + 2] as number
+      minX = Math.min(minX, x); maxX = Math.max(maxX, x)
+      minY = Math.min(minY, y); maxY = Math.max(maxY, y)
+      minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z)
+    }
+    const range = Math.max(maxX - minX, maxY - minY, maxZ - minZ)
+    // Nothing to do for a single point or a degenerate (zero-extent) cloud.
+    if (!(range > 0) || range > spaceSize) return
+
+    // Fill 80% of the cube so the cloud sits comfortably inside the frustum after centering.
+    const effectiveSpaceSize = spaceSize * 0.8
+    const scaleFactor = effectiveSpaceSize / range
+    // Center each axis independently within [0, spaceSize].
+    const offsetX = (spaceSize - (maxX - minX) * scaleFactor) / 2
+    const offsetY = (spaceSize - (maxY - minY) * scaleFactor) / 2
+    const offsetZ = (spaceSize - (maxZ - minZ) * scaleFactor) / 2
+    for (let i = 0; i < pointsNumber; i++) {
+      points[i * 3] = (points[i * 3] as number - minX) * scaleFactor + offsetX
+      points[i * 3 + 1] = (points[i * 3 + 1] as number - minY) * scaleFactor + offsetY
+      points[i * 3 + 2] = (points[i * 3 + 2] as number - minZ) * scaleFactor + offsetZ
     }
   }
 }
