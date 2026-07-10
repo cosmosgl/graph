@@ -24,7 +24,7 @@ in vec2 pointIndices;
 out vec4 vColor;
 
 void main() {
-  vec4 pointPosition = texture(positionsTexture, pointIndices / pointsTextureSize);
+  vec4 pointPosition = texture(positionsTexture, (pointIndices + 0.5) / pointsTextureSize);
   vColor = vec4(pointPosition.rg, 1.0, 0.0);
 
   float n = floor(pointPosition.x / cellSize);

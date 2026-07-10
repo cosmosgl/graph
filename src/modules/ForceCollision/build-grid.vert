@@ -40,7 +40,7 @@ in vec2 pointIndices;
 out vec4 cellData;
 
 void main() {
-  vec4 pointPosition = texture(positionsTexture, pointIndices / pointsTextureSize);
+  vec4 pointPosition = texture(positionsTexture, (pointIndices + 0.5) / pointsTextureSize);
 
 #ifdef SPACE_3D
   // The position texture stores z in the alpha channel
@@ -62,7 +62,7 @@ void main() {
   vec2 gridPosition = 2.0 * (vec2(pixel) + 0.5) / vec2(gridTextureWidth, gridTextureHeight) - 1.0;
 #else
   // Output: position sum, size sum, count
-  vec4 pointSize = texture(sizeTexture, pointIndices / pointsTextureSize);
+  vec4 pointSize = texture(sizeTexture, (pointIndices + 0.5) / pointsTextureSize);
   cellData = vec4(pointPosition.xy, pointSize.r, 1.0);
 
   // Apply grid offset for multi-pass collision detection
