@@ -9,7 +9,7 @@
     },
     "target": "es2019",
     "module": "esnext",
-    "moduleResolution": "node",
+    "moduleResolution": "bundler",
     "lib": ["es2019", "es2017", "es7", "es6", "dom"],
     "declaration": true,
     "outDir": "dist",

@@ -278,7 +278,7 @@ export class Clusters extends CoreModule {
     }
 
     // Create UniformStore for calculateCentermass uniforms
-    this.calculateCentermassUniformStore ||= new UniformStore({
+    this.calculateCentermassUniformStore ||= new UniformStore(device, {
       calculateCentermassUniforms: {
         uniformTypes: {
           pointsTextureSize: 'f32',
@@ -309,7 +309,7 @@ export class Clusters extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        calculateCentermassUniforms: this.calculateCentermassUniformStore.getManagedUniformBuffer(device, 'calculateCentermassUniforms'),
+        calculateCentermassUniforms: this.calculateCentermassUniformStore.getManagedUniformBuffer('calculateCentermassUniforms'),
         // All texture bindings will be set dynamically in calculateCentermass() method
       },
       parameters: {
@@ -326,7 +326,7 @@ export class Clusters extends CoreModule {
     })
 
     // Create UniformStore for applyForces uniforms
-    this.applyForcesUniformStore ||= new UniformStore({
+    this.applyForcesUniformStore ||= new UniformStore(device, {
       applyForcesUniforms: {
         uniformTypes: {
           alpha: 'f32',
@@ -364,7 +364,7 @@ export class Clusters extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        applyForcesUniforms: this.applyForcesUniformStore.getManagedUniformBuffer(device, 'applyForcesUniforms'),
+        applyForcesUniforms: this.applyForcesUniformStore.getManagedUniformBuffer('applyForcesUniforms'),
         // All texture bindings will be set dynamically in run() method
       },
     })

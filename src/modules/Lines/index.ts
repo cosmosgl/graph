@@ -179,7 +179,7 @@ export class Lines extends CoreModule {
     })
 
     // Create UniformStore for drawLine uniforms
-    this.drawLineUniformStore ||= new UniformStore({
+    this.drawLineUniformStore ||= new UniformStore(device, {
       drawLineUniforms: {
         uniformTypes: {
           transformationMatrix: 'mat4x4<f32>',
@@ -253,7 +253,7 @@ export class Lines extends CoreModule {
     this.isLinkBlendingActive = this.config.linkBlending
 
     // Sampled links (for getSampledLinks / getSampledLinkPositionsMap)
-    this.fillSampledLinksUniformStore ||= new UniformStore({
+    this.fillSampledLinksUniformStore ||= new UniformStore(device, {
       fillSampledLinksUniforms: {
         uniformTypes: {
           pointsTextureSize: 'f32',
@@ -297,7 +297,7 @@ export class Lines extends CoreModule {
         ...(store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
-        fillSampledLinksUniforms: this.fillSampledLinksUniformStore.getManagedUniformBuffer(device, 'fillSampledLinksUniforms'),
+        fillSampledLinksUniforms: this.fillSampledLinksUniformStore.getManagedUniformBuffer('fillSampledLinksUniforms'),
       },
       parameters: {
         depthWriteEnabled: false,
@@ -1147,8 +1147,8 @@ export class Lines extends CoreModule {
         ...(this.store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
-        drawLineUniforms: this.drawLineUniformStore.getManagedUniformBuffer(this.device, 'drawLineUniforms'),
-        drawLineFragmentUniforms: this.drawLineUniformStore.getManagedUniformBuffer(this.device, 'drawLineFragmentUniforms'),
+        drawLineUniforms: this.drawLineUniformStore.getManagedUniformBuffer('drawLineUniforms'),
+        drawLineFragmentUniforms: this.drawLineUniformStore.getManagedUniformBuffer('drawLineFragmentUniforms'),
       },
       parameters,
     })

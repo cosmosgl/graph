@@ -315,7 +315,7 @@ export class ForceManyBody extends CoreModule {
     if (!data.pointsNumber || !points || !store.pointsTextureSize) return
 
     // Calculate levels command (point list)
-    this.calculateLevelsUniformStore ||= new UniformStore({
+    this.calculateLevelsUniformStore ||= new UniformStore(device, {
       calculateLevelsUniforms: {
         uniformTypes: {
           pointsTextureSize: 'f32',
@@ -347,7 +347,7 @@ export class ForceManyBody extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        calculateLevelsUniforms: this.calculateLevelsUniformStore.getManagedUniformBuffer(device, 'calculateLevelsUniforms'),
+        calculateLevelsUniforms: this.calculateLevelsUniformStore.getManagedUniformBuffer('calculateLevelsUniforms'),
         // All texture bindings will be set dynamically in drawLevels() method
       },
       parameters: {
@@ -364,7 +364,7 @@ export class ForceManyBody extends CoreModule {
     })
 
     // Force command (fullscreen quad)
-    this.forceUniformStore ||= new UniformStore({
+    this.forceUniformStore ||= new UniformStore(device, {
       forceUniforms: {
         uniformTypes: {
           level: 'f32',
@@ -408,7 +408,7 @@ export class ForceManyBody extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        forceUniforms: this.forceUniformStore.getManagedUniformBuffer(device, 'forceUniforms'),
+        forceUniforms: this.forceUniformStore.getManagedUniformBuffer('forceUniforms'),
         // All texture bindings will be set dynamically in drawForces() method
       },
       parameters: {
@@ -425,7 +425,7 @@ export class ForceManyBody extends CoreModule {
     })
 
     // Force-from-centermass command (fullscreen quad)
-    this.forceCenterUniformStore ||= new UniformStore({
+    this.forceCenterUniformStore ||= new UniformStore(device, {
       forceCenterUniforms: {
         uniformTypes: {
           levelTextureSize: 'f32',
@@ -457,7 +457,7 @@ export class ForceManyBody extends CoreModule {
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
-        forceCenterUniforms: this.forceCenterUniformStore.getManagedUniformBuffer(device, 'forceCenterUniforms'),
+        forceCenterUniforms: this.forceCenterUniformStore.getManagedUniformBuffer('forceCenterUniforms'),
         // All texture bindings will be set dynamically in drawForces() method
       },
       parameters: {
@@ -475,7 +475,7 @@ export class ForceManyBody extends CoreModule {
 
     // Brute-force 3D repulsion command (fullscreen quad, 3D mode only)
     if (store.is3D) {
-      this.bruteForce3DUniformStore ||= new UniformStore({
+      this.bruteForce3DUniformStore ||= new UniformStore(device, {
         forceBruteForceUniforms: {
           uniformTypes: {
             pointsTextureSize: 'f32',
@@ -507,7 +507,7 @@ export class ForceManyBody extends CoreModule {
           USE_UNIFORM_BUFFERS: true,
         },
         bindings: {
-          forceBruteForceUniforms: this.bruteForce3DUniformStore.getManagedUniformBuffer(device, 'forceBruteForceUniforms'),
+          forceBruteForceUniforms: this.bruteForce3DUniformStore.getManagedUniformBuffer('forceBruteForceUniforms'),
           // All texture bindings will be set dynamically in drawForcesBruteForce3D() method
         },
         parameters: {
@@ -517,7 +517,7 @@ export class ForceManyBody extends CoreModule {
       })
 
       // Octree aggregation command (point list, additive blend — mirrors calculateLevelsCommand)
-      this.calculateLevels3DUniformStore ||= new UniformStore({
+      this.calculateLevels3DUniformStore ||= new UniformStore(device, {
         calculateLevels3DUniforms: {
           uniformTypes: {
             // Order MUST match shader declaration order (std140 layout)
@@ -554,7 +554,7 @@ export class ForceManyBody extends CoreModule {
           USE_UNIFORM_BUFFERS: true,
         },
         bindings: {
-          calculateLevels3DUniforms: this.calculateLevels3DUniformStore.getManagedUniformBuffer(device, 'calculateLevels3DUniforms'),
+          calculateLevels3DUniforms: this.calculateLevels3DUniformStore.getManagedUniformBuffer('calculateLevels3DUniforms'),
           // All texture bindings will be set dynamically in drawLevels3D() method
         },
         parameters: {
@@ -571,7 +571,7 @@ export class ForceManyBody extends CoreModule {
       })
 
       // Octree per-level force command (fullscreen quad, additive into velocityFbo)
-      this.forceLevel3DUniformStore ||= new UniformStore({
+      this.forceLevel3DUniformStore ||= new UniformStore(device, {
         forceLevel3DUniforms: {
           uniformTypes: {
             // Order MUST match shader declaration order (std140 layout)
@@ -608,7 +608,7 @@ export class ForceManyBody extends CoreModule {
           USE_UNIFORM_BUFFERS: true,
         },
         bindings: {
-          forceLevel3DUniforms: this.forceLevel3DUniformStore.getManagedUniformBuffer(device, 'forceLevel3DUniforms'),
+          forceLevel3DUniforms: this.forceLevel3DUniformStore.getManagedUniformBuffer('forceLevel3DUniforms'),
           // All texture bindings will be set dynamically in drawForcesOctree3D() method
         },
         parameters: {
@@ -626,7 +626,7 @@ export class ForceManyBody extends CoreModule {
 
       // Near-field slot peeling command (point list; the depth test selects the
       // eligible point with the smallest per-tick hash per cell)
-      this.buildNearFieldSlotsUniformStore ||= new UniformStore({
+      this.buildNearFieldSlotsUniformStore ||= new UniformStore(device, {
         buildNearFieldSlotsUniforms: {
           uniformTypes: {
             // Order MUST match shader declaration order (std140 layout)
@@ -667,7 +667,7 @@ export class ForceManyBody extends CoreModule {
           USE_UNIFORM_BUFFERS: true,
         },
         bindings: {
-          buildNearFieldSlotsUniforms: this.buildNearFieldSlotsUniformStore.getManagedUniformBuffer(device, 'buildNearFieldSlotsUniforms'),
+          buildNearFieldSlotsUniforms: this.buildNearFieldSlotsUniformStore.getManagedUniformBuffer('buildNearFieldSlotsUniforms'),
           // All texture bindings will be set dynamically in drawNearFieldSlots() method
         },
         parameters: {
@@ -679,7 +679,7 @@ export class ForceManyBody extends CoreModule {
 
       // Octree near-field force command (fullscreen quad — the P3M replacement of
       // the 2D forceFromItsOwnCentermassCommand)
-      this.forceNearField3DUniformStore ||= new UniformStore({
+      this.forceNearField3DUniformStore ||= new UniformStore(device, {
         forceNearField3DUniforms: {
           uniformTypes: {
             // Order MUST match shader declaration order (std140 layout)
@@ -716,7 +716,7 @@ export class ForceManyBody extends CoreModule {
           USE_UNIFORM_BUFFERS: true,
         },
         bindings: {
-          forceNearField3DUniforms: this.forceNearField3DUniformStore.getManagedUniformBuffer(device, 'forceNearField3DUniforms'),
+          forceNearField3DUniforms: this.forceNearField3DUniformStore.getManagedUniformBuffer('forceNearField3DUniforms'),
           // All texture bindings will be set dynamically in drawForcesOctree3D() method
         },
         parameters: {

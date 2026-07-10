@@ -218,7 +218,7 @@ export class ForceCollision extends CoreModule {
     }
 
     // Build-grid command: positions each point into its grid cell (additive accumulation)
-    this.buildGridUniformStore ||= new UniformStore({
+    this.buildGridUniformStore ||= new UniformStore(device, {
       buildGridUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
@@ -249,7 +249,7 @@ export class ForceCollision extends CoreModule {
         ...(store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
-        buildGridUniforms: this.buildGridUniformStore.getManagedUniformBuffer(device, 'buildGridUniforms'),
+        buildGridUniforms: this.buildGridUniformStore.getManagedUniformBuffer('buildGridUniforms'),
         // Texture bindings set dynamically in run()
       },
       parameters: {
@@ -266,7 +266,7 @@ export class ForceCollision extends CoreModule {
     })
 
     // Collision force command: reads the spatial hash grid (additive accumulation)
-    this.forceUniformStore ||= new UniformStore({
+    this.forceUniformStore ||= new UniformStore(device, {
       forceCollisionUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
@@ -305,7 +305,7 @@ export class ForceCollision extends CoreModule {
         ...(store.is3D ? { SPACE_3D: true } : {}),
       },
       bindings: {
-        forceCollisionUniforms: this.forceUniformStore.getManagedUniformBuffer(device, 'forceCollisionUniforms'),
+        forceCollisionUniforms: this.forceUniformStore.getManagedUniformBuffer('forceCollisionUniforms'),
         // Texture bindings set dynamically in run()
       },
       parameters: {
