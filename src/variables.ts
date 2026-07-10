@@ -23,6 +23,7 @@ export const defaultConfigValues = {
   pointGreyoutOpacity: undefined,
   pointGreyoutColor: undefined,
   pointSizeScale: 1,
+  pointOcclusionCulling: true,
   scalePointsOnZoom: false,
 
   // Point interaction

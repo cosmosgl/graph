@@ -37,6 +37,7 @@ layout(std140) uniform drawVertexUniforms {
   float transitionProgress;
   float animateColors;
   float animateSizes;
+  float pointsNumber;
 } drawVertex;
 
 #define ratio drawVertex.ratio
@@ -58,6 +59,7 @@ layout(std140) uniform drawVertexUniforms {
 #define transitionProgress drawVertex.transitionProgress
 #define animateColors drawVertex.animateColors
 #define animateSizes drawVertex.animateSizes
+#define pointsNumber drawVertex.pointsNumber
 #else
 uniform float ratio;
 uniform mat3 transformationMatrix;
@@ -78,6 +80,7 @@ uniform float imageAtlasCoordsTextureSize;
 uniform float transitionProgress;
 uniform float animateColors;
 uniform float animateSizes;
+uniform float pointsNumber;
 #endif
 
 out float pointShape;
@@ -158,7 +161,13 @@ void main() {
   #else
   vec3 finalPosition = transformationMatrix * vec3(normalizedPosition, 1);
   #endif
-  gl_Position = vec4(finalPosition.rg, 0, 1);
+  // Depth encodes stacking order (2D only — the 3D branch above outputs real
+  // perspective depth): higher point index = drawn on top = nearer (smaller z).
+  // Harmless when depth testing is off (depthCompare 'always'); used by the
+  // occlusion-culling core/fringe passes.
+  float linearIndex = pointIndices.y * pointsTextureSize + pointIndices.x;
+  float depthZ = 1.0 - 2.0 * (linearIndex + 0.5) / max(pointsNumber, 1.0);
+  gl_Position = vec4(finalPosition.rg, depthZ, 1.0);
   float pxPerUnit = transformationMatrix[0][0];
   #endif
 

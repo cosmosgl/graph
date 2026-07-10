@@ -1,4 +1,4 @@
-import { Framebuffer, Buffer, Texture, UniformStore, RenderPass } from '@luma.gl/core'
+import { Framebuffer, Buffer, Texture, UniformStore, RenderPass, type RenderPipelineParameters } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 // import { scaleLinear } from 'd3-scale'
 // import { extent } from 'd3-array'
@@ -43,6 +43,56 @@ const MAX_PICKING_BUFFER_DIMENSION = 1536
  * buffer pixels — its half is the pick "forgiveness" radius in buffer pixels.
  */
 const PICKING_WINDOW_SIZE = 9
+
+const BLEND_PARAMETERS = {
+  blend: true,
+  blendColorOperation: 'add',
+  blendColorSrcFactor: 'src-alpha',
+  blendColorDstFactor: 'one-minus-src-alpha',
+  blendAlphaOperation: 'add',
+  blendAlphaSrcFactor: 'one',
+  blendAlphaDstFactor: 'one-minus-src-alpha',
+} as const
+
+/** Standard single-pass point drawing in 2D: blended, no depth testing. */
+const DEFAULT_DRAW_PARAMETERS_2D: RenderPipelineParameters = {
+  ...BLEND_PARAMETERS,
+  depthWriteEnabled: false,
+  depthCompare: 'always',
+}
+
+/**
+ * Point drawing in 3D: blended, and points write real perspective depth (with
+ * an alpha-discard in the fragment shader) so that nearer geometry correctly
+ * occludes farther geometry.
+ */
+const DRAW_PARAMETERS_3D: RenderPipelineParameters = {
+  ...BLEND_PARAMETERS,
+  depthWriteEnabled: true,
+  depthCompare: 'less-equal',
+}
+
+/**
+ * Occlusion-culling pass A (2D only): fully opaque point interiors drawn
+ * front-to-back (reversed index order) so early-z rejects fragments hidden
+ * behind nearer points.
+ */
+const CORE_PASS_PARAMETERS: RenderPipelineParameters = {
+  blend: false,
+  depthWriteEnabled: true,
+  depthCompare: 'less',
+}
+
+/**
+ * Occlusion-culling pass B (2D only): antialiasing fringes and translucent
+ * points drawn back-to-front, depth-tested against the cores. A point's own
+ * core fails 'less' at equal z, so nothing draws twice.
+ */
+const FRINGE_PASS_PARAMETERS: RenderPipelineParameters = {
+  ...BLEND_PARAMETERS,
+  depthWriteEnabled: false,
+  depthCompare: 'less',
+}
 
 export class Points extends CoreModule {
   public transition: Transition | undefined
@@ -158,6 +208,14 @@ export class Points extends CoreModule {
    */
   private programsSpaceDimensions: 2 | 3 = 2
   private drawCommand: Model | undefined
+  /**
+   * Occlusion-culling pass A model (2D mode only — in 3D index order is
+   * unrelated to camera depth and points already write real perspective
+   * depth). Shares attribute buffers, uniform buffers and the cached GL
+   * program with `drawCommand`; differs only in parameters (depth write, no
+   * blend) and the reversed index buffer (front-to-back order).
+   */
+  private drawCoreCommand: Model | undefined
   private drawHighlightedCommand: Model | undefined
   private updatePositionCommand: Model | undefined
   private interpolatePositionCommand: Model | undefined
@@ -187,6 +245,10 @@ export class Points extends CoreModule {
   private polygonPathTexture: Texture | undefined
   private polygonPathLength = 0
   private drawPointIndices: Buffer | undefined
+  /** Uint32 element indices `[N-1 … 0]` for the front-to-back core pass. */
+  private reversedPointIndexBuffer: Buffer | undefined
+  /** Cached pass-B parameter state; parameters only switch on an actual mode change. */
+  private isOcclusionCullingActive = false
   private hoveredPointIndices: Buffer | undefined
   private sampledPointIndices: Buffer | undefined
   private transitionProgress = 1
@@ -235,6 +297,7 @@ export class Points extends CoreModule {
       transitionProgress: number;
       animateColors: number;
       animateSizes: number;
+      pointsNumber: number;
     };
     drawFragmentUniforms: {
       greyoutOpacity: number;
@@ -243,6 +306,7 @@ export class Points extends CoreModule {
       backgroundColor: [number, number, number, number];
       outlineColor: [number, number, number, number];
       outlineWidth: number;
+      renderMode: number;
     };
   }> | undefined
 
@@ -481,6 +545,12 @@ export class Points extends CoreModule {
         pointIndices: this.drawPointIndices,
       })
     }
+    if (this.drawCoreCommand) {
+      this.drawCoreCommand.setAttributes({
+        pointIndices: this.drawPointIndices,
+      })
+    }
+    this.updateReversedPointIndexBuffer()
 
     if (!this.hoveredPointIndices || this.hoveredPointIndices.byteLength !== requiredByteLength) {
       if (this.hoveredPointIndices && !this.hoveredPointIndices.destroyed) {
@@ -531,6 +601,12 @@ export class Points extends CoreModule {
         this.drawCommand.destroy()
         this.drawCommand = undefined
       }
+      if (this.drawCoreCommand) {
+        this.drawCoreCommand.destroy()
+        this.drawCoreCommand = undefined
+      }
+      // The recreated drawCommand starts with freshly baked default parameters
+      this.isOcclusionCullingActive = false
       if (this.fillPickingBufferCommand) {
         this.fillPickingBufferCommand.destroy()
         this.fillPickingBufferCommand = undefined
@@ -633,6 +709,7 @@ export class Points extends CoreModule {
           transitionProgress: 'f32',
           animateColors: 'f32',
           animateSizes: 'f32',
+          pointsNumber: 'f32',
         },
         defaultUniforms: {
           // Order MUST match uniformTypes and shader declaration
@@ -663,6 +740,7 @@ export class Points extends CoreModule {
           transitionProgress: 1,
           animateColors: 0,
           animateSizes: 0,
+          pointsNumber: data.pointsNumber ?? 0,
         },
       },
       drawFragmentUniforms: {
@@ -673,6 +751,7 @@ export class Points extends CoreModule {
           backgroundColor: 'vec4<f32>',
           outlineColor: 'vec4<f32>',
           outlineWidth: 'f32',
+          renderMode: 'f32',
         },
         defaultUniforms: {
           // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
@@ -682,6 +761,7 @@ export class Points extends CoreModule {
           backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
           outlineColor: ensureVec4(store.outlinedPointRingColor, [1, 1, 1, 1]),
           outlineWidth: 0.9,
+          renderMode: 0,
         },
       },
     })
@@ -723,20 +803,53 @@ export class Points extends CoreModule {
         drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer(device, 'drawFragmentUniforms'),
         // All texture bindings will be set dynamically in draw() method
       },
-      parameters: {
-        blend: true,
-        blendColorOperation: 'add',
-        blendColorSrcFactor: 'src-alpha',
-        blendColorDstFactor: 'one-minus-src-alpha',
-        blendAlphaOperation: 'add',
-        blendAlphaSrcFactor: 'one',
-        blendAlphaDstFactor: 'one-minus-src-alpha',
-        // In 3D points write depth (with an alpha-discard in the fragment shader)
-        // so that nearer geometry correctly occludes farther geometry.
-        depthWriteEnabled: store.is3D,
-        depthCompare: store.is3D ? 'less-equal' : 'always',
-      },
+      parameters: store.is3D ? DRAW_PARAMETERS_3D : DEFAULT_DRAW_PARAMETERS_2D,
     })
+
+    // Occlusion-culling pass A model (2D mode only): same shaders, attributes
+    // and uniform buffers as drawCommand (PipelineFactory reuses the cached GL
+    // program), but draws front-to-back via the reversed index buffer with
+    // depth writes and no blending. draw() decides each frame whether to use it.
+    if (!store.is3D) {
+      this.updateReversedPointIndexBuffer()
+      this.drawCoreCommand ||= new Model(device, {
+        fs: drawPointsFrag,
+        vs: drawPointsVert,
+        modules: [space3dModule],
+        topology: 'point-list',
+        vertexCount: data.pointsNumber ?? 0,
+        indexBuffer: this.reversedPointIndexBuffer ?? null,
+        attributes: {
+          ...(this.drawPointIndices && { pointIndices: this.drawPointIndices }),
+          ...(this.sourceSizeBuffer && { sourceSize: this.sourceSizeBuffer }),
+          ...(this.targetSizeBuffer && { targetSize: this.targetSizeBuffer }),
+          ...(this.sourceColorBuffer && { sourceColor: this.sourceColorBuffer }),
+          ...(this.targetColorBuffer && { targetColor: this.targetColorBuffer }),
+          ...(this.shapeBuffer && { shape: this.shapeBuffer }),
+          ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
+          ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
+        },
+        bufferLayout: [
+          { name: 'pointIndices', format: 'float32x2' },
+          { name: 'sourceSize', format: 'float32' },
+          { name: 'targetSize', format: 'float32' },
+          { name: 'sourceColor', format: 'float32x4' },
+          { name: 'targetColor', format: 'float32x4' },
+          { name: 'shape', format: 'float32' },
+          { name: 'imageIndex', format: 'float32' },
+          { name: 'imageSize', format: 'float32' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
+        },
+        bindings: {
+          drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer(device, 'drawVertexUniforms'),
+          drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer(device, 'drawFragmentUniforms'),
+          // All texture bindings will be set dynamically in draw() method
+        },
+        parameters: CORE_PASS_PARAMETERS,
+      })
+    }
 
     // Create vertex buffer for quad
     this.findPointsInRectVertexCoordBuffer ||= device.createBuffer({
@@ -1098,11 +1211,15 @@ export class Points extends CoreModule {
     this.targetColorBuffer = target
     this.previousColorData = previous
 
+    const colorAttributes = {
+      ...(this.sourceColorBuffer && { sourceColor: this.sourceColorBuffer }),
+      ...(this.targetColorBuffer && { targetColor: this.targetColorBuffer }),
+    }
     if (this.drawCommand) {
-      this.drawCommand.setAttributes({
-        ...(this.sourceColorBuffer && { sourceColor: this.sourceColorBuffer }),
-        ...(this.targetColorBuffer && { targetColor: this.targetColorBuffer }),
-      })
+      this.drawCommand.setAttributes(colorAttributes)
+    }
+    if (this.drawCoreCommand) {
+      this.drawCoreCommand.setAttributes(colorAttributes)
     }
   }
 
@@ -1222,11 +1339,15 @@ export class Points extends CoreModule {
     this.targetSizeBuffer = target
     this.previousSizeData = previous
 
+    const sizeAttributes = {
+      ...(this.sourceSizeBuffer && { sourceSize: this.sourceSizeBuffer }),
+      ...(this.targetSizeBuffer && { targetSize: this.targetSizeBuffer }),
+    }
     if (this.drawCommand) {
-      this.drawCommand.setAttributes({
-        ...(this.sourceSizeBuffer && { sourceSize: this.sourceSizeBuffer }),
-        ...(this.targetSizeBuffer && { targetSize: this.targetSizeBuffer }),
-      })
+      this.drawCommand.setAttributes(sizeAttributes)
+    }
+    if (this.drawCoreCommand) {
+      this.drawCoreCommand.setAttributes(sizeAttributes)
     }
 
     const initialState = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
@@ -1287,6 +1408,11 @@ export class Points extends CoreModule {
         shape: this.shapeBuffer,
       })
     }
+    if (this.drawCoreCommand) {
+      this.drawCoreCommand.setAttributes({
+        shape: this.shapeBuffer,
+      })
+    }
   }
 
   public updateImageIndices (): void {
@@ -1312,6 +1438,11 @@ export class Points extends CoreModule {
         imageIndex: this.imageIndicesBuffer,
       })
     }
+    if (this.drawCoreCommand) {
+      this.drawCoreCommand.setAttributes({
+        imageIndex: this.imageIndicesBuffer,
+      })
+    }
   }
 
   public updateImageSizes (): void {
@@ -1334,6 +1465,11 @@ export class Points extends CoreModule {
     }
     if (this.drawCommand) {
       this.drawCommand.setAttributes({
+        imageSize: this.imageSizesBuffer,
+      })
+    }
+    if (this.drawCoreCommand) {
+      this.drawCoreCommand.setAttributes({
         imageSize: this.imageSizesBuffer,
       })
     }
@@ -1528,6 +1664,7 @@ export class Points extends CoreModule {
       transitionProgress: this.transitionProgress,
       animateColors: this.shouldAnimatePointColors ? 1 : 0,
       animateSizes: this.shouldAnimatePointSizes ? 1 : 0,
+      pointsNumber: data.pointsNumber,
     }
 
     const baseFragmentUniforms = {
@@ -1538,12 +1675,72 @@ export class Points extends CoreModule {
       backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
       outlineColor: ensureVec4(store.outlinedPointRingColor, [1, 1, 1, 1]),
       outlineWidth: 0.9,
+      renderMode: 0,
+    }
+
+    const textureBindings = {
+      positionsTexture: this.currentPositionTexture,
+      pointStatus: this.pointStatusTexture,
+      imageAtlasTexture: this.imageAtlasTexture,
+      imageAtlasCoords: this.imageAtlasCoordsTexture,
     }
 
     const hasHighlighting = config.highlightedPointIndices !== undefined
 
-    // Render in layers: greyed points first (behind), then highlighted points (in front)
-    if (hasHighlighting) {
+    // Occlusion culling skips fragments hidden under opaque points via depth
+    // testing, in 2D mode only — in 3D index order is unrelated to camera depth
+    // and points already write real perspective depth. Active while points are
+    // effectively opaque and no highlighting is set: highlighting always falls
+    // back because its layered greyed/highlighted draw relies on paint order.
+    const useOcclusionCulling =
+      config.pointOcclusionCulling &&
+      config.pointOpacity >= 1 &&
+      !hasHighlighting &&
+      !store.is3D &&
+      !!this.drawCoreCommand &&
+      this.reversedPointIndexBuffer?.byteLength === data.pointsNumber * 4
+
+    // Flip pass-B depth parameters only when the effective mode changes
+    // (cf. Lines.updateLinkBlending — setParameters can touch the pipeline).
+    // In 3D both sides stay false, so the 3D parameters are never touched.
+    if (useOcclusionCulling !== this.isOcclusionCullingActive) {
+      this.drawCommand.setParameters(useOcclusionCulling ? FRINGE_PASS_PARAMETERS : DEFAULT_DRAW_PARAMETERS_2D)
+      this.isOcclusionCullingActive = useOcclusionCulling
+    }
+
+    if (useOcclusionCulling && this.drawCoreCommand) {
+      // Pass A: opaque cores, front-to-back (reversed indices), depth write,
+      // no blending. Early-z rejects fragments hidden behind nearer cores.
+      this.drawUniformStore.setUniforms({
+        drawVertexUniforms: {
+          ...baseVertexUniforms,
+          skipHighlighted: 0,
+          skipGreyed: 0,
+        },
+        drawFragmentUniforms: {
+          ...baseFragmentUniforms,
+          renderMode: 1,
+        },
+      })
+
+      this.drawCoreCommand.setVertexCount(data.pointsNumber)
+      this.drawCoreCommand.setBindings(textureBindings)
+      this.drawCoreCommand.draw(renderPass)
+
+      // Pass B: antialiasing fringes and translucent points, original
+      // back-to-front order, blended, depth-tested against the cores
+      this.drawUniformStore.setUniforms({
+        drawFragmentUniforms: {
+          ...baseFragmentUniforms,
+          renderMode: 2,
+        },
+      })
+
+      this.drawCommand.setBindings(textureBindings)
+
+      this.drawCommand.draw(renderPass)
+    } else if (hasHighlighting) {
+      // Render in layers: greyed points first (behind), then highlighted points (in front)
       // First draw greyed points (they will appear behind)
       this.drawUniformStore.setUniforms({
         drawVertexUniforms: {
@@ -1554,12 +1751,7 @@ export class Points extends CoreModule {
         drawFragmentUniforms: baseFragmentUniforms,
       })
 
-      this.drawCommand.setBindings({
-        positionsTexture: this.currentPositionTexture,
-        pointStatus: this.pointStatusTexture,
-        imageAtlasTexture: this.imageAtlasTexture,
-        imageAtlasCoords: this.imageAtlasCoordsTexture,
-      })
+      this.drawCommand.setBindings(textureBindings)
 
       this.drawCommand.draw(renderPass)
 
@@ -1573,12 +1765,7 @@ export class Points extends CoreModule {
         drawFragmentUniforms: baseFragmentUniforms,
       })
 
-      this.drawCommand.setBindings({
-        positionsTexture: this.currentPositionTexture,
-        pointStatus: this.pointStatusTexture,
-        imageAtlasTexture: this.imageAtlasTexture,
-        imageAtlasCoords: this.imageAtlasCoordsTexture,
-      })
+      this.drawCommand.setBindings(textureBindings)
 
       this.drawCommand.draw(renderPass)
     } else {
@@ -1592,12 +1779,7 @@ export class Points extends CoreModule {
         drawFragmentUniforms: baseFragmentUniforms,
       })
 
-      this.drawCommand.setBindings({
-        positionsTexture: this.currentPositionTexture,
-        pointStatus: this.pointStatusTexture,
-        imageAtlasTexture: this.imageAtlasTexture,
-        imageAtlasCoords: this.imageAtlasCoordsTexture,
-      })
+      this.drawCommand.setBindings(textureBindings)
 
       this.drawCommand.draw(renderPass)
     }
@@ -2198,6 +2380,9 @@ export class Points extends CoreModule {
     // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
     this.drawCommand?.destroy()
     this.drawCommand = undefined
+    this.drawCoreCommand?.destroy()
+    this.drawCoreCommand = undefined
+    this.isOcclusionCullingActive = false
     this.drawHighlightedCommand?.destroy()
     this.drawHighlightedCommand = undefined
     this.interpolatePositionCommand?.destroy()
@@ -2373,6 +2558,10 @@ export class Points extends CoreModule {
       this.drawPointIndices.destroy()
     }
     this.drawPointIndices = undefined
+    if (this.reversedPointIndexBuffer && !this.reversedPointIndexBuffer.destroyed) {
+      this.reversedPointIndexBuffer.destroy()
+    }
+    this.reversedPointIndexBuffer = undefined
     if (this.hoveredPointIndices && !this.hoveredPointIndices.destroyed) {
       this.hoveredPointIndices.destroy()
     }
@@ -2970,5 +3159,33 @@ export class Points extends CoreModule {
       points[i * 3 + 1] = (points[i * 3 + 1] as number - minY) * scaleFactor + offsetY
       points[i * 3 + 2] = (points[i * 3 + 2] as number - minZ) * scaleFactor + offsetZ
     }
+  }
+
+  /**
+   * (Re)builds the uint32 element index buffer `[N-1 … 0]` that lets the
+   * occlusion-culling core pass draw the shared attribute buffers in reversed
+   * (front-to-back) order. Content depends only on the point count, so the
+   * buffer is rebuilt only when `pointsNumber` changes. Skipped in 3D mode,
+   * where the culling path is inactive; a later 3D → 2D switch rebuilds it
+   * from `initPrograms()`.
+   */
+  private updateReversedPointIndexBuffer (): void {
+    const { device, data, store } = this
+    if (store.is3D) return
+    const pointsNumber = data.pointsNumber ?? 0
+    if (pointsNumber === 0) return
+    const requiredByteLength = pointsNumber * 4
+    if (this.reversedPointIndexBuffer?.byteLength === requiredByteLength) return
+
+    const reversedIndexData = new Uint32Array(pointsNumber)
+    for (let i = 0; i < pointsNumber; i++) reversedIndexData[i] = pointsNumber - 1 - i
+    if (this.reversedPointIndexBuffer && !this.reversedPointIndexBuffer.destroyed) {
+      this.reversedPointIndexBuffer.destroy()
+    }
+    this.reversedPointIndexBuffer = device.createBuffer({
+      data: reversedIndexData,
+      usage: Buffer.INDEX | Buffer.COPY_DST,
+    })
+    this.drawCoreCommand?.setIndexBuffer(this.reversedPointIndexBuffer)
   }
 }
