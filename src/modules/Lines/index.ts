@@ -105,6 +105,7 @@ export class Lines extends CoreModule {
       animateWidths: number;
       animatePositions: number;
       pointDefaultColor: [number, number, number, number];
+      linkColorInterpolateFromEndpoints: number;
     };
     drawLineFragmentUniforms: {
       renderMode: number;
@@ -204,6 +205,7 @@ export class Lines extends CoreModule {
           animateWidths: 'f32',
           animatePositions: 'f32',
           pointDefaultColor: 'vec4<f32>',
+          linkColorInterpolateFromEndpoints: 'f32',
         },
         defaultUniforms: {
           transformationMatrix: store.transformationMatrix4x4,
@@ -233,6 +235,7 @@ export class Lines extends CoreModule {
           animateWidths: 0,
           animatePositions: 0,
           pointDefaultColor: ensureVec4(getRgbaColor(config.pointDefaultColor), [0, 0, 0, 1]),
+          linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
         },
       },
       drawLineFragmentUniforms: {
@@ -406,6 +409,7 @@ export class Lines extends CoreModule {
         animatePositions: this.shouldAnimatePositions ? 1 : 0,
         // Cached parse — draw() runs per frame, so no color-string parsing here.
         pointDefaultColor: ensureVec4(this.data.defaultRgba, [0, 0, 0, 1]),
+        linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
       },
       drawLineFragmentUniforms: {
         renderMode: 0.0, // Normal rendering
@@ -422,8 +426,11 @@ export class Lines extends CoreModule {
       positionsTexture: points.currentPositionTexture,
       linkStatus: this.linkStatusTexture,
       exitTexture: points.exitTexture,
-      // Endpoint colors for gradient links; fall back to the positions texture (same format/size)
-      // so the sampler is always bound even before the first point-color write.
+      // Endpoint colors for gradient links. The sampler must always have a valid texture
+      // bound, but the stand-in is never sampled: with the gradient off the vertex shader
+      // skips the fetches, and with it on Points.updateColor() has built the real texture
+      // (initial create runs it before the first draw; runtime toggles go through
+      // updateStateFromConfig, which re-runs it on the flag change).
       pointColorsTexture: points.pointColorsTexture ?? points.currentPositionTexture,
     })
 
@@ -944,6 +951,7 @@ export class Lines extends CoreModule {
         animateWidths: this.shouldAnimateLinkWidths ? 1 : 0,
         animatePositions: this.shouldAnimatePositions ? 1 : 0,
         pointDefaultColor: ensureVec4(this.data.defaultRgba, [0, 0, 0, 1]),
+        linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
       },
       drawLineFragmentUniforms: {
         renderMode: 1.0, // Index rendering for picking
@@ -960,6 +968,7 @@ export class Lines extends CoreModule {
       positionsTexture: points.currentPositionTexture,
       linkStatus: this.linkStatusTexture,
       exitTexture: points.exitTexture,
+      // Never-sampled stand-in when the gradient is off; see the visible-pass binding.
       pointColorsTexture: points.pointColorsTexture ?? points.currentPositionTexture,
     })
 

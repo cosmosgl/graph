@@ -1664,6 +1664,11 @@ export class Graph {
       this.graph.updateLinkStyles()
       this.lines?.updateStyle()
     }
+    if (prevConfig.linkColorInterpolateFromEndpoints !== this.config.linkColorInterpolateFromEndpoints) {
+      // updateColor reconciles the endpoint-color texture with the flag:
+      // it builds the texture when the gradient turns on and frees it when off.
+      this.points?.updateColor()
+    }
     if (prevConfig.linkBlending !== this.config.linkBlending) {
       this.lines?.updateLinkBlending()
     }
