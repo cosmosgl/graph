@@ -137,6 +137,7 @@ export class Graph {
   private isLinkColorUpdateNeeded = false
   private isLinkWidthUpdateNeeded = false
   private isLinkArrowUpdateNeeded = false
+  private isLinkStyleUpdateNeeded = false
   private isPointClusterUpdateNeeded = false
   private isForceManyBodyUpdateNeeded = false
   private isForceLinkUpdateNeeded = false
@@ -719,6 +720,7 @@ export class Graph {
     this.isLinkColorUpdateNeeded = true
     this.isLinkWidthUpdateNeeded = true
     this.isLinkArrowUpdateNeeded = true
+    this.isLinkStyleUpdateNeeded = true
     this.isForceLinkUpdateNeeded = true
   }
 
@@ -786,6 +788,33 @@ export class Graph {
     if (this.ensureDevice(() => this.setLinkArrows(linkArrows))) return
     this.graph.linkArrowsBoolean = linkArrows
     this.isLinkArrowUpdateNeeded = true
+  }
+
+  /**
+   * Sets the styles (stroke patterns) for the graph links.
+   *
+   * @param {Float32Array} linkStyles - A Float32Array representing the style of each link in the format [style1, style2, ..., stylen],
+   * where `n` is the index of the link. Each value is a `LinkStyle` enum value: `0` = Solid, `1` = Dashed, `2` = Dotted.
+   * Example: `new Float32Array([0, 1, 2])` sets the first link to solid, the second to dashed, and the third to dotted.
+   * Invalid values fall back to the `linkDefaultStyle` config value.
+   * Dash length and gap are controlled globally via the `linkDashLength` and `linkDashGap` config options.
+   */
+  public setLinkStyles (linkStyles: Float32Array): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setLinkStyles(linkStyles))) return
+    this.graph.inputLinkStyles = linkStyles
+    this.isLinkStyleUpdateNeeded = true
+  }
+
+  /**
+   * Gets the current styles of the graph links.
+   *
+   * @returns {Float32Array} A Float32Array representing the style of each link in the format [style1, style2, ..., stylen],
+   * where `n` is the index of the link. Returns an empty Float32Array if no link styles are set.
+   */
+  public getLinkStyles (): Float32Array {
+    if (this._isDestroyed) return new Float32Array()
+    return this.graph.linkStyles ?? new Float32Array()
   }
 
   /**
@@ -1784,6 +1813,7 @@ export class Graph {
     if (this.isLinkColorUpdateNeeded) this.lines.updateColor()
     if (this.isLinkWidthUpdateNeeded) this.lines.updateWidth()
     if (this.isLinkArrowUpdateNeeded) this.lines.updateArrow()
+    if (this.isLinkStyleUpdateNeeded) this.lines.updateStyle()
 
     if (this.isForceManyBodyUpdateNeeded) this.forceManyBody?.create()
     // Collision grid/size textures depend on point count and sizes. Mark them
@@ -1807,6 +1837,7 @@ export class Graph {
     this.isLinkColorUpdateNeeded = false
     this.isLinkWidthUpdateNeeded = false
     this.isLinkArrowUpdateNeeded = false
+    this.isLinkStyleUpdateNeeded = false
     this.isPointClusterUpdateNeeded = false
     this.isForceManyBodyUpdateNeeded = false
     this.isForceLinkUpdateNeeded = false
@@ -1910,6 +1941,15 @@ export class Graph {
     if (prevConfig.linkDefaultArrows !== this.config.linkDefaultArrows) {
       this.graph.updateArrows()
       this.lines?.updateArrow()
+    }
+    if (prevConfig.linkDefaultStyle !== this.config.linkDefaultStyle) {
+      this.graph.updateLinkStyles()
+      this.lines?.updateStyle()
+    }
+    if (prevConfig.linkColorInterpolateFromEndpoints !== this.config.linkColorInterpolateFromEndpoints) {
+      // updateColor reconciles the endpoint-color texture with the flag:
+      // it builds the texture when the gradient turns on and frees it when off.
+      this.points?.updateColor()
     }
     if (prevConfig.linkBlending !== this.config.linkBlending) {
       this.lines?.updateLinkBlending()
@@ -2989,7 +3029,7 @@ export class Graph {
 
 export type { GraphConfig } from './config'
 export type { Camera3dState } from './modules/Camera'
-export { PointShape } from './modules/GraphData'
+export { PointShape, LinkStyle } from './modules/GraphData'
 export { TransitionEasing } from './modules/Transition'
 
 export * from './variables'

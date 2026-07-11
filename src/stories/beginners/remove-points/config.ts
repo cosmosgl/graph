@@ -9,7 +9,9 @@ export const config: GraphConfig = {
   scalePointsOnZoom: true,
   pointGreyoutOpacity: 0.1,
   linkDefaultWidth: 0.6,
-  linkDefaultColor: '#5F74C2',
+  // Each link is a gradient between its endpoint colors, so it's easy to see which
+  // points a fading link belonged to when a point is removed.
+  linkColorInterpolateFromEndpoints: true,
   linkDefaultArrows: false,
   linkGreyoutOpacity: 0,
   hoveredPointCursor: 'pointer',

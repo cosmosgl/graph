@@ -14,6 +14,13 @@ export enum PointShape {
   None = 8
 }
 
+/** Link stroke pattern; one value per link via `setLinkStyles`. Dash metrics come from `linkDashLength`/`linkDashGap`. */
+export enum LinkStyle {
+  Solid = 0,
+  Dashed = 1,
+  Dotted = 2
+}
+
 export class GraphData {
   public inputPointPositions: Float32Array | undefined
   /**
@@ -30,6 +37,8 @@ export class GraphData {
   public inputPointImageSizes: Float32Array | undefined
   public inputLinkColors: Float32Array | undefined
   public inputLinkWidths: Float32Array | undefined
+  /** Raw per-link stroke patterns from `setLinkStyles` (`LinkStyle` per link); sanitized into `linkStyles`. */
+  public inputLinkStyles: Float32Array | undefined
   public inputLinkStrength: Float32Array | undefined
   public inputPointClusters: (number | undefined)[] | undefined
   public inputClusterPositions: (number | undefined)[] | undefined
@@ -69,6 +78,8 @@ export class GraphData {
   public links: Float32Array | undefined
   public linkColors: Float32Array | undefined
   public linkWidths: Float32Array | undefined
+  /** Sanitized per-link stroke patterns (integer `LinkStyle` values) that the Lines module uploads. */
+  public linkStyles: Float32Array | undefined
   public linkArrowsBoolean: boolean[] | undefined
   public linkArrows: number[] | undefined
   public linkStrength: Float32Array | undefined
@@ -181,7 +192,10 @@ export class GraphData {
 
     const { pointDefaultShape } = this._config
     const configShape = typeof pointDefaultShape === 'string' ? Number(pointDefaultShape) : pointDefaultShape
-    const defaultShape = (configShape >= 0 && configShape <= 8) ? configShape : defaultConfigValues.pointDefaultShape
+    // PointShape is an integer enum; the draw shader matches shapes by exact equality,
+    // so a fractional value would silently render as the shader's fallback (circle)
+    // instead of the configured default. Require integers — Number.isInteger also rejects NaN.
+    const defaultShape = (Number.isInteger(configShape) && configShape >= 0 && configShape <= 8) ? configShape : defaultConfigValues.pointDefaultShape
 
     // Sets point shapes to default values if the input is missing or does not match input points number.
     if (this.inputPointShapes === undefined || this.inputPointShapes.length !== this.pointsNumber) {
@@ -190,8 +204,10 @@ export class GraphData {
       this.pointShapes = new Float32Array(this.inputPointShapes)
       const pointShapes = this.pointShapes
       for (let i = 0; i < pointShapes.length; i++) {
-        const shape = pointShapes[i]
-        if (shape == null || !isNumber(shape) || shape < 0 || shape > 8) {
+        // In-bounds Float32Array reads never yield undefined; `?? -1` narrows the type
+        // and routes the impossible case into the range check.
+        const shape = pointShapes[i] ?? -1
+        if (!Number.isInteger(shape) || shape < 0 || shape > 8) {
           pointShapes[i] = defaultShape
         }
       }
@@ -307,6 +323,38 @@ export class GraphData {
   }
 
   /**
+   * Updates the link styles (stroke patterns) based on the input data or default config value.
+   */
+  public updateLinkStyles (): void {
+    if (this.linksNumber === undefined) {
+      this.linkStyles = undefined
+      return
+    }
+
+    const { linkDefaultStyle } = this._config
+    const configStyle = typeof linkDefaultStyle === 'string' ? Number(linkDefaultStyle) : linkDefaultStyle
+    // LinkStyle is an integer enum; the fragment shader picks the pattern with thresholds,
+    // so a fractional value would silently select a pattern instead of the documented
+    // fallback. Require integers — Number.isInteger also rejects NaN.
+    const defaultStyle = (Number.isInteger(configStyle) && configStyle >= 0 && configStyle <= 2) ? configStyle : defaultConfigValues.linkDefaultStyle
+
+    // Sets link styles to default values if the input is missing or does not match input links number.
+    if (this.inputLinkStyles === undefined || this.inputLinkStyles.length !== this.linksNumber) {
+      this.linkStyles = new Float32Array(this.linksNumber).fill(defaultStyle)
+    } else {
+      this.linkStyles = new Float32Array(this.inputLinkStyles)
+      const linkStyles = this.linkStyles
+      for (let i = 0; i < linkStyles.length; i++) {
+        // See updatePointShape: `?? -1` narrows the indexed read for the type checker.
+        const style = linkStyles[i] ?? -1
+        if (!Number.isInteger(style) || style < 0 || style > 2) {
+          linkStyles[i] = defaultStyle
+        }
+      }
+    }
+  }
+
+  /**
    * Updates the link arrows based on the input data or default config value.
    */
   public updateArrows (): void {
@@ -372,6 +420,7 @@ export class GraphData {
     this.updateLinkColor()
     this.updateLinkWidth()
     this.updateArrows()
+    this.updateLinkStyles()
     this.updateLinkStrength()
 
     this.updateClusters()

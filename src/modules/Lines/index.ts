@@ -11,7 +11,7 @@ import fillGridWithSampledLinksVert from '@/graph/modules/Lines/fill-sampled-lin
 import { PickingReadback, resolvePickedLinkIndex } from '@/graph/modules/Points/picking-readback'
 import { defaultConfigValues } from '@/graph/variables'
 import { getCurveLineGeometry } from '@/graph/modules/Lines/geometry'
-import { updateAttributeBuffers } from '@/graph/modules/Shared/buffer'
+import { updateAttributeBuffer, updateAttributeBuffers } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import { ensureVec2, ensureVec4 } from '@/graph/modules/Shared/uniform-utils'
 import { readPixels } from '@/graph/helper'
@@ -26,6 +26,7 @@ type DrawCurveCommandAttributes = {
   targetWidth?: Buffer;
   arrow?: Buffer;
   linkIndices?: Buffer;
+  linkStyle?: Buffer;
 }
 
 export class Lines extends CoreModule {
@@ -67,6 +68,7 @@ export class Lines extends CoreModule {
   private targetWidthBuffer: Buffer | undefined
   private previousWidthData: Float32Array | undefined
   private arrowBuffer: Buffer | undefined
+  private linkStyleBuffer: Buffer | undefined
   private curveLineGeometry: number[][] | undefined
   private curveLineBuffer: Buffer | undefined
   private linkIndexBuffer: Buffer | undefined
@@ -106,7 +108,6 @@ export class Lines extends CoreModule {
       maxPointSize: number;
       renderMode: number;
       hoveredLinkIndex: number;
-      hoveredLinkColor: [number, number, number, number];
       hoveredLinkWidthIncrease: number;
       isLinkHighlightingActive: number;
       linkStatusTextureSize: number;
@@ -115,9 +116,15 @@ export class Lines extends CoreModule {
       transitionProgress: number;
       animateColors: number;
       animateWidths: number;
+      linkColorInterpolateFromEndpoints: number;
     };
     drawLineFragmentUniforms: {
       renderMode: number;
+      linkDashLength: number;
+      linkDashGap: number;
+      linkColorInterpolateFromEndpoints: number;
+      hoveredLinkIndex: number;
+      hoveredLinkColor: [number, number, number, number];
     };
   }> | undefined
 
@@ -173,6 +180,10 @@ export class Lines extends CoreModule {
       data: new Float32Array(linksNumber),
       usage: Buffer.VERTEX | Buffer.COPY_DST,
     })
+    this.linkStyleBuffer ||= device.createBuffer({
+      data: new Float32Array(linksNumber),
+      usage: Buffer.VERTEX | Buffer.COPY_DST,
+    })
     this.linkIndexBuffer ||= device.createBuffer({
       data: new Float32Array(linksNumber),
       usage: Buffer.VERTEX | Buffer.COPY_DST,
@@ -199,7 +210,6 @@ export class Lines extends CoreModule {
           maxPointSize: 'f32',
           renderMode: 'f32',
           hoveredLinkIndex: 'f32',
-          hoveredLinkColor: 'vec4<f32>',
           hoveredLinkWidthIncrease: 'f32',
           isLinkHighlightingActive: 'f32',
           linkStatusTextureSize: 'f32',
@@ -208,6 +218,7 @@ export class Lines extends CoreModule {
           transitionProgress: 'f32',
           animateColors: 'f32',
           animateWidths: 'f32',
+          linkColorInterpolateFromEndpoints: 'f32',
         },
         defaultUniforms: {
           transformationMatrix: store.transformationMatrix4x4,
@@ -227,7 +238,6 @@ export class Lines extends CoreModule {
           maxPointSize: store.maxPointSize,
           renderMode: 0.0,
           hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
-          hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
           hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease,
           isLinkHighlightingActive: 0,
           linkStatusTextureSize: 0,
@@ -236,14 +246,25 @@ export class Lines extends CoreModule {
           transitionProgress: 1,
           animateColors: 0,
           animateWidths: 0,
+          linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
         },
       },
       drawLineFragmentUniforms: {
         uniformTypes: {
           renderMode: 'f32',
+          linkDashLength: 'f32',
+          linkDashGap: 'f32',
+          linkColorInterpolateFromEndpoints: 'f32',
+          hoveredLinkIndex: 'f32',
+          hoveredLinkColor: 'vec4<f32>',
         },
         defaultUniforms: {
           renderMode: 0.0,
+          linkDashLength: config.linkDashLength,
+          linkDashGap: config.linkDashGap,
+          linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
+          hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
+          hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
         },
       },
     })
@@ -318,6 +339,7 @@ export class Lines extends CoreModule {
     if (!this.targetColorBuffer) this.updateColor()
     if (!this.targetWidthBuffer) this.updateWidth()
     if (!this.arrowBuffer) this.updateArrow()
+    if (!this.linkStyleBuffer) this.updateStyle()
     if (!this.curveLineGeometry) this.updateCurveLineGeometry()
     if (!this.drawCurveCommand || !this.drawLineUniformStore || !this.linkStatusTexture) return
 
@@ -345,7 +367,6 @@ export class Lines extends CoreModule {
         maxPointSize: store.maxPointSize,
         renderMode: 0.0, // Normal rendering
         hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
-        hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
         hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease,
         isLinkHighlightingActive: hasHighlighting ? 1 : 0,
         linkStatusTextureSize: this.linkStatusTextureSize,
@@ -354,9 +375,15 @@ export class Lines extends CoreModule {
         transitionProgress: this.transitionProgress,
         animateColors: this.shouldAnimateLinkColors ? 1 : 0,
         animateWidths: this.shouldAnimateLinkWidths ? 1 : 0,
+        linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
       },
       drawLineFragmentUniforms: {
         renderMode: 0.0, // Normal rendering
+        linkDashLength: config.linkDashLength,
+        linkDashGap: config.linkDashGap,
+        linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
+        hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
+        hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
       },
     })
 
@@ -364,6 +391,12 @@ export class Lines extends CoreModule {
     this.drawCurveCommand.setBindings({
       positionsTexture: points.currentPositionTexture,
       linkStatus: this.linkStatusTexture,
+      // Endpoint colors for gradient links. The sampler must always have a valid texture
+      // bound, but the stand-in is never sampled: with the gradient off the vertex shader
+      // skips the fetches, and with it on Points.updateColor() has built the real texture
+      // (initial create runs it before the first draw; runtime toggles go through
+      // updateStateFromConfig, which re-runs it on the flag change).
+      pointColorsTexture: points.pointColorsTexture ?? points.currentPositionTexture,
     })
 
     // Update instance count
@@ -593,29 +626,20 @@ export class Lines extends CoreModule {
     const linksNumber = data.linksNumber ?? 0
     const arrowData = data.linkArrows
       ? new Float32Array(data.linkArrows)
-      : new Float32Array(linksNumber).fill(0)
+      : new Float32Array(linksNumber)
 
-    if (!this.arrowBuffer) {
-      this.arrowBuffer = device.createBuffer({
-        data: arrowData,
-        usage: Buffer.VERTEX | Buffer.COPY_DST,
-      })
-    } else {
-      // Check if buffer needs to be resized
-      const currentSize = (this.arrowBuffer.byteLength ?? 0) / Float32Array.BYTES_PER_ELEMENT
-      if (currentSize !== linksNumber) {
-        if (this.arrowBuffer && !this.arrowBuffer.destroyed) {
-          this.arrowBuffer.destroy()
-        }
-        this.arrowBuffer = device.createBuffer({
-          data: arrowData,
-          usage: Buffer.VERTEX | Buffer.COPY_DST,
-        })
-      } else {
-        this.arrowBuffer.write(arrowData)
-      }
-    }
+    this.arrowBuffer = updateAttributeBuffer(device, this.arrowBuffer, arrowData)
     this.setDrawCurveCommandAttributes({ arrow: this.arrowBuffer })
+  }
+
+  public updateStyle (): void {
+    const { device, data } = this
+    // linkStyles is undefined only when there are no links; the initial buffer
+    // from initPrograms keeps the attribute bound, so there is nothing to refresh.
+    if (data.linksNumber === undefined || data.linkStyles === undefined) return
+
+    this.linkStyleBuffer = updateAttributeBuffer(device, this.linkStyleBuffer, data.linkStyles)
+    this.setDrawCurveCommandAttributes({ linkStyle: this.linkStyleBuffer })
   }
 
   public updateLinkStatus (): void {
@@ -862,7 +886,6 @@ export class Lines extends CoreModule {
         maxPointSize: store.maxPointSize,
         renderMode: 1.0, // Index rendering for picking
         hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
-        hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
         hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease,
         isLinkHighlightingActive: hasHighlighting ? 1 : 0,
         linkStatusTextureSize: this.linkStatusTextureSize,
@@ -871,9 +894,15 @@ export class Lines extends CoreModule {
         transitionProgress: this.transitionProgress,
         animateColors: this.shouldAnimateLinkColors ? 1 : 0,
         animateWidths: this.shouldAnimateLinkWidths ? 1 : 0,
+        linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
       },
       drawLineFragmentUniforms: {
         renderMode: 1.0, // Index rendering for picking
+        linkDashLength: config.linkDashLength,
+        linkDashGap: config.linkDashGap,
+        linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
+        hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
+        hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
       },
     })
 
@@ -881,6 +910,8 @@ export class Lines extends CoreModule {
     this.drawCurvePickingCommand.setBindings({
       positionsTexture: points.currentPositionTexture,
       linkStatus: this.linkStatusTexture,
+      // Never-sampled stand-in when the gradient is off; see the visible-pass binding.
+      pointColorsTexture: points.pointColorsTexture ?? points.currentPositionTexture,
     })
 
     // Update instance count
@@ -1028,6 +1059,10 @@ export class Lines extends CoreModule {
       this.arrowBuffer.destroy()
     }
     this.arrowBuffer = undefined
+    if (this.linkStyleBuffer && !this.linkStyleBuffer.destroyed) {
+      this.linkStyleBuffer.destroy()
+    }
+    this.linkStyleBuffer = undefined
     if (this.curveLineBuffer && !this.curveLineBuffer.destroyed) {
       this.curveLineBuffer.destroy()
     }
@@ -1141,6 +1176,7 @@ export class Lines extends CoreModule {
         { name: 'targetWidth', format: 'float32', stepMode: 'instance' },
         { name: 'arrow', format: 'float32', stepMode: 'instance' },
         { name: 'linkIndices', format: 'float32', stepMode: 'instance' },
+        { name: 'linkStyle', format: 'float32', stepMode: 'instance' },
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
@@ -1165,6 +1201,7 @@ export class Lines extends CoreModule {
     if (this.targetWidthBuffer) attributes.targetWidth = this.targetWidthBuffer
     if (this.arrowBuffer) attributes.arrow = this.arrowBuffer
     if (this.linkIndexBuffer) attributes.linkIndices = this.linkIndexBuffer
+    if (this.linkStyleBuffer) attributes.linkStyle = this.linkStyleBuffer
     return attributes
   }
 

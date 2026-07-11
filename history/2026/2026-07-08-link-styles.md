@@ -1,0 +1,133 @@
+# Link styles: dashed, dotted, and gradient links
+
+**Date:** 2026-07-08
+
+## Why
+
+Links could only be drawn as solid, single-color strokes. Users need to encode link
+semantics visually — dashed/dotted patterns to mark inferred, predicted, or otherwise
+"soft" edges, and a color gradient along the link to show source→target flow. This adds
+both, following the library's existing per-element conventions (mirrors the per-point
+`PointShape` / `setPointShapes` design).
+
+Purely additive: the default style is `LinkStyle.Solid` and gradient is off, so existing
+graphs render exactly as before. No migration needed.
+
+## What changed
+
+Two orthogonal capabilities on links:
+
+1. **Stroke pattern** — per-link Solid / Dashed / Dotted, set via `setLinkStyles`.
+2. **Gradient** — a global mode that colors each link from its source point's color to its
+   target point's color.
+
+They compose: a link can be a dashed gradient, a dotted gradient, etc.
+
+Touched files: `src/modules/GraphData/index.ts` (enum + data), `src/config.ts` +
+`src/variables.ts` (config + defaults), `src/index.ts` (public API + wiring),
+`src/modules/Points/index.ts` (endpoint-color texture), `src/modules/Lines/index.ts` and
+`src/modules/Lines/draw-curve-line.{vert,frag}` (rendering), plus the shared
+`updateAttributeBuffer` / `glslFloatLiteral` helpers.
+
+## API
+
+`LinkStyle` enum (`src/modules/GraphData/index.ts`), exported from the package root:
+
+```ts
+enum LinkStyle { Solid = 0, Dashed = 1, Dotted = 2 }
+```
+
+```ts
+import { Graph, LinkStyle } from '@cosmos.gl/graph'
+
+// One float per link; non-integer or out-of-range values fall back to `linkDefaultStyle`.
+graph.setLinkStyles(new Float32Array([LinkStyle.Solid, LinkStyle.Dashed, LinkStyle.Dotted]))
+graph.getLinkStyles() // -> Float32Array
+
+// Gradient is a global toggle (reads the colors set via setPointColors):
+graph.setConfigPartial({ linkColorInterpolateFromEndpoints: true })
+```
+
+Styles are per-link, stored as a static instanced attribute (a `linkStyleBuffer`, updated
+through the shared `updateAttributeBuffer` helper like `arrow` — no transition/animation,
+since a discrete enum shouldn't tween). `setLinks` marks the style buffer stale so it is
+resized with the link count.
+
+## Config
+
+| Property | Meaning | Default |
+|---|---|---|
+| `linkDefaultStyle` | Fallback stroke pattern (`LinkStyle`, a number, or numeric string). | `LinkStyle.Solid` |
+| `linkDashLength` | Dash length for dashed links. | `8` |
+| `linkDashGap` | Gap between dashes, or between dots for dotted links. | `4` |
+| `linkColorInterpolateFromEndpoints` | Interpolate each link's RGB from source→target point color. | `false` |
+
+All four are runtime-changeable via `setConfig`/`setConfigPartial`: the dash metrics and
+the gradient flag are read live each frame; `linkDefaultStyle` re-derives and re-uploads
+the style buffer; toggling the gradient builds or frees the endpoint-color texture.
+
+## Rendering notes
+
+- The along-link parameter needed for both features was already available: `pos.x`
+  (0→1 from source to target) is an existing fragment varying (the arrow code uses it),
+  and it is emitted in both the 2D and the 3D (`SPACE_3D`) shader branches. So dashes/dots
+  needed no new geometry — just fragment logic plus a couple of `flat` varyings.
+- **Gradient** reads point colors in the link vertex shader from a new `pointColorsTexture`
+  in the Points module — an RGBA32F texture (`pointsTextureSize`) written in
+  `updateColor()`, mirroring the existing `pointStatusTexture`. It exists only while
+  `linkColorInterpolateFromEndpoints` is on (built/freed when the flag toggles), so
+  non-gradient graphs pay nothing for it. Point colors previously lived only as a
+  per-point attribute the link shader couldn't reach. `GraphData.pointColors` is already
+  sanitized on the CPU (missing / non-number channels replaced with the default), so the
+  link shader samples the endpoint colors directly. The fragment mixes the two endpoint
+  colors by `pos.x` and overrides only RGB; opacity (visibility fade, greyout) still comes
+  from `rgbaColor.a`, and `hoveredLinkColor` is applied after the gradient in the fragment,
+  so hover wins for gradient links exactly as it does for solid ones.
+- **Dash/dot masking** runs in the visible pass only (`renderMode < 0.5`), so gaps stay
+  fully pickable in the index pass, and the arrowhead region is left solid. Dotted draws
+  round dots sized to the stroke width. Anti-aliasing uses `fwidth()` so edges stay ~1px
+  regardless of whether the pattern is in screen or world space. The fragment matches
+  styles by exact equality against named consts (like the point-shapes shader) — safe
+  because the CPU sanitizer guarantees integers and the varying is `flat` — so an unknown
+  future style renders solid instead of snapping to the nearest pattern.
+- **3D and link picking (this branch).** Both features work in 3D perspective mode as well
+  as 2D: the new endpoint-color varyings are written before the 2D/3D branch split, and the
+  dash pattern span / dot diameter are computed in each branch (screen px, or world units
+  when `scaleLinksOnZoom` is on). They also stay fully compatible with the branch's
+  change-gated link picking: the dash/dot mask and the gradient RGB override are gated to
+  the visible pass (`renderMode < 0.5`), so the index pass writes each link's index along
+  its whole length — a dashed link's gaps remain pickable. On curved links (2D or 3D) the
+  pattern and gradient are approximate, since `pos.x` is the non-arc-length curve parameter.
+
+## Zoom behavior
+
+The dash/dot pattern follows `scaleLinksOnZoom` (consistent with how link *width* already
+uses that flag):
+
+| `scaleLinksOnZoom` | Pattern space | On zoom |
+|---|---|---|
+| `false` (default) | screen pixels | constant on-screen dash size, but the pattern shifts along the link as its on-screen length changes |
+| `true` | graph (world) space | pattern is locked to the link and scales with zoom — no crawling |
+
+Constant on-screen size and no-crawl are mutually exclusive (a fixed-pixel pattern on a
+link whose screen length changes must change its dash count). The vertex shader picks the
+space per mode (a `dashSpan` in screen px or world units, with a matching `dashWidthScale`
+for the dot diameter); the fragment logic is unchanged between the two modes.
+
+## Examples
+
+New **Examples/Link Styles** Storybook group (`src/stories/link-styles.stories.ts`):
+
+- **Solid / Dashed / Dotted** (`link-styles/stroke-styles`) — the three patterns side by side.
+- **Gradient Links** (`link-styles/gradient-links`) — endpoint-color gradient combined with
+  each stroke pattern.
+- **Interactive Playground (big graph)** (`link-styles/interactive`) — a ~5k-point / ~12k-link
+  graph with a control panel to switch the stroke pattern and toggle gradient, curved links,
+  arrows, and `scaleLinksOnZoom` (handy for seeing the zoom behavior above).
+
+## Known limitations / future work
+
+- Gradient endpoint colors come from the points' final (post-transition) colors only, so during an animated
+  point-color transition the gradient snaps to the final colors rather than tweening.
+- Dash length/gap are global config, not per-link. Per-link dash metrics would need another
+  channel if a use case appears.

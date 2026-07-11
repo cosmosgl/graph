@@ -10,9 +10,11 @@ in float sourceWidth;
 in float targetWidth;
 in float arrow;
 in float linkIndices;
+in float linkStyle;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D linkStatus;
+uniform sampler2D pointColorsTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform drawLineUniforms {
@@ -33,7 +35,6 @@ layout(std140) uniform drawLineUniforms {
   float maxPointSize;
   float renderMode;
   float hoveredLinkIndex;
-  vec4 hoveredLinkColor;
   float hoveredLinkWidthIncrease;
   float isLinkHighlightingActive;
   float linkStatusTextureSize;
@@ -42,6 +43,7 @@ layout(std140) uniform drawLineUniforms {
   float transitionProgress;
   float animateColors;
   float animateWidths;
+  float linkColorInterpolateFromEndpoints;
 } drawLine;
 
 #define transformationMatrix drawLine.transformationMatrix
@@ -61,7 +63,6 @@ layout(std140) uniform drawLineUniforms {
 #define maxPointSize drawLine.maxPointSize
 #define renderMode drawLine.renderMode
 #define hoveredLinkIndex drawLine.hoveredLinkIndex
-#define hoveredLinkColor drawLine.hoveredLinkColor
 #define hoveredLinkWidthIncrease drawLine.hoveredLinkWidthIncrease
 #define isLinkHighlightingActive drawLine.isLinkHighlightingActive
 #define linkStatusTextureSize drawLine.linkStatusTextureSize
@@ -70,6 +71,7 @@ layout(std140) uniform drawLineUniforms {
 #define transitionProgress drawLine.transitionProgress
 #define animateColors drawLine.animateColors
 #define animateWidths drawLine.animateWidths
+#define linkColorInterpolateFromEndpoints drawLine.linkColorInterpolateFromEndpoints
 #else
 uniform mat3 transformationMatrix;
 uniform float pointsTextureSize;
@@ -89,7 +91,6 @@ uniform float maxPointSize;
 // renderMode: 0.0 = normal rendering, 1.0 = index buffer rendering for picking
 uniform float renderMode;
 uniform float hoveredLinkIndex;
-uniform vec4 hoveredLinkColor;
 uniform float hoveredLinkWidthIncrease;
 uniform float isLinkHighlightingActive;
 uniform float linkStatusTextureSize;
@@ -98,6 +99,7 @@ uniform float focusedLinkWidthIncrease;
 uniform float transitionProgress;
 uniform float animateColors;
 uniform float animateWidths;
+uniform float linkColorInterpolateFromEndpoints;
 #endif
 
 out vec4 rgbaColor;
@@ -107,6 +109,12 @@ out float useArrow;
 out float smoothing;
 out float arrowWidthFactor;
 out float linkIndex;
+// Per-instance constants (no per-vertex variation), so `flat` skips interpolation.
+flat out float vLinkStyle;
+flat out float vLinkDashSpan;
+flat out float vLinkDashWidth;
+flat out vec4 vEndpointColorA;
+flat out vec4 vEndpointColorB;
 
 float map(float value, float min1, float max1, float min2, float max2) {
   return min2 + (value - min1) * (max2 - min2) / (max1 - min1);
@@ -174,12 +182,30 @@ float calculateArrowWidth3D(float arrowWidth, float pxPerUnit) {
 void main() {
   pos = position;
   linkIndex = linkIndices;
+  vLinkStyle = linkStyle;
 
   vec2 pointTexturePosA = (pointA + 0.5) / pointsTextureSize;
   vec2 pointTexturePosB = (pointB + 0.5) / pointsTextureSize;
 
   vec4 pointPositionA = texture(positionsTexture, pointTexturePosA);
   vec4 pointPositionB = texture(positionsTexture, pointTexturePosB);
+
+  // Sample the source/target point colors so the fragment shader can build a gradient
+  // along the link. Skipped entirely when the gradient is off — the fragment shader
+  // only reads these varyings inside its own gradient branch, keyed on the same flag.
+  // pointColorsTexture mirrors GraphData.pointColors, which is already sanitized on the
+  // CPU (NaN / non-number channels replaced with the default), so no shader resolution
+  // is needed here. Assigned before the 2D/3D split so both paths write the varyings.
+  if (linkColorInterpolateFromEndpoints > 0.5) {
+    vEndpointColorA = texture(pointColorsTexture, pointTexturePosA);
+    vEndpointColorB = texture(pointColorsTexture, pointTexturePosB);
+  }
+
+  // Dash/dot pattern geometry, filled per-branch below. `dashSpan` is the link length in
+  // the pattern's space (screen px when scaleLinksOnZoom is off, else world units);
+  // `dashWidthScale` converts that branch's native linkWidthPx into the same space.
+  float dashSpan = 0.0;
+  float dashWidthScale = 1.0;
 
   #ifdef SPACE_3D
   // 3D mode: project both endpoints (z lives in the position texture's alpha channel)
@@ -245,6 +271,13 @@ void main() {
   // Pixels per space unit at this vertex's depth — gives a natural perspective
   // taper along the link when widths scale with zoom.
   float pxPerUnit = pxPerSpaceUnit(transformationMatrix, screenSize, clipCurr.w);
+
+  // Dash pattern space in 3D. Screen mode uses the projected chord length in px;
+  // world mode uses the straight-line world length. linkWidthPx (below) is in px,
+  // so world mode divides it back into world units to match dashSpan.
+  float worldLen3D = length(b3 - a3);
+  dashSpan = scaleLinksOnZoom > 0.0 ? worldLen3D : linkDistPx;
+  dashWidthScale = scaleLinksOnZoom > 0.0 ? (pxPerUnit > 0.0 ? 1.0 / pxPerUnit : 0.0) : 1.0;
   #else
   vec2 a = pointPositionA.xy;
   vec2 b = pointPositionB.xy;
@@ -260,6 +293,12 @@ void main() {
 
   // Convert link distance to screen pixels
   float linkDistPx = linkDist * transformationMatrix[0][0];
+
+  // Dash pattern space in 2D. Screen mode measures in screen px (linkDist * zoom == linkDistPx);
+  // world mode measures in world units. linkWidthPx (below) is in world units here, so the same
+  // scale converts it into the pattern's space.
+  dashWidthScale = scaleLinksOnZoom > 0.0 ? 1.0 : transformationMatrix[0][0];
+  dashSpan = linkDist * dashWidthScale;
   #endif
 
   float lineWidthBase = animateWidths > 0.0
@@ -345,7 +384,11 @@ void main() {
   linkWidthPx += smoothingPx;
   #endif
 
-
+  // Publish the dash pattern span and the link thickness in the pattern's space so the
+  // fragment shader can draw dashes/dots (dotted dots are sized to the stroke width).
+  // Both are in the same units (screen px or world), keeping dots round in either mode.
+  vLinkDashSpan = dashSpan;
+  vLinkDashWidth = linkWidthPx * dashWidthScale;
 
   // Calculate final color with opacity based on link distance
   vec3 rgbColor = lineColor.rgb;
@@ -363,15 +406,9 @@ void main() {
     }
   }
 
-  // Pass final color to fragment shader
+  // Pass final color to fragment shader. Hover color is applied in the fragment
+  // shader, after the endpoint gradient, so it wins for gradient links too.
   rgbaColor = vec4(rgbColor, opacity);
-
-  // Apply hover color if this is the hovered link and hover color is defined
-  if (hoveredLinkIndex == linkIndex && hoveredLinkColor.a > -0.5) {
-    // Keep existing RGB values but multiply opacity with hover color opacity
-    rgbaColor.rgb = hoveredLinkColor.rgb;
-    rgbaColor.a *= hoveredLinkColor.a;
-  }
 
   #ifdef SPACE_3D
   // Offset the centerline point along the screen-space perpendicular of its tangent.
