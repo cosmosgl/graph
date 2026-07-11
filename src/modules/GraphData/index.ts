@@ -194,7 +194,10 @@ export class GraphData {
 
     const { pointDefaultShape } = this._config
     const configShape = typeof pointDefaultShape === 'string' ? Number(pointDefaultShape) : pointDefaultShape
-    const defaultShape = (configShape >= 0 && configShape <= 8) ? configShape : defaultConfigValues.pointDefaultShape
+    // PointShape is an integer enum; the draw shader matches shapes by exact equality,
+    // so a fractional value would silently render as the shader's fallback (circle)
+    // instead of the configured default. Require integers — Number.isInteger also rejects NaN.
+    const defaultShape = (Number.isInteger(configShape) && configShape >= 0 && configShape <= 8) ? configShape : defaultConfigValues.pointDefaultShape
 
     // Sets point shapes to default values if the input is missing or does not match input points number.
     if (this.inputPointShapes === undefined || this.inputPointShapes.length !== this.pointsNumber) {
@@ -204,7 +207,7 @@ export class GraphData {
       const pointShapes = this.pointShapes
       for (let i = 0; i < pointShapes.length; i++) {
         const shape = pointShapes[i]
-        if (shape == null || !isNumber(shape) || shape < 0 || shape > 8) {
+        if (!Number.isInteger(shape) || shape < 0 || shape > 8) {
           pointShapes[i] = defaultShape
         }
       }
@@ -332,7 +335,10 @@ export class GraphData {
 
     const { linkDefaultStyle } = this._config
     const configStyle = typeof linkDefaultStyle === 'string' ? Number(linkDefaultStyle) : linkDefaultStyle
-    const defaultStyle = (configStyle >= 0 && configStyle <= 2) ? configStyle : defaultConfigValues.linkDefaultStyle
+    // LinkStyle is an integer enum; the fragment shader picks the pattern with thresholds,
+    // so a fractional value would silently select a pattern instead of the documented
+    // fallback. Require integers — Number.isInteger also rejects NaN.
+    const defaultStyle = (Number.isInteger(configStyle) && configStyle >= 0 && configStyle <= 2) ? configStyle : defaultConfigValues.linkDefaultStyle
 
     // Sets link styles to default values if the input is missing or does not match input links number.
     if (this.inputLinkStyles === undefined || this.inputLinkStyles.length !== this.linksNumber) {
@@ -342,7 +348,7 @@ export class GraphData {
       const linkStyles = this.linkStyles
       for (let i = 0; i < linkStyles.length; i++) {
         const style = linkStyles[i]
-        if (style == null || !isNumber(style) || style < 0 || style > 2) {
+        if (!Number.isInteger(style) || style < 0 || style > 2) {
           linkStyles[i] = defaultStyle
         }
       }
