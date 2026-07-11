@@ -36,7 +36,6 @@ layout(std140) uniform drawLineUniforms {
   float maxPointSize;
   float renderMode;
   float hoveredLinkIndex;
-  vec4 hoveredLinkColor;
   float hoveredLinkWidthIncrease;
   float isLinkHighlightingActive;
   float linkStatusTextureSize;
@@ -66,7 +65,6 @@ layout(std140) uniform drawLineUniforms {
 #define maxPointSize drawLine.maxPointSize
 #define renderMode drawLine.renderMode
 #define hoveredLinkIndex drawLine.hoveredLinkIndex
-#define hoveredLinkColor drawLine.hoveredLinkColor
 #define hoveredLinkWidthIncrease drawLine.hoveredLinkWidthIncrease
 #define isLinkHighlightingActive drawLine.isLinkHighlightingActive
 #define linkStatusTextureSize drawLine.linkStatusTextureSize
@@ -96,7 +94,6 @@ uniform float maxPointSize;
 // renderMode: 0.0 = normal rendering, 1.0 = index buffer rendering for picking
 uniform float renderMode;
 uniform float hoveredLinkIndex;
-uniform vec4 hoveredLinkColor;
 uniform float hoveredLinkWidthIncrease;
 uniform float isLinkHighlightingActive;
 uniform float linkStatusTextureSize;
@@ -319,15 +316,9 @@ void main() {
     }
   }
 
-  // Pass final color to fragment shader
+  // Pass final color to fragment shader. Hover color is applied in the fragment
+  // shader, after the endpoint gradient, so it wins for gradient links too.
   rgbaColor = vec4(rgbColor, opacity);
-
-  // Apply hover color if this is the hovered link and hover color is defined
-  if (hoveredLinkIndex == linkIndex && hoveredLinkColor.a > -0.5) {
-    // Keep existing RGB values but multiply opacity with hover color opacity
-    rgbaColor.rgb = hoveredLinkColor.rgb;
-    rgbaColor.a *= hoveredLinkColor.a;
-  }
 
   // Calculate position on the curved path
   float t = position.x;

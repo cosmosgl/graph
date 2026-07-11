@@ -95,7 +95,6 @@ export class Lines extends CoreModule {
       maxPointSize: number;
       renderMode: number;
       hoveredLinkIndex: number;
-      hoveredLinkColor: [number, number, number, number];
       hoveredLinkWidthIncrease: number;
       isLinkHighlightingActive: number;
       linkStatusTextureSize: number;
@@ -112,6 +111,8 @@ export class Lines extends CoreModule {
       linkDashLength: number;
       linkDashGap: number;
       linkColorInterpolateFromEndpoints: number;
+      hoveredLinkIndex: number;
+      hoveredLinkColor: [number, number, number, number];
     };
   }> | undefined
 
@@ -193,7 +194,6 @@ export class Lines extends CoreModule {
           maxPointSize: 'f32',
           renderMode: 'f32',
           hoveredLinkIndex: 'f32',
-          hoveredLinkColor: 'vec4<f32>',
           hoveredLinkWidthIncrease: 'f32',
           isLinkHighlightingActive: 'f32',
           linkStatusTextureSize: 'f32',
@@ -223,7 +223,6 @@ export class Lines extends CoreModule {
           maxPointSize: store.maxPointSize,
           renderMode: 0.0,
           hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
-          hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
           hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease,
           isLinkHighlightingActive: 0,
           linkStatusTextureSize: 0,
@@ -242,12 +241,16 @@ export class Lines extends CoreModule {
           linkDashLength: 'f32',
           linkDashGap: 'f32',
           linkColorInterpolateFromEndpoints: 'f32',
+          hoveredLinkIndex: 'f32',
+          hoveredLinkColor: 'vec4<f32>',
         },
         defaultUniforms: {
           renderMode: 0.0,
           linkDashLength: config.linkDashLength,
           linkDashGap: config.linkDashGap,
           linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
+          hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
+          hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
         },
       },
     })
@@ -392,7 +395,6 @@ export class Lines extends CoreModule {
         maxPointSize: store.maxPointSize,
         renderMode: 0.0, // Normal rendering
         hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
-        hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
         hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease,
         isLinkHighlightingActive: hasHighlighting ? 1 : 0,
         linkStatusTextureSize: this.linkStatusTextureSize,
@@ -410,6 +412,8 @@ export class Lines extends CoreModule {
         linkDashLength: config.linkDashLength,
         linkDashGap: config.linkDashGap,
         linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
+        hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
+        hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
       },
     })
 
@@ -930,7 +934,6 @@ export class Lines extends CoreModule {
         maxPointSize: store.maxPointSize,
         renderMode: 1.0, // Index rendering for picking
         hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
-        hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
         hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease,
         isLinkHighlightingActive: hasHighlighting ? 1 : 0,
         linkStatusTextureSize: this.linkStatusTextureSize,
@@ -947,6 +950,8 @@ export class Lines extends CoreModule {
         linkDashLength: config.linkDashLength,
         linkDashGap: config.linkDashGap,
         linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
+        hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
+        hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
       },
     })
 
