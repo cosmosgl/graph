@@ -1660,6 +1660,10 @@ export class Graph {
       this.graph.updateArrows()
       this.lines?.updateArrow()
     }
+    if (prevConfig.linkDefaultStyle !== this.config.linkDefaultStyle) {
+      this.graph.updateLinkStyles()
+      this.lines?.updateStyle()
+    }
     if (prevConfig.linkBlending !== this.config.linkBlending) {
       this.lines?.updateLinkBlending()
     }
