@@ -22,18 +22,24 @@ layout(std140) uniform drawLineFragmentUniforms {
   float linkDashLength;
   float linkDashGap;
   float linkColorInterpolateFromEndpoints;
+  float hoveredLinkIndex;
+  vec4 hoveredLinkColor;
 } drawLineFrag;
 
 #define renderMode drawLineFrag.renderMode
 #define linkDashLength drawLineFrag.linkDashLength
 #define linkDashGap drawLineFrag.linkDashGap
 #define linkColorInterpolateFromEndpoints drawLineFrag.linkColorInterpolateFromEndpoints
+#define hoveredLinkIndex drawLineFrag.hoveredLinkIndex
+#define hoveredLinkColor drawLineFrag.hoveredLinkColor
 #else
 // renderMode: 0.0 = normal rendering, 1.0 = index buffer rendering for picking
 uniform float renderMode;
 uniform float linkDashLength;
 uniform float linkDashGap;
 uniform float linkColorInterpolateFromEndpoints;
+uniform float hoveredLinkIndex;
+uniform vec4 hoveredLinkColor;
 #endif
 
 out vec4 fragColor;
@@ -54,7 +60,7 @@ void main() {
   vec3 color = rgbaColor.rgb;
 
   // Gradient links: interpolate RGB from the source point color to the target point color
-  // along the link. Opacity (visibility / greyout / hover) still comes from rgbaColor.a.
+  // along the link. Opacity (visibility / greyout) still comes from rgbaColor.a.
   if (linkColorInterpolateFromEndpoints > 0.5) {
     color = mix(vEndpointColorA.rgb, vEndpointColorB.rgb, clamp(pos.x, 0.0, 1.0));
   }
@@ -101,6 +107,15 @@ void main() {
         opacity *= 1.0 - smoothstep(diameter * 0.5 - aa, diameter * 0.5 + aa, r);
       }
     }
+  }
+
+  // Apply hover color if this is the hovered link and hover color is defined.
+  // Done last — after the gradient and the dash mask — so hover wins over every
+  // color source (per-link color from the vertex stage and the endpoint gradient
+  // alike), while the dash pattern and AA stay intact in the hover color.
+  if (hoveredLinkIndex == linkIndex && hoveredLinkColor.a > -0.5) {
+    color = hoveredLinkColor.rgb;
+    opacity *= hoveredLinkColor.a;
   }
 
   if (renderMode > 0.0) {
