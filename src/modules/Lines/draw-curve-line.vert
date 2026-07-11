@@ -46,6 +46,7 @@ layout(std140) uniform drawLineUniforms {
   float animateWidths;
   float animatePositions;
   vec4 pointDefaultColor;
+  float linkColorInterpolateFromEndpoints;
 } drawLine;
 
 #define transformationMatrix drawLine.transformationMatrix
@@ -75,6 +76,7 @@ layout(std140) uniform drawLineUniforms {
 #define animateWidths drawLine.animateWidths
 #define animatePositions drawLine.animatePositions
 #define pointDefaultColor drawLine.pointDefaultColor
+#define linkColorInterpolateFromEndpoints drawLine.linkColorInterpolateFromEndpoints
 #else
 uniform mat3 transformationMatrix;
 uniform float pointsTextureSize;
@@ -104,6 +106,7 @@ uniform float animateColors;
 uniform float animateWidths;
 uniform float animatePositions;
 uniform vec4 pointDefaultColor;
+uniform float linkColorInterpolateFromEndpoints;
 #endif
 
 out vec4 rgbaColor;
@@ -208,10 +211,14 @@ void main() {
   }
 
   // Sample the source/target point colors so the fragment shader can build a gradient
-  // along the link. The texture mirrors GraphData.pointColors, so channels may be NaN
-  // ("use the default") — resolve them with the endpoint's exit ramp, like the point draw.
-  vEndpointColorA = resolveColor(texture(pointColorsTexture, pointTexturePosA), exitA);
-  vEndpointColorB = resolveColor(texture(pointColorsTexture, pointTexturePosB), exitB);
+  // along the link. Skipped entirely when the gradient is off — the fragment shader
+  // only reads these varyings inside its own gradient branch, keyed on the same flag.
+  // The texture mirrors GraphData.pointColors, so channels may be NaN ("use the
+  // default") — resolve them with the endpoint's exit ramp, like the point draw.
+  if (linkColorInterpolateFromEndpoints > 0.5) {
+    vEndpointColorA = resolveColor(texture(pointColorsTexture, pointTexturePosA), exitA);
+    vEndpointColorB = resolveColor(texture(pointColorsTexture, pointTexturePosB), exitB);
+  }
 
   // Calculate direction vector and its perpendicular
   vec2 xBasis = b - a;
