@@ -11,10 +11,10 @@ in float smoothing;
 in float arrowWidthFactor;
 in float linkIndex;
 flat in float vLinkStyle;
-in float vLinkDashSpan;
-in float vLinkDashWidth;
-in vec4 vEndpointColorA;
-in vec4 vEndpointColorB;
+flat in float vLinkDashSpan;
+flat in float vLinkDashWidth;
+flat in vec4 vEndpointColorA;
+flat in vec4 vEndpointColorB;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform drawLineFragmentUniforms {
@@ -65,6 +65,11 @@ void main() {
   float opacity = 1.0;
   vec3 color = rgbaColor.rgb;
 
+  // Arrowhead extent along the link (pos.x space) — used by the arrow rendering
+  // and by the dash mask, which leaves the arrowhead solid.
+  float end_arrow = 0.5 + arrowLength / 2.0;
+  float start_arrow = end_arrow - arrowLength;
+
   // Gradient links: interpolate RGB from the source point color to the target point color
   // along the link. Opacity (visibility / greyout) still comes from rgbaColor.a.
   if (linkColorInterpolateFromEndpoints > 0.5) {
@@ -72,8 +77,6 @@ void main() {
   }
 
   if (useArrow > 0.5) {
-    float end_arrow = 0.5 + arrowLength / 2.0;
-    float start_arrow = end_arrow - arrowLength;
     float arrowWidthDelta = arrowWidthFactor / 2.0;
     float linkOpacity = rgbaColor.a * smoothstep(0.5 - arrowWidthDelta, 0.5 - arrowWidthDelta - smoothing / 2.0, abs(pos.y));
     float arrowOpacity = 1.0;
@@ -90,8 +93,6 @@ void main() {
   // Dashed / dotted stroke patterns. Applied to the visible pass only (renderMode == 0.0)
   // so that gaps stay fully pickable in the index pass. The arrowhead region is left solid.
   if (renderMode < 0.5 && (vLinkStyle == LINK_STYLE_DASHED || vLinkStyle == LINK_STYLE_DOTTED)) {
-    float end_arrow = 0.5 + arrowLength / 2.0;
-    float start_arrow = end_arrow - arrowLength;
     bool inArrowHead = (useArrow > 0.5) && (pos.x > start_arrow) && (pos.x < end_arrow);
     if (!inArrowHead) {
       // Distance along the link in the dash pattern's space (screen px or world units; see the vertex shader).

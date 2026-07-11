@@ -14,6 +14,7 @@ export enum PointShape {
   None = 8
 }
 
+/** Link stroke pattern; one value per link via `setLinkStyles`. Dash metrics come from `linkDashLength`/`linkDashGap`. */
 export enum LinkStyle {
   Solid = 0,
   Dashed = 1,
@@ -30,6 +31,7 @@ export class GraphData {
   public inputPointImageSizes: Float32Array | undefined
   public inputLinkColors: Float32Array | undefined
   public inputLinkWidths: Float32Array | undefined
+  /** Raw per-link stroke patterns from `setLinkStyles` (`LinkStyle` per link); sanitized into `linkStyles`. */
   public inputLinkStyles: Float32Array | undefined
   public inputLinkStrength: Float32Array | undefined
   public inputPointClusters: (number | undefined)[] | undefined
@@ -60,6 +62,7 @@ export class GraphData {
   public links: Float32Array | undefined
   public linkColors: Float32Array | undefined
   public linkWidths: Float32Array | undefined
+  /** Sanitized per-link stroke patterns (integer `LinkStyle` values) that the Lines module uploads. */
   public linkStyles: Float32Array | undefined
   public linkArrowsBoolean: boolean[] | undefined
   public linkArrows: number[] | undefined
@@ -206,7 +209,9 @@ export class GraphData {
       this.pointShapes = new Float32Array(this.inputPointShapes)
       const pointShapes = this.pointShapes
       for (let i = 0; i < pointShapes.length; i++) {
-        const shape = pointShapes[i]
+        // In-bounds Float32Array reads never yield undefined; `?? -1` narrows the type
+        // and routes the impossible case into the range check.
+        const shape = pointShapes[i] ?? -1
         if (!Number.isInteger(shape) || shape < 0 || shape > 8) {
           pointShapes[i] = defaultShape
         }
@@ -347,7 +352,8 @@ export class GraphData {
       this.linkStyles = new Float32Array(this.inputLinkStyles)
       const linkStyles = this.linkStyles
       for (let i = 0; i < linkStyles.length; i++) {
-        const style = linkStyles[i]
+        // See updatePointShape: `?? -1` narrows the indexed read for the type checker.
+        const style = linkStyles[i] ?? -1
         if (!Number.isInteger(style) || style < 0 || style > 2) {
           linkStyles[i] = defaultStyle
         }

@@ -116,11 +116,12 @@ out float useArrow;
 out float smoothing;
 out float arrowWidthFactor;
 out float linkIndex;
+// Per-instance constants (no per-vertex variation), so `flat` skips interpolation.
 flat out float vLinkStyle;
-out float vLinkDashSpan;
-out float vLinkDashWidth;
-out vec4 vEndpointColorA;
-out vec4 vEndpointColorB;
+flat out float vLinkDashSpan;
+flat out float vLinkDashWidth;
+flat out vec4 vEndpointColorA;
+flat out vec4 vEndpointColorB;
 
 float map(float value, float min1, float max1, float min2, float max2) {
   return min2 + (value - min1) * (max2 - min2) / (max1 - min1);

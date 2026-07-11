@@ -23,13 +23,10 @@ import trackPositionsFrag from '@/graph/modules/Points/track-positions.frag?raw'
 import dragPointFrag from '@/graph/modules/Points/drag-point.frag?raw'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 import { readPixels, isPointAbsent, getRgbaColor } from '@/graph/helper'
-import { ensureVec2, ensureVec4 } from '@/graph/modules/Shared/uniform-utils'
+import { ensureVec2, ensureVec4, glslFloatLiteral } from '@/graph/modules/Shared/uniform-utils'
 import { createAtlasDataFromImageData } from '@/graph/modules/Points/atlas-utils'
 import { buildPositionTextureData, buildSourcePositionTextureData } from '@/graph/modules/Points/position-utils'
 import { Transition, TransitionProperty } from '@/graph/modules/Transition'
-
-/** Exact GLSL float literal for a shader `#define` (`.toFixed` would round non-integers). */
-const glslFloatLiteral = (value: number): string => (Number.isInteger(value) ? value.toFixed(1) : String(value))
 
 export class Points extends CoreModule {
   public transition: Transition | undefined
