@@ -12,8 +12,10 @@ export const config: GraphConfig = {
   pointDefaultColor: '#4B5BBF',
   // Links show what happens to a removed point's edges: the engine fades them out
   // with the point (no need to drop them from the array before compacting).
+  // Each link is a gradient between its endpoint colors, so it's easy to see which
+  // points a fading link belonged to.
   linkDefaultWidth: 2,
-  linkDefaultColor: '#8890b0',
+  linkColorInterpolateFromEndpoints: true,
   // Keep points a constant on-screen size regardless of zoom, so they stay clearly
   // visible in this interactive demo.
   scalePointsOnZoom: false,
