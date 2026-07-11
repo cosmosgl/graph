@@ -11,13 +11,10 @@ import hoveredLineIndexFrag from '@/graph/modules/Lines/hovered-line-index.frag?
 import hoveredLineIndexVert from '@/graph/modules/Lines/hovered-line-index.vert?raw'
 import { defaultConfigValues, EXIT_DEFAULT_COLOR_CHANNEL } from '@/graph/variables'
 import { getCurveLineGeometry } from '@/graph/modules/Lines/geometry'
-import { updateAttributeBuffers } from '@/graph/modules/Shared/buffer'
+import { updateAttributeBuffer, updateAttributeBuffers } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
-import { ensureVec2, ensureVec4 } from '@/graph/modules/Shared/uniform-utils'
+import { ensureVec2, ensureVec4, glslFloatLiteral } from '@/graph/modules/Shared/uniform-utils'
 import { readPixels, getRgbaColor } from '@/graph/helper'
-
-// GLSL requires float literals in #define'd expressions ("0" would be an int)
-const glslFloatLiteral = (value: number): string => (Number.isInteger(value) ? value.toFixed(1) : String(value))
 
 type DrawCurveCommandAttributes = {
   position?: Buffer;
@@ -648,58 +645,19 @@ export class Lines extends CoreModule {
     const linksNumber = data.linksNumber ?? 0
     const arrowData = data.linkArrows
       ? new Float32Array(data.linkArrows)
-      : new Float32Array(linksNumber).fill(0)
+      : new Float32Array(linksNumber)
 
-    if (!this.arrowBuffer) {
-      this.arrowBuffer = device.createBuffer({
-        data: arrowData,
-        usage: Buffer.VERTEX | Buffer.COPY_DST,
-      })
-    } else {
-      // Check if buffer needs to be resized
-      const currentSize = (this.arrowBuffer.byteLength ?? 0) / Float32Array.BYTES_PER_ELEMENT
-      if (currentSize !== linksNumber) {
-        if (this.arrowBuffer && !this.arrowBuffer.destroyed) {
-          this.arrowBuffer.destroy()
-        }
-        this.arrowBuffer = device.createBuffer({
-          data: arrowData,
-          usage: Buffer.VERTEX | Buffer.COPY_DST,
-        })
-      } else {
-        this.arrowBuffer.write(arrowData)
-      }
-    }
+    this.arrowBuffer = updateAttributeBuffer(device, this.arrowBuffer, arrowData)
     this.setDrawCurveCommandAttributes({ arrow: this.arrowBuffer })
   }
 
   public updateStyle (): void {
     const { device, data } = this
-    const linksNumber = data.linksNumber ?? 0
-    const styleData = data.linkStyles
-      ? new Float32Array(data.linkStyles)
-      : new Float32Array(linksNumber).fill(0)
+    // linkStyles is undefined only when there are no links; the initial buffer
+    // from initPrograms keeps the attribute bound, so there is nothing to refresh.
+    if (data.linksNumber === undefined || data.linkStyles === undefined) return
 
-    if (!this.linkStyleBuffer) {
-      this.linkStyleBuffer = device.createBuffer({
-        data: styleData,
-        usage: Buffer.VERTEX | Buffer.COPY_DST,
-      })
-    } else {
-      // Check if buffer needs to be resized
-      const currentSize = (this.linkStyleBuffer.byteLength ?? 0) / Float32Array.BYTES_PER_ELEMENT
-      if (currentSize !== linksNumber) {
-        if (this.linkStyleBuffer && !this.linkStyleBuffer.destroyed) {
-          this.linkStyleBuffer.destroy()
-        }
-        this.linkStyleBuffer = device.createBuffer({
-          data: styleData,
-          usage: Buffer.VERTEX | Buffer.COPY_DST,
-        })
-      } else {
-        this.linkStyleBuffer.write(styleData)
-      }
-    }
+    this.linkStyleBuffer = updateAttributeBuffer(device, this.linkStyleBuffer, data.linkStyles)
     this.setDrawCurveCommandAttributes({ linkStyle: this.linkStyleBuffer })
   }
 

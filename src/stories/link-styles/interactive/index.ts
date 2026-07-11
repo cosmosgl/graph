@@ -103,8 +103,8 @@ export const interactiveLinkStyles = (): { div: HTMLDivElement; graph: Graph; de
     spaceSize,
     backgroundColor: '#16161c',
     enableSimulation: true,
-    // With simulation off and `rescalePositions` left at its default, points are
-    // automatically repositioned to fit the visible space.
+    // The simulation lays the graph out; `scalePointsOnZoom` keeps points readable
+    // across zoom levels while the link styles are being compared.
     scalePointsOnZoom: true,
     pointDefaultSize: 1.5,
     linkDefaultColor: '#5F74C2',

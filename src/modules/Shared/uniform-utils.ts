@@ -23,3 +23,9 @@ export function ensureVec4 (
   if (!arr || arr.length !== 4) return fallback
   return [arr[0], arr[1], arr[2], arr[3]] as [number, number, number, number]
 }
+
+/**
+ * Formats a number as a GLSL float literal for injection as a `#define`
+ * (GLSL treats a bare `0` as an int, so integers need a `.0` suffix).
+ */
+export const glslFloatLiteral = (value: number): string => (Number.isInteger(value) ? value.toFixed(1) : String(value))

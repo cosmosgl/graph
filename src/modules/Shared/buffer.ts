@@ -12,6 +12,21 @@ export function createIndexesForBuffer (textureSize: number): Float32Array {
   return indexes
 }
 
+/**
+ * Creates, resizes, or rewrites a static (non-transitioned) vertex buffer so it holds
+ * exactly `data`. Returns the buffer for the caller to assign back to its field.
+ * For source/target attribute pairs that animate between updates, use
+ * `updateAttributeBuffers` below instead.
+ */
+export function updateAttributeBuffer (device: Device, buffer: Buffer | undefined, data: Float32Array): Buffer {
+  if (!buffer || buffer.byteLength !== data.byteLength) {
+    if (buffer && !buffer.destroyed) buffer.destroy()
+    return device.createBuffer({ data, usage: Buffer.VERTEX | Buffer.COPY_DST })
+  }
+  buffer.write(data)
+  return buffer
+}
+
 export function updateAttributeBuffers (
   device: Device,
   targetData: Float32Array,
