@@ -1,7 +1,7 @@
 # Link styles: dashed, dotted, and gradient links
 
 **Date:** 2026-07-08
-**Commits:** `11f185b`, `81548f1`, `d33ec60`
+**Commits:** `b42d045`, `3ab2596`, `53e6062` (feature); `c9ef089`, `fbb88d2`, `d142444`, `7fe5aed`, `ece719d`, `0ab6c16` (post-review hardening)
 
 ## Why
 
@@ -40,7 +40,7 @@ enum LinkStyle { Solid = 0, Dashed = 1, Dotted = 2 }
 ```ts
 import { Graph, LinkStyle } from '@cosmos.gl/graph'
 
-// One float per link; invalid values fall back to `linkDefaultStyle`.
+// One float per link; non-integer or out-of-range values fall back to `linkDefaultStyle`.
 graph.setLinkStyles(new Float32Array([LinkStyle.Solid, LinkStyle.Dashed, LinkStyle.Dotted]))
 graph.getLinkStyles() // -> Float32Array
 
@@ -48,9 +48,10 @@ graph.getLinkStyles() // -> Float32Array
 graph.setConfigPartial({ linkColorInterpolateFromEndpoints: true })
 ```
 
-Styles are per-link, stored as a static instanced attribute (a `linkStyleBuffer`, wired
-like `arrow` — no transition/animation, since a discrete enum shouldn't tween). `setLinks`
-marks the style buffer stale so it is resized with the link count.
+Styles are per-link, stored as a static instanced attribute (a `linkStyleBuffer`, updated
+through the shared `updateAttributeBuffer` helper like `arrow` — no transition/animation,
+since a discrete enum shouldn't tween). `setLinks` marks the style buffer stale so it is
+resized with the link count.
 
 ## Config
 
@@ -61,6 +62,10 @@ marks the style buffer stale so it is resized with the link count.
 | `linkDashGap` | Gap between dashes, or between dots for dotted links. | `4` |
 | `linkColorInterpolateFromEndpoints` | Interpolate each link's RGB from source→target point color. | `false` |
 
+All four are runtime-changeable via `setConfig`/`setConfigPartial`: the dash metrics and
+the gradient flag are read live each frame; `linkDefaultStyle` re-derives and re-uploads
+the style buffer; toggling the gradient builds or frees the endpoint-color texture.
+
 ## Rendering notes
 
 - The along-link parameter needed for both features was already available: `pos.x`
@@ -68,14 +73,20 @@ marks the style buffer stale so it is resized with the link count.
   So dashes/dots needed no new geometry — just fragment logic plus a couple of varyings.
 - **Gradient** reads point colors in the link vertex shader from a new `pointColorsTexture`
   in the Points module — an RGBA32F texture (`pointsTextureSize`) written in
-  `updateColor()`, mirroring the existing `pointStatusTexture`. Point colors previously
-  lived only as a per-point attribute the link shader couldn't reach. The fragment mixes
-  the two endpoint colors by `pos.x` and overrides only RGB; opacity (visibility fade,
-  greyout, hover) still comes from `rgbaColor.a`, so gradient composes with all of them.
+  `updateColor()`, mirroring the existing `pointStatusTexture`. It exists only while
+  `linkColorInterpolateFromEndpoints` is on (built/freed when the flag toggles), so
+  non-gradient graphs pay nothing for it. Point colors previously lived only as a
+  per-point attribute the link shader couldn't reach. The fragment mixes the two endpoint
+  colors by `pos.x` and overrides only RGB; opacity (visibility fade, greyout) still
+  comes from `rgbaColor.a`, and `hoveredLinkColor` is applied after the gradient in the
+  fragment, so hover wins for gradient links exactly as it does for solid ones.
 - **Dash/dot masking** runs in the visible pass only (`renderMode < 0.5`), so gaps stay
   fully pickable in the index pass, and the arrowhead region is left solid. Dotted draws
   round dots sized to the stroke width. Anti-aliasing uses `fwidth()` so edges stay ~1px
-  regardless of whether the pattern is in screen or world space.
+  regardless of whether the pattern is in screen or world space. The fragment matches
+  styles by exact equality against named consts (like the point-shapes shader) — safe
+  because the CPU sanitizer guarantees integers and the varying is `flat` — so an unknown
+  future style renders solid instead of snapping to the nearest pattern.
 
 ## Zoom behavior
 
@@ -105,9 +116,31 @@ New **Examples/Link Styles** Storybook group (`src/stories/link-styles.stories.t
   graph with a control panel to switch the stroke pattern and toggle gradient, curved links,
   arrows, and `scaleLinksOnZoom` (handy for seeing the zoom behavior above).
 
+## Post-review hardening (2026-07-11)
+
+The PR went through CodeRabbit plus a deep multi-agent review; a fix series landed on
+top of the feature (second half of the **Commits** line):
+
+- **Hover precedence** — `hoveredLinkColor` moved from the vertex to the fragment stage,
+  applied after the gradient mix, so hover wins for gradient links exactly as for solid
+  ones (previously the gradient silently discarded the hover RGB).
+- **Gradient cost gated** — the endpoint-color texture is built only while
+  `linkColorInterpolateFromEndpoints` is on and freed when it turns off, and the two
+  per-vertex endpoint fetches are skipped behind the same flag. Non-gradient graphs
+  (the default) no longer pay a full-size RGBA32F allocation + upload per color update.
+- **Config sync** — `linkDefaultStyle` and the gradient flag are wired into
+  `updateStateFromConfig`, so `setConfig*` changes take effect immediately instead of
+  waiting for an unrelated `setLinks` call.
+- **Enum sanitization** — link styles *and* point shapes now reject non-integers
+  (falling back to the configured default, as documented); the style shader switched
+  from threshold picks to exact-equality matching.
+- **Dedup** — the static-buffer update dance (`updateStyle`/`updateArrow`) extracted
+  into a shared `updateAttributeBuffer` helper; `glslFloatLiteral` moved to
+  `Shared/uniform-utils`; per-instance link varyings marked `flat`.
+
 ## Known limitations / future work
 
-- Gradient endpoint colors come from the target point colors only, so during an animated
+- Gradient endpoint colors come from the points' final (post-transition) colors only, so during an animated
   point-color transition the gradient snaps to the final colors rather than tweening.
 - Dash length/gap are global config, not per-link. Per-link dash metrics would need another
   channel if a use case appears.
