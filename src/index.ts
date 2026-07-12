@@ -159,7 +159,7 @@ export class Graph {
       this.shouldDestroyDevice = true // Graph created the device and owns it
     }
 
-    const setupPromise = this.deviceInitPromise.then(device => {
+    const setupPromise = this.deviceInitPromise.then(async device => {
       if (this._isDestroyed) {
         // Only destroy the device if Graph owns it
         if (this.shouldDestroyDevice) {
@@ -190,6 +190,18 @@ export class Graph {
       deviceCanvas.style.height = '100%'
       this.canvas = deviceCanvas
       this.updateCanvasTouchAction()
+
+      // Wait for luma's first canvas measurement — but never wait longer than 500 ms.
+      // luma 9.3 sizes the drawing buffer from a ResizeObserver, which reports after the
+      // current frame's rAF callbacks; rendering before its first measurement draws into
+      // the canvas's default 300×150 buffer, CSS-stretched to a one-frame "zoomed-in"
+      // flash. The timeout keeps init going for canvases mounted in hidden containers,
+      // where the observer stays silent until they become visible.
+      await Promise.race([
+        deviceCanvasContext.initialized,
+        new Promise<void>(resolve => { setTimeout(resolve, 500) }),
+      ])
+      if (this._isDestroyed) return device
 
       const w = this.canvas.clientWidth
       const h = this.canvas.clientHeight
