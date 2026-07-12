@@ -436,19 +436,15 @@ export class Lines extends CoreModule {
         this.linkIndexTexture.destroy()
       }
 
-      // Create new texture
+      // Create new texture. No zero-fill upload: WebGL textures are
+      // zero-initialized by spec, and updateLinkIndexBuffer clears the FBO
+      // before every index pass — a CPU fill would allocate and upload tens of
+      // MB (16 bytes/px at full screen resolution) on every resize step.
       this.linkIndexTexture = device.createTexture({
         width: screenWidth,
         height: screenHeight,
         format: 'rgba32float',
-        usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
-      })
-      this.linkIndexTexture.copyImageData({
-        data: new Float32Array(screenWidth * screenHeight * 4).fill(0),
-        bytesPerRow: getBytesPerRow('rgba32float', screenWidth),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
+        usage: Texture.SAMPLE | Texture.RENDER,
       })
 
       // Create new framebuffer
