@@ -2069,6 +2069,14 @@ export class Graph {
     if (prevConfig.enableZoom !== this.config.enableZoom || prevConfig.enableDrag !== this.config.enableDrag) {
       this.updateZoomDragBehaviors()
     }
+    // The sampling grids bake their cell size from these values at build time;
+    // without a rebuild the change would silently apply only on the next resize.
+    if (prevConfig.pointSamplingDistance !== this.config.pointSamplingDistance) {
+      this.points?.updateSampledPointsGrid()
+    }
+    if (prevConfig.linkSamplingDistance !== this.config.linkSamplingDistance) {
+      this.lines?.updateSampledLinksGrid()
+    }
     if (prevConfig.spaceDimensions !== this.config.spaceDimensions) {
       this.setSpaceDimensions(this.config.spaceDimensions)
     }
