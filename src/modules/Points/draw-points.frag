@@ -208,6 +208,9 @@ void main() {
 
     vec4 finalShapeColor = vec4(0.0);
     vec4 finalImageColor = vec4(0.0);
+    // Geometric sprite coverage (shape SDF / image / outline ring alpha, before any
+    // color-alpha or opacity multiplies) — drives the 3D depth-write discard below.
+    float coverage = 0.0;
     
     // Handle shape rendering with centering logic
     if (pointShape != NONE) {
@@ -229,6 +232,7 @@ void main() {
             float shapeDistance = getShapeDistance(shapeCoord, pointShape);
             opacity = 1.0 - smoothstep(-0.01, 0.01, shapeDistance);
         }
+        coverage = opacity;
         opacity *= shapeColor.a;
 
         finalShapeColor = vec4(shapeColor.rgb, opacity);
@@ -262,6 +266,8 @@ void main() {
         }
     }
 
+    coverage = max(coverage, finalImageColor.a);
+
     float finalPointAlpha = max(finalShapeColor.a, finalImageColor.a);
     if (isGreyedOut > 0.0 && greyoutOpacity != -1.0) {
         finalPointAlpha *= greyoutOpacity;
@@ -284,6 +290,7 @@ void main() {
         float outerEdge = smoothstep(rSafe, rSafe * ringSmoothing, 1.0);
         float innerEdge = smoothstep(wSafe, wSafe * ringSmoothing, r);
         float ringAlpha = outerEdge * innerEdge;
+        coverage = max(coverage, ringAlpha);
 
         // Grey out the ring color when the point is greyed
         vec3 ringColor = outlineColor.rgb;
@@ -322,7 +329,10 @@ void main() {
 
     // Depth writes are enabled in 3D: the transparent corners of the point sprite
     // must not write depth, or they would punch invisible holes into points behind.
-    if (fragColor.a < 0.33) {
+    // Test geometric coverage, not final alpha — pointOpacity/greyoutOpacity and the
+    // point color's alpha apply uniformly across the sprite and must not make
+    // low-opacity points disappear entirely.
+    if (coverage < 0.33) {
         discard;
     }
     #endif
