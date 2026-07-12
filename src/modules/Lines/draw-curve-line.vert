@@ -392,8 +392,14 @@ void main() {
 
   // Calculate final color with opacity based on link distance
   vec3 rgbColor = lineColor.rgb;
-  // Adjust opacity based on link distance
-  float opacity = lineColor.a * linkOpacity * max(linkVisibilityMinTransparency, map(linkDistPx, linkVisibilityDistanceRange.g, linkVisibilityDistanceRange.r, 0.0, 1.0));
+  // Fade long links toward the minimum transparency, saturating at 1 so links
+  // shorter than the range minimum never exceed the configured opacity. A
+  // degenerate (or inverted) range acts as a hard threshold instead of
+  // dividing by zero in map().
+  float visibilityFade = linkVisibilityDistanceRange.g > linkVisibilityDistanceRange.r
+    ? map(linkDistPx, linkVisibilityDistanceRange.g, linkVisibilityDistanceRange.r, 0.0, 1.0)
+    : (linkDistPx <= linkVisibilityDistanceRange.g ? 1.0 : 0.0);
+  float opacity = lineColor.a * linkOpacity * clamp(visibilityFade, linkVisibilityMinTransparency, 1.0);
 
   // Apply greyed-out opacity from link status texture
   if (isLinkHighlightingActive > 0.0 && linkStatusTextureSize > 0.0) {
