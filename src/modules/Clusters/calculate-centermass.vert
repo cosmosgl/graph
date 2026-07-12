@@ -34,11 +34,15 @@ void main() {
 #endif
 
   vec4 pointClusterIndices = texture(clusterTexture, (pointIndices + 0.5) / pointsTextureSize);
-  vec2 xy = vec2(0.0);
-  if (pointClusterIndices.x >= 0.0 && pointClusterIndices.y >= 0.0) {
-    xy = 2.0 * (pointClusterIndices.xy + 0.5) / clustersTextureSize - 1.0;
+  // Unclustered points ([-1, -1]) must not contribute mass to any cluster —
+  // vec2(0.0) is the NDC center (a real cluster's texel), so cull them off-screen.
+  if (pointClusterIndices.x < 0.0 || pointClusterIndices.y < 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = 1.0;
+    return;
   }
-  
+  vec2 xy = 2.0 * (pointClusterIndices.xy + 0.5) / clustersTextureSize - 1.0;
+
   gl_Position = vec4(xy, 0.0, 1.0);
   gl_PointSize = 1.0;
 }
