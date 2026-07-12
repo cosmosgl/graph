@@ -28,6 +28,18 @@ import { Camera, type Camera3dState } from '@/graph/modules/Camera'
 const LONG_PRESS_DURATION_MS = 500
 const LONG_PRESS_MOVE_THRESHOLD_PX = 10
 
+type ZoomGestureEvent = Event & { ctrlKey?: boolean; button?: number; touches?: TouchList }
+/** d3-zoom's default gesture filter, restored when `enableZoom` is on. */
+const defaultZoomGestureFilter = (event: ZoomGestureEvent): boolean =>
+  (!event.ctrlKey || event.type === 'wheel') && !event.button
+/**
+ * Gesture filter for `enableZoom: false`: panning/orbiting must keep working, so
+ * only the second touch point (which would start a pinch-zoom) is rejected —
+ * wheel and double-click zoom have their listeners unbound separately.
+ */
+const panOnlyZoomGestureFilter = (event: ZoomGestureEvent): boolean =>
+  defaultZoomGestureFilter(event) && (event.touches === undefined || event.touches.length < 2)
+
 export class Graph {
   /** Current graph configuration. Always fully populated with default values for any unset properties. */
   public config: GraphConfigInterface = createDefaultConfig()
@@ -2774,6 +2786,15 @@ export class Graph {
   }
 
   private updateZoomDragBehaviors (): void {
+    const zoomBehavior = this.store.is3D ? this.camera.behavior : this.zoomInstance.behavior
+    // Panning (2D) and orbiting (3D) ride on the same d3-zoom behavior as the
+    // zoom gestures, so `enableZoom: false` cannot simply unbind everything:
+    // wheel and double-click get their listeners removed, and pinch (the only
+    // zoom gesture sharing the touch listeners with panning) is rejected by a
+    // gesture filter that blocks a second touch point. When zoom is enabled the
+    // filter reverts to d3-zoom's default.
+    zoomBehavior.filter(this.config.enableZoom ? defaultZoomGestureFilter : panOnlyZoomGestureFilter)
+
     if (this.store.is3D) {
       // Point dragging binds before the camera so a drag that starts on a hovered
       // point captures the gesture; everywhere else the camera orbits. The camera
@@ -2791,6 +2812,7 @@ export class Graph {
         this.canvasD3Selection
           ?.call(this.camera.behavior)
           .on('wheel.zoom', null)
+          .on('dblclick.zoom', null)
       }
       this.updateCanvasTouchAction()
       return
@@ -2810,6 +2832,7 @@ export class Graph {
       this.canvasD3Selection
         ?.call(this.zoomInstance.behavior)
         .on('wheel.zoom', null)
+        .on('dblclick.zoom', null)
     }
 
     this.updateCanvasTouchAction()
