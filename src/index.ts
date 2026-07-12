@@ -714,7 +714,12 @@ export class Graph {
   public setLinks (links: Float32Array): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setLinks(links))) return
-    this.graph.inputLinks = links
+    let sanitizedLinks = links
+    if (sanitizedLinks.length % 2 !== 0) {
+      console.warn('cosmos.gl: `setLinks` expects 2 point indices per link; truncating the incomplete trailing link')
+      sanitizedLinks = sanitizedLinks.subarray(0, sanitizedLinks.length - 1)
+    }
+    this.graph.inputLinks = sanitizedLinks
     this.isLinksUpdateNeeded = true
     // Links related texture depends on links length, so we need to update it
     this.isLinkColorUpdateNeeded = true

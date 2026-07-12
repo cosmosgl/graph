@@ -112,7 +112,7 @@ export class GraphData {
   }
 
   public get linksNumber (): number | undefined {
-    return this.links && this.links.length / 2
+    return this.links && Math.trunc(this.links.length / 2)
   }
 
   public updatePoints (): void {
