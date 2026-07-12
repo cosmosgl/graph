@@ -81,6 +81,13 @@ export class Camera {
    */
   public onUpdate: (() => void) | undefined
 
+  /**
+   * Canvas selection the behavior is bound to; set by the Graph. Fit/setState
+   * tweens run on this selection under the named `'cosmosCameraFit'` transition,
+   * which the gesture handlers must be able to cancel.
+   */
+  public canvasSelection: Selection<HTMLCanvasElement, undefined, null, undefined> | undefined
+
   /** Orbit center in space coordinates. */
   public target = vec3.create()
   /** Distance from the camera eye to `target`. */
@@ -94,6 +101,20 @@ export class Camera {
     .scaleExtent([0.001, Infinity])
     .on('start', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
       this.isRunning = true
+      if (e.sourceEvent) {
+        // Fit/setState tweens run in a *named* transition, which survives the
+        // unnamed interrupt() d3-zoom issues on gesture start — cancel it here
+        // so the user takes over, and rebase the dolly baseline (and its limits)
+        // onto the interpolated state so the gesture continues from what's on
+        // screen. A no-op when nothing is in flight: the baseline invariant
+        // `distance == baseDistance / k` already holds then.
+        this.canvasSelection?.interrupt('cosmosCameraFit')
+        this.baseDistance = this.distance * e.transform.k
+        this.behavior.scaleExtent([
+          this.baseDistance / (this.sceneRadius * MAX_DOLLY_SCENE_RADII),
+          this.baseDistance / (this.sceneRadius * MIN_DOLLY_SCENE_RADII),
+        ])
+      }
       this.config.onZoomStart?.(e, !!e.sourceEvent)
     })
     .on('zoom', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
@@ -257,6 +278,10 @@ export class Camera {
     const { target, distance, radius } = this.getFitOrbit(positions, dimensions, padding)
     this.sceneRadius = radius
     if (duration === 0) {
+      // An animated fit/setState in flight shares the named transition slot and
+      // would overwrite the instant fit on its next tick — cancel it explicitly
+      // (the animated branch below replaces it implicitly by name).
+      selection.interrupt('cosmosCameraFit')
       vec3.copy(this.target, target)
       this.distance = distance
       this.updateMatrices()

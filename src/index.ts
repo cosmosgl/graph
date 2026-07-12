@@ -338,6 +338,10 @@ export class Graph {
         .on('click.cosmos', this.onClick.bind(this))
         .on('contextmenu.cosmos', this.onContextMenu.bind(this))
 
+      // The camera's gesture handlers need the selection to cancel the named
+      // fit/setState transition when a user gesture takes over.
+      this.camera.canvasSelection = this.canvasD3Selection
+
       select(document)
         .on('keydown.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
         .on('keyup.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
@@ -1793,6 +1797,7 @@ export class Graph {
     document.getElementById('gl-bench-style')?.remove()
 
     this.canvasD3Selection = undefined
+    this.camera.canvasSelection = undefined
     this.attributionDivElement = undefined
   }
 
