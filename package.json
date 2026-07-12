@@ -41,7 +41,7 @@
     "@storybook/addon-interactions": "^8.4.5",
     "@storybook/blocks": "^8.4.5",
     "@storybook/html": "^8.4.5",
-    "@storybook/html-vite": "^8.4.5",
+    "@storybook/html-vite": "^10.5.0",
     "@storybook/test": "^8.4.5",
     "@types/d3-array": "^3.0.3",
     "@types/d3-color": "^3.1.0",
@@ -67,7 +67,7 @@
     "remark-gfm": "^4.0.0",
     "storybook": "^8.4.5",
     "typescript": "^5.9.3",
-    "vite": "^6.4.1",
+    "vite": "^8.1.4",
     "vite-plugin-dts": "^4.3.0"
   },
   "dependencies": {
