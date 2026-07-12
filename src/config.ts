@@ -471,6 +471,14 @@ export interface GraphConfigInterface {
    * Default value: `0`
    */
   simulationCollisionPadding: number;
+  /**
+   * Number of collision relaxation iterations per simulation tick.
+   * Higher values make the collision constraint stiffer and more responsive
+   * (overlaps resolve faster), at a linear performance cost in the collision
+   * step. Similar to d3-force's `collide.iterations`.
+   * Default value: `1`
+   */
+  simulationCollisionIterations: number;
 
   /**
    * Callback function that will be called when the simulation starts.

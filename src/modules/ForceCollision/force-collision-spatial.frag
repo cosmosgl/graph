@@ -163,9 +163,9 @@ void main() {
     velocity.rgb *= damping;
   }
 
-  // Cap the per-pass correction so overlaps resolve by relaxation over a few
-  // frames instead of overshooting in one.
-  float maxCorrection = currentCollisionRadius * 0.1;
+  // Cap the per-pass correction so overlaps resolve by relaxation instead of
+  // overshooting in one frame.
+  float maxCorrection = currentCollisionRadius * 0.25;
   float correction = length(velocity.rgb);
   if (correction > maxCorrection) {
     velocity.rgb *= maxCorrection / correction;
@@ -252,18 +252,20 @@ void main() {
     }
   }
 
-  // Apply density-based damping: reduce force when surrounded by many neighbors
-  // This prevents chaotic oscillations in dense clusters
+  // Apply density-based damping: reduce force when surrounded by many neighbors.
+  // This prevents chaotic oscillations in dense clusters. Floored (like the 3D
+  // branch) so a dense pile is never suppressed so hard it can't push itself
+  // apart — the per-pass correction cap below prevents oscillation.
   if (totalNeighbors > 2.0) {
-    float damping = 2.0 / totalNeighbors;
+    float damping = max(2.0 / totalNeighbors, 0.05);
     velocity.rg *= damping;
   }
 
-  // Cap the per-pass correction so overlaps resolve by relaxation over a few
-  // frames instead of overshooting in one. Across the offset passes the
-  // total displacement stays within ~40% of this point's collision radius,
-  // which converges without the ping-pong of full-overlap corrections.
-  float maxCorrection = currentCollisionRadius * 0.1;
+  // Cap the per-pass correction so overlaps resolve by relaxation instead of
+  // overshooting in one frame. Across the offset passes the total displacement
+  // stays within ~one collision radius per tick, so a full overlap resolves in
+  // a frame or two while the soft force curve keeps light contacts gentle.
+  float maxCorrection = currentCollisionRadius * 0.25;
   float correction = length(velocity.rg);
   if (correction > maxCorrection) {
     velocity.rg *= maxCorrection / correction;

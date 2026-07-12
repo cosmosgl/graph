@@ -111,6 +111,7 @@ The simulation also runs in 3D mode (after `setPointPositions3D`) with the same 
 | simulationCollision | Collision force coefficient. When greater than `0`, points push each other apart when they overlap, so they don't stack on top of one another. Uses a GPU spatial-hash grid, so it scales to large graphs better than naive O(n²) collision. Set to `0` to disable (its GPU resources are then never allocated). | 0.0 – 1.0 | `0` |
 | simulationCollisionRadius | Collision radius. When `0`, each point's collision radius is derived from its size (half of the point size). When greater than `0`, every point uses this fixed radius regardless of its size. | 0 – 100 | `0` |
 | simulationCollisionPadding | Extra room added to every point's collision radius, in simulation space units. Without padding, points settle just touching; with padding, neighbouring points keep a gap of twice this value between their visual edges. Composes with both size-derived and fixed `simulationCollisionRadius`. | 0 – 50 | `0` |
+| simulationCollisionIterations | Number of collision relaxation iterations per simulation tick. Higher values make the collision constraint stiffer (overlaps resolve faster), at a linear performance cost in the collision step. | 1 – 5 | `1` |
 
 ## Event Callbacks
 

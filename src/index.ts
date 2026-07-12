@@ -2418,9 +2418,15 @@ export class Graph {
           this.forceCollision?.initPrograms()
           this.isForceCollisionReady = true
         }
-        this.points?.swapFbo()
-        this.forceCollision?.run()
-        this.points?.updatePosition()
+        // Each iteration rebuilds the spatial grid from the freshly updated
+        // positions, so extra iterations stiffen the collision constraint
+        // (overlaps resolve within the tick) like d3-force's collide.iterations.
+        const collisionIterations = Math.max(1, Math.round(this.config.simulationCollisionIterations ?? 1))
+        for (let i = 0; i < collisionIterations; i += 1) {
+          this.points?.swapFbo()
+          this.forceCollision?.run()
+          this.points?.updatePosition()
+        }
       }
 
       // Simulation moved the points — the picking buffers no longer match them

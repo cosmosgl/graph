@@ -39,6 +39,13 @@ const GRID_OFFSETS_3D: [number, number, number][] = [
 // (~4MB rgba32float) — bounds the memory of the 8 offset-pass scratch grids
 const MAX_GRID_SIZE_3D = 64
 
+// Collision acts as an overlap constraint rather than a cooling force, so it
+// shouldn't fade out with the simulation the way alpha-scaled forces do —
+// otherwise overlaps introduced late (e.g. by dragging) barely resolve. The
+// floor keeps it responsive; it can't cause jitter at rest because the force
+// vanishes smoothly once points separate.
+const COLLISION_ALPHA_FLOOR = 0.25
+
 export class ForceCollision extends CoreModule {
   private gridTargets: GridTarget[] = []
   private sizeTexture: Texture | undefined
@@ -395,7 +402,7 @@ export class ForceCollision extends CoreModule {
           pointsTextureSize: store.pointsTextureSize ?? 0,
           gridTextureSize: this.gridTextureSize,
           cellSize: this.cellSize,
-          alpha: store.alpha,
+          alpha: Math.max(store.alpha, COLLISION_ALPHA_FLOOR),
           collisionStrength: config.simulationCollision ?? 0,
           collisionRadius,
           collisionPadding,
