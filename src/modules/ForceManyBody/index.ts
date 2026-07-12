@@ -197,19 +197,14 @@ export class ForceManyBody extends CoreModule {
       const levelTextureSize = Math.pow(2, level + 1)
       const existingTarget = this.levelTargets.get(level)
 
+      // Textures are not zero-filled here — drawLevels clears every level FBO
+      // each tick before aggregating (a CPU zero-fill would allocate and upload
+      // hundreds of MB per data update for the deeper levels).
       if (
         existingTarget &&
         existingTarget.texture.width === levelTextureSize &&
         existingTarget.texture.height === levelTextureSize
       ) {
-        // Clear existing texture data to zero
-        existingTarget.texture.copyImageData({
-          data: new Float32Array(levelTextureSize * levelTextureSize * 4).fill(0),
-          bytesPerRow: getBytesPerRow('rgba32float', levelTextureSize),
-          mipLevel: 0,
-          x: 0,
-          y: 0,
-        })
         continue
       }
 
@@ -223,14 +218,7 @@ export class ForceManyBody extends CoreModule {
         width: levelTextureSize,
         height: levelTextureSize,
         format: 'rgba32float',
-        usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
-      })
-      texture.copyImageData({
-        data: new Float32Array(levelTextureSize * levelTextureSize * 4).fill(0),
-        bytesPerRow: getBytesPerRow('rgba32float', levelTextureSize),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
+        usage: Texture.SAMPLE | Texture.RENDER,
       })
       const fbo = device.createFramebuffer({
         width: levelTextureSize,
