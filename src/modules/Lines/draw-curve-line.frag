@@ -104,7 +104,10 @@ void main() {
         opacity *= strokeMask(phase, linkDashLength, period, aa);
       } else {
         // Dotted: round dots sized to the stroke width, spaced by diameter + gap.
-        float diameter = vLinkDashWidth;
+        // On arrowed links the quad is widened to fit the arrowhead and the stroke
+        // occupies only (1 - arrowWidthFactor) of it — size dots to the stroke,
+        // not the widened quad.
+        float diameter = useArrow > 0.5 ? vLinkDashWidth * (1.0 - arrowWidthFactor) : vLinkDashWidth;
         float period = max(diameter + linkDashGap, 0.001);
         float localX = mod(phase, period) - period * 0.5;
         float localY = pos.y * vLinkDashWidth;
