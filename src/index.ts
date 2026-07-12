@@ -28,6 +28,9 @@ import { Camera, type Camera3dState } from '@/graph/modules/Camera'
 const LONG_PRESS_DURATION_MS = 500
 const LONG_PRESS_MOVE_THRESHOLD_PX = 10
 
+/** Monotonic id giving each Graph instance its own d3 event namespace on `document`. */
+let graphInstanceCounter = 0
+
 type ZoomGestureEvent = Event & { ctrlKey?: boolean; button?: number; touches?: TouchList }
 /** d3-zoom's default gesture filter, restored when `enableZoom` is on. */
 const defaultZoomGestureFilter = (event: ZoomGestureEvent): boolean =>
@@ -53,6 +56,11 @@ export class Graph {
   private canvas!: HTMLCanvasElement
   private attributionDivElement: HTMLElement | undefined
   private canvasD3Selection: Selection<HTMLCanvasElement, undefined, null, undefined> | undefined
+  /**
+   * d3 event namespace for listeners on shared elements (`document`). Canvas
+   * listeners can use the plain `.cosmos` namespace — the canvas is per-instance.
+   */
+  private readonly documentEventsNamespace = `cosmos-${graphInstanceCounter++}`
   private device: Device | undefined
   /**
    * Tracks whether this Graph instance owns the device and should destroy it on cleanup.
@@ -354,9 +362,12 @@ export class Graph {
       // fit/setState transition when a user gesture takes over.
       this.camera.canvasSelection = this.canvasD3Selection
 
+      // `document` is shared between Graph instances and d3 keeps one listener per
+      // element+type+name — a per-instance namespace keeps a second instance from
+      // clobbering the first, and destroy() from removing the survivors' listeners.
       select(document)
-        .on('keydown.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
-        .on('keyup.cosmos', (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
+        .on(`keydown.${this.documentEventsNamespace}`, (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
+        .on(`keyup.${this.documentEventsNamespace}`, (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
 
       this.zoomInstance.behavior
         .on('start.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
@@ -1753,7 +1764,7 @@ export class Graph {
         .on('.zoom', null)
     }
 
-    select(document).on('.cosmos', null)
+    select(document).on(`.${this.documentEventsNamespace}`, null)
 
     if (this.zoomInstance?.behavior) {
       this.zoomInstance.behavior
