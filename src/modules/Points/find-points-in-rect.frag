@@ -62,6 +62,11 @@ float pointSizeF(float size) {
 
 void main() {
   vec4 pointPosition = texture(positionsTexture, textureCoords);
+  // Texels beyond the point count carry index -1 — they are not points.
+  if (pointPosition.b < 0.0) {
+    fragColor = vec4(0.0);
+    return;
+  }
   vec2 p = 2.0 * pointPosition.rg / spaceSize - 1.0;
   p *= spaceSize / screenSize;
   #ifdef USE_UNIFORM_BUFFERS

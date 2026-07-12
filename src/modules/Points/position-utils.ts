@@ -4,7 +4,8 @@
  *
  * Layout per pixel: `[x, y, index, z]`. The blue channel encodes the point index —
  * `drag-point.frag` reads it to match the drag target. Alpha holds the z coordinate
- * (`0` in 2D mode, where no shader reads it).
+ * (`0` in 2D mode, where no shader reads it). Texels beyond `pointsNumber` get index
+ * `-1` so index-driven shaders (selection, drag) can tell them apart from real points.
  */
 export function buildPositionTextureData (
   pointPositions: Float32Array | undefined,
@@ -12,7 +13,12 @@ export function buildPositionTextureData (
   pointsNumber: number,
   dimensions: 2 | 3 = 2
 ): Float32Array {
-  const positionData = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
+  const texelCount = pointsTextureSize * pointsTextureSize
+  const positionData = new Float32Array(texelCount * 4)
+  const usedCount = pointPositions ? pointsNumber : 0
+  for (let i = usedCount; i < texelCount; ++i) {
+    positionData[i * 4 + 2] = -1
+  }
   if (!pointPositions) return positionData
 
   for (let i = 0; i < pointsNumber; ++i) {
@@ -43,7 +49,13 @@ export function buildSourcePositionTextureData (
   targetCount: number,
   newTextureSize: number
 ): Float32Array {
-  const sourceData = new Float32Array(newTextureSize * newTextureSize * 4)
+  const texelCount = newTextureSize * newTextureSize
+  const sourceData = new Float32Array(texelCount * 4)
+  // Unused texels get index -1, matching `buildPositionTextureData` — the
+  // interpolation pass carries the source blue channel into the position texture.
+  for (let i = targetCount; i < texelCount; i += 1) {
+    sourceData[i * 4 + 2] = -1
+  }
 
   for (let i = 0; i < sharedCount; i += 1) {
     sourceData[i * 4 + 0] = previousPositionPixels[i * 4 + 0] as number

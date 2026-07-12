@@ -1295,7 +1295,9 @@ export class Graph {
     const h = this.store.screenSize[1]
     this.store.searchArea = [[rect[0][0], (h - rect[1][1])], [rect[1][0], (h - rect[0][1])]]
     if (!this.points.findPointsInRect()) return []
+    const pointsNumber = this.graph.pointsNumber ?? 0
     return extractIndicesFromPixels(readPixels(this.device, this.points.searchFbo as Framebuffer))
+      .filter(index => index < pointsNumber)
   }
 
   /**
@@ -1323,7 +1325,9 @@ export class Graph {
     const convertedPath = polygonPath.map(([x, y]) => [x, h - y] as [number, number])
     this.points.updatePolygonPath(convertedPath)
     if (!this.points.findPointsInPolygon()) return []
+    const pointsNumber = this.graph.pointsNumber ?? 0
     return extractIndicesFromPixels(readPixels(this.device, this.points.searchFbo as Framebuffer))
+      .filter(index => index < pointsNumber)
   }
 
   /**
