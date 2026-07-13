@@ -83,6 +83,7 @@ export const defaultConfigValues = {
   simulationCollisionRadius: undefined,
   simulationCollisionPadding: 0,
   simulationCollisionIterations: 1,
+  simulationAlphaOnDrag: 0.3,
 
   // Simulation callbacks
   onSimulationStart: undefined,

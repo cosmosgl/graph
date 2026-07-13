@@ -408,6 +408,9 @@ export class Graph {
       this.dragInstance.behavior
         .on('start.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
           this.currentEvent = e
+          // The Drag module's own 'start' handler runs first (registration
+          // order), so isActive already tells us a point drag actually began.
+          if (this.dragInstance.isActive) this.reheatSimulationOnDragStart()
           this.updateCanvasCursor()
           this.requestRender()
         })
@@ -2345,6 +2348,20 @@ export class Graph {
     this.create()
     this.initPrograms()
     this.store.alpha = simulationAlpha
+  }
+
+  /**
+   * Re-heats the simulation when the user starts dragging a point, so the
+   * surrounding points react to the drag instead of staying frozen: alpha is
+   * raised to at least `simulationAlphaOnDrag` and a paused or settled
+   * simulation is restarted (`start()` fires the usual callbacks).
+   */
+  private reheatSimulationOnDragStart (): void {
+    const alphaOnDrag = this.config.simulationAlphaOnDrag ?? 0
+    if (!this.config.enableSimulation || alphaOnDrag <= 0) return
+    // Already running at or above the target alpha — nothing to re-heat
+    if (this.store.isSimulationRunning && this.store.alpha >= alphaOnDrag) return
+    this.start(Math.max(this.store.alpha, alphaOnDrag))
   }
 
   /**

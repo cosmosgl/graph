@@ -479,6 +479,15 @@ export interface GraphConfigInterface {
    * Default value: `1`
    */
   simulationCollisionIterations: number;
+  /**
+   * Simulation re-heat on point drag. When the user starts dragging a point
+   * and the simulation is enabled, alpha is raised to at least this value and
+   * the simulation is restarted if it was paused or had settled, so the
+   * surrounding points react to the dragged point (similar to d3-force's
+   * `alphaTarget` pattern on drag start). Set to `0` to disable.
+   * Default value: `0.3`
+   */
+  simulationAlphaOnDrag: number;
 
   /**
    * Callback function that will be called when the simulation starts.
