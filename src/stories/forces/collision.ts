@@ -131,5 +131,6 @@ export const collision = (): { graph: Graph; div: HTMLDivElement } => {
     fitViewOnInit: false,
     fitViewDelay: 250,
     fitViewDuration: 1000,
+    simulationCollisionIterations: 10,
   })
 }

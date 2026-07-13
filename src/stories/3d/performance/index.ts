@@ -26,10 +26,10 @@ export const performance3D = (): { graph: Graph; div: HTMLDivElement; destroy?: 
 
   const graph = new Graph(div, config)
 
-  const data = generateGalaxy3D(100000)
+  const data = generateGalaxy3D(1000000)
   graph.setPointPositions(data.pointPositions, { dimensions: 3 })
   graph.setPointColors(data.pointColors)
-  graph.setLinks(data.links)
+  // graph.setLinks(data.links)
   graph.render()
 
   const buttonsDiv = document.createElement('div')

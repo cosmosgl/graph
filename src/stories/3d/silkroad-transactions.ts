@@ -77,23 +77,25 @@ export const silkroadTransactions3d = (): { graph: Graph; div: HTMLDivElement; d
     backgroundColor: '#0a0a14',
     pointDefaultSize: 2,
     linkDefaultWidth: 0.5,
-    linkDefaultColor: '#8a6a30',
-    linkOpacity: 0.8,
+    linkDefaultColor: '#8ea2ff', // brighter gold; kept faint so the bright point colors read through
+    linkOpacity: 0.18,
     scalePointsOnZoom: true,
     curvedLinks: false,
     enableDrag: true,
     enableSimulation: true,
     simulationGravity: 0.4,
     simulationRepulsion: 1.5,
-    simulationLinkSpring: 0.15,
+    simulationLinkSpring: 0.35,
     simulationLinkDistance: 10,
-    simulationFriction: 0.85,
+    simulationFriction: 0.55,
     simulationCollision: 0.75,
-    simulationCollisionPadding: 2,
+    simulationCollisionPadding: 0,
     simulationDecay: 1000,
     cameraFov: 55,
     pointSphereShading: true,
+    pointDepthFade: 0.1,
     fitViewOnInit: false,
+    simulationCollisionIterations: 3,
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
   }
 
@@ -229,10 +231,10 @@ export const silkroadTransactions3d = (): { graph: Graph; div: HTMLDivElement; d
       positions3d[i * 3 + 2] = center + r3 * u
 
       const t = (percentile[i] ?? 0) ** 3 // percentile, gamma-curved so only the top hubs read bright/large
-      colors[i * 4] = 0.24 + t * 0.76 // dim slate → warm gold
-      colors[i * 4 + 1] = 0.30 + t * 0.52
-      colors[i * 4 + 2] = 0.46 - t * 0.22
-      colors[i * 4 + 3] = 0.9
+      colors[i * 4] = 0.30 + t * 0.70 // bright teal → vivid gold
+      colors[i * 4 + 1] = 0.72 + t * 0.18
+      colors[i * 4 + 2] = 0.92 - t * 0.55
+      colors[i * 4 + 3] = 1.0
       sizes[i] = 5 + t * 5
     }
 

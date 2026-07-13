@@ -25,7 +25,7 @@ export function generateCollisionPoints3D (
 
     // Mostly small spheres with a few large ones (t is size, biased small)
     const t = Math.pow(Math.random(), 2.5)
-    pointSizes[i] = 40 + t * 80
+    pointSizes[i] = 40 + t * 480
 
     pointColors[i * 4 + 0] = 0.19 + t * 0.76
     pointColors[i * 4 + 1] = 0.75 - t * 0.07

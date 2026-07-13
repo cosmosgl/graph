@@ -21,7 +21,7 @@ export const collision3D = (): { graph: Graph; div: HTMLDivElement; destroy?: ()
     // collision force (radius = point size / 2) keeps the spheres from overlapping,
     // so they settle into a packed ball.
     enableSimulation: true,
-    simulationGravity: 0.5,
+    simulationGravity: 0.005,
     simulationRepulsion: 0,
     simulationCollision: 0.5,
     simulationFriction: 0.85,
@@ -30,11 +30,12 @@ export const collision3D = (): { graph: Graph; div: HTMLDivElement; destroy?: ()
     // lit spheres, so the packed ball reads front-to-back (toggles below).
     pointDepthFade: 0.4,
     pointSphereShading: true,
+    simulationCollisionIterations: 3,
   }
 
   const graph = new Graph(div, config)
 
-  const data = generateCollisionPoints3D(600)
+  const data = generateCollisionPoints3D(1600)
   graph.setPointPositions(data.pointPositions, { dimensions: 3 })
   graph.setPointColors(data.pointColors)
   graph.setPointSizes(data.pointSizes)
