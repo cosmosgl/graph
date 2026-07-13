@@ -50,11 +50,14 @@ export class Graph {
   private shouldDestroyDevice: boolean
   private requestAnimationFrameId = 0
   /**
-   * With on-demand rendering nothing polls the canvas size while idle;
-   * this observer schedules a redraw on element resize. The actual
-   * screen-size/zoom-transform update stays in resizeCanvas() inside the frame.
+   * Detects canvas element resizes:
+   * resize → `_shouldSyncScreenSize` + `requestRender()` → `syncScreenSize()` next frame.
+   * The work always runs in-frame, so resizing behaves the same whether the
+   * loop was running or idle.
    */
   private resizeObserver: ResizeObserver | undefined
+  /** Set by the ResizeObserver; the next frame applies it via syncScreenSize(). */
+  private _shouldSyncScreenSize = false
   private isRightClickMouse = false
   /**
    * Touch/pen long-press timer. Set on pointerdown for non-mouse pointers and
@@ -209,11 +212,13 @@ export class Graph {
       ])
       if (this._isDestroyed) return device
 
-      // With on-demand rendering there is no per-frame resize polling, so a resize while
-      // the loop is idle must schedule a frame itself; the actual resize work still runs
-      // in-frame (resizeCanvas), and luma's own observer resizes the drawing buffer.
+      // Two observers watch this canvas: this one flags the screen-size sync and
+      // wakes the loop; luma's own resizes the drawing buffer.
       if (typeof ResizeObserver !== 'undefined') {
-        this.resizeObserver = new ResizeObserver(() => { this.requestRender() })
+        this.resizeObserver = new ResizeObserver(() => {
+          this._shouldSyncScreenSize = true
+          this.requestRender()
+        })
         this.resizeObserver.observe(this.canvas)
       }
 
@@ -1176,7 +1181,7 @@ export class Graph {
 
     // Override the config's `enableSimulationDuringZoom` for this programmatic zoom transition.
     this.zoomInstance.shouldEnableSimulationDuringZoomOverride = enableSimulation
-    this.resizeCanvas()
+    this.syncScreenSize()
     const transform = this.zoomInstance.getTransform(positions, scale, padding)
     this.canvasD3Selection
       ?.transition()
@@ -1791,7 +1796,7 @@ export class Graph {
     }
     if (prevConfig.spaceSize !== this.config.spaceSize) {
       this.store.adjustSpaceSize(this.config.spaceSize, this.device?.limits.maxTextureDimension2D ?? 4096)
-      this.resizeCanvas(true)
+      this.syncScreenSize(true)
       this.update(this.store.isSimulationRunning ? this.store.alpha : 0)
     }
     if (prevConfig.showFPSMonitor !== this.config.showFPSMonitor) {
@@ -2157,7 +2162,12 @@ export class Graph {
 
     const frameNow = now ?? performance.now()
     this.fpsMonitor?.begin()
-    this.resizeCanvas()
+    // Apply a screen-size change the observer flagged. Without a ResizeObserver
+    // (rare embeds, jsdom) fall back to checking every frame.
+    if (this._shouldSyncScreenSize || !this.resizeObserver) {
+      this._shouldSyncScreenSize = false
+      this.syncScreenSize()
+    }
 
     const shouldInterpolatePositions = this.transition.isActiveFor(TransitionProperty.Positions)
     const shouldAnimatePointColors = this.transition.isActiveFor(TransitionProperty.PointColors)
@@ -2333,20 +2343,30 @@ export class Graph {
     }
   }
 
-  private resizeCanvas (forceResize = false): void {
+  /**
+   * Updates cosmos state to match the canvas's CSS size:
+   * - `store.screenSize`
+   * - the zoom transform — re-centered so the view keeps looking at the same spot
+   * - the screen-sized sampling grids and picking FBOs
+   *
+   * Does NOT touch `canvas.width`/`canvas.height` — the drawing buffer belongs
+   * to luma.gl's autoResize.
+   *
+   * Skips the work when the CSS size is unchanged. Pass `force` when state must
+   * be rebuilt at the same size (e.g. `spaceSize` remaps the world).
+   */
+  private syncScreenSize (force = false): void {
     if (this._isDestroyed) return
     const w = this.canvas.clientWidth
     const h = this.canvas.clientHeight
     const [prevW, prevH] = this.store.screenSize
 
-    // Check if CSS size changed (luma.gl's autoResize handles canvas.width/height automatically)
-    if (forceResize || prevW !== w || prevH !== h) {
+    if (force || prevW !== w || prevH !== h) {
       const { k } = this.zoomInstance.eventTransform
       const centerPosition = this.zoomInstance.convertScreenToSpacePosition([prevW / 2, prevH / 2])
 
       this.store.updateScreenSize(w, h)
-      // Note: canvas.width and canvas.height are managed by luma.gl's autoResize
-      // We only update our internal state and dependent components
+      // canvas.width/height stay untouched — luma.gl's autoResize owns the drawing buffer
       this.canvasD3Selection
         ?.call(this.zoomInstance.behavior.transform, this.zoomInstance.getTransform(centerPosition, k))
       this.points?.updateSampledPointsGrid()
