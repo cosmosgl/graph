@@ -15,6 +15,7 @@ precision highp float;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D previousSlot;
+uniform sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform buildNearFieldSlotsUniforms {
@@ -43,6 +44,17 @@ in vec2 pointIndices;
 out vec2 slotData; // [point index, hash]
 
 void main() {
+  // Absent points must not be captured as neighbors — a NaN position bins to an
+  // undefined cell and its distance poisons the force of every point sampling
+  // that slot. Same guard as calculate-level.vert. (exit.G = absent)
+  vec4 exitStatus = texture(exitTexture, (pointIndices + 0.5) / pointsTextureSize);
+  if (exitStatus.g > 0.5) {
+    slotData = vec2(-1.0, 1.0);
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = 1.0;
+    return;
+  }
+
   vec4 pointPosition = texture(positionsTexture, (pointIndices + 0.5) / pointsTextureSize);
   float index = pointIndices.y * pointsTextureSize + pointIndices.x;
 
