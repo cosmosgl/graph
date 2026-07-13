@@ -49,6 +49,11 @@ Use when recent commits extend or correct a topic that already has an entry — 
 ### Ground rules
 
 - Read 1–2 recent entries under `history/` before writing — the corpus is the real source of truth on tone and detail level.
+- **Cite commits as subject + hash**, e.g. `` `feat(links): add dashed link styles` (`b42d045`) `` — this repo
+  rebase/squash-merges, which rewrites hashes, so the subject line is the durable identifier
+  (recoverable via `git log --grep`); the hash is a convenience that may go stale. When updating an
+  entry whose hashes no longer exist, match commits by subject and refresh the hashes if convenient —
+  never treat a stale hash as a reason to drop the citation.
 - Don't invent facts. If something's missing or unclear, add `<!-- TODO: ... -->` instead of guessing.
 - Writing before merge? Leave the commit hash as `<!-- TODO -->` and fill it in after.
 - Output **only** the markdown content ready to save.
