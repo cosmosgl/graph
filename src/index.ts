@@ -2123,6 +2123,10 @@ export class Graph {
    * continuous activity can still change visual state.
    */
   private shouldKeepRendering (): boolean {
+    // No ResizeObserver (jsdom, legacy embeds): nothing can wake the loop on a
+    // resize, so keep it running — the per-frame size check in renderFrame then
+    // works exactly like it did before on-demand rendering.
+    if (!this.resizeObserver) return true
     // gl-bench derives FPS from frame cadence; keep the loop continuous while
     // the monitor is shown so its numbers stay meaningful.
     if (this.fpsMonitor) return true
@@ -2163,7 +2167,8 @@ export class Graph {
     const frameNow = now ?? performance.now()
     this.fpsMonitor?.begin()
     // Apply a screen-size change the observer flagged. Without a ResizeObserver
-    // (rare embeds, jsdom) fall back to checking every frame.
+    // the loop never idles (see shouldKeepRendering), so checking every frame
+    // here keeps resize detection working like before on-demand rendering.
     if (this._shouldSyncScreenSize || !this.resizeObserver) {
       this._shouldSyncScreenSize = false
       this.syncScreenSize()
