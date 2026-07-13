@@ -2,7 +2,7 @@
 # On-demand rendering
 
 **Date:** 2026-07-07
-**Commits:** `2b6629d`
+**Commits:** `On-demand rendering` (`403e0ba`); post-review: `refactor(render): observer-driven screen-size sync; rename resizeCanvas to syncScreenSize` (`a2ab764`), `fix(render): keep the loop running when ResizeObserver is unavailable` (`13e11e6`)
 
 ## Why
 
@@ -26,6 +26,7 @@ empty-data `render()` path.
 
 | Condition | Why it needs continuous frames |
 |---|---|
+| no `ResizeObserver` in the environment (jsdom, legacy embeds) | nothing can wake the loop on a resize, so it never idles — the per-frame size check then works exactly like before on-demand rendering |
 | `fpsMonitor` exists (`showFPSMonitor: true`) | gl-bench derives FPS from frame cadence; also doubles as a debug escape hatch |
 | `store.isSimulationRunning` | forces step every tick (alpha floor still handled by `end()`) |
 | `transition.isActive` | GPU interpolation advances per frame (`isPending` deliberately does *not* count — a queued-but-never-rendered transition must not keep the loop alive) |
@@ -51,10 +52,13 @@ on d3's own timer and emit a `zoom` event every frame (synchronously for
 
 ## Details worth knowing
 
-- **Canvas resize while idle.** `resizeCanvas()` used to detect CSS size changes by
-  per-frame polling. A `ResizeObserver` on the canvas now schedules a redraw; the
-  actual size/zoom-transform work still happens in the in-frame `resizeCanvas()`.
-  Disconnected in `destroy()`.
+- **Canvas resize while idle.** Size changes used to be detected by per-frame polling.
+  A `ResizeObserver` on the canvas now flags the change (`_shouldSyncScreenSize`) and
+  wakes the loop; the frame applies it via `syncScreenSize()` — renamed from
+  `resizeCanvas`, since it never touched `canvas.width/height` (luma.gl's autoResize
+  owns the drawing buffer). The per-frame `clientWidth` reads (forced-layout hazards)
+  are gone from the render path; environments without `ResizeObserver` keep the loop
+  running instead (see the table above). Disconnected in `destroy()`.
 - **Drag release needs one extra frame.** The drag GPU write happens *after* the draw
   pass in `renderFrame`, so the final drag position only becomes visible on the next
   frame — the drag `end.detect` hook schedules it. Without this, a released point
@@ -71,6 +75,16 @@ on d3's own timer and emit a `zoom` event every frame (synchronously for
 - **External-device integrations** that relied on cosmos.gl redrawing the shared
   context every frame no longer get that for free — trigger a cosmos.gl-observable
   change (e.g. `render()`) when a redraw is needed.
+
+## Post-review updates
+
+Rebased onto v3.3 main (one keep-both conflict: this PR's observer and the luma-9.3
+first-measurement await share the setup block) and reviewed with a deep multi-agent
+pass; its fixes are the post-review commits above. The `Examples/Experiments →
+Examples/Misc` story-group rename was kept as deliberate. Verified: the loop idles at
+a stable frame count, wakes on hover/zoom, re-idles; resize-while-idle costs exactly
+two frames; an exhaustive sweep of every pixel-mutating public API found no path that
+fails to schedule a frame.
 
 ## Example
 
