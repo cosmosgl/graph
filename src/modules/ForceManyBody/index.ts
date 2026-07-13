@@ -509,6 +509,7 @@ export class ForceManyBody extends CoreModule {
     if (!points) return
     if (!this.buildNearFieldSlotsCommand || !this.buildNearFieldSlotsUniformStore) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
+    if (!points.exitTexture || points.exitTexture.destroyed) return
     if (!data.pointsNumber || !this.pointIndices) return
     const finest = this.levelTargets.get(this.levels - 1)
     if (!finest || finest.texture.destroyed) return
@@ -534,6 +535,7 @@ export class ForceManyBody extends CoreModule {
       this.buildNearFieldSlotsCommand.setVertexCount(data.pointsNumber)
       this.buildNearFieldSlotsCommand.setBindings({
         positionsTexture: points.previousPositionTexture,
+        exitTexture: points.exitTexture,
         // Pass 0 never samples previousSlot, but the binding must exist for the
         // draw to run — any texture that is not the render target works.
         previousSlot: slot === 0
