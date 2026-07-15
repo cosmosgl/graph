@@ -90,7 +90,7 @@
   },
   "pre-commit": "lint:staged",
   "lint-staged": {
-    "*.{js,ts}": "eslint --quiet --cache --fix"
+    "src/**/*.{js,ts}": "eslint --quiet --cache --fix"
   },
   "eslintConfig": {
     "extends": [
