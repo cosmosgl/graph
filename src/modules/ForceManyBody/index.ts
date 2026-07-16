@@ -111,7 +111,6 @@ export class ForceManyBody extends CoreModule {
   }> | undefined
 
   private previousPointsTextureSize: number | undefined
-  private previousSpaceSize: number | undefined
   private previousPointsNumber: number | undefined
 
   public create (): void {
@@ -174,7 +173,6 @@ export class ForceManyBody extends CoreModule {
     }
 
     this.previousPointsTextureSize = store.pointsTextureSize
-    this.previousSpaceSize = store.adjustedSpaceSize
     this.previousPointsNumber = this.data.pointsNumber
   }
 
@@ -393,10 +391,11 @@ export class ForceManyBody extends CoreModule {
   }
 
   public run (): void {
-    // Skip if sizes changed and create() wasn't called yet
+    // Skip if point topology changed and create() wasn't called yet. Space size
+    // is intentionally not guarded: grid allocation is point-count-based and
+    // every draw computes cellSize from the live adjustedSpaceSize.
     if (
       this.store.pointsTextureSize !== this.previousPointsTextureSize ||
-      this.store.adjustedSpaceSize !== this.previousSpaceSize ||
       this.data.pointsNumber !== this.previousPointsNumber
     ) {
       return
