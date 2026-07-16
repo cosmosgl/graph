@@ -58,8 +58,22 @@ void main() {
   vec4 pointPosition = texture(positionsTexture, (pointIndices + 0.5) / pointsTextureSize);
   float index = pointIndices.y * pointsTextureSize + pointIndices.x;
 
-  // Per-tick random ordering; kept strictly inside (0, 1) so the depth range is safe.
-  float hashValue = fract(sin(index * 12.9898 + randomSeed * 78.233) * 43758.5453);
+  // Per-tick random ordering via an integer hash (lowbias32). A fract(sin(...))
+  // hash breaks down here: at large point indices GPU sin() loses precision
+  // (differently per vendor), producing correlated or colliding hashes — and a
+  // hash collision makes the peeling test below silently drop a point from the
+  // sample. Integer ops are exact everywhere, and both inputs are exact (the
+  // index is an integer-valued float; floatBitsToUint reinterprets seed bits).
+  uint h = uint(index) ^ floatBitsToUint(randomSeed);
+  h ^= h >> 16u;
+  h *= 0x7feb352du;
+  h ^= h >> 15u;
+  h *= 0x846ca68bu;
+  h ^= h >> 16u;
+  // Top 24 bits only, so the value is exactly representable in a float32 and
+  // round-trips bit-exactly through the slot texture into the next pass's
+  // comparison. Kept strictly inside (0, 1) so the depth range is safe.
+  float hashValue = (float(h >> 8u) + 0.5) / 16777216.0;
   hashValue = 0.001 + hashValue * 0.998;
 
   // Must match the cell formula of the aggregation and force shaders exactly.
