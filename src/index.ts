@@ -1796,6 +1796,9 @@ export class Graph {
     }
     if (prevConfig.spaceSize !== this.config.spaceSize) {
       this.store.adjustSpaceSize(this.config.spaceSize, this.device?.limits.maxTextureDimension2D ?? 4096)
+      // Collision grid dimensions depend on adjustedSpaceSize, so rebuild them
+      // lazily before the next collision pass.
+      this.isForceCollisionReady = false
       this.syncScreenSize(true)
       this.update(this.store.isSimulationRunning ? this.store.alpha : 0)
     }
