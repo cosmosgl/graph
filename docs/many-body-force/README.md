@@ -101,6 +101,25 @@ the point with the smallest hash *not yet selected by passes 0..k−1* (the GPU 
 the per-cell minimum for free). After 8 passes, each cell's 8 **slot textures** hold a uniform
 random 8-subset of its points — re-drawn from scratch every tick.
 
+**The hash must be an integer hash.** The first version used the classic
+`fract(sin(index * 12.9898 + seed * 78.233) * 43758.5453)` one-liner, which is quietly broken at
+this engine's scale: with hundreds of thousands of points the `sin()` argument reaches millions
+of radians, where GLSL guarantees no accuracy and real GPUs diverge — [testing across
+vendors](https://github.com/danilw/GPU-sin-hash-stability) shows sin-hashes produce different
+(and sometimes visibly broken) values on NVIDIA vs AMD vs Apple vs mobile. Degraded precision
+means correlated or *colliding* hashes, and a collision is not cosmetic here: the peeling
+eligibility test (`hash <= previous slot's hash`) silently skips a tied point, so it can never
+be sampled and the Horvitz–Thompson estimate loses its unbiasedness. The replacement is
+**lowbias32**, an XOR-shift–multiply integer hash that sits on the quality/speed Pareto
+frontier of [Jarzynski & Olano's GPU-hash study
+(JCGT 2020)](https://www.jcgt.org/published/0009/03/02/paper.pdf) with the [lowest measured
+bias of its class](https://fgarlin.com/blog/gpu-rng/). Integer ops are exact on every GPU, and
+both inputs are exact (the point index is an integer-valued float; the per-tick seed enters via
+`floatBitsToUint`), so the ordering is identical across platforms. Only the hash's top 24 bits
+become the float ticket, so the value written to the slot texture round-trips bit-exactly into
+the next pass's comparison. Cost is a wash: ~8 integer ALU ops replace a special-function-unit
+`sin()`, in a pass dominated by texture fetches anyway.
+
 **Estimation (`force-nearfield.frag`):** for each of the 9 neighborhood cells, the point sums
 the true pairwise forces from the sampled slots (skipping itself), then scales the sum by
 
