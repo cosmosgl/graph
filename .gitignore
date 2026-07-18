@@ -6,3 +6,14 @@ yarn.lock
 .eslintcache
 *storybook.log
 storybook-static
+
+# Raw 96MB dataset for the github-stress story; preprocess.py converts it to the
+# committed int8 bins in github-stress/data/. Too big to commit.
+src/stories/experiments/github-repos-100k.parquet
+# PCA-64 embeddings and the 2D init are now computed client-side (PCA in the
+# browser, see pca.ts), so these offline artifacts are no longer loaded.
+src/stories/experiments/github-stress/data/embeddings64.i8.bin
+src/stories/experiments/github-stress/data/init.f32.bin
+# Per-row norms: unused (NN-Descent and PCA compute their own). Safe to delete.
+src/stories/experiments/github-stress/data/norms.f32.bin
+src/stories/experiments/github-stress/data/norms64.f32.bin

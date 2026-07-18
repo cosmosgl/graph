@@ -3,9 +3,13 @@ import type { Meta } from '@storybook/html'
 import { CosmosStoryProps } from '@/graph/stories/create-cosmos'
 import { createStory, Story } from '@/graph/stories/create-story'
 import { hyperbolicStressTest } from './stress-test'
+import { githubStressTest } from './experiments/github-stress'
 
 import hyperbolicStressTestStoryRaw from './stress-test/index?raw'
 import hyperbolicUtilsRaw from './utils?raw'
+import githubStressTestStoryRaw from './experiments/github-stress/index?raw'
+import nnDescentRaw from './experiments/github-stress/nn-descent?raw'
+import pcaRaw from './experiments/github-stress/pca?raw'
 
 const meta: Meta<CosmosStoryProps> = {
   title: 'Examples/Stress Test',
@@ -23,6 +27,18 @@ export const HyperbolicLargeGraph: Story = {
     sourceCode: [
       { name: 'Story', code: hyperbolicStressTestStoryRaw },
       { name: 'Generator', code: hyperbolicUtilsRaw },
+    ],
+  },
+}
+
+export const GithubEmbeddings: Story = {
+  ...createStory(githubStressTest),
+  name: 'GPU UMAP — 100k GitHub repos (in-browser kNN)',
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: githubStressTestStoryRaw },
+      { name: 'pca.ts', code: pcaRaw },
+      { name: 'nn-descent.ts', code: nnDescentRaw },
     ],
   },
 }

@@ -1,0 +1,1 @@
+{"n": 100000, "dim": 256, "k": 15, "langs": ["Python", "JavaScript", "TypeScript", "Java", "C++", "C", "C#", "Go", "Rust", "PHP", "Ruby", "Shell", "HTML", "Swift", "Kotlin", "Other"], "scale": 127}

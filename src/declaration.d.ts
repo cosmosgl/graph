@@ -15,3 +15,8 @@ declare module '*?raw' {
     // eslint-disable-next-line import/no-default-export
     export default content
   }
+declare module '*?url' {
+    const url: string
+    // eslint-disable-next-line import/no-default-export
+    export default url
+  }
