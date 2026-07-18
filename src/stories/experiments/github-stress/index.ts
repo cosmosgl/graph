@@ -22,11 +22,17 @@ import starsUrl from './data/stars.f32.bin?url'
  * Points are colored by primary language and sized by stars. Watch the FPS
  * monitor to see where the optimizer strains. Everything runs client-side; only
  * the parquet → int8 conversion happens offline (browsers can't read 96MB parquet).
+ *
+ * Interactive controls: min_dist and spread act LIVE on the running simulation
+ * (the kernel parameters are shader uniforms); n_neighbors re-slices the
+ * precomputed kNN and rebuilds the fuzzy graph on the CPU, then re-heats.
  */
 
 const RAW_DIM = 256
 const REDUCED_DIM = 64
-const K = 15
+/** kNN is computed once at K_MAX; the n_neighbors slider re-slices it to k ≤ K_MAX. */
+const K_MAX = 20
+const K_DEFAULT = 15
 
 // Index → color, matching the LANGS order in preprocess.py (last = "Other").
 const LANGS = ['Python', 'JavaScript', 'TypeScript', 'Java', 'C++', 'C', 'C#', 'Go', 'Rust', 'PHP', 'Ruby', 'Shell', 'HTML', 'Swift', 'Kotlin', 'Other']
@@ -82,6 +88,24 @@ const langColors = (lang: Uint8Array, n: number): Float32Array => {
     colors[i * 4] = c[0]; colors[i * 4 + 1] = c[1]; colors[i * 4 + 2] = c[2]; colors[i * 4 + 3] = 1
   }
   return colors
+}
+
+/** First kTo (nearest) neighbors of each point's kFrom-long sorted list. */
+const sliceKnn = (
+  knn: { indices: Int32Array; distances: Float32Array },
+  n: number,
+  kFrom: number,
+  kTo: number
+): { indices: Int32Array; distances: Float32Array } => {
+  const indices = new Int32Array(n * kTo)
+  const distances = new Float32Array(n * kTo)
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < kTo; j++) {
+      indices[i * kTo + j] = knn.indices[i * kFrom + j] as number
+      distances[i * kTo + j] = knn.distances[i * kFrom + j] as number
+    }
+  }
+  return { indices, distances }
 }
 
 const starSizes = (stars: Float32Array, n: number, minSize = 2, maxSize = 25): Float32Array => {
@@ -175,6 +199,49 @@ export const githubStressTest = (): { graph: Graph; div: HTMLDivElement; destroy
   })
   div.appendChild(legend)
 
+  // ── UMAP parameter controls ────────────────────────────────────────────────
+  // min_dist / spread are shader uniforms, so their sliders act live on the
+  // running simulation. n_neighbors re-slices the precomputed kNN (K_MAX) and
+  // rebuilds the fuzzy graph on the CPU, then re-heats the simulation.
+  const panel = document.createElement('div')
+  panel.style.cssText = [
+    'position: absolute', 'top: 48px', 'left: 12px', 'z-index: 1000', 'padding: 10px 12px',
+    'display: none', 'flex-direction: column', 'gap: 6px',
+    'font: 500 11px Helvetica, Arial, sans-serif', 'color: #cdd3e0',
+    'background: rgba(11,14,26,0.6)', 'border-radius: 8px',
+  ].join(';')
+  const addSlider = (
+    label: string,
+    min: number, max: number, step: number, value: number,
+    format: (v: number) => string
+  ): { input: HTMLInputElement; readout: HTMLSpanElement } => {
+    const row = document.createElement('div')
+    row.style.cssText = 'display: flex; align-items: center; gap: 8px;'
+    const name = document.createElement('span')
+    name.textContent = label
+    name.style.cssText = 'width: 78px;'
+    const input = document.createElement('input')
+    input.type = 'range'
+    input.min = String(min)
+    input.max = String(max)
+    input.step = String(step)
+    input.value = String(value)
+    input.style.cssText = 'width: 110px;'
+    const readout = document.createElement('span')
+    readout.textContent = format(value)
+    readout.style.cssText = 'width: 44px; text-align: right;'
+    row.append(name, input, readout)
+    panel.appendChild(row)
+    return { input, readout }
+  }
+  const statusRow = document.createElement('div')
+  statusRow.style.cssText = 'min-height: 13px; opacity: 0.75;'
+  const neighborsSlider = addSlider('n_neighbors', 5, K_MAX, 1, K_DEFAULT, (v) => String(v))
+  const minDistSlider = addSlider('min_dist', 0.01, 0.99, 0.01, 0.15, (v) => v.toFixed(2))
+  const spreadSlider = addSlider('spread', 0.5, 8, 0.1, 5, (v) => v.toFixed(1))
+  panel.appendChild(statusRow)
+  div.appendChild(panel)
+
   let cancelled = false
 
   const run = async (): Promise<void> => {
@@ -194,12 +261,12 @@ export const githubStressTest = (): { graph: Graph; div: HTMLDivElement; destroy
     const { reduced, init2d } = await runPca(emb, n, RAW_DIM, REDUCED_DIM, setProgress)
     if (cancelled) return
 
-    const knn = await approximateKnn(reduced, n, REDUCED_DIM, { k: K, onProgress: setProgress })
+    const knnFull = await approximateKnn(reduced, n, REDUCED_DIM, { k: K_MAX, onProgress: setProgress })
     if (cancelled) return
 
     overlay.textContent = 'Building UMAP graph…'
     await new Promise<void>((resolve) => { setTimeout(resolve, 0) })
-    const { links, strengths } = buildUmapGraph(knn, n, K)
+    const { links, strengths } = buildUmapGraph(sliceKnn(knnFull, n, K_MAX, K_DEFAULT), n, K_DEFAULT)
     if (cancelled) return
 
     graph.setPointPositions(scaleInit(init2d, n, spaceSize))
@@ -213,6 +280,47 @@ export const githubStressTest = (): { graph: Graph; div: HTMLDivElement; destroy
 
     overlay.remove()
     toggleButton.style.display = 'block'
+    panel.style.display = 'flex'
+
+    // n_neighbors: CPU graph rebuild (a few seconds at 100k) on commit.
+    let rebuilding = false
+    neighborsSlider.input.addEventListener('input', () => { neighborsSlider.readout.textContent = neighborsSlider.input.value })
+    neighborsSlider.input.addEventListener('change', () => {
+      if (rebuilding || cancelled) return
+      rebuilding = true
+      neighborsSlider.input.disabled = true
+      const k = Number(neighborsSlider.input.value)
+      statusRow.textContent = `rebuilding graph for k = ${k}…`
+      setTimeout(() => {
+        try {
+          if (cancelled) return
+          const rebuilt = buildUmapGraph(sliceKnn(knnFull, n, K_MAX, k), n, k)
+          graph.setLinks(rebuilt.links)
+          graph.setLinkStrength(rebuilt.strengths)
+          graph.render()
+          graph.start(0.5)
+        } finally {
+          rebuilding = false
+          neighborsSlider.input.disabled = false
+          statusRow.textContent = ''
+        }
+      }, 30)
+    })
+
+    // min_dist / spread: live uniform updates; gently re-heat on release so the
+    // new curve visibly acts even after the simulation has cooled.
+    minDistSlider.input.addEventListener('input', () => {
+      const v = Number(minDistSlider.input.value)
+      minDistSlider.readout.textContent = v.toFixed(2)
+      graph.setConfigPartial({ simulationUmapMinDist: v })
+    })
+    minDistSlider.input.addEventListener('change', () => { graph.start(0.3) })
+    spreadSlider.input.addEventListener('input', () => {
+      const v = Number(spreadSlider.input.value)
+      spreadSlider.readout.textContent = v.toFixed(1)
+      graph.setConfigPartial({ simulationUmapSpread: v })
+    })
+    spreadSlider.input.addEventListener('change', () => { graph.start(0.3) })
   }
 
   run().catch((error: unknown) => {
