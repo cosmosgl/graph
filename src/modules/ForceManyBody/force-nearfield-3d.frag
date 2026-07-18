@@ -62,10 +62,18 @@ vec3 pairwiseVelocity(vec3 position, vec3 otherPosition, float mass) {
   vec3 distVector = position - otherPosition;
   float l = dot(distVector, distVector);
   if (l <= 0.0) return vec3(0.0);
+  #ifdef UMAP_KERNEL
+  // UMAP repulsive gradient (see force-level.frag) — must stay identical to the
+  // level passes.
+  float d2 = l / (UMAP_SCALE * UMAP_SCALE);
+  float coeff = 2.0 * UMAP_B / ((0.001 + d2) * (1.0 + UMAP_A * pow(d2, UMAP_B)));
+  return alpha * repulsion * mass * UMAP_SCALE * clamp(coeff * distVector / UMAP_SCALE, -4.0, 4.0);
+  #else
   float distanceMin2 = 1.0;
   if (l < distanceMin2) l = sqrt(distanceMin2 * l);
   float addV = alpha * repulsion * mass / sqrt(l);
   return addV * normalize(distVector);
+  #endif
 }
 
 // One peeled slot of a cell: the unweighted pairwise force from the sampled

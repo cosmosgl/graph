@@ -69,6 +69,10 @@ export const defaultConfigValues = {
   focusedLinkWidthIncrease: 5,
 
   // Simulation
+  simulationKernel: 'default',
+  simulationUmapScale: 100,
+  simulationUmapMinDist: 0.1,
+  simulationUmapSpread: 1.0,
   simulationDecay: 5000,
   simulationGravity: 0.25,
   simulationCenter: 0,

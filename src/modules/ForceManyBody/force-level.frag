@@ -46,12 +46,21 @@ vec2 calculateAdditionalVelocity (vec2 ij, vec2 pp) {
     float l = dot(distVector, distVector);
     float dist = sqrt(l);
     if (l > 0.0) {
+      #ifdef UMAP_KERNEL
+      // UMAP repulsive gradient: 2b / ((0.001 + d²)(1 + a·d²ᵇ)) per unit mass, in
+      // embedding units (UMAP_SCALE space units = 1 embedding unit), per-component
+      // clipped to ±4 like the reference SGD implementation.
+      float d2 = l / (UMAP_SCALE * UMAP_SCALE);
+      float coeff = 2.0 * UMAP_B / ((0.001 + d2) * (1.0 + UMAP_A * pow(d2, UMAP_B)));
+      add = alpha * repulsion * centermass.b * UMAP_SCALE * clamp(coeff * distVector / UMAP_SCALE, -4.0, 4.0);
+      #else
       float c = alpha * repulsion * centermass.b;
 
       float distanceMin2 = 1.0;
       if (l < distanceMin2) l = sqrt(distanceMin2 * l);
       float addV = c / sqrt(l);
       add = addV * normalize(distVector);
+      #endif
     }
   }
   return add;

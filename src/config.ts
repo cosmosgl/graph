@@ -414,6 +414,38 @@ export interface GraphConfigInterface {
    */
   simulationCenter: number;
   /**
+   * Force kernel used by the link and many-body forces.
+   * `default` is the d3-style force layout (spring links + inverse-distance repulsion).
+   * `umap` replaces both gradients with UMAP's attractive/repulsive kernels, turning
+   * the simulation into a UMAP-style embedding optimizer: provide the kNN affinity
+   * graph via `setLinks` and the fuzzy edge weights via `setLinkStrength`.
+   * Experimental. Default value: `default`
+   */
+  simulationKernel: 'default' | 'umap';
+  /**
+   * Size of one UMAP embedding unit in space units when `simulationKernel` is `umap`.
+   * A typical UMAP embedding spans roughly ±10 units, so with the default `spaceSize`
+   * of 4096 a scale of 100–200 fills the space.
+   * Default value: `100`
+   */
+  simulationUmapScale: number;
+  /**
+   * UMAP `min_dist` when `simulationKernel` is `umap`: how tightly points are
+   * allowed to pack within a cluster. Smaller values (→ 0) produce denser, more
+   * clumped clusters; larger values (→ 1) spread points more evenly. Together
+   * with `simulationUmapSpread` it determines the embedding curve's `a`/`b`
+   * parameters (fit exactly as in umap-learn).
+   * Default value: `0.1`
+   */
+  simulationUmapMinDist: number;
+  /**
+   * UMAP `spread` when `simulationKernel` is `umap`: the overall scale of the
+   * embedding curve. Larger values spread clusters further apart. Rarely changed
+   * from the default; tune `simulationUmapMinDist` first.
+   * Default value: `1.0`
+   */
+  simulationUmapSpread: number;
+  /**
    * Repulsion force coefficient.
    * Default value: `1.0`
    */

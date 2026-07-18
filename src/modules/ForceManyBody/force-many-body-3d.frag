@@ -61,11 +61,18 @@ void main() {
         if (l == 0.0) continue;
       }
 
+      #ifdef UMAP_KERNEL
+      // UMAP repulsive gradient (see force-level.frag), per-pair with mass 1.
+      float d2 = l / (UMAP_SCALE * UMAP_SCALE);
+      float coeff = 2.0 * UMAP_B / ((0.001 + d2) * (1.0 + UMAP_A * pow(d2, UMAP_B)));
+      velocity += alpha * repulsion * UMAP_SCALE * clamp(coeff * distVector / UMAP_SCALE, -4.0, 4.0);
+      #else
       // Mirrors the 2D level force: c / dist with a minimum-distance clamp.
       float distanceMin2 = 1.0;
       if (l < distanceMin2) l = sqrt(distanceMin2 * l);
       float addV = alpha * repulsion / sqrt(l);
       velocity += addV * normalize(distVector);
+      #endif
     }
   }
 

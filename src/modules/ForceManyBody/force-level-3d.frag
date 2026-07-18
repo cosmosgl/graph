@@ -58,10 +58,17 @@ vec3 cellVelocity(ivec3 cell, int gridSize, int rowTiles, vec3 position) {
   vec3 distVector = position - centermassPosition;
   float l = dot(distVector, distVector);
   if (l <= 0.0) return vec3(0.0);
+  #ifdef UMAP_KERNEL
+  // UMAP repulsive gradient (see force-level.frag), weighted by the cell's mass.
+  float d2 = l / (UMAP_SCALE * UMAP_SCALE);
+  float coeff = 2.0 * UMAP_B / ((0.001 + d2) * (1.0 + UMAP_A * pow(d2, UMAP_B)));
+  return alpha * repulsion * centermass.b * UMAP_SCALE * clamp(coeff * distVector / UMAP_SCALE, -4.0, 4.0);
+  #else
   float distanceMin2 = 1.0;
   if (l < distanceMin2) l = sqrt(distanceMin2 * l);
   float addV = alpha * repulsion * centermass.b / sqrt(l);
   return addV * normalize(distVector);
+  #endif
 }
 
 void main() {

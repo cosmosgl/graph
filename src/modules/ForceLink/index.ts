@@ -3,6 +3,7 @@ import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
 
 import { forceFrag } from '@/graph/modules/ForceLink/force-spring'
+import { findUmapABParams } from '@/graph/modules/Shared/umap-params'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import { ensureVec2 } from '@/graph/modules/Shared/uniform-utils'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
@@ -19,6 +20,9 @@ export class ForceLink extends CoreModule {
   private previousMaxPointDegree: number | undefined
   /** Space dimensions the Model was compiled for; a mode switch recreates it (SPACE_3D define). */
   private programsSpaceDimensions: 2 | 3 = 2
+  /** Force kernel the Model was compiled for; a kernel or scale switch recreates it. */
+  private programsKernel: 'default' | 'umap' = 'default'
+  private programsUmapSignature: string | undefined
   private previousPointsTextureSize: number | undefined
   private previousLinksTextureSize: number | undefined
 
@@ -182,6 +186,22 @@ export class ForceLink extends CoreModule {
       }
     }
 
+    const kernel = this.config.simulationKernel
+    // a, b are baked into the shader, so a min_dist / spread / scale change
+    // recompiles the Model (same rebuild path as a kernel switch).
+    const umap = kernel === 'umap'
+      ? { scale: this.config.simulationUmapScale, ...findUmapABParams(this.config.simulationUmapMinDist, this.config.simulationUmapSpread) }
+      : undefined
+    const umapSignature = umap && `${umap.scale}|${umap.a}|${umap.b}`
+    if (this.programsKernel !== kernel || this.programsUmapSignature !== umapSignature) {
+      this.programsKernel = kernel
+      this.programsUmapSignature = umapSignature
+      if (this.runCommand) {
+        this.runCommand.destroy()
+        this.runCommand = undefined
+      }
+    }
+
     this.vertexCoordBuffer ||= device.createBuffer({
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
     })
@@ -200,7 +220,7 @@ export class ForceLink extends CoreModule {
     })
 
     this.runCommand ||= new Model(device, {
-      fs: forceFrag(this.maxPointDegree),
+      fs: forceFrag(this.maxPointDegree, umap),
       vs: updateVert,
       topology: 'triangle-strip',
       vertexCount: 4,

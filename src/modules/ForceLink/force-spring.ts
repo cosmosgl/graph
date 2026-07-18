@@ -1,6 +1,17 @@
-export function forceFrag (maxLinks: number): string {
+export function forceFrag (maxLinks: number, umap?: { scale: number; a: number; b: number }): string {
   return `#version 300 es
 precision highp float;
+
+${umap === undefined
+    ? ''
+    : `
+// UMAP attractive kernel constants. a, b are fit from min_dist / spread
+// (see Shared/umap-params.ts); UMAP_SCALE converts space units to embedding units.
+#define UMAP_KERNEL
+const float UMAP_A = ${umap.a.toFixed(6)};
+const float UMAP_B = ${umap.b.toFixed(6)};
+const float UMAP_SCALE = ${umap.scale.toFixed(4)};
+`}
 
 uniform sampler2D positionsTexture;
 uniform sampler2D linkInfoTexture; // Texture storing first link indices and amount
@@ -75,6 +86,24 @@ void main() {
         float l = sqrt(x * x + y * y);
         #endif
 
+        #ifdef UMAP_KERNEL
+        // UMAP attractive gradient along the kNN affinity edge, in embedding units:
+        // 2ab·d²⁽ᵇ⁻¹⁾ / (1 + a·d²ᵇ) · w, per-component clipped to ±4 like the
+        // reference SGD implementation. The degree bias is skipped: the fuzzy
+        // weights are symmetric and both endpoints receive the full gradient.
+        float d2 = (l * l) / (UMAP_SCALE * UMAP_SCALE);
+        float w = strength * strength; // undo the sqrt applied on ingest
+        float coeff = 0.0;
+        if (d2 > 0.0) {
+          coeff = 2.0 * UMAP_A * UMAP_B * pow(d2, UMAP_B - 1.0) / (1.0 + UMAP_A * pow(d2, UMAP_B));
+        }
+        float k = linkSpring * alpha * w * UMAP_SCALE;
+        velocity.x += clamp(coeff * x / UMAP_SCALE, -4.0, 4.0) * k;
+        velocity.y += clamp(coeff * y / UMAP_SCALE, -4.0, 4.0) * k;
+        #ifdef SPACE_3D
+        velocity.b += clamp(coeff * z / UMAP_SCALE, -4.0, 4.0) * k;
+        #endif
+        #else
         // Apply the link force
         l = max(l, randomMinLinkDist * 0.99);
         l = (l - randomMinLinkDist) / l;
@@ -88,6 +117,7 @@ void main() {
         #ifdef SPACE_3D
         z *= l;
         velocity.b += z;
+        #endif
         #endif
       }
     }

@@ -13,6 +13,7 @@ import buildNearFieldSlotsVert from '@/graph/modules/ForceManyBody/build-nearfie
 import buildNearFieldSlotsFrag from '@/graph/modules/ForceManyBody/build-nearfield-slots.frag?raw'
 import forceBruteForce3DFrag from '@/graph/modules/ForceManyBody/force-many-body-3d.frag?raw'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
+import { findUmapABParams } from '@/graph/modules/Shared/umap-params'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
@@ -170,6 +171,32 @@ export class ForceManyBody extends CoreModule {
   private previousPointsTextureSize: number | undefined
   private previousSpaceSize: number | undefined
   private previousPointsNumber: number | undefined
+  /** Force kernel the Models were compiled for; a kernel / scale / min_dist switch recreates them. */
+  private programsKernel: 'default' | 'umap' = 'default'
+  private programsUmapSignature: string | undefined
+
+  /**
+   * UMAP kernel constants baked into the repulsion shaders when
+   * `simulationKernel` is `umap`: a, b fit from min_dist / spread (see
+   * Shared/umap-params.ts); UMAP_SCALE converts space units to embedding units.
+   */
+  private get umapKernelDefines (): Record<string, string | boolean> {
+    if (this.config.simulationKernel !== 'umap') return {}
+    const { a, b } = findUmapABParams(this.config.simulationUmapMinDist, this.config.simulationUmapSpread)
+    return {
+      UMAP_KERNEL: true,
+      UMAP_A: a.toFixed(6),
+      UMAP_B: b.toFixed(6),
+      UMAP_SCALE: this.config.simulationUmapScale.toFixed(4),
+    }
+  }
+
+  /** Signature that recompiles the repulsion Models when the UMAP kernel changes. */
+  private get umapSignature (): string | undefined {
+    if (this.config.simulationKernel !== 'umap') return undefined
+    const { a, b } = findUmapABParams(this.config.simulationUmapMinDist, this.config.simulationUmapSpread)
+    return `${this.config.simulationUmapScale}|${a}|${b}`
+  }
 
   public create (): void {
     const { device, store } = this
@@ -302,6 +329,26 @@ export class ForceManyBody extends CoreModule {
     const { device, store, data, points } = this
     if (!data.pointsNumber || !points || !store.pointsTextureSize) return
 
+    // The kernel constants are baked into the repulsion shaders — a kernel,
+    // scale, or min_dist / spread switch recreates the force Models (the
+    // aggregation passes are unaffected).
+    const kernel = this.config.simulationKernel
+    const umapSignature = this.umapSignature
+    if (this.programsKernel !== kernel || this.programsUmapSignature !== umapSignature) {
+      this.programsKernel = kernel
+      this.programsUmapSignature = umapSignature
+      this.forceCommand?.destroy()
+      this.forceCommand = undefined
+      this.forceFromItsOwnCentermassCommand?.destroy()
+      this.forceFromItsOwnCentermassCommand = undefined
+      this.bruteForce3DCommand?.destroy()
+      this.bruteForce3DCommand = undefined
+      this.forceLevel3DCommand?.destroy()
+      this.forceLevel3DCommand = undefined
+      this.forceNearField3DCommand?.destroy()
+      this.forceNearField3DCommand = undefined
+    }
+
     // Calculate levels command (point list)
     this.calculateLevelsUniformStore ||= new UniformStore(device, {
       calculateLevelsUniforms: {
@@ -331,6 +378,7 @@ export class ForceManyBody extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
+        ...this.umapKernelDefines,
       },
       bindings: {
         // Create uniform buffer binding
@@ -392,6 +440,7 @@ export class ForceManyBody extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
+        ...this.umapKernelDefines,
       },
       bindings: {
         // Create uniform buffer binding
@@ -441,6 +490,7 @@ export class ForceManyBody extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
+        ...this.umapKernelDefines,
       },
       bindings: {
         // Create uniform buffer binding
@@ -493,6 +543,7 @@ export class ForceManyBody extends CoreModule {
         ],
         defines: {
           USE_UNIFORM_BUFFERS: true,
+          ...this.umapKernelDefines,
         },
         bindings: {
           forceBruteForceUniforms: this.bruteForce3DUniformStore.getManagedUniformBuffer('forceBruteForceUniforms'),
@@ -540,6 +591,7 @@ export class ForceManyBody extends CoreModule {
         ],
         defines: {
           USE_UNIFORM_BUFFERS: true,
+          ...this.umapKernelDefines,
         },
         bindings: {
           calculateLevels3DUniforms: this.calculateLevels3DUniformStore.getManagedUniformBuffer('calculateLevels3DUniforms'),
@@ -594,6 +646,7 @@ export class ForceManyBody extends CoreModule {
         ],
         defines: {
           USE_UNIFORM_BUFFERS: true,
+          ...this.umapKernelDefines,
         },
         bindings: {
           forceLevel3DUniforms: this.forceLevel3DUniformStore.getManagedUniformBuffer('forceLevel3DUniforms'),
@@ -653,6 +706,7 @@ export class ForceManyBody extends CoreModule {
         ],
         defines: {
           USE_UNIFORM_BUFFERS: true,
+          ...this.umapKernelDefines,
         },
         bindings: {
           buildNearFieldSlotsUniforms: this.buildNearFieldSlotsUniformStore.getManagedUniformBuffer('buildNearFieldSlotsUniforms'),
@@ -702,6 +756,7 @@ export class ForceManyBody extends CoreModule {
         ],
         defines: {
           USE_UNIFORM_BUFFERS: true,
+          ...this.umapKernelDefines,
         },
         bindings: {
           forceNearField3DUniforms: this.forceNearField3DUniformStore.getManagedUniformBuffer('forceNearField3DUniforms'),

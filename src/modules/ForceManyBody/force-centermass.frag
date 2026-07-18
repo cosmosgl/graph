@@ -34,6 +34,12 @@ vec2 calculateAdditionalVelocity (vec2 ij, vec2 pp) {
     float l = dot(distVector, distVector);
     float dist = sqrt(l);
     if (l > 0.0) {
+      #ifdef UMAP_KERNEL
+      // UMAP repulsive gradient — must stay identical to force-level.frag.
+      float d2 = l / (UMAP_SCALE * UMAP_SCALE);
+      float coeff = 2.0 * UMAP_B / ((0.001 + d2) * (1.0 + UMAP_A * pow(d2, UMAP_B)));
+      add = alpha * repulsion * centermass.b * UMAP_SCALE * clamp(coeff * distVector / UMAP_SCALE, -4.0, 4.0);
+      #else
       float angle = atan(distVector.y, distVector.x);
       float c = alpha * repulsion * centermass.b;
 
@@ -41,6 +47,7 @@ vec2 calculateAdditionalVelocity (vec2 ij, vec2 pp) {
       if (l < distanceMin2) l = sqrt(distanceMin2 * l);
       float addV = c / sqrt(l);
       add = addV * vec2(cos(angle), sin(angle));
+      #endif
     }
   }
   return add;
