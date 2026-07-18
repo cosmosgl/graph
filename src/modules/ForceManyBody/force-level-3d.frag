@@ -23,6 +23,10 @@ layout(std140) uniform forceLevel3DUniforms {
   float isFirstLevel;
   float alpha;
   float repulsion;
+  // UMAP repulsive kernel parameters (live-updatable); unused in the default kernel.
+  float umapA;
+  float umapB;
+  float umapScale;
 } forceLevel3D;
 
 #define levelGridSize forceLevel3D.levelGridSize
@@ -31,6 +35,9 @@ layout(std140) uniform forceLevel3DUniforms {
 #define isFirstLevel forceLevel3D.isFirstLevel
 #define alpha forceLevel3D.alpha
 #define repulsion forceLevel3D.repulsion
+#define umapA forceLevel3D.umapA
+#define umapB forceLevel3D.umapB
+#define umapScale forceLevel3D.umapScale
 #else
 uniform float levelGridSize;
 uniform float cellSize;
@@ -38,6 +45,9 @@ uniform float tilesPerRow;
 uniform float isFirstLevel;
 uniform float alpha;
 uniform float repulsion;
+uniform float umapA;
+uniform float umapB;
+uniform float umapScale;
 #endif
 
 in vec2 textureCoords;
@@ -60,9 +70,9 @@ vec3 cellVelocity(ivec3 cell, int gridSize, int rowTiles, vec3 position) {
   if (l <= 0.0) return vec3(0.0);
   #ifdef UMAP_KERNEL
   // UMAP repulsive gradient (see force-level.frag), weighted by the cell's mass.
-  float d2 = l / (UMAP_SCALE * UMAP_SCALE);
-  float coeff = 2.0 * UMAP_B / ((0.001 + d2) * (1.0 + UMAP_A * pow(d2, UMAP_B)));
-  return alpha * repulsion * centermass.b * UMAP_SCALE * clamp(coeff * distVector / UMAP_SCALE, -4.0, 4.0);
+  float d2 = l / (umapScale * umapScale);
+  float coeff = 2.0 * umapB / ((0.001 + d2) * (1.0 + umapA * pow(d2, umapB)));
+  return alpha * repulsion * centermass.b * umapScale * clamp(coeff * distVector / umapScale, -4.0, 4.0);
   #else
   float distanceMin2 = 1.0;
   if (l < distanceMin2) l = sqrt(distanceMin2 * l);

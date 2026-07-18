@@ -46,9 +46,9 @@ export const umapEmbedding3d = (): { graph: Graph; div: HTMLDivElement; destroy?
     simulationKernel: 'umap',
     simulationUmapScale: umapScale,
     simulationUmapMinDist: minDist,
-    // See the 2D story: from the PCA init the simulation only refines, so gentle
-    // repulsion + light gravity/centering keep it compact and framed.
-    simulationRepulsion: 2 / n,
+    // See the 2D story: repulsion reads as "negative samples per point" in UMAP
+    // mode; gentle repulsion + light gravity/centering keep it compact and framed.
+    simulationRepulsion: 2,
     simulationLinkSpring: 1,
     simulationGravity: 0.05,
     simulationCenter: 0.1,

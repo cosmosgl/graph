@@ -37,6 +37,10 @@ layout(std140) uniform forceNearField3DUniforms {
   float tilesPerRow;
   float alpha;
   float repulsion;
+  // UMAP repulsive kernel parameters (live-updatable); unused in the default kernel.
+  float umapA;
+  float umapB;
+  float umapScale;
 } forceNearField3D;
 
 #define pointsTextureSize forceNearField3D.pointsTextureSize
@@ -45,6 +49,9 @@ layout(std140) uniform forceNearField3DUniforms {
 #define tilesPerRow forceNearField3D.tilesPerRow
 #define alpha forceNearField3D.alpha
 #define repulsion forceNearField3D.repulsion
+#define umapA forceNearField3D.umapA
+#define umapB forceNearField3D.umapB
+#define umapScale forceNearField3D.umapScale
 #else
 uniform float pointsTextureSize;
 uniform float levelGridSize;
@@ -52,6 +59,9 @@ uniform float cellSize;
 uniform float tilesPerRow;
 uniform float alpha;
 uniform float repulsion;
+uniform float umapA;
+uniform float umapB;
+uniform float umapScale;
 #endif
 
 in vec2 textureCoords;
@@ -65,9 +75,9 @@ vec3 pairwiseVelocity(vec3 position, vec3 otherPosition, float mass) {
   #ifdef UMAP_KERNEL
   // UMAP repulsive gradient (see force-level.frag) — must stay identical to the
   // level passes.
-  float d2 = l / (UMAP_SCALE * UMAP_SCALE);
-  float coeff = 2.0 * UMAP_B / ((0.001 + d2) * (1.0 + UMAP_A * pow(d2, UMAP_B)));
-  return alpha * repulsion * mass * UMAP_SCALE * clamp(coeff * distVector / UMAP_SCALE, -4.0, 4.0);
+  float d2 = l / (umapScale * umapScale);
+  float coeff = 2.0 * umapB / ((0.001 + d2) * (1.0 + umapA * pow(d2, umapB)));
+  return alpha * repulsion * mass * umapScale * clamp(coeff * distVector / umapScale, -4.0, 4.0);
   #else
   float distanceMin2 = 1.0;
   if (l < distanceMin2) l = sqrt(distanceMin2 * l);
@@ -139,8 +149,11 @@ void main() {
     }
   }
 
+  #ifndef UMAP_KERNEL
   // Random jitter proportional to the velocity, like the 2D centermass fallback.
+  // Skipped for the UMAP kernel: an embedding should settle, not boil.
   velocity += velocity * random.rgb;
+  #endif
 
   // z velocity lives in the blue channel (update-position.frag SPACE_3D contract).
   fragColor = vec4(velocity, 0.0);

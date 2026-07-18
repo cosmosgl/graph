@@ -13,6 +13,11 @@ layout(std140) uniform forceUniforms {
   float repulsion;
   float spaceSize;
   float theta;
+  // UMAP repulsive kernel parameters (uniforms so min_dist / spread / scale can
+  // change live without a shader rebuild); unused in the default kernel.
+  float umapA;
+  float umapB;
+  float umapScale;
 } force;
 
 #define level force.level
@@ -22,6 +27,9 @@ layout(std140) uniform forceUniforms {
 #define repulsion force.repulsion
 #define spaceSize force.spaceSize
 #define theta force.theta
+#define umapA force.umapA
+#define umapB force.umapB
+#define umapScale force.umapScale
 #else
 uniform float level;
 uniform float levels;
@@ -30,6 +38,9 @@ uniform float repulsion;
 uniform float alpha;
 uniform float spaceSize;
 uniform float theta;
+uniform float umapA;
+uniform float umapB;
+uniform float umapScale;
 #endif
 
 in vec2 textureCoords;
@@ -48,11 +59,11 @@ vec2 calculateAdditionalVelocity (vec2 ij, vec2 pp) {
     if (l > 0.0) {
       #ifdef UMAP_KERNEL
       // UMAP repulsive gradient: 2b / ((0.001 + d²)(1 + a·d²ᵇ)) per unit mass, in
-      // embedding units (UMAP_SCALE space units = 1 embedding unit), per-component
+      // embedding units (umapScale space units = 1 embedding unit), per-component
       // clipped to ±4 like the reference SGD implementation.
-      float d2 = l / (UMAP_SCALE * UMAP_SCALE);
-      float coeff = 2.0 * UMAP_B / ((0.001 + d2) * (1.0 + UMAP_A * pow(d2, UMAP_B)));
-      add = alpha * repulsion * centermass.b * UMAP_SCALE * clamp(coeff * distVector / UMAP_SCALE, -4.0, 4.0);
+      float d2 = l / (umapScale * umapScale);
+      float coeff = 2.0 * umapB / ((0.001 + d2) * (1.0 + umapA * pow(d2, umapB)));
+      add = alpha * repulsion * centermass.b * umapScale * clamp(coeff * distVector / umapScale, -4.0, 4.0);
       #else
       float c = alpha * repulsion * centermass.b;
 

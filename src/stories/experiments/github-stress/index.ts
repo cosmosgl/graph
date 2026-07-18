@@ -126,9 +126,9 @@ export const githubStressTest = (): { graph: Graph; div: HTMLDivElement; destroy
     simulationUmapScale: 350,
     simulationUmapMinDist: 0.15,
     simulationUmapSpread: 5,
-    // ~samples/n repulsion (aggregated all-pairs vs UMAP's negative sampling);
-    // gentle from the PCA init, held compact by a little gravity + centering.
-    simulationRepulsion: 2 / 100_000,
+    // In UMAP mode repulsion reads as "negative samples per point" (the engine
+    // normalizes by point count); held compact by a little gravity + centering.
+    simulationRepulsion: 2,
     simulationLinkSpring: 0.5,
     simulationCollision: 1,
     simulationGravity: 0.02,

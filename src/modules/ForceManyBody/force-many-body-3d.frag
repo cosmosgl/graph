@@ -15,17 +15,27 @@ layout(std140) uniform forceBruteForceUniforms {
   float pointsNumber;
   float alpha;
   float repulsion;
+  // UMAP repulsive kernel parameters (live-updatable); unused in the default kernel.
+  float umapA;
+  float umapB;
+  float umapScale;
 } forceBruteForce;
 
 #define pointsTextureSize forceBruteForce.pointsTextureSize
 #define pointsNumber forceBruteForce.pointsNumber
 #define alpha forceBruteForce.alpha
 #define repulsion forceBruteForce.repulsion
+#define umapA forceBruteForce.umapA
+#define umapB forceBruteForce.umapB
+#define umapScale forceBruteForce.umapScale
 #else
 uniform float pointsTextureSize;
 uniform float pointsNumber;
 uniform float alpha;
 uniform float repulsion;
+uniform float umapA;
+uniform float umapB;
+uniform float umapScale;
 #endif
 
 in vec2 textureCoords;
@@ -63,9 +73,9 @@ void main() {
 
       #ifdef UMAP_KERNEL
       // UMAP repulsive gradient (see force-level.frag), per-pair with mass 1.
-      float d2 = l / (UMAP_SCALE * UMAP_SCALE);
-      float coeff = 2.0 * UMAP_B / ((0.001 + d2) * (1.0 + UMAP_A * pow(d2, UMAP_B)));
-      velocity += alpha * repulsion * UMAP_SCALE * clamp(coeff * distVector / UMAP_SCALE, -4.0, 4.0);
+      float d2 = l / (umapScale * umapScale);
+      float coeff = 2.0 * umapB / ((0.001 + d2) * (1.0 + umapA * pow(d2, umapB)));
+      velocity += alpha * repulsion * umapScale * clamp(coeff * distVector / umapScale, -4.0, 4.0);
       #else
       // Mirrors the 2D level force: c / dist with a minimum-distance clamp.
       float distanceMin2 = 1.0;
@@ -76,8 +86,11 @@ void main() {
     }
   }
 
+  #ifndef UMAP_KERNEL
   // Random jitter proportional to the velocity, like the 2D centermass force.
+  // Skipped for the UMAP kernel: an embedding should settle, not boil.
   velocity += velocity * random.rgb;
+  #endif
 
   fragColor = vec4(velocity, 0.0);
 }

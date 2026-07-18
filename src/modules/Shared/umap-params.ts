@@ -83,3 +83,19 @@ export function findUmapABParams (minDist: number, spread: number): { a: number;
 
   return { a, b }
 }
+
+/**
+ * Memoized `findUmapABParams` for per-tick use: the force modules read a/b every
+ * simulation tick (they are shader uniforms, so min_dist / spread can change
+ * live), and the LM fit only needs to rerun when the inputs actually change.
+ */
+let cachedKey = ''
+let cachedValue: { a: number; b: number } | undefined
+export function getUmapABParams (minDist: number, spread: number): { a: number; b: number } {
+  const key = `${minDist}|${spread}`
+  if (cachedValue === undefined || key !== cachedKey) {
+    cachedKey = key
+    cachedValue = findUmapABParams(minDist, spread)
+  }
+  return cachedValue
+}

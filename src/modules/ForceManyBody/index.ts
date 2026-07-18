@@ -13,7 +13,7 @@ import buildNearFieldSlotsVert from '@/graph/modules/ForceManyBody/build-nearfie
 import buildNearFieldSlotsFrag from '@/graph/modules/ForceManyBody/build-nearfield-slots.frag?raw'
 import forceBruteForce3DFrag from '@/graph/modules/ForceManyBody/force-many-body-3d.frag?raw'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
-import { findUmapABParams } from '@/graph/modules/Shared/umap-params'
+import { getUmapABParams } from '@/graph/modules/Shared/umap-params'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
@@ -102,6 +102,9 @@ export class ForceManyBody extends CoreModule {
       repulsion: number;
       spaceSize: number;
       theta: number;
+      umapA: number;
+      umapB: number;
+      umapScale: number;
     };
   }> | undefined
 
@@ -110,6 +113,9 @@ export class ForceManyBody extends CoreModule {
       levelTextureSize: number;
       alpha: number;
       repulsion: number;
+      umapA: number;
+      umapB: number;
+      umapScale: number;
     };
   }> | undefined
 
@@ -119,6 +125,9 @@ export class ForceManyBody extends CoreModule {
       pointsNumber: number;
       alpha: number;
       repulsion: number;
+      umapA: number;
+      umapB: number;
+      umapScale: number;
     };
   }> | undefined
 
@@ -141,6 +150,9 @@ export class ForceManyBody extends CoreModule {
       isFirstLevel: number;
       alpha: number;
       repulsion: number;
+      umapA: number;
+      umapB: number;
+      umapScale: number;
     };
   }> | undefined
 
@@ -165,37 +177,48 @@ export class ForceManyBody extends CoreModule {
       tilesPerRow: number;
       alpha: number;
       repulsion: number;
+      umapA: number;
+      umapB: number;
+      umapScale: number;
     };
   }> | undefined
 
   private previousPointsTextureSize: number | undefined
   private previousSpaceSize: number | undefined
   private previousPointsNumber: number | undefined
-  /** Force kernel the Models were compiled for; a kernel / scale / min_dist switch recreates them. */
+  /** Force kernel the Models were compiled for; a kernel switch recreates them (UMAP_KERNEL define). */
   private programsKernel: 'default' | 'umap' = 'default'
-  private programsUmapSignature: string | undefined
 
   /**
-   * UMAP kernel constants baked into the repulsion shaders when
-   * `simulationKernel` is `umap`: a, b fit from min_dist / spread (see
-   * Shared/umap-params.ts); UMAP_SCALE converts space units to embedding units.
+   * Kernel selector baked into the repulsion shaders. The kernel parameters
+   * themselves (a, b, scale) are uniforms — see umapKernelUniforms — so only a
+   * kernel switch requires recompiling.
    */
-  private get umapKernelDefines (): Record<string, string | boolean> {
-    if (this.config.simulationKernel !== 'umap') return {}
-    const { a, b } = findUmapABParams(this.config.simulationUmapMinDist, this.config.simulationUmapSpread)
-    return {
-      UMAP_KERNEL: true,
-      UMAP_A: a.toFixed(6),
-      UMAP_B: b.toFixed(6),
-      UMAP_SCALE: this.config.simulationUmapScale.toFixed(4),
-    }
+  private get umapKernelDefines (): Record<string, boolean> {
+    return this.config.simulationKernel === 'umap' ? { UMAP_KERNEL: true } : {}
   }
 
-  /** Signature that recompiles the repulsion Models when the UMAP kernel changes. */
-  private get umapSignature (): string | undefined {
-    if (this.config.simulationKernel !== 'umap') return undefined
-    const { a, b } = findUmapABParams(this.config.simulationUmapMinDist, this.config.simulationUmapSpread)
-    return `${this.config.simulationUmapScale}|${a}|${b}`
+  /**
+   * Per-tick UMAP kernel uniform values: a, b fit from min_dist / spread
+   * (memoized — see Shared/umap-params.ts); umapScale converts space units to
+   * embedding units. Harmless defaults in the default kernel (unused there).
+   */
+  private get umapKernelUniforms (): { umapA: number; umapB: number; umapScale: number } {
+    const { a, b } = getUmapABParams(this.config.simulationUmapMinDist, this.config.simulationUmapSpread)
+    return { umapA: a, umapB: b, umapScale: this.config.simulationUmapScale }
+  }
+
+  /**
+   * Repulsion coefficient handed to the shaders. In UMAP mode the many-body
+   * pass aggregates repulsion from ALL points each tick, while reference UMAP
+   * only draws a handful of negative samples per point per epoch — so the
+   * config value is normalized by the point count, making `simulationRepulsion`
+   * an O(1) knob (≈ negative samples per point) instead of requiring users to
+   * hand-tune ≈ samples / n.
+   */
+  private get effectiveRepulsion (): number {
+    if (this.config.simulationKernel !== 'umap') return this.config.simulationRepulsion
+    return this.config.simulationRepulsion / Math.max(1, this.data.pointsNumber ?? 1)
   }
 
   public create (): void {
@@ -329,14 +352,11 @@ export class ForceManyBody extends CoreModule {
     const { device, store, data, points } = this
     if (!data.pointsNumber || !points || !store.pointsTextureSize) return
 
-    // The kernel constants are baked into the repulsion shaders — a kernel,
-    // scale, or min_dist / spread switch recreates the force Models (the
-    // aggregation passes are unaffected).
+    // Only a kernel switch recompiles the force Models (UMAP_KERNEL define) —
+    // the kernel parameters are uniforms. Aggregation passes are unaffected.
     const kernel = this.config.simulationKernel
-    const umapSignature = this.umapSignature
-    if (this.programsKernel !== kernel || this.programsUmapSignature !== umapSignature) {
+    if (this.programsKernel !== kernel) {
       this.programsKernel = kernel
-      this.programsUmapSignature = umapSignature
       this.forceCommand?.destroy()
       this.forceCommand = undefined
       this.forceFromItsOwnCentermassCommand?.destroy()
@@ -410,15 +430,19 @@ export class ForceManyBody extends CoreModule {
           repulsion: 'f32',
           spaceSize: 'f32',
           theta: 'f32',
+          umapA: 'f32',
+          umapB: 'f32',
+          umapScale: 'f32',
         },
         defaultUniforms: {
           level: 0,
           levels: this.levels,
           levelTextureSize: 0,
           alpha: store.alpha,
-          repulsion: this.config.simulationRepulsion,
+          repulsion: this.effectiveRepulsion,
           spaceSize: store.adjustedSpaceSize,
           theta: this.config.simulationRepulsionTheta,
+          ...this.umapKernelUniforms,
         },
       },
     })
@@ -468,11 +492,15 @@ export class ForceManyBody extends CoreModule {
           levelTextureSize: 'f32',
           alpha: 'f32',
           repulsion: 'f32',
+          umapA: 'f32',
+          umapB: 'f32',
+          umapScale: 'f32',
         },
         defaultUniforms: {
           levelTextureSize: 0,
           alpha: store.alpha,
-          repulsion: this.config.simulationRepulsion,
+          repulsion: this.effectiveRepulsion,
+          ...this.umapKernelUniforms,
         },
       },
     })
@@ -520,12 +548,16 @@ export class ForceManyBody extends CoreModule {
             pointsNumber: 'f32',
             alpha: 'f32',
             repulsion: 'f32',
+            umapA: 'f32',
+            umapB: 'f32',
+            umapScale: 'f32',
           },
           defaultUniforms: {
             pointsTextureSize: store.pointsTextureSize,
             pointsNumber: data.pointsNumber,
             alpha: store.alpha,
-            repulsion: this.config.simulationRepulsion,
+            repulsion: this.effectiveRepulsion,
+            ...this.umapKernelUniforms,
           },
         },
       })
@@ -621,6 +653,9 @@ export class ForceManyBody extends CoreModule {
             isFirstLevel: 'f32',
             alpha: 'f32',
             repulsion: 'f32',
+            umapA: 'f32',
+            umapB: 'f32',
+            umapScale: 'f32',
           },
           defaultUniforms: {
             levelGridSize: 0,
@@ -628,7 +663,8 @@ export class ForceManyBody extends CoreModule {
             tilesPerRow: 0,
             isFirstLevel: 0,
             alpha: store.alpha,
-            repulsion: this.config.simulationRepulsion,
+            repulsion: this.effectiveRepulsion,
+            ...this.umapKernelUniforms,
           },
         },
       })
@@ -731,6 +767,9 @@ export class ForceManyBody extends CoreModule {
             tilesPerRow: 'f32',
             alpha: 'f32',
             repulsion: 'f32',
+            umapA: 'f32',
+            umapB: 'f32',
+            umapScale: 'f32',
           },
           defaultUniforms: {
             pointsTextureSize: store.pointsTextureSize,
@@ -738,7 +777,8 @@ export class ForceManyBody extends CoreModule {
             cellSize: 0,
             tilesPerRow: 0,
             alpha: store.alpha,
-            repulsion: this.config.simulationRepulsion,
+            repulsion: this.effectiveRepulsion,
+            ...this.umapKernelUniforms,
           },
         },
       })
@@ -895,7 +935,8 @@ export class ForceManyBody extends CoreModule {
         pointsTextureSize: store.pointsTextureSize ?? 0,
         pointsNumber: data.pointsNumber ?? 0,
         alpha: store.alpha,
-        repulsion: this.config.simulationRepulsion,
+        repulsion: this.effectiveRepulsion,
+        ...this.umapKernelUniforms,
       },
     })
 
@@ -987,7 +1028,8 @@ export class ForceManyBody extends CoreModule {
           tilesPerRow: target.tilesPerRow,
           isFirstLevel: level === 0 ? 1 : 0,
           alpha: store.alpha,
-          repulsion: this.config.simulationRepulsion,
+          repulsion: this.effectiveRepulsion,
+          ...this.umapKernelUniforms,
         },
       })
 
@@ -1009,7 +1051,8 @@ export class ForceManyBody extends CoreModule {
             cellSize,
             tilesPerRow: target.tilesPerRow,
             alpha: store.alpha,
-            repulsion: this.config.simulationRepulsion,
+            repulsion: this.effectiveRepulsion,
+            ...this.umapKernelUniforms,
           },
         })
 
@@ -1271,9 +1314,10 @@ export class ForceManyBody extends CoreModule {
           levels: this.levels,
           levelTextureSize,
           alpha: store.alpha,
-          repulsion: this.config.simulationRepulsion,
+          repulsion: this.effectiveRepulsion,
           spaceSize: store.adjustedSpaceSize,
           theta: this.config.simulationRepulsionTheta,
+          ...this.umapKernelUniforms,
         },
       })
 
@@ -1291,7 +1335,8 @@ export class ForceManyBody extends CoreModule {
           forceCenterUniforms: {
             levelTextureSize,
             alpha: store.alpha,
-            repulsion: this.config.simulationRepulsion,
+            repulsion: this.effectiveRepulsion,
+            ...this.umapKernelUniforms,
           },
         })
 

@@ -54,11 +54,10 @@ export const umapEmbedding = (): { graph: Graph; div: HTMLDivElement; destroy?: 
     simulationUmapScale: umapScale,
     simulationUmapMinDist: minDist,
     simulationCollision: 0.5,
-    // From the PCA init (already a coherent layout) the simulation only refines,
-    // so it needs far less repulsion than it would from a random cloud — enough
-    // to spread neighborhoods, not so much it re-inflates into the walls. Light
-    // gravity + a centering force hold it compact and framed.
-    simulationRepulsion: 2 / n,
+    // In UMAP mode repulsion reads as "negative samples per point" (the engine
+    // normalizes by point count). From the PCA init the simulation only refines,
+    // so a modest value spreads neighborhoods without re-inflating the layout.
+    simulationRepulsion: 2,
     simulationLinkSpring: 1,
     simulationGravity: 0.05,
     simulationCenter: 0.1,

@@ -1,17 +1,8 @@
-export function forceFrag (maxLinks: number, umap?: { scale: number; a: number; b: number }): string {
+export function forceFrag (maxLinks: number, useUmapKernel?: boolean): string {
   return `#version 300 es
 precision highp float;
 
-${umap === undefined
-    ? ''
-    : `
-// UMAP attractive kernel constants. a, b are fit from min_dist / spread
-// (see Shared/umap-params.ts); UMAP_SCALE converts space units to embedding units.
-#define UMAP_KERNEL
-const float UMAP_A = ${umap.a.toFixed(6)};
-const float UMAP_B = ${umap.b.toFixed(6)};
-const float UMAP_SCALE = ${umap.scale.toFixed(4)};
-`}
+${useUmapKernel ? '#define UMAP_KERNEL' : ''}
 
 uniform sampler2D positionsTexture;
 uniform sampler2D linkInfoTexture; // Texture storing first link indices and amount
@@ -27,6 +18,12 @@ layout(std140) uniform forceLinkUniforms {
   float pointsTextureSize;
   float linksTextureSize;
   float alpha;
+  // UMAP attractive kernel parameters (uniforms so min_dist / spread / scale can
+  // change live without a shader rebuild). a, b are fit from min_dist / spread
+  // (see Shared/umap-params.ts); umapScale converts space units to embedding units.
+  float umapA;
+  float umapB;
+  float umapScale;
 } forceLink;
 
 #define linkSpring forceLink.linkSpring
@@ -35,6 +32,9 @@ layout(std140) uniform forceLinkUniforms {
 #define pointsTextureSize forceLink.pointsTextureSize
 #define linksTextureSize forceLink.linksTextureSize
 #define alpha forceLink.alpha
+#define umapA forceLink.umapA
+#define umapB forceLink.umapB
+#define umapScale forceLink.umapScale
 #else
 uniform float linkSpring;
 uniform float linkDistance;
@@ -42,6 +42,9 @@ uniform vec2 linkDistRandomVariationRange;
 uniform float pointsTextureSize;
 uniform float linksTextureSize;
 uniform float alpha;
+uniform float umapA;
+uniform float umapB;
+uniform float umapScale;
 #endif
 
 in vec2 textureCoords;
@@ -91,17 +94,17 @@ void main() {
         // 2ab·d²⁽ᵇ⁻¹⁾ / (1 + a·d²ᵇ) · w, per-component clipped to ±4 like the
         // reference SGD implementation. The degree bias is skipped: the fuzzy
         // weights are symmetric and both endpoints receive the full gradient.
-        float d2 = (l * l) / (UMAP_SCALE * UMAP_SCALE);
+        float d2 = (l * l) / (umapScale * umapScale);
         float w = strength * strength; // undo the sqrt applied on ingest
         float coeff = 0.0;
         if (d2 > 0.0) {
-          coeff = 2.0 * UMAP_A * UMAP_B * pow(d2, UMAP_B - 1.0) / (1.0 + UMAP_A * pow(d2, UMAP_B));
+          coeff = 2.0 * umapA * umapB * pow(d2, umapB - 1.0) / (1.0 + umapA * pow(d2, umapB));
         }
-        float k = linkSpring * alpha * w * UMAP_SCALE;
-        velocity.x += clamp(coeff * x / UMAP_SCALE, -4.0, 4.0) * k;
-        velocity.y += clamp(coeff * y / UMAP_SCALE, -4.0, 4.0) * k;
+        float k = linkSpring * alpha * w * umapScale;
+        velocity.x += clamp(coeff * x / umapScale, -4.0, 4.0) * k;
+        velocity.y += clamp(coeff * y / umapScale, -4.0, 4.0) * k;
         #ifdef SPACE_3D
-        velocity.b += clamp(coeff * z / UMAP_SCALE, -4.0, 4.0) * k;
+        velocity.b += clamp(coeff * z / umapScale, -4.0, 4.0) * k;
         #endif
         #else
         // Apply the link force

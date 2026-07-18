@@ -54,9 +54,9 @@ export const mammothProjection = async (): Promise<{ graph: Graph; div: HTMLDivE
     simulationCollision: 0.5,
     // From the PCA init (already a coherent silhouette) the simulation only needs
     // to LIGHTLY refine — unfold local structure while holding the overall shape.
-    // Gentle repulsion + a little gravity keep it compact so it doesn't re-inflate
-    // into a sparse cloud that fills (and clamps against) the space.
-    simulationRepulsion: 0.5 / n,
+    // Repulsion reads as "negative samples per point" in UMAP mode; keep it well
+    // below 1 so the silhouette doesn't re-inflate into a sparse cloud.
+    simulationRepulsion: 0.5,
     simulationLinkSpring: 1,
     simulationGravity: 0.05,
     simulationCenter: 0.1,

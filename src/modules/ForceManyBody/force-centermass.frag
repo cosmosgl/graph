@@ -10,15 +10,25 @@ layout(std140) uniform forceCenterUniforms {
   float levelTextureSize;
   float alpha;
   float repulsion;
+  // UMAP repulsive kernel parameters (live-updatable); unused in the default kernel.
+  float umapA;
+  float umapB;
+  float umapScale;
 } forceCenter;
 
 #define levelTextureSize forceCenter.levelTextureSize
 #define repulsion forceCenter.repulsion
 #define alpha forceCenter.alpha
+#define umapA forceCenter.umapA
+#define umapB forceCenter.umapB
+#define umapScale forceCenter.umapScale
 #else
 uniform float levelTextureSize;
 uniform float alpha;
 uniform float repulsion;
+uniform float umapA;
+uniform float umapB;
+uniform float umapScale;
 #endif
 
 in vec2 textureCoords;
@@ -36,9 +46,9 @@ vec2 calculateAdditionalVelocity (vec2 ij, vec2 pp) {
     if (l > 0.0) {
       #ifdef UMAP_KERNEL
       // UMAP repulsive gradient — must stay identical to force-level.frag.
-      float d2 = l / (UMAP_SCALE * UMAP_SCALE);
-      float coeff = 2.0 * UMAP_B / ((0.001 + d2) * (1.0 + UMAP_A * pow(d2, UMAP_B)));
-      add = alpha * repulsion * centermass.b * UMAP_SCALE * clamp(coeff * distVector / UMAP_SCALE, -4.0, 4.0);
+      float d2 = l / (umapScale * umapScale);
+      float coeff = 2.0 * umapB / ((0.001 + d2) * (1.0 + umapA * pow(d2, umapB)));
+      add = alpha * repulsion * centermass.b * umapScale * clamp(coeff * distVector / umapScale, -4.0, 4.0);
       #else
       float angle = atan(distVector.y, distVector.x);
       float c = alpha * repulsion * centermass.b;
@@ -61,8 +71,11 @@ void main() {
 
   // Calculate additional velocity based on the point position
   velocity.xy += calculateAdditionalVelocity(pointPosition.xy / levelTextureSize, pointPosition.xy);
-  // Apply random factor to the velocity
+  #ifndef UMAP_KERNEL
+  // Apply random factor to the velocity — annealing jitter for the force layout.
+  // Skipped for the UMAP kernel: an embedding should settle, not boil.
   velocity.xy += velocity.xy * random.rg;
+  #endif
 
   fragColor = velocity;
 }

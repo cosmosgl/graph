@@ -447,6 +447,10 @@ export interface GraphConfigInterface {
   simulationUmapSpread: number;
   /**
    * Repulsion force coefficient.
+   * When `simulationKernel` is `umap`, the value is normalized by the point
+   * count internally (the many-body pass aggregates repulsion from all points,
+   * unlike reference UMAP's per-point negative sampling), so it reads as
+   * "negative samples per point" — values around `2`–`5` work well at any scale.
    * Default value: `1.0`
    */
   simulationRepulsion: number;
