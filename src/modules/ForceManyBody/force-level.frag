@@ -3,6 +3,10 @@ precision highp float;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D levelFbo;
+#ifdef TSNE_KERNEL
+// 1×1 texture holding last tick's global normalization Z (see reduce-sum.frag).
+uniform sampler2D zTexture;
+#endif
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceUniforms {
@@ -48,6 +52,12 @@ out vec4 fragColor;
 
 const float MAX_LEVELS_NUM = 14.0;
 
+#ifdef TSNE_KERNEL
+// Per-point partial sum Sᵢ = Σ mass·w for the global Z; accumulated across the
+// cell loop and written to the alpha channel (additively blended across passes).
+float zAccum = 0.0;
+#endif
+
 vec2 calculateAdditionalVelocity (vec2 ij, vec2 pp) {
   vec2 add = vec2(0.0);
   vec4 centermass = texture(levelFbo, ij);
@@ -57,7 +67,16 @@ vec2 calculateAdditionalVelocity (vec2 ij, vec2 pp) {
     float l = dot(distVector, distVector);
     float dist = sqrt(l);
     if (l > 0.0) {
-      #ifdef UMAP_KERNEL
+      #ifdef TSNE_KERNEL
+      // Barnes-Hut t-SNE repulsive gradient: 4·mass·w²/Z away from the cell's
+      // center of mass, w = 1/(1 + d²) in embedding units. Z is last tick's
+      // global sum (one-tick lag); the embedding scale cancels except inside w.
+      float d2 = l / (umapScale * umapScale);
+      float w = 1.0 / (1.0 + d2);
+      float Z = max(texelFetch(zTexture, ivec2(0), 0).r, 1e-6);
+      zAccum += centermass.b * w;
+      add = alpha * repulsion * centermass.b * (4.0 * w * w / Z) * distVector;
+      #elif defined(UMAP_KERNEL)
       // UMAP repulsive gradient: 2b / ((0.001 + d²)(1 + a·d²ᵇ)) per unit mass, in
       // embedding units (umapScale space units = 1 embedding unit), per-component
       // clipped to ±4 like the reference SGD implementation.
@@ -154,5 +173,8 @@ void main() {
     }
   }
 
+  #ifdef TSNE_KERNEL
+  velocity.a = zAccum;
+  #endif
   fragColor = velocity;
 }

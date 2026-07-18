@@ -4,6 +4,10 @@ precision highp float;
 uniform sampler2D positionsTexture;
 uniform sampler2D levelFbo;
 uniform sampler2D randomValues;
+#ifdef TSNE_KERNEL
+// 1×1 texture holding last tick's global normalization Z (see reduce-sum.frag).
+uniform sampler2D zTexture;
+#endif
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceCenterUniforms {
@@ -34,6 +38,11 @@ uniform float umapScale;
 in vec2 textureCoords;
 out vec4 fragColor;
 
+#ifdef TSNE_KERNEL
+// Partial sum for the global Z, written to the alpha channel (additive).
+float zAccum = 0.0;
+#endif
+
 // Calculate the additional velocity based on the center of mass
 vec2 calculateAdditionalVelocity (vec2 ij, vec2 pp) {
   vec2 add = vec2(0.0);
@@ -44,7 +53,14 @@ vec2 calculateAdditionalVelocity (vec2 ij, vec2 pp) {
     float l = dot(distVector, distVector);
     float dist = sqrt(l);
     if (l > 0.0) {
-      #ifdef UMAP_KERNEL
+      #ifdef TSNE_KERNEL
+      // t-SNE repulsive gradient — must stay identical to force-level.frag.
+      float d2 = l / (umapScale * umapScale);
+      float w = 1.0 / (1.0 + d2);
+      float Z = max(texelFetch(zTexture, ivec2(0), 0).r, 1e-6);
+      zAccum += centermass.b * w;
+      add = alpha * repulsion * centermass.b * (4.0 * w * w / Z) * distVector;
+      #elif defined(UMAP_KERNEL)
       // UMAP repulsive gradient — must stay identical to force-level.frag.
       float d2 = l / (umapScale * umapScale);
       float coeff = 2.0 * umapB / ((0.001 + d2) * (1.0 + umapA * pow(d2, umapB)));
@@ -71,11 +87,14 @@ void main() {
 
   // Calculate additional velocity based on the point position
   velocity.xy += calculateAdditionalVelocity(pointPosition.xy / levelTextureSize, pointPosition.xy);
-  #ifndef UMAP_KERNEL
+  #if !defined(UMAP_KERNEL) && !defined(TSNE_KERNEL)
   // Apply random factor to the velocity — annealing jitter for the force layout.
-  // Skipped for the UMAP kernel: an embedding should settle, not boil.
+  // Skipped for the embedding kernels: an embedding should settle, not boil.
   velocity.xy += velocity.xy * random.rg;
   #endif
 
+  #ifdef TSNE_KERNEL
+  velocity.a = zAccum;
+  #endif
   fragColor = velocity;
 }

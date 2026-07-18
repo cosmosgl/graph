@@ -208,3 +208,78 @@ export const buildUmapGraph = (
   }
   return { links: new Float32Array(links), strengths: new Float32Array(strengths) }
 }
+
+/**
+ * t-SNE input probabilities from the kNN lists (van der Maaten's Barnes-Hut
+ * formulation): per point, binary-search the Gaussian precision βᵢ so that the
+ * conditional distribution p_j|i over its k neighbors has the target perplexity
+ * (2^H = perplexity), then symmetrize p_ij = (p_j|i + p_i|j) / (2n). Feed the
+ * result to cosmos via `setLinks` + `setLinkStrength` with
+ * `simulationKernel: 'tsne'`. Use k ≈ 3 · perplexity, as in Barnes-Hut t-SNE.
+ */
+export const buildTsneGraph = (
+  knn: { indices: Int32Array; distances: Float32Array },
+  n: number,
+  k: number,
+  perplexity = 30
+): UmapGraph => {
+  const { indices, distances } = knn
+  const targetEntropy = Math.log(perplexity) // nats
+  const directed = new Map<number, number>()
+  const p = new Float64Array(k)
+
+  for (let i = 0; i < n; i++) {
+    const base = i * k
+    // Squared distances, shifted by the smallest for numerical stability
+    // (shifting cancels out in the normalized probabilities).
+    const d0 = (distances[base] as number) ** 2
+
+    let lo = 0
+    let hi = Infinity
+    let beta = 1
+    for (let iter = 0; iter < 64; iter++) {
+      let sum = 0
+      for (let s = 0; s < k; s++) {
+        const d2 = (distances[base + s] as number) ** 2 - d0
+        p[s] = Math.exp(-beta * d2)
+        sum += p[s] as number
+      }
+      let entropy = 0
+      for (let s = 0; s < k; s++) {
+        const prob = (p[s] as number) / sum
+        if (prob > 1e-12) entropy -= prob * Math.log(prob)
+      }
+      if (Math.abs(entropy - targetEntropy) < 1e-5) break
+      if (entropy > targetEntropy) {
+        // Too spread out — sharpen the Gaussian.
+        lo = beta
+        beta = hi === Infinity ? beta * 2 : (lo + hi) / 2
+      } else {
+        hi = beta
+        beta = (lo + hi) / 2
+      }
+    }
+
+    let sum = 0
+    for (let s = 0; s < k; s++) sum += p[s] as number
+    for (let s = 0; s < k; s++) {
+      const j = indices[base + s] as number
+      if (j < 0) continue
+      directed.set(i * n + j, (p[s] as number) / sum)
+    }
+  }
+
+  const links: number[] = []
+  const strengths: number[] = []
+  for (const [key, pij] of directed) {
+    const i = Math.floor(key / n)
+    const j = key % n
+    if (j < i && directed.has(j * n + i)) continue // handled from the (j, i) side
+    const pji = directed.get(j * n + i) ?? 0
+    const pSym = (pij + pji) / (2 * n)
+    if (pSym <= 0) continue
+    links.push(i, j)
+    strengths.push(pSym)
+  }
+  return { links: new Float32Array(links), strengths: new Float32Array(strengths) }
+}

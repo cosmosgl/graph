@@ -14,6 +14,10 @@ precision highp float;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D levelTexture;
+#ifdef TSNE_KERNEL
+// 1×1 texture holding last tick's global normalization Z (see reduce-sum.frag).
+uniform sampler2D zTexture;
+#endif
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceLevel3DUniforms {
@@ -53,6 +57,11 @@ uniform float umapScale;
 in vec2 textureCoords;
 out vec4 fragColor;
 
+#ifdef TSNE_KERNEL
+// Partial sum for the global Z, written to the alpha channel (additive).
+float zAccum = 0.0;
+#endif
+
 // Repulsion from one cell's center of mass — the 3D transcription of the 2D
 // calculateAdditionalVelocity (same d3-style clamped inverse-distance falloff).
 vec3 cellVelocity(ivec3 cell, int gridSize, int rowTiles, vec3 position) {
@@ -68,7 +77,14 @@ vec3 cellVelocity(ivec3 cell, int gridSize, int rowTiles, vec3 position) {
   vec3 distVector = position - centermassPosition;
   float l = dot(distVector, distVector);
   if (l <= 0.0) return vec3(0.0);
-  #ifdef UMAP_KERNEL
+  #ifdef TSNE_KERNEL
+  // t-SNE repulsive gradient (see force-level.frag), weighted by the cell's mass.
+  float d2 = l / (umapScale * umapScale);
+  float w = 1.0 / (1.0 + d2);
+  float Z = max(texelFetch(zTexture, ivec2(0), 0).r, 1e-6);
+  zAccum += centermass.b * w;
+  return alpha * repulsion * centermass.b * (4.0 * w * w / Z) * distVector;
+  #elif defined(UMAP_KERNEL)
   // UMAP repulsive gradient (see force-level.frag), weighted by the cell's mass.
   float d2 = l / (umapScale * umapScale);
   float coeff = 2.0 * umapB / ((0.001 + d2) * (1.0 + umapA * pow(d2, umapB)));
@@ -125,5 +141,9 @@ void main() {
 
   // z velocity lives in the blue channel (update-position.frag SPACE_3D contract) —
   // unlike the 2D force shaders, which write a constant 1.0 there.
+  #ifdef TSNE_KERNEL
+  fragColor = vec4(velocity, zAccum);
+  #else
   fragColor = vec4(velocity, 0.0);
+  #endif
 }

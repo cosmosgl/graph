@@ -12,6 +12,7 @@ import forceNearField3DFrag from '@/graph/modules/ForceManyBody/force-nearfield-
 import buildNearFieldSlotsVert from '@/graph/modules/ForceManyBody/build-nearfield-slots.vert?raw'
 import buildNearFieldSlotsFrag from '@/graph/modules/ForceManyBody/build-nearfield-slots.frag?raw'
 import forceBruteForce3DFrag from '@/graph/modules/ForceManyBody/force-many-body-3d.frag?raw'
+import reduceSumFrag from '@/graph/modules/ForceManyBody/reduce-sum.frag?raw'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import { getUmapABParams } from '@/graph/modules/Shared/umap-params'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
@@ -183,11 +184,28 @@ export class ForceManyBody extends CoreModule {
     };
   }> | undefined
 
+  /**
+   * t-SNE global-normalization (Z) reduction chain: textures halving in size
+   * from ceil(pointsTextureSize / 2) down to 1×1. The repulsion passes write
+   * per-point partial sums into the velocity texture's alpha channel; the chain
+   * sums them, and the final 1×1 texture is read (one tick lagged) by the
+   * repulsion shaders' TSNE_KERNEL branch.
+   */
+  private zReduceTargets: LevelTarget[] = []
+  private zReduceCommand: Model | undefined
+  private zReduceUniformStore: UniformStore<{
+    reduceSumUniforms: {
+      inputWidth: number;
+      inputHeight: number;
+      readAlpha: number;
+    };
+  }> | undefined
+
   private previousPointsTextureSize: number | undefined
   private previousSpaceSize: number | undefined
   private previousPointsNumber: number | undefined
-  /** Force kernel the Models were compiled for; a kernel switch recreates them (UMAP_KERNEL define). */
-  private programsKernel: 'default' | 'umap' = 'default'
+  /** Force kernel the Models were compiled for; a kernel switch recreates them (UMAP/TSNE_KERNEL define). */
+  private programsKernel: 'default' | 'umap' | 'tsne' = 'default'
 
   /**
    * Kernel selector baked into the repulsion shaders. The kernel parameters
@@ -195,7 +213,9 @@ export class ForceManyBody extends CoreModule {
    * kernel switch requires recompiling.
    */
   private get umapKernelDefines (): Record<string, boolean> {
-    return this.config.simulationKernel === 'umap' ? { UMAP_KERNEL: true } : {}
+    if (this.config.simulationKernel === 'umap') return { UMAP_KERNEL: true }
+    if (this.config.simulationKernel === 'tsne') return { TSNE_KERNEL: true }
+    return {}
   }
 
   /**
@@ -217,8 +237,19 @@ export class ForceManyBody extends CoreModule {
    * hand-tune ≈ samples / n.
    */
   private get effectiveRepulsion (): number {
-    if (this.config.simulationKernel !== 'umap') return this.config.simulationRepulsion
-    return this.config.simulationRepulsion / Math.max(1, this.data.pointsNumber ?? 1)
+    const n = Math.max(1, this.data.pointsNumber ?? 1)
+    // UMAP: aggregated all-pairs repulsion vs reference negative sampling → ÷ n.
+    if (this.config.simulationKernel === 'umap') return this.config.simulationRepulsion / n
+    // t-SNE: p_ij sums to 1 over the graph, so gradients are O(1/n) — scale both
+    // terms by n (the attractive side does the same in force-spring.ts) so the
+    // config knobs stay O(1).
+    if (this.config.simulationKernel === 'tsne') return this.config.simulationRepulsion * n
+    return this.config.simulationRepulsion
+  }
+
+  /** Final 1×1 target of the Z reduction chain (last tick's Z), if any. */
+  private get zFinalTexture (): Texture | undefined {
+    return this.zReduceTargets[this.zReduceTargets.length - 1]?.texture
   }
 
   public create (): void {
@@ -342,6 +373,8 @@ export class ForceManyBody extends CoreModule {
         pointIndices: this.pointIndices,
       })
     }
+
+    this.createZReduceTargets()
 
     this.previousPointsTextureSize = store.pointsTextureSize
     this.previousSpaceSize = store.adjustedSpaceSize
@@ -815,6 +848,44 @@ export class ForceManyBody extends CoreModule {
         },
       })
     }
+
+    // t-SNE Z reduction command (fullscreen quad, no blending — each step
+    // overwrites its own target).
+    if (kernel === 'tsne') {
+      this.zReduceUniformStore ||= new UniformStore(device, {
+        reduceSumUniforms: {
+          uniformTypes: {
+            inputWidth: 'f32',
+            inputHeight: 'f32',
+            readAlpha: 'f32',
+          },
+        },
+      })
+
+      this.zReduceCommand ||= new Model(device, {
+        fs: reduceSumFrag,
+        vs: updateVert,
+        topology: 'triangle-strip',
+        vertexCount: 4,
+        attributes: {
+          vertexCoord: this.forceVertexCoordBuffer,
+        },
+        bufferLayout: [
+          { name: 'vertexCoord', format: 'float32x2' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
+        },
+        bindings: {
+          reduceSumUniforms: this.zReduceUniformStore.getManagedUniformBuffer('reduceSumUniforms'),
+          // reduceInput is bound per step in reduceZ()
+        },
+        parameters: {
+          depthWriteEnabled: false,
+          depthCompare: 'always',
+        },
+      })
+    }
   }
 
   public run (): void {
@@ -825,6 +896,11 @@ export class ForceManyBody extends CoreModule {
       this.data.pointsNumber !== this.previousPointsNumber
     ) {
       return
+    }
+    // A live switch to the t-SNE kernel reaches run() without create(): build
+    // the Z reduction chain lazily.
+    if (this.config.simulationKernel === 'tsne' && this.zReduceTargets.length === 0) {
+      this.createZReduceTargets()
     }
     if (this.store.is3D) {
       // Octree above the threshold; exact brute force below (and as a defensive
@@ -845,6 +921,10 @@ export class ForceManyBody extends CoreModule {
       this.drawLevels()
       this.drawForces()
     }
+    // t-SNE: the repulsion passes above accumulated the per-point Z partial sums
+    // into the velocity texture's alpha channel — reduce them to the 1×1 Z for
+    // the next tick (one-tick lag; the forces just drawn used last tick's Z).
+    if (this.config.simulationKernel === 'tsne') this.reduceZ()
   }
 
   /**
@@ -869,6 +949,8 @@ export class ForceManyBody extends CoreModule {
     this.buildNearFieldSlotsCommand = undefined
     this.forceNearField3DCommand?.destroy()
     this.forceNearField3DCommand = undefined
+    this.zReduceCommand?.destroy()
+    this.zReduceCommand = undefined
 
     // 2. Destroy Framebuffers (before textures they reference)
     for (const target of this.levelTargets.values()) {
@@ -892,6 +974,7 @@ export class ForceManyBody extends CoreModule {
 
     // Octree targets destroy their FBOs before their textures internally
     this.destroyLevelTargets3D()
+    this.destroyZReduceTargets()
 
     // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
     this.calculateLevelsUniformStore?.destroy()
@@ -910,6 +993,8 @@ export class ForceManyBody extends CoreModule {
     this.buildNearFieldSlotsUniformStore = undefined
     this.forceNearField3DUniformStore?.destroy()
     this.forceNearField3DUniformStore = undefined
+    this.zReduceUniformStore?.destroy()
+    this.zReduceUniformStore = undefined
 
     // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
     if (this.pointIndices && !this.pointIndices.destroyed) {
@@ -920,6 +1005,90 @@ export class ForceManyBody extends CoreModule {
       this.forceVertexCoordBuffer.destroy()
     }
     this.forceVertexCoordBuffer = undefined
+  }
+
+  /**
+   * Allocates the Z reduction chain (t-SNE kernel only): textures halving from
+   * ceil(pointsTextureSize / 2) down to 1×1, and seeds the final target with a
+   * safe first-tick Z. A compact initial cloud has w ≈ 1 per pair, so n²
+   * over-estimates Z — the first tick's repulsion errs weak, never explosive.
+   */
+  private createZReduceTargets (): void {
+    const { device, store } = this
+    const pointsTextureSize = store.pointsTextureSize
+    if (this.config.simulationKernel !== 'tsne' || !pointsTextureSize) {
+      this.destroyZReduceTargets()
+      return
+    }
+
+    const sizes: number[] = []
+    let size = Math.max(1, Math.ceil(pointsTextureSize / 2))
+    for (;;) {
+      sizes.push(size)
+      if (size === 1) break
+      size = Math.ceil(size / 2)
+    }
+    const upToDate = this.zReduceTargets.length === sizes.length &&
+      this.zReduceTargets.every((target, i) => !target.texture.destroyed && target.texture.width === sizes[i])
+    if (!upToDate) {
+      this.destroyZReduceTargets()
+      for (const s of sizes) {
+        const texture = device.createTexture({
+          width: s,
+          height: s,
+          format: 'rgba32float',
+          usage: Texture.SAMPLE | Texture.RENDER,
+        })
+        const fbo = device.createFramebuffer({ width: s, height: s, colorAttachments: [texture] })
+        this.zReduceTargets.push({ texture, fbo })
+      }
+    }
+
+    const finalTarget = this.zReduceTargets[this.zReduceTargets.length - 1]
+    if (finalTarget && !finalTarget.fbo.destroyed) {
+      const n = this.data.pointsNumber ?? 1
+      const pass = device.beginRenderPass({ framebuffer: finalTarget.fbo, clearColor: [n * n, 0, 0, 0] })
+      pass.end()
+    }
+  }
+
+  private destroyZReduceTargets (): void {
+    for (const target of this.zReduceTargets) {
+      if (!target.fbo.destroyed) target.fbo.destroy()
+      if (!target.texture.destroyed) target.texture.destroy()
+    }
+    this.zReduceTargets = []
+  }
+
+  /**
+   * Runs the Z reduction: velocity texture alpha (per-point partial sums) →
+   * halving chain → 1×1 Z, consumed by the repulsion shaders next tick.
+   */
+  private reduceZ (): void {
+    const { device, store, points } = this
+    if (!points?.velocityTexture || points.velocityTexture.destroyed) return
+    if (!this.zReduceCommand || !this.zReduceUniformStore) return
+    if (this.zReduceTargets.length === 0) return
+
+    let input: Texture = points.velocityTexture
+    let inputSize = store.pointsTextureSize ?? 0
+    for (let i = 0; i < this.zReduceTargets.length; i++) {
+      const target = this.zReduceTargets[i]
+      if (!target || target.fbo.destroyed) return
+      this.zReduceUniformStore.setUniforms({
+        reduceSumUniforms: {
+          inputWidth: inputSize,
+          inputHeight: inputSize,
+          readAlpha: i === 0 ? 1 : 0,
+        },
+      })
+      this.zReduceCommand.setBindings({ reduceInput: input })
+      const pass = device.beginRenderPass({ framebuffer: target.fbo, clearColor: [0, 0, 0, 0] })
+      this.zReduceCommand.draw(pass)
+      pass.end()
+      input = target.texture
+      inputSize = target.texture.width
+    }
   }
 
   private drawForcesBruteForce3D (): void {
@@ -944,6 +1113,7 @@ export class ForceManyBody extends CoreModule {
     this.bruteForce3DCommand.setBindings({
       positionsTexture: points.previousPositionTexture,
       randomValues: this.randomValuesTexture,
+      ...(this.config.simulationKernel === 'tsne' && this.zFinalTexture ? { zTexture: this.zFinalTexture } : {}),
     })
 
     const drawPass = device.beginRenderPass({
@@ -1037,6 +1207,7 @@ export class ForceManyBody extends CoreModule {
       this.forceLevel3DCommand.setBindings({
         positionsTexture: points.previousPositionTexture,
         levelTexture: target.texture,
+        ...(this.config.simulationKernel === 'tsne' && this.zFinalTexture ? { zTexture: this.zFinalTexture } : {}),
       })
       this.forceLevel3DCommand.draw(drawPass)
 
@@ -1068,6 +1239,7 @@ export class ForceManyBody extends CoreModule {
           slotTexture5: this.nearFieldSlotTargets[5]!.texture,
           slotTexture6: this.nearFieldSlotTargets[6]!.texture,
           slotTexture7: this.nearFieldSlotTargets[7]!.texture,
+          ...(this.config.simulationKernel === 'tsne' && this.zFinalTexture ? { zTexture: this.zFinalTexture } : {}),
         })
         this.forceNearField3DCommand.draw(drawPass)
       }
@@ -1325,6 +1497,7 @@ export class ForceManyBody extends CoreModule {
       this.forceCommand.setBindings({
         positionsTexture: points.previousPositionTexture,
         levelFbo: target.texture,
+        ...(this.config.simulationKernel === 'tsne' && this.zFinalTexture ? { zTexture: this.zFinalTexture } : {}),
       })
 
       this.forceCommand.draw(drawPass)
@@ -1345,6 +1518,7 @@ export class ForceManyBody extends CoreModule {
           positionsTexture: points.previousPositionTexture,
           randomValues: this.randomValuesTexture,
           levelFbo: target.texture,
+          ...(this.config.simulationKernel === 'tsne' && this.zFinalTexture ? { zTexture: this.zFinalTexture } : {}),
         })
         this.forceFromItsOwnCentermassCommand.draw(drawPass)
       }

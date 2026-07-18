@@ -419,13 +419,18 @@ export interface GraphConfigInterface {
    * `umap` replaces both gradients with UMAP's attractive/repulsive kernels, turning
    * the simulation into a UMAP-style embedding optimizer: provide the kNN affinity
    * graph via `setLinks` and the fuzzy edge weights via `setLinkStrength`.
+   * `tsne` replaces them with Barnes-Hut t-SNE's gradients (Student-t kernel with
+   * a global normalization term computed on the GPU each tick): provide the kNN
+   * graph via `setLinks` and the symmetrized p_ij via `setLinkStrength`; use
+   * `simulationLinkSpring` for early exaggeration (e.g. start at `12`, then `1`).
    * Experimental. Default value: `default`
    */
-  simulationKernel: 'default' | 'umap';
+  simulationKernel: 'default' | 'umap' | 'tsne';
   /**
-   * Size of one UMAP embedding unit in space units when `simulationKernel` is `umap`.
-   * A typical UMAP embedding spans roughly ±10 units, so with the default `spaceSize`
-   * of 4096 a scale of 100–200 fills the space.
+   * Size of one embedding unit in space units for the embedding kernels
+   * (`simulationKernel: 'umap' | 'tsne'`). A typical embedding spans roughly
+   * ±10 units, so with the default `spaceSize` of 4096 a scale of 100–200
+   * fills the space.
    * Default value: `100`
    */
   simulationUmapScale: number;
@@ -451,6 +456,9 @@ export interface GraphConfigInterface {
    * count internally (the many-body pass aggregates repulsion from all points,
    * unlike reference UMAP's per-point negative sampling), so it reads as
    * "negative samples per point" — values around `2`–`5` work well at any scale.
+   * When `simulationKernel` is `tsne`, the gradient is scaled by the point count
+   * (a learning-rate normalization matching the attractive term), so values
+   * around `1` work at any scale.
    * Default value: `1.0`
    */
   simulationRepulsion: number;

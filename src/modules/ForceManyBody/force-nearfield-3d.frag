@@ -28,6 +28,10 @@ uniform sampler2D slotTexture4;
 uniform sampler2D slotTexture5;
 uniform sampler2D slotTexture6;
 uniform sampler2D slotTexture7;
+#ifdef TSNE_KERNEL
+// 1×1 texture holding last tick's global normalization Z (see reduce-sum.frag).
+uniform sampler2D zTexture;
+#endif
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceNearField3DUniforms {
@@ -67,12 +71,28 @@ uniform float umapScale;
 in vec2 textureCoords;
 out vec4 fragColor;
 
+#ifdef TSNE_KERNEL
+// Per-cell partial sum of Σ w over the sampled slot points; Horvitz–Thompson
+// weighted into zAccum by the caller (same estimator as the force itself).
+float zCell = 0.0;
+// Per-point partial sum for the global Z, written to the alpha channel (additive).
+float zAccum = 0.0;
+#endif
+
 // Same clamped inverse-distance falloff as the level passes (must stay identical).
 vec3 pairwiseVelocity(vec3 position, vec3 otherPosition, float mass) {
   vec3 distVector = position - otherPosition;
   float l = dot(distVector, distVector);
   if (l <= 0.0) return vec3(0.0);
-  #ifdef UMAP_KERNEL
+  #ifdef TSNE_KERNEL
+  // t-SNE repulsive gradient (see force-level.frag) — must stay identical to the
+  // level passes.
+  float d2 = l / (umapScale * umapScale);
+  float w = 1.0 / (1.0 + d2);
+  float Z = max(texelFetch(zTexture, ivec2(0), 0).r, 1e-6);
+  zCell += mass * w;
+  return alpha * repulsion * mass * (4.0 * w * w / Z) * distVector;
+  #elif defined(UMAP_KERNEL)
   // UMAP repulsive gradient (see force-level.frag) — must stay identical to the
   // level passes.
   float d2 = l / (umapScale * umapScale);
@@ -130,6 +150,9 @@ void main() {
 
         vec3 pairSum = vec3(0.0);
         float sampled = 0.0;
+        #ifdef TSNE_KERNEL
+        zCell = 0.0;
+        #endif
         // Sampler arrays cannot be indexed dynamically in GLSL ES 3.0 — unrolled.
         pairSum += slotVelocity(texelFetch(slotTexture0, pixel, 0).rg, position, selfIndex, sampled);
         pairSum += slotVelocity(texelFetch(slotTexture1, pixel, 0).rg, position, selfIndex, sampled);
@@ -144,17 +167,27 @@ void main() {
         // other points (conditioned on whether the point itself was peeled),
         // so scaling by others/sampled gives E[force] = exact all-pairs sum.
         // Exhaustively peeled cells (others == sampled) are exact.
-        if (sampled > 0.0) velocity += (others / sampled) * pairSum;
+        if (sampled > 0.0) {
+          velocity += (others / sampled) * pairSum;
+          #ifdef TSNE_KERNEL
+          // Same estimator for the Z partial sum.
+          zAccum += (others / sampled) * zCell;
+          #endif
+        }
       }
     }
   }
 
-  #ifndef UMAP_KERNEL
+  #if !defined(UMAP_KERNEL) && !defined(TSNE_KERNEL)
   // Random jitter proportional to the velocity, like the 2D centermass fallback.
-  // Skipped for the UMAP kernel: an embedding should settle, not boil.
+  // Skipped for the embedding kernels: an embedding should settle, not boil.
   velocity += velocity * random.rgb;
   #endif
 
   // z velocity lives in the blue channel (update-position.frag SPACE_3D contract).
+  #ifdef TSNE_KERNEL
+  fragColor = vec4(velocity, zAccum);
+  #else
   fragColor = vec4(velocity, 0.0);
+  #endif
 }

@@ -1,8 +1,9 @@
-export function forceFrag (maxLinks: number, useUmapKernel?: boolean): string {
+export function forceFrag (maxLinks: number, kernel: 'default' | 'umap' | 'tsne' = 'default'): string {
   return `#version 300 es
 precision highp float;
 
-${useUmapKernel ? '#define UMAP_KERNEL' : ''}
+${kernel === 'umap' ? '#define UMAP_KERNEL' : ''}
+${kernel === 'tsne' ? '#define TSNE_KERNEL' : ''}
 
 uniform sampler2D positionsTexture;
 uniform sampler2D linkInfoTexture; // Texture storing first link indices and amount
@@ -24,6 +25,7 @@ layout(std140) uniform forceLinkUniforms {
   float umapA;
   float umapB;
   float umapScale;
+  float pointsNumber;
 } forceLink;
 
 #define linkSpring forceLink.linkSpring
@@ -35,6 +37,7 @@ layout(std140) uniform forceLinkUniforms {
 #define umapA forceLink.umapA
 #define umapB forceLink.umapB
 #define umapScale forceLink.umapScale
+#define pointsNumber forceLink.pointsNumber
 #else
 uniform float linkSpring;
 uniform float linkDistance;
@@ -45,6 +48,7 @@ uniform float alpha;
 uniform float umapA;
 uniform float umapB;
 uniform float umapScale;
+uniform float pointsNumber;
 #endif
 
 in vec2 textureCoords;
@@ -89,7 +93,23 @@ void main() {
         float l = sqrt(x * x + y * y);
         #endif
 
-        #ifdef UMAP_KERNEL
+        #ifdef TSNE_KERNEL
+        // Barnes-Hut t-SNE attractive gradient along the kNN edge:
+        // 4·p_ij·w·(y_j − y_i) with w = 1/(1 + d²) (Student-t numerator).
+        // Scaled by pointsNumber as a learning-rate normalization (p_ij sums to 1
+        // over the whole graph, so raw gradients are O(1/n)). The embedding scale
+        // cancels out except inside w. linkSpring doubles as the (early)
+        // exaggeration knob. The degree bias is skipped: p_ij is symmetric.
+        float d2 = (l * l) / (umapScale * umapScale);
+        float p = strength * strength; // undo the sqrt applied on ingest
+        float w = 1.0 / (1.0 + d2);
+        float k = 4.0 * pointsNumber * p * w * linkSpring * alpha;
+        velocity.x += k * x;
+        velocity.y += k * y;
+        #ifdef SPACE_3D
+        velocity.b += k * z;
+        #endif
+        #elif defined(UMAP_KERNEL)
         // UMAP attractive gradient along the kNN affinity edge, in embedding units:
         // 2ab·d²⁽ᵇ⁻¹⁾ / (1 + a·d²ᵇ) · w, per-component clipped to ±4 like the
         // reference SGD implementation. The degree bias is skipped: the fuzzy

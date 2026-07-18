@@ -20,8 +20,8 @@ export class ForceLink extends CoreModule {
   private previousMaxPointDegree: number | undefined
   /** Space dimensions the Model was compiled for; a mode switch recreates it (SPACE_3D define). */
   private programsSpaceDimensions: 2 | 3 = 2
-  /** Force kernel the Model was compiled for; a kernel switch recreates it (UMAP_KERNEL define). */
-  private programsKernel: 'default' | 'umap' = 'default'
+  /** Force kernel the Model was compiled for; a kernel switch recreates it (UMAP/TSNE_KERNEL define). */
+  private programsKernel: 'default' | 'umap' | 'tsne' = 'default'
   private previousPointsTextureSize: number | undefined
   private previousLinksTextureSize: number | undefined
 
@@ -38,6 +38,7 @@ export class ForceLink extends CoreModule {
       umapA: number;
       umapB: number;
       umapScale: number;
+      pointsNumber: number;
     };
   }> | undefined
 
@@ -214,12 +215,13 @@ export class ForceLink extends CoreModule {
           umapA: 'f32',
           umapB: 'f32',
           umapScale: 'f32',
+          pointsNumber: 'f32',
         },
       },
     })
 
     this.runCommand ||= new Model(device, {
-      fs: forceFrag(this.maxPointDegree, kernel === 'umap'),
+      fs: forceFrag(this.maxPointDegree, kernel),
       vs: updateVert,
       topology: 'triangle-strip',
       vertexCount: 4,
@@ -274,6 +276,7 @@ export class ForceLink extends CoreModule {
         umapA,
         umapB,
         umapScale: this.config.simulationUmapScale,
+        pointsNumber: this.data.pointsNumber ?? 0,
       },
     })
 

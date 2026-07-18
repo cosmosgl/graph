@@ -8,6 +8,10 @@ precision highp float;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D randomValues;
+#ifdef TSNE_KERNEL
+// 1×1 texture holding last tick's global normalization Z (see reduce-sum.frag).
+uniform sampler2D zTexture;
+#endif
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceBruteForceUniforms {
@@ -52,6 +56,11 @@ void main() {
   int count = int(pointsNumber);
   ivec2 selfPixel = ivec2(gl_FragCoord.xy);
   int pointIndex = 0;
+  #ifdef TSNE_KERNEL
+  // Partial sum for the global Z (written to the alpha channel below).
+  float zAccum = 0.0;
+  float Z = max(texelFetch(zTexture, ivec2(0), 0).r, 1e-6);
+  #endif
 
   for (int j = 0; j < size; j += 1) {
     if (pointIndex >= count) break;
@@ -71,7 +80,13 @@ void main() {
         if (l == 0.0) continue;
       }
 
-      #ifdef UMAP_KERNEL
+      #ifdef TSNE_KERNEL
+      // t-SNE repulsive gradient (see force-level.frag), per-pair with mass 1.
+      float d2 = l / (umapScale * umapScale);
+      float w = 1.0 / (1.0 + d2);
+      zAccum += w;
+      velocity += alpha * repulsion * (4.0 * w * w / Z) * distVector;
+      #elif defined(UMAP_KERNEL)
       // UMAP repulsive gradient (see force-level.frag), per-pair with mass 1.
       float d2 = l / (umapScale * umapScale);
       float coeff = 2.0 * umapB / ((0.001 + d2) * (1.0 + umapA * pow(d2, umapB)));
@@ -86,11 +101,15 @@ void main() {
     }
   }
 
-  #ifndef UMAP_KERNEL
+  #if !defined(UMAP_KERNEL) && !defined(TSNE_KERNEL)
   // Random jitter proportional to the velocity, like the 2D centermass force.
-  // Skipped for the UMAP kernel: an embedding should settle, not boil.
+  // Skipped for the embedding kernels: an embedding should settle, not boil.
   velocity += velocity * random.rgb;
   #endif
 
+  #ifdef TSNE_KERNEL
+  fragColor = vec4(velocity, zAccum);
+  #else
   fragColor = vec4(velocity, 0.0);
+  #endif
 }
