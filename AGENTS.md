@@ -53,3 +53,22 @@ Requires Node ≥ 18, npm ≥ 7.
 
 Per `CONTRIBUTING.md`: fork, branch from `main`, code, make sure lint + build pass, add a Storybook
 example if you changed behavior/config/public API, then open a PR. Contributions are MIT-licensed.
+
+## Commits
+
+Sign off every commit: `git commit -s` (adds the `Signed-off-by` trailer). The repo enforces **DCO**
+(`.github/dco.yml`) and rejects unsigned commits from non-members. AI/tool-assisted commits also
+carry a `Co-authored-by:` trailer (see the log).
+
+**Subject** — Conventional Commits, `type(scope): summary`, lowercase, no trailing period. Types in
+use: `fix`, `feat`, `docs`, `refactor`, `build`, `chore`, `perf`; scope names the area (`force`,
+`points`, `transitions`, `zoom`, `links`, `stories`, `data`, …). An em-dash clause often carries the
+key consequence — e.g. `fix(data): resolve NaN channels at read time — caller arrays are never edited`.
+
+**Body** (anything non-trivial) — lead with the *problem and why it mattered*, not the "what"; frame
+the fix as an invariant or contract; follow with reasoned bullets that say *why* each change, not just
+the mechanic; close with the resulting guarantee. Wrap ~72 columns. The model to imitate:
+`fix(data): resolve NaN size/color channels at read time` (`1c00abea`) — find it with
+`git log --grep` if the hash has since been rewritten by a rebase/squash-merge.
+
+After a behavior / config / public-API change, add or update the `history/` entry (`/history`).
