@@ -209,6 +209,24 @@ export const buildUmapGraph = (
   return { links: new Float32Array(links), strengths: new Float32Array(strengths) }
 }
 
+/** First kTo (nearest) neighbors of each point's kFrom-long sorted kNN lists. */
+export const sliceKnnLists = (
+  knn: { indices: Int32Array; distances: Float32Array },
+  n: number,
+  kFrom: number,
+  kTo: number
+): { indices: Int32Array; distances: Float32Array } => {
+  const indices = new Int32Array(n * kTo)
+  const distances = new Float32Array(n * kTo)
+  for (let i = 0; i < n; i++) {
+    for (let j = 0; j < kTo; j++) {
+      indices[i * kTo + j] = knn.indices[i * kFrom + j] as number
+      distances[i * kTo + j] = knn.distances[i * kFrom + j] as number
+    }
+  }
+  return { indices, distances }
+}
+
 /**
  * t-SNE input probabilities from the kNN lists (van der Maaten's Barnes-Hut
  * formulation): per point, binary-search the Gaussian precision βᵢ so that the

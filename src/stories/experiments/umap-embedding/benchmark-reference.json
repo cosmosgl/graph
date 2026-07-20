@@ -1,0 +1,38 @@
+{
+ "dataset": "mammoth 10000x3",
+ "params": {
+  "umap": {
+   "n_neighbors": 25,
+   "min_dist": 0.1
+  },
+  "tsne": {
+   "perplexity": 20
+  },
+  "trust_k": 10,
+  "trust_sample": 2000,
+  "seed": 42
+ },
+ "results": [
+  {
+   "name": "PCA-2D",
+   "seconds": 0.0,
+   "trustworthiness": 0.9606,
+   "recall@10": 0.4142,
+   "recall@30": 0.4615
+  },
+  {
+   "name": "umap-learn",
+   "seconds": 19.6,
+   "trustworthiness": 0.9993,
+   "recall@10": 0.6656,
+   "recall@30": 0.7174
+  },
+  {
+   "name": "openTSNE",
+   "seconds": 36.1,
+   "trustworthiness": 0.9998,
+   "recall@10": 0.787,
+   "recall@30": 0.7576
+  }
+ ]
+}

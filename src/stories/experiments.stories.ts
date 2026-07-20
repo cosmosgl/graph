@@ -11,6 +11,7 @@ import { umapEmbedding3d } from './experiments/umap-embedding/index-3d'
 import { mammothProjection } from './experiments/umap-embedding/mammoth'
 import { mammothTsneProjection } from './experiments/umap-embedding/mammoth-tsne'
 import { tsneZValidation } from './experiments/umap-embedding/tsne-z-validation'
+import { embeddingBenchmark } from './experiments/umap-embedding/benchmark'
 
 import createCosmosRaw from './create-cosmos?raw'
 import generateMeshDataRaw from './generate-mesh-data?raw'
@@ -26,6 +27,8 @@ import umapEmbeddingLabelsRaw from './experiments/umap-embedding/labels?raw'
 import mammothProjectionRaw from './experiments/umap-embedding/mammoth?raw'
 import mammothTsneProjectionRaw from './experiments/umap-embedding/mammoth-tsne?raw'
 import tsneZValidationRaw from './experiments/umap-embedding/tsne-z-validation?raw'
+import embeddingBenchmarkRaw from './experiments/umap-embedding/benchmark?raw'
+import benchmarkReferencePyRaw from './experiments/umap-embedding/benchmark-reference.py?raw'
 import mammothDataRaw from './experiments/umap-embedding/mammoth-data?raw'
 
 // More on how to set up stories at: https://storybook.js.org/docs/writing-stories#default-export
@@ -127,6 +130,17 @@ export const TsneZValidation: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: tsneZValidationRaw },
+      { name: 'data-gen.ts', code: umapEmbeddingDataGenRaw },
+    ],
+  },
+}
+export const EmbeddingBenchmark: Story = {
+  ...createStory(embeddingBenchmark),
+  name: 'Embedding Quality Benchmark',
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: embeddingBenchmarkRaw },
+      { name: 'benchmark-reference.py', code: benchmarkReferencePyRaw },
       { name: 'data-gen.ts', code: umapEmbeddingDataGenRaw },
     ],
   },
