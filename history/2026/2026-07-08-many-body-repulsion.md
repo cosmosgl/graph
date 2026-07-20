@@ -3,7 +3,7 @@
 # Many-body repulsion: grid + Monte-Carlo near field
 
 **Date:** 2026-07-08
-**Commits:** `5d0bd38`
+**Commits:** `Precise Monte-Carlo near field force` (`3c78989`), `Add Repulsion Benchmark story` (`0c4d9d9`), `docs(force): explain grid-based many-body repulsion` (`7a612c6`); hardening: `fix(force): exclude absent points from near-field slots` (`24ed690`), `fix(force): replace sin-based hash with lowbias32 in near-field sampling` (`58ededd`), `fix(force): changing spaceSize disabled many-body and reused stale velocity` (`eeef329`), `refactor(force): drop dead grid-level branch and fix many-body comments` (`edba6b2`)
 
 ## Why
 
@@ -67,6 +67,24 @@ Both live in `force-nearfield.frag`:
   approximation. Still accepted so existing configs don't break; ignored, and documented as such
   in the Configuration docs.
 
+## Follow-ups
+
+Fixes and cleanup after the first landing (all in `src/modules/ForceManyBody/`):
+
+- **Cross-platform sampling hash** — the per-tick point hash moved from a `fract(sin(...))`
+  one-liner to the integer **lowbias32** hash. `sin()` loses precision at large point indices
+  and diverges across GPU vendors, correlating or colliding hashes and quietly biasing the
+  depth-peel sample; integer ops are exact everywhere.
+- **Absent points excluded from slots** — a removed point's NaN position could be peeled into a
+  cell's sample and poison every neighbor's force. Slot building now skips absent points, matching
+  the aggregation pass.
+- **spaceSize changes** — changing `spaceSize` no longer disables the force or reuses stale
+  velocity; allocation is point-count-based and each draw recomputes `cellSize` from the live
+  space size.
+- **Dead code + comments** — removed an unreachable grid-level recreation branch (a level's size
+  is fixed by its index) and corrected stale comments, including the `simulationRepulsionTheta`
+  JSDoc.
+
 ## Notes
 
 - **Not a breaking change** — behavior settles differently (and more naturally) but the public
@@ -75,6 +93,8 @@ Both live in `force-nearfield.frag`:
   simulation step). The exact O(n²) brute-force path considered for graphs ≤ ~4k points was
   dropped: the grid is both faster (O(n²) does more work even at 2k points) and effectively exact
   when cells are sparse, so a second code path earned nothing.
+- **Deep dive:** `docs/many-body-force/README.md` walks through the old vs new algorithm, the P3M
+  decomposition, and the depth-peeling / Horvitz–Thompson math.
 
 ## Example
 
