@@ -11,8 +11,8 @@ import { loadMammoth, kmeansLabels, labelColors, coordInit2D } from './mammoth-d
  *
  * The input p_ij come from perplexity calibration on the CPU (buildTsneGraph,
  * k = 3 · perplexity as in Barnes-Hut t-SNE), and `simulationLinkSpring` doubles
- * as t-SNE's early exaggeration: it starts at 12 and drops to 1 after a few
- * seconds — a live uniform change, no rebuild.
+ * as t-SNE's early exaggeration: it starts at 12 and drops to 1 after 250
+ * simulation ticks (like reference t-SNE) — a live uniform change, no rebuild.
  */
 export const mammothTsneProjection = async (): Promise<{ graph: Graph; div: HTMLDivElement; destroy?: () => void }> => {
   // Yield once so the "Loading story…" placeholder paints before the synchronous
@@ -70,11 +70,22 @@ export const mammothTsneProjection = async (): Promise<{ graph: Graph; div: HTML
   graph.setLinkStrength(strengths)
   graph.render()
 
-  // End early exaggeration once the coarse structure has formed — a live
-  // uniform update (the kernel parameters are not baked into the shaders).
-  const exaggerationTimer = setTimeout(() => {
-    graph.setConfigPartial({ simulationLinkSpring: 1 })
-  }, 6000)
+  // End early exaggeration after a fixed number of simulation TICKS (like
+  // reference t-SNE's ~250 iterations) — a live uniform update. Tick-based, not
+  // wall-clock: frame rate varies wildly across hardware, and the schedule must
+  // track optimization progress, not seconds.
+  const EXAGGERATION_TICKS = 250
+  let ticks = 0
+  let exaggerationEnded = false
+  graph.setConfigPartial({
+    onSimulationTick: () => {
+      ticks += 1
+      if (!exaggerationEnded && ticks >= EXAGGERATION_TICKS) {
+        exaggerationEnded = true
+        graph.setConfigPartial({ simulationLinkSpring: 1 })
+      }
+    },
+  })
 
   // The layout expands as t-SNE spreads the clusters; re-fit periodically with
   // `enableSimulation: false` (reframes WITHOUT reheating), then stop so the
@@ -87,7 +98,6 @@ export const mammothTsneProjection = async (): Promise<{ graph: Graph; div: HTML
   }, 2500)
 
   const destroy = (): void => {
-    clearTimeout(exaggerationTimer)
     clearInterval(refitTimer)
     graph.destroy()
   }

@@ -10,6 +10,7 @@ import { umapEmbedding } from './experiments/umap-embedding'
 import { umapEmbedding3d } from './experiments/umap-embedding/index-3d'
 import { mammothProjection } from './experiments/umap-embedding/mammoth'
 import { mammothTsneProjection } from './experiments/umap-embedding/mammoth-tsne'
+import { tsneZValidation } from './experiments/umap-embedding/tsne-z-validation'
 
 import createCosmosRaw from './create-cosmos?raw'
 import generateMeshDataRaw from './generate-mesh-data?raw'
@@ -24,6 +25,7 @@ import umapEmbeddingCountriesRaw from './experiments/umap-embedding/countries-da
 import umapEmbeddingLabelsRaw from './experiments/umap-embedding/labels?raw'
 import mammothProjectionRaw from './experiments/umap-embedding/mammoth?raw'
 import mammothTsneProjectionRaw from './experiments/umap-embedding/mammoth-tsne?raw'
+import tsneZValidationRaw from './experiments/umap-embedding/tsne-z-validation?raw'
 import mammothDataRaw from './experiments/umap-embedding/mammoth-data?raw'
 
 // More on how to set up stories at: https://storybook.js.org/docs/writing-stories#default-export
@@ -116,6 +118,16 @@ export const MammothTsneProjection: Story = {
       { name: 'Story', code: mammothTsneProjectionRaw },
       { name: 'data-gen.ts', code: umapEmbeddingDataGenRaw },
       { name: 'mammoth-data.ts', code: mammothDataRaw },
+    ],
+  },
+}
+export const TsneZValidation: Story = {
+  ...createStory(tsneZValidation),
+  name: 't-SNE Z Validation',
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: tsneZValidationRaw },
+      { name: 'data-gen.ts', code: umapEmbeddingDataGenRaw },
     ],
   },
 }

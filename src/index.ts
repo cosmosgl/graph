@@ -1547,6 +1547,20 @@ export class Graph {
   }
 
   /**
+   * Reads back the current t-SNE global normalization term Z (the denominator of
+   * the low-dimensional similarities q_ij), computed on the GPU each simulation
+   * tick when `simulationKernel` is `tsne`. Synchronous GPU read — meant for
+   * debugging, validation, or convergence monitoring, not for per-frame use.
+   * Returns `undefined` when the t-SNE kernel is not active.
+   * Experimental.
+   */
+  public getTsneNormalization (): number | undefined {
+    if (this._isDestroyed) return undefined
+    if (this.config.simulationKernel !== 'tsne') return undefined
+    return this.forceManyBody?.readZ()
+  }
+
+  /**
    * For the points that are currently visible on the screen, get a sample of point indices
    * with their X, Y and Z coordinates. 3D counterpart of `getSampledPointPositionsMap` —
    * project the returned positions with `spaceToScreenPosition3D` to place labels.

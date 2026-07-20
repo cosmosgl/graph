@@ -1,6 +1,7 @@
 import { Buffer, Framebuffer, Texture, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule } from '@/graph/modules/core-module'
+import { readPixels } from '@/graph/helper'
 
 import calculateLevelFrag from '@/graph/modules/ForceManyBody/calculate-level.frag?raw'
 import calculateLevelVert from '@/graph/modules/ForceManyBody/calculate-level.vert?raw'
@@ -886,6 +887,18 @@ export class ForceManyBody extends CoreModule {
         },
       })
     }
+  }
+
+  /**
+   * Reads back the current t-SNE global normalization Z (the 1×1 result of the
+   * reduction chain). Synchronous GPU read — meant for debugging / validation,
+   * not for per-frame use. Returns `undefined` outside the t-SNE kernel.
+   */
+  public readZ (): number | undefined {
+    const finalTarget = this.zReduceTargets[this.zReduceTargets.length - 1]
+    if (!finalTarget || finalTarget.fbo.destroyed) return undefined
+    const pixels = readPixels(this.device, finalTarget.fbo as Framebuffer)
+    return pixels[0]
   }
 
   public run (): void {
