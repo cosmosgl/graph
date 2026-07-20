@@ -19,9 +19,18 @@ import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 const MAX_GRID_SIZE = 512
 
 /**
- * Depth-peeled points per finest-level cell that receive exact pairwise
- * repulsion each tick. The subset is re-randomized every tick, so points of a
- * dense cell rotate through exact treatment.
+ * How many points per finest-level cell get exact pairwise repulsion each tick.
+ * We pick a fresh random subset every tick, so over time every point in a busy
+ * cell takes its turn being treated exactly.
+ *
+ * Heads up — this isn't a knob you can just turn. The JS side (allocation, the
+ * peel loop) follows this number automatically, but the shader can't: WebGL2's
+ * GLSL won't let you loop over a sampler array, so force-nearfield.frag spells
+ * out every slot by hand. So if you change this, you also have to update
+ * force-nearfield.frag (the sampler list and the unrolled reads) and the
+ * bindings in drawForces — each of those spots has a matching note. If you'd
+ * rather make it truly tunable, switch the slots to a sampler2DArray and all the
+ * hand-syncing goes away.
  */
 const NEAR_FIELD_SLOTS = 8
 
@@ -55,7 +64,7 @@ type SlotTarget = {
 export class ForceManyBody extends CoreModule {
   private randomValuesTexture: Texture | undefined
   private pointIndices: Buffer | undefined
-  /** Grid level count; `0` while the brute-force path is active. */
+  /** Grid level count; `0` until create() allocates the pyramid. */
   private levels = 0
   private levelTargets = new Map<number, LevelTarget>()
   /**
@@ -117,8 +126,8 @@ export class ForceManyBody extends CoreModule {
     const { device, store } = this
     if (!store.pointsTextureSize) return
 
-    // Allocate the grid pyramid + near-field slots (or free them and fall back to
-    // brute force below the point-count threshold).
+    // (Re)allocate the grid pyramid + near-field slots for the current point
+    // count (resizing levels and dropping any that the pyramid no longer needs).
     this.createLevels()
 
     // Random jitter texture to prevent sticking
@@ -608,6 +617,10 @@ export class ForceManyBody extends CoreModule {
           },
         })
 
+        // One binding per slot, listed out to match the samplers over in
+        // force-nearfield.frag — both lists have to stay NEAR_FIELD_SLOTS long.
+        // We only reach here after confirming we have a full set of slots (check
+        // at the top of this method), so the `!` on each one is safe.
         this.forceNearFieldCommand.setBindings({
           positionsTexture: points.previousPositionTexture,
           levelTexture: target.texture,
@@ -646,15 +659,16 @@ export class ForceManyBody extends CoreModule {
     this.levels = Math.log2(finestGridSize) - 1
 
     for (let level = 0; level < this.levels; level += 1) {
+      // A level's size only depends on its index (level L is always a 2^(L+2)
+      // grid), so any level we already built is guaranteed to still be the right
+      // size. That's why we can just skip the ones we have and build only what's
+      // missing — on the first run, or the finer levels we need again after the
+      // pyramid grew back. (Shrinking is handled by the drop loop below.) The
+      // near-field slots are the opposite case — they really can change size, see
+      // createNearFieldSlotTargets.
+      if (this.levelTargets.has(level)) continue
+
       const gridSize = Math.pow(2, level + 2)
-
-      const existingTarget = this.levelTargets.get(level)
-      if (existingTarget && existingTarget.gridSize === gridSize) continue
-      if (existingTarget) {
-        if (!existingTarget.fbo.destroyed) existingTarget.fbo.destroy()
-        if (!existingTarget.texture.destroyed) existingTarget.texture.destroy()
-      }
-
       const texture = device.createTexture({
         width: gridSize,
         height: gridSize,
@@ -689,6 +703,12 @@ export class ForceManyBody extends CoreModule {
    */
   private createNearFieldSlotTargets (finest: LevelTarget): void {
     const { device } = this
+    // These slots follow the finest level's grid, and that grid does change size
+    // as the graph grows or shrinks (it snaps to powers of two). So unlike the
+    // level targets, we really might need to resize here: if what we already have
+    // matches the finest grid and we've got all NEAR_FIELD_SLOTS, keep it;
+    // otherwise throw it away and rebuild at the new size. Every slot is the same
+    // size, so checking slot 0 tells us about the whole set.
     const existing = this.nearFieldSlotTargets[0]
     if (
       existing &&

@@ -373,8 +373,9 @@ export interface GraphConfigInterface {
   simulationRepulsion: number;
   /**
    * @deprecated No longer used. The many-body force now repels close points
-   * individually (exact all-pairs up to 4,096 points, a grid pyramid with an
-   * unbiased Monte-Carlo near field above), so there is no theta approximation
+   * individually — a grid pyramid closed by an unbiased Monte-Carlo near field
+   * that stays exact while cells are sparse and only approximates once a cell
+   * holds more points than sampling slots — so there is no theta approximation
    * to tune. This option is kept for backward compatibility and has no effect.
    * Default value: `1.15`
    */
