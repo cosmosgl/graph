@@ -1,6 +1,6 @@
 import { Graph, type GraphConfig } from '@cosmos.gl/graph'
 
-import { buildUmapGraph } from '../umap-embedding/data-gen'
+import { buildUmapGraph, buildTsneGraph, type UmapGraph } from '../umap-embedding/data-gen'
 import { approximateKnn } from './nn-descent'
 import { runPca } from './pca-client'
 
@@ -23,9 +23,12 @@ import starsUrl from './data/stars.f32.bin?url'
  * monitor to see where the optimizer strains. Everything runs client-side; only
  * the parquet → int8 conversion happens offline (browsers can't read 96MB parquet).
  *
- * Interactive controls: min_dist and spread act LIVE on the running simulation
- * (the kernel parameters are shader uniforms); n_neighbors re-slices the
- * precomputed kNN and rebuilds the fuzzy graph on the CPU, then re-heats.
+ * Interactive controls: a kernel toggle switches the SAME kNN between UMAP and
+ * Barnes-Hut t-SNE live (the current positions carry over — watch one algorithm
+ * reorganize the other's layout); min_dist and spread act LIVE on the running
+ * simulation (the kernel parameters are shader uniforms, UMAP only);
+ * n_neighbors re-slices the precomputed kNN and rebuilds the current kernel's
+ * graph on the CPU, then re-heats.
  */
 
 const RAW_DIM = 256
@@ -33,6 +36,19 @@ const REDUCED_DIM = 64
 /** kNN is computed once at K_MAX; the n_neighbors slider re-slices it to k ≤ K_MAX. */
 const K_MAX = 20
 const K_DEFAULT = 15
+
+type Kernel = 'umap' | 'tsne'
+
+/**
+ * Per-kernel simulation settings. t-SNE spreads far more embedding units than
+ * UMAP (no min_dist plateau), so its unit scale is much smaller; its linkSpring
+ * is the early-exaggeration value, dropped to 1 after EXAGGERATION_TICKS.
+ */
+const KERNEL_SETTINGS = {
+  umap: { simulationUmapScale: 350, simulationRepulsion: 2, simulationLinkSpring: 0.5 },
+  tsne: { simulationUmapScale: 20, simulationRepulsion: 0.5, simulationLinkSpring: 12 },
+} as const
+const EXAGGERATION_TICKS = 250
 
 // Index → color, matching the LANGS order in preprocess.py (last = "Other").
 const LANGS = ['Python', 'JavaScript', 'TypeScript', 'Java', 'C++', 'C', 'C#', 'Go', 'Rust', 'PHP', 'Ruby', 'Shell', 'HTML', 'Swift', 'Kotlin', 'Other']
@@ -138,7 +154,18 @@ export const githubStressTest = (): { graph: Graph; div: HTMLDivElement; destroy
 
   const spaceSize = 8192
 
+  // t-SNE early exaggeration countdown, in simulation TICKS (frame rate varies
+  // across hardware, so schedules must track optimization progress, not seconds).
+  // Armed by the kernel toggle; -1 = inactive.
+  let exaggerationTicksLeft = -1
+
   const config: GraphConfig = {
+    onSimulationTick: () => {
+      if (exaggerationTicksLeft > 0) {
+        exaggerationTicksLeft -= 1
+        if (exaggerationTicksLeft === 0) graph.setConfigPartial({ simulationLinkSpring: 1 })
+      }
+    },
     spaceSize,
     backgroundColor: '#0b0e1a',
     pointDefaultSize: 5,
@@ -234,6 +261,33 @@ export const githubStressTest = (): { graph: Graph; div: HTMLDivElement; destroy
     panel.appendChild(row)
     return { input, readout }
   }
+  // Kernel toggle: same kNN, same positions — different embedding objective.
+  const kernelRow = document.createElement('div')
+  kernelRow.style.cssText = 'display: flex; align-items: center; gap: 8px;'
+  const kernelLabel = document.createElement('span')
+  kernelLabel.textContent = 'kernel'
+  kernelLabel.style.cssText = 'width: 78px;'
+  kernelRow.appendChild(kernelLabel)
+  const kernelButtons: Record<Kernel, HTMLButtonElement> = {
+    umap: document.createElement('button'),
+    tsne: document.createElement('button'),
+  }
+  kernelButtons.umap.textContent = 'UMAP'
+  kernelButtons.tsne.textContent = 't-SNE'
+  for (const button of Object.values(kernelButtons)) {
+    button.style.cssText = [
+      'padding: 3px 12px', 'font: 600 11px Helvetica, Arial, sans-serif', 'color: #fff',
+      'border: none', 'border-radius: 10px', 'cursor: pointer',
+    ].join(';')
+    kernelRow.appendChild(button)
+  }
+  const highlightKernel = (active: Kernel): void => {
+    kernelButtons.umap.style.background = active === 'umap' ? '#5f69de' : '#3a3f55'
+    kernelButtons.tsne.style.background = active === 'tsne' ? '#5f69de' : '#3a3f55'
+  }
+  highlightKernel('umap')
+  panel.appendChild(kernelRow)
+
   const statusRow = document.createElement('div')
   statusRow.style.cssText = 'min-height: 13px; opacity: 0.75;'
   const neighborsSlider = addSlider('n_neighbors', 5, K_MAX, 1, K_DEFAULT, (v) => String(v))
@@ -264,9 +318,29 @@ export const githubStressTest = (): { graph: Graph; div: HTMLDivElement; destroy
     const knnFull = await approximateKnn(reduced, n, REDUCED_DIM, { k: K_MAX, onProgress: setProgress })
     if (cancelled) return
 
+    // Graphs are cached per (kernel, k): the kNN is shared, only the edge
+    // weighting differs — UMAP's fuzzy simplicial set vs t-SNE's
+    // perplexity-calibrated p_ij (perplexity ≈ k/2 so it scales with the slider
+    // and stays below k; reference t-SNE uses k = 3·perplexity).
+    const graphCache = new Map<string, UmapGraph>()
+    const buildGraphFor = (kernel: Kernel, k: number): UmapGraph => {
+      const key = `${kernel}|${k}`
+      let result = graphCache.get(key)
+      if (!result) {
+        const sliced = sliceKnn(knnFull, n, K_MAX, k)
+        result = kernel === 'tsne'
+          ? buildTsneGraph(sliced, n, k, Math.max(2, Math.round(k / 2)))
+          : buildUmapGraph(sliced, n, k)
+        graphCache.set(key, result)
+      }
+      return result
+    }
+
+    let activeKernel: Kernel = 'umap'
+
     overlay.textContent = 'Building UMAP graph…'
     await new Promise<void>((resolve) => { setTimeout(resolve, 0) })
-    const { links, strengths } = buildUmapGraph(sliceKnn(knnFull, n, K_MAX, K_DEFAULT), n, K_DEFAULT)
+    const { links, strengths } = buildGraphFor('umap', K_DEFAULT)
     if (cancelled) return
 
     graph.setPointPositions(scaleInit(init2d, n, spaceSize))
@@ -282,29 +356,49 @@ export const githubStressTest = (): { graph: Graph; div: HTMLDivElement; destroy
     toggleButton.style.display = 'block'
     panel.style.display = 'flex'
 
-    // n_neighbors: CPU graph rebuild (a few seconds at 100k) on commit.
+    // Shared busy-guard for the CPU graph rebuilds (kernel switch, n_neighbors).
     let rebuilding = false
-    neighborsSlider.input.addEventListener('input', () => { neighborsSlider.readout.textContent = neighborsSlider.input.value })
-    neighborsSlider.input.addEventListener('change', () => {
+    const rebuildGraph = (kernel: Kernel, k: number, status: string): void => {
       if (rebuilding || cancelled) return
       rebuilding = true
       neighborsSlider.input.disabled = true
-      const k = Number(neighborsSlider.input.value)
-      statusRow.textContent = `rebuilding graph for k = ${k}…`
+      statusRow.textContent = status
       setTimeout(() => {
         try {
           if (cancelled) return
-          const rebuilt = buildUmapGraph(sliceKnn(knnFull, n, K_MAX, k), n, k)
+          const rebuilt = buildGraphFor(kernel, k)
+          activeKernel = kernel
+          const settings = KERNEL_SETTINGS[kernel]
+          exaggerationTicksLeft = kernel === 'tsne' ? EXAGGERATION_TICKS : -1
+          graph.setConfigPartial({ simulationKernel: kernel, ...settings })
           graph.setLinks(rebuilt.links)
           graph.setLinkStrength(rebuilt.strengths)
           graph.render()
           graph.start(0.5)
+          highlightKernel(kernel)
+          // min_dist / spread only exist in the UMAP objective.
+          minDistSlider.input.disabled = kernel === 'tsne'
+          spreadSlider.input.disabled = kernel === 'tsne'
         } finally {
           rebuilding = false
           neighborsSlider.input.disabled = false
           statusRow.textContent = ''
         }
       }, 30)
+    }
+
+    kernelButtons.umap.addEventListener('click', () => {
+      if (activeKernel !== 'umap') rebuildGraph('umap', Number(neighborsSlider.input.value), 'building UMAP graph…')
+    })
+    kernelButtons.tsne.addEventListener('click', () => {
+      if (activeKernel !== 'tsne') rebuildGraph('tsne', Number(neighborsSlider.input.value), 'calibrating t-SNE perplexity…')
+    })
+
+    // n_neighbors: CPU graph rebuild (a few seconds at 100k) on commit.
+    neighborsSlider.input.addEventListener('input', () => { neighborsSlider.readout.textContent = neighborsSlider.input.value })
+    neighborsSlider.input.addEventListener('change', () => {
+      const k = Number(neighborsSlider.input.value)
+      rebuildGraph(activeKernel, k, `rebuilding graph for k = ${k}…`)
     })
 
     // min_dist / spread: live uniform updates; gently re-heat on release so the
