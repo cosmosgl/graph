@@ -44,6 +44,15 @@ const MAX_PICKING_BUFFER_DIMENSION = 1536
  */
 const PICKING_WINDOW_SIZE = 9
 
+/**
+ * t-SNE gradient-clip cap, as a fraction of the space size: the largest
+ * per-tick displacement any point may take under `simulationKernel: 'tsne'`.
+ * Bounds the pathology (a point crossing the whole space in a few ticks from
+ * the lagged-Z feedback or weak connectivity) while leaving normal convergence
+ * steps — far smaller — untouched. Disabled (cap 0) for the other kernels.
+ */
+const TSNE_MAX_STEP_FRACTION = 0.02
+
 const BLEND_PARAMETERS = {
   blend: true,
   blendColorOperation: 'add',
@@ -268,6 +277,7 @@ export class Points extends CoreModule {
     updatePositionUniforms: {
       friction: number;
       spaceSize: number;
+      maxForce: number;
     };
   }> | undefined
 
@@ -400,6 +410,14 @@ export class Points extends CoreModule {
   /** Whether an async pick readback is awaiting its GPU fence (the render loop must keep polling). */
   public get isPickInFlight (): boolean {
     return this.pickingReadback?.inFlight ?? false
+  }
+
+  /**
+   * Per-tick displacement cap for t-SNE gradient clipping (update-position.frag),
+   * in space units; 0 disables clipping in every other kernel.
+   */
+  private get tsneMaxForce (): number {
+    return this.config.simulationKernel === 'tsne' ? TSNE_MAX_STEP_FRACTION * this.store.adjustedSpaceSize : 0
   }
 
   public updatePositions (): boolean {
@@ -1923,6 +1941,7 @@ export class Points extends CoreModule {
       updatePositionUniforms: {
         friction: this.config.simulationFriction,
         spaceSize: this.store.adjustedSpaceSize,
+        maxForce: this.tsneMaxForce,
       },
     })
 
@@ -3050,10 +3069,12 @@ export class Points extends CoreModule {
           // Order MUST match shader declaration order (std140 layout)
           friction: 'f32',
           spaceSize: 'f32',
+          maxForce: 'f32',
         },
         defaultUniforms: {
           friction: config.simulationFriction,
           spaceSize: store.adjustedSpaceSize,
+          maxForce: this.tsneMaxForce,
         },
       },
     })

@@ -11,13 +11,16 @@ uniform sampler2D pinnedStatusTexture;
 layout(std140) uniform updatePositionUniforms {
   float friction;
   float spaceSize;
+  float maxForce;
 } updatePosition;
 
 #define friction updatePosition.friction
 #define spaceSize updatePosition.spaceSize
+#define maxForce updatePosition.maxForce
 #else
 uniform float friction;
 uniform float spaceSize;
+uniform float maxForce;
 #endif
 
 in vec2 textureCoords;
@@ -37,6 +40,29 @@ void main() {
   if (pinnedStatus.r > 0.5) {
     fragColor = pointPosition;
     return;
+  }
+
+  // t-SNE gradient clipping (maxForce > 0 only in the t-SNE kernel): cap the
+  // per-tick displacement magnitude, exactly as reference t-SNE clips the
+  // gradient each step. Without it the lagged-Z repulsion feedback, or a
+  // weakly-connected point, can fling a point across the whole space in a few
+  // ticks; the cap bounds the step while preserving its direction. The alpha
+  // channel (the t-SNE Z partial sum) is untouched — and already consumed by
+  // the Z reduction before this pass runs.
+  if (maxForce > 0.0) {
+    #ifdef SPACE_3D
+    vec3 step = vec3(pointVelocity.r, pointVelocity.g, pointVelocity.b);
+    float stepMag = length(step);
+    if (stepMag > maxForce) {
+      step *= maxForce / stepMag;
+      pointVelocity.r = step.x;
+      pointVelocity.g = step.y;
+      pointVelocity.b = step.z;
+    }
+    #else
+    float stepMag = length(pointVelocity.rg);
+    if (stepMag > maxForce) pointVelocity.rg *= maxForce / stepMag;
+    #endif
   }
 
   // Friction
