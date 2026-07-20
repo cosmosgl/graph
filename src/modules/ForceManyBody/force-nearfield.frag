@@ -21,6 +21,9 @@ precision highp float;
 uniform sampler2D positionsTexture;
 uniform sampler2D levelTexture;
 uniform sampler2D randomValues;
+// One sampler per near-field slot. We list them out instead of using an array
+// because WebGL2's GLSL won't let you index a sampler array in a loop. Keep this
+// list the same length as NEAR_FIELD_SLOTS in index.ts.
 uniform sampler2D slotTexture0;
 uniform sampler2D slotTexture1;
 uniform sampler2D slotTexture2;
@@ -63,8 +66,7 @@ vec2 pairwiseVelocity(vec2 position, vec2 otherPosition, vec2 randomDir) {
     // Exactly coincident points have no separation direction, so an inverse-distance
     // force is undefined and they would stay stacked forever — a stack's cell count
     // then repels everything around it, carving a void ring. Kick along this point's
-    // random vector instead (each point has a different one, so a pile disperses),
-    // mirroring the brute-force pass's coincident handling.
+    // random vector instead (each point has a different one, so a pile disperses).
     distVector = randomDir;
     l = dot(distVector, distVector);
     if (l <= 0.0) return vec2(0.0);
@@ -80,6 +82,12 @@ vec2 pairwiseVelocity(vec2 position, vec2 otherPosition, vec2 randomDir) {
 // contribute nothing.
 vec2 slotVelocity(vec2 slot, vec2 position, float selfIndex, vec2 randomDir, inout float sampled) {
   float index = slot.x;
+  // Skip empty slots (index -1) and the point itself. This exact `==` — and the
+  // texel math just below — count on a point index fitting exactly in a float,
+  // which only holds for whole numbers up to ~16.7M (2^24). That's every
+  // realistic graph; you'd need a points texture bigger than 4096² to get there.
+  // Past that, indices start rounding, so a point could sample the wrong texel or
+  // fail to skip itself — but you'd hit memory limits long before it matters.
   if (index < 0.0 || index == selfIndex) return vec2(0.0);
   int size = int(pointsTextureSize);
   int i = int(index);
@@ -114,7 +122,10 @@ void main() {
 
       vec2 pairSum = vec2(0.0);
       float sampled = 0.0;
-      // Sampler arrays cannot be indexed dynamically in GLSL ES 3.0 — unrolled.
+      // Same story as the sampler list above: no looping over samplers in
+      // WebGL2, so we read each slot on its own line. This has to match
+      // NEAR_FIELD_SLOTS too (and the samplers above, and the bindings in
+      // index.ts).
       pairSum += slotVelocity(texelFetch(slotTexture0, cell, 0).rg, position, selfIndex, random.rg, sampled);
       pairSum += slotVelocity(texelFetch(slotTexture1, cell, 0).rg, position, selfIndex, random.rg, sampled);
       pairSum += slotVelocity(texelFetch(slotTexture2, cell, 0).rg, position, selfIndex, random.rg, sampled);
