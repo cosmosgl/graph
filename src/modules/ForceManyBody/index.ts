@@ -14,6 +14,7 @@ import buildNearFieldSlotsVert from '@/graph/modules/ForceManyBody/build-nearfie
 import buildNearFieldSlotsFrag from '@/graph/modules/ForceManyBody/build-nearfield-slots.frag?raw'
 import forceBruteForce3DFrag from '@/graph/modules/ForceManyBody/force-many-body-3d.frag?raw'
 import reduceSumFrag from '@/graph/modules/ForceManyBody/reduce-sum.frag?raw'
+import reduceEmaFrag from '@/graph/modules/ForceManyBody/reduce-ema.frag?raw'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import { getUmapABParams } from '@/graph/modules/Shared/umap-params'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
@@ -39,6 +40,15 @@ const MAX_LEVEL_GRID_SIZE_3D = 64
  * cell's residual centroid.
  */
 const NEAR_FIELD_SLOTS_3D = 8
+
+/**
+ * Weight of the current raw Z in the t-SNE normalization's exponential moving
+ * average (Z_smooth = mix(prev, raw, α)). Small → Z drifts toward its true
+ * value over several ticks, damping the delayed-feedback oscillation that
+ * otherwise flings the layout to the space walls before it relaxes. See
+ * reduce-ema.frag.
+ */
+const Z_EMA_ALPHA = 0.1
 
 type LevelTarget = {
   texture: Texture;
@@ -202,6 +212,19 @@ export class ForceManyBody extends CoreModule {
     };
   }> | undefined
 
+  /**
+   * Ping-ponged 1×1 targets holding the exponential moving average of Z, and
+   * the index of the current (front) one. The raw reduction result rings from
+   * the one-tick-lagged repulsion feedback; the EMA damps it before repulsion
+   * consumes it. See reduce-ema.frag.
+   */
+  private zSmoothTargets: LevelTarget[] = []
+  private zSmoothIndex = 0
+  private zEmaCommand: Model | undefined
+  private zEmaUniformStore: UniformStore<{
+    reduceEmaUniforms: { emaAlpha: number };
+  }> | undefined
+
   private previousPointsTextureSize: number | undefined
   private previousSpaceSize: number | undefined
   private previousPointsNumber: number | undefined
@@ -248,9 +271,18 @@ export class ForceManyBody extends CoreModule {
     return this.config.simulationRepulsion
   }
 
-  /** Final 1×1 target of the Z reduction chain (last tick's Z), if any. */
-  private get zFinalTexture (): Texture | undefined {
+  /** Raw 1×1 output of the Z reduction chain (last tick's Z), if any. */
+  private get zRawTexture (): Texture | undefined {
     return this.zReduceTargets[this.zReduceTargets.length - 1]?.texture
+  }
+
+  /**
+   * Z value the repulsion shaders consume: the EMA-smoothed Z when the damping
+   * targets are up (the normal t-SNE path), falling back to the raw reduction
+   * output otherwise.
+   */
+  private get zFinalTexture (): Texture | undefined {
+    return this.zSmoothTargets[this.zSmoothIndex]?.texture ?? this.zRawTexture
   }
 
   public create (): void {
@@ -886,13 +918,46 @@ export class ForceManyBody extends CoreModule {
           depthCompare: 'always',
         },
       })
+
+      // t-SNE Z damping command: EMA-smooths the 1×1 raw Z before repulsion
+      // reads it (see reduce-ema.frag). rawInput / prevInput bound per tick.
+      this.zEmaUniformStore ||= new UniformStore(device, {
+        reduceEmaUniforms: {
+          uniformTypes: { emaAlpha: 'f32' },
+        },
+      })
+
+      this.zEmaCommand ||= new Model(device, {
+        fs: reduceEmaFrag,
+        vs: updateVert,
+        topology: 'triangle-strip',
+        vertexCount: 4,
+        attributes: {
+          vertexCoord: this.forceVertexCoordBuffer,
+        },
+        bufferLayout: [
+          { name: 'vertexCoord', format: 'float32x2' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
+        },
+        bindings: {
+          reduceEmaUniforms: this.zEmaUniformStore.getManagedUniformBuffer('reduceEmaUniforms'),
+        },
+        parameters: {
+          depthWriteEnabled: false,
+          depthCompare: 'always',
+        },
+      })
     }
   }
 
   /**
-   * Reads back the current t-SNE global normalization Z (the 1×1 result of the
-   * reduction chain). Synchronous GPU read — meant for debugging / validation,
-   * not for per-frame use. Returns `undefined` outside the t-SNE kernel.
+   * Reads back the current t-SNE global normalization Z — the raw 1×1 result of
+   * the reduction chain (NOT the EMA-smoothed value repulsion consumes), so the
+   * validation story keeps measuring the reduction itself. Synchronous GPU read
+   * — meant for debugging / validation, not per-frame use. Returns `undefined`
+   * outside the t-SNE kernel.
    */
   public readZ (): number | undefined {
     const finalTarget = this.zReduceTargets[this.zReduceTargets.length - 1]
@@ -964,6 +1029,8 @@ export class ForceManyBody extends CoreModule {
     this.forceNearField3DCommand = undefined
     this.zReduceCommand?.destroy()
     this.zReduceCommand = undefined
+    this.zEmaCommand?.destroy()
+    this.zEmaCommand = undefined
 
     // 2. Destroy Framebuffers (before textures they reference)
     for (const target of this.levelTargets.values()) {
@@ -1008,6 +1075,8 @@ export class ForceManyBody extends CoreModule {
     this.forceNearField3DUniformStore = undefined
     this.zReduceUniformStore?.destroy()
     this.zReduceUniformStore = undefined
+    this.zEmaUniformStore?.destroy()
+    this.zEmaUniformStore = undefined
 
     // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
     if (this.pointIndices && !this.pointIndices.destroyed) {
@@ -1057,11 +1126,34 @@ export class ForceManyBody extends CoreModule {
       }
     }
 
+    // Two 1×1 ping-pong targets for the EMA-smoothed Z.
+    const smoothUpToDate = this.zSmoothTargets.length === 2 &&
+      this.zSmoothTargets.every((target) => !target.texture.destroyed)
+    if (!smoothUpToDate) {
+      this.destroyZSmoothTargets()
+      for (let i = 0; i < 2; i++) {
+        const texture = device.createTexture({
+          width: 1,
+          height: 1,
+          format: 'rgba32float',
+          usage: Texture.SAMPLE | Texture.RENDER,
+        })
+        const fbo = device.createFramebuffer({ width: 1, height: 1, colorAttachments: [texture] })
+        this.zSmoothTargets.push({ texture, fbo })
+      }
+    }
+    this.zSmoothIndex = 0
+
+    // Seed the raw and both smoothed targets with n². A compact initial cloud
+    // has w ≈ 1 per pair, so n² over-estimates Z — the first tick's repulsion
+    // errs weak, never explosive.
+    const n = this.data.pointsNumber ?? 1
+    const seed: [number, number, number, number] = [n * n, 0, 0, 0]
     const finalTarget = this.zReduceTargets[this.zReduceTargets.length - 1]
-    if (finalTarget && !finalTarget.fbo.destroyed) {
-      const n = this.data.pointsNumber ?? 1
-      const pass = device.beginRenderPass({ framebuffer: finalTarget.fbo, clearColor: [n * n, 0, 0, 0] })
-      pass.end()
+    for (const target of [finalTarget, ...this.zSmoothTargets]) {
+      if (target && !target.fbo.destroyed) {
+        device.beginRenderPass({ framebuffer: target.fbo, clearColor: seed }).end()
+      }
     }
   }
 
@@ -1071,6 +1163,15 @@ export class ForceManyBody extends CoreModule {
       if (!target.texture.destroyed) target.texture.destroy()
     }
     this.zReduceTargets = []
+    this.destroyZSmoothTargets()
+  }
+
+  private destroyZSmoothTargets (): void {
+    for (const target of this.zSmoothTargets) {
+      if (!target.fbo.destroyed) target.fbo.destroy()
+      if (!target.texture.destroyed) target.texture.destroy()
+    }
+    this.zSmoothTargets = []
   }
 
   /**
@@ -1101,6 +1202,20 @@ export class ForceManyBody extends CoreModule {
       pass.end()
       input = target.texture
       inputSize = target.texture.width
+    }
+
+    // EMA-smooth the raw Z into the back ping-pong target, then flip: repulsion
+    // reads zFinalTexture (the new front) next tick.
+    const raw = this.zReduceTargets[this.zReduceTargets.length - 1]
+    const front = this.zSmoothTargets[this.zSmoothIndex]
+    const back = this.zSmoothTargets[this.zSmoothIndex ^ 1]
+    if (this.zEmaCommand && this.zEmaUniformStore && raw && front && back && !back.fbo.destroyed) {
+      this.zEmaUniformStore.setUniforms({ reduceEmaUniforms: { emaAlpha: Z_EMA_ALPHA } })
+      this.zEmaCommand.setBindings({ rawInput: raw.texture, prevInput: front.texture })
+      const pass = device.beginRenderPass({ framebuffer: back.fbo, clearColor: [0, 0, 0, 0] })
+      this.zEmaCommand.draw(pass)
+      pass.end()
+      this.zSmoothIndex ^= 1
     }
   }
 
