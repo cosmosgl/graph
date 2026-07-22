@@ -2,7 +2,7 @@
 # Depth-based point occlusion culling
 
 **Date:** 2026-07-07
-**Commits:** `776c1ff`
+**Commits:** `Depth-based occlusion culling for overlapping opaque points` (`889dfa6`); rebase + follow-ups: `fix(points): adapt occlusion-culling core pass to current main` (`baaecda`), `refactor(points): simplify pointOcclusionCulling to a plain boolean` (`cbbcd9d`)
 **PR:** [#238](https://github.com/cosmosgl/graph/pull/238)
 
 ## Why
@@ -43,21 +43,21 @@ program, and the uniform buffers are all shared between the two models.
 
 ## Config
 
-| `pointOcclusionCulling` | Behavior |
-|---|---|
-| `undefined` (default) | Auto — active while `pointOpacity` is `1` and `highlightedPointIndices` is not set |
-| `true` | Force — skips the `pointOpacity` check; highlighting still falls back (its layered greyed/highlighted rendering relies on paint order) |
-| `false` | Off — always use the standard single-pass rendering |
+`pointOcclusionCulling: boolean`, default `true` — "enable the optimization; it applies
+automatically when safe" (`pointOpacity` is `1` and `highlightedPointIndices` is not
+set; highlighting always falls back, its layered greyed/highlighted rendering relies on
+paint order). `false` always uses the standard single-pass rendering — the escape hatch
+for driver/GPU trouble.
 
 Per-point translucent colors are correct in every mode — fragments below the alpha
 threshold simply render through the blended fringe pass, so mixed opaque/translucent
 scenes need no special handling.
 
-**Open question (see PR #238):** `true` is effectively redundant — auto already
-activates everywhere the optimization can help, and with `pointOpacity < 1` the core
-pass can't produce any fragments, so forcing is pure overhead. The leading proposal is
-to simplify to a plain boolean (default `true` = "on, applies automatically when safe"),
-keeping `false` as the escape hatch for driver/GPU trouble.
+The option started as a tri-state (`undefined` = auto, `true` = force past the
+`pointOpacity` check): force was redundant — auto already activates everywhere the
+optimization can help, and with `pointOpacity < 1` the core pass can't produce any
+fragments, so forcing was pure overhead. Simplified to the boolean before merge, as
+proposed in PR #238's design note.
 
 ## Wiring notes (for future changes)
 
@@ -75,12 +75,17 @@ keeping `false` as the escape hatch for driver/GPU trouble.
 - Hover/focus rings draw after both passes with `depthCompare: 'always'` and stay on
   top; links draw before points and never touch depth; picking/sampling FBOs use
   separate models with no depth attachments.
+- **`drawCoreCommand` must stay configured identically to `drawCommand`** — same
+  defines (incl. the `EXIT_DEFAULT_*` exit-ramp constants), same uniform buffers, same
+  texture bindings (incl. `exitTexture`) — or the two passes stop sharing one cached GL
+  program; a missing define is a shader compile error at runtime. The rebase onto
+  current main tripped exactly this.
 
 ## Example
 
-**Point Occlusion Culling** (`src/stories/experiments/point-occlusion-culling.ts`,
-*Examples/Experiments*): 200k points of size 30 in 12 gaussian clusters (worst-case
-overdraw) with `showFPSMonitor: true`, a button cycling Auto/Off/Forced, and a toggle
+**Point Occlusion Culling** (`src/stories/misc/point-occlusion-culling.ts`,
+*Examples/Misc*): 200k points of size 30 in 12 gaussian clusters (worst-case
+overdraw) with `showFPSMonitor: true`, an On/Off culling toggle, and a toggle
 that makes 30% of points translucent to demonstrate mixed-alpha correctness.
 
 ## Known characteristics
