@@ -3,7 +3,7 @@
 # Many-body repulsion: grid + Monte-Carlo near field
 
 **Date:** 2026-07-08
-**Commits:** `Precise Monte-Carlo near field force` (`3c78989`), `Add Repulsion Benchmark story` (`0c4d9d9`), `docs(force): explain grid-based many-body repulsion` (`7a612c6`); hardening: `fix(force): exclude absent points from near-field slots` (`24ed690`), `fix(force): replace sin-based hash with lowbias32 in near-field sampling` (`58ededd`), `fix(force): changing spaceSize disabled many-body and reused stale velocity` (`eeef329`), `refactor(force): drop dead grid-level branch and fix many-body comments` (`edba6b2`)
+**Commits:** `Precise Monte-Carlo near field force` (`3c78989`), `Add Repulsion Benchmark story` (`0c4d9d9`), `docs(force): explain grid-based many-body repulsion` (`7a612c6`); hardening: `fix(force): exclude absent points from near-field slots` (`24ed690`), `fix(force): replace sin-based hash with lowbias32 in near-field sampling` (`58ededd`), `fix(force): changing spaceSize disabled many-body and reused stale velocity` (`eeef329`), `refactor(force): drop dead grid-level branch and fix many-body comments` (`edba6b2`), `fix(stories): stop the repulsion benchmark when its story unmounts` (`5c5c0a2`), `fix(force): 16-bit peel depth buffer quantized the 24-bit sampling hash` (`1f69a26`), `fix(docs): diagram generator could not run under the repo's ESM package` (`babbe27`)
 
 ## Why
 
@@ -69,12 +69,17 @@ Both live in `force-nearfield.frag`:
 
 ## Follow-ups
 
-Fixes and cleanup after the first landing (all in `src/modules/ForceManyBody/`):
+Fixes and cleanup after the first landing:
 
 - **Cross-platform sampling hash** — the per-tick point hash moved from a `fract(sin(...))`
   one-liner to the integer **lowbias32** hash. `sin()` loses precision at large point indices
   and diverges across GPU vendors, correlating or colliding hashes and quietly biasing the
   depth-peel sample; integer ops are exact everywhere.
+- **Depth resolution matches the hash** — the peel's depth test ran on a 16-bit buffer while
+  the next pass's eligibility compared the full 24-bit hash, so hashes differing only below the
+  16-bit quantum tied in depth and draw order could exclude the true smallest-hash point from
+  the tick's sample (the same order-dependent exclusion the lowbias32 fix closed, re-opened
+  through the depth buffer). The slot framebuffers now use `depth24plus`.
 - **Absent points excluded from slots** — a removed point's NaN position could be peeled into a
   cell's sample and poison every neighbor's force. Slot building now skips absent points, matching
   the aggregation pass.
@@ -84,6 +89,13 @@ Fixes and cleanup after the first landing (all in `src/modules/ForceManyBody/`):
 - **Dead code + comments** — removed an unreachable grid-level recreation branch (a level's size
   is fixed by its index) and corrected stale comments, including the `simulationRepulsionTheta`
   JSDoc.
+- **Benchmark story cancellation** — the benchmark loop ran fire-and-forget, so switching
+  stories mid-run left it stepping up to 200k-point graphs against a detached DOM node. Story
+  teardown now sets a `cancelled` flag checked at every await; a readiness-poll timeout also
+  fails loudly instead of reporting ~0ms rows with infinite fps.
+- **Diagram generator runnable** — `docs/many-body-force/gen-diagrams.js` was CommonJS under the
+  repo's `"type": "module"`, so its documented `node` command always threw; renamed to `.cjs`
+  (regenerated output was byte-identical to the checked-in SVGs).
 
 ## Notes
 
