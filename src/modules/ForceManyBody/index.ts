@@ -730,7 +730,12 @@ export class ForceManyBody extends CoreModule {
         width: finest.gridSize,
         height: finest.gridSize,
         colorAttachments: [texture],
-        depthStencilAttachment: 'depth16unorm',
+        // Depth resolution must cover the 24-bit peel hash: the depth test picks
+        // each slot's winner, but the next pass's eligibility compares the full
+        // hash from the color target. A 16-bit depth buffer quantizes ties into
+        // existence, and a tie resolved by draw order can exclude the true
+        // smallest-hash point from the whole tick's sample.
+        depthStencilAttachment: 'depth24plus',
       })
       this.nearFieldSlotTargets.push({ texture, fbo })
     }
