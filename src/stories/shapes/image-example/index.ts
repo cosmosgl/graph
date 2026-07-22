@@ -245,7 +245,6 @@ export const imageExample = (): {div: HTMLDivElement; graph: Graph; destroy?: ()
 
     const destroy = (): void => {
       isDestroyed = true
-      graph.destroy()
     }
 
     return { div, graph, destroy }

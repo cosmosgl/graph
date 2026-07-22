@@ -146,9 +146,5 @@ export const interactiveLinkStyles = (): { div: HTMLDivElement; graph: Graph; de
     onScaleOnZoomChange: (on) => { graph.setConfigPartial({ scaleLinksOnZoom: on }); graph.render() },
   }))
 
-  const destroy = (): void => {
-    graph.destroy()
-  }
-
-  return { div, graph, destroy }
+  return { div, graph }
 }

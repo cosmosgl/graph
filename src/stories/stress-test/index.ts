@@ -117,9 +117,5 @@ export const hyperbolicStressTest = (): { graph: Graph; div: HTMLDivElement; des
     linkBlendingButton.textContent = `Link blending: ${linkBlending ? 'On' : 'Off'}`
   })
 
-  const destroy = (): void => {
-    graph.destroy()
-  }
-
-  return { div, graph, destroy }
+  return { div, graph }
 }

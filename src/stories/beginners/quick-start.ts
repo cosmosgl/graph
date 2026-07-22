@@ -50,9 +50,5 @@ export const quickStart = (): { graph: Graph; div: HTMLDivElement; destroy?: () 
 
   graph.render()
 
-  const destroy = (): void => {
-    graph.destroy()
-  }
-
-  return { div, graph, destroy }
+  return { div, graph }
 }

@@ -61,9 +61,5 @@ export const moscowMetroStations = (): {graph: Graph; div: HTMLDivElement; destr
     graph.fitView()
   })
 
-  const destroy = (): void => {
-    graph.destroy()
-  }
-
-  return { div, graph, destroy }
+  return { div, graph }
 }

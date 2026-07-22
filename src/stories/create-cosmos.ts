@@ -15,7 +15,7 @@ export type CosmosStoryProps = GraphConfig & {
   clusterStrength?: Float32Array;
 }
 
-export const createCosmos = (props: CosmosStoryProps): { div: HTMLDivElement; graph: Graph; destroy?: () => void} => {
+export const createCosmos = (props: CosmosStoryProps): { div: HTMLDivElement; graph: Graph } => {
   const div = document.createElement('div')
   div.style.height = '100vh'
   div.style.width = '100%'
@@ -65,9 +65,5 @@ export const createCosmos = (props: CosmosStoryProps): { div: HTMLDivElement; gr
   graph.zoom(0.9)
   graph.render()
 
-  const destroy = (): void => {
-    graph.destroy()
-  }
-
-  return { div, graph, destroy }
+  return { div, graph }
 }

@@ -70,7 +70,6 @@ export const pinnedPoints = (): { graph: Graph; div: HTMLDivElement; destroy: ()
 
   // Cleanup function to destroy the external device
   const destroy = (): void => {
-    graph.destroy()
     devicePromise.then(device => device.destroy())
   }
 

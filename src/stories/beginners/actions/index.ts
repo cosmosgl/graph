@@ -189,9 +189,5 @@ export const actions = (): { graph: Graph; div: HTMLDivElement; destroy?: () => 
   highlightPointsInAreaButton.addEventListener('click', highlightPointsInArea)
   actionsDiv.appendChild(highlightPointsInAreaButton)
 
-  const destroy = (): void => {
-    graph.destroy()
-  }
-
-  return { div, graph, destroy }
+  return { div, graph }
 }

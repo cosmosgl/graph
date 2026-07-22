@@ -249,7 +249,6 @@ export const citiesTransition = async (): Promise<{
     graph,
     destroy: (): void => {
       stopLoopTimer()
-      graph.destroy()
     },
   }
 }

@@ -71,9 +71,5 @@ export const gradientLinks = (): { div: HTMLDivElement; graph: Graph; destroy?: 
   graph.render()
   graph.fitView(0)
 
-  const destroy = (): void => {
-    graph.destroy()
-  }
-
-  return { div, graph, destroy }
+  return { div, graph }
 }

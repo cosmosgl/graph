@@ -125,9 +125,5 @@ export const pointOcclusionCulling = (): { graph: Graph; div: HTMLDivElement; de
     translucencyButton.textContent = `Translucent points: ${translucencyEnabled ? 'On' : 'Off'}`
   })
 
-  const destroy = (): void => {
-    graph.destroy()
-  }
-
-  return { div, graph, destroy }
+  return { div, graph }
 }

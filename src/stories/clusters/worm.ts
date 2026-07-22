@@ -6,7 +6,7 @@ import { generateMeshData } from '../generate-mesh-data'
 export const worm = (): {graph: Graph; div: HTMLDivElement; destroy?: () => void} => {
   const { pointPositions, pointColors, links, linkColors, pointClusters } = generateMeshData(100, 100, 1000, 1.0)
 
-  const { div, graph, destroy } = createCosmos({
+  const { div, graph } = createCosmos({
     simulationGravity: 0.5,
     simulationRepulsion: 1,
     simulationLinkSpring: 1,
@@ -36,5 +36,5 @@ export const worm = (): {graph: Graph; div: HTMLDivElement; destroy?: () => void
     },
   })
 
-  return { div, graph, destroy }
+  return { div, graph }
 }

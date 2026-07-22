@@ -290,9 +290,5 @@ export const addRemovePoints = (): { graph: Graph; div: HTMLDivElement; destroy?
   renderHint()
   reset()
 
-  const destroy = (): void => {
-    graph.destroy()
-  }
-
-  return { div, graph, destroy }
+  return { div, graph }
 }
