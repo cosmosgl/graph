@@ -46,6 +46,7 @@ export const MeshWithHoles: Story = {
 
 export const OnDemandRendering: Story = {
   ...createStory(onDemandRendering),
+  name: 'On-Demand Rendering',
   parameters: {
     sourceCode: [
       { name: 'Story', code: onDemandRenderingRaw },

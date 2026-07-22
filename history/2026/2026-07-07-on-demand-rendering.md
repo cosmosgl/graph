@@ -88,7 +88,7 @@ fails to schedule a frame.
 
 ## Example
 
-`src/stories/misc/on-demand-rendering.ts` (*Examples/Misc → On Demand
+`src/stories/misc/on-demand-rendering.ts` (*Examples/Misc → On-Demand
 Rendering*): a mesh graph with a frame-counter overlay (patched
 `requestAnimationFrame`, updated on a `setInterval` so it keeps reporting while cosmos
 renders nothing). Watch the counter hit "idle" after the simulation decays, and resume
