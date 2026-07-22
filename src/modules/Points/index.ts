@@ -1753,13 +1753,12 @@ export class Points extends CoreModule {
     const hasHighlighting = config.highlightedPointIndices !== undefined
 
     // Occlusion culling skips fragments hidden under opaque points via depth
-    // testing. Auto-enabled when points are effectively opaque; `true` forces
-    // it (translucent fragments just fall through to the blended fringe pass);
-    // `false` disables. Highlighting always falls back — its layered greyed/
-    // highlighted draw relies on paint order, not index order.
+    // testing. Applies only while points are effectively opaque; `false`
+    // disables it entirely. Highlighting always falls back — its layered
+    // greyed/highlighted draw relies on paint order, not index order.
     const useOcclusionCulling =
-      config.pointOcclusionCulling !== false &&
-      (config.pointOcclusionCulling === true || config.pointOpacity >= 1) &&
+      config.pointOcclusionCulling &&
+      config.pointOpacity >= 1 &&
       !hasHighlighting &&
       !!this.drawCoreCommand &&
       this.reversedPointIndexBuffer?.byteLength === data.pointsNumber * 4

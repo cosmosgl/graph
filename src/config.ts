@@ -117,21 +117,16 @@ export interface GraphConfigInterface {
   pointSizeScale: number;
 
   /**
-   * Controls the depth-based occlusion culling optimization that skips shading
-   * and blending of point fragments hidden underneath other opaque points.
-   * Greatly improves performance when many large opaque points overlap;
-   * rendering output stays visually identical (point edges remain antialiased
-   * and per-point translucent colors still blend correctly).
-   * - `undefined` (default): enabled automatically while `pointOpacity` is `1`
-   *   and `highlightedPointIndices` is not set.
-   * - `true`: force the optimized path regardless of `pointOpacity` (harmless —
-   *   translucent fragments are simply drawn blended, without the speedup).
-   *   Highlighting still falls back to the standard path, which its layered
-   *   rendering requires.
-   * - `false`: always use the standard single-pass rendering.
-   * Default value: `undefined`
+   * Depth-based occlusion culling: skips shading and blending of point
+   * fragments hidden underneath other opaque points. Greatly improves
+   * performance when many large opaque points overlap; rendering output stays
+   * visually identical (point edges remain antialiased and per-point
+   * translucent colors still blend correctly). Applies automatically only
+   * while it is safe: `pointOpacity` is `1` and `highlightedPointIndices` is
+   * not set. Set to `false` to always use the standard single-pass rendering.
+   * Default value: `true`
    */
-  pointOcclusionCulling?: boolean;
+  pointOcclusionCulling: boolean;
 
   /**
    * Cursor style to use when hovering over a point

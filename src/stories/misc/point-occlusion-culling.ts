@@ -106,21 +106,14 @@ export const pointOcclusionCulling = (): { graph: Graph; div: HTMLDivElement; de
   graph.setPointColors(opaqueColors)
   graph.render()
 
-  // Cycle through the three pointOcclusionCulling states
-  const occlusionStates: { value: boolean | undefined; label: string }[] = [
-    { value: undefined, label: 'Occlusion culling: Auto' },
-    { value: false, label: 'Occlusion culling: Off' },
-    { value: true, label: 'Occlusion culling: Forced' },
-  ]
-  let occlusionStateIndex = 0
+  let occlusionEnabled = true
   const applyOcclusionState = (): void => {
-    const state = occlusionStates[occlusionStateIndex] as { value: boolean | undefined; label: string }
-    graph.setConfigPartial({ pointOcclusionCulling: state.value })
-    occlusionButton.textContent = state.label
+    graph.setConfigPartial({ pointOcclusionCulling: occlusionEnabled })
+    occlusionButton.textContent = `Occlusion culling: ${occlusionEnabled ? 'On' : 'Off'}`
   }
   applyOcclusionState()
   occlusionButton.addEventListener('click', () => {
-    occlusionStateIndex = (occlusionStateIndex + 1) % occlusionStates.length
+    occlusionEnabled = !occlusionEnabled
     applyOcclusionState()
   })
 
