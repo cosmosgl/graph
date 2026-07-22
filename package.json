@@ -64,7 +64,6 @@
     "eslint-plugin-storybook": "^0.11.1",
     "eslint-plugin-unicorn": "^43.0.1",
     "lint-staged": "^13.0.3",
-    "pre-commit": "^1.2.2",
     "remark-gfm": "^4.0.0",
     "storybook": "^8.4.5",
     "typescript": "^5.9.3",
@@ -89,7 +88,6 @@
     "gl-matrix": "^3.4.3",
     "random": "^4.1.0"
   },
-  "pre-commit": "lint:staged",
   "lint-staged": {
     "*.{js,ts}": "eslint --quiet --cache --fix --ignore-pattern 'docs/**'"
   },
