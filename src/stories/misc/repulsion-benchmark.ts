@@ -165,7 +165,6 @@ export const repulsionBenchmark = (): { graph: Graph; div: HTMLDivElement; destr
     div: outer,
     destroy: (): void => {
       cancelled = true
-      graph.destroy()
     },
   }
 }

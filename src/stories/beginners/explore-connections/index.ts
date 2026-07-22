@@ -172,9 +172,5 @@ export const exploreConnections = (): { graph: Graph; div: HTMLDivElement; destr
   graph.zoom(0.9)
   graph.render()
 
-  const destroy = (): void => {
-    graph.destroy()
-  }
-
-  return { div, graph, destroy }
+  return { div, graph }
 }

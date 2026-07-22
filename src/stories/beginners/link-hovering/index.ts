@@ -93,9 +93,5 @@ export const linkHovering = (): { div: HTMLDivElement; graph: Graph; destroy?: (
     graph.render()
   })
 
-  const destroy = (): void => {
-    graph.destroy()
-  }
-
-  return { div, graph, destroy }
+  return { div, graph }
 }

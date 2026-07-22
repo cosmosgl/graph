@@ -15,6 +15,9 @@ export const createStory: (storyFunction: () => {
 }>) => Story = (storyFunction) => ({
   async beforeEach (d): Promise<() => void> {
     return (): void => {
+      // Teardown contract: the graph is destroyed here, once, for every story.
+      // A story's `destroy` is only for cleanup beyond the graph itself
+      // (timers, listeners, restored globals, external devices).
       d.args.destroy?.()
       d.args.graph?.destroy()
     }

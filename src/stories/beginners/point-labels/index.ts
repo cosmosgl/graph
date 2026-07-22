@@ -61,9 +61,5 @@ export const pointLabels = (
     pointsToShowLabelsFor.map((l) => pointLabelToIndex.get(l) as number)
   )
 
-  const destroy = (): void => {
-    graph.destroy()
-  }
-
-  return { div, graph, destroy }
+  return { div, graph }
 }

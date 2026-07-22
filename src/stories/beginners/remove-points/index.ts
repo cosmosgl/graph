@@ -88,9 +88,5 @@ export const removePoints = (): { graph: Graph; div: HTMLDivElement; destroy?: (
 
   pauseButton.addEventListener('click', togglePause)
 
-  const destroy = (): void => {
-    graph.destroy()
-  }
-
-  return { div, graph, destroy }
+  return { div, graph }
 }

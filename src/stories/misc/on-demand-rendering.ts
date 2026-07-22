@@ -21,7 +21,7 @@ export const onDemandRendering = (): { graph: Graph; div: HTMLDivElement; destro
     })
 
   const { pointPositions, links, pointColors } = generateMeshData(40, 30, 15, 1.0)
-  const { div, graph, destroy } = createCosmos({
+  const { div, graph } = createCosmos({
     pointPositions,
     links,
     pointColors,
@@ -51,7 +51,6 @@ export const onDemandRendering = (): { graph: Graph; div: HTMLDivElement; destro
     destroy: (): void => {
       window.clearInterval(intervalId)
       window.requestAnimationFrame = originalRequestAnimationFrame
-      destroy?.()
     },
   }
 }

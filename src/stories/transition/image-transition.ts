@@ -120,7 +120,6 @@ export const imageTransition = async (): Promise<{
     graph,
     destroy: (): void => {
       stopLoopTimer()
-      graph.destroy()
     },
   }
 }
