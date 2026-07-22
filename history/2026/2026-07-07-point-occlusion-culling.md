@@ -35,7 +35,9 @@ standard technique for opaque sprites in point-cloud/particle renderers:
 Depth encodes the pre-existing paint order — the vertex shader writes
 `z_ndc = 1 − 2·(i + 0.5)/N` (higher point index = nearer = wins), so output is visually
 identical to the standard path. The z write is unconditional and harmless when depth
-testing is off. A 24-bit depth buffer resolves up to ~16.7M points.
+testing is off. Distinct depths hold up to ~8.4M points — the fp32 `i + 0.5` loses its
+half at 2²³ before the (in practice 24-bit) depth buffer runs out; past that,
+index-adjacent overlapping points can drop an antialiased edge, nothing worse.
 
 The reversed draw order comes from a `Uint32Array` element index buffer `[N−1 … 0]`
 (4 bytes/point, rebuilt only when the point count changes); attribute buffers, the GL
