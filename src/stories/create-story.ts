@@ -2,7 +2,7 @@ import { Graph } from '@cosmos.gl/graph'
 import type { StoryObj } from '@storybook/html'
 import { CosmosStoryProps } from '@/graph/stories/create-cosmos'
 
-export type Story = StoryObj<CosmosStoryProps & { graph: Graph; destroy?: () => void }>;
+export type Story = StoryObj<CosmosStoryProps & { graph: Graph; destroy?: () => void; _disposed?: boolean }>;
 
 export const createStory: (storyFunction: () => {
   graph: Graph;
@@ -14,10 +14,12 @@ export const createStory: (storyFunction: () => {
   destroy?: () => void;
 }>) => Story = (storyFunction) => ({
   async beforeEach (d): Promise<() => void> {
+    d.args._disposed = false
     return (): void => {
       // Teardown contract: the graph is destroyed here, once, for every story.
       // A story's `destroy` is only for cleanup beyond the graph itself
       // (timers, listeners, restored globals, external devices).
+      d.args._disposed = true
       d.args.destroy?.()
       d.args.graph?.destroy()
     }
@@ -33,6 +35,14 @@ export const createStory: (storyFunction: () => {
       div.innerHTML = '<div style="display: flex; align-items: center; justify-content: center; height: 100%; color: #666;">Loading story...</div>'
 
       result.then((story) => {
+        // The story may resolve after its teardown already ran (switched away
+        // while loading) — mounting then would leak a live graph into a
+        // detached div. Dispose it immediately instead.
+        if (args._disposed) {
+          story.destroy?.()
+          story.graph.destroy()
+          return
+        }
         args.graph = story.graph
         args.destroy = story.destroy
         // Replace the content with the actual story div
