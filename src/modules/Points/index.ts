@@ -793,10 +793,12 @@ export class Points extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
-      },
+        EXIT_DEFAULT_SIZE: glslFloatLiteral(EXIT_DEFAULT_SIZE),
+        EXIT_DEFAULT_COLOR_CHANNEL: glslFloatLiteral(EXIT_DEFAULT_COLOR_CHANNEL),
+      } as unknown as Record<string, boolean>,
       bindings: {
-        drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer(device, 'drawVertexUniforms'),
-        drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer(device, 'drawFragmentUniforms'),
+        drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer('drawVertexUniforms'),
+        drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer('drawFragmentUniforms'),
         // All texture bindings will be set dynamically in draw() method
       },
       parameters: CORE_PASS_PARAMETERS,
