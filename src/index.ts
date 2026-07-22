@@ -172,6 +172,9 @@ export class Graph {
       if (this._isDestroyed) {
         // Only destroy the device if Graph owns it
         if (this.shouldDestroyDevice) {
+          // luma's device.destroy() leaves the canvas context's Resize/Intersection
+          // observers connected — stop them explicitly or they outlive the graph.
+          device.canvasContext?.destroy()
           device.destroy()
         }
         return device
@@ -1572,6 +1575,9 @@ export class Graph {
         })
         clearPass.end()
         this.device.submit()
+        // luma's device.destroy() leaves the canvas context's Resize/Intersection
+        // observers connected — stop them explicitly or they outlive the graph.
+        this.device.canvasContext?.destroy()
         this.device.destroy()
       }
     }
