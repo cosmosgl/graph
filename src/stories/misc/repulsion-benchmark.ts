@@ -35,7 +35,9 @@ const makePositions = (n: number): Float32Array => {
   return positions
 }
 
-const timeSize = async (div: HTMLDivElement, positions: Float32Array): Promise<number> => {
+// Resolves to null (without timing anything) if the story is torn down while
+// this size's graph is being set up — the caller stops the run.
+const timeSize = async (div: HTMLDivElement, positions: Float32Array, isCancelled: () => boolean): Promise<number | null> => {
   const config: GraphConfig = {
     spaceSize: SPACE_SIZE,
     enableSimulation: true,
@@ -54,6 +56,7 @@ const timeSize = async (div: HTMLDivElement, positions: Float32Array): Promise<n
   try {
     // Device init is async; step()/getPointPositions() are no-ops until it resolves.
     await graph.ready
+    if (isCancelled()) return null
     graph.setPointPositions(positions)
     graph.render()
     // Kill the internal rAF loop so it doesn't compete with our manual stepping.
@@ -68,7 +71,11 @@ const timeSize = async (div: HTMLDivElement, positions: Float32Array): Promise<n
     for (let attempt = 0; attempt < 120 && !ready; attempt += 1) {
       ready = graph.getPointPositions().length > 0
       if (!ready) await nextFrame()
+      if (isCancelled()) return null
     }
+    // Timing an un-uploaded graph would measure no-op steps and report ~0ms
+    // rows with infinite fps — fail loudly instead of publishing fake numbers.
+    if (!ready) throw new Error(`positions for ${positions.length / 2} points never became readable`)
 
     for (let i = 0; i < WARMUP_STEPS; i += 1) graph.step()
     graph.getPointPositions() // flush warmup
@@ -117,11 +124,18 @@ export const repulsionBenchmark = (): { graph: Graph; div: HTMLDivElement; destr
     table.textContent = [header, '─'.repeat(header.length), ...lines].join('\n')
   }
 
+  // Storybook's teardown can only signal us — the loop below must notice and
+  // stop, or it keeps creating graphs and stepping the GPU against a detached
+  // DOM node long after the user has switched stories.
+  let cancelled = false
+
   const run = async (): Promise<void> => {
     for (const size of SIZES) {
+      if (cancelled) return
       status.textContent = `Running ${size.toLocaleString()} points…`
       await nextFrame()
-      const ms = await timeSize(bench, makePositions(size))
+      const ms = await timeSize(bench, makePositions(size), () => cancelled)
+      if (ms === null) return // story torn down mid-size
       rows.push({
         size,
         ms,
@@ -146,5 +160,12 @@ export const repulsionBenchmark = (): { graph: Graph; div: HTMLDivElement; destr
   const placeholderDiv = document.createElement('div')
   const graph = new Graph(placeholderDiv, { enableSimulation: false })
 
-  return { graph, div: outer, destroy: () => graph.destroy() }
+  return {
+    graph,
+    div: outer,
+    destroy: (): void => {
+      cancelled = true
+      graph.destroy()
+    },
+  }
 }
