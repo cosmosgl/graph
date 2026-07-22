@@ -18,10 +18,14 @@ export const createStory: (storyFunction: () => {
     return (): void => {
       // Teardown contract: the graph is destroyed here, once, for every story.
       // A story's `destroy` is only for cleanup beyond the graph itself
-      // (timers, listeners, restored globals, external devices).
+      // (timers, listeners, restored globals, external devices). A throwing
+      // destroy must not skip the graph teardown that follows it.
       d.args._disposed = true
-      d.args.destroy?.()
-      d.args.graph?.destroy()
+      try {
+        d.args.destroy?.()
+      } finally {
+        d.args.graph?.destroy()
+      }
     }
   },
   render: (args): HTMLDivElement => {
@@ -39,8 +43,11 @@ export const createStory: (storyFunction: () => {
         // while loading) — mounting then would leak a live graph into a
         // detached div. Dispose it immediately instead.
         if (args._disposed) {
-          story.destroy?.()
-          story.graph.destroy()
+          try {
+            story.destroy?.()
+          } finally {
+            story.graph.destroy()
+          }
           return
         }
         args.graph = story.graph
