@@ -1,5 +1,5 @@
 // Regenerates the SVG diagrams for this folder. Run from here:
-//   node gen-diagrams.js .
+//   node gen-diagrams.cjs .
 // Grid-coverage panels compute cell coverage with the SAME rules as the
 // shaders (first level: whole grid minus 3×3; others: 6×6 child block minus
 // 3×3), so the pictures are exact, not artistic impressions. Keep this script
