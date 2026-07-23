@@ -13,7 +13,7 @@
     "CITATION.cff"
   ],
   "scripts": {
-    "prepare": "git rev-parse --is-inside-work-tree >/dev/null 2>&1 && (git config core.hooksPath .githooks || echo \"prepare: warning: could not set core.hooksPath -- pre-commit hooks will not run. Run 'git config core.hooksPath .githooks' manually.\" 1>&2) || true",
+    "prepare": "sh scripts/prepare.sh",
     "build": "vite build --mode es && vite build --mode umd",
     "watch": "vite build --watch",
     "lint": "eslint --cache ./src --ext .ts --ignore-path .gitignore",
