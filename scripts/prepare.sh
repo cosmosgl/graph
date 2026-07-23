@@ -11,7 +11,7 @@
 # to support (see .githooks/pre-commit).
 set -e
 
-if ! git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+if [ "$(git rev-parse --is-inside-work-tree 2>/dev/null)" != "true" ]; then
   exit 0
 fi
 
