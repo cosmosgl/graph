@@ -2171,6 +2171,13 @@ export class Graph {
     if (this.zoomInstance.isRunning) return true // user gesture or programmatic d3 transition
     // Right-click repulsion runs regardless of isSimulationRunning (see runSimulationStep)
     if (this.isRightClickMouse && this.config.enableRightClickRepulsion) return true
+    // An issued async pick lands in resolvePendingPick() one or more frames
+    // AFTER detection ran — by which time hasPendingHoverWork() is already
+    // false. Keep the loop alive until the readback is collected, or the last
+    // hover before the scene settles would never apply (and the readback slot
+    // would stay occupied, blocking the next pick until something else wakes
+    // the loop).
+    if (this.points?.hasPendingPickReadback || this.lines?.hasPendingPickReadback) return true
     return this.hasPendingHoverWork()
   }
 
