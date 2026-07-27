@@ -39,13 +39,15 @@ export class PickingReadback {
     this.buffer ||= gl.createBuffer()
     if (!this.buffer) return false
 
-    const previousFramebuffer = gl.getParameter(gl.FRAMEBUFFER_BINDING) as WebGLFramebuffer | null
-    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
+    // readPixels only consults the READ framebuffer — bind and restore just
+    // that one, so a distinct DRAW binding (if any) is never clobbered.
+    const previousFramebuffer = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING) as WebGLFramebuffer | null
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, framebuffer)
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.buffer)
     gl.bufferData(gl.PIXEL_PACK_BUFFER, this.data.byteLength, gl.STREAM_READ)
     gl.readPixels(x, y, width, height, gl.RGBA, gl.FLOAT, 0)
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null)
-    gl.bindFramebuffer(gl.FRAMEBUFFER, previousFramebuffer)
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, previousFramebuffer)
 
     this.sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)
     gl.flush()
@@ -68,7 +70,11 @@ export class PickingReadback {
     gl.deleteSync(this.sync)
     this.sync = null
     this.isInFlight = false
-    if (status === gl.WAIT_FAILED) return null
+    // Only a signaled fence guarantees the copy happened. Anything else —
+    // WAIT_FAILED, or the 0 a lost context returns — must not fall through to
+    // getBufferSubData (a no-op when lost), which would hand back the reused
+    // CPU array as a phantom "point 0 at [0,0]" pick.
+    if (status !== gl.ALREADY_SIGNALED && status !== gl.CONDITION_SATISFIED) return null
 
     gl.bindBuffer(gl.PIXEL_PACK_BUFFER, this.buffer)
     gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, this.data)

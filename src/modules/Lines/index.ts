@@ -475,8 +475,10 @@ export class Lines extends CoreModule {
     const { device, data, store } = this
     if (data.linksNumber === undefined || data.links === undefined) return
     if (!store.pointsTextureSize) return // Guard against 0/undefined
-    // New link endpoints invalidate the rasterized link index buffer
+    // New link endpoints invalidate the rasterized link index buffer —
+    // including a pick already in flight, whose index belongs to the old set
     this.isLinkIndexBufferStale = true
+    this.discardPendingPick()
 
     // Create separate buffers for pointA and pointB
     const pointAData = new Float32Array(data.linksNumber * 2)
@@ -943,22 +945,35 @@ export class Lines extends CoreModule {
   }
 
   /**
-   * Starts an asynchronous link pick at the current cursor position (no-op
-   * while a previous one is still in flight). The result is collected one or
-   * more frames later via `takePickLinkResult()` — no GPU→CPU stall.
+   * Starts an asynchronous link pick at the current cursor position. The
+   * result is collected one or more frames later via `takePickLinkResult()` —
+   * no GPU→CPU stall. Returns whether the detection was issued (or is
+   * structurally impossible): `false` only for the retryable case — the
+   * readback slot still occupied — so the caller keeps its trigger armed.
    */
-  public requestPickLink (): void {
+  public requestPickLink (): boolean {
+    // Slot still draining a previous pick — retryable; checked before the
+    // buffer update so a colliding attempt doesn't pay a full index pass.
+    if (this.pickingReadback?.inFlight) return false
     this.updateLinkIndexBuffer()
-    if (!this.linkIndexFbo || this.linkIndexFbo.destroyed) return
+    if (!this.linkIndexFbo || this.linkIndexFbo.destroyed) return true
     const gl = (this.device as unknown as { gl?: WebGL2RenderingContext }).gl
     const handle = (this.linkIndexFbo as unknown as { handle?: WebGLFramebuffer }).handle
-    if (!gl || !handle) return // non-WebGL backend: the sync path still works
+    if (!gl || !handle) return true // non-WebGL backend: the sync path still works
 
     this.pickingReadback ||= new PickingReadback(gl, 4)
-    if (this.pickingReadback.inFlight) return
     const pixel = this.getCursorPickingPixel()
-    if (!pixel) return
-    this.pickingReadback.issue(handle, pixel.x, pixel.y, 1, 1)
+    if (!pixel) return true
+    return this.pickingReadback.issue(handle, pixel.x, pixel.y, 1, 1)
+  }
+
+  /**
+   * Drops an in-flight async link pick. Called when the pending result can no
+   * longer be trusted: a synchronous pick superseded it, or the link data it
+   * was rasterized from was replaced.
+   */
+  public discardPendingPick (): void {
+    this.pickingReadback?.cancel()
   }
 
   /**
