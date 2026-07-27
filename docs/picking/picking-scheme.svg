@@ -370,8 +370,9 @@
 <text x="522" y="937" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">cursor sits on link 4, but point 3 from the 9×9 window takes priority.</text>
 <text x="506" y="969" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="14" fill="#1e293b" text-anchor="start" font-weight="600">Both buffers share one lifecycle</text>
 <text x="506" y="991" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">Re-rendered only when marked stale: points move, data or config</text>
-<text x="506" y="1010" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">changes, zoom, resize, hover change. Read back asynchronously</text>
-<text x="506" y="1029" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">(PBO + fence) — the hover path never stalls the GPU pipeline.</text>
+<text x="506" y="1010" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">changes, zoom, resize — plus hover changes, which invalidate the</text>
+<text x="506" y="1029" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">link buffer only (the hovered link is drawn wider there). Read</text>
+<text x="506" y="1048" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">back asynchronously (PBO + fence) — hover never stalls the GPU.</text>
 <rect x="22" y="1075" width="13" height="13" fill="#decb5f" fill-opacity="0.55" stroke="#e2e8f0"/>
 <text x="41" y="1086" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#64748b" text-anchor="start" font-weight="normal">pixels covered by a point</text>
 <rect x="210" y="1075" width="13" height="13" fill="#8b9dc0" fill-opacity="0.45" stroke="#e2e8f0"/>
