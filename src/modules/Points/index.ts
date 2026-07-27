@@ -388,6 +388,11 @@ export class Points extends CoreModule {
     };
   }> | undefined
 
+  /** Whether an issued async pick is still awaiting its GPU readback. */
+  public get hasPendingPickReadback (): boolean {
+    return this.pickingReadback?.inFlight ?? false
+  }
+
   public updatePositions (): boolean {
     const { device, store, data, config: { rescalePositions, enableSimulation } } = this
 

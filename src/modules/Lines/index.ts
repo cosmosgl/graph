@@ -128,6 +128,11 @@ export class Lines extends CoreModule {
   // Track previous screen size to detect changes
   private previousScreenSize: [number, number] | undefined
 
+  /** Whether an issued async pick is still awaiting its GPU readback. */
+  public get hasPendingPickReadback (): boolean {
+    return this.pickingReadback?.inFlight ?? false
+  }
+
   public initPrograms (): void {
     const { device, config, store, data } = this
 
