@@ -19,9 +19,11 @@ scanning elements per mouse move:
   over the link result.
 
 Both buffers re-render only when marked stale (movement, zoom, resize, data or
-config updates, hover change) and are read back asynchronously (PBO + fence),
-so the hover path never stalls the GPU pipeline. Clicks, drag starts and
-long-presses still read synchronously — they need the answer inside the event.
+config updates); a hover change additionally invalidates just the link buffer —
+the hovered link is drawn wider there, so the hover is an input to that buffer
+and that buffer only. Both are read back asynchronously (PBO + fence), so the
+hover path never stalls the GPU pipeline. Clicks, drag starts and long-presses
+still read synchronously — they need the answer inside the event.
 
 The full engineering record — why the old scheme was O(elements) with a
 pipeline stall, the change-gating rules, the async lifecycle invariants — is

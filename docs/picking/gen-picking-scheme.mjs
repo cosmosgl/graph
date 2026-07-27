@@ -224,8 +224,9 @@ text(NX, ny, 'Both buffers share one lifecycle', { size: 14, color: C.title, wei
 ny += 22
 for (const line of [
   'Re-rendered only when marked stale: points move, data or config',
-  'changes, zoom, resize, hover change. Read back asynchronously',
-  '(PBO + fence) — the hover path never stalls the GPU pipeline.',
+  'changes, zoom, resize — plus hover changes, which invalidate the',
+  'link buffer only (the hovered link is drawn wider there). Read',
+  'back asynchronously (PBO + fence) — hover never stalls the GPU.',
 ]) {
   text(NX, ny, line, { size: 12.5 })
   ny += 19
