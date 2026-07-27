@@ -2480,13 +2480,6 @@ export class Graph {
       return
     }
 
-    // Update last checked position
-    this._lastCheckedMouseX = this._lastMouseX
-    this._lastCheckedMouseY = this._lastMouseY
-
-    // Reset force flag after use
-    this._shouldForceHoverDetection = false
-
     this._findHoveredItemExecutionCount = 0
 
     // The view transform is an input to the picking buffer — a zoom or resize
@@ -2496,7 +2489,12 @@ export class Graph {
     const isLinkPickingActive = !!this.graph.linksNumber && this.store.isLinkHoveringEnabled
     if (immediate) {
       // Clicks, drag starts and long-presses need the result within the same
-      // event — take the small synchronous window reads.
+      // event — take the small synchronous window reads. A pick still in
+      // flight from the hover path is now superseded: left pending, it would
+      // land a frame later and overwrite this fresh result (clearing the
+      // hovered point right before its click callback fires).
+      this.points?.discardPendingPick()
+      this.lines?.discardPendingPick()
       const picked = this.points?.pickPointSync() ?? null
       let pickedLink: number | null | undefined
       // Points win over links, so the link read is only needed with no point hit
@@ -2505,10 +2503,20 @@ export class Graph {
     } else {
       // Frame-loop hover reads asynchronously (PBO + fence): the results are
       // collected by resolvePendingPick() one or more frames later, so the
-      // pipeline never stalls on a readback.
-      this.points?.requestPickPoint()
-      if (isLinkPickingActive) this.lines?.requestPickLink()
+      // pipeline never stalls on a readback. When a readback slot is still
+      // draining a previous pick, the request reports failure — leave the
+      // detection trigger armed (checked position, force flag) so the
+      // detection retries once the slot frees instead of being lost.
+      const pointIssued = this.points ? this.points.requestPickPoint() : true
+      const linkIssued = isLinkPickingActive && this.lines ? this.lines.requestPickLink() : true
+      if (!pointIssued || !linkIssued) return
     }
+
+    // Detection executed (or its async reads were issued) — consume the
+    // triggers so hasPendingHoverWork() lets the loop idle again.
+    this._lastCheckedMouseX = this._lastMouseX
+    this._lastCheckedMouseY = this._lastMouseY
+    this._shouldForceHoverDetection = false
   }
 
   /** Marks both picking buffers stale when the view transform changed since the last check. */
@@ -2597,6 +2605,11 @@ export class Graph {
     let isMouseover = false
     let isMouseout = false
 
+    // A result read against a dataset that has since been replaced can carry
+    // an index past the current point count — never let it reach user
+    // callbacks. (Data updates cancel in-flight picks; this is the backstop.)
+    if (picked && picked.index >= (this.graph.pointsNumber ?? 0)) picked = null
+
     if (picked) {
       if (this.store.hoveredPoint === undefined || this.store.hoveredPoint.index !== picked.index) {
         isMouseover = true
@@ -2614,6 +2627,10 @@ export class Graph {
   private applyPickedLink (pickedLinkIndex: number | null): { mouseover: boolean; mouseout: boolean } {
     let isMouseover = false
     let isMouseout = false
+
+    // Backstop against a stale async result decoded from a replaced link set —
+    // an out-of-range index must never reach store state or user callbacks.
+    if (pickedLinkIndex !== null && pickedLinkIndex >= (this.graph.linksNumber ?? 0)) pickedLinkIndex = null
 
     if (pickedLinkIndex !== null) {
       if (this.store.hoveredLinkIndex !== pickedLinkIndex) isMouseover = true

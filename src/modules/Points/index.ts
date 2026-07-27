@@ -524,8 +524,10 @@ export class Points extends CoreModule {
     }
 
     // The picking buffer is (re)created lazily in updatePickingBuffer(); new
-    // point data invalidates whatever it currently holds.
+    // point data invalidates whatever it currently holds — including a pick
+    // already in flight, whose indices belong to the replaced dataset.
     this.isPickingBufferStale = true
+    this.discardPendingPick()
 
     // Create buffers
     const indexData = createIndexesForBuffer(store.pointsTextureSize)
@@ -2234,24 +2236,42 @@ export class Points extends CoreModule {
   }
 
   /**
-   * Starts an asynchronous pick at the current cursor position (no-op while a
-   * previous one is still in flight). The result is collected one or more
-   * frames later via `takePickResult()` — no GPU→CPU stall.
+   * Starts an asynchronous pick at the current cursor position. The result is
+   * collected one or more frames later via `takePickResult()` — no GPU→CPU
+   * stall. Returns whether the detection was actually issued (or is
+   * structurally impossible, which callers should treat the same): `false`
+   * only for the retryable case — the readback slot still occupied by a
+   * previous pick — so the caller can keep its detection trigger armed and
+   * retry instead of silently losing the hover.
    */
-  public requestPickPoint (): void {
+  public requestPickPoint (): boolean {
+    // Slot still draining a previous pick — retryable; checked before the
+    // buffer update so a colliding attempt doesn't pay a full fill pass.
+    if (this.pickingReadback?.inFlight) return false
     this.updatePickingBuffer()
-    if (!this.pickingFbo || this.pickingFbo.destroyed) return
+    if (!this.pickingFbo || this.pickingFbo.destroyed) return true
     const gl = (this.device as unknown as { gl?: WebGL2RenderingContext }).gl
     const handle = (this.pickingFbo as unknown as { handle?: WebGLFramebuffer }).handle
-    if (!gl || !handle) return // non-WebGL backend: the sync path still works
+    if (!gl || !handle) return true // non-WebGL backend: the sync path still works
 
     this.pickingReadback ||= new PickingReadback(gl, PICKING_WINDOW_SIZE * PICKING_WINDOW_SIZE * 4)
-    if (this.pickingReadback.inFlight) return
     const window = this.getCursorPickingWindow()
-    if (!window) return
+    if (!window) return true
     if (this.pickingReadback.issue(handle, window.x, window.y, PICKING_WINDOW_SIZE, PICKING_WINDOW_SIZE)) {
       this.issuedPickingWindow = window
+      return true
     }
+    return false
+  }
+
+  /**
+   * Drops an in-flight async pick and its issued window. Called when the
+   * pending result can no longer be trusted: a synchronous pick superseded it,
+   * or the point data it was rasterized from was replaced.
+   */
+  public discardPendingPick (): void {
+    this.pickingReadback?.cancel()
+    this.issuedPickingWindow = undefined
   }
 
   /**
