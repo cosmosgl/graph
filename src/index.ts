@@ -2480,8 +2480,6 @@ export class Graph {
       return
     }
 
-    this._findHoveredItemExecutionCount = 0
-
     // The view transform is an input to the picking buffer — a zoom or resize
     // since the last detection invalidates it.
     this.updatePickingBufferStaleness()
@@ -2513,7 +2511,11 @@ export class Graph {
     }
 
     // Detection executed (or its async reads were issued) — consume the
-    // triggers so hasPendingHoverWork() lets the loop idle again.
+    // triggers so hasPendingHoverWork() lets the loop idle again. The throttle
+    // counter resets only here: a failed issue above keeps it at the
+    // threshold, so the retry runs on the next frame instead of waiting out
+    // another full throttle cycle.
+    this._findHoveredItemExecutionCount = 0
     this._lastCheckedMouseX = this._lastMouseX
     this._lastCheckedMouseY = this._lastMouseY
     this._shouldForceHoverDetection = false
