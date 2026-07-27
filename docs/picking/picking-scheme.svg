@@ -1,0 +1,387 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="950" height="1170" viewBox="0 0 950 1170">
+<rect width="950" height="1170" fill="#ffffff"/>
+<defs><marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="context-stroke"/></marker></defs>
+<rect x="20" y="52" width="440" height="470" rx="10" fill="#fafbfd" stroke="#94a3b8"/>
+<text x="36" y="34" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="16" fill="#1e293b" text-anchor="start" font-weight="600">What you see on screen</text>
+<line x1="110" y1="168" x2="230" y2="148" stroke="#8b9dc0" stroke-width="2.5" stroke-opacity="0.8"/>
+<line x1="110" y1="168" x2="180" y2="318" stroke="#8b9dc0" stroke-width="2.5" stroke-opacity="0.8"/>
+<line x1="382" y1="162" x2="350" y2="378" stroke="#8b9dc0" stroke-width="2.5" stroke-opacity="0.8"/>
+<line x1="180" y1="318" x2="270" y2="448" stroke="#8b9dc0" stroke-width="2.5" stroke-opacity="0.8"/>
+<line x1="100" y1="400" x2="382" y2="162" stroke="#8b9dc0" stroke-width="2.5" stroke-opacity="0.8"/>
+<line x1="350" y1="378" x2="270" y2="448" stroke="#8b9dc0" stroke-width="2.5" stroke-opacity="0.8"/>
+<circle cx="110" cy="168" r="22" fill="#5f69de"/>
+<circle cx="230" cy="148" r="15" fill="#de695f"/>
+<circle cx="382" cy="162" r="26" fill="#5fdea9"/>
+<circle cx="180" cy="318" r="20" fill="#decb5f"/>
+<circle cx="350" cy="378" r="18" fill="#a95fde"/>
+<circle cx="100" cy="400" r="14" fill="#3a86ff"/>
+<circle cx="270" cy="448" r="24" fill="#de695f"/>
+<path d="M 222 290 l 0 16.5 l 3.8 -3.6 l 2.6 6 l 3.4 -1.5 l -2.6 -5.9 l 5.3 -0.4 z" fill="#0f172a" stroke="#ffffff" stroke-width="1.2"/>
+<text x="238" y="298" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#64748b" text-anchor="start" font-weight="normal" paint-order="stroke" stroke="#fafbfd" stroke-width="3.5">cursor — on link 4,</text>
+<text x="238" y="314" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#64748b" text-anchor="start" font-weight="normal" paint-order="stroke" stroke="#fafbfd" stroke-width="3.5">near (not on) point 3</text>
+<text x="36" y="488" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">Hover needs to answer: which point (or link) is under the cursor?</text>
+<text x="36" y="505" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">Asking the GPU per mouse move used to cost O(elements).</text>
+<rect x="490" y="52" width="440" height="470" rx="10" fill="#fafbfd" stroke="#94a3b8"/>
+<text x="506" y="34" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="16" fill="#1e293b" text-anchor="start" font-weight="600">The point picking map (half resolution)</text>
+<rect x="560" y="138" width="20" height="20" fill="#5f69de" fill-opacity="0.55"/>
+<rect x="580" y="138" width="20" height="20" fill="#5f69de" fill-opacity="0.55"/>
+<rect x="560" y="158" width="20" height="20" fill="#5f69de" fill-opacity="0.55"/>
+<rect x="580" y="158" width="20" height="20" fill="#5f69de" fill-opacity="0.55"/>
+<rect x="560" y="178" width="20" height="20" fill="#5f69de" fill-opacity="0.55"/>
+<rect x="580" y="178" width="20" height="20" fill="#5f69de" fill-opacity="0.55"/>
+<rect x="680" y="138" width="20" height="20" fill="#de695f" fill-opacity="0.55"/>
+<rect x="700" y="138" width="20" height="20" fill="#de695f" fill-opacity="0.55"/>
+<rect x="820" y="138" width="20" height="20" fill="#5fdea9" fill-opacity="0.55"/>
+<rect x="840" y="138" width="20" height="20" fill="#5fdea9" fill-opacity="0.55"/>
+<rect x="860" y="138" width="20" height="20" fill="#5fdea9" fill-opacity="0.55"/>
+<rect x="820" y="158" width="20" height="20" fill="#5fdea9" fill-opacity="0.55"/>
+<rect x="840" y="158" width="20" height="20" fill="#5fdea9" fill-opacity="0.55"/>
+<rect x="860" y="158" width="20" height="20" fill="#5fdea9" fill-opacity="0.55"/>
+<rect x="840" y="178" width="20" height="20" fill="#5fdea9" fill-opacity="0.55"/>
+<rect x="620" y="298" width="20" height="20" fill="#decb5f" fill-opacity="0.55"/>
+<rect x="640" y="298" width="20" height="20" fill="#decb5f" fill-opacity="0.55"/>
+<rect x="660" y="298" width="20" height="20" fill="#decb5f" fill-opacity="0.55"/>
+<rect x="620" y="318" width="20" height="20" fill="#decb5f" fill-opacity="0.55"/>
+<rect x="640" y="318" width="20" height="20" fill="#decb5f" fill-opacity="0.55"/>
+<rect x="660" y="318" width="20" height="20" fill="#decb5f" fill-opacity="0.55"/>
+<rect x="800" y="358" width="20" height="20" fill="#a95fde" fill-opacity="0.55"/>
+<rect x="820" y="358" width="20" height="20" fill="#a95fde" fill-opacity="0.55"/>
+<rect x="800" y="378" width="20" height="20" fill="#a95fde" fill-opacity="0.55"/>
+<rect x="820" y="378" width="20" height="20" fill="#a95fde" fill-opacity="0.55"/>
+<rect x="560" y="378" width="20" height="20" fill="#3a86ff" fill-opacity="0.55"/>
+<rect x="560" y="398" width="20" height="20" fill="#3a86ff" fill-opacity="0.55"/>
+<rect x="720" y="418" width="20" height="20" fill="#de695f" fill-opacity="0.55"/>
+<rect x="740" y="418" width="20" height="20" fill="#de695f" fill-opacity="0.55"/>
+<rect x="720" y="438" width="20" height="20" fill="#de695f" fill-opacity="0.55"/>
+<rect x="740" y="438" width="20" height="20" fill="#de695f" fill-opacity="0.55"/>
+<rect x="720" y="458" width="20" height="20" fill="#de695f" fill-opacity="0.55"/>
+<rect x="740" y="458" width="20" height="20" fill="#de695f" fill-opacity="0.55"/>
+<line x1="500" y1="78" x2="500" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="520" y1="78" x2="520" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="540" y1="78" x2="540" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="560" y1="78" x2="560" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="580" y1="78" x2="580" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="600" y1="78" x2="600" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="620" y1="78" x2="620" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="640" y1="78" x2="640" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="660" y1="78" x2="660" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="680" y1="78" x2="680" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="700" y1="78" x2="700" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="720" y1="78" x2="720" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="740" y1="78" x2="740" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="760" y1="78" x2="760" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="780" y1="78" x2="780" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="800" y1="78" x2="800" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="820" y1="78" x2="820" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="840" y1="78" x2="840" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="860" y1="78" x2="860" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="880" y1="78" x2="880" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="900" y1="78" x2="900" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="920" y1="78" x2="920" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="78" x2="920" y2="78" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="98" x2="920" y2="98" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="118" x2="920" y2="118" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="138" x2="920" y2="138" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="158" x2="920" y2="158" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="178" x2="920" y2="178" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="198" x2="920" y2="198" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="218" x2="920" y2="218" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="238" x2="920" y2="238" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="258" x2="920" y2="258" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="278" x2="920" y2="278" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="298" x2="920" y2="298" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="318" x2="920" y2="318" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="338" x2="920" y2="338" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="358" x2="920" y2="358" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="378" x2="920" y2="378" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="398" x2="920" y2="398" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="418" x2="920" y2="418" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="438" x2="920" y2="438" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="458" x2="920" y2="458" stroke="#e2e8f0" stroke-width="1"/>
+<line x1="500" y1="478" x2="920" y2="478" stroke="#e2e8f0" stroke-width="1"/>
+<text x="590" y="172" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#0f172a" text-anchor="middle" font-weight="700">0</text>
+<text x="710" y="152" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#0f172a" text-anchor="middle" font-weight="700">1</text>
+<text x="850" y="172" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#0f172a" text-anchor="middle" font-weight="700">2</text>
+<text x="650" y="332" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#0f172a" text-anchor="middle" font-weight="700">3</text>
+<text x="830" y="392" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#0f172a" text-anchor="middle" font-weight="700">4</text>
+<text x="570" y="412" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#0f172a" text-anchor="middle" font-weight="700">5</text>
+<text x="750" y="452" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#0f172a" text-anchor="middle" font-weight="700">6</text>
+<text x="630" y="231.5" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="9" fill="#b6c0cf" text-anchor="middle" font-weight="normal">−1</text>
+<text x="730" y="251.5" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="9" fill="#b6c0cf" text-anchor="middle" font-weight="normal">−1</text>
+<text x="690" y="331.5" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="9" fill="#b6c0cf" text-anchor="middle" font-weight="normal">−1</text>
+<text x="750" y="351.5" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="9" fill="#b6c0cf" text-anchor="middle" font-weight="normal">−1</text>
+<rect x="600" y="198" width="180" height="180" fill="none" stroke="#7c3aed" stroke-width="2.5"/>
+<rect x="680" y="278" width="20" height="20" fill="none" stroke="#0f172a" stroke-width="2" stroke-dasharray="3 2"/>
+<line x1="682" y1="296" x2="674" y2="306" stroke="#7c3aed" stroke-width="2.4" marker-end="url(#arr)"/>
+<rect x="784" y="194" width="132" height="100" rx="6" fill="#fafbfd" fill-opacity="0.92"/>
+<text x="788" y="208" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#7c3aed" text-anchor="start" font-weight="600">9×9 window read</text>
+<text x="788" y="224" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#7c3aed" text-anchor="start" font-weight="normal">under the cursor:</text>
+<text x="788" y="240" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#7c3aed" text-anchor="start" font-weight="normal">nearest valid pixel</text>
+<text x="788" y="256" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#7c3aed" text-anchor="start" font-weight="600">wins — point 3, even</text>
+<text x="788" y="272" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#7c3aed" text-anchor="start" font-weight="normal">though the cursor</text>
+<text x="788" y="288" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#7c3aed" text-anchor="start" font-weight="normal">is not touching it</text>
+<text x="506" y="488" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">Each pixel stores [point index, x, y]; empty pixels hold −1.</text>
+<text x="506" y="505" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">Rendered by the GPU for all pixels at once, at half resolution.</text>
+<rect x="20" y="586" width="440" height="470" rx="10" fill="#fafbfd" stroke="#94a3b8"/>
+<text x="36" y="568" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="16" fill="#1e293b" text-anchor="start" font-weight="600">The link index buffer (full resolution)</text>
+<rect x="110" y="702" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="110" y="692" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="120" y="692" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="130" y="692" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="140" y="692" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="150" y="692" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="160" y="692" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="170" y="682" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="180" y="682" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="190" y="682" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="200" y="682" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="210" y="682" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="220" y="682" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="230" y="682" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="110" y="712" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="120" y="722" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="120" y="732" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="130" y="742" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="130" y="752" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="130" y="762" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="140" y="762" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="140" y="772" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="140" y="782" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="150" y="782" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="150" y="792" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="150" y="802" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="160" y="812" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="160" y="822" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="170" y="832" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="170" y="842" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="180" y="852" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="380" y="692" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="380" y="702" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="370" y="702" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="370" y="712" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="370" y="722" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="370" y="732" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="370" y="742" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="370" y="752" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="370" y="762" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="370" y="772" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="360" y="772" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="360" y="782" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="360" y="792" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="360" y="802" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="360" y="812" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="360" y="822" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="360" y="832" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="360" y="842" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="350" y="842" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="350" y="852" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="350" y="862" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="350" y="872" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="350" y="882" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="350" y="892" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="350" y="902" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="350" y="912" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="180" y="862" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="190" y="862" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="190" y="872" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="200" y="882" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="200" y="892" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="210" y="892" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="210" y="902" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="220" y="912" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="230" y="922" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="230" y="932" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="240" y="932" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="240" y="942" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="250" y="952" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="250" y="962" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="260" y="962" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="260" y="972" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="270" y="982" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="100" y="932" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="100" y="922" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="110" y="922" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="110" y="912" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="120" y="912" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="120" y="902" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="130" y="902" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="130" y="892" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="140" y="892" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="150" y="882" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="160" y="882" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="160" y="872" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="170" y="872" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="170" y="862" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="190" y="852" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="190" y="842" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="200" y="842" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="210" y="832" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="220" y="822" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="230" y="812" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="240" y="812" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="240" y="802" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="250" y="802" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="260" y="792" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="270" y="782" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="280" y="772" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="290" y="772" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="290" y="762" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="300" y="762" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="300" y="752" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="310" y="752" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="310" y="742" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="320" y="742" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="320" y="732" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="330" y="732" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="340" y="722" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="350" y="712" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="360" y="712" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="360" y="702" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="370" y="692" width="10" height="10" fill="#3a86ff" fill-opacity="0.6"/>
+<rect x="340" y="912" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="330" y="912" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="330" y="922" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="320" y="922" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="320" y="932" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="310" y="932" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="310" y="942" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="300" y="942" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="300" y="952" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="290" y="952" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="290" y="962" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="280" y="962" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="280" y="972" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<rect x="270" y="972" width="10" height="10" fill="#8b9dc0" fill-opacity="0.45"/>
+<line x1="30" y1="612" x2="30" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="40" y1="612" x2="40" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="50" y1="612" x2="50" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="60" y1="612" x2="60" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="70" y1="612" x2="70" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="80" y1="612" x2="80" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="90" y1="612" x2="90" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="100" y1="612" x2="100" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="110" y1="612" x2="110" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="120" y1="612" x2="120" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="130" y1="612" x2="130" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="140" y1="612" x2="140" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="150" y1="612" x2="150" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="160" y1="612" x2="160" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="170" y1="612" x2="170" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="180" y1="612" x2="180" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="190" y1="612" x2="190" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="200" y1="612" x2="200" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="210" y1="612" x2="210" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="220" y1="612" x2="220" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="230" y1="612" x2="230" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="240" y1="612" x2="240" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="250" y1="612" x2="250" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="260" y1="612" x2="260" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="270" y1="612" x2="270" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="280" y1="612" x2="280" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="290" y1="612" x2="290" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="300" y1="612" x2="300" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="310" y1="612" x2="310" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="320" y1="612" x2="320" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="330" y1="612" x2="330" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="340" y1="612" x2="340" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="350" y1="612" x2="350" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="360" y1="612" x2="360" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="370" y1="612" x2="370" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="380" y1="612" x2="380" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="390" y1="612" x2="390" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="400" y1="612" x2="400" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="410" y1="612" x2="410" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="420" y1="612" x2="420" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="430" y1="612" x2="430" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="440" y1="612" x2="440" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="450" y1="612" x2="450" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="612" x2="450" y2="612" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="622" x2="450" y2="622" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="632" x2="450" y2="632" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="642" x2="450" y2="642" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="652" x2="450" y2="652" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="662" x2="450" y2="662" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="672" x2="450" y2="672" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="682" x2="450" y2="682" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="692" x2="450" y2="692" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="702" x2="450" y2="702" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="712" x2="450" y2="712" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="722" x2="450" y2="722" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="732" x2="450" y2="732" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="742" x2="450" y2="742" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="752" x2="450" y2="752" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="762" x2="450" y2="762" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="772" x2="450" y2="772" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="782" x2="450" y2="782" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="792" x2="450" y2="792" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="802" x2="450" y2="802" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="812" x2="450" y2="812" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="822" x2="450" y2="822" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="832" x2="450" y2="832" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="842" x2="450" y2="842" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="852" x2="450" y2="852" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="862" x2="450" y2="862" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="872" x2="450" y2="872" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="882" x2="450" y2="882" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="892" x2="450" y2="892" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="902" x2="450" y2="902" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="912" x2="450" y2="912" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="922" x2="450" y2="922" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="932" x2="450" y2="932" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="942" x2="450" y2="942" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="952" x2="450" y2="952" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="962" x2="450" y2="962" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="972" x2="450" y2="972" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="982" x2="450" y2="982" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="992" x2="450" y2="992" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="1002" x2="450" y2="1002" stroke="#e2e8f0" stroke-width="0.5"/>
+<line x1="30" y1="1012" x2="450" y2="1012" stroke="#e2e8f0" stroke-width="0.5"/>
+<text x="155" y="771" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="11" fill="#64748b" text-anchor="start" font-weight="700" paint-order="stroke" stroke="#fafbfd" stroke-width="3.5">1</text>
+<text x="251" y="809" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="11" fill="#3a86ff" text-anchor="start" font-weight="700" paint-order="stroke" stroke="#fafbfd" stroke-width="3.5">4</text>
+<rect x="219" y="821" width="12" height="12" fill="none" stroke="#0f172a" stroke-width="2" stroke-dasharray="3 2"/>
+<line x1="246" y1="804" x2="232" y2="822" stroke="#7c3aed" stroke-width="2" marker-end="url(#arr)"/>
+<rect x="248" y="760" width="164" height="54" rx="6" fill="#fafbfd" fill-opacity="0.92"/>
+<text x="252" y="774" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#7c3aed" text-anchor="start" font-weight="600">1×1 read at the cursor</text>
+<text x="252" y="790" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#7c3aed" text-anchor="start" font-weight="normal">→ link 4. Applied only if no</text>
+<text x="252" y="806" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#7c3aed" text-anchor="start" font-weight="normal">point picked — here point 3 wins</text>
+<text x="36" y="1022" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">Each pixel stores [link index, 0, 0, validity]; alpha 0 = empty.</text>
+<text x="36" y="1039" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">Same link draw shader, switched to index mode (renderMode = 1).</text>
+<text x="506" y="596" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="16" fill="#1e293b" text-anchor="start" font-weight="600">How link picking differs</text>
+<circle cx="510" cy="622" r="3" fill="#7c3aed"/>
+<text x="522" y="626" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="13" fill="#1e293b" text-anchor="start" font-weight="600">Full resolution, not half —</text>
+<text x="522" y="645" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">a 1-pixel-wide link would fall between half-res texels.</text>
+<circle cx="510" cy="669" r="3" fill="#7c3aed"/>
+<text x="522" y="673" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="13" fill="#1e293b" text-anchor="start" font-weight="600">A single 1×1 pixel read —</text>
+<text x="522" y="692" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">links are thin, so no window scan or nearest-candidate logic.</text>
+<circle cx="510" cy="716" r="3" fill="#7c3aed"/>
+<text x="522" y="720" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="13" fill="#1e293b" text-anchor="start" font-weight="600">Alpha gates pickability —</text>
+<text x="522" y="739" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">a fully transparent link writes nothing and cannot be hovered.</text>
+<circle cx="510" cy="763" r="3" fill="#7c3aed"/>
+<text x="522" y="767" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="13" fill="#1e293b" text-anchor="start" font-weight="600">Dashes stay solid here —</text>
+<text x="522" y="786" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">the dash mask applies only to the visible pass, so dashed links</text>
+<text x="522" y="805" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">are pickable along their whole length, gaps included.</text>
+<circle cx="510" cy="829" r="3" fill="#7c3aed"/>
+<text x="522" y="833" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="13" fill="#1e293b" text-anchor="start" font-weight="600">Hover hysteresis —</text>
+<text x="522" y="852" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">the hovered link is re-drawn wider in this buffer, so it is easier</text>
+<text x="522" y="871" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">to keep a link hovered than to acquire it.</text>
+<circle cx="510" cy="895" r="3" fill="#7c3aed"/>
+<text x="522" y="899" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="13" fill="#1e293b" text-anchor="start" font-weight="600">Points win —</text>
+<text x="522" y="918" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">the link result applies only when no point was picked. Here the</text>
+<text x="522" y="937" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">cursor sits on link 4, but point 3 from the 9×9 window takes priority.</text>
+<text x="506" y="969" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="14" fill="#1e293b" text-anchor="start" font-weight="600">Both buffers share one lifecycle</text>
+<text x="506" y="991" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">Re-rendered only when marked stale: points move, data or config</text>
+<text x="506" y="1010" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">changes, zoom, resize, hover change. Read back asynchronously</text>
+<text x="506" y="1029" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12.5" fill="#64748b" text-anchor="start" font-weight="normal">(PBO + fence) — the hover path never stalls the GPU pipeline.</text>
+<rect x="22" y="1075" width="13" height="13" fill="#decb5f" fill-opacity="0.55" stroke="#e2e8f0"/>
+<text x="41" y="1086" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#64748b" text-anchor="start" font-weight="normal">pixels covered by a point</text>
+<rect x="210" y="1075" width="13" height="13" fill="#8b9dc0" fill-opacity="0.45" stroke="#e2e8f0"/>
+<text x="229" y="1086" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#64748b" text-anchor="start" font-weight="normal">pixels covered by a link</text>
+<rect x="395" y="1075" width="13" height="13" fill="#ffffff" stroke="#e2e8f0"/>
+<text x="414" y="1086" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#64748b" text-anchor="start" font-weight="normal">empty</text>
+<rect x="480" y="1075" width="13" height="13" fill="none" stroke="#7c3aed" stroke-width="2"/>
+<text x="499" y="1086" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#64748b" text-anchor="start" font-weight="normal">read window</text>
+<rect x="595" y="1075" width="13" height="13" fill="none" stroke="#0f172a" stroke-width="1.6" stroke-dasharray="3 2"/>
+<text x="614" y="1086" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="12" fill="#64748b" text-anchor="start" font-weight="normal">cursor pixel</text>
+<text x="20" y="1116" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="13" fill="#1e293b" text-anchor="start" font-weight="normal">The maps refresh only when the scene changes — a still scene does no picking work. A hover then reads 81 pixels for points</text>
+<text x="20" y="1134" font-family="ui-sans-serif, system-ui, -apple-system, sans-serif" font-size="13" fill="#1e293b" text-anchor="start" font-weight="normal">and 1 pixel for links, so it costs the same at 300 elements or 300,000.</text>
+</svg>
