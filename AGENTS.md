@@ -22,8 +22,13 @@ contribution process, see `CONTRIBUTING.md`, `CHARTER.md`, `CODE_OF_CONDUCT.md`,
   validation and default-fill.
 - `modules/` — per-force and per-render modules (ForceManyBody, ForceLink, ForceGravity, ForceCenter,
   ForceMouse, Clusters, Points, Lines, Zoom, Drag, Store), each with its GLSL shaders.
-- `stories/` — Storybook examples (beginners, clusters, shapes, geospatial, experiments) plus the
-  `configuration.mdx` / `api-reference.mdx` docs — the best worked examples of building the input arrays.
+- `stories/` — Storybook examples plus the `configuration.mdx` / `api-reference.mdx` docs — the best
+  worked examples of building the input arrays. One sidebar section per `*.stories.ts` file, each
+  named for the feature area it teaches (get-started, points, links, forces, clustering, interaction,
+  updating-data, showcase, performance), with the story implementations in the matching subfolder.
+  Audience and intent are story `tags` (`beginner`, `advanced`, `perf`, `interactive`, `large-data`,
+  `labels`) rather than sections, so nothing has to be filed twice; `.storybook/preview.ts` holds the
+  tag vocabulary and the sidebar order, and both must stay inline literals for Storybook to index them.
 - `helper.ts` — utilities (e.g. `getRgbaColor`: parse a CSS/hex color into a normalized RGBA tuple).
 
 `migration-notes.md` documents **breaking changes only** — data-format and config changes that require
