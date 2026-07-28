@@ -95,7 +95,7 @@ cosmos.gl v3.0 brings a new rendering engine, async initialization, and several 
 - **GPU transitions** — point positions, point colors/sizes, and link colors/widths now animate by default (`transitionDuration: 800`, `transitionEasing: TransitionEasing.CubicInOut`). Use `transitionDuration: 0` to keep snap updates.
 - **Transition callbacks** — use `onTransitionStart`, `onTransition`, and `onTransitionEnd` to track transition lifecycle and progress.
 - **Default point shape** — new `pointDefaultShape` config property lets you set the fallback shape for all points when no per-point shapes are provided. Accepts a `PointShape` enum value (e.g., `PointShape.Star`), a plain number (e.g., `6`), or a numeric string (e.g., `"6"`).
-- **Collision force** — new GPU-accelerated collision force keeps points from overlapping, using a spatial-hash grid that scales to large graphs. Enable it with `simulationCollision`, and tune the spacing with `simulationCollisionRadius` (fixed radius vs. size-derived) and `simulationCollisionPadding` (extra gap between points). See the [Collision example](https://cosmosgl.github.io/graph/?path=/story/examples-experiments--collision).
+- **Collision force** — new GPU-accelerated collision force keeps points from overlapping, using a spatial-hash grid that scales to large graphs. Enable it with `simulationCollision`, and tune the spacing with `simulationCollisionRadius` (fixed radius vs. size-derived) and `simulationCollisionPadding` (extra gap between points). See the [Collision example](https://cosmosgl.github.io/graph/?path=/story/examples-forces--collision).
 - **Exported defaults** — `defaultConfigValues` is now part of the public API.
 - **Optimized hover detection** — skips GPU work when the mouse hasn't moved.
 
@@ -118,7 +118,7 @@ Check the [Migration Guide](./migration-notes.md) for upgrading from v1.
 
 ### Examples
 
-- [Actions](https://cosmosgl.github.io/graph/?path=/story/examples-beginners--actions)
+- [Actions](https://cosmosgl.github.io/graph/?path=/story/examples-interaction--actions)
 
 ---
 
@@ -139,7 +139,7 @@ Check the [Migration Guide](./migration-notes.md) for upgrading from v1.
 ---
 
 ### Documentation
-- 🧑‍💻 [Quick Start](https://cosmosgl.github.io/graph/?path=/docs/welcome-to-cosmos--docs)
+- 🧑‍💻 [Quick Start](https://cosmosgl.github.io/graph/?path=/docs/welcome-to-cosmos-gl--docs)
 - 🛠 [Configuration](https://cosmosgl.github.io/graph/?path=/docs/configuration--docs)
 - ⚙️ [API Reference](https://cosmosgl.github.io/graph/?path=/docs/api-reference--docs)
 - 🚀 [Migration Guide](https://github.com/cosmosgl/graph/blob/main/migration-notes.md)
