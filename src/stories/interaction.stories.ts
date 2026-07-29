@@ -3,7 +3,6 @@ import type { Meta } from '@storybook/html'
 import { createStory, Story } from '@/graph/stories/create-story'
 import { CosmosStoryProps } from './create-cosmos'
 import { contextMenu } from './interaction/context-menu'
-import { actions } from './interaction/actions'
 import { exploreConnections } from './interaction/explore-connections'
 import { polygonSelection } from './interaction/lasso-selection'
 import { pinnedPoints } from './interaction/pinned-points'
@@ -14,9 +13,6 @@ import contextMenuStoryRaw from './interaction/context-menu/index?raw'
 import contextMenuMenuRaw from './interaction/context-menu/menu?raw'
 import contextMenuDataGenRaw from './interaction/context-menu/data-gen?raw'
 import contextMenuCssRaw from './interaction/context-menu/style.css?raw'
-import actionsStoryRaw from './interaction/actions/index?raw'
-import actionsCssRaw from './interaction/actions/style.css?raw'
-import actionsDataGenRaw from './interaction/actions/data-gen?raw'
 import exploreConnectionsStoryRaw from './interaction/explore-connections/index?raw'
 import exploreConnectionsDataGenRaw from './interaction/explore-connections/data-gen?raw'
 import exploreConnectionsCssRaw from './interaction/explore-connections/style.css?raw'
@@ -28,18 +24,6 @@ import pinnedPointsDataGenRaw from './interaction/pinned-points/data-gen?raw'
 
 const meta: Meta<CosmosStoryProps> = {
   title: 'Examples/Interaction',
-}
-
-export const Actions: Story = {
-  ...createStory(actions),
-  tags: ['interactive', 'large-data'],
-  parameters: {
-    sourceCode: [
-      { name: 'Story', code: actionsStoryRaw },
-      { name: 'style.css', code: actionsCssRaw },
-      { name: 'data-gen', code: actionsDataGenRaw },
-    ],
-  },
 }
 
 export const ExploreConnections: Story = {

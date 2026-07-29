@@ -24,8 +24,10 @@ contribution process, see `CONTRIBUTING.md`, `CHARTER.md`, `CODE_OF_CONDUCT.md`,
   ForceMouse, Clusters, Points, Lines, Zoom, Drag, Store), each with its GLSL shaders.
 - `stories/` — Storybook examples plus the `configuration.mdx` / `api-reference.mdx` docs — the best
   worked examples of building the input arrays. One sidebar section per `*.stories.ts` file, each
-  named for the feature area it teaches (get-started, points, links, forces, clustering, interaction,
+  named for the feature area it teaches (get-started, points, links, forces, interaction,
   updating-data, showcase, performance), with the story implementations in the matching subfolder.
+  Sections stay flat — a nested section turns its parent into a sidebar folder, which reads as a
+  different kind of thing from every other section.
   Audience and intent are story `tags` (`beginner`, `advanced`, `perf`, `interactive`, `large-data`,
   `labels`) rather than sections, so nothing has to be filed twice; `.storybook/preview.ts` holds the
   tag vocabulary and the sidebar order, and both must stay inline literals for Storybook to index them.

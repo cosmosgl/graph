@@ -3,13 +3,12 @@ import type { Meta } from '@storybook/html'
 import { createStory, Story } from '@/graph/stories/create-story'
 import { CosmosStoryProps } from './create-cosmos'
 import { quickStart } from './get-started/quick-start'
-import { moscowMetroStations } from './get-started/position-rescaling'
+import { actions } from './get-started/actions'
 
 import quickStartStoryRaw from './get-started/quick-start?raw'
-import positionRescalingStoryRaw from './get-started/position-rescaling/index?raw'
-import positionRescalingCoordsRaw from './get-started/position-rescaling/moscow-metro-coords?raw'
-import positionRescalingColorsRaw from './get-started/position-rescaling/point-colors?raw'
-import positionRescalingCssRaw from './get-started/position-rescaling/style.css?raw'
+import actionsStoryRaw from './get-started/actions/index?raw'
+import actionsCssRaw from './get-started/actions/style.css?raw'
+import actionsDataGenRaw from './get-started/actions/data-gen?raw'
 
 const meta: Meta<CosmosStoryProps> = {
   title: 'Examples/Get Started',
@@ -26,16 +25,14 @@ export const QuickStart: Story = {
   },
 }
 
-export const PositionRescaling: Story = {
-  ...createStory(moscowMetroStations),
-  name: 'Position Rescaling',
-  tags: ['beginner', 'interactive'],
+export const Actions: Story = {
+  ...createStory(actions),
+  tags: ['beginner', 'interactive', 'large-data'],
   parameters: {
     sourceCode: [
-      { name: 'Story', code: positionRescalingStoryRaw },
-      { name: 'moscow-metro-coords', code: positionRescalingCoordsRaw },
-      { name: 'point-colors', code: positionRescalingColorsRaw },
-      { name: 'style.css', code: positionRescalingCssRaw },
+      { name: 'Story', code: actionsStoryRaw },
+      { name: 'style.css', code: actionsCssRaw },
+      { name: 'data-gen', code: actionsDataGenRaw },
     ],
   },
 }
