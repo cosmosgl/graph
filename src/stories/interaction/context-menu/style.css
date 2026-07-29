@@ -1,0 +1,134 @@
+.context-menu-story {
+  position: relative;
+  width: 100%;
+  height: 100vh;
+  font-family: "Nunito Sans", -apple-system, ".SFNSText-Regular", "San Francisco", BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+}
+
+.context-menu-story .cm-graph {
+  width: 100%;
+  height: 100%;
+}
+
+.context-menu-story .cm-hint {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  padding: 7px 11px;
+  border-radius: 6px;
+  background: rgba(12, 15, 21, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #aab3c5;
+  font-size: 12px;
+  pointer-events: none;
+}
+
+.context-menu-story .cm-hint b {
+  color: #fff;
+}
+
+/* The callback names in the chain readout, so the pair reads at a glance. */
+.context-menu-story .cm-fired {
+  color: #9ec5ff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px;
+}
+
+.context-menu-story .cm-menu {
+  position: absolute;
+  z-index: 10;
+  min-width: 208px;
+  padding: 8px;
+  border-radius: 9px;
+  background: rgba(20, 24, 34, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.45);
+  color: #d6dbe6;
+  font-size: 12px;
+}
+
+.context-menu-story .cm-header {
+  padding: 0 2px 2px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.context-menu-story .cm-subtitle {
+  padding: 0 2px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  margin-bottom: 7px;
+  color: #6f7b93;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 10px;
+}
+
+.context-menu-story .cm-row + .cm-row {
+  margin-top: 7px;
+}
+
+.context-menu-story .cm-row-label {
+  margin-bottom: 4px;
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: #6f7b93;
+}
+
+.context-menu-story .cm-row-label:empty {
+  display: none;
+}
+
+.context-menu-story .cm-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.context-menu-story .cm-chip {
+  min-width: 24px;
+  padding: 4px 8px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: rgba(255, 255, 255, 0.05);
+  color: #d6dbe6;
+  font-size: 11px;
+  font-family: inherit;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.context-menu-story .cm-chip:hover {
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+.context-menu-story .cm-chip.is-active {
+  border-color: #9ec5ff;
+  color: #9ec5ff;
+}
+
+.context-menu-story .cm-swatch {
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.18);
+}
+
+.context-menu-story .cm-swatch:hover {
+  border-color: #fff;
+  transform: scale(1.12);
+}
+
+/* Unavailable choices stay visible so the capability is still discoverable —
+   the tooltip carries the reason and the way out sits beside them. */
+.context-menu-story .cm-chip:disabled {
+  opacity: 0.32;
+  cursor: not-allowed;
+}
+
+.context-menu-story .cm-chip:disabled:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.13);
+  transform: none;
+}

@@ -2,6 +2,7 @@ import type { Meta } from '@storybook/html'
 
 import { createStory, Story } from '@/graph/stories/create-story'
 import { CosmosStoryProps } from './create-cosmos'
+import { contextMenu } from './interaction/context-menu'
 import { actions } from './interaction/actions'
 import { exploreConnections } from './interaction/explore-connections'
 import { polygonSelection } from './interaction/lasso-selection'
@@ -9,6 +10,10 @@ import { pinnedPoints } from './interaction/pinned-points'
 
 import createCosmosRaw from './create-cosmos?raw'
 import generateMeshDataRaw from './generate-mesh-data?raw'
+import contextMenuStoryRaw from './interaction/context-menu/index?raw'
+import contextMenuMenuRaw from './interaction/context-menu/menu?raw'
+import contextMenuDataGenRaw from './interaction/context-menu/data-gen?raw'
+import contextMenuCssRaw from './interaction/context-menu/style.css?raw'
 import actionsStoryRaw from './interaction/actions/index?raw'
 import actionsCssRaw from './interaction/actions/style.css?raw'
 import actionsDataGenRaw from './interaction/actions/data-gen?raw'
@@ -73,6 +78,20 @@ export const PinnedPoints: Story = {
     sourceCode: [
       { name: 'Story', code: pinnedPointsStoryRaw },
       { name: 'data-gen.ts', code: pinnedPointsDataGenRaw },
+    ],
+  },
+}
+
+export const ContextMenu: Story = {
+  ...createStory(contextMenu),
+  name: 'Context Menu',
+  tags: ['beginner', 'interactive'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: contextMenuStoryRaw },
+      { name: 'menu.ts', code: contextMenuMenuRaw },
+      { name: 'data-gen.ts', code: contextMenuDataGenRaw },
+      { name: 'style.css', code: contextMenuCssRaw },
     ],
   },
 }
