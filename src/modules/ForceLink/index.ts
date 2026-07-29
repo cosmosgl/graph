@@ -284,9 +284,10 @@ export class ForceLink extends CoreModule {
         linkDistRandomVariationRange: ensureVec2(this.config.simulationLinkDistRandomVariationRange, [0, 0]),
         pointsTextureSize: store.pointsTextureSize,
         linksTextureSize: store.linksTextureSize,
-        // t-SNE has no annealing: its own optimizer (momentum + gains) provides
-        // convergence, so the gradient is never scaled down by alpha decay.
-        alpha: isTsne ? 1 : store.alpha,
+        // Only the t-SNE `momentum` optimizer skips annealing (it converges through
+        // momentum + decaying gains); under `friction`, alpha decay is what stops
+        // the layout expanding into the space walls.
+        alpha: isTsne && this.config.simulationTsneOptimizer === 'momentum' ? 1 : store.alpha,
         umapA,
         umapB,
         umapScale: this.config.simulationUmapScale,

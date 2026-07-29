@@ -272,12 +272,15 @@ export class ForceManyBody extends CoreModule {
   }
 
   /**
-   * Alpha handed to the repulsion shaders. The t-SNE kernel has no annealing —
-   * its own optimizer (momentum + per-point gains) provides convergence — so its
-   * gradient is never scaled down by alpha decay.
+   * Alpha handed to the repulsion shaders. Only the t-SNE `momentum` optimizer
+   * skips annealing — it converges through its own dynamics (momentum + decaying
+   * per-point gains). The `friction` integrator has no such mechanism, so alpha
+   * decay is what stops the layout from expanding until it hits the space walls.
    */
   private get effectiveAlpha (): number {
-    return this.config.simulationKernel === 'tsne' ? 1 : this.store.alpha
+    const isMomentumTsne = this.config.simulationKernel === 'tsne' &&
+      this.config.simulationTsneOptimizer === 'momentum'
+    return isMomentumTsne ? 1 : this.store.alpha
   }
 
   /** Raw 1×1 output of the Z reduction chain (last tick's Z), if any. */
