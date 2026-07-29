@@ -72,12 +72,36 @@ const kernelSettings = (kernel: 'umap' | 'tsne', dims: 2 | 3): {
   return { simulationUmapScale: dims === 3 ? 250 : 350, simulationRepulsion: 2, simulationLinkSpring: 0.5 }
 }
 
-/** Extra config applied only in the 3D view (sphere shading, depth cue, camera). */
+/**
+ * Extra config for the 3D view. The t-SNE / UMAP layouts are *filled volumes*
+ * (measured: the median point sits at ~0.48 of the outer radius, so the mass is
+ * center-heavy, not a shell), and a filled volume drawn with large opaque
+ * spheres only ever shows its own hull — which reads as an amorphous blob with
+ * colored patches. Partial opacity plus a real depth cue and smaller points make
+ * the interior clusters visible instead.
+ */
 const VIEW_3D_CONFIG = {
   pointSphereShading: true,
-  pointDepthFade: 0.1,
+  pointDepthFade: 0.4,
+  pointOpacity: 0.75,
+  pointSizeScale: 0.75,
   cameraFov: 55,
 } as const
+
+/** 2D view defaults, restored when leaving 3D (opacity 1 keeps occlusion culling on). */
+const VIEW_2D_CONFIG = {
+  pointSphereShading: false,
+  pointDepthFade: 0,
+  pointOpacity: 1,
+  pointSizeScale: 1,
+} as const
+
+/**
+ * Alpha for the generic topic -1 ("neighborhood / project", ~40% of proposals).
+ * It carries no thematic signal, so it recedes to a haze and lets the real
+ * clusters read — the single biggest readability win in both views.
+ */
+const GENERIC_TOPIC_ALPHA = 0.22
 
 const fetchBytes = async (url: string): Promise<ArrayBuffer> => {
   const res = await fetch(url)
@@ -146,8 +170,10 @@ const buildTopicPalette = (topics: Meta['topics']): Map<number, [number, number,
 const topicColors = (topic: Int16Array, n: number, palette: Map<number, [number, number, number]>): Float32Array => {
   const colors = new Float32Array(n * 4)
   for (let i = 0; i < n; i++) {
-    const c = palette.get(topic[i] as number) ?? [0.34, 0.36, 0.42]
-    colors[i * 4] = c[0]; colors[i * 4 + 1] = c[1]; colors[i * 4 + 2] = c[2]; colors[i * 4 + 3] = 1
+    const t = topic[i] as number
+    const c = palette.get(t) ?? [0.34, 0.36, 0.42]
+    colors[i * 4] = c[0]; colors[i * 4 + 1] = c[1]; colors[i * 4 + 2] = c[2]
+    colors[i * 4 + 3] = t < 0 ? GENERIC_TOPIC_ALPHA : 1
   }
   return colors
 }
@@ -368,7 +394,7 @@ export const decidimEmbedding = (): { graph: Graph; div: HTMLDivElement; destroy
           if (dimsChanged) {
             graph.setConfigPartial(dims === 3
               ? { spaceDimensions: 3, ...VIEW_3D_CONFIG }
-              : { spaceDimensions: 2, pointSphereShading: false, pointDepthFade: 0 })
+              : { spaceDimensions: 2, ...VIEW_2D_CONFIG })
           }
           if (mode === 'precomputed') {
             graph.pause()
