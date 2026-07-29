@@ -118,7 +118,7 @@ Check the [Migration Guide](./migration-notes.md) for upgrading from v1.
 
 ### Examples
 
-- [Actions](https://cosmosgl.github.io/graph/?path=/story/examples-interaction--actions)
+- [Actions](https://cosmosgl.github.io/graph/?path=/story/examples-get-started--actions)
 
 ---
 

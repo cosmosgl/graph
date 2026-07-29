@@ -4,11 +4,15 @@ import { createStory, Story } from '@/graph/stories/create-story'
 import { CosmosStoryProps } from './create-cosmos'
 import { fullMesh } from './showcase/full-mesh'
 import { meshWithHoles } from './showcase/mesh-with-holes'
+import { radial } from './showcase/radial'
+import { worm } from './showcase/worm'
 
 import createCosmosRaw from './create-cosmos?raw'
 import generateMeshDataRaw from './generate-mesh-data?raw'
 import fullMeshRaw from './showcase/full-mesh?raw'
 import meshWithHolesRaw from './showcase/mesh-with-holes?raw'
+import radialRaw from './showcase/radial?raw'
+import wormRaw from './showcase/worm?raw'
 
 // Showcase holds the stories that teach no single API — they are combinations
 // of things taught elsewhere, kept for the look of them. Anything that does
@@ -39,6 +43,29 @@ export const MeshWithHoles: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: meshWithHolesRaw },
+      ...sourceCodeAddonParams,
+    ],
+  },
+}
+
+export const RadialMesh: Story = {
+  ...createStory(radial),
+  name: 'Radial Mesh',
+  tags: ['large-data'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: radialRaw },
+      ...sourceCodeAddonParams,
+    ],
+  },
+}
+
+export const Worm: Story = {
+  ...createStory(worm),
+  tags: ['large-data'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: wormRaw },
       ...sourceCodeAddonParams,
     ],
   },

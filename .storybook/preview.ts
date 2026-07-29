@@ -38,7 +38,6 @@ const preview: Preview = {
             'Points',
             'Links',
             'Forces',
-            ['Clustering'],
             'Interaction',
             'Camera',
             'Updating Data',
