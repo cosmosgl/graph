@@ -16,6 +16,7 @@ import fillPickingBufferVert from '@/graph/modules/Points/fill-picking-buffer.ve
 import fillGridWithSampledPointsFrag from '@/graph/modules/Points/fill-sampled-points.frag?raw'
 import fillGridWithSampledPointsVert from '@/graph/modules/Points/fill-sampled-points.vert?raw'
 import updatePositionFrag from '@/graph/modules/Points/update-position.frag?raw'
+import tsneIntegrateFrag from '@/graph/modules/Points/tsne-integrate.frag?raw'
 import interpolatePositionFrag from '@/graph/modules/Points/interpolate-position.frag?raw'
 import { createIndexesForBuffer, updateAttributeBuffers } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
@@ -45,13 +46,26 @@ const MAX_PICKING_BUFFER_DIMENSION = 1536
 const PICKING_WINDOW_SIZE = 9
 
 /**
+ * Floor for the t-SNE integrator's per-point gains (Jacobs' rule), matching
+ * reference t-SNE's `min_gain`.
+ */
+const TSNE_MIN_GAIN = 0.01
+
+/**
+ * t-SNE integrator momentum during and after the early-exaggeration phase —
+ * reference t-SNE ramps it up once the global structure has formed.
+ */
+const TSNE_MOMENTUM_EXAGGERATION = 0.5
+const TSNE_MOMENTUM_SETTLE = 0.8
+
+/**
  * t-SNE gradient-clip cap, as a fraction of the space size: the largest
  * per-tick displacement any point may take under `simulationKernel: 'tsne'`.
- * Bounds the pathology (a point crossing the whole space in a few ticks from
- * the lagged-Z feedback or weak connectivity) while leaving normal convergence
- * steps — far smaller — untouched. Disabled (cap 0) for the other kernels.
+ * A safety net for the pathology (a point crossing the whole space in a few
+ * ticks from the lagged-Z feedback or weak connectivity), deliberately loose so
+ * it never regulates ordinary momentum steps. Disabled (cap 0) for other kernels.
  */
-const TSNE_MAX_STEP_FRACTION = 0.02
+const TSNE_MAX_STEP_FRACTION = 0.06
 
 const BLEND_PARAMETERS = {
   blend: true,
@@ -278,6 +292,28 @@ export class Points extends CoreModule {
       friction: number;
       spaceSize: number;
       maxForce: number;
+    };
+  }> | undefined
+
+  /**
+   * t-SNE integrator state (see tsne-integrate.frag): the persistent velocity and
+   * the per-point gains, both ping-ponged. `velocityTexture` above stays the
+   * per-tick gradient accumulator the force passes write into; these carry the
+   * optimizer's memory across ticks.
+   */
+  private tsneVelocityTargets: { texture: Texture; fbo: Framebuffer }[] = []
+  private tsneGainTargets: { texture: Texture; fbo: Framebuffer }[] = []
+  private tsneStateIndex = 0
+  /** Rendering mode the integrator Model was compiled for (`SPACE_3D` define). */
+  private isTsneIntegrator3D: boolean | undefined
+  private tsneIntegrateCommand: Model | undefined
+  private tsneIntegrateVertexCoordBuffer: Buffer | undefined
+  private tsneIntegrateUniformStore: UniformStore<{
+    tsneIntegrateUniforms: {
+      momentum: number;
+      learningRate: number;
+      minGain: number;
+      writeGain: number;
     };
   }> | undefined
 
@@ -1931,15 +1967,22 @@ export class Points extends CoreModule {
     }
   }
 
-  public updatePosition (): void {
+  /**
+   * Advances positions by the current velocity texture. `options.velocity`
+   * substitutes a different velocity source (the t-SNE integrator passes its
+   * persistent velocity here) and `options.friction` overrides the config value
+   * (the t-SNE integrator owns its own damping through momentum, so it passes 1).
+   */
+  public updatePosition (options?: { velocity?: Texture; friction?: number }): void {
     if (!this.updatePositionCommand || !this.updatePositionUniformStore || !this.currentPositionFbo || this.currentPositionFbo.destroyed) return
     if (!this.previousPositionTexture || this.previousPositionTexture.destroyed) return
-    if (!this.velocityTexture || this.velocityTexture.destroyed) return
+    const velocity = options?.velocity ?? this.velocityTexture
+    if (!velocity || velocity.destroyed) return
     if (!this.pinnedStatusTexture || this.pinnedStatusTexture.destroyed) return
 
     this.updatePositionUniformStore.setUniforms({
       updatePositionUniforms: {
-        friction: this.config.simulationFriction,
+        friction: options?.friction ?? this.config.simulationFriction,
         spaceSize: this.store.adjustedSpaceSize,
         maxForce: this.tsneMaxForce,
       },
@@ -1948,7 +1991,7 @@ export class Points extends CoreModule {
     // Update texture bindings dynamically
     this.updatePositionCommand.setBindings({
       positionsTexture: this.previousPositionTexture,
-      velocity: this.velocityTexture,
+      velocity,
       pinnedStatusTexture: this.pinnedStatusTexture,
     })
 
@@ -1963,6 +2006,85 @@ export class Points extends CoreModule {
     // to read. After this call, `currentPositionFbo` holds the new result.
     // Invalidate tracked positions cache since positions have changed
     this.isPositionsUpToDate = false
+  }
+
+  /**
+   * Runs the t-SNE integrator on the force the force passes accumulated this
+   * tick (see tsne-integrate.frag): updates the persistent velocity and the
+   * per-point gains, then advances positions by the new velocity. Momentum ramps
+   * up once the early-exaggeration phase ends.
+   */
+  public integrateTsne (isExaggerating: boolean): void {
+    this.ensureTsneIntegratorResources()
+    const command = this.tsneIntegrateCommand
+    const store = this.tsneIntegrateUniformStore
+    if (!command || !store) return
+    if (!this.velocityTexture || this.velocityTexture.destroyed) return
+
+    const current = this.tsneStateIndex
+    const next = current ^ 1
+    const velocityFrom = this.tsneVelocityTargets[current]
+    const velocityTo = this.tsneVelocityTargets[next]
+    const gainFrom = this.tsneGainTargets[current]
+    const gainTo = this.tsneGainTargets[next]
+    if (!velocityFrom || !velocityTo || !gainFrom || !gainTo) return
+    if (velocityTo.fbo.destroyed || gainTo.fbo.destroyed) return
+
+    const momentum = isExaggerating ? TSNE_MOMENTUM_EXAGGERATION : TSNE_MOMENTUM_SETTLE
+    const draw = (target: Framebuffer, writeGain: number): void => {
+      store.setUniforms({
+        tsneIntegrateUniforms: {
+          momentum,
+          learningRate: this.config.simulationTsneLearningRate,
+          minGain: TSNE_MIN_GAIN,
+          writeGain,
+        },
+      })
+      command.setBindings({
+        velocityTexture: velocityFrom.texture,
+        gainTexture: gainFrom.texture,
+        forceTexture: this.velocityTexture as Texture,
+      })
+      const pass = this.device.beginRenderPass({ framebuffer: target })
+      command.draw(pass)
+      pass.end()
+    }
+
+    // Both outputs derive from the same inputs, so order does not matter; two
+    // single-attachment passes avoid needing a multi-target framebuffer.
+    draw(velocityTo.fbo, 0)
+    draw(gainTo.fbo, 1)
+    this.tsneStateIndex = next
+
+    // Momentum already damps the step, so integrate the new velocity with no
+    // friction; the gradient clip in update-position.frag still applies.
+    this.updatePosition({ velocity: velocityTo.texture, friction: 1 })
+  }
+
+  /**
+   * Zeroes the t-SNE integrator's velocity and resets the gains to 1 — reference
+   * t-SNE runs exaggeration and settling as two separate gradient-descent calls,
+   * each starting from a clean optimizer state, which is what lets clusters
+   * tighten crisply at the handover instead of smearing.
+   */
+  public resetTsneIntegratorState (): void {
+    this.ensureTsneIntegratorResources()
+    const size = this.store.pointsTextureSize
+    if (!size) return
+    for (const [targets, fill] of [[this.tsneVelocityTargets, 0], [this.tsneGainTargets, 1]] as const) {
+      const data = new Float32Array(size * size * 4).fill(fill)
+      for (const target of targets) {
+        if (target.texture.destroyed) continue
+        target.texture.copyImageData({
+          data,
+          bytesPerRow: getBytesPerRow('rgba32float', size),
+          mipLevel: 0,
+          x: 0,
+          y: 0,
+        })
+      }
+    }
+    this.tsneStateIndex = 0
   }
 
   public drag (): void {
@@ -2877,6 +2999,16 @@ export class Points extends CoreModule {
     this.updatePositionCommand = undefined
     this.updatePositionUniformStore?.destroy()
     this.updatePositionUniformStore = undefined
+    this.tsneIntegrateCommand?.destroy()
+    this.tsneIntegrateCommand = undefined
+    this.isTsneIntegrator3D = undefined
+    this.destroyTsneIntegratorTargets()
+    this.tsneIntegrateUniformStore?.destroy()
+    this.tsneIntegrateUniformStore = undefined
+    if (this.tsneIntegrateVertexCoordBuffer && !this.tsneIntegrateVertexCoordBuffer.destroyed) {
+      this.tsneIntegrateVertexCoordBuffer.destroy()
+    }
+    this.tsneIntegrateVertexCoordBuffer = undefined
     if (this.updatePositionVertexCoordBuffer && !this.updatePositionVertexCoordBuffer.destroyed) {
       this.updatePositionVertexCoordBuffer.destroy()
     }
@@ -3054,6 +3186,92 @@ export class Points extends CoreModule {
     return {
       index: bestIndex,
       position: this.store.is3D ? bestPosition : [bestPosition[0], bestPosition[1]],
+    }
+  }
+
+  /**
+   * Allocates the t-SNE integrator's state textures (velocity + gains, both
+   * ping-ponged) and its Model. Rebuilds the Model when the rendering mode
+   * changes, since `SPACE_3D` is baked in at creation.
+   */
+  private ensureTsneIntegratorResources (): void {
+    const { device, store } = this
+    const size = store.pointsTextureSize
+    if (!size) return
+
+    const sizeChanged = this.tsneVelocityTargets[0]?.texture.width !== size
+    if (sizeChanged) {
+      this.destroyTsneIntegratorTargets()
+      for (const [targets, fill] of [[this.tsneVelocityTargets, 0], [this.tsneGainTargets, 1]] as const) {
+        const data = new Float32Array(size * size * 4).fill(fill)
+        for (let i = 0; i < 2; i += 1) {
+          const texture = device.createTexture({ width: size, height: size, format: 'rgba32float' })
+          texture.copyImageData({
+            data,
+            bytesPerRow: getBytesPerRow('rgba32float', size),
+            mipLevel: 0,
+            x: 0,
+            y: 0,
+          })
+          const fbo = device.createFramebuffer({ width: size, height: size, colorAttachments: [texture] })
+          targets.push({ texture, fbo })
+        }
+      }
+      this.tsneStateIndex = 0
+    }
+
+    if (this.tsneIntegrateCommand && this.isTsneIntegrator3D !== store.is3D) {
+      this.tsneIntegrateCommand.destroy()
+      this.tsneIntegrateCommand = undefined
+    }
+
+    this.tsneIntegrateVertexCoordBuffer ||= device.createBuffer({
+      data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
+    })
+
+    this.tsneIntegrateUniformStore ||= new UniformStore(device, {
+      tsneIntegrateUniforms: {
+        uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
+          momentum: 'f32',
+          learningRate: 'f32',
+          minGain: 'f32',
+          writeGain: 'f32',
+        },
+      },
+    })
+
+    if (!this.tsneIntegrateCommand) {
+      this.isTsneIntegrator3D = store.is3D
+      this.tsneIntegrateCommand = new Model(device, {
+        fs: tsneIntegrateFrag,
+        vs: updateVert,
+        topology: 'triangle-strip',
+        vertexCount: 4,
+        attributes: {
+          vertexCoord: this.tsneIntegrateVertexCoordBuffer,
+        },
+        bufferLayout: [
+          { name: 'vertexCoord', format: 'float32x2' },
+        ],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
+          ...(store.is3D ? { SPACE_3D: true } : {}),
+        },
+        bindings: {
+          tsneIntegrateUniforms: this.tsneIntegrateUniformStore.getManagedUniformBuffer('tsneIntegrateUniforms'),
+        },
+      })
+    }
+  }
+
+  private destroyTsneIntegratorTargets (): void {
+    for (const targets of [this.tsneVelocityTargets, this.tsneGainTargets]) {
+      for (const target of targets) {
+        if (!target.fbo.destroyed) target.fbo.destroy()
+        if (!target.texture.destroyed) target.texture.destroy()
+      }
+      targets.length = 0
     }
   }
 

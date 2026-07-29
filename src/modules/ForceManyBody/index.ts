@@ -271,6 +271,15 @@ export class ForceManyBody extends CoreModule {
     return this.config.simulationRepulsion
   }
 
+  /**
+   * Alpha handed to the repulsion shaders. The t-SNE kernel has no annealing —
+   * its own optimizer (momentum + per-point gains) provides convergence — so its
+   * gradient is never scaled down by alpha decay.
+   */
+  private get effectiveAlpha (): number {
+    return this.config.simulationKernel === 'tsne' ? 1 : this.store.alpha
+  }
+
   /** Raw 1×1 output of the Z reduction chain (last tick's Z), if any. */
   private get zRawTexture (): Texture | undefined {
     return this.zReduceTargets[this.zReduceTargets.length - 1]?.texture
@@ -504,7 +513,7 @@ export class ForceManyBody extends CoreModule {
           level: 0,
           levels: this.levels,
           levelTextureSize: 0,
-          alpha: store.alpha,
+          alpha: this.effectiveAlpha,
           repulsion: this.effectiveRepulsion,
           spaceSize: store.adjustedSpaceSize,
           theta: this.config.simulationRepulsionTheta,
@@ -564,7 +573,7 @@ export class ForceManyBody extends CoreModule {
         },
         defaultUniforms: {
           levelTextureSize: 0,
-          alpha: store.alpha,
+          alpha: this.effectiveAlpha,
           repulsion: this.effectiveRepulsion,
           ...this.umapKernelUniforms,
         },
@@ -621,7 +630,7 @@ export class ForceManyBody extends CoreModule {
           defaultUniforms: {
             pointsTextureSize: store.pointsTextureSize,
             pointsNumber: data.pointsNumber,
-            alpha: store.alpha,
+            alpha: this.effectiveAlpha,
             repulsion: this.effectiveRepulsion,
             ...this.umapKernelUniforms,
           },
@@ -728,7 +737,7 @@ export class ForceManyBody extends CoreModule {
             cellSize: 0,
             tilesPerRow: 0,
             isFirstLevel: 0,
-            alpha: store.alpha,
+            alpha: this.effectiveAlpha,
             repulsion: this.effectiveRepulsion,
             ...this.umapKernelUniforms,
           },
@@ -842,7 +851,7 @@ export class ForceManyBody extends CoreModule {
             levelGridSize: 0,
             cellSize: 0,
             tilesPerRow: 0,
-            alpha: store.alpha,
+            alpha: this.effectiveAlpha,
             repulsion: this.effectiveRepulsion,
             ...this.umapKernelUniforms,
           },
@@ -1231,7 +1240,7 @@ export class ForceManyBody extends CoreModule {
       forceBruteForceUniforms: {
         pointsTextureSize: store.pointsTextureSize ?? 0,
         pointsNumber: data.pointsNumber ?? 0,
-        alpha: store.alpha,
+        alpha: this.effectiveAlpha,
         repulsion: this.effectiveRepulsion,
         ...this.umapKernelUniforms,
       },
@@ -1325,7 +1334,7 @@ export class ForceManyBody extends CoreModule {
           cellSize,
           tilesPerRow: target.tilesPerRow,
           isFirstLevel: level === 0 ? 1 : 0,
-          alpha: store.alpha,
+          alpha: this.effectiveAlpha,
           repulsion: this.effectiveRepulsion,
           ...this.umapKernelUniforms,
         },
@@ -1349,7 +1358,7 @@ export class ForceManyBody extends CoreModule {
             levelGridSize: target.gridSize,
             cellSize,
             tilesPerRow: target.tilesPerRow,
-            alpha: store.alpha,
+            alpha: this.effectiveAlpha,
             repulsion: this.effectiveRepulsion,
             ...this.umapKernelUniforms,
           },
@@ -1613,7 +1622,7 @@ export class ForceManyBody extends CoreModule {
           level,
           levels: this.levels,
           levelTextureSize,
-          alpha: store.alpha,
+          alpha: this.effectiveAlpha,
           repulsion: this.effectiveRepulsion,
           spaceSize: store.adjustedSpaceSize,
           theta: this.config.simulationRepulsionTheta,
@@ -1635,7 +1644,7 @@ export class ForceManyBody extends CoreModule {
         this.forceCenterUniformStore.setUniforms({
           forceCenterUniforms: {
             levelTextureSize,
-            alpha: store.alpha,
+            alpha: this.effectiveAlpha,
             repulsion: this.effectiveRepulsion,
             ...this.umapKernelUniforms,
           },

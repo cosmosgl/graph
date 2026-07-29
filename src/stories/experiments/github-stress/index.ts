@@ -41,14 +41,25 @@ type Kernel = 'umap' | 'tsne'
 
 /**
  * Per-kernel simulation settings. t-SNE spreads far more embedding units than
- * UMAP (no min_dist plateau), so its unit scale is much smaller; its linkSpring
- * is the early-exaggeration value, dropped to 1 after EXAGGERATION_TICKS.
+ * UMAP (no min_dist plateau), so its unit scale is much smaller. The engine
+ * schedules t-SNE's early exaggeration and runs its reference optimizer.
  */
 const KERNEL_SETTINGS = {
-  umap: { simulationUmapScale: 350, simulationRepulsion: 2, simulationLinkSpring: 0.5 },
-  tsne: { simulationUmapScale: 20, simulationRepulsion: 0.5, simulationLinkSpring: 12 },
+  umap: {
+    simulationUmapScale: 350,
+    simulationRepulsion: 2,
+    simulationLinkSpring: 0.5,
+    simulationGravity: 0.02,
+    simulationCenter: 0.1,
+  },
+  tsne: {
+    simulationUmapScale: 20,
+    simulationRepulsion: 1,
+    simulationLinkSpring: 1,
+    simulationGravity: 0.02,
+    simulationCenter: 0.1,
+  },
 } as const
-const EXAGGERATION_TICKS = 250
 
 // Index → color, matching the LANGS order in preprocess.py (last = "Other").
 const LANGS = ['Python', 'JavaScript', 'TypeScript', 'Java', 'C++', 'C', 'C#', 'Go', 'Rust', 'PHP', 'Ruby', 'Shell', 'HTML', 'Swift', 'Kotlin', 'Other']
@@ -154,18 +165,7 @@ export const githubStressTest = (): { graph: Graph; div: HTMLDivElement; destroy
 
   const spaceSize = 8192
 
-  // t-SNE early exaggeration countdown, in simulation TICKS (frame rate varies
-  // across hardware, so schedules must track optimization progress, not seconds).
-  // Armed by the kernel toggle; -1 = inactive.
-  let exaggerationTicksLeft = -1
-
   const config: GraphConfig = {
-    onSimulationTick: () => {
-      if (exaggerationTicksLeft > 0) {
-        exaggerationTicksLeft -= 1
-        if (exaggerationTicksLeft === 0) graph.setConfigPartial({ simulationLinkSpring: 1 })
-      }
-    },
     spaceSize,
     backgroundColor: '#0b0e1a',
     pointDefaultSize: 5,
@@ -369,7 +369,6 @@ export const githubStressTest = (): { graph: Graph; div: HTMLDivElement; destroy
           const rebuilt = buildGraphFor(kernel, k)
           activeKernel = kernel
           const settings = KERNEL_SETTINGS[kernel]
-          exaggerationTicksLeft = kernel === 'tsne' ? EXAGGERATION_TICKS : -1
           graph.setConfigPartial({ simulationKernel: kernel, ...settings })
           graph.setLinks(rebuilt.links)
           graph.setLinkStrength(rebuilt.strengths)

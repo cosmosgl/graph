@@ -30,6 +30,17 @@ const TRUST_K = 10
 const TRUST_SAMPLE = 2000
 const SETTLE_TICKS = 1500
 const EXAGGERATION_TICKS = 250
+/**
+ * t-SNE integrator learning rate (η). Our gradient is expressed in SPACE units
+ * (not the reference implementation's embedding units), so the usable range is
+ * far below reference t-SNE's η = 200. Override with `?eta=` and skip the UMAP
+ * phase with `?tsneOnly=1` to sweep it quickly.
+ */
+const params = new URLSearchParams(window.location.search)
+const TSNE_LEARNING_RATE = Number(params.get('eta') ?? 0.02)
+const TSNE_ONLY = params.get('tsneOnly') === '1'
+/** `?optimizer=momentum` switches to the reference momentum + gains integrator. */
+const TSNE_OPTIMIZER = params.get('optimizer') === 'momentum' ? 'momentum' as const : 'friction' as const
 
 /** One row of benchmark-reference.json (keys include `recall@10`, `recall@30`). */
 type ReferenceRow = Record<string, string | number>
@@ -167,12 +178,8 @@ export const embeddingBenchmark = async (): Promise<{ graph: Graph; div: HTMLDiv
 
   let ticks = 0
   let onSettled: (() => void) | undefined
-  let exaggerationEndTick = -1
   config.onSimulationTick = (): void => {
     ticks += 1
-    if (exaggerationEndTick > 0 && ticks === exaggerationEndTick) {
-      graph.setConfigPartial({ simulationLinkSpring: 1 })
-    }
     if (ticks >= SETTLE_TICKS && onSettled) {
       const done = onSettled
       onSettled = undefined
@@ -196,21 +203,23 @@ export const embeddingBenchmark = async (): Promise<{ graph: Graph; div: HTMLDiv
     await measure('PCA-2D (JS parity)', init, 0)
     if (cancelled) return
 
-    // UMAP run.
-    renderTable('building UMAP graph…')
-    await nextTick()
-    const umapGraph = buildUmapGraph(sliceKnnLists(inputKnn, n, TSNE_K, UMAP_K), n, UMAP_K)
-    graph.setLinks(umapGraph.links)
-    graph.setLinkStrength(umapGraph.strengths)
-    graph.render()
-    const settledUmap = settle()
-    const t0 = performance.now()
-    renderTable(`UMAP settling (${SETTLE_TICKS} ticks)…`)
-    graph.start()
-    await settledUmap
-    if (cancelled) return
-    await measure('cosmos UMAP', positionsNow(), (performance.now() - t0) / 1000)
-    if (cancelled) return
+    // UMAP run (skipped when sweeping t-SNE parameters).
+    if (!TSNE_ONLY) {
+      renderTable('building UMAP graph…')
+      await nextTick()
+      const umapGraph = buildUmapGraph(sliceKnnLists(inputKnn, n, TSNE_K, UMAP_K), n, UMAP_K)
+      graph.setLinks(umapGraph.links)
+      graph.setLinkStrength(umapGraph.strengths)
+      graph.render()
+      const settledUmap = settle()
+      const t0 = performance.now()
+      renderTable(`UMAP settling (${SETTLE_TICKS} ticks)…`)
+      graph.start()
+      await settledUmap
+      if (cancelled) return
+      await measure('cosmos UMAP', positionsNow(), (performance.now() - t0) / 1000)
+      if (cancelled) return
+    }
 
     // t-SNE run — fresh PCA init (openTSNE also starts from PCA).
     renderTable('calibrating t-SNE perplexity…')
@@ -219,21 +228,27 @@ export const embeddingBenchmark = async (): Promise<{ graph: Graph; div: HTMLDiv
     graph.setConfigPartial({
       simulationKernel: 'tsne',
       simulationUmapScale: 40,
-      simulationLinkSpring: 12, // early exaggeration
-      simulationRepulsion: 0.5,
+      simulationLinkSpring: 1,
+      simulationRepulsion: 1,
+      // The engine now owns the schedule: exaggeration for N ticks, then a clean
+      // optimizer state and momentum ramp-up (reference t-SNE's two phases).
+      simulationTsneExaggeration: 12,
+      simulationTsneExaggerationIterations: EXAGGERATION_TICKS,
+      simulationTsneLearningRate: TSNE_LEARNING_RATE,
+      simulationTsneOptimizer: TSNE_OPTIMIZER,
     })
     graph.setPointPositions(init)
     graph.setLinks(tsneGraph.links)
     graph.setLinkStrength(tsneGraph.strengths)
     graph.render()
     const settledTsne = settle()
-    exaggerationEndTick = EXAGGERATION_TICKS
     const t1 = performance.now()
     renderTable(`t-SNE settling (${SETTLE_TICKS} ticks, exaggeration for ${EXAGGERATION_TICKS})…`)
     graph.start()
     await settledTsne
     if (cancelled) return
-    await measure('cosmos t-SNE', positionsNow(), (performance.now() - t1) / 1000)
+    const label = TSNE_OPTIMIZER === 'momentum' ? `cosmos t-SNE η=${TSNE_LEARNING_RATE}` : 'cosmos t-SNE'
+    await measure(label, positionsNow(), (performance.now() - t1) / 1000)
 
     renderTable('done')
     graph.fitView(500)

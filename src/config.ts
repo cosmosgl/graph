@@ -463,6 +463,49 @@ export interface GraphConfigInterface {
    */
   simulationRepulsion: number;
   /**
+   * t-SNE early exaggeration: the factor the attractive term is multiplied by for
+   * the first `simulationTsneExaggerationIterations` ticks, letting the global
+   * cluster structure form before local detail. Reference t-SNE uses `12`.
+   * When the phase ends the integrator's velocity and per-point gains are reset
+   * (matching reference t-SNE's two separate gradient-descent calls), which is
+   * what lets clusters tighten crisply instead of smearing.
+   * Only used when `simulationKernel` is `tsne`.
+   * Default value: `12`
+   */
+  simulationTsneExaggeration: number;
+  /**
+   * Length of the t-SNE early-exaggeration phase, in simulation ticks.
+   * Only used when `simulationKernel` is `tsne`.
+   * Default value: `250`
+   */
+  simulationTsneExaggerationIterations: number;
+  /**
+   * t-SNE learning rate (η) for the momentum + per-point-gains integrator used by
+   * the `tsne` kernel. The step is `η · gain · gradient`, with gains adapted per
+   * point (Jacobs' rule) and momentum ramping from `0.5` during exaggeration to
+   * `0.8` afterwards — reference t-SNE's optimizer, in place of the
+   * friction/alpha-decay integration the other kernels use.
+   * Only used when `simulationKernel` is `tsne`.
+   * Default value: `1`
+   */
+  simulationTsneLearningRate: number;
+  /**
+   * Which integrator the `tsne` kernel uses.
+   *
+   * `friction` (default) integrates every force separately with
+   * `simulationFriction` and alpha decay, like the other kernels.
+   * `momentum` runs reference t-SNE's optimizer instead: the tick accumulates ONE
+   * fused gradient (repulsion + attraction) and steps it with a persistent
+   * velocity and Jacobs' per-point gains, tuned by `simulationTsneLearningRate`.
+   *
+   * The momentum optimizer is the faithful formulation but needs its learning
+   * rate tuned per dataset — it takes more ticks to reach the same layout, since
+   * it moves points once per tick where `friction` moves them once per force.
+   * Only used when `simulationKernel` is `tsne`.
+   * Default value: `friction`
+   */
+  simulationTsneOptimizer: 'friction' | 'momentum';
+  /**
    * Decreases / increases the detalization of the Many-Body force calculations.
    * Not used in 3D mode: the 3D octree samples a fixed neighborhood shell.
    * Default value: `1.15`

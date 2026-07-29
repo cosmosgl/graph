@@ -10,9 +10,9 @@ import { loadMammoth, kmeansLabels, labelColors, coordInit2D } from './mammoth-d
  * computed each tick by a reduction over the repulsion pass's partial sums.
  *
  * The input p_ij come from perplexity calibration on the CPU (buildTsneGraph,
- * k = 3 · perplexity as in Barnes-Hut t-SNE), and `simulationLinkSpring` doubles
- * as t-SNE's early exaggeration: it starts at 12 and drops to 1 after 250
- * simulation ticks (like reference t-SNE) — a live uniform change, no rebuild.
+ * k = 3 · perplexity as in Barnes-Hut t-SNE). The engine drives the reference
+ * schedule — early exaggeration for `simulationTsneExaggerationIterations` ticks,
+ * then a clean optimizer state — and integrates with momentum + per-point gains.
  */
 export const mammothTsneProjection = async (): Promise<{ graph: Graph; div: HTMLDivElement; destroy?: () => void }> => {
   // Yield once so the "Loading story…" placeholder paints before the synchronous
@@ -47,11 +47,14 @@ export const mammothTsneProjection = async (): Promise<{ graph: Graph; div: HTML
     enableSimulation: true,
     simulationKernel: 'tsne',
     simulationUmapScale: umapScale,
-    // Early exaggeration: 12× attraction while the global structure forms.
-    simulationLinkSpring: 12,
-    simulationRepulsion: 0.5,
-    // Light gravity + centering keep the layout compact and framed (positions
-    // are hard-clamped to the space, and t-SNE has no intrinsic centering).
+    simulationLinkSpring: 1,
+    simulationRepulsion: 1,
+    // The engine owns the t-SNE schedule: 12× attraction while the global
+    // structure forms, then a clean optimizer state and a momentum ramp-up.
+    simulationTsneExaggeration: 12,
+    simulationTsneExaggerationIterations: 250,
+    // Light gravity + centering keep the layout compact and framed under the
+    // default `friction` integrator (positions are hard-clamped to the space).
     simulationGravity: 0.05,
     simulationCenter: 0.1,
     simulationDecay: 5000,
@@ -69,23 +72,6 @@ export const mammothTsneProjection = async (): Promise<{ graph: Graph; div: HTML
   graph.setLinks(links)
   graph.setLinkStrength(strengths)
   graph.render()
-
-  // End early exaggeration after a fixed number of simulation TICKS (like
-  // reference t-SNE's ~250 iterations) — a live uniform update. Tick-based, not
-  // wall-clock: frame rate varies wildly across hardware, and the schedule must
-  // track optimization progress, not seconds.
-  const EXAGGERATION_TICKS = 250
-  let ticks = 0
-  let exaggerationEnded = false
-  graph.setConfigPartial({
-    onSimulationTick: () => {
-      ticks += 1
-      if (!exaggerationEnded && ticks >= EXAGGERATION_TICKS) {
-        exaggerationEnded = true
-        graph.setConfigPartial({ simulationLinkSpring: 1 })
-      }
-    },
-  })
 
   // The layout expands as t-SNE spreads the clusters; re-fit periodically with
   // `enableSimulation: false` (reframes WITHOUT reheating), then stop so the

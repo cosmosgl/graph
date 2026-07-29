@@ -44,6 +44,13 @@ export class Store {
   public pointsTextureSize = 0
   public linksTextureSize = 0
   public alpha = 1
+  /**
+   * Current t-SNE early-exaggeration factor (the attractive term is multiplied by
+   * it). Driven by the tick loop from `simulationTsneExaggeration` /
+   * `simulationTsneExaggerationIterations`; `1` outside the exaggeration phase
+   * and in every other kernel.
+   */
+  public tsneExaggeration = 1
   public transform = mat3.create()
   public screenSize: [number, number] = [0, 0]
   public mousePosition = [0, 0]

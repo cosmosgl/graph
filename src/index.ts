@@ -168,6 +168,12 @@ export class Graph {
   // are allocated and match the current data. Allocated lazily the first time
   // collision runs, so a graph that never enables it pays no memory cost.
   private isForceCollisionReady = false
+  /**
+   * Ticks the t-SNE kernel has run since the layout was (re)started — drives the
+   * early-exaggeration schedule and the optimizer-state reset at its end. Reset
+   * by `start()` so each run is reproducible.
+   */
+  private tsneIteration = 0
 
   private _isDestroyed = false
 
@@ -1689,6 +1695,11 @@ export class Graph {
     this.store.isSimulationRunning = true
     this.store.simulationProgress = 0
     this.store.alpha = alpha
+    // A fresh run restarts the t-SNE schedule (early exaggeration, then settle)
+    // from a clean optimizer state, so a layout is reproducible from its init.
+    this.tsneIteration = 0
+    this.store.tsneExaggeration = 1
+    this.points?.resetTsneIntegratorState()
     if (!wasRunning) this.config.onSimulationStart?.()
 
     // No-op before the first render() — frame() bails while there's nothing renderable
@@ -2406,57 +2417,89 @@ export class Graph {
     // `current` holds the latest positions — the draw pass, hover detection,
     // trackPoints and the next frame all read from `current`.
     if (shouldRunSimulation) {
-      if (simulationGravity) {
-        this.points?.swapFbo()
-        this.forceGravity?.run()
-        this.points?.updatePosition()
-      }
+      // t-SNE early-exaggeration schedule (both integrators): the attractive term
+      // is amplified while the global cluster structure forms, then released.
+      const isTsne = this.config.simulationKernel === 'tsne'
+      const exaggerationIterations = Math.max(0, Math.round(this.config.simulationTsneExaggerationIterations))
+      const isExaggerating = isTsne && this.tsneIteration < exaggerationIterations
+      this.store.tsneExaggeration = isExaggerating ? this.config.simulationTsneExaggeration : 1
 
-      if (simulationCenter) {
+      if (isTsne && this.config.simulationTsneOptimizer === 'momentum') {
+        // Reference t-SNE's optimizer needs the FULL gradient before it can step:
+        // the repulsion pass fills the accumulator, the link passes add attraction
+        // into it (see ForceLink.run), and ONE integration applies momentum +
+        // per-point gains. Note this moves points once per tick, where the
+        // `friction` path below moves them once per force.
         this.points?.swapFbo()
-        this.forceCenter?.run()
-        this.points?.updatePosition()
-      }
+        this.forceManyBody?.run()
+        if (this.store.linksTextureSize) {
+          this.forceLinkIncoming?.run()
+          this.forceLinkOutgoing?.run()
+        }
+        this.points?.integrateTsne(isExaggerating)
+      } else {
+        if (simulationGravity) {
+          this.points?.swapFbo()
+          this.forceGravity?.run()
+          this.points?.updatePosition()
+        }
 
-      this.points?.swapFbo()
-      this.forceManyBody?.run()
-      this.points?.updatePosition()
+        if (simulationCenter) {
+          this.points?.swapFbo()
+          this.forceCenter?.run()
+          this.points?.updatePosition()
+        }
 
-      if (this.store.linksTextureSize) {
         this.points?.swapFbo()
-        this.forceLinkIncoming?.run()
+        this.forceManyBody?.run()
         this.points?.updatePosition()
-        this.points?.swapFbo()
-        this.forceLinkOutgoing?.run()
-        this.points?.updatePosition()
-      }
 
-      if (this.graph.pointClusters || this.graph.clusterPositions) {
-        this.points?.swapFbo()
-        this.clusters?.run()
-        this.points?.updatePosition()
-      }
+        if (this.store.linksTextureSize) {
+          this.points?.swapFbo()
+          this.forceLinkIncoming?.run()
+          this.points?.updatePosition()
+          this.points?.swapFbo()
+          this.forceLinkOutgoing?.run()
+          this.points?.updatePosition()
+        }
 
-      // Collision runs after the attraction forces (links, clusters) so it
-      // corrects the overlap they introduce within the same tick, instead of
-      // lagging one frame behind and oscillating against them.
-      if (simulationCollision) {
+        if (this.graph.pointClusters || this.graph.clusterPositions) {
+          this.points?.swapFbo()
+          this.clusters?.run()
+          this.points?.updatePosition()
+        }
+
+        // Collision runs after the attraction forces (links, clusters) so it
+        // corrects the overlap they introduce within the same tick, instead of
+        // lagging one frame behind and oscillating against them.
+        if (simulationCollision) {
         // Lazily allocate the collision GPU resources on first use (or after a
         // data change marked them stale), so a graph that never enables
         // collision never pays the grid/size-texture memory cost.
-        if (!this.isForceCollisionReady) {
-          this.forceCollision?.create()
-          this.forceCollision?.initPrograms()
-          this.isForceCollisionReady = true
+          if (!this.isForceCollisionReady) {
+            this.forceCollision?.create()
+            this.forceCollision?.initPrograms()
+            this.isForceCollisionReady = true
+          }
+          // Each iteration rebuilds the spatial grid from the freshly updated
+          // positions, so extra iterations stiffen the collision constraint
+          // (overlaps resolve within the tick) like d3-force's collide.iterations.
+          const collisionIterations = Math.max(1, Math.round(this.config.simulationCollisionIterations ?? 1))
+          for (let i = 0; i < collisionIterations; i += 1) {
+            this.points?.swapFbo()
+            this.forceCollision?.run()
+            this.points?.updatePosition()
+          }
         }
-        // Each iteration rebuilds the spatial grid from the freshly updated
-        // positions, so extra iterations stiffen the collision constraint
-        // (overlaps resolve within the tick) like d3-force's collide.iterations.
-        const collisionIterations = Math.max(1, Math.round(this.config.simulationCollisionIterations ?? 1))
-        for (let i = 0; i < collisionIterations; i += 1) {
-          this.points?.swapFbo()
-          this.forceCollision?.run()
-          this.points?.updatePosition()
+      }
+
+      if (isTsne) {
+        this.tsneIteration += 1
+        // Reference t-SNE runs exaggeration and settling as two separate
+        // gradient-descent calls, each starting from a clean optimizer state —
+        // what lets clusters tighten crisply instead of smearing at the handover.
+        if (exaggerationIterations > 0 && this.tsneIteration === exaggerationIterations) {
+          this.points?.resetTsneIntegratorState()
         }
       }
 

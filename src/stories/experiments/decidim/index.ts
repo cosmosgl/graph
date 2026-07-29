@@ -51,7 +51,6 @@ type Meta = {
 const UMAP_N_NEIGHBORS = 15
 const TSNE_PERPLEXITY = 20
 const TSNE_K = 3 * TSNE_PERPLEXITY
-const EXAGGERATION_TICKS = 250
 
 const SPACE_SIZE = 8192
 
@@ -65,11 +64,26 @@ const kernelSettings = (kernel: 'umap' | 'tsne', dims: 2 | 3): {
   simulationUmapScale: number;
   simulationRepulsion: number;
   simulationLinkSpring: number;
+  simulationGravity: number;
+  simulationCenter: number;
 } => {
   if (kernel === 'tsne') {
-    return { simulationUmapScale: dims === 3 ? 14 : 20, simulationRepulsion: 0.5, simulationLinkSpring: 12 }
+    // Early exaggeration is engine-scheduled (simulationTsne* options).
+    return {
+      simulationUmapScale: dims === 3 ? 14 : 20,
+      simulationRepulsion: 1,
+      simulationLinkSpring: 1,
+      simulationGravity: 0.05,
+      simulationCenter: 0.1,
+    }
   }
-  return { simulationUmapScale: dims === 3 ? 250 : 350, simulationRepulsion: 2, simulationLinkSpring: 0.5 }
+  return {
+    simulationUmapScale: dims === 3 ? 250 : 350,
+    simulationRepulsion: 2,
+    simulationLinkSpring: 0.5,
+    simulationGravity: 0.05,
+    simulationCenter: 0.1,
+  }
 }
 
 /**
@@ -232,16 +246,6 @@ export const decidimEmbedding = (): { graph: Graph; div: HTMLDivElement; destroy
     attribution: 'visualized with <a href="https://cosmograph.app/" style="color: var(--cosmosgl-attribution-color);" target="_blank">Cosmograph</a>',
   }
 
-  // t-SNE early-exaggeration countdown in ticks (frame rate varies across
-  // hardware, so the schedule tracks optimization progress, not wall-clock).
-  let exaggerationTicksLeft = -1
-  config.onSimulationTick = (): void => {
-    if (exaggerationTicksLeft > 0) {
-      exaggerationTicksLeft -= 1
-      if (exaggerationTicksLeft === 0) graph.setConfigPartial({ simulationLinkSpring: 1 })
-    }
-  }
-
   const graph = new Graph(graphDiv, config)
 
   // ── Controls: mode toggle + pause ───────────────────────────────────────────
@@ -398,7 +402,6 @@ export const decidimEmbedding = (): { graph: Graph; div: HTMLDivElement; destroy
           }
           if (mode === 'precomputed') {
             graph.pause()
-            exaggerationTicksLeft = -1
             // 2D data: in the 3D view these lie in the z = 0 plane.
             graph.setPointPositions(precomputedPositions, { dimensions: 2 })
             graph.render()
@@ -410,7 +413,6 @@ export const decidimEmbedding = (): { graph: Graph; div: HTMLDivElement; destroy
             graph.setLinkStrength(built.strengths)
             // Reproducible: restart from the PCA init matching this view.
             graph.setPointPositions(initFor(dims), { dimensions: dims })
-            exaggerationTicksLeft = mode === 'tsne' ? EXAGGERATION_TICKS : -1
             graph.render()
             graph.start(1)
             fitLater()

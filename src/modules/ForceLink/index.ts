@@ -242,6 +242,16 @@ export class ForceLink extends CoreModule {
         // All texture bindings will be set dynamically in run() method
       },
       parameters: {
+        // Additive so the t-SNE kernel can accumulate attraction on top of the
+        // repulsion already in the buffer. The other kernels clear the target
+        // first, where adding to zero is identical to overwriting.
+        blend: true,
+        blendColorOperation: 'add',
+        blendColorSrcFactor: 'one',
+        blendColorDstFactor: 'one',
+        blendAlphaOperation: 'add',
+        blendAlphaSrcFactor: 'one',
+        blendAlphaDstFactor: 'one',
         depthWriteEnabled: false,
         depthCompare: 'always',
       },
@@ -264,15 +274,19 @@ export class ForceLink extends CoreModule {
       return
     }
 
+    const isTsne = this.config.simulationKernel === 'tsne'
     const { a: umapA, b: umapB } = getUmapABParams(this.config.simulationUmapMinDist, this.config.simulationUmapSpread)
     this.uniformStore.setUniforms({
       forceLinkUniforms: {
-        linkSpring: this.config.simulationLinkSpring,
+        // t-SNE folds early exaggeration into the attractive coefficient.
+        linkSpring: this.config.simulationLinkSpring * (isTsne ? store.tsneExaggeration : 1),
         linkDistance: this.config.simulationLinkDistance,
         linkDistRandomVariationRange: ensureVec2(this.config.simulationLinkDistRandomVariationRange, [0, 0]),
         pointsTextureSize: store.pointsTextureSize,
         linksTextureSize: store.linksTextureSize,
-        alpha: store.alpha,
+        // t-SNE has no annealing: its own optimizer (momentum + gains) provides
+        // convergence, so the gradient is never scaled down by alpha decay.
+        alpha: isTsne ? 1 : store.alpha,
         umapA,
         umapB,
         umapScale: this.config.simulationUmapScale,
@@ -288,9 +302,12 @@ export class ForceLink extends CoreModule {
       linkRandomDistanceTexture: this.randomDistanceTexture,
     })
 
+    // The t-SNE kernel integrates ONE fused gradient per tick, so its passes add
+    // into the accumulator that the repulsion pass already cleared and filled;
+    // the other kernels integrate each force separately and start from zero.
     const pass = device.beginRenderPass({
       framebuffer: points.velocityFbo,
-      clearColor: [0, 0, 0, 0],
+      ...(isTsne ? {} : { clearColor: [0, 0, 0, 0] as [number, number, number, number] }),
     })
     this.runCommand.draw(pass)
     pass.end()
