@@ -89,6 +89,17 @@ export function readPixels (device: Device, fbo: Framebuffer, sourceX = 0, sourc
 }
 
 /**
+ * Generates a short random id. Used to namespace the listeners each `Graph`
+ * instance registers on shared globals like `document`, so instances never
+ * replace or remove each other's handlers.
+ */
+export function generateRandomId (): string {
+  const words = new Uint32Array(2)
+  crypto.getRandomValues(words)
+  return Array.from(words, (word) => word.toString(36)).join('')
+}
+
+/**
  * Extracts point indices from a pixel readback buffer.
  * Every 4th value (R channel) is checked — non-zero means the point at that index was found.
  */
