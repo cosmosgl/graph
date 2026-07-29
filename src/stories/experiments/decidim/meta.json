@@ -1,0 +1,157 @@
+{
+ "n": 31775,
+ "k": 64,
+ "supportsMax": 2441.0,
+ "topics": [
+  {
+   "id": -1,
+   "label": "barri - mes - projecte",
+   "count": 12870
+  },
+  {
+   "id": 0,
+   "label": "barri - participacio - entitats",
+   "count": 2668
+  },
+  {
+   "id": 1,
+   "label": "joves - educacio - escola",
+   "count": 2178
+  },
+  {
+   "id": 2,
+   "label": "esport - espai - projecte",
+   "count": 1912
+  },
+  {
+   "id": 3,
+   "label": "salut - persones - atencio",
+   "count": 902
+  },
+  {
+   "id": 4,
+   "label": "bici - bicicletes - carril",
+   "count": 870
+  },
+  {
+   "id": 5,
+   "label": "dones - sexual - genere",
+   "count": 863
+  },
+  {
+   "id": 6,
+   "label": "cultural - culturals - musica",
+   "count": 862
+  },
+  {
+   "id": 7,
+   "label": "fundacio - associacio - barcelona",
+   "count": 778
+  },
+  {
+   "id": 8,
+   "label": "habitatge - habitatges - lloguer",
+   "count": 768
+  },
+  {
+   "id": 9,
+   "label": "bus - autobusos - transport",
+   "count": 635
+  },
+  {
+   "id": 10,
+   "label": "gossos - animals - perros",
+   "count": 593
+  },
+  {
+   "id": 11,
+   "label": "guardia - soroll - vigilancia",
+   "count": 550
+  },
+  {
+   "id": 12,
+   "label": "generada - participativa - sessio",
+   "count": 513
+  },
+  {
+   "id": 13,
+   "label": "projecte - descripcio - carrer",
+   "count": 512
+  },
+  {
+   "id": 14,
+   "label": "jardins - parc - arbres",
+   "count": 492
+  },
+  {
+   "id": 15,
+   "label": "turisme - turistics - turistes",
+   "count": 448
+  },
+  {
+   "id": 16,
+   "label": "escola - institut - collegi",
+   "count": 378
+  },
+  {
+   "id": 17,
+   "label": "energetica - energetic - energia",
+   "count": 321
+  },
+  {
+   "id": 18,
+   "label": "contenidors - reciclatge - residus",
+   "count": 316
+  },
+  {
+   "id": 19,
+   "label": "carrer - aparcament - vehicles",
+   "count": 305
+  },
+  {
+   "id": 20,
+   "label": "memoria - patrimoni - historica",
+   "count": 295
+  },
+  {
+   "id": 21,
+   "label": "illuminacio - exploratoria - valoracio",
+   "count": 250
+  },
+  {
+   "id": 22,
+   "label": "mar - marina - platges",
+   "count": 234
+  },
+  {
+   "id": 23,
+   "label": "escales - mecaniques - ascensor",
+   "count": 230
+  },
+  {
+   "id": 24,
+   "label": "biblioteca - biblioteques - llibres",
+   "count": 217
+  },
+  {
+   "id": 25,
+   "label": "ciencia - recerca - cientifica",
+   "count": 210
+  },
+  {
+   "id": 26,
+   "label": "escola - escoles - escolars",
+   "count": 208
+  },
+  {
+   "id": 27,
+   "label": "malbaratament - aliments - alimentari",
+   "count": 206
+  },
+  {
+   "id": 28,
+   "label": "solars - solar - plaques",
+   "count": 191
+  }
+ ]
+}

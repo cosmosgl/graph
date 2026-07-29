@@ -12,6 +12,7 @@ import { mammothProjection } from './experiments/umap-embedding/mammoth'
 import { mammothTsneProjection } from './experiments/umap-embedding/mammoth-tsne'
 import { tsneZValidation } from './experiments/umap-embedding/tsne-z-validation'
 import { embeddingBenchmark } from './experiments/umap-embedding/benchmark'
+import { decidimEmbedding } from './experiments/decidim'
 
 import createCosmosRaw from './create-cosmos?raw'
 import generateMeshDataRaw from './generate-mesh-data?raw'
@@ -29,6 +30,8 @@ import mammothTsneProjectionRaw from './experiments/umap-embedding/mammoth-tsne?
 import tsneZValidationRaw from './experiments/umap-embedding/tsne-z-validation?raw'
 import embeddingBenchmarkRaw from './experiments/umap-embedding/benchmark?raw'
 import benchmarkReferencePyRaw from './experiments/umap-embedding/benchmark-reference.py?raw'
+import decidimEmbeddingRaw from './experiments/decidim/index?raw'
+import decidimPreprocessRaw from './experiments/decidim/preprocess.py?raw'
 import mammothDataRaw from './experiments/umap-embedding/mammoth-data?raw'
 
 // More on how to set up stories at: https://storybook.js.org/docs/writing-stories#default-export
@@ -141,6 +144,17 @@ export const EmbeddingBenchmark: Story = {
     sourceCode: [
       { name: 'Story', code: embeddingBenchmarkRaw },
       { name: 'benchmark-reference.py', code: benchmarkReferencePyRaw },
+      { name: 'data-gen.ts', code: umapEmbeddingDataGenRaw },
+    ],
+  },
+}
+export const DecidimEmbedding: Story = {
+  ...createStory(decidimEmbedding),
+  name: 'Decidim Proposals (UMAP / t-SNE / Precomputed)',
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: decidimEmbeddingRaw },
+      { name: 'preprocess.py', code: decidimPreprocessRaw },
       { name: 'data-gen.ts', code: umapEmbeddingDataGenRaw },
     ],
   },
