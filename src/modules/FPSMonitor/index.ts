@@ -26,7 +26,9 @@ export class FPSMonitor {
 
   public destroy (): void {
     this.bench = undefined
-    this.container.querySelector('#gl-bench')?.remove()
-    this.container.querySelector('#gl-bench-style')?.remove()
+    // gl-bench appends both elements as direct children of the container;
+    // ':scope >' keeps a monitor in a nested container out of reach.
+    this.container.querySelector(':scope > #gl-bench')?.remove()
+    this.container.querySelector(':scope > #gl-bench-style')?.remove()
   }
 }
