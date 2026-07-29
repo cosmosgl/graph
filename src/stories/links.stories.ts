@@ -12,7 +12,6 @@ import strokeStylesStoryRaw from './links/stroke-styles/index?raw'
 import gradientLinksStoryRaw from './links/gradient-links/index?raw'
 import hoveringStoryRaw from './links/hovering/index?raw'
 import hoveringDataGenRaw from './links/hovering/data-generator?raw'
-import hoveringCssRaw from './links/hovering/style.css?raw'
 import labelsStoryRaw from './links/labels/index?raw'
 import labelsDataRaw from './links/labels/data?raw'
 import labelsLabelsRaw from './links/labels/labels?raw'
@@ -53,7 +52,6 @@ export const LinkHovering: Story = {
     sourceCode: [
       { name: 'Story', code: hoveringStoryRaw },
       { name: 'data-generator.ts', code: hoveringDataGenRaw },
-      { name: 'style.css', code: hoveringCssRaw },
     ],
   },
 }

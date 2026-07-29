@@ -69,7 +69,7 @@ export const PinnedPoints: Story = {
 export const ContextMenu: Story = {
   ...createStory(contextMenu),
   name: 'Context Menu',
-  tags: ['beginner', 'interactive'],
+  tags: ['advanced', 'interactive'],
   parameters: {
     sourceCode: [
       { name: 'Story', code: contextMenuStoryRaw },

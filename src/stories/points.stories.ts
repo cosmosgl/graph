@@ -81,7 +81,13 @@ export const PointLabels: Story = {
   ],
   async beforeEach (d): Promise<() => void> {
     return (): void => {
-      d.args.destroy?.()
+      // Same teardown contract as createStory: `destroy` is extra cleanup,
+      // and the graph must be destroyed even if it throws.
+      try {
+        d.args.destroy?.()
+      } finally {
+        d.args.graph?.destroy()
+      }
     }
   },
   render: (args, { loaded: { data } }): HTMLDivElement => {

@@ -5,7 +5,8 @@ import { generateMeshData } from '../generate-mesh-data'
 
 export const withLabels = (): {div: HTMLDivElement; graph: Graph; destroy: () => void } => {
   let nClusters = 2
-  const { pointPositions, pointColors, pointClusters } = generateMeshData(100, 100, nClusters, 1.0)
+  // wholeness 0: the story renders no links, so skip generating them
+  const { pointPositions, pointColors, pointClusters } = generateMeshData(100, 100, nClusters, 0)
 
   const { div, graph } = createCosmos({
     pointPositions,
@@ -38,7 +39,7 @@ export const withLabels = (): {div: HTMLDivElement; graph: Graph; destroy: () =>
       }
     }
 
-    const nextData = generateMeshData(100, 100, nClusters, 1.0)
+    const nextData = generateMeshData(100, 100, nClusters, 0)
     graph.setPointClusters(nextData.pointClusters)
     graph.setPointColors(nextData.pointColors)
     graph.render(1)
