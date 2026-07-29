@@ -5,6 +5,7 @@ import { buildUmapGraph, buildTsneGraph, sliceKnnLists, type UmapGraph } from '.
 import knnIdxUrl from './knn_idx.u16.bin?url'
 import knnDistUrl from './knn_dist.f32.bin?url'
 import initUrl from './init.f32.bin?url'
+import init3dUrl from './init3d.f32.bin?url'
 import precomputedUrl from './precomputed.f32.bin?url'
 import topicUrl from './topic.i16.bin?url'
 import supportsUrl from './supports.f32.bin?url'
@@ -18,11 +19,18 @@ import metaRaw from './meta.json?raw'
  *   • t-SNE       — the GPU `simulationKernel: 'tsne'` optimizes the embedding,
  *   • Precomputed — the UMAP x/y that shipped in the dataset (reference).
  *
- * The kNN graph and the PCA-2D init are precomputed offline (see preprocess.py)
+ * A 2D / 3D switch flips `spaceDimensions` live. In 3D the kernels optimize a
+ * genuine 3D embedding (from a PCA-3D init, through the orbit camera and the
+ * octree repulsion path at this point count) — not a projection of the 2D
+ * result. The precomputed layout only ships x/y, so in 3D it stays a flat plane
+ * at z = 0; that is the honest rendering of 2D data, and rotating it makes the
+ * difference from a real 3D embedding obvious.
+ *
+ * The kNN graph and the PCA inits are precomputed offline (see preprocess.py)
  * — the browser can't read the parquet, and the thing under test here is the
  * GPU *layout* kernel, not kNN construction, so the layout-independent
- * preprocessing is done once. Switching to UMAP or t-SNE restarts that kernel
- * from the shared PCA init, so each tab shows its algorithm's honest
+ * preprocessing is done once. Switching mode or dimensionality restarts the
+ * kernel from the matching PCA init, so every tab shows its algorithm's honest
  * from-scratch result against the precomputed reference.
  *
  * Points are colored by discovered topic (topic -1 is the generic
@@ -47,10 +55,28 @@ const EXAGGERATION_TICKS = 250
 
 const SPACE_SIZE = 8192
 
-/** Per-kernel simulation settings (t-SNE spreads far wider in embedding units). */
-const KERNEL_SETTINGS = {
-  umap: { simulationUmapScale: 350, simulationRepulsion: 2, simulationLinkSpring: 0.5 },
-  tsne: { simulationUmapScale: 20, simulationRepulsion: 0.5, simulationLinkSpring: 12 },
+/**
+ * Per-kernel, per-dimensionality simulation settings. t-SNE spreads far wider in
+ * embedding units than UMAP (no min_dist plateau), so its unit scale is much
+ * smaller. The 3D variants use a smaller scale still: the same points spread
+ * over a third axis, so the layout reaches further in embedding units.
+ */
+const kernelSettings = (kernel: 'umap' | 'tsne', dims: 2 | 3): {
+  simulationUmapScale: number;
+  simulationRepulsion: number;
+  simulationLinkSpring: number;
+} => {
+  if (kernel === 'tsne') {
+    return { simulationUmapScale: dims === 3 ? 14 : 20, simulationRepulsion: 0.5, simulationLinkSpring: 12 }
+  }
+  return { simulationUmapScale: dims === 3 ? 250 : 350, simulationRepulsion: 2, simulationLinkSpring: 0.5 }
+}
+
+/** Extra config applied only in the 3D view (sphere shading, depth cue, camera). */
+const VIEW_3D_CONFIG = {
+  pointSphereShading: true,
+  pointDepthFade: 0.1,
+  cameraFov: 55,
 } as const
 
 const fetchBytes = async (url: string): Promise<ArrayBuffer> => {
@@ -59,22 +85,30 @@ const fetchBytes = async (url: string): Promise<ArrayBuffer> => {
   return res.arrayBuffer()
 }
 
-/** Aspect-preserving scale of a raw 2D layout into the center of the space. */
-const scaleToSpace = (raw: Float32Array, n: number, spaceSize: number, fill = 0.85): Float32Array => {
-  let minX = Infinity; let maxX = -Infinity; let minY = Infinity; let maxY = -Infinity
+/**
+ * Aspect-preserving scale of a raw `dims`-dimensional layout into the center of
+ * the space (one shared scale across axes, so the shape is never distorted).
+ */
+const scaleToSpace = (raw: Float32Array, n: number, dims: 2 | 3, spaceSize: number, fill = 0.85): Float32Array => {
+  const min = new Float64Array(dims).fill(Infinity)
+  const max = new Float64Array(dims).fill(-Infinity)
   for (let i = 0; i < n; i++) {
-    const x = raw[i * 2] as number; const y = raw[i * 2 + 1] as number
-    if (x < minX) minX = x; if (x > maxX) maxX = x
-    if (y < minY) minY = y; if (y > maxY) maxY = y
+    for (let d = 0; d < dims; d++) {
+      const v = raw[i * dims + d] as number
+      if (v < (min[d] as number)) min[d] = v
+      if (v > (max[d] as number)) max[d] = v
+    }
   }
-  const extent = Math.max(maxX - minX, maxY - minY) || 1
-  const scale = (fill * spaceSize) / extent
+  let extent = 0
+  for (let d = 0; d < dims; d++) extent = Math.max(extent, (max[d] as number) - (min[d] as number))
+  const scale = (fill * spaceSize) / (extent || 1)
   const center = spaceSize / 2
-  const cx = (minX + maxX) / 2; const cy = (minY + maxY) / 2
-  const out = new Float32Array(n * 2)
+  const out = new Float32Array(n * dims)
   for (let i = 0; i < n; i++) {
-    out[i * 2] = center + ((raw[i * 2] as number) - cx) * scale
-    out[i * 2 + 1] = center + ((raw[i * 2 + 1] as number) - cy) * scale
+    for (let d = 0; d < dims; d++) {
+      const mid = ((min[d] as number) + (max[d] as number)) / 2
+      out[i * dims + d] = center + ((raw[i * dims + d] as number) - mid) * scale
+    }
   }
   return out
 }
@@ -155,12 +189,16 @@ export const decidimEmbedding = (): { graph: Graph; div: HTMLDivElement; destroy
     renderLinks: false,
     enableDrag: false,
     enableSimulation: true,
+    spaceDimensions: 2,
+    // Switches apply instantly. The default animated transition would (a) pause
+    // the simulation for its duration and (b) animate z from 0 on a 2D → 3D data
+    // switch — and a perfectly flat z = 0 plane is a symmetric equilibrium for
+    // the 3D repulsion, so the restarted layout would stay trapped in the plane.
+    transitionDuration: 0,
     simulationKernel: 'umap',
-    simulationUmapScale: KERNEL_SETTINGS.umap.simulationUmapScale,
     simulationUmapMinDist: 0.1,
     simulationUmapSpread: 1,
-    simulationRepulsion: KERNEL_SETTINGS.umap.simulationRepulsion,
-    simulationLinkSpring: KERNEL_SETTINGS.umap.simulationLinkSpring,
+    ...kernelSettings('umap', 2),
     simulationGravity: 0.05,
     simulationCenter: 0.1,
     simulationDecay: 30000,
@@ -202,22 +240,42 @@ export const decidimEmbedding = (): { graph: Graph; div: HTMLDivElement; destroy
     ].join(';')
     panel.appendChild(button)
   }
+  // 2D / 3D view switch — flips `spaceDimensions` live and restarts the active
+  // kernel from the matching PCA init.
+  const button2d = document.createElement('button')
+  const button3d = document.createElement('button')
+  button2d.textContent = '2D'
+  button3d.textContent = '3D'
+  const dimsButtons = [button2d, button3d]
+  const dimsGroup = document.createElement('span')
+  dimsGroup.style.cssText = 'margin-left: 14px; display: flex; gap: 6px;'
+  for (const button of dimsButtons) {
+    button.style.cssText = [
+      'padding: 6px 14px', 'font: 600 12px Helvetica, Arial, sans-serif', 'color: #fff',
+      'border: none', 'border-radius: 14px', 'cursor: pointer',
+    ].join(';')
+    dimsGroup.appendChild(button)
+  }
+  panel.appendChild(dimsGroup)
+
   const pauseButton = document.createElement('button')
   pauseButton.textContent = 'Pause'
   pauseButton.style.cssText = [
-    'margin-left: 8px', 'padding: 6px 14px', 'color: #fff', 'background: #2f3550',
+    'margin-left: 14px', 'padding: 6px 14px', 'color: #fff', 'background: #2f3550',
     'border: none', 'border-radius: 14px', 'cursor: pointer',
   ].join(';')
   panel.appendChild(pauseButton)
   const status = document.createElement('span')
-  status.style.cssText = 'margin-left: 8px; color: #8b93a7; font-weight: 500;'
+  status.style.cssText = 'margin-left: 10px; color: #8b93a7; font-weight: 500;'
   panel.appendChild(status)
   div.appendChild(panel)
 
-  const highlightMode = (active: Mode): void => {
+  const highlightControls = (activeMode: Mode, activeDims: 2 | 3): void => {
     for (const [mode, button] of Object.entries(modeButtons)) {
-      button.style.background = mode === active ? '#5f69de' : '#2f3550'
+      button.style.background = mode === activeMode ? '#5f69de' : '#2f3550'
     }
+    button2d.style.background = activeDims === 2 ? '#5f69de' : '#2f3550'
+    button3d.style.background = activeDims === 3 ? '#5f69de' : '#2f3550'
   }
 
   // ── Topic legend (top labelled topics by count) ──────────────────────────────
@@ -244,8 +302,8 @@ export const decidimEmbedding = (): { graph: Graph; div: HTMLDivElement; destroy
   const graphCache = new Map<Mode, UmapGraph>()
 
   const run = async (): Promise<void> => {
-    const [idxBuf, distBuf, initBuf, precomputedBuf, topicBuf, supportsBuf] = await Promise.all([
-      fetchBytes(knnIdxUrl), fetchBytes(knnDistUrl), fetchBytes(initUrl),
+    const [idxBuf, distBuf, initBuf, init3dBuf, precomputedBuf, topicBuf, supportsBuf] = await Promise.all([
+      fetchBytes(knnIdxUrl), fetchBytes(knnDistUrl), fetchBytes(initUrl), fetchBytes(init3dUrl),
       fetchBytes(precomputedUrl), fetchBytes(topicUrl), fetchBytes(supportsUrl),
     ])
     if (cancelled) return
@@ -255,8 +313,11 @@ export const decidimEmbedding = (): { graph: Graph; div: HTMLDivElement; destroy
       indices: Int32Array.from(idxU16),
       distances: new Float32Array(distBuf),
     }
-    const initPositions = scaleToSpace(new Float32Array(initBuf), n, SPACE_SIZE)
-    const precomputedPositions = scaleToSpace(new Float32Array(precomputedBuf), n, SPACE_SIZE)
+    // PCA init per view dimensionality — the 2D one is the 3D one's first two axes.
+    const init2dPositions = scaleToSpace(new Float32Array(initBuf), n, 2, SPACE_SIZE)
+    const init3dPositions = scaleToSpace(new Float32Array(init3dBuf), n, 3, SPACE_SIZE)
+    const initFor = (dims: 2 | 3): Float32Array => (dims === 3 ? init3dPositions : init2dPositions)
+    const precomputedPositions = scaleToSpace(new Float32Array(precomputedBuf), n, 2, SPACE_SIZE)
     const topic = new Int16Array(topicBuf)
     const supports = new Float32Array(supportsBuf)
 
@@ -275,53 +336,74 @@ export const decidimEmbedding = (): { graph: Graph; div: HTMLDivElement; destroy
     }
 
     let activeMode: Mode = 'umap'
+    let activeDims: 2 | 3 = 2
     let busy = false
 
     // Fit a frame later: a synchronous fitView races the position upload (and,
-    // on a kernel switch, the shader recompile), computing its target from stale
-    // positions and framing an empty view.
+    // on a kernel or dimensionality switch, the shader recompile), computing its
+    // target from stale positions and framing an empty view.
     const fitLater = (): void => { setTimeout(() => { if (!cancelled) graph.fitView(400) }, 80) }
 
-    const enterMode = (mode: Mode, buildStatus: string): void => {
-      if (busy || cancelled || mode === activeMode) return
+    /** The precomputed layout has no z, so in 3D it can only be a flat plane. */
+    const noteFor = (mode: Mode, dims: 2 | 3): string =>
+      (mode === 'precomputed' && dims === 3 ? 'dataset ships x/y only — flat plane at z = 0' : '')
+
+    const apply = (mode: Mode, dims: 2 | 3, buildStatus: string): void => {
+      if (busy || cancelled) return
+      if (mode === activeMode && dims === activeDims) return
       busy = true
-      status.textContent = buildStatus
-      for (const button of Object.values(modeButtons)) button.disabled = true
+      status.textContent = buildStatus || 'switching…'
+      const allButtons = [...Object.values(modeButtons), ...dimsButtons]
+      for (const button of allButtons) button.disabled = true
       // Yield so the status paints before a (brief) synchronous graph build.
       setTimeout(() => {
         try {
           if (cancelled) return
+          const dimsChanged = dims !== activeDims
           activeMode = mode
+          activeDims = dims
+          // Flipping spaceDimensions swaps the gestures (pan/zoom ⇄ orbit) and
+          // rebuilds the mode-specific GPU resources; the 3D-only shading and
+          // camera settings ride along.
+          if (dimsChanged) {
+            graph.setConfigPartial(dims === 3
+              ? { spaceDimensions: 3, ...VIEW_3D_CONFIG }
+              : { spaceDimensions: 2, pointSphereShading: false, pointDepthFade: 0 })
+          }
           if (mode === 'precomputed') {
             graph.pause()
             exaggerationTicksLeft = -1
-            graph.setPointPositions(precomputedPositions)
+            // 2D data: in the 3D view these lie in the z = 0 plane.
+            graph.setPointPositions(precomputedPositions, { dimensions: 2 })
             graph.render()
             fitLater()
           } else {
             const built = buildGraphFor(mode)
-            graph.setConfigPartial({ simulationKernel: mode, ...KERNEL_SETTINGS[mode] })
+            graph.setConfigPartial({ simulationKernel: mode, ...kernelSettings(mode, dims) })
             graph.setLinks(built.links)
             graph.setLinkStrength(built.strengths)
-            graph.setPointPositions(initPositions) // reproducible: restart from the shared PCA init
+            // Reproducible: restart from the PCA init matching this view.
+            graph.setPointPositions(initFor(dims), { dimensions: dims })
             exaggerationTicksLeft = mode === 'tsne' ? EXAGGERATION_TICKS : -1
             graph.render()
             graph.start(1)
             fitLater()
             pauseButton.textContent = 'Pause'
           }
-          highlightMode(mode)
+          highlightControls(mode, dims)
         } finally {
           busy = false
-          for (const button of Object.values(modeButtons)) button.disabled = false
-          status.textContent = ''
+          for (const button of allButtons) button.disabled = false
+          status.textContent = noteFor(activeMode, activeDims)
         }
       }, 20)
     }
 
-    modeButtons.umap.addEventListener('click', () => enterMode('umap', 'building UMAP graph…'))
-    modeButtons.tsne.addEventListener('click', () => enterMode('tsne', 'calibrating t-SNE perplexity…'))
-    modeButtons.precomputed.addEventListener('click', () => enterMode('precomputed', ''))
+    modeButtons.umap.addEventListener('click', () => apply('umap', activeDims, 'building UMAP graph…'))
+    modeButtons.tsne.addEventListener('click', () => apply('tsne', activeDims, 'calibrating t-SNE perplexity…'))
+    modeButtons.precomputed.addEventListener('click', () => apply('precomputed', activeDims, ''))
+    button2d.addEventListener('click', () => apply(activeMode, 2, 'switching to 2D…'))
+    button3d.addEventListener('click', () => apply(activeMode, 3, 'switching to 3D…'))
     pauseButton.addEventListener('click', () => {
       if (activeMode === 'precomputed') return
       if (graph.isSimulationRunning) { graph.pause(); pauseButton.textContent = 'Start' } else { graph.unpause(); pauseButton.textContent = 'Pause' }
@@ -331,13 +413,13 @@ export const decidimEmbedding = (): { graph: Graph; div: HTMLDivElement; destroy
     const umapGraph = buildGraphFor('umap')
     graph.setLinks(umapGraph.links)
     graph.setLinkStrength(umapGraph.strengths)
-    graph.setPointPositions(initPositions)
+    graph.setPointPositions(initFor(activeDims), { dimensions: activeDims })
     graph.render()
     graph.start(1)
     // Defer the first fit so the initial positions reach the GPU before the fit
     // computes its target extent (a synchronous fitView here races the upload).
     setTimeout(() => { if (!cancelled) graph.fitView(400) }, 50)
-    highlightMode('umap')
+    highlightControls(activeMode, activeDims)
 
     overlay.remove()
     panel.style.display = 'flex'

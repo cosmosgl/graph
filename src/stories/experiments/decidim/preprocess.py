@@ -10,6 +10,7 @@ against a precomputed UMAP — so the expensive, layout-independent preprocessin
   knn_idx.u16.bin   uint16   n × K   neighbor indices (self excluded), ascending
   knn_dist.f32.bin  float32  n × K   matching euclidean distances (unit-normed)
   init.f32.bin      float32  n × 2   PCA-2D init positions (raw, unscaled)
+  init3d.f32.bin    float32  n × 3   PCA-3D init positions, for the 3D view
   precomputed.f32.bin float32 n × 2  the parquet's stored UMAP x / y (raw)
   topic.i16.bin     int16    n       topic id (-1 = generic / uncategorized)
   supports.f32.bin  float32  n       support count (for point sizing)
@@ -72,11 +73,14 @@ def main() -> None:
     idx.astype(np.uint16).tofile(os.path.join(OUT, 'knn_idx.u16.bin'))
     dist.tofile(os.path.join(OUT, 'knn_dist.f32.bin'))
 
-    # PCA-2D init from the top 2 principal components of the embeddings.
+    # PCA init from the top principal components of the embeddings: 2 components
+    # for the 2D view, 3 for the 3D view (the 2D init is the 3D one's first two
+    # columns, so both views start from the same projection).
     centered = emb - emb.mean(axis=0)
     _, _, vt = np.linalg.svd(centered, full_matrices=False)
-    init = (centered @ vt[:2].T).astype(np.float32)
-    init.tofile(os.path.join(OUT, 'init.f32.bin'))
+    init3d = (centered @ vt[:3].T).astype(np.float32)
+    init3d[:, :2].copy().tofile(os.path.join(OUT, 'init.f32.bin'))
+    init3d.tofile(os.path.join(OUT, 'init3d.f32.bin'))
 
     precomputed = np.stack([t['x'], t['y']], axis=1).astype(np.float32)
     precomputed.tofile(os.path.join(OUT, 'precomputed.f32.bin'))
@@ -101,7 +105,7 @@ def main() -> None:
         json.dump(meta, f, indent=1)
 
     total = sum(os.path.getsize(os.path.join(OUT, b)) for b in [
-        'knn_idx.u16.bin', 'knn_dist.f32.bin', 'init.f32.bin',
+        'knn_idx.u16.bin', 'knn_dist.f32.bin', 'init.f32.bin', 'init3d.f32.bin',
         'precomputed.f32.bin', 'topic.i16.bin', 'supports.f32.bin',
     ])
     print(f'wrote bins ({total / 1e6:.1f} MB) + meta.json ({len(topics)} topics)')
