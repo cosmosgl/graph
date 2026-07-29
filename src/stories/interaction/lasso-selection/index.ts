@@ -5,7 +5,8 @@ import { PolygonSelection } from './polygon'
 
 export const polygonSelection = (): {div: HTMLDivElement; graph: Graph; destroy: () => void } => {
   const nClusters = 25
-  const { pointPositions, pointColors, pointClusters } = generateMeshData(150, 150, nClusters, 1.0)
+  // wholeness 0: the story renders no links, so skip generating them
+  const { pointPositions, pointColors, pointClusters } = generateMeshData(150, 150, nClusters, 0)
 
   const { div, graph } = createCosmos({
     pointPositions,
