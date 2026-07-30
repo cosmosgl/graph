@@ -8,32 +8,18 @@ import { pointLabels } from './points/labels'
 import { moscowMetroStations } from './points/position-rescaling'
 
 import shapesStoryRaw from './points/shapes/index?raw'
-import rescalingStoryRaw from './points/position-rescaling/index?raw'
-import rescalingCoordsRaw from './points/position-rescaling/moscow-metro-coords?raw'
-import rescalingColorsRaw from './points/position-rescaling/point-colors?raw'
-import rescalingCssRaw from './points/position-rescaling/style.css?raw'
 import imagesStoryRaw from './points/images/index?raw'
 import labelsStoryRaw from './points/labels/index?raw'
 import labelsDataRaw from './points/labels/data?raw'
 import labelsLabelsRaw from './points/labels/labels?raw'
 import labelsCssRaw from './points/labels/style.css?raw'
+import rescalingStoryRaw from './points/position-rescaling/index?raw'
+import rescalingCoordsRaw from './points/position-rescaling/moscow-metro-coords?raw'
+import rescalingColorsRaw from './points/position-rescaling/point-colors?raw'
+import rescalingCssRaw from './points/position-rescaling/style.css?raw'
 
 const meta: Meta<CosmosStoryProps> = {
   title: 'Examples/Points',
-}
-
-export const PositionRescaling: Story = {
-  ...createStory(moscowMetroStations),
-  name: 'Position Rescaling',
-  tags: ['beginner', 'interactive'],
-  parameters: {
-    sourceCode: [
-      { name: 'Story', code: rescalingStoryRaw },
-      { name: 'moscow-metro-coords', code: rescalingCoordsRaw },
-      { name: 'point-colors', code: rescalingColorsRaw },
-      { name: 'style.css', code: rescalingCssRaw },
-    ],
-  },
 }
 
 export const AllShapes: Story = {
@@ -113,6 +99,20 @@ export const PointLabels: Story = {
       { name: 'data.ts', code: labelsDataRaw },
       { name: 'labels.ts', code: labelsLabelsRaw },
       { name: 'style.css', code: labelsCssRaw },
+    ],
+  },
+}
+
+export const PositionRescaling: Story = {
+  ...createStory(moscowMetroStations),
+  name: 'Position Rescaling',
+  tags: ['beginner', 'interactive'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: rescalingStoryRaw },
+      { name: 'moscow-metro-coords', code: rescalingCoordsRaw },
+      { name: 'point-colors', code: rescalingColorsRaw },
+      { name: 'style.css', code: rescalingCssRaw },
     ],
   },
 }
