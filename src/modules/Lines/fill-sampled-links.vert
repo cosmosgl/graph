@@ -12,7 +12,6 @@ uniform sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform fillSampledLinksUniforms {
-  float pointsTextureSize;
   mat4 transformationMatrix;
   float spaceSize;
   vec2 screenSize;
@@ -21,7 +20,6 @@ layout(std140) uniform fillSampledLinksUniforms {
   float curvedLinkSegments;
 } fillSampledLinks;
 
-#define pointsTextureSize fillSampledLinks.pointsTextureSize
 #define transformationMatrix fillSampledLinks.transformationMatrix
 #define spaceSize fillSampledLinks.spaceSize
 #define screenSize fillSampledLinks.screenSize
@@ -29,7 +27,6 @@ layout(std140) uniform fillSampledLinksUniforms {
 #define curvedLinkControlPointDistance fillSampledLinks.curvedLinkControlPointDistance
 #define curvedLinkSegments fillSampledLinks.curvedLinkSegments
 #else
-uniform float pointsTextureSize;
 uniform float spaceSize;
 uniform vec2 screenSize;
 uniform float curvedWeight;
@@ -41,16 +38,19 @@ uniform mat3 transformationMatrix;
 out vec4 rgba;
 
 void main() {
+  ivec2 pointTexelA = ivec2(pointA);
+  ivec2 pointTexelB = ivec2(pointB);
+
   // Skip a link touching an absent (faded-out) point. exit.G = current absence.
-  if (texture(exitTexture, (pointA + 0.5) / pointsTextureSize).g > 0.5 ||
-      texture(exitTexture, (pointB + 0.5) / pointsTextureSize).g > 0.5) {
+  if (texelFetch(exitTexture, pointTexelA, 0).g > 0.5 ||
+      texelFetch(exitTexture, pointTexelB, 0).g > 0.5) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     gl_PointSize = 0.0;
     return;
   }
 
-  vec4 posA = texture(positionsTexture, (pointA + 0.5) / pointsTextureSize);
-  vec4 posB = texture(positionsTexture, (pointB + 0.5) / pointsTextureSize);
+  vec4 posA = texelFetch(positionsTexture, pointTexelA, 0);
+  vec4 posB = texelFetch(positionsTexture, pointTexelB, 0);
   vec2 a = posA.rg;
   vec2 b = posB.rg;
 

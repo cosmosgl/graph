@@ -21,18 +21,18 @@ uniform float friction;
 uniform float spaceSize;
 #endif
 
-in vec2 textureCoords;
-
 out vec4 fragColor;
 
 void main() {
-  vec4 pointPosition = texture(positionsTexture, textureCoords);
-  vec4 pointVelocity = texture(velocity, textureCoords);
+  ivec2 pointTexel = ivec2(gl_FragCoord.xy);
+
+  vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
+  vec4 pointVelocity = texelFetch(velocity, pointTexel, 0);
 
   // Check if point is pinned
   // pinnedStatusTexture has the same size and layout as positionsTexture
   // Each pixel corresponds to a point: red channel > 0.5 means the point is pinned
-  vec4 pinnedStatus = texture(pinnedStatusTexture, textureCoords);
+  vec4 pinnedStatus = texelFetch(pinnedStatusTexture, pointTexel, 0);
   
   // If pinned, don't update position
   if (pinnedStatus.r > 0.5) {
@@ -42,7 +42,7 @@ void main() {
 
   // If absent (current absence = exit.G), leave it untouched — don't integrate or
   // clamp it (clamping NaN is undefined and could resurrect the point at (0,0)).
-  vec4 exitStatus = texture(exitTexture, textureCoords);
+  vec4 exitStatus = texelFetch(exitTexture, pointTexel, 0);
   if (exitStatus.g > 0.5) {
     fragColor = pointPosition;
     return;

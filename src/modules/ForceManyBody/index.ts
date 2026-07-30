@@ -83,7 +83,6 @@ export class ForceManyBody extends CoreModule {
 
   private calculateLevelsUniformStore: UniformStore<{
     calculateLevelsPreciseUniforms: {
-      pointsTextureSize: number;
       levelGridSize: number;
       cellSize: number;
     };
@@ -198,12 +197,10 @@ export class ForceManyBody extends CoreModule {
       calculateLevelsPreciseUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
-          pointsTextureSize: 'f32',
           levelGridSize: 'f32',
           cellSize: 'f32',
         },
         defaultUniforms: {
-          pointsTextureSize: store.pointsTextureSize,
           levelGridSize: 0,
           cellSize: 0,
         },
@@ -480,7 +477,6 @@ export class ForceManyBody extends CoreModule {
 
       this.calculateLevelsUniformStore.setUniforms({
         calculateLevelsPreciseUniforms: {
-          pointsTextureSize: store.pointsTextureSize ?? 0,
           levelGridSize: target.gridSize,
           // Computed per level from the space size so the power-of-two halving
           // chain stays bit-exact between levels (the coverage invariant relies on it).

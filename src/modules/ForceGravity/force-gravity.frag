@@ -19,11 +19,12 @@ uniform float spaceSize;
 uniform float alpha;
 #endif
 
-in vec2 textureCoords;
 out vec4 fragColor;
 
 void main() {
-  vec4 pointPosition = texture(positionsTexture, textureCoords);
+  ivec2 pointTexel = ivec2(gl_FragCoord.xy);
+
+  vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
 
   vec4 velocity = vec4(0.0);
 

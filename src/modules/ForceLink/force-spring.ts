@@ -14,7 +14,6 @@ layout(std140) uniform forceLinkUniforms {
   float linkSpring;
   float linkDistance;
   vec2 linkDistRandomVariationRange;
-  float pointsTextureSize;
   float linksTextureSize;
   float alpha;
 } forceLink;
@@ -22,28 +21,27 @@ layout(std140) uniform forceLinkUniforms {
 #define linkSpring forceLink.linkSpring
 #define linkDistance forceLink.linkDistance
 #define linkDistRandomVariationRange forceLink.linkDistRandomVariationRange
-#define pointsTextureSize forceLink.pointsTextureSize
 #define linksTextureSize forceLink.linksTextureSize
 #define alpha forceLink.alpha
 #else
 uniform float linkSpring;
 uniform float linkDistance;
 uniform vec2 linkDistRandomVariationRange;
-uniform float pointsTextureSize;
 uniform float linksTextureSize;
 uniform float alpha;
 #endif
 
-in vec2 textureCoords;
 out vec4 fragColor;
 
 const float MAX_LINKS = ${maxLinks}.0;
 
 void main() {
-  vec4 pointPosition = texture(positionsTexture, textureCoords);
+  ivec2 pointTexel = ivec2(gl_FragCoord.xy);
+
+  vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
   vec4 velocity = vec4(0.0);
 
-  vec4 linkInfo = texture(linkInfoTexture, textureCoords);
+  vec4 linkInfo = texelFetch(linkInfoTexture, pointTexel, 0);
   float iCount = linkInfo.r;
   float jCount = linkInfo.g;
   float linkAmount = linkInfo.b;
@@ -54,10 +52,10 @@ void main() {
           iCount = 0.0;
           jCount += 1.0;
         }
-        vec2 linkTextureIndex = (vec2(iCount, jCount) + 0.5) / linksTextureSize;
-        vec4 connectedPointIndex = texture(linkIndicesTexture, linkTextureIndex);
-        vec4 biasAndStrength = texture(linkPropertiesTexture, linkTextureIndex);
-        vec4 randomMinDistance = texture(linkRandomDistanceTexture, linkTextureIndex);
+        ivec2 linkTexel = ivec2(iCount, jCount);
+        vec4 connectedPointIndex = texelFetch(linkIndicesTexture, linkTexel, 0);
+        vec4 biasAndStrength = texelFetch(linkPropertiesTexture, linkTexel, 0);
+        vec4 randomMinDistance = texelFetch(linkRandomDistanceTexture, linkTexel, 0);
         float bias = biasAndStrength.r;
         float strength = biasAndStrength.g;
         float randomMinLinkDist = randomMinDistance.r * (linkDistRandomVariationRange.g - linkDistRandomVariationRange.r) + linkDistRandomVariationRange.r;
@@ -65,14 +63,17 @@ void main() {
 
         iCount += 1.0;
 
+        // linkIndicesTexture stores whole texel coordinates, so truncating is exact.
+        ivec2 connectedTexel = ivec2(connectedPointIndex.rg);
+
         // Skip a link to an absent point — its position would poison the spring
         // force. (exit.G = current absence)
-        vec4 connectedExit = texture(exitTexture, (connectedPointIndex.rg + 0.5) / pointsTextureSize);
+        vec4 connectedExit = texelFetch(exitTexture, connectedTexel, 0);
         if (connectedExit.g > 0.5) {
           continue;
         }
 
-        vec4 connectedPointPosition = texture(positionsTexture, (connectedPointIndex.rg + 0.5) / pointsTextureSize);
+        vec4 connectedPointPosition = texelFetch(positionsTexture, connectedTexel, 0);
         float x = connectedPointPosition.x - (pointPosition.x + velocity.x);
         float y = connectedPointPosition.y - (pointPosition.y + velocity.y);
         float l = sqrt(x * x + y * y);

@@ -17,13 +17,14 @@ uniform float centerForce;
 uniform float alpha;
 #endif
 
-in vec2 textureCoords;
 out vec4 fragColor;
 
 void main() {
-  vec4 pointPosition = texture(positionsTexture, textureCoords);
+  ivec2 pointTexel = ivec2(gl_FragCoord.xy);
+
+  vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
   vec4 velocity = vec4(0.0);
-  vec4 centermassValues = texture(centermassTexture, vec2(0.0));
+  vec4 centermassValues = texelFetch(centermassTexture, ivec2(0), 0);
   vec2 centermassPosition = centermassValues.xy / centermassValues.b;
   vec2 distVector = centermassPosition - pointPosition.xy;
   float dist = sqrt(dot(distVector, distVector));

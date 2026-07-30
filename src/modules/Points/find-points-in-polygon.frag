@@ -26,22 +26,19 @@ uniform vec2 screenSize;
 uniform mat3 transformationMatrix;
 #endif
 
-in vec2 textureCoords;
-
 out vec4 fragColor;
 
 // Get a point from the polygon path texture at a specific index
 vec2 getPolygonPoint(sampler2D pathTexture, int index, int pathLength) {
   if (index >= pathLength) return vec2(0.0);
-  
-  // Calculate texture coordinates for the index
-  int textureSize = int(ceil(sqrt(float(pathLength))));
-  int x = index - (index / textureSize) * textureSize;
-  int y = index / textureSize;
-  
-  vec2 texCoord = (vec2(float(x), float(y)) + 0.5) / float(textureSize);
-  vec4 pathData = texture(pathTexture, texCoord);
-  
+
+  // The path is written row-major into a square texture. Ask the texture how wide it
+  // is rather than re-deriving ceil(sqrt(pathLength)) — that duplicates the formula
+  // the allocation used, and a local named textureSize would shadow this builtin.
+  int width = textureSize(pathTexture, 0).x;
+
+  vec4 pathData = texelFetch(pathTexture, ivec2(index % width, index / width), 0);
+
   return pathData.xy;
 }
 
@@ -67,13 +64,15 @@ bool pointInPolygon(vec2 point, sampler2D pathTexture, int pathLength) {
 }
 
 void main() {
+  ivec2 pointTexel = ivec2(gl_FragCoord.xy);
+
   // Skip absent (faded-out) points — never select a removed point. exit.G = absent.
-  if (texture(exitTexture, textureCoords).g > 0.5) {
+  if (texelFetch(exitTexture, pointTexel, 0).g > 0.5) {
     fragColor = vec4(0.0);
     return;
   }
 
-  vec4 pointPosition = texture(positionsTexture, textureCoords);
+  vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
   vec2 p = 2.0 * pointPosition.rg / spaceSize - 1.0;
   p *= spaceSize / screenSize;
   #ifdef USE_UNIFORM_BUFFERS

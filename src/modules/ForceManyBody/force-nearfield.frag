@@ -55,7 +55,6 @@ uniform float alpha;
 uniform float repulsion;
 #endif
 
-in vec2 textureCoords;
 out vec4 fragColor;
 
 // Same clamped inverse-distance falloff as the level passes (must stay identical).
@@ -97,11 +96,13 @@ vec2 slotVelocity(vec2 slot, vec2 position, float selfIndex, vec2 randomDir, ino
 }
 
 void main() {
-  vec4 pointPosition = texture(positionsTexture, textureCoords);
+  ivec2 pointTexel = ivec2(gl_FragCoord.xy);
+
+  vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
   vec2 position = pointPosition.rg;
   // One fragment per point: the fragment's pixel is the point's texel.
   float selfIndex = floor(gl_FragCoord.y) * pointsTextureSize + floor(gl_FragCoord.x);
-  vec4 random = texture(randomValues, textureCoords);
+  vec4 random = texelFetch(randomValues, pointTexel, 0);
 
   int gridSize = int(levelGridSize);
   ivec2 pointCell = clamp(ivec2(floor(position / cellSize)), ivec2(0), ivec2(gridSize - 1));

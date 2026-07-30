@@ -6,24 +6,14 @@ precision highp float;
 uniform sampler2D positionsTexture;
 uniform sampler2D trackedIndices;
 
-#ifdef USE_UNIFORM_BUFFERS
-layout(std140) uniform trackPointsUniforms {
-  float pointsTextureSize;
-} trackPoints;
-
-#define pointsTextureSize trackPoints.pointsTextureSize
-#else
-uniform float pointsTextureSize;
-#endif
-
-in vec2 textureCoords;
-
 out vec4 fragColor;
 
 void main() {
-  vec4 trackedPointIndices = texture(trackedIndices, textureCoords);
+  ivec2 trackedTexel = ivec2(gl_FragCoord.xy);
+
+  vec4 trackedPointIndices = texelFetch(trackedIndices, trackedTexel, 0);
   if (trackedPointIndices.r < 0.0) discard;
-  vec4 pointPosition = texture(positionsTexture, (trackedPointIndices.rg + 0.5) / pointsTextureSize);
+  vec4 pointPosition = texelFetch(positionsTexture, ivec2(trackedPointIndices.rg), 0);
 
   fragColor = vec4(pointPosition.rg, 1.0, 1.0);
 }

@@ -91,21 +91,21 @@ void main() {
   gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
   gl_PointSize = 1.0;
 
-  vec2 uv = (pointIndices + 0.5) / pointsTextureSize;
+  ivec2 pointTexel = ivec2(pointIndices);
 
   // Skip absent (faded-out) points so hover never lands on a removed one. Their
   // size/position may still look hittable mid-fade (only alpha faded), so the exit
   // status is the reliable signal. exit.G = current absence.
-  vec4 exitStatus = texture(exitTexture, uv);
+  vec4 exitStatus = texelFetch(exitTexture, pointTexel, 0);
   if (exitStatus.g > 0.5) return;
 
-  vec4 greyoutStatus = texture(pointStatus, uv);
+  vec4 greyoutStatus = texelFetch(pointStatus, pointTexel, 0);
   float isHighlighted = (greyoutStatus.r == 0.0) ? 1.0 : 0.0;
 
   if (skipHighlighted > 0.0 && isHighlighted > 0.0) return;
   if (skipGreyed > 0.0 && isHighlighted <= 0.0) return;
 
-  vec4 pointPosition = texture(positionsTexture, uv);
+  vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
   vec2 point = pointPosition.rg;
 
   vec2 normalizedPosition = 2.0 * point / spaceSize - 1.0;

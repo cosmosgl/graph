@@ -134,8 +134,10 @@ vec4 resolveColor(vec4 color, float exitRamp) {
 }
 
 void main() {
+  ivec2 pointTexel = ivec2(pointIndices);
+
   // Read point status texture: R = greyout, G = outlined
-  vec4 status = texture(pointStatus, (pointIndices + 0.5) / pointsTextureSize);
+  vec4 status = texelFetch(pointStatus, pointTexel, 0);
   isGreyedOut = status.r;
   isOutlined = status.g;
   float isHighlighted = (status.r == 0.0) ? 1.0 : 0.0;
@@ -157,7 +159,7 @@ void main() {
   // settled current absence) so an unrelated color/size transition can't replay the
   // ramp. The caller drives the visual fade via setPointSizes/setPointColors; here
   // we only remove the point once it is fully gone.
-  vec4 exitStatus = texture(exitTexture, (pointIndices + 0.5) / pointsTextureSize);
+  vec4 exitStatus = texelFetch(exitTexture, pointTexel, 0);
   float exit = animatePositions > 0.0
     ? mix(exitStatus.r, exitStatus.g, transitionProgress)
     : exitStatus.g;
@@ -169,7 +171,7 @@ void main() {
   }
 
   // Position
-  vec4 pointPosition = texture(positionsTexture, (pointIndices + 0.5) / pointsTextureSize);
+  vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
   vec2 point = pointPosition.rg;
 
   // Transform point position to normalized device coordinates
@@ -255,22 +257,20 @@ void main() {
   if (hasImages <= 0.0 || imageIndex < 0.0 || imageIndex >= imageCount) {
     imageAtlasUV = vec4(-1.0);
   } else {
-    float atlasCoordIndex = imageIndex;
-    float texX = mod(atlasCoordIndex, imageAtlasCoordsTextureSize);
-    float texY = floor(atlasCoordIndex / imageAtlasCoordsTextureSize);
-    vec2 atlasCoordTexCoord = (vec2(texX, texY) + 0.5) / imageAtlasCoordsTextureSize;
-    vec4 atlasCoords = texture(imageAtlasCoords, atlasCoordTexCoord);
+    int atlasTexSize = int(imageAtlasCoordsTextureSize);
+    int atlasCoordIndex = int(imageIndex);
+    ivec2 atlasTexel = ivec2(atlasCoordIndex % atlasTexSize, atlasCoordIndex / atlasTexSize);
+    vec4 atlasCoords = texelFetch(imageAtlasCoords, atlasTexel, 0);
     imageAtlasUV = atlasCoords;
   }
   #else
   if (hasImages <= 0.0 || imageIndex < 0.0 || imageIndex >= imageCount) {
     imageAtlasUV = vec4(-1.0);
   } else {
-    float atlasCoordIndex = imageIndex;
-    float texX = mod(atlasCoordIndex, imageAtlasCoordsTextureSize);
-    float texY = floor(atlasCoordIndex / imageAtlasCoordsTextureSize);
-    vec2 atlasCoordTexCoord = (vec2(texX, texY) + 0.5) / imageAtlasCoordsTextureSize;
-    vec4 atlasCoords = texture(imageAtlasCoords, atlasCoordTexCoord);
+    int atlasTexSize = int(imageAtlasCoordsTextureSize);
+    int atlasCoordIndex = int(imageIndex);
+    ivec2 atlasTexel = ivec2(atlasCoordIndex % atlasTexSize, atlasCoordIndex / atlasTexSize);
+    vec4 atlasCoords = texelFetch(imageAtlasCoords, atlasTexel, 0);
     imageAtlasUV = atlasCoords;
   }
   #endif

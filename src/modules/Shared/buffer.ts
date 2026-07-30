@@ -1,5 +1,16 @@
 import { Buffer, Device } from '@luma.gl/core'
 
+/**
+ * One (x, y) texel coordinate per texel of a `textureSize`² data texture, in row-major
+ * order, so a draw of N vertices walks texels 0…N-1.
+ *
+ * The values are whole numbers exactly representable in float32, which is what lets the
+ * shaders read them back as `texelFetch(tex, ivec2(pointIndices), 0)`: `ivec2` truncates,
+ * and truncating an exact integer is exact. Shaders must not sample these textures with
+ * normalized coordinates instead — `index / textureSize` lands on a texel *boundary*,
+ * where the sampler's floor can fall to the previous texel and silently return another
+ * point's data.
+ */
 export function createIndexesForBuffer (textureSize: number): Float32Array {
   const indexes = new Float32Array(textureSize * textureSize * 2)
   for (let y = 0; y < textureSize; y++) {

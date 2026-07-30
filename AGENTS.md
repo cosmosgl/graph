@@ -22,6 +22,13 @@ contribution process, see `CONTRIBUTING.md`, `CHARTER.md`, `CODE_OF_CONDUCT.md`,
   validation and default-fill.
 - `modules/` — per-force and per-render modules (ForceManyBody, ForceLink, ForceGravity, ForceCenter,
   ForceMouse, Clusters, Points, Lines, Zoom, Drag, Store), each with its GLSL shaders.
+  In those shaders **every data-texture read uses `texelFetch`** — `texelFetch(tex, ivec2(index), 0)`
+  where an index is at hand, `texelFetch(tex, ivec2(gl_FragCoord.xy), 0)` in a full-screen pass that
+  writes one output per element. Never address a data texture with a normalized coordinate:
+  `index / textureSize` lands on a texel *boundary*, where the sampler's floor can fall to the previous
+  texel and silently return another element's data, and the `(index + 0.5) / textureSize` centre form
+  only hides that behind a half-texel margin. `texture()` is reserved for genuine UV sampling, where a
+  continuous coordinate and filtering are the point — in this codebase, only the image atlas.
 - `stories/` — Storybook examples plus the `configuration.mdx` / `api-reference.mdx` docs — the best
   worked examples of building the input arrays. One sidebar section per `*.stories.ts` file, each
   named for the feature area it teaches (get-started, points, links, forces, interaction,

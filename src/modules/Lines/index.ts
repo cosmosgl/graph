@@ -73,7 +73,6 @@ export class Lines extends CoreModule {
   private shouldAnimatePositions = false
   private fillSampledLinksUniformStore: UniformStore<{
     fillSampledLinksUniforms: {
-      pointsTextureSize: number;
       transformationMatrix: Mat4Array;
       spaceSize: number;
       screenSize: [number, number];
@@ -87,7 +86,6 @@ export class Lines extends CoreModule {
   private drawLineUniformStore: UniformStore<{
     drawLineUniforms: {
       transformationMatrix: Mat4Array;
-      pointsTextureSize: number;
       widthScale: number;
       linkArrowsSizeScale: number;
       spaceSize: number;
@@ -173,7 +171,6 @@ export class Lines extends CoreModule {
       drawLineUniforms: {
         uniformTypes: {
           transformationMatrix: 'mat4x4<f32>',
-          pointsTextureSize: 'f32',
           widthScale: 'f32',
           linkArrowsSizeScale: 'f32',
           spaceSize: 'f32',
@@ -203,7 +200,6 @@ export class Lines extends CoreModule {
         },
         defaultUniforms: {
           transformationMatrix: store.transformationMatrix4x4,
-          pointsTextureSize: store.pointsTextureSize,
           widthScale: config.linkWidthScale,
           linkArrowsSizeScale: config.linkArrowsSizeScale,
           spaceSize: store.adjustedSpaceSize,
@@ -260,7 +256,6 @@ export class Lines extends CoreModule {
     this.fillSampledLinksUniformStore ||= new UniformStore(device, {
       fillSampledLinksUniforms: {
         uniformTypes: {
-          pointsTextureSize: 'f32',
           transformationMatrix: 'mat4x4<f32>',
           spaceSize: 'f32',
           screenSize: 'vec2<f32>',
@@ -269,7 +264,6 @@ export class Lines extends CoreModule {
           curvedLinkSegments: 'f32',
         },
         defaultUniforms: {
-          pointsTextureSize: store.pointsTextureSize ?? 0,
           transformationMatrix: store.transformationMatrix4x4,
           spaceSize: store.adjustedSpaceSize,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
@@ -335,7 +329,6 @@ export class Lines extends CoreModule {
     this.drawLineUniformStore.setUniforms({
       drawLineUniforms: {
         transformationMatrix: store.transformationMatrix4x4,
-        pointsTextureSize: store.pointsTextureSize,
         widthScale: config.linkWidthScale,
         linkArrowsSizeScale: config.linkArrowsSizeScale,
         spaceSize: store.adjustedSpaceSize,
@@ -751,7 +744,6 @@ export class Lines extends CoreModule {
       this.fillSampledLinksFboCommand.setVertexCount(this.data.linksNumber ?? 0)
       this.fillSampledLinksUniformStore.setUniforms({
         fillSampledLinksUniforms: {
-          pointsTextureSize: this.store.pointsTextureSize ?? 0,
           transformationMatrix: this.store.transformationMatrix4x4,
           spaceSize: this.store.adjustedSpaceSize,
           screenSize: ensureVec2(this.store.screenSize, [0, 0]),
@@ -800,7 +792,6 @@ export class Lines extends CoreModule {
       this.fillSampledLinksFboCommand.setVertexCount(this.data.linksNumber ?? 0)
       this.fillSampledLinksUniformStore.setUniforms({
         fillSampledLinksUniforms: {
-          pointsTextureSize: this.store.pointsTextureSize ?? 0,
           transformationMatrix: this.store.transformationMatrix4x4,
           spaceSize: this.store.adjustedSpaceSize,
           screenSize: ensureVec2(this.store.screenSize, [0, 0]),
@@ -869,7 +860,6 @@ export class Lines extends CoreModule {
     this.drawLineUniformStore.setUniforms({
       drawLineUniforms: {
         transformationMatrix: store.transformationMatrix4x4,
-        pointsTextureSize: store.pointsTextureSize,
         widthScale: config.linkWidthScale,
         linkArrowsSizeScale: config.linkArrowsSizeScale,
         spaceSize: store.adjustedSpaceSize,
