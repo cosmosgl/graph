@@ -8,40 +8,18 @@ import { linkHovering } from './links/hovering'
 import { linkSampling } from './links/labels'
 import { interactiveLinkStyles } from './links/playground'
 
-import strokeStylesStoryRaw from './links/stroke-styles/index?raw'
-import gradientLinksStoryRaw from './links/gradient-links/index?raw'
 import hoveringStoryRaw from './links/hovering/index?raw'
 import hoveringDataGenRaw from './links/hovering/data-generator?raw'
 import labelsStoryRaw from './links/labels/index?raw'
 import labelsDataRaw from './links/labels/data?raw'
 import labelsLabelsRaw from './links/labels/labels?raw'
 import labelsCssRaw from './links/labels/style.css?raw'
+import strokeStylesStoryRaw from './links/stroke-styles/index?raw'
+import gradientLinksStoryRaw from './links/gradient-links/index?raw'
 import playgroundStoryRaw from './links/playground/index?raw'
 
 const meta: Meta<CosmosStoryProps> = {
   title: 'Examples/Links',
-}
-
-export const StrokeStyles: Story = {
-  ...createStory(strokeStyles),
-  name: 'Solid / Dashed / Dotted',
-  tags: ['beginner'],
-  parameters: {
-    sourceCode: [
-      { name: 'Story', code: strokeStylesStoryRaw },
-    ],
-  },
-}
-
-export const GradientLinks: Story = {
-  ...createStory(gradientLinks),
-  name: 'Gradient Links',
-  tags: ['beginner'],
-  parameters: {
-    sourceCode: [
-      { name: 'Story', code: gradientLinksStoryRaw },
-    ],
-  },
 }
 
 export const LinkHovering: Story = {
@@ -66,6 +44,28 @@ export const LinkLabels: Story = {
       { name: 'labels.ts', code: labelsLabelsRaw },
       { name: 'data.ts', code: labelsDataRaw },
       { name: 'style.css', code: labelsCssRaw },
+    ],
+  },
+}
+
+export const StrokeStyles: Story = {
+  ...createStory(strokeStyles),
+  name: 'Solid / Dashed / Dotted',
+  tags: ['beginner'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: strokeStylesStoryRaw },
+    ],
+  },
+}
+
+export const GradientLinks: Story = {
+  ...createStory(gradientLinks),
+  name: 'Gradient Links',
+  tags: ['beginner'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: gradientLinksStoryRaw },
     ],
   },
 }
