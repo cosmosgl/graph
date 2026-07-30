@@ -27,7 +27,6 @@ export class ForceLink extends CoreModule {
       linkSpring: number;
       linkDistance: number;
       linkDistRandomVariationRange: [number, number];
-      pointsTextureSize: number;
       linksTextureSize: number;
       alpha: number;
     };
@@ -182,7 +181,6 @@ export class ForceLink extends CoreModule {
           linkSpring: 'f32',
           linkDistance: 'f32',
           linkDistRandomVariationRange: 'vec2<f32>',
-          pointsTextureSize: 'f32',
           linksTextureSize: 'f32',
           alpha: 'f32',
         },
@@ -238,7 +236,6 @@ export class ForceLink extends CoreModule {
         linkSpring: this.config.simulationLinkSpring,
         linkDistance: this.config.simulationLinkDistance,
         linkDistRandomVariationRange: ensureVec2(this.config.simulationLinkDistRandomVariationRange, [0, 0]),
-        pointsTextureSize: store.pointsTextureSize,
         linksTextureSize: store.linksTextureSize,
         alpha: store.alpha,
       },

@@ -7,18 +7,15 @@ uniform sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform buildGridUniforms {
-  float pointsTextureSize;
   float gridTextureSize;
   float cellSize;
   vec2 gridOffset; // Offset for multi-pass (0-1 range, multiplied by cellSize)
 } buildGrid;
 
-#define pointsTextureSize buildGrid.pointsTextureSize
 #define gridTextureSize buildGrid.gridTextureSize
 #define cellSize buildGrid.cellSize
 #define gridOffset buildGrid.gridOffset
 #else
-uniform float pointsTextureSize;
 uniform float gridTextureSize;
 uniform float cellSize;
 uniform vec2 gridOffset;
@@ -29,17 +26,19 @@ in vec2 pointIndices;
 out vec4 cellData; // xy = position, z = size, w = count (1.0)
 
 void main() {
+  ivec2 pointTexel = ivec2(pointIndices);
+
   // Absent points must not enter the grid — a NaN position bins to a NaN cell and
   // poisons the accumulated position/size sum for every point in that cell. (exit.g = absent)
-  vec4 exitStatus = texture(exitTexture, pointIndices / pointsTextureSize);
+  vec4 exitStatus = texelFetch(exitTexture, pointTexel, 0);
   if (exitStatus.g > 0.5) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     gl_PointSize = 0.0;
     return;
   }
 
-  vec4 pointPosition = texture(positionsTexture, pointIndices / pointsTextureSize);
-  vec4 pointSize = texture(sizeTexture, pointIndices / pointsTextureSize);
+  vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
+  vec4 pointSize = texelFetch(sizeTexture, pointTexel, 0);
 
   // Output: position sum, size sum, count
   cellData = vec4(pointPosition.xy, pointSize.r, 1.0);

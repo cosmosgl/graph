@@ -36,7 +36,6 @@ uniform float alpha;
 uniform float repulsion;
 #endif
 
-in vec2 textureCoords;
 out vec4 fragColor;
 
 // Repulsion from one cell's center of mass — a d3-style clamped
@@ -57,7 +56,9 @@ vec2 cellVelocity(ivec2 cell, vec2 position) {
 }
 
 void main() {
-  vec4 pointPosition = texture(positionsTexture, textureCoords);
+  ivec2 pointTexel = ivec2(gl_FragCoord.xy);
+
+  vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
   vec2 position = pointPosition.rg;
 
   int gridSize = int(levelGridSize);

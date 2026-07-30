@@ -12,37 +12,36 @@ uniform sampler2D clusterForceCoefficient;
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform applyForcesUniforms {
   float alpha;
-  float clustersTextureSize;
   float clusterCoefficient;
 } applyForces;
 
 #define alpha applyForces.alpha
-#define clustersTextureSize applyForces.clustersTextureSize
 #define clusterCoefficient applyForces.clusterCoefficient
 #else
 uniform float alpha;
-uniform float clustersTextureSize;
 uniform float clusterCoefficient;
 #endif
-
-in vec2 textureCoords;
 
 out vec4 fragColor;
 
 
 void main() {
-  vec4 pointPosition = texture(positionsTexture, textureCoords);
+  ivec2 pointTexel = ivec2(gl_FragCoord.xy);
+
+  vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
   vec4 velocity = vec4(0.0);
-  vec4 pointClusterIndices = texture(clusterTexture, textureCoords);
+  vec4 pointClusterIndices = texelFetch(clusterTexture, pointTexel, 0);
   // no cluster, so no forces
   if (pointClusterIndices.x >= 0.0 && pointClusterIndices.y >= 0.0) {
+    // clusterTexture stores whole texel coordinates, so truncating to int is exact.
+    ivec2 clusterTexel = ivec2(pointClusterIndices.xy);
     // positioning points to custom cluster position or either to the center of mass
-    vec2 clusterPositions = texture(clusterPositionsTexture, pointClusterIndices.xy / clustersTextureSize).xy;
+    vec2 clusterPositions = texelFetch(clusterPositionsTexture, clusterTexel, 0).xy;
     if (clusterPositions.x < 0.0 || clusterPositions.y < 0.0) {
-      vec4 centermassValues = texture(centermassTexture, pointClusterIndices.xy / clustersTextureSize);
+      vec4 centermassValues = texelFetch(centermassTexture, clusterTexel, 0);
       clusterPositions = centermassValues.xy / centermassValues.b;
     }
-    vec4 clusterCustomCoeff = texture(clusterForceCoefficient, textureCoords);
+    vec4 clusterCustomCoeff = texelFetch(clusterForceCoefficient, pointTexel, 0);
     vec2 distVector = clusterPositions.xy - pointPosition.xy;
     float dist = length(distVector);
     if (dist > 0.0) {

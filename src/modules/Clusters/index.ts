@@ -40,7 +40,6 @@ export class Clusters extends CoreModule {
   // Uniform stores for scalar uniforms
   private calculateCentermassUniformStore: UniformStore<{
     calculateCentermassUniforms: {
-      pointsTextureSize: number;
       clustersTextureSize: number;
     };
   }> | undefined
@@ -48,7 +47,6 @@ export class Clusters extends CoreModule {
   private applyForcesUniformStore: UniformStore<{
     applyForcesUniforms: {
       alpha: number;
-      clustersTextureSize: number;
       clusterCoefficient: number;
     };
   }> | undefined
@@ -264,11 +262,9 @@ export class Clusters extends CoreModule {
     this.calculateCentermassUniformStore ||= new UniformStore(device, {
       calculateCentermassUniforms: {
         uniformTypes: {
-          pointsTextureSize: 'f32',
           clustersTextureSize: 'f32',
         },
         defaultUniforms: {
-          pointsTextureSize: store.pointsTextureSize,
           clustersTextureSize: (this.clustersTextureSize ?? 0),
         },
       },
@@ -312,12 +308,10 @@ export class Clusters extends CoreModule {
       applyForcesUniforms: {
         uniformTypes: {
           alpha: 'f32',
-          clustersTextureSize: 'f32',
           clusterCoefficient: 'f32',
         },
         defaultUniforms: {
           alpha: store.alpha,
-          clustersTextureSize: (this.clustersTextureSize ?? 0),
           clusterCoefficient: this.config.simulationCluster,
         },
       },
@@ -370,7 +364,6 @@ export class Clusters extends CoreModule {
     // Update UniformStore with current values
     this.calculateCentermassUniformStore.setUniforms({
       calculateCentermassUniforms: {
-        pointsTextureSize: this.store.pointsTextureSize,
         clustersTextureSize: (this.clustersTextureSize ?? 0),
       },
     })
@@ -453,7 +446,6 @@ export class Clusters extends CoreModule {
     this.applyForcesUniformStore.setUniforms({
       applyForcesUniforms: {
         alpha: this.store.alpha,
-        clustersTextureSize: (this.clustersTextureSize ?? 0),
         clusterCoefficient: this.config.simulationCluster,
       },
     })

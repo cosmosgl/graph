@@ -83,19 +83,27 @@ const float relativeRingRadius = 1.3;
 void main () {
   vertexPosition = vertexCoord;
 
-  vec2 textureCoordinates = vec2(mod(pointIndex, pointsTextureSize), floor(pointIndex / pointsTextureSize)) + 0.5;
+  int pointTexSize = int(pointsTextureSize);
+  int pointLinearIndex = int(pointIndex);
+  // Integer % and / are undefined on a negative or zero operand, and pointIndex
+  // defaults to -1 (no point highlighted). Nothing to draw in that case anyway.
+  if (pointLinearIndex < 0 || pointTexSize <= 0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
+  ivec2 pointTexel = ivec2(pointLinearIndex % pointTexSize, pointLinearIndex / pointTexSize);
 
   // Don't draw a highlight/outline for an absent (faded-out) point. exit.G = absent.
-  if (texture(exitTexture, textureCoordinates / pointsTextureSize).g > 0.5) {
+  if (texelFetch(exitTexture, pointTexel, 0).g > 0.5) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
   }
 
-  vec4 pointPosition = texture(positionsTexture, textureCoordinates / pointsTextureSize);
+  vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
 
   rgbColor = color.rgb;
   pointOpacity = color.a * universalPointOpacity;
-  vec4 greyoutStatus = texture(pointStatus, textureCoordinates / pointsTextureSize);
+  vec4 greyoutStatus = texelFetch(pointStatus, pointTexel, 0);
   if (greyoutStatus.r > 0.0) {
     if (greyoutColor[0] != -1.0) {
       rgbColor = greyoutColor.rgb;

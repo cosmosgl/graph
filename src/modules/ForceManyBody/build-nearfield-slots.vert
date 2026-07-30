@@ -44,10 +44,12 @@ in vec2 pointIndices;
 out vec2 slotData; // [point index, hash]
 
 void main() {
+  ivec2 pointTexel = ivec2(pointIndices);
+
   // Absent points must not be captured as neighbors — a NaN position bins to an
   // undefined cell and its distance poisons the force of every point sampling
   // that slot. Same guard as calculate-level.vert. (exit.G = absent)
-  vec4 exitStatus = texture(exitTexture, (pointIndices + 0.5) / pointsTextureSize);
+  vec4 exitStatus = texelFetch(exitTexture, pointTexel, 0);
   if (exitStatus.g > 0.5) {
     slotData = vec2(-1.0, 1.0);
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
@@ -55,7 +57,7 @@ void main() {
     return;
   }
 
-  vec4 pointPosition = texture(positionsTexture, (pointIndices + 0.5) / pointsTextureSize);
+  vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
   float index = pointIndices.y * pointsTextureSize + pointIndices.x;
 
   // Per-tick random ordering via an integer hash (lowbias32). A fract(sin(...))

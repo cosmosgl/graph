@@ -382,12 +382,6 @@ export class Points extends CoreModule {
     };
   }> | undefined
 
-  private trackPointsUniformStore: UniformStore<{
-    trackPointsUniforms: {
-      pointsTextureSize: number;
-    };
-  }> | undefined
-
   /** Whether an issued async pick is still awaiting its GPU readback. */
   public get hasPendingPickReadback (): boolean {
     return this.pickingReadback?.inFlight ?? false
@@ -1129,19 +1123,6 @@ export class Points extends CoreModule {
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
     })
 
-    // Create UniformStore for trackPoints uniforms
-    this.trackPointsUniformStore ||= new UniformStore(device, {
-      trackPointsUniforms: {
-        uniformTypes: {
-          // Order MUST match shader declaration order (std140 layout)
-          pointsTextureSize: 'f32',
-        },
-        defaultUniforms: {
-          pointsTextureSize: store.pointsTextureSize ?? 0,
-        },
-      },
-    })
-
     this.trackPointsCommand ||= new Model(device, {
       fs: trackPositionsFrag,
       vs: updateVert,
@@ -1157,9 +1138,6 @@ export class Points extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
-        // Create uniform buffer binding
-        // Update it later by calling uniformStore.setUniforms()
-        trackPointsUniforms: this.trackPointsUniformStore.getManagedUniformBuffer('trackPointsUniforms'),
         // All texture bindings will be set dynamically in trackPoints() method
       },
     })
@@ -1352,9 +1330,13 @@ export class Points extends CoreModule {
     this.hasAnyAbsentPoint = anyAbsentNow
 
     // Common (no-NaN) case: every texel would be zero, so bind a 1×1 all-zero
-    // stand-in instead of a pointsTextureSize² texture. Any sample of it returns
-    // "present", it stays cache-resident so the per-vertex fetch in the hot shaders
-    // costs ~nothing, and the full-size texture is never allocated or uploaded.
+    // stand-in instead of a pointsTextureSize² texture. The shaders texelFetch it at
+    // the point's own texel, which is out of range for every point but the first.
+    // GLSL ES leaves an out-of-range fetch undefined, but WebGL 2 requires it to read
+    // back as zero and its conformance suite tests exactly that, so R and G read 0 —
+    // "present" — for every point either way. It stays cache-resident so the per-vertex
+    // fetch in the hot shaders costs ~nothing, and the full-size texture is never
+    // allocated or uploaded.
     if (!anyAbsentNow && !anyAbsentBefore) {
       if (this.exitTexture && !this.exitTexture.destroyed && this.exitTexture.width === 1) return
       if (this.exitTexture && !this.exitTexture.destroyed) {
@@ -1670,16 +1652,10 @@ export class Points extends CoreModule {
    * `trackPointsByIndices()` self-calls after reallocating; no manual follow-up needed.
    */
   public trackPoints (): void {
-    if (!this.trackedIndices?.length || !this.trackPointsCommand || !this.trackPointsUniformStore ||
+    if (!this.trackedIndices?.length || !this.trackPointsCommand ||
         !this.trackedPositionsFbo || this.trackedPositionsFbo.destroyed) return
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
     if (!this.trackedIndicesTexture || this.trackedIndicesTexture.destroyed) return
-
-    this.trackPointsUniformStore.setUniforms({
-      trackPointsUniforms: {
-        pointsTextureSize: this.store.pointsTextureSize ?? 0,
-      },
-    })
 
     // Update texture bindings dynamically
     this.trackPointsCommand.setBindings({
@@ -2681,8 +2657,6 @@ export class Points extends CoreModule {
     this.fillSampledPointsUniformStore = undefined
     this.drawHighlightedUniformStore?.destroy()
     this.drawHighlightedUniformStore = undefined
-    this.trackPointsUniformStore?.destroy()
-    this.trackPointsUniformStore = undefined
 
     // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
     if (this.sourceColorBuffer && !this.sourceColorBuffer.destroyed) {

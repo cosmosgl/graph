@@ -20,7 +20,6 @@ uniform sampler2D pointColorsTexture;
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform drawLineUniforms {
   mat4 transformationMatrix;
-  float pointsTextureSize;
   float widthScale;
   float linkArrowsSizeScale;
   float spaceSize;
@@ -50,7 +49,6 @@ layout(std140) uniform drawLineUniforms {
 } drawLine;
 
 #define transformationMatrix drawLine.transformationMatrix
-#define pointsTextureSize drawLine.pointsTextureSize
 #define widthScale drawLine.widthScale
 #define linkArrowsSizeScale drawLine.linkArrowsSizeScale
 #define spaceSize drawLine.spaceSize
@@ -79,7 +77,6 @@ layout(std140) uniform drawLineUniforms {
 #define linkColorInterpolateFromEndpoints drawLine.linkColorInterpolateFromEndpoints
 #else
 uniform mat3 transformationMatrix;
-uniform float pointsTextureSize;
 uniform float widthScale;
 uniform float linkArrowsSizeScale;
 uniform float spaceSize;
@@ -171,11 +168,11 @@ void main() {
   linkIndex = linkIndices;
   vLinkStyle = linkStyle;
 
-  vec2 pointTexturePosA = (pointA + 0.5) / pointsTextureSize;
-  vec2 pointTexturePosB = (pointB + 0.5) / pointsTextureSize;
+  ivec2 pointTexelA = ivec2(pointA);
+  ivec2 pointTexelB = ivec2(pointB);
 
-  vec4 pointPositionA = texture(positionsTexture, pointTexturePosA);
-  vec4 pointPositionB = texture(positionsTexture, pointTexturePosB);
+  vec4 pointPositionA = texelFetch(positionsTexture, pointTexelA, 0);
+  vec4 pointPositionB = texelFetch(positionsTexture, pointTexelB, 0);
   vec2 a = pointPositionA.xy;
   vec2 b = pointPositionB.xy;
 
@@ -190,8 +187,8 @@ void main() {
 
   // Exit status of both endpoints (R = previous absence, G = current absence). A link
   // is only as present as its endpoints.
-  vec4 exitStatusA = texture(exitTexture, pointTexturePosA);
-  vec4 exitStatusB = texture(exitTexture, pointTexturePosB);
+  vec4 exitStatusA = texelFetch(exitTexture, pointTexelA, 0);
+  vec4 exitStatusB = texelFetch(exitTexture, pointTexelB, 0);
 
   // Picking must not report a link to a removed point even mid-fade — same rule as
   // point picking, which excludes on current absence.
@@ -217,8 +214,8 @@ void main() {
   // The texture mirrors GraphData.pointColors, so channels may be NaN ("use the
   // default") — resolve them with the endpoint's exit ramp, like the point draw.
   if (linkColorInterpolateFromEndpoints > 0.5) {
-    vEndpointColorA = resolveColor(texture(pointColorsTexture, pointTexturePosA), exitA);
-    vEndpointColorB = resolveColor(texture(pointColorsTexture, pointTexturePosB), exitB);
+    vEndpointColorA = resolveColor(texelFetch(pointColorsTexture, pointTexelA, 0), exitA);
+    vEndpointColorB = resolveColor(texelFetch(pointColorsTexture, pointTexelB, 0), exitB);
   }
 
   // Calculate direction vector and its perpendicular
@@ -315,10 +312,10 @@ void main() {
 
   // Apply greyed-out opacity from link status texture
   if (isLinkHighlightingActive > 0.0 && linkStatusTextureSize > 0.0) {
-    float texX = mod(linkIndices, linkStatusTextureSize);
-    float texY = floor(linkIndices / linkStatusTextureSize);
-    vec2 linkStatusCoord = (vec2(texX, texY) + 0.5) / linkStatusTextureSize;
-    vec4 linkStatusValue = texture(linkStatus, linkStatusCoord);
+    int statusTexSize = int(linkStatusTextureSize);
+    int statusIndex = int(linkIndices);
+    ivec2 statusTexel = ivec2(statusIndex % statusTexSize, statusIndex / statusTexSize);
+    vec4 linkStatusValue = texelFetch(linkStatus, statusTexel, 0);
     if (linkStatusValue.r > 0.0) {
       opacity *= greyoutOpacity;
     }

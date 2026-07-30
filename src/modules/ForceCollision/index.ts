@@ -34,7 +34,6 @@ export class ForceCollision extends CoreModule {
 
   private buildGridUniformStore: UniformStore<{
     buildGridUniforms: {
-      pointsTextureSize: number;
       gridTextureSize: number;
       cellSize: number;
       gridOffset: [number, number];
@@ -43,7 +42,6 @@ export class ForceCollision extends CoreModule {
 
   private forceUniformStore: UniformStore<{
     forceCollisionUniforms: {
-      pointsTextureSize: number;
       gridTextureSize: number;
       cellSize: number;
       alpha: number;
@@ -168,7 +166,6 @@ export class ForceCollision extends CoreModule {
     this.buildGridUniformStore ||= new UniformStore(device, {
       buildGridUniforms: {
         uniformTypes: {
-          pointsTextureSize: 'f32',
           gridTextureSize: 'f32',
           cellSize: 'f32',
           gridOffset: 'vec2<f32>',
@@ -211,7 +208,6 @@ export class ForceCollision extends CoreModule {
     this.forceUniformStore ||= new UniformStore(device, {
       forceCollisionUniforms: {
         uniformTypes: {
-          pointsTextureSize: 'f32',
           gridTextureSize: 'f32',
           cellSize: 'f32',
           alpha: 'f32',
@@ -292,7 +288,6 @@ export class ForceCollision extends CoreModule {
 
       this.buildGridUniformStore.setUniforms({
         buildGridUniforms: {
-          pointsTextureSize: store.pointsTextureSize ?? 0,
           gridTextureSize: this.gridTextureSize,
           cellSize: this.cellSize,
           gridOffset,
@@ -325,7 +320,6 @@ export class ForceCollision extends CoreModule {
 
       this.forceUniformStore.setUniforms({
         forceCollisionUniforms: {
-          pointsTextureSize: store.pointsTextureSize ?? 0,
           gridTextureSize: this.gridTextureSize,
           cellSize: this.cellSize,
           alpha: store.alpha,

@@ -41,8 +41,6 @@ uniform float scalePointsOnZoom;
 uniform float maxPointSize;
 #endif
 
-in vec2 textureCoords;
-
 out vec4 fragColor;
 
 float pointSizeF(float size) {
@@ -62,13 +60,15 @@ float pointSizeF(float size) {
 }
 
 void main() {
+  ivec2 pointTexel = ivec2(gl_FragCoord.xy);
+
   // Skip absent (faded-out) points — never select a removed point. exit.G = absent.
-  if (texture(exitTexture, textureCoords).g > 0.5) {
+  if (texelFetch(exitTexture, pointTexel, 0).g > 0.5) {
     fragColor = vec4(0.0);
     return;
   }
 
-  vec4 pointPosition = texture(positionsTexture, textureCoords);
+  vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
   vec2 p = 2.0 * pointPosition.rg / spaceSize - 1.0;
   p *= spaceSize / screenSize;
   #ifdef USE_UNIFORM_BUFFERS
@@ -79,7 +79,7 @@ void main() {
   vec3 final = transformationMatrix * vec3(p, 1);
   #endif
 
-  vec4 pSize = texture(pointSize, textureCoords);
+  vec4 pSize = texelFetch(pointSize, pointTexel, 0);
   float size = pSize.r * sizeScale;
 
   float left = 2.0 * (rect0.x - 0.5 * pointSizeF(size)) / screenSize.x - 1.0;

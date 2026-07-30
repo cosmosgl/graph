@@ -18,12 +18,12 @@ uniform vec2 mousePos;
 uniform float index;
 #endif
 
-in vec2 textureCoords;
-
 out vec4 fragColor;
 
 void main() {
-  vec4 pointPosition = texture(positionsTexture, textureCoords);
+  ivec2 pointTexel = ivec2(gl_FragCoord.xy);
+
+  vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
 
   // Check if a point is being dragged
   if (index >= 0.0 && index == pointPosition.b) {

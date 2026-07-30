@@ -19,12 +19,6 @@ export class ForceCenter extends CoreModule {
 
   private forceVertexCoordBuffer: Buffer | undefined
 
-  private calculateUniformStore: UniformStore<{
-    calculateCentermassUniforms: {
-      pointsTextureSize: number;
-    };
-  }> | undefined
-
   private forceUniformStore: UniformStore<{
     forceCenterUniforms: {
       centerForce: number;
@@ -86,14 +80,6 @@ export class ForceCenter extends CoreModule {
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
     })
 
-    this.calculateUniformStore ||= new UniformStore(device, {
-      calculateCentermassUniforms: {
-        uniformTypes: {
-          pointsTextureSize: 'f32',
-        },
-      },
-    })
-
     this.forceUniformStore ||= new UniformStore(device, {
       forceCenterUniforms: {
         uniformTypes: {
@@ -117,9 +103,6 @@ export class ForceCenter extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
-        // Create uniform buffer binding
-        // Update it later by calling uniformStore.setUniforms()
-        calculateCentermassUniforms: this.calculateUniformStore.getManagedUniformBuffer('calculateCentermassUniforms'),
         // All texture bindings will be set dynamically in run() method
       },
       parameters: {
@@ -166,7 +149,7 @@ export class ForceCenter extends CoreModule {
   public run (): void {
     const { device, store, points } = this
     if (!points) return
-    if (!this.calculateCentermassCommand || !this.calculateUniformStore || !this.runCommand || !this.forceUniformStore) return
+    if (!this.calculateCentermassCommand || !this.runCommand || !this.forceUniformStore) return
     if (!this.centermassFbo || !this.centermassTexture) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
     if (!points.velocityFbo || points.velocityFbo.destroyed) return
@@ -184,11 +167,6 @@ export class ForceCenter extends CoreModule {
       clearColor: [0, 0, 0, 0],
     })
 
-    this.calculateUniformStore.setUniforms({
-      calculateCentermassUniforms: {
-        pointsTextureSize: store.pointsTextureSize ?? 0,
-      },
-    })
     // Update texture bindings dynamically
     this.calculateCentermassCommand.setBindings({
       positionsTexture: points.previousPositionTexture,
@@ -244,8 +222,6 @@ export class ForceCenter extends CoreModule {
     this.centermassTexture = undefined
 
     // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
-    this.calculateUniformStore?.destroy()
-    this.calculateUniformStore = undefined
     this.forceUniformStore?.destroy()
     this.forceUniformStore = undefined
 

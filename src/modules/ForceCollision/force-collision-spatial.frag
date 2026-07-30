@@ -7,7 +7,6 @@ uniform sampler2D gridTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceCollisionUniforms {
-  float pointsTextureSize;
   float gridTextureSize;
   float cellSize;
   float alpha;
@@ -18,7 +17,6 @@ layout(std140) uniform forceCollisionUniforms {
   vec2 gridOffset; // Must match the offset used when building the grid
 } forceCollision;
 
-#define pointsTextureSize forceCollision.pointsTextureSize
 #define gridTextureSize forceCollision.gridTextureSize
 #define cellSize forceCollision.cellSize
 #define alpha forceCollision.alpha
@@ -28,7 +26,6 @@ layout(std140) uniform forceCollisionUniforms {
 #define pointsNumber forceCollision.pointsNumber
 #define gridOffset forceCollision.gridOffset
 #else
-uniform float pointsTextureSize;
 uniform float gridTextureSize;
 uniform float cellSize;
 uniform float alpha;
@@ -39,11 +36,12 @@ uniform float pointsNumber;
 uniform vec2 gridOffset;
 #endif
 
-in vec2 textureCoords;
 out vec4 fragColor;
 
 void main() {
-  vec4 pointPosition = texture(positionsTexture, textureCoords);
+  ivec2 pointTexel = ivec2(gl_FragCoord.xy);
+
+  vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
   vec4 velocity = vec4(0.0);
 
   // Get current point's index
@@ -56,7 +54,7 @@ void main() {
   }
 
   // Get current point's size for collision radius
-  vec4 currentSizeData = texture(sizeTexture, textureCoords);
+  vec4 currentSizeData = texelFetch(sizeTexture, pointTexel, 0);
   float currentSize = currentSizeData.r;
   float currentCollisionRadius = (collisionRadius > 0.0 ? collisionRadius : currentSize * 0.5) + collisionPadding;
 
@@ -86,9 +84,9 @@ void main() {
         continue;
       }
 
-      // Sample the grid cell
-      vec2 gridCoord = (vec2(neighborCellX, neighborCellY) + 0.5) / gridTextureSize;
-      vec4 cellData = texture(gridTexture, gridCoord);
+      // Sample the grid cell (the bounds check above keeps the fetch in range)
+      ivec2 cell = ivec2(neighborCellX, neighborCellY);
+      vec4 cellData = texelFetch(gridTexture, cell, 0);
 
       float cellCount = cellData.w;
       if (cellCount < 0.5) continue; // Empty cell

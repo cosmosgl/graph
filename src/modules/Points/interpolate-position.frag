@@ -16,13 +16,13 @@ layout(std140) uniform interpolatePositionUniforms {
 uniform float progress;
 #endif
 
-in vec2 textureCoords;
-
 out vec4 fragColor;
 
 void main() {
-  vec4 source = texture(sourceTexture, textureCoords);
-  vec4 target = texture(targetTexture, textureCoords);
+  ivec2 pointTexel = ivec2(gl_FragCoord.xy);
+
+  vec4 source = texelFetch(sourceTexture, pointTexel, 0);
+  vec4 target = texelFetch(targetTexture, pointTexel, 0);
   // NaN means absent (ingest normalizes half-NaN to full-NaN, so checking one
   // channel suffices). Hold the real side so the point stays put while it fades,
   // never interpolating to/from NaN:
