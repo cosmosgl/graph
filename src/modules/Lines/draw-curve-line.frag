@@ -24,6 +24,7 @@ layout(std140) uniform drawLineFragmentUniforms {
   float linkColorInterpolateFromEndpoints;
   float hoveredLinkIndex;
   vec4 hoveredLinkColor;
+  float linkBlending;
 } drawLineFrag;
 
 #define renderMode drawLineFrag.renderMode
@@ -32,6 +33,7 @@ layout(std140) uniform drawLineFragmentUniforms {
 #define linkColorInterpolateFromEndpoints drawLineFrag.linkColorInterpolateFromEndpoints
 #define hoveredLinkIndex drawLineFrag.hoveredLinkIndex
 #define hoveredLinkColor drawLineFrag.hoveredLinkColor
+#define linkBlending drawLineFrag.linkBlending
 #else
 // renderMode: 0.0 = normal rendering, 1.0 = index buffer rendering for picking
 uniform float renderMode;
@@ -40,6 +42,7 @@ uniform float linkDashGap;
 uniform float linkColorInterpolateFromEndpoints;
 uniform float hoveredLinkIndex;
 uniform vec4 hoveredLinkColor;
+uniform float linkBlending;
 #endif
 
 out vec4 fragColor;
@@ -62,7 +65,8 @@ float strokeMask(float phase, float on, float period, float aa) {
 }
 
 void main() {
-  float opacity = 1.0;
+  // Geometric coverage only (stroke / arrow / dash). Color alpha is applied after.
+  float coverage = 1.0;
   vec3 color = rgbaColor.rgb;
 
   // Arrowhead extent along the link (pos.x space) — used by the arrow rendering
@@ -78,17 +82,17 @@ void main() {
 
   if (useArrow > 0.5) {
     float arrowWidthDelta = arrowWidthFactor / 2.0;
-    float linkOpacity = rgbaColor.a * smoothstep(0.5 - arrowWidthDelta, 0.5 - arrowWidthDelta - smoothing / 2.0, abs(pos.y));
-    float arrowOpacity = 1.0;
+    float linkCoverage = smoothstep(0.5 - arrowWidthDelta, 0.5 - arrowWidthDelta - smoothing / 2.0, abs(pos.y));
+    float arrowCoverage = 1.0;
     if (pos.x > start_arrow && pos.x < start_arrow + arrowLength) {
       float xmapped = map(pos.x, start_arrow, end_arrow, 0.0, 1.0);
-      arrowOpacity = rgbaColor.a * smoothstep(xmapped - smoothing, xmapped, map(abs(pos.y), 0.5, 0.0, 0.0, 1.0));
-      if (linkOpacity != arrowOpacity) {
-        linkOpacity = max(linkOpacity, arrowOpacity);
+      arrowCoverage = smoothstep(xmapped - smoothing, xmapped, map(abs(pos.y), 0.5, 0.0, 0.0, 1.0));
+      if (linkCoverage != arrowCoverage) {
+        linkCoverage = max(linkCoverage, arrowCoverage);
       }
     }
-    opacity = linkOpacity;
-  } else opacity = rgbaColor.a * smoothstep(0.5, 0.5 - smoothing, abs(pos.y));
+    coverage = linkCoverage;
+  } else coverage = smoothstep(0.5, 0.5 - smoothing, abs(pos.y));
 
   // Dashed / dotted stroke patterns. Applied to the visible pass only (renderMode == 0.0)
   // so that gaps stay fully pickable in the index pass. The arrowhead region is left solid.
@@ -101,7 +105,7 @@ void main() {
       if (vLinkStyle == LINK_STYLE_DASHED) {
         float period = max(linkDashLength + linkDashGap, 0.001);
         float aa = max(fwidth(phase), 1e-4);
-        opacity *= strokeMask(phase, linkDashLength, period, aa);
+        coverage *= strokeMask(phase, linkDashLength, period, aa);
       } else {
         // Dotted: round dots sized to the stroke width, spaced by diameter + gap.
         float diameter = vLinkDashWidth;
@@ -110,10 +114,12 @@ void main() {
         float localY = pos.y * vLinkDashWidth;
         float r = length(vec2(localX, localY));
         float aa = max(fwidth(r), 1e-4);
-        opacity *= 1.0 - smoothstep(diameter * 0.5 - aa, diameter * 0.5 + aa, r);
+        coverage *= 1.0 - smoothstep(diameter * 0.5 - aa, diameter * 0.5 + aa, r);
       }
     }
   }
+
+  float opacity = rgbaColor.a * coverage;
 
   // Apply hover color if this is the hovered link and hover color is defined.
   // Done last — after the gradient and the dash mask — so hover wins over every
@@ -127,6 +133,16 @@ void main() {
   if (renderMode > 0.0) {
     if (opacity <= 0.0) discard;
     fragColor = vec4(linkIndex, 0.0, 0.0, 1.0);
-  } else fragColor = vec4(color, opacity);
+  } else if (linkBlending < 0.5) {
+    // Unblended: any covered fragment is fully opaque. Soft AA fringes would
+    // otherwise write full RGB with partial alpha; canvas compositing treats that
+    // as premultiplied and the edge reads brighter than the solid core.
+    // Discard only zero coverage / fully transparent — do not hard-cut at
+    // coverage < 0.5, which erases thin strokes whose smoothstep peaks ~0.5.
+    if (coverage <= 0.0 || opacity <= 0.0) discard;
+    fragColor = vec4(color, 1.0);
+  } else {
+    fragColor = vec4(color, opacity);
+  }
 
 }

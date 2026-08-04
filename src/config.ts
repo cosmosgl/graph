@@ -307,9 +307,9 @@ export interface GraphConfigInterface {
   /**
    * Controls alpha blending for link rendering.
    *
-   * When `true` (default), links are drawn with standard source-over alpha blending,
-   * which is required for transparency, opacity, and antialiased link edges.
-   * Disable if you want much faster links rendering.
+   * When `true` (default), links are drawn with standard source-over alpha blending
+   * for transparency and soft antialiased edges.
+   * When `false`, links are drawn as opaque hard edges (faster for dense graphs).
    * Default value: `true`
    */
   linkBlending: boolean;
