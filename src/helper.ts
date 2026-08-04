@@ -96,7 +96,10 @@ export function readPixels (device: Device, fbo: Framebuffer, sourceX = 0, sourc
 export function generateRandomId (): string {
   const words = new Uint32Array(2)
   crypto.getRandomValues(words)
-  return Array.from(words, (word) => word.toString(36)).join('')
+  // Each word is padded to the 7 base-36 digits a full uint32 needs, so the
+  // boundary between them is fixed: with variable widths two different pairs
+  // can concatenate to the same id.
+  return Array.from(words, (word) => word.toString(36).padStart(7, '0')).join('')
 }
 
 /**
