@@ -76,9 +76,11 @@ export class ForceCollision extends CoreModule {
     const collisionPadding = config.simulationCollisionPadding ?? 0
     const effectiveRadius = (collisionRadius > 0 ? collisionRadius : maxSize * 0.5) + collisionPadding
 
-    // Cell size = collision radius (smaller cells = better accuracy).
-    // We use multiple offset passes to catch boundary collisions.
-    this.cellSize = Math.max(effectiveRadius, 8)
+    // Two touching points interact up to 2 × effectiveRadius apart, and the 3x3
+    // neighbourhood scan only reaches one cell of separation, so the cell must
+    // span the full interaction range. The offset passes shuffle cell alignment
+    // to catch boundary collisions; they do not extend the search radius.
+    this.cellSize = Math.max(effectiveRadius * 2, 8)
 
     // Grid texture size = space size / cell size, clamped to reasonable values
     this.gridTextureSize = Math.min(
