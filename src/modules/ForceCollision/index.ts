@@ -82,13 +82,16 @@ export class ForceCollision extends CoreModule {
     // to catch boundary collisions; they do not extend the search radius.
     this.cellSize = Math.max(effectiveRadius * 2, 8)
 
-    // Grid texture size = space size / cell size, clamped to reasonable values
+    // Grid dimension from that cell size, capped by texture size. Rounding down
+    // is what keeps the fitted cell at or above the interaction range — rounding
+    // up divides the space into cells smaller than it. A large radius therefore
+    // yields a coarse grid: the cell size is the constraint, not the cell count.
     this.gridTextureSize = Math.min(
       512,
-      Math.max(32, Math.ceil(store.adjustedSpaceSize / this.cellSize))
+      Math.max(1, Math.floor(store.adjustedSpaceSize / this.cellSize))
     )
 
-    // Recalculate cell size to fit the grid evenly
+    // Recalculate cell size to fit the grid evenly (only ever grows it)
     this.cellSize = store.adjustedSpaceSize / this.gridTextureSize
 
     // Allocate one grid framebuffer per offset pass. These are scratch buffers
