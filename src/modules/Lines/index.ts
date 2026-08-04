@@ -120,6 +120,7 @@ export class Lines extends CoreModule {
       linkColorInterpolateFromEndpoints: number;
       hoveredLinkIndex: number;
       hoveredLinkColor: [number, number, number, number];
+      linkBlending: number;
     };
   }> | undefined
 
@@ -236,6 +237,7 @@ export class Lines extends CoreModule {
           linkColorInterpolateFromEndpoints: 'f32',
           hoveredLinkIndex: 'f32',
           hoveredLinkColor: 'vec4<f32>',
+          linkBlending: 'f32',
         },
         defaultUniforms: {
           renderMode: 0.0,
@@ -244,6 +246,7 @@ export class Lines extends CoreModule {
           linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
           hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
           hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
+          linkBlending: config.linkBlending ? 1 : 0,
         },
       },
     })
@@ -364,6 +367,7 @@ export class Lines extends CoreModule {
         linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
         hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
         hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
+        linkBlending: config.linkBlending ? 1 : 0,
       },
     })
 
@@ -894,6 +898,8 @@ export class Lines extends CoreModule {
         linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
         hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
         hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
+        // Keep the UBO complete; picking ignores this when renderMode > 0.
+        linkBlending: config.linkBlending ? 1 : 0,
       },
     })
 
