@@ -111,6 +111,14 @@ export class GraphData {
   }
 
   public updatePoints (): void {
+    // Positions must hold whole [x, y] pairs: an odd length makes `pointsNumber`
+    // fractional, which the adjacency and degree builds pass to `new Array()`.
+    // `subarray` is a view over the same buffer — the caller's array is not edited.
+    if (this.inputPointPositions !== undefined && this.inputPointPositions.length % 2 !== 0) {
+      console.warn(`Invalid point positions length: ${this.inputPointPositions.length}. The array must hold [x, y] pairs — the trailing value was ignored.`)
+      this.inputPointPositions = this.inputPointPositions.subarray(0, this.inputPointPositions.length - 1)
+    }
+
     // Don't sync the same positions twice — it breaks animations when points are added or removed.
     if (this.pointPositions === this.inputPointPositions) return
 
