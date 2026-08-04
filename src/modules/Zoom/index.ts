@@ -15,7 +15,11 @@ export class Zoom {
       // double-click and pinch zoom active. Panning must keep working, so
       // block just the scale-changing gestures here instead.
       if (!this.config.enableZoom) {
-        if (event.type === 'wheel' || event.type === 'dblclick') return false
+        // `touchend` blocks double-tap: d3-zoom reroutes the second tap's
+        // touchend into its dblclick handler, which re-applies this filter.
+        // Pan gestures never reach the filter with a touchend, so this only
+        // stops the double-tap zoom.
+        if (event.type === 'wheel' || event.type === 'dblclick' || event.type === 'touchend') return false
         if ('touches' in event && event.touches.length > 1) return false
       }
       // Mirrors d3-zoom's default filter.
