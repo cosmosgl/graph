@@ -102,11 +102,17 @@ export function generateRandomId (): string {
 /**
  * Extracts point indices from a pixel readback buffer.
  * Every 4th value (R channel) is checked — non-zero means the point at that index was found.
+ *
+ * @param pointsNumber Number of real points. The texture is square, so the texels
+ * past this count are padding holding position `(0, 0)`; they match any search area
+ * covering the space origin and would be reported as points that do not exist.
+ * Omit it to read the whole buffer.
  */
-export function extractIndicesFromPixels (pixels: Float32Array): number[] {
+export function extractIndicesFromPixels (pixels: Float32Array, pointsNumber?: number): number[] {
   const result: number[] = []
-  for (let i = 0; i < pixels.length; i += 4) {
-    if (pixels[i] !== 0) result.push(i / 4)
+  const count = Math.min(pixels.length / 4, pointsNumber ?? Infinity)
+  for (let i = 0; i < count; i += 1) {
+    if (pixels[i * 4] !== 0) result.push(i)
   }
   return result
 }
