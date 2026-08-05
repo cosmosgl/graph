@@ -508,11 +508,16 @@ export class GraphData {
     if (this.links === undefined) return []
     const linksNumber = this.linksNumber ?? 0
     for (const linkIndex of indices) {
-      if (linkIndex < 0 || linkIndex >= linksNumber) continue
+      // A fractional index reads one endpoint from each of two neighbouring links.
+      if (!Number.isInteger(linkIndex) || linkIndex < 0 || linkIndex >= linksNumber) continue
       const sourceIndex = this.links[linkIndex * 2]
       const targetIndex = this.links[linkIndex * 2 + 1]
-      if (sourceIndex !== undefined) result.add(sourceIndex)
-      if (targetIndex !== undefined) result.add(targetIndex)
+      // Read straight from `links`, so the endpoint check the adjacency build
+      // applies has to be repeated here: a link with one invalid endpoint
+      // contributes neither.
+      if (!this.isPointIndex(sourceIndex) || !this.isPointIndex(targetIndex)) continue
+      result.add(sourceIndex)
+      result.add(targetIndex)
     }
     return [...result]
   }
