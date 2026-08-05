@@ -1324,7 +1324,7 @@ export class Graph {
   public getPointRadiusByIndex (index: number): number | undefined {
     if (this._isDestroyed) return undefined
     if (this.graph.pointSizes === undefined && this.graph.pointImageSizes === undefined) return undefined
-    if (index < 0 || index >= (this.graph.pointsNumber ?? 0)) return undefined
+    if (!this.graph.isPointIndex(index)) return undefined
     const shapeSize = this.graph.getResolvedPointSize(index)
     const imageSize = this.graph.pointImageSizes?.[index]
     return Math.max(shapeSize, imageSize ?? 0)
@@ -1685,8 +1685,11 @@ export class Graph {
    * @returns An array of tuple positions
    */
   public pair (pointPositions: number[]): [number, number][] {
-    const arr = new Array(pointPositions.length / 2) as [number, number][]
-    for (let i = 0; i < pointPositions.length / 2; i++) {
+    // A trailing x with no y has no pair — `new Array()` throws on a fractional
+    // length, so the odd value is dropped rather than taking the caller down.
+    const pairsNumber = Math.floor(pointPositions.length / 2)
+    const arr = new Array(pairsNumber) as [number, number][]
+    for (let i = 0; i < pairsNumber; i++) {
       arr[i] = [pointPositions[i * 2] as number, pointPositions[i * 2 + 1] as number]
     }
 

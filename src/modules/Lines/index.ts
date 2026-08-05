@@ -482,8 +482,15 @@ export class Lines extends CoreModule {
     const pointBData = new Float32Array(data.linksNumber * 2)
 
     for (let i = 0; i < data.linksNumber; i++) {
-      const fromIndex = data.links[i * 2] as number
-      const toIndex = data.links[i * 2 + 1] as number
+      const rawFrom = data.links[i * 2] as number
+      const rawTo = data.links[i * 2 + 1] as number
+      // An endpoint that is not a real point would address a texel outside the
+      // position texture and draw a link to wherever that reads. Collapse the
+      // link onto one texel instead — zero length renders nothing — keeping the
+      // instance, so every link index still means what the caller passed.
+      const isValid = data.isPointIndex(rawFrom) && data.isPointIndex(rawTo)
+      const fromIndex = isValid ? rawFrom : 0
+      const toIndex = isValid ? rawTo : 0
       const fromX = fromIndex % store.pointsTextureSize
       const fromY = Math.floor(fromIndex / store.pointsTextureSize)
       const toX = toIndex % store.pointsTextureSize

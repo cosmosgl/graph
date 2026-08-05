@@ -279,7 +279,25 @@ export class GraphData {
     }
   }
 
+  /**
+   * True when `index` addresses a real point. Link endpoints come straight from
+   * the caller, so they may be out of range, negative or fractional.
+   */
+  public isPointIndex (index: number | undefined): index is number {
+    return index !== undefined && Number.isInteger(index) &&
+      index >= 0 && index < (this.pointsNumber ?? 0)
+  }
+
   public updateLinks (): void {
+    // Links must hold whole [source, target] pairs: an odd length makes
+    // `linksNumber` fractional, and `new Array(linksNumber)` in `updateArrows`
+    // throws from inside the deferred render, leaving the graph blank with no
+    // error surfaced. `subarray` is a view — the caller's array is not edited.
+    if (this.inputLinks !== undefined && this.inputLinks.length % 2 !== 0) {
+      console.warn(`Invalid links length: ${this.inputLinks.length}. The array must hold [source, target] pairs — the trailing value was ignored.`)
+      this.inputLinks = this.inputLinks.subarray(0, this.inputLinks.length - 1)
+    }
+
     this.links = this.inputLinks
   }
 
@@ -451,10 +469,9 @@ export class GraphData {
    */
   public getNeighboringPointIndices (pointIndices: number | number[]): number[] {
     const indices = Array.isArray(pointIndices) ? pointIndices : [pointIndices]
-    const pointsNumber = this.pointsNumber ?? 0
     const result = new Set<number>()
     for (const index of indices) {
-      if (index < 0 || index >= pointsNumber) continue
+      if (!this.isPointIndex(index)) continue
       for (const [pointIndex] of this.sourceIndexToTargetIndices?.[index] ?? []) result.add(pointIndex)
       for (const [pointIndex] of this.targetIndexToSourceIndices?.[index] ?? []) result.add(pointIndex)
     }
@@ -469,11 +486,10 @@ export class GraphData {
    */
   public getConnectedLinkIndices (pointIndices: number | number[]): number[] {
     const indices = Array.isArray(pointIndices) ? pointIndices : [pointIndices]
-    const pointsNumber = this.pointsNumber ?? 0
     const indexSet = new Set(indices)
     const result = new Set<number>()
     for (const index of indexSet) {
-      if (index < 0 || index >= pointsNumber) continue
+      if (!this.isPointIndex(index)) continue
       for (const [targetIndex, linkIndex] of this.sourceIndexToTargetIndices?.[index] ?? []) {
         if (indexSet.has(targetIndex)) result.add(linkIndex)
       }
@@ -513,12 +529,16 @@ export class GraphData {
     for (let i = 0; i < this.linksNumber; i++) {
       const sourceIndex = this.links[i * 2]
       const targetIndex = this.links[i * 2 + 1]
-      if (sourceIndex !== undefined && targetIndex !== undefined) {
-        if (this.sourceIndexToTargetIndices[sourceIndex] === undefined) this.sourceIndexToTargetIndices[sourceIndex] = []
-        this.sourceIndexToTargetIndices[sourceIndex]?.push([targetIndex, i])
+      // Both endpoints must be real points: an out-of-range index would extend
+      // these arrays past the point count and come back out of
+      // `getNeighboringPointIndices` as a point the caller cannot look up.
+      // Skipped rather than dropped, so link indices stay the caller's own.
+      if (this.isPointIndex(sourceIndex) && this.isPointIndex(targetIndex)) {
+        this.sourceIndexToTargetIndices[sourceIndex] ??= []
+        this.sourceIndexToTargetIndices[sourceIndex].push([targetIndex, i])
 
-        if (this.targetIndexToSourceIndices[targetIndex] === undefined) this.targetIndexToSourceIndices[targetIndex] = []
-        this.targetIndexToSourceIndices[targetIndex]?.push([sourceIndex, i])
+        this.targetIndexToSourceIndices[targetIndex] ??= []
+        this.targetIndexToSourceIndices[targetIndex].push([sourceIndex, i])
       }
     }
   }
