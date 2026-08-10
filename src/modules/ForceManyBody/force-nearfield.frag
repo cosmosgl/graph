@@ -1,5 +1,8 @@
 #version 300 es
 precision highp float;
+// Fragment shaders default int to mediump, guaranteed only to 32767 —
+// point indices go far higher.
+precision highp int;
 
 // Near-field pass of the precise grid repulsion (P3M-style). After the finest
 // level pass, the only un-accumulated region is the 3×3 neighborhood of the
