@@ -49,7 +49,7 @@ bool pointInPolygon(vec2 point, sampler2D pathTexture, int pathLength) {
   for (int i = 0; i < 2048; i++) {
     if (i >= pathLength) break;
     
-    int j = int(mod(float(i + 1), float(pathLength)));
+    int j = (i + 1) % pathLength;
     
     vec2 pi = getPolygonPoint(pathTexture, i, pathLength);
     vec2 pj = getPolygonPoint(pathTexture, j, pathLength);
