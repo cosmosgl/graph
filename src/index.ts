@@ -1332,6 +1332,12 @@ export class Graph {
 
   /**
    * Track multiple point positions by their indices on each Cosmos tick.
+   *
+   * The tracked set is declarative: an index follows its point whenever that
+   * point exists. Growing or shrinking the point count later keeps tracking
+   * correct — an index past the current count simply reports nothing until the
+   * count grows to include it. Tracking may also be set up before the first
+   * `setPointPositions` call.
    * @param indices Array of points indices.
    */
   public trackPointPositionsByIndices (indices: number[]): void {
@@ -1350,7 +1356,8 @@ export class Graph {
    * @note An **absent** tracked point (removed via a `NaN` position — see `setPointPositions`) is
    * omitted from the map — a missing key means "this point is gone". React to absence yourself
    * (e.g. hide its label); the entry disappears as soon as the point is removed, even while its
-   * fade-out is still playing.
+   * fade-out is still playing. A tracked index with no point behind it (at or past the current
+   * point count) is omitted the same way, and reappears if the count grows to include it.
    */
   public getTrackedPointPositionsMap (): ReadonlyMap<number, [number, number]> {
     if (this._isDestroyed || !this.points) return new Map()
