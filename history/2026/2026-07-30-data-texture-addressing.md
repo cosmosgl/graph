@@ -3,7 +3,9 @@
 # Addressing data textures by texel index
 
 **Commits:** `fix(shaders): read data textures by texel index, never by coordinate`
-(`f6c6a97`)
+(`c440ce4`), `fix(points): tracked points follow the point, not a baked texel`
+(`3f3a3b8`), `fix(points): close the lasso with integer modulo` (`d7a5225`),
+`fix(force): declare highp int for near-field point indices` (`71206e2`)
 
 ## Why
 
@@ -52,7 +54,12 @@ fragility — it is an argument that has to be re-made at every new call site, a
 the corner form is what you get when someone doesn't make it. An integer texel
 does no coordinate arithmetic at all, and ignores filter and wrap state, so there
 is nothing left to get wrong. This also matches the WebGL 2 GPGPU idiom, where
-`texelFetch` is what replaced the WebGL 1 half-texel workaround.
+`texelFetch` is what replaced the WebGL 1 half-texel workaround. That workaround
+was never a style choice: GLSL ES 1.00 reserved `%` and had no `texelFetch`, so
+index-to-texel was float `mod()`/`floor()` by construction — the arithmetic whose
+boundary failure the sweep notes below measure (`mod(33.0, 33.0) = 33`) — and
+half-texel offsets plus epsilons were how engines held it together. WebGL 2
+removed the constraint; the rule here finishes the removal.
 
 For the same reason the full-screen passes stopped reading an interpolated quad
 varying: a rasterised coordinate re-introduces exactly the dependence being
@@ -84,12 +91,18 @@ local of the same name). That one now asks the texture.
   defining an out-of-range `texelFetch` as zero (its conformance suite tests
   exactly that; GLSL ES alone leaves it undefined). Same answer, different
   mechanism, and it is documented at the allocation.
-- **Stale tracked indices.** `trackPointPositionsByIndices` bakes its texel pairs
-  from the `pointsTextureSize` current at call time and never re-bakes them when
-  the point count changes. A stale index used to clamp and report *some* real
-  point's position; it now reads out of range and reports `(0, 0)`, so a tracked
-  set lands at the origin and reads like a layout bug. Pre-existing — the symptom
-  changed, and the re-bake is still owed.
+- **Stale tracked indices — since resolved.** `trackPointPositionsByIndices` baked
+  its texel pairs from the `pointsTextureSize` current at call time and never
+  re-baked them when the point count changed. A stale index used to clamp and
+  report *some* real point's position; after this sweep it read out of range and
+  reported `(0, 0)`, so a tracked set landed at the origin and read like a layout
+  bug. `3f3a3b8` closes it with this entry's own rule rather than the re-bake
+  that was owed: the table stores the raw point index, and `track-positions.frag`
+  derives the texel at read time from `textureSize(positionsTexture, 0)` —
+  legitimate there, since the shader samples that texture. With no baked mapping
+  left to go stale, the tracked set is declarative: an index at or past the
+  current count is omitted like an absent point and comes back if the count
+  grows to include it.
 
 ## Verification
 
@@ -124,5 +137,26 @@ hardware was exercised.
   the wrong offset, silently. Nine members were removed here (two blocks emptied
   entirely, taking their `UniformStore` with them), each in lockstep, with every
   block's order re-checked against its `uniformTypes` afterwards.
+- **Fragment shaders default `int` to `mediump`** — spec minimum 16 bits. Every
+  shader here declares `precision highp float;` and none declared the int
+  counterpart, so fragment-stage integer math on a raw point/link index above
+  32 767 is only safe where the driver widens mediump (desktop/ANGLE does; the
+  spec does not promise it). `track-positions.frag` and `force-nearfield.frag` —
+  the shaders that hold raw indices — now declare `precision highp int;`
+  (`71206e2`); SwiftShader, Chrome's fallback renderer, reports mediump int as
+  exactly 16 bits, so the gap is real on reachable stacks. Bounded ints (texel
+  coordinates, grid cells) keep the default, and sampler precision — `lowp` by
+  default, the same spec posture — was deliberately left alone: no reachable
+  implementation narrows it.
+- **Deriving a texel from an index needs integer math.** A GPU probe measured
+  float `mod(33.0, 33.0)` returning `33` — the boundary floor this entry is
+  about, surfacing at index 33 — while integer `%` and `/` were exact at every
+  width for indices up to `2^24 − 1`. Above `2^24` an index no longer survives
+  float32 storage at all; that ceiling is shared by every float-carried index
+  in the engine (`linkIndices`, and now the tracked-index table). The codebase
+  held one live instance: `find-points-in-polygon.frag` wrapped its last edge
+  with float `mod`, and at 33 path vertices closed the lasso onto a zero-filled
+  padding texel — four outsiders selected, the enclosed point dropped
+  (`d7a5225`).
 - `npm run build` exits 0 even when TypeScript errors are printed, so a green
   build is not a type check — `npx tsc --noEmit` is.
