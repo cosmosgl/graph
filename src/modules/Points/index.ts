@@ -2265,23 +2265,24 @@ export class Points extends CoreModule {
   }
 
   public trackPointsByIndices (indices?: number[] | undefined): void {
-    const { store: { pointsTextureSize }, device } = this
+    const { device } = this
     this.trackedIndices = indices
 
     // Clear cache when changing tracked indices
     this.trackedPositions = undefined
     this.isPositionsUpToDate = false
 
-    if (!indices?.length || !pointsTextureSize) return
+    if (!indices?.length) return
     const textureSize = Math.ceil(Math.sqrt(indices.length))
 
+    // The table stores raw indices; the shader derives each texel from the
+    // positions texture's live width, so a point-count relayout cannot strand
+    // the table on the old layout. float32 carries integers exactly to 2^24 —
+    // the same ceiling every float-carried index in the engine lives under.
     const initialState = new Float32Array(textureSize * textureSize * 4).fill(-1)
     for (const [i, sortedIndex] of indices.entries()) {
       if (sortedIndex !== undefined) {
-        initialState[i * 4] = sortedIndex % pointsTextureSize
-        initialState[i * 4 + 1] = Math.floor(sortedIndex / pointsTextureSize)
-        initialState[i * 4 + 2] = 0
-        initialState[i * 4 + 3] = 0
+        initialState[i * 4] = sortedIndex
       }
     }
 
@@ -2347,6 +2348,10 @@ export class Points extends CoreModule {
 
     if (!this.trackedPositionsFbo || this.trackedPositionsFbo.destroyed) return new Map()
 
+    // Frames gather after position changes, but a read can come first
+    // (static graph, or tracking set before data) — gather here when stale.
+    if (!this.isPositionsUpToDate) this.trackPoints()
+
     const pixels = readPixels(this.device, this.trackedPositionsFbo as Framebuffer)
 
     const tracked = new Map<number, [number, number]>()
@@ -2357,7 +2362,10 @@ export class Points extends CoreModule {
       if (x !== undefined && y !== undefined && index !== undefined) {
         // Omit absent (removed) points — the tracked FBO holds their frozen last
         // coordinate, which must not be reported as a live position. A missing key
-        // is the map's way of saying "this point is gone".
+        // is the map's way of saying "this point is gone". An index with no point
+        // behind it under the current count is omitted the same way, and comes
+        // back if the count grows to include it.
+        if (!this.data.isPointIndex(index)) continue
         if (this.data.pointPositions && isPointAbsent(this.data.pointPositions, index)) continue
         tracked.set(index, [x, y])
       }
@@ -2479,6 +2487,8 @@ export class Points extends CoreModule {
     if (!this.trackedIndices) return positions
     if (!this.trackedPositionsFbo || this.trackedPositionsFbo.destroyed) return positions
     positions.length = this.trackedIndices.length * 2
+    // Same as the map readback: gather when stale.
+    if (!this.isPositionsUpToDate) this.trackPoints()
     const pixels = readPixels(this.device, this.trackedPositionsFbo as Framebuffer)
     for (let i = 0; i < pixels.length / 4; i += 1) {
       const x = pixels[i * 4]
@@ -2487,8 +2497,10 @@ export class Points extends CoreModule {
       if (x !== undefined && y !== undefined && index !== undefined) {
         // An absent (removed) point reads back as NaN. Unlike the map (which omits
         // it), the array must keep the slot so positions stay aligned with the
-        // tracked indices.
-        if (this.data.pointPositions && isPointAbsent(this.data.pointPositions, index)) {
+        // tracked indices. An index with no point behind it under the current
+        // count gets the same NaN slot.
+        if (!this.data.isPointIndex(index) ||
+            (this.data.pointPositions && isPointAbsent(this.data.pointPositions, index))) {
           positions[i * 2] = NaN
           positions[i * 2 + 1] = NaN
           continue
