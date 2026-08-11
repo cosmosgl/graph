@@ -918,8 +918,11 @@ export class Graph {
   }
 
   /**
-   * Renders the graph and starts rendering.
-   * Does NOT modify simulation state - use start(), stop(), pause(), unpause() to control simulation.
+   * Applies pending data changes and renders the graph.
+   * Does not start or stop the simulation — use start(), stop(), pause(), unpause() for that.
+   * Two exceptions: the `simulationAlpha` argument sets the alpha when provided, and a position
+   * transition started with a positive `transitionDuration` (or its `config.transitionDuration`
+   * fallback) pauses a running simulation (see `setPointPositions`).
    *
    * @param {number} [simulationAlpha] - Optional alpha value to set.
    *   - If 0: Sets alpha to 0, simulation stops after one frame (graph becomes static).
@@ -1442,8 +1445,10 @@ export class Graph {
   }
 
   /**
-   * Start the simulation.
-   * This only controls the simulation state, not rendering.
+   * Start the simulation. Data ingest and the initial render belong to `render()`;
+   * this method sets the simulation running and requests frames to drive it.
+   * An active position transition is ended immediately (`onTransitionEnd`
+   * fires with `interrupted: true`).
    * If the simulation is already running, calling `start(alpha)` reheats it by
    * resetting `alpha` and `simulationProgress` without firing
    * `onSimulationStart` again.
@@ -1499,6 +1504,8 @@ export class Graph {
   /**
    * Unpause the simulation. This method resumes a paused
    * simulation and continues its execution.
+   * An active position transition is ended immediately (`onTransitionEnd`
+   * fires with `interrupted: true`).
    */
   public unpause (): void {
     if (this._isDestroyed) return
@@ -1618,9 +1625,12 @@ export class Graph {
   }
 
   /**
-   * Applies pending data changes (positions, colors, sizes, shapes, links, forces, clusters)
-   * to the graph visualization. Call this after setting data via methods like `setPointPositions`,
-   * `setPointColors`, `setLinks`, etc. if you need to apply changes without calling `render()`.
+   * Uploads the processed data to the GPU for every channel whose update flag is set
+   * (positions, colors, sizes, shapes, images, links, forces, clusters) and requests a redraw.
+   * An internal stage of the render pipeline: it does not ingest new input arrays, so data
+   * passed to `setPointPositions`, `setPointColors`, `setLinks`, etc. takes effect only on
+   * the next `render()`. To apply new data while keeping the current alpha, call
+   * `render(undefined)` — or `render(undefined, 0)` to also snap instead of animating.
    */
   public create (): void {
     if (this._isDestroyed) return
@@ -1673,7 +1683,7 @@ export class Graph {
     this.isForceLinkUpdateNeeded = false
     this.isForceCenterUpdateNeeded = false
 
-    // Public contract: applies data changes without render() — draw them
+    // create() presents what it uploads — callers don't need a separate frame kick
     this.requestRender()
   }
 
