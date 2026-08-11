@@ -433,7 +433,7 @@ Sets which points are pinned (fixed) in position. Pinned points do not move due 
 
 ### <a name="render" href="#render">#</a> graph.<b>render</b>([<i>simulationAlpha</i>], [<i>transitionDuration</i>])
 
-The `render` method renders the graph and starts rendering. It does NOT modify simulation state - use `start()`, `stop()`, `pause()`, or `unpause()` to control the simulation.
+The `render` method applies pending data changes and renders the graph. It does not start or stop the simulation — use `start()`, `stop()`, `pause()`, or `unpause()` for that. Two exceptions: the `simulationAlpha` argument sets the alpha when provided, and a position transition started with a positive `transitionDuration` (or its `config.transitionDuration` fallback) pauses a running simulation (see `setPointPositions`).
 
 * **`simulationAlpha`** (number, optional): Optional alpha value to set.
   - If `0`: Sets alpha to 0, simulation stops after one frame (graph becomes static).
@@ -667,7 +667,7 @@ The sample distributes links evenly across the visible area.
 
 ### <a name="start" href="#start">#</a> graph.<b>start</b>([<i>alpha</i>])
 
-Starts the simulation. This method only controls the simulation state, not rendering. Rendering is started automatically by `render()`.
+Starts the simulation. Data ingest and the initial render belong to `render()`; this method sets the simulation running and requests frames to drive it. An active position transition is ended immediately (`onTransitionEnd` fires with `interrupted: true`).
 
 * **`alpha`** (Number, optional): A number between `0` and `1` representing the initial energy of the simulation. The default value is `1` if not provided. A higher `alpha` value results in more initial energy for the simulation.
 
@@ -681,7 +681,7 @@ Pauses the simulation. When paused, the simulation stops running but preserves i
 
 ### <a name="unpause" href="#unpause">#</a> graph.<b>unpause</b>()
 
-Unpauses (resumes) the simulation. This method resumes a paused simulation and continues its execution from where it was paused.
+Unpauses (resumes) the simulation. This method resumes a paused simulation and continues its execution from where it was paused. An active position transition is ended immediately (`onTransitionEnd` fires with `interrupted: true`).
 
 If a **position** transition is currently active when `unpause()` is called, the transition is ended as interrupted (`onTransitionEnd(true)` fires) and the simulation resumes from the current mid-animation positions.
 
@@ -701,7 +701,7 @@ Destroys the current cosmos.gl instance and cleans up all resources.
 
 ### <a name="create" href="#create">#</a> graph.<b>create</b>()
 
-Applies pending data changes (positions, colors, sizes, shapes, links, forces, clusters) to the graph visualization. Call this after setting data via methods like `setPointPositions`, `setPointColors`, `setLinks`, etc. if you need to apply changes without calling `render()`.
+Uploads the processed data to the GPU for every channel whose update flag is set (positions, colors, sizes, shapes, images, links, forces, clusters) and requests a redraw. An internal stage of the render pipeline: it does not ingest new input arrays, so data passed to `setPointPositions`, `setPointColors`, `setLinks`, etc. takes effect only on the next `render()`. To apply new data while keeping the current alpha, call `render(undefined)` — or `render(undefined, 0)` to also snap instead of animating.
 
 ### <a name="flatten" href="#flatten">#</a> graph.<b>flatten</b>(<i>pointPositions</i>)
 
