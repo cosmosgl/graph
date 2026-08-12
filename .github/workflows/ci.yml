@@ -46,13 +46,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+          # Resolve against the upstream release index, not the runner's
+          # toolcache — the newest leg must track real releases, not images.
+          check-latest: true
           cache: npm
       - run: npm ci
       - run: npm run lint
       # The build exits 0 even when TypeScript reports errors; the grep turns
       # them into a failure.
       - name: Build
+        # Default runner shell is bash -e without pipefail: a hard build
+        # crash would exit through tee as 0 and only the grep would judge.
         run: |
+          set -o pipefail
           npm run build 2>&1 | tee build.log
           ! grep -q "error TS" build.log
       - run: npm run build:storybook
