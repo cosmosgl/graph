@@ -67,7 +67,7 @@
     "remark-gfm": "^4.0.0",
     "storybook": "^8.4.5",
     "typescript": "^5.9.3",
-    "vite": "^6.4.1",
+    "vite": "^6.4.3",
     "vite-plugin-dts": "^4.3.0"
   },
   "dependencies": {
@@ -83,7 +83,7 @@
     "d3-selection": "^3.0.0",
     "d3-transition": "^3.0.1",
     "d3-zoom": "^3.0.0",
-    "dompurify": "^3.2.6",
+    "dompurify": "^3.4.13",
     "gl-bench": "^1.0.42",
     "gl-matrix": "^3.4.3",
     "random": "^4.1.0"
