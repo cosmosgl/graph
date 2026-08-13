@@ -309,7 +309,9 @@ export interface GraphConfigInterface {
    *
    * When `true` (default), links are drawn with standard source-over alpha blending
    * for transparency and soft antialiased edges.
-   * When `false`, links are drawn as opaque hard edges (faster for dense graphs).
+   * When `false`, links are drawn as opaque hard edges (faster for dense graphs),
+   * and greyed-out links (`highlightedLinkIndices`) are hidden entirely instead
+   * of dimmed — dash gaps stay transparent.
    * Default value: `true`
    */
   linkBlending: boolean;

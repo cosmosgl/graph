@@ -112,6 +112,7 @@ export class Lines extends CoreModule {
       animatePositions: number;
       pointDefaultColor: [number, number, number, number];
       linkColorInterpolateFromEndpoints: number;
+      linkBlending: number;
     };
     drawLineFragmentUniforms: {
       renderMode: number;
@@ -198,6 +199,7 @@ export class Lines extends CoreModule {
           animatePositions: 'f32',
           pointDefaultColor: 'vec4<f32>',
           linkColorInterpolateFromEndpoints: 'f32',
+          linkBlending: 'f32',
         },
         defaultUniforms: {
           transformationMatrix: store.transformationMatrix4x4,
@@ -227,6 +229,7 @@ export class Lines extends CoreModule {
           animatePositions: 0,
           pointDefaultColor: ensureVec4(getRgbaColor(config.pointDefaultColor), [0, 0, 0, 1]),
           linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
+          linkBlending: config.linkBlending ? 1 : 0,
         },
       },
       drawLineFragmentUniforms: {
@@ -359,6 +362,7 @@ export class Lines extends CoreModule {
         // Cached parse — draw() runs per frame, so no color-string parsing here.
         pointDefaultColor: ensureVec4(this.data.defaultRgba, [0, 0, 0, 1]),
         linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
+        linkBlending: config.linkBlending ? 1 : 0,
       },
       drawLineFragmentUniforms: {
         renderMode: 0.0, // Normal rendering
@@ -742,6 +746,9 @@ export class Lines extends CoreModule {
     if (blend === this.isLinkBlendingActive) return
     this.drawCurveCommand?.setParameters(this.getLinkBlendParameters(blend))
     this.isLinkBlendingActive = blend
+    // The pickable set follows the visible mode: unblended rendering hides greyed
+    // links, so the index buffer must be re-rendered with the new mode.
+    this.isLinkIndexBufferStale = true
   }
 
   public getSampledLinkPositionsMap (): Map<number, [number, number, number]> {
@@ -897,6 +904,10 @@ export class Lines extends CoreModule {
         animatePositions: this.shouldAnimatePositions ? 1 : 0,
         pointDefaultColor: ensureVec4(this.data.defaultRgba, [0, 0, 0, 1]),
         linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
+        // Mirrors the visible mode (not this pipeline's own blend state, which is
+        // always off): greyed links hidden by unblended rendering must also be
+        // absent from the index buffer, and links visible in blended mode pickable.
+        linkBlending: config.linkBlending ? 1 : 0,
       },
       drawLineFragmentUniforms: {
         renderMode: 1.0, // Index rendering for picking
@@ -1170,7 +1181,11 @@ export class Lines extends CoreModule {
    * Builds the render pipeline parameters for the link draw commands.
    * Visible rendering follows `linkBlending`; picking passes `false`.
    * With `blend` enabled, uses standard source-over alpha blending; with it disabled,
-   * fragments overwrite the framebuffer directly (no ROP read-modify-write).
+   * fragments overwrite the framebuffer directly (no read-modify-write of the
+   * destination pixel): links render opaque, the shaders hide greyed-out links and
+   * discard fully transparent fragments (dash gaps), keyed on the `linkBlending`
+   * uniform — which is why the picking command, unblended by construction, still
+   * receives the visible mode's flag value.
    */
   private getLinkBlendParameters (blend: boolean): RenderPipelineParameters {
     const base: RenderPipelineParameters = {

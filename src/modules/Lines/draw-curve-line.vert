@@ -46,6 +46,7 @@ layout(std140) uniform drawLineUniforms {
   float animatePositions;
   vec4 pointDefaultColor;
   float linkColorInterpolateFromEndpoints;
+  float linkBlending;
 } drawLine;
 
 #define transformationMatrix drawLine.transformationMatrix
@@ -75,6 +76,7 @@ layout(std140) uniform drawLineUniforms {
 #define animatePositions drawLine.animatePositions
 #define pointDefaultColor drawLine.pointDefaultColor
 #define linkColorInterpolateFromEndpoints drawLine.linkColorInterpolateFromEndpoints
+#define linkBlending drawLine.linkBlending
 #else
 uniform mat3 transformationMatrix;
 uniform float widthScale;
@@ -104,6 +106,7 @@ uniform float animateWidths;
 uniform float animatePositions;
 uniform vec4 pointDefaultColor;
 uniform float linkColorInterpolateFromEndpoints;
+uniform float linkBlending;
 #endif
 
 out vec4 rgbaColor;
@@ -310,13 +313,22 @@ void main() {
   // Fade with the exit ramp of the endpoints (1 = both fully present).
   opacity *= exitPresence;
 
-  // Apply greyed-out opacity from link status texture
+  // Apply greyed-out status from the link status texture. Blended rendering dims
+  // greyed links by greyoutOpacity. Unblended rendering hides them instead: alpha is
+  // ignored at write time, links render opaque and can only overwrite each other, so a
+  // dimmed link drawn later would cut into highlighted links; collapsing the instance
+  // also skips its fill cost. Runs in the picking pass too — a hidden link is not
+  // hoverable, matching what is on screen.
   if (isLinkHighlightingActive > 0.0 && linkStatusTextureSize > 0.0) {
     int statusTexSize = int(linkStatusTextureSize);
     int statusIndex = int(linkIndices);
     ivec2 statusTexel = ivec2(statusIndex % statusTexSize, statusIndex / statusTexSize);
     vec4 linkStatusValue = texelFetch(linkStatus, statusTexel, 0);
     if (linkStatusValue.r > 0.0) {
+      if (linkBlending < 0.5) {
+        gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+        return;
+      }
       opacity *= greyoutOpacity;
     }
   }
