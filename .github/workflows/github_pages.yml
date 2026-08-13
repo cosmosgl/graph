@@ -31,11 +31,14 @@ jobs:
           path: ~/.npm
           key: npm-${{ hashFiles('package-lock.json') }}
           restore-keys: npm-
+      # engines.node in package.json is the single home of the supported Node
+      # version; deploy builds on its floor, same as ci.yml.
+      - id: node
+        run: echo "floor=$(node -p "require('./package.json').engines.node.match(/\d+/)[0]")" >> "$GITHUB_OUTPUT"
       - name: Build
         uses: actions/setup-node@v4
         with:
-          node-version: '20.x'
-      - run: npm install -g npm@10
+          node-version: ${{ steps.node.outputs.floor }}
       - run: npm ci
       - run: npm run build:storybook -- -o _site
       - name: Upload artifact
