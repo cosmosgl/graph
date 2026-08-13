@@ -85,4 +85,5 @@ the mechanic; close with the resulting guarantee. Wrap ~72 columns. The model to
 `fix(data): resolve NaN size/color channels at read time` (`1c00abea`) — find it with
 `git log --grep` if the hash has since been rewritten by a rebase/squash-merge.
 
-After a behavior / config / public-API change, add or update the `history/` entry (`/history`).
+After a cosmos.gl behavior / config / public-API change, add or update the `history/` entry (`/history`).
+Repo tooling (CI, `engines`, build scripts) and small fixes don't warrant one.
