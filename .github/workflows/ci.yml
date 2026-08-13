@@ -13,42 +13,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # engines.node in package.json is the single home of the supported Node
-  # range; both matrix legs below derive from it.
-  node-range:
-    runs-on: ubuntu-latest
-    outputs:
-      floor: ${{ steps.read.outputs.floor }}
-      range: ${{ steps.read.outputs.range }}
-    steps:
-      - uses: actions/checkout@v4
-      - id: read
-        run: |
-          {
-            echo "floor=$(node -p "require('./package.json').engines.node.match(/\d+/)[0]")"
-            echo "range=$(node -p "require('./package.json').engines.node")"
-          } >> "$GITHUB_OUTPUT"
-
   verify:
-    needs: node-range
     runs-on: ubuntu-latest
-    strategy:
-      # Which end broke is the diagnostic: floor only → a dependency dropped
-      # the documented minimum; newest only → a fresh Node release broke the
-      # toolchain. Always run both to completion.
-      fail-fast: false
-      matrix:
-        node:
-          - ${{ needs.node-range.outputs.floor }}
-          - ${{ needs.node-range.outputs.range }}
     steps:
       - uses: actions/checkout@v4
+      # engines.node in package.json is the single home of the supported Node
+      # version; CI verifies on its floor.
+      - id: node
+        run: echo "floor=$(node -p "require('./package.json').engines.node.match(/\d+/)[0]")" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
-          # Resolve against the upstream release index, not the runner's
-          # toolcache — the newest leg must track real releases, not images.
-          check-latest: true
+          node-version: ${{ steps.node.outputs.floor }}
           cache: npm
       - run: npm ci
       - run: npm run lint

@@ -53,7 +53,7 @@ graph visualization; positions only ⇒ a point/scatter visualization.
 
 ## Dev workflow
 
-Requires Node ≥ 18, npm ≥ 7.
+Requires Node ≥ 22, npm ≥ 10.
 
 - `npm run storybook` — the primary dev loop (live examples at `:6006`). Per `CONTRIBUTING.md`, add or
   update a Storybook example when you add a feature or change configuration / public methods.
