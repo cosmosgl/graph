@@ -34,15 +34,20 @@ void main() {
     return;
   }
 
+  // Unclustered points ([-1, -1]) must not contribute mass to any cluster —
+  // a default position of (0, 0) is the framebuffer's center texel, a real
+  // cluster's slot, so cull them off-screen instead.
+  vec4 pointClusterIndices = texelFetch(clusterTexture, pointTexel, 0);
+  if (pointClusterIndices.x < 0.0 || pointClusterIndices.y < 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = 0.0;
+    return;
+  }
+
   vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
   rgba = vec4(pointPosition.xy, 1.0, 0.0);
 
-  vec4 pointClusterIndices = texelFetch(clusterTexture, pointTexel, 0);
-  vec2 xy = vec2(0.0);
-  if (pointClusterIndices.x >= 0.0 && pointClusterIndices.y >= 0.0) {
-    xy = 2.0 * (pointClusterIndices.xy + 0.5) / clustersTextureSize - 1.0;
-  }
-  
+  vec2 xy = 2.0 * (pointClusterIndices.xy + 0.5) / clustersTextureSize - 1.0;
   gl_Position = vec4(xy, 0.0, 1.0);
   gl_PointSize = 1.0;
 }
