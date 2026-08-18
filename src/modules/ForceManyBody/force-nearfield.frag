@@ -24,17 +24,10 @@ precision highp int;
 uniform sampler2D positionsTexture;
 uniform sampler2D levelTexture;
 uniform sampler2D randomValues;
-// One sampler per near-field slot. We list them out instead of using an array
-// because WebGL2's GLSL won't let you index a sampler array in a loop. Keep this
-// list the same length as NEAR_FIELD_SLOTS in index.ts.
-uniform sampler2D slotTexture0;
-uniform sampler2D slotTexture1;
-uniform sampler2D slotTexture2;
-uniform sampler2D slotTexture3;
-uniform sampler2D slotTexture4;
-uniform sampler2D slotTexture5;
-uniform sampler2D slotTexture6;
-uniform sampler2D slotTexture7;
+// All near-field slots live in one array texture (one layer per depth-peeling
+// pass), so the slot count is a runtime uniform instead of a hard-wired list
+// of sampler2Ds. Float data — highp, the default sampler precision is lowp.
+uniform highp sampler2DArray slotsTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceNearFieldUniforms {
@@ -43,6 +36,7 @@ layout(std140) uniform forceNearFieldUniforms {
   float cellSize;
   float alpha;
   float repulsion;
+  float slotCount;
 } forceNearField;
 
 #define pointsTextureSize forceNearField.pointsTextureSize
@@ -50,12 +44,14 @@ layout(std140) uniform forceNearFieldUniforms {
 #define cellSize forceNearField.cellSize
 #define alpha forceNearField.alpha
 #define repulsion forceNearField.repulsion
+#define slotCount forceNearField.slotCount
 #else
 uniform float pointsTextureSize;
 uniform float levelGridSize;
 uniform float cellSize;
 uniform float alpha;
 uniform float repulsion;
+uniform float slotCount;
 #endif
 
 out vec4 fragColor;
@@ -126,18 +122,15 @@ void main() {
 
       vec2 pairSum = vec2(0.0);
       float sampled = 0.0;
-      // Same story as the sampler list above: no looping over samplers in
-      // WebGL2, so we read each slot on its own line. This has to match
-      // NEAR_FIELD_SLOTS too (and the samplers above, and the bindings in
-      // index.ts).
-      pairSum += slotVelocity(texelFetch(slotTexture0, cell, 0).rg, position, selfIndex, random.rg, sampled);
-      pairSum += slotVelocity(texelFetch(slotTexture1, cell, 0).rg, position, selfIndex, random.rg, sampled);
-      pairSum += slotVelocity(texelFetch(slotTexture2, cell, 0).rg, position, selfIndex, random.rg, sampled);
-      pairSum += slotVelocity(texelFetch(slotTexture3, cell, 0).rg, position, selfIndex, random.rg, sampled);
-      pairSum += slotVelocity(texelFetch(slotTexture4, cell, 0).rg, position, selfIndex, random.rg, sampled);
-      pairSum += slotVelocity(texelFetch(slotTexture5, cell, 0).rg, position, selfIndex, random.rg, sampled);
-      pairSum += slotVelocity(texelFetch(slotTexture6, cell, 0).rg, position, selfIndex, random.rg, sampled);
-      pairSum += slotVelocity(texelFetch(slotTexture7, cell, 0).rg, position, selfIndex, random.rg, sampled);
+      // One layer per depth-peeling pass. An exhausted cell peels empty slots
+      // (index -1) for the remaining layers; the early break skips them —
+      // empty layers can't be followed by occupied ones within a cell.
+      int slots = int(slotCount);
+      for (int s = 0; s < slots; s += 1) {
+        vec2 slot = texelFetch(slotsTexture, ivec3(cell, s), 0).rg;
+        if (slot.x < 0.0) break;
+        pairSum += slotVelocity(slot, position, selfIndex, random.rg, sampled);
+      }
 
       // Horvitz–Thompson weighting: the sample is uniform among the cell's
       // other points (conditioned on whether the point itself was peeled),
