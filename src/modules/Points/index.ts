@@ -115,6 +115,15 @@ export class Points extends CoreModule {
    */
   public currentPositionTexture: Texture | undefined
   /**
+   * Monotonic counter for external consumers of `currentPositionTexture`
+   * (see `Graph.getPointPositionTexture()`). Incremented whenever the texture's
+   * identity or contents change: every ping-pong swap (each swap precedes a GPU
+   * write), every CPU upload from `updatePositions()`, every transition
+   * interpolation frame, and every sparse position write. A consumer that
+   * cached `{texture, version}` re-fetches when the version differs.
+   */
+  public positionVersion = 0
+  /**
    * Holds the previous frame of positions so simulation and drag shaders can
    * read it while writing the new frame into `currentPositionTexture` in the
    * same render pass (a single texture cannot be both read and written in one
@@ -480,6 +489,7 @@ export class Points extends CoreModule {
     }
     this.areClusterCentroidsUpToDate = false
     this.isPositionsUpToDate = false
+    this.positionVersion++
     if (this.config.enableSimulation) this.ensureSimulationResources()
 
     // Create searchTexture and framebuffer
@@ -1987,6 +1997,111 @@ export class Points extends CoreModule {
     this.isPositionsUpToDate = false
   }
 
+  /**
+   * Writes new positions for a sparse set of points directly into the live
+   * position texture — one texel per point, no full-array upload. Writes only
+   * `currentPositionTexture`: every GPU write path (simulation, drag) swaps
+   * first and then reads what was current, so the update survives the next tick.
+   *
+   * Absent points (NaN input position) are skipped — a sparse write must not
+   * resurrect a removed point. Out-of-range indices are skipped too.
+   */
+  public setPointPositionsByIndices (indices: ArrayLike<number>, positions: ArrayLike<number>): void {
+    const { store: { pointsTextureSize }, data } = this
+    if (!pointsTextureSize || data.pointsNumber === undefined) return
+    if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
+
+    const texel = new Float32Array(4)
+    for (let i = 0, n = indices.length; i < n; i += 1) {
+      const index = indices[i] as number
+      if (!Number.isInteger(index) || index < 0 || index >= data.pointsNumber) continue
+      if (data.pointPositions && isPointAbsent(data.pointPositions, index)) continue
+      texel[0] = positions[i * 2] as number
+      texel[1] = positions[i * 2 + 1] as number
+      texel[2] = index // drag-point.frag matches the drag target on the blue channel
+      this.currentPositionTexture.copyImageData({
+        data: texel,
+        x: index % pointsTextureSize,
+        y: Math.floor(index / pointsTextureSize),
+        width: 1,
+        height: 1,
+        bytesPerRow: getBytesPerRow('rgba32float', 1),
+        mipLevel: 0,
+      })
+    }
+
+    this.isPositionsUpToDate = false
+    this.areClusterCentroidsUpToDate = false
+    this.positionVersion++
+  }
+
+  /**
+   * Flips the pinned status of a single point with a one-texel write, avoiding
+   * the full-texture rebuild of `updatePinnedStatus()`. The caller keeps
+   * `data.inputPinnedPoints` in sync so later full rebuilds agree.
+   * Falls back to the full rebuild when the status texture doesn't exist yet
+   * or no longer matches the texture size.
+   */
+  public setPointPinnedStatus (index: number, pinned: boolean): void {
+    const { store: { pointsTextureSize }, data } = this
+    if (!pointsTextureSize || data.pointsNumber === undefined) return
+    if (index < 0 || index >= data.pointsNumber) return
+
+    if (!this.pinnedStatusTexture || this.pinnedStatusTexture.destroyed ||
+        this.pinnedStatusTexture.width !== pointsTextureSize || this.pinnedStatusTexture.height !== pointsTextureSize) {
+      this.updatePinnedStatus()
+      return
+    }
+
+    this.pinnedStatusTexture.copyImageData({
+      data: new Float32Array([pinned ? 1 : 0, 0, 0, 0]),
+      x: index % pointsTextureSize,
+      y: Math.floor(index / pointsTextureSize),
+      width: 1,
+      height: 1,
+      bytesPerRow: getBytesPerRow('rgba32float', 1),
+      mipLevel: 0,
+    })
+  }
+
+  /**
+   * Asynchronous readback of the current position texture. Copies the pixels
+   * into a staging buffer on the GPU timeline and resolves once the copy is
+   * observable — the CPU never stalls waiting for the GPU to drain, unlike the
+   * synchronous `readPixels` path.
+   *
+   * Returns the raw RGBA32F pixel array (`[x, y, index, unused]` per texel), or
+   * `undefined` when there is nothing to read. Uses a fresh staging buffer per
+   * call so overlapping reads can't corrupt each other.
+   */
+  public async readPositionPixelsAsync (): Promise<Float32Array | undefined> {
+    const { device, store: { pointsTextureSize } } = this
+    if (!pointsTextureSize) return undefined
+    if (!this.currentPositionFbo || this.currentPositionFbo.destroyed) return undefined
+
+    const byteLength = pointsTextureSize * pointsTextureSize * 4 * 4 // RGBA × float32
+    const stagingBuffer = device.createBuffer({
+      byteLength,
+      usage: Buffer.COPY_DST | Buffer.MAP_READ,
+    })
+    try {
+      const commandEncoder = device.createCommandEncoder()
+      commandEncoder.copyTextureToBuffer({
+        // The WebGL backend reads framebuffer sources via PIXEL_PACK_BUFFER;
+        // the option type only names Texture, hence the cast.
+        sourceTexture: this.currentPositionFbo as unknown as Texture,
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        destinationBuffer: stagingBuffer,
+      })
+      device.submit(commandEncoder.finish())
+      const bytes = await stagingBuffer.readAsync()
+      return new Float32Array(bytes.buffer, bytes.byteOffset, byteLength / 4)
+    } finally {
+      stagingBuffer.destroy()
+    }
+  }
+
   public findPointsInRect (): boolean {
     if (!this.findPointsInRectCommand || !this.findPointsInRectUniformStore || !this.searchFbo || this.searchFbo.destroyed) return false
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return false
@@ -2936,6 +3051,7 @@ export class Points extends CoreModule {
 
     this.isPositionsUpToDate = false
     this.areClusterCentroidsUpToDate = false
+    this.positionVersion++
   }
 
   public destroySimulationResources (): void {
@@ -2973,6 +3089,7 @@ export class Points extends CoreModule {
     this.currentPositionTexture = tempTexture
     this.currentPositionFbo = tempFbo
     this.areClusterCentroidsUpToDate = false
+    this.positionVersion++
   }
 
   /**
