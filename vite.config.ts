@@ -4,8 +4,14 @@ import { defineConfig } from 'vite'
 import dts from 'vite-plugin-dts'
 import pkg from './package.json'
 
+// Peer dependencies (luma.gl) must stay external in the ES build: bundling a
+// private luma copy would defeat the peer-dependency contract — a host sharing
+// its Device with cosmos requires both to resolve the same @luma.gl/core.
+// The UMD build still bundles everything so the jsdelivr single file stays
+// standalone.
 const external = [
   ...Object.keys(pkg.dependencies || {}).map((dep) => new RegExp(`^${dep}(/.*)?$`)),
+  ...Object.keys(pkg.peerDependencies || {}).map((dep) => new RegExp(`^${dep}(/.*)?$`)),
   /d3-/,
 ]
 
