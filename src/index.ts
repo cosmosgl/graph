@@ -3,7 +3,7 @@ import 'd3-transition'
 import { easeQuadInOut, easeQuadIn, easeQuadOut } from 'd3-ease'
 import { D3ZoomEvent } from 'd3-zoom'
 import { D3DragEvent } from 'd3-drag'
-import { Device, Framebuffer, luma } from '@luma.gl/core'
+import { Device, Framebuffer, luma, type Texture } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
 
 import { applyConfig, createDefaultConfig, resetConfigToDefaults, GraphConfigInterface, type GraphConfig } from '@/graph/config'
@@ -28,6 +28,33 @@ import { Drag } from '@/graph/modules/Drag'
 /** Touch/pen long-press → context menu thresholds. */
 const LONG_PRESS_DURATION_MS = 500
 const LONG_PRESS_MOVE_THRESHOLD_PX = 10
+
+/**
+ * A read-only view of the GPU point-position texture, for hosts (e.g. a deck.gl
+ * layer) that sample positions directly instead of reading them back to the CPU.
+ * See `Graph.getPointPositionTexture()`.
+ */
+export interface PointPositionTexture {
+  /**
+   * The current position texture: square RGBA32F, where point `i` lives at texel
+   * `(i % textureSize, floor(i / textureSize))` as `[x, y, i, unused]` in space
+   * coordinates. Owned by cosmos.gl — never write to or destroy it. The handle
+   * alternates between two ping-pong textures as the simulation runs, so re-fetch
+   * it whenever `version` changes rather than caching it.
+   */
+  texture: Texture;
+  /** Number of points; texels at index `pointCount` and beyond are unused. */
+  pointCount: number;
+  /** Width and height of the square texture, in texels. */
+  textureSize: number;
+  /**
+   * Monotonic counter that increases whenever the texture's identity or contents
+   * change (simulation tick, drag, CPU upload, transition frame, sparse write).
+   * @note An **absent** point (NaN position — see `setPointPositions`) keeps its
+   * frozen last coordinate in the texture; consult the input positions to hide it.
+   */
+  version: number;
+}
 
 export class Graph {
   /** Current graph configuration. Always fully populated with default values for any unset properties. */
@@ -171,8 +198,8 @@ export class Graph {
    *   to create a **headless** simulation-only instance: no canvas is adopted or
    *   reparented, no zoom/drag/pointer/keyboard listeners are installed, no internal
    *   render loop runs, and an externally supplied device is never cleared, submitted,
-   *   resized, or reparented. Drive the simulation with `step()` and read results
-   *   via `getPointPositions()`. View-dependent APIs
+   *   resized, or reparented. Drive the simulation with `step()` and read results via
+   *   `getPointPositions*()` or `getPointPositionTexture()`. View-dependent APIs
    *   (zoom, fit, screen-space queries) are inert, and transitions snap instead of
    *   animating (nothing advances them without a render loop).
    * @param config - Optional configuration. Unset properties use default values.
@@ -766,6 +793,81 @@ export class Graph {
   }
 
   /**
+   * Pins or unpins a single point without replacing the whole pinned set —
+   * a one-texel GPU write instead of the full rebuild `setPinnedPoints` performs.
+   * Designed for interactive hosts that pin a point on drag start and unpin it
+   * on drag end (pair with `setPointPosition` to move it while pinned).
+   * See `setPinnedPoints` for what pinning means.
+   *
+   * @param index - The index of the point.
+   * @param pinned - `true` to pin, `false` to unpin.
+   */
+  public setPointPinned (index: number, pinned: boolean): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointPinned(index, pinned))) return
+    if (!Number.isInteger(index) || index < 0) return
+
+    // Keep the CPU-side pinned set in sync so a later full rebuild
+    // (`updatePinnedStatus` on data changes) agrees with the texel write.
+    // Clone instead of mutating: the current array may belong to the caller.
+    const pinnedSet = new Set(this.graph.inputPinnedPoints)
+    if (pinned) pinnedSet.add(index)
+    else pinnedSet.delete(index)
+    this.graph.inputPinnedPoints = pinnedSet.size > 0 ? [...pinnedSet] : undefined
+
+    this.points?.setPointPinnedStatus(index, pinned)
+    this.requestRender()
+  }
+
+  /**
+   * Moves a single point to a new position with a one-texel GPU write — no
+   * full-array upload, no `render()` round trip. Together with the batched
+   * `setPointPositionsByIndices` this is the API for mapping host-driven drag
+   * interactions onto a live simulation.
+   *
+   * The write targets the **live** simulation state, like an interactive drag:
+   * it does not modify the input array passed to `setPointPositions`, so a later
+   * full data update starts from the input positions again. While the simulation
+   * is running, forces move the point on the next tick unless it is pinned
+   * (`setPointPinned`).
+   *
+   * @param index - The index of the point.
+   * @param x - New X coordinate, in space coordinates (as returned by `getPointPositions`).
+   * @param y - New Y coordinate, in space coordinates.
+   * @note An **absent** point (NaN position — see `setPointPositions`) is not a valid
+   * target: the call is a no-op. No-op before the first `render()` call as well.
+   */
+  public setPointPosition (index: number, x: number, y: number): void {
+    this.setPointPositionsByIndices([index], [x, y])
+  }
+
+  /**
+   * Batched form of `setPointPosition`: moves a sparse set of points in one call.
+   * @param indices - Indices of the points to move.
+   * @param positions - New positions aligned with `indices`, flat `[x0, y0, x1, y1, …]`
+   *   in space coordinates.
+   * @note Intended for interactive updates of a few points per frame. Bulk position
+   * changes should go through `setPointPositions()` + `render()`, which upload one
+   * texture instead of one texel per point.
+   */
+  public setPointPositionsByIndices (indices: number[], positions: number[] | Float32Array): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointPositionsByIndices(indices, positions))) return
+    if (indices.length * 2 !== positions.length) {
+      console.warn(`setPointPositionsByIndices: expected ${indices.length * 2} coordinates ` +
+        `for ${indices.length} indices, got ${positions.length}. Call ignored.`)
+      return
+    }
+    if (!this.points) return
+    this.points.setPointPositionsByIndices(indices, positions)
+    // Points moved: the picking buffers no longer match them, and trackPoints()
+    // must run after every write to the current position texture.
+    this.markPickingBuffersStale()
+    this.points.trackPoints()
+    this.requestRender()
+  }
+
+  /**
    * Applies pending data changes and renders the graph.
    * Does not start or stop the simulation — use start(), stop(), pause(), unpause() for that.
    * Two exceptions: the `simulationAlpha` argument sets the alpha when provided, and a position
@@ -952,33 +1054,68 @@ export class Graph {
   /**
    * Get current X and Y coordinates of the points.
    * @returns Array of point positions.
+   * @note Reads the GPU synchronously — the call stalls until the GPU has drained
+   * all pending work. For polling positions during a running simulation prefer
+   * `getPointPositionsAsync()` (no stall) or, for GPU-side consumers,
+   * `getPointPositionTexture()` (no readback at all).
    * @note An **absent** point (removed via a `NaN` position — see `setPointPositions`) reads back
    * as `NaN`, mirroring the input — not as its last on-screen coordinate. This keeps removal
    * detectable from the read-back and keeps absent points out of `fitView`.
    */
   public getPointPositions (): number[] {
-    if (this._isDestroyed || !this.device || !this.points) return []
-    if (this.graph.pointsNumber === undefined) return []
-    const positions: number[] = []
+    return Array.from(this.getPointPositionsArray())
+  }
+
+  /**
+   * Get current X and Y coordinates of the points as a `Float32Array` in
+   * `[x0, y0, x1, y1, …]` order — same data as `getPointPositions()` without the
+   * `number[]` conversion.
+   * @param out - Optional destination array. Reused when it holds at least
+   *   `2 × pointCount` values (extra tail values are left untouched); otherwise a
+   *   new array is allocated and returned.
+   * @returns The filled destination array (empty when there is nothing to read).
+   * @note Reads the GPU synchronously — see `getPointPositions()`. Prefer
+   * `getPointPositionsAsync()` while the simulation is running.
+   */
+  public getPointPositionsArray (out?: Float32Array): Float32Array {
+    if (this._isDestroyed || !this.device || !this.points) return new Float32Array(0)
+    if (this.graph.pointsNumber === undefined || !this.points.currentPositionFbo) return new Float32Array(0)
     const pointPositionsPixels = readPixels(this.device, this.points.currentPositionFbo as Framebuffer)
-    positions.length = this.graph.pointsNumber * 2
-    for (let i = 0; i < this.graph.pointsNumber; i += 1) {
-      // An absent point reads back as NaN: the position texture keeps its frozen
-      // last coordinate (the fade renders from it), which must not read back as a
-      // live position.
-      if (this.graph.pointPositions && isPointAbsent(this.graph.pointPositions, i)) {
-        positions[i * 2] = NaN
-        positions[i * 2 + 1] = NaN
-        continue
-      }
-      const posX = pointPositionsPixels[i * 4 + 0]
-      const posY = pointPositionsPixels[i * 4 + 1]
-      if (posX !== undefined && posY !== undefined) {
-        positions[i * 2] = posX
-        positions[i * 2 + 1] = posY
-      }
+    return this.composePointPositions(pointPositionsPixels, out)
+  }
+
+  /**
+   * Asynchronous variant of `getPointPositionsArray()`: the pixel copy runs on the
+   * GPU timeline and the promise resolves when it completes, so the CPU never
+   * stalls waiting for in-flight simulation work.
+   * @param out - Optional destination array, as in `getPointPositionsArray()`.
+   * @returns Promise of the filled destination array (empty when there is nothing to read).
+   */
+  public async getPointPositionsAsync (out?: Float32Array): Promise<Float32Array> {
+    if (this._isDestroyed || !this.device || !this.points) return new Float32Array(0)
+    if (this.graph.pointsNumber === undefined) return new Float32Array(0)
+    const pointPositionsPixels = await this.points.readPositionPixelsAsync()
+    if (!pointPositionsPixels || this._isDestroyed) return new Float32Array(0)
+    return this.composePointPositions(pointPositionsPixels, out)
+  }
+
+  /**
+   * Get a read-only view of the GPU position texture, for hosts that sample point
+   * positions directly on the GPU (e.g. a custom deck.gl layer) instead of reading
+   * them back to the CPU. See `PointPositionTexture` for the texel layout and the
+   * ping-pong/version contract.
+   * @returns The texture view, or `undefined` before the first `render()` call.
+   */
+  public getPointPositionTexture (): PointPositionTexture | undefined {
+    if (this._isDestroyed || !this.points) return undefined
+    const texture = this.points.currentPositionTexture
+    if (!texture || texture.destroyed || !this.store.pointsTextureSize) return undefined
+    return {
+      texture,
+      pointCount: this.graph.pointsNumber ?? 0,
+      textureSize: this.store.pointsTextureSize,
+      version: this.points.positionVersion,
     }
-    return positions
   }
 
   /**
@@ -2006,6 +2143,27 @@ export class Graph {
     // Zoom level 1 means no zoom (100% scale). defaultConfigValues.initialZoomLevel is undefined,
     // so we fall back to 1 here as the neutral zoom level when no initial zoom is configured.
     this.setZoomLevel(this.config.initialZoomLevel ?? 1)
+  }
+
+  /**
+   * Maps raw RGBA position texels (`[x, y, index, unused]` per point) to the
+   * public `[x, y]` pair layout, resolving absent points to NaN: the texture keeps
+   * a removed point's frozen last coordinate (the exit fade renders from it), which
+   * must not read back as a live position.
+   */
+  private composePointPositions (pixels: Float32Array, out?: Float32Array): Float32Array {
+    const pointsNumber = this.graph.pointsNumber ?? 0
+    const positions = out && out.length >= pointsNumber * 2 ? out : new Float32Array(pointsNumber * 2)
+    for (let i = 0; i < pointsNumber; i += 1) {
+      if (this.graph.pointPositions && isPointAbsent(this.graph.pointPositions, i)) {
+        positions[i * 2] = NaN
+        positions[i * 2 + 1] = NaN
+        continue
+      }
+      positions[i * 2] = pixels[i * 4 + 0] as number
+      positions[i * 2 + 1] = pixels[i * 4 + 1] as number
+    }
+    return positions
   }
 
   /**
