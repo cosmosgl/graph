@@ -44,6 +44,7 @@ const preview: Preview = {
             'Showcase',
             'Rendering',
             'Performance',
+            'Integrations',
           ],
         ],
       },
