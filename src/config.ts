@@ -14,6 +14,16 @@ export interface GraphConfigInterface {
    */
   enableSimulation: boolean;
   /**
+   * If set to `false`, cosmos.gl never schedules its own `requestAnimationFrame`
+   * loop. The host application drives the graph instead: call `step()` to advance
+   * the simulation and `renderOneFrame()` to draw. Use this when embedding cosmos.gl
+   * in an application with its own frame scheduler (deck.gl, map renderers, game
+   * engines, notebooks).
+   * Can be toggled at runtime using `setConfig` or `setConfigPartial`.
+   * Default value: `true`
+   */
+  enableRenderLoop: boolean;
+  /**
    * Transition duration in milliseconds.
    * Default value: `800`
    * @note When a position transition is triggered via `setPointPositions()`, the simulation
