@@ -36,17 +36,7 @@ export class Zoom {
       this.config.onZoomStart?.(e, userDriven)
     })
     .on('zoom', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
-      this.eventTransform = e.transform
-      const { eventTransform: { x, y, k }, store: { transform, screenSize } } = this
-      const w = screenSize[0]
-      const h = screenSize[1]
-      if (!w || !h) return
-      mat3.projection(transform, w, h)
-      mat3.translate(transform, transform, [x, y])
-      mat3.scale(transform, transform, [k, k])
-      mat3.translate(transform, transform, [w / 2, h / 2])
-      mat3.scale(transform, transform, [w / 2, h / 2])
-      mat3.scale(transform, transform, [1, -1])
+      this.applyEventTransform(e.transform)
 
       const userDriven = !!e.sourceEvent
       this.config.onZoom?.(e, userDriven)
@@ -67,6 +57,27 @@ export class Zoom {
   public constructor (store: Store, config: GraphConfigInterface) {
     this.store = store
     this.config = config
+  }
+
+  /**
+   * Makes `transform` the current view: stores it as `eventTransform` (read by
+   * picking, radius scaling, and space↔screen conversion) and bakes it together
+   * with the screen size into `store.transform`, the matrix every draw shader
+   * projects with. The d3-zoom `'zoom'` handler routes through here; hosts that
+   * drive the view themselves (`Graph.setViewTransform`) call it directly.
+   */
+  public applyEventTransform (transform: ZoomTransform): void {
+    this.eventTransform = transform
+    const { eventTransform: { x, y, k }, store: { transform: matrix, screenSize } } = this
+    const w = screenSize[0]
+    const h = screenSize[1]
+    if (!w || !h) return
+    mat3.projection(matrix, w, h)
+    mat3.translate(matrix, matrix, [x, y])
+    mat3.scale(matrix, matrix, [k, k])
+    mat3.translate(matrix, matrix, [w / 2, h / 2])
+    mat3.scale(matrix, matrix, [w / 2, h / 2])
+    mat3.scale(matrix, matrix, [1, -1])
   }
 
   /**

@@ -1,9 +1,9 @@
 import { select, Selection } from 'd3-selection'
 import 'd3-transition'
 import { easeQuadInOut, easeQuadIn, easeQuadOut } from 'd3-ease'
-import { D3ZoomEvent } from 'd3-zoom'
+import { D3ZoomEvent, zoomIdentity } from 'd3-zoom'
 import { D3DragEvent } from 'd3-drag'
-import { Device, Framebuffer, luma, type Texture } from '@luma.gl/core'
+import { Device, Framebuffer, luma, type RenderPass, type Texture } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
 
 import { applyConfig, createDefaultConfig, resetConfigToDefaults, GraphConfigInterface, type GraphConfig } from '@/graph/config'
@@ -1538,6 +1538,73 @@ export class Graph {
   }
 
   /**
+   * Sets the view directly, bypassing the interactive zoom behavior — for hosts
+   * (deck.gl layers, map renderers) that own the camera and want cosmos.gl's full
+   * rendering (`drawToRenderPass`) to follow it. Updates everything the zoom
+   * gesture would: the shader projection matrix, picking, point-radius zoom
+   * scaling, and the space↔screen conversion methods.
+   *
+   * The transform follows the d3-zoom convention. With `S = spaceSize` (adjusted),
+   * `[w, h] = screenSize` in CSS pixels, a point at space position
+   * `(spaceX, spaceY)` lands on screen (y down) at:
+   * ```
+   * screenX = k * (spaceX + (w - S) / 2) + x
+   * screenY = k * ((S - spaceY) + (h - S) / 2) + y
+   * ```
+   * (cosmos space y points up; screen y points down.)
+   *
+   * @param transform - View transform: `k` scale (screen pixels per space unit),
+   *   `x`/`y` translation in screen pixels.
+   * @param screenSize - Viewport size in CSS pixels. Required for headless
+   *   instances (they have no canvas to measure); ignored when omitted on a
+   *   non-headless instance, whose canvas remains the source of truth.
+   */
+  public setViewTransform (transform: { k: number; x: number; y: number }, screenSize?: [number, number]): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setViewTransform(transform, screenSize))) return
+    if (screenSize) this.store.updateScreenSize(screenSize[0], screenSize[1])
+    this.zoomInstance.applyEventTransform(zoomIdentity.translate(transform.x, transform.y).scale(transform.k))
+    // The view moved under the points — picking buffers rasterized for the old
+    // view no longer match (same invalidation the zoom handler relies on).
+    this.markPickingBuffersStale()
+    this.requestRender()
+  }
+
+  /**
+   * Records the point and link draws into a render pass owned by the host,
+   * without clearing, ending, or submitting it. Lets an embedding application
+   * (deck.gl layer, map renderer) compose cosmos.gl's rendering into its own
+   * frame: begin a pass, call this, draw other content, end and submit.
+   *
+   * Draws with cosmos.gl's current view transform and screen size. A headless
+   * instance has no view of its own — the host supplies one through
+   * `setViewTransform()` before drawing (or samples `getPointPositionTexture()`
+   * with its own shaders instead). No-op until data has been provided and
+   * `render()` called.
+   *
+   * @param renderPass - The host's open render pass to record into.
+   * @param options - Set `points` or `links` to `false` to draw only the other.
+   */
+  public drawToRenderPass (renderPass: RenderPass, options?: { points?: boolean; links?: boolean }): void {
+    if (this._isDestroyed || !this.device) return
+    if (!this.store.pointsTextureSize) return
+
+    const shouldDrawLinks =
+      (options?.links ?? true) &&
+      this.config.renderLinks !== false &&
+      !!this.store.linksTextureSize &&
+      !!this.graph.linksNumber &&
+      this.graph.linksNumber > 0
+
+    if (shouldDrawLinks) {
+      this.lines?.draw(renderPass)
+    }
+    if (options?.points ?? true) {
+      this.points?.draw(renderPass)
+    }
+  }
+
+  /**
    * Render a single frame immediately, without scheduling any further frames.
    * Intended for hosts that drive cosmos.gl from their own scheduler
    * (`enableRenderLoop: false`): call `renderOneFrame()` from the host's frame
@@ -2515,18 +2582,7 @@ export class Graph {
         clearStencil: 0,
       })
 
-      const { config: { renderLinks } } = this
-      const shouldDrawLinks =
-        renderLinks !== false &&
-        !!this.store.linksTextureSize &&
-        !!this.graph.linksNumber &&
-        this.graph.linksNumber > 0
-
-      if (shouldDrawLinks) {
-        this.lines?.draw(drawRenderPass)
-      }
-
-      this.points?.draw(drawRenderPass)
+      this.drawToRenderPass(drawRenderPass)
 
       if (this.dragInstance.isActive) {
         // Swap-before-write: after the swap, `previous` holds the freshest positions so drag()
