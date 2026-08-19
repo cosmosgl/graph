@@ -160,16 +160,30 @@ export class Graph {
   private _isDestroyed = false
 
   /**
+   * Simulation-only instance (constructed without a `div`): owns no canvas, installs
+   * no input handlers, never schedules frames, and never clears or submits the device.
+   */
+  private readonly _isHeadless: boolean
+
+  /**
    * Create a new Graph instance.
-   * @param div - Container element for the graph canvas.
+   * @param div - Container element for the graph canvas. Pass `null` (or `undefined`)
+   *   to create a **headless** simulation-only instance: no canvas is adopted or
+   *   reparented, no zoom/drag/pointer/keyboard listeners are installed, no internal
+   *   render loop runs, and an externally supplied device is never cleared, submitted,
+   *   resized, or reparented. Drive the simulation with `step()` and read results
+   *   via `getPointPositions()`. View-dependent APIs
+   *   (zoom, fit, screen-space queries) are inert, and transitions snap instead of
+   *   animating (nothing advances them without a render loop).
    * @param config - Optional configuration. Unset properties use default values.
    */
   public constructor (
-    div: HTMLDivElement,
+    div: HTMLDivElement | null | undefined,
     config?: GraphConfig,
     devicePromise?: Promise<Device>
   ) {
     if (config) applyConfig(this.config, config)
+    this._isHeadless = !div
 
     if (devicePromise) {
       this.deviceInitPromise = devicePromise
@@ -193,225 +207,59 @@ export class Graph {
       }
       this.device = device
       this.isReady = true
-      const deviceCanvasContext = this.validateDevice(device)
 
-      // If external device was provided, sync its useDevicePixels with config.pixelRatio
-      if (devicePromise) {
-        deviceCanvasContext.setProps({ useDevicePixels: this.config.pixelRatio })
-      }
+      // Headless: leave the device's canvas context, DOM, and input untouched —
+      // the host owns them. Only the space-size bookkeeping below is needed.
+      if (!this._isHeadless) {
+        const deviceCanvasContext = this.validateDevice(device)
 
-      this.store.div = div
-      const deviceCanvas = deviceCanvasContext.canvas as HTMLCanvasElement
-      // Ensure canvas is in the div
-      if (deviceCanvas.parentNode !== this.store.div) {
-        if (deviceCanvas.parentNode) {
-          deviceCanvas.parentNode.removeChild(deviceCanvas)
+        // If external device was provided, sync its useDevicePixels with config.pixelRatio
+        if (devicePromise) {
+          deviceCanvasContext.setProps({ useDevicePixels: this.config.pixelRatio })
         }
-        this.store.div.appendChild(deviceCanvas)
+
+        this.store.div = div as HTMLDivElement
+        const deviceCanvas = deviceCanvasContext.canvas as HTMLCanvasElement
+        // Ensure canvas is in the div
+        if (deviceCanvas.parentNode !== this.store.div) {
+          if (deviceCanvas.parentNode) {
+            deviceCanvas.parentNode.removeChild(deviceCanvas)
+          }
+          this.store.div.appendChild(deviceCanvas)
+        }
+        this.addAttribution()
+        deviceCanvas.style.width = '100%'
+        deviceCanvas.style.height = '100%'
+        this.canvas = deviceCanvas
+        this.updateCanvasTouchAction()
+
+        // Wait for luma's first canvas measurement — but never wait longer than 500 ms.
+        // luma 9.3 sizes the drawing buffer from a ResizeObserver, which reports after the
+        // current frame's rAF callbacks; rendering before its first measurement draws into
+        // the canvas's default 300×150 buffer, CSS-stretched to a one-frame "zoomed-in"
+        // flash. The timeout keeps init going for canvases mounted in hidden containers,
+        // where the observer stays silent until they become visible.
+        await Promise.race([
+          deviceCanvasContext.initialized,
+          new Promise<void>(resolve => { setTimeout(resolve, 500) }),
+        ])
+        if (this._isDestroyed) return device
+
+        // Two observers watch this canvas: this one flags the screen-size sync and
+        // wakes the loop; luma's own resizes the drawing buffer.
+        if (typeof ResizeObserver !== 'undefined') {
+          this.resizeObserver = new ResizeObserver(() => {
+            this._shouldSyncScreenSize = true
+            this.requestRender()
+          })
+          this.resizeObserver.observe(this.canvas)
+        }
       }
-      this.addAttribution()
-      deviceCanvas.style.width = '100%'
-      deviceCanvas.style.height = '100%'
-      this.canvas = deviceCanvas
-      this.updateCanvasTouchAction()
-
-      // Wait for luma's first canvas measurement — but never wait longer than 500 ms.
-      // luma 9.3 sizes the drawing buffer from a ResizeObserver, which reports after the
-      // current frame's rAF callbacks; rendering before its first measurement draws into
-      // the canvas's default 300×150 buffer, CSS-stretched to a one-frame "zoomed-in"
-      // flash. The timeout keeps init going for canvases mounted in hidden containers,
-      // where the observer stays silent until they become visible.
-      await Promise.race([
-        deviceCanvasContext.initialized,
-        new Promise<void>(resolve => { setTimeout(resolve, 500) }),
-      ])
-      if (this._isDestroyed) return device
-
-      // Two observers watch this canvas: this one flags the screen-size sync and
-      // wakes the loop; luma's own resizes the drawing buffer.
-      if (typeof ResizeObserver !== 'undefined') {
-        this.resizeObserver = new ResizeObserver(() => {
-          this._shouldSyncScreenSize = true
-          this.requestRender()
-        })
-        this.resizeObserver.observe(this.canvas)
-      }
-
-      const w = this.canvas.clientWidth
-      const h = this.canvas.clientHeight
 
       this.store.adjustSpaceSize(this.config.spaceSize, this.device.limits.maxTextureDimension2D)
       this.store.setWebGLMaxTextureSize(this.device.limits.maxTextureDimension2D)
-      this.store.updateScreenSize(w, h)
 
-      this.canvasD3Selection = select<HTMLCanvasElement, undefined>(this.canvas)
-        .call(this.dragInstance.behavior)
-        .call(this.zoomInstance.behavior)
-        .on('pointerenter.cosmos', (event: PointerEvent) => {
-          if (!event.isPrimary) return
-          this._isPointerOnCanvas = true
-          this._lastMouseX = event.clientX
-          this._lastMouseY = event.clientY
-          // Drain any hover work that accumulated while the pointer was away
-          // (forced hover check or unchecked mouse movement).
-          this.requestRender()
-        })
-        .on('pointermove.cosmos', (event: PointerEvent) => {
-          if (!event.isPrimary) return
-          this._isPointerOnCanvas = true
-          this._lastMouseX = event.clientX
-          this._lastMouseY = event.clientY
-          this.currentEvent = event
-          this.updateMousePosition(event)
-          this.isRightClickMouse = (event.buttons & 2) !== 0
-
-          // Cancel a pending long-press if the finger drifted past the threshold —
-          // the user is clearly panning/dragging, not holding to open a context menu.
-          if (this._longPressTimerId !== undefined) {
-            const dx = Math.abs(event.clientX - this._longPressStartX)
-            const dy = Math.abs(event.clientY - this._longPressStartY)
-            if (dx > LONG_PRESS_MOVE_THRESHOLD_PX || dy > LONG_PRESS_MOVE_THRESHOLD_PX) {
-              this.cancelLongPress()
-            }
-          }
-
-          this.config.onMouseMove?.(
-            this.store.hoveredPoint?.index,
-            this.store.hoveredPoint?.position,
-            this.currentEvent
-          )
-
-          this.requestRender()
-        })
-        .on('pointerleave.cosmos pointercancel.cosmos', (event: PointerEvent) => {
-          // Non-primary pointers (e.g. second finger of a pinch) leaving must not
-          // flip _isPointerOnCanvas or clear hover — the primary pointer is still down.
-          if (!event.isPrimary) return
-          this.cancelLongPress()
-          this._isPointerOnCanvas = false
-          // Touch tap: pointerdown → pointerup → pointerleave → click
-          // Clearing here would empty hoveredPoint before click reads it.
-          // Keep it — the next tap overwrites it anyway.
-          if (event.pointerType !== 'mouse') return
-          this.currentEvent = event
-
-          // Clear point hover state and trigger callback if needed
-          if (this.store.hoveredPoint !== undefined && this.config.onPointMouseOut) {
-            this.config.onPointMouseOut(event)
-          }
-
-          // Clear link hover state and trigger callback if needed
-          if (this.store.hoveredLinkIndex !== undefined && this.config.onLinkMouseOut) {
-            this.config.onLinkMouseOut(event)
-          }
-
-          // Reset right-click flag
-          this.isRightClickMouse = false
-
-          // Clear hover states
-          this.store.hoveredPoint = undefined
-          this.store.hoveredLinkIndex = undefined
-          // The hovered link was drawn wider in the index pass (hover
-          // hysteresis) — clearing the hover invalidates that buffer.
-          if (this.lines) this.lines.isLinkIndexBufferStale = true
-
-          // Update cursor style after clearing hover states
-          this.updateCanvasCursor()
-
-          // Hover ring / link highlight was cleared — redraw without it
-          this.requestRender()
-        })
-        .on('pointerdown.cosmos', (event: PointerEvent) => {
-          if (!event.isPrimary) return
-          this.currentEvent = event
-          // A new gesture starts fresh — drop any stale suppress flag.
-          this._shouldSuppressNextClick = false
-          // Touch fires no pointermove before touchstart, so hoveredPoint is empty
-          // when d3-drag checks it. Pick here so drag starts, not zoom.
-          // updateMousePosition first — findHoveredItem reads what it writes.
-          this._lastMouseX = event.clientX
-          this._lastMouseY = event.clientY
-          this.updateMousePosition(event)
-          this.findHoveredItem(true)
-          // The immediate pick may have shown/moved the hover ring
-          this.requestRender()
-
-          // Touch/pen long-press → contextmenu. The mouse path already gets
-          // contextmenu from the browser; this fills the gap for touch where
-          // long-press doesn't reliably dispatch contextmenu on canvas.
-          if (event.pointerType !== 'mouse') {
-            this._longPressStartX = event.clientX
-            this._longPressStartY = event.clientY
-            this.cancelLongPress()
-            this._longPressTimerId = window.setTimeout(() => {
-              this._longPressTimerId = undefined
-              if (this._isDestroyed) return
-              // Re-pick in case points moved during the hold (simulation may have
-              // shifted them under the stationary finger).
-              this.findHoveredItem(true)
-              this.requestRender()
-              this._shouldSuppressNextClick = true
-              this.fireContextMenu(event)
-            }, LONG_PRESS_DURATION_MS)
-          }
-        })
-        .on('pointerup.cosmos', (event: PointerEvent) => {
-          if (!event.isPrimary) return
-          // Finger lifted before the long-press window expired — it's a tap.
-          this.cancelLongPress()
-          // pointermove normally updates this flag, but it doesn't fire on a still
-          // release — without this line, forceMouse would keep running.
-          this.isRightClickMouse = (event.buttons & 2) !== 0
-        })
-        .on('click.cosmos', this.onClick.bind(this))
-        .on('contextmenu.cosmos', this.onContextMenu.bind(this))
-
-      select(document)
-        .on(`keydown.cosmos-${this._instanceId}`, (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
-        .on(`keyup.cosmos-${this._instanceId}`, (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
-
-      this.zoomInstance.behavior
-        .on('start.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
-          this.currentEvent = e
-          this.requestRender()
-        })
-        .on('zoom.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
-          const userDriven = !!e.sourceEvent
-          if (userDriven) this.updateMousePosition(e.sourceEvent)
-          this.currentEvent = e
-          this.requestRender()
-        })
-        .on('end.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
-          this.currentEvent = e
-          // Force hover detection on next frame since zoom may have changed what's under the mouse
-          this._shouldForceHoverDetection = true
-          this.requestRender()
-        })
-
-      this.dragInstance.behavior
-        .on('start.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
-          this.currentEvent = e
-          this.updateCanvasCursor()
-          this.requestRender()
-        })
-        .on('drag.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
-          if (this.dragInstance.isActive) {
-            this.updateMousePosition(e)
-          }
-          this.currentEvent = e
-          this.requestRender()
-        })
-        .on('end.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
-          this.currentEvent = e
-          this.updateCanvasCursor()
-          // The drag GPU write happens after the draw pass, so the final
-          // position only becomes visible on the frame scheduled here.
-          this.requestRender()
-        })
-      if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
-      // Zoom level 1 means no zoom (100% scale). defaultConfigValues.initialZoomLevel is undefined,
-      // so we fall back to 1 here as the neutral zoom level when no initial zoom is configured.
-      this.setZoomLevel(this.config.initialZoomLevel ?? 1)
+      if (!this._isHeadless) this.initInteractions()
 
       this.store.maxPointSize = getMaxPointSize(device, this.config.pixelRatio)
 
@@ -447,7 +295,7 @@ export class Graph {
 
       this.store.updateLinkHoveringEnabled(this.config)
 
-      if (this.config.showFPSMonitor) this.fpsMonitor = new FPSMonitor(this.canvas, this.store.div)
+      if (!this._isHeadless && this.config.showFPSMonitor) this.fpsMonitor = new FPSMonitor(this.canvas, this.store.div)
 
       if (this.config.randomSeed !== undefined) this.store.addRandomSeed(this.config.randomSeed)
 
@@ -941,21 +789,24 @@ export class Graph {
     const { fitViewOnInit, fitViewDelay, fitViewPadding, fitViewDuration, fitViewByPointsInRect, fitViewByPointIndices, initialZoomLevel } = this.config
     if (!this.graph.pointsNumber && !this.graph.linksNumber) {
       this.stopFrames()
-      select(this.canvas).style('cursor', null)
-      if (this.device) {
-        const clearPass = this.device.beginRenderPass({
-          clearColor: this.store.backgroundColor,
-          clearDepth: 1,
-          clearStencil: 0,
-        })
-        clearPass.end()
-        this.device.submit()
+      // Headless: the canvas belongs to the host — never clear or submit its device.
+      if (!this._isHeadless) {
+        select(this.canvas).style('cursor', null)
+        if (this.device) {
+          const clearPass = this.device.beginRenderPass({
+            clearColor: this.store.backgroundColor,
+            clearDepth: 1,
+            clearStencil: 0,
+          })
+          clearPass.end()
+          this.device.submit()
+        }
       }
       return
     }
 
     // If `initialZoomLevel` is set, we don't need to fit the view
-    if (this._isFirstRenderAfterInit && fitViewOnInit && initialZoomLevel === undefined) {
+    if (!this._isHeadless && this._isFirstRenderAfterInit && fitViewOnInit && initialZoomLevel === undefined) {
       this._fitViewOnInitTimeoutID = window.setTimeout(() => {
         if (fitViewByPointIndices) this.fitViewByPointIndices(fitViewByPointIndices, fitViewDuration, fitViewPadding)
         else if (fitViewByPointsInRect) {
@@ -970,7 +821,9 @@ export class Graph {
     }
     // Set the override before the pipeline: `updatePositions()` (inside `this.update()` below) reads
     // `transition.duration` to decide animate vs. snap, then `start()` consumes the override.
-    this.transition.setDurationOverride(transitionDuration)
+    // Headless instances snap: nothing runs `transition.step()` without a render loop,
+    // so an animated transition would leave positions frozen at their source forever.
+    this.transition.setDurationOverride(this._isHeadless ? 0 : transitionDuration)
 
     // Update graph and start frames
     this.update(simulationAlpha)
@@ -1535,8 +1388,37 @@ export class Graph {
 
     // Run one simulation step, forcing execution regardless of isSimulationRunning
     this.runSimulationStep(true)
+    // Without an internal loop nothing else performs the alpha-floor check that
+    // frame() normally runs, so a host-driven simulation would never fire
+    // onSimulationEnd. Checking after the step keeps the same invariant: no
+    // step ever runs with alpha already below ALPHA_MIN.
+    if ((this._isHeadless || !this.config.enableRenderLoop) &&
+        this.store.alpha < ALPHA_MIN && this.store.isSimulationRunning) {
+      this.end()
+    }
     // A manual step outside the loop is invisible until drawn
     this.requestRender()
+  }
+
+  /**
+   * Render a single frame immediately, without scheduling any further frames.
+   * Intended for hosts that drive cosmos.gl from their own scheduler
+   * (`enableRenderLoop: false`): call `renderOneFrame()` from the host's frame
+   * callback. Performs the same per-frame work as the internal loop — screen-size
+   * sync, transitions, hover detection, one simulation step (when the simulation
+   * is running), and the draw — including the simulation-end check.
+   * No-op on headless instances (they own no canvas to draw into).
+   */
+  public renderOneFrame (): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.renderOneFrame())) return
+    if (this._isHeadless) return
+    if (!this.store.pointsTextureSize || (!this.graph.pointsNumber && !this.graph.linksNumber)) return
+    // Same alpha-floor check the internal loop performs before rendering.
+    if (this.store.alpha < ALPHA_MIN && this.store.isSimulationRunning) {
+      this.end()
+    }
+    this.renderFrame()
   }
 
   /**
@@ -1849,13 +1731,19 @@ export class Graph {
       this.syncScreenSize(true)
       this.update(this.store.isSimulationRunning ? this.store.alpha : 0)
     }
-    if (prevConfig.showFPSMonitor !== this.config.showFPSMonitor) {
+    if (prevConfig.showFPSMonitor !== this.config.showFPSMonitor && !this._isHeadless) {
       if (this.config.showFPSMonitor) {
         this.fpsMonitor = new FPSMonitor(this.canvas, this.store.div)
       } else {
         this.fpsMonitor?.destroy()
         this.fpsMonitor = undefined
       }
+    }
+    if (prevConfig.enableRenderLoop !== this.config.enableRenderLoop && !this.config.enableRenderLoop) {
+      // The loop may have a frame in flight — cancel it so the host takes over
+      // scheduling immediately. (Turning the loop back on needs no special case:
+      // the requestRender() below reschedules it.)
+      this.stopFrames()
     }
     if (prevConfig.enableZoom !== this.config.enableZoom || prevConfig.enableDrag !== this.config.enableDrag) {
       this.updateZoomDragBehaviors()
@@ -1939,6 +1827,185 @@ export class Graph {
       return true
     }
     return false
+  }
+
+  /**
+   * Installs the pointer/keyboard/zoom/drag handlers on the canvas and document.
+   * Never called for headless instances — they own no canvas and no input.
+   */
+  private initInteractions (): void {
+    const w = this.canvas.clientWidth
+    const h = this.canvas.clientHeight
+    this.store.updateScreenSize(w, h)
+
+    this.canvasD3Selection = select<HTMLCanvasElement, undefined>(this.canvas)
+      .call(this.dragInstance.behavior)
+      .call(this.zoomInstance.behavior)
+      .on('pointerenter.cosmos', (event: PointerEvent) => {
+        if (!event.isPrimary) return
+        this._isPointerOnCanvas = true
+        this._lastMouseX = event.clientX
+        this._lastMouseY = event.clientY
+        // Drain any hover work that accumulated while the pointer was away
+        // (forced hover check or unchecked mouse movement).
+        this.requestRender()
+      })
+      .on('pointermove.cosmos', (event: PointerEvent) => {
+        if (!event.isPrimary) return
+        this._isPointerOnCanvas = true
+        this._lastMouseX = event.clientX
+        this._lastMouseY = event.clientY
+        this.currentEvent = event
+        this.updateMousePosition(event)
+        this.isRightClickMouse = (event.buttons & 2) !== 0
+
+        // Cancel a pending long-press if the finger drifted past the threshold —
+        // the user is clearly panning/dragging, not holding to open a context menu.
+        if (this._longPressTimerId !== undefined) {
+          const dx = Math.abs(event.clientX - this._longPressStartX)
+          const dy = Math.abs(event.clientY - this._longPressStartY)
+          if (dx > LONG_PRESS_MOVE_THRESHOLD_PX || dy > LONG_PRESS_MOVE_THRESHOLD_PX) {
+            this.cancelLongPress()
+          }
+        }
+
+        this.config.onMouseMove?.(
+          this.store.hoveredPoint?.index,
+          this.store.hoveredPoint?.position,
+          this.currentEvent
+        )
+
+        this.requestRender()
+      })
+      .on('pointerleave.cosmos pointercancel.cosmos', (event: PointerEvent) => {
+        // Non-primary pointers (e.g. second finger of a pinch) leaving must not
+        // flip _isPointerOnCanvas or clear hover — the primary pointer is still down.
+        if (!event.isPrimary) return
+        this.cancelLongPress()
+        this._isPointerOnCanvas = false
+        // Touch tap: pointerdown → pointerup → pointerleave → click
+        // Clearing here would empty hoveredPoint before click reads it.
+        // Keep it — the next tap overwrites it anyway.
+        if (event.pointerType !== 'mouse') return
+        this.currentEvent = event
+
+        // Clear point hover state and trigger callback if needed
+        if (this.store.hoveredPoint !== undefined && this.config.onPointMouseOut) {
+          this.config.onPointMouseOut(event)
+        }
+
+        // Clear link hover state and trigger callback if needed
+        if (this.store.hoveredLinkIndex !== undefined && this.config.onLinkMouseOut) {
+          this.config.onLinkMouseOut(event)
+        }
+
+        // Reset right-click flag
+        this.isRightClickMouse = false
+
+        // Clear hover states
+        this.store.hoveredPoint = undefined
+        this.store.hoveredLinkIndex = undefined
+        // The hovered link was drawn wider in the index pass (hover
+        // hysteresis) — clearing the hover invalidates that buffer.
+        if (this.lines) this.lines.isLinkIndexBufferStale = true
+
+        // Update cursor style after clearing hover states
+        this.updateCanvasCursor()
+
+        // Hover ring / link highlight was cleared — redraw without it
+        this.requestRender()
+      })
+      .on('pointerdown.cosmos', (event: PointerEvent) => {
+        if (!event.isPrimary) return
+        this.currentEvent = event
+        // A new gesture starts fresh — drop any stale suppress flag.
+        this._shouldSuppressNextClick = false
+        // Touch fires no pointermove before touchstart, so hoveredPoint is empty
+        // when d3-drag checks it. Pick here so drag starts, not zoom.
+        // updateMousePosition first — findHoveredItem reads what it writes.
+        this._lastMouseX = event.clientX
+        this._lastMouseY = event.clientY
+        this.updateMousePosition(event)
+        this.findHoveredItem(true)
+        // The immediate pick may have shown/moved the hover ring
+        this.requestRender()
+
+        // Touch/pen long-press → contextmenu. The mouse path already gets
+        // contextmenu from the browser; this fills the gap for touch where
+        // long-press doesn't reliably dispatch contextmenu on canvas.
+        if (event.pointerType !== 'mouse') {
+          this._longPressStartX = event.clientX
+          this._longPressStartY = event.clientY
+          this.cancelLongPress()
+          this._longPressTimerId = window.setTimeout(() => {
+            this._longPressTimerId = undefined
+            if (this._isDestroyed) return
+            // Re-pick in case points moved during the hold (simulation may have
+            // shifted them under the stationary finger).
+            this.findHoveredItem(true)
+            this.requestRender()
+            this._shouldSuppressNextClick = true
+            this.fireContextMenu(event)
+          }, LONG_PRESS_DURATION_MS)
+        }
+      })
+      .on('pointerup.cosmos', (event: PointerEvent) => {
+        if (!event.isPrimary) return
+        // Finger lifted before the long-press window expired — it's a tap.
+        this.cancelLongPress()
+        // pointermove normally updates this flag, but it doesn't fire on a still
+        // release — without this line, forceMouse would keep running.
+        this.isRightClickMouse = (event.buttons & 2) !== 0
+      })
+      .on('click.cosmos', this.onClick.bind(this))
+      .on('contextmenu.cosmos', this.onContextMenu.bind(this))
+
+    select(document)
+      .on(`keydown.cosmos-${this._instanceId}`, (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
+      .on(`keyup.cosmos-${this._instanceId}`, (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
+
+    this.zoomInstance.behavior
+      .on('start.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
+        this.currentEvent = e
+        this.requestRender()
+      })
+      .on('zoom.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
+        const userDriven = !!e.sourceEvent
+        if (userDriven) this.updateMousePosition(e.sourceEvent)
+        this.currentEvent = e
+        this.requestRender()
+      })
+      .on('end.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
+        this.currentEvent = e
+        // Force hover detection on next frame since zoom may have changed what's under the mouse
+        this._shouldForceHoverDetection = true
+        this.requestRender()
+      })
+
+    this.dragInstance.behavior
+      .on('start.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
+        this.currentEvent = e
+        this.updateCanvasCursor()
+        this.requestRender()
+      })
+      .on('drag.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
+        if (this.dragInstance.isActive) {
+          this.updateMousePosition(e)
+        }
+        this.currentEvent = e
+        this.requestRender()
+      })
+      .on('end.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
+        this.currentEvent = e
+        this.updateCanvasCursor()
+        // The drag GPU write happens after the draw pass, so the final
+        // position only becomes visible on the frame scheduled here.
+        this.requestRender()
+      })
+    if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
+    // Zoom level 1 means no zoom (100% scale). defaultConfigValues.initialZoomLevel is undefined,
+    // so we fall back to 1 here as the neutral zoom level when no initial zoom is configured.
+    this.setZoomLevel(this.config.initialZoomLevel ?? 1)
   }
 
   /**
@@ -2151,6 +2218,9 @@ export class Graph {
    */
   private frame (): void {
     if (this._isDestroyed) return
+    // Headless instances have nothing to draw; with `enableRenderLoop: false` the
+    // host schedules frames instead (`step()` / `renderOneFrame()`).
+    if (this._isHeadless || !this.config.enableRenderLoop) return
     if (this.requestAnimationFrameId) return // frame already scheduled
     // Nothing renderable: before the first render(), or after render() cleared
     // the data. Without this guard a later pointermove would resurrect drawing
@@ -2440,6 +2510,8 @@ export class Graph {
    * be rebuilt at the same size (e.g. `spaceSize` remaps the world).
    */
   private syncScreenSize (force = false): void {
+    // Headless: no canvas, no screen — every view-dependent quantity stays inert.
+    if (this._isHeadless || !this.canvas) return
     if (this._isDestroyed) return
     const w = this.canvas.clientWidth
     const h = this.canvas.clientHeight
@@ -2465,6 +2537,7 @@ export class Graph {
   }
 
   private updateZoomDragBehaviors (): void {
+    if (this._isHeadless) return
     if (this.config.enableDrag) {
       this.canvasD3Selection?.call(this.dragInstance.behavior)
     } else {
