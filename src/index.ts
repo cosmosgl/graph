@@ -2234,6 +2234,31 @@ export class Graph {
   }
 
   /**
+   * Restores the ambient GL state cosmos's offscreen passes assume, before any
+   * simulation or render work on an **externally supplied** device.
+   *
+   * luma applies only the pipeline `parameters` a Model declares; everything
+   * else (blend, depth, scissor, …) is inherited from the context's current
+   * state. cosmos's own device keeps the WebGL defaults, but an external device
+   * arrives mid-frame carrying the host's state — deck.gl, for example, leaves
+   * blending enabled, and blended writes into the RGBA32F position textures
+   * (whose texels carry alpha 0) zero out the whole simulation.
+   */
+  private resetExternalDeviceState (): void {
+    if (this.shouldDestroyDevice) return // own device: no host code touches its state
+    const device = this.device as (Device & { setParametersWebGL?: (parameters: Record<string, unknown>) => void }) | undefined
+    device?.setParametersWebGL?.({
+      blend: false,
+      depthTest: false,
+      depthMask: true,
+      scissorTest: false,
+      stencilTest: false,
+      cull: false,
+      colorMask: [true, true, true, true],
+    })
+  }
+
+  /**
    * Validates that a device has the required HTMLCanvasElement canvas context.
    * Cosmos requires an HTMLCanvasElement canvas context and does not support
    * OffscreenCanvas or compute-only devices.
@@ -2299,6 +2324,8 @@ export class Graph {
     const { config: { simulationGravity, simulationCenter, simulationCollision, enableSimulation }, store: { isSimulationRunning } } = this
 
     if (!enableSimulation) return
+
+    this.resetExternalDeviceState()
 
     // Right-click repulsion (runs regardless of isSimulationRunning)
     if (this.isRightClickMouse && this.config.enableRightClickRepulsion) {
@@ -2532,6 +2559,8 @@ export class Graph {
   private renderFrame (now?: number): void {
     if (this._isDestroyed) return
     if (!this.store.pointsTextureSize) return
+
+    this.resetExternalDeviceState()
 
     const frameNow = now ?? performance.now()
     this.fpsMonitor?.begin()
