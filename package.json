@@ -40,6 +40,10 @@
     "@deck.gl/layers": "~9.3.0",
     "@interacta/css-labels": "^0.6.0",
     "@jls-digital/storybook-addon-code": "^1.0.4",
+    "@luma.gl/core": "~9.3.6",
+    "@luma.gl/engine": "~9.3.6",
+    "@luma.gl/shadertools": "~9.3.6",
+    "@luma.gl/webgl": "~9.3.6",
     "@storybook/addon-essentials": "^8.4.5",
     "@storybook/addon-interactions": "^8.4.5",
     "@storybook/blocks": "^8.4.5",
@@ -72,11 +76,13 @@
     "vite": "^6.4.3",
     "vite-plugin-dts": "^4.3.0"
   },
+  "peerDependencies": {
+    "@luma.gl/core": "^9.3.0",
+    "@luma.gl/engine": "^9.3.0",
+    "@luma.gl/shadertools": "^9.3.0",
+    "@luma.gl/webgl": "^9.3.0"
+  },
   "dependencies": {
-    "@luma.gl/core": "~9.3.6",
-    "@luma.gl/engine": "~9.3.6",
-    "@luma.gl/shadertools": "~9.3.6",
-    "@luma.gl/webgl": "~9.3.6",
     "d3-array": "^3.2.0",
     "d3-color": "^3.1.0",
     "d3-drag": "^3.0.0",
