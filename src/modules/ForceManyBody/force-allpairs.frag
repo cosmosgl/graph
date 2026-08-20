@@ -21,17 +21,20 @@ layout(std140) uniform forceAllPairsUniforms {
   float pointsNumber;
   float alpha;
   float repulsion;
+  float maxStep;
 } forceAllPairs;
 
 #define pointsTextureSize forceAllPairs.pointsTextureSize
 #define pointsNumber forceAllPairs.pointsNumber
 #define alpha forceAllPairs.alpha
 #define repulsion forceAllPairs.repulsion
+#define maxStep forceAllPairs.maxStep
 #else
 uniform float pointsTextureSize;
 uniform float pointsNumber;
 uniform float alpha;
 uniform float repulsion;
+uniform float maxStep;
 #endif
 
 out vec4 fragColor;
@@ -77,18 +80,36 @@ void main() {
   vec2 position = texelFetch(positionsTexture, pointTexel, 0).rg;
   vec4 random = texelFetch(randomValues, pointTexel, 0);
 
-  vec2 velocity = vec2(0.0);
+  // Pairs are split at the grid path's near-field scale (maxStep = 2 × the
+  // finest cell size it would use at this point count): closer pairs
+  // correspond to its 3×3 near-field pass — jittered and bounded below, the
+  // way that pass bounds its own sum — farther pairs to its level passes,
+  // which it leaves unbounded. The same split keeps the dynamics continuous
+  // across the point-count threshold between the two paths.
+  vec2 nearVelocity = vec2(0.0);
+  vec2 farVelocity = vec2(0.0);
+  float nearRadius2 = maxStep * maxStep;
   for (int i = 0; i < count; i += 1) {
     if (i == selfIndex) continue;
     ivec2 texel = ivec2(i % size, i / size);
     if (texelFetch(exitTexture, texel, 0).g > 0.5) continue;
     vec2 otherPosition = texelFetch(positionsTexture, texel, 0).rg;
-    velocity += pairwiseVelocity(position, otherPosition, random.rg);
+    vec2 distVector = position - otherPosition;
+    vec2 pairVelocity = pairwiseVelocity(position, otherPosition, random.rg);
+    if (dot(distVector, distVector) < nearRadius2) nearVelocity += pairVelocity;
+    else farVelocity += pairVelocity;
   }
 
-  // Random jitter proportional to the velocity, to keep points from sticking
-  // (same as the near-field pass).
-  velocity += velocity * random.rg;
+  // Random jitter proportional to the near velocity, to keep points from
+  // sticking (same as the near-field pass).
+  nearVelocity += nearVelocity * random.rg;
 
-  fragColor = vec4(velocity, 0.0, 0.0);
+  // Bound the per-tick near kick. Exactness alone does not bound it: the
+  // falloff still diverges at near-zero separations, and a coincident stack
+  // sums n−1 same-direction random kicks into one fling. The clamp caps the
+  // magnitude and keeps the direction.
+  float speed = length(nearVelocity);
+  if (speed > maxStep) nearVelocity *= maxStep / speed;
+
+  fragColor = vec4(farVelocity + nearVelocity, 0.0, 0.0);
 }
