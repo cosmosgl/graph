@@ -12,6 +12,10 @@ Since that follow-up the force has **two paths**: graphs of at most 4,096 points
 [Small graphs are exact](#small-graphs-are-exact-the-all-pairs-path)) — and everything below
 describes the grid + Monte-Carlo machinery that larger graphs use.
 
+The problem-and-fix story behind that follow-up — the measurements, the captured trajectories,
+and its own figures — is also a standalone page: [`jitter-fix.html`](./jitter-fix.html)
+(self-contained; open it locally in a browser — GitHub shows only its source).
+
 ## The problem both algorithms solve
 
 Repulsion is an *n-body* force: every point pushes away every other point. Computed literally
@@ -117,6 +121,8 @@ targets (pass *k* must sample pass *k−1*'s output, and sampling one layer of a
 rendering to another layer of the same texture is a WebGL feedback loop) and its result is
 copied into its array layer.
 
+![Peeling ping-pong into the slot array](h-pingpong-peel.svg)
+
 **The hash must be an integer hash.** The first version used the classic
 `fract(sin(index * 12.9898 + seed * 78.233) * 43758.5453)` one-liner, which is quietly broken at
 this engine's scale: with hundreds of thousands of points the `sin()` argument reaches millions
@@ -202,6 +208,8 @@ graph, every point wandered ~0.5 units per tick with a ~92° mean direction chan
 random walk stacked on a settled layout, while an exact all-pairs reference under the same
 integration was three orders of magnitude stiller.
 
+![Same cell, a fresh sample every tick](f-resample-jitter.svg)
+
 Two changes closed it (2026-08-14):
 
 1. **Small graphs skip the estimator entirely** — the all-pairs path below. This is the case
@@ -222,7 +230,12 @@ At or below **4,096 points** (`ALL_PAIRS_MAX_POINTS`) the force runs as one full
 (`force-allpairs.frag`): each point loops over every other point and sums the same clamped
 inverse-distance pairwise force the grid path uses, with the same coincident-point random
 kick. No pyramid, no peeling, no sampling — the result is exact at *any* cell occupancy, so
-there is no noise to anneal and nothing to shimmer.
+there is no noise to anneal and nothing to shimmer. The two paths also bound the same thing:
+pairs within the near-field scale (2 × the finest cell size the grid path would use) are
+jittered and capped like the near-field pass's sum, so a coincident stack expands instead of
+teleporting, while farther pairs pass through unbounded like the level passes.
+
+![The two paths](g-two-paths.svg)
 
 It is also simply faster there. Depth peeling costs one render pass per slot, ~0.1 ms of
 fixed overhead each; at 2k points, 64 experimental slots measured ~6.4 ms/step while the

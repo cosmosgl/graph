@@ -152,7 +152,7 @@ const arrow = (x1, y1, x2, y2, stroke, width = 2, dash = '') =>
 }
 
 // ---------------------------------------------------------------- Diagram C
-// Depth peeling K=8 random slots per cell + Horvitz–Thompson weighting.
+// Depth peeling K random slots per cell (K = 8 drawn) + Horvitz–Thompson weighting.
 {
   const W = 980; const H = 430
   let b = ''
@@ -177,13 +177,13 @@ const arrow = (x1, y1, x2, y2, stroke, width = 2, dash = '') =>
     b += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="9" fill="${isP ? C.covered[0] : '#ffffff'}" stroke="${isP ? C.covered[0] : '#b9c3d3'}" stroke-width="2"/>`
     b += txt(x, y + 24, h.toFixed(2).slice(1), { size: 10.5, fill: isP ? C.covered[0] : C.sub, anchor: 'middle' })
   })
-  b += txt(cellX, cellY + cellS + 28, 'sampled (8 smallest hashes)', { size: 12, fill: C.covered[0] })
+  b += txt(cellX, cellY + cellS + 28, 'sampled (the K smallest hashes)', { size: 12, fill: C.covered[0] })
   b += `<circle cx="${cellX + 190}" cy="${cellY + cellS + 24}" r="7" fill="#fff" stroke="#b9c3d3" stroke-width="2"/>`
   b += txt(cellX + 202, cellY + cellS + 28, 'left out', { size: 12, fill: C.sub })
 
   // Peeling passes → slot textures
   const sx = 380; const sy = 78
-  b += txt(sx, 40, '8 depth-peeling passes → 8 slot textures', { size: 15, weight: '600' })
+  b += txt(sx, 40, 'K depth-peeling passes → K slot array layers (K = 8 drawn)', { size: 15, weight: '600' })
   b += txt(sx, 58, 'pass k keeps the smallest hash not yet peeled', { size: 12, fill: C.sub })
   order.slice(0, 8).forEach((o, k) => {
     const y = sy + k * 34
@@ -203,17 +203,18 @@ const arrow = (x1, y1, x2, y2, stroke, width = 2, dash = '') =>
   b += txt(ex + 16, ey + 88, 'F  ≈  (12 / 8) · Σ F(sampled pair)', { size: 14.5, weight: '600', fill: C.accent })
   b += txt(ex + 16, ey + 122, 'E[F] = exact all-pairs sum', { size: 13.5 })
   b += txt(ex + 16, ey + 142, '(unbiased, no centroid term)', { size: 12.5, fill: C.sub })
-  b += txt(ex + 16, ey + 166, '≤ 8 points in cell → exact.', { size: 13, weight: '600' })
-  b += txt(ex, ey + 210, 'A fresh random subset every tick:', { size: 12.5, fill: C.sub })
-  b += txt(ex, ey + 228, 'the sampling noise shrinks with alpha', { size: 12.5, fill: C.sub })
-  b += txt(ex, ey + 246, 'and acts as annealing jitter.', { size: 12.5, fill: C.sub })
+  b += txt(ex + 16, ey + 166, '≤ K points in cell → exact.', { size: 13, weight: '600' })
+  b += txt(ex, ey + 210, 'A fresh random subset every tick: the', { size: 12.5, fill: C.sub })
+  b += txt(ex, ey + 228, 'noise anneals with alpha while density', { size: 12.5, fill: C.sub })
+  b += txt(ex, ey + 246, 'disperses. Sustained density is why K', { size: 12.5, fill: C.sub })
+  b += txt(ex, ey + 264, 'adapts (32/16/8) and ≤ 4k graphs go exact.', { size: 12.5, fill: C.sub })
   fs.writeFileSync(path.join(OUT, 'c-depth-peeling.svg'), svgDoc(W, H, b))
 }
 
 // ---------------------------------------------------------------- Diagram D
 // The per-tick GPU pipeline.
 {
-  const W = 980; const H = 300
+  const W = 980; const H = 322
   let b = ''
   const box = (x, y, w, h, title, lines, color, soft) => {
     let s = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9" fill="${soft}" stroke="${color}" stroke-width="1.6"/>`
@@ -227,11 +228,12 @@ const arrow = (x1, y1, x2, y2, stroke, width = 2, dash = '') =>
   b += arrow(170, midY + 55, 208, midY + 55, C.frame, 2.5)
   b += box(210, midY, 220, 110, '1 · aggregate levels', ['draw n points into each grid,', 'additive blend accumulates', '[Σx, Σy, count] per cell'], C.covered[1], C.coveredSoft[1])
   b += arrow(430, midY + 55, 468, midY + 55, C.frame, 2.5)
-  b += box(470, midY, 220, 110, '2 · build near-field slots', ['8 depth-peel passes over the', 'finest grid: a fresh random', '8-subset per cell, every tick'], C.covered[0], C.coveredSoft[0])
+  b += box(470, midY, 220, 110, '2 · build near-field slots', ['K depth-peel passes over the', 'finest grid: a fresh random', 'K-subset per cell (K = 32/16/8)'], C.covered[0], C.coveredSoft[0])
   b += arrow(690, midY + 55, 728, midY + 55, C.frame, 2.5)
   b += box(730, midY, 230, 110, '3 · force passes', ['per level: centroid repulsion', '+ near field: weighted pairs;', 'all add into the velocity texture'], C.covered[2], C.coveredSoft[2])
   b += txt(20, 250, 'The integration step (velocity → positions) is shared with all other forces and unchanged.', { size: 12.5, fill: C.sub })
-  b += txt(20, 272, 'Levels: 4², 8², … up to ≈ 2·√n per axis (capped 512²). Slot textures: 8 × finest grid, [point index, hash] each.', { size: 12.5, fill: C.sub })
+  b += txt(20, 272, 'Levels: 4², 8², … up to ≈ 2·√n per axis (capped 512²). Slot array: K layers × finest grid, [point index, hash] each.', { size: 12.5, fill: C.sub })
+  b += txt(20, 294, 'Graphs of ≤ 4,096 points skip all three passes: a single exact all-pairs pass writes the velocity texture directly.', { size: 12.5, fill: C.sub })
   fs.writeFileSync(path.join(OUT, 'd-gpu-pipeline.svg'), svgDoc(W, H, b))
 }
 
@@ -275,6 +277,123 @@ const arrow = (x1, y1, x2, y2, stroke, width = 2, dash = '') =>
   b += txt(tx, 322, 'The far-field idea (coarser grids for farther mass) was sound — the new', { size: 12.5, fill: C.sub })
   b += txt(tx, 340, 'algorithm keeps it, and replaces everything inside the 3×3 shell.', { size: 12.5, fill: C.sub })
   fs.writeFileSync(path.join(OUT, 'e-old-theta-bands.svg'), svgDoc(W, H, b))
+}
+
+// ---------------------------------------------------------------- Diagram F
+// The sustained-density failure mode: a fresh sample every tick means the
+// force on a confined point is re-rolled noise, not annealing jitter.
+{
+  const W = 980; const H = 430
+  let b = ''
+  b += txt(20, 34, 'Same cell, same positions — a fresh sample every tick', { size: 16, weight: '600' })
+  // One shared dot layout (relative to a 200×200 cell): sample A one tick,
+  // sample B the next, one dot never drawn either tick, plus the observed point.
+  const setA = [[60, 50], [120, 55], [75, 80], [165, 100], [115, 105], [70, 140], [130, 145], [120, 165]]
+  const setB = [[90, 40], [150, 70], [45, 85], [135, 90], [55, 115], [145, 120], [100, 135], [160, 150]]
+  const extra = [[90, 175]]
+  const self = [105, 75]
+  const panel = (ox, label, sampled, unsampled, color, arrowTo) => {
+    let s = txt(ox, 66, label, { size: 13, fill: C.sub })
+    s += `<rect x="${ox}" y="76" width="200" height="200" fill="#f6f8fb" stroke="${C.gridLine}"/>`
+    for (const [x, y] of [...unsampled, ...extra]) s += `<circle cx="${ox + x}" cy="${76 + y}" r="4" fill="${C.gridLine}"/>`
+    for (const [x, y] of sampled) s += `<circle cx="${ox + x}" cy="${76 + y}" r="5" fill="${color}"/>`
+    s += `<circle cx="${ox + self[0]}" cy="${76 + self[1]}" r="6.5" fill="#ffffff" stroke="${C.text}" stroke-width="2"/>`
+    s += arrow(ox + self[0], 76 + self[1], ox + arrowTo[0], 76 + arrowTo[1], color, 2.5)
+    return s
+  }
+  b += panel(30, 'tick t — sample A (amber)', setA, setB, C.covered[2], [68, 32])
+  b += txt(30, 300, 'force on ⊙ = Σ over sample A × m/K', { size: 12, fill: C.sub })
+  b += panel(360, 'tick t+1 — sample B (teal)', setB, setA, C.covered[1], [144, 116])
+  b += txt(360, 300, 'same positions, different draw → different answer', { size: 12, fill: C.sub })
+  b += txt(690, 66, 'the point, tick after tick', { size: 13, fill: C.sub })
+  b += `<rect x="690" y="76" width="200" height="200" fill="#f6f8fb" stroke="${C.gridLine}"/>`
+  b += `<polyline points="710,240 726,228 718,210 736,202 748,216 764,208 758,190 774,178 790,188 784,206 800,216 816,206 810,188 826,176 842,184" fill="none" stroke="${C.text}" stroke-width="1.5" marker-end="url(#arr)"/>`
+  b += `<circle cx="710" cy="240" r="3.5" fill="${C.text}"/>`
+  b += txt(690, 300, '≈0.5 units/tick, ~92° mean turn — at equilibrium', { size: 12, fill: C.sub })
+  b += txt(20, 345, 'The estimate is unbiased — averaged over ticks it equals the exact force — but each tick draws a fresh K-subset and', { size: 13 })
+  b += txt(20, 365, 'weights it by m/K. While the cell stays dense (m ≫ K) that per-tick difference never shrinks: the noise is not annealing,', { size: 13 })
+  b += txt(20, 385, 'it is a permanent random walk stacked on a settled layout.', { size: 13 })
+  fs.writeFileSync(path.join(OUT, 'f-resample-jitter.svg'), svgDoc(W, H, b))
+}
+
+// ---------------------------------------------------------------- Diagram G
+// The two paths after the fix: exact all-pairs ≤ 4,096 points, grid + sampling above.
+{
+  const W = 980; const H = 330
+  const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace'
+  let b = ''
+  b += txt(20, 34, 'Two paths — the point count picks one', { size: 16, weight: '600' })
+  b += `<rect x="20" y="130" width="110" height="52" fill="#f6f8fb" stroke="${C.frame}" rx="4"/>`
+  b += txt(75, 152, 'graph of', { size: 13, anchor: 'middle' })
+  b += txt(75, 170, 'n points', { size: 13, anchor: 'middle' })
+  b += `<polygon points="240,116 320,156 240,196 160,156" fill="#ffffff" stroke="${C.text}" stroke-width="1.5"/>`
+  b += `<text x="240" y="152" font-family="${MONO}" font-size="12" fill="${C.text}" text-anchor="middle">n ≤ 4096</text>`
+  b += txt(240, 168, 'usesAllPairs', { size: 11, fill: C.sub, anchor: 'middle' })
+  b += arrow(130, 156, 156, 156, C.text, 1.5)
+  b += arrow(266, 129, 352, 94, C.text, 1.5)
+  b += txt(300, 96, 'no', { size: 12, fill: C.sub })
+  b += `<rect x="358" y="60" width="160" height="56" fill="#f6f8fb" stroke="${C.frame}" rx="4"/>`
+  b += txt(438, 84, 'aggregate the', { size: 13, anchor: 'middle' })
+  b += txt(438, 102, 'grid pyramid', { size: 13, anchor: 'middle' })
+  b += arrow(518, 88, 552, 88, C.text, 1.5)
+  b += `<rect x="556" y="60" width="160" height="56" fill="${C.coveredSoft[0]}" stroke="${C.frame}" rx="4"/>`
+  b += txt(636, 84, 'depth-peel K slots', { size: 13, anchor: 'middle' })
+  b += txt(636, 102, 'per finest cell', { size: 13, anchor: 'middle' })
+  b += `<text x="636" y="136" font-family="${MONO}" font-size="11" fill="${C.sub}" text-anchor="middle">K = 32 (≤16k) · 16 (≤65k) · 8 above</text>`
+  b += arrow(716, 88, 750, 88, C.text, 1.5)
+  b += `<rect x="754" y="60" width="200" height="56" fill="#f6f8fb" stroke="${C.frame}" rx="4"/>`
+  b += txt(854, 84, 'far field per level +', { size: 13, anchor: 'middle' })
+  b += txt(854, 102, 'sampled near field ×m/K', { size: 13, anchor: 'middle' })
+  b += arrow(266, 183, 424, 234, C.text, 1.5)
+  b += txt(318, 226, 'yes', { size: 12, fill: C.sub })
+  b += `<rect x="430" y="216" width="250" height="64" fill="${C.coveredSoft[2]}" stroke="${C.covered[2]}" rx="4"/>`
+  b += `<text x="555" y="242" font-family="${MONO}" font-size="12" fill="${C.text}" text-anchor="middle">force-allpairs.frag</text>`
+  b += txt(555, 262, 'one exact O(n²) pass — no grid, no sampling', { size: 13, anchor: 'middle' })
+  b += `<rect x="850" y="200" width="110" height="52" fill="${C.coveredSoft[1]}" stroke="${C.frame}" rx="4"/>`
+  b += txt(905, 222, 'velocity', { size: 13, anchor: 'middle' })
+  b += txt(905, 240, 'texture', { size: 13, anchor: 'middle' })
+  b += arrow(854, 116, 887, 196, C.text, 1.5)
+  b += txt(892, 156, 'additive', { size: 11, fill: C.sub })
+  b += arrow(680, 242, 846, 230, C.text, 1.5)
+  b += txt(742, 222, 'single write', { size: 11, fill: C.sub })
+  b += txt(20, 312, 'Same pairwise falloff and coincident-point kick on both paths — the small-graph path just computes every pair instead of estimating.', { size: 12, fill: C.sub })
+  fs.writeFileSync(path.join(OUT, 'g-two-paths.svg'), svgDoc(W, H, b))
+}
+
+// ---------------------------------------------------------------- Diagram H
+// Peeling ping-pong: two plain 2D targets, each pass's result copied into its
+// layer of the slot array texture (rendering into a layer of a texture you are
+// sampling another layer of is a WebGL feedback loop).
+{
+  const W = 980; const H = 430
+  const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace'
+  let b = ''
+  b += txt(20, 34, 'Peeling ping-pong: two plain 2D targets, copied into array layers', { size: 16, weight: '600' })
+  const cols = [
+    { x: 100, label: 'pass 0', l1: 'writes target A', l2: 'smallest hash / cell', soft: C.coveredSoft[0] },
+    { x: 320, label: 'pass 1', l1: 'reads A · writes B', l2: 'next-smallest hash', soft: C.coveredSoft[1] },
+    { x: 540, label: 'pass 2', l1: 'reads B · writes A', l2: 'next-smallest hash', soft: C.coveredSoft[0] },
+    { x: 760, label: 'pass 3 … K−1', l1: 'reads A · writes B', l2: '… alternating', soft: C.coveredSoft[1] },
+  ]
+  cols.forEach((col, k) => {
+    b += txt(col.x + 80, 96, col.label, { size: 13, fill: C.sub, anchor: 'middle' })
+    b += `<rect x="${col.x}" y="110" width="160" height="64" fill="${col.soft}" stroke="${C.frame}" rx="4"/>`
+    b += txt(col.x + 80, 136, col.l1, { size: 13, anchor: 'middle' })
+    b += txt(col.x + 80, 156, col.l2, { size: 12, fill: C.sub, anchor: 'middle' })
+    if (k < cols.length - 1) {
+      b += arrow(col.x + 160, 142, col.x + 216, 142, C.text, 1.5)
+      b += txt(col.x + 188, 130, 'winner', { size: 11, fill: C.sub, anchor: 'middle' })
+    }
+    b += arrow(col.x + 80, 174, col.x + 80, 266, C.covered[2], 2)
+    b += `<rect x="${col.x}" y="270" width="160" height="48" fill="${C.coveredSoft[2]}" stroke="${C.covered[2]}" rx="4"/>`
+    b += txt(col.x + 80, 298, k < 3 ? `layer ${k}` : 'layer 3 … K−1', { size: 13, anchor: 'middle' })
+  })
+  b += `<text x="510" y="226" font-family="${MONO}" font-size="11" fill="#b97a1e" text-anchor="middle">copyTextureToTexture</text>`
+  b += `<line x1="90" y1="330" x2="930" y2="330" stroke="${C.frame}" stroke-width="1"/>`
+  b += `<text x="510" y="352" font-family="${MONO}" font-size="12" fill="${C.text}" text-anchor="middle">slotsTexture : sampler2DArray — the force pass loops s = 0 … slotCount−1</text>`
+  b += txt(20, 390, 'Why not render into layer k directly? Pass k must sample pass k−1\'s output — and sampling one layer of a texture while', { size: 13 })
+  b += txt(20, 410, 'rendering to another layer of the same texture is a WebGL feedback loop. So passes render to plain 2D targets instead.', { size: 13 })
+  fs.writeFileSync(path.join(OUT, 'h-pingpong-peel.svg'), svgDoc(W, H, b))
 }
 
 console.log('generated:', fs.readdirSync(OUT).join(', '))
