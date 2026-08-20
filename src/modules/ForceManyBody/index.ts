@@ -20,6 +20,15 @@ import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 const MAX_GRID_SIZE = 512
 
 /**
+ * Finest grid resolution per axis for a point count: ~2·√n, floored at 8²,
+ * capped at MAX_GRID_SIZE. Shared by the pyramid allocation and the all-pairs
+ * pass's per-tick velocity clamp, which must bound with the same cell size the
+ * grid path would use at the same count.
+ */
+const getFinestGridSize = (pointsNumber: number): number =>
+  Math.min(MAX_GRID_SIZE, Math.max(8, Math.pow(2, Math.ceil(Math.log2(2 * Math.sqrt(pointsNumber))))))
+
+/**
  * How many points per finest-level cell get exact pairwise repulsion each tick.
  * A cell holding at most this many points is sampled exhaustively — its near
  * field is exact. Above it, a fresh random subset is drawn every tick and
@@ -174,6 +183,7 @@ export class ForceManyBody extends CoreModule {
       pointsNumber: number;
       alpha: number;
       repulsion: number;
+      maxStep: number;
     };
   }> | undefined
 
@@ -444,12 +454,14 @@ export class ForceManyBody extends CoreModule {
           pointsNumber: 'f32',
           alpha: 'f32',
           repulsion: 'f32',
+          maxStep: 'f32',
         },
         defaultUniforms: {
           pointsTextureSize: store.pointsTextureSize,
           pointsNumber: data.pointsNumber,
           alpha: store.alpha,
           repulsion: this.config.simulationRepulsion,
+          maxStep: 0,
         },
       },
     })
@@ -607,6 +619,10 @@ export class ForceManyBody extends CoreModule {
         pointsNumber: data.pointsNumber,
         alpha: store.alpha,
         repulsion: this.config.simulationRepulsion,
+        // The near-field pass's per-tick bound and the shader's near/far split
+        // radius, computed from the finest cell size the grid path would use
+        // at this point count.
+        maxStep: 2 * (store.adjustedSpaceSize / getFinestGridSize(data.pointsNumber)),
       },
     })
 
@@ -734,8 +750,8 @@ export class ForceManyBody extends CoreModule {
         width: finest.gridSize,
         height: finest.gridSize,
       })
+      // finish() destroys the encoder itself and returns the command buffer.
       device.submit(commandEncoder.finish())
-      commandEncoder.destroy()
     }
   }
 
@@ -819,11 +835,7 @@ export class ForceManyBody extends CoreModule {
     const { device } = this
     const pointsNumber = this.data.pointsNumber ?? 0
 
-    const targetGridSize = 2 * Math.sqrt(pointsNumber)
-    const finestGridSize = Math.min(
-      MAX_GRID_SIZE,
-      Math.max(8, Math.pow(2, Math.ceil(Math.log2(targetGridSize))))
-    )
+    const finestGridSize = getFinestGridSize(pointsNumber)
     this.levels = Math.log2(finestGridSize) - 1
 
     for (let level = 0; level < this.levels; level += 1) {
