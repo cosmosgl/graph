@@ -7,7 +7,7 @@ import { collisionStressTest } from './performance/collision-stress-test'
 import { pointOcclusionCulling } from './performance/point-occlusion-culling'
 import { onDemandRendering } from './performance/on-demand-rendering'
 import { repulsionBenchmark } from './performance/repulsion-benchmark'
-import { countryBordersJitter } from './performance/country-borders-jitter'
+import { countryBordersComparison } from './performance/country-borders-comparison'
 
 import createCosmosRaw from './create-cosmos?raw'
 import generateMeshDataRaw from './generate-mesh-data?raw'
@@ -17,7 +17,7 @@ import collisionStressTestRaw from './performance/collision-stress-test?raw'
 import pointOcclusionCullingRaw from './performance/point-occlusion-culling?raw'
 import onDemandRenderingRaw from './performance/on-demand-rendering?raw'
 import repulsionBenchmarkRaw from './performance/repulsion-benchmark?raw'
-import countryBordersJitterRaw from './performance/country-borders-jitter?raw'
+import countryBordersComparisonRaw from './performance/country-borders-comparison?raw'
 
 // These exist to show a cost or a limit rather than a feature. Most run an FPS
 // monitor; several will be slow to start on weak hardware.
@@ -89,13 +89,13 @@ export const RepulsionBenchmark: Story = {
   },
 }
 
-export const CountryBordersJitter: Story = {
-  ...createStory(countryBordersJitter),
-  name: 'Near-Field Jitter: Country Borders',
+export const CountryBordersComparison: Story = {
+  ...createStory(countryBordersComparison),
+  name: 'Repulsion Jitter: Fixed vs Before',
   tags: ['perf', 'advanced', 'interactive'],
   parameters: {
     sourceCode: [
-      { name: 'Story', code: countryBordersJitterRaw },
+      { name: 'Story', code: countryBordersComparisonRaw },
     ],
   },
 }
