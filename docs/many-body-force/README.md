@@ -3,8 +3,18 @@
 This is a walkthrough of the repulsion force introduced in
 [#240](https://github.com/cosmosgl/graph/pull/240) — what the old algorithm did, what the new
 one does instead, and why the change matters. The code lives in
-`src/modules/ForceManyBody/`; the short engineering record is
-`history/2026/2026-07-08-many-body-repulsion.md`.
+`src/modules/ForceManyBody/`; the short engineering records are
+`history/2026/2026-07-08-many-body-repulsion.md` and (for the sampling-noise follow-up
+described near the end) `history/2026/2026-08-14-nearfield-jitter.md`.
+
+Since that follow-up the force has **two paths**: graphs of at most 4,096 points are computed
+**exactly** — one all-pairs pass, no grid, no sampling (`force-allpairs.frag`, see
+[Small graphs are exact](#small-graphs-are-exact-the-all-pairs-path)) — and everything below
+describes the grid + Monte-Carlo machinery that larger graphs use.
+
+The problem-and-fix story behind that follow-up — the measurements, the captured trajectories,
+and its own figures — is also a standalone page: [`jitter-fix.html`](./jitter-fix.html)
+(self-contained; open it locally in a browser — GitHub shows only its source).
 
 ## The problem both algorithms solve
 
@@ -96,10 +106,22 @@ computes an **unbiased estimate** instead:
 ![Depth peeling and Horvitz–Thompson weighting](c-depth-peeling.svg)
 
 **Sampling (`build-nearfield-slots.vert`):** every tick, each point gets a fresh pseudo-random
-hash. Eight "depth peeling" passes then run over the finest grid; pass *k* selects, per cell,
+hash. K "depth peeling" passes then run over the finest grid; pass *k* selects, per cell,
 the point with the smallest hash *not yet selected by passes 0..k−1* (the GPU depth test does
-the per-cell minimum for free). After 8 passes, each cell's 8 **slot textures** hold a uniform
-random 8-subset of its points — re-drawn from scratch every tick.
+the per-cell minimum for free). After K passes, the K layers of a **slot array texture**
+(`sampler2DArray`, one layer per pass) hold a uniform random K-subset of each cell's points —
+re-drawn from scratch every tick.
+
+**K adapts to the graph size** (`getNearFieldSlotCount` in `index.ts`): 32 slots up to 16k
+points, 16 up to 65k, 8 above. Peeling is inherently sequential — one render pass per slot —
+so K is a direct trade between per-tick cost and sampling variance; big graphs keep the cheap
+estimator (per-point noise is sub-pixel at that scale), smaller ones buy more slots so that
+realistic hub-cell occupancies are covered exactly. Each pass ping-pongs between two plain 2D
+targets (pass *k* must sample pass *k−1*'s output, and sampling one layer of a texture while
+rendering to another layer of the same texture is a WebGL feedback loop) and its result is
+copied into its array layer.
+
+![Peeling ping-pong into the slot array](h-pingpong-peel.svg)
 
 **The hash must be an integer hash.** The first version used the classic
 `fract(sin(index * 12.9898 + seed * 78.233) * 43758.5453)` one-liner, which is quietly broken at
@@ -124,7 +146,7 @@ the next pass's comparison. Cost is a wash: ~8 integer ALU ops replace a special
 the true pairwise forces from the sampled slots (skipping itself), then scales the sum by
 
 ```
-others / sampled        // e.g. cell holds 12 other points, 8 sampled → × 12/8
+others / sampled        // e.g. cell holds 48 other points, 32 sampled → × 48/32
 ```
 
 This is the **Horvitz–Thompson estimator**: since each of the cell's `others` points had equal
@@ -136,16 +158,16 @@ centroid term**, so the tangential force component survives:
 
 Two properties fall out for free:
 
-- **Sparse cells are exact.** A cell with ≤ 8 points is sampled exhaustively
+- **Sparse cells are exact.** A cell with ≤ K points is sampled exhaustively
   (`others == sampled`, weight = 1). With the finest grid at 2·√n per axis, the average cell
   holds ¼ point — so for typical graphs the near field *is* the exact all-pairs force, and the
-  approximation only kicks in inside genuinely dense hubs. This is also why the prototyped
-  separate brute-force path for small graphs was dropped: the grid path is already effectively
-  exact there, and faster.
-- **The sampling noise is a feature.** The estimate is unbiased but noisy, and the noise is
-  re-rolled every tick. Because every force is scaled by `alpha`, the noise *anneals*: large
-  early, when clumps need breaking apart, shrinking to nothing as the layout settles. It is
-  precisely the jitter that lets stacked points find distinct directions to escape along.
+  approximation only kicks in inside genuinely dense hubs.
+- **The sampling noise is (mostly) a feature.** The estimate is unbiased but noisy, and the
+  noise is re-rolled every tick. Because every force is scaled by `alpha`, the noise *anneals*:
+  large early, when clumps need breaking apart, shrinking to nothing as the layout settles. It
+  is precisely the jitter that lets stacked points find distinct directions to escape along.
+  The caveat — and what the 2026-08-14 follow-up fixed — is layouts where the density never
+  disperses: see [When the noise stops annealing](#when-the-noise-stops-annealing) below.
 
 ### Step 4 — two stability guards
 
@@ -157,11 +179,11 @@ Both live in `force-nearfield.frag`, both born from real failure modes:
   ring" around the stack. Instead, each point kicks along its own per-point random vector, so a
   pile disperses.
 - **Per-tick velocity clamp (2 × cell size).** The `others/sampled` weight is unbiased but
-  high-variance: in a cell holding far more points than 8 slots, a couple of very close samples
-  can be multiplied into a huge one-tick kick — flinging points across the screen at startup
-  and ejecting points from dense cluster centers. The clamp caps the magnitude and keeps the
-  direction; genuine spreading kicks are far below the bound, and bulk expansion is driven by
-  the far-field levels anyway.
+  high-variance: in a cell holding far more points than sampling slots, a couple of very close
+  samples can be multiplied into a huge one-tick kick — flinging points across the screen at
+  startup and ejecting points from dense cluster centers. The clamp caps the magnitude and
+  keeps the direction; genuine spreading kicks are far below the bound, and bulk expansion is
+  driven by the far-field levels anyway.
 
 ### The per-tick pipeline
 
@@ -170,7 +192,60 @@ Both live in `force-nearfield.frag`, both born from real failure modes:
 Orchestrated by `src/modules/ForceManyBody/index.ts`:
 `drawLevels()` → `drawNearFieldSlots()` → `drawForces()` (per-level force passes plus the
 near-field pass, all blending additively into the shared velocity texture). Integration into
-positions is the same step every other force uses.
+positions is the same step every other force uses. Small graphs replace all three with a
+single `drawAllPairsForce()` pass — next section.
+
+## When the noise stops annealing
+
+The "noise is a feature" argument has a hole, found the hard way on a real graph (the
+163-country border-adjacency network): it assumes the density that causes the sampling
+variance *disperses*. Under pure repulsion it does — the clump expands, occupancy falls to ~K
+within a second, and the noise dies with it, sub-pixel before anyone sees it. But when link
+attraction or gravity holds a hub together *while alpha stays high* (a long-running layout, a
+reheated one, `start()` on interaction), occupancy stays far above the slot count forever, and
+the per-tick re-drawn sample turns into visible, permanent shimmer: measured on that country
+graph, every point wandered ~0.5 units per tick with a ~92° mean direction change — a pure
+random walk stacked on a settled layout, while an exact all-pairs reference under the same
+integration was three orders of magnitude stiller.
+
+![Same cell, a fresh sample every tick](f-resample-jitter.svg)
+
+Two changes closed it (2026-08-14):
+
+1. **Small graphs skip the estimator entirely** — the all-pairs path below. This is the case
+   where sustained dense hubs are both most common and cheapest to compute exactly.
+2. **K became adaptive** (32/16/8 — see step 3). Mid-size graphs get 2–4× more samples, which
+   both extends the exactly-covered occupancy range and shrinks the residual variance
+   (amplitude ∝ occupancy/K · 1/√K) — while the ≥ 65k tier keeps today's 8-slot cost
+   unchanged.
+
+The **Performance → Repulsion Jitter: Fixed vs Before** story shows this live: the real
+graph that surfaced it, run side by side — today's exact path next to the pre-fix sampled
+configuration (forced back on through a story-only internals patch) — each with alpha held
+at 1, a sliding-window step/turn meter, and a trajectory trace of one dense-cell point.
+
+## Small graphs are exact: the all-pairs path
+
+At or below **4,096 points** (`ALL_PAIRS_MAX_POINTS`) the force runs as one full-screen pass
+(`force-allpairs.frag`): each point loops over every other point and sums the same clamped
+inverse-distance pairwise force the grid path uses, with the same coincident-point random
+kick. No pyramid, no peeling, no sampling — the result is exact at *any* cell occupancy, so
+there is no noise to anneal and nothing to shimmer. The two paths also bound the same thing:
+pairs within the near-field scale (2 × the finest cell size the grid path would use) are
+jittered and capped like the near-field pass's sum, so a coincident stack expands instead of
+teleporting, while farther pairs pass through unbounded like the level passes.
+
+![The two paths](g-two-paths.svg)
+
+It is also simply faster there. Depth peeling costs one render pass per slot, ~0.1 ms of
+fixed overhead each; at 2k points, 64 experimental slots measured ~6.4 ms/step while the
+single all-pairs pass measures **~1.8 ms/step** — n² texel loops are trivial work at this
+scale (4096² ≈ 17M pair evaluations). The threshold sits where that stops being true: the
+next power of two would already cost several milliseconds.
+
+(#240 prototyped and dropped exactly this path, when the grid looked "effectively exact" for
+small graphs. That held for dispersing layouts; the sustained-density case above is why it
+came back.)
 
 ## Why it is better than the old one
 
@@ -180,15 +255,16 @@ positions is the same step every other force uses.
 | Dense hubs | collapse into disks / petals | spread into natural clouds |
 | Stacked points | never separate (void rings) | random kick disperses them |
 | Coverage seams | depend on `theta` tuning | exact once-tiling, nothing to tune |
-| Small / sparse graphs | always approximate | effectively **exact** (cells ≤ 8 points) |
+| Small graphs (≤ 4,096 points) | always approximate | **exact** — dedicated all-pairs pass |
+| Sparse cells (larger graphs) | always approximate | **exact** (cells ≤ K points, K = 8–32) |
 | Bias | systematic (centroid direction) | none — unbiased estimator; noise anneals with alpha |
 | `simulationRepulsionTheta` | required tuning | deprecated no-op (accepted, ignored) |
 | Speed | baseline | **~1.2–4× faster per step** across the practical range |
-| Code paths | one, plus the theta special-casing | one, for every graph size |
+| Code paths | one, plus the theta special-casing | two: exact ≤ 4k points, grid + sampling above |
 
 The speedup comes from the fixed 3×3/6×6 loop structure (compact, coherent texel fetches;
-no data-dependent band walking) — measure it yourself with the **Misc → Repulsion Benchmark**
-story, which steps the simulation directly and forces a readback so the numbers aren't capped
+no data-dependent band walking) — measure it yourself with the **Performance → Repulsion
+Benchmark** story, which steps the simulation directly and forces a readback so the numbers aren't capped
 by the display refresh rate. The before/after videos in the
 [PR description](https://github.com/cosmosgl/graph/pull/240) show the visual difference on a
 dense-hub graph.
@@ -197,13 +273,16 @@ dense-hub graph.
 
 The old algorithm's error was a systematic *bias* — invisible per-frame, but it deformed
 layouts (disks, petals, void rings) and never went away. The new algorithm's error is
-*variance* — visible as per-tick jitter in dense regions while `alpha` is high, but centered on
-the exact answer and vanishing as the simulation cools. For a layout engine that trade is
-clearly right: the final layout is what users keep, and the transient jitter is doing useful
-work (annealing) on the way there.
+*variance* — per-tick jitter in dense regions while `alpha` is high, centered on the exact
+answer and vanishing as the simulation cools. For a layout engine that trade is right: the
+final layout is what users keep, and the transient jitter is doing useful work (annealing) on
+the way there. Where the variance stopped vanishing — sustained-density layouts — it was
+removed outright (exact ≤ 4k points) or shrunk (adaptive K); the residual is confined to
+over-K-occupancy hub cells in graphs above 4k points while alpha is high.
 
-Cost side: 8 extra slot textures at the finest grid resolution (at the 512² cap that is
-8 × 512² × 2 floats = 16 MB of GPU memory) and the 8 peeling passes per tick — both already
+Cost side: the slot array texture plus two peel targets at the finest grid resolution (at the
+512² cap with K = 8 that is 10 × 512² × 2 floats = 20 MB of GPU memory; smaller graphs have
+more layers but a proportionally smaller grid) and the K peeling passes per tick — all already
 included in the benchmark numbers above.
 
 ## Glossary
