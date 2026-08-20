@@ -39,6 +39,7 @@ const PATCH_FLAG = Symbol.for('cosmos.stories.force-sampled-repulsion-patch')
 type ForceManyBodyPrivate = {
   config: Record<string, unknown>;
   data: { pointsNumber?: number };
+  nearFieldSlots?: number;
 }
 
 const patchForceManyBody = (): void => {
@@ -72,7 +73,14 @@ const patchForceManyBody = (): void => {
       if (!this.config[FORCE_SAMPLED_KEY]) return originalCreateSlotTargets.apply(this, args)
       Object.defineProperty(this.data, 'pointsNumber', { value: 100_000, configurable: true })
       try {
-        return originalCreateSlotTargets.apply(this, args)
+        const result = originalCreateSlotTargets.apply(this, args)
+        // The pane's "K = 8" header must stay true: fail loudly if the slot
+        // tiers are retuned so 100k points no longer maps to 8 slots, or the
+        // count stops flowing through data.pointsNumber.
+        if (this.nearFieldSlots !== 8) {
+          throw new Error(`country-borders-comparison: expected 8 near-field slots, got ${this.nearFieldSlots} — update this story`)
+        }
+        return result
       } finally {
         delete this.data.pointsNumber
       }

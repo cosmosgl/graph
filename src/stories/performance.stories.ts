@@ -18,6 +18,7 @@ import pointOcclusionCullingRaw from './performance/point-occlusion-culling?raw'
 import onDemandRenderingRaw from './performance/on-demand-rendering?raw'
 import repulsionBenchmarkRaw from './performance/repulsion-benchmark?raw'
 import countryBordersComparisonRaw from './performance/country-borders-comparison?raw'
+import countryBordersDataRaw from './performance/country-borders-data?raw'
 
 // These exist to show a cost or a limit rather than a feature. Most run an FPS
 // monitor; several will be slow to start on weak hardware.
@@ -96,6 +97,7 @@ export const CountryBordersComparison: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: countryBordersComparisonRaw },
+      { name: 'Data', code: countryBordersDataRaw },
     ],
   },
 }
