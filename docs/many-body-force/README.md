@@ -211,9 +211,10 @@ Two changes closed it (2026-08-14):
    (amplitude ∝ occupancy/K · 1/√K) — while the ≥ 65k tier keeps today's 8-slot cost
    unchanged.
 
-The **Performance → Near-Field Jitter: Country Borders** story reproduces this live: the
-real graph that surfaced it, with alpha held at 1 and a sliding-window meter of per-tick
-step, turn angle, and finest-cell occupancy versus the sampling slots.
+The **Performance → Repulsion Jitter: Fixed vs Before** story shows this live: the real
+graph that surfaced it, run side by side — today's exact path next to the pre-fix sampled
+configuration (forced back on through a story-only internals patch) — each with alpha held
+at 1, a sliding-window step/turn meter, and a trajectory trace of one dense-cell point.
 
 ## Small graphs are exact: the all-pairs path
 
