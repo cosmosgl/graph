@@ -3,7 +3,7 @@
 # Near-field sampling jitter: exact small-graph path + adaptive slot count
 
 **Date:** 2026-08-14
-**Commits:** `feat(stories): country-borders story reproducing near-field sampling jitter` (`229d7dc`), `fix(force): exact all-pairs repulsion below 4k points; adaptive near-field sampling above` (`9ced541`)
+**Commits:** `feat(stories): country-borders story reproducing near-field sampling jitter` (`776d15a`), `fix(force): exact all-pairs repulsion below 4k points; adaptive near-field sampling above` (`ea88026`), `feat(stories): replace the jitter repro with a fixed-vs-before comparison — both paths visible at HEAD` (`2fe05a6`)
 
 ## Why
 
@@ -63,7 +63,16 @@ Two complementary mechanisms in `src/modules/ForceManyBody/`:
 
 ## Example
 
-- **Near-Field Jitter: Country Borders** (`src/stories/performance/country-borders-jitter.ts`,
-  Storybook *Performance*): the real graph that surfaced the bug, running live with alpha held
-  at 1 and a sliding-window jitter meter (step, turn, occupancy vs slots). Committed *before*
-  the fix so the shimmer is observable at that commit; the fix lands in the next one.
+- **Repulsion Jitter: Fixed vs Before** (`src/stories/performance/country-borders-comparison.ts`,
+  Storybook *Performance*): the real graph that surfaced the bug, run twice side by side with
+  identical data and seed — left today's exact path (settled and still), right the pre-fix
+  configuration (sampled near field, K = 8) forced back on through a story-only patch of
+  ForceManyBody internals via the repo's src alias (per-instance config marker; fails loudly if
+  the internals move; does not resolve against the published package). Each side has a
+  step/turn meter and a trajectory panel tracing one dense-cell point over 360 ticks — a
+  smooth drift arc today vs a random-walk tangle before.
+- This story replaced the original single-pane repro
+  (`feat(stories): country-borders story reproducing near-field sampling jitter`): after the
+  fix, that story ran on the exact path and could no longer show live the shimmer it
+  documented. It was committed *before* the fix precisely so the shimmer is observable at its
+  own commit — that bisectable evidence remains in git history.
