@@ -1,6 +1,6 @@
 import { Deck, OrthographicView } from '@deck.gl/core'
 import type { Device } from '@luma.gl/core'
-import { Graph, defaultConfigValues } from '@cosmos.gl/graph'
+import { GraphSimulation, defaultConfigValues } from '@cosmos.gl/graph'
 
 import { generateMeshData } from '../generate-mesh-data'
 import { CosmosPointsLayer, CosmosLinksLayer } from './cosmos-deck-layers'
@@ -9,12 +9,13 @@ import { CosmosPointsLayer, CosmosLinksLayer } from './cosmos-deck-layers'
  * Shared-device, zero-copy deck.gl integration.
  *
  * deck.gl owns the canvas, the luma.gl device, and the frame lifecycle. cosmos.gl
- * runs **headless** on the same device (`new Graph(null, config, devicePromise)`)
- * and is advanced one `step()` per deck.gl frame from `onBeforeRender`. Custom
- * layers sample the live GPU position texture by point index — positions never
- * leave the GPU, there is one canvas, one device, and no cosmos.gl render loop.
+ * contributes only its extracted simulation class — `GraphSimulation`, no canvas,
+ * no DOM, no render loop — running on deck's device and advanced one `step()` per
+ * deck.gl frame from `onBeforeRender`. Custom layers sample the live GPU position
+ * texture by point index: positions never leave the GPU, there is one canvas and
+ * one device.
  */
-export const deckGlZeroCopy = async (): Promise<{ div: HTMLDivElement; graph: Graph; destroy: () => void }> => {
+export const deckGlZeroCopy = async (): Promise<{ div: HTMLDivElement; graph: GraphSimulation; destroy: () => void }> => {
   const div = document.createElement('div')
   div.style.height = '100vh'
   div.style.width = '100%'
@@ -40,7 +41,7 @@ export const deckGlZeroCopy = async (): Promise<{ div: HTMLDivElement; graph: Gr
     })
   })
 
-  const graph = new Graph(null, {
+  const graph = new GraphSimulation({
     spaceSize,
     // Enough gravity to keep the relaxed lattice inside the space — with less,
     // repulsion expands it into the space-boundary clamp and it piles up on the walls
@@ -57,7 +58,7 @@ export const deckGlZeroCopy = async (): Promise<{ div: HTMLDivElement; graph: Gr
 
   graph.setPointPositions(data.pointPositions)
   graph.setLinks(data.links)
-  graph.render()
+  graph.applyData()
   await graph.ready
 
   deck.setProps({
@@ -84,7 +85,7 @@ export const deckGlZeroCopy = async (): Promise<{ div: HTMLDivElement; graph: Gr
     div,
     graph,
     destroy: (): void => {
-      // The device belongs to deck.gl: tear the graph down first (it skips
+      // The device belongs to deck.gl: tear the simulation down first (it skips
       // destroying the external device), then let deck.finalize() destroy it.
       graph.destroy()
       deck.finalize()

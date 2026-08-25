@@ -32,7 +32,7 @@ export const deckGlReadback = (): { div: HTMLDivElement; graph: Graph; destroy: 
 
   // Positions the deck.gl layers read from; starts at the input layout so the
   // first frame shows something before the first snapshot lands
-  let positions = Float32Array.from(data.pointPositions)
+  let positions: Float32Array = Float32Array.from(data.pointPositions)
   let snapshotVersion = 0
 
   const deck = new Deck({
