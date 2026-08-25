@@ -836,6 +836,45 @@ export type Complete<T> = { [K in keyof Required<T>]: T[K] }
 export type GraphConfig = Partial<GraphConfigInterface>
 
 /**
+ * The subset of the configuration that drives the force simulation — everything
+ * `GraphSimulation` consumes. `pointDefaultSize` is included because the
+ * collision force derives point radii from sizes when no explicit collision
+ * radius is set. Rendering, interaction, and transition options live only on
+ * `GraphConfigInterface`.
+ */
+export type GraphSimulationConfigInterface = Pick<GraphConfigInterface,
+  | 'enableSimulation'
+  | 'spaceSize'
+  | 'pointDefaultSize'
+  | 'simulationDecay'
+  | 'simulationGravity'
+  | 'simulationCenter'
+  | 'simulationRepulsion'
+  | 'simulationRepulsionTheta'
+  | 'simulationLinkSpring'
+  | 'simulationLinkDistance'
+  | 'simulationLinkDistRandomVariationRange'
+  | 'simulationFriction'
+  | 'simulationCluster'
+  | 'simulationCollision'
+  | 'simulationCollisionRadius'
+  | 'simulationCollisionPadding'
+  | 'randomSeed'
+  | 'rescalePositions'
+  | 'onSimulationStart'
+  | 'onSimulationTick'
+  | 'onSimulationEnd'
+  | 'onSimulationPause'
+  | 'onSimulationUnpause'
+>
+
+/**
+ * Configuration options for the `GraphSimulation` constructor and its
+ * `setConfig()` method. All properties are optional.
+ */
+export type GraphSimulationConfig = Partial<GraphSimulationConfigInterface>
+
+/**
  * Returns a fresh copy of `defaultConfigValues` with arrays cloned so each Graph instance
  * gets its own copy rather than sharing array references with it.
  * `defaultConfigValues` is a module-level object — one instance shared across the entire codebase.
