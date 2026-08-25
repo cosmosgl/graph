@@ -8,7 +8,9 @@ snapshots, sparse writes, per-point pinning` (`172b1ec`), `feat(graph): render
 into a host pass with a host camera — drawToRenderPass and setViewTransform`
 (`6fec847`), `fix(graph): reset ambient GL state before passes on an external
 device` (`196b552`), `feat(stories): deck.gl integration examples`
-(`7e43328`), `build(deps): make luma.gl a peer dependency` (`c99c695`)
+(`7e43328`), `build(deps): make luma.gl a peer dependency` (`c99c695`),
+`feat(simulation): extract GraphSimulation` (`0405099`), `feat(stories): run
+the zero-copy story on GraphSimulation` (`ae23a73`)
 
 ## Why
 
@@ -19,9 +21,9 @@ without owning a canvas, a render loop that a host scheduler can replace, and
 GPU position access that doesn't round-trip through the CPU. This change
 implements the two roadmap milestones that unblock that work — headless
 operation and external scheduling, plus the read/write APIs a host needs
-(position texture, efficient snapshots, sparse updates, pinning). The larger
-`GraphSimulation` class extraction is deliberately deferred until a real
-consumer validates these APIs.
+(position texture, efficient snapshots, sparse updates, pinning) — and, once
+the unit tests could act as a safety net, the `GraphSimulation` class
+extraction those APIs were designed toward (see below).
 
 ## New capabilities
 
@@ -109,6 +111,59 @@ resolves to the same `@luma.gl/core@9.3.6` as cosmos, so one deduped copy
 serves both (a shared `Device` across two luma copies is not a supported
 boundary).
 
+- **deck.gl: shared device, zero-copy** — deck owns the canvas, device, and
+  frame lifecycle; a standalone `GraphSimulation` runs on deck's device,
+  advanced one `step()` per frame from `onBeforeRender`; custom layers render
+  points and links by `texelFetch`ing the live position texture
+  (`cosmos-deck-layers.ts`). Positions never leave the GPU.
+- **deck.gl: cosmos rendering in a deck layer** — same shared-device setup, but
+  the layer calls `setViewTransform` + `drawToRenderPass` so cosmos's own draw
+  programs render everything (cluster colors, per-point sizes, curved
+  per-link-colored links) under deck's camera. No custom shaders at all.
+- **deck.gl: CPU readback layout** — headless cosmos as a pure layout engine
+  feeding stock `ScatterplotLayer`/`LineLayer` through throttled
+  `getPointPositionsAsync()` snapshots (the RFC's Phase-1 `CosmosLayout`
+  pattern).
+
+## The `GraphSimulation` extraction
+
+`GraphSimulation` (exported, `src/simulation.ts`) is the simulation as a
+standalone class: device ownership, the data model, the position engine
+(`Points`), the force modules, clusters, the step pipeline with alpha decay and
+end detection, all the ingest setters (positions, links, sizes, clusters,
+pinning, sparse writes), `applyData()` as the render()-counterpart, and the
+three position outputs. `Graph` now **composes** it — it creates the simulation,
+shares one config object with it, aliases its store/data/points internally, and
+layers rendering, view state, transitions, and input on top. The interaction
+context (right-click repulsion, zoom-suspends-forces) threads into
+`runSimulationStep(force, {applyMouseRepulsion, blockedByInteraction})` instead
+of being read from controllers the simulation no longer knows about.
+
+Boundaries chosen deliberately:
+
+- **`Points` is not split.** It still carries both the simulation resources and
+  the draw programs; the simulation owns it and `Graph` reaches in for
+  rendering. Splitting it (a `PointSimulation` vs. a renderer) is the remaining
+  internal debt — a standalone `GraphSimulation` compiles draw shaders it never
+  uses. The public boundary doesn't change when that lands.
+- **`Store` is shared, not split.** Engine state (alpha, texture sizes) and view
+  state (screen size, transform) live in one internal object both halves see.
+- **Config is `Pick`ed, not duplicated**: `GraphSimulationConfigInterface`
+  selects the simulation keys from `GraphConfigInterface` (plus
+  `pointDefaultSize`, which the collision force derives radii from), so the
+  option docs exist once.
+
+The extraction also closed a latent init race: `Graph.isReady` used to flip
+true before the modules existed (a `setPointPositions` call landing in the
+canvas-measurement window could hit undefined `points`); it now flips after
+the module aliases are wired.
+
+The standalone class is covered by its own test file
+(`test/graph-simulation.test.ts` — lifecycle, links, texture contract,
+pinning, `setConfig` enable/disable, external-device state safety), and the
+zero-copy deck.gl story now uses `GraphSimulation` directly instead of a
+headless `Graph`.
+
 ## Packaging
 
 `@luma.gl/*` moved from dependencies to peerDependencies (compatibility range
@@ -120,20 +175,6 @@ own toolchain deterministic. Breaking for package managers that don't
 auto-install peers — see `migration-notes.md`. Prerelease luma lines (the 9.4
 alphas) intentionally sit outside the range: supporting them means chaining
 users to an alpha, so that waits for a stable 9.4.
-
-- **deck.gl: shared device, zero-copy** — deck owns the canvas, device, and
-  frame lifecycle; a headless cosmos runs on deck's device, advanced one
-  `step()` per frame from `onBeforeRender`; custom layers render points and
-  links by `texelFetch`ing the live position texture (`cosmos-deck-layers.ts`).
-  Positions never leave the GPU.
-- **deck.gl: cosmos rendering in a deck layer** — same shared-device setup, but
-  the layer calls `setViewTransform` + `drawToRenderPass` so cosmos's own draw
-  programs render everything (cluster colors, per-point sizes, curved
-  per-link-colored links) under deck's camera. No custom shaders at all.
-- **deck.gl: CPU readback layout** — headless cosmos as a pure layout engine
-  feeding stock `ScatterplotLayer`/`LineLayer` through throttled
-  `getPointPositionsAsync()` snapshots (the RFC's Phase-1 `CosmosLayout`
-  pattern).
 
 ## Notes
 
