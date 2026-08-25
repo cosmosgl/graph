@@ -45,11 +45,9 @@ class CosmosRenderLayer extends Layer<Required<{ id: string; graph: Graph; space
       y: origin[1] - k * (spaceSize + (viewport.height - spaceSize) / 2),
     }, [viewport.width, viewport.height])
 
-    // cosmos.gl's draw models declare their own blend state but assume depth
-    // testing is off; deck's ambient depth state would z-fight links and points
-    const device = this.context.device as Device & { setParametersWebGL?: (parameters: Record<string, unknown>) => void }
-    device.setParametersWebGL?.({ depthTest: false })
-
+    // No GL state babysitting needed: cosmos.gl's draw models declare their
+    // full pipeline state (blend and depth) per draw, so they compose into
+    // deck's pass regardless of what previous layers left behind
     graph.drawToRenderPass(this.context.renderPass)
   }
 }
