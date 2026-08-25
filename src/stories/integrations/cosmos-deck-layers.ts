@@ -1,7 +1,7 @@
-import { Layer, type LayerContext } from '@deck.gl/core'
+import { Layer, type LayerContext, type UpdateParameters } from '@deck.gl/core'
 import { Model } from '@luma.gl/engine'
 import type { Texture } from '@luma.gl/core'
-import type { Graph } from '@cosmos.gl/graph'
+import type { Graph, GraphSimulation } from '@cosmos.gl/graph'
 
 /**
  * Custom deck.gl layers that render a headless cosmos.gl simulation with **zero
@@ -9,10 +9,12 @@ import type { Graph } from '@cosmos.gl/graph'
  * `graph.getPointPositionTexture()` with `texelFetch`, so point coordinates never
  * leave the GPU. Both layers share deck.gl's device with the cosmos.gl simulation.
  *
- * The layers draw with plain WebGL uniforms (`model.props.uniforms`, read on every
- * draw) and the viewport's view-projection matrix, so deck.gl's pan/zoom applies
- * without involving deck.gl's shader modules — the point here is to demonstrate
- * the texture-sampling contract, not production-grade layer authoring.
+ * The layers draw with plain WebGL uniforms and the viewport's view-projection
+ * matrix, so deck.gl's pan/zoom applies without involving deck.gl's shader
+ * modules. luma.gl keeps the `uniforms` record handed to a `Model` by reference
+ * and re-reads it on every draw, so each layer keeps that same record in its
+ * state and mutates it in place. The point here is to demonstrate the
+ * texture-sampling contract, not production-grade layer authoring.
  */
 
 const pointsVs = /* glsl */ `#version 300 es
@@ -108,8 +110,8 @@ const BLEND_PARAMETERS = {
 
 type CosmosPointsLayerProps = {
   id: string;
-  /** The headless cosmos.gl instance whose position texture to sample. */
-  graph: Graph;
+  /** The cosmos.gl simulation (or headless Graph) whose position texture to sample. */
+  graph: GraphSimulation | Graph;
   color?: [number, number, number, number];
   /** Point diameter in pixels. */
   pointSize?: number;
@@ -127,29 +129,30 @@ export class CosmosPointsLayer extends Layer<Required<CosmosPointsLayerProps>> {
     pointSize: 4,
   }
 
-  declare public state: { model?: Model }
+  declare public state: { model?: Model; uniforms: Record<string, unknown> }
 
   public initializeState (): void {
-    this.state = {}
+    this.state = { uniforms: {} }
   }
 
   public draw (): void {
     const positionInfo = this.props.graph.getPointPositionTexture()
     if (!positionInfo) return
 
+    const { uniforms } = this.state
     this.state.model ||= new Model(this.context.device, {
       id: `${this.props.id}-model`,
       vs: pointsVs,
       fs: pointsFs,
       topology: 'point-list',
       vertexCount: 0,
-      uniforms: {},
+      uniforms,
       parameters: BLEND_PARAMETERS,
     })
     const { model } = this.state
 
-    // Plain WebGL uniforms are read from `model.props.uniforms` on every draw
-    Object.assign(model.props.uniforms, {
+    // The Model holds this record by reference and re-reads it on every draw
+    Object.assign(uniforms, {
       viewProjectionMatrix: this.context.viewport.viewProjectionMatrix,
       pointsTextureSize: positionInfo.textureSize,
       pointSize: this.props.pointSize,
@@ -168,8 +171,8 @@ export class CosmosPointsLayer extends Layer<Required<CosmosPointsLayerProps>> {
 
 type CosmosLinksLayerProps = {
   id: string;
-  /** The headless cosmos.gl instance whose position texture to sample. */
-  graph: Graph;
+  /** The cosmos.gl simulation (or headless Graph) whose position texture to sample. */
+  graph: GraphSimulation | Graph;
   /** Flat `[source0, target0, source1, target1, …]` point indices, as passed to `graph.setLinks`. */
   links: Float32Array;
   color?: [number, number, number, number];
@@ -186,13 +189,19 @@ export class CosmosLinksLayer extends Layer<Required<CosmosLinksLayerProps>> {
     color: { type: 'array', value: [0.37, 0.45, 0.76, 0.25] },
   }
 
-  declare public state: { model?: Model; linksTexture?: Texture; linksTextureSize: number; linkCount: number }
-
-  public initializeState (): void {
-    this.state = { linksTextureSize: 0, linkCount: 0 }
+  declare public state: {
+    model?: Model;
+    uniforms: Record<string, unknown>;
+    linksTexture?: Texture;
+    linksTextureSize: number;
+    linkCount: number;
   }
 
-  public updateState (params: Parameters<Layer['updateState']>[0]): void {
+  public initializeState (): void {
+    this.state = { uniforms: {}, linksTextureSize: 0, linkCount: 0 }
+  }
+
+  public updateState (params: UpdateParameters<this>): void {
     super.updateState(params)
     if (params.changeFlags.dataChanged || params.props.links !== params.oldProps.links) {
       this._createLinksTexture()
@@ -201,7 +210,7 @@ export class CosmosLinksLayer extends Layer<Required<CosmosLinksLayerProps>> {
 
   public draw (): void {
     const positionInfo = this.props.graph.getPointPositionTexture()
-    const { linksTexture, linksTextureSize, linkCount } = this.state
+    const { uniforms, linksTexture, linksTextureSize, linkCount } = this.state
     if (!positionInfo || !linksTexture || linkCount === 0) return
 
     this.state.model ||= new Model(this.context.device, {
@@ -210,12 +219,12 @@ export class CosmosLinksLayer extends Layer<Required<CosmosLinksLayerProps>> {
       fs: linksFs,
       topology: 'line-list',
       vertexCount: 0,
-      uniforms: {},
+      uniforms,
       parameters: BLEND_PARAMETERS,
     })
     const { model } = this.state
 
-    Object.assign(model.props.uniforms, {
+    Object.assign(uniforms, {
       viewProjectionMatrix: this.context.viewport.viewProjectionMatrix,
       pointsTextureSize: positionInfo.textureSize,
       linksTextureSize,

@@ -12,9 +12,11 @@ import deckGlCosmosRenderingRaw from './integrations/deck-gl-cosmos-rendering?ra
 import cosmosDeckLayersRaw from './integrations/cosmos-deck-layers?raw'
 import generateMeshDataRaw from './generate-mesh-data?raw'
 
-// Embedding cosmos.gl in host rendering frameworks. Both stories run cosmos.gl
-// headless (`new Graph(null, …)`): no canvas of its own, no internal render
-// loop — the host drives the simulation and renders the result.
+// Embedding cosmos.gl in host rendering frameworks. Every story runs the
+// simulation without a canvas of its own or an internal render loop — the host
+// drives it and renders the result. The zero-copy story uses the standalone
+// `GraphSimulation` class; the others run a headless `Graph`
+// (`new Graph(null, …)`), which composes the same simulation.
 const meta: Meta<CosmosStoryProps> = {
   title: 'Examples/Integrations',
   parameters: {
