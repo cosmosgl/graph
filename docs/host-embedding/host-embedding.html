@@ -1,0 +1,847 @@
+<title>Cosmos Host Embedding</title>
+<style>
+  :root {
+    --bg: #FBFBFE;
+    --surface: #F2F3F8;
+    --card: #FFFFFF;
+    --ink: #21232F;
+    --muted: #5C5F74;
+    --line: #DDDFEA;
+    --cosmos: #4653C4;
+    --cosmos-soft: #E7EAFB;
+    --host: #A2601F;
+    --host-soft: #F7EBDC;
+    --good: #2C7A4B;
+    --good-soft: #E2F1E8;
+    --warn: #B04A1E;
+    --warn-soft: #F9E9E0;
+    --code-bg: #F0F1F8;
+    --code-ink: #333A58;
+    --sans: "Seravek", "Gill Sans Nova", "Avenir Next", "Segoe UI", system-ui, sans-serif;
+    --serif: "Charter", "Bitstream Charter", "Sitka Text", "Iowan Old Style", Cambria, Georgia, serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #14151F;
+      --surface: #1B1C2B;
+      --card: #191A28;
+      --ink: #E5E6F1;
+      --muted: #9CA0B8;
+      --line: #2D3047;
+      --cosmos: #97A3F5;
+      --cosmos-soft: #262B4C;
+      --host: #DFA162;
+      --host-soft: #3A2C1B;
+      --good: #6AC192;
+      --good-soft: #1E3529;
+      --warn: #E08A62;
+      --warn-soft: #3D2417;
+      --code-bg: #202234;
+      --code-ink: #C9CDE8;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #14151F;
+    --surface: #1B1C2B;
+    --card: #191A28;
+    --ink: #E5E6F1;
+    --muted: #9CA0B8;
+    --line: #2D3047;
+    --cosmos: #97A3F5;
+    --cosmos-soft: #262B4C;
+    --host: #DFA162;
+    --host-soft: #3A2C1B;
+    --good: #6AC192;
+    --good-soft: #1E3529;
+    --warn: #E08A62;
+    --warn-soft: #3D2417;
+    --code-bg: #202234;
+    --code-ink: #C9CDE8;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--serif);
+    font-size: 17px;
+    line-height: 1.65;
+    margin: 0;
+    padding: 0 20px 96px;
+  }
+  .shell { max-width: 980px; margin: 0 auto; }
+  .prose { max-width: 72ch; }
+
+  header.doc { padding: 56px 0 8px; }
+  .commitline {
+    font-family: var(--mono);
+    font-size: 12.5px;
+    color: var(--muted);
+    letter-spacing: 0.01em;
+    margin: 0 0 18px;
+  }
+  .commitline b { color: var(--cosmos); font-weight: 600; }
+  h1 {
+    font-family: var(--sans);
+    font-size: clamp(34px, 5.4vw, 50px);
+    font-weight: 650;
+    letter-spacing: -0.015em;
+    line-height: 1.08;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+  .standfirst {
+    font-size: 20px;
+    line-height: 1.55;
+    color: var(--muted);
+    margin: 0 0 8px;
+    max-width: 62ch;
+    text-wrap: balance;
+  }
+  .statrow {
+    display: flex; flex-wrap: wrap; gap: 10px 26px;
+    margin: 26px 0 0;
+    padding: 16px 0;
+    border-top: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    font-family: var(--sans);
+    font-size: 13.5px;
+  }
+  .statrow div { color: var(--muted); }
+  .statrow strong { color: var(--ink); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  section { margin-top: 64px; }
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    margin: 0 0 10px;
+    letter-spacing: 0.01em;
+    overflow-wrap: anywhere;
+  }
+  .eyebrow b { color: var(--cosmos); font-weight: 600; }
+  h2 {
+    font-family: var(--sans);
+    font-size: 27px;
+    font-weight: 640;
+    letter-spacing: -0.01em;
+    margin: 0 0 16px;
+    line-height: 1.2;
+    text-wrap: balance;
+  }
+  h3 {
+    font-family: var(--sans);
+    font-size: 18px;
+    font-weight: 640;
+    margin: 30px 0 10px;
+  }
+  p { margin: 0 0 16px; }
+  a { color: var(--cosmos); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+  a:focus-visible, button:focus-visible { outline: 2px solid var(--cosmos); outline-offset: 2px; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.86em;
+    background: var(--code-bg);
+    color: var(--code-ink);
+    padding: 1.5px 5px;
+    border-radius: 4px;
+  }
+  pre {
+    background: var(--code-bg);
+    color: var(--code-ink);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 16px 18px;
+    overflow-x: auto;
+    font-family: var(--mono);
+    font-size: 13.5px;
+    line-height: 1.6;
+    margin: 20px 0;
+  }
+  pre code { background: none; padding: 0; font-size: inherit; color: inherit; }
+  .cmt { color: var(--muted); }
+
+  figure {
+    margin: 28px 0 34px;
+    padding: 22px 20px 14px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+  }
+  figure .scroller { overflow-x: auto; }
+  figure svg { display: block; max-width: 100%; height: auto; min-width: 640px; margin: 0 auto; }
+  figcaption {
+    font-family: var(--sans);
+    font-size: 13.5px;
+    color: var(--muted);
+    margin-top: 14px;
+    line-height: 1.5;
+    max-width: 78ch;
+  }
+  figcaption b { color: var(--ink); font-weight: 600; }
+
+  /* SVG roles — every diagram color routes through the token set */
+  .sv-lane { stroke: var(--line); fill: none; }
+  .sv-ink { fill: var(--ink); }
+  .sv-mut { fill: var(--muted); }
+  .sv-edge { stroke: var(--muted); fill: none; }
+  .sv-edgeink { stroke: var(--ink); fill: none; }
+  .sv-cos-box { fill: var(--cosmos-soft); stroke: var(--cosmos); }
+  .sv-cos-text { fill: var(--cosmos); }
+  .sv-cos-edge { stroke: var(--cosmos); fill: none; }
+  .sv-cos-head { fill: var(--cosmos); }
+  .sv-host-box { fill: var(--host-soft); stroke: var(--host); }
+  .sv-host-text { fill: var(--host); }
+  .sv-host-edge { stroke: var(--host); fill: none; }
+  .sv-host-head { fill: var(--host); }
+  .sv-mut-head { fill: var(--muted); }
+  .sv-warn-box { fill: var(--warn-soft); stroke: var(--warn); }
+  .sv-warn-text { fill: var(--warn); }
+  .sv-warn-edge { stroke: var(--warn); fill: none; }
+  .sv-card { fill: var(--card); stroke: var(--line); }
+  svg text { font-family: var(--sans); font-size: 12.5px; }
+  svg text.m { font-family: var(--mono); font-size: 11.5px; }
+  svg text.lbl { font-size: 11.5px; }
+
+  table {
+    border-collapse: collapse;
+    width: 100%;
+    font-family: var(--sans);
+    font-size: 14.5px;
+    line-height: 1.45;
+  }
+  .tablewrap { overflow-x: auto; margin: 24px 0; border: 1px solid var(--line); border-radius: 10px; }
+  th {
+    text-align: left;
+    font-weight: 640;
+    font-size: 12.5px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    padding: 12px 14px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+    white-space: nowrap;
+  }
+  td {
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+    background: var(--card);
+  }
+  tr:last-child td { border-bottom: none; }
+  td code { white-space: nowrap; }
+  .num { font-variant-numeric: tabular-nums; }
+
+  .chip {
+    display: inline-block;
+    font-family: var(--sans);
+    font-size: 12px;
+    font-weight: 640;
+    padding: 2px 9px;
+    border-radius: 999px;
+    white-space: nowrap;
+  }
+  .chip.cos { background: var(--cosmos-soft); color: var(--cosmos); }
+  .chip.host { background: var(--host-soft); color: var(--host); }
+  .chip.none { background: var(--surface); color: var(--muted); border: 1px solid var(--line); }
+  .chip.good { background: var(--good-soft); color: var(--good); }
+  .chip.part { background: var(--warn-soft); color: var(--warn); }
+  .legend {
+    display: flex; gap: 16px; flex-wrap: wrap;
+    font-family: var(--sans); font-size: 13px; color: var(--muted);
+    margin: 14px 0 6px;
+  }
+
+  .callout {
+    border-left: 3px solid var(--cosmos);
+    background: var(--surface);
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    margin: 22px 0;
+    font-size: 15.5px;
+  }
+  .callout.warn { border-left-color: var(--warn); }
+  .callout p { margin: 0 0 8px; }
+  .callout p:last-child { margin: 0; }
+
+  ol.findings { padding-left: 22px; margin: 18px 0; }
+  ol.findings li { margin-bottom: 14px; }
+  ol.findings li::marker { font-family: var(--sans); font-weight: 640; color: var(--warn); }
+
+  ul.tight { margin: 12px 0 18px; padding-left: 22px; }
+  ul.tight li { margin-bottom: 8px; }
+  ul.tight li::marker { color: var(--cosmos); }
+
+  footer.doc {
+    margin-top: 76px;
+    padding-top: 22px;
+    border-top: 1px solid var(--line);
+    font-family: var(--sans);
+    font-size: 13.5px;
+    color: var(--muted);
+    line-height: 1.7;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    a { transition: color 120ms ease; }
+  }
+</style>
+
+<div class="shell">
+
+<header class="doc">
+  <p class="commitline">branch <b>feat/host-embedding</b> → cosmosgl/graph PR <b>#257</b> · base <b>main</b> · 9 commits</p>
+  <h1>cosmos.gl inside a host renderer</h1>
+  <p class="standfirst">The simulation now runs headless on a host's GPU device and frame schedule, hands its positions over at three different costs, and can render itself into the host's pass under the host's camera — with deck.gl as the worked example.</p>
+  <div class="statrow">
+    <div>files <strong>21</strong></div>
+    <div>code diff <strong>+1,977&thinsp;/&thinsp;−279</strong></div>
+    <div>new public APIs <strong>10</strong></div>
+    <div>unit tests <strong>13</strong> <span>(real WebGL&nbsp;2)</span></div>
+    <div>stories <strong>3</strong> <span>(deck.gl)</span></div>
+    <div>breaking change <strong>1</strong> <span>(luma.gl → peer)</span></div>
+  </div>
+</header>
+
+<section>
+  <p class="eyebrow">why · deck.gl-community <b>#704</b> — RFC: @deck.gl-community/cosmos-layers</p>
+  <h2>Where this comes from</h2>
+  <div class="prose">
+    <p>An RFC in deck.gl-community proposes a <code>cosmos-layers</code> package backed by cosmos.gl and gates a production integration on upstream changes: a simulation that runs without owning a canvas, a render loop a host scheduler can replace, and GPU position access that doesn't round-trip through the CPU. This branch implements those requirements. Everything the RFC proposed — the nine upstream asks, its API sketches, its package phases, and its acceptance criteria — is compared line by line against the delivery <a href="#scorecard">at the end of this document</a>.</p>
+    <p>Everything is additive except the packaging change: the existing <code>new Graph(div, config)</code> API, defaults, and rendering behavior on cosmos-owned devices are untouched.</p>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow"><b>feat(graph):</b> headless mode and external frame scheduling — cosmos runs inside a host's frame · <code>1344629</code></p>
+  <h2>One Graph, three ownership modes</h2>
+  <div class="prose">
+    <p>The constructor now accepts <code>null</code> in place of the container element. What changes between modes is ownership — who holds the canvas, the input, the clock, and the camera. The engine itself is the same object with the same data APIs in all three.</p>
+  </div>
+
+  <div class="legend">
+    <span><span class="chip cos">cosmos.gl</span> owns it</span>
+    <span><span class="chip host">host</span> owns it</span>
+    <span><span class="chip none">—</span> does not exist in this mode</span>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Concern</th>
+          <th>Interactive<br><span style="text-transform:none;letter-spacing:0"><code>new Graph(div, cfg)</code></span></th>
+          <th>Host-scheduled<br><span style="text-transform:none;letter-spacing:0"><code>enableRenderLoop: false</code></span></th>
+          <th>Headless<br><span style="text-transform:none;letter-spacing:0"><code>new Graph(null, cfg, device?)</code></span></th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>Canvas &amp; DOM</td><td><span class="chip cos">cosmos.gl</span></td><td><span class="chip cos">cosmos.gl</span></td><td><span class="chip none">—</span> never adopted or reparented</td></tr>
+        <tr><td>Pointer / zoom / drag / keys</td><td><span class="chip cos">cosmos.gl</span></td><td><span class="chip cos">cosmos.gl</span></td><td><span class="chip none">—</span> no listeners installed</td></tr>
+        <tr><td>Frame scheduling</td><td><span class="chip cos">cosmos.gl</span> rAF loop</td><td><span class="chip host">host</span> <code>step()</code> + <code>renderOneFrame()</code></td><td><span class="chip host">host</span> <code>step()</code> only</td></tr>
+        <tr><td>Camera / view transform</td><td><span class="chip cos">cosmos.gl</span> d3-zoom</td><td><span class="chip cos">cosmos.gl</span> d3-zoom</td><td><span class="chip host">host</span> <code>setViewTransform()</code></td></tr>
+        <tr><td>Screen draw</td><td><span class="chip cos">cosmos.gl</span></td><td><span class="chip cos">cosmos.gl</span> on host's call</td><td><span class="chip host">host</span> — own shaders or <code>drawToRenderPass()</code></td></tr>
+        <tr><td>Device clear / submit / resize</td><td><span class="chip cos">cosmos.gl</span></td><td><span class="chip cos">cosmos.gl</span></td><td><span class="chip host">host</span> — external device never touched</td></tr>
+        <tr><td>Simulation, forces, GPU state</td><td><span class="chip cos">cosmos.gl</span></td><td><span class="chip cos">cosmos.gl</span></td><td><span class="chip cos">cosmos.gl</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="prose">
+    <p>Headless works with an internal device too — <code>new Graph(null, config)</code> creates a hidden device and runs as a pure layout engine. Two behaviors follow from having no clock of one's own: transitions <em>snap</em> instead of animating (nothing would advance them), and view-dependent APIs are inert until the host supplies a view.</p>
+    <p>The end-of-simulation check moved with the clock. It used to live only in the render loop; now <code>step()</code> performs it whenever no loop exists, so <code>onSimulationEnd</code> still fires exactly once under host scheduling — the invariant "no step runs with alpha already below the floor" holds in every mode.</p>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow"><b>fix(graph):</b> reset ambient GL state before passes on an external device — host blend state zeroed the simulation · <code>881ecf9</code></p>
+  <h2>Sharing a device without inheriting its state</h2>
+  <div class="prose">
+    <p>Verifying the zero-copy story surfaced the one real bug of the project, and it would have broken every shared-device embedding. luma.gl applies only the pipeline parameters a model declares; everything else — blend, depth, scissor — is inherited from the context. cosmos's offscreen simulation passes declare none of it, because on a cosmos-owned device the context holds WebGL defaults. An external device arrives mid-frame carrying the <em>host's</em> state. deck.gl leaves blending enabled, and blended writes into the RGBA32F position textures — whose texels carry alpha&nbsp;0 — zeroed the entire simulation within a few ticks.</p>
+    <p>The fix: <code>resetExternalDeviceState()</code> restores blend, depth, scissor, stencil, cull, and color-mask at the top of every simulation step and every rendered frame — on externally supplied devices only. Cosmos-owned devices skip it entirely, keeping existing behavior byte-identical.</p>
+  </div>
+
+  <figure>
+    <div class="scroller">
+    <svg viewBox="0 0 960 330" role="img" aria-label="One deck.gl frame: the host calls graph.step() during onBeforeRender; cosmos first resets ambient GL state, then runs its force passes and trackPoints into offscreen framebuffers; during the host's render pass, layers sample the current position texture with texelFetch; the host alone submits the device.">
+      <defs>
+        <marker id="ah-host" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sv-host-head"/></marker>
+        <marker id="ah-cos" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sv-cos-head"/></marker>
+      </defs>
+
+      <text x="16" y="26" class="sv-mut lbl">one deck.gl frame →</text>
+      <line x1="16" y1="34" x2="944" y2="34" class="sv-lane"/>
+
+      <!-- host lane -->
+      <text x="16" y="70" class="sv-host-text" font-weight="600">host (deck.gl)</text>
+      <rect x="16" y="80" width="928" height="46" rx="8" class="sv-lane"/>
+      <rect x="60" y="87" width="330" height="32" rx="6" class="sv-host-box"/>
+      <text x="225" y="107" text-anchor="middle" class="sv-host-text m">onBeforeRender()</text>
+      <rect x="520" y="87" width="260" height="32" rx="6" class="sv-host-box"/>
+      <text x="650" y="107" text-anchor="middle" class="sv-host-text m">render pass — layers draw</text>
+      <rect x="830" y="87" width="106" height="32" rx="6" class="sv-host-box"/>
+      <text x="883" y="107" text-anchor="middle" class="sv-host-text m">submit()</text>
+
+      <!-- cosmos lane -->
+      <text x="16" y="222" class="sv-cos-text" font-weight="600">cosmos.gl</text>
+      <rect x="16" y="232" width="928" height="46" rx="8" class="sv-lane"/>
+      <rect x="76" y="239" width="118" height="32" rx="6" class="sv-warn-box"/>
+      <text x="135" y="259" text-anchor="middle" class="sv-warn-text m">reset GL state</text>
+      <rect x="206" y="239" width="150" height="32" rx="6" class="sv-cos-box"/>
+      <text x="281" y="259" text-anchor="middle" class="sv-cos-text m">force passes ×6</text>
+      <rect x="368" y="239" width="104" height="32" rx="6" class="sv-cos-box"/>
+      <text x="420" y="259" text-anchor="middle" class="sv-cos-text m">trackPoints</text>
+      <rect x="540" y="239" width="220" height="32" rx="6" class="sv-cos-box"/>
+      <text x="650" y="259" text-anchor="middle" class="sv-cos-text m">position texture (current)</text>
+
+      <!-- crossing arrows -->
+      <line x1="150" y1="126" x2="150" y2="232" class="sv-host-edge" stroke-width="1.6" marker-end="url(#ah-host)"/>
+      <text x="160" y="168" class="sv-mut m">graph.step()</text>
+
+      <line x1="650" y1="232" x2="650" y2="126" class="sv-cos-edge" stroke-width="1.6" marker-end="url(#ah-cos)"/>
+      <text x="660" y="168" class="sv-mut m">texelFetch by gl_VertexID</text>
+      <text x="660" y="184" class="sv-mut lbl">zero copies — positions stay on the GPU</text>
+
+      <!-- reset annotation -->
+      <line x1="135" y1="278" x2="135" y2="298" class="sv-edge" stroke-dasharray="3 3"/>
+      <text x="30" y="314" class="sv-warn-text lbl">deck leaves blend on — blended writes into RGBA32F would zero the sim</text>
+    </svg>
+    </div>
+    <figcaption><b>The shared-device frame.</b> The host calls <code>step()</code> from its own lifecycle; cosmos restores ambient GL state before its offscreen passes, then the host's layers sample the live position texture during the host's own pass. Cosmos never clears, submits, or resizes the device — the host alone ends the frame.</figcaption>
+  </figure>
+</section>
+
+<section>
+  <p class="eyebrow"><b>feat(points):</b> expose GPU positions — texture handle, non-stalling snapshots, sparse writes, per-point pinning · <code>7f1213f</code></p>
+  <h2>Positions at three costs</h2>
+  <div class="prose">
+    <p>The engine keeps positions in a square RGBA32F texture, ping-ponged between two buffers on every GPU write. This branch makes that state readable at whichever cost the consumer can afford — from zero copies down to a full pipeline stall.</p>
+  </div>
+
+  <figure>
+    <div class="scroller">
+    <svg viewBox="0 0 960 250" role="img" aria-label="From the position framebuffer, three readback tiers: getPointPositionTexture hands the GPU texture directly to host shaders with zero copies; getPointPositionsAsync copies through a staging buffer into a Float32Array; getPointPositionsArray reads pixels synchronously, stalling the pipeline.">
+      <defs>
+        <marker id="ah-t" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sv-mut-head"/></marker>
+        <marker id="ah-t2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sv-cos-head"/></marker>
+      </defs>
+
+      <rect x="20" y="85" width="180" height="80" rx="8" class="sv-cos-box"/>
+      <text x="110" y="120" text-anchor="middle" class="sv-cos-text m">position FBO</text>
+      <text x="110" y="140" text-anchor="middle" class="sv-cos-text lbl">RGBA32F, ping-pong</text>
+
+      <!-- tier 1 -->
+      <line x1="200" y1="105" x2="360" y2="55" class="sv-cos-edge" stroke-width="1.8" marker-end="url(#ah-t2)"/>
+      <rect x="366" y="34" width="228" height="40" rx="6" class="sv-card"/>
+      <text x="480" y="59" text-anchor="middle" class="sv-ink m">texture handle → host shader</text>
+      <text x="620" y="52" class="sv-cos-text m">getPointPositionTexture()</text>
+      <text x="620" y="68" class="sv-mut lbl">0 copies · GPU-resident · re-fetch on version change</text>
+
+      <!-- tier 2 -->
+      <line x1="200" y1="125" x2="360" y2="125" class="sv-edge" stroke-width="1.4" marker-end="url(#ah-t)"/>
+      <rect x="366" y="105" width="122" height="40" rx="6" class="sv-card"/>
+      <text x="427" y="130" text-anchor="middle" class="sv-ink m">staging buffer</text>
+      <line x1="488" y1="125" x2="540" y2="125" class="sv-edge" stroke-width="1.4" marker-end="url(#ah-t)"/>
+      <rect x="546" y="105" width="112" height="40" rx="6" class="sv-card"/>
+      <text x="602" y="130" text-anchor="middle" class="sv-ink m">Float32Array</text>
+      <text x="672" y="122" class="sv-cos-text m">getPointPositionsAsync(out?)</text>
+      <text x="672" y="138" class="sv-mut lbl">GPU-timeline copy, resolved later¹</text>
+
+      <!-- tier 3 -->
+      <line x1="200" y1="145" x2="360" y2="200" class="sv-edge" stroke-width="1.4" stroke-dasharray="5 4" marker-end="url(#ah-t)"/>
+      <rect x="366" y="180" width="112" height="40" rx="6" class="sv-card"/>
+      <text x="422" y="205" text-anchor="middle" class="sv-ink m">Float32Array</text>
+      <text x="492" y="197" class="sv-cos-text m">getPointPositionsArray(out?)</text>
+      <text x="492" y="213" class="sv-mut lbl">readPixels — stalls until the GPU drains (documented)</text>
+    </svg>
+    </div>
+    <figcaption><b>Three readback tiers.</b> Hosts pick a tier per use: rendering samples the texture, throttled label/export snapshots use the async path, and the sync path remains for one-shot reads. <code>getPointPositions()</code> keeps its <code>number[]</code> shape and now delegates to the array variant. ¹&thinsp;See <a href="#open-items">open item 1</a>: the async path's no-stall promise needs a fence in the current luma 9.3 backend.</figcaption>
+  </figure>
+
+  <h3>The texture contract</h3>
+  <div class="prose">
+    <p>The exported <code>PointPositionTexture</code> type pins down everything a consumer needs: the texel layout, who owns the memory, and how to survive the ping-pong.</p>
+  </div>
+
+  <figure>
+    <div class="scroller">
+    <svg viewBox="0 0 960 300" role="img" aria-label="Two ping-pong textures swap roles on every GPU write; the version counter increments on every swap, upload, transition frame, and sparse write. A consumer holds texture, pointCount, textureSize, and version, and re-fetches the handle whenever version changes. Point i lives at texel (i mod size, i div size) storing x, y, i.">
+      <defs>
+        <marker id="ah-p" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sv-cos-head"/></marker>
+        <marker id="ah-p2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sv-mut-head"/></marker>
+      </defs>
+
+      <!-- ping-pong pair -->
+      <rect x="40" y="60" width="120" height="120" rx="8" class="sv-cos-box"/>
+      <text x="100" y="115" text-anchor="middle" class="sv-cos-text m">texture A</text>
+      <text x="100" y="133" text-anchor="middle" class="sv-cos-text lbl">current</text>
+      <rect x="250" y="60" width="120" height="120" rx="8" class="sv-card"/>
+      <text x="310" y="115" text-anchor="middle" class="sv-mut m">texture B</text>
+      <text x="310" y="133" text-anchor="middle" class="sv-mut lbl">previous</text>
+
+      <path d="M 160 85 C 195 65, 215 65, 250 85" class="sv-cos-edge" stroke-width="1.6" marker-end="url(#ah-p)"/>
+      <path d="M 250 155 C 215 175, 195 175, 160 155" class="sv-cos-edge" stroke-width="1.6" marker-end="url(#ah-p)"/>
+      <text x="205" y="52" text-anchor="middle" class="sv-mut m">swapFbo()</text>
+      <text x="205" y="200" text-anchor="middle" class="sv-mut lbl">every write: swap, read previous, write current</text>
+      <text x="205" y="222" text-anchor="middle" class="sv-cos-text m">version++</text>
+      <text x="205" y="240" text-anchor="middle" class="sv-mut lbl">on swap · CPU upload · transition frame · sparse write</text>
+
+      <!-- consumer -->
+      <rect x="470" y="60" width="240" height="120" rx="8" class="sv-card"/>
+      <text x="590" y="90" text-anchor="middle" class="sv-ink" font-weight="600">consumer (host layer)</text>
+      <text x="590" y="116" text-anchor="middle" class="sv-mut m">{ texture, pointCount,</text>
+      <text x="590" y="134" text-anchor="middle" class="sv-mut m">textureSize, version }</text>
+      <line x1="370" y1="120" x2="470" y2="120" class="sv-edge" stroke-width="1.4" marker-end="url(#ah-p2)"/>
+      <text x="590" y="205" text-anchor="middle" class="sv-mut lbl">version changed → re-fetch the handle,</text>
+      <text x="590" y="222" text-anchor="middle" class="sv-mut lbl">never cache the texture object</text>
+
+      <!-- texel layout inset -->
+      <rect x="770" y="60" width="150" height="120" rx="8" class="sv-card"/>
+      <line x1="770" y1="90" x2="920" y2="90" class="sv-lane"/>
+      <line x1="770" y1="120" x2="920" y2="120" class="sv-lane"/>
+      <line x1="770" y1="150" x2="920" y2="150" class="sv-lane"/>
+      <line x1="807" y1="60" x2="807" y2="180" class="sv-lane"/>
+      <line x1="845" y1="60" x2="845" y2="180" class="sv-lane"/>
+      <line x1="882" y1="60" x2="882" y2="180" class="sv-lane"/>
+      <rect x="845" y="90" width="37" height="30" class="sv-cos-box"/>
+      <text x="845" y="205" text-anchor="middle" class="sv-mut lbl">point i at (i % size, ⌊i / size⌋)</text>
+      <text x="845" y="222" text-anchor="middle" class="sv-mut m">texel = [x, y, i, ·]</text>
+
+      <text x="480" y="278" class="sv-mut lbl">absent (NaN) points keep their frozen last texel — consult the input positions to hide them</text>
+    </svg>
+    </div>
+    <figcaption><b>The ping-pong and version contract.</b> The handle alternates between two textures as the simulation runs, so identity is unstable by design; the monotonic <code>version</code> is the change signal, bumped by every path that can touch position state. Both facts live in the type's JSDoc, and a unit test asserts the version advances across a step.</figcaption>
+  </figure>
+
+  <h3>Sparse writes and pinning — the drag pattern, generalized</h3>
+  <div class="prose">
+    <p>Interactive hosts need to move or pin <em>one</em> point per frame, not re-upload the world. Three new methods write single texels into the live simulation state, exactly the way cosmos's own pointer drag does:</p>
+  </div>
+  <pre><code><span class="cmt">// host's drag handler — one texel per call, input arrays never modified</span>
+graph.setPointPinned(index, true)          <span class="cmt">// pin on drag start</span>
+graph.setPointPosition(index, x, y)        <span class="cmt">// follow the pointer</span>
+graph.setPointPositionsByIndices(ids, xy)  <span class="cmt">// batched form</span>
+graph.setPointPinned(index, false)         <span class="cmt">// release on drag end</span></code></pre>
+  <div class="prose">
+    <p>Writes target the live state like a drag: a later full data update starts from the input positions again, absent (NaN) points are never resurrected, and a mismatched indices/positions pair is rejected whole with a warning. While the simulation runs, forces move the point on the next tick unless it is pinned — which is why the pair of calls above is the drag idiom.</p>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow"><b>feat(graph):</b> render into a host pass with a host camera — drawToRenderPass and setViewTransform · <code>c1752b6</code></p>
+  <h2>Cosmos rendering under the host's camera</h2>
+  <div class="prose">
+    <p>Zero-copy sampling means the host writes its own shaders. For hosts that want cosmos's full pipeline instead — point shapes, per-point colors and sizes, curved per-link-colored links, arrows — two methods let cosmos draw <em>inside</em> the host's frame:</p>
+    <ul class="tight">
+      <li><code>drawToRenderPass(renderPass, {points?, links?})</code> records the point and link draws into a host-owned pass without clearing, ending, or submitting it. The internal renderer now routes through the same method, so there is one draw path, not two.</li>
+      <li><code>setViewTransform({k, x, y}, screenSize?)</code> injects the host's camera through the exact code path the interactive zoom uses, so picking, point-radius scaling, and the space↔screen conversions all stay consistent.</li>
+    </ul>
+    <p>The transform contract is documented as a formula and asserted by a unit test — with <code>S = spaceSize</code>, <code>[w, h] = screenSize</code>, a point at space position <code>(spaceX, spaceY)</code> lands at:</p>
+  </div>
+  <pre><code>screenX = k · (spaceX + (w − S) / 2) + x
+screenY = k · ((S − spaceY) + (h − S) / 2) + y   <span class="cmt">// cosmos space y is up; screen y is down</span></code></pre>
+  <div class="prose">
+    <p>A deck.gl layer inverts this from its viewport in four lines and then calls <code>drawToRenderPass</code> — the whole layer is ~25 lines with no custom shaders. Cosmos's visible draw models declare their complete pipeline state, so they compose into the host's pass regardless of what previous layers left behind.</p>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow"><b>build(deps):</b> make luma.gl a peer dependency — one luma installation shared with the host · <code>7fdc05d</code></p>
+  <h2>One luma.gl — the breaking change</h2>
+  <div class="prose">
+    <p>A <code>Device</code> created by one copy of luma.gl and consumed by another is not a supported boundary — the classes differ, the state trackers differ. Sharing a device therefore requires sharing the installation, and that is a packaging fact, not a runtime one:</p>
+  </div>
+
+  <figure>
+    <div class="scroller">
+    <svg viewBox="0 0 960 270" role="img" aria-label="Before: the app depends on deck.gl and cosmos.gl, each resolving its own copy of luma.gl, and passing a Device across the two copies is unsupported. After: luma.gl is a peer dependency, both deck.gl and cosmos.gl resolve one installation, and the Device is shared legitimately.">
+      <defs>
+        <marker id="ah-d" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="sv-mut-head"/></marker>
+      </defs>
+
+      <!-- BEFORE -->
+      <text x="120" y="30" class="sv-mut" font-weight="600">before — dependencies "~9.3.6"</text>
+      <rect x="150" y="46" width="130" height="34" rx="6" class="sv-card"/>
+      <text x="215" y="67" text-anchor="middle" class="sv-ink m">app</text>
+      <rect x="60" y="120" width="130" height="34" rx="6" class="sv-host-box"/>
+      <text x="125" y="141" text-anchor="middle" class="sv-host-text m">deck.gl</text>
+      <rect x="240" y="120" width="130" height="34" rx="6" class="sv-cos-box"/>
+      <text x="305" y="141" text-anchor="middle" class="sv-cos-text m">cosmos.gl</text>
+      <rect x="60" y="196" width="130" height="34" rx="6" class="sv-card"/>
+      <text x="125" y="217" text-anchor="middle" class="sv-ink m">luma.gl A</text>
+      <rect x="240" y="196" width="130" height="34" rx="6" class="sv-card"/>
+      <text x="305" y="217" text-anchor="middle" class="sv-ink m">luma.gl B</text>
+      <line x1="185" y1="80" x2="135" y2="120" class="sv-edge" stroke-width="1.4" marker-end="url(#ah-d)"/>
+      <line x1="245" y1="80" x2="295" y2="120" class="sv-edge" stroke-width="1.4" marker-end="url(#ah-d)"/>
+      <line x1="125" y1="154" x2="125" y2="196" class="sv-edge" stroke-width="1.4" marker-end="url(#ah-d)"/>
+      <line x1="305" y1="154" x2="305" y2="196" class="sv-edge" stroke-width="1.4" marker-end="url(#ah-d)"/>
+      <line x1="190" y1="213" x2="240" y2="213" class="sv-warn-edge" stroke-width="1.6" stroke-dasharray="5 4"/>
+      <text x="215" y="250" text-anchor="middle" class="sv-warn-text lbl">Device across two copies: unsupported</text>
+
+      <!-- divider -->
+      <line x1="475" y1="24" x2="475" y2="250" class="sv-lane" stroke-dasharray="3 5"/>
+
+      <!-- AFTER -->
+      <text x="600" y="30" class="sv-mut" font-weight="600">after — peerDependencies "^9.3.0"</text>
+      <rect x="640" y="46" width="130" height="34" rx="6" class="sv-card"/>
+      <text x="705" y="67" text-anchor="middle" class="sv-ink m">app</text>
+      <rect x="550" y="120" width="130" height="34" rx="6" class="sv-host-box"/>
+      <text x="615" y="141" text-anchor="middle" class="sv-host-text m">deck.gl</text>
+      <rect x="730" y="120" width="130" height="34" rx="6" class="sv-cos-box"/>
+      <text x="795" y="141" text-anchor="middle" class="sv-cos-text m">cosmos.gl</text>
+      <rect x="640" y="196" width="130" height="34" rx="6" class="sv-card"/>
+      <text x="705" y="217" text-anchor="middle" class="sv-ink m">luma.gl 9.3.6</text>
+      <line x1="675" y1="80" x2="625" y2="120" class="sv-edge" stroke-width="1.4" marker-end="url(#ah-d)"/>
+      <line x1="735" y1="80" x2="785" y2="120" class="sv-edge" stroke-width="1.4" marker-end="url(#ah-d)"/>
+      <line x1="625" y1="154" x2="680" y2="196" class="sv-edge" stroke-width="1.4" marker-end="url(#ah-d)"/>
+      <line x1="785" y1="154" x2="730" y2="196" class="sv-edge" stroke-width="1.4" marker-end="url(#ah-d)"/>
+      <text x="705" y="250" text-anchor="middle" class="sv-mut lbl">one installation — one Device class, shared legitimately</text>
+    </svg>
+    </div>
+    <figcaption><b>The peer move.</b> <code>@luma.gl/*</code> leaves <code>dependencies</code> for <code>peerDependencies</code> (<code>^9.3.0</code>). The ES build keeps luma external — the rollup externals list now covers peers, where before the move would have silently bundled a private copy — while the UMD/jsdelivr build stays standalone. Verified: <code>npm ls @luma.gl/core</code> resolves a single deduped 9.3.6 for cosmos + deck.gl 9.3.10.</figcaption>
+  </figure>
+
+  <div class="callout">
+    <p><b>Who has to act:</b> npm 7+ users — nobody (peers auto-install). Yarn 1 or pnpm without auto-install-peers — add the four <code>@luma.gl/*</code> packages explicitly. CDN/UMD users — nobody. Full instructions live in <code>migration-notes.md</code> under "Migrating to v3.5".</p>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow"><b>feat(stories):</b> deck.gl integration examples · <code>ad1e651</code> — <b>test:</b> host-embedding unit tests on real WebGL 2 · <code>313057b</code></p>
+  <h2>Proof: three architectures, thirteen tests</h2>
+  <div class="prose">
+    <p>Each embedding architecture ships as a runnable Storybook story (Examples → Integrations) against deck.gl ~9.3, and the API contracts are locked by a vitest browser-mode suite running on a real WebGL&nbsp;2 context in headless Chromium.</p>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Story</th><th>Architecture</th><th>Position path</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Shared device, zero-copy</b><br><span class="num" style="color:var(--muted)">10k points</span></td>
+          <td>deck owns canvas, device, frame lifecycle; cosmos steps once per frame from <code>onBeforeRender</code>; two custom layers (~130 lines of GLSL + glue) draw everything</td>
+          <td><code>texelFetch</code> on the live texture — never leaves the GPU</td>
+        </tr>
+        <tr>
+          <td><b>Cosmos rendering in a deck layer</b><br><span class="num" style="color:var(--muted)">10k points</span></td>
+          <td>same shared device, but <code>setViewTransform</code> + <code>drawToRenderPass</code> reuse cosmos's own draw programs under deck's camera — ~25-line layer, no shaders</td>
+          <td>none — cosmos draws in place</td>
+        </tr>
+        <tr>
+          <td><b>CPU readback layout</b><br><span class="num" style="color:var(--muted)">2k points</span></td>
+          <td>cosmos as a pure layout engine on its own hidden device; stock <code>ScatterplotLayer</code>/<code>LineLayer</code> render</td>
+          <td>throttled <code>getPointPositionsAsync()</code> snapshots</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="prose">
+    <p>The test suite (<code>npm test</code>, 13 passing) covers the headless lifecycle, snapshot equivalence, the texture/version contract, sparse updates and pinning, absent-point NaN semantics, view injection against the documented formula, external scheduling to completion, and a regression test that enables blending on a raw shared context and proves the simulation survives 5 steps with a pinned, sparse-moved point exactly in place. Lint and build pass; a shared-device stress check keeps all 10,000 index channels intact across 100 interleaved steps.</p>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">scope · the deck.gl stories are the worked example, not the boundary</p>
+  <h2>More general than a deck.gl layer</h2>
+  <div class="prose">
+    <p>Nothing in the new API surface names deck.gl. What a given host can reach is determined by how much GPU context it can share with cosmos — not by which library it is. That sorts the ecosystem into three tiers:</p>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Tier</th><th>Coupling required</th><th>Who lands here</th><th>State</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Shared luma <code>Device</code></b><br><span style="color:var(--muted)">zero-copy</span></td>
+          <td>Host resolves the <em>same</em> <code>@luma.gl</code> installation — the peer-dependency contract</td>
+          <td>deck.gl (this branch's stories), kepler.gl via deck, any luma.gl application</td>
+          <td><span class="chip good">proven</span> — the only tier that is vis.gl-specific</td>
+        </tr>
+        <tr>
+          <td><b>Shared raw WebGL&nbsp;2 context</b><br><span style="color:var(--muted)">zero-copy</span></td>
+          <td>Host exposes its <code>WebGL2RenderingContext</code>; <code>luma.attachDevice({handle: gl})</code> wraps it and a headless Graph runs on it — the position texture then lives in the <em>host's</em> context</td>
+          <td>MapLibre&nbsp;GL / Mapbox&nbsp;GL custom layers, Three.js (<code>ExternalTexture</code>), PixiJS (WebGL), regl, raw-WebGL apps</td>
+          <td><span class="chip part">mechanically supported</span> — luma 9.3 ships the attach path (the same one deck's interleaved Mapbox mode uses); undemonstrated, and open item 2's entry-point guards become load-bearing here</td>
+        </tr>
+        <tr>
+          <td><b>Headless + snapshots</b><br><span style="color:var(--muted)">CPU handoff</span></td>
+          <td>None — positions cross as a <code>Float32Array</code></td>
+          <td>Any renderer or framework: Cytoscape.js layout extensions, Sigma.js / Graphology, D3 apps past <code>d3-force</code> scale, React&nbsp;Flow auto-layout, notebooks, server-side layout precompute (the test suite already runs on SwiftShader with no screen)</td>
+          <td><span class="chip good">universal today</span> — becomes genuinely non-blocking once the async fence lands (open item 1)</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="prose">
+    <p>The biggest audiences are not renderers at all but graph libraries with <em>pluggable layouts</em> consuming the third tier as a pure layout engine — the RFC's "hidden layout engine" pattern, generalized past its own package. Two hard bounds apply across every tier: the simulation is 2D (<code>x, y</code> — a 3D host gains a layout plane, not a volume), and WebGL&nbsp;2 only (WebGPU-mode hosts wait on the compute backend — see "out of scope").</p>
+  </div>
+</section>
+
+<section id="scorecard">
+  <p class="eyebrow">deck.gl-community <b>#704</b> — the RFC's proposals, compared line by line against this branch</p>
+  <h2>Proposed vs. implemented</h2>
+  <div class="prose">
+    <p>The RFC proposed in three registers: nine upstream asks (some with concrete API sketches), a two-phase package plan with example code, and a production acceptance checklist. Each is compared against the branch below — the summary first, then the sketches against the shipped signatures.</p>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th style="width:3ch">#</th><th>RFC ask</th><th>Status</th><th>How</th></tr></thead>
+      <tbody>
+        <tr><td class="num">1</td><td>Simulation-only class</td><td><span class="chip part">partial</span></td><td>Headless <code>Graph(null, …)</code> delivers the semantics; the <code>GraphSimulation</code> class extraction is deferred until a real consumer validates the APIs</td></tr>
+        <tr><td class="num">2</td><td>External frame scheduling</td><td><span class="chip good">delivered</span></td><td><code>enableRenderLoop: false</code>, <code>step()</code>, <code>renderOneFrame()</code>; no perpetual loop survives</td></tr>
+        <tr><td class="num">3</td><td>Optional DOM / canvas ownership</td><td><span class="chip good">delivered</span></td><td>Headless never adopts, reparents, clears, submits, or resizes; ownership rules explicit per mode</td></tr>
+        <tr><td class="num">4</td><td>Read-only GPU position resource</td><td><span class="chip good">delivered</span></td><td><code>getPointPositionTexture()</code> with texel layout, ownership, ping-pong + <code>version</code> contract on the exported type</td></tr>
+        <tr><td class="num">5</td><td>Host render pass</td><td><span class="chip good">delivered</span></td><td><code>drawToRenderPass(pass, {points?, links?})</code> — no clear, end, or submit; points/links separable</td></tr>
+        <tr><td class="num">6</td><td>Efficient snapshots</td><td><span class="chip part">delivered*</span></td><td><code>Float32Array</code> + caller-provided <code>out</code> + async variant + documented sync stall; *the async path still needs a fence to honor its no-stall claim (open item 1)</td></tr>
+        <tr><td class="num">7</td><td>Indexed mutation and pinning</td><td><span class="chip good">delivered</span></td><td><code>setPointPosition</code>, <code>setPointPositionsByIndices</code>, <code>setPointPinned</code> — the names the RFC proposed</td></tr>
+        <tr><td class="num">8</td><td>luma.gl dependency alignment</td><td><span class="chip good">delivered</span></td><td>Peers at <code>^9.3.0</code>, single deduped install verified; the range deliberately excludes the luma 9.4 <em>prerelease</em> line (semver ranges don't match foreign prereleases) and will cover stable 9.4 with no cosmos release</td></tr>
+        <tr><td class="num">9</td><td>Backend capability flags</td><td><span class="chip none">not yet</span></td><td>Deliberately deferred (see "out of scope" below): the flags should describe a stabilized surface; adapters feature-detect method presence for now</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>The RFC's API sketches → the shipped signatures</h3>
+  <div class="prose">
+    <p>Where the RFC sketched concrete code, the deliberate divergences are the interesting part:</p>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>RFC proposed</th><th>Branch shipped</th><th>Divergence, and why</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><code>new GraphSimulation(device, cfg)</code><br><code>simulation.initialize()</code><br><code>simulation.step()</code> · <code>simulation.destroy()</code></td>
+          <td><code>new Graph(null, cfg, device?)</code><br><code>graph.render()</code><br><code>graph.step()</code> · <code>graph.destroy()</code></td>
+          <td>One class, two modes, instead of a second class. Same five-call lifecycle (<code>initialize()</code> ≈ <code>render()</code>); the class extraction is deferred so a real consumer shapes the boundary before it freezes</td>
+        </tr>
+        <tr>
+          <td>"an option that disables the internal <code>requestAnimationFrame</code> loop"; host calls one sim step and optionally one render op</td>
+          <td><code>enableRenderLoop: false</code> + <code>step()</code> + <code>renderOneFrame()</code></td>
+          <td>Exceeds the ask: runtime-toggleable via <code>setConfig</code>, and the simulation-end check travels with the clock so <code>onSimulationEnd</code> fires under any scheduler</td>
+        </tr>
+        <tr>
+          <td><code>{texture, pointCount, <b>width, height</b>, version}</code>; document texel format, coordinate convention, ownership, ping-pong observation</td>
+          <td><code>{texture, pointCount, <b>textureSize</b>, version}</code> on the exported <code>PointPositionTexture</code> type</td>
+          <td>The texture is always square, so one field encodes the invariant two would obscure. Every documentation clause the RFC listed is on the type; the optional buffer form is deferred with WebGPU</td>
+        </tr>
+        <tr>
+          <td>a method recording draws into a supplied <code>RenderPass</code>; "separately configurable point and link rendering"</td>
+          <td><code>drawToRenderPass(pass, {points?, links?})</code> — plus <code>setViewTransform({k, x, y}, screenSize?)</code></td>
+          <td>Exact match, and the internal renderer now routes through the same method. <code>setViewTransform</code> wasn't asked for by name, but the RFC's "thin wrapper around an upstream encode(renderPass)" needs a camera — shipped with a documented, unit-tested formula</td>
+        </tr>
+        <tr>
+          <td>snapshots: <code>Float32Array</code> return; optional destination; "an asynchronous readback option where supported"; document the sync stall</td>
+          <td><code>getPointPositionsArray(out?)</code> · <code>getPointPositionsAsync(out?)</code> · stall documented on <code>getPointPositions()</code></td>
+          <td>All four clauses shipped in shape. The async path's no-stall behavior still needs a fence in luma 9.3 (open item 1) — the RFC's "where supported" hedge was the wiser wording until then</td>
+        </tr>
+        <tr>
+          <td>"Possible operations include <code>setPointPosition</code>, <code>setPointPinned</code>, and a batched sparse update API"</td>
+          <td><code>setPointPosition(i, x, y)</code> · <code>setPointPinned(i, bool)</code> · <code>setPointPositionsByIndices(ids, xy)</code></td>
+          <td>The proposed names, verbatim. Semantics specified beyond the ask: live-state writes on the drag path, input arrays never modified, absent points never resurrected, mismatched pairs rejected whole</td>
+        </tr>
+        <tr>
+          <td>luma: move to peers <b>or</b> publish a documented compatibility range</td>
+          <td>Both: <code>peerDependencies ^9.3.0</code>, documented in README + migration notes</td>
+          <td>The "or" became "and". The range deliberately excludes the 9.4 prerelease line and admits stable 9.4 automatically</td>
+        </tr>
+        <tr>
+          <td>capability flags for simulation, rendering, readback, external scheduling, shared resources</td>
+          <td>—</td>
+          <td>The one ask with no code: deferred until the surface the flags would describe has stabilized; adapters feature-detect for now</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>The RFC's package phases → this branch's stories</h3>
+  <div class="prose">
+    <p>PR #257 doesn't build the deck-side package — that's deck.gl-community's work — but each architecture the RFC describes now exists as a running prototype in the Integrations stories:</p>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>RFC design</th><th>Prototype in this branch</th><th>What remains deck-side</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><b>Phase 1: <code>CosmosLayout</code></b> — hidden canvas, throttled <code>getPointPositions()</code>, <code>snapshotIntervalMs</code>, final-snapshot "calculate-then-render" mode</td>
+          <td><b>CPU readback story</b> — headless graph on its own hidden device, 100&thinsp;ms-throttled <code>getPointPositionsAsync(out)</code>, final snapshot on <code>onSimulationEnd</code>, stock <code>ScatterplotLayer</code>/<code>LineLayer</code></td>
+          <td>Stable ID↔index mapping, <code>GraphLayout</code> lifecycle translation, topology updates, bounds. The story already upgrades the RFC's sketch from <code>getPointPositions()</code> to the reusable-destination async API</td>
+        </tr>
+        <tr>
+          <td><b>Phase 2, option A</b> — deck-specific shaders sample the exported position resource</td>
+          <td><b>Zero-copy story</b> — custom <code>CosmosPointsLayer</code>/<code>CosmosLinksLayer</code>, <code>texelFetch</code> by <code>gl_VertexID</code>, positions never leave the GPU</td>
+          <td>Production layer authoring: deck picking, shader modules, effects. The story is the texture-contract demo, not the layer</td>
+        </tr>
+        <tr>
+          <td><b>Phase 2, option B</b> — "a thin wrapper around an upstream <code>encode(renderPass)</code> method"</td>
+          <td><b>Cosmos-rendering story</b> — <code>setViewTransform</code> + <code>drawToRenderPass</code> under deck's camera; full cosmos pipeline in a ~25-line layer</td>
+          <td>Nothing to build — but these draws can't join deck's picking pass, so the RFC's "picking returns original objects" criterion pushes production toward option A. That answers the RFC's open question 3 with running code</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>The RFC's production acceptance criteria, today</h3>
+  <div class="legend">
+    <span><span class="chip good">met</span> demonstrated by this branch</span>
+    <span><span class="chip part">grounded</span> supported, formal test pending</span>
+    <span><span class="chip host">deck-side</span> the integrating package's work</span>
+    <span><span class="chip none">deferred</span> explicitly future work</span>
+  </div>
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th>Criterion</th><th>Status</th><th>Evidence</th></tr></thead>
+      <tbody>
+        <tr><td>Steady-state animation performs no full position readback</td><td><span class="chip good">met</span></td><td>Zero-copy story: positions sampled in place across the whole run</td></tr>
+        <tr><td>Only one canvas and one luma.gl device</td><td><span class="chip good">met</span></td><td>Both shared-device stories; the readback story keeps a hidden device by design (Phase-1 pattern — it could now share too)</td></tr>
+        <tr><td>No independent animation loop, clear pass, or device submission</td><td><span class="chip good">met</span></td><td>Headless guarantees it structurally; a unit test asserts the external device survives <code>destroy()</code></td></tr>
+        <tr><td>Layer ordered between deck layers corrupts neither draw</td><td><span class="chip part">grounded</span></td><td>Full-pipeline-state draw models + the GL-state reset + the 100-step stress check; a formal before/after-layer render test belongs to the package</td></tr>
+        <tr><td>Picking returns the original node/edge object and stable ID</td><td><span class="chip host">deck-side</span></td><td>Cosmos ships the primitives (<code>setPointPinned</code>, <code>setPointPosition</code>); host-native picking is the adapter's job</td></tr>
+        <tr><td>Changing view state does not restart the simulation</td><td><span class="chip good">met</span></td><td>All three stories: pan/zoom redraws from the live texture without touching alpha</td></tr>
+        <tr><td>Removing the layer releases all adapter-owned resources</td><td><span class="chip part">grounded</span></td><td>Both shared-device stories tear down cleanly; the readback story currently leaks its graph (open item 4)</td></tr>
+        <tr><td>Benchmarks vs <code>D3ForceLayout</code> and the readback prototype at 10k–250k points</td><td><span class="chip none">deferred</span></td><td>Future work: "the stories prove the architectures; the numbers deserve a dedicated perf story"</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="callout">
+    <p><b>Shipped beyond the proposal:</b> the ambient GL-state reset (the RFC never anticipated host state leaking into cosmos's offscreen passes — the one real bug, found, fixed, and regression-tested), the position <code>version</code> counter's per-write granularity, runtime toggling of the render loop, absent-point NaN semantics across every new API, and a 13-test WebGL&nbsp;2 suite on cosmos's own side — the RFC asked for tests only in the downstream package.</p>
+  </div>
+</section>
+
+<section>
+  <p class="eyebrow">future work · PR #257 comment by the author, in dependency order</p>
+  <h2>Deliberately out of scope</h2>
+  <div class="prose">
+    <p>The PR records what it leaves out and why, which is part of the design:</p>
+    <ul class="tight">
+      <li><b>Awaiting a real consumer</b> — the <code>GraphSimulation</code> class extraction (headless <code>Graph</code> is functionally equivalent; extracting first risks freezing the wrong boundary), capability flags (trivial, but they should describe a stabilized surface), and formal readback-vs-zero-copy benchmarks with GPU timer queries.</li>
+      <li><b>Blocked on upstream</b> — luma.gl 9.4 (the peer range intentionally skips the prerelease line and admits stable 9.4 automatically) and WebGPU / compute-only devices (the simulation is WebGL&nbsp;2 fragment shaders over ping-pong FBOs throughout; a WebGPU backend is a compute rewrite plus a WGSL port).</li>
+      <li><b>The integrating side's work</b> — a published adapter package, host-native picking that returns original application objects, and node dragging built on that picking; the cosmos-side primitives for it (<code>setPointPinned</code>, <code>setPointPosition</code>) ship here.</li>
+    </ul>
+    <p>Two earlier open questions were resolved in-branch: cosmos-side unit tests were added (<code>313057b</code>, with the GL-state regression test confirmed to fail when the fix is disabled), and a suspected <code>drawToRenderPass</code> depth-state rough edge turned out not to exist — every visible draw model already declares its depth state, and a redundant story-side override was removed (<code>ba7afa5</code>).</p>
+  </div>
+</section>
+
+<section id="open-items">
+  <p class="eyebrow">review · verified against source, luma internals, and a full local run</p>
+  <h2>Open items before undrafting</h2>
+  <div class="prose">
+    <p>A deep review of the branch confirmed the architecture and contracts above and left five items, in severity order:</p>
+  </div>
+  <ol class="findings">
+    <li class="prose"><b>The async snapshot still stalls.</b> The enqueue half is right — <code>copyTextureToBuffer</code> records a GPU-timeline <code>readPixels</code>-into-PBO copy — but luma 9.3's WebGL <code>Buffer.readAsync</code> is a synchronous <code>getBufferSubData</code> in disguise, and calling it immediately forces the driver to drain every queued command the copy depends on: the whole simulation tick. Net effect: the "async" path synchronizes at the same point as the sync path, despite its documented no-stall contract — negligible in the 2k-point story, main-thread jank at the 100k+ scale cosmos exists for, and a silent skew in the RFC's planned readback-vs-zero-copy benchmarks. The fix is one fence, shipped in the same luma version: <code>device.createFence()</code> after submit, <code>await fence.signaled</code> (a non-blocking <code>clientWaitSync</code> poll), then read — plus capturing <code>pointsNumber</code>/<code>textureSize</code> at call time, since a real async gap lets data updates land mid-flight. The API shape itself is forward-correct (a WebGPU backend satisfies it natively via <code>mapAsync</code>); until the fence lands, the honest wording is the RFC's own "asynchronous readback <em>where supported</em>."</li>
+    <li class="prose"><b>The GL-state reset guards two entry points, not all of them.</b> <code>trackPoints()</code> is a raster draw reachable outside the guarded step/frame paths — through the new <code>setPointPositionsByIndices</code>, through <code>trackPointPositionsByIndices</code>, and through <code>render()</code> — so a shared-device host using point tracking can still hit the blend-corruption class the branch fixes. The corruption <em>persists</em> once the simulation has settled (no guarded step runs afterward to repair it — and a settled layout is exactly when users drag), and the regression test walks past this door: it never enables tracking, so <code>trackPoints()</code> early-returns. Cheap fix: reset at those public entries too (a no-op on cosmos-owned devices).</li>
+    <li class="prose"><b><code>npm test</code> runs in no CI and needs an undocumented <code>npx playwright install</code>.</b> Out of the box the suite fails with a missing-browser error; after the one-time install, 13/13 pass in ~6.5s. Add a CI step and one line in the contributor docs.</li>
+    <li class="prose"><b>The readback story leaks its graph.</b> Its <code>destroy()</code> finalizes deck but never calls <code>graph.destroy()</code>, leaking a hidden WebGL context per story switch — and browsers cap live contexts (~16), so flipping stories eventually evicts the oldest, possibly the one on screen. The other two stories tear down correctly; the fix is one line.</li>
+    <li class="prose"><b>Small alignments.</b> <code>setPointPinned</code> admits out-of-range indices into the CPU-side pinned set — GPU writes are bounds-checked, but if the graph later grows past the phantom index, a point nobody pinned silently freezes; either reject out-of-range or document the declarative semantics the tracking API already has; the migration heading says v3.5 while the package is 3.4.1 and the change is labeled breaking; and the reset reaches luma through optional-chained <code>setParametersWebGL?.</code>, which would degrade silently if a future luma renames it. The peer range admits stable 9.4 automatically the day it ships — worth a CI leg against 9.4 when it stabilizes, since the cosmos-layers work targets that line.</li>
+  </ol>
+</section>
+
+<footer class="doc">
+  <p><b>Pointers.</b> Implementation: cosmosgl/graph PR #257 (<code>feat/host-embedding</code>, 9 commits, draft) and its future-work comment. Motivating RFC: visgl/deck.gl-community PR #704 (<code>docs/rfcs/cosmos-layers.md</code>). Rationale log: <code>history/2026/2026-08-18-host-embedding.md</code>. Migration: <code>migration-notes.md</code> → "Migrating to v3.5". Stories: Storybook → Examples → Integrations.</p>
+</footer>
+
+</div>
