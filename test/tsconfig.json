@@ -11,6 +11,6 @@
     "declaration": false,
     "noEmit": true
   },
-  "include": ["./**/*"],
+  "include": ["./**/*", "../src/declaration.d.ts"],
   "exclude": []
 }

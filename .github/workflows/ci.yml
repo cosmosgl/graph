@@ -27,6 +27,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
+      # Covers stories and tests too, which the build never compiles, and exits
+      # non-zero on its own.
+      - run: npm run typecheck
       # The build exits 0 even when TypeScript reports errors; the grep turns
       # them into a failure.
       - name: Build

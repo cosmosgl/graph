@@ -66,8 +66,11 @@ Requires Node ≥ 22, npm ≥ 10.
   update a Storybook example when you add a feature or change configuration / public methods.
 - `npm run build` — production build (Vite, ES + UMD).
 - `npm run watch` — rebuild on change.
-- `npm run lint` — ESLint over `src` (`lint-staged` runs on commit). **Ensure the project lints and
-  builds before opening a PR.**
+- `npm run lint` — ESLint over `src` (`lint-staged` runs on commit).
+- `npm run typecheck` — `tsc --noEmit` over everything we author, stories and `test/` included
+  (the base `tsconfig.json` drives declaration emit, so it is scoped to what ships and excludes
+  `src/stories`; `tsconfig.typecheck.json` widens the program). **Ensure the project lints,
+  typechecks, and builds before opening a PR.**
 
 ## Contributing
 
