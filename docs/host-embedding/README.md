@@ -393,10 +393,10 @@ items, in severity order:
    `graph.destroy()`, leaking a hidden WebGL context per story switch — and browsers cap
    live contexts (~16), so flipping stories eventually evicts the oldest, possibly the
    one on screen. The other two stories tear down correctly; the fix is one line.
-5. **Small alignments.** `setPinnedPoint` admits out-of-range indices into the CPU-side
-   pinned set — GPU writes are bounds-checked, but if the graph later grows past the
-   phantom index, a point nobody pinned silently freezes; either reject out-of-range or
-   document the declarative semantics the tracking API already has. The migration heading says v3.5 while the
+5. **Small alignments.** Pinning now documents the declarative contract (an index beyond
+   the point count pins its point once the count grows — the tracking API's contract),
+   drops entries that can never name a point, and exposes per-point state through
+   `isPointPinned`. The migration heading says v3.5 while the
    package is 3.4.1 and the change is labeled breaking; and the reset reaches luma through
    optional-chained `setParametersWebGL?.`, which would degrade silently if a future luma
    renames it. The peer range admits stable 9.4 automatically the day it ships — worth a
