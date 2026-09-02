@@ -148,10 +148,10 @@ cosmos's own pointer drag does:
 
 ```ts
 // host's drag handler — one texel per call, input arrays never modified
-graph.setPointPinned(index, true)          // pin on drag start
+graph.setPinnedPoint(index, true)          // pin on drag start
 graph.setPointPosition(index, x, y)        // follow the pointer
 graph.setPointPositionsByIndices(ids, xy)  // batched form
-graph.setPointPinned(index, false)         // release on drag end
+graph.setPinnedPoint(index, false)         // release on drag end
 ```
 
 Writes target the live state like a drag: a later full data update starts from the input
@@ -281,7 +281,7 @@ shipped signatures.
 | 4 | Read-only GPU position resource | delivered | `getPointPositionTexture()` with texel layout, ownership, ping-pong + `version` contract on the exported type |
 | 5 | Host render pass | delivered | `drawToRenderPass(pass, {points?, links?})` — no clear, end, or submit; points/links separable |
 | 6 | Efficient snapshots | delivered* | `Float32Array` + caller-provided `out` + async variant + documented sync stall; \*the async path still needs a fence to honor its no-stall claim (open item 1) |
-| 7 | Indexed mutation and pinning | delivered | `setPointPosition`, `setPointPositionsByIndices`, `setPointPinned` — the names the RFC proposed |
+| 7 | Indexed mutation and pinning | delivered | `setPointPosition`, `setPointPositionsByIndices`, `setPinnedPoint` — the RFC's proposed operations; its `setPointPinned` ships as `setPinnedPoint`, paired with `setPinnedPoints` |
 | 8 | luma.gl dependency alignment | delivered | Peers at `^9.3.0`, single deduped install verified; the range deliberately excludes the luma 9.4 *prerelease* line (semver ranges don't match foreign prereleases) and will cover stable 9.4 with no cosmos release |
 | 9 | Backend capability flags | not yet | Deliberately deferred (see below): the flags should describe a stabilized surface; adapters feature-detect method presence for now |
 
@@ -296,7 +296,7 @@ Where the RFC sketched concrete code, the deliberate divergences are the interes
 | `{texture, pointCount, `**`width, height`**`, version}`; document texel format, coordinate convention, ownership, ping-pong observation | `{texture, pointCount, `**`textureSize`**`, version}` on the exported `PointPositionTexture` type | The texture is always square, so one field encodes the invariant two would obscure. Every documentation clause the RFC listed is on the type; the optional buffer form is deferred with WebGPU |
 | a method recording draws into a supplied `RenderPass`; "separately configurable point and link rendering" | `drawToRenderPass(pass, {points?, links?})` — plus `setViewTransform({k, x, y}, screenSize?)` | Exact match, and the internal renderer now routes through the same method. `setViewTransform` wasn't asked for by name, but the RFC's "thin wrapper around an upstream encode(renderPass)" needs a camera — shipped with a documented, unit-tested formula |
 | snapshots: `Float32Array` return; optional destination; "an asynchronous readback option where supported"; document the sync stall | `getPointPositionsArray(out?)` · `getPointPositionsAsync(out?)` · stall documented on `getPointPositions()` | All four clauses shipped in shape. The async path's no-stall behavior still needs a fence in luma 9.3 (open item 1) — the RFC's "where supported" hedge was the wiser wording until then |
-| "Possible operations include `setPointPosition`, `setPointPinned`, and a batched sparse update API" | `setPointPosition(i, x, y)` · `setPointPinned(i, bool)` · `setPointPositionsByIndices(ids, xy)` | The proposed names, verbatim. Semantics specified beyond the ask: live-state writes on the drag path, input arrays never modified, absent points never resurrected, mismatched pairs rejected whole |
+| "Possible operations include `setPointPosition`, `setPointPinned`, and a batched sparse update API" | `setPointPosition(i, x, y)` · `setPinnedPoint(i, bool)` · `setPointPositionsByIndices(ids, xy)` | The proposed operations; `setPointPinned` ships as `setPinnedPoint` to pair with `setPinnedPoints`. Semantics specified beyond the ask: live-state writes on the drag path, input arrays never modified, absent points never resurrected, mismatched pairs rejected whole |
 | luma: move to peers **or** publish a documented compatibility range | Both: `peerDependencies ^9.3.0`, documented in README + migration notes | The "or" became "and". The range deliberately excludes the 9.4 prerelease line and admits stable 9.4 automatically |
 | capability flags for simulation, rendering, readback, external scheduling, shared resources | — | The one ask with no code: deferred until the surface the flags would describe has stabilized; adapters feature-detect for now |
 
@@ -324,7 +324,7 @@ future work.
 | Only one canvas and one luma.gl device | met | Both shared-device stories; the readback story keeps a hidden device by design (Phase-1 pattern — it could now share too) |
 | No independent animation loop, clear pass, or device submission | met | Headless guarantees it structurally; a unit test asserts the external device survives `destroy()` |
 | Layer ordered between deck layers corrupts neither draw | grounded | Full-pipeline-state draw models + the GL-state reset + the 100-step stress check; a formal before/after-layer render test belongs to the package |
-| Picking returns the original node/edge object and stable ID | deck-side | Cosmos ships the primitives (`setPointPinned`, `setPointPosition`); host-native picking is the adapter's job |
+| Picking returns the original node/edge object and stable ID | deck-side | Cosmos ships the primitives (`setPinnedPoint`, `setPointPosition`); host-native picking is the adapter's job |
 | Changing view state does not restart the simulation | met | All three stories: pan/zoom redraws from the live texture without touching alpha |
 | Removing the layer releases all adapter-owned resources | grounded | Both shared-device stories tear down cleanly; the readback story currently leaks its graph (open item 4) |
 | Benchmarks vs `D3ForceLayout` and the readback prototype at 10k–250k points | deferred | Future work: "the stories prove the architectures; the numbers deserve a dedicated perf story" |
@@ -350,7 +350,7 @@ From the PR author's future-work comment, in dependency order:
   is a compute rewrite plus a WGSL port).
 - **The integrating side's work** — a published adapter package, host-native picking that
   returns original application objects, and node dragging built on that picking; the
-  cosmos-side primitives for it (`setPointPinned`, `setPointPosition`) ship here.
+  cosmos-side primitives for it (`setPinnedPoint`, `setPointPosition`) ship here.
 
 Two earlier open questions were resolved in-branch: cosmos-side unit tests were added
 (`313057b`, with the GL-state regression test confirmed to fail when the fix is disabled),
@@ -393,7 +393,7 @@ items, in severity order:
    `graph.destroy()`, leaking a hidden WebGL context per story switch — and browsers cap
    live contexts (~16), so flipping stories eventually evicts the oldest, possibly the
    one on screen. The other two stories tear down correctly; the fix is one line.
-5. **Small alignments.** `setPointPinned` admits out-of-range indices into the CPU-side
+5. **Small alignments.** `setPinnedPoint` admits out-of-range indices into the CPU-side
    pinned set — GPU writes are bounds-checked, but if the graph later grows past the
    phantom index, a point nobody pinned silently freezes; either reject out-of-range or
    document the declarative semantics the tracking API already has. The migration heading says v3.5 while the
