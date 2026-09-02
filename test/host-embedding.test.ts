@@ -202,14 +202,14 @@ describe('sparse updates and pinning', () => {
   it('a pinned point holds its position through simulation steps; unpinning releases it', async () => {
     const graph = await createHeadlessGraph()
     try {
-      graph.setPointPinned(0, true)
+      graph.setPinnedPoint(0, true)
       graph.setPointPosition(0, 3500, 3500)
       for (let i = 0; i < 30; i += 1) graph.step()
       const pinned = graph.getPointPositionsArray()
       expect(pinned[0]).toBeCloseTo(3500, 3)
       expect(pinned[1]).toBeCloseTo(3500, 3)
 
-      graph.setPointPinned(0, false)
+      graph.setPinnedPoint(0, false)
       for (let i = 0; i < 30; i += 1) graph.step()
       const released = graph.getPointPositionsArray()
       const distance = Math.hypot((released[0] as number) - 3500, (released[1] as number) - 3500)
@@ -256,7 +256,7 @@ describe('external device', () => {
         gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
         gl.enable(gl.DEPTH_TEST)
 
-        graph.setPointPinned(0, true)
+        graph.setPinnedPoint(0, true)
         graph.setPointPosition(0, 3500, 3500)
         for (let i = 0; i < 5; i += 1) graph.step()
 
