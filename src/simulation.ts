@@ -341,7 +341,12 @@ export class GraphSimulation {
   public setPinnedPoints (pinnedIndices: number[] | null): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setPinnedPoints(pinnedIndices))) return
-    this.data.inputPinnedPoints = pinnedIndices && pinnedIndices.length > 0 ? pinnedIndices : undefined
+    // Declarative set: keep valid indices even beyond the current point count
+    // (they pin their point once it exists); drop entries that can never name
+    // a point. Copy — the caller's array stays theirs.
+    const sanitized = pinnedIndices?.filter(index => Number.isInteger(index) && index >= 0)
+    const deduped = sanitized && sanitized.length > 0 ? [...new Set(sanitized)] : undefined
+    this.data.inputPinnedPoints = deduped
     this.points?.updatePinnedStatus()
   }
 
@@ -363,6 +368,14 @@ export class GraphSimulation {
     this.data.inputPinnedPoints = pinnedSet.size > 0 ? [...pinnedSet] : undefined
 
     this.points?.setPointPinnedStatus(index, pinned)
+  }
+
+  /**
+   * Whether a point index is in the pinned set. See `Graph.isPointPinned`.
+   */
+  public isPointPinned (index: number): boolean {
+    if (this._isDestroyed) return false
+    return this.data.inputPinnedPoints?.includes(index) ?? false
   }
 
   /**

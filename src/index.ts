@@ -709,17 +709,30 @@ export class Graph {
    * Pins or unpins a single point without replacing the whole pinned set —
    * a one-texel GPU write instead of the full rebuild `setPinnedPoints` performs.
    * Designed for interactive hosts that pin a point on drag start and unpin it
-   * on drag end (pair with `setPointPosition` to move it while pinned).
+   * on drag end (pair with `setPointPosition` to move it while pinned; check
+   * `isPointPinned` first to restore a deliberate pin on release).
    * See `setPinnedPoints` for what pinning means.
    *
    * @param index - The index of the point.
    * @param pinned - `true` to pin, `false` to unpin.
+   * @note Each call clones the tracked pinned set to keep later full rebuilds
+   * in sync — fine at gesture rate; to change many pins at once, use
+   * `setPinnedPoints`.
    */
   public setPinnedPoint (index: number, pinned: boolean): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setPinnedPoint(index, pinned))) return
     this.simulation.setPinnedPoint(index, pinned)
     this.requestRender()
+  }
+
+  /**
+   * Whether a point index is currently pinned. Lets a host that pins during a
+   * drag gesture restore the point's deliberate pinned state on release.
+   */
+  public isPointPinned (index: number): boolean {
+    if (this._isDestroyed) return false
+    return this.simulation.isPointPinned(index)
   }
 
   /**

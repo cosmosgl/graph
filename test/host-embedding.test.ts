@@ -203,6 +203,7 @@ describe('sparse updates and pinning', () => {
     const graph = await createHeadlessGraph()
     try {
       graph.setPinnedPoint(0, true)
+      expect(graph.isPointPinned(0)).toBe(true)
       graph.setPointPosition(0, 3500, 3500)
       for (let i = 0; i < 30; i += 1) graph.step()
       const pinned = graph.getPointPositionsArray()
@@ -210,6 +211,7 @@ describe('sparse updates and pinning', () => {
       expect(pinned[1]).toBeCloseTo(3500, 3)
 
       graph.setPinnedPoint(0, false)
+      expect(graph.isPointPinned(0)).toBe(false)
       for (let i = 0; i < 30; i += 1) graph.step()
       const released = graph.getPointPositionsArray()
       const distance = Math.hypot((released[0] as number) - 3500, (released[1] as number) - 3500)
