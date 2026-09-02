@@ -3,14 +3,16 @@
 # Host embedding: headless mode, external scheduling, GPU position sharing
 
 **Commits:** `feat(graph): headless mode and external frame scheduling`
-(`c34ce41`), `feat(points): expose GPU positions — texture handle, non-stalling
-snapshots, sparse writes, per-point pinning` (`172b1ec`), `feat(graph): render
+(`1344629`), `feat(points): expose GPU positions — texture handle, non-stalling
+snapshots, sparse writes, per-point pinning` (`7f1213f`), `feat(graph): render
 into a host pass with a host camera — drawToRenderPass and setViewTransform`
-(`6fec847`), `fix(graph): reset ambient GL state before passes on an external
-device` (`196b552`), `feat(stories): deck.gl integration examples`
-(`7e43328`), `build(deps): make luma.gl a peer dependency` (`c99c695`),
-`feat(simulation): extract GraphSimulation` (`0405099`), `feat(stories): run
-the zero-copy story on GraphSimulation` (`ae23a73`)
+(`c1752b6`), `fix(graph): reset ambient GL state before passes on an external
+device` (`881ecf9`), `feat(stories): deck.gl integration examples`
+(`ad1e651`), `build(deps): make luma.gl a peer dependency` (`7fdc05d`),
+`feat(simulation): extract GraphSimulation` (`22cbac2`), `feat(stories): run
+the zero-copy story on GraphSimulation` (`9d63bc4`), `feat(api): rename
+setPointPinned to setPinnedPoint` (`d19403d`), `feat(api): sanitize the pinned
+set and add isPointPinned` (`e541f5b`)
 
 ## Why
 
@@ -79,9 +81,24 @@ stalls, and it delegates to the array variant.
 `setPointPositionsByIndices(indices, positions)` write one texel per point into
 the live position texture (the drag pattern, generalized — input arrays are
 untouched, so a data rebuild starts from the inputs again), and
-`setPointPinned(index, pinned)` flips one point's pin with a one-texel write
+`setPinnedPoint(index, pinned)` flips one point's pin with a one-texel write
 instead of `setPinnedPoints`' full-texture rebuild. Together they map a host's
 drag interaction onto a running simulation.
+
+The pin surface was aligned before the stable 3.5.0 lands (a beta-line-only
+break: 3.5.0-beta.1 exported the method as `setPointPinned`). The sparse method
+is named `setPinnedPoint` so the pair follows the convention the position
+family already teaches — same stem, plural = bulk set, singular = one-element
+live write. `setPinnedPoints` now stores a sanitized copy of the caller's
+array: entries that can never name a point (negative, non-integer) are
+dropped, duplicates collapse, and mutating the array afterwards no longer
+leaks into pin state; indices at or beyond the current point count are kept
+and take effect if the count grows — the tracking API's behavior, deliberately
+left undocumented so it stays behavior rather than contract. `isPointPinned(index)`
+is the read side: a host that pins during a drag gesture can restore a
+deliberate pin on release instead of blindly unpinning. A list getter was
+considered and dropped — additive API is forever, and the boolean can't be
+misused as a per-frame hot path.
 
 ## The shared-device state bug
 
