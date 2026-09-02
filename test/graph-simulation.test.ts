@@ -110,7 +110,7 @@ describe('GraphSimulation', () => {
   it('pins and sparse-moves points', async () => {
     const simulation = await createSimulation()
     try {
-      simulation.setPointPinned(0, true)
+      simulation.setPinnedPoint(0, true)
       simulation.setPointPosition(0, 3500, 3500)
       for (let i = 0; i < 30; i += 1) simulation.step()
       const positions = simulation.getPointPositionsArray()
@@ -156,7 +156,7 @@ describe('GraphSimulation', () => {
         const gl = (device as Device & { gl: WebGL2RenderingContext }).gl
         gl.enable(gl.BLEND)
         gl.enable(gl.DEPTH_TEST)
-        simulation.setPointPinned(0, true)
+        simulation.setPinnedPoint(0, true)
         simulation.setPointPosition(0, 3500, 3500)
         for (let i = 0; i < 5; i += 1) simulation.step()
         const positions = simulation.getPointPositionsArray()

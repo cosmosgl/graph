@@ -347,11 +347,11 @@ export class GraphSimulation {
 
   /**
    * Pins or unpins a single point with a one-texel GPU write — no full rebuild.
-   * See `Graph.setPointPinned`.
+   * See `Graph.setPinnedPoint`.
    */
-  public setPointPinned (index: number, pinned: boolean): void {
+  public setPinnedPoint (index: number, pinned: boolean): void {
     if (this._isDestroyed) return
-    if (this.ensureDevice(() => this.setPointPinned(index, pinned))) return
+    if (this.ensureDevice(() => this.setPinnedPoint(index, pinned))) return
     if (!Number.isInteger(index) || index < 0) return
 
     // Keep the CPU-side pinned set in sync so a later full rebuild

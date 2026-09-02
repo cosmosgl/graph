@@ -519,10 +519,10 @@
     <p>Interactive hosts need to move or pin <em>one</em> point per frame, not re-upload the world. Three new methods write single texels into the live simulation state, exactly the way cosmos's own pointer drag does:</p>
   </div>
   <pre><code><span class="cmt">// host's drag handler — one texel per call, input arrays never modified</span>
-graph.setPointPinned(index, true)          <span class="cmt">// pin on drag start</span>
+graph.setPinnedPoint(index, true)          <span class="cmt">// pin on drag start</span>
 graph.setPointPosition(index, x, y)        <span class="cmt">// follow the pointer</span>
 graph.setPointPositionsByIndices(ids, xy)  <span class="cmt">// batched form</span>
-graph.setPointPinned(index, false)         <span class="cmt">// release on drag end</span></code></pre>
+graph.setPinnedPoint(index, false)         <span class="cmt">// release on drag end</span></code></pre>
   <div class="prose">
     <p>Writes target the live state like a drag: a later full data update starts from the input positions again, absent (NaN) points are never resurrected, and a mismatched indices/positions pair is rejected whole with a warning. While the simulation runs, forces move the point on the next tick unless it is pinned — which is why the pair of calls above is the drag idiom.</p>
   </div>
@@ -697,7 +697,7 @@ screenY = k · ((S − spaceY) + (h − S) / 2) + y   <span class="cmt">// cosmo
         <tr><td class="num">4</td><td>Read-only GPU position resource</td><td><span class="chip good">delivered</span></td><td><code>getPointPositionTexture()</code> with texel layout, ownership, ping-pong + <code>version</code> contract on the exported type</td></tr>
         <tr><td class="num">5</td><td>Host render pass</td><td><span class="chip good">delivered</span></td><td><code>drawToRenderPass(pass, {points?, links?})</code> — no clear, end, or submit; points/links separable</td></tr>
         <tr><td class="num">6</td><td>Efficient snapshots</td><td><span class="chip part">delivered*</span></td><td><code>Float32Array</code> + caller-provided <code>out</code> + async variant + documented sync stall; *the async path still needs a fence to honor its no-stall claim (open item 1)</td></tr>
-        <tr><td class="num">7</td><td>Indexed mutation and pinning</td><td><span class="chip good">delivered</span></td><td><code>setPointPosition</code>, <code>setPointPositionsByIndices</code>, <code>setPointPinned</code> — the names the RFC proposed</td></tr>
+        <tr><td class="num">7</td><td>Indexed mutation and pinning</td><td><span class="chip good">delivered</span></td><td><code>setPointPosition</code>, <code>setPointPositionsByIndices</code>, <code>setPinnedPoint</code> — the RFC's proposed operations; its <code>setPointPinned</code> ships as <code>setPinnedPoint</code>, paired with <code>setPinnedPoints</code></td></tr>
         <tr><td class="num">8</td><td>luma.gl dependency alignment</td><td><span class="chip good">delivered</span></td><td>Peers at <code>^9.3.0</code>, single deduped install verified; the range deliberately excludes the luma 9.4 <em>prerelease</em> line (semver ranges don't match foreign prereleases) and will cover stable 9.4 with no cosmos release</td></tr>
         <tr><td class="num">9</td><td>Backend capability flags</td><td><span class="chip none">not yet</span></td><td>Deliberately deferred (see "out of scope" below): the flags should describe a stabilized surface; adapters feature-detect method presence for now</td></tr>
       </tbody>
@@ -739,7 +739,7 @@ screenY = k · ((S − spaceY) + (h − S) / 2) + y   <span class="cmt">// cosmo
         </tr>
         <tr>
           <td>"Possible operations include <code>setPointPosition</code>, <code>setPointPinned</code>, and a batched sparse update API"</td>
-          <td><code>setPointPosition(i, x, y)</code> · <code>setPointPinned(i, bool)</code> · <code>setPointPositionsByIndices(ids, xy)</code></td>
+          <td><code>setPointPosition(i, x, y)</code> · <code>setPinnedPoint(i, bool)</code> · <code>setPointPositionsByIndices(ids, xy)</code></td>
           <td>The proposed names, verbatim. Semantics specified beyond the ask: live-state writes on the drag path, input arrays never modified, absent points never resurrected, mismatched pairs rejected whole</td>
         </tr>
         <tr>
@@ -798,7 +798,7 @@ screenY = k · ((S − spaceY) + (h − S) / 2) + y   <span class="cmt">// cosmo
         <tr><td>Only one canvas and one luma.gl device</td><td><span class="chip good">met</span></td><td>Both shared-device stories; the readback story keeps a hidden device by design (Phase-1 pattern — it could now share too)</td></tr>
         <tr><td>No independent animation loop, clear pass, or device submission</td><td><span class="chip good">met</span></td><td>Headless guarantees it structurally; a unit test asserts the external device survives <code>destroy()</code></td></tr>
         <tr><td>Layer ordered between deck layers corrupts neither draw</td><td><span class="chip part">grounded</span></td><td>Full-pipeline-state draw models + the GL-state reset + the 100-step stress check; a formal before/after-layer render test belongs to the package</td></tr>
-        <tr><td>Picking returns the original node/edge object and stable ID</td><td><span class="chip host">deck-side</span></td><td>Cosmos ships the primitives (<code>setPointPinned</code>, <code>setPointPosition</code>); host-native picking is the adapter's job</td></tr>
+        <tr><td>Picking returns the original node/edge object and stable ID</td><td><span class="chip host">deck-side</span></td><td>Cosmos ships the primitives (<code>setPinnedPoint</code>, <code>setPointPosition</code>); host-native picking is the adapter's job</td></tr>
         <tr><td>Changing view state does not restart the simulation</td><td><span class="chip good">met</span></td><td>All three stories: pan/zoom redraws from the live texture without touching alpha</td></tr>
         <tr><td>Removing the layer releases all adapter-owned resources</td><td><span class="chip part">grounded</span></td><td>Both shared-device stories tear down cleanly; the readback story currently leaks its graph (open item 4)</td></tr>
         <tr><td>Benchmarks vs <code>D3ForceLayout</code> and the readback prototype at 10k–250k points</td><td><span class="chip none">deferred</span></td><td>Future work: "the stories prove the architectures; the numbers deserve a dedicated perf story"</td></tr>
@@ -819,7 +819,7 @@ screenY = k · ((S − spaceY) + (h − S) / 2) + y   <span class="cmt">// cosmo
     <ul class="tight">
       <li><b>Awaiting a real consumer</b> — the <code>GraphSimulation</code> class extraction (headless <code>Graph</code> is functionally equivalent; extracting first risks freezing the wrong boundary), capability flags (trivial, but they should describe a stabilized surface), and formal readback-vs-zero-copy benchmarks with GPU timer queries.</li>
       <li><b>Blocked on upstream</b> — luma.gl 9.4 (the peer range intentionally skips the prerelease line and admits stable 9.4 automatically) and WebGPU / compute-only devices (the simulation is WebGL&nbsp;2 fragment shaders over ping-pong FBOs throughout; a WebGPU backend is a compute rewrite plus a WGSL port).</li>
-      <li><b>The integrating side's work</b> — a published adapter package, host-native picking that returns original application objects, and node dragging built on that picking; the cosmos-side primitives for it (<code>setPointPinned</code>, <code>setPointPosition</code>) ship here.</li>
+      <li><b>The integrating side's work</b> — a published adapter package, host-native picking that returns original application objects, and node dragging built on that picking; the cosmos-side primitives for it (<code>setPinnedPoint</code>, <code>setPointPosition</code>) ship here.</li>
     </ul>
     <p>Two earlier open questions were resolved in-branch: cosmos-side unit tests were added (<code>313057b</code>, with the GL-state regression test confirmed to fail when the fix is disabled), and a suspected <code>drawToRenderPass</code> depth-state rough edge turned out not to exist — every visible draw model already declares its depth state, and a redundant story-side override was removed (<code>ba7afa5</code>).</p>
   </div>
@@ -836,7 +836,7 @@ screenY = k · ((S − spaceY) + (h − S) / 2) + y   <span class="cmt">// cosmo
     <li class="prose"><b>The GL-state reset guards two entry points, not all of them.</b> <code>trackPoints()</code> is a raster draw reachable outside the guarded step/frame paths — through the new <code>setPointPositionsByIndices</code>, through <code>trackPointPositionsByIndices</code>, and through <code>render()</code> — so a shared-device host using point tracking can still hit the blend-corruption class the branch fixes. The corruption <em>persists</em> once the simulation has settled (no guarded step runs afterward to repair it — and a settled layout is exactly when users drag), and the regression test walks past this door: it never enables tracking, so <code>trackPoints()</code> early-returns. Cheap fix: reset at those public entries too (a no-op on cosmos-owned devices).</li>
     <li class="prose"><b><code>npm test</code> runs in no CI and needs an undocumented <code>npx playwright install</code>.</b> Out of the box the suite fails with a missing-browser error; after the one-time install, 13/13 pass in ~6.5s. Add a CI step and one line in the contributor docs.</li>
     <li class="prose"><b>The readback story leaks its graph.</b> Its <code>destroy()</code> finalizes deck but never calls <code>graph.destroy()</code>, leaking a hidden WebGL context per story switch — and browsers cap live contexts (~16), so flipping stories eventually evicts the oldest, possibly the one on screen. The other two stories tear down correctly; the fix is one line.</li>
-    <li class="prose"><b>Small alignments.</b> <code>setPointPinned</code> admits out-of-range indices into the CPU-side pinned set — GPU writes are bounds-checked, but if the graph later grows past the phantom index, a point nobody pinned silently freezes; either reject out-of-range or document the declarative semantics the tracking API already has; the migration heading says v3.5 while the package is 3.4.1 and the change is labeled breaking; and the reset reaches luma through optional-chained <code>setParametersWebGL?.</code>, which would degrade silently if a future luma renames it. The peer range admits stable 9.4 automatically the day it ships — worth a CI leg against 9.4 when it stabilizes, since the cosmos-layers work targets that line.</li>
+    <li class="prose"><b>Small alignments.</b> <code>setPinnedPoint</code> admits out-of-range indices into the CPU-side pinned set — GPU writes are bounds-checked, but if the graph later grows past the phantom index, a point nobody pinned silently freezes; either reject out-of-range or document the declarative semantics the tracking API already has; the migration heading says v3.5 while the package is 3.4.1 and the change is labeled breaking; and the reset reaches luma through optional-chained <code>setParametersWebGL?.</code>, which would degrade silently if a future luma renames it. The peer range admits stable 9.4 automatically the day it ships — worth a CI leg against 9.4 when it stabilizes, since the cosmos-layers work targets that line.</li>
   </ol>
 </section>
 

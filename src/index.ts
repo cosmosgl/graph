@@ -715,10 +715,10 @@ export class Graph {
    * @param index - The index of the point.
    * @param pinned - `true` to pin, `false` to unpin.
    */
-  public setPointPinned (index: number, pinned: boolean): void {
+  public setPinnedPoint (index: number, pinned: boolean): void {
     if (this._isDestroyed) return
-    if (this.ensureDevice(() => this.setPointPinned(index, pinned))) return
-    this.simulation.setPointPinned(index, pinned)
+    if (this.ensureDevice(() => this.setPinnedPoint(index, pinned))) return
+    this.simulation.setPinnedPoint(index, pinned)
     this.requestRender()
   }
 
@@ -732,7 +732,7 @@ export class Graph {
    * it does not modify the input array passed to `setPointPositions`, so a later
    * full data update starts from the input positions again. While the simulation
    * is running, forces move the point on the next tick unless it is pinned
-   * (`setPointPinned`).
+   * (`setPinnedPoint`).
    *
    * @param index - The index of the point.
    * @param x - New X coordinate, in space coordinates (as returned by `getPointPositions`).
