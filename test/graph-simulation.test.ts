@@ -121,6 +121,46 @@ describe('GraphSimulation', () => {
     }
   })
 
+  it('keeps declarative pins: an index beyond the point count pins its point when the count grows', async () => {
+    const simulation = await createSimulation()
+    try {
+      simulation.setPinnedPoint(5, true) // only 4 points exist yet
+      expect(simulation.isPointPinned(5)).toBe(true)
+
+      const grown = new Float32Array([...POSITIONS, 500, 500, 2000, 2000])
+      simulation.setPointPositions(grown)
+      simulation.applyData()
+      const before = simulation.getPointPositionsArray()
+      for (let i = 0; i < 20; i += 1) simulation.step()
+      const after = simulation.getPointPositionsArray()
+      // point 5 froze where it was; its unpinned neighbor moved
+      expect(after[10]).toBeCloseTo(before[10] as number, 3)
+      expect(after[11]).toBeCloseTo(before[11] as number, 3)
+      expect(Math.hypot((after[8] as number) - (before[8] as number), (after[9] as number) - (before[9] as number))).toBeGreaterThan(1)
+    } finally {
+      simulation.destroy()
+    }
+  })
+
+  it('sanitizes the pinned set and reads it back: impossible entries drop, future ones stay', async () => {
+    const simulation = await createSimulation()
+    try {
+      simulation.setPinnedPoints([3, -1, 2.5, 99, 3])
+      expect(simulation.isPointPinned(3)).toBe(true)
+      expect(simulation.isPointPinned(99)).toBe(true)
+      expect(simulation.isPointPinned(-1)).toBe(false)
+      expect(simulation.isPointPinned(2.5)).toBe(false)
+      expect(simulation.isPointPinned(2)).toBe(false)
+      simulation.setPinnedPoint(99, false)
+      expect(simulation.isPointPinned(99)).toBe(false)
+      expect(simulation.isPointPinned(3)).toBe(true)
+      simulation.setPinnedPoints(null)
+      expect(simulation.isPointPinned(3)).toBe(false)
+    } finally {
+      simulation.destroy()
+    }
+  })
+
   it('setConfig toggles enableSimulation with the module lifecycle', async () => {
     const onSimulationEnd = vi.fn()
     const simulation = await createSimulation({ ...SIMULATION_CONFIG, onSimulationEnd })
