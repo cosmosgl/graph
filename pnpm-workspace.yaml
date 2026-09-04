@@ -1,0 +1,10 @@
+# The workspace root is the publishable @cosmos.gl/graph package itself;
+# integration packages (deck.gl layers, future host adapters) live under
+# integrations/ and depend on it via the workspace: protocol.
+packages:
+  - integrations/*
+
+# pnpm 10 blocks dependency lifecycle scripts by default; esbuild (vite's
+# platform binary) is the only dependency in the tree that needs one.
+onlyBuiltDependencies:
+  - esbuild
