@@ -25,12 +25,8 @@ jobs:
         uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v5
-      - name: Cache dependencies
-        uses: actions/cache@v4
-        with:
-          path: ~/.npm
-          key: npm-${{ hashFiles('package-lock.json') }}
-          restore-keys: npm-
+      # Reads the pnpm version to install from the packageManager field.
+      - uses: pnpm/action-setup@v6
       # engines.node in package.json is the single home of the supported Node
       # version; deploy builds on its floor, same as ci.yml.
       - id: node
@@ -39,8 +35,12 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: ${{ steps.node.outputs.floor }}
-      - run: npm ci
-      - run: npm run build:storybook -- -o _site
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      # No `--` separator: npm consumed it, pnpm forwards it literally and
+      # storybook then treats `-o _site` as positional text and builds to the
+      # default directory instead.
+      - run: pnpm run build:storybook -o _site
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
 

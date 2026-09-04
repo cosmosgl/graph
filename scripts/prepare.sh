@@ -1,7 +1,7 @@
 #!/bin/sh
 # Configures core.hooksPath so .githooks/pre-commit runs for this checkout.
 #
-# Run via the "prepare" npm script on every `npm install`/`npm ci`. Silently
+# Run via the "prepare" script on every `pnpm install`. Silently
 # does nothing when there's no git working tree to configure (e.g. this
 # package installed as a registry/tarball dependency elsewhere) -- but if we
 # ARE inside a real working tree and the config write itself fails

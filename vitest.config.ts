@@ -4,7 +4,7 @@ import { playwright } from '@vitest/browser-playwright'
 
 // cosmos.gl is a WebGL 2 engine — its tests need a real GPU context, not a DOM
 // emulation, so the suite runs in headless Chromium (SwiftShader) through
-// vitest browser mode. `npm test` runs it once; `npm run test:watch` watches.
+// vitest browser mode. `pnpm test` runs it once; `pnpm run test:watch` watches.
 // eslint-disable-next-line import/no-default-export
 export default defineConfig({
   resolve: {
