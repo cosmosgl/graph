@@ -60,14 +60,15 @@ graph visualization; positions only ⇒ a point/scatter visualization.
 
 ## Dev workflow
 
-Requires Node ≥ 22, npm ≥ 10.
+Requires Node ≥ 22, pnpm ≥ 10 (the repo is a pnpm workspace: the root is the publishable
+`@cosmos.gl/graph` package; integration packages live under `integrations/*`).
 
-- `npm run storybook` — the primary dev loop (live examples at `:6006`). Per `CONTRIBUTING.md`, add or
+- `pnpm run storybook` — the primary dev loop (live examples at `:6006`). Per `CONTRIBUTING.md`, add or
   update a Storybook example when you add a feature or change configuration / public methods.
-- `npm run build` — production build (Vite, ES + UMD).
-- `npm run watch` — rebuild on change.
-- `npm run lint` — ESLint over `src` (`lint-staged` runs on commit).
-- `npm run typecheck` — `tsc --noEmit` over everything we author, stories and `test/` included
+- `pnpm run build` — production build (Vite, ES + UMD).
+- `pnpm run watch` — rebuild on change.
+- `pnpm run lint` — ESLint over `src` (`lint-staged` runs on commit).
+- `pnpm run typecheck` — `tsc --noEmit` over everything we author, stories and `test/` included
   (the base `tsconfig.json` drives declaration emit, so it is scoped to what ships and excludes
   `src/stories`; `tsconfig.typecheck.json` widens the program). **Ensure the project lints,
   typechecks, and builds before opening a PR.**
