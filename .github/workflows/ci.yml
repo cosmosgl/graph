@@ -16,7 +16,11 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
+      # This workflow runs PR-controlled code; never leave the GITHUB_TOKEN
+      # persisted in .git/config for it to read.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       # Reads the pnpm version to install from the packageManager field.
       - uses: pnpm/action-setup@v6
       # engines.node in package.json is the single home of the supported Node
