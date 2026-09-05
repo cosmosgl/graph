@@ -2,6 +2,8 @@ import type { Meta } from '@storybook/html'
 
 import { CosmosStoryProps } from '@/graph/stories/create-cosmos'
 import { createStory, Story } from '@/graph/stories/create-story'
+import cosmosPointsLayerRaw from '../../integrations/deck-layers/src/cosmos-points-layer?raw'
+import cosmosLinksLayerRaw from '../../integrations/deck-layers/src/cosmos-links-layer?raw'
 import { deckGlReadback } from './integrations/deck-gl-readback'
 import { deckGlZeroCopy } from './integrations/deck-gl-zero-copy'
 import { deckGlCosmosRendering } from './integrations/deck-gl-cosmos-rendering'
@@ -9,7 +11,6 @@ import { deckGlCosmosRendering } from './integrations/deck-gl-cosmos-rendering'
 import deckGlReadbackRaw from './integrations/deck-gl-readback?raw'
 import deckGlZeroCopyRaw from './integrations/deck-gl-zero-copy?raw'
 import deckGlCosmosRenderingRaw from './integrations/deck-gl-cosmos-rendering?raw'
-import cosmosDeckLayersRaw from './integrations/cosmos-deck-layers?raw'
 import generateMeshDataRaw from './generate-mesh-data?raw'
 
 // Embedding cosmos.gl in host rendering frameworks. Every story runs the
@@ -33,7 +34,8 @@ export const DeckGlZeroCopy: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: deckGlZeroCopyRaw },
-      { name: 'Layers', code: cosmosDeckLayersRaw },
+      { name: 'CosmosPointsLayer', code: cosmosPointsLayerRaw },
+      { name: 'CosmosLinksLayer', code: cosmosLinksLayerRaw },
       { name: 'generate-mesh-data', code: generateMeshDataRaw },
     ],
   },
