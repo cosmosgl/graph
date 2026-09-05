@@ -4,6 +4,36 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+catalogs:
+  default:
+    '@deck.gl/core':
+      specifier: ~9.3.0
+      version: 9.3.10
+    '@deck.gl/layers':
+      specifier: ~9.3.0
+      version: 9.3.10
+    '@luma.gl/core':
+      specifier: ~9.3.6
+      version: 9.3.6
+    '@luma.gl/engine':
+      specifier: ~9.3.6
+      version: 9.3.6
+    '@luma.gl/shadertools':
+      specifier: ~9.3.6
+      version: 9.3.6
+    '@luma.gl/webgl':
+      specifier: ~9.3.6
+      version: 9.3.6
+    typescript:
+      specifier: ^5.9.3
+      version: 5.9.3
+    vite:
+      specifier: ^6.4.3
+      version: 6.4.3
+    vite-plugin-dts:
+      specifier: ^4.3.0
+      version: 4.3.0
+
 importers:
 
   .:
@@ -46,10 +76,10 @@ importers:
         version: 4.1.0
     devDependencies:
       '@deck.gl/core':
-        specifier: ~9.3.0
+        specifier: 'catalog:'
         version: 9.3.10
       '@deck.gl/layers':
-        specifier: ~9.3.0
+        specifier: 'catalog:'
         version: 9.3.10(@deck.gl/core@9.3.10)(@loaders.gl/core@4.4.4)(@luma.gl/core@9.3.6)(@luma.gl/engine@9.3.6(@luma.gl/core@9.3.6)(@luma.gl/shadertools@9.3.6(@luma.gl/core@9.3.6)))
       '@interacta/css-labels':
         specifier: ^0.6.0
@@ -58,16 +88,16 @@ importers:
         specifier: ^1.0.4
         version: 1.0.4(@storybook/addons@7.6.17(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@storybook/api@7.6.17(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(@storybook/components@8.6.12(storybook@8.6.18))(@storybook/manager@8.4.7(storybook@8.6.18))(@storybook/preview@8.4.7(storybook@8.6.18))(react@18.3.1)
       '@luma.gl/core':
-        specifier: ~9.3.6
+        specifier: 'catalog:'
         version: 9.3.6
       '@luma.gl/engine':
-        specifier: ~9.3.6
+        specifier: 'catalog:'
         version: 9.3.6(@luma.gl/core@9.3.6)(@luma.gl/shadertools@9.3.6(@luma.gl/core@9.3.6))
       '@luma.gl/shadertools':
-        specifier: ~9.3.6
+        specifier: 'catalog:'
         version: 9.3.6(@luma.gl/core@9.3.6)
       '@luma.gl/webgl':
-        specifier: ~9.3.6
+        specifier: 'catalog:'
         version: 9.3.6(@luma.gl/core@9.3.6)
       '@storybook/addon-docs':
         specifier: ^8.4.5
@@ -172,17 +202,41 @@ importers:
         specifier: ^8.4.5
         version: 8.6.18
       typescript:
-        specifier: ^5.9.3
+        specifier: 'catalog:'
         version: 5.9.3
       vite:
-        specifier: ^6.4.3
+        specifier: 'catalog:'
         version: 6.4.3(@types/node@25.9.5)(yaml@2.9.0)
       vite-plugin-dts:
-        specifier: ^4.3.0
+        specifier: 'catalog:'
         version: 4.3.0(@types/node@25.9.5)(rollup@4.62.2)(typescript@5.9.3)(vite@6.4.3(@types/node@25.9.5)(yaml@2.9.0))
       vitest:
         specifier: ^4.1.11
         version: 4.1.11(@types/node@25.9.5)(@vitest/browser-playwright@4.1.11)(vite@6.4.3(@types/node@25.9.5)(yaml@2.9.0))
+
+  integrations/deck-layers:
+    devDependencies:
+      '@cosmos.gl/graph':
+        specifier: workspace:^
+        version: link:../..
+      '@deck.gl/core':
+        specifier: 'catalog:'
+        version: 9.3.10
+      '@luma.gl/core':
+        specifier: 'catalog:'
+        version: 9.3.6
+      '@luma.gl/engine':
+        specifier: 'catalog:'
+        version: 9.3.6(@luma.gl/core@9.3.6)(@luma.gl/shadertools@9.3.6(@luma.gl/core@9.3.6))
+      typescript:
+        specifier: 'catalog:'
+        version: 5.9.3
+      vite:
+        specifier: 'catalog:'
+        version: 6.4.3(@types/node@25.9.5)(yaml@2.9.0)
+      vite-plugin-dts:
+        specifier: 'catalog:'
+        version: 4.3.0(@types/node@25.9.5)(rollup@4.62.2)(typescript@5.9.3)(vite@6.4.3(@types/node@25.9.5)(yaml@2.9.0))
 
 packages:
 

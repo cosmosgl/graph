@@ -40,6 +40,10 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@/graph': resolve(__dirname, 'src/'),
         '@cosmos.gl/graph': resolve(__dirname, 'src/'),
+        // Storybook merges this config, so stories resolve the workspace
+        // package to live source; an alias instead of a root devDependency
+        // keeps the workspace free of a root↔package dependency cycle.
+        '@cosmos.gl/deck-layers': resolve(__dirname, 'integrations/deck-layers/src/'),
       },
     },
   }

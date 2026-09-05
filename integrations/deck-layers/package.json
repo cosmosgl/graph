@@ -1,0 +1,53 @@
+{
+  "name": "@cosmos.gl/deck-layers",
+  "version": "3.5.0-beta.1",
+  "description": "deck.gl layers rendering the cosmos.gl GPU force simulation — zero-copy position sampling on a shared luma.gl device",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/cosmosgl/graph.git",
+    "directory": "integrations/deck-layers"
+  },
+  "type": "module",
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build",
+    "watch": "vite build --watch",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
+    "prepublishOnly": "pnpm run build"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "keywords": [
+    "deck.gl",
+    "graph",
+    "webgl",
+    "force",
+    "simulation",
+    "visualization",
+    "layers"
+  ],
+  "homepage": "https://cosmosgl.github.io/graph",
+  "author": "cosmos.gl",
+  "peerDependencies": {
+    "@cosmos.gl/graph": "workspace:^",
+    "@deck.gl/core": "^9.3.0",
+    "@luma.gl/core": "^9.3.0",
+    "@luma.gl/engine": "^9.3.0"
+  },
+  "devDependencies": {
+    "@cosmos.gl/graph": "workspace:^",
+    "@deck.gl/core": "catalog:",
+    "@luma.gl/core": "catalog:",
+    "@luma.gl/engine": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-dts": "catalog:"
+  }
+}

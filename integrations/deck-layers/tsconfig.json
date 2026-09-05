@@ -1,0 +1,28 @@
+{
+  // Build config for @cosmos.gl/deck-layers: drives declaration emit into
+  // dist (via vite-plugin-dts), so it is scoped to what ships and excludes
+  // src/stories; tsconfig.typecheck.json widens the program.
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@cosmos.gl/graph": ["../../src/"],
+      "@cosmos.gl/graph/*": ["../../src/*"],
+      "@/graph": ["../../src/"],
+      "@/graph/*": ["../../src/*"]
+    },
+    "outDir": "dist"
+  },
+  "include": [
+    "./src/**/*",
+    // Root sources reach this program through the @cosmos.gl/graph path
+    // alias; their ambient module declarations (`*?raw` shader imports) only
+    // arrive via include.
+    "../../src/declaration.d.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "src/stories"
+  ]
+}

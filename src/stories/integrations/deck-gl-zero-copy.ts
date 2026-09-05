@@ -1,9 +1,9 @@
 import { Deck, OrthographicView } from '@deck.gl/core'
 import type { Device } from '@luma.gl/core'
 import { GraphSimulation, defaultConfigValues } from '@cosmos.gl/graph'
+import { CosmosPointsLayer, CosmosLinksLayer } from '@cosmos.gl/deck-layers'
 
 import { generateMeshData } from '../generate-mesh-data'
-import { CosmosPointsLayer, CosmosLinksLayer } from './cosmos-deck-layers'
 
 /**
  * Shared-device, zero-copy deck.gl integration.
