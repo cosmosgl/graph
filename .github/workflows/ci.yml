@@ -16,7 +16,13 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
+      # This workflow runs PR-controlled code; never leave the GITHUB_TOKEN
+      # persisted in .git/config for it to read.
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # Reads the pnpm version to install from the packageManager field.
+      - uses: pnpm/action-setup@v6
       # engines.node in package.json is the single home of the supported Node
       # version; CI verifies on its floor.
       - id: node
@@ -24,9 +30,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ steps.node.outputs.floor }}
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
+      # Covers stories and tests too, which the build never compiles, and exits
+      # non-zero on its own.
+      - run: pnpm run typecheck
       # The build exits 0 even when TypeScript reports errors; the grep turns
       # them into a failure.
       - name: Build
@@ -34,10 +43,10 @@ jobs:
         # crash would exit through tee as 0 and only the grep would judge.
         run: |
           set -o pipefail
-          npm run build 2>&1 | tee build.log
+          pnpm run build 2>&1 | tee build.log
           ! grep -q "error TS" build.log
-      - run: npm run build:storybook
+      - run: pnpm run build:storybook
       # Advisories reachable from the published package only; dev-tooling
       # advisories are tracked but must not block unrelated work.
       - name: Runtime dependency audit
-        run: npm audit --omit=dev --audit-level=high
+        run: pnpm audit --prod --audit-level=high

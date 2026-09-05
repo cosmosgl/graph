@@ -1,0 +1,25 @@
+# The workspace root is the publishable @cosmos.gl/graph package itself;
+# integration packages (deck.gl layers, future host adapters) live under
+# integrations/ and depend on it via the workspace: protocol.
+packages:
+  - integrations/*
+
+# Single home for the versions every workspace package must agree on. The
+# luma.gl pins are load-bearing: a Device shared between cosmos and a host
+# requires both to resolve the same @luma.gl/core, and deck ~9.3 pairs with
+# luma ~9.3. Peer ranges stay looser (^9.3.0) in each package's manifest.
+catalog:
+  '@deck.gl/core': ~9.3.0
+  '@deck.gl/layers': ~9.3.0
+  '@luma.gl/core': ~9.3.6
+  '@luma.gl/engine': ~9.3.6
+  '@luma.gl/shadertools': ~9.3.6
+  '@luma.gl/webgl': ~9.3.6
+  typescript: ^5.9.3
+  vite: ^6.4.3
+  vite-plugin-dts: ^4.3.0
+
+# pnpm 10 blocks dependency lifecycle scripts by default; esbuild (vite's
+# platform binary) is the only dependency in the tree that needs one.
+onlyBuiltDependencies:
+  - esbuild

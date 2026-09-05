@@ -208,10 +208,11 @@ export const addRemovePoints = (): { graph: Graph; div: HTMLDivElement; destroy?
       if (source !== undefined && target !== undefined) remappedLinks.push(source, target)
     }
     links = remappedLinks
-    pointPositions = active.flatMap((slot) => [pointPositions[slot * 2], pointPositions[slot * 2 + 1]])
+    // Every slot in `active` is in range, so the reads below can't be undefined
+    pointPositions = active.flatMap((slot) => [pointPositions[slot * 2] as number, pointPositions[slot * 2 + 1] as number])
     pointColors = active.flatMap((slot) => pointColors.slice(slot * 4, slot * 4 + 4))
-    pointSizes = active.map((slot) => pointSizes[slot])
-    pointIds = active.map((slot) => pointIds[slot])
+    pointSizes = active.map((slot) => pointSizes[slot] as number)
+    pointIds = active.map((slot) => pointIds[slot] as number)
     update(0) // snap the renumber so nothing visibly moves
   }
 

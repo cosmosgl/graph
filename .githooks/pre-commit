@@ -2,7 +2,7 @@
 # Version-controlled pre-commit hook.
 #
 # Enabled via `git config core.hooksPath .githooks` (set automatically by the
-# `prepare` npm script). Because it lives in the tracked tree it is present in
+# `prepare` script). Because it lives in the tracked tree it is present in
 # every worktree, and because it resolves the toolchain from the nearest
 # node_modules ABOVE the working tree, it also works from git worktrees that have
 # no node_modules of their own — they share the parent checkout's dependencies.
@@ -32,7 +32,7 @@ while [ "$dir" != "/" ] && [ ! -x "$dir/node_modules/.bin/lint-staged" ]; do
 done
 
 if [ ! -x "$dir/node_modules/.bin/lint-staged" ]; then
-  echo "pre-commit: lint-staged not found — run 'npm install' in this repo." >&2
+  echo "pre-commit: lint-staged not found — run 'pnpm install' in this repo." >&2
   exit 1
 fi
 

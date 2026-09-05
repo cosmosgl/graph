@@ -43,6 +43,7 @@ const preview: Preview = {
             'Updating Data',
             'Showcase',
             'Performance',
+            'Integrations',
           ],
         ],
       },

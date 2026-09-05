@@ -29,6 +29,8 @@ Install the package:
 npm install @cosmos.gl/graph
 ```
 
+> **Note:** [luma.gl](https://luma.gl) (`@luma.gl/core`, `@luma.gl/engine`, `@luma.gl/shadertools`, `@luma.gl/webgl`, compatible range `^9.3.0`) is a peer dependency. npm 7+ installs it automatically; with Yarn 1 or pnpm configurations that skip auto-installing peers, add it explicitly. Keeping luma.gl as a peer lets cosmos.gl share one luma.gl installation — and one GPU `Device` — with hosts like deck.gl.
+
 Get the data, [configure](https://cosmosgl.github.io/graph/?path=/docs/configuration--docs) the graph and run the simulation:
 
 ```ts

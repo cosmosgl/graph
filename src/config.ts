@@ -14,6 +14,16 @@ export interface GraphConfigInterface {
    */
   enableSimulation: boolean;
   /**
+   * If set to `false`, cosmos.gl never schedules its own `requestAnimationFrame`
+   * loop. The host application drives the graph instead: call `step()` to advance
+   * the simulation and `renderOneFrame()` to draw. Use this when embedding cosmos.gl
+   * in an application with its own frame scheduler (deck.gl, map renderers, game
+   * engines, notebooks).
+   * Can be toggled at runtime using `setConfig` or `setConfigPartial`.
+   * Default value: `true`
+   */
+  enableRenderLoop: boolean;
+  /**
    * Transition duration in milliseconds.
    * Default value: `800`
    * @note When a position transition is triggered via `setPointPositions()`, the simulation
@@ -824,6 +834,45 @@ export type Complete<T> = { [K in keyof Required<T>]: T[K] }
  * to their defaults, not retain their previous values.
  */
 export type GraphConfig = Partial<GraphConfigInterface>
+
+/**
+ * The subset of the configuration that drives the force simulation — everything
+ * `GraphSimulation` consumes. `pointDefaultSize` is included because the
+ * collision force derives point radii from sizes when no explicit collision
+ * radius is set. Rendering, interaction, and transition options live only on
+ * `GraphConfigInterface`.
+ */
+export type GraphSimulationConfigInterface = Pick<GraphConfigInterface,
+  | 'enableSimulation'
+  | 'spaceSize'
+  | 'pointDefaultSize'
+  | 'simulationDecay'
+  | 'simulationGravity'
+  | 'simulationCenter'
+  | 'simulationRepulsion'
+  | 'simulationRepulsionTheta'
+  | 'simulationLinkSpring'
+  | 'simulationLinkDistance'
+  | 'simulationLinkDistRandomVariationRange'
+  | 'simulationFriction'
+  | 'simulationCluster'
+  | 'simulationCollision'
+  | 'simulationCollisionRadius'
+  | 'simulationCollisionPadding'
+  | 'randomSeed'
+  | 'rescalePositions'
+  | 'onSimulationStart'
+  | 'onSimulationTick'
+  | 'onSimulationEnd'
+  | 'onSimulationPause'
+  | 'onSimulationUnpause'
+>
+
+/**
+ * Configuration options for the `GraphSimulation` constructor and its
+ * `setConfig()` method. All properties are optional.
+ */
+export type GraphSimulationConfig = Partial<GraphSimulationConfigInterface>
 
 /**
  * Returns a fresh copy of `defaultConfigValues` with arrays cloned so each Graph instance

@@ -1,0 +1,19 @@
+{
+  // Whole-repo typecheck (`pnpm run typecheck`). The base config is scoped to what
+  // ships — it drives declaration emit, so `src/stories` is excluded there. This
+  // one widens the program to everything we author (stories and tests included)
+  // and emits nothing, so CI checks the examples users actually read.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "declaration": false
+  },
+  "include": [
+    "./src/**/*",
+    "./test/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

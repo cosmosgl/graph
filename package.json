@@ -1,6 +1,6 @@
 {
   "name": "@cosmos.gl/graph",
-  "version": "3.4.1",
+  "version": "3.5.0-beta.1",
   "description": "GPU-based force graph layout and rendering",
   "jsdelivr": "dist/index.min.js",
   "main": "dist/index.js",
@@ -14,18 +14,21 @@
   ],
   "scripts": {
     "prepare": "sh scripts/prepare.sh",
-    "build": "vite build --mode es && vite build --mode umd",
+    "build": "vite build --mode es && vite build --mode umd && pnpm -r run build",
     "watch": "vite build --watch",
-    "lint": "eslint --cache ./src --ext .ts --ignore-path .gitignore",
-    "lint:staged": "npx lint-staged",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.typecheck.json && pnpm -r run typecheck",
+    "lint": "eslint --cache ./src ./test ./integrations --ext .ts --ignore-path .gitignore",
+    "lint:staged": "pnpm exec lint-staged",
     "storybook": "storybook dev -p 6006",
     "build:storybook": "storybook build",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "pnpm run build"
   },
   "engines": {
-    "node": ">=22.0.0",
-    "npm": ">=10.0.0"
+    "node": ">=22.0.0"
   },
+  "packageManager": "pnpm@10.15.0",
   "keywords": [
     "graph",
     "webgl",
@@ -36,11 +39,20 @@
   "homepage": "https://cosmosgl.github.io/graph",
   "author": "cosmos.gl",
   "devDependencies": {
+    "@deck.gl/core": "catalog:",
+    "@deck.gl/layers": "catalog:",
     "@interacta/css-labels": "^0.6.0",
     "@jls-digital/storybook-addon-code": "^1.0.4",
+    "@luma.gl/core": "catalog:",
+    "@luma.gl/engine": "catalog:",
+    "@luma.gl/shadertools": "catalog:",
+    "@luma.gl/webgl": "catalog:",
+    "@storybook/addon-docs": "^8.4.5",
     "@storybook/addon-essentials": "^8.4.5",
     "@storybook/addon-interactions": "^8.4.5",
     "@storybook/blocks": "^8.4.5",
+    "@storybook/manager-api": "^8.4.5",
+    "@storybook/theming": "^8.4.5",
     "@storybook/html": "^8.4.5",
     "@storybook/html-vite": "^8.4.5",
     "@storybook/test": "^8.4.5",
@@ -55,6 +67,8 @@
     "@types/d3-zoom": "^3.0.1",
     "@typescript-eslint/eslint-plugin": "^6.21.0",
     "@typescript-eslint/parser": "^6.21.0",
+    "@vitest/browser": "^4.1.11",
+    "@vitest/browser-playwright": "^4.1.11",
     "d3-scale-chromatic": "^3.1.0",
     "eslint": "^8.57.1",
     "eslint-config-standard": "^17.0.0",
@@ -64,17 +78,21 @@
     "eslint-plugin-storybook": "^0.11.1",
     "eslint-plugin-unicorn": "^43.0.1",
     "lint-staged": "^13.0.3",
+    "playwright": "^1.62.1",
     "remark-gfm": "^4.0.0",
     "storybook": "^8.4.5",
-    "typescript": "^5.9.3",
-    "vite": "^6.4.3",
-    "vite-plugin-dts": "^4.3.0"
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vite-plugin-dts": "catalog:",
+    "vitest": "^4.1.11"
+  },
+  "peerDependencies": {
+    "@luma.gl/core": "^9.3.0",
+    "@luma.gl/engine": "^9.3.0",
+    "@luma.gl/shadertools": "^9.3.0",
+    "@luma.gl/webgl": "^9.3.0"
   },
   "dependencies": {
-    "@luma.gl/core": "~9.3.6",
-    "@luma.gl/engine": "~9.3.6",
-    "@luma.gl/shadertools": "~9.3.6",
-    "@luma.gl/webgl": "~9.3.6",
     "d3-array": "^3.2.0",
     "d3-color": "^3.1.0",
     "d3-drag": "^3.0.0",

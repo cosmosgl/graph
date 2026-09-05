@@ -1,15 +1,15 @@
-import { Graph } from '@cosmos.gl/graph'
+import { Graph, GraphSimulation } from '@cosmos.gl/graph'
 import type { StoryObj } from '@storybook/html'
 import { CosmosStoryProps } from '@/graph/stories/create-cosmos'
 
-export type Story = StoryObj<CosmosStoryProps & { graph: Graph; destroy?: () => void; _disposed?: boolean }>;
+export type Story = StoryObj<CosmosStoryProps & { graph: Graph | GraphSimulation; destroy?: () => void; _disposed?: boolean }>;
 
 export const createStory: (storyFunction: () => {
-  graph: Graph;
+  graph: Graph | GraphSimulation;
   div: HTMLDivElement;
   destroy?: () => void;
 } | Promise<{
-  graph: Graph;
+  graph: Graph | GraphSimulation;
   div: HTMLDivElement;
   destroy?: () => void;
 }>) => Story = (storyFunction) => ({

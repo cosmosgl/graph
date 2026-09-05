@@ -1,20 +1,12 @@
 import { select, Selection } from 'd3-selection'
 import 'd3-transition'
 import { easeQuadInOut, easeQuadIn, easeQuadOut } from 'd3-ease'
-import { D3ZoomEvent } from 'd3-zoom'
+import { D3ZoomEvent, zoomIdentity } from 'd3-zoom'
 import { D3DragEvent } from 'd3-drag'
-import { Device, Framebuffer, luma } from '@luma.gl/core'
-import { webgl2Adapter } from '@luma.gl/webgl'
+import { Device, Framebuffer, type RenderPass } from '@luma.gl/core'
 
 import { applyConfig, createDefaultConfig, resetConfigToDefaults, GraphConfigInterface, type GraphConfig } from '@/graph/config'
 import { getRgbaColor, getMaxPointSize, readPixels, extractIndicesFromPixels, sanitizeHtml, isPointAbsent, generateRandomId } from '@/graph/helper'
-import { ForceCenter } from '@/graph/modules/ForceCenter'
-import { ForceCollision } from '@/graph/modules/ForceCollision'
-import { ForceGravity } from '@/graph/modules/ForceGravity'
-import { ForceLink, LinkDirection } from '@/graph/modules/ForceLink'
-import { ForceManyBody } from '@/graph/modules/ForceManyBody'
-import { ForceMouse } from '@/graph/modules/ForceMouse'
-import { Clusters } from '@/graph/modules/Clusters'
 import { FPSMonitor } from '@/graph/modules/FPSMonitor'
 import { GraphData } from '@/graph/modules/GraphData'
 import { Lines } from '@/graph/modules/Lines'
@@ -24,6 +16,7 @@ import { Store, ALPHA_MIN, MAX_HOVER_DETECTION_DELAY, MIN_MOUSE_MOVEMENT_THRESHO
 import { Transition, TransitionProperty } from '@/graph/modules/Transition'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
+import { GraphSimulation, type PointPositionTexture } from '@/graph/simulation'
 
 /** Touch/pen long-press → context menu thresholds. */
 const LONG_PRESS_DURATION_MS = 500
@@ -32,23 +25,23 @@ const LONG_PRESS_MOVE_THRESHOLD_PX = 10
 export class Graph {
   /** Current graph configuration. Always fully populated with default values for any unset properties. */
   public config: GraphConfigInterface = createDefaultConfig()
-  public graph = new GraphData(this.config)
+  /** The data model holding the ingested input arrays (owned by the simulation). */
+  public readonly graph: GraphData
   /** Promise that resolves when the graph is fully initialized and ready to use */
   public readonly ready: Promise<void>
   /** Whether the graph has completed initialization */
   public isReady = false
-  private readonly deviceInitPromise: Promise<Device>
+  /**
+   * The force simulation this graph composes with its renderer and interaction
+   * controllers. Owns the device, the data model, the position engine, and the
+   * force modules; `Graph` layers rendering, view state, and input on top.
+   */
+  private readonly simulation: GraphSimulation
   /** Canvas element, assigned asynchronously during device initialization */
   private canvas!: HTMLCanvasElement
   private attributionDivElement: HTMLElement | undefined
   private canvasD3Selection: Selection<HTMLCanvasElement, undefined, null, undefined> | undefined
   private device: Device | undefined
-  /**
-   * Tracks whether this Graph instance owns the device and should destroy it on cleanup.
-   * Set to `true` when Graph creates its own device, `false` when using an external device.
-   * When `false`, the external device lifecycle is managed by the user.
-   */
-  private shouldDestroyDevice: boolean
   private requestAnimationFrameId = 0
   /**
    * Detects canvas element resizes:
@@ -83,20 +76,14 @@ export class Graph {
    * instance's destroy() removes another's.
    */
   private readonly _instanceId = generateRandomId()
-  private store = new Store()
+  /** The simulation's store — shared so both halves observe one engine state. */
+  private readonly store: Store
+  /** The simulation's position engine — aliased for the render/interaction code. */
   private points: Points | undefined
   private lines: Lines | undefined
-  private forceGravity: ForceGravity | undefined
-  private forceCenter: ForceCenter | undefined
-  private forceManyBody: ForceManyBody | undefined
-  private forceLinkIncoming: ForceLink | undefined
-  private forceLinkOutgoing: ForceLink | undefined
-  private forceMouse: ForceMouse | undefined
-  private forceCollision: ForceCollision | undefined
-  private clusters: Clusters | undefined
-  private zoomInstance = new Zoom(this.store, this.config)
-  private transition = new Transition(this.config)
-  private dragInstance = new Drag(this.store, this.config, this.transition)
+  private readonly zoomInstance: Zoom
+  private readonly transition: Transition
+  private readonly dragInstance: Drag
 
   private fpsMonitor: FPSMonitor | undefined
 
@@ -136,9 +123,9 @@ export class Graph {
   private _isFirstRenderAfterInit = true
   private _fitViewOnInitTimeoutID: number | undefined
 
-  private isPointPositionsUpdateNeeded = false
+  // Render-side update flags; the simulation tracks its own (positions, sizes,
+  // forces, clusters) and applies them in applyDataUpdates().
   private isPointColorUpdateNeeded = false
-  private isPointSizeUpdateNeeded = false
   private isPointShapeUpdateNeeded = false
   private isPointImageIndicesUpdateNeeded = false
   private isLinksUpdateNeeded = false
@@ -146,292 +133,105 @@ export class Graph {
   private isLinkWidthUpdateNeeded = false
   private isLinkArrowUpdateNeeded = false
   private isLinkStyleUpdateNeeded = false
-  private isPointClusterUpdateNeeded = false
-  private isForceManyBodyUpdateNeeded = false
-  private isForceLinkUpdateNeeded = false
-  private isForceCenterUpdateNeeded = false
   private isPointImageSizesUpdateNeeded = false
-
-  // Whether the collision force's GPU resources (grid/size textures, programs)
-  // are allocated and match the current data. Allocated lazily the first time
-  // collision runs, so a graph that never enables it pays no memory cost.
-  private isForceCollisionReady = false
 
   private _isDestroyed = false
 
   /**
+   * Simulation-only instance (constructed without a `div`): owns no canvas, installs
+   * no input handlers, never schedules frames, and never clears or submits the device.
+   */
+  private readonly _isHeadless: boolean
+
+  /**
    * Create a new Graph instance.
-   * @param div - Container element for the graph canvas.
+   * @param div - Container element for the graph canvas. Pass `null` (or `undefined`)
+   *   to create a **headless** simulation-only instance: no canvas is adopted or
+   *   reparented, no zoom/drag/pointer/keyboard listeners are installed, no internal
+   *   render loop runs, and an externally supplied device is never cleared, submitted,
+   *   resized, or reparented. Drive the simulation with `step()` and read results via
+   *   `getPointPositions*()` or `getPointPositionTexture()`. View-dependent APIs
+   *   (zoom, fit, screen-space queries) are inert, and transitions snap instead of
+   *   animating (nothing advances them without a render loop).
    * @param config - Optional configuration. Unset properties use default values.
    */
   public constructor (
-    div: HTMLDivElement,
+    div: HTMLDivElement | null | undefined,
     config?: GraphConfig,
     devicePromise?: Promise<Device>
   ) {
     if (config) applyConfig(this.config, config)
+    this._isHeadless = !div
 
-    if (devicePromise) {
-      this.deviceInitPromise = devicePromise
-      this.shouldDestroyDevice = false // External device - Graph does not own it
-    } else {
-      const canvas = document.createElement('canvas')
-      this.deviceInitPromise = this.createDevice(canvas)
-      this.shouldDestroyDevice = true // Graph created the device and owns it
-    }
+    // The simulation owns the device, the data model, and the position engine.
+    // Graph shares its config object with it so setConfig() reaches both halves,
+    // and aliases the simulation's store/data for the render/interaction code.
+    this.simulation = new GraphSimulation(undefined, devicePromise, this.config)
+    this.store = this.simulation.store
+    this.graph = this.simulation.data
+    this.zoomInstance = new Zoom(this.store, this.config)
+    this.transition = new Transition(this.config)
+    this.dragInstance = new Drag(this.store, this.config, this.transition)
 
-    const setupPromise = this.deviceInitPromise.then(async device => {
-      if (this._isDestroyed) {
-        // Only destroy the device if Graph owns it
-        if (this.shouldDestroyDevice) {
-          // luma's device.destroy() leaves the canvas context's Resize/Intersection
-          // observers connected — stop them explicitly or they outlive the graph.
-          device.canvasContext?.destroy()
-          device.destroy()
-        }
-        return device
-      }
+    const setupPromise = this.simulation.ready.then(async () => {
+      const device = this.simulation.device
+      if (this._isDestroyed || !device) return
+
       this.device = device
-      this.isReady = true
-      const deviceCanvasContext = this.validateDevice(device)
 
-      // If external device was provided, sync its useDevicePixels with config.pixelRatio
-      if (devicePromise) {
-        deviceCanvasContext.setProps({ useDevicePixels: this.config.pixelRatio })
-      }
+      // Headless: leave the device's canvas context, DOM, and input untouched —
+      // the host owns them. The simulation already did the space-size bookkeeping.
+      if (!this._isHeadless) {
+        const deviceCanvasContext = this.validateDevice(device)
 
-      this.store.div = div
-      const deviceCanvas = deviceCanvasContext.canvas as HTMLCanvasElement
-      // Ensure canvas is in the div
-      if (deviceCanvas.parentNode !== this.store.div) {
-        if (deviceCanvas.parentNode) {
-          deviceCanvas.parentNode.removeChild(deviceCanvas)
+        // If external device was provided, sync its useDevicePixels with config.pixelRatio
+        if (devicePromise) {
+          deviceCanvasContext.setProps({ useDevicePixels: this.config.pixelRatio })
         }
-        this.store.div.appendChild(deviceCanvas)
+
+        this.store.div = div as HTMLDivElement
+        const deviceCanvas = deviceCanvasContext.canvas as HTMLCanvasElement
+        // Ensure canvas is in the div
+        if (deviceCanvas.parentNode !== this.store.div) {
+          if (deviceCanvas.parentNode) {
+            deviceCanvas.parentNode.removeChild(deviceCanvas)
+          }
+          this.store.div.appendChild(deviceCanvas)
+        }
+        this.addAttribution()
+        deviceCanvas.style.width = '100%'
+        deviceCanvas.style.height = '100%'
+        this.canvas = deviceCanvas
+        this.updateCanvasTouchAction()
+
+        // Wait for luma's first canvas measurement — but never wait longer than 500 ms.
+        // luma 9.3 sizes the drawing buffer from a ResizeObserver, which reports after the
+        // current frame's rAF callbacks; rendering before its first measurement draws into
+        // the canvas's default 300×150 buffer, CSS-stretched to a one-frame "zoomed-in"
+        // flash. The timeout keeps init going for canvases mounted in hidden containers,
+        // where the observer stays silent until they become visible.
+        await Promise.race([
+          deviceCanvasContext.initialized,
+          new Promise<void>(resolve => { setTimeout(resolve, 500) }),
+        ])
+        if (this._isDestroyed) return
+
+        // Two observers watch this canvas: this one flags the screen-size sync and
+        // wakes the loop; luma's own resizes the drawing buffer.
+        if (typeof ResizeObserver !== 'undefined') {
+          this.resizeObserver = new ResizeObserver(() => {
+            this._shouldSyncScreenSize = true
+            this.requestRender()
+          })
+          this.resizeObserver.observe(this.canvas)
+        }
       }
-      this.addAttribution()
-      deviceCanvas.style.width = '100%'
-      deviceCanvas.style.height = '100%'
-      this.canvas = deviceCanvas
-      this.updateCanvasTouchAction()
 
-      // Wait for luma's first canvas measurement — but never wait longer than 500 ms.
-      // luma 9.3 sizes the drawing buffer from a ResizeObserver, which reports after the
-      // current frame's rAF callbacks; rendering before its first measurement draws into
-      // the canvas's default 300×150 buffer, CSS-stretched to a one-frame "zoomed-in"
-      // flash. The timeout keeps init going for canvases mounted in hidden containers,
-      // where the observer stays silent until they become visible.
-      await Promise.race([
-        deviceCanvasContext.initialized,
-        new Promise<void>(resolve => { setTimeout(resolve, 500) }),
-      ])
-      if (this._isDestroyed) return device
+      if (!this._isHeadless) this.initInteractions()
 
-      // Two observers watch this canvas: this one flags the screen-size sync and
-      // wakes the loop; luma's own resizes the drawing buffer.
-      if (typeof ResizeObserver !== 'undefined') {
-        this.resizeObserver = new ResizeObserver(() => {
-          this._shouldSyncScreenSize = true
-          this.requestRender()
-        })
-        this.resizeObserver.observe(this.canvas)
-      }
-
-      const w = this.canvas.clientWidth
-      const h = this.canvas.clientHeight
-
-      this.store.adjustSpaceSize(this.config.spaceSize, this.device.limits.maxTextureDimension2D)
-      this.store.setWebGLMaxTextureSize(this.device.limits.maxTextureDimension2D)
-      this.store.updateScreenSize(w, h)
-
-      this.canvasD3Selection = select<HTMLCanvasElement, undefined>(this.canvas)
-        .call(this.dragInstance.behavior)
-        .call(this.zoomInstance.behavior)
-        .on('pointerenter.cosmos', (event: PointerEvent) => {
-          if (!event.isPrimary) return
-          this._isPointerOnCanvas = true
-          this._lastMouseX = event.clientX
-          this._lastMouseY = event.clientY
-          // Drain any hover work that accumulated while the pointer was away
-          // (forced hover check or unchecked mouse movement).
-          this.requestRender()
-        })
-        .on('pointermove.cosmos', (event: PointerEvent) => {
-          if (!event.isPrimary) return
-          this._isPointerOnCanvas = true
-          this._lastMouseX = event.clientX
-          this._lastMouseY = event.clientY
-          this.currentEvent = event
-          this.updateMousePosition(event)
-          this.isRightClickMouse = (event.buttons & 2) !== 0
-
-          // Cancel a pending long-press if the finger drifted past the threshold —
-          // the user is clearly panning/dragging, not holding to open a context menu.
-          if (this._longPressTimerId !== undefined) {
-            const dx = Math.abs(event.clientX - this._longPressStartX)
-            const dy = Math.abs(event.clientY - this._longPressStartY)
-            if (dx > LONG_PRESS_MOVE_THRESHOLD_PX || dy > LONG_PRESS_MOVE_THRESHOLD_PX) {
-              this.cancelLongPress()
-            }
-          }
-
-          this.config.onMouseMove?.(
-            this.store.hoveredPoint?.index,
-            this.store.hoveredPoint?.position,
-            this.currentEvent
-          )
-
-          this.requestRender()
-        })
-        .on('pointerleave.cosmos pointercancel.cosmos', (event: PointerEvent) => {
-          // Non-primary pointers (e.g. second finger of a pinch) leaving must not
-          // flip _isPointerOnCanvas or clear hover — the primary pointer is still down.
-          if (!event.isPrimary) return
-          this.cancelLongPress()
-          this._isPointerOnCanvas = false
-          // Touch tap: pointerdown → pointerup → pointerleave → click
-          // Clearing here would empty hoveredPoint before click reads it.
-          // Keep it — the next tap overwrites it anyway.
-          if (event.pointerType !== 'mouse') return
-          this.currentEvent = event
-
-          // Clear point hover state and trigger callback if needed
-          if (this.store.hoveredPoint !== undefined && this.config.onPointMouseOut) {
-            this.config.onPointMouseOut(event)
-          }
-
-          // Clear link hover state and trigger callback if needed
-          if (this.store.hoveredLinkIndex !== undefined && this.config.onLinkMouseOut) {
-            this.config.onLinkMouseOut(event)
-          }
-
-          // Reset right-click flag
-          this.isRightClickMouse = false
-
-          // Clear hover states
-          this.store.hoveredPoint = undefined
-          this.store.hoveredLinkIndex = undefined
-          // The hovered link was drawn wider in the index pass (hover
-          // hysteresis) — clearing the hover invalidates that buffer.
-          if (this.lines) this.lines.isLinkIndexBufferStale = true
-
-          // Update cursor style after clearing hover states
-          this.updateCanvasCursor()
-
-          // Hover ring / link highlight was cleared — redraw without it
-          this.requestRender()
-        })
-        .on('pointerdown.cosmos', (event: PointerEvent) => {
-          if (!event.isPrimary) return
-          this.currentEvent = event
-          // A new gesture starts fresh — drop any stale suppress flag.
-          this._shouldSuppressNextClick = false
-          // Touch fires no pointermove before touchstart, so hoveredPoint is empty
-          // when d3-drag checks it. Pick here so drag starts, not zoom.
-          // updateMousePosition first — findHoveredItem reads what it writes.
-          this._lastMouseX = event.clientX
-          this._lastMouseY = event.clientY
-          this.updateMousePosition(event)
-          this.findHoveredItem(true)
-          // The immediate pick may have shown/moved the hover ring
-          this.requestRender()
-
-          // Touch/pen long-press → contextmenu. The mouse path already gets
-          // contextmenu from the browser; this fills the gap for touch where
-          // long-press doesn't reliably dispatch contextmenu on canvas.
-          if (event.pointerType !== 'mouse') {
-            this._longPressStartX = event.clientX
-            this._longPressStartY = event.clientY
-            this.cancelLongPress()
-            this._longPressTimerId = window.setTimeout(() => {
-              this._longPressTimerId = undefined
-              if (this._isDestroyed) return
-              // Re-pick in case points moved during the hold (simulation may have
-              // shifted them under the stationary finger).
-              this.findHoveredItem(true)
-              this.requestRender()
-              this._shouldSuppressNextClick = true
-              this.fireContextMenu(event)
-            }, LONG_PRESS_DURATION_MS)
-          }
-        })
-        .on('pointerup.cosmos', (event: PointerEvent) => {
-          if (!event.isPrimary) return
-          // Finger lifted before the long-press window expired — it's a tap.
-          this.cancelLongPress()
-          // pointermove normally updates this flag, but it doesn't fire on a still
-          // release — without this line, forceMouse would keep running.
-          this.isRightClickMouse = (event.buttons & 2) !== 0
-        })
-        .on('click.cosmos', this.onClick.bind(this))
-        .on('contextmenu.cosmos', this.onContextMenu.bind(this))
-
-      select(document)
-        .on(`keydown.cosmos-${this._instanceId}`, (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
-        .on(`keyup.cosmos-${this._instanceId}`, (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
-
-      this.zoomInstance.behavior
-        .on('start.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
-          this.currentEvent = e
-          this.requestRender()
-        })
-        .on('zoom.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
-          const userDriven = !!e.sourceEvent
-          if (userDriven) this.updateMousePosition(e.sourceEvent)
-          this.currentEvent = e
-          this.requestRender()
-        })
-        .on('end.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
-          this.currentEvent = e
-          // Force hover detection on next frame since zoom may have changed what's under the mouse
-          this._shouldForceHoverDetection = true
-          this.requestRender()
-        })
-
-      this.dragInstance.behavior
-        .on('start.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
-          this.currentEvent = e
-          this.updateCanvasCursor()
-          this.requestRender()
-        })
-        .on('drag.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
-          if (this.dragInstance.isActive) {
-            this.updateMousePosition(e)
-          }
-          this.currentEvent = e
-          this.requestRender()
-        })
-        .on('end.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
-          this.currentEvent = e
-          this.updateCanvasCursor()
-          // The drag GPU write happens after the draw pass, so the final
-          // position only becomes visible on the frame scheduled here.
-          this.requestRender()
-        })
-      if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
-      // Zoom level 1 means no zoom (100% scale). defaultConfigValues.initialZoomLevel is undefined,
-      // so we fall back to 1 here as the neutral zoom level when no initial zoom is configured.
-      this.setZoomLevel(this.config.initialZoomLevel ?? 1)
-
-      this.store.maxPointSize = getMaxPointSize(device, this.config.pixelRatio)
-
-      // Initialize simulation state based on enableSimulation config
-      // If simulation is disabled, start with isSimulationRunning = false
-      this.store.isSimulationRunning = this.config.enableSimulation
-
-      this.points = new Points(device, this.config, this.store, this.graph)
-      this.points.transition = this.transition
-      this.lines = new Lines(device, this.config, this.store, this.graph, this.points)
-      if (this.config.enableSimulation) {
-        this.forceGravity = new ForceGravity(device, this.config, this.store, this.graph, this.points)
-        this.forceCenter = new ForceCenter(device, this.config, this.store, this.graph, this.points)
-        this.forceManyBody = new ForceManyBody(device, this.config, this.store, this.graph, this.points)
-        this.forceLinkIncoming = new ForceLink(device, this.config, this.store, this.graph, this.points)
-        this.forceLinkOutgoing = new ForceLink(device, this.config, this.store, this.graph, this.points)
-        this.forceMouse = new ForceMouse(device, this.config, this.store, this.graph, this.points)
-        this.forceCollision = new ForceCollision(device, this.config, this.store, this.graph, this.points)
-      }
-      this.clusters = new Clusters(device, this.config, this.store, this.graph, this.points)
+      this.points = this.simulation.points
+      if (this.points) this.points.transition = this.transition
+      this.lines = new Lines(device, this.config, this.store, this.graph, this.points as Points)
 
       this.store.backgroundColor = getRgbaColor(this.config.backgroundColor)
       this.store.setHoveredPointRingColor(this.config.hoveredPointRingColor)
@@ -447,11 +247,9 @@ export class Graph {
 
       this.store.updateLinkHoveringEnabled(this.config)
 
-      if (this.config.showFPSMonitor) this.fpsMonitor = new FPSMonitor(this.canvas, this.store.div)
+      if (!this._isHeadless && this.config.showFPSMonitor) this.fpsMonitor = new FPSMonitor(this.canvas, this.store.div)
 
-      if (this.config.randomSeed !== undefined) this.store.addRandomSeed(this.config.randomSeed)
-
-      return device
+      this.isReady = true
     })
       .catch(error => {
         this.device = undefined
@@ -549,9 +347,9 @@ export class Graph {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.setPointPositions(pointPositions, dontRescale))) return
-    this.graph.inputPointPositions = pointPositions
-    this.points!.shouldSkipRescale = dontRescale
-    this.isPointPositionsUpdateNeeded = true
+    // The simulation ingests the array and marks its own update flags
+    // (positions, sizes, forces, clusters)
+    this.simulation.setPointPositions(pointPositions, dontRescale)
     const currentPositionTexture = this.points?.currentPositionTexture
     if (currentPositionTexture && !currentPositionTexture.destroyed) {
       // Only positions: the exit/enter fade of default-valued (NaN) channels is
@@ -563,14 +361,9 @@ export class Graph {
     this.isLinksUpdateNeeded = true
     // Point related textures depend on point positions length, so we need to update them
     this.isPointColorUpdateNeeded = true
-    this.isPointSizeUpdateNeeded = true
     this.isPointShapeUpdateNeeded = true
     this.isPointImageIndicesUpdateNeeded = true
     this.isPointImageSizesUpdateNeeded = true
-    this.isPointClusterUpdateNeeded = true
-    this.isForceManyBodyUpdateNeeded = true
-    this.isForceLinkUpdateNeeded = true
-    this.isForceCenterUpdateNeeded = true
   }
 
   /**
@@ -627,8 +420,8 @@ export class Graph {
   public setPointSizes (pointSizes: Float32Array): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setPointSizes(pointSizes))) return
-    this.graph.inputPointSizes = pointSizes
-    this.isPointSizeUpdateNeeded = true
+    // Sizes are a simulation channel too: the collision force derives radii from them
+    this.simulation.setPointSizes(pointSizes)
     this.transition.queue(TransitionProperty.PointSizes)
   }
 
@@ -723,14 +516,14 @@ export class Graph {
   public setLinks (links: Float32Array): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setLinks(links))) return
-    this.graph.inputLinks = links
+    // The simulation ingests the array and marks the link-force rebuild
+    this.simulation.setLinks(links)
     this.isLinksUpdateNeeded = true
     // Links related texture depends on links length, so we need to update it
     this.isLinkColorUpdateNeeded = true
     this.isLinkWidthUpdateNeeded = true
     this.isLinkArrowUpdateNeeded = true
     this.isLinkStyleUpdateNeeded = true
-    this.isForceLinkUpdateNeeded = true
   }
 
   /**
@@ -836,8 +629,7 @@ export class Graph {
   public setLinkStrength (linkStrength: Float32Array): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setLinkStrength(linkStrength))) return
-    this.graph.inputLinkStrength = linkStrength
-    this.isForceLinkUpdateNeeded = true
+    this.simulation.setLinkStrength(linkStrength)
   }
 
   /**
@@ -854,8 +646,7 @@ export class Graph {
   public setPointClusters (pointClusters: (number | undefined)[]): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setPointClusters(pointClusters))) return
-    this.graph.inputPointClusters = pointClusters
-    this.isPointClusterUpdateNeeded = true
+    this.simulation.setPointClusters(pointClusters)
   }
 
   /**
@@ -871,8 +662,7 @@ export class Graph {
   public setClusterPositions (clusterPositions: (number | undefined)[]): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setClusterPositions(clusterPositions))) return
-    this.graph.inputClusterPositions = clusterPositions
-    this.isPointClusterUpdateNeeded = true
+    this.simulation.setClusterPositions(clusterPositions)
   }
 
   /**
@@ -888,8 +678,7 @@ export class Graph {
   public setPointClusterStrength (clusterStrength: Float32Array): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setPointClusterStrength(clusterStrength))) return
-    this.graph.inputClusterStrength = clusterStrength
-    this.isPointClusterUpdateNeeded = true
+    this.simulation.setPointClusterStrength(clusterStrength)
   }
 
   /**
@@ -912,8 +701,77 @@ export class Graph {
   public setPinnedPoints (pinnedIndices: number[] | null): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setPinnedPoints(pinnedIndices))) return
-    this.graph.inputPinnedPoints = pinnedIndices && pinnedIndices.length > 0 ? pinnedIndices : undefined
-    this.points?.updatePinnedStatus()
+    this.simulation.setPinnedPoints(pinnedIndices)
+    this.requestRender()
+  }
+
+  /**
+   * Pins or unpins a single point without replacing the whole pinned set —
+   * a one-texel GPU write instead of the full rebuild `setPinnedPoints` performs.
+   * Designed for interactive hosts that pin a point on drag start and unpin it
+   * on drag end (pair with `setPointPosition` to move it while pinned; check
+   * `isPointPinned` first to restore a deliberate pin on release).
+   * See `setPinnedPoints` for what pinning means.
+   *
+   * @param index - The index of the point.
+   * @param pinned - `true` to pin, `false` to unpin.
+   * @note Each call clones the tracked pinned set to keep later full rebuilds
+   * in sync — fine at gesture rate; to change many pins at once, use
+   * `setPinnedPoints`.
+   */
+  public setPinnedPoint (index: number, pinned: boolean): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPinnedPoint(index, pinned))) return
+    this.simulation.setPinnedPoint(index, pinned)
+    this.requestRender()
+  }
+
+  /**
+   * Whether a point index is currently pinned. Lets a host that pins during a
+   * drag gesture restore the point's deliberate pinned state on release.
+   */
+  public isPointPinned (index: number): boolean {
+    if (this._isDestroyed) return false
+    return this.simulation.isPointPinned(index)
+  }
+
+  /**
+   * Moves a single point to a new position with a one-texel GPU write — no
+   * full-array upload, no `render()` round trip. Together with the batched
+   * `setPointPositionsByIndices` this is the API for mapping host-driven drag
+   * interactions onto a live simulation.
+   *
+   * The write targets the **live** simulation state, like an interactive drag:
+   * it does not modify the input array passed to `setPointPositions`, so a later
+   * full data update starts from the input positions again. While the simulation
+   * is running, forces move the point on the next tick unless it is pinned
+   * (`setPinnedPoint`).
+   *
+   * @param index - The index of the point.
+   * @param x - New X coordinate, in space coordinates (as returned by `getPointPositions`).
+   * @param y - New Y coordinate, in space coordinates.
+   * @note An **absent** point (NaN position — see `setPointPositions`) is not a valid
+   * target: the call is a no-op. No-op before the first `render()` call as well.
+   */
+  public setPointPosition (index: number, x: number, y: number): void {
+    this.setPointPositionsByIndices([index], [x, y])
+  }
+
+  /**
+   * Batched form of `setPointPosition`: moves a sparse set of points in one call.
+   * @param indices - Indices of the points to move.
+   * @param positions - New positions aligned with `indices`, flat `[x0, y0, x1, y1, …]`
+   *   in space coordinates.
+   * @note Intended for interactive updates of a few points per frame. Bulk position
+   * changes should go through `setPointPositions()` + `render()`, which upload one
+   * texture instead of one texel per point.
+   */
+  public setPointPositionsByIndices (indices: number[], positions: number[] | Float32Array): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointPositionsByIndices(indices, positions))) return
+    this.simulation.setPointPositionsByIndices(indices, positions)
+    // Points moved: the picking buffers no longer match them
+    this.markPickingBuffersStale()
     this.requestRender()
   }
 
@@ -941,21 +799,24 @@ export class Graph {
     const { fitViewOnInit, fitViewDelay, fitViewPadding, fitViewDuration, fitViewByPointsInRect, fitViewByPointIndices, initialZoomLevel } = this.config
     if (!this.graph.pointsNumber && !this.graph.linksNumber) {
       this.stopFrames()
-      select(this.canvas).style('cursor', null)
-      if (this.device) {
-        const clearPass = this.device.beginRenderPass({
-          clearColor: this.store.backgroundColor,
-          clearDepth: 1,
-          clearStencil: 0,
-        })
-        clearPass.end()
-        this.device.submit()
+      // Headless: the canvas belongs to the host — never clear or submit its device.
+      if (!this._isHeadless) {
+        select(this.canvas).style('cursor', null)
+        if (this.device) {
+          const clearPass = this.device.beginRenderPass({
+            clearColor: this.store.backgroundColor,
+            clearDepth: 1,
+            clearStencil: 0,
+          })
+          clearPass.end()
+          this.device.submit()
+        }
       }
       return
     }
 
     // If `initialZoomLevel` is set, we don't need to fit the view
-    if (this._isFirstRenderAfterInit && fitViewOnInit && initialZoomLevel === undefined) {
+    if (!this._isHeadless && this._isFirstRenderAfterInit && fitViewOnInit && initialZoomLevel === undefined) {
       this._fitViewOnInitTimeoutID = window.setTimeout(() => {
         if (fitViewByPointIndices) this.fitViewByPointIndices(fitViewByPointIndices, fitViewDuration, fitViewPadding)
         else if (fitViewByPointsInRect) {
@@ -970,7 +831,9 @@ export class Graph {
     }
     // Set the override before the pipeline: `updatePositions()` (inside `this.update()` below) reads
     // `transition.duration` to decide animate vs. snap, then `start()` consumes the override.
-    this.transition.setDurationOverride(transitionDuration)
+    // Headless instances snap: nothing runs `transition.step()` without a render loop,
+    // so an animated transition would leave positions frozen at their source forever.
+    this.transition.setDurationOverride(this._isHeadless ? 0 : transitionDuration)
 
     // Update graph and start frames
     this.update(simulationAlpha)
@@ -1099,33 +962,57 @@ export class Graph {
   /**
    * Get current X and Y coordinates of the points.
    * @returns Array of point positions.
+   * @note Reads the GPU synchronously — the call stalls until the GPU has drained
+   * all pending work. For polling positions during a running simulation prefer
+   * `getPointPositionsAsync()` (no stall) or, for GPU-side consumers,
+   * `getPointPositionTexture()` (no readback at all).
    * @note An **absent** point (removed via a `NaN` position — see `setPointPositions`) reads back
    * as `NaN`, mirroring the input — not as its last on-screen coordinate. This keeps removal
    * detectable from the read-back and keeps absent points out of `fitView`.
    */
   public getPointPositions (): number[] {
-    if (this._isDestroyed || !this.device || !this.points) return []
-    if (this.graph.pointsNumber === undefined) return []
-    const positions: number[] = []
-    const pointPositionsPixels = readPixels(this.device, this.points.currentPositionFbo as Framebuffer)
-    positions.length = this.graph.pointsNumber * 2
-    for (let i = 0; i < this.graph.pointsNumber; i += 1) {
-      // An absent point reads back as NaN: the position texture keeps its frozen
-      // last coordinate (the fade renders from it), which must not read back as a
-      // live position.
-      if (this.graph.pointPositions && isPointAbsent(this.graph.pointPositions, i)) {
-        positions[i * 2] = NaN
-        positions[i * 2 + 1] = NaN
-        continue
-      }
-      const posX = pointPositionsPixels[i * 4 + 0]
-      const posY = pointPositionsPixels[i * 4 + 1]
-      if (posX !== undefined && posY !== undefined) {
-        positions[i * 2] = posX
-        positions[i * 2 + 1] = posY
-      }
-    }
-    return positions
+    if (this._isDestroyed) return []
+    return this.simulation.getPointPositions()
+  }
+
+  /**
+   * Get current X and Y coordinates of the points as a `Float32Array` in
+   * `[x0, y0, x1, y1, …]` order — same data as `getPointPositions()` without the
+   * `number[]` conversion.
+   * @param out - Optional destination array. Reused when it holds at least
+   *   `2 × pointCount` values (extra tail values are left untouched); otherwise a
+   *   new array is allocated and returned.
+   * @returns The filled destination array (empty when there is nothing to read).
+   * @note Reads the GPU synchronously — see `getPointPositions()`. Prefer
+   * `getPointPositionsAsync()` while the simulation is running.
+   */
+  public getPointPositionsArray (out?: Float32Array): Float32Array {
+    if (this._isDestroyed) return new Float32Array(0)
+    return this.simulation.getPointPositionsArray(out)
+  }
+
+  /**
+   * Asynchronous variant of `getPointPositionsArray()`: the pixel copy runs on the
+   * GPU timeline and the promise resolves when it completes, so the CPU never
+   * stalls waiting for in-flight simulation work.
+   * @param out - Optional destination array, as in `getPointPositionsArray()`.
+   * @returns Promise of the filled destination array (empty when there is nothing to read).
+   */
+  public async getPointPositionsAsync (out?: Float32Array): Promise<Float32Array> {
+    if (this._isDestroyed) return new Float32Array(0)
+    return await this.simulation.getPointPositionsAsync(out)
+  }
+
+  /**
+   * Get a read-only view of the GPU position texture, for hosts that sample point
+   * positions directly on the GPU (e.g. a custom deck.gl layer) instead of reading
+   * them back to the CPU. See `PointPositionTexture` for the texel layout and the
+   * ping-pong/version contract.
+   * @returns The texture view, or `undefined` before the first `render()` call.
+   */
+  public getPointPositionTexture (): PointPositionTexture | undefined {
+    if (this._isDestroyed) return undefined
+    return this.simulation.getPointPositionTexture()
   }
 
   /**
@@ -1133,9 +1020,8 @@ export class Graph {
    * @returns Array of cluster positions in `[x0, y0, x1, y1, ...]` order. Do not mutate the returned array.
    */
   public getClusterPositions (): Readonly<number[]> {
-    if (this._isDestroyed || !this.device || !this.clusters) return []
-    if (this.graph.pointClusters === undefined || this.clusters.clusterCount === undefined) return []
-    return this.clusters.getCentroidPositions()
+    if (this._isDestroyed) return []
+    return this.simulation.getClusterPositions()
   }
 
   /**
@@ -1465,11 +1351,7 @@ export class Graph {
       // Avoids running simulation against mid-interpolation positions.
       this.transition.end(true)
     }
-    const wasRunning = this.store.isSimulationRunning
-    this.store.isSimulationRunning = true
-    this.store.simulationProgress = 0
-    this.store.alpha = alpha
-    if (!wasRunning) this.config.onSimulationStart?.()
+    this.simulation.start(alpha)
 
     // No-op before the first render() — frame() bails while there's nothing renderable
     this.requestRender()
@@ -1481,11 +1363,7 @@ export class Graph {
    */
   public stop (): void {
     if (this._isDestroyed) return
-    const wasSimulationActive = this.store.isSimulationRunning || this.store.alpha > 0 || this.store.simulationProgress > 0
-    this.store.isSimulationRunning = false
-    this.store.simulationProgress = 0
-    this.store.alpha = 0
-    if (wasSimulationActive) this.config.onSimulationEnd?.()
+    this.simulation.stop()
   }
 
   /**
@@ -1496,9 +1374,7 @@ export class Graph {
   public pause (): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.pause())) return
-    if (!this.store.isSimulationRunning) return
-    this.store.isSimulationRunning = false
-    this.config.onSimulationPause?.()
+    this.simulation.pause()
   }
 
   /**
@@ -1516,8 +1392,7 @@ export class Graph {
       // Avoids running simulation against mid-interpolation positions.
       this.transition.end(true)
     }
-    this.store.isSimulationRunning = true
-    this.config.onSimulationUnpause?.()
+    this.simulation.unpause()
     this.requestRender()
   }
 
@@ -1535,8 +1410,104 @@ export class Graph {
 
     // Run one simulation step, forcing execution regardless of isSimulationRunning
     this.runSimulationStep(true)
+    // Without an internal loop nothing else performs the alpha-floor check that
+    // frame() normally runs, so a host-driven simulation would never fire
+    // onSimulationEnd. Checking after the step keeps the same invariant: no
+    // step ever runs with alpha already below ALPHA_MIN.
+    if ((this._isHeadless || !this.config.enableRenderLoop) &&
+        this.store.alpha < ALPHA_MIN && this.store.isSimulationRunning) {
+      this.end()
+    }
     // A manual step outside the loop is invisible until drawn
     this.requestRender()
+  }
+
+  /**
+   * Sets the view directly, bypassing the interactive zoom behavior — for hosts
+   * (deck.gl layers, map renderers) that own the camera and want cosmos.gl's full
+   * rendering (`drawToRenderPass`) to follow it. Updates everything the zoom
+   * gesture would: the shader projection matrix, picking, point-radius zoom
+   * scaling, and the space↔screen conversion methods.
+   *
+   * The transform follows the d3-zoom convention. With `S = spaceSize` (adjusted),
+   * `[w, h] = screenSize` in CSS pixels, a point at space position
+   * `(spaceX, spaceY)` lands on screen (y down) at:
+   * ```
+   * screenX = k * (spaceX + (w - S) / 2) + x
+   * screenY = k * ((S - spaceY) + (h - S) / 2) + y
+   * ```
+   * (cosmos space y points up; screen y points down.)
+   *
+   * @param transform - View transform: `k` scale (screen pixels per space unit),
+   *   `x`/`y` translation in screen pixels.
+   * @param screenSize - Viewport size in CSS pixels. Required for headless
+   *   instances (they have no canvas to measure); ignored when omitted on a
+   *   non-headless instance, whose canvas remains the source of truth.
+   */
+  public setViewTransform (transform: { k: number; x: number; y: number }, screenSize?: [number, number]): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setViewTransform(transform, screenSize))) return
+    if (screenSize) this.store.updateScreenSize(screenSize[0], screenSize[1])
+    this.zoomInstance.applyEventTransform(zoomIdentity.translate(transform.x, transform.y).scale(transform.k))
+    // The view moved under the points — picking buffers rasterized for the old
+    // view no longer match (same invalidation the zoom handler relies on).
+    this.markPickingBuffersStale()
+    this.requestRender()
+  }
+
+  /**
+   * Records the point and link draws into a render pass owned by the host,
+   * without clearing, ending, or submitting it. Lets an embedding application
+   * (deck.gl layer, map renderer) compose cosmos.gl's rendering into its own
+   * frame: begin a pass, call this, draw other content, end and submit.
+   *
+   * Draws with cosmos.gl's current view transform and screen size. A headless
+   * instance has no view of its own — the host supplies one through
+   * `setViewTransform()` before drawing (or samples `getPointPositionTexture()`
+   * with its own shaders instead). No-op until data has been provided and
+   * `render()` called.
+   *
+   * @param renderPass - The host's open render pass to record into.
+   * @param options - Set `points` or `links` to `false` to draw only the other.
+   */
+  public drawToRenderPass (renderPass: RenderPass, options?: { points?: boolean; links?: boolean }): void {
+    if (this._isDestroyed || !this.device) return
+    if (!this.store.pointsTextureSize) return
+
+    const shouldDrawLinks =
+      (options?.links ?? true) &&
+      this.config.renderLinks !== false &&
+      !!this.store.linksTextureSize &&
+      !!this.graph.linksNumber &&
+      this.graph.linksNumber > 0
+
+    if (shouldDrawLinks) {
+      this.lines?.draw(renderPass)
+    }
+    if (options?.points ?? true) {
+      this.points?.draw(renderPass)
+    }
+  }
+
+  /**
+   * Render a single frame immediately, without scheduling any further frames.
+   * Intended for hosts that drive cosmos.gl from their own scheduler
+   * (`enableRenderLoop: false`): call `renderOneFrame()` from the host's frame
+   * callback. Performs the same per-frame work as the internal loop — screen-size
+   * sync, transitions, hover detection, one simulation step (when the simulation
+   * is running), and the draw — including the simulation-end check.
+   * No-op on headless instances (they own no canvas to draw into).
+   */
+  public renderOneFrame (): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.renderOneFrame())) return
+    if (this._isHeadless) return
+    if (!this.store.pointsTextureSize || (!this.graph.pointsNumber && !this.graph.linksNumber)) return
+    // Same alpha-floor check the internal loop performs before rendering.
+    if (this.store.alpha < ALPHA_MIN && this.store.isSimulationRunning) {
+      this.end()
+    }
+    this.renderFrame()
   }
 
   /**
@@ -1581,38 +1552,13 @@ export class Graph {
 
     this.fpsMonitor?.destroy()
 
-    // Destroy all module resources before destroying the device
-    this.points?.destroy()
+    // Render-side module resources go first, then the simulation tears down its
+    // modules and — only when it owns it — clears and destroys the device.
     this.lines?.destroy()
-    this.clusters?.destroy()
-    this.forceGravity?.destroy()
-    this.forceCenter?.destroy()
-    this.forceManyBody?.destroy()
-    this.forceLinkIncoming?.destroy()
-    this.forceLinkOutgoing?.destroy()
-    this.forceMouse?.destroy()
-    this.forceCollision?.destroy()
+    this.simulation.destroy()
 
-    if (this.device) {
-      // Only clear and destroy the device if Graph owns it
-      if (this.shouldDestroyDevice) {
-        // Clears the canvas after particle system is destroyed
-        const clearPass = this.device.beginRenderPass({
-          clearColor: this.store.backgroundColor,
-          clearDepth: 1,
-          clearStencil: 0,
-        })
-        clearPass.end()
-        this.device.submit()
-        // luma's device.destroy() leaves the canvas context's Resize/Intersection
-        // observers connected — stop them explicitly or they outlive the graph.
-        this.device.canvasContext?.destroy()
-        this.device.destroy()
-      }
-    }
-
-    // Only remove canvas if Graph owns the device (canvas was created by Graph)
-    if (this.shouldDestroyDevice && this.canvas && this.canvas.parentNode) {
+    // Only remove canvas if the simulation owned the device (the canvas was created internally)
+    if (this.simulation.ownsDevice && this.canvas && this.canvas.parentNode) {
       this.canvas.parentNode.removeChild(this.canvas)
     }
 
@@ -1637,14 +1583,16 @@ export class Graph {
     if (this.ensureDevice(() => this.create())) return
     if (!this.points) return
     if (!this.lines) return
-    if (this.isPointPositionsUpdateNeeded) {
-      this.points.updatePositions()
+
+    // The simulation applies its side first: positions, sizes, forces, clusters
+    const { positionsUpdated } = this.simulation.applyDataUpdates()
+    if (positionsUpdated) {
       // Links are rasterized from the point positions — new positions (and the
       // exit status derived from them) invalidate the link index buffer.
       this.lines.isLinkIndexBufferStale = true
     }
+
     if (this.isPointColorUpdateNeeded) this.points.updateColor()
-    if (this.isPointSizeUpdateNeeded) this.points.updateSize()
     if (this.isPointShapeUpdateNeeded) this.points.updateShape()
     if (this.isPointImageIndicesUpdateNeeded) this.points.updateImageIndices()
     if (this.isPointImageSizesUpdateNeeded) this.points.updateImageSizes()
@@ -1655,21 +1603,7 @@ export class Graph {
     if (this.isLinkArrowUpdateNeeded) this.lines.updateArrow()
     if (this.isLinkStyleUpdateNeeded) this.lines.updateStyle()
 
-    if (this.isForceManyBodyUpdateNeeded) this.forceManyBody?.create()
-    // Collision grid/size textures depend on point count and sizes. Mark them
-    // stale so they're rebuilt lazily the next time the collision force runs,
-    // rather than reallocating here while collision may be disabled.
-    if (this.isForceManyBodyUpdateNeeded || this.isPointSizeUpdateNeeded) this.isForceCollisionReady = false
-    if (this.isForceLinkUpdateNeeded) {
-      this.forceLinkIncoming?.create(LinkDirection.INCOMING)
-      this.forceLinkOutgoing?.create(LinkDirection.OUTGOING)
-    }
-    if (this.isForceCenterUpdateNeeded) this.forceCenter?.create()
-    if (this.isPointClusterUpdateNeeded) this.clusters?.create()
-
-    this.isPointPositionsUpdateNeeded = false
     this.isPointColorUpdateNeeded = false
-    this.isPointSizeUpdateNeeded = false
     this.isPointShapeUpdateNeeded = false
     this.isPointImageIndicesUpdateNeeded = false
     this.isPointImageSizesUpdateNeeded = false
@@ -1678,10 +1612,6 @@ export class Graph {
     this.isLinkWidthUpdateNeeded = false
     this.isLinkArrowUpdateNeeded = false
     this.isLinkStyleUpdateNeeded = false
-    this.isPointClusterUpdateNeeded = false
-    this.isForceManyBodyUpdateNeeded = false
-    this.isForceLinkUpdateNeeded = false
-    this.isForceCenterUpdateNeeded = false
 
     // create() presents what it uploads — callers don't need a separate frame kick
     this.requestRender()
@@ -1830,7 +1760,7 @@ export class Graph {
         prevConfig.simulationCollisionPadding !== this.config.simulationCollisionPadding ||
         ((this.config.simulationCollisionRadius === undefined || this.config.simulationCollisionRadius === 0) &&
          prevConfig.pointDefaultSize !== this.config.pointDefaultSize)) {
-      this.isForceCollisionReady = false
+      this.simulation.invalidateCollisionResources()
     }
     if (prevConfig.pixelRatio !== this.config.pixelRatio) {
       // Update device's canvas context useDevicePixels
@@ -1845,17 +1775,23 @@ export class Graph {
       this.store.adjustSpaceSize(this.config.spaceSize, this.device?.limits.maxTextureDimension2D ?? 4096)
       // Collision grid dimensions depend on adjustedSpaceSize, so rebuild them
       // lazily before the next collision pass.
-      this.isForceCollisionReady = false
+      this.simulation.invalidateCollisionResources()
       this.syncScreenSize(true)
       this.update(this.store.isSimulationRunning ? this.store.alpha : 0)
     }
-    if (prevConfig.showFPSMonitor !== this.config.showFPSMonitor) {
+    if (prevConfig.showFPSMonitor !== this.config.showFPSMonitor && !this._isHeadless) {
       if (this.config.showFPSMonitor) {
         this.fpsMonitor = new FPSMonitor(this.canvas, this.store.div)
       } else {
         this.fpsMonitor?.destroy()
         this.fpsMonitor = undefined
       }
+    }
+    if (prevConfig.enableRenderLoop !== this.config.enableRenderLoop && !this.config.enableRenderLoop) {
+      // The loop may have a frame in flight — cancel it so the host takes over
+      // scheduling immediately. (Turning the loop back on needs no special case:
+      // the requestRender() below reschedules it.)
+      this.stopFrames()
     }
     if (prevConfig.enableZoom !== this.config.enableZoom || prevConfig.enableDrag !== this.config.enableDrag) {
       this.updateZoomDragBehaviors()
@@ -1895,11 +1831,9 @@ export class Graph {
       // Avoids running simulation against mid-interpolation positions.
       this.transition.end(true)
       this.transition.dequeue(TransitionProperty.Positions)
-      this.ensureSimulationModules()
+      this.simulation.ensureSimulationModules()
       this.points?.ensureSimulationResources()
-      this.isForceManyBodyUpdateNeeded = true
-      this.isForceLinkUpdateNeeded = true
-      this.isForceCenterUpdateNeeded = true
+      this.simulation.markForcesDirty()
       // Rebuild simulation resources before binding programs to them.
       this.create()
       this.initPrograms()
@@ -1917,7 +1851,7 @@ export class Graph {
     this.store.simulationProgress = 0
     this._shouldForceHoverDetection = true
     if (wasSimulationActive) this.config.onSimulationEnd?.()
-    this.destroySimulationModules()
+    this.simulation.destroySimulationModules()
   }
 
   /**
@@ -1942,6 +1876,185 @@ export class Graph {
   }
 
   /**
+   * Installs the pointer/keyboard/zoom/drag handlers on the canvas and document.
+   * Never called for headless instances — they own no canvas and no input.
+   */
+  private initInteractions (): void {
+    const w = this.canvas.clientWidth
+    const h = this.canvas.clientHeight
+    this.store.updateScreenSize(w, h)
+
+    this.canvasD3Selection = select<HTMLCanvasElement, undefined>(this.canvas)
+      .call(this.dragInstance.behavior)
+      .call(this.zoomInstance.behavior)
+      .on('pointerenter.cosmos', (event: PointerEvent) => {
+        if (!event.isPrimary) return
+        this._isPointerOnCanvas = true
+        this._lastMouseX = event.clientX
+        this._lastMouseY = event.clientY
+        // Drain any hover work that accumulated while the pointer was away
+        // (forced hover check or unchecked mouse movement).
+        this.requestRender()
+      })
+      .on('pointermove.cosmos', (event: PointerEvent) => {
+        if (!event.isPrimary) return
+        this._isPointerOnCanvas = true
+        this._lastMouseX = event.clientX
+        this._lastMouseY = event.clientY
+        this.currentEvent = event
+        this.updateMousePosition(event)
+        this.isRightClickMouse = (event.buttons & 2) !== 0
+
+        // Cancel a pending long-press if the finger drifted past the threshold —
+        // the user is clearly panning/dragging, not holding to open a context menu.
+        if (this._longPressTimerId !== undefined) {
+          const dx = Math.abs(event.clientX - this._longPressStartX)
+          const dy = Math.abs(event.clientY - this._longPressStartY)
+          if (dx > LONG_PRESS_MOVE_THRESHOLD_PX || dy > LONG_PRESS_MOVE_THRESHOLD_PX) {
+            this.cancelLongPress()
+          }
+        }
+
+        this.config.onMouseMove?.(
+          this.store.hoveredPoint?.index,
+          this.store.hoveredPoint?.position,
+          this.currentEvent
+        )
+
+        this.requestRender()
+      })
+      .on('pointerleave.cosmos pointercancel.cosmos', (event: PointerEvent) => {
+        // Non-primary pointers (e.g. second finger of a pinch) leaving must not
+        // flip _isPointerOnCanvas or clear hover — the primary pointer is still down.
+        if (!event.isPrimary) return
+        this.cancelLongPress()
+        this._isPointerOnCanvas = false
+        // Touch tap: pointerdown → pointerup → pointerleave → click
+        // Clearing here would empty hoveredPoint before click reads it.
+        // Keep it — the next tap overwrites it anyway.
+        if (event.pointerType !== 'mouse') return
+        this.currentEvent = event
+
+        // Clear point hover state and trigger callback if needed
+        if (this.store.hoveredPoint !== undefined && this.config.onPointMouseOut) {
+          this.config.onPointMouseOut(event)
+        }
+
+        // Clear link hover state and trigger callback if needed
+        if (this.store.hoveredLinkIndex !== undefined && this.config.onLinkMouseOut) {
+          this.config.onLinkMouseOut(event)
+        }
+
+        // Reset right-click flag
+        this.isRightClickMouse = false
+
+        // Clear hover states
+        this.store.hoveredPoint = undefined
+        this.store.hoveredLinkIndex = undefined
+        // The hovered link was drawn wider in the index pass (hover
+        // hysteresis) — clearing the hover invalidates that buffer.
+        if (this.lines) this.lines.isLinkIndexBufferStale = true
+
+        // Update cursor style after clearing hover states
+        this.updateCanvasCursor()
+
+        // Hover ring / link highlight was cleared — redraw without it
+        this.requestRender()
+      })
+      .on('pointerdown.cosmos', (event: PointerEvent) => {
+        if (!event.isPrimary) return
+        this.currentEvent = event
+        // A new gesture starts fresh — drop any stale suppress flag.
+        this._shouldSuppressNextClick = false
+        // Touch fires no pointermove before touchstart, so hoveredPoint is empty
+        // when d3-drag checks it. Pick here so drag starts, not zoom.
+        // updateMousePosition first — findHoveredItem reads what it writes.
+        this._lastMouseX = event.clientX
+        this._lastMouseY = event.clientY
+        this.updateMousePosition(event)
+        this.findHoveredItem(true)
+        // The immediate pick may have shown/moved the hover ring
+        this.requestRender()
+
+        // Touch/pen long-press → contextmenu. The mouse path already gets
+        // contextmenu from the browser; this fills the gap for touch where
+        // long-press doesn't reliably dispatch contextmenu on canvas.
+        if (event.pointerType !== 'mouse') {
+          this._longPressStartX = event.clientX
+          this._longPressStartY = event.clientY
+          this.cancelLongPress()
+          this._longPressTimerId = window.setTimeout(() => {
+            this._longPressTimerId = undefined
+            if (this._isDestroyed) return
+            // Re-pick in case points moved during the hold (simulation may have
+            // shifted them under the stationary finger).
+            this.findHoveredItem(true)
+            this.requestRender()
+            this._shouldSuppressNextClick = true
+            this.fireContextMenu(event)
+          }, LONG_PRESS_DURATION_MS)
+        }
+      })
+      .on('pointerup.cosmos', (event: PointerEvent) => {
+        if (!event.isPrimary) return
+        // Finger lifted before the long-press window expired — it's a tap.
+        this.cancelLongPress()
+        // pointermove normally updates this flag, but it doesn't fire on a still
+        // release — without this line, forceMouse would keep running.
+        this.isRightClickMouse = (event.buttons & 2) !== 0
+      })
+      .on('click.cosmos', this.onClick.bind(this))
+      .on('contextmenu.cosmos', this.onContextMenu.bind(this))
+
+    select(document)
+      .on(`keydown.cosmos-${this._instanceId}`, (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = true })
+      .on(`keyup.cosmos-${this._instanceId}`, (event) => { if (event.code === 'Space') this.store.isSpaceKeyPressed = false })
+
+    this.zoomInstance.behavior
+      .on('start.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
+        this.currentEvent = e
+        this.requestRender()
+      })
+      .on('zoom.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
+        const userDriven = !!e.sourceEvent
+        if (userDriven) this.updateMousePosition(e.sourceEvent)
+        this.currentEvent = e
+        this.requestRender()
+      })
+      .on('end.detect', (e: D3ZoomEvent<HTMLCanvasElement, undefined>) => {
+        this.currentEvent = e
+        // Force hover detection on next frame since zoom may have changed what's under the mouse
+        this._shouldForceHoverDetection = true
+        this.requestRender()
+      })
+
+    this.dragInstance.behavior
+      .on('start.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
+        this.currentEvent = e
+        this.updateCanvasCursor()
+        this.requestRender()
+      })
+      .on('drag.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
+        if (this.dragInstance.isActive) {
+          this.updateMousePosition(e)
+        }
+        this.currentEvent = e
+        this.requestRender()
+      })
+      .on('end.detect', (e: D3DragEvent<HTMLCanvasElement, undefined, Hovered>) => {
+        this.currentEvent = e
+        this.updateCanvasCursor()
+        // The drag GPU write happens after the draw pass, so the final
+        // position only becomes visible on the frame scheduled here.
+        this.requestRender()
+      })
+    if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
+    // Zoom level 1 means no zoom (100% scale). defaultConfigValues.initialZoomLevel is undefined,
+    // so we fall back to 1 here as the neutral zoom level when no initial zoom is configured.
+    this.setZoomLevel(this.config.initialZoomLevel ?? 1)
+  }
+
+  /**
    * Validates that a device has the required HTMLCanvasElement canvas context.
    * Cosmos requires an HTMLCanvasElement canvas context and does not support
    * OffscreenCanvas or compute-only devices.
@@ -1960,34 +2073,12 @@ export class Graph {
   }
 
   /**
-   * Internal device creation method
-   * Graph class decides what device to create with sensible defaults
-   */
-  private async createDevice (
-    canvas: HTMLCanvasElement
-  ): Promise<Device> {
-    return await luma.createDevice({
-      type: 'webgl',
-      adapters: [webgl2Adapter],
-      createCanvasContext: {
-        canvas, // Provide existing canvas
-        useDevicePixels: this.config.pixelRatio, // Use config pixelRatio value
-        autoResize: true,
-        width: undefined,
-        height: undefined,
-      },
-    })
-  }
-
-  /**
   * Updates and recreates the graph visualization based on pending changes.
   *
   * @param simulationAlpha - Optional alpha value to set. If not provided, keeps current alpha.
   */
   private update (simulationAlpha = this.store.alpha): void {
-    const { graph } = this
-    this.store.pointsTextureSize = Math.ceil(Math.sqrt(graph.pointsNumber ?? 0))
-    this.store.linksTextureSize = Math.ceil(Math.sqrt((graph.linksNumber ?? 0) * 2))
+    this.simulation.updateTextureSizes()
     this.create()
     this.initPrograms()
     this.store.alpha = simulationAlpha
@@ -2004,144 +2095,24 @@ export class Graph {
    *     to respect pause/unpause state.
    */
   private runSimulationStep (forceExecution = false): void {
-    const { config: { simulationGravity, simulationCenter, simulationCollision, enableSimulation }, store: { isSimulationRunning } } = this
+    if (!this.config.enableSimulation) return
 
-    if (!enableSimulation) return
-
-    // Right-click repulsion (runs regardless of isSimulationRunning)
-    if (this.isRightClickMouse && this.config.enableRightClickRepulsion) {
-      this.points?.swapFbo()
-      this.forceMouse?.run()
-      this.points?.updatePosition()
-      this.markPickingBuffersStale()
-    }
-
-    // Main simulation forces gate:
-    // If forceExecution is true (from step()), always run.
-    // Otherwise, respect isSimulationRunning and zoom state.
+    // Right-click repulsion runs regardless of isSimulationRunning; a zoom
+    // gesture suspends the forces unless configured otherwise.
+    const applyMouseRepulsion = this.isRightClickMouse && this.config.enableRightClickRepulsion
     const enableSimulationDuringZoom = this.zoomInstance.shouldEnableSimulationDuringZoomOverride ?? this.config.enableSimulationDuringZoom
-    const shouldRunSimulation = forceExecution ||
-      (isSimulationRunning && !(this.zoomInstance.isRunning && !enableSimulationDuringZoom))
+    const blockedByInteraction = this.zoomInstance.isRunning && !enableSimulationDuringZoom
 
-    // Swap-before-write: every GPU position write is preceded by swapFbo(). The swap makes
-    // `previous` point to the freshest data so updatePosition() reads it
-    // and writes the new result into `current`. After each swap+write pair
-    // `current` holds the latest positions — the draw pass, hover detection,
-    // trackPoints and the next frame all read from `current`.
-    if (shouldRunSimulation) {
-      if (simulationGravity) {
-        this.points?.swapFbo()
-        this.forceGravity?.run()
-        this.points?.updatePosition()
-      }
+    const forcesRan = this.simulation.runSimulationStep(forceExecution, { applyMouseRepulsion, blockedByInteraction })
 
-      if (simulationCenter) {
-        this.points?.swapFbo()
-        this.forceCenter?.run()
-        this.points?.updatePosition()
-      }
-
-      this.points?.swapFbo()
-      this.forceManyBody?.run()
-      this.points?.updatePosition()
-
-      if (this.store.linksTextureSize) {
-        this.points?.swapFbo()
-        this.forceLinkIncoming?.run()
-        this.points?.updatePosition()
-        this.points?.swapFbo()
-        this.forceLinkOutgoing?.run()
-        this.points?.updatePosition()
-      }
-
-      if (this.graph.pointClusters || this.graph.clusterPositions) {
-        this.points?.swapFbo()
-        this.clusters?.run()
-        this.points?.updatePosition()
-      }
-
-      // Collision runs after the attraction forces (links, clusters) so it
-      // corrects the overlap they introduce within the same tick, instead of
-      // lagging one frame behind and oscillating against them.
-      if (simulationCollision) {
-        // Lazily allocate the collision GPU resources on first use (or after a
-        // data change marked them stale), so a graph that never enables
-        // collision never pays the grid/size-texture memory cost.
-        if (!this.isForceCollisionReady) {
-          this.forceCollision?.create()
-          this.forceCollision?.initPrograms()
-          this.isForceCollisionReady = true
-        }
-        this.points?.swapFbo()
-        this.forceCollision?.run()
-        this.points?.updatePosition()
-      }
-
-      // Simulation moved the points — the picking buffers no longer match them
-      this.markPickingBuffersStale()
-
-      // Alpha decay and progress
-      this.store.alpha += this.store.addAlpha(this.config.simulationDecay)
-      if (this.isRightClickMouse && this.config.enableRightClickRepulsion) {
-        this.store.alpha = Math.max(this.store.alpha, 0.1)
-      }
-      this.store.simulationProgress = Math.sqrt(Math.min(1, ALPHA_MIN / this.store.alpha))
-
-      this.config.onSimulationTick?.(
-        this.store.alpha,
-        this.store.hoveredPoint?.index,
-        this.store.hoveredPoint?.position
-      )
-    }
-
-    // Track points (runs regardless of simulation state)
-    this.points?.trackPoints()
+    // The step moved the points — the picking buffers no longer match them
+    if (forcesRan || applyMouseRepulsion) this.markPickingBuffersStale()
   }
 
   private initPrograms (): void {
-    if (this._isDestroyed || !this.points || !this.lines || !this.clusters) return
-    this.points.initPrograms()
+    if (this._isDestroyed || !this.points || !this.lines) return
+    this.simulation.initPrograms()
     this.lines.initPrograms()
-    this.forceGravity?.initPrograms()
-    this.forceManyBody?.initPrograms()
-    this.forceCenter?.initPrograms()
-    this.forceLinkIncoming?.initPrograms()
-    this.forceLinkOutgoing?.initPrograms()
-    this.forceMouse?.initPrograms()
-    // ForceCollision programs are built lazily on first use (see runSimulationStep)
-    this.clusters.initPrograms()
-  }
-
-  private ensureSimulationModules (): void {
-    if (!this.device || !this.points) return
-
-    this.forceGravity ||= new ForceGravity(this.device, this.config, this.store, this.graph, this.points)
-    this.forceCenter ||= new ForceCenter(this.device, this.config, this.store, this.graph, this.points)
-    this.forceManyBody ||= new ForceManyBody(this.device, this.config, this.store, this.graph, this.points)
-    this.forceLinkIncoming ||= new ForceLink(this.device, this.config, this.store, this.graph, this.points)
-    this.forceLinkOutgoing ||= new ForceLink(this.device, this.config, this.store, this.graph, this.points)
-    this.forceMouse ||= new ForceMouse(this.device, this.config, this.store, this.graph, this.points)
-    this.forceCollision ||= new ForceCollision(this.device, this.config, this.store, this.graph, this.points)
-  }
-
-  private destroySimulationModules (): void {
-    this.forceGravity?.destroy()
-    this.forceGravity = undefined
-    this.forceCenter?.destroy()
-    this.forceCenter = undefined
-    this.forceManyBody?.destroy()
-    this.forceManyBody = undefined
-    this.forceLinkIncoming?.destroy()
-    this.forceLinkIncoming = undefined
-    this.forceLinkOutgoing?.destroy()
-    this.forceLinkOutgoing = undefined
-    this.forceMouse?.destroy()
-    this.forceMouse = undefined
-    this.forceCollision?.destroy()
-    this.forceCollision = undefined
-    // Force lazy re-allocation if collision is re-enabled on a new instance.
-    this.isForceCollisionReady = false
-    this.points?.destroySimulationResources()
   }
 
   /**
@@ -2151,6 +2122,9 @@ export class Graph {
    */
   private frame (): void {
     if (this._isDestroyed) return
+    // Headless instances have nothing to draw; with `enableRenderLoop: false` the
+    // host schedules frames instead (`step()` / `renderOneFrame()`).
+    if (this._isHeadless || !this.config.enableRenderLoop) return
     if (this.requestAnimationFrameId) return // frame already scheduled
     // Nothing renderable: before the first render(), or after render() cleared
     // the data. Without this guard a later pointermove would resurrect drawing
@@ -2238,6 +2212,8 @@ export class Graph {
     if (this._isDestroyed) return
     if (!this.store.pointsTextureSize) return
 
+    this.simulation.resetExternalDeviceState()
+
     const frameNow = now ?? performance.now()
     this.fpsMonitor?.begin()
     // Apply a screen-size change the observer flagged. Without a ResizeObserver
@@ -2287,18 +2263,7 @@ export class Graph {
         clearStencil: 0,
       })
 
-      const { config: { renderLinks } } = this
-      const shouldDrawLinks =
-        renderLinks !== false &&
-        !!this.store.linksTextureSize &&
-        !!this.graph.linksNumber &&
-        this.graph.linksNumber > 0
-
-      if (shouldDrawLinks) {
-        this.lines?.draw(drawRenderPass)
-      }
-
-      this.points?.draw(drawRenderPass)
+      this.drawToRenderPass(drawRenderPass)
 
       if (this.dragInstance.isActive) {
         // Swap-before-write: after the swap, `previous` holds the freshest positions so drag()
@@ -2333,9 +2298,7 @@ export class Graph {
    * Rendering continues after this is called (for rendering/interaction).
    */
   private end (): void {
-    this.store.isSimulationRunning = false
-    this.store.simulationProgress = 1
-    this.config.onSimulationEnd?.()
+    this.simulation.end()
     // Force hover detection on next frame since points may have moved under stationary mouse
     this._shouldForceHoverDetection = true
   }
@@ -2440,6 +2403,8 @@ export class Graph {
    * be rebuilt at the same size (e.g. `spaceSize` remaps the world).
    */
   private syncScreenSize (force = false): void {
+    // Headless: no canvas, no screen — every view-dependent quantity stays inert.
+    if (this._isHeadless || !this.canvas) return
     if (this._isDestroyed) return
     const w = this.canvas.clientWidth
     const h = this.canvas.clientHeight
@@ -2465,6 +2430,7 @@ export class Graph {
   }
 
   private updateZoomDragBehaviors (): void {
+    if (this._isHeadless) return
     if (this.config.enableDrag) {
       this.canvasD3Selection?.call(this.dragInstance.behavior)
     } else {
@@ -2718,7 +2684,9 @@ export class Graph {
   }
 }
 
-export type { GraphConfig } from './config'
+export type { GraphConfig, GraphSimulationConfig, GraphSimulationConfigInterface } from './config'
+export { GraphSimulation } from './simulation'
+export type { PointPositionTexture } from './simulation'
 export { PointShape, LinkStyle } from './modules/GraphData'
 export { TransitionEasing } from './modules/Transition'
 
