@@ -2,14 +2,16 @@ import { Graph, GraphSimulation } from '@cosmos.gl/graph'
 import type { StoryObj } from '@storybook/html'
 import { CosmosStoryProps } from '@/graph/stories/create-cosmos'
 
-export type Story = StoryObj<CosmosStoryProps & { graph: Graph | GraphSimulation; destroy?: () => void; _disposed?: boolean }>;
+export type Story = StoryObj<CosmosStoryProps & { graph?: Graph | GraphSimulation; destroy?: () => void; _disposed?: boolean }>;
 
 export const createStory: (storyFunction: () => {
-  graph: Graph | GraphSimulation;
+  // Absent when a layer owns the graph (e.g. CosmosGraphLayer): the story's
+  // `destroy` tears everything down through the host
+  graph?: Graph | GraphSimulation;
   div: HTMLDivElement;
   destroy?: () => void;
 } | Promise<{
-  graph: Graph | GraphSimulation;
+  graph?: Graph | GraphSimulation;
   div: HTMLDivElement;
   destroy?: () => void;
 }>) => Story = (storyFunction) => ({
@@ -46,7 +48,7 @@ export const createStory: (storyFunction: () => {
           try {
             story.destroy?.()
           } finally {
-            story.graph.destroy()
+            story.graph?.destroy()
           }
           return
         }
