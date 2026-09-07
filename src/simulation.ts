@@ -398,6 +398,9 @@ export class GraphSimulation {
       return
     }
     if (!this.points) return
+    // The tracking draw below runs outside the simulation step: reset the
+    // host's ambient GL state here too, or leftover blending corrupts it
+    this.resetExternalDeviceState()
     this.points.setPointPositionsByIndices(indices, positions)
     // trackPoints() must run after every write to the current position texture
     this.points.trackPoints()
