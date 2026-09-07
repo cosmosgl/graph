@@ -68,7 +68,13 @@ export const deckGlZeroCopy = async (): Promise<{ div: HTMLDivElement; graph: Gr
     },
     layers: [
       new CosmosLinksLayer({ id: 'cosmos-links', graph, links: data.links }),
-      new CosmosPointsLayer({ id: 'cosmos-points', graph, pointSize: 4 }),
+      new CosmosPointsLayer({
+        id: 'cosmos-points',
+        graph,
+        data: { length: data.pointPositions.length / 2 },
+        getPointSize: 4,
+        pickable: true,
+      }),
     ],
   })
 
