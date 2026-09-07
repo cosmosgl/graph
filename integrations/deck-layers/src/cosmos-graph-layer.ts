@@ -28,6 +28,8 @@ import { CosmosLinksLayer } from './cosmos-links-layer'
 export type CosmosGraphPoints<PointDataT> = readonly PointDataT[] | {
   length: number;
   initialPositions?: Float32Array;
+  /** Optional binary styling channels, keyed by accessor name (`getPointColor`, `getPointSize`). */
+  attributes?: Record<string, unknown>;
 }
 
 /**
@@ -54,8 +56,8 @@ type CosmosGraphLayerOwnProps<PointDataT, LinkDataT> = {
    * accessors may return ids instead of point indices.
    */
   getPointId?: Accessor<PointDataT, string | number> | null;
-  /** Initial `[x, y]` position accessor for array points; unset points are seeded randomly. */
-  getPointPosition?: Accessor<PointDataT, readonly [number, number]> | null;
+  /** Initial `[x, y]` position accessor for array points; points it leaves undefined are seeded randomly. */
+  getPointPosition?: Accessor<PointDataT, readonly [number, number] | null | undefined> | null;
   /**
    * Point diameter accessor, in `pointSizeUnits`.
    * @default 4
@@ -196,7 +198,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     simulation?: GraphSimulation;
     isReady: boolean;
     pointCount: number;
-    pointsData: readonly PointDataT[] | { length: number };
+    pointsData: readonly PointDataT[] | { length: number; attributes?: Record<string, unknown> };
     linksData: readonly LinkDataT[] | { length: number; attributes: Record<string, unknown> } | null;
     idToIndex: Map<string | number, number> | null;
     draggedPointIndex: number | null;
@@ -292,6 +294,8 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
             getLinkColor,
             getLinkWidth,
             linkWidthUnits,
+            // getSubLayerProps does not forward `transitions`
+            transitions: this.props.transitions,
           },
           Array.isArray(linksData)
             ? {
@@ -318,6 +322,8 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
           getPointSize,
           getPointColor,
           pointSizeUnits,
+          // getSubLayerProps does not forward `transitions`
+          transitions: this.props.transitions,
         }
       )
     )
@@ -431,7 +437,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
 
     let pointCount: number
     let positions: Float32Array
-    let pointsData: readonly PointDataT[] | { length: number }
+    let pointsData: this['state']['pointsData']
     let idToIndex: Map<string | number, number> | null = null
 
     if (Array.isArray(points)) {
@@ -449,7 +455,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       }
       pointsData = pointArray
     } else {
-      const binaryPoints = points as { length: number; initialPositions?: Float32Array }
+      const binaryPoints = points as { length: number; initialPositions?: Float32Array; attributes?: Record<string, unknown> }
       pointCount = binaryPoints.length
       if (binaryPoints.initialPositions) {
         positions = binaryPoints.initialPositions
@@ -457,7 +463,9 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
         positions = new Float32Array(pointCount * 2)
         for (let i = 0; i < positions.length; i += 1) positions[i] = randomCoordinate()
       }
-      pointsData = { length: pointCount }
+      pointsData = binaryPoints.attributes
+        ? { length: pointCount, attributes: binaryPoints.attributes }
+        : { length: pointCount }
     }
 
     let linkArray: Float32Array | null = null
