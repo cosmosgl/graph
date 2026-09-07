@@ -8,9 +8,16 @@ import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+// The semver.org grammar without build metadata: the release flow publishes
+// X.Y.Z and X.Y.Z-<prerelease> only, and check-lockstep compares versions
+// verbatim. Validating here stops an invalid version before any manifest is
+// rewritten — the registry would reject it only after every prepublish build.
+const SEMVER =
+  /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*)?$/
+
 const version = process.argv[2]
-if (!version || !/^\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$/.test(version)) {
-  console.error('Usage: pnpm bump <version> — e.g. pnpm bump 3.5.0 or pnpm bump 3.5.0-beta.2')
+if (!version || !SEMVER.test(version)) {
+  console.error('Usage: pnpm bump <version> — a SemVer version without build metadata, e.g. pnpm bump 3.5.0 or pnpm bump 3.5.0-beta.2')
   process.exit(1)
 }
 
