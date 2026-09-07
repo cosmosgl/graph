@@ -42,6 +42,13 @@ contribution process, see `CONTRIBUTING.md`, `CHARTER.md`, `CODE_OF_CONDUCT.md`,
   globbed by the same root Storybook into the same flat sidebar.
 - `helper.ts` — utilities (e.g. `getRgbaColor`: parse a CSS/hex color into a normalized RGBA tuple).
 
+`integrations/deck-layers/` — the `@cosmos.gl/deck-layers` workspace package: deck.gl layers over the
+standalone `GraphSimulation`. `CosmosGraphLayer` (composite: owns the simulation, steps it from deck's
+timeline, dual object/binary data modes, picking, drag-to-pin) plus the `CosmosPointsLayer` /
+`CosmosLinksLayer` primitives, which sample the live GPU position texture by instance index — typed
+against `PositionTextureSource`, never a concrete engine class. Versioned in lockstep with the root
+package (`pnpm bump <version>` sets both; `scripts/check-lockstep.mjs` guards every publish).
+
 `migration-notes.md` documents **breaking changes only** — data-format and config changes that require
 users to update their code (v1→v3: the move to `Float32Array` ingest, the v3 config renames, RGBA
 normalized to 0..1). Read it before touching the public API or config keys. Do **not** add an entry here
@@ -70,6 +77,8 @@ Requires Node ≥ 22, pnpm ≥ 10 (the repo is a pnpm workspace: the root is the
 - `pnpm run build` — production build (Vite, ES + UMD).
 - `pnpm run watch` — rebuild on change.
 - `pnpm run lint` — ESLint over `src` (`lint-staged` runs on commit).
+- `pnpm test` — the vitest browser suite (real WebGL 2 in headless Chromium): engine host-embedding
+  contracts and the deck-layers runtime tests (picking, dragging, simulation stepping).
 - `pnpm run typecheck` — `tsc --noEmit` over everything we author, stories and `test/` included
   (the base `tsconfig.json` drives declaration emit, so it is scoped to what ships and excludes
   `src/stories`; `tsconfig.typecheck.json` widens the program). **Ensure the project lints,

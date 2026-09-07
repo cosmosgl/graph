@@ -1,6 +1,6 @@
 # cosmos.gl inside a host renderer
 
-**Branch `feat/host-embedding` → cosmosgl/graph [PR #257](https://github.com/cosmosgl/graph/pull/257) · base `main` · 9 commits**
+**Branch `feat/host-embedding` → cosmosgl/graph [PR #257](https://github.com/cosmosgl/graph/pull/257) · base `main` · 32 commits**
 
 The simulation now runs headless on a host's GPU device and frame schedule, hands its
 positions over at three different costs, and can render itself into the host's pass under
@@ -8,7 +8,7 @@ the host's camera — with deck.gl as the worked example.
 
 | files | code diff | new public APIs | unit tests | stories | breaking change |
 | --- | --- | --- | --- | --- | --- |
-| 21 | +1,977 / −279 | 10 | 13 (real WebGL 2) | 3 (deck.gl) | 1 (luma.gl → peer) |
+| 51 | +12,777 / −17,128 | 10 + a package | 35 (real WebGL 2, in CI) | 2 (deck.gl) | 1 (luma.gl → peer) |
 
 > A rendered version of this document with figures lives next to this file:
 > [`host-embedding.html`](./host-embedding.html).
@@ -27,6 +27,26 @@ compared line by line against the delivery
 
 Everything is additive except the packaging change: the existing `new Graph(div, config)`
 API, defaults, and rendering behavior on cosmos-owned devices are untouched.
+
+## Since this overview: the deck-side package moved in
+
+The sections below are the milestone as first written; the branch has since gone
+further, and where a statement below is overtaken, its status is corrected in
+place. The headline changes:
+
+- **The RFC was closed unmerged** (2026-08-28, no deck.gl-community engagement),
+  and the deck-side package this document assigned to deck.gl-community is now
+  built **here**: the repo is a pnpm workspace and `integrations/deck-layers`
+  ships `@cosmos.gl/deck-layers`, versioned in lockstep with the engine.
+- **`GraphSimulation` was extracted** as a standalone exported class (`22cbac2`);
+  `Graph` composes it, and the package builds on it.
+- The package delivers what this document called "the integrating side's work":
+  `CosmosGraphLayer` (a composite that owns its simulation, steps it from deck's
+  timeline, takes object or binary data, and implements picking with original
+  objects and drag-to-pin) over rebuilt `CosmosPointsLayer` / `CosmosLinksLayer`
+  primitives on deck's shader-module system — positions still zero-copy.
+- Of the five open items below: **2, 3, 4 and 5 are fixed**; only the async
+  snapshot fence (item 1) remains open.
 
 ## One Graph, three ownership modes
 
@@ -237,7 +257,12 @@ running on a real WebGL 2 context in headless Chromium.
 | **Cosmos rendering in a deck layer** (10k points) | same shared device, but `setViewTransform` + `drawToRenderPass` reuse cosmos's own draw programs under deck's camera — ~25-line layer, no shaders | none — cosmos draws in place |
 | **CPU readback layout** (2k points) | cosmos as a pure layout engine on its own hidden device; stock `ScatterplotLayer`/`LineLayer` render | throttled `getPointPositionsAsync()` snapshots |
 
-The test suite (`npm test`, 13 passing) covers the headless lifecycle, snapshot
+*Since superseded:* the prototype stories consolidated into `@cosmos.gl/deck-layers`'s
+two `CosmosGraphLayer` stories (zero-copy flagship and object-data mode); the
+render-pass and readback prototypes retired in the story audit, their patterns kept in
+the package README and this document.
+
+The test suite (`pnpm test`, 35 passing, now a CI step) covers the headless lifecycle, snapshot
 equivalence, the texture/version contract, sparse updates and pinning, absent-point NaN
 semantics, view injection against the documented formula, external scheduling to
 completion, and a regression test that enables blending on a raw shared context and proves
@@ -275,7 +300,7 @@ shipped signatures.
 
 | # | RFC ask | Status | How |
 | --- | --- | --- | --- |
-| 1 | Simulation-only class | partial | Headless `Graph(null, …)` delivers the semantics; the `GraphSimulation` class extraction is deferred until a real consumer validates the APIs |
+| 1 | Simulation-only class | delivered | Headless `Graph(null, …)` delivered the semantics first; the `GraphSimulation` class has since been extracted (`22cbac2`) and `Graph` composes it |
 | 2 | External frame scheduling | delivered | `enableRenderLoop: false`, `step()`, `renderOneFrame()`; no perpetual loop survives |
 | 3 | Optional DOM / canvas ownership | delivered | Headless never adopts, reparents, clears, submits, or resizes; ownership rules explicit per mode |
 | 4 | Read-only GPU position resource | delivered | `getPointPositionTexture()` with texel layout, ownership, ping-pong + `version` contract on the exported type |
@@ -291,7 +316,7 @@ Where the RFC sketched concrete code, the deliberate divergences are the interes
 
 | RFC proposed | Branch shipped | Divergence, and why |
 | --- | --- | --- |
-| `new GraphSimulation(device, cfg)` · `simulation.initialize()` · `simulation.step()` · `simulation.destroy()` | `new Graph(null, cfg, device?)` · `graph.render()` · `graph.step()` · `graph.destroy()` | One class, two modes, instead of a second class. Same five-call lifecycle (`initialize()` ≈ `render()`); the class extraction is deferred so a real consumer shapes the boundary before it freezes |
+| `new GraphSimulation(device, cfg)` · `simulation.initialize()` · `simulation.step()` · `simulation.destroy()` | `new Graph(null, cfg, device?)` · `graph.render()` · `graph.step()` · `graph.destroy()` | One class, two modes, instead of a second class. Same five-call lifecycle (`initialize()` ≈ `render()`); the extraction was deferred until a real consumer shaped the boundary — and has since shipped as `GraphSimulation` (`22cbac2`) |
 | "an option that disables the internal `requestAnimationFrame` loop"; host calls one sim step and optionally one render op | `enableRenderLoop: false` + `step()` + `renderOneFrame()` | Exceeds the ask: runtime-toggleable via `setConfig`, and the simulation-end check travels with the clock so `onSimulationEnd` fires under any scheduler |
 | `{texture, pointCount, `**`width, height`**`, version}`; document texel format, coordinate convention, ownership, ping-pong observation | `{texture, pointCount, `**`textureSize`**`, version}` on the exported `PointPositionTexture` type | The texture is always square, so one field encodes the invariant two would obscure. Every documentation clause the RFC listed is on the type; the optional buffer form is deferred with WebGPU |
 | a method recording draws into a supplied `RenderPass`; "separately configurable point and link rendering" | `drawToRenderPass(pass, {points?, links?})` — plus `setViewTransform({k, x, y}, screenSize?)` | Exact match, and the internal renderer now routes through the same method. `setViewTransform` wasn't asked for by name, but the RFC's "thin wrapper around an upstream encode(renderPass)" needs a camera — shipped with a documented, unit-tested formula |
@@ -302,15 +327,20 @@ Where the RFC sketched concrete code, the deliberate divergences are the interes
 
 ### The RFC's package phases → this branch's stories
 
-PR #257 doesn't build the deck-side package — that's deck.gl-community's work — but each
-architecture the RFC describes now exists as a running prototype in the Integrations
-stories:
+PR #257 now builds the deck-side package too — the RFC closed unmerged with its
+maintenance question unanswered, and `@cosmos.gl/deck-layers` deliberately reverses the
+division of labor this paragraph originally recorded. Each architecture the RFC
+describes existed first as a running prototype in the Integrations stories:
 
 | RFC design | Prototype in this branch | What remains deck-side |
 | --- | --- | --- |
 | **Phase 1: `CosmosLayout`** — hidden canvas, throttled `getPointPositions()`, `snapshotIntervalMs`, final-snapshot "calculate-then-render" mode | **CPU readback story** — headless graph on its own hidden device, 100 ms-throttled `getPointPositionsAsync(out)`, final snapshot on `onSimulationEnd`, stock `ScatterplotLayer`/`LineLayer` | Stable ID↔index mapping, `GraphLayout` lifecycle translation, topology updates, bounds. The story already upgrades the RFC's sketch from `getPointPositions()` to the reusable-destination async API |
 | **Phase 2, option A** — deck-specific shaders sample the exported position resource | **Zero-copy story** — custom `CosmosPointsLayer`/`CosmosLinksLayer`, `texelFetch` by `gl_VertexID`, positions never leave the GPU | Production layer authoring: deck picking, shader modules, effects. The story is the texture-contract demo, not the layer |
 | **Phase 2, option B** — "a thin wrapper around an upstream `encode(renderPass)` method" | **Cosmos-rendering story** — `setViewTransform` + `drawToRenderPass` under deck's camera; full cosmos pipeline in a ~25-line layer | Nothing to build — but these draws can't join deck's picking pass, so the RFC's "picking returns original objects" criterion pushes production toward option A. That answers the RFC's open question 3 with running code |
+
+*The "what remains deck-side" column has since been delivered:* `@cosmos.gl/deck-layers`
+ships option A as production layers (deck shader modules, picking by instance index,
+id↔index mapping, drag-to-pin) with `CosmosGraphLayer` on top.
 
 ### The RFC's production acceptance criteria, today
 
@@ -324,9 +354,9 @@ future work.
 | Only one canvas and one luma.gl device | met | Both shared-device stories; the readback story keeps a hidden device by design (Phase-1 pattern — it could now share too) |
 | No independent animation loop, clear pass, or device submission | met | Headless guarantees it structurally; a unit test asserts the external device survives `destroy()` |
 | Layer ordered between deck layers corrupts neither draw | grounded | Full-pipeline-state draw models + the GL-state reset + the 100-step stress check; a formal before/after-layer render test belongs to the package |
-| Picking returns the original node/edge object and stable ID | deck-side | Cosmos ships the primitives (`setPinnedPoint`, `setPointPosition`); host-native picking is the adapter's job |
+| Picking returns the original node/edge object and stable ID | met | `CosmosGraphLayer` reports `elementType` + index, returns original objects for array data, and builds dragging on it — runtime-tested |
 | Changing view state does not restart the simulation | met | All three stories: pan/zoom redraws from the live texture without touching alpha |
-| Removing the layer releases all adapter-owned resources | grounded | Both shared-device stories tear down cleanly; the readback story currently leaks its graph (open item 4) |
+| Removing the layer releases all adapter-owned resources | met | `CosmosGraphLayer.finalizeState` destroys its owned simulation — runtime-tested; the readback-story leak (open item 4) was fixed in the shared story teardown before that story retired |
 | Benchmarks vs `D3ForceLayout` and the readback prototype at 10k–250k points | deferred | Future work: "the stories prove the architectures; the numbers deserve a dedicated perf story" |
 
 **Shipped beyond the proposal:** the ambient GL-state reset (the RFC never anticipated
@@ -340,10 +370,10 @@ downstream package.
 
 From the PR author's future-work comment, in dependency order:
 
-- **Awaiting a real consumer** — the `GraphSimulation` class extraction (headless `Graph`
-  is functionally equivalent; extracting first risks freezing the wrong boundary),
-  capability flags (trivial, but they should describe a stabilized surface), and formal
-  readback-vs-zero-copy benchmarks with GPU timer queries.
+- **Awaiting a real consumer** — the `GraphSimulation` class extraction (since
+  delivered: `22cbac2`), capability flags (trivial, but they should describe a
+  stabilized surface), and formal readback-vs-zero-copy benchmarks with GPU timer
+  queries.
 - **Blocked on upstream** — luma.gl 9.4 (the peer range intentionally skips the prerelease
   line and admits stable 9.4 automatically) and WebGPU / compute-only devices (the
   simulation is WebGL 2 fragment shaders over ping-pong FBOs throughout; a WebGPU backend
@@ -351,6 +381,8 @@ From the PR author's future-work comment, in dependency order:
 - **The integrating side's work** — a published adapter package, host-native picking that
   returns original application objects, and node dragging built on that picking; the
   cosmos-side primitives for it (`setPinnedPoint`, `setPointPosition`) ship here.
+  *Since delivered in-repo:* `@cosmos.gl/deck-layers` is that package, with picking
+  and drag-to-pin built on exactly these primitives.
 
 Two earlier open questions were resolved in-branch: cosmos-side unit tests were added
 (`313057b`, with the GL-state regression test confirmed to fail when the fix is disabled),
@@ -361,9 +393,9 @@ was removed (`ba7afa5`).
 ## Open items before undrafting
 
 A deep review of the branch confirmed the architecture and contracts above and left five
-items, in severity order:
+items, in severity order. Status as of 2026-09-07: items 2–5 are fixed; item 1 remains.
 
-1. **The async snapshot still stalls.** The enqueue half is right —
+1. **Still open — the async snapshot stalls.** The enqueue half is right —
    `copyTextureToBuffer` records a GPU-timeline `readPixels`-into-PBO copy — but luma
    9.3's WebGL `Buffer.readAsync` is a synchronous `getBufferSubData` in disguise, and
    calling it immediately forces the driver to drain every queued command the copy
@@ -377,7 +409,7 @@ items, in severity order:
    updates land mid-flight. The API shape itself is forward-correct (a WebGPU backend
    satisfies it natively via `mapAsync`); until the fence lands, the honest wording is
    the RFC's own "asynchronous readback *where supported*."
-2. **The GL-state reset guards two entry points, not all of them.** `trackPoints()` is a
+2. **Fixed (`9566be1`) — the GL-state reset guards the sparse-write path too.** As reviewed: `trackPoints()` is a
    raster draw reachable outside the guarded step/frame paths — through the new
    `setPointPositionsByIndices`, through `trackPointPositionsByIndices`, and through
    `render()` — so a shared-device host using point tracking can still hit the
@@ -386,14 +418,14 @@ items, in severity order:
    exactly when users drag), and the regression test walks past this door: it never
    enables tracking, so `trackPoints()` early-returns. Cheap fix: reset at those public
    entries too (a no-op on cosmos-owned devices).
-3. **`npm test` runs in no CI and needs an undocumented `npx playwright install`.** Out of
+3. **Fixed — the suite runs in CI** (`pnpm test` after a `playwright install` step in `ci.yml`). As reviewed: Out of
    the box the suite fails with a missing-browser error; after the one-time install, 13/13
    pass in ~6.5s. Add a CI step and one line in the contributor docs.
-4. **The readback story leaks its graph.** Its `destroy()` finalizes deck but never calls
+4. **Fixed — the shared story teardown destroys the graph** (and the readback story has since retired in the story audit). As reviewed: Its `destroy()` finalizes deck but never calls
    `graph.destroy()`, leaking a hidden WebGL context per story switch — and browsers cap
    live contexts (~16), so flipping stories eventually evicts the oldest, possibly the
    one on screen. The other two stories tear down correctly; the fix is one line.
-5. **Small alignments.** Pinning now documents the declarative contract (an index beyond
+5. **Done (`d19403d`, `e541f5b`, `ed3dbc0`) — the pin API and migration-heading alignments landed.** As reviewed: Pinning now documents the declarative contract (an index beyond
    the point count pins its point once the count grows — the tracking API's contract),
    drops entries that can never name a point, and exposes per-point state through
    `isPointPinned`. The migration heading says v3.5 while the
@@ -405,8 +437,9 @@ items, in severity order:
 ---
 
 **Pointers.** Implementation: cosmosgl/graph
-[PR #257](https://github.com/cosmosgl/graph/pull/257) (`feat/host-embedding`, 9 commits,
-draft) and its future-work comment. Motivating RFC: visgl/deck.gl-community
+[PR #257](https://github.com/cosmosgl/graph/pull/257) (`feat/host-embedding`) and its
+future-work comment. The deck-side package: `integrations/deck-layers`
+(`@cosmos.gl/deck-layers`), with its own README. Motivating RFC: visgl/deck.gl-community
 [PR #704](https://github.com/visgl/deck.gl-community/pull/704)
 (`docs/rfcs/cosmos-layers.md`). Rationale log:
 `history/2026/2026-08-18-host-embedding.md`. Migration: `migration-notes.md` → "Migrating
