@@ -40,7 +40,6 @@
   "author": "cosmos.gl",
   "devDependencies": {
     "@deck.gl/core": "catalog:",
-    "@deck.gl/layers": "catalog:",
     "@interacta/css-labels": "^0.6.0",
     "@jls-digital/storybook-addon-code": "^1.0.4",
     "@luma.gl/core": "catalog:",
