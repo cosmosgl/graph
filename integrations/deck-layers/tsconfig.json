@@ -9,7 +9,9 @@
       "@cosmos.gl/graph": ["../../src/"],
       "@cosmos.gl/graph/*": ["../../src/*"],
       "@/graph": ["../../src/"],
-      "@/graph/*": ["../../src/*"]
+      "@/graph/*": ["../../src/*"],
+      "@cosmos.gl/deck-layers": ["./src/"],
+      "@cosmos.gl/deck-layers/*": ["./src/*"]
     },
     "outDir": "dist"
   },

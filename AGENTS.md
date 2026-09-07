@@ -38,6 +38,8 @@ contribution process, see `CONTRIBUTING.md`, `CHARTER.md`, `CODE_OF_CONDUCT.md`,
   Audience and intent are story `tags` (`beginner`, `advanced`, `perf`, `interactive`, `large-data`,
   `labels`) rather than sections, so nothing has to be filed twice; `.storybook/preview.ts` holds the
   tag vocabulary and the sidebar order, and both must stay inline literals for Storybook to index them.
+  Stories that belong to an integration package live with it (`integrations/*/src/stories/`) and are
+  globbed by the same root Storybook into the same flat sidebar.
 - `helper.ts` — utilities (e.g. `getRgbaColor`: parse a CSS/hex color into a normalized RGBA tuple).
 
 `migration-notes.md` documents **breaking changes only** — data-format and config changes that require

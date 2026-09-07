@@ -140,7 +140,7 @@
   },
   "overrides": [
     {
-      "files": ["src/stories/**/*.ts"],
+      "files": ["src/stories/**/*.ts", "integrations/*/src/stories/**/*.ts"],
       "rules": {
         "no-console": "off"
       }
