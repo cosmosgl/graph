@@ -16,7 +16,9 @@ GL state before sparse-write tracking draws` (`9566be1`),
 `feat(stories): move the deck.gl stories into the package and focus the set on
 CosmosGraphLayer` (`f46843a`), `fix(deck-layers): highlight only the hovered
 sublayer` (`0660c1a`), `build: lockstep release wiring and the CI test leg`
-(`ee53675`)
+(`ee53675`), `feat(deck-layers): transitions forwarding, binary styling
+channels, partial position seeding` (`735dbff`), `feat(stories): four showcase
+stories — scale, composition, live updates, control` (`8a3bef3`)
 
 ## Why
 
@@ -89,7 +91,14 @@ prototype code, on deck 9's own idioms:
   `elementType: 'point' | 'link'`; drag-to-pin (`enablePointDrag`) pins on
   grab, streams `setPointPosition` while moving, reheats the simulation at a
   low alpha so the graph responds, and suppresses view panning only while a
-  point is held.
+  point is held. Three refinements came out of building the showcase stories:
+  binary points may carry styling `attributes` (accessor-keyed) so colors and
+  sizes stay zero-copy at scale; `getPointPosition` may leave individual
+  points `undefined` to seed them randomly, which makes layout carry-over
+  across data changes a userland pattern (snapshot positions, feed survivors
+  back through the accessor); and the composite forwards deck's `transitions`
+  prop to its sublayers — `getSubLayerProps` doesn't — so accessor transitions
+  animate.
 
 ## What building the consumer taught the engine
 
@@ -118,10 +127,16 @@ as a fix plus a regression test:
 
 ## Example
 
-Storybook → Examples → Integrations: **CosmosGraphLayer: zero-copy graph
-(10k points)** — binary data, self-stepping, hover highlight, drag-to-pin,
-with the primitive-layer sources as panes — and **CosmosGraphLayer: object
-data and accessors** — the deck-idiomatic on-ramp, where picking hands back
-the original objects. The earlier render-pass and readback prototypes retired
-in the story audit; their patterns live in the package README and
-`docs/host-embedding/README.md`.
+Storybook → Examples → Integrations, six stories. The two data-mode stories:
+**zero-copy graph (10k points)** — binary data, self-stepping, hover
+highlight, drag-to-pin, with the primitive-layer sources as panes — and
+**object data and accessors**, the deck-idiomatic on-ramp where picking hands
+back the original objects. Four showcase stories cover the capability
+classes: **100k points at full zero-copy scale** (binary styling channels
+included), **composing with deck layers** (a stock `TextLayer` labels the
+hubs in the same `Deck`), **live updates and restyling** (data changes with
+userland position carry-over; animated recoloring through `updateTriggers` +
+`transitions`), and **simulation control and minimap** (pause/reheat/pinning
+via `onSimulationCreated`; one layer in two viewports). The earlier
+render-pass and readback prototypes retired in the story audit; their
+patterns live in the package README and `docs/host-embedding/README.md`.
