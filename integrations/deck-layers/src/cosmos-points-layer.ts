@@ -25,18 +25,23 @@ out vec4 vColor;
 out vec2 unitPosition;
 out float outerRadiusPixels;
 
+// Collapse the quad so it clips away: nothing rasterizes, nothing picks
+void collapse() {
+  gl_Position = vec4(0.0);
+  unitPosition = vec2(0.0);
+  outerRadiusPixels = 0.0;
+  vColor = vec4(0.0);
+}
+
 void main(void) {
   int pointIndex = gl_InstanceID;
   int textureSize = int(cosmosPoints.pointsTextureSize);
   // Point i lives at texel (i % size, i / size) as [x, y, i, unused] in space coordinates
   vec4 pointPosition = texelFetch(positionsTexture, ivec2(pointIndex % textureSize, pointIndex / textureSize), 0);
 
-  // An absent point keeps a frozen NaN state; collapse its quad so it clips away
+  // An absent point keeps a frozen NaN state
   if (isnan(pointPosition.x)) {
-    gl_Position = vec4(0.0);
-    unitPosition = vec2(0.0);
-    outerRadiusPixels = 0.0;
-    vColor = vec4(0.0);
+    collapse();
     return;
   }
 
@@ -45,6 +50,12 @@ void main(void) {
 
   // instanceSizes is a diameter; the quad expands by radius
   outerRadiusPixels = project_size_to_pixel(instanceSizes * 0.5, cosmosPoints.sizeUnits);
+  // A non-positive size hides the point — and the edge-padding divide below
+  // is undefined at zero
+  if (outerRadiusPixels <= 0.0) {
+    collapse();
+    return;
+  }
   // Expand the quad so edge smoothing has room outside the circle
   float edgePadding = (outerRadiusPixels + SMOOTH_EDGE_RADIUS) / outerRadiusPixels;
 
@@ -99,7 +110,7 @@ type CosmosPointsLayerOwnProps<DataT> = {
   /** The simulation whose live position texture to sample. */
   graph: PositionTextureSource;
   /**
-   * Point diameter accessor, in `pointSizeUnits`.
+   * Point diameter accessor, in `pointSizeUnits`; `0` hides the point.
    * @default 4
    */
   getPointSize?: Accessor<DataT, number>;
