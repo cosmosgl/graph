@@ -81,7 +81,19 @@ export const deckGlZeroCopy = async (): Promise<{ div: HTMLDivElement; graph: Gr
       if (graph.isSimulationRunning) graph.step()
     },
     layers: [
-      new CosmosLinksLayer({ id: 'cosmos-links', graph, links: data.links }),
+      new CosmosLinksLayer({
+        id: 'cosmos-links',
+        graph,
+        // The cosmos links array is [src0, tgt0, src1, tgt1, …] — deck reads
+        // it directly as two interleaved binary attributes, no copy
+        data: {
+          length: data.links.length / 2,
+          attributes: {
+            getLinkSource: { value: data.links, size: 1, stride: 8 },
+            getLinkTarget: { value: data.links, size: 1, offset: 4, stride: 8 },
+          },
+        },
+      }),
       new CosmosPointsLayer({
         id: 'cosmos-points',
         graph,
