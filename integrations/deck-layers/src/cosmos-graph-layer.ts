@@ -61,7 +61,7 @@ type CosmosGraphLayerOwnProps<PointDataT, LinkDataT> = {
   /** Initial `[x, y]` position accessor for array points; points it leaves undefined are seeded randomly. */
   getPointPosition?: Accessor<PointDataT, readonly [number, number] | null | undefined> | null;
   /**
-   * Point diameter accessor, in `pointSizeUnits`.
+   * Point diameter accessor, in `pointSizeUnits`; `0` hides the point.
    * @default 4
    */
   getPointSize?: Accessor<PointDataT, number>;
