@@ -2,7 +2,7 @@ import { Deck, OrthographicView, type PickingInfo } from '@deck.gl/core'
 import { defaultConfigValues, type GraphSimulation } from '@cosmos.gl/graph'
 import { CosmosGraphLayer, type CosmosGraphPickingInfo } from '@cosmos.gl/deck-layers'
 
-import { generateMeshData } from '../generate-mesh-data'
+import { generateMeshData } from '@/graph/stories/generate-mesh-data'
 
 /**
  * Shared-device, zero-copy deck.gl integration.

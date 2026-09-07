@@ -2,7 +2,11 @@ import type { StorybookConfig } from "@storybook/html-vite";
 import remarkGfm from 'remark-gfm';
 
 const config: StorybookConfig = {
-  stories: ["../src/**/*.mdx", "../src/**/*.stories.@(js|jsx|mjs|ts|tsx)"],
+  stories: [
+    "../src/**/*.mdx",
+    "../src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
+    "../integrations/*/src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
+  ],
   addons: [
     "@jls-digital/storybook-addon-code",
     "@storybook/addon-essentials",

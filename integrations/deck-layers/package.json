@@ -46,6 +46,7 @@
     "@deck.gl/core": "catalog:",
     "@luma.gl/core": "catalog:",
     "@luma.gl/engine": "catalog:",
+    "@storybook/html": "^8.4.5",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plugin-dts": "catalog:"
