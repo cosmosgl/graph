@@ -81,9 +81,11 @@ export const cosmosGraphUpdates = async (): Promise<{ div: HTMLDivElement; destr
     if (groupCounter === 0) return
     snapshotPositions()
     groupCounter -= 1
-    const removed = `hub-${groupCounter}`
     points = points.filter((point) => point.group !== groupCounter)
-    links = links.filter((link) => link.source !== removed && !link.target.startsWith(`p-${groupCounter}-`))
+    // Keep only links between surviving points: the inter-hub link into the
+    // removed cluster has a surviving source and must go too
+    const survivingIds = new Set(points.map((point) => point.id))
+    links = links.filter((link) => survivingIds.has(link.source) && survivingIds.has(link.target))
   }
 
   const makeLayer = (): CosmosGraphLayer<StoryPoint, StoryLink> =>
