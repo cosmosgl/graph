@@ -4,6 +4,7 @@ import { CosmosStoryProps } from '@/graph/stories/create-cosmos'
 import { createStory, Story } from '@/graph/stories/create-story'
 import cosmosPointsLayerRaw from '../../integrations/deck-layers/src/cosmos-points-layer?raw'
 import cosmosLinksLayerRaw from '../../integrations/deck-layers/src/cosmos-links-layer?raw'
+import blendParametersRaw from '../../integrations/deck-layers/src/blend-parameters?raw'
 import { deckGlReadback } from './integrations/deck-gl-readback'
 import { deckGlZeroCopy } from './integrations/deck-gl-zero-copy'
 import { deckGlCosmosRendering } from './integrations/deck-gl-cosmos-rendering'
@@ -36,6 +37,7 @@ export const DeckGlZeroCopy: Story = {
       { name: 'Story', code: deckGlZeroCopyRaw },
       { name: 'CosmosPointsLayer', code: cosmosPointsLayerRaw },
       { name: 'CosmosLinksLayer', code: cosmosLinksLayerRaw },
+      { name: 'blend-parameters', code: blendParametersRaw },
       { name: 'generate-mesh-data', code: generateMeshDataRaw },
     ],
   },
