@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { Deck, OrthographicView } from '@deck.gl/core'
 import type { Device } from '@luma.gl/core'
 import { GraphSimulation, type GraphSimulationConfig } from '@cosmos.gl/graph'
@@ -424,6 +424,52 @@ describe('CosmosGraphLayer', () => {
       expect(link?.elementType).toBe('link')
       expect(link?.object).toEqual(links[0])
     } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('drops a link whose endpoint is not a point — from the simulation and the rendering alike', async () => {
+    const points = [
+      { id: 'a', position: [1000, 1000] as const },
+      { id: 'b', position: [1050, 1000] as const },
+      { id: 'c', position: [1000, 1030] as const },
+    ]
+    // The second link names a point that does not exist; resolved to index 0
+    // as a fallback it would draw from c to a
+    const links = [{ source: 'a', target: 'b' }, { source: 'c', target: 'ghost' }]
+    let simulation: GraphSimulation | undefined
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer<(typeof points)[number], (typeof links)[number]>({
+        id: 'graph',
+        points,
+        links,
+        getPointId: (p): string => p.id,
+        getPointPosition: (p): readonly [number, number] => p.position,
+        getPointSize: 10,
+        getLinkWidth: 6,
+        simulationConfig: STATIC_SIM,
+        onSimulationCreated: (sim): void => { simulation = sim },
+        pickable: true,
+      }),
+    ])
+    try {
+      await waitUntilPickable(deck)
+
+      const dropWarnings = warn.mock.calls.filter(([message]) => String(message).includes('dropped 1 of 2 links'))
+      expect(dropWarnings).toHaveLength(1)
+      // The simulation holds only the resolvable link
+      expect(simulation?.data.linksNumber).toBe(1)
+
+      // The surviving link still picks with its original object …
+      const link = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as CosmosGraphPickingInfo | null
+      expect(link?.elementType).toBe('link')
+      expect(link?.object).toEqual(links[0])
+      // … and nothing is drawn where the dropped link would have landed
+      expect(deck.pickObject({ ...worldToScreen(1000, 1015), radius: 2 })).toBeNull()
+    } finally {
+      warn.mockRestore()
       deck.finalize()
       container.remove()
     }

@@ -35,6 +35,8 @@ export type CosmosGraphPoints<PointDataT> = readonly PointDataT[] | {
 /**
  * Links input: an array to run accessors over, or the cosmos-native
  * `[source0, target0, source1, target1, …]` array of point indices.
+ * An array link whose source or target does not resolve to a point is dropped
+ * from both the simulation and the rendering, with one warning per data change.
  */
 export type CosmosGraphLinks<LinkDataT> = readonly LinkDataT[] | Float32Array
 
@@ -200,7 +202,8 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     pointCount: number;
     pointsData: readonly PointDataT[] | { length: number; attributes?: Record<string, unknown> };
     linksData: readonly LinkDataT[] | { length: number; attributes: Record<string, unknown> } | null;
-    idToIndex: Map<string | number, number> | null;
+    /** Array links only: the resolved `[source, target]` point-index pairs, one per entry of `linksData`. */
+    linkIndices: Float32Array | null;
     draggedPointIndex: number | null;
     animationHandle?: number;
   }
@@ -224,7 +227,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       pointCount: 0,
       pointsData: { length: 0 },
       linksData: null,
-      idToIndex: null,
+      linkIndices: null,
       draggedPointIndex: null,
       // Step the simulation exactly once per animation frame, independent of
       // draw passes (draw runs per viewport and again while picking)
@@ -252,18 +255,22 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     if (changeFlags.propsChanged && props.simulationConfig !== oldProps.simulationConfig) {
       simulation.setConfig(props.simulationConfig)
     }
+    // Link endpoints are resolved at ingest, so an endpoint accessor change
+    // re-ingests like a data change
+    const triggers = typeof changeFlags.updateTriggersChanged === 'object'
+      ? changeFlags.updateTriggersChanged as CosmosUpdateTriggers
+      : undefined
     const dataChanged =
       props.points !== oldProps.points ||
       props.links !== oldProps.links ||
-      (typeof changeFlags.updateTriggersChanged === 'object' &&
-        Boolean((changeFlags.updateTriggersChanged as CosmosUpdateTriggers).getPointPosition))
+      Boolean(triggers?.getPointPosition || triggers?.getLinkSource || triggers?.getLinkTarget)
     if (dataChanged) {
       this._updateSimulationData()
     }
   }
 
   public renderLayers (): Layer[] | null {
-    const { simulation, isReady, pointCount, pointsData, linksData, idToIndex } = this.state
+    const { simulation, isReady, pointCount, pointsData, linksData, linkIndices } = this.state
     if (!simulation || !isReady || pointCount === 0) return null
 
     const { getPointSize, getPointColor, pointSizeUnits, getLinkColor, getLinkWidth, linkWidthUnits } = this.props
@@ -271,12 +278,6 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     const layers: Layer[] = []
 
     if (linksData) {
-      // Array links resolve their endpoints through the id map when one exists
-      const resolveEndpoint = (accessor: Accessor<LinkDataT, string | number>) =>
-        (link: LinkDataT, info: AccessorContext<LinkDataT>): number => {
-          const endpoint = resolveAccessor(accessor, link, info)
-          return idToIndex ? idToIndex.get(endpoint) ?? 0 : (endpoint as number)
-        }
       layers.push(
         new CosmosLinksLayer<LinkDataT>(
           this.getSubLayerProps({
@@ -297,10 +298,12 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
             // getSubLayerProps does not forward `transitions`
             transitions: this.props.transitions,
           },
-          Array.isArray(linksData)
+          Array.isArray(linksData) && linkIndices
             ? {
-              getLinkSource: resolveEndpoint(this.props.getLinkSource),
-              getLinkTarget: resolveEndpoint(this.props.getLinkTarget),
+              // Array links read the endpoints resolved at ingest, so the
+              // rendered links are exactly the simulated ones
+              getLinkSource: (_: LinkDataT, { index }: AccessorContext<LinkDataT>): number => linkIndices[index * 2] as number,
+              getLinkTarget: (_: LinkDataT, { index }: AccessorContext<LinkDataT>): number => linkIndices[index * 2 + 1] as number,
             }
             : {}
         )
@@ -470,6 +473,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
 
     let linkArray: Float32Array | null = null
     let linksData: this['state']['linksData'] = null
+    let linkIndices: Float32Array | null = null
     if (links instanceof Float32Array) {
       linkArray = links
       // The cosmos pair array feeds deck as two interleaved binary attributes
@@ -483,22 +487,42 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     } else if (Array.isArray(links)) {
       const linkObjects = links as readonly LinkDataT[]
       const { getLinkSource, getLinkTarget } = this.props
-      linkArray = new Float32Array(linkObjects.length * 2)
+      // An endpoint is a point index, or a point id when the id map exists;
+      // anything that does not name a point drops the whole link from both
+      // the simulation and the rendering, so the two never disagree
+      const resolveEndpoint = (endpoint: string | number): number | undefined => {
+        const index = idToIndex ? idToIndex.get(endpoint) : endpoint
+        return typeof index === 'number' && Number.isInteger(index) && index >= 0 && index < pointCount
+          ? index
+          : undefined
+      }
+      const keptLinks: LinkDataT[] = []
+      const keptIndices: number[] = []
       for (let i = 0; i < linkObjects.length; i += 1) {
         const link = linkObjects[i] as LinkDataT
         const info: AccessorContext<LinkDataT> = { index: i, data: linkObjects, target: [] }
-        const source = resolveAccessor(getLinkSource, link, info)
-        const target = resolveAccessor(getLinkTarget, link, info)
-        linkArray[i * 2] = idToIndex ? idToIndex.get(source) ?? 0 : (source as number)
-        linkArray[i * 2 + 1] = idToIndex ? idToIndex.get(target) ?? 0 : (target as number)
+        const source = resolveEndpoint(resolveAccessor(getLinkSource, link, info))
+        const target = resolveEndpoint(resolveAccessor(getLinkTarget, link, info))
+        if (source === undefined || target === undefined) continue
+        keptLinks.push(link)
+        keptIndices.push(source, target)
       }
-      linksData = linkObjects
+      const dropped = linkObjects.length - keptLinks.length
+      if (dropped > 0) {
+        const hint = idToIndex ? 'getLinkSource / getLinkTarget against getPointId' : 'getLinkSource / getLinkTarget'
+        console.warn(
+          `@cosmos.gl/deck-layers: dropped ${dropped} of ${linkObjects.length} links whose source or target is not a point — check ${hint}`
+        )
+      }
+      linkArray = Float32Array.from(keptIndices)
+      linkIndices = linkArray
+      linksData = keptLinks
     }
 
     simulation.setPointPositions(positions)
     simulation.setLinks(linkArray ?? new Float32Array(0))
     simulation.applyData()
 
-    this.setState({ pointCount, pointsData, linksData, idToIndex })
+    this.setState({ pointCount, pointsData, linksData, linkIndices })
   }
 }
