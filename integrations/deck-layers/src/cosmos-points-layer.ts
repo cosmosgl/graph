@@ -1,107 +1,199 @@
-import { Layer, type LayerContext } from '@deck.gl/core'
-import { Model } from '@luma.gl/engine'
-import type { Graph, GraphSimulation } from '@cosmos.gl/graph'
+import { Layer, project32, picking, UNIT } from '@deck.gl/core'
+import type { Accessor, Color, DefaultProps, LayerDataSource, LayerProps, Unit, UpdateParameters } from '@deck.gl/core'
+import { Model, Geometry } from '@luma.gl/engine'
 
 import { BLEND_PARAMETERS } from './blend-parameters'
+import { cosmosPointsUniforms } from './cosmos-points-layer-uniforms'
+import type { CosmosPointsProps } from './cosmos-points-layer-uniforms'
+import type { PositionTextureSource } from './types'
 
-const pointsVs = /* glsl */ `#version 300 es
-precision highp float;
-precision highp int;
+const DEFAULT_POINT_COLOR: [number, number, number, number] = [74, 92, 191, 230]
+
+const vs = /* glsl */ `\
+#version 300 es
+#define SHADER_NAME cosmos-points-layer-vertex-shader
+
+in vec3 positions;
+
+in float instanceSizes;
+in vec4 instanceColors;
+in vec3 instancePickingColors;
 
 uniform sampler2D positionsTexture;
-uniform mat4 viewProjectionMatrix;
-uniform float pointsTextureSize;
-uniform float pointSize;
 
-void main() {
-  int size = int(pointsTextureSize);
-  int index = gl_VertexID;
+out vec4 vColor;
+out vec2 unitPosition;
+out float outerRadiusPixels;
+
+void main(void) {
+  int pointIndex = gl_InstanceID;
+  int textureSize = int(cosmosPoints.pointsTextureSize);
   // Point i lives at texel (i % size, i / size) as [x, y, i, unused] in space coordinates
-  vec4 pointPosition = texelFetch(positionsTexture, ivec2(index % size, index / size), 0);
-  // An absent point keeps a frozen NaN-adjacent state; cull it off-screen
-  if (isnan(pointPosition.r)) {
-    gl_Position = vec4(2.0, 2.0, 2.0, 0.0);
-    gl_PointSize = 0.0;
+  vec4 pointPosition = texelFetch(positionsTexture, ivec2(pointIndex % textureSize, pointIndex / textureSize), 0);
+
+  // An absent point keeps a frozen NaN state; collapse its quad so it clips away
+  if (isnan(pointPosition.x)) {
+    gl_Position = vec4(0.0);
+    unitPosition = vec2(0.0);
+    outerRadiusPixels = 0.0;
+    vColor = vec4(0.0);
     return;
   }
-  gl_Position = viewProjectionMatrix * vec4(pointPosition.rg, 0.0, 1.0);
-  gl_PointSize = pointSize;
+
+  geometry.worldPosition = vec3(pointPosition.xy, 0.0);
+  geometry.pickingColor = instancePickingColors;
+
+  // instanceSizes is a diameter; the quad expands by radius
+  outerRadiusPixels = project_size_to_pixel(instanceSizes * 0.5, cosmosPoints.sizeUnits);
+  // Expand the quad so edge smoothing has room outside the circle
+  float edgePadding = (outerRadiusPixels + SMOOTH_EDGE_RADIUS) / outerRadiusPixels;
+
+  unitPosition = edgePadding * positions.xy;
+  geometry.uv = unitPosition;
+
+  vec3 offset = vec3(edgePadding * positions.xy * project_pixel_size(outerRadiusPixels), 0.0);
+  DECKGL_FILTER_SIZE(offset, geometry);
+  gl_Position = project_position_to_clipspace(geometry.worldPosition, vec3(0.0), offset, geometry.position);
+  DECKGL_FILTER_GL_POSITION(gl_Position, geometry);
+
+  vColor = vec4(instanceColors.rgb, instanceColors.a * layer.opacity);
+  DECKGL_FILTER_COLOR(vColor, geometry);
 }
 `
 
-const pointsFs = /* glsl */ `#version 300 es
+const fs = /* glsl */ `\
+#version 300 es
+#define SHADER_NAME cosmos-points-layer-fragment-shader
+
 precision highp float;
 
-uniform vec4 color;
+in vec4 vColor;
+in vec2 unitPosition;
+in float outerRadiusPixels;
 
 out vec4 fragColor;
 
-void main() {
-  vec2 fromCenter = gl_PointCoord * 2.0 - 1.0;
-  float distSquared = dot(fromCenter, fromCenter);
-  if (distSquared > 1.0) discard;
-  fragColor = vec4(color.rgb, color.a * (1.0 - smoothstep(0.64, 1.0, distSquared)));
+void main(void) {
+  geometry.uv = unitPosition;
+
+  float distToCenter = length(unitPosition) * outerRadiusPixels;
+  float inCircle = smoothedge(distToCenter, outerRadiusPixels);
+  if (inCircle == 0.0) {
+    discard;
+  }
+
+  fragColor = vec4(vColor.rgb, vColor.a * inCircle);
+  DECKGL_FILTER_COLOR(fragColor, geometry);
 }
 `
 
-export type CosmosPointsLayerProps = {
-  id: string;
-  /** The cosmos.gl simulation (or headless Graph) whose position texture to sample. */
-  graph: GraphSimulation | Graph;
-  color?: [number, number, number, number];
-  /** Point diameter in pixels. */
-  pointSize?: number;
+export type CosmosPointsLayerProps<DataT = unknown> = CosmosPointsLayerOwnProps<DataT> & LayerProps
+
+type CosmosPointsLayerOwnProps<DataT> = {
+  /**
+   * One entry per simulation point, in point-index order: an array to run
+   * accessors over, or `{ length }` when accessors are constants. The length
+   * must equal the simulation's point count.
+   */
+  data: LayerDataSource<DataT>;
+  /** The simulation whose live position texture to sample. */
+  graph: PositionTextureSource;
+  /**
+   * Point diameter accessor, in `pointSizeUnits`.
+   * @default 4
+   */
+  getPointSize?: Accessor<DataT, number>;
+  /**
+   * Point RGBA color accessor, channels in 0..255.
+   * @default [74, 92, 191, 230]
+   */
+  getPointColor?: Accessor<DataT, Color>;
+  /**
+   * The units of the point diameter, one of `'meters'`, `'common'`, `'pixels'`.
+   * @default 'pixels'
+   */
+  pointSizeUnits?: Unit;
+}
+
+const defaultProps: DefaultProps<CosmosPointsLayerProps> = {
+  getPointSize: { type: 'accessor', value: 4 },
+  getPointColor: { type: 'accessor', value: DEFAULT_POINT_COLOR },
+  pointSizeUnits: 'pixels',
+  parameters: { type: 'object', value: BLEND_PARAMETERS, optional: true, compare: 2 },
 }
 
 /**
- * Renders every cosmos.gl point as an instanceless `point-list` draw: the vertex
- * shader derives each point's texel from `gl_VertexID` — no position attribute,
- * no CPU copy, no per-frame attribute updates.
+ * Renders every cosmos.gl point as an instanced quad whose position comes from
+ * a `texelFetch` on the simulation's live GPU position texture — no position
+ * attribute, no CPU copy, no per-frame attribute updates. Color and size are
+ * ordinary deck instanced attributes, and picking works out of the box: the
+ * instance index is the point index.
  */
-export class CosmosPointsLayer extends Layer<Required<CosmosPointsLayerProps>> {
+export class CosmosPointsLayer<DataT = unknown> extends Layer<Required<CosmosPointsLayerOwnProps<DataT>>> {
   public static layerName = 'CosmosPointsLayer'
-  public static defaultProps = {
-    color: { type: 'array', value: [0.29, 0.36, 0.75, 0.9] },
-    pointSize: 4,
-    parameters: { type: 'object', value: BLEND_PARAMETERS, optional: true, compare: 2 },
+  public static defaultProps = defaultProps
+
+  declare public state: { model?: Model }
+
+  public getShaders (): ReturnType<Layer['getShaders']> {
+    return super.getShaders({ vs, fs, modules: [project32, picking, cosmosPointsUniforms] })
   }
 
-  declare public state: { model?: Model; uniforms: Record<string, unknown> }
-
   public initializeState (): void {
-    this.state = { uniforms: {} }
+    this.getAttributeManager()!.addInstanced({
+      instanceSizes: {
+        size: 1,
+        transition: true,
+        accessor: 'getPointSize',
+        defaultValue: 4,
+      },
+      instanceColors: {
+        size: 4,
+        transition: true,
+        type: 'unorm8',
+        accessor: 'getPointColor',
+        defaultValue: [...DEFAULT_POINT_COLOR],
+      },
+    })
+  }
+
+  public updateState (params: UpdateParameters<this>): void {
+    super.updateState(params)
+
+    if (params.changeFlags.extensionsChanged) {
+      this.state.model?.destroy()
+      this.state.model = this._getModel()
+      this.getAttributeManager()!.invalidateAll()
+    }
   }
 
   public draw (): void {
     const positionInfo = this.props.graph.getPointPositionTexture()
-    if (!positionInfo) return
-
-    const { uniforms } = this.state
-    this.state.model ||= new Model(this.context.device, {
-      id: `${this.props.id}-model`,
-      vs: pointsVs,
-      fs: pointsFs,
-      topology: 'point-list',
-      vertexCount: 0,
-      uniforms,
-      parameters: BLEND_PARAMETERS,
-    })
     const { model } = this.state
+    if (!positionInfo || !model || positionInfo.pointCount === 0) return
 
-    // The Model holds this record by reference and re-reads it on every draw
-    Object.assign(uniforms, {
-      viewProjectionMatrix: this.context.viewport.viewProjectionMatrix,
+    const moduleProps: CosmosPointsProps = {
       pointsTextureSize: positionInfo.textureSize,
-      pointSize: this.props.pointSize,
-      color: this.props.color,
-    })
-    model.setBindings({ positionsTexture: positionInfo.texture })
-    model.setVertexCount(positionInfo.pointCount)
+      sizeUnits: UNIT[this.props.pointSizeUnits],
+      positionsTexture: positionInfo.texture,
+    }
+    model.shaderInputs.setProps({ cosmosPoints: moduleProps })
     model.draw(this.context.renderPass)
   }
 
-  public finalizeState (context: LayerContext): void {
-    this.state.model?.destroy()
-    super.finalizeState(context)
+  private _getModel (): Model {
+    // A quad that minimally covers the unit circle
+    return new Model(this.context.device, {
+      ...this.getShaders(),
+      id: this.props.id,
+      bufferLayout: this.getAttributeManager()!.getBufferLayouts(),
+      geometry: new Geometry({
+        topology: 'triangle-strip',
+        attributes: {
+          positions: { size: 3, value: new Float32Array([-1, -1, 0, 1, -1, 0, -1, 1, 0, 1, 1, 0]) },
+        },
+      }),
+      isInstanced: true,
+    })
   }
 }

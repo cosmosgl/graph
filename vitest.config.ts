@@ -11,6 +11,7 @@ export default defineConfig({
     alias: {
       '@/graph': resolve(__dirname, 'src/'),
       '@cosmos.gl/graph': resolve(__dirname, 'src/'),
+      '@cosmos.gl/deck-layers': resolve(__dirname, 'integrations/deck-layers/src/'),
     },
   },
   test: {

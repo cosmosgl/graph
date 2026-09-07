@@ -5,6 +5,8 @@
     "paths": {
       "@cosmos.gl/graph": ["src/"],
       "@cosmos.gl/graph/*": ["src/*"],
+      "@cosmos.gl/deck-layers": ["integrations/deck-layers/src/"],
+      "@cosmos.gl/deck-layers/*": ["integrations/deck-layers/src/*"],
       "@/graph": ["src/"],
       "@/graph/*": ["src/*"]
     },
