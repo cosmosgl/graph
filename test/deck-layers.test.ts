@@ -473,4 +473,95 @@ describe('CosmosGraphLayer', () => {
       container.remove()
     }
   })
+
+  it('drags a point: pins on start, moves with the pointer, releases on end', async () => {
+    let simulation: GraphSimulation | undefined
+    const calls = { start: 0, drag: 0, end: 0 }
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer({
+        id: 'graph',
+        points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
+        getPointSize: 10,
+        simulationConfig: STATIC_SIM,
+        onSimulationCreated: (sim): void => { simulation = sim },
+        pickable: true,
+        enablePointDrag: true,
+        dragReheatAlpha: null,
+        onPointDragStart: (): void => { calls.start += 1 },
+        onPointDrag: (): void => { calls.drag += 1 },
+        onPointDragEnd: (): void => { calls.end += 1 },
+      }),
+    ])
+    try {
+      await waitUntilPickable(deck)
+      const info = deck.pickObject({ ...CENTER, radius: 2 }) as CosmosGraphPickingInfo
+      const layer = info.layer as unknown as CosmosGraphLayer
+      let stopped = 0
+      const event = { stopImmediatePropagation: (): void => { stopped += 1 } }
+
+      expect(layer.onDragStart(info, event)).toBe(true)
+      expect(simulation?.isPointPinned(0)).toBe(true)
+      expect(stopped).toBe(1)
+      expect(calls.start).toBe(1)
+
+      // Deck freezes info.index for the gesture and refreshes coordinate
+      expect(layer.onDrag({ ...info, coordinate: [1010, 985] }, event)).toBe(true)
+      const positions = simulation!.getPointPositionsArray()
+      expect(positions[0]).toBeCloseTo(1010, 0)
+      expect(positions[1]).toBeCloseTo(985, 0)
+      // Picking tracks the dragged point at its new position
+      const moved = deck.pickObject({ ...worldToScreen(1010, 985), radius: 2 })
+      expect(moved?.index).toBe(0)
+      expect(calls.drag).toBe(1)
+
+      expect(layer.onDragEnd(info, event)).toBe(true)
+      expect(simulation?.isPointPinned(0)).toBe(false)
+      expect(calls.end).toBe(1)
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('ignores drags off points, and keeps the pin when unpinOnDragEnd is false', async () => {
+    let simulation: GraphSimulation | undefined
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer({
+        id: 'graph',
+        points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
+        links: new Float32Array([0, 1]),
+        getPointSize: 10,
+        getLinkWidth: 6,
+        simulationConfig: STATIC_SIM,
+        onSimulationCreated: (sim): void => { simulation = sim },
+        pickable: true,
+        enablePointDrag: true,
+        dragReheatAlpha: null,
+        unpinOnDragEnd: false,
+      }),
+    ])
+    try {
+      await waitUntilPickable(deck)
+      let stopped = 0
+      const event = { stopImmediatePropagation: (): void => { stopped += 1 } }
+
+      // A link is not draggable: the gesture falls through to the controller
+      const linkInfo = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as CosmosGraphPickingInfo
+      expect(linkInfo.elementType).toBe('link')
+      const layer = linkInfo.layer as unknown as CosmosGraphLayer
+      expect(layer.onDragStart(linkInfo, event)).toBe(false)
+      expect(stopped).toBe(0)
+      expect(simulation?.isPointPinned(0)).toBe(false)
+
+      // unpinOnDragEnd: false keeps the point where it was dropped
+      const pointInfo = deck.pickObject({ ...CENTER, radius: 2 }) as CosmosGraphPickingInfo
+      layer.onDragStart(pointInfo, event)
+      layer.onDrag({ ...pointInfo, coordinate: [995, 1010] }, event)
+      layer.onDragEnd(pointInfo, event)
+      expect(simulation?.isPointPinned(0)).toBe(true)
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
 })

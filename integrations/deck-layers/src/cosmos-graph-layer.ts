@@ -98,6 +98,30 @@ type CosmosGraphLayerOwnProps<PointDataT, LinkDataT> = {
    * @default 'pixels'
    */
   linkWidthUnits?: Unit;
+  /**
+   * Lets pointer drags grab a point: pinned on drag start, moved with the
+   * pointer, released per `unpinOnDragEnd`. View panning is suppressed while
+   * a point is grabbed.
+   * @default false
+   */
+  enablePointDrag?: boolean;
+  /**
+   * Simulation alpha to restart with when a drag starts, so the graph
+   * responds to the moving point; `null` leaves the simulation untouched.
+   * @default 0.1
+   */
+  dragReheatAlpha?: number | null;
+  /**
+   * Release the point on drag end; `false` keeps it pinned where dropped.
+   * @default true
+   */
+  unpinOnDragEnd?: boolean;
+  /** Called when a point drag starts. */
+  onPointDragStart?: ((info: CosmosGraphPickingInfo) => void) | null;
+  /** Called for every pointer move while a point is dragged. */
+  onPointDrag?: ((info: CosmosGraphPickingInfo) => void) | null;
+  /** Called when a point drag ends. */
+  onPointDragEnd?: ((info: CosmosGraphPickingInfo) => void) | null;
   /** Simulation configuration, passed through to `GraphSimulation` (forces, spaceSize, callbacks). */
   simulationConfig?: GraphSimulationConfig;
   /**
@@ -119,11 +143,22 @@ const defaultProps: DefaultProps<CosmosGraphLayerProps> = {
   getLinkColor: { type: 'accessor', value: [94, 115, 194, 64] },
   getLinkWidth: { type: 'accessor', value: 1 },
   linkWidthUnits: 'pixels',
+  enablePointDrag: false,
+  dragReheatAlpha: 0.1,
+  unpinOnDragEnd: true,
+  onPointDragStart: { type: 'function', value: null, optional: true },
+  onPointDrag: { type: 'function', value: null, optional: true },
+  onPointDragEnd: { type: 'function', value: null, optional: true },
   simulationConfig: { type: 'object', value: {}, compare: 2 },
   onSimulationCreated: { type: 'function', value: null, optional: true },
   // getSubLayerProps forwards `parameters` into every sublayer, so the
   // composite must carry the same pipeline-state default the primitives do
   parameters: { type: 'object', value: BLEND_PARAMETERS, optional: true, compare: 2 },
+}
+
+/** The slice of a deck gesture event the drag handlers need. */
+type DragGestureEvent = {
+  stopImmediatePropagation?: () => void;
 }
 
 /** The update-trigger keys the composite forwards to its sublayers. */
@@ -164,6 +199,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     pointsData: readonly PointDataT[] | { length: number };
     linksData: readonly LinkDataT[] | { length: number; attributes: Record<string, unknown> } | null;
     idToIndex: Map<string | number, number> | null;
+    draggedPointIndex: number | null;
     animationHandle?: number;
   }
 
@@ -187,6 +223,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       pointsData: { length: 0 },
       linksData: null,
       idToIndex: null,
+      draggedPointIndex: null,
       // Step the simulation exactly once per animation frame, independent of
       // draw passes (draw runs per viewport and again while picking)
       animationHandle: timeline.attachAnimation({ setTime: () => this._onTimelineTick() }),
@@ -288,6 +325,46 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     return layers
   }
 
+  public onDragStart (info: PickingInfo, event: DragGestureEvent): boolean {
+    const { simulation } = this.state
+    const { enablePointDrag, dragReheatAlpha } = this.props
+    const picked = info as CosmosGraphPickingInfo
+    if (!enablePointDrag || !simulation || picked.elementType !== 'point' || info.index < 0) return false
+
+    // A direct field write: per-gesture state must not re-render sublayers
+    this.state.draggedPointIndex = info.index
+    simulation.setPinnedPoint(info.index, true)
+    if (dragReheatAlpha !== null) simulation.start(dragReheatAlpha)
+    // A grabbed point must not also pan the view
+    event.stopImmediatePropagation?.()
+    this.props.onPointDragStart?.(picked)
+    return true
+  }
+
+  public onDrag (info: PickingInfo, event: DragGestureEvent): boolean {
+    const { simulation, draggedPointIndex } = this.state
+    if (!simulation || draggedPointIndex === null) return false
+
+    const [x, y] = this._dragCoordinate(info)
+    simulation.setPointPosition(draggedPointIndex, x, y)
+    event.stopImmediatePropagation?.()
+    // Repaint even when the simulation is settled and the ticker is idle
+    ;(this.getCurrentLayer() ?? this).setNeedsRedraw()
+    this.props.onPointDrag?.(info as CosmosGraphPickingInfo)
+    return true
+  }
+
+  public onDragEnd (info: PickingInfo, event: DragGestureEvent): boolean {
+    const { simulation, draggedPointIndex } = this.state
+    if (!simulation || draggedPointIndex === null) return false
+
+    if (this.props.unpinOnDragEnd) simulation.setPinnedPoint(draggedPointIndex, false)
+    this.state.draggedPointIndex = null
+    event.stopImmediatePropagation?.()
+    this.props.onPointDragEnd?.(info as CosmosGraphPickingInfo)
+    return true
+  }
+
   public getPickingInfo (params: GetPickingInfoParams): CosmosGraphPickingInfo {
     const info: CosmosGraphPickingInfo = params.info
     if (params.sourceLayer) {
@@ -318,6 +395,14 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     // the flag stops being set and deck goes idle on its own
     const layer = this.getCurrentLayer() ?? this
     layer.setNeedsRedraw()
+  }
+
+  private _dragCoordinate (info: PickingInfo): [number, number] {
+    // info.coordinate is unprojected at the current pointer; it can be absent
+    // when the pointer leaves the picked object's viewport
+    if (info.coordinate) return [info.coordinate[0] as number, info.coordinate[1] as number]
+    const unprojected = this.context.viewport.unproject([info.x, info.y])
+    return [unprojected[0] as number, unprojected[1] as number]
   }
 
   private _updateSimulationData (): void {
