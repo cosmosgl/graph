@@ -1,9 +1,9 @@
 import { Layer, type LayerContext, type UpdateParameters } from '@deck.gl/core'
 import { Model } from '@luma.gl/engine'
 import type { Texture } from '@luma.gl/core'
-import type { Graph, GraphSimulation } from '@cosmos.gl/graph'
 
 import { BLEND_PARAMETERS } from './blend-parameters'
+import type { PositionTextureSource } from './types'
 
 const linksVs = /* glsl */ `#version 300 es
 precision highp float;
@@ -46,8 +46,8 @@ void main() {
 
 export type CosmosLinksLayerProps = {
   id: string;
-  /** The cosmos.gl simulation (or headless Graph) whose position texture to sample. */
-  graph: GraphSimulation | Graph;
+  /** The simulation whose live position texture to sample. */
+  graph: PositionTextureSource;
   /** Flat `[source0, target0, source1, target1, …]` point indices, as passed to `graph.setLinks`. */
   links: Float32Array;
   color?: [number, number, number, number];
