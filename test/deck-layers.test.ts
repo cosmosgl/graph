@@ -3,7 +3,7 @@ import { Deck, OrthographicView } from '@deck.gl/core'
 import type { Device } from '@luma.gl/core'
 import { GraphSimulation, type GraphSimulationConfig } from '@cosmos.gl/graph'
 import { CosmosPointsLayer, CosmosLinksLayer, CosmosGraphLayer, type CosmosGraphPickingInfo } from '@cosmos.gl/deck-layers'
-import type { LayersList } from '@deck.gl/core'
+import type { LayersList, PickingInfo } from '@deck.gl/core'
 
 /**
  * Runtime contract tests for @cosmos.gl/deck-layers: the layers render a live
@@ -560,6 +560,51 @@ describe('CosmosGraphLayer', () => {
       layer.onDragEnd(pointInfo, event)
       expect(simulation?.isPointPinned(0)).toBe(true)
     } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('highlights only the hovered sublayer — point N must not tint link N', async () => {
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer({
+        id: 'graph',
+        points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
+        links: new Float32Array([0, 1]),
+        getPointSize: 10,
+        getLinkWidth: 6,
+        simulationConfig: STATIC_SIM,
+        pickable: true,
+        autoHighlight: true,
+      }),
+    ])
+    const pointsProto = CosmosPointsLayer.prototype.updateAutoHighlight
+    const linksProto = CosmosLinksLayer.prototype.updateAutoHighlight
+    try {
+      await waitUntilPickable(deck)
+      const calls: { id: string; picked: boolean }[] = []
+      const spy = function (this: { id: string }, info: PickingInfo): void {
+        calls.push({ id: this.id, picked: Boolean(info.picked) })
+      }
+      CosmosPointsLayer.prototype.updateAutoHighlight = spy
+      CosmosLinksLayer.prototype.updateAutoHighlight = spy
+
+      // Hovering a point highlights the points sublayer and clears the links one
+      const pointInfo = deck.pickObject({ ...CENTER, radius: 2 }) as CosmosGraphPickingInfo
+      const composite = pointInfo.layer as unknown as { _updateAutoHighlight (info: PickingInfo): void }
+      composite._updateAutoHighlight({ ...pointInfo, picked: true })
+      expect(calls).toContainEqual({ id: 'graph-points', picked: true })
+      expect(calls).toContainEqual({ id: 'graph-links', picked: false })
+
+      // And the other way around for a link
+      calls.length = 0
+      const linkInfo = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as CosmosGraphPickingInfo
+      composite._updateAutoHighlight({ ...linkInfo, picked: true })
+      expect(calls).toContainEqual({ id: 'graph-links', picked: true })
+      expect(calls).toContainEqual({ id: 'graph-points', picked: false })
+    } finally {
+      CosmosPointsLayer.prototype.updateAutoHighlight = pointsProto
+      CosmosLinksLayer.prototype.updateAutoHighlight = linksProto
       deck.finalize()
       container.remove()
     }
