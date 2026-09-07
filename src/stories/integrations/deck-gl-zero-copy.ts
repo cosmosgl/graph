@@ -16,7 +16,9 @@ import { generateMeshData } from '../generate-mesh-data'
  * position texture.
  *
  * Hovering highlights the element under the cursor — point or link — and
- * shows which one, even while the simulation is moving.
+ * shows which one, even while the simulation is moving. Dragging a point
+ * grabs it: pinned under the pointer, with the simulation reheating so the
+ * graph responds around it.
  */
 export const deckGlZeroCopy = async (): Promise<{ div: HTMLDivElement; graph?: GraphSimulation; destroy: () => void }> => {
   const div = document.createElement('div')
@@ -28,7 +30,7 @@ export const deckGlZeroCopy = async (): Promise<{ div: HTMLDivElement; graph?: G
   const spaceSize = defaultConfigValues.spaceSize
 
   const hoverStatus = document.createElement('div')
-  hoverStatus.textContent = 'hover a point or link'
+  hoverStatus.textContent = 'hover to inspect — drag a point to move it'
   hoverStatus.style.cssText =
     'position: absolute; top: 12px; right: 12px; z-index: 1; padding: 6px 12px; ' +
     'font: 12px monospace; color: #fff; background: rgba(0, 0, 0, 0.5); border-radius: 4px;'
@@ -64,11 +66,12 @@ export const deckGlZeroCopy = async (): Promise<{ div: HTMLDivElement; graph?: G
         },
         onSimulationCreated: (sim): void => { simulation = sim },
         pickable: true,
+        enablePointDrag: true,
         autoHighlight: true,
         highlightColor: [255, 255, 255, 220],
         onHover: (info: PickingInfo): void => {
           const { elementType, index } = info as CosmosGraphPickingInfo
-          hoverStatus.textContent = index >= 0 ? `${elementType} ${index}` : 'hover a point or link'
+          hoverStatus.textContent = index >= 0 ? `${elementType} ${index}` : 'hover to inspect — drag a point to move it'
         },
       }),
     ],
