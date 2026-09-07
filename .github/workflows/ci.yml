@@ -32,10 +32,15 @@ jobs:
           node-version: ${{ steps.node.outputs.floor }}
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      # Workspace packages publish in lockstep; catch version drift early.
+      - run: node scripts/check-lockstep.mjs
       - run: pnpm run lint
       # Covers stories and tests too, which the build never compiles, and exits
       # non-zero on its own.
       - run: pnpm run typecheck
+      # Real-GPU browser suite (headless Chromium on SwiftShader).
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test
       # The build exits 0 even when TypeScript reports errors; the grep turns
       # them into a failure.
       - name: Build
