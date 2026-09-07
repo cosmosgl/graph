@@ -1,4 +1,4 @@
-import { Deck, OrthographicView } from '@deck.gl/core'
+import { Deck, OrthographicView, type PickingInfo } from '@deck.gl/core'
 import type { Device } from '@luma.gl/core'
 import { GraphSimulation, defaultConfigValues } from '@cosmos.gl/graph'
 import { CosmosPointsLayer, CosmosLinksLayer } from '@cosmos.gl/deck-layers'
@@ -14,6 +14,10 @@ import { generateMeshData } from '../generate-mesh-data'
  * deck.gl frame from `onBeforeRender`. Custom layers sample the live GPU position
  * texture by point index: positions never leave the GPU, there is one canvas and
  * one device.
+ *
+ * The points layer joins deck's picking pass: hovering highlights the point
+ * under the cursor and shows its index — even while the simulation is moving,
+ * because picking samples the same live texture the draw does.
  */
 export const deckGlZeroCopy = async (): Promise<{ div: HTMLDivElement; graph: GraphSimulation; destroy: () => void }> => {
   const div = document.createElement('div')
@@ -36,10 +40,20 @@ export const deckGlZeroCopy = async (): Promise<{ div: HTMLDivElement; graph: Gr
       // Render every frame while the simulation runs; onBeforeRender below
       // (set once the graph exists) advances it from deck's frame lifecycle
       _animate: true,
+      // Points are small — give hover and click a little tolerance
+      pickingRadius: 5,
+      getCursor: ({ isDragging, isHovering }) => (isDragging ? 'grabbing' : isHovering ? 'pointer' : 'grab'),
       onDeviceInitialized: resolve,
       layers: [],
     })
   })
+
+  const hoverStatus = document.createElement('div')
+  hoverStatus.textContent = 'hover a point'
+  hoverStatus.style.cssText =
+    'position: absolute; top: 12px; right: 12px; z-index: 1; padding: 6px 12px; ' +
+    'font: 12px monospace; color: #fff; background: rgba(0, 0, 0, 0.5); border-radius: 4px;'
+  div.appendChild(hoverStatus)
 
   const graph = new GraphSimulation({
     spaceSize,
@@ -74,6 +88,11 @@ export const deckGlZeroCopy = async (): Promise<{ div: HTMLDivElement; graph: Gr
         data: { length: data.pointPositions.length / 2 },
         getPointSize: 4,
         pickable: true,
+        autoHighlight: true,
+        highlightColor: [255, 255, 255, 220],
+        onHover: (info: PickingInfo): void => {
+          hoverStatus.textContent = info.index >= 0 ? `point ${info.index}` : 'hover a point'
+        },
       }),
     ],
   })
