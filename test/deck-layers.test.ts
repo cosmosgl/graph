@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { Deck, OrthographicView } from '@deck.gl/core'
 import type { Device } from '@luma.gl/core'
 import { GraphSimulation, type GraphSimulationConfig } from '@cosmos.gl/graph'
-import { CosmosPointsLayer } from '@cosmos.gl/deck-layers'
+import { CosmosPointsLayer, CosmosLinksLayer } from '@cosmos.gl/deck-layers'
 
 /**
  * Runtime contract tests for @cosmos.gl/deck-layers: the layers render a live
@@ -242,6 +242,76 @@ describe('CosmosPointsLayer', () => {
       for (const probe of [{ x: 20, y: 20 }, { x: 180, y: 180 }, { x: 100, y: 180 }]) {
         expect(deck.pickObject({ ...probe, radius: 2 })?.index ?? null).not.toBe(1)
       }
+    } finally {
+      graph.destroy()
+      deck.finalize()
+      container.remove()
+    }
+  })
+})
+
+describe('CosmosLinksLayer', () => {
+  it('picks links by link index along the extruded quad', async () => {
+    const { deck, graph, container } = await createDeckWithSimulation(
+      {},
+      new Float32Array([1000, 1000, 1050, 1000])
+    )
+    try {
+      // Cosmos-native links array read as two interleaved binary attributes
+      const links = new Float32Array([0, 1])
+      deck.setProps({
+        layers: [
+          new CosmosLinksLayer({
+            id: 'links',
+            graph,
+            data: {
+              length: 1,
+              attributes: {
+                getLinkSource: { value: links, size: 1, stride: 8 },
+                getLinkTarget: { value: links, size: 1, offset: 4, stride: 8 },
+              },
+            },
+            getLinkWidth: 8,
+            pickable: true,
+          }),
+        ],
+      })
+      await waitUntilPickable(deck)
+
+      const mid = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 })
+      expect(mid?.index).toBe(0)
+      expect(mid?.layer?.id).toBe('links')
+
+      // The quad is extruded by half the width to each side: 3 px off the
+      // centre line still hits at width 8, 8 px off misses
+      const nearEdge = deck.pickObject({ x: worldToScreen(1025, 1000).x, y: CENTER.y - 3, radius: 0 })
+      expect(nearEdge?.index).toBe(0)
+      const outside = deck.pickObject({ x: worldToScreen(1025, 1000).x, y: CENTER.y - 8, radius: 0 })
+      expect(outside).toBeNull()
+    } finally {
+      graph.destroy()
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('resolves accessor-mode links through the default source/target accessors', async () => {
+    const { deck, graph, container } = await createDeckWithSimulation(
+      {},
+      new Float32Array([1000, 1000, 1050, 1000])
+    )
+    try {
+      const linkData = [{ source: 0, target: 1, label: 'only' }]
+      deck.setProps({
+        layers: [
+          new CosmosLinksLayer({ id: 'links', graph, data: linkData, getLinkWidth: 8, pickable: true }),
+        ],
+      })
+      await waitUntilPickable(deck)
+
+      const info = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 })
+      expect(info?.index).toBe(0)
+      expect(info?.object).toEqual({ source: 0, target: 1, label: 'only' })
     } finally {
       graph.destroy()
       deck.finalize()

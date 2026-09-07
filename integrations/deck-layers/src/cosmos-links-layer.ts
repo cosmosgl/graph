@@ -1,143 +1,238 @@
-import { Layer, type LayerContext, type UpdateParameters } from '@deck.gl/core'
-import { Model } from '@luma.gl/engine'
-import type { Texture } from '@luma.gl/core'
+import { Layer, project32, picking, UNIT } from '@deck.gl/core'
+import type { Accessor, Color, DefaultProps, LayerDataSource, LayerProps, Unit, UpdateParameters } from '@deck.gl/core'
+import { Model, Geometry } from '@luma.gl/engine'
 
 import { BLEND_PARAMETERS } from './blend-parameters'
+import { cosmosLinksUniforms } from './cosmos-links-layer-uniforms'
+import type { CosmosLinksProps } from './cosmos-links-layer-uniforms'
 import type { PositionTextureSource } from './types'
 
-const linksVs = /* glsl */ `#version 300 es
-precision highp float;
-precision highp int;
+const DEFAULT_LINK_COLOR: [number, number, number, number] = [94, 115, 194, 64]
+
+const vs = /* glsl */ `\
+#version 300 es
+#define SHADER_NAME cosmos-links-layer-vertex-shader
+
+in vec3 positions;
+
+in float instanceSourceIndices;
+in float instanceTargetIndices;
+in vec4 instanceColors;
+in float instanceWidths;
+in vec3 instancePickingColors;
 
 uniform sampler2D positionsTexture;
-uniform sampler2D linksTexture;
-uniform mat4 viewProjectionMatrix;
-uniform float pointsTextureSize;
-uniform float linksTextureSize;
 
-void main() {
-  int linkIndex = gl_VertexID / 2;
-  int endpoint = gl_VertexID - linkIndex * 2;
-  int linksSize = int(linksTextureSize);
-  // Link i lives at texel (i % size, i / size) as [sourceIndex, targetIndex, 0, 0]
-  vec4 link = texelFetch(linksTexture, ivec2(linkIndex % linksSize, linkIndex / linksSize), 0);
-  int pointIndex = int(endpoint == 0 ? link.r : link.g);
-  int pointsSize = int(pointsTextureSize);
-  vec4 pointPosition = texelFetch(positionsTexture, ivec2(pointIndex % pointsSize, pointIndex / pointsSize), 0);
-  if (isnan(pointPosition.r)) {
-    gl_Position = vec4(2.0, 2.0, 2.0, 0.0);
+out vec4 vColor;
+out vec2 uv;
+
+// Offset the vertex by half the link width, perpendicular to the link, in
+// screen space. offsetDirection is -1 (left) or 1 (right).
+vec2 getExtrusionOffset(vec2 lineClipspace, float offsetDirection, float width) {
+  vec2 dirScreenspace = normalize(lineClipspace * project.viewportSize);
+  dirScreenspace = vec2(-dirScreenspace.y, dirScreenspace.x);
+  return dirScreenspace * offsetDirection * width / 2.0;
+}
+
+vec4 fetchPointPosition(float index, int textureSize) {
+  int pointIndex = int(index);
+  // Point i lives at texel (i % size, i / size) as [x, y, i, unused] in space coordinates
+  return texelFetch(positionsTexture, ivec2(pointIndex % textureSize, pointIndex / textureSize), 0);
+}
+
+void main(void) {
+  int textureSize = int(cosmosLinks.pointsTextureSize);
+  vec4 sourcePosition = fetchPointPosition(instanceSourceIndices, textureSize);
+  vec4 targetPosition = fetchPointPosition(instanceTargetIndices, textureSize);
+
+  // An absent endpoint keeps a frozen NaN state; collapse the quad so it clips away
+  if (isnan(sourcePosition.x) || isnan(targetPosition.x)) {
+    gl_Position = vec4(0.0);
+    vColor = vec4(0.0);
+    uv = vec2(0.0);
     return;
   }
-  gl_Position = viewProjectionMatrix * vec4(pointPosition.rg, 0.0, 1.0);
+
+  vec3 sourceWorld = vec3(sourcePosition.xy, 0.0);
+  vec3 targetWorld = vec3(targetPosition.xy, 0.0);
+  geometry.worldPosition = sourceWorld;
+  geometry.worldPositionAlt = targetWorld;
+
+  vec4 sourceCommonspace;
+  vec4 targetCommonspace;
+  vec4 source = project_position_to_clipspace(sourceWorld, vec3(0.0), vec3(0.0), sourceCommonspace);
+  vec4 target = project_position_to_clipspace(targetWorld, vec3(0.0), vec3(0.0), targetCommonspace);
+
+  // positions.x selects the endpoint, positions.y the extrusion side
+  float segmentIndex = positions.x;
+  vec4 p = mix(source, target, segmentIndex);
+  geometry.position = mix(sourceCommonspace, targetCommonspace, segmentIndex);
+  uv = positions.xy;
+  geometry.uv = uv;
+  geometry.pickingColor = instancePickingColors;
+
+  float widthPixels = project_size_to_pixel(instanceWidths, cosmosLinks.widthUnits);
+
+  vec3 offset = vec3(getExtrusionOffset(target.xy - source.xy, positions.y, widthPixels), 0.0);
+  DECKGL_FILTER_SIZE(offset, geometry);
+  DECKGL_FILTER_GL_POSITION(p, geometry);
+  gl_Position = p + vec4(project_pixel_size_to_clipspace(offset.xy), 0.0, 0.0);
+
+  vColor = vec4(instanceColors.rgb, instanceColors.a * layer.opacity);
+  DECKGL_FILTER_COLOR(vColor, geometry);
 }
 `
 
-const linksFs = /* glsl */ `#version 300 es
+const fs = /* glsl */ `\
+#version 300 es
+#define SHADER_NAME cosmos-links-layer-fragment-shader
+
 precision highp float;
 
-uniform vec4 color;
+in vec4 vColor;
+in vec2 uv;
 
 out vec4 fragColor;
 
-void main() {
-  fragColor = color;
+void main(void) {
+  geometry.uv = uv;
+
+  fragColor = vColor;
+  DECKGL_FILTER_COLOR(fragColor, geometry);
 }
 `
 
-export type CosmosLinksLayerProps = {
-  id: string;
+export type CosmosLinksLayerProps<DataT = unknown> = CosmosLinksLayerOwnProps<DataT> & LayerProps
+
+type CosmosLinksLayerOwnProps<DataT> = {
+  /**
+   * One entry per link, in link-index order: an array to run accessors over,
+   * or binary form. The cosmos links array `[src0, tgt0, src1, tgt1, …]` maps
+   * without a copy as two interleaved attributes over the same buffer:
+   * `{ length, attributes: { getLinkSource: { value, size: 1, stride: 8 },
+   * getLinkTarget: { value, size: 1, offset: 4, stride: 8 } } }`.
+   */
+  data: LayerDataSource<DataT>;
   /** The simulation whose live position texture to sample. */
   graph: PositionTextureSource;
-  /** Flat `[source0, target0, source1, target1, …]` point indices, as passed to `graph.setLinks`. */
-  links: Float32Array;
-  color?: [number, number, number, number];
+  /**
+   * Source point index accessor.
+   * @default l => l.source
+   */
+  getLinkSource?: Accessor<DataT, number>;
+  /**
+   * Target point index accessor.
+   * @default l => l.target
+   */
+  getLinkTarget?: Accessor<DataT, number>;
+  /**
+   * Link RGBA color accessor, channels in 0..255.
+   * @default [94, 115, 194, 64]
+   */
+  getLinkColor?: Accessor<DataT, Color>;
+  /**
+   * Link width accessor, in `linkWidthUnits`.
+   * @default 1
+   */
+  getLinkWidth?: Accessor<DataT, number>;
+  /**
+   * The units of the link width, one of `'meters'`, `'common'`, `'pixels'`.
+   * @default 'pixels'
+   */
+  linkWidthUnits?: Unit;
+}
+
+const defaultProps: DefaultProps<CosmosLinksLayerProps> = {
+  getLinkSource: { type: 'accessor', value: (l: unknown) => (l as { source: number }).source },
+  getLinkTarget: { type: 'accessor', value: (l: unknown) => (l as { target: number }).target },
+  getLinkColor: { type: 'accessor', value: DEFAULT_LINK_COLOR },
+  getLinkWidth: { type: 'accessor', value: 1 },
+  linkWidthUnits: 'pixels',
+  parameters: { type: 'object', value: BLEND_PARAMETERS, optional: true, compare: 2 },
 }
 
 /**
- * Renders cosmos.gl links as a `line-list` draw. Link endpoint indices are
- * uploaded once into a small RGBA32F lookup texture; each vertex then chains two
- * texelFetches — link texel → endpoint index → live position texel.
+ * Renders every cosmos.gl link as an instanced quad stretched between its two
+ * endpoints: the vertex shader `texelFetch`es both point positions from the
+ * simulation's live GPU texture and extrudes the quad by half the link width
+ * in screen space — no position attribute, no CPU copy, no per-frame attribute
+ * updates. Endpoint indices, color and width are ordinary deck instanced
+ * attributes, and picking works out of the box: the instance index is the
+ * link index.
  */
-export class CosmosLinksLayer extends Layer<Required<CosmosLinksLayerProps>> {
+export class CosmosLinksLayer<DataT = unknown> extends Layer<Required<CosmosLinksLayerOwnProps<DataT>>> {
   public static layerName = 'CosmosLinksLayer'
-  public static defaultProps = {
-    color: { type: 'array', value: [0.37, 0.45, 0.76, 0.25] },
-    parameters: { type: 'object', value: BLEND_PARAMETERS, optional: true, compare: 2 },
-  }
+  public static defaultProps = defaultProps
 
-  declare public state: {
-    model?: Model;
-    uniforms: Record<string, unknown>;
-    linksTexture?: Texture;
-    linksTextureSize: number;
-    linkCount: number;
+  declare public state: { model?: Model }
+
+  public getShaders (): ReturnType<Layer['getShaders']> {
+    return super.getShaders({ vs, fs, modules: [project32, picking, cosmosLinksUniforms] })
   }
 
   public initializeState (): void {
-    this.state = { uniforms: {}, linksTextureSize: 0, linkCount: 0 }
+    this.getAttributeManager()!.addInstanced({
+      instanceSourceIndices: {
+        size: 1,
+        accessor: 'getLinkSource',
+      },
+      instanceTargetIndices: {
+        size: 1,
+        accessor: 'getLinkTarget',
+      },
+      instanceColors: {
+        size: 4,
+        transition: true,
+        type: 'unorm8',
+        accessor: 'getLinkColor',
+        defaultValue: [...DEFAULT_LINK_COLOR],
+      },
+      instanceWidths: {
+        size: 1,
+        transition: true,
+        accessor: 'getLinkWidth',
+        defaultValue: 1,
+      },
+    })
   }
 
   public updateState (params: UpdateParameters<this>): void {
     super.updateState(params)
-    if (params.changeFlags.dataChanged || params.props.links !== params.oldProps.links) {
-      this._createLinksTexture()
+
+    if (params.changeFlags.extensionsChanged) {
+      this.state.model?.destroy()
+      this.state.model = this._getModel()
+      this.getAttributeManager()!.invalidateAll()
     }
   }
 
   public draw (): void {
     const positionInfo = this.props.graph.getPointPositionTexture()
-    const { uniforms, linksTexture, linksTextureSize, linkCount } = this.state
-    if (!positionInfo || !linksTexture || linkCount === 0) return
-
-    this.state.model ||= new Model(this.context.device, {
-      id: `${this.props.id}-model`,
-      vs: linksVs,
-      fs: linksFs,
-      topology: 'line-list',
-      vertexCount: 0,
-      uniforms,
-      parameters: BLEND_PARAMETERS,
-    })
     const { model } = this.state
+    if (!positionInfo || !model || positionInfo.pointCount === 0) return
 
-    Object.assign(uniforms, {
-      viewProjectionMatrix: this.context.viewport.viewProjectionMatrix,
+    const moduleProps: CosmosLinksProps = {
       pointsTextureSize: positionInfo.textureSize,
-      linksTextureSize,
-      color: this.props.color,
-    })
-    model.setBindings({
+      widthUnits: UNIT[this.props.linkWidthUnits],
       positionsTexture: positionInfo.texture,
-      linksTexture,
-    })
-    model.setVertexCount(linkCount * 2)
+    }
+    model.shaderInputs.setProps({ cosmosLinks: moduleProps })
     model.draw(this.context.renderPass)
   }
 
-  public finalizeState (context: LayerContext): void {
-    this.state.model?.destroy()
-    this.state.linksTexture?.destroy()
-    super.finalizeState(context)
-  }
-
-  private _createLinksTexture (): void {
-    const { links } = this.props
-    const linkCount = Math.floor(links.length / 2)
-    const linksTextureSize = Math.max(1, Math.ceil(Math.sqrt(linkCount)))
-    const data = new Float32Array(linksTextureSize * linksTextureSize * 4)
-    for (let i = 0; i < linkCount; i += 1) {
-      data[i * 4] = links[i * 2] as number
-      data[i * 4 + 1] = links[i * 2 + 1] as number
-    }
-
-    this.state.linksTexture?.destroy()
-    this.state.linksTexture = this.context.device.createTexture({
-      width: linksTextureSize,
-      height: linksTextureSize,
-      format: 'rgba32float',
-      data,
+  private _getModel (): Model {
+    // positions.x selects source/target, positions.y the extrusion side
+    return new Model(this.context.device, {
+      ...this.getShaders(),
+      id: this.props.id,
+      bufferLayout: this.getAttributeManager()!.getBufferLayouts(),
+      geometry: new Geometry({
+        topology: 'triangle-strip',
+        attributes: {
+          positions: { size: 3, value: new Float32Array([0, -1, 0, 0, 1, 0, 1, -1, 0, 1, 1, 0]) },
+        },
+      }),
+      isInstanced: true,
     })
-    this.state.linksTextureSize = linksTextureSize
-    this.state.linkCount = linkCount
   }
 }
