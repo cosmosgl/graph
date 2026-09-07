@@ -44,6 +44,7 @@
   "devDependencies": {
     "@cosmos.gl/graph": "workspace:^",
     "@deck.gl/core": "catalog:",
+    "@deck.gl/layers": "catalog:",
     "@luma.gl/core": "catalog:",
     "@luma.gl/engine": "catalog:",
     "@storybook/html": "^8.4.5",
