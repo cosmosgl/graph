@@ -155,8 +155,10 @@ The exported `PointPositionTexture` type pins down everything a consumer needs:
   every path that can touch position state: every swap, CPU upload, transition
   interpolation frame, and sparse write. Version changed → re-fetch the handle; never
   cache the texture object.
-- **Absent points** — a removed (NaN-position) point keeps its frozen last texel; consult
-  the input positions to hide it.
+- **Absent points** — a removed (NaN-position) point reads as NaN whenever its removal
+  snapped, which is always the case for a `GraphSimulation` and a headless `Graph`, so a
+  host can test `isnan`. Only an interactive `Graph` animates a removal, and its texel then
+  keeps the last coordinate the exit fade renders from.
 
 A unit test asserts the version advances across a step.
 

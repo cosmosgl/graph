@@ -508,7 +508,7 @@
       <text x="845" y="205" text-anchor="middle" class="sv-mut lbl">point i at (i % size, ⌊i / size⌋)</text>
       <text x="845" y="222" text-anchor="middle" class="sv-mut m">texel = [x, y, i, ·]</text>
 
-      <text x="480" y="278" class="sv-mut lbl">absent (NaN) points keep their frozen last texel — consult the input positions to hide them</text>
+      <text x="480" y="278" class="sv-mut lbl">absent (NaN) points read as NaN for every host source — test isnan; only an interactive Graph's fade keeps the last texel</text>
     </svg>
     </div>
     <figcaption><b>The ping-pong and version contract.</b> The handle alternates between two textures as the simulation runs, so identity is unstable by design; the monotonic <code>version</code> is the change signal, bumped by every path that can touch position state. Both facts live in the type's JSDoc, and a unit test asserts the version advances across a step.</figcaption>

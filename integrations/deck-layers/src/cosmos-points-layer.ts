@@ -39,7 +39,7 @@ void main(void) {
   // Point i lives at texel (i % size, i / size) as [x, y, i, unused] in space coordinates
   vec4 pointPosition = texelFetch(positionsTexture, ivec2(pointIndex % textureSize, pointIndex / textureSize), 0);
 
-  // An absent point keeps a frozen NaN state
+  // A removed (absent) point's texel is NaN — see PointPositionTexture
   if (isnan(pointPosition.x)) {
     collapse();
     return;

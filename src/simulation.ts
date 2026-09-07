@@ -26,6 +26,11 @@ export interface PointPositionTexture {
    * coordinates. Owned by cosmos.gl — never write to or destroy it. The handle
    * alternates between two ping-pong textures as the simulation runs, so re-fetch
    * it whenever `version` changes rather than caching it.
+   * @note An **absent** point (NaN position — see `setPointPositions`) reads as
+   * NaN here whenever its removal snapped — always for a `GraphSimulation` and a
+   * headless `Graph`, so hosts can test `isnan`. Only an interactive `Graph`
+   * animates a removal; its texel then keeps the last coordinate the exit fade
+   * renders from.
    */
   texture: Texture;
   /** Number of points; texels at index `pointCount` and beyond are unused. */
@@ -35,8 +40,6 @@ export interface PointPositionTexture {
   /**
    * Monotonic counter that increases whenever the texture's identity or contents
    * change (simulation tick, drag, CPU upload, transition frame, sparse write).
-   * @note An **absent** point (NaN position — see `setPointPositions`) keeps its
-   * frozen last coordinate in the texture; consult the input positions to hide it.
    */
   version: number;
 }
