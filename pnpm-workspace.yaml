@@ -10,6 +10,7 @@ packages:
 # luma ~9.3. Peer ranges stay looser (^9.3.0) in each package's manifest.
 catalog:
   '@deck.gl/core': ~9.3.0
+  '@deck.gl/layers': ~9.3.0
   '@luma.gl/core': ~9.3.6
   '@luma.gl/engine': ~9.3.6
   '@luma.gl/shadertools': ~9.3.6
