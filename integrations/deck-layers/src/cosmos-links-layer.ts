@@ -45,7 +45,8 @@ void main(void) {
   vec4 sourcePosition = fetchPointPosition(instanceSourceIndices, textureSize);
   vec4 targetPosition = fetchPointPosition(instanceTargetIndices, textureSize);
 
-  // An absent endpoint keeps a frozen NaN state; collapse the quad so it clips away
+  // A removed (absent) endpoint's texel is NaN — see PointPositionTexture;
+  // collapse the quad so it clips away
   if (isnan(sourcePosition.x) || isnan(targetPosition.x)) {
     gl_Position = vec4(0.0);
     vColor = vec4(0.0);

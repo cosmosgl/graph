@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 import { Deck, OrthographicView } from '@deck.gl/core'
 import type { Device } from '@luma.gl/core'
-import { GraphSimulation, type GraphSimulationConfig } from '@cosmos.gl/graph'
+import { Graph, GraphSimulation, type GraphSimulationConfig } from '@cosmos.gl/graph'
 import { CosmosPointsLayer, CosmosLinksLayer, CosmosGraphLayer, type CosmosGraphPickingInfo } from '@cosmos.gl/deck-layers'
 import type { LayersList, PickingInfo } from '@deck.gl/core'
 
@@ -23,14 +23,13 @@ const CENTER = { x: WIDTH / 2, y: HEIGHT / 2 }
 const worldToScreen = (x: number, y: number): { x: number; y: number } =>
   ({ x: CENTER.x + (x - 1000), y: CENTER.y + (y - 1000) })
 
-const createDeckWithSimulation = async (
-  config: GraphSimulationConfig = {},
-  positions: Float32Array = POSITIONS
-): Promise<{
+// A deck with no layers, plus the promise of its device for a cosmos instance
+// to share
+const createDeckDevice = (): {
   deck: Deck<OrthographicView>;
-  graph: GraphSimulation;
   container: HTMLDivElement;
-}> => {
+  devicePromise: Promise<Device>;
+} => {
   const container = document.createElement('div')
   container.style.width = `${WIDTH}px`
   container.style.height = `${HEIGHT}px`
@@ -49,7 +48,18 @@ const createDeckWithSimulation = async (
       layers: [],
     })
   })
+  return { deck, container, devicePromise }
+}
 
+const createDeckWithSimulation = async (
+  config: GraphSimulationConfig = {},
+  positions: Float32Array = POSITIONS
+): Promise<{
+  deck: Deck<OrthographicView>;
+  graph: GraphSimulation;
+  container: HTMLDivElement;
+}> => {
+  const { deck, container, devicePromise } = createDeckDevice()
   const graph = new GraphSimulation(config, devicePromise)
   graph.setPointPositions(positions, true)
   graph.applyData()
@@ -276,6 +286,62 @@ describe('CosmosPointsLayer', () => {
       for (const probe of [{ x: 20, y: 20 }, { x: 180, y: 180 }, { x: 100, y: 180 }]) {
         expect(deck.pickObject({ ...probe, radius: 2 })?.index ?? null).not.toBe(1)
       }
+    } finally {
+      graph.destroy()
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('removes an existing point when its position becomes NaN — GraphSimulation snaps', async () => {
+    const { deck, graph, container } = await createDeckWithSimulation({}, new Float32Array([1000, 1000, 1050, 1000]))
+    try {
+      deck.setProps({
+        layers: [
+          new CosmosPointsLayer({ id: 'points', graph, data: { length: 2 }, getPointSize: 10, pickable: true }),
+        ],
+      })
+      await waitUntilPickable(deck)
+      const at1 = worldToScreen(1050, 1000)
+      expect(deck.pickObject({ ...at1, radius: 2 })?.index).toBe(1)
+
+      graph.setPointPositions(new Float32Array([1000, 1000, NaN, NaN]), true)
+      graph.applyData()
+
+      // The texel is NaN now, not the frozen last coordinate: nothing draws or picks there
+      expect(deck.pickObject({ ...at1, radius: 2 })).toBeNull()
+      expect(deck.pickObject({ ...CENTER, radius: 2 })?.index).toBe(0)
+    } finally {
+      graph.destroy()
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('removes an existing point when its position becomes NaN — a headless Graph snaps too', async () => {
+    // A headless Graph on deck's device is the other documented source. Its
+    // transitions are forced to snap (nothing would advance them), so the
+    // default 800 ms transitionDuration must not leave a frozen coordinate
+    const { deck, container, devicePromise } = createDeckDevice()
+    const graph = new Graph(null, { rescalePositions: false }, devicePromise)
+    graph.setPointPositions(new Float32Array([1000, 1000, 1050, 1000]))
+    graph.render()
+    await graph.ready
+    try {
+      deck.setProps({
+        layers: [
+          new CosmosPointsLayer({ id: 'points', graph, data: { length: 2 }, getPointSize: 10, pickable: true }),
+        ],
+      })
+      await waitUntilPickable(deck)
+      const at1 = worldToScreen(1050, 1000)
+      expect(deck.pickObject({ ...at1, radius: 2 })?.index).toBe(1)
+
+      graph.setPointPositions(new Float32Array([1000, 1000, NaN, NaN]))
+      graph.render()
+
+      expect(deck.pickObject({ ...at1, radius: 2 })).toBeNull()
+      expect(deck.pickObject({ ...CENTER, radius: 2 })?.index).toBe(0)
     } finally {
       graph.destroy()
       deck.finalize()
