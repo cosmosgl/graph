@@ -2,7 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { Deck, OrthographicView } from '@deck.gl/core'
 import type { Device } from '@luma.gl/core'
 import { GraphSimulation, type GraphSimulationConfig } from '@cosmos.gl/graph'
-import { CosmosPointsLayer, CosmosLinksLayer } from '@cosmos.gl/deck-layers'
+import { CosmosPointsLayer, CosmosLinksLayer, CosmosGraphLayer, type CosmosGraphPickingInfo } from '@cosmos.gl/deck-layers'
+import type { LayersList } from '@deck.gl/core'
 
 /**
  * Runtime contract tests for @cosmos.gl/deck-layers: the layers render a live
@@ -75,6 +76,39 @@ const waitUntilPickable = async (deck: Deck<OrthographicView>, maxFrames = 240):
     if (deck.pickObject({ ...CENTER, radius: 2 })) return
   }
   throw new Error(`deck produced no pick at the canvas centre within ${maxFrames} frames`)
+}
+
+// For CosmosGraphLayer tests: the layer creates and owns its own simulation.
+// Resolves once deck finished its async device initialization — picking
+// before that asserts inside deck.
+const createDeck = async (layers: LayersList): Promise<{ deck: Deck<OrthographicView>; container: HTMLDivElement }> => {
+  const container = document.createElement('div')
+  container.style.width = `${WIDTH}px`
+  container.style.height = `${HEIGHT}px`
+  document.body.appendChild(container)
+  let deck!: Deck<OrthographicView>
+  await new Promise<void>((resolve) => {
+    deck = new Deck({
+      parent: container,
+      width: WIDTH,
+      height: HEIGHT,
+      views: new OrthographicView(),
+      initialViewState: { target: [1000, 1000, 0], zoom: 0 },
+      controller: false,
+      onLoad: resolve,
+      layers,
+    })
+  })
+  return { deck, container }
+}
+
+// All forces off: the simulation runs but nothing moves
+const STATIC_SIM: GraphSimulationConfig = {
+  rescalePositions: false,
+  simulationGravity: 0,
+  simulationCenter: 0,
+  simulationRepulsion: 0,
+  simulationLinkSpring: 0,
 }
 
 describe('CosmosPointsLayer', () => {
@@ -314,6 +348,127 @@ describe('CosmosLinksLayer', () => {
       expect(info?.object).toEqual({ source: 0, target: 1, label: 'only' })
     } finally {
       graph.destroy()
+      deck.finalize()
+      container.remove()
+    }
+  })
+})
+
+describe('CosmosGraphLayer', () => {
+  it('owns the simulation: creates, ingests, renders, picks, and destroys it', async () => {
+    let simulation: GraphSimulation | undefined
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer({
+        id: 'graph',
+        points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
+        links: new Float32Array([0, 1]),
+        getPointSize: 10,
+        getLinkWidth: 6,
+        simulationConfig: STATIC_SIM,
+        onSimulationCreated: (sim): void => { simulation = sim },
+        pickable: true,
+      }),
+    ])
+    try {
+      await waitUntilPickable(deck)
+      expect(simulation).toBeInstanceOf(GraphSimulation)
+
+      const point = deck.pickObject({ ...CENTER, radius: 2 }) as CosmosGraphPickingInfo | null
+      expect(point?.index).toBe(0)
+      expect(point?.elementType).toBe('point')
+      // Picking bubbles to the composite
+      expect(point?.layer?.id).toBe('graph')
+
+      const link = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as CosmosGraphPickingInfo | null
+      expect(link?.index).toBe(0)
+      expect(link?.elementType).toBe('link')
+
+      // Removing the layer destroys the owned simulation; the handle stays safe
+      deck.setProps({ layers: [] })
+      await waitFrames(5)
+      expect(deck.pickObject({ ...CENTER, radius: 2 })).toBeNull()
+      expect(() => simulation?.step()).not.toThrow()
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('resolves array data by point id and returns original objects from picking', async () => {
+    const points = [
+      { id: 'a', position: [1000, 1000] as const },
+      { id: 'b', position: [1050, 1000] as const },
+    ]
+    const links = [{ source: 'a', target: 'b' }]
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer<(typeof points)[number], (typeof links)[number]>({
+        id: 'graph',
+        points,
+        links,
+        getPointId: (p): string => p.id,
+        getPointPosition: (p): readonly [number, number] => p.position,
+        getPointSize: 10,
+        getLinkWidth: 6,
+        simulationConfig: STATIC_SIM,
+        pickable: true,
+      }),
+    ])
+    try {
+      await waitUntilPickable(deck)
+
+      const point = deck.pickObject({ ...worldToScreen(1050, 1000), radius: 2 }) as CosmosGraphPickingInfo | null
+      expect(point?.elementType).toBe('point')
+      expect(point?.object).toEqual(points[1])
+
+      const link = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as CosmosGraphPickingInfo | null
+      expect(link?.elementType).toBe('link')
+      expect(link?.object).toEqual(links[0])
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('steps itself from deck timeline — no app render-loop wiring anywhere', async () => {
+    let simulation: GraphSimulation | undefined
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer({
+        id: 'graph',
+        points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
+        links: new Float32Array([0, 1]),
+        getPointSize: 10,
+        simulationConfig: {
+          rescalePositions: false,
+          simulationGravity: 0,
+          simulationCenter: 0,
+          simulationRepulsion: 0,
+          simulationLinkSpring: 2,
+          simulationLinkDistance: 10,
+          simulationFriction: 0.85,
+          simulationDecay: 1000,
+          randomSeed: 1,
+        },
+        onSimulationCreated: (sim): void => { simulation = sim },
+        pickable: true,
+      }),
+    ])
+    try {
+      // Nothing here calls step(): the layer's timeline animation must move
+      // the linked points on its own
+      let x0 = 1000
+      for (let i = 0; i < 240 && Math.abs(x0 - 1000) < 8; i += 1) {
+        await waitFrames(1)
+        const positions = simulation?.getPointPositionsArray()
+        if (positions && positions.length >= 2) x0 = positions[0] as number
+      }
+      expect(Math.abs(x0 - 1000)).toBeGreaterThanOrEqual(8)
+
+      // And picking tracks the moved point
+      const positions = simulation!.getPointPositionsArray()
+      const screen = worldToScreen(positions[0] as number, positions[1] as number)
+      const moved = deck.pickObject({ x: Math.round(screen.x), y: Math.round(screen.y), radius: 3 })
+      expect(moved?.index).toBe(0)
+    } finally {
       deck.finalize()
       container.remove()
     }
