@@ -63,6 +63,7 @@ export class CosmosPointsLayer extends Layer<Required<CosmosPointsLayerProps>> {
   public static defaultProps = {
     color: { type: 'array', value: [0.29, 0.36, 0.75, 0.9] },
     pointSize: 4,
+    parameters: { type: 'object', value: BLEND_PARAMETERS, optional: true, compare: 2 },
   }
 
   declare public state: { model?: Model; uniforms: Record<string, unknown> }

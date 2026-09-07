@@ -62,6 +62,7 @@ export class CosmosLinksLayer extends Layer<Required<CosmosLinksLayerProps>> {
   public static layerName = 'CosmosLinksLayer'
   public static defaultProps = {
     color: { type: 'array', value: [0.37, 0.45, 0.76, 0.25] },
+    parameters: { type: 'object', value: BLEND_PARAMETERS, optional: true, compare: 2 },
   }
 
   declare public state: {
