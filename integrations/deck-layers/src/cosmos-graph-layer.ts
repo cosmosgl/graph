@@ -387,6 +387,21 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     super.finalizeState(context)
   }
 
+  /**
+   * Points and links have separate index spaces, so the same picking color
+   * exists in both sublayers: highlight only the sublayer that was hovered
+   * and clear the other, or hovering point N would also tint link N.
+   */
+  protected _updateAutoHighlight (info: PickingInfo): void {
+    for (const layer of this.getSubLayers()) {
+      if (layer.id === info.sourceLayer?.id) {
+        layer.updateAutoHighlight(info)
+      } else {
+        layer.updateAutoHighlight({ ...info, picked: false })
+      }
+    }
+  }
+
   private _onTimelineTick (): void {
     const { simulation, isReady } = this.state ?? {}
     if (!simulation || !isReady || !simulation.isSimulationRunning) return
