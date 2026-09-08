@@ -121,6 +121,36 @@ describe('position snapshots', () => {
     }
   })
 
+  it('getPointPositionsAsync reads only after a GPU fence has signaled', async () => {
+    const { device, destroy } = await createExternalDevice()
+    const graph = await createHeadlessGraph(SIMULATION_CONFIG, POSITIONS, Promise.resolve(device))
+    // Hold the fence: the read must wait for it instead of racing ahead to
+    // the blocking getBufferSubData
+    let release!: () => void
+    const held = new Promise<void>((resolve) => { release = resolve })
+    const createFence = vi.spyOn(device, 'createFence').mockReturnValue({
+      signaled: held,
+      destroy: vi.fn(),
+      isSignaled: () => false,
+    } as unknown as ReturnType<Device['createFence']>)
+    try {
+      graph.step()
+      const expected = Array.from(graph.getPointPositionsArray())
+      let settled = false
+      const snapshot = graph.getPointPositionsAsync().then((positions) => { settled = true; return positions })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(createFence).toHaveBeenCalledTimes(1)
+      expect(settled).toBe(false)
+
+      release()
+      expect(Array.from(await snapshot)).toEqual(expected)
+    } finally {
+      createFence.mockRestore()
+      graph.destroy()
+      destroy()
+    }
+  })
+
   it('an absent (NaN) point reads back as NaN, not as a frozen coordinate', async () => {
     const positions = new Float32Array([1000, 1000, NaN, NaN, 3000, 3000])
     const graph = await createHeadlessGraph(SIMULATION_CONFIG, positions)
