@@ -446,6 +446,9 @@ export class GraphSimulation {
    */
   public stop (): void {
     if (this._isDestroyed) return
+    // Deferred like every other lifecycle call: setup sets the running flag
+    // from `enableSimulation`, and a stop that ran before it would be undone
+    if (this.ensureDevice(() => this.stop())) return
     const wasSimulationActive = this.store.isSimulationRunning || this.store.alpha > 0 || this.store.simulationProgress > 0
     this.store.isSimulationRunning = false
     this.store.simulationProgress = 0
