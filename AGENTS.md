@@ -86,7 +86,7 @@ Requires Node ≥ 22, pnpm ≥ 10 (the repo is a pnpm workspace: the root is the
 
 ## Contributing
 
-Per `CONTRIBUTING.md`: fork, branch from `main`, code, make sure lint + build pass, add a Storybook
+Per `CONTRIBUTING.md`: fork, branch from `main`, code, make sure lint, typecheck and build pass, add a Storybook
 example if you changed behavior/config/public API, then open a PR. Contributions are MIT-licensed.
 
 ## Commits
