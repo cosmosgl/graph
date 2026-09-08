@@ -167,6 +167,7 @@ type DragGestureEvent = {
 
 /** The update-trigger keys the composite forwards to its sublayers. */
 type CosmosUpdateTriggers = {
+  getPointId?: unknown;
   getPointPosition?: unknown;
   getPointSize?: unknown;
   getPointColor?: unknown;
@@ -255,15 +256,17 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     if (changeFlags.propsChanged && props.simulationConfig !== oldProps.simulationConfig) {
       simulation.setConfig(props.simulationConfig)
     }
-    // Link endpoints are resolved at ingest, so an endpoint accessor change
-    // re-ingests like a data change
+    // Link endpoints are resolved at ingest, so a change to the id map or to
+    // an endpoint accessor re-ingests like a data change
     const triggers = typeof changeFlags.updateTriggersChanged === 'object'
       ? changeFlags.updateTriggersChanged as CosmosUpdateTriggers
       : undefined
     const dataChanged =
       props.points !== oldProps.points ||
       props.links !== oldProps.links ||
-      Boolean(triggers?.getPointPosition || triggers?.getLinkSource || triggers?.getLinkTarget)
+      Boolean(
+        triggers?.getPointPosition || triggers?.getPointId || triggers?.getLinkSource || triggers?.getLinkTarget
+      )
     if (dataChanged) {
       this._updateSimulationData()
     }

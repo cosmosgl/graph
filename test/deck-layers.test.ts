@@ -541,6 +541,49 @@ describe('CosmosGraphLayer', () => {
     }
   })
 
+  it('re-resolves link endpoints when getPointId changes over stable arrays', async () => {
+    // Under `id` the link runs a → b (horizontal); under `alt` the same link
+    // object resolves 'b' to the third point, so it runs a → c (vertical)
+    const points = [
+      { id: 'a', alt: 'a', position: [1000, 1000] as const },
+      { id: 'b', alt: 'c', position: [1050, 1000] as const },
+      { id: 'c', alt: 'b', position: [1000, 1030] as const },
+    ]
+    const links = [{ source: 'a', target: 'b' }]
+    type P = (typeof points)[number]
+    type L = (typeof links)[number]
+    const makeLayer = (getPointId: (p: P) => string, trigger: number): CosmosGraphLayer<P, L> =>
+      new CosmosGraphLayer<P, L>({
+        id: 'graph',
+        points,
+        links,
+        getPointId,
+        getPointPosition: (p): readonly [number, number] => p.position,
+        getPointSize: 10,
+        getLinkWidth: 6,
+        simulationConfig: STATIC_SIM,
+        updateTriggers: { getPointId: trigger },
+        pickable: true,
+      })
+    const horizontal = worldToScreen(1025, 1000)
+    const vertical = worldToScreen(1000, 1015)
+    const { deck, container } = await createDeck([makeLayer((p) => p.id, 1)])
+    try {
+      await waitUntilPickable(deck)
+      expect((deck.pickObject({ ...horizontal, radius: 2 }) as CosmosGraphPickingInfo | null)?.elementType).toBe('link')
+      expect(deck.pickObject({ ...vertical, radius: 2 })).toBeNull()
+
+      // Same arrays, new id accessor and trigger: the link must move with the id map
+      deck.setProps({ layers: [makeLayer((p) => p.alt, 2)] })
+      await waitFrames(5)
+      expect((deck.pickObject({ ...vertical, radius: 2 }) as CosmosGraphPickingInfo | null)?.elementType).toBe('link')
+      expect(deck.pickObject({ ...horizontal, radius: 2 })).toBeNull()
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
   it('steps itself from deck timeline — no app render-loop wiring anywhere', async () => {
     let simulation: GraphSimulation | undefined
     const { deck, container } = await createDeck([
