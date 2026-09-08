@@ -1,3 +1,4 @@
+<!doctype html>
 <title>Cosmos Host Embedding</title>
 <style>
   :root {
@@ -740,7 +741,7 @@ screenY = k · ((S − spaceY) + (h − S) / 2) + y   <span class="cmt">// cosmo
         <tr>
           <td>"Possible operations include <code>setPointPosition</code>, <code>setPointPinned</code>, and a batched sparse update API"</td>
           <td><code>setPointPosition(i, x, y)</code> · <code>setPinnedPoint(i, bool)</code> · <code>setPointPositionsByIndices(ids, xy)</code></td>
-          <td>The proposed names, verbatim. Semantics specified beyond the ask: live-state writes on the drag path, input arrays never modified, absent points never resurrected, mismatched pairs rejected whole</td>
+          <td>The proposed operations; <code>setPointPinned</code> ships as <code>setPinnedPoint</code> to pair with <code>setPinnedPoints</code>. Semantics specified beyond the ask: live-state writes on the drag path, input arrays never modified, absent points never resurrected, mismatched pairs rejected whole</td>
         </tr>
         <tr>
           <td>luma: move to peers <b>or</b> publish a documented compatibility range</td>
