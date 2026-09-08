@@ -228,13 +228,13 @@ flowchart TB
         A1 --> C1[cosmos.gl] --> L2[luma.gl B]
         L1 -. "Device across two copies:<br/>unsupported" .- C1
     end
-    subgraph after ["after — peerDependencies ^9.3.0"]
+    subgraph after ["after — peerDependencies ~9.3.0"]
         A2[app] --> D2[deck.gl] --> L3[luma.gl 9.3.6]
         A2 --> C2[cosmos.gl] --> L3
     end
 ```
 
-`@luma.gl/*` leaves `dependencies` for `peerDependencies` (`^9.3.0`). The ES build keeps
+`@luma.gl/*` leaves `dependencies` for `peerDependencies` (~~`^9.3.0`~~ `~9.3.0`, the tested line). The ES build keeps
 luma external — the rollup externals list now covers peers, where before the move would
 have silently bundled a private copy — while the UMD/jsdelivr build stays standalone.
 Verified: `npm ls @luma.gl/core` resolves a single deduped 9.3.6 for cosmos + deck.gl
@@ -309,7 +309,7 @@ shipped signatures.
 | 5 | Host render pass | delivered | `drawToRenderPass(pass, {points?, links?})` — no clear, end, or submit; points/links separable |
 | 6 | Efficient snapshots | delivered | `Float32Array` + caller-provided `out` + async variant + documented sync stall; the async path honors its no-stall claim through a fence (open item 1, `b8da115`) |
 | 7 | Indexed mutation and pinning | delivered | `setPointPosition`, `setPointPositionsByIndices`, `setPinnedPoint` — the RFC's proposed operations; its `setPointPinned` ships as `setPinnedPoint`, paired with `setPinnedPoints` |
-| 8 | luma.gl dependency alignment | delivered | Peers at `^9.3.0`, single deduped install verified; the range deliberately excludes the luma 9.4 *prerelease* line (semver ranges don't match foreign prereleases) and will cover stable 9.4 with no cosmos release |
+| 8 | luma.gl dependency alignment | delivered | Peers at ~~`^9.3.0`~~ `~9.3.0`, single deduped install verified; ~~the range deliberately excludes the luma 9.4 *prerelease* line (semver ranges don't match foreign prereleases) and will cover stable 9.4 with no cosmos release~~ stable 9.4 shipped on 2026-09-05 and the caret range let npm place it beside deck 9.3's luma 9.3 (two copies), so the range now names the tested line and widens with a verified release |
 | 9 | Backend capability flags | not yet | Deliberately deferred (see below): the flags should describe a stabilized surface; adapters feature-detect method presence for now |
 
 ### The RFC's API sketches → the shipped signatures
@@ -324,7 +324,7 @@ Where the RFC sketched concrete code, the deliberate divergences are the interes
 | a method recording draws into a supplied `RenderPass`; "separately configurable point and link rendering" | `drawToRenderPass(pass, {points?, links?})` — plus `setViewTransform({k, x, y}, screenSize?)` | Exact match, and the internal renderer now routes through the same method. `setViewTransform` wasn't asked for by name, but the RFC's "thin wrapper around an upstream encode(renderPass)" needs a camera — shipped with a documented, unit-tested formula |
 | snapshots: `Float32Array` return; optional destination; "an asynchronous readback option where supported"; document the sync stall | `getPointPositionsArray(out?)` · `getPointPositionsAsync(out?)` · stall documented on `getPointPositions()` | All four clauses shipped in shape. The async path's no-stall behavior is honored through a fence (open item 1, `b8da115`) — the RFC's "where supported" hedge was the wiser wording until it landed |
 | "Possible operations include `setPointPosition`, `setPointPinned`, and a batched sparse update API" | `setPointPosition(i, x, y)` · `setPinnedPoint(i, bool)` · `setPointPositionsByIndices(ids, xy)` | The proposed operations; `setPointPinned` ships as `setPinnedPoint` to pair with `setPinnedPoints`. Semantics specified beyond the ask: live-state writes on the drag path, input arrays never modified, absent points never resurrected, mismatched pairs rejected whole |
-| luma: move to peers **or** publish a documented compatibility range | Both: `peerDependencies ^9.3.0`, documented in README + migration notes | The "or" became "and". The range deliberately excludes the 9.4 prerelease line and admits stable 9.4 automatically |
+| luma: move to peers **or** publish a documented compatibility range | Both: `peerDependencies` ~~`^9.3.0`~~ `~9.3.0`, documented in README + migration notes | The "or" became "and". ~~The range deliberately excludes the 9.4 prerelease line and admits stable 9.4 automatically~~ The range names the tested 9.3 line; admitting 9.4 automatically produced two luma copies next to deck 9.3 once 9.4 shipped |
 | capability flags for simulation, rendering, readback, external scheduling, shared resources | — | The one ask with no code: deferred until the surface the flags would describe has stabilized; adapters feature-detect for now |
 
 ### The RFC's package phases → this branch's stories

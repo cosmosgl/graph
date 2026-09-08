@@ -37,9 +37,10 @@
   "author": "cosmos.gl",
   "peerDependencies": {
     "@cosmos.gl/graph": "workspace:^",
-    "@deck.gl/core": "^9.3.0",
-    "@luma.gl/core": "^9.3.0",
-    "@luma.gl/engine": "^9.3.0"
+    "@deck.gl/core": "~9.3.0",
+    "@luma.gl/core": "~9.3.0",
+    "@luma.gl/engine": "~9.3.0",
+    "@luma.gl/shadertools": "~9.3.0"
   },
   "devDependencies": {
     "@cosmos.gl/graph": "workspace:^",
@@ -47,6 +48,7 @@
     "@deck.gl/layers": "catalog:",
     "@luma.gl/core": "catalog:",
     "@luma.gl/engine": "catalog:",
+    "@luma.gl/shadertools": "catalog:",
     "@storybook/html": "^8.4.5",
     "typescript": "catalog:",
     "vite": "catalog:",
