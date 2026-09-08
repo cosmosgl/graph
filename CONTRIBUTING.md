@@ -17,7 +17,7 @@ We actively welcome pull requests. If you want to submit one, please follow the 
 
 1. Fork the repo and create your branch from `main`;
 2. Code;
-3. Make sure the project lints and builds after your changes;
+3. Make sure the project lints, typechecks, and builds after your changes;
 4. Submit your PR!
 
 ## License
