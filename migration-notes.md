@@ -6,10 +6,15 @@
 
 The `@luma.gl/*` packages (`core`, `engine`, `shadertools`, `webgl`) moved from
 `dependencies` to `peerDependencies`, with a documented compatibility range of
-`^9.3.0`. This lets cosmos.gl and a host application (for example deck.gl)
+`~9.3.0`. This lets cosmos.gl and a host application (for example deck.gl)
 resolve **one** luma.gl installation — a GPU `Device` shared between two
 independently installed luma.gl copies is not a supported boundary, and the
 public types no longer force casts between two copies of `Device`.
+
+The range names the 9.3 line on purpose. deck.gl 9.3 pins luma.gl 9.3, and a
+wider range lets npm place a newer luma.gl next to deck's copy — two copies,
+and a broken shared device — without any error. The range widens when
+cosmos.gl is verified on a newer line, as a release.
 
 What you need to do:
 
@@ -25,7 +30,7 @@ npm install @cosmos.gl/graph @luma.gl/core @luma.gl/engine @luma.gl/shadertools 
   stays standalone.
 
 If your application also depends on luma.gl directly (or through deck.gl),
-make sure everything resolves inside `^9.3.0` — check with:
+make sure everything resolves inside `~9.3.0` — check with:
 
 ```bash
 npm ls @luma.gl/core

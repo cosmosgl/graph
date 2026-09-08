@@ -7,7 +7,10 @@ packages:
 # Single home for the versions every workspace package must agree on. The
 # luma.gl pins are load-bearing: a Device shared between cosmos and a host
 # requires both to resolve the same @luma.gl/core, and deck ~9.3 pairs with
-# luma ~9.3. Peer ranges stay looser (^9.3.0) in each package's manifest.
+# luma ~9.3. Both packages publish ~9.3.0 peer ranges, the line they are
+# tested on: with a caret range npm placed luma 9.4 beside deck's 9.3 (two
+# copies) the day 9.4 shipped, and the deck layers do not run on deck 9.4
+# yet. Widening the range is a verified release, never automatic.
 catalog:
   '@deck.gl/core': ~9.3.0
   '@deck.gl/layers': ~9.3.0

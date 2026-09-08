@@ -87,10 +87,10 @@
     "vitest": "^4.1.11"
   },
   "peerDependencies": {
-    "@luma.gl/core": "^9.3.0",
-    "@luma.gl/engine": "^9.3.0",
-    "@luma.gl/shadertools": "^9.3.0",
-    "@luma.gl/webgl": "^9.3.0"
+    "@luma.gl/core": "~9.3.0",
+    "@luma.gl/engine": "~9.3.0",
+    "@luma.gl/shadertools": "~9.3.0",
+    "@luma.gl/webgl": "~9.3.0"
   },
   "dependencies": {
     "d3-array": "^3.2.0",
