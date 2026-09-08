@@ -1,6 +1,6 @@
 {
   "name": "@cosmos.gl/deck-layers",
-  "version": "3.5.0-beta.1",
+  "version": "3.5.0-beta.2",
   "description": "deck.gl layers rendering the cosmos.gl GPU force simulation — zero-copy position sampling on a shared luma.gl device",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
