@@ -93,6 +93,23 @@ describe('GraphSimulation', () => {
     }
   })
 
+  it('keeps a stop() issued before ready — setup must not flip it back to running', async () => {
+    const simulation = new GraphSimulation(SIMULATION_CONFIG)
+    simulation.setPointPositions(POSITIONS)
+    simulation.applyData()
+    simulation.stop()
+    await simulation.ready
+    try {
+      expect(simulation.isSimulationRunning).toBe(false)
+      expect(simulation.progress).toBe(0)
+      // A later start still works as usual
+      simulation.start(1)
+      expect(simulation.isSimulationRunning).toBe(true)
+    } finally {
+      simulation.destroy()
+    }
+  })
+
   it('exposes the position texture with the version contract', async () => {
     const simulation = await createSimulation()
     try {
