@@ -1,0 +1,125 @@
+import { Meta } from '@storybook/blocks'
+
+<Meta title="Integrations/deck.gl" />
+
+# cosmos.gl in deck.gl
+
+`@cosmos.gl/deck-layers` puts the cosmos.gl force layout inside a [deck.gl](https://deck.gl) app.
+The simulation runs on deck's GPU and the layers draw straight from it, so hundreds of thousands
+of points stay interactive.
+
+## Install
+
+```bash
+npm install @cosmos.gl/deck-layers @cosmos.gl/graph
+```
+
+Install matching versions of the two: they are released together. deck.gl and luma.gl come
+with your deck.gl app; only Yarn 1 users add `@luma.gl/core @luma.gl/engine` by hand.
+
+## Your first graph
+
+`CosmosGraphLayer` creates the simulation, runs it until the layout settles, and draws the
+points and links.
+
+```js
+import { Deck, OrthographicView } from '@deck.gl/core'
+import { CosmosGraphLayer } from '@cosmos.gl/deck-layers'
+
+const nodes = [{ id: 'a' }, { id: 'b' }, { id: 'c' }]
+const edges = [{ source: 'a', target: 'b' }, { source: 'b', target: 'c' }]
+
+new Deck({
+  views: new OrthographicView(),
+  initialViewState: { target: [2048, 2048, 0], zoom: -2 }, // the layout space is 4096 wide
+  controller: true,
+  layers: [
+    new CosmosGraphLayer({
+      id: 'graph',
+      points: nodes,
+      links: edges,
+      getPointId: (p) => p.id,
+      pickable: true,
+    }),
+  ],
+})
+```
+
+Try it: [object data and accessors](../?path=/story/examples-integrations--cosmos-graph-object-data).
+
+## Style and tune
+
+Styling works like any deck.gl layer. Colors are RGBA in 0..255, sizes are in pixels.
+`simulationConfig` takes the same keys as the cosmos.gl [configuration](../?path=/docs/configuration--docs).
+
+```js
+new CosmosGraphLayer({
+  // …
+  getPointColor: (p) => (p.group === 0 ? [88, 143, 219, 235] : [219, 138, 88, 235]),
+  getPointSize: (p) => (p.isHub ? 12 : 6),
+  getLinkWidth: 1.5,
+  updateTriggers: { getPointColor: palette }, // re-run the accessor when `palette` changes
+  transitions: { getPointColor: 600 },        // animate the change
+  simulationConfig: {
+    simulationGravity: 0.25,
+    simulationRepulsion: 1.5,
+    onSimulationEnd: () => console.log('settled'),
+  },
+})
+```
+
+Try it: [live updates and restyling](../?path=/story/examples-integrations--cosmos-graph-updates).
+
+## Interact
+
+Clicks and hovers report a point or a link. A drag grabs a point and the graph follows it.
+`onSimulationCreated` hands you the simulation to pause, reheat, or pin points.
+
+```js
+let simulation
+
+new CosmosGraphLayer({
+  // …
+  pickable: true,
+  autoHighlight: true,
+  onClick: (info) => console.log(info.elementType, info.index, info.object), // 'point' | 'link'
+  enablePointDrag: true,
+  onSimulationCreated: (sim) => { simulation = sim },
+})
+
+simulation.pause()
+simulation.start(0.3)                // reheat: 0 is still, 1 is full energy
+simulation.setPinnedPoint(3, true)   // hold point 3 where it is
+```
+
+Try it: [simulation control](../?path=/story/examples-integrations--cosmos-graph-control).
+
+## Big graphs
+
+Past a few thousand points, skip the objects: pass cosmos.gl's flat arrays. Nothing is copied.
+
+```js
+new CosmosGraphLayer({
+  id: 'graph',
+  points: {
+    length: pointCount,
+    initialPositions: positions,                 // Float32Array [x0, y0, x1, y1, …], optional
+    attributes: {
+      getPointColor: { value: colors, size: 4 }, // Uint8Array, RGBA per point
+      getPointSize: { value: sizes, size: 1 },   // Float32Array, one diameter per point
+    },
+  },
+  links: linkIndices,                            // Float32Array [src0, tgt0, src1, tgt1, …]
+})
+```
+
+Try it: [100k points](../?path=/story/examples-integrations--cosmos-graph-large).
+
+## Good to know
+
+- **WebGL 2 only**, and the layout is 2D: use `OrthographicView`.
+- **Other deck.gl layers** stack on top as usual. For labels or anything that needs positions on
+  the CPU, read `simulation.getPointPositionsArray()`. Try it:
+  [composing with deck layers](../?path=/story/examples-integrations--cosmos-graph-composition).
+- **Full control**: `CosmosPointsLayer` and `CosmosLinksLayer` render from a simulation you own.
+  See the [package README](https://github.com/cosmosgl/graph/tree/main/integrations/deck-layers).
