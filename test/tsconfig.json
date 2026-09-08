@@ -1,7 +1,7 @@
 {
-  "extends": "../../tsconfig.json",
+  "extends": "../tsconfig.json",
   "compilerOptions": {
-    "baseUrl": "../..",
+    "baseUrl": "..",
     "paths": {
       "@cosmos.gl/graph": ["src/"],
       "@cosmos.gl/graph/*": ["src/*"],
@@ -13,6 +13,6 @@
     "declaration": false,
     "noEmit": true
   },
-  "include": ["./**/*"],
+  "include": ["./**/*", "../src/declaration.d.ts"],
   "exclude": []
 }

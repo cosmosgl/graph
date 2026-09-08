@@ -38,7 +38,16 @@ contribution process, see `CONTRIBUTING.md`, `CHARTER.md`, `CODE_OF_CONDUCT.md`,
   Audience and intent are story `tags` (`beginner`, `advanced`, `perf`, `interactive`, `large-data`,
   `labels`) rather than sections, so nothing has to be filed twice; `.storybook/preview.ts` holds the
   tag vocabulary and the sidebar order, and both must stay inline literals for Storybook to index them.
+  Stories that belong to an integration package live with it (`integrations/*/src/stories/`) and are
+  globbed by the same root Storybook into the same flat sidebar.
 - `helper.ts` — utilities (e.g. `getRgbaColor`: parse a CSS/hex color into a normalized RGBA tuple).
+
+`integrations/deck-layers/` — the `@cosmos.gl/deck-layers` workspace package: deck.gl layers over the
+standalone `GraphSimulation`. `CosmosGraphLayer` (composite: owns the simulation, steps it from deck's
+timeline, dual object/binary data modes, picking, drag-to-pin) plus the `CosmosPointsLayer` /
+`CosmosLinksLayer` primitives, which sample the live GPU position texture by instance index — typed
+against `PositionTextureSource`, never a concrete engine class. Versioned in lockstep with the root
+package (`pnpm bump <version>` sets both; `scripts/check-lockstep.mjs` guards every publish).
 
 `migration-notes.md` documents **breaking changes only** — data-format and config changes that require
 users to update their code (v1→v3: the move to `Float32Array` ingest, the v3 config renames, RGBA
@@ -60,18 +69,24 @@ graph visualization; positions only ⇒ a point/scatter visualization.
 
 ## Dev workflow
 
-Requires Node ≥ 22, npm ≥ 10.
+Requires Node ≥ 22, pnpm ≥ 10 (the repo is a pnpm workspace: the root is the publishable
+`@cosmos.gl/graph` package; integration packages live under `integrations/*`).
 
-- `npm run storybook` — the primary dev loop (live examples at `:6006`). Per `CONTRIBUTING.md`, add or
+- `pnpm run storybook` — the primary dev loop (live examples at `:6006`). Per `CONTRIBUTING.md`, add or
   update a Storybook example when you add a feature or change configuration / public methods.
-- `npm run build` — production build (Vite, ES + UMD).
-- `npm run watch` — rebuild on change.
-- `npm run lint` — ESLint over `src` (`lint-staged` runs on commit). **Ensure the project lints and
-  builds before opening a PR.**
+- `pnpm run build` — production build (Vite, ES + UMD).
+- `pnpm run watch` — rebuild on change.
+- `pnpm run lint` — ESLint over `src` (`lint-staged` runs on commit).
+- `pnpm test` — the vitest browser suite (real WebGL 2 in headless Chromium): engine host-embedding
+  contracts and the deck-layers runtime tests (picking, dragging, simulation stepping).
+- `pnpm run typecheck` — `tsc --noEmit` over everything we author, stories and `test/` included
+  (the base `tsconfig.json` drives declaration emit, so it is scoped to what ships and excludes
+  `src/stories`; `tsconfig.typecheck.json` widens the program). **Ensure the project lints,
+  typechecks, and builds before opening a PR.**
 
 ## Contributing
 
-Per `CONTRIBUTING.md`: fork, branch from `main`, code, make sure lint + build pass, add a Storybook
+Per `CONTRIBUTING.md`: fork, branch from `main`, code, make sure lint, typecheck and build pass, add a Storybook
 example if you changed behavior/config/public API, then open a PR. Contributions are MIT-licensed.
 
 ## Commits

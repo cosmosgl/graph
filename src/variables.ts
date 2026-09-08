@@ -8,6 +8,7 @@ import { TransitionEasing } from '@/graph/modules/Transition'
 export const defaultConfigValues = {
   // General
   enableSimulation: true,
+  enableRenderLoop: true,
   transitionDuration: 800,
   transitionEasing: TransitionEasing.CubicInOut,
   backgroundColor: '#222222',
