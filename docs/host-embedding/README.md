@@ -45,8 +45,8 @@ place. The headline changes:
   timeline, takes object or binary data, and implements picking with original
   objects and drag-to-pin) over rebuilt `CosmosPointsLayer` / `CosmosLinksLayer`
   primitives on deck's shader-module system — positions still zero-copy.
-- Of the five open items below: **2, 3, 4 and 5 are fixed**; only the async
-  snapshot fence (item 1) remains open.
+- Of the five open items below: **all five are fixed** — the async snapshot fence
+  (item 1) landed last, in `b8da115`.
 
 ## One Graph, three ownership modes
 
@@ -140,8 +140,8 @@ flowchart LR
 Hosts pick a tier per use: rendering samples the texture, throttled label/export snapshots
 use the async path, and the sync path remains for one-shot reads. `getPointPositions()`
 keeps its `number[]` shape and now delegates to the array variant.
-¹ See [open item 1](#open-items-before-undrafting): the async path's no-stall promise
-needs a fence in the current luma 9.3 backend.
+¹ The async path's no-stall promise is honored since `b8da115`
+([open item 1](#open-items-before-undrafting)): a fence after the submit, then the read.
 
 ### The texture contract
 
@@ -283,7 +283,7 @@ tiers:
 | --- | --- | --- | --- |
 | **Shared luma `Device`** (zero-copy) | Host resolves the *same* `@luma.gl` installation — the peer-dependency contract | deck.gl (this branch's stories), kepler.gl via deck, any luma.gl application | **Proven** — the only tier that is vis.gl-specific |
 | **Shared raw WebGL 2 context** (zero-copy) | Host exposes its `WebGL2RenderingContext`; `luma.attachDevice({handle: gl})` wraps it and a headless Graph runs on it — the position texture then lives in the *host's* context | MapLibre GL / Mapbox GL custom layers, Three.js (`ExternalTexture`), PixiJS (WebGL), regl, raw-WebGL apps | **Mechanically supported** — luma 9.3 ships the attach path (the same one deck's interleaved Mapbox mode uses); undemonstrated, and open item 2's entry-point guards become load-bearing here |
-| **Headless + snapshots** (CPU handoff) | None — positions cross as a `Float32Array` | Any renderer or framework: Cytoscape.js layout extensions, Sigma.js / Graphology, D3 apps past `d3-force` scale, React Flow auto-layout, notebooks, server-side layout precompute (the test suite already runs on SwiftShader with no screen) | **Universal today** — becomes genuinely non-blocking once the async fence lands (open item 1) |
+| **Headless + snapshots** (CPU handoff) | None — positions cross as a `Float32Array` | Any renderer or framework: Cytoscape.js layout extensions, Sigma.js / Graphology, D3 apps past `d3-force` scale, React Flow auto-layout, notebooks, server-side layout precompute (the test suite already runs on SwiftShader with no screen) | **Universal today** — genuinely non-blocking since the async fence landed (open item 1, `b8da115`) |
 
 The biggest audiences are not renderers at all but graph libraries with *pluggable
 layouts* consuming the third tier as a pure layout engine — the RFC's "hidden layout
@@ -307,7 +307,7 @@ shipped signatures.
 | 3 | Optional DOM / canvas ownership | delivered | Headless never adopts, reparents, clears, submits, or resizes; ownership rules explicit per mode |
 | 4 | Read-only GPU position resource | delivered | `getPointPositionTexture()` with texel layout, ownership, ping-pong + `version` contract on the exported type |
 | 5 | Host render pass | delivered | `drawToRenderPass(pass, {points?, links?})` — no clear, end, or submit; points/links separable |
-| 6 | Efficient snapshots | delivered* | `Float32Array` + caller-provided `out` + async variant + documented sync stall; \*the async path still needs a fence to honor its no-stall claim (open item 1) |
+| 6 | Efficient snapshots | delivered | `Float32Array` + caller-provided `out` + async variant + documented sync stall; the async path honors its no-stall claim through a fence (open item 1, `b8da115`) |
 | 7 | Indexed mutation and pinning | delivered | `setPointPosition`, `setPointPositionsByIndices`, `setPinnedPoint` — the RFC's proposed operations; its `setPointPinned` ships as `setPinnedPoint`, paired with `setPinnedPoints` |
 | 8 | luma.gl dependency alignment | delivered | Peers at `^9.3.0`, single deduped install verified; the range deliberately excludes the luma 9.4 *prerelease* line (semver ranges don't match foreign prereleases) and will cover stable 9.4 with no cosmos release |
 | 9 | Backend capability flags | not yet | Deliberately deferred (see below): the flags should describe a stabilized surface; adapters feature-detect method presence for now |
@@ -322,7 +322,7 @@ Where the RFC sketched concrete code, the deliberate divergences are the interes
 | "an option that disables the internal `requestAnimationFrame` loop"; host calls one sim step and optionally one render op | `enableRenderLoop: false` + `step()` + `renderOneFrame()` | Exceeds the ask: runtime-toggleable via `setConfig`, and the simulation-end check travels with the clock so `onSimulationEnd` fires under any scheduler |
 | `{texture, pointCount, `**`width, height`**`, version}`; document texel format, coordinate convention, ownership, ping-pong observation | `{texture, pointCount, `**`textureSize`**`, version}` on the exported `PointPositionTexture` type | The texture is always square, so one field encodes the invariant two would obscure. Every documentation clause the RFC listed is on the type; the optional buffer form is deferred with WebGPU |
 | a method recording draws into a supplied `RenderPass`; "separately configurable point and link rendering" | `drawToRenderPass(pass, {points?, links?})` — plus `setViewTransform({k, x, y}, screenSize?)` | Exact match, and the internal renderer now routes through the same method. `setViewTransform` wasn't asked for by name, but the RFC's "thin wrapper around an upstream encode(renderPass)" needs a camera — shipped with a documented, unit-tested formula |
-| snapshots: `Float32Array` return; optional destination; "an asynchronous readback option where supported"; document the sync stall | `getPointPositionsArray(out?)` · `getPointPositionsAsync(out?)` · stall documented on `getPointPositions()` | All four clauses shipped in shape. The async path's no-stall behavior still needs a fence in luma 9.3 (open item 1) — the RFC's "where supported" hedge was the wiser wording until then |
+| snapshots: `Float32Array` return; optional destination; "an asynchronous readback option where supported"; document the sync stall | `getPointPositionsArray(out?)` · `getPointPositionsAsync(out?)` · stall documented on `getPointPositions()` | All four clauses shipped in shape. The async path's no-stall behavior is honored through a fence (open item 1, `b8da115`) — the RFC's "where supported" hedge was the wiser wording until it landed |
 | "Possible operations include `setPointPosition`, `setPointPinned`, and a batched sparse update API" | `setPointPosition(i, x, y)` · `setPinnedPoint(i, bool)` · `setPointPositionsByIndices(ids, xy)` | The proposed operations; `setPointPinned` ships as `setPinnedPoint` to pair with `setPinnedPoints`. Semantics specified beyond the ask: live-state writes on the drag path, input arrays never modified, absent points never resurrected, mismatched pairs rejected whole |
 | luma: move to peers **or** publish a documented compatibility range | Both: `peerDependencies ^9.3.0`, documented in README + migration notes | The "or" became "and". The range deliberately excludes the 9.4 prerelease line and admits stable 9.4 automatically |
 | capability flags for simulation, rendering, readback, external scheduling, shared resources | — | The one ask with no code: deferred until the surface the flags would describe has stabilized; adapters feature-detect for now |
@@ -395,9 +395,9 @@ was removed (`ba7afa5`).
 ## Open items before undrafting
 
 A deep review of the branch confirmed the architecture and contracts above and left five
-items, in severity order. Status as of 2026-09-07: items 2–5 are fixed; item 1 remains.
+items, in severity order. Status as of 2026-09-08: all five are fixed.
 
-1. **Still open — the async snapshot stalls.** The enqueue half is right —
+1. **Fixed (`b8da115`) — the async snapshot reads behind a fence.** As reviewed: the enqueue half is right —
    `copyTextureToBuffer` records a GPU-timeline `readPixels`-into-PBO copy — but luma
    9.3's WebGL `Buffer.readAsync` is a synchronous `getBufferSubData` in disguise, and
    calling it immediately forces the driver to drain every queued command the copy
@@ -410,7 +410,11 @@ items, in severity order. Status as of 2026-09-07: items 2–5 are fixed; item 1
    capturing `pointsNumber`/`textureSize` at call time, since a real async gap lets data
    updates land mid-flight. The API shape itself is forward-correct (a WebGPU backend
    satisfies it natively via `mapAsync`); until the fence lands, the honest wording is
-   the RFC's own "asynchronous readback *where supported*."
+   the RFC's own "asynchronous readback *where supported*." Landed as reviewed: the fence
+   after the submit, bounded at one second so a lost context falls through to the blocking
+   read instead of hanging, and a data rebuild that resizes the texture mid-flight resolves
+   an empty snapshot rather than old pixels against new data. A regression test holds the
+   fence open and asserts the read waits.
 2. **Fixed (`9566be1`) — the GL-state reset guards the sparse-write path too.** As reviewed: `trackPoints()` is a
    raster draw reachable outside the guarded step/frame paths — through the new
    `setPointPositionsByIndices`, through `trackPointPositionsByIndices`, and through
