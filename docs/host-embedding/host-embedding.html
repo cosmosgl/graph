@@ -584,7 +584,7 @@ screenY = k · ((S − spaceY) + (h − S) / 2) + y   <span class="cmt">// cosmo
       <line x1="475" y1="24" x2="475" y2="250" class="sv-lane" stroke-dasharray="3 5"/>
 
       <!-- AFTER -->
-      <text x="600" y="30" class="sv-mut" font-weight="600">after — peerDependencies "^9.3.0"</text>
+      <text x="600" y="30" class="sv-mut" font-weight="600">after — peerDependencies "~9.3.0"</text>
       <rect x="640" y="46" width="130" height="34" rx="6" class="sv-card"/>
       <text x="705" y="67" text-anchor="middle" class="sv-ink m">app</text>
       <rect x="550" y="120" width="130" height="34" rx="6" class="sv-host-box"/>
@@ -600,7 +600,7 @@ screenY = k · ((S − spaceY) + (h − S) / 2) + y   <span class="cmt">// cosmo
       <text x="705" y="250" text-anchor="middle" class="sv-mut lbl">one installation — one Device class, shared legitimately</text>
     </svg>
     </div>
-    <figcaption><b>The peer move.</b> <code>@luma.gl/*</code> leaves <code>dependencies</code> for <code>peerDependencies</code> (<code>^9.3.0</code>). The ES build keeps luma external — the rollup externals list now covers peers, where before the move would have silently bundled a private copy — while the UMD/jsdelivr build stays standalone. Verified: <code>npm ls @luma.gl/core</code> resolves a single deduped 9.3.6 for cosmos + deck.gl 9.3.10.</figcaption>
+    <figcaption><b>The peer move.</b> <code>@luma.gl/*</code> leaves <code>dependencies</code> for <code>peerDependencies</code> (<s><code>^9.3.0</code></s> <code>~9.3.0</code>, the tested line). The ES build keeps luma external — the rollup externals list now covers peers, where before the move would have silently bundled a private copy — while the UMD/jsdelivr build stays standalone. Verified: <code>npm ls @luma.gl/core</code> resolves a single deduped 9.3.6 for cosmos + deck.gl 9.3.10.</figcaption>
   </figure>
 
   <div class="callout">
@@ -699,7 +699,7 @@ screenY = k · ((S − spaceY) + (h − S) / 2) + y   <span class="cmt">// cosmo
         <tr><td class="num">5</td><td>Host render pass</td><td><span class="chip good">delivered</span></td><td><code>drawToRenderPass(pass, {points?, links?})</code> — no clear, end, or submit; points/links separable</td></tr>
         <tr><td class="num">6</td><td>Efficient snapshots</td><td><span class="chip good">delivered</span></td><td><code>Float32Array</code> + caller-provided <code>out</code> + async variant + documented sync stall; the async path honors its no-stall claim through a fence (open item 1, <code>b8da115</code>)</td></tr>
         <tr><td class="num">7</td><td>Indexed mutation and pinning</td><td><span class="chip good">delivered</span></td><td><code>setPointPosition</code>, <code>setPointPositionsByIndices</code>, <code>setPinnedPoint</code> — the RFC's proposed operations; its <code>setPointPinned</code> ships as <code>setPinnedPoint</code>, paired with <code>setPinnedPoints</code></td></tr>
-        <tr><td class="num">8</td><td>luma.gl dependency alignment</td><td><span class="chip good">delivered</span></td><td>Peers at <code>^9.3.0</code>, single deduped install verified; the range deliberately excludes the luma 9.4 <em>prerelease</em> line (semver ranges don't match foreign prereleases) and will cover stable 9.4 with no cosmos release</td></tr>
+        <tr><td class="num">8</td><td>luma.gl dependency alignment</td><td><span class="chip good">delivered</span></td><td>Peers at <s><code>^9.3.0</code></s> <code>~9.3.0</code>, single deduped install verified; <s>the range deliberately excludes the luma 9.4 <em>prerelease</em> line (semver ranges don't match foreign prereleases) and will cover stable 9.4 with no cosmos release</s> stable 9.4 shipped on 2026-09-05 and the caret range let npm place it beside deck 9.3's luma 9.3 (two copies), so the range now names the tested line and widens with a verified release</td></tr>
         <tr><td class="num">9</td><td>Backend capability flags</td><td><span class="chip none">not yet</span></td><td>Deliberately deferred (see "out of scope" below): the flags should describe a stabilized surface; adapters feature-detect method presence for now</td></tr>
       </tbody>
     </table>
@@ -745,7 +745,7 @@ screenY = k · ((S − spaceY) + (h − S) / 2) + y   <span class="cmt">// cosmo
         </tr>
         <tr>
           <td>luma: move to peers <b>or</b> publish a documented compatibility range</td>
-          <td>Both: <code>peerDependencies ^9.3.0</code>, documented in README + migration notes</td>
+          <td>Both: <code>peerDependencies</code> <s><code>^9.3.0</code></s> <code>~9.3.0</code>, documented in README + migration notes</td>
           <td>The "or" became "and". The range deliberately excludes the 9.4 prerelease line and admits stable 9.4 automatically</td>
         </tr>
         <tr>
