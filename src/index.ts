@@ -996,7 +996,8 @@ export class Graph {
    * GPU timeline and the promise resolves when it completes, so the CPU never
    * stalls waiting for in-flight simulation work.
    * @param out - Optional destination array, as in `getPointPositionsArray()`.
-   * @returns Promise of the filled destination array (empty when there is nothing to read).
+   * @returns Promise of the filled destination array (empty when there is nothing to read,
+   *   or when a data rebuild resized the position texture while the copy was in flight).
    */
   public async getPointPositionsAsync (out?: Float32Array): Promise<Float32Array> {
     if (this._isDestroyed) return new Float32Array(0)

@@ -2066,13 +2066,15 @@ export class Points extends CoreModule {
 
   /**
    * Asynchronous readback of the current position texture. Copies the pixels
-   * into a staging buffer on the GPU timeline and resolves once the copy is
-   * observable — the CPU never stalls waiting for the GPU to drain, unlike the
-   * synchronous `readPixels` path.
+   * into a staging buffer on the GPU timeline, waits on a fence for the copy to
+   * land, then reads — the CPU never stalls waiting for the GPU to drain, unlike
+   * the synchronous `readPixels` path.
    *
    * Returns the raw RGBA32F pixel array (`[x, y, index, unused]` per texel), or
-   * `undefined` when there is nothing to read. Uses a fresh staging buffer per
-   * call so overlapping reads can't corrupt each other.
+   * `undefined` when there is nothing to read — including when a data rebuild
+   * resized the texture while the copy was in flight, since the snapshot would
+   * describe the old data. Uses a fresh staging buffer per call so overlapping
+   * reads can't corrupt each other.
    */
   public async readPositionPixelsAsync (): Promise<Float32Array | undefined> {
     const { device, store: { pointsTextureSize } } = this
@@ -2095,6 +2097,13 @@ export class Points extends CoreModule {
         destinationBuffer: stagingBuffer,
       })
       device.submit(commandEncoder.finish())
+      // The WebGL `readAsync` below is a blocking `getBufferSubData`: reading
+      // right away would wait for every queued command the copy depends on.
+      // Let the GPU pass the copy first, so the read returns at once.
+      await this.waitForGpu()
+      // A real async gap lets data updates land mid-flight
+      if (this.store.pointsTextureSize !== pointsTextureSize) return undefined
+      if (!this.currentPositionFbo || this.currentPositionFbo.destroyed) return undefined
       const bytes = await stagingBuffer.readAsync()
       return new Float32Array(bytes.buffer, bytes.byteOffset, byteLength / 4)
     } finally {
@@ -3135,6 +3144,27 @@ export class Points extends CoreModule {
         height: pointsTextureSize,
         colorAttachments: [this.previousPositionTexture],
       })
+    }
+  }
+
+  /**
+   * Resolves once the GPU has executed everything submitted so far, without
+   * blocking the CPU: luma's WebGL fence polls `clientWaitSync` with a zero
+   * timeout. Bounded, because a lost context reports a failure status the poll
+   * never treats as signaled — then fall through to the blocking read rather
+   * than hang and leak the caller's staging buffer.
+   */
+  private async waitForGpu (timeoutMs = 1000): Promise<void> {
+    const fence = this.device.createFence()
+    let timer: ReturnType<typeof setTimeout> | undefined
+    try {
+      await Promise.race([
+        fence.signaled,
+        new Promise<void>((resolve) => { timer = setTimeout(resolve, timeoutMs) }),
+      ])
+    } finally {
+      clearTimeout(timer)
+      fence.destroy()
     }
   }
 
