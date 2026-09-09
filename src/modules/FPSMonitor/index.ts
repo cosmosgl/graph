@@ -1,5 +1,5 @@
 
-import GLBench from 'gl-bench'
+import GLBench from 'gl-bench/dist/gl-bench.module.js'
 import { benchCSS } from './css'
 
 export class FPSMonitor {
