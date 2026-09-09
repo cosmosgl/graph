@@ -27,6 +27,12 @@
     "import/no-default-export": "error",
     "import/prefer-default-export": 0,
     "import/first": ["error", "absolute-first"],
+    "no-restricted-imports": ["error", {
+      "paths": [{
+        "name": "gl-bench",
+        "message": "Import 'gl-bench/dist/gl-bench.module.js'; the bare name resolves to gl-bench's export-less browser script."
+      }]
+    }],
     "import/order": ["error", 
       {
         "groups": ["builtin", "external", "internal", "parent", "sibling", "index", "object"],

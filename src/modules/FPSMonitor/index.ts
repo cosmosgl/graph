@@ -1,5 +1,9 @@
 
-import GLBench from 'gl-bench'
+// gl-bench's `browser` entry is an export-less script, so a bare `gl-bench`
+// specifier yields no default export in bundlers that honor that field. The
+// ES entry is imported by path: gl-bench stays external, the consumer's
+// bundler resolves this specifier, and no `browser` field redirects a path.
+import GLBench from 'gl-bench/dist/gl-bench.module.js'
 import { benchCSS } from './css'
 
 export class FPSMonitor {
