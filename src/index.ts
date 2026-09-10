@@ -1969,6 +1969,11 @@ export class Graph {
     return await luma.createDevice({
       type: 'webgl',
       adapters: [webgl2Adapter],
+      webgl: {
+        // Point and link edges are anti-aliased analytically in the shaders;
+        // multisampling the default framebuffer would only add fill cost.
+        antialias: false,
+      },
       createCanvasContext: {
         canvas, // Provide existing canvas
         useDevicePixels: this.config.pixelRatio, // Use config pixelRatio value
