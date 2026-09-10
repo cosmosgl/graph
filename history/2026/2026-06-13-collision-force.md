@@ -1,7 +1,8 @@
 # Spatial-hash collision force
 
 **Date:** 2026-06-13
-**Commits:** `6cb1b48`, `566bcba`, `6e41a8a`, `ad860ec`, `8284883`, `9c852f7`, `94dcfd3`
+**Commits:** `6cb1b48`, `566bcba`, `6e41a8a`, `ad860ec`, `8284883`, `9c852f7`, `94dcfd3`,
+`ca4ee44`, `58e2475`
 
 ## Why
 
@@ -55,10 +56,18 @@ collisions straddling cell boundaries:
    velocity from the overlap, and the integrator applies it via the usual
    `swapFbo → run → updatePosition` dance.
 
-Grid sizing: `cellSize = max(effectiveRadius, 8)` and
-`gridTextureSize = clamp(ceil(spaceSize / cellSize), 32, 512)`, then `cellSize` is
-recomputed to divide `spaceSize` evenly. The 512 cap bounds grid memory regardless of
-space size.
+Grid sizing: `cellSize = max(2 × effectiveRadius, 8)` and
+`gridTextureSize = min(512, max(1, floor(spaceSize / cellSize)))`, then `cellSize` is
+recomputed to divide `spaceSize` evenly. The cell spans the full interaction range because
+two touching points are two radii apart and the 3×3 scan reaches only one cell of
+separation; rounding the grid dimension *down* means the refit can only grow the cell, and
+the 1-cell floor lets a large radius have the coarse grid it asks for. (The original
+`max(effectiveRadius, 8)` / `clamp(ceil(…), 32, 512)` left touching pairs in cells the scan
+never compared for any point larger than the 8-unit floor happened to cover — fixed in
+`fix(force): cover the full collision range and unbias cell averages` (`ca4ee44`) and
+`fix(force): keep the fitted collision cell at the interaction range` (`58e2475`), which
+also subtract the point's own contribution from its cell's sums before averaging.) The 512
+cap bounds grid memory regardless of space size.
 
 Shaders are **GLSL ES 3.0** (`#version 300 es`), imported with `?raw`, mirroring the
 luma.gl `ForceManyBody` module. The build vertex shader samples the positions/size
@@ -111,8 +120,9 @@ add a config/data path that affects collision sizing, add an invalidation there 
   `linkDistance: 50` for sizes up to ~30.
 - **Jitter** is reduced by lower `simulationFriction` and shorter `simulationDecay` (less
   residual energy), and by the force ordering / correction cap above.
-- **Density** = cost. More points per cell (smaller `spaceSize`, larger points) means more
-  work per tick.
+- **Density** = quality, not per-tick time. The GPU work is O(n) with a fixed constant (a
+  cell is one texel however crowded it is); more points per cell means a coarser average
+  standing in for more individuals, and more ticks to converge.
 
 ## Examples & docs
 
@@ -128,6 +138,10 @@ add a config/data path that affects collision sizing, add an invalidation there 
 - Docs: `simulationCollision` / `simulationCollisionRadius` / `simulationCollisionPadding`
   documented in the Configuration docs (ranges + defaults), Collision listed among the
   simulation forces, and the example linked from the README.
+- **Deep dive:** `docs/collision-force/README.md` walks through the cell-size argument (why
+  the cell is the whole contact range), the four offset grids, the cell-average push and its
+  caps, the tick ordering, and the cost and limits of the averaging — with generated figures
+  (`node gen-diagrams.mjs` from that folder).
 
 ## Known limitations / future work
 
