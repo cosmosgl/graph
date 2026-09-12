@@ -299,11 +299,13 @@ void main() {
         }
 
         float ringOpacity = ringAlpha * outlineColor.a;
-        // Composite ring on top of existing fragment
-        fragColor = vec4(
-            mix(fragColor.rgb, ringColor, ringOpacity),
-            max(fragColor.a, ringOpacity)
-        );
+        // Source-over of the ring onto the fragment. A plain mix would tint the ring with a
+        // transparent body's colour, and the blend would then apply the ring's alpha twice.
+        float outAlpha = ringOpacity + fragColor.a * (1.0 - ringOpacity);
+        vec3 outRgb = outAlpha > 0.0
+            ? (ringColor * ringOpacity + fragColor.rgb * fragColor.a * (1.0 - ringOpacity)) / outAlpha
+            : fragColor.rgb;
+        fragColor = vec4(outRgb, outAlpha);
     }
 
     // Occlusion culling: split every fragment between the opaque core pass
