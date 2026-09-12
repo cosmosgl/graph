@@ -3,7 +3,7 @@
 
 **Date:** 2026-09-10
 **Commits:** `fix(points): close the triangle field's segment at the apex — the ramp holds on every edge` (`48f887f`), `fix(points): clamp the pentagon field to the true half side` (`16a66da`), `fix(points): composite the outline ring over a transparent body` (`7a6d9c7`), `perf(points, links): centre a one-device-pixel edge ramp on every edge` (`ad201be`), `refactor(points): one size rule for draw, ring, picking and selection` (`d855646`), `fix(points): pad the selection rectangle in CSS px — the footprint is the drawn point` (`1df6d42`), `feat(stories): edge anti-aliasing check at 0.5×, 1×, 2×, in a Rendering section` (`94a8e2b`)
-**PR:** <!-- TODO -->
+**PR:** [#262](https://github.com/cosmosgl/graph/pull/262)
 
 ## Why
 
