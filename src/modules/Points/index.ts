@@ -4,7 +4,7 @@ import { Model } from '@luma.gl/engine'
 // import { extent } from 'd3-array'
 import { CoreModule } from '@/graph/modules/core-module'
 import type { Mat4Array, Hovered } from '@/graph/modules/Store'
-import { defaultConfigValues, EXIT_DEFAULT_SIZE, EXIT_DEFAULT_COLOR_CHANNEL } from '@/graph/variables'
+import { defaultConfigValues, EXIT_DEFAULT_SIZE, EXIT_DEFAULT_COLOR_CHANNEL, EDGE_RAMP_PX, POINT_RING_SCALE } from '@/graph/variables'
 import drawPointsFrag from '@/graph/modules/Points/draw-points.frag?raw'
 import drawPointsVert from '@/graph/modules/Points/draw-points.vert?raw'
 import findPointsInRectFrag from '@/graph/modules/Points/find-points-in-rect.frag?raw'
@@ -13,6 +13,7 @@ import drawHighlightedFrag from '@/graph/modules/Points/draw-highlighted.frag?ra
 import drawHighlightedVert from '@/graph/modules/Points/draw-highlighted.vert?raw'
 import fillPickingBufferFrag from '@/graph/modules/Points/fill-picking-buffer.frag?raw'
 import fillPickingBufferVert from '@/graph/modules/Points/fill-picking-buffer.vert?raw'
+import { pointSizeModule } from '@/graph/modules/Points/point-size-module'
 import fillGridWithSampledPointsFrag from '@/graph/modules/Points/fill-sampled-points.frag?raw'
 import fillGridWithSampledPointsVert from '@/graph/modules/Points/fill-sampled-points.vert?raw'
 import updatePositionFrag from '@/graph/modules/Points/update-position.frag?raw'
@@ -365,6 +366,7 @@ export class Points extends CoreModule {
     drawHighlightedUniforms: {
       color: [number, number, number, number];
       width: number;
+      pixelRatio: number;
       pointIndex: number;
       size: number;
       sizeScale: number;
@@ -738,6 +740,7 @@ export class Points extends CoreModule {
     this.drawCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
+      modules: [pointSizeModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       attributes: {
@@ -767,6 +770,8 @@ export class Points extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
         EXIT_DEFAULT_SIZE: glslFloatLiteral(EXIT_DEFAULT_SIZE),
         EXIT_DEFAULT_COLOR_CHANNEL: glslFloatLiteral(EXIT_DEFAULT_COLOR_CHANNEL),
+        EDGE_RAMP_PX: glslFloatLiteral(EDGE_RAMP_PX),
+        POINT_RING_SCALE: glslFloatLiteral(POINT_RING_SCALE),
       } as unknown as Record<string, boolean>,
       bindings: {
         // Create uniform buffer binding
@@ -786,6 +791,7 @@ export class Points extends CoreModule {
     this.drawCoreCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
+      modules: [pointSizeModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       indexBuffer: this.reversedPointIndexBuffer ?? null,
@@ -813,6 +819,8 @@ export class Points extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
         EXIT_DEFAULT_SIZE: glslFloatLiteral(EXIT_DEFAULT_SIZE),
         EXIT_DEFAULT_COLOR_CHANNEL: glslFloatLiteral(EXIT_DEFAULT_COLOR_CHANNEL),
+        EDGE_RAMP_PX: glslFloatLiteral(EDGE_RAMP_PX),
+        POINT_RING_SCALE: glslFloatLiteral(POINT_RING_SCALE),
       } as unknown as Record<string, boolean>,
       bindings: {
         drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer('drawVertexUniforms'),
@@ -859,6 +867,7 @@ export class Points extends CoreModule {
     this.findPointsInRectCommand ||= new Model(device, {
       fs: findPointsInRectFrag,
       vs: updateVert,
+      modules: [pointSizeModule],
       topology: 'triangle-strip',
       vertexCount: 4,
       attributes: {
@@ -963,6 +972,7 @@ export class Points extends CoreModule {
     this.fillPickingBufferCommand ||= new Model(device, {
       fs: fillPickingBufferFrag,
       vs: fillPickingBufferVert,
+      modules: [pointSizeModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       attributes: {
@@ -1062,6 +1072,7 @@ export class Points extends CoreModule {
           greyoutColor: 'vec4<f32>',
           // Fragment shader uniforms (width is in same block):
           width: 'f32',
+          pixelRatio: 'f32',
         },
         defaultUniforms: {
           size: 1,
@@ -1081,6 +1092,7 @@ export class Points extends CoreModule {
           backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
           greyoutColor: ensureVec4(store.greyoutPointColor, [0, 0, 0, 1]),
           width: 0.85,
+          pixelRatio: config.pixelRatio,
         },
       },
     })
@@ -1088,6 +1100,7 @@ export class Points extends CoreModule {
     this.drawHighlightedCommand ||= new Model(device, {
       fs: drawHighlightedFrag,
       vs: drawHighlightedVert,
+      modules: [pointSizeModule],
       topology: 'triangle-strip',
       vertexCount: 4,
       attributes: {
@@ -1098,7 +1111,9 @@ export class Points extends CoreModule {
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
-      },
+        EDGE_RAMP_PX: glslFloatLiteral(EDGE_RAMP_PX),
+        POINT_RING_SCALE: glslFloatLiteral(POINT_RING_SCALE),
+      } as unknown as Record<string, boolean>,
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
@@ -1876,6 +1891,7 @@ export class Points extends CoreModule {
           backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
           greyoutColor: ensureVec4(store.greyoutPointColor, [0, 0, 0, 1]),
           width: 0.85,
+          pixelRatio: config.pixelRatio,
         },
       })
       // Update texture bindings dynamically
@@ -1911,6 +1927,7 @@ export class Points extends CoreModule {
           backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
           greyoutColor: ensureVec4(store.greyoutPointColor, [0, 0, 0, 1]),
           width: 0.85,
+          pixelRatio: config.pixelRatio,
         },
       })
       // Update texture bindings dynamically

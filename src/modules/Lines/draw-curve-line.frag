@@ -81,12 +81,18 @@ void main() {
   }
 
   if (useArrow > 0.5) {
-    float arrowWidthDelta = arrowWidthFactor / 2.0;
-    float linkCoverage = smoothstep(0.5 - arrowWidthDelta, 0.5 - arrowWidthDelta - smoothing / 2.0, abs(pos.y));
+    // pos.y spans the quad, which is the arrow width plus a ramp. arrowWidthFactor is a fraction
+    // of the arrow width alone, so edges derived from it scale by (1 - smoothing) = arrow / quad.
+    float preRamp = 1.0 - smoothing;
+    float bodyEdge = (0.5 - arrowWidthFactor / 2.0) * preRamp;
+    float headBase = 0.5 * preRamp;
+    // Body edge, ramp centred on it as for the plain stroke.
+    float linkCoverage = smoothstep(bodyEdge + smoothing / 2.0, bodyEdge - smoothing / 2.0, abs(pos.y));
     float arrowCoverage = 1.0;
     if (pos.x > start_arrow && pos.x < start_arrow + arrowLength) {
-      float xmapped = map(pos.x, start_arrow, end_arrow, 0.0, 1.0);
-      arrowCoverage = smoothstep(xmapped - smoothing, xmapped, map(abs(pos.y), 0.5, 0.0, 0.0, 1.0));
+      // Arrowhead taper, from headBase at its base to the centreline at its tip; ramp centred on it.
+      float taper = headBase * (1.0 - map(pos.x, start_arrow, end_arrow, 0.0, 1.0));
+      arrowCoverage = 1.0 - smoothstep(taper - smoothing / 2.0, taper + smoothing / 2.0, abs(pos.y));
       if (linkCoverage != arrowCoverage) {
         linkCoverage = max(linkCoverage, arrowCoverage);
       }
@@ -100,20 +106,29 @@ void main() {
     bool inArrowHead = (useArrow > 0.5) && (pos.x > start_arrow) && (pos.x < end_arrow);
     if (!inArrowHead) {
       // Distance along the link in the dash pattern's space (screen px or world units; see the vertex shader).
-      // fwidth() gives the screen-space rate of change, so anti-aliasing stays ~1px wide in either space.
+      // fwidth() gives the screen-space rate of change, so the ramp is EDGE_RAMP_PX device pixels in either space.
       float phase = clamp(pos.x, 0.0, 1.0) * vLinkDashSpan;
       if (vLinkStyle == LINK_STYLE_DASHED) {
         float period = max(linkDashLength + linkDashGap, 0.001);
-        float aa = max(fwidth(phase), 1e-4);
+        // Half a ramp in the pattern's units: fwidth(phase) is the change in phase per device pixel.
+        float aa = max(fwidth(phase), 1e-4) * (EDGE_RAMP_PX * 0.5);
         coverage *= strokeMask(phase, linkDashLength, period, aa);
       } else {
-        // Dotted: round dots sized to the stroke width, spaced by diameter + gap.
-        float diameter = vLinkDashWidth;
+        // Dotted: round dots sized to the stroke, the quad less its ramp; spaced by diameter + gap.
+        float diameter = vLinkDashWidth * (1.0 - smoothing);
+        if (linkBlending < 0.5) {
+          // Unblended keeps only pixels whose centre is inside the dot. A dot under √2 device
+          // px can miss every pixel centre and vanish; at √2 it always holds one. Pattern units
+          // per device pixel from the phase's gradient (the pattern space is isotropic).
+          float pxInPattern = max(length(vec2(dFdx(phase), dFdy(phase))), 1e-4);
+          diameter = max(diameter, 1.4142136 * pxInPattern);
+        }
         float period = max(diameter + linkDashGap, 0.001);
         float localX = mod(phase, period) - period * 0.5;
         float localY = pos.y * vLinkDashWidth;
         float r = length(vec2(localX, localY));
-        float aa = max(fwidth(r), 1e-4);
+        // Half a ramp in the pattern's units: fwidth(r) is the change in r per device pixel.
+        float aa = max(fwidth(r), 1e-4) * (EDGE_RAMP_PX * 0.5);
         coverage *= 1.0 - smoothstep(diameter * 0.5 - aa, diameter * 0.5 + aa, r);
       }
     }
@@ -134,12 +149,12 @@ void main() {
     if (opacity <= 0.0) discard;
     fragColor = vec4(linkIndex, 0.0, 0.0, 1.0);
   } else if (linkBlending < 0.5) {
-    // Unblended: any covered fragment is fully opaque. Soft AA fringes would
-    // otherwise write full RGB with partial alpha; canvas compositing treats that
-    // as premultiplied and the edge reads brighter than the solid core.
-    // Discard only zero coverage / fully transparent — do not hard-cut at
-    // coverage < 0.5, which erases thin strokes whose smoothstep peaks ~0.5.
-    if (coverage <= 0.0 || opacity <= 0.0) discard;
+    // Unblended: opaque, hard edges. Soft fringes would write full RGB with partial
+    // alpha; canvas compositing treats that as premultiplied and the edge reads
+    // brighter than the solid core. Every fade is centred on its geometric edge, so
+    // coverage 0.5 is that edge: keep the pixels whose centre is inside the stroke.
+    // The vertex stage keeps unblended strokes at least a device pixel wide.
+    if (coverage < 0.5 || opacity <= 0.0) discard;
     fragColor = vec4(color, 1.0);
   } else {
     fragColor = vec4(color, opacity);

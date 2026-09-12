@@ -102,19 +102,10 @@ out float shapeSize;
 out float imageSizeVarying;
 out float overallSize;
 
+// The size rule is the shared pointSize module, so drawing, picking and selection agree on it.
 float calculatePointSize(float size) {
-  float pSize;
-
-  if (scalePointsOnZoom > 0.0) {
-    pSize = size * ratio * transformationMatrix[0][0];
-  } else {
-    pSize = size * ratio * min(5.0, max(1.0, transformationMatrix[0][0] * 0.01));
-  }
-
-  return min(pSize, maxPointSize * ratio);
+  return pointSizePx(size, ratio, transformationMatrix[0][0], scalePointsOnZoom, maxPointSize);
 }
-
-const float outlineRingScale = 1.3;
 
 // Read-time resolution of NaN channels — input arrays are used verbatim and never
 // edited, so "use the default" stays encoded as NaN all the way to the GPU. A NaN
@@ -209,15 +200,25 @@ void main() {
   float shapeSizeValue = calculatePointSize(pointSize * sizeScale);
   float imageSizeValue = calculatePointSize(imageSize * sizeScale);
 
-  // Use the larger of the two sizes for the overall point size
-  float overallSizeValue = max(shapeSizeValue, imageSizeValue);
-
-  // Scale up point sprite to fit outline ring; clamp to hardware gl_PointSize limit so the
-  // sprite never gets silently clipped — the point body is unaffected, only the ring narrows.
-  if (isOutlined > 0.0) {
-    overallSizeValue *= outlineRingScale;
-    overallSizeValue = min(overallSizeValue, maxPointSize * ratio);
+  // A size of 0 draws nothing; the sprite below is never smaller than a pixel.
+  if (max(shapeSizeValue, imageSizeValue) <= 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    gl_PointSize = 0.0;
+    return;
   }
+
+  // Use the larger of the shape, image, and 1-pixel minimum. The sprite is the shape's own size:
+  // the ramp stays centred on the edge, and its outer half is clipped where the shape meets the
+  // sprite's sides.
+  float overallSizeValue = max(max(shapeSizeValue, 1.0), imageSizeValue);
+
+  // Outlined: scale the drawn core (a shape is never under a pixel) to the ring size, then add
+  // ramp room on both sides.
+  if (isOutlined > 0.0) {
+    overallSizeValue = POINT_RING_SCALE * max(max(shapeSizeValue, 1.0), imageSizeValue) + 2.0 * EDGE_RAMP_PX;
+  }
+  // Clamp to the hardware limit; the fragment shader preserves the shape size.
+  overallSizeValue = min(overallSizeValue, maxPointSize * ratio);
 
   gl_PointSize = overallSizeValue;
 

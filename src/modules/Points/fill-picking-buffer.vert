@@ -70,19 +70,9 @@ out vec4 rgba;
 // pixels) a point could fall between the buffer's texels.
 const float minPickingSize = 2.0;
 
-// Must stay identical to calculatePointSize in draw-points.vert (same
-// transform-scale semantics), or the picking radius drifts from the rendered
-// point size.
+// The drawn size (draw-points.vert), so the pickable footprint is the rendered point.
 float calculatePointSize(float size, float pxPerUnit) {
-  float pSize;
-
-  if (scalePointsOnZoom > 0.0) {
-    pSize = size * ratio * pxPerUnit;
-  } else {
-    pSize = size * ratio * min(5.0, max(1.0, pxPerUnit * 0.01));
-  }
-
-  return min(pSize, maxPointSize * ratio);
+  return pointSizePx(size, ratio, pxPerUnit, scalePointsOnZoom, maxPointSize);
 }
 
 void main() {
@@ -126,6 +116,9 @@ void main() {
 
   float shapeSizeValue = calculatePointSize(resolvedSize * sizeScale, pxPerUnit);
   float imageSizeValue = calculatePointSize(imageSize * sizeScale, pxPerUnit);
+  // A size of 0 draws nothing (draw-points.vert), so it is not hoverable either.
+  if (max(shapeSizeValue, imageSizeValue) <= 0.0) return;
+
   // Device px → CSS px → picking-buffer px (the buffer is smaller than the screen)
   float spriteSize = max(shapeSizeValue, imageSizeValue) / ratio * pickingPixelRatio;
 

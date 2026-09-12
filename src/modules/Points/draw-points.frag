@@ -45,9 +45,6 @@ in float overallSize;
 
 out vec4 fragColor;
 
-// Smoothing controls the smoothness of the point's edge
-const float smoothing = 0.9;
-
 // Occlusion culling splits fragments between the opaque core pass (renderMode 1)
 // and the blended fringe pass (renderMode 2) at this final-alpha threshold
 const float OPAQUE_ALPHA_THRESHOLD = 0.999;
@@ -93,14 +90,18 @@ float squareDistance(vec2 p) {
 
 float triangleDistance(vec2 p) {
     const float k = sqrt(3.0);   // ≈1.732; slope of 60° lines for an equilateral triangle
-    p.x = abs(p.x) - 0.9;        // fold the X axis and shift: brings left and right halves together
-    p.y = p.y + 0.55;             // move the whole shape up slightly so it is centred vertically
+    const float r = 0.9;         // half the edge length; each edge is 2r
+    p.x = abs(p.x) - r;          // fold the X axis and shift: the base corner is at the origin
+    p.y += 0.55;                 // move the base (y = -0.55 in the core) to y = 0. The centred offset is
+                                 // r/k = 0.52; 0.55 keeps the apex at 1.01 rather than 1.04
 
-    // reflect points that fall outside the main triangle back inside, to reuse the same maths
+    // Reflect across the corner's bisector: the slanted edge maps onto the x axis,
+    // corner at x = 0, apex at x = -2r
     if (p.x + k * p.y > 0.0)
         p = vec2(p.x - k * p.y,  -k * p.x - p.y) / 2.0;
 
-    p.x -= clamp(p.x, -1.0, 0.0); // clip any remainder on the left side
+    // Distance to the edge as the segment [-2r, 0] on the x axis
+    p.x -= clamp(p.x, -2.0 * r, 0.0);
 
     // Return signed distance: negative = inside; positive = outside
     return -length(p) * sign(p.y);
@@ -114,15 +115,17 @@ float diamondDistance(vec2 p) {
 
 float pentagonDistance(vec2 p) {
     // Regular pentagon signed-distance (Inigo Quilez)
-    const vec3 k = vec3(0.809016994, 0.587785252, 0.726542528);
+    const vec3 k = vec3(0.809016994, 0.587785252, 0.726542528); // cos 36°, sin 36°, tan 36°
+    const float r = 0.726542528;                                // apothem: the flat edge is at y = r; equal to k.z by
+                                                                // coincidence of the chosen size, not by construction
     p.x = abs(p.x);
 
     // Reflect across the two tilted edges ─ only if point is outside
     p -= 2.0 * min(dot(vec2(-k.x, k.y), p), 0.0) * vec2(-k.x, k.y);
     p -= 2.0 * min(dot(vec2( k.x, k.y), p), 0.0) * vec2( k.x, k.y);
 
-    // Clip against the top horizontal edge (keeps top point sharp)
-    p -= vec2(clamp(p.x, -k.z * k.x, k.z * k.x), k.z);
+    // distance to the flat edge as a segment: every corner folds onto x = ±r·tan 36°
+    p -= vec2(clamp(p.x, -r * k.z, r * k.z), r);
 
     // Return signed distance (negative → inside, positive → outside)
     return length(p) * sign(p.y);
@@ -202,30 +205,43 @@ void main() {
     // Calculate coordinates within the point
     vec2 pointCoord = 2.0 * gl_PointCoord - 1.0;
 
+    // pointCoord covers the full sprite, which is larger than the shape when the point is
+    // outlined, carries a bigger image, or is under a pixel. Rescale it so the shape keeps
+    // its intended size.
+    vec2 shapeCoord = pointCoord;
+    float shapeDiameterPx = overallSize;
+    if (overallSize > shapeSize && shapeSize > 0.0) {
+        shapeCoord = pointCoord * (overallSize / shapeSize);
+        shapeDiameterPx = shapeSize;
+    }
+
     vec4 finalShapeColor = vec4(0.0);
     vec4 finalImageColor = vec4(0.0);
     
-    // Handle shape rendering with centering logic
-    if (pointShape != NONE) {
-        // Calculate shape coordinates with centering
-        vec2 shapeCoord = pointCoord;
-        if (overallSize > shapeSize && shapeSize > 0.0) {
-            // Shape is smaller than overall size, center it
-            float scale = shapeSize / overallSize;
-            shapeCoord = pointCoord / scale;
-        }
-        
+    // Ramp of EDGE_RAMP_PX device pixels centred on the shape edge. The sprite is the shape's own
+    // size: the outer half of the ramp is clipped only where the shape touches the sprite's sides.
+    // A shape under one device pixel is drawn as a one-pixel core with alpha shape² / core², the
+    // ink of its true area; a size of 0 has no shape.
+    if (pointShape != NONE && shapeSize > 0.0) {
+        float coreDiameterPx = max(shapeDiameterPx, 1.0);
+        float smallAlpha = min(1.0, (shapeDiameterPx * shapeDiameterPx) / (coreDiameterPx * coreDiameterPx));
+        vec2 coreCoord = shapeCoord * (shapeDiameterPx / coreDiameterPx); // -1..1 across the core
+        float halfRampPx = EDGE_RAMP_PX * 0.5;
+
         float opacity;
         if (pointShape == CIRCLE) {
-            // For circles, use the original distance calculation
-            float pointCenterDistance = dot(shapeCoord, shapeCoord);
-            opacity = 1.0 - smoothstep(smoothing, 1.0, pointCenterDistance);
+            // Along the radius: a ramp in r² skews coverage outward on small discs.
+            float rPx = length(coreCoord) * coreDiameterPx * 0.5;
+            opacity = 1.0 - smoothstep(coreDiameterPx * 0.5 - halfRampPx, coreDiameterPx * 0.5 + halfRampPx, rPx);
         } else {
-            // For other shapes, use the shape distance function
-            float shapeDistance = getShapeDistance(shapeCoord, pointShape);
-            opacity = 1.0 - smoothstep(-0.01, 0.01, shapeDistance);
+            float shapeDistance = getShapeDistance(coreCoord, pointShape);
+            // Half a ramp in field units, via the field's gradient per pixel: exact for a field that
+            // is linear across the ramp, as every polygon field is at its edge. All fragments of a
+            // sprite share pointShape, so the derivative is taken in coherent control flow.
+            float shapeHalfRamp = max(halfRampPx * length(vec2(dFdx(shapeDistance), dFdy(shapeDistance))), 1e-6);
+            opacity = 1.0 - smoothstep(-shapeHalfRamp, shapeHalfRamp, shapeDistance);
         }
-        opacity *= shapeColor.a;
+        opacity *= smallAlpha * shapeColor.a;
 
         finalShapeColor = vec4(shapeColor.rgb, opacity);
     }
@@ -271,15 +287,22 @@ void main() {
         finalPointAlpha
     );
 
-    // Render outline ring around the point
+    // Outline ring: band [outlineWidth × R, R], R = POINT_RING_SCALE × point radius, device px.
+    // Core at least a ramp wide, centred on the band, ramp centred on both edges. A ring is an
+    // interface mark: thinner than the ramp it is widened at full alpha, not dimmed.
+    //
+    //          inner R      outer R
+    //   ────────░░┤░░████████░░├░░────────
+    //            fade  core   fade
     if (isOutlined > 0.0) {
-        float r = length(pointCoord);
-        const float ringSmoothing = 1.025;
-        float rSafe = max(r, 1e-6);
-        float wSafe = max(outlineWidth, 1e-6);
-        float outerEdge = smoothstep(rSafe, rSafe * ringSmoothing, 1.0);
-        float innerEdge = smoothstep(wSafe, wSafe * ringSmoothing, r);
-        float ringAlpha = outerEdge * innerEdge;
+        // Sized from the drawn core (a shape under a pixel is drawn as one), inside the sprite,
+        // which the hardware cap can clamp: the ring then tightens onto the body.
+        float ringOuterPx = min(POINT_RING_SCALE * max(max(shapeSize, 1.0), imageSizeVarying), overallSize - EDGE_RAMP_PX) * 0.5;
+        float ringInnerPx = outlineWidth * ringOuterPx;
+        float ringCentrePx = (ringOuterPx + ringInnerPx) * 0.5;
+        float ringHalfCorePx = max(ringOuterPx - ringInnerPx, EDGE_RAMP_PX) * 0.5;
+        float rPx = length(pointCoord) * overallSize * 0.5;
+        float ringAlpha = 1.0 - smoothstep(-EDGE_RAMP_PX * 0.5, EDGE_RAMP_PX * 0.5, abs(rPx - ringCentrePx) - ringHalfCorePx);
 
         // Grey out the ring color when the point is greyed
         vec3 ringColor = outlineColor.rgb;
@@ -293,11 +316,13 @@ void main() {
         }
 
         float ringOpacity = ringAlpha * outlineColor.a;
-        // Composite ring on top of existing fragment
-        fragColor = vec4(
-            mix(fragColor.rgb, ringColor, ringOpacity),
-            max(fragColor.a, ringOpacity)
-        );
+        // Source-over of the ring onto the fragment. A plain mix would tint the ring with a
+        // transparent body's colour, and the blend would then apply the ring's alpha twice.
+        float outAlpha = ringOpacity + fragColor.a * (1.0 - ringOpacity);
+        vec3 outRgb = outAlpha > 0.0
+            ? (ringColor * ringOpacity + fragColor.rgb * fragColor.a * (1.0 - ringOpacity)) / outAlpha
+            : fragColor.rgb;
+        fragColor = vec4(outRgb, outAlpha);
     }
 
     // Occlusion culling: split every fragment between the opaque core pass

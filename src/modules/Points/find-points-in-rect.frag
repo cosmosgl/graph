@@ -43,20 +43,10 @@ uniform float maxPointSize;
 
 out vec4 fragColor;
 
+// The drawn size (draw-points.vert), so the selection footprint is the rendered point: a shape
+// under a device pixel is drawn as one. In CSS px, the units of the rectangle and screenSize.
 float pointSizeF(float size) {
-  float pSize;
-  // Extract top-left element from mat4 (or use mat3 conversion)
-  #ifdef USE_UNIFORM_BUFFERS
-  float scale = transformationMatrix[0][0]; // mat4 first element
-  #else
-  float scale = transformationMatrix[0][0]; // mat3 first element
-  #endif
-  if (scalePointsOnZoom > 0.0) { 
-    pSize = size * ratio * scale;
-  } else {
-    pSize = size * ratio * min(5.0, max(1.0, scale * 0.01));
-  }
-  return min(pSize, maxPointSize * ratio);
+  return max(pointSizePx(size, ratio, transformationMatrix[0][0], scalePointsOnZoom, maxPointSize), 1.0) / ratio;
 }
 
 void main() {
@@ -81,6 +71,11 @@ void main() {
 
   vec4 pSize = texelFetch(pointSize, pointTexel, 0);
   float size = pSize.r * sizeScale;
+  // A size of 0 draws nothing (draw-points.vert), so it is not selectable either.
+  if (size <= 0.0) {
+    fragColor = vec4(0.0);
+    return;
+  }
 
   float left = 2.0 * (rect0.x - 0.5 * pointSizeF(size)) / screenSize.x - 1.0;
   float right = 2.0 * (rect1.x + 0.5 * pointSizeF(size)) / screenSize.x - 1.0;

@@ -9,7 +9,7 @@ import fillGridWithSampledLinksFrag from '@/graph/modules/Lines/fill-sampled-lin
 import fillGridWithSampledLinksVert from '@/graph/modules/Lines/fill-sampled-links.vert?raw'
 import { PickingReadback } from '@/graph/modules/Points/picking-readback'
 import { resolvePickedLinkIndex } from '@/graph/modules/Points/picking-utils'
-import { defaultConfigValues, EXIT_DEFAULT_COLOR_CHANNEL } from '@/graph/variables'
+import { defaultConfigValues, EXIT_DEFAULT_COLOR_CHANNEL, EDGE_RAMP_PX } from '@/graph/variables'
 import { getCurveLineGeometry } from '@/graph/modules/Lines/geometry'
 import { updateAttributeBuffer, updateAttributeBuffers } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
@@ -113,6 +113,7 @@ export class Lines extends CoreModule {
       pointDefaultColor: [number, number, number, number];
       linkColorInterpolateFromEndpoints: number;
       linkBlending: number;
+      pixelRatio: number;
     };
     drawLineFragmentUniforms: {
       renderMode: number;
@@ -200,6 +201,7 @@ export class Lines extends CoreModule {
           pointDefaultColor: 'vec4<f32>',
           linkColorInterpolateFromEndpoints: 'f32',
           linkBlending: 'f32',
+          pixelRatio: 'f32',
         },
         defaultUniforms: {
           transformationMatrix: store.transformationMatrix4x4,
@@ -230,6 +232,7 @@ export class Lines extends CoreModule {
           pointDefaultColor: ensureVec4(getRgbaColor(config.pointDefaultColor), [0, 0, 0, 1]),
           linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
           linkBlending: config.linkBlending ? 1 : 0,
+          pixelRatio: config.pixelRatio,
         },
       },
       drawLineFragmentUniforms: {
@@ -363,6 +366,7 @@ export class Lines extends CoreModule {
         pointDefaultColor: ensureVec4(this.data.defaultRgba, [0, 0, 0, 1]),
         linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
         linkBlending: config.linkBlending ? 1 : 0,
+        pixelRatio: config.pixelRatio,
       },
       drawLineFragmentUniforms: {
         renderMode: 0.0, // Normal rendering
@@ -908,6 +912,7 @@ export class Lines extends CoreModule {
         // always off): greyed links hidden by unblended rendering must also be
         // absent from the index buffer, and links visible in blended mode pickable.
         linkBlending: config.linkBlending ? 1 : 0,
+        pixelRatio: config.pixelRatio,
       },
       drawLineFragmentUniforms: {
         renderMode: 1.0, // Index rendering for picking
@@ -1148,6 +1153,7 @@ export class Lines extends CoreModule {
       defines: {
         USE_UNIFORM_BUFFERS: true,
         EXIT_DEFAULT_COLOR_CHANNEL: glslFloatLiteral(EXIT_DEFAULT_COLOR_CHANNEL),
+        EDGE_RAMP_PX: glslFloatLiteral(EDGE_RAMP_PX),
       } as unknown as Record<string, boolean>,
       bindings: {
         drawLineUniforms: this.drawLineUniformStore.getManagedUniformBuffer('drawLineUniforms'),
