@@ -118,15 +118,17 @@ float diamondDistance(vec2 p) {
 
 float pentagonDistance(vec2 p) {
     // Regular pentagon signed-distance (Inigo Quilez)
-    const vec3 k = vec3(0.809016994, 0.587785252, 0.726542528);
+    const vec3 k = vec3(0.809016994, 0.587785252, 0.726542528); // cos 36°, sin 36°, tan 36°
+    const float r = 0.726542528;                                // apothem: the flat edge is at y = r; equal to k.z by
+                                                                // coincidence of the chosen size, not by construction
     p.x = abs(p.x);
 
     // Reflect across the two tilted edges ─ only if point is outside
     p -= 2.0 * min(dot(vec2(-k.x, k.y), p), 0.0) * vec2(-k.x, k.y);
     p -= 2.0 * min(dot(vec2( k.x, k.y), p), 0.0) * vec2( k.x, k.y);
 
-    // Clip against the top horizontal edge (keeps top point sharp)
-    p -= vec2(clamp(p.x, -k.z * k.x, k.z * k.x), k.z);
+    // distance to the flat edge as a segment: every corner folds onto x = ±r·tan 36°
+    p -= vec2(clamp(p.x, -r * k.z, r * k.z), r);
 
     // Return signed distance (negative → inside, positive → outside)
     return length(p) * sign(p.y);
