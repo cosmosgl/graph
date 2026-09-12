@@ -72,17 +72,9 @@ out vec3 rgbColor;
 flat out float ringRadiusPx;
 flat out float quadHalfPx;
 
-// The drawn size (draw-points.vert), device px, so the ring follows it.
+// The drawn size (draw-points.vert), so the ring follows it. `size` is a uniform here.
 float calculatePointSize(float pointSize) {
-  float pSize;
-
-  if (scalePointsOnZoom > 0.0) {
-    pSize = pointSize * pixelRatio * transformationMatrix[0][0];
-  } else {
-    pSize = pointSize * pixelRatio * min(5.0, max(1.0, transformationMatrix[0][0] * 0.01));
-  }
-
-  return min(pSize, maxPointSize * pixelRatio);
+  return pointSizePx(pointSize, pixelRatio, transformationMatrix[0][0], scalePointsOnZoom, maxPointSize);
 }
 
 void main () {

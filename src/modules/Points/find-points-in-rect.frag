@@ -43,20 +43,9 @@ uniform float maxPointSize;
 
 out vec4 fragColor;
 
+// The drawn size (draw-points.vert), so the selection footprint is the rendered point.
 float pointSizeF(float size) {
-  float pSize;
-  // Extract top-left element from mat4 (or use mat3 conversion)
-  #ifdef USE_UNIFORM_BUFFERS
-  float scale = transformationMatrix[0][0]; // mat4 first element
-  #else
-  float scale = transformationMatrix[0][0]; // mat3 first element
-  #endif
-  if (scalePointsOnZoom > 0.0) { 
-    pSize = size * ratio * scale;
-  } else {
-    pSize = size * ratio * min(5.0, max(1.0, scale * 0.01));
-  }
-  return min(pSize, maxPointSize * ratio);
+  return pointSizePx(size, ratio, transformationMatrix[0][0], scalePointsOnZoom, maxPointSize);
 }
 
 void main() {

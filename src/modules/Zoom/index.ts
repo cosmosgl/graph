@@ -179,13 +179,16 @@ export class Zoom {
   }
 
   public convertSpaceToScreenRadius (spaceRadius: number): number {
-    const { config: { scalePointsOnZoom }, store: { maxPointSize }, eventTransform: { k } } = this
+    const { config: { scalePointsOnZoom, pixelRatio }, store: { maxPointSize }, eventTransform: { k } } = this
     let size = spaceRadius * 2
     if (scalePointsOnZoom) {
       size *= k
     } else {
       size *= Math.min(5.0, Math.max(1.0, k * 0.01))
     }
-    return Math.min(size, maxPointSize) / 2
+    // The drawn size (draw-points.vert): a size of 0 draws nothing, a shape is never under a
+    // device pixel, and the hardware sprite limit caps it.
+    if (size <= 0) return 0
+    return Math.min(Math.max(size, 1 / pixelRatio), maxPointSize) / 2
   }
 }
