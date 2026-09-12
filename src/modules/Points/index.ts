@@ -13,6 +13,7 @@ import drawHighlightedFrag from '@/graph/modules/Points/draw-highlighted.frag?ra
 import drawHighlightedVert from '@/graph/modules/Points/draw-highlighted.vert?raw'
 import fillPickingBufferFrag from '@/graph/modules/Points/fill-picking-buffer.frag?raw'
 import fillPickingBufferVert from '@/graph/modules/Points/fill-picking-buffer.vert?raw'
+import { pointSizeModule } from '@/graph/modules/Points/point-size-module'
 import fillGridWithSampledPointsFrag from '@/graph/modules/Points/fill-sampled-points.frag?raw'
 import fillGridWithSampledPointsVert from '@/graph/modules/Points/fill-sampled-points.vert?raw'
 import updatePositionFrag from '@/graph/modules/Points/update-position.frag?raw'
@@ -739,6 +740,7 @@ export class Points extends CoreModule {
     this.drawCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
+      modules: [pointSizeModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       attributes: {
@@ -789,6 +791,7 @@ export class Points extends CoreModule {
     this.drawCoreCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
+      modules: [pointSizeModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       indexBuffer: this.reversedPointIndexBuffer ?? null,
@@ -864,6 +867,7 @@ export class Points extends CoreModule {
     this.findPointsInRectCommand ||= new Model(device, {
       fs: findPointsInRectFrag,
       vs: updateVert,
+      modules: [pointSizeModule],
       topology: 'triangle-strip',
       vertexCount: 4,
       attributes: {
@@ -968,6 +972,7 @@ export class Points extends CoreModule {
     this.fillPickingBufferCommand ||= new Model(device, {
       fs: fillPickingBufferFrag,
       vs: fillPickingBufferVert,
+      modules: [pointSizeModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       attributes: {
@@ -1095,6 +1100,7 @@ export class Points extends CoreModule {
     this.drawHighlightedCommand ||= new Model(device, {
       fs: drawHighlightedFrag,
       vs: drawHighlightedVert,
+      modules: [pointSizeModule],
       topology: 'triangle-strip',
       vertexCount: 4,
       attributes: {

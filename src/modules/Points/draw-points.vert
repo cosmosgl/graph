@@ -102,16 +102,9 @@ out float shapeSize;
 out float imageSizeVarying;
 out float overallSize;
 
+// The size rule is the shared pointSize module, so drawing, picking and selection agree on it.
 float calculatePointSize(float size) {
-  float pSize;
-
-  if (scalePointsOnZoom > 0.0) {
-    pSize = size * ratio * transformationMatrix[0][0];
-  } else {
-    pSize = size * ratio * min(5.0, max(1.0, transformationMatrix[0][0] * 0.01));
-  }
-
-  return min(pSize, maxPointSize * ratio);
+  return pointSizePx(size, ratio, transformationMatrix[0][0], scalePointsOnZoom, maxPointSize);
 }
 
 // Read-time resolution of NaN channels — input arrays are used verbatim and never
