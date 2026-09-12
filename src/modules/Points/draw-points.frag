@@ -93,14 +93,18 @@ float squareDistance(vec2 p) {
 
 float triangleDistance(vec2 p) {
     const float k = sqrt(3.0);   // ≈1.732; slope of 60° lines for an equilateral triangle
-    p.x = abs(p.x) - 0.9;        // fold the X axis and shift: brings left and right halves together
-    p.y = p.y + 0.55;             // move the whole shape up slightly so it is centred vertically
+    const float r = 0.9;         // half the edge length; each edge is 2r
+    p.x = abs(p.x) - r;          // fold the X axis and shift: the base corner is at the origin
+    p.y += 0.55;                 // move the base (y = -0.55 in the core) to y = 0. The centred offset is
+                                 // r/k = 0.52; 0.55 keeps the apex at 1.01 rather than 1.04
 
-    // reflect points that fall outside the main triangle back inside, to reuse the same maths
+    // Reflect across the corner's bisector: the slanted edge maps onto the x axis,
+    // corner at x = 0, apex at x = -2r
     if (p.x + k * p.y > 0.0)
         p = vec2(p.x - k * p.y,  -k * p.x - p.y) / 2.0;
 
-    p.x -= clamp(p.x, -1.0, 0.0); // clip any remainder on the left side
+    // Distance to the edge as the segment [-2r, 0] on the x axis
+    p.x -= clamp(p.x, -2.0 * r, 0.0);
 
     // Return signed distance: negative = inside; positive = outside
     return -length(p) * sign(p.y);
