@@ -282,6 +282,7 @@ export const antiAliasing = (): { graph: Graph; div: HTMLDivElement; destroy?: (
   addToggle('scale on zoom', 'scaleOnZoom')
   addToggle('reference rings', 'referenceRings')
   const style = document.createElement('select')
+  style.setAttribute('aria-label', 'Link style')
   style.style.cssText = 'font:inherit;'
   for (const [label, value] of [['solid', LinkStyle.Solid], ['dashed', LinkStyle.Dashed], ['dotted', LinkStyle.Dotted]] as const) {
     const option = document.createElement('option')
