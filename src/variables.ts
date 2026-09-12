@@ -160,3 +160,30 @@ export const focusedPointRingOpacity = 0.95
  */
 export const EXIT_DEFAULT_SIZE = 0
 export const EXIT_DEFAULT_COLOR_CHANNEL = 0
+
+/**
+ * Anti-aliasing ramp: the fade from coverage 1 to 0 at every edge the engine draws, in
+ * device pixels, centred on the geometric edge. Reaches the point, link and highlight
+ * shaders as the `EDGE_RAMP_PX` define.
+ *
+ *   coverage
+ *   1 |███████░░
+ *     |         ●        0.5 exactly on the edge
+ *   0 |__________░░___   half the ramp inside, half outside
+ *
+ * A centred fade integrates to the same area as a hard edge, so ink is independent of shape
+ * size and pixel ratio. Thinner than the ramp, each element keeps what matters for it:
+ *
+ *   link   → drawn at ramp width, alpha = width / ramp   (ink preserved)
+ *   ring   → drawn at ramp width, alpha = 1              (visibility preserved)
+ *   point  → 1 px core, alpha = shape² / core²           (ink preserved)
+ *
+ * 1.0 is the box filter: a straight edge deposits in each pixel exactly the area it covers.
+ */
+export const EDGE_RAMP_PX = 1.0
+
+/**
+ * A ring's outer radius over its point's radius, for the outline ring and the hover / focus
+ * ring alike. Reaches the point and highlight shaders as the `POINT_RING_SCALE` define.
+ */
+export const POINT_RING_SCALE = 1.3

@@ -47,6 +47,7 @@ layout(std140) uniform drawLineUniforms {
   vec4 pointDefaultColor;
   float linkColorInterpolateFromEndpoints;
   float linkBlending;
+  float pixelRatio;
 } drawLine;
 
 #define transformationMatrix drawLine.transformationMatrix
@@ -77,6 +78,7 @@ layout(std140) uniform drawLineUniforms {
 #define pointDefaultColor drawLine.pointDefaultColor
 #define linkColorInterpolateFromEndpoints drawLine.linkColorInterpolateFromEndpoints
 #define linkBlending drawLine.linkBlending
+#define pixelRatio drawLine.pixelRatio
 #else
 uniform mat3 transformationMatrix;
 uniform float widthScale;
@@ -107,6 +109,7 @@ uniform float animatePositions;
 uniform vec4 pointDefaultColor;
 uniform float linkColorInterpolateFromEndpoints;
 uniform float linkBlending;
+uniform float pixelRatio;
 #endif
 
 out vec4 rgbaColor;
@@ -249,6 +252,12 @@ void main() {
   
   // Calculate line width using the width scale
   float linkWidth = lineWidthBase * widthScale;
+  // A width of 0 draws nothing, as a point of size 0 does: culled here, before the hover and
+  // focus increases and the one-pixel floor could widen an absent link. Not pickable either.
+  if (linkWidth <= 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
   float k = 2.0;
   // Arrow width is proportionally larger than the line width
   float arrowWidth = linkWidth * k;
@@ -295,13 +304,26 @@ void main() {
       linkWidthPx += focusedLinkWidthIncrease / transformationMatrix[0][0];
     }
   }
-  float smoothingPx = 0.5 / transformationMatrix[0][0];
+  // Center a one-ramp-wide fade on each stroke edge.
+  // Strokes thinner than the ramp use the ramp width with reduced alpha.
+  // Units: EDGE_RAMP_PX is device px; / pixelRatio → CSS px; / k → world, k = transformationMatrix[0][0]
+  // (the matrix carries no DPR). Widths are extruded in world space, so unlike gl_PointSize they
+  // never multiply by pixelRatio. The *Px values below are world units.
+  float smoothingPx = (EDGE_RAMP_PX / pixelRatio) / transformationMatrix[0][0];
+  float thinAlpha = min(linkWidthPx / smoothingPx, 1.0);
+  float minWidthPx = smoothingPx;
+  if (linkBlending < 0.5) {
+    // Unblended strokes cannot be dimmed: the fragment cuts them at the edge instead, and a
+    // stroke under a device pixel is drawn one pixel wide (its body, when it has an arrowhead).
+    thinAlpha = 1.0;
+    float bodyShare = useArrow > 0.5 ? 1.0 - arrowWidthFactor : 1.0;
+    // One device px → world, the same chain as the ramp.
+    minWidthPx = (1.0 / pixelRatio) / transformationMatrix[0][0] / bodyShare;
+  }
+  linkWidthPx = max(linkWidthPx, minWidthPx) + smoothingPx;
   smoothing = smoothingPx / linkWidthPx;
-  linkWidthPx += smoothingPx;
 
-  // Link thickness expressed in the dash pattern's space, so dotted-link dots match the stroke width.
-  // linkWidthPx is in world units; `dashUnitScale` converts it to screen px (scaleLinksOnZoom = false)
-  // or keeps it in world units (scaleLinksOnZoom = true), matching vLinkDashSpan.
+  // Quad width (stroke + ramp) in vLinkDashSpan's pattern-space units; the fragment takes the ramp back off.
   vLinkDashWidth = linkWidthPx * dashUnitScale;
 
 
@@ -312,6 +334,8 @@ void main() {
   float opacity = lineColor.a * linkOpacity * max(linkVisibilityMinTransparency, map(linkDistPx, linkVisibilityDistanceRange.g, linkVisibilityDistanceRange.r, 0.0, 1.0));
   // Fade with the exit ramp of the endpoints (1 = both fully present).
   opacity *= exitPresence;
+  // A stroke drawn at ramp width: alpha scales it back to its true width.
+  opacity *= thinAlpha;
 
   // Apply greyed-out status from the link status texture. Blended rendering dims
   // greyed links by greyoutOpacity. Unblended rendering hides them instead: alpha is
