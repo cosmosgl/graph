@@ -126,6 +126,9 @@ void main() {
 
   float shapeSizeValue = calculatePointSize(resolvedSize * sizeScale, pxPerUnit);
   float imageSizeValue = calculatePointSize(imageSize * sizeScale, pxPerUnit);
+  // A size of 0 draws nothing (draw-points.vert), so it is not hoverable either.
+  if (max(shapeSizeValue, imageSizeValue) <= 0.0) return;
+
   // Device px → CSS px → picking-buffer px (the buffer is smaller than the screen)
   float spriteSize = max(shapeSizeValue, imageSizeValue) / ratio * pickingPixelRatio;
 

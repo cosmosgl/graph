@@ -27,9 +27,11 @@ layout(std140) uniform drawHighlightedUniforms {
   vec4 backgroundColor;
   vec4 greyoutColor;
   float width;
+  float pixelRatio;
 } drawHighlighted;
 
 #define size drawHighlighted.size
+#define pixelRatio drawHighlighted.pixelRatio
 #define transformationMatrix drawHighlighted.transformationMatrix
 #define pointsTextureSize drawHighlighted.pointsTextureSize
 #define sizeScale drawHighlighted.sizeScale
@@ -61,24 +63,27 @@ uniform float isDarkenGreyout;
 uniform vec4 backgroundColor;
 uniform vec4 greyoutColor;
 uniform float width;
+uniform float pixelRatio;
 #endif
 out vec2 vertexPosition;
 out float pointOpacity;
 out vec3 rgbColor;
+// Ring outer radius and quad half-size, device px: the ring plus a full ramp per side.
+flat out float ringRadiusPx;
+flat out float quadHalfPx;
 
+// The drawn size (draw-points.vert), device px, so the ring follows it.
 float calculatePointSize(float pointSize) {
   float pSize;
 
-  if (scalePointsOnZoom > 0.0) { 
-    pSize = pointSize * transformationMatrix[0][0];
+  if (scalePointsOnZoom > 0.0) {
+    pSize = pointSize * pixelRatio * transformationMatrix[0][0];
   } else {
-    pSize = pointSize * min(5.0, max(1.0, transformationMatrix[0][0] * 0.01));
+    pSize = pointSize * pixelRatio * min(5.0, max(1.0, transformationMatrix[0][0] * 0.01));
   }
 
-  return min(pSize, maxPointSize);
+  return min(pSize, maxPointSize * pixelRatio);
 }
-
-const float relativeRingRadius = 1.3;
 
 void main () {
   vertexPosition = vertexCoord;
@@ -100,6 +105,12 @@ void main () {
   }
 
   vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
+
+  // A size of 0 has no ring; the quad below is never narrower than the ramp.
+  if (size * sizeScale <= 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
 
   rgbColor = color.rgb;
   pointOpacity = color.a * universalPointOpacity;
@@ -136,9 +147,10 @@ void main () {
     }
   }
 
-  // Calculate point radius
-  float pointSize = (calculatePointSize(size * sizeScale) * relativeRingRadius) / transformationMatrix[0][0];
-  float radius = pointSize * 0.5;
+  // Ring radius from the drawn core, device px: a shape under a device pixel is drawn as one.
+  ringRadiusPx = max(calculatePointSize(size * sizeScale), 1.0) * POINT_RING_SCALE * 0.5;
+  quadHalfPx = ringRadiusPx + EDGE_RAMP_PX;
+  float radius = quadHalfPx / pixelRatio / transformationMatrix[0][0];
 
   // Calculate point position in screen space
   vec2 a = pointPosition.xy;
