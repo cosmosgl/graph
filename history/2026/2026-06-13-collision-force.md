@@ -60,8 +60,10 @@ Grid sizing: `cellSize = max(2 × effectiveRadius, 8)` and
 `gridTextureSize = min(512, max(1, floor(spaceSize / cellSize)))`, then `cellSize` is
 recomputed to divide `spaceSize` evenly. The cell spans the full interaction range because
 two touching points are two radii apart and the 3×3 scan reaches only one cell of
-separation; rounding the grid dimension *down* means the refit can only grow the cell, and
-the 1-cell floor lets a large radius have the coarse grid it asks for. (The original
+separation; rounding the grid dimension *down* means the refit can only grow the cell — except
+when `2R` exceeds the space and the grid collapses to one cell, which shrinks the cell to the
+space; every point then shares it, so no pair is missed — and the 1-cell floor lets a large
+radius have the coarse grid it asks for. (The original
 `max(effectiveRadius, 8)` / `clamp(ceil(…), 32, 512)` left touching pairs in cells the scan
 never compared for any point larger than the 8-unit floor happened to cover — fixed in
 `fix(force): cover the full collision range and unbias cell averages` (`ca4ee44`) and
