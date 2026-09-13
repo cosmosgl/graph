@@ -57,7 +57,7 @@ the point count:
 R    = (fixed radius > 0 ? fixed radius : maxSize / 2) + padding   // largest R in the graph
 cell = max(2 · R, 8)
 grid = min(512, max(1, ⌊spaceSize / cell⌋))                         // cells per axis
-cell = spaceSize / grid                                             // refit — only ever grows
+cell = spaceSize / grid                                             // refit grows unless 2R > space
 ```
 
 The `2 · R` is the whole argument. Two points of the largest radius touch when their centers
@@ -78,10 +78,11 @@ formula floors rather than ceils and allows a 1-cell grid: refitting the cell to
 number of grid cells had rounded the count *up*, which makes the cell slightly *smaller* than
 requested, and a 32-cell minimum pinned the cell at `spaceSize / 32` however large the radius
 grew — so above `R = 64` the gap reopened completely (30 points at size 300: 26 overlapping
-pairs, now none). Rounding down means fitting can only grow the cell, and a large radius
-legitimately wants a coarse grid; at one cell every point shares it and reacts to the average
-of all the others, which is the degenerate but correct case where the contact range covers
-the whole space.
+pairs, now none). Rounding down means fitting can only grow the cell — except when `2R`
+exceeds the space and the grid collapses to one cell, which shrinks the cell to the space —
+and a large radius legitimately wants a coarse grid; at one cell every point shares it and
+reacts to the average of all the others, which is the degenerate but correct case where the
+contact range covers the whole space.
 
 Two consequences worth holding onto:
 
@@ -113,11 +114,13 @@ A point never sees its neighbours individually, only each neighbouring cell's *m
 touching pair straddles a cell boundary, the neighbour is represented by the mean of its whole
 cell, and a third point on the far side of that cell drags the mean out of contact range: the
 overlap is real, and this grid cannot see it. Shifting the partition by half a cell changes who
-shares a cell with whom. In the shifted grids the pair either lands in one cell — where the
-own-cell average, after subtracting yourself, *is* the neighbour — or the neighbour is alone
-in its cell, and again the average is exact. The force pass runs once per grid, each pass
-weighted by ¼, so a contact that one partition averages away is still resolved by the other
-three at ¾ strength instead of not at all.
+shares a cell with whom. In the figure's shifted grids the pair either lands in one cell — where
+the own-cell average, after subtracting yourself, *is* the neighbour — or the neighbour is
+alone in its cell, and again the average is exact. The force pass runs once per grid, each pass
+weighted by ¼, so a contact that one partition averages away is still resolved by the others —
+here by three, at ¾ strength — instead of not at all. That is the likely outcome, not a
+guarantee: a pair with enough far-side mass in every partition is masked in all four (see
+"What the averaging costs").
 
 ### Step 3 — resolve against the cell averages
 
@@ -273,7 +276,7 @@ real neighbours to test against instead of one mean.
 | | `d3-force` `forceCollide` | cosmos.gl collision |
 |---|---|---|
 | neighbour search | quadtree, exact pairs, CPU | uniform grid, cell averages, GPU |
-| per-tick cost | O(n log n) plus `iterations` sweeps | O(n) fixed: 4 draws + 4 passes |
+| per-tick cost | typically O(n log n) plus `iterations` sweeps | O(n) fixed: 4 draws + 4 passes |
 | response | linear in overlap, split between the pair by `r²` (a small disc yields to a big one) | `√overlap`, symmetric before caps; caps scale with each point's own radius |
 | overlap depth handled per tick | full, over `iterations` (default 1) | relaxation: ≤ 0.4 × own radius per tick |
 | coincident points | random jiggle | deterministic golden-angle fan-out by index |
