@@ -42,6 +42,7 @@ const preview: Preview = {
             'Camera',
             'Updating Data',
             'Showcase',
+            'Rendering',
             'Performance',
           ],
         ],
