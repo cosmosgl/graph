@@ -20,6 +20,8 @@ layout(std140) uniform drawHighlightedUniforms {
   float isDarkenGreyout;
   vec4 backgroundColor;
   vec4 greyoutColor;
+  float animatePositions;
+  float transitionProgress;
   float width;
 } drawHighlighted;
 

@@ -38,6 +38,12 @@ export function updateAttributeBuffer (device: Device, buffer: Buffer | undefine
   return buffer
 }
 
+/**
+ * Uploads `targetData` as the new target of a source/target attribute pair, promoting the
+ * previous target to the source. `previous` is a CPU copy of the new target, to pass back
+ * as `previousData` on the next update; `sourceData` is a CPU copy of what the source
+ * buffer holds, for CPU-side consumers that must mirror the shader's mix (the ring size).
+ */
 export function updateAttributeBuffers (
   device: Device,
   targetData: Float32Array,
@@ -45,7 +51,7 @@ export function updateAttributeBuffers (
   targetBuffer: Buffer | undefined,
   previousData: Float32Array | undefined,
   tupleSize: 1 | 4
-): { source: Buffer; target: Buffer; previous: Float32Array } {
+): { source: Buffer; target: Buffer; previous: Float32Array; sourceData: Float32Array } {
   const oldCount = previousData ? previousData.length / tupleSize : 0
   const newCount = targetData.length / tupleSize
   const sameCount = oldCount === newCount
@@ -62,6 +68,7 @@ export function updateAttributeBuffers (
       source: nextSource,
       target: nextTarget,
       previous: new Float32Array(targetData),
+      sourceData: previousData ?? new Float32Array(targetData),
     }
   }
 
@@ -91,5 +98,6 @@ export function updateAttributeBuffers (
       usage: Buffer.VERTEX | Buffer.COPY_DST,
     }),
     previous: new Float32Array(targetData),
+    sourceData,
   }
 }
