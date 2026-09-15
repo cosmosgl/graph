@@ -241,19 +241,11 @@ void main() {
       // If greyoutColor is not set, make color lighter or darker based on isDarkenGreyout
       float blendFactor = 0.65;
 
-      #ifdef USE_UNIFORM_BUFFERS
       if (isDarkenGreyout > 0.0) {
         shapeColor.rgb = mix(shapeColor.rgb, vec3(0.2), blendFactor);
       } else {
         shapeColor.rgb = mix(shapeColor.rgb, max(backgroundColor.rgb, vec3(0.8)), blendFactor);
       }
-      #else
-      if (isDarkenGreyout > 0.0) {
-        shapeColor.rgb = mix(shapeColor.rgb, vec3(0.2), blendFactor);
-      } else {
-        shapeColor.rgb = mix(shapeColor.rgb, max(backgroundColor.rgb, vec3(0.8)), blendFactor);
-      }
-      #endif
     }
   }
 
