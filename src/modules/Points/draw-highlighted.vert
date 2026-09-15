@@ -142,7 +142,6 @@ void main () {
       // If greyoutColor is not set, make color lighter or darker based on isDarkenGreyout
       float blendFactor = 0.65; // Controls how much to modify (0.0 = original, 1.0 = target color)
       
-      #ifdef USE_UNIFORM_BUFFERS
       if (isDarkenGreyout > 0.0) {
         // Darken the color
         rgbColor = mix(rgbColor, vec3(0.2), blendFactor);
@@ -150,15 +149,6 @@ void main () {
         // Lighten the color
         rgbColor = mix(rgbColor, max(backgroundColor.rgb, vec3(0.8)), blendFactor);
       }
-      #else
-      if (isDarkenGreyout > 0.0) {
-        // Darken the color
-        rgbColor = mix(rgbColor, vec3(0.2), blendFactor);
-      } else {
-        // Lighten the color
-        rgbColor = mix(rgbColor, max(backgroundColor.rgb, vec3(0.8)), blendFactor);
-      }
-      #endif
     }
 
     if (greyoutOpacity != -1.0) {
