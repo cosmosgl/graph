@@ -14,6 +14,7 @@ layout(std140) uniform drawFragmentUniforms {
   vec4 outlineColor;
   float outlineWidth;
   float renderMode;
+  float strokeWidth;
 } drawFragment;
 
 #define greyoutOpacity drawFragment.greyoutOpacity
@@ -23,6 +24,7 @@ layout(std140) uniform drawFragmentUniforms {
 #define outlineColor drawFragment.outlineColor
 #define outlineWidth drawFragment.outlineWidth
 #define renderMode drawFragment.renderMode
+#define strokeWidth drawFragment.strokeWidth
 #else
 uniform float greyoutOpacity;
 uniform float pointOpacity;
@@ -31,6 +33,7 @@ uniform vec4 backgroundColor;
 uniform vec4 outlineColor;
 uniform float outlineWidth;
 uniform float renderMode;
+uniform float strokeWidth;
 #endif
 
 
@@ -42,6 +45,7 @@ in vec4 imageAtlasUV;
 in float shapeSize;
 in float imageSizeVarying;
 in float overallSize;
+in vec3 strokeColor;
 
 out vec4 fragColor;
 
@@ -109,7 +113,9 @@ float triangleDistance(vec2 p) {
 float diamondDistance(vec2 p) {
     // aspect > 1  →  taller diamond
     const float aspect = 1.2;
-    return abs(p.x) + abs(p.y) / aspect - 0.8;
+    // Divide by the gradient magnitude of the L1 form so this is a Euclidean distance
+    // along the edges like the other shapes — the pixel-space stroke relies on that.
+    return (abs(p.x) + abs(p.y) / aspect - 0.8) / length(vec2(1.0, 1.0 / aspect));
 }
 
 float pentagonDistance(vec2 p) {
@@ -216,7 +222,30 @@ void main() {
         }
         
         float opacity;
-        if (pointShape == CIRCLE) {
+        vec3 shapeRgb = shapeColor.rgb;
+        if (strokeWidth > 0.0) {
+            // Stroke path: work in device pixels. The stroke is a second coverage band read
+            // off the same signed distance as the fill, so it anti-aliases like the fill and
+            // both the 1 px edge band and the stroke width stay constant across point sizes
+            // and zoom levels. Every shape function returns a Euclidean distance (unit
+            // gradient), so scaling by pixels-per-unit is exact.
+            float sd = pointShape == CIRCLE
+                ? length(shapeCoord) - 1.0
+                : getShapeDistance(shapeCoord, pointShape);
+            // shapeCoord spans [-1, 1] over shapeSize device pixels. The edge sits half a
+            // pixel inside the nominal boundary so its anti-alias band never crosses the
+            // sprite bounds (which would flatten circles on the axes).
+            float d = sd * shapeSize * 0.5 + 0.5;
+            opacity = 1.0 - smoothstep(-0.5, 0.5, d);
+
+            // No stroke on points narrower than the stroke itself — they would be nothing
+            // but stroke. The band is inset: d in [-strokeWidth, 0], nothing added outside.
+            if (shapeSize >= strokeWidth) {
+                float bandSd = abs(d + strokeWidth * 0.5) - strokeWidth * 0.5;
+                float stroke = 1.0 - smoothstep(-0.5, 0.5, bandSd);
+                shapeRgb = mix(shapeRgb, strokeColor, stroke);
+            }
+        } else if (pointShape == CIRCLE) {
             // For circles, use the original distance calculation
             float pointCenterDistance = dot(shapeCoord, shapeCoord);
             opacity = 1.0 - smoothstep(smoothing, 1.0, pointCenterDistance);
@@ -227,7 +256,7 @@ void main() {
         }
         opacity *= shapeColor.a;
 
-        finalShapeColor = vec4(shapeColor.rgb, opacity);
+        finalShapeColor = vec4(shapeRgb, opacity);
     }
 
     // Handle image rendering with centering logic

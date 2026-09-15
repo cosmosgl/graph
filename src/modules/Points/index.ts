@@ -7,6 +7,7 @@ import type { Mat4Array, Hovered } from '@/graph/modules/Store'
 import { defaultConfigValues, EXIT_DEFAULT_SIZE, EXIT_DEFAULT_COLOR_CHANNEL } from '@/graph/variables'
 import drawPointsFrag from '@/graph/modules/Points/draw-points.frag?raw'
 import drawPointsVert from '@/graph/modules/Points/draw-points.vert?raw'
+import { oklabModule } from '@/graph/modules/Shared/oklab-module'
 import findPointsInRectFrag from '@/graph/modules/Points/find-points-in-rect.frag?raw'
 import findPointsInPolygonFrag from '@/graph/modules/Points/find-points-in-polygon.frag?raw'
 import drawHighlightedFrag from '@/graph/modules/Points/draw-highlighted.frag?raw'
@@ -300,6 +301,8 @@ export class Points extends CoreModule {
       pointDefaultColor: [number, number, number, number];
       pointDefaultSize: number;
       pointsNumber: number;
+      strokeLightnessStep: number;
+      strokeDirection: number;
     };
     drawFragmentUniforms: {
       greyoutOpacity: number;
@@ -309,6 +312,7 @@ export class Points extends CoreModule {
       outlineColor: [number, number, number, number];
       outlineWidth: number;
       renderMode: number;
+      strokeWidth: number;
     };
   }> | undefined
 
@@ -676,6 +680,8 @@ export class Points extends CoreModule {
           pointDefaultColor: 'vec4<f32>',
           pointDefaultSize: 'f32',
           pointsNumber: 'f32',
+          strokeLightnessStep: 'f32',
+          strokeDirection: 'f32',
         },
         defaultUniforms: {
           // Order MUST match uniformTypes and shader declaration
@@ -710,6 +716,8 @@ export class Points extends CoreModule {
           pointDefaultColor: ensureVec4(getRgbaColor(config.pointDefaultColor), [0, 0, 0, 1]),
           pointDefaultSize: config.pointDefaultSize,
           pointsNumber: data.pointsNumber ?? 0,
+          strokeLightnessStep: this.getStrokeLightnessStep(),
+          strokeDirection: this.getStrokeDirection(),
         },
       },
       drawFragmentUniforms: {
@@ -721,6 +729,7 @@ export class Points extends CoreModule {
           outlineColor: 'vec4<f32>',
           outlineWidth: 'f32',
           renderMode: 'f32',
+          strokeWidth: 'f32',
         },
         defaultUniforms: {
           // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
@@ -731,6 +740,7 @@ export class Points extends CoreModule {
           outlineColor: ensureVec4(store.outlinedPointRingColor, [1, 1, 1, 1]),
           outlineWidth: 0.9,
           renderMode: 0,
+          strokeWidth: this.getStrokeWidthInDevicePixels(),
         },
       },
     })
@@ -738,6 +748,7 @@ export class Points extends CoreModule {
     this.drawCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
+      modules: [oklabModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       attributes: {
@@ -786,6 +797,7 @@ export class Points extends CoreModule {
     this.drawCoreCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
+      modules: [oklabModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       indexBuffer: this.reversedPointIndexBuffer ?? null,
@@ -1734,6 +1746,8 @@ export class Points extends CoreModule {
       pointDefaultColor: ensureVec4(data.defaultRgba, [0, 0, 0, 1]),
       pointDefaultSize: config.pointDefaultSize,
       pointsNumber: data.pointsNumber,
+      strokeLightnessStep: this.getStrokeLightnessStep(),
+      strokeDirection: this.getStrokeDirection(),
     }
 
     const baseFragmentUniforms = {
@@ -1745,6 +1759,7 @@ export class Points extends CoreModule {
       outlineColor: ensureVec4(store.outlinedPointRingColor, [1, 1, 1, 1]),
       outlineWidth: 0.9,
       renderMode: 0,
+      strokeWidth: this.getStrokeWidthInDevicePixels(),
     }
 
     const textureBindings = {
@@ -2979,6 +2994,26 @@ export class Points extends CoreModule {
    * Makes sure the GPU has current and previous position textures at the right size.
    * This method only allocates; `updatePositions()` is responsible for putting data in them.
    */
+  /** `pointStrokeWidth` is in CSS pixels; the shader compares it against `gl_PointSize`, which is in device pixels. */
+  private getStrokeWidthInDevicePixels (): number {
+    const { config } = this
+    return Math.max(0, config.pointStrokeWidth) * config.pixelRatio
+  }
+
+  /** `pointStrokeIntensity` is an OKLab lightness step; L spans 0..1, so a step beyond 1 is meaningless. */
+  private getStrokeLightnessStep (): number {
+    return Math.min(1, Math.max(0, this.config.pointStrokeIntensity))
+  }
+
+  /** Stroke direction for the vertex shader: -1 darken, +1 lighten, 0 = decide per point from its own lightness. */
+  private getStrokeDirection (): number {
+    switch (this.config.pointStrokeMode) {
+    case 'darken': return -1
+    case 'lighten': return 1
+    default: return 0
+    }
+  }
+
   private ensurePositionTextures (pointsTextureSize: number): void {
     if (!this.currentPositionTexture || this.currentPositionTexture.width !== pointsTextureSize || this.currentPositionTexture.height !== pointsTextureSize) {
       if (this.currentPositionTexture && !this.currentPositionTexture.destroyed) {
