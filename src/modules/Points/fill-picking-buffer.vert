@@ -16,6 +16,7 @@ precision highp float;
 in vec2 pointIndices;
 in float size;
 in float imageSize;
+in float imageIndex;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D pointStatus;
@@ -35,6 +36,8 @@ layout(std140) uniform fillPickingBufferUniforms {
   float skipHighlighted;
   float skipGreyed;
   float pointDefaultSize;
+  float hasImages;
+  float imageCount;
 } fillPickingBuffer;
 
 #define pointsTextureSize fillPickingBuffer.pointsTextureSize
@@ -49,6 +52,8 @@ layout(std140) uniform fillPickingBufferUniforms {
 #define skipHighlighted fillPickingBuffer.skipHighlighted
 #define skipGreyed fillPickingBuffer.skipGreyed
 #define pointDefaultSize fillPickingBuffer.pointDefaultSize
+#define hasImages fillPickingBuffer.hasImages
+#define imageCount fillPickingBuffer.imageCount
 #else
 uniform float pointsTextureSize;
 uniform float sizeScale;
@@ -62,6 +67,8 @@ uniform float maxPointSize;
 uniform float skipHighlighted;
 uniform float skipGreyed;
 uniform float pointDefaultSize;
+uniform float hasImages;
+uniform float imageCount;
 #endif
 
 out vec4 rgba;
@@ -114,8 +121,11 @@ void main() {
   // so a NaN here means "use the config default".
   float resolvedSize = isnan(size) ? pointDefaultSize : size;
 
+  // Same footprint as draw-points.vert: the image size counts only for a point
+  // that draws an image.
+  bool hasImage = hasImages > 0.0 && imageIndex >= 0.0 && imageIndex < imageCount;
   float shapeSizeValue = calculatePointSize(resolvedSize * sizeScale, pxPerUnit);
-  float imageSizeValue = calculatePointSize(imageSize * sizeScale, pxPerUnit);
+  float imageSizeValue = hasImage ? calculatePointSize(imageSize * sizeScale, pxPerUnit) : 0.0;
   // A size of 0 draws nothing (draw-points.vert), so it is not hoverable either.
   if (max(shapeSizeValue, imageSizeValue) <= 0.0) return;
 

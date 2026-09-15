@@ -11,7 +11,9 @@ uniform sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform drawHighlightedUniforms {
-  float size;
+  float sourceSize;
+  float targetSize;
+  float imageSize;
   mat4 transformationMatrix;
   float pointsTextureSize;
   float sizeScale;
@@ -26,11 +28,17 @@ layout(std140) uniform drawHighlightedUniforms {
   float isDarkenGreyout;
   vec4 backgroundColor;
   vec4 greyoutColor;
+  float animatePositions;
+  float transitionProgress;
+  float animateSizes;
+  float pointDefaultSize;
   float width;
   float pixelRatio;
 } drawHighlighted;
 
-#define size drawHighlighted.size
+#define sourceSize drawHighlighted.sourceSize
+#define targetSize drawHighlighted.targetSize
+#define imageSize drawHighlighted.imageSize
 #define pixelRatio drawHighlighted.pixelRatio
 #define transformationMatrix drawHighlighted.transformationMatrix
 #define pointsTextureSize drawHighlighted.pointsTextureSize
@@ -46,8 +54,14 @@ layout(std140) uniform drawHighlightedUniforms {
 #define isDarkenGreyout drawHighlighted.isDarkenGreyout
 #define backgroundColor drawHighlighted.backgroundColor
 #define greyoutColor drawHighlighted.greyoutColor
+#define animatePositions drawHighlighted.animatePositions
+#define transitionProgress drawHighlighted.transitionProgress
+#define animateSizes drawHighlighted.animateSizes
+#define pointDefaultSize drawHighlighted.pointDefaultSize
 #else
-uniform float size;
+uniform float sourceSize;
+uniform float targetSize;
+uniform float imageSize;
 uniform mat3 transformationMatrix;
 uniform float pointsTextureSize;
 uniform float sizeScale;
@@ -62,6 +76,10 @@ uniform float greyoutOpacity;
 uniform float isDarkenGreyout;
 uniform vec4 backgroundColor;
 uniform vec4 greyoutColor;
+uniform float animatePositions;
+uniform float transitionProgress;
+uniform float animateSizes;
+uniform float pointDefaultSize;
 uniform float width;
 uniform float pixelRatio;
 #endif
@@ -72,9 +90,18 @@ out vec3 rgbColor;
 flat out float ringRadiusPx;
 flat out float quadHalfPx;
 
-// The drawn size (draw-points.vert), so the ring follows it. `size` is a uniform here.
+// The drawn size (draw-points.vert), so the ring follows it. The sizes are uniforms here.
 float calculatePointSize(float pointSize) {
   return pointSizePx(pointSize, pixelRatio, transformationMatrix[0][0], scalePointsOnZoom, maxPointSize);
+}
+
+// Must stay identical to resolveSize in draw-points.vert, or the ring drifts from the
+// body: a NaN size means "use the default" — the config default blended toward the
+// exit default along the exit ramp. EXIT_DEFAULT_SIZE is a #define injected from
+// variables.ts.
+float resolveSize(float size, float exitRamp) {
+  if (!isnan(size)) return size;
+  return mix(pointDefaultSize, EXIT_DEFAULT_SIZE, exitRamp);
 }
 
 void main () {
@@ -90,19 +117,19 @@ void main () {
   }
   ivec2 pointTexel = ivec2(pointLinearIndex % pointTexSize, pointLinearIndex / pointTexSize);
 
-  // Don't draw a highlight/outline for an absent (faded-out) point. exit.G = absent.
-  if (texelFetch(exitTexture, pointTexel, 0).g > 0.5) {
+  // Exit texture: R = previous absence, G = current absence (1 = absent). Like the
+  // sprite, blend R→G during a position transition and drop the ring only once the
+  // point is fully gone, so it stays on the body while that fades out or in.
+  vec4 exitStatus = texelFetch(exitTexture, pointTexel, 0);
+  float exit = animatePositions > 0.0
+    ? mix(exitStatus.r, exitStatus.g, transitionProgress)
+    : exitStatus.g;
+  if (exit >= 1.0) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
   }
 
   vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
-
-  // A size of 0 has no ring; the quad below is never narrower than the ramp.
-  if (size * sizeScale <= 0.0) {
-    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
-    return;
-  }
 
   rgbColor = color.rgb;
   pointOpacity = color.a * universalPointOpacity;
@@ -139,8 +166,23 @@ void main () {
     }
   }
 
+  // The sprite's footprint this frame — must stay identical to draw-points.vert: the
+  // source→target size mix during a size transition, NaN sizes resolved along the
+  // exit ramp, and the image size (0 for a point without an image) when larger.
+  float pointSize = animateSizes > 0.0
+    ? mix(resolveSize(sourceSize, exit), resolveSize(targetSize, exit), transitionProgress)
+    : resolveSize(targetSize, exit);
+  float footprint = max(calculatePointSize(pointSize * sizeScale), calculatePointSize(imageSize * sizeScale));
+
+  // A size of 0 draws nothing (draw-points.vert culls the sprite), so it has no ring; the
+  // quad below is never narrower than the ramp.
+  if (footprint <= 0.0) {
+    gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
+    return;
+  }
+
   // Ring radius from the drawn core, device px: a shape under a device pixel is drawn as one.
-  ringRadiusPx = max(calculatePointSize(size * sizeScale), 1.0) * POINT_RING_SCALE * 0.5;
+  ringRadiusPx = max(footprint, 1.0) * POINT_RING_SCALE * 0.5;
   quadHalfPx = ringRadiusPx + EDGE_RAMP_PX;
   float radius = quadHalfPx / pixelRatio / transformationMatrix[0][0];
 
