@@ -205,9 +205,13 @@ void main() {
     : resolveColor(targetColor, exit);
 
 
-  // Calculate sizes for shape and image
+  // Calculate sizes for shape and image. A point without an image has no image
+  // size: the attribute still holds a value (a copy of the target point size when
+  // none was given), and letting it into the sprite footprint would hold the
+  // outline ring at the target while the shape is still transitioning.
+  bool hasImage = hasImages > 0.0 && imageIndex >= 0.0 && imageIndex < imageCount;
   float shapeSizeValue = calculatePointSize(pointSize * sizeScale);
-  float imageSizeValue = calculatePointSize(imageSize * sizeScale);
+  float imageSizeValue = hasImage ? calculatePointSize(imageSize * sizeScale) : 0.0;
 
   // Use the larger of the two sizes for the overall point size
   float overallSizeValue = max(shapeSizeValue, imageSizeValue);
@@ -237,24 +241,15 @@ void main() {
       // If greyoutColor is not set, make color lighter or darker based on isDarkenGreyout
       float blendFactor = 0.65;
 
-      #ifdef USE_UNIFORM_BUFFERS
       if (isDarkenGreyout > 0.0) {
         shapeColor.rgb = mix(shapeColor.rgb, vec3(0.2), blendFactor);
       } else {
         shapeColor.rgb = mix(shapeColor.rgb, max(backgroundColor.rgb, vec3(0.8)), blendFactor);
       }
-      #else
-      if (isDarkenGreyout > 0.0) {
-        shapeColor.rgb = mix(shapeColor.rgb, vec3(0.2), blendFactor);
-      } else {
-        shapeColor.rgb = mix(shapeColor.rgb, max(backgroundColor.rgb, vec3(0.8)), blendFactor);
-      }
-      #endif
     }
   }
 
-  #ifdef USE_UNIFORM_BUFFERS
-  if (hasImages <= 0.0 || imageIndex < 0.0 || imageIndex >= imageCount) {
+  if (!hasImage) {
     imageAtlasUV = vec4(-1.0);
   } else {
     int atlasTexSize = int(imageAtlasCoordsTextureSize);
@@ -263,15 +258,4 @@ void main() {
     vec4 atlasCoords = texelFetch(imageAtlasCoords, atlasTexel, 0);
     imageAtlasUV = atlasCoords;
   }
-  #else
-  if (hasImages <= 0.0 || imageIndex < 0.0 || imageIndex >= imageCount) {
-    imageAtlasUV = vec4(-1.0);
-  } else {
-    int atlasTexSize = int(imageAtlasCoordsTextureSize);
-    int atlasCoordIndex = int(imageIndex);
-    ivec2 atlasTexel = ivec2(atlasCoordIndex % atlasTexSize, atlasCoordIndex / atlasTexSize);
-    vec4 atlasCoords = texelFetch(imageAtlasCoords, atlasTexel, 0);
-    imageAtlasUV = atlasCoords;
-  }
-  #endif
 }

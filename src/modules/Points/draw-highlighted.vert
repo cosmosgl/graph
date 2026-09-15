@@ -26,6 +26,8 @@ layout(std140) uniform drawHighlightedUniforms {
   float isDarkenGreyout;
   vec4 backgroundColor;
   vec4 greyoutColor;
+  float animatePositions;
+  float transitionProgress;
   float width;
 } drawHighlighted;
 
@@ -44,6 +46,8 @@ layout(std140) uniform drawHighlightedUniforms {
 #define isDarkenGreyout drawHighlighted.isDarkenGreyout
 #define backgroundColor drawHighlighted.backgroundColor
 #define greyoutColor drawHighlighted.greyoutColor
+#define animatePositions drawHighlighted.animatePositions
+#define transitionProgress drawHighlighted.transitionProgress
 #else
 uniform float size;
 uniform mat3 transformationMatrix;
@@ -60,6 +64,8 @@ uniform float greyoutOpacity;
 uniform float isDarkenGreyout;
 uniform vec4 backgroundColor;
 uniform vec4 greyoutColor;
+uniform float animatePositions;
+uniform float transitionProgress;
 uniform float width;
 #endif
 out vec2 vertexPosition;
@@ -93,8 +99,14 @@ void main () {
   }
   ivec2 pointTexel = ivec2(pointLinearIndex % pointTexSize, pointLinearIndex / pointTexSize);
 
-  // Don't draw a highlight/outline for an absent (faded-out) point. exit.G = absent.
-  if (texelFetch(exitTexture, pointTexel, 0).g > 0.5) {
+  // Exit texture: R = previous absence, G = current absence (1 = absent). Like the
+  // sprite, blend R→G during a position transition and drop the ring only once the
+  // point is fully gone, so it stays on the body while that fades out or in.
+  vec4 exitStatus = texelFetch(exitTexture, pointTexel, 0);
+  float exit = animatePositions > 0.0
+    ? mix(exitStatus.r, exitStatus.g, transitionProgress)
+    : exitStatus.g;
+  if (exit >= 1.0) {
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
     return;
   }
@@ -112,7 +124,6 @@ void main () {
       // If greyoutColor is not set, make color lighter or darker based on isDarkenGreyout
       float blendFactor = 0.65; // Controls how much to modify (0.0 = original, 1.0 = target color)
       
-      #ifdef USE_UNIFORM_BUFFERS
       if (isDarkenGreyout > 0.0) {
         // Darken the color
         rgbColor = mix(rgbColor, vec3(0.2), blendFactor);
@@ -120,15 +131,6 @@ void main () {
         // Lighten the color
         rgbColor = mix(rgbColor, max(backgroundColor.rgb, vec3(0.8)), blendFactor);
       }
-      #else
-      if (isDarkenGreyout > 0.0) {
-        // Darken the color
-        rgbColor = mix(rgbColor, vec3(0.2), blendFactor);
-      } else {
-        // Lighten the color
-        rgbColor = mix(rgbColor, max(backgroundColor.rgb, vec3(0.8)), blendFactor);
-      }
-      #endif
     }
 
     if (greyoutOpacity != -1.0) {
