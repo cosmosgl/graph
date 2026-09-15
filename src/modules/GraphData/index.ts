@@ -184,7 +184,7 @@ export class GraphData {
    * Resolves a point's size the way the draw shader does: `NaN` means the exit
    * default (`0`) for an **absent** point, the config default otherwise. The CPU
    * mirror of the shader rule, for consumers that read sizes outside the GPU
-   * (collision, hover ring, read-back).
+   * (collision, read-back, the image-size fallback).
    */
   public getResolvedPointSize (index: number): number {
     const raw = this.pointSizes?.[index]
@@ -277,6 +277,28 @@ export class GraphData {
         }
       }
     }
+  }
+
+  /**
+   * Whether a point draws an atlas image: an image index in range of the images
+   * set. Only then does its image size count toward its footprint — the size slot
+   * of a point without an image still holds a value (the point size by default),
+   * and that must not size the point, its rings or its hit box.
+   */
+  public pointDrawsImage (index: number): boolean {
+    const imageIndex = this.pointImageIndices?.[index] ?? -1
+    return imageIndex >= 0 && imageIndex < (this.inputImageData?.length ?? 0)
+  }
+
+  /**
+   * The sprite's footprint: the resolved point size, or the image size when the
+   * point draws an image and that is larger — the draw shader's `max(shape, image)`
+   * for consumers outside the GPU (the rect-selection texture, `getPointRadiusByIndex`).
+   * The ring shader applies the same rule on the GPU, to the mixed size.
+   */
+  public getResolvedPointFootprint (index: number): number {
+    const imageSize = this.pointDrawsImage(index) ? this.pointImageSizes?.[index] : undefined
+    return Math.max(this.getResolvedPointSize(index), imageSize ?? 0)
   }
 
   /**

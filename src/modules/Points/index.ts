@@ -70,6 +70,15 @@ const FRINGE_PASS_PARAMETERS: RenderPipelineParameters = {
   depthCompare: 'less',
 }
 
+// The shared constants (variables.ts) the point and ring shaders read as #defines. luma types
+// `defines` boolean-only, but its runtime injects any value verbatim as `#define KEY value`.
+const POINT_SHADER_DEFINES = {
+  EXIT_DEFAULT_SIZE: glslFloatLiteral(EXIT_DEFAULT_SIZE),
+  EXIT_DEFAULT_COLOR_CHANNEL: glslFloatLiteral(EXIT_DEFAULT_COLOR_CHANNEL),
+  EDGE_RAMP_PX: glslFloatLiteral(EDGE_RAMP_PX),
+  POINT_RING_SCALE: glslFloatLiteral(POINT_RING_SCALE),
+} as unknown as Record<string, boolean>
+
 export class Points extends CoreModule {
   public transition: Transition | undefined
   public currentPositionFbo: Framebuffer | undefined
@@ -127,9 +136,9 @@ export class Points extends CoreModule {
   /**
    * Exit status, derived from NaN positions (R = previous absence, G = current
    * absence; 1 = absent). The single source of truth for "is this point leaving /
-   * gone": draw blends R→G by transition progress for the fade gone-guard, while
-   * the integrator and force modules read G to exclude absent points from physics.
-   * Public so the force modules can sample it.
+   * gone": the point and ring draws blend R→G by transition progress for the fade
+   * gone-guard, while the integrator and force modules read G to exclude absent
+   * points from physics. Public so the force modules can sample it.
    *
    * While no point is (or was) absent — the common no-NaN case — this is a 1×1
    * all-zero stand-in: any sample returns "present", the texel stays
@@ -174,6 +183,11 @@ export class Points extends CoreModule {
   private sourceSizeBuffer: Buffer | undefined
   private targetSizeBuffer: Buffer | undefined
   private previousSizeData: Float32Array | undefined
+  /**
+   * CPU copy of `sourceSizeBuffer`. The hover/focus ring is a single quad, so its
+   * point's source size reaches the ring shader as a uniform rather than an attribute.
+   */
+  private sourceSizeData: Float32Array | undefined
   /**
    * Previous-frame absence per point (1 = absent), kept so the next `updateExit`
    * can fill the exit texture's R (previous) channel.
@@ -239,7 +253,14 @@ export class Points extends CoreModule {
   /** Cursor window issued to the async readback, in picking-buffer pixels. */
   private issuedPickingWindow: PickingWindow | undefined
   private pinnedStatusTexture: Texture | undefined
+  /**
+   * Per-point footprint (`GraphData.getResolvedPointFootprint`), read by the
+   * rect-selection shader. Rebuilt lazily by `findPointsInRect` when
+   * `isSizeTextureStale` — any size, image-size, image-index or image-set update
+   * can change a footprint, and most graphs never rect-select.
+   */
   private sizeTexture: Texture | undefined
+  private isSizeTextureStale = true
   private trackedIndicesTexture: Texture | undefined
   private polygonPathTexture: Texture | undefined
   private polygonPathLength = 0
@@ -350,6 +371,8 @@ export class Points extends CoreModule {
       skipHighlighted: number;
       skipGreyed: number;
       pointDefaultSize: number;
+      hasImages: number; // f32 in shader, not boolean
+      imageCount: number;
     };
   }> | undefined
 
@@ -368,7 +391,9 @@ export class Points extends CoreModule {
       width: number;
       pixelRatio: number;
       pointIndex: number;
-      size: number;
+      sourceSize: number;
+      targetSize: number;
+      imageSize: number;
       sizeScale: number;
       pointsTextureSize: number;
       transformationMatrix: Mat4Array;
@@ -381,6 +406,10 @@ export class Points extends CoreModule {
       isDarkenGreyout: number; // f32 in shader, not boolean
       backgroundColor: [number, number, number, number];
       greyoutColor: [number, number, number, number];
+      animatePositions: number; // f32 in shader, not boolean
+      transitionProgress: number;
+      animateSizes: number; // f32 in shader, not boolean
+      pointDefaultSize: number;
     };
   }> | undefined
 
@@ -763,16 +792,7 @@ export class Points extends CoreModule {
         { name: 'imageIndex', format: 'float32' },
         { name: 'imageSize', format: 'float32' },
       ],
-      // Cast: luma types `defines` boolean-only, but its runtime injects any value
-      // verbatim as `#define KEY value` — which is how the shared exit defaults
-      // (variables.ts) reach the shader.
-      defines: {
-        USE_UNIFORM_BUFFERS: true,
-        EXIT_DEFAULT_SIZE: glslFloatLiteral(EXIT_DEFAULT_SIZE),
-        EXIT_DEFAULT_COLOR_CHANNEL: glslFloatLiteral(EXIT_DEFAULT_COLOR_CHANNEL),
-        EDGE_RAMP_PX: glslFloatLiteral(EDGE_RAMP_PX),
-        POINT_RING_SCALE: glslFloatLiteral(POINT_RING_SCALE),
-      } as unknown as Record<string, boolean>,
+      defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
@@ -815,13 +835,7 @@ export class Points extends CoreModule {
         { name: 'imageIndex', format: 'float32' },
         { name: 'imageSize', format: 'float32' },
       ],
-      defines: {
-        USE_UNIFORM_BUFFERS: true,
-        EXIT_DEFAULT_SIZE: glslFloatLiteral(EXIT_DEFAULT_SIZE),
-        EXIT_DEFAULT_COLOR_CHANNEL: glslFloatLiteral(EXIT_DEFAULT_COLOR_CHANNEL),
-        EDGE_RAMP_PX: glslFloatLiteral(EDGE_RAMP_PX),
-        POINT_RING_SCALE: glslFloatLiteral(POINT_RING_SCALE),
-      } as unknown as Record<string, boolean>,
+      defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
       bindings: {
         drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer('drawVertexUniforms'),
         drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer('drawFragmentUniforms'),
@@ -951,6 +965,8 @@ export class Points extends CoreModule {
           skipHighlighted: 'f32',
           skipGreyed: 'f32',
           pointDefaultSize: 'f32',
+          hasImages: 'f32',
+          imageCount: 'f32',
         },
         defaultUniforms: {
           pointsTextureSize: store.pointsTextureSize ?? 0,
@@ -965,6 +981,8 @@ export class Points extends CoreModule {
           skipHighlighted: 0,
           skipGreyed: 0,
           pointDefaultSize: config.pointDefaultSize,
+          hasImages: 0,
+          imageCount: 0,
         },
       },
     })
@@ -979,11 +997,13 @@ export class Points extends CoreModule {
         ...(this.hoveredPointIndices && { pointIndices: this.hoveredPointIndices }),
         ...(this.targetSizeBuffer && { size: this.targetSizeBuffer }),
         ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
+        ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
       },
       bufferLayout: [
         { name: 'pointIndices', format: 'float32x2' },
         { name: 'size', format: 'float32' },
         { name: 'imageSize', format: 'float32' },
+        { name: 'imageIndex', format: 'float32' },
       ],
       defines: {
         USE_UNIFORM_BUFFERS: true,
@@ -1055,7 +1075,9 @@ export class Points extends CoreModule {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
           // Vertex shader uniforms:
-          size: 'f32',
+          sourceSize: 'f32',
+          targetSize: 'f32',
+          imageSize: 'f32',
           transformationMatrix: 'mat4x4<f32>',
           pointsTextureSize: 'f32',
           sizeScale: 'f32',
@@ -1070,12 +1092,18 @@ export class Points extends CoreModule {
           isDarkenGreyout: 'f32',
           backgroundColor: 'vec4<f32>',
           greyoutColor: 'vec4<f32>',
+          animatePositions: 'f32',
+          transitionProgress: 'f32',
+          animateSizes: 'f32',
+          pointDefaultSize: 'f32',
           // Fragment shader uniforms (width is in same block):
           width: 'f32',
           pixelRatio: 'f32',
         },
         defaultUniforms: {
-          size: 1,
+          sourceSize: 1,
+          targetSize: 1,
+          imageSize: 0,
           transformationMatrix: store.transformationMatrix4x4,
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale,
@@ -1091,6 +1119,10 @@ export class Points extends CoreModule {
           isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0,
           backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
           greyoutColor: ensureVec4(store.greyoutPointColor, [0, 0, 0, 1]),
+          animatePositions: 0,
+          transitionProgress: 1,
+          animateSizes: 0,
+          pointDefaultSize: config.pointDefaultSize,
           width: 0.85,
           pixelRatio: config.pixelRatio,
         },
@@ -1109,11 +1141,7 @@ export class Points extends CoreModule {
       bufferLayout: [
         { name: 'vertexCoord', format: 'float32x2' },
       ],
-      defines: {
-        USE_UNIFORM_BUFFERS: true,
-        EDGE_RAMP_PX: glslFloatLiteral(EDGE_RAMP_PX),
-        POINT_RING_SCALE: glslFloatLiteral(POINT_RING_SCALE),
-      } as unknown as Record<string, boolean>,
+      defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
@@ -1320,8 +1348,8 @@ export class Points extends CoreModule {
 
   /**
    * Builds the exit texture from point positions: R = previous absence, G = current
-   * absence (1 = NaN position). One signal for both pipelines: the draw shader
-   * blends R→G by transition progress (the fade gone-guard), and the integrator
+   * absence (1 = NaN position). One signal for both pipelines: the point and ring
+   * shaders blend R→G by transition progress (the fade gone-guard), and the integrator
    * and force shaders read G to skip absent points so a NaN never poisons physics.
    * The texture is rg32float — two channels are all the state there is.
    */
@@ -1401,14 +1429,13 @@ export class Points extends CoreModule {
   }
 
   public updateSize (): void {
-    const { device, store: { pointsTextureSize }, data } = this
+    const { store: { pointsTextureSize }, data } = this
     if (!pointsTextureSize || data.pointsNumber === undefined) return
-    // Point sizes define the pickable sprite footprints
-    this.isPickingBufferStale = true
+    this.markFootprintsStale()
 
     // GraphData.updatePointSize() always populates pointSizes before this runs
     const sizeData = data.pointSizes as Float32Array
-    const { source, target, previous } = updateAttributeBuffers(
+    const { source, target, previous, sourceData } = updateAttributeBuffers(
       this.device,
       sizeData,
       this.sourceSizeBuffer,
@@ -1419,6 +1446,7 @@ export class Points extends CoreModule {
     this.sourceSizeBuffer = source
     this.targetSizeBuffer = target
     this.previousSizeData = previous
+    this.sourceSizeData = sourceData
 
     const sizeAttributes = {
       ...(this.sourceSizeBuffer && { sourceSize: this.sourceSizeBuffer }),
@@ -1429,42 +1457,6 @@ export class Points extends CoreModule {
     }
     if (this.drawCoreCommand) {
       this.drawCoreCommand.setAttributes(sizeAttributes)
-    }
-
-    const initialState = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
-    for (let i = 0; i < data.pointsNumber; i++) {
-      // Resolve the raw size: a NaN ("use the default") would poison Math.max and
-      // give the point a NaN radius in the rect-selection shader.
-      const shapeSize = data.getResolvedPointSize(i)
-      const imageSize = data.pointImageSizes?.[i] ?? shapeSize
-      initialState[i * 4] = Math.max(shapeSize, imageSize)
-    }
-
-    if (!this.sizeTexture || this.sizeTexture.width !== pointsTextureSize || this.sizeTexture.height !== pointsTextureSize) {
-      if (this.sizeTexture && !this.sizeTexture.destroyed) {
-        this.sizeTexture.destroy()
-      }
-      const sizeTexture = device.createTexture({
-        width: pointsTextureSize,
-        height: pointsTextureSize,
-        format: 'rgba32float',
-      })
-      this.sizeTexture = sizeTexture
-      sizeTexture.copyImageData({
-        data: initialState,
-        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
-      })
-    } else {
-      this.sizeTexture.copyImageData({
-        data: initialState,
-        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
-      })
     }
   }
 
@@ -1526,6 +1518,13 @@ export class Points extends CoreModule {
         imageIndex: this.imageIndicesBuffer,
       })
     }
+    if (this.fillPickingBufferCommand) {
+      this.fillPickingBufferCommand.setAttributes({
+        imageIndex: this.imageIndicesBuffer,
+      })
+    }
+    // Which points draw an image decides whether their image size is part of the footprint
+    this.markFootprintsStale()
   }
 
   public updateImageSizes (): void {
@@ -1561,11 +1560,13 @@ export class Points extends CoreModule {
         imageSize: this.imageSizesBuffer,
       })
     }
-    this.isPickingBufferStale = true
+    this.markFootprintsStale()
   }
 
   public createAtlas (): void {
     const { device, data, store } = this
+    // The image set decides which points draw an image, and so which footprints include an image size
+    this.markFootprintsStale()
 
     if (!data.inputImageData?.length) {
       this.imageCount = 0
@@ -1870,11 +1871,9 @@ export class Points extends CoreModule {
     if (config.renderHoveredPointRing && store.hoveredPoint && this.drawHighlightedCommand && this.drawHighlightedUniformStore) {
       if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
       if (!this.pointStatusTexture || this.pointStatusTexture.destroyed) return
-      const pointSize = data.getResolvedPointSize(store.hoveredPoint.index)
-      const imageSize = data.pointImageSizes?.[store.hoveredPoint.index] ?? pointSize
       this.drawHighlightedUniformStore.setUniforms({
         drawHighlightedUniforms: {
-          size: Math.max(pointSize, imageSize),
+          ...this.getRingSizeUniforms(store.hoveredPoint.index),
           transformationMatrix: store.transformationMatrix4x4,
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale,
@@ -1890,6 +1889,10 @@ export class Points extends CoreModule {
           isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0,
           backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
           greyoutColor: ensureVec4(store.greyoutPointColor, [0, 0, 0, 1]),
+          animatePositions: this.shouldAnimatePointPositions ? 1 : 0,
+          transitionProgress: this.transitionProgress,
+          animateSizes: this.shouldAnimatePointSizes ? 1 : 0,
+          pointDefaultSize: config.pointDefaultSize,
           width: 0.85,
           pixelRatio: config.pixelRatio,
         },
@@ -1906,11 +1909,9 @@ export class Points extends CoreModule {
     if (store.focusedPoint && this.drawHighlightedCommand && this.drawHighlightedUniformStore) {
       if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
       if (!this.pointStatusTexture || this.pointStatusTexture.destroyed) return
-      const pointSize = data.getResolvedPointSize(store.focusedPoint.index)
-      const imageSize = data.pointImageSizes?.[store.focusedPoint.index] ?? pointSize
       this.drawHighlightedUniformStore.setUniforms({
         drawHighlightedUniforms: {
-          size: Math.max(pointSize, imageSize),
+          ...this.getRingSizeUniforms(store.focusedPoint.index),
           transformationMatrix: store.transformationMatrix4x4,
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale,
@@ -1926,6 +1927,10 @@ export class Points extends CoreModule {
           isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0,
           backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
           greyoutColor: ensureVec4(store.greyoutPointColor, [0, 0, 0, 1]),
+          animatePositions: this.shouldAnimatePointPositions ? 1 : 0,
+          transitionProgress: this.transitionProgress,
+          animateSizes: this.shouldAnimatePointSizes ? 1 : 0,
+          pointDefaultSize: config.pointDefaultSize,
           width: 0.85,
           pixelRatio: config.pixelRatio,
         },
@@ -2007,6 +2012,7 @@ export class Points extends CoreModule {
   public findPointsInRect (): boolean {
     if (!this.findPointsInRectCommand || !this.findPointsInRectUniformStore || !this.searchFbo || this.searchFbo.destroyed) return false
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return false
+    if (this.isSizeTextureStale) this.updateSizeTexture()
     if (!this.sizeTexture || this.sizeTexture.destroyed) return false
     if (!this.exitTexture) this.updateExit()
     if (!this.exitTexture || this.exitTexture.destroyed) return false
@@ -2146,6 +2152,7 @@ export class Points extends CoreModule {
       ...(this.hoveredPointIndices && { pointIndices: this.hoveredPointIndices }),
       ...(this.targetSizeBuffer && { size: this.targetSizeBuffer }),
       ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
+      ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
     })
 
     const screenSize = ensureVec2(this.store.screenSize, [0, 0])
@@ -2161,6 +2168,8 @@ export class Points extends CoreModule {
       pickingPixelRatio: screenSize[0] > 0 ? (this.pickingFbo.width / screenSize[0]) : PICKING_RESOLUTION_SCALE,
       maxPointSize: this.store.maxPointSize,
       pointDefaultSize: this.config.pointDefaultSize,
+      hasImages: this.imageCount > 0 ? 1 : 0,
+      imageCount: this.imageCount,
     }
 
     const bindings = {
@@ -2641,6 +2650,7 @@ export class Points extends CoreModule {
       this.sizeTexture.destroy()
     }
     this.sizeTexture = undefined
+    this.isSizeTextureStale = true
     if (this.trackedIndicesTexture && !this.trackedIndicesTexture.destroyed) {
       this.trackedIndicesTexture.destroy()
     }
@@ -2706,6 +2716,7 @@ export class Points extends CoreModule {
     }
     this.targetSizeBuffer = undefined
     this.previousSizeData = undefined
+    this.sourceSizeData = undefined
     this.previousExitData = undefined
     if (this.shapeBuffer && !this.shapeBuffer.destroyed) {
       this.shapeBuffer.destroy()
@@ -2990,6 +3001,66 @@ export class Points extends CoreModule {
     this.currentPositionTexture = tempTexture
     this.currentPositionFbo = tempFbo
     this.areClusterCentroidsUpToDate = false
+  }
+
+  /**
+   * A footprint changed — sizes, image sizes, image indices or the image set — so the
+   * picking buffer and the rect-selection texture both rebuild on their next read.
+   */
+  private markFootprintsStale (): void {
+    this.isPickingBufferStale = true
+    this.isSizeTextureStale = true
+  }
+
+  /**
+   * Rebuilds `sizeTexture` from the current footprints. Called by `findPointsInRect`
+   * when `isSizeTextureStale`, never eagerly: sizes, image sizes, image indices and
+   * the image set arrive as separate updates, and rebuilding on each would upload
+   * the texture several times per data change.
+   */
+  private updateSizeTexture (): void {
+    const { device, store: { pointsTextureSize }, data } = this
+    if (!pointsTextureSize || data.pointsNumber === undefined) return
+
+    const footprints = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
+    for (let i = 0; i < data.pointsNumber; i++) {
+      footprints[i * 4] = data.getResolvedPointFootprint(i)
+    }
+
+    if (!this.sizeTexture || this.sizeTexture.width !== pointsTextureSize || this.sizeTexture.height !== pointsTextureSize) {
+      if (this.sizeTexture && !this.sizeTexture.destroyed) {
+        this.sizeTexture.destroy()
+      }
+      this.sizeTexture = device.createTexture({
+        width: pointsTextureSize,
+        height: pointsTextureSize,
+        format: 'rgba32float',
+      })
+    }
+    this.sizeTexture.copyImageData({
+      data: footprints,
+      bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
+      mipLevel: 0,
+      x: 0,
+      y: 0,
+    })
+    this.isSizeTextureStale = false
+  }
+
+  /**
+   * The raw size inputs the hover/focus ring shader resolves and mixes exactly as
+   * `draw-points.vert` does for the sprite: the source and target point sizes as
+   * uploaded (NaN = "use the default"), and the image size when the point draws an
+   * image, else 0.
+   */
+  private getRingSizeUniforms (index: number): { sourceSize: number; targetSize: number; imageSize: number } {
+    const { data } = this
+    const targetSize = data.pointSizes?.[index] ?? NaN
+    return {
+      sourceSize: this.sourceSizeData?.[index] ?? targetSize,
+      targetSize,
+      imageSize: data.pointDrawsImage(index) ? data.pointImageSizes?.[index] ?? 0 : 0,
+    }
   }
 
   /**

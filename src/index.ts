@@ -629,6 +629,8 @@ export class Graph {
     if (this.ensureDevice(() => this.setPointSizes(pointSizes))) return
     this.graph.inputPointSizes = pointSizes
     this.isPointSizeUpdateNeeded = true
+    // Image sizes default to a copy of point sizes, so they follow this change.
+    this.isPointImageSizesUpdateNeeded = true
     this.transition.queue(TransitionProperty.PointSizes)
   }
 
@@ -685,6 +687,7 @@ export class Graph {
    * @param {Float32Array} imageSizes - A Float32Array representing the sizes of point images in the format [size1, size2, ..., sizen],
    * where `n` is the index of the point.
    * Example: `new Float32Array([10, 20, 30])` sets the first image to size 10, the second image to size 20, and the third image to size 30.
+   * @note A size counts only for a point that draws an image (see `setPointImageIndices`); for any other point it is kept but ignored.
    */
   public setPointImageSizes (imageSizes: Float32Array): void {
     if (this._isDestroyed) return
@@ -1320,7 +1323,8 @@ export class Graph {
   }
 
   /**
-   * Get point radius by its index.
+   * Get point radius by its index: the point size, or the image size when the point
+   * draws an image and that is larger.
    * @param index Index of the point.
    * @returns Radius of the point.
    */
@@ -1328,9 +1332,7 @@ export class Graph {
     if (this._isDestroyed) return undefined
     if (this.graph.pointSizes === undefined && this.graph.pointImageSizes === undefined) return undefined
     if (!this.graph.isPointIndex(index)) return undefined
-    const shapeSize = this.graph.getResolvedPointSize(index)
-    const imageSize = this.graph.pointImageSizes?.[index]
-    return Math.max(shapeSize, imageSize ?? 0)
+    return this.graph.getResolvedPointFootprint(index)
   }
 
   /**
