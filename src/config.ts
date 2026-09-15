@@ -117,6 +117,34 @@ export interface GraphConfigInterface {
   pointSizeScale: number;
 
   /**
+   * Width, in CSS pixels, of a stroke drawn along the inside edge of every point in a
+   * shade of the point's own color (see `pointStrokeIntensity` and `pointStrokeMode`).
+   * The stroke is inset, so it never enlarges the point, and its width stays constant
+   * while zooming even with `scalePointsOnZoom`. A point whose on-screen diameter is
+   * smaller than the stroke width is drawn without a stroke. Points with an image get
+   * the stroke on the shape only, underneath the image. `0` disables the stroke.
+   * Default value: `0`
+   */
+  pointStrokeWidth: number;
+
+  /**
+   * How far the stroke color is from the point's color, as a step in OKLab lightness
+   * (`L`, 0..1). The step is perceptual, so every hue gets an equally visible stroke: `0.1`
+   * reads as a clear outline, `0.05` as a hint. `0` makes the stroke invisible. Hue is
+   * preserved; chroma is reduced only where the shifted color would leave the sRGB gamut.
+   * Default value: `0.1`
+   */
+  pointStrokeIntensity: number;
+
+  /**
+   * Direction of the lightness step. `'darken'` and `'lighten'` apply to every point;
+   * `'auto'` decides per point from its own lightness, darkening light points and
+   * lightening dark ones, so the stroke always has room to differ from the fill.
+   * Default value: `'auto'`
+   */
+  pointStrokeMode: 'auto' | 'darken' | 'lighten';
+
+  /**
    * Depth-based occlusion culling: skips shading and blending of point
    * fragments hidden underneath other opaque points. Greatly improves
    * performance when many large opaque points overlap; rendering output stays
