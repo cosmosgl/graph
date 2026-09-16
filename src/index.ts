@@ -654,6 +654,8 @@ export class Graph {
    * Sets the images for the graph points using ImageData objects.
    * Images are rendered above shapes.
    * To use images, provide image indices via setPointImageIndices().
+   * A list whose images all have zero width or height cannot be packed into an atlas: it is
+   * rejected with a console warning and the previous images stay in use.
    *
    * @param {ImageData[]} imageDataArray - Array of ImageData objects to use as point images.
    * Example: `setImageData([imageData1, imageData2, imageData3])`
@@ -661,8 +663,11 @@ export class Graph {
   public setImageData (imageDataArray: ImageData[]): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setImageData(imageDataArray))) return
+    const previousImageData = this.graph.inputImageData
     this.graph.inputImageData = imageDataArray
-    this.points?.createAtlas()
+    // A rejected list must not stay in the data model: the atlas, the draw and picking keep
+    // the previous images, so the footprints, rings and radius must read the same list.
+    if (this.points?.createAtlas() === false) this.graph.inputImageData = previousImageData
     this.requestRender()
   }
 

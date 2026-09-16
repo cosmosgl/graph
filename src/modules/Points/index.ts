@@ -1564,7 +1564,12 @@ export class Points extends CoreModule {
     this.markFootprintsStale()
   }
 
-  public createAtlas (): void {
+  /**
+   * Builds the image atlas from `data.inputImageData`. Returns `false` when the list cannot be
+   * packed (every image has zero width or height); the atlas, `imageCount` and the textures then
+   * stay as they were, so the caller must not keep the new list either.
+   */
+  public createAtlas (): boolean {
     const { device, data, store } = this
     // The image set decides which points draw an image, and so which footprints include an image size
     this.markFootprintsStale()
@@ -1587,13 +1592,13 @@ export class Points extends CoreModule {
         format: 'rgba8unorm',
       })
 
-      return
+      return true
     }
 
     const atlasResult = createAtlasDataFromImageData(data.inputImageData, store.webglMaxTextureSize)
     if (!atlasResult) {
       console.warn('Failed to create atlas from image data')
-      return
+      return false
     }
 
     this.imageCount = data.inputImageData.length
@@ -1635,6 +1640,7 @@ export class Points extends CoreModule {
       x: 0,
       y: 0,
     })
+    return true
   }
 
   public updateSampledPointsGrid (): void {
