@@ -14,6 +14,7 @@ import drawHighlightedVert from '@/graph/modules/Points/draw-highlighted.vert?ra
 import fillPickingBufferFrag from '@/graph/modules/Points/fill-picking-buffer.frag?raw'
 import fillPickingBufferVert from '@/graph/modules/Points/fill-picking-buffer.vert?raw'
 import { pointSizeModule } from '@/graph/modules/Points/point-size-module'
+import { exitRampModule } from '@/graph/modules/Points/exit-ramp-module'
 import fillGridWithSampledPointsFrag from '@/graph/modules/Points/fill-sampled-points.frag?raw'
 import fillGridWithSampledPointsVert from '@/graph/modules/Points/fill-sampled-points.vert?raw'
 import updatePositionFrag from '@/graph/modules/Points/update-position.frag?raw'
@@ -769,7 +770,7 @@ export class Points extends CoreModule {
     this.drawCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
-      modules: [pointSizeModule],
+      modules: [pointSizeModule, exitRampModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       attributes: {
@@ -811,7 +812,7 @@ export class Points extends CoreModule {
     this.drawCoreCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
-      modules: [pointSizeModule],
+      modules: [pointSizeModule, exitRampModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       indexBuffer: this.reversedPointIndexBuffer ?? null,
@@ -1132,7 +1133,7 @@ export class Points extends CoreModule {
     this.drawHighlightedCommand ||= new Model(device, {
       fs: drawHighlightedFrag,
       vs: drawHighlightedVert,
-      modules: [pointSizeModule],
+      modules: [pointSizeModule, exitRampModule],
       topology: 'triangle-strip',
       vertexCount: 4,
       attributes: {
