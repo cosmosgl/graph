@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# https://docs.coderabbit.ai/reference/configuration
+reviews:
+  path_filters:
+    # Shader modules are source. CodeRabbit skips *.glsl by default (its "Game and 3D
+    # assets" list); the exact pattern without the leading "!" lifts that default.
+    - "**/*.glsl"
