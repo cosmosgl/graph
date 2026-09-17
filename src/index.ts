@@ -192,7 +192,6 @@ export class Graph {
         return device
       }
       this.device = device
-      this.isReady = true
       const deviceCanvasContext = this.validateDevice(device)
 
       // If external device was provided, sync its useDevicePixels with config.pixelRatio
@@ -409,9 +408,6 @@ export class Graph {
           this.requestRender()
         })
       if (!this.config.enableZoom || !this.config.enableDrag) this.updateZoomDragBehaviors()
-      // Zoom level 1 means no zoom (100% scale). defaultConfigValues.initialZoomLevel is undefined,
-      // so we fall back to 1 here as the neutral zoom level when no initial zoom is configured.
-      this.setZoomLevel(this.config.initialZoomLevel ?? 1)
 
       this.store.maxPointSize = getMaxPointSize(device, this.config.pixelRatio)
 
@@ -450,6 +446,11 @@ export class Graph {
       if (this.config.showFPSMonitor) this.fpsMonitor = new FPSMonitor(this.canvas, this.store.div)
 
       if (this.config.randomSeed !== undefined) this.store.addRandomSeed(this.config.randomSeed)
+
+      this.isReady = true
+      // Zoom level 1 means no zoom (100% scale). defaultConfigValues.initialZoomLevel is undefined,
+      // so we fall back to 1 here as the neutral zoom level when no initial zoom is configured.
+      this.setZoomLevel(this.config.initialZoomLevel ?? 1)
 
       return device
     })
