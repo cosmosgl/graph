@@ -5,7 +5,9 @@ precision highp float;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform drawHighlightedUniforms {
-  float size;
+  float sourceSize;
+  float targetSize;
+  float imageSize;
   mat4 transformationMatrix;
   float pointsTextureSize;
   float sizeScale;
@@ -20,6 +22,10 @@ layout(std140) uniform drawHighlightedUniforms {
   float isDarkenGreyout;
   vec4 backgroundColor;
   vec4 greyoutColor;
+  float animatePositions;
+  float transitionProgress;
+  float animateSizes;
+  float pointDefaultSize;
   float width;
   float pixelRatio;
 } drawHighlighted;

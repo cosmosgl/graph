@@ -113,14 +113,11 @@ float calculatePointSize(float size) {
 // exit ramp (0 = present, 1 = gone), so the enter/exit fade of default-valued
 // channels drives itself — no size/color transition needed for a removal. Explicit
 // (real) values pass through. EXIT_DEFAULT_* are #defines injected from variables.ts,
-// shared with the CPU resolvers (GraphData.getResolvedPoint*).
-float resolveSize(float size, float exitRamp) {
-  if (!isnan(size)) return size;
-  return mix(pointDefaultSize, EXIT_DEFAULT_SIZE, exitRamp);
-}
-
-vec4 resolveColor(vec4 color, float exitRamp) {
-  vec4 defaultColor = mix(pointDefaultColor, vec4(EXIT_DEFAULT_COLOR_CHANNEL), exitRamp);
+// shared with the CPU resolvers (GraphData.getResolvedPoint*). The ramp and the size
+// rule are the shared exitRamp module (exit-ramp.glsl), which the hover/focus ring
+// draws by too; only the sprite resolves colors.
+vec4 resolveColor(vec4 color, float exit) {
+  vec4 defaultColor = mix(pointDefaultColor, vec4(EXIT_DEFAULT_COLOR_CHANNEL), exit);
   return mix(color, defaultColor, isnan(color));
 }
 
@@ -145,15 +142,10 @@ void main() {
     return;
   }
 
-  // Exit texture: R = previous absence, G = current absence (1 = absent). During a
-  // position transition, blend R→G to animate the enter/exit; otherwise use G (the
-  // settled current absence) so an unrelated color/size transition can't replay the
-  // ramp. The caller drives the visual fade via setPointSizes/setPointColors; here
-  // we only remove the point once it is fully gone.
-  vec4 exitStatus = texelFetch(exitTexture, pointTexel, 0);
-  float exit = animatePositions > 0.0
-    ? mix(exitStatus.r, exitStatus.g, transitionProgress)
-    : exitStatus.g;
+  // Exit ramp (exit-ramp.glsl): 0 = present, 1 = gone. The caller drives the visual
+  // fade via setPointSizes/setPointColors; here we only remove the point once it is
+  // fully gone.
+  float exit = exitRamp(texelFetch(exitTexture, pointTexel, 0), animatePositions, transitionProgress);
   if (exit >= 1.0) {
     // Fully gone — skip. Also avoids using a NaN position on the snapped path.
     gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
@@ -188,17 +180,19 @@ void main() {
   // Resolve NaN channels against the animated exit ramp before mixing — default
   // sizes/colors of an entering or leaving point fade with the ramp regardless of
   // whether a size/color transition is active.
-  float pointSize = animateSizes > 0.0
-    ? mix(resolveSize(sourceSize, exit), resolveSize(targetSize, exit), transitionProgress)
-    : resolveSize(targetSize, exit);
+  float pointSize = transitionedSize(sourceSize, targetSize, animateSizes, transitionProgress, exit, pointDefaultSize);
   vec4 pointColor = animateColors > 0.0
     ? mix(resolveColor(sourceColor, exit), resolveColor(targetColor, exit), transitionProgress)
     : resolveColor(targetColor, exit);
 
 
-  // Calculate sizes for shape and image
+  // Calculate sizes for shape and image. A point without an image has no image
+  // size: the attribute still holds a value (a copy of the target point size when
+  // none was given), and letting it into the sprite footprint would hold the
+  // outline ring at the target while the shape is still transitioning.
+  bool hasImage = hasImages > 0.0 && imageIndex >= 0.0 && imageIndex < imageCount;
   float shapeSizeValue = calculatePointSize(pointSize * sizeScale);
-  float imageSizeValue = calculatePointSize(imageSize * sizeScale);
+  float imageSizeValue = hasImage ? calculatePointSize(imageSize * sizeScale) : 0.0;
 
   // A size of 0 draws nothing; the sprite below is never smaller than a pixel.
   if (max(shapeSizeValue, imageSizeValue) <= 0.0) {
@@ -238,24 +232,15 @@ void main() {
       // If greyoutColor is not set, make color lighter or darker based on isDarkenGreyout
       float blendFactor = 0.65;
 
-      #ifdef USE_UNIFORM_BUFFERS
       if (isDarkenGreyout > 0.0) {
         shapeColor.rgb = mix(shapeColor.rgb, vec3(0.2), blendFactor);
       } else {
         shapeColor.rgb = mix(shapeColor.rgb, max(backgroundColor.rgb, vec3(0.8)), blendFactor);
       }
-      #else
-      if (isDarkenGreyout > 0.0) {
-        shapeColor.rgb = mix(shapeColor.rgb, vec3(0.2), blendFactor);
-      } else {
-        shapeColor.rgb = mix(shapeColor.rgb, max(backgroundColor.rgb, vec3(0.8)), blendFactor);
-      }
-      #endif
     }
   }
 
-  #ifdef USE_UNIFORM_BUFFERS
-  if (hasImages <= 0.0 || imageIndex < 0.0 || imageIndex >= imageCount) {
+  if (!hasImage) {
     imageAtlasUV = vec4(-1.0);
   } else {
     int atlasTexSize = int(imageAtlasCoordsTextureSize);
@@ -264,15 +249,4 @@ void main() {
     vec4 atlasCoords = texelFetch(imageAtlasCoords, atlasTexel, 0);
     imageAtlasUV = atlasCoords;
   }
-  #else
-  if (hasImages <= 0.0 || imageIndex < 0.0 || imageIndex >= imageCount) {
-    imageAtlasUV = vec4(-1.0);
-  } else {
-    int atlasTexSize = int(imageAtlasCoordsTextureSize);
-    int atlasCoordIndex = int(imageIndex);
-    ivec2 atlasTexel = ivec2(atlasCoordIndex % atlasTexSize, atlasCoordIndex / atlasTexSize);
-    vec4 atlasCoords = texelFetch(imageAtlasCoords, atlasTexel, 0);
-    imageAtlasUV = atlasCoords;
-  }
-  #endif
 }
