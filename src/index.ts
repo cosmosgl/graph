@@ -821,6 +821,44 @@ export class Graph implements PositionTextureSource {
   }
 
   /**
+   * Sets an attractor for each point in the graph.
+   *
+   * Every point is pulled toward its own attractor by the attractor force, on top of
+   * the other simulation forces (links, repulsion, gravity, …) — a per-point layout constraint
+   * rather than a fixed position. The pull grows linearly with the distance to the
+   * attractor and is scaled by `simulationAttraction` and the point's coefficient from
+   * `setPointAttractorStrength`.
+   *
+   * @param {Float32Array} attractors - A Float32Array of attractor positions in the format [x1, y1, x2, y2, ..., xn, yn],
+   * where `n` is the index of the point, in simulation space coordinates (same space as `setPointPositions`).
+   * `NaN` in either coordinate means that point has no attractor and is not affected by this force.
+   * The array must hold exactly one pair per point; otherwise it is ignored.
+   * Example: `new Float32Array([100, 100, NaN, NaN, 300, 250])` pulls point 0 toward (100, 100) and point 2 toward (300, 250); point 1 is free.
+   */
+  public setPointAttractors (attractors: Float32Array): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointAttractors(attractors))) return
+    this.simulation.setPointAttractors(attractors)
+  }
+
+  /**
+   * Sets the attractor force strength coefficient for each point in the graph.
+   *
+   * Multiplies the pull of a point toward its attractor (see `setPointAttractors`),
+   * so different points can be held with different firmness. Points without a coefficient
+   * (a missing array or a `NaN` entry) use `1`.
+   *
+   * @param {Float32Array} attractorStrength - A Float32Array of force strength coefficients for each point in the format [coeff1, coeff2, ..., coeffn],
+   * where `n` is the index of the point. The array must hold exactly one value per point; otherwise it is ignored.
+   * Example: `new Float32Array([1, 0.4, 0.3])` sets the coefficient for point 0 to 1, point 1 to 0.4, and point 2 to 0.3.
+   */
+  public setPointAttractorStrength (attractorStrength: Float32Array): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointAttractorStrength(attractorStrength))) return
+    this.simulation.setPointAttractorStrength(attractorStrength)
+  }
+
+  /**
    * Sets which points are pinned (fixed) in position.
    *
    * Pinned points:

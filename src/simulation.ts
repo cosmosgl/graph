@@ -3,6 +3,7 @@ import { webgl2Adapter, WebGLStateTracker } from '@luma.gl/webgl'
 
 import { applyConfig, createDefaultConfig, GraphConfigInterface, type GraphSimulationConfig } from '@/graph/config'
 import { getMaxPointSize, readPixels, isPointAbsent } from '@/graph/helper'
+import { ForceAttractor } from '@/graph/modules/ForceAttractor'
 import { ForceCenter } from '@/graph/modules/ForceCenter'
 import { ForceCollision } from '@/graph/modules/ForceCollision'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
@@ -148,6 +149,7 @@ export class GraphSimulation implements PositionTextureSource {
   private forceLinkIncoming: ForceLink | undefined
   private forceLinkOutgoing: ForceLink | undefined
   private forceCollision: ForceCollision | undefined
+  private forceAttractor: ForceAttractor | undefined
   private clusters: Clusters | undefined
 
   private isPointPositionsUpdateNeeded = false
@@ -155,6 +157,7 @@ export class GraphSimulation implements PositionTextureSource {
   private isForceManyBodyUpdateNeeded = false
   private isForceLinkUpdateNeeded = false
   private isForceCenterUpdateNeeded = false
+  private isForceAttractorUpdateNeeded = false
   private isPointClusterUpdateNeeded = false
 
   // Whether the collision force's GPU resources (grid/size textures, programs)
@@ -333,6 +336,7 @@ export class GraphSimulation implements PositionTextureSource {
     this.isForceManyBodyUpdateNeeded = true
     this.isForceLinkUpdateNeeded = true
     this.isForceCenterUpdateNeeded = true
+    this.isForceAttractorUpdateNeeded = true
   }
 
   /**
@@ -388,6 +392,22 @@ export class GraphSimulation implements PositionTextureSource {
     if (this.ensureDevice(() => this.setPointClusterStrength(clusterStrength))) return
     this.data.inputClusterStrength = clusterStrength
     this.isPointClusterUpdateNeeded = true
+  }
+
+  /** Sets per-point attractor positions, as in `Graph.setPointAttractors`. */
+  public setPointAttractors (attractors: Float32Array): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointAttractors(attractors))) return
+    this.data.inputPointAttractors = attractors
+    this.isForceAttractorUpdateNeeded = true
+  }
+
+  /** Sets per-point attractor coefficients, as in `Graph.setPointAttractorStrength`. */
+  public setPointAttractorStrength (attractorStrength: Float32Array): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointAttractorStrength(attractorStrength))) return
+    this.data.inputPointAttractorStrength = attractorStrength
+    this.isForceAttractorUpdateNeeded = true
   }
 
   /**
@@ -732,6 +752,7 @@ export class GraphSimulation implements PositionTextureSource {
       this.forceLinkOutgoing?.create(LinkDirection.OUTGOING)
     }
     if (this.isForceCenterUpdateNeeded) this.forceCenter?.create()
+    if (this.isForceAttractorUpdateNeeded) this.forceAttractor?.create()
     if (this.isPointClusterUpdateNeeded) this.clusters?.create()
 
     this.isPointPositionsUpdateNeeded = false
@@ -739,6 +760,7 @@ export class GraphSimulation implements PositionTextureSource {
     this.isForceManyBodyUpdateNeeded = false
     this.isForceLinkUpdateNeeded = false
     this.isForceCenterUpdateNeeded = false
+    this.isForceAttractorUpdateNeeded = false
     this.isPointClusterUpdateNeeded = false
 
     return { positionsUpdated }
@@ -757,6 +779,7 @@ export class GraphSimulation implements PositionTextureSource {
     this.forceLinkIncoming?.initPrograms()
     this.forceLinkOutgoing?.initPrograms()
     this.forceMouse?.initPrograms()
+    this.forceAttractor?.initPrograms()
     // ForceCollision programs are built lazily on first use (see runSimulationStep)
     this.clusters.initPrograms()
   }
@@ -854,6 +877,7 @@ export class GraphSimulation implements PositionTextureSource {
     this.forceLinkOutgoing ||= new ForceLink(this._device, this.config, this.store, this.data, this.points)
     this.forceMouse ||= new ForceMouse(this._device, this.config, this.store, this.data, this.points)
     this.forceCollision ||= new ForceCollision(this._device, this.config, this.store, this.data, this.points)
+    this.forceAttractor ||= new ForceAttractor(this._device, this.config, this.store, this.data, this.points)
   }
 
   /**
@@ -876,6 +900,8 @@ export class GraphSimulation implements PositionTextureSource {
     this.forceMouse = undefined
     this.forceCollision?.destroy()
     this.forceCollision = undefined
+    this.forceAttractor?.destroy()
+    this.forceAttractor = undefined
     // Force lazy re-allocation if collision is re-enabled on a new instance.
     this.isForceCollisionReady = false
     this.points?.destroySimulationResources()
@@ -886,6 +912,7 @@ export class GraphSimulation implements PositionTextureSource {
     this.isForceManyBodyUpdateNeeded = true
     this.isForceLinkUpdateNeeded = true
     this.isForceCenterUpdateNeeded = true
+    this.isForceAttractorUpdateNeeded = true
   }
 
   /** Invalidates the lazily built collision-force resources. @internal */
@@ -947,7 +974,13 @@ export class GraphSimulation implements PositionTextureSource {
         this.points?.updatePosition()
       }
 
-      // Collision runs after the attraction forces (links, clusters) so it
+      if (this.forceAttractor?.isActive) {
+        this.points?.swapFbo()
+        this.forceAttractor.run()
+        this.points?.updatePosition()
+      }
+
+      // Collision runs after the attraction forces (links, clusters, attractors) so it
       // corrects the overlap they introduce within the same tick, instead of
       // lagging one frame behind and oscillating against them.
       if (simulationCollision) {
