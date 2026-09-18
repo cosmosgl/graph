@@ -37,6 +37,10 @@ export class GraphData {
   public inputPointClusters: (number | undefined)[] | undefined
   public inputClusterPositions: (number | undefined)[] | undefined
   public inputClusterStrength: Float32Array | undefined
+  /** Raw per-point attractor positions from `setPointAttractors` (`[x0, y0, x1, y1, …]`; `NaN` = none). */
+  public inputPointAttractors: Float32Array | undefined
+  /** Raw per-point attractor strength coefficients from `setPointAttractorStrength`. */
+  public inputPointAttractorStrength: Float32Array | undefined
   public inputPinnedPoints: number[] | undefined
 
   public pointPositions: Float32Array | undefined
@@ -71,6 +75,16 @@ export class GraphData {
   public pointClusters: (number | undefined)[] | undefined
   public clusterPositions: (number | undefined)[] | undefined
   public clusterStrength: Float32Array | undefined
+
+  /**
+   * Per-point attractor positions the attractor force uploads, `[x0, y0, x1, y1, …]`
+   * aligned to the point index space; `NaN` in either coordinate means the point has
+   * no attractor. `undefined` when the input is missing or does not match the
+   * point count — the force then does nothing.
+   */
+  public pointAttractors: Float32Array | undefined
+  /** Per-point attractor strength coefficients (`undefined` = every point uses `1`). */
+  public pointAttractorStrength: Float32Array | undefined
 
   /**
    * Each inner array of `sourceIndexToTargetIndices` and `targetIndexToSourceIndices` contains pairs where:
@@ -440,6 +454,29 @@ export class GraphData {
     }
   }
 
+  /**
+   * Updates the per-point attractors and strengths from the input data.
+   * Like the other channels, a mismatched length disables the channel instead of
+   * reading another point's data; the caller's arrays are never edited.
+   */
+  public updateAttractors (): void {
+    if (this.pointsNumber === undefined) {
+      this.pointAttractors = undefined
+      this.pointAttractorStrength = undefined
+      return
+    }
+    if (this.inputPointAttractors === undefined || this.inputPointAttractors.length !== this.pointsNumber * 2) {
+      this.pointAttractors = undefined
+    } else {
+      this.pointAttractors = this.inputPointAttractors
+    }
+    if (this.inputPointAttractorStrength === undefined || this.inputPointAttractorStrength.length !== this.pointsNumber) {
+      this.pointAttractorStrength = undefined
+    } else {
+      this.pointAttractorStrength = this.inputPointAttractorStrength
+    }
+  }
+
   public update (): void {
     this.updatePoints()
     this.updatePointColor()
@@ -456,6 +493,7 @@ export class GraphData {
     this.updateLinkStrength()
 
     this.updateClusters()
+    this.updateAttractors()
 
     this._createAdjacencyLists()
     this._calculateDegrees()
