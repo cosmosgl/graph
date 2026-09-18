@@ -13,6 +13,9 @@ export type CosmosStoryProps = GraphConfig & {
   pointClusters?: number[];
   clusterPositions?: number[];
   clusterStrength?: Float32Array;
+
+  pointAttractors?: Float32Array;
+  pointAttractorStrength?: Float32Array;
 }
 
 export const createCosmos = (props: CosmosStoryProps): { div: HTMLDivElement; graph: Graph } => {
@@ -61,6 +64,9 @@ export const createCosmos = (props: CosmosStoryProps): { div: HTMLDivElement; gr
   if (props.pointClusters) graph.setPointClusters(props.pointClusters)
   if (props.clusterPositions) graph.setClusterPositions(props.clusterPositions)
   if (props.clusterStrength) graph.setPointClusterStrength(props.clusterStrength)
+
+  if (props.pointAttractors) graph.setPointAttractors(props.pointAttractors)
+  if (props.pointAttractorStrength) graph.setPointAttractorStrength(props.pointAttractorStrength)
 
   graph.zoom(0.9)
   graph.render()
