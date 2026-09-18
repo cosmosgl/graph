@@ -2,12 +2,14 @@ import type { Meta } from '@storybook/html'
 
 import { createStory, Story } from '@/graph/stories/create-story'
 import { CosmosStoryProps } from './create-cosmos'
+import { attractors } from './forces/attractors'
 import { collision } from './forces/collision'
 import { withLabels } from './forces/with-labels'
 
 import createCosmosRaw from './create-cosmos?raw'
 import generateMeshDataRaw from './generate-mesh-data?raw'
 import createClusterLabelsRaw from './create-cluster-labels?raw'
+import attractorsRaw from './forces/attractors?raw'
 import collisionRaw from './forces/collision?raw'
 import withLabelsStoryRaw from './forces/with-labels?raw'
 
@@ -21,6 +23,18 @@ export const Collision: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: collisionRaw },
+      { name: 'create-cosmos', code: createCosmosRaw },
+    ],
+  },
+}
+
+export const Attractors: Story = {
+  ...createStory(attractors),
+  name: 'Attractors',
+  tags: ['beginner', 'interactive'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: attractorsRaw },
       { name: 'create-cosmos', code: createCosmosRaw },
     ],
   },
