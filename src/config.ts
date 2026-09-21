@@ -6,6 +6,11 @@ import { defaultConfigValues } from '@/graph/variables'
 import { PointShape, LinkStyle } from '@/graph/modules/GraphData'
 import { type TransitionEasing } from '@/graph/modules/Transition'
 
+/**
+ * Rules for deriving a point's stroke color from its own fill (see `pointDefaultStrokeColor`).
+ */
+export type PointStrokeShade = 'auto' | 'darken' | 'lighten'
+
 export interface GraphConfigInterface {
   /**
    * If set to `false`, the simulation will not run.
@@ -117,32 +122,40 @@ export interface GraphConfigInterface {
   pointSizeScale: number;
 
   /**
-   * Width, in CSS pixels, of a stroke drawn along the inside edge of every point in a
-   * shade of the point's own color (see `pointStrokeIntensity` and `pointStrokeMode`).
-   * The stroke is inset, so it never enlarges the point, and its width stays constant
-   * while zooming even with `scalePointsOnZoom`. A point whose on-screen diameter is
-   * smaller than the stroke width is drawn without a stroke. Points with an image get
-   * the stroke on the shape only, underneath the image. `0` disables the stroke.
+   * Default width, in CSS pixels, of the stroke drawn along the inside edge of a point: a thin
+   * band in a shade of the point's own color (see `pointDefaultStrokeColor`) that separates
+   * overlapping points. Used for every point that has no width of its own from
+   * `setPointStrokeWidths` (a `NaN` there means "use this default"). The stroke is inset, so it
+   * never enlarges the point, and its width stays constant while zooming even with
+   * `scalePointsOnZoom`. A point whose on-screen diameter is smaller than its stroke width is
+   * drawn without a stroke. Points with an image get the stroke on the shape only, underneath
+   * the image. `0` disables the stroke.
    * Default value: `0`
    */
-  pointStrokeWidth: number;
+  pointDefaultStrokeWidth: number;
 
   /**
-   * How far the stroke color is from the point's color, as a step in OKLab lightness
-   * (`L`, 0..1). The step is perceptual, so every hue gets an equally visible stroke: `0.1`
-   * reads as a clear outline, `0.05` as a hint. `0` makes the stroke invisible. Hue is
-   * preserved; chroma is reduced only where the shifted color would leave the sRGB gamut.
-   * Default value: `0.1`
-   */
-  pointStrokeIntensity: number;
-
-  /**
-   * Direction of the lightness step. `'darken'` and `'lighten'` apply to every point;
-   * `'auto'` decides per point from its own lightness, darkening light points and
-   * lightening dark ones, so the stroke always has room to differ from the fill.
+   * Default stroke color, used for every point that has no color of its own from
+   * `setPointStrokeColors` (a `NaN` channel there means "use this default"). Either a color —
+   * a hex string (e.g. `'#ffffff'`) or RGBA values in 0..1 — used as is, or a rule that derives
+   * the color from the point's own fill by a step of `pointStrokeContrast` in OKLab lightness:
+   * `'darken'` and `'lighten'` apply that direction to every point, `'auto'` decides per point
+   * from its own lightness (light points darken, dark points lighten) so the step always has
+   * room. Greyed-out points always get the derived shade of their greyed fill, so the stroke
+   * fades with the point.
    * Default value: `'auto'`
    */
-  pointStrokeMode: 'auto' | 'darken' | 'lighten';
+  pointDefaultStrokeColor: PointStrokeShade | string | [number, number, number, number];
+
+  /**
+   * Size of the OKLab lightness step (`L`, 0..1) between a point's fill and its derived stroke
+   * color. The step is perceptual, so every hue gets an equally visible stroke: `0.1` reads as
+   * a clear outline, `0.05` as a hint. Hue is preserved; chroma is reduced only where the
+   * shifted color would leave the sRGB gamut. Applies to the `'auto'`, `'darken'` and
+   * `'lighten'` rules of `pointDefaultStrokeColor`; explicit colors are used as given.
+   * Default value: `0.1`
+   */
+  pointStrokeContrast: number;
 
   /**
    * Depth-based occlusion culling: skips shading and blending of point

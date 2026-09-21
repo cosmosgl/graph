@@ -14,7 +14,6 @@ layout(std140) uniform drawFragmentUniforms {
   vec4 outlineColor;
   float outlineWidth;
   float renderMode;
-  float strokeWidth;
 } drawFragment;
 
 #define greyoutOpacity drawFragment.greyoutOpacity
@@ -24,7 +23,6 @@ layout(std140) uniform drawFragmentUniforms {
 #define outlineColor drawFragment.outlineColor
 #define outlineWidth drawFragment.outlineWidth
 #define renderMode drawFragment.renderMode
-#define strokeWidth drawFragment.strokeWidth
 #else
 uniform float greyoutOpacity;
 uniform float pointOpacity;
@@ -33,7 +31,6 @@ uniform vec4 backgroundColor;
 uniform vec4 outlineColor;
 uniform float outlineWidth;
 uniform float renderMode;
-uniform float strokeWidth;
 #endif
 
 
@@ -45,7 +42,8 @@ in vec4 imageAtlasUV;
 in float shapeSize;
 in float imageSizeVarying;
 in float overallSize;
-in vec3 strokeColor;
+in vec4 strokeColor;
+in float strokeWidthPx;
 
 out vec4 fragColor;
 
@@ -250,15 +248,15 @@ void main() {
         float opacity = 1.0 - smoothstep(-halfRampPx, halfRampPx, edgeDistancePx);
         opacity *= smallAlpha * shapeColor.a;
 
-        // Edge stroke: an inset band [-strokeWidth, 0] px along the edge in the per-point stroke
-        // color (a lightness step from the fill, computed in the vertex stage). Inset, so the
-        // point never grows and the sprite needs no room for it. A shape narrower than the
-        // stroke would be nothing but stroke, so it gets none.
+        // Edge stroke: an inset band [-strokeWidthPx, 0] along the edge in the per-point stroke
+        // color (resolved in the vertex stage: explicit, or a lightness step from the fill).
+        // Inset, so the point never grows and the sprite needs no room for it. A shape narrower
+        // than its stroke would be nothing but stroke, so it gets none.
         vec3 shapeRgb = shapeColor.rgb;
-        if (strokeWidth > 0.0 && shapeDiameterPx >= strokeWidth) {
-            float bandDistancePx = abs(edgeDistancePx + strokeWidth * 0.5) - strokeWidth * 0.5;
+        if (strokeWidthPx > 0.0 && shapeDiameterPx >= strokeWidthPx) {
+            float bandDistancePx = abs(edgeDistancePx + strokeWidthPx * 0.5) - strokeWidthPx * 0.5;
             float stroke = 1.0 - smoothstep(-halfRampPx, halfRampPx, bandDistancePx);
-            shapeRgb = mix(shapeRgb, strokeColor, stroke);
+            shapeRgb = mix(shapeRgb, strokeColor.rgb, stroke * strokeColor.a);
         }
 
         finalShapeColor = vec4(shapeRgb, opacity);

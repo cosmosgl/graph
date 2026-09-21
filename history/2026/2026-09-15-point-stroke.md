@@ -17,13 +17,31 @@ untouched.
 
 ## What changed
 
-Three config keys, all in `GraphConfigInterface` / `defaultConfigValues`:
+Three config keys, all in `GraphConfigInterface` / `defaultConfigValues`, and two per-point
+setters that follow the `pointDefaultColor` / `setPointColors` pattern:
 
 ```ts
-pointStrokeWidth: 0.5,        // CSS px; 0 (the default) disables the stroke
-pointStrokeIntensity: 0.1,    // step in OKLab lightness (L, 0..1) from the fill color
-pointStrokeMode: 'auto',      // 'auto' | 'darken' | 'lighten'
+pointDefaultStrokeWidth: 0.5,     // CSS px; 0 (the default) disables the stroke
+pointDefaultStrokeColor: 'auto',  // 'auto' | 'darken' | 'lighten' | a color
+pointStrokeContrast: 0.1,         // OKLab lightness step for the derived rules
+
+graph.setPointStrokeColors(Float32Array)  // RGBA per point; NaN = use the default rule
+graph.setPointStrokeWidths(Float32Array)  // CSS px per point; NaN = use the default width
 ```
+
+The keys are named as *defaults* because they are: like every per-point channel, the stroke
+is a flat typed array aligned to the point index space with a config default behind it, and
+a `NaN` entry resolves to that default at read time (the repo's existing rule for colors and
+sizes). So a handful of points can carry an explicit stroke color or width while the rest
+stay on the derived shade, in one array. "Stroke" is kept as the name because it is the term
+SVG, Canvas and d3 use for this band; the earlier `pointStrokeMode` / `pointStrokeIntensity`
+read as if the color were fixed by the engine, which `pointDefaultStrokeColor` taking a real
+color puts right.
+
+Per-point channels ride the existing transitions: stroke colors join `PointColors`, widths
+join `PointSizes`, each with a source/target buffer pair. A greyed-out point always gets the
+derived shade of its greyed fill, explicit color or not, so the stroke fades with the point
+instead of staying a bright rim.
 
 ### Stroke color: a perceptual lightness step, per point
 
@@ -38,13 +56,13 @@ The stroke color is now computed in **OKLab** (`src/modules/Shared/oklab-module.
 `ShaderModule` in the same style as `conicParametricCurveModule`, attached to both point
 Models via `modules`):
 
-- `pointStrokeIntensity` is a step in OKLab `L`. OKLab is perceptually uniform in `L`, so the
+- `pointStrokeContrast` is a step in OKLab `L`. OKLab is perceptually uniform in `L`, so the
   same step reads as the same contrast on every hue.
 - `'auto'` chooses the direction **per point** from the point's own lightness (threshold
   `L = 0.6`, roughly sRGB mid-grey): light points darken, dark points lighten, so the step
-  always has room. `'darken'` / `'lighten'` force one direction for all points. The
-  background no longer plays a role — the stroke is inset and its job is to separate a point
-  from its neighbours, not from the canvas.
+  always has room. `'darken'` / `'lighten'` force one direction for all points; a color is
+  used as is. The background plays no role — the stroke is inset and its job is to separate
+  a point from its neighbours, not from the canvas.
 - Hue is preserved: after the shift the color is mapped back into sRGB by scaling chroma
   down (8-step bisection) only when it would leave the gamut, instead of clamping channels.
 - It runs in the **vertex** shader on the greyed color and reaches the fragment as a
@@ -89,8 +107,9 @@ width 0.75 px and a lightness step of 0.1 with `'auto'` shade. Two layouts, swit
   discs stay legible. `scalePointsOnZoom` is on here, so zooming in shows the stroke width
   holding steady while the discs grow.
 
-Sliders for width and intensity, a shade-mode selector, and a light/dark background toggle
-show `'auto'` flipping direction.
+Sliders for the default width and contrast, a default-color rule selector, a light/dark
+background toggle, and a **per-point overrides** checkbox that strokes one group white and
+gives another a 2 px stroke through the two setters while the rest stay on the defaults.
 
 ## Notes
 

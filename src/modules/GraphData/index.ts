@@ -25,6 +25,10 @@ export class GraphData {
   public inputPointPositions: Float32Array | undefined
   public inputPointColors: Float32Array | undefined
   public inputPointSizes: Float32Array | undefined
+  /** Raw per-point stroke colors from `setPointStrokeColors` (RGBA, `NaN` = use the default rule). */
+  public inputPointStrokeColors: Float32Array | undefined
+  /** Raw per-point stroke widths from `setPointStrokeWidths` (CSS px, `NaN` = use `pointDefaultStrokeWidth`). */
+  public inputPointStrokeWidths: Float32Array | undefined
   public inputPointShapes: Float32Array | undefined
   public inputImageData: ImageData[] | undefined
   public inputPointImageIndices: Float32Array | undefined
@@ -54,6 +58,8 @@ export class GraphData {
   public targetPointsNumber = 0
   public pointColors: Float32Array | undefined
   public pointSizes: Float32Array | undefined
+  public pointStrokeColors: Float32Array | undefined
+  public pointStrokeWidths: Float32Array | undefined
   public pointShapes: Float32Array | undefined
   public pointImageIndices: Float32Array | undefined
   public pointImageSizes: Float32Array | undefined
@@ -191,6 +197,39 @@ export class GraphData {
     if (isNumber(raw)) return raw as number
     if (this.pointPositions && isPointAbsent(this.pointPositions, index)) return EXIT_DEFAULT_SIZE
     return this._config.pointDefaultSize
+  }
+
+  /**
+   * Per-point stroke colors. Like colors: no resolution here — the draw shader treats a
+   * `NaN` channel as "use the `pointDefaultStrokeColor` rule", and a missing or mismatched
+   * input becomes an all-NaN array.
+   */
+  public updatePointStrokeColor (): void {
+    if (this.pointsNumber === undefined) {
+      this.pointStrokeColors = undefined
+      return
+    }
+    if (this.inputPointStrokeColors === undefined || this.inputPointStrokeColors.length / 4 !== this.pointsNumber) {
+      this.pointStrokeColors = new Float32Array(this.pointsNumber * 4).fill(NaN)
+    } else {
+      this.pointStrokeColors = this.inputPointStrokeColors
+    }
+  }
+
+  /**
+   * Per-point stroke widths. Like sizes: no resolution here — the draw shader treats `NaN`
+   * as "use `pointDefaultStrokeWidth`", and a missing or mismatched input becomes all-NaN.
+   */
+  public updatePointStrokeWidth (): void {
+    if (this.pointsNumber === undefined) {
+      this.pointStrokeWidths = undefined
+      return
+    }
+    if (this.inputPointStrokeWidths === undefined || this.inputPointStrokeWidths.length !== this.pointsNumber) {
+      this.pointStrokeWidths = new Float32Array(this.pointsNumber).fill(NaN)
+    } else {
+      this.pointStrokeWidths = this.inputPointStrokeWidths
+    }
   }
 
   /**
@@ -466,6 +505,8 @@ export class GraphData {
     this.updatePoints()
     this.updatePointColor()
     this.updatePointSize()
+    this.updatePointStrokeColor()
+    this.updatePointStrokeWidth()
     this.updatePointShape()
     this.updatePointImageIndices()
     this.updatePointImageSizes()

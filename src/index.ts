@@ -139,6 +139,8 @@ export class Graph {
   private isPointPositionsUpdateNeeded = false
   private isPointColorUpdateNeeded = false
   private isPointSizeUpdateNeeded = false
+  private isPointStrokeColorUpdateNeeded = false
+  private isPointStrokeWidthUpdateNeeded = false
   private isPointShapeUpdateNeeded = false
   private isPointImageIndicesUpdateNeeded = false
   private isLinksUpdateNeeded = false
@@ -437,6 +439,7 @@ export class Graph {
       }
       this.store.setGreyoutPointColor(this.config.pointGreyoutColor)
       this.store.setOutlinedPointRingColor(this.config.outlinedPointRingColor)
+      this.store.setPointDefaultStrokeColor(this.config.pointDefaultStrokeColor)
       this.store.setHighlightedPointSet(this.config.highlightedPointIndices)
       this.store.setOutlinedPointSet(this.config.outlinedPointIndices)
       this.store.setHoveredLinkColor(this.config.hoveredLinkColor)
@@ -565,6 +568,8 @@ export class Graph {
     // Point related textures depend on point positions length, so we need to update them
     this.isPointColorUpdateNeeded = true
     this.isPointSizeUpdateNeeded = true
+    this.isPointStrokeColorUpdateNeeded = true
+    this.isPointStrokeWidthUpdateNeeded = true
     this.isPointShapeUpdateNeeded = true
     this.isPointImageIndicesUpdateNeeded = true
     this.isPointImageSizesUpdateNeeded = true
@@ -632,6 +637,42 @@ export class Graph {
     this.isPointSizeUpdateNeeded = true
     // Image sizes default to a copy of point sizes, so they follow this change.
     this.isPointImageSizesUpdateNeeded = true
+    this.transition.queue(TransitionProperty.PointSizes)
+  }
+
+  /**
+   * Sets per-point stroke colors — the thin band along the inside edge of each point
+   * (see `pointDefaultStrokeWidth`).
+   *
+   * @param {Float32Array} pointStrokeColors - RGBA per point in 0..1, `[r1, g1, b1, a1, r2, g2, b2, a2, ...]`,
+   * aligned to the point index space. A `NaN` channel means "use `pointDefaultStrokeColor`" for that
+   * point — so a few points can carry an explicit color while the rest keep the derived shade.
+   * Greyed-out points always get the derived shade of their greyed fill.
+   * Example: `new Float32Array([1, 1, 1, 1, NaN, NaN, NaN, NaN])` strokes the first point white and leaves the second on the default.
+   * On the next `render()` the change animates together with point colors.
+   */
+  public setPointStrokeColors (pointStrokeColors: Float32Array): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointStrokeColors(pointStrokeColors))) return
+    this.graph.inputPointStrokeColors = pointStrokeColors
+    this.isPointStrokeColorUpdateNeeded = true
+    this.transition.queue(TransitionProperty.PointColors)
+  }
+
+  /**
+   * Sets per-point stroke widths, in CSS pixels.
+   *
+   * @param {Float32Array} pointStrokeWidths - One width per point, `[w1, w2, ...]`, aligned to the point index space.
+   * A `NaN` means "use `pointDefaultStrokeWidth`" for that point; `0` draws no stroke. A point whose on-screen
+   * diameter is smaller than its stroke width is drawn without a stroke.
+   * Example: `new Float32Array([2, NaN, 0])` gives the first point a 2 px stroke, keeps the default on the second, and none on the third.
+   * On the next `render()` the change animates together with point sizes.
+   */
+  public setPointStrokeWidths (pointStrokeWidths: Float32Array): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointStrokeWidths(pointStrokeWidths))) return
+    this.graph.inputPointStrokeWidths = pointStrokeWidths
+    this.isPointStrokeWidthUpdateNeeded = true
     this.transition.queue(TransitionProperty.PointSizes)
   }
 
@@ -1653,6 +1694,8 @@ export class Graph {
     }
     if (this.isPointColorUpdateNeeded) this.points.updateColor()
     if (this.isPointSizeUpdateNeeded) this.points.updateSize()
+    if (this.isPointStrokeColorUpdateNeeded) this.points.updateStrokeColor()
+    if (this.isPointStrokeWidthUpdateNeeded) this.points.updateStrokeWidth()
     if (this.isPointShapeUpdateNeeded) this.points.updateShape()
     if (this.isPointImageIndicesUpdateNeeded) this.points.updateImageIndices()
     if (this.isPointImageSizesUpdateNeeded) this.points.updateImageSizes()
@@ -1678,6 +1721,8 @@ export class Graph {
     this.isPointPositionsUpdateNeeded = false
     this.isPointColorUpdateNeeded = false
     this.isPointSizeUpdateNeeded = false
+    this.isPointStrokeColorUpdateNeeded = false
+    this.isPointStrokeWidthUpdateNeeded = false
     this.isPointShapeUpdateNeeded = false
     this.isPointImageIndicesUpdateNeeded = false
     this.isPointImageSizesUpdateNeeded = false
@@ -1815,6 +1860,9 @@ export class Graph {
     }
     if (prevConfig.outlinedPointRingColor !== this.config.outlinedPointRingColor) {
       this.store.setOutlinedPointRingColor(this.config.outlinedPointRingColor)
+    }
+    if (prevConfig.pointDefaultStrokeColor !== this.config.pointDefaultStrokeColor) {
+      this.store.setPointDefaultStrokeColor(this.config.pointDefaultStrokeColor)
     }
     if (prevConfig.highlightedPointIndices !== this.config.highlightedPointIndices) {
       this.store.setHighlightedPointSet(this.config.highlightedPointIndices)

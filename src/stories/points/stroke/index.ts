@@ -1,13 +1,14 @@
-import { Graph, PointShape, type GraphConfig } from '@cosmos.gl/graph'
+import { Graph, PointShape } from '@cosmos.gl/graph'
 
-type StrokeMode = GraphConfig['pointStrokeMode']
+type StrokeShade = 'auto' | 'darken' | 'lighten'
 type Layout = 'grid' | 'clusters'
 
 interface ControlHandlers {
   onLayoutChange: (layout: Layout) => void;
   onWidthChange: (width: number) => void;
-  onIntensityChange: (intensity: number) => void;
-  onModeChange: (mode: StrokeMode) => void;
+  onContrastChange: (contrast: number) => void;
+  onShadeChange: (shade: StrokeShade) => void;
+  onOverridesChange: (on: boolean) => void;
   onBackgroundChange: (dark: boolean) => void;
 }
 
@@ -17,6 +18,26 @@ interface PointData {
   sizes: Float32Array;
   shapes: Float32Array;
   clusters?: number[];
+  /** Point group per index (grid: shape row, clusters: cluster) — drives the per-point overrides. */
+  groups: Uint8Array;
+}
+
+/**
+ * Per-point stroke overrides on top of the defaults: one group gets an explicit white stroke,
+ * another a 2 px stroke; every other entry is NaN, which means "use the default", so the two
+ * channels compose with whatever the panel sets for the rest.
+ */
+function buildStrokeOverrides (groups: Uint8Array, on: boolean): { colors: Float32Array; widths: Float32Array } {
+  const count = groups.length
+  const colors = new Float32Array(count * 4).fill(NaN)
+  const widths = new Float32Array(count).fill(NaN)
+  if (on) {
+    for (let i = 0; i < count; i++) {
+      if (groups[i] === 0) colors.set([1, 1, 1, 1], i * 4)
+      if (groups[i] === 1) widths[i] = 2
+    }
+  }
+  return { colors, widths }
 }
 
 const DARK_BACKGROUND = '#2d313a'
@@ -24,7 +45,7 @@ const LIGHT_BACKGROUND = '#f4f4f6'
 const SPACE_SIZE = 4096
 
 const STROKE_WIDTH = 0.75
-const STROKE_INTENSITY = 0.1
+const STROKE_CONTRAST = 0.1
 
 // fitView's scale is proportional to (1 - 2 * padding): the default 0.1 fills 80% of the
 // viewport, so -0.4 fills 160% — twice as close, still centred. The piles are the subject of
@@ -64,6 +85,7 @@ function buildGridData (): PointData {
   const colors = new Float32Array(count * 4)
   const sizes = new Float32Array(count)
   const shapes = new Float32Array(count)
+  const groups = new Uint8Array(count)
 
   const margin = SPACE_SIZE * 0.06
   const cellX = (SPACE_SIZE - 2 * margin) / (columns - 1)
@@ -78,8 +100,9 @@ function buildGridData (): PointData {
     const t = column / (columns - 1)
     sizes[i] = 0.5 + 28 * t * t
     shapes[i] = (row % 8) as PointShape
+    groups[i] = row % 8
   }
-  return { positions, colors, sizes, shapes }
+  return { positions, colors, sizes, shapes, groups }
 }
 
 /**
@@ -96,6 +119,7 @@ function buildClusterData (): PointData {
   const sizes = new Float32Array(count)
   const shapes = new Float32Array(count)
   const clusters = new Array<number>(count)
+  const groups = new Uint8Array(count)
 
   const ringRadius = SPACE_SIZE * 0.16
   const clumpRadius = SPACE_SIZE * 0.07
@@ -116,9 +140,10 @@ function buildClusterData (): PointData {
       sizes[i] = 2 + 14 * Math.random() ** 3
       shapes[i] = PointShape.Circle
       clusters[i] = c
+      groups[i] = c
     }
   }
-  return { positions, colors, sizes, shapes, clusters }
+  return { positions, colors, sizes, shapes, clusters, groups }
 }
 
 /** Builds the floating control panel (layout, stroke sliders, shade mode, background toggle). */
@@ -202,32 +227,39 @@ function buildControls (handlers: ControlHandlers): HTMLDivElement {
   radios<Layout>('point-stroke-layout', [['Size grid', 'grid'], ['Overlapping clusters', 'clusters']], 'grid', handlers.onLayoutChange)
 
   panel.appendChild(divider())
-  panel.appendChild(heading('Stroke'))
+  panel.appendChild(heading('Default stroke'))
   panel.appendChild(slider('Width (px)', 0, 3, 0.25, STROKE_WIDTH, v => v.toFixed(2), handlers.onWidthChange))
-  panel.appendChild(slider('Lightness step (OKLab ΔL)', 0, 0.4, 0.01, STROKE_INTENSITY, v => v.toFixed(2), handlers.onIntensityChange))
+  panel.appendChild(slider('Contrast (OKLab ΔL)', 0, 0.4, 0.01, STROKE_CONTRAST, v => v.toFixed(2), handlers.onContrastChange))
 
-  panel.appendChild(heading('Shade'))
-  radios<StrokeMode>('point-stroke-mode', [['Auto (per point lightness)', 'auto'], ['Darken', 'darken'], ['Lighten', 'lighten']], 'auto', handlers.onModeChange)
+  panel.appendChild(heading('Default color'))
+  const shades: [string, StrokeShade][] = [['Auto (per point lightness)', 'auto'], ['Darken', 'darken'], ['Lighten', 'lighten']]
+  radios<StrokeShade>('point-stroke-shade', shades, 'auto', handlers.onShadeChange)
 
   panel.appendChild(divider())
-  const background = document.createElement('label')
-  background.style.cssText = 'display: flex; align-items: center; gap: 8px; cursor: pointer;'
-  const backgroundInput = document.createElement('input')
-  backgroundInput.type = 'checkbox'
-  backgroundInput.checked = true
-  backgroundInput.addEventListener('change', () => handlers.onBackgroundChange(backgroundInput.checked))
-  background.append(backgroundInput, document.createTextNode('Dark background'))
-  panel.appendChild(background)
+  const checkbox = (label: string, initial: boolean, onChange: (on: boolean) => void): HTMLLabelElement => {
+    const row = document.createElement('label')
+    row.style.cssText = 'display: flex; align-items: center; gap: 8px; cursor: pointer;'
+    const input = document.createElement('input')
+    input.type = 'checkbox'
+    input.checked = initial
+    input.addEventListener('change', () => onChange(input.checked))
+    row.append(input, document.createTextNode(label))
+    return row
+  }
+  panel.appendChild(checkbox('Per-point overrides (white / 2 px)', false, handlers.onOverridesChange))
+  panel.appendChild(checkbox('Dark background', true, handlers.onBackgroundChange))
 
   return panel
 }
 
 /**
  * Per-point edge stroke: a thin band along the inside of every point, in a darker or
- * lighter shade of the point's own color. Two layouts: a static size grid, where the
- * sizes ramp shows the small-point cutoff and `scalePointsOnZoom` shows the width holding
- * steady while the points scale, and a simulated set of overlapping clusters, where the
- * stroke has to separate piled-up neighbours of the same color.
+ * lighter shade of the point's own color by default, or an explicit color and width per
+ * point. Two layouts: a static size grid, where the size ramp shows the small-point cutoff,
+ * and a simulated set of overlapping clusters, where the stroke has to separate piled-up
+ * neighbours of the same color. The overrides checkbox strokes one group white and gives
+ * another a 2 px stroke through `setPointStrokeColors` / `setPointStrokeWidths`, leaving the
+ * rest on the defaults.
  */
 export const pointStroke = (): { div: HTMLDivElement; graph: Graph } => {
   const div = document.createElement('div')
@@ -242,9 +274,9 @@ export const pointStroke = (): { div: HTMLDivElement; graph: Graph } => {
     rescalePositions: false,
     // The story frames the view itself (see `applyLayout`).
     fitViewOnInit: false,
-    pointStrokeWidth: STROKE_WIDTH,
-    pointStrokeIntensity: STROKE_INTENSITY,
-    pointStrokeMode: 'auto',
+    pointDefaultStrokeWidth: STROKE_WIDTH,
+    pointDefaultStrokeColor: 'auto',
+    pointStrokeContrast: STROKE_CONTRAST,
     renderHoveredPointRing: true,
     hoveredPointRingColor: '#ffffff',
     // Cluster layout forces: repulsion weak enough that points still overlap, cluster pull
@@ -258,15 +290,25 @@ export const pointStroke = (): { div: HTMLDivElement; graph: Graph } => {
     enableDrag: true,
   })
   let currentLayout: Layout = 'grid'
+  let currentGroups = new Uint8Array(0)
+  let overridesOn = false
+
+  const applyOverrides = (): void => {
+    const { colors, widths } = buildStrokeOverrides(currentGroups, overridesOn)
+    graph.setPointStrokeColors(colors)
+    graph.setPointStrokeWidths(widths)
+  }
 
   const applyLayout = (layout: Layout): void => {
     currentLayout = layout
     const data = layout === 'grid' ? buildGridData() : buildClusterData()
+    currentGroups = data.groups
     graph.setPointPositions(data.positions)
     graph.setPointColors(data.colors)
     graph.setPointSizes(data.sizes)
     graph.setPointShapes(data.shapes)
     graph.setPointClusters(data.clusters ?? [])
+    applyOverrides()
     // Snap: a new layout is a different dataset, not a transition of the old one.
     graph.render(undefined, 0)
     graph.setConfigPartial({
@@ -293,9 +335,14 @@ export const pointStroke = (): { div: HTMLDivElement; graph: Graph } => {
 
   div.appendChild(buildControls({
     onLayoutChange: applyLayout,
-    onWidthChange: width => graph.setConfigPartial({ pointStrokeWidth: width }),
-    onIntensityChange: intensity => graph.setConfigPartial({ pointStrokeIntensity: intensity }),
-    onModeChange: mode => graph.setConfigPartial({ pointStrokeMode: mode }),
+    onWidthChange: width => graph.setConfigPartial({ pointDefaultStrokeWidth: width }),
+    onContrastChange: contrast => graph.setConfigPartial({ pointStrokeContrast: contrast }),
+    onShadeChange: shade => graph.setConfigPartial({ pointDefaultStrokeColor: shade }),
+    onOverridesChange: on => {
+      overridesOn = on
+      applyOverrides()
+      graph.render()
+    },
     onBackgroundChange: dark => graph.setConfigPartial({ backgroundColor: dark ? DARK_BACKGROUND : LIGHT_BACKGROUND }),
   }))
 

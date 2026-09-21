@@ -11,6 +11,10 @@ in vec4 targetColor;
 in float shape;
 in float imageIndex;
 in float imageSize;
+in vec4 sourceStrokeColor;
+in vec4 targetStrokeColor;
+in float sourceStrokeWidth;
+in float targetStrokeWidth;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D pointStatus;
@@ -42,8 +46,10 @@ layout(std140) uniform drawVertexUniforms {
   vec4 pointDefaultColor;
   float pointDefaultSize;
   float pointsNumber;
-  float strokeLightnessStep;
-  float strokeDirection;
+  float strokeContrast;
+  float strokeDefaultShade;
+  float strokeDefaultWidth;
+  vec4 strokeDefaultColor;
 } drawVertex;
 
 #define ratio drawVertex.ratio
@@ -69,8 +75,10 @@ layout(std140) uniform drawVertexUniforms {
 #define pointDefaultColor drawVertex.pointDefaultColor
 #define pointDefaultSize drawVertex.pointDefaultSize
 #define pointsNumber drawVertex.pointsNumber
-#define strokeLightnessStep drawVertex.strokeLightnessStep
-#define strokeDirection drawVertex.strokeDirection
+#define strokeContrast drawVertex.strokeContrast
+#define strokeDefaultShade drawVertex.strokeDefaultShade
+#define strokeDefaultWidth drawVertex.strokeDefaultWidth
+#define strokeDefaultColor drawVertex.strokeDefaultColor
 #else
 uniform float ratio;
 uniform mat3 transformationMatrix;
@@ -95,8 +103,10 @@ uniform float animatePositions;
 uniform vec4 pointDefaultColor;
 uniform float pointDefaultSize;
 uniform float pointsNumber;
-uniform float strokeLightnessStep;
-uniform float strokeDirection;
+uniform float strokeContrast;
+uniform float strokeDefaultShade;
+uniform float strokeDefaultWidth;
+uniform vec4 strokeDefaultColor;
 #endif
 
 out float pointShape;
@@ -107,22 +117,40 @@ out vec4 imageAtlasUV;
 out float shapeSize;
 out float imageSizeVarying;
 out float overallSize;
-out vec3 strokeColor;
+out vec4 strokeColor;
+out float strokeWidthPx;
 
 // Points lighter than this OKLab lightness get a darker stroke in 'auto' mode, darker ones a
 // lighter stroke. 0.6 is roughly sRGB mid-grey, so saturated blues lighten and yellows darken.
 const float STROKE_AUTO_LIGHTNESS_THRESHOLD = 0.6;
 
-// Stroke color: a constant perceptual step in OKLab lightness from the point color (oklab
+// Derived stroke color: a constant perceptual step in OKLab lightness from the fill (oklab
 // module), chroma reduced only if the shifted color leaves the sRGB gamut so the hue survives.
-// Per point in the vertex stage: the color depends on nothing the fragment knows. Runs on the
-// greyed color so greyed points get a matching greyed stroke.
-vec3 computeStrokeColor(vec3 srgb) {
-  vec3 lab = srgbToOklab(srgb);
-  float direction = strokeDirection;
+// `direction` is -1 darken, 1 lighten, 0 decide from the fill's own lightness.
+vec3 shadeStrokeColor(vec3 fill, float direction) {
+  vec3 lab = srgbToOklab(fill);
   if (direction == 0.0) direction = lab.x > STROKE_AUTO_LIGHTNESS_THRESHOLD ? -1.0 : 1.0;
-  lab.x += direction * strokeLightnessStep;
+  lab.x += direction * strokeContrast;
   return oklabToSrgb(oklabClampChroma(lab));
+}
+
+// Per-point stroke color. An explicit per-point color (no NaN channel) wins; otherwise the
+// default: an explicit default color (shade 2), or a shade derived from the fill. A greyed-out
+// point always gets the derived shade of its greyed fill, so the stroke fades with the point
+// instead of staying a bright rim. Per point in the vertex stage: the color depends on nothing
+// the fragment knows.
+vec4 resolveStrokeColor(vec4 explicit, vec3 fill, float greyed) {
+  if (greyed <= 0.0) {
+    if (!any(isnan(explicit))) return explicit;
+    if (strokeDefaultShade > 1.5) return strokeDefaultColor;
+  }
+  float direction = strokeDefaultShade > 1.5 ? 0.0 : strokeDefaultShade;
+  return vec4(shadeStrokeColor(fill, direction), 1.0);
+}
+
+// Per-point stroke width in CSS px; NaN = the config default.
+float resolveStrokeWidth(float width) {
+  return isnan(width) ? strokeDefaultWidth : width;
 }
 
 // The size rule is the shared pointSize module, so drawing, picking and selection agree on it.
@@ -263,7 +291,15 @@ void main() {
     }
   }
 
-  strokeColor = computeStrokeColor(shapeColor.rgb);
+  // Stroke: explicit per-point channels ride the color and size transitions of the fill.
+  strokeColor = animateColors > 0.0
+    ? mix(resolveStrokeColor(sourceStrokeColor, shapeColor.rgb, isGreyedOut),
+          resolveStrokeColor(targetStrokeColor, shapeColor.rgb, isGreyedOut), transitionProgress)
+    : resolveStrokeColor(targetStrokeColor, shapeColor.rgb, isGreyedOut);
+  float strokeWidth = animateSizes > 0.0
+    ? mix(resolveStrokeWidth(sourceStrokeWidth), resolveStrokeWidth(targetStrokeWidth), transitionProgress)
+    : resolveStrokeWidth(targetStrokeWidth);
+  strokeWidthPx = max(strokeWidth, 0.0) * ratio;
 
   if (!hasImage) {
     imageAtlasUV = vec4(-1.0);
