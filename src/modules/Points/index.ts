@@ -83,6 +83,14 @@ const POINT_SHADER_DEFINES = {
   POINT_RING_SCALE: glslFloatLiteral(POINT_RING_SCALE),
 } as unknown as Record<string, boolean>
 
+/** Stroke defaults handed to the point vertex shader every frame (see `Points.getStrokeUniforms`). */
+interface StrokeUniforms {
+  strokeContrast: number;
+  strokeDefaultShade: number;
+  strokeDefaultWidth: number;
+  strokeDefaultColor: [number, number, number, number];
+}
+
 export class Points extends CoreModule implements PointTrackerHost {
   public transition: Transition | undefined
   public currentPositionFbo: Framebuffer | undefined
@@ -218,6 +226,12 @@ export class Points extends CoreModule implements PointTrackerHost {
   private previousColorData: Float32Array | undefined
   private sourceSizeBuffer: Buffer | undefined
   private targetSizeBuffer: Buffer | undefined
+  private sourceStrokeColorBuffer: Buffer | undefined
+  private targetStrokeColorBuffer: Buffer | undefined
+  private previousStrokeColorData: Float32Array | undefined
+  private sourceStrokeWidthBuffer: Buffer | undefined
+  private targetStrokeWidthBuffer: Buffer | undefined
+  private previousStrokeWidthData: Float32Array | undefined
   private previousSizeData: Float32Array | undefined
   /**
    * CPU copy of `sourceSizeBuffer`. The hover/focus ring is a single quad, so its
@@ -365,8 +379,10 @@ export class Points extends CoreModule implements PointTrackerHost {
       pointDefaultColor: [number, number, number, number];
       pointDefaultSize: number;
       pointsNumber: number;
-      strokeLightnessStep: number;
-      strokeDirection: number;
+      strokeContrast: number;
+      strokeDefaultShade: number;
+      strokeDefaultWidth: number;
+      strokeDefaultColor: [number, number, number, number];
     };
     drawFragmentUniforms: {
       greyoutOpacity: number;
@@ -376,7 +392,6 @@ export class Points extends CoreModule implements PointTrackerHost {
       outlineColor: [number, number, number, number];
       outlineWidth: number;
       renderMode: number;
-      strokeWidth: number;
       pickingAlpha: number;
       pickingIndexOffset: number;
     };
@@ -705,6 +720,8 @@ export class Points extends CoreModule implements PointTrackerHost {
     // Ensure buffers exist before Model creation (Model needs attributes at creation time)
     if (!this.targetColorBuffer) this.updateColor()
     if (!this.targetSizeBuffer) this.updateSize()
+    if (!this.targetStrokeColorBuffer) this.updateStrokeColor()
+    if (!this.targetStrokeWidthBuffer) this.updateStrokeWidth()
     if (!this.shapeBuffer) this.updateShape()
     if (!this.imageIndicesBuffer) this.updateImageIndices()
     if (!this.imageSizesBuffer) this.updateImageSizes()
@@ -783,8 +800,10 @@ export class Points extends CoreModule implements PointTrackerHost {
           pointDefaultColor: 'vec4<f32>',
           pointDefaultSize: 'f32',
           pointsNumber: 'f32',
-          strokeLightnessStep: 'f32',
-          strokeDirection: 'f32',
+          strokeContrast: 'f32',
+          strokeDefaultShade: 'f32',
+          strokeDefaultWidth: 'f32',
+          strokeDefaultColor: 'vec4<f32>',
         },
         defaultUniforms: {
           // Order MUST match uniformTypes and shader declaration
@@ -819,8 +838,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           pointDefaultColor: ensureVec4(getRgbaColor(config.pointDefaultColor), [0, 0, 0, 1]),
           pointDefaultSize: config.pointDefaultSize,
           pointsNumber: data.pointsNumber ?? 0,
-          strokeLightnessStep: this.getStrokeLightnessStep(),
-          strokeDirection: this.getStrokeDirection(),
+          ...this.getStrokeUniforms(),
         },
       },
       drawFragmentUniforms: {
@@ -832,7 +850,6 @@ export class Points extends CoreModule implements PointTrackerHost {
           outlineColor: 'vec4<f32>',
           outlineWidth: 'f32',
           renderMode: 'f32',
-          strokeWidth: 'f32',
           pickingAlpha: 'f32',
           pickingIndexOffset: 'f32',
         },
@@ -847,7 +864,6 @@ export class Points extends CoreModule implements PointTrackerHost {
           outlineColor: ensureVec4(store.outlinedPointRingColor, [1, 1, 1, 1]),
           outlineWidth: 0.9,
           renderMode: 0,
-          strokeWidth: this.getStrokeWidthInDevicePixels(),
         },
       },
     })
@@ -868,6 +884,10 @@ export class Points extends CoreModule implements PointTrackerHost {
         ...(this.shapeBuffer && { shape: this.shapeBuffer }),
         ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
         ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
+        ...(this.sourceStrokeColorBuffer && { sourceStrokeColor: this.sourceStrokeColorBuffer }),
+        ...(this.targetStrokeColorBuffer && { targetStrokeColor: this.targetStrokeColorBuffer }),
+        ...(this.sourceStrokeWidthBuffer && { sourceStrokeWidth: this.sourceStrokeWidthBuffer }),
+        ...(this.targetStrokeWidthBuffer && { targetStrokeWidth: this.targetStrokeWidthBuffer }),
         ...(this.renderRankBuffer && { renderRank: this.renderRankBuffer }),
       },
       bufferLayout: [
@@ -879,6 +899,10 @@ export class Points extends CoreModule implements PointTrackerHost {
         { name: 'shape', format: 'float32' },
         { name: 'imageIndex', format: 'float32' },
         { name: 'imageSize', format: 'float32' },
+        { name: 'sourceStrokeColor', format: 'float32x4' },
+        { name: 'targetStrokeColor', format: 'float32x4' },
+        { name: 'sourceStrokeWidth', format: 'float32' },
+        { name: 'targetStrokeWidth', format: 'float32' },
         { name: 'renderRank', format: 'float32' },
       ],
       defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
@@ -912,6 +936,10 @@ export class Points extends CoreModule implements PointTrackerHost {
         ...(this.shapeBuffer && { shape: this.shapeBuffer }),
         ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
         ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
+        ...(this.sourceStrokeColorBuffer && { sourceStrokeColor: this.sourceStrokeColorBuffer }),
+        ...(this.targetStrokeColorBuffer && { targetStrokeColor: this.targetStrokeColorBuffer }),
+        ...(this.sourceStrokeWidthBuffer && { sourceStrokeWidth: this.sourceStrokeWidthBuffer }),
+        ...(this.targetStrokeWidthBuffer && { targetStrokeWidth: this.targetStrokeWidthBuffer }),
         ...(this.renderRankBuffer && { renderRank: this.renderRankBuffer }),
       },
       bufferLayout: [
@@ -923,6 +951,10 @@ export class Points extends CoreModule implements PointTrackerHost {
         { name: 'shape', format: 'float32' },
         { name: 'imageIndex', format: 'float32' },
         { name: 'imageSize', format: 'float32' },
+        { name: 'sourceStrokeColor', format: 'float32x4' },
+        { name: 'targetStrokeColor', format: 'float32x4' },
+        { name: 'sourceStrokeWidth', format: 'float32' },
+        { name: 'targetStrokeWidth', format: 'float32' },
         { name: 'renderRank', format: 'float32' },
       ],
       defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
@@ -1557,6 +1589,58 @@ export class Points extends CoreModule implements PointTrackerHost {
     }
   }
 
+  public updateStrokeColor (): void {
+    const { store: { pointsTextureSize }, data } = this
+    if (!pointsTextureSize) return
+
+    // GraphData.updatePointStrokeColor() always populates pointStrokeColors before this runs
+    const colorData = data.pointStrokeColors as Float32Array
+    const { source, target, previous } = updateAttributeBuffers(
+      this.device,
+      colorData,
+      this.sourceStrokeColorBuffer,
+      this.targetStrokeColorBuffer,
+      this.previousStrokeColorData,
+      4
+    )
+    this.sourceStrokeColorBuffer = source
+    this.targetStrokeColorBuffer = target
+    this.previousStrokeColorData = previous
+
+    const attributes = {
+      ...(this.sourceStrokeColorBuffer && { sourceStrokeColor: this.sourceStrokeColorBuffer }),
+      ...(this.targetStrokeColorBuffer && { targetStrokeColor: this.targetStrokeColorBuffer }),
+    }
+    this.drawCommand?.setAttributes(attributes)
+    this.drawCoreCommand?.setAttributes(attributes)
+  }
+
+  public updateStrokeWidth (): void {
+    const { store: { pointsTextureSize }, data } = this
+    if (!pointsTextureSize) return
+
+    // GraphData.updatePointStrokeWidth() always populates pointStrokeWidths before this runs
+    const widthData = data.pointStrokeWidths as Float32Array
+    const { source, target, previous } = updateAttributeBuffers(
+      this.device,
+      widthData,
+      this.sourceStrokeWidthBuffer,
+      this.targetStrokeWidthBuffer,
+      this.previousStrokeWidthData,
+      1
+    )
+    this.sourceStrokeWidthBuffer = source
+    this.targetStrokeWidthBuffer = target
+    this.previousStrokeWidthData = previous
+
+    const attributes = {
+      ...(this.sourceStrokeWidthBuffer && { sourceStrokeWidth: this.sourceStrokeWidthBuffer }),
+      ...(this.targetStrokeWidthBuffer && { targetStrokeWidth: this.targetStrokeWidthBuffer }),
+    }
+    this.drawCommand?.setAttributes(attributes)
+    this.drawCoreCommand?.setAttributes(attributes)
+  }
+
   public updateShape (): void {
     const { device, data } = this
     if (data.pointsNumber === undefined || data.pointShapes === undefined) return
@@ -1974,6 +2058,8 @@ export class Points extends CoreModule implements PointTrackerHost {
     const { data, config, store } = this
     if (!this.targetColorBuffer) this.updateColor()
     if (!this.targetSizeBuffer) this.updateSize()
+    if (!this.targetStrokeColorBuffer) this.updateStrokeColor()
+    if (!this.targetStrokeWidthBuffer) this.updateStrokeWidth()
     if (!this.exitTexture) this.updateExit()
     if (!this.shapeBuffer) this.updateShape()
     if (!this.imageIndicesBuffer) this.updateImageIndices()
@@ -3297,23 +3383,20 @@ export class Points extends CoreModule implements PointTrackerHost {
    * Makes sure the GPU has current and previous position textures at the right size.
    * This method only allocates; `updatePositions()` is responsible for putting data in them.
    */
-  /** `pointStrokeWidth` is in CSS pixels; the shader compares it against `gl_PointSize`, which is in device pixels. */
-  private getStrokeWidthInDevicePixels (): number {
-    const { config } = this
-    return Math.max(0, config.pointStrokeWidth) * config.pixelRatio
-  }
-
-  /** `pointStrokeIntensity` is an OKLab lightness step; L spans 0..1, so a step beyond 1 is meaningless. */
-  private getStrokeLightnessStep (): number {
-    return Math.min(1, Math.max(0, this.config.pointStrokeIntensity))
-  }
-
-  /** Stroke direction for the vertex shader: -1 darken, +1 lighten, 0 = decide per point from its own lightness. */
-  private getStrokeDirection (): number {
-    switch (this.config.pointStrokeMode) {
-    case 'darken': return -1
-    case 'lighten': return 1
-    default: return 0
+  /**
+   * Stroke defaults for the vertex shader. `strokeDefaultShade` is the derivation direction
+   * (0 auto per point, -1 darken, 1 lighten) or 2 when `pointDefaultStrokeColor` is an explicit
+   * color, carried in `strokeDefaultColor` (parsed once per config change by the store). The
+   * default width stays in CSS px; the shader scales it by `ratio`.
+   */
+  private getStrokeUniforms (): StrokeUniforms {
+    const { config, store } = this
+    const explicit = store.pointDefaultStrokeRgba
+    return {
+      strokeContrast: Math.min(1, Math.max(0, config.pointStrokeContrast)),
+      strokeDefaultShade: explicit ? 2 : store.pointDefaultStrokeShade,
+      strokeDefaultWidth: Math.max(0, config.pointDefaultStrokeWidth),
+      strokeDefaultColor: explicit ?? [0, 0, 0, 1],
     }
   }
 
@@ -3620,8 +3703,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       pointDefaultColor: ensureVec4(data.defaultRgba, [0, 0, 0, 1]),
       pointDefaultSize: config.pointDefaultSize,
       pointsNumber: data.pointsNumber,
-      strokeLightnessStep: this.getStrokeLightnessStep(),
-      strokeDirection: this.getStrokeDirection(),
+      ...this.getStrokeUniforms(),
     }
     const fragment = {
       // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
@@ -3632,7 +3714,6 @@ export class Points extends CoreModule implements PointTrackerHost {
       outlineColor: ensureVec4(store.outlinedPointRingColor, [1, 1, 1, 1]),
       outlineWidth: 0.9,
       renderMode: 0,
-      strokeWidth: this.getStrokeWidthInDevicePixels(),
     }
     return { vertex, fragment }
   }
