@@ -3,12 +3,14 @@ import type { Meta } from '@storybook/html'
 import { createStory, Story } from '@/graph/stories/create-story'
 import { CosmosStoryProps } from './create-cosmos'
 import { allShapes } from './points/shapes'
+import { pointStroke } from './points/stroke'
 import { imageExample } from './points/images'
 import { pointRenderOrder } from './points/render-order'
 import { pointLabels } from './points/labels'
 import { moscowMetroStations } from './points/position-rescaling'
 
 import shapesStoryRaw from './points/shapes/index?raw'
+import strokeStoryRaw from './points/stroke/index?raw'
 import imagesStoryRaw from './points/images/index?raw'
 import renderOrderStoryRaw from './points/render-order/index?raw'
 import labelsStoryRaw from './points/labels/index?raw'
@@ -31,6 +33,17 @@ export const AllShapes: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: shapesStoryRaw },
+    ],
+  },
+}
+
+export const PointStroke: Story = {
+  ...createStory(pointStroke),
+  name: 'Point Stroke',
+  tags: ['interactive'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: strokeStoryRaw },
     ],
   },
 }
