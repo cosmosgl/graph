@@ -38,8 +38,11 @@ SVG, Canvas and d3 use for this band; the earlier `pointStrokeMode` / `pointStro
 read as if the color were fixed by the engine, which `pointDefaultStrokeColor` taking a real
 color puts right.
 
-Per-point channels ride the existing transitions: stroke colors join `PointColors`, widths
-join `PointSizes`, each with a source/target buffer pair. A greyed-out point always gets the
+Per-point channels animate through their own transition properties (`PointStrokeColors`,
+`PointStrokeWidths`), each with a source/target buffer pair. They deliberately do *not* ride
+`PointColors` / `PointSizes`: a channel's source buffer holds the values before that
+channel's last change, so starting the fill's transition from a stroke change replayed the
+fill's previous transition — surfaced as fills flashing old colors when the overrides toggled. A greyed-out point always gets the
 derived shade of its greyed fill, explicit color or not, so the stroke fades with the point
 instead of staying a bright rim.
 

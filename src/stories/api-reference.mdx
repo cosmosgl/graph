@@ -167,7 +167,7 @@ Sets per-point stroke colors — the thin band along the inside edge of each poi
 
 * **`pointStrokeColors`** (Float32Array): RGBA per point in 0..1, `[r1, g1, b1, a1, r2, g2, b2, a2, ...]`, aligned to the point index space. A `NaN` channel means "use `pointDefaultStrokeColor`" for that point, so a few points can carry an explicit color while the rest keep the derived shade. Greyed-out points always get the derived shade of their greyed fill.
 
-On the next `render()` the change animates together with point colors.
+On the next `render()` the change animates with `transitionDuration`, as point colors do.
 
 **Example:**
 ```javascript
@@ -182,7 +182,7 @@ Sets per-point stroke widths, in CSS pixels.
 
 * **`pointStrokeWidths`** (Float32Array): One width per point, `[w1, w2, ...]`, aligned to the point index space. A `NaN` means "use `pointDefaultStrokeWidth`" for that point; `0` draws no stroke. A point whose on-screen diameter is smaller than its stroke width is drawn without a stroke.
 
-On the next `render()` the change animates together with point sizes.
+On the next `render()` the change animates with `transitionDuration`, as point sizes do.
 
 **Example:**
 ```javascript

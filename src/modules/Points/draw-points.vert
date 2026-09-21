@@ -50,6 +50,8 @@ layout(std140) uniform drawVertexUniforms {
   float strokeDefaultShade;
   float strokeDefaultWidth;
   vec4 strokeDefaultColor;
+  float animateStrokeColors;
+  float animateStrokeWidths;
 } drawVertex;
 
 #define ratio drawVertex.ratio
@@ -79,6 +81,8 @@ layout(std140) uniform drawVertexUniforms {
 #define strokeDefaultShade drawVertex.strokeDefaultShade
 #define strokeDefaultWidth drawVertex.strokeDefaultWidth
 #define strokeDefaultColor drawVertex.strokeDefaultColor
+#define animateStrokeColors drawVertex.animateStrokeColors
+#define animateStrokeWidths drawVertex.animateStrokeWidths
 #else
 uniform float ratio;
 uniform mat3 transformationMatrix;
@@ -107,6 +111,8 @@ uniform float strokeContrast;
 uniform float strokeDefaultShade;
 uniform float strokeDefaultWidth;
 uniform vec4 strokeDefaultColor;
+uniform float animateStrokeColors;
+uniform float animateStrokeWidths;
 #endif
 
 out float pointShape;
@@ -291,12 +297,13 @@ void main() {
     }
   }
 
-  // Stroke: explicit per-point channels ride the color and size transitions of the fill.
-  strokeColor = animateColors > 0.0
+  // Stroke: the per-point channels have their own transition properties, so a stroke change
+  // never restarts the fill's transition (whose source buffer holds older colors) and vice versa.
+  strokeColor = animateStrokeColors > 0.0
     ? mix(resolveStrokeColor(sourceStrokeColor, shapeColor.rgb, isGreyedOut),
           resolveStrokeColor(targetStrokeColor, shapeColor.rgb, isGreyedOut), transitionProgress)
     : resolveStrokeColor(targetStrokeColor, shapeColor.rgb, isGreyedOut);
-  float strokeWidth = animateSizes > 0.0
+  float strokeWidth = animateStrokeWidths > 0.0
     ? mix(resolveStrokeWidth(sourceStrokeWidth), resolveStrokeWidth(targetStrokeWidth), transitionProgress)
     : resolveStrokeWidth(targetStrokeWidth);
   strokeWidthPx = max(strokeWidth, 0.0) * ratio;

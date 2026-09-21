@@ -649,14 +649,17 @@ export class Graph {
    * point — so a few points can carry an explicit color while the rest keep the derived shade.
    * Greyed-out points always get the derived shade of their greyed fill.
    * Example: `new Float32Array([1, 1, 1, 1, NaN, NaN, NaN, NaN])` strokes the first point white and leaves the second on the default.
-   * On the next `render()` the change animates together with point colors.
+   * On the next `render()` the change animates like point colors do (`transitionDuration`).
    */
   public setPointStrokeColors (pointStrokeColors: Float32Array): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setPointStrokeColors(pointStrokeColors))) return
     this.graph.inputPointStrokeColors = pointStrokeColors
     this.isPointStrokeColorUpdateNeeded = true
-    this.transition.queue(TransitionProperty.PointColors)
+    // Its own transition property: riding `PointColors` would start a fill transition
+    // from the fill's source buffer, which holds the colors before the *last fill change*,
+    // not the current ones — the fills would replay an old transition.
+    this.transition.queue(TransitionProperty.PointStrokeColors)
   }
 
   /**
@@ -666,14 +669,14 @@ export class Graph {
    * A `NaN` means "use `pointDefaultStrokeWidth`" for that point; `0` draws no stroke. A point whose on-screen
    * diameter is smaller than its stroke width is drawn without a stroke.
    * Example: `new Float32Array([2, NaN, 0])` gives the first point a 2 px stroke, keeps the default on the second, and none on the third.
-   * On the next `render()` the change animates together with point sizes.
+   * On the next `render()` the change animates like point sizes do (`transitionDuration`).
    */
   public setPointStrokeWidths (pointStrokeWidths: Float32Array): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setPointStrokeWidths(pointStrokeWidths))) return
     this.graph.inputPointStrokeWidths = pointStrokeWidths
     this.isPointStrokeWidthUpdateNeeded = true
-    this.transition.queue(TransitionProperty.PointSizes)
+    this.transition.queue(TransitionProperty.PointStrokeWidths) // see setPointStrokeColors
   }
 
   /**
@@ -2312,6 +2315,8 @@ export class Graph {
     const shouldInterpolatePositions = this.transition.isActiveFor(TransitionProperty.Positions)
     const shouldAnimatePointColors = this.transition.isActiveFor(TransitionProperty.PointColors)
     const shouldAnimatePointSizes = this.transition.isActiveFor(TransitionProperty.PointSizes)
+    const shouldAnimateStrokeColors = this.transition.isActiveFor(TransitionProperty.PointStrokeColors)
+    const shouldAnimateStrokeWidths = this.transition.isActiveFor(TransitionProperty.PointStrokeWidths)
     const shouldAnimateLinkColors = this.transition.isActiveFor(TransitionProperty.LinkColors)
     const shouldAnimateLinkWidths = this.transition.isActiveFor(TransitionProperty.LinkWidths)
     if (this.transition.isActive) {
@@ -2324,7 +2329,10 @@ export class Graph {
       }
     }
 
-    this.points?.setTransitionProgress(this.transition.progress, shouldAnimatePointColors, shouldAnimatePointSizes, shouldInterpolatePositions)
+    this.points?.setTransitionProgress(
+      this.transition.progress, shouldAnimatePointColors, shouldAnimatePointSizes, shouldInterpolatePositions,
+      shouldAnimateStrokeColors, shouldAnimateStrokeWidths
+    )
     this.lines?.setTransitionProgress(this.transition.progress, shouldAnimateLinkColors, shouldAnimateLinkWidths, shouldInterpolatePositions)
 
     if (!this.dragInstance.isActive) {
