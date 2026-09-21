@@ -42,6 +42,8 @@ layout(std140) uniform drawVertexUniforms {
   vec4 pointDefaultColor;
   float pointDefaultSize;
   float pointsNumber;
+  float strokeLightnessStep;
+  float strokeDirection;
 } drawVertex;
 
 #define ratio drawVertex.ratio
@@ -67,6 +69,8 @@ layout(std140) uniform drawVertexUniforms {
 #define pointDefaultColor drawVertex.pointDefaultColor
 #define pointDefaultSize drawVertex.pointDefaultSize
 #define pointsNumber drawVertex.pointsNumber
+#define strokeLightnessStep drawVertex.strokeLightnessStep
+#define strokeDirection drawVertex.strokeDirection
 #else
 uniform float ratio;
 uniform mat3 transformationMatrix;
@@ -91,6 +95,8 @@ uniform float animatePositions;
 uniform vec4 pointDefaultColor;
 uniform float pointDefaultSize;
 uniform float pointsNumber;
+uniform float strokeLightnessStep;
+uniform float strokeDirection;
 #endif
 
 out float pointShape;
@@ -101,6 +107,23 @@ out vec4 imageAtlasUV;
 out float shapeSize;
 out float imageSizeVarying;
 out float overallSize;
+out vec3 strokeColor;
+
+// Points lighter than this OKLab lightness get a darker stroke in 'auto' mode, darker ones a
+// lighter stroke. 0.6 is roughly sRGB mid-grey, so saturated blues lighten and yellows darken.
+const float STROKE_AUTO_LIGHTNESS_THRESHOLD = 0.6;
+
+// Stroke color: a constant perceptual step in OKLab lightness from the point color (oklab
+// module), chroma reduced only if the shifted color leaves the sRGB gamut so the hue survives.
+// Per point in the vertex stage: the color depends on nothing the fragment knows. Runs on the
+// greyed color so greyed points get a matching greyed stroke.
+vec3 computeStrokeColor(vec3 srgb) {
+  vec3 lab = srgbToOklab(srgb);
+  float direction = strokeDirection;
+  if (direction == 0.0) direction = lab.x > STROKE_AUTO_LIGHTNESS_THRESHOLD ? -1.0 : 1.0;
+  lab.x += direction * strokeLightnessStep;
+  return oklabToSrgb(oklabClampChroma(lab));
+}
 
 // The size rule is the shared pointSize module, so drawing, picking and selection agree on it.
 float calculatePointSize(float size) {
@@ -239,6 +262,8 @@ void main() {
       }
     }
   }
+
+  strokeColor = computeStrokeColor(shapeColor.rgb);
 
   if (!hasImage) {
     imageAtlasUV = vec4(-1.0);
