@@ -331,6 +331,8 @@ export class Points extends CoreModule implements PointTrackerHost {
   private transitionProgress = 1
   private shouldAnimatePointColors = false
   private shouldAnimatePointSizes = false
+  private shouldAnimateStrokeColors = false
+  private shouldAnimateStrokeWidths = false
   private shouldAnimatePointPositions = false
 
   // Uniform stores for scalar uniforms
@@ -383,6 +385,8 @@ export class Points extends CoreModule implements PointTrackerHost {
       strokeDefaultShade: number;
       strokeDefaultWidth: number;
       strokeDefaultColor: [number, number, number, number];
+      animateStrokeColors: number;
+      animateStrokeWidths: number;
     };
     drawFragmentUniforms: {
       greyoutOpacity: number;
@@ -804,6 +808,8 @@ export class Points extends CoreModule implements PointTrackerHost {
           strokeDefaultShade: 'f32',
           strokeDefaultWidth: 'f32',
           strokeDefaultColor: 'vec4<f32>',
+          animateStrokeColors: 'f32',
+          animateStrokeWidths: 'f32',
         },
         defaultUniforms: {
           // Order MUST match uniformTypes and shader declaration
@@ -839,6 +845,8 @@ export class Points extends CoreModule implements PointTrackerHost {
           pointDefaultSize: config.pointDefaultSize,
           pointsNumber: data.pointsNumber ?? 0,
           ...this.getStrokeUniforms(),
+          animateStrokeColors: 0,
+          animateStrokeWidths: 0,
         },
       },
       drawFragmentUniforms: {
@@ -1974,10 +1982,15 @@ export class Points extends CoreModule implements PointTrackerHost {
     return from + (size - from) * progress
   }
 
-  public setTransitionProgress (progress: number, animateColors = false, animateSizes = false, animatePositions = false): void {
+  public setTransitionProgress (
+    progress: number, animateColors = false, animateSizes = false, animatePositions = false,
+    animateStrokeColors = false, animateStrokeWidths = false
+  ): void {
     this.transitionProgress = progress
     this.shouldAnimatePointColors = animateColors
     this.shouldAnimatePointSizes = animateSizes
+    this.shouldAnimateStrokeColors = animateStrokeColors
+    this.shouldAnimateStrokeWidths = animateStrokeWidths
     this.shouldAnimatePointPositions = animatePositions
   }
 
@@ -3704,6 +3717,8 @@ export class Points extends CoreModule implements PointTrackerHost {
       pointDefaultSize: config.pointDefaultSize,
       pointsNumber: data.pointsNumber,
       ...this.getStrokeUniforms(),
+      animateStrokeColors: this.shouldAnimateStrokeColors ? 1 : 0,
+      animateStrokeWidths: this.shouldAnimateStrokeWidths ? 1 : 0,
     }
     const fragment = {
       // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
