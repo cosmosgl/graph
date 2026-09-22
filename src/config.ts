@@ -221,6 +221,9 @@ export interface GraphConfigInterface {
    * Array of point indices to draw an outline ring around. The outline ring is a circle
    * rendered around the point regardless of the point's shape. When a point is both
    * outlined and greyed out (not highlighted), the ring color is dimmed to match.
+   * This is a selection mark drawn *outside* the body in one uniform color; for an edge color
+   * every point carries, in its own shade or a per-point color, see `pointDefaultStrokeColor`
+   * and `setPointStrokeColors`.
    * Default value: `undefined`
    */
   outlinedPointIndices?: number[];
