@@ -320,6 +320,14 @@ This method retrieves the current widths of the graph links that were previously
 
 The returned array contains the processed link widths used for rendering, including any default values that were applied during processing.
 
+### <a name="get_link_width_by_index" href="#get_link_width_by_index">#</a> graph.<b>getLinkWidthByIndex</b>(<i>index</i>)
+
+This method retrieves the width of the link at <i>index</i> as it is drawn. While link widths transition after `setLinkWidths`, the value moves with the animation; otherwise it is the width `getLinkWidths` holds.
+
+* **`index`** (Number): The index of the link.
+
+**Returns:** The link's width, or `undefined` for an index outside the links.
+
 ### <a name="set_link_arrows" href="#set_link_arrows">#</a> graph.<b>setLinkArrows</b>(<i>linkArrows</i>)
 
 This method sets the arrows for the graph links.
@@ -578,7 +586,7 @@ This method is used to convert a <i>radius</i> value from the space coordinate s
 
 ### <a name="get_point_radius_by_index" href="#get_point_radius_by_index">#</a> graph.<b>getPointRadiusByIndex</b>(<i>index</i>)
 
-This method retrieves the radius of a point in the graph identified by its <i>index</i>.
+This method retrieves the radius of a point in the graph identified by its <i>index</i>, as it is drawn: while point sizes transition after `setPointSizes`, the value moves with the animation.
 
 * **`index`** (Number): The index of the point for which the radius is to be retrieved.
 

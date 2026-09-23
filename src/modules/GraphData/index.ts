@@ -294,11 +294,12 @@ export class GraphData {
    * The sprite's footprint: the resolved point size, or the image size when the
    * point draws an image and that is larger — the draw shader's `max(shape, image)`
    * for consumers outside the GPU (the rect-selection texture, `getPointRadiusByIndex`).
-   * The ring shader applies the same rule on the GPU, to the mixed size.
+   * The ring shader applies the same rule on the GPU, to the mixed size; a caller
+   * mid-transition passes that mixed size as `shapeSize`.
    */
-  public getResolvedPointFootprint (index: number): number {
+  public getResolvedPointFootprint (index: number, shapeSize?: number): number {
     const imageSize = this.pointDrawsImage(index) ? this.pointImageSizes?.[index] : undefined
-    return Math.max(this.getResolvedPointSize(index), imageSize ?? 0)
+    return Math.max(shapeSize ?? this.getResolvedPointSize(index), imageSize ?? 0)
   }
 
   /**

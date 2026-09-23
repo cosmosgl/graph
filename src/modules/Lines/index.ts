@@ -61,6 +61,8 @@ export class Lines extends CoreModule {
   private sourceWidthBuffer: Buffer | undefined
   private targetWidthBuffer: Buffer | undefined
   private previousWidthData: Float32Array | undefined
+  /** CPU copy of `sourceWidthBuffer`, for `getAnimatedWidth`. */
+  private sourceWidthData: Float32Array | undefined
   private arrowBuffer: Buffer | undefined
   private linkStyleBuffer: Buffer | undefined
   private curveLineGeometry: number[][] | undefined
@@ -601,7 +603,7 @@ export class Lines extends CoreModule {
     // Link widths define the pickable footprints
     this.isLinkIndexBufferStale = true
     const widthData = data.linkWidths ?? new Float32Array(linksNumber).fill(0)
-    const { source, target, previous } = updateAttributeBuffers(
+    const { source, target, previous, sourceData } = updateAttributeBuffers(
       this.device,
       widthData,
       this.sourceWidthBuffer,
@@ -612,6 +614,7 @@ export class Lines extends CoreModule {
     this.sourceWidthBuffer = source
     this.targetWidthBuffer = target
     this.previousWidthData = previous
+    this.sourceWidthData = sourceData
 
     this.setDrawCurveCommandAttributes({
       ...(this.sourceWidthBuffer && { sourceWidth: this.sourceWidthBuffer }),
@@ -1007,6 +1010,17 @@ export class Lines extends CoreModule {
     return resolvePickedLinkIndex(pixels) ?? null
   }
 
+  /**
+   * A link's width as `draw-curve-line.vert` mixes it at `progress` of a width
+   * transition, for consumers outside the GPU (`getLinkWidthByIndex`). Widths are
+   * default-filled on ingest, so the target needs no resolve.
+   */
+  public getAnimatedWidth (index: number, progress: number): number {
+    const width = this.data.linkWidths?.[index] ?? this.config.linkDefaultWidth
+    const source = this.sourceWidthData?.[index]
+    return source === undefined ? width : source + (width - source) * progress
+  }
+
   public setTransitionProgress (progress: number, animateColors = false, animateWidths = false, animatePositions = false): void {
     // An animating transition changes the rasterized links each frame: widths
     // and positions move the footprints, and color alpha gates pickability
@@ -1089,6 +1103,7 @@ export class Lines extends CoreModule {
     }
     this.targetWidthBuffer = undefined
     this.previousWidthData = undefined
+    this.sourceWidthData = undefined
     if (this.arrowBuffer && !this.arrowBuffer.destroyed) {
       this.arrowBuffer.destroy()
     }

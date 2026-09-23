@@ -804,6 +804,21 @@ export class Graph {
   }
 
   /**
+   * Gets a link's width by its index, as drawn: while link widths transition, it moves with them.
+   *
+   * @param {number} index - The index of the link.
+   * @returns {number | undefined} The width, or `undefined` for an index outside the links.
+   */
+  public getLinkWidthByIndex (index: number): number | undefined {
+    if (this._isDestroyed) return undefined
+    const width = this.graph.linkWidths?.[index]
+    if (width === undefined) return undefined
+    return this.lines && this.transition.isActiveFor(TransitionProperty.LinkWidths)
+      ? this.lines.getAnimatedWidth(index, this.transition.progress)
+      : width
+  }
+
+  /**
    * Sets the arrows for the graph links.
    *
    * @param {boolean[]} linkArrows - An array of booleans indicating whether each link should have an arrow,
@@ -1338,8 +1353,8 @@ export class Graph {
   }
 
   /**
-   * Get point radius by its index: the point size, or the image size when the point
-   * draws an image and that is larger.
+   * Get point radius by its index, as drawn: the point size, or the image size when the
+   * point draws an image and that is larger. While point sizes transition, it moves with them.
    * @param index Index of the point.
    * @returns Radius of the point.
    */
@@ -1347,7 +1362,10 @@ export class Graph {
     if (this._isDestroyed) return undefined
     if (this.graph.pointSizes === undefined && this.graph.pointImageSizes === undefined) return undefined
     if (!this.graph.isPointIndex(index)) return undefined
-    return this.graph.getResolvedPointFootprint(index)
+    const shapeSize = this.points && this.transition.isActiveFor(TransitionProperty.PointSizes)
+      ? this.points.getAnimatedSize(index, this.transition.progress)
+      : undefined
+    return this.graph.getResolvedPointFootprint(index, shapeSize)
   }
 
   /**
