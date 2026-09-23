@@ -25,6 +25,14 @@ import { Transition, TransitionProperty } from '@/graph/modules/Transition'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
 
+export interface TrackedPositionsOptions {
+  /**
+   * Return the latest positions the GPU has already handed back instead of waiting for it to
+   * catch up. While points move, they trail the drawn frame by a frame or more.
+   */
+  nonBlocking?: boolean;
+}
+
 /** Touch/pen long-press → context menu thresholds. */
 const LONG_PRESS_DURATION_MS = 500
 const LONG_PRESS_MOVE_THRESHOLD_PX = 10
@@ -1362,6 +1370,8 @@ export class Graph {
   /**
    * Get current X and Y coordinates of the tracked points.
    * Do not mutate the returned map - it may affect future calls.
+   * @param options Use `{ nonBlocking: true }` to take the latest positions the GPU has handed
+   * back without stalling for the current ones.
    * @returns A ReadonlyMap where keys are point indices and values are their corresponding X and Y coordinates in the [number, number] format.
    * @see trackPointPositionsByIndices To set which points should be tracked
    * @note An **absent** tracked point (removed via a `NaN` position — see `setPointPositions`) is
@@ -1370,9 +1380,13 @@ export class Graph {
    * fade-out is still playing. A tracked index with no point behind it (at or past the current
    * point count) is omitted the same way, and reappears if the count grows to include it.
    */
-  public getTrackedPointPositionsMap (): ReadonlyMap<number, [number, number]> {
+  public getTrackedPointPositionsMap (options?: TrackedPositionsOptions): ReadonlyMap<number, [number, number]> {
     if (this._isDestroyed || !this.points) return new Map()
-    return this.points.getTrackedPositionsMap()
+    const positions = this.points.getTrackedPositionsMap(options?.nonBlocking)
+    // Frames issue and collect the readback. An idle loop would never run one, so a
+    // non-blocking read taken outside a frame (a timer, a button) would stay stale.
+    if (options?.nonBlocking && this.points.needsTrackedReadback) this.requestRender()
+    return positions
   }
 
   /**
@@ -2226,6 +2240,10 @@ export class Graph {
     // would stay occupied, blocking the next pick until something else wakes
     // the loop).
     if (this.points?.hasPendingPickReadback || this.lines?.hasPendingPickReadback) return true
+    // Same for a non-blocking tracked-positions readback: the one issued after
+    // the simulation's last step must still be collected, or an overlay reading
+    // with `nonBlocking` would stay a tick behind the settled layout.
+    if (this.points?.hasPendingTrackedReadback) return true
     return this.hasPendingHoverWork()
   }
 
@@ -2260,6 +2278,9 @@ export class Graph {
       this._shouldSyncScreenSize = false
       this.syncScreenSize()
     }
+    // Collect before the frame queues GPU work: `getBufferSubData` waits behind
+    // whatever commands are already queued.
+    this.points?.resolveTrackedPositionsReadback()
 
     const shouldInterpolatePositions = this.transition.isActiveFor(TransitionProperty.Positions)
     const shouldAnimatePointColors = this.transition.isActiveFor(TransitionProperty.PointColors)
@@ -2328,6 +2349,10 @@ export class Graph {
       drawRenderPass.end()
       this.device.submit()
     }
+
+    // After every position write this frame (transition, simulation step, drag) and its
+    // trackPoints(), so a non-blocking read collected next frame sees the newest of them.
+    this.points?.requestTrackedPositionsReadback()
 
     this.fpsMonitor?.end(frameNow)
 

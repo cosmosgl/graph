@@ -218,11 +218,22 @@ export class Points extends CoreModule {
   private trackedPositions: Map<number, [number, number]> | undefined
   /**
    * Guards the CPU-side `trackedPositions` cache in `getTrackedPositionsMap()`.
-   * Set to `true` after a successful readback; must be set to `false` whenever
-   * `currentPositionFbo` is written to (simulation step, drag, position transition)
-   * so the next call re-reads from the GPU.
+   * Set to `true` after a successful blocking readback; cleared by `markPositionsChanged()`
+   * whenever `currentPositionFbo` is written to, so the next call re-reads from the GPU.
    */
   private isPositionsUpToDate = false
+  /**
+   * Async copy of `trackedPositionsFbo` for non-blocking reads, issued by
+   * `requestTrackedPositionsReadback()` and collected by `resolveTrackedPositionsReadback()`.
+   */
+  private trackedPositionsReadback: PickingReadback | undefined
+  /**
+   * Set by a non-blocking read that returned older positions; the next readback issued
+   * clears it, so readbacks stop when the reads do.
+   */
+  private isTrackedReadbackWanted = false
+  /** Set by `markPositionsChanged()`: positions changed since the last readback was issued. */
+  private isTrackedReadbackStale = false
   private drawCommand: Model | undefined
   /**
    * Occlusion-culling pass A model. Shares attribute buffers, uniform buffers
@@ -419,6 +430,16 @@ export class Points extends CoreModule {
     return this.pickingReadback?.inFlight ?? false
   }
 
+  /** Whether a non-blocking tracked-positions readback is still awaiting the GPU. */
+  public get hasPendingTrackedReadback (): boolean {
+    return this.trackedPositionsReadback?.inFlight ?? false
+  }
+
+  /** Whether a non-blocking read is waiting on a readback that no frame has issued yet. */
+  public get needsTrackedReadback (): boolean {
+    return this.isTrackedReadbackWanted && this.isTrackedReadbackStale
+  }
+
   public updatePositions (): boolean {
     const { device, store, data, config: { rescalePositions, enableSimulation } } = this
 
@@ -511,7 +532,7 @@ export class Points extends CoreModule {
       this.writePositionTexture(this.previousPositionTexture!, animatedSourceData, pointsTextureSize)
     }
     this.areClusterCentroidsUpToDate = false
-    this.isPositionsUpToDate = false
+    this.markPositionsChanged()
     if (this.config.enableSimulation) this.ensureSimulationResources()
 
     // Create searchTexture and framebuffer
@@ -1984,7 +2005,7 @@ export class Points extends CoreModule {
     // `previousPositionTexture` holds the freshest positions for the shader
     // to read. After this call, `currentPositionFbo` holds the new result.
     // Invalidate tracked positions cache since positions have changed
-    this.isPositionsUpToDate = false
+    this.markPositionsChanged()
   }
 
   public drag (): void {
@@ -2013,7 +2034,7 @@ export class Points extends CoreModule {
     // `previousPositionTexture` holds the freshest positions for the shader
     // to read. After this call, `currentPositionFbo` holds the drag result.
     // Invalidate tracked positions cache since positions have changed
-    this.isPositionsUpToDate = false
+    this.markPositionsChanged()
   }
 
   public findPointsInRect (): boolean {
@@ -2303,7 +2324,10 @@ export class Points extends CoreModule {
 
     // Clear cache when changing tracked indices
     this.trackedPositions = undefined
-    this.isPositionsUpToDate = false
+    this.markPositionsChanged()
+    // The tracked FBO may be reallocated below; a read in flight targets the old one.
+    this.trackedPositionsReadback?.destroy()
+    this.trackedPositionsReadback = undefined
 
     if (!indices?.length) return
     const textureSize = Math.ceil(Math.sqrt(indices.length))
@@ -2365,42 +2389,63 @@ export class Points extends CoreModule {
    * Returns a cached result until the positions change, to avoid repeating the
    * GPU-to-CPU transfer (`readPixels`), which stalls until the GPU catches up.
    *
+   * With `nonBlocking`, changed positions don't stall: the result is the latest one
+   * `resolveTrackedPositionsReadback()` has collected, a frame or more behind the drawn
+   * points. It blocks only when there is no earlier result to return.
+   *
    * @returns A ReadonlyMap where keys are point indices and values are [x, y] coordinates.
    */
-  public getTrackedPositionsMap (): ReadonlyMap<number, [number, number]> {
+  public getTrackedPositionsMap (nonBlocking = false): ReadonlyMap<number, [number, number]> {
     if (!this.trackedIndices) return new Map()
 
     if (this.isPositionsUpToDate && this.trackedPositions) return this.trackedPositions
 
+    if (nonBlocking && this.trackedPositions) {
+      this.isTrackedReadbackWanted = true
+      return this.trackedPositions
+    }
+
     if (!this.trackedPositionsFbo || this.trackedPositionsFbo.destroyed) return new Map()
+
+    // A read still in flight holds older positions than the one about to be taken.
+    this.isTrackedReadbackWanted = false
+    this.trackedPositionsReadback?.cancel()
 
     // Frames gather after position changes, but a read can come first
     // (static graph, or tracking set before data) — gather here when stale.
     if (!this.isPositionsUpToDate) this.trackPoints()
 
-    const pixels = readPixels(this.device, this.trackedPositionsFbo as Framebuffer)
-
-    const tracked = new Map<number, [number, number]>()
-    for (let i = 0; i < pixels.length / 4; i += 1) {
-      const x = pixels[i * 4]
-      const y = pixels[i * 4 + 1]
-      const index = this.trackedIndices[i]
-      if (x !== undefined && y !== undefined && index !== undefined) {
-        // Omit absent (removed) points — the tracked FBO holds their frozen last
-        // coordinate, which must not be reported as a live position. A missing key
-        // is the map's way of saying "this point is gone". An index with no point
-        // behind it under the current count is omitted the same way, and comes
-        // back if the count grows to include it.
-        if (!this.data.isPointIndex(index)) continue
-        if (this.data.pointPositions && isPointAbsent(this.data.pointPositions, index)) continue
-        tracked.set(index, [x, y])
-      }
-    }
-
-    this.trackedPositions = tracked
+    const tracked = this.cacheTrackedPositions(readPixels(this.device, this.trackedPositionsFbo as Framebuffer))
     this.isPositionsUpToDate = true
-
+    this.isTrackedReadbackStale = false
     return tracked
+  }
+
+  /**
+   * Starts a non-blocking read of the tracked positions for `resolveTrackedPositionsReadback()`
+   * to collect on a later frame. Does nothing unless a non-blocking read asked for one and
+   * positions changed since the last issue, so it can run at the end of every frame.
+   */
+  public requestTrackedPositionsReadback (): void {
+    if (!this.isTrackedReadbackWanted || !this.isTrackedReadbackStale || !this.trackedIndices?.length) return
+    if (!this.trackedPositionsFbo || this.trackedPositionsFbo.destroyed) return
+    const gl = (this.device as unknown as { gl?: WebGL2RenderingContext }).gl
+    const handle = (this.trackedPositionsFbo as unknown as { handle?: WebGLFramebuffer }).handle
+    if (!gl || !handle) return // non-WebGL backend: the blocking path still works
+
+    const { width, height } = this.trackedPositionsFbo
+    this.trackedPositionsReadback ||= new PickingReadback(gl, width * height * 4)
+    // A read still in flight keeps the slot; both flags hold so the next frame retries.
+    if (this.trackedPositionsReadback.issue(handle, 0, 0, width, height)) {
+      this.isTrackedReadbackStale = false
+      this.isTrackedReadbackWanted = false
+    }
+  }
+
+  /** Caches the positions of a finished `requestTrackedPositionsReadback()`, if one has finished. */
+  public resolveTrackedPositionsReadback (): void {
+    const pixels = this.trackedPositionsReadback?.poll()
+    if (pixels) this.cacheTrackedPositions(pixels)
   }
 
   public getSampledPointPositionsMap (): Map<number, [number, number]> {
@@ -2566,6 +2611,8 @@ export class Points extends CoreModule {
     this.trackPointsCommand = undefined
     this.pickingReadback?.destroy()
     this.pickingReadback = undefined
+    this.trackedPositionsReadback?.destroy()
+    this.trackedPositionsReadback = undefined
     this.issuedPickingWindow = undefined
 
     // 2. Destroy Framebuffers (before textures they reference)
@@ -2959,7 +3006,7 @@ export class Points extends CoreModule {
     this.interpolatePositionCommand.draw(renderPass)
     renderPass.end()
 
-    this.isPositionsUpToDate = false
+    this.markPositionsChanged()
     this.areClusterCentroidsUpToDate = false
   }
 
@@ -3042,6 +3089,40 @@ export class Points extends CoreModule {
       y: 0,
     })
     this.isSizeTextureStale = false
+  }
+
+  /**
+   * Every write to the position texture (simulation step, drag, position transition,
+   * CPU upload, tracking change) reports here: the CPU cache and any readback already
+   * issued are now behind.
+   */
+  private markPositionsChanged (): void {
+    this.isPositionsUpToDate = false
+    this.isTrackedReadbackStale = true
+  }
+
+  /** Builds the tracked-positions map from a readback and stores it as the cache. */
+  private cacheTrackedPositions (pixels: Float32Array): ReadonlyMap<number, [number, number]> {
+    if (!this.trackedIndices) return new Map()
+    const tracked = new Map<number, [number, number]>()
+    for (let i = 0; i < pixels.length / 4; i += 1) {
+      const x = pixels[i * 4]
+      const y = pixels[i * 4 + 1]
+      const index = this.trackedIndices[i]
+      if (x !== undefined && y !== undefined && index !== undefined) {
+        // Omit absent (removed) points — the tracked FBO holds their frozen last
+        // coordinate, which must not be reported as a live position. A missing key
+        // is the map's way of saying "this point is gone". An index with no point
+        // behind it under the current count is omitted the same way, and comes
+        // back if the count grows to include it.
+        if (!this.data.isPointIndex(index)) continue
+        if (this.data.pointPositions && isPointAbsent(this.data.pointPositions, index)) continue
+        tracked.set(index, [x, y])
+      }
+    }
+
+    this.trackedPositions = tracked
+    return tracked
   }
 
   /**

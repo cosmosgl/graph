@@ -594,6 +594,8 @@ To retrieve the current positions of the tracked points, use the [**getTrackedPo
 
 This method retrieves the current positions of points that are being tracked. This method is particularly useful for monitoring the changing coordinates of specific points over time during the simulation. Using this method in conjunction with the [**trackPointPositionsByIndices**](#track_point_positions_by_indices) method allows for dynamic tracking and retrieval of point positions.
 
+Reading positions back from the GPU blocks until the GPU finishes its queued work. Pass `{ nonBlocking: true }` to get the latest positions it has already handed back instead: while points move they trail the drawn frame by a frame or more, which suits overlays redrawn on every simulation tick.
+
 **Returns:**
 
 * A `Map` object where the keys are the indices of the tracked points and the values are their corresponding X and Y coordinates in the form of a `[number, number]` array.
