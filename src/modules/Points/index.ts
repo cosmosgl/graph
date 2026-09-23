@@ -218,9 +218,9 @@ export class Points extends CoreModule {
   private trackedPositions: Map<number, [number, number]> | undefined
   /**
    * Guards the CPU-side `trackedPositions` cache in `getTrackedPositionsMap()`.
-   * Set to `true` after a successful readback when the simulation is inactive;
-   * must be set to `false` whenever `currentPositionFbo` is written to
-   * (simulation step, drag, position transition) so the next call re-reads from the GPU.
+   * Set to `true` after a successful readback; must be set to `false` whenever
+   * `currentPositionFbo` is written to (simulation step, drag, position transition)
+   * so the next call re-reads from the GPU.
    */
   private isPositionsUpToDate = false
   private drawCommand: Model | undefined
@@ -2362,22 +2362,15 @@ export class Points extends CoreModule {
   /**
    * Get current X and Y coordinates of the tracked points.
    *
-   * When the simulation is disabled or stopped, this method returns a cached
-   * result to avoid expensive GPU-to-CPU memory transfers (`readPixels`).
+   * Returns a cached result until the positions change, to avoid repeating the
+   * GPU-to-CPU transfer (`readPixels`), which stalls until the GPU catches up.
    *
    * @returns A ReadonlyMap where keys are point indices and values are [x, y] coordinates.
    */
   public getTrackedPositionsMap (): ReadonlyMap<number, [number, number]> {
     if (!this.trackedIndices) return new Map()
 
-    const { config: { enableSimulation }, store: { isSimulationRunning } } = this
-
-    // Use cached positions when simulation is inactive and cache is valid
-    if ((!enableSimulation || !isSimulationRunning) &&
-        this.isPositionsUpToDate &&
-        this.trackedPositions) {
-      return this.trackedPositions
-    }
+    if (this.isPositionsUpToDate && this.trackedPositions) return this.trackedPositions
 
     if (!this.trackedPositionsFbo || this.trackedPositionsFbo.destroyed) return new Map()
 
@@ -2404,11 +2397,8 @@ export class Points extends CoreModule {
       }
     }
 
-    // If simulation is inactive, cache the result for next time
-    if (!enableSimulation || !isSimulationRunning) {
-      this.trackedPositions = tracked
-      this.isPositionsUpToDate = true
-    }
+    this.trackedPositions = tracked
+    this.isPositionsUpToDate = true
 
     return tracked
   }
