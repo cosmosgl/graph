@@ -2733,6 +2733,7 @@ export class Graph {
 
 export type { GraphConfig } from './config'
 export { PointShape, LinkStyle } from './modules/GraphData'
+export type { LinksByPoint } from './modules/GraphData'
 export { TransitionEasing } from './modules/Transition'
 
 export * from './variables'
