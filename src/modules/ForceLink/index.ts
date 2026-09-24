@@ -46,16 +46,22 @@ export class ForceLink extends CoreModule {
     const linkBiasAndStrengthState = new Float32Array(linksTextureSize * linksTextureSize * 4)
     const linkDistanceState = new Float32Array(linksTextureSize * linksTextureSize * 4)
 
-    const grouped = direction === LinkDirection.INCOMING ? data.sourceIndexToTargetIndices : data.targetIndexToSourceIndices
+    const linksByPoint = direction === LinkDirection.INCOMING ? data.linksBySource : data.linksByTarget
     this.maxPointDegree = 0
-    let linkIndex = 0
-    grouped?.forEach((connectedPointIndices, pointIndex) => {
-      if (connectedPointIndices) {
-        this.linkFirstIndicesAndAmount[pointIndex * 4 + 0] = linkIndex % linksTextureSize
-        this.linkFirstIndicesAndAmount[pointIndex * 4 + 1] = Math.floor(linkIndex / linksTextureSize)
-        this.linkFirstIndicesAndAmount[pointIndex * 4 + 2] = connectedPointIndices.length ?? 0
+    if (linksByPoint) {
+      const { offsets, neighbors, linkIndices } = linksByPoint
+      for (let pointIndex = 0; pointIndex < offsets.length - 1; pointIndex++) {
+        const firstLinkIndex = offsets[pointIndex] as number
+        const endLinkIndex = offsets[pointIndex + 1] as number
+        const amount = endLinkIndex - firstLinkIndex
+        if (amount === 0) continue
+        this.linkFirstIndicesAndAmount[pointIndex * 4 + 0] = firstLinkIndex % linksTextureSize
+        this.linkFirstIndicesAndAmount[pointIndex * 4 + 1] = Math.floor(firstLinkIndex / linksTextureSize)
+        this.linkFirstIndicesAndAmount[pointIndex * 4 + 2] = amount
 
-        connectedPointIndices.forEach(([connectedPointIndex, initialLinkIndex]) => {
+        for (let linkIndex = firstLinkIndex; linkIndex < endLinkIndex; linkIndex++) {
+          const connectedPointIndex = neighbors[linkIndex] as number
+          const initialLinkIndex = linkIndices[linkIndex] as number
           this.indices[linkIndex * 4 + 0] = connectedPointIndex % pointsTextureSize
           this.indices[linkIndex * 4 + 1] = Math.floor(connectedPointIndex / pointsTextureSize)
           const degree = data.degree?.[connectedPointIndex] ?? 0
@@ -74,13 +80,11 @@ export class ForceLink extends CoreModule {
           linkBiasAndStrengthState[linkIndex * 4 + 0] = bias
           linkBiasAndStrengthState[linkIndex * 4 + 1] = strength
           linkDistanceState[linkIndex * 4] = this.store.getRandomFloat(0, 1)
+        }
 
-          linkIndex += 1
-        })
-
-        this.maxPointDegree = Math.max(this.maxPointDegree, connectedPointIndices.length ?? 0)
+        this.maxPointDegree = Math.max(this.maxPointDegree, amount)
       }
-    })
+    }
 
     // Recreate textures if sizes changed
     const recreatePointTextures =
