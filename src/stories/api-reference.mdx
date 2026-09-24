@@ -159,7 +159,7 @@ This method retrieves the current sizes of the graph points that were previously
 
 **Returns:** A Float32Array representing the sizes of points in the format `[size1, size2, ..., sizeN]`, where each `size` value corresponds to the size of the point at the same index in the graph's data. Returns an empty Float32Array if no point sizes are set.
 
-The returned array contains the processed point sizes used for rendering, including any default values that were applied during processing.
+The returned array contains the processed point sizes used for rendering, including any default values that were applied during processing. While point sizes transition, it holds the target sizes; `getPointRadiusByIndex` moves with the animation.
 
 ### <a name="set_point_shapes" href="#set_point_shapes">#</a> graph.<b>setPointShapes</b>(<i>pointShapes</i>)
 
@@ -318,7 +318,7 @@ This method retrieves the current widths of the graph links that were previously
 
 **Returns:** A Float32Array representing the widths of links in the format `[width1, width2, ..., widthN]`, where each `width` value corresponds to the width of the link at the same index in the graph's data. Returns an empty Float32Array if no link widths are set.
 
-The returned array contains the processed link widths used for rendering, including any default values that were applied during processing.
+The returned array contains the processed link widths used for rendering, including any default values that were applied during processing. While link widths transition, it holds the target widths; `getLinkWidthByIndex` moves with the animation.
 
 ### <a name="get_link_width_by_index" href="#get_link_width_by_index">#</a> graph.<b>getLinkWidthByIndex</b>(<i>index</i>)
 

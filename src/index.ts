@@ -594,7 +594,7 @@ export class Graph {
   }
 
   /**
-   * Gets the current colors of the graph points, as rendered: `NaN` channels are
+   * Gets the current colors of the graph points, with `NaN` channels
    * resolved to the config default (or the exit default for an absent point).
    *
    * @returns {Float32Array} A **new** Float32Array (a snapshot — safe to mutate, computed on
@@ -703,8 +703,9 @@ export class Graph {
   }
 
   /**
-   * Gets the current sizes of the graph points, as rendered: `NaN` sizes are
+   * Gets the current sizes of the graph points, with `NaN` sizes
    * resolved to the config default (or the exit default for an absent point).
+   * While point sizes transition, these are the targets; `getPointRadiusByIndex` moves with them.
    *
    * @returns {Float32Array} A **new** Float32Array (a snapshot — safe to mutate, computed on
    * each call) of point sizes in the format [size1, size2, ..., sizen],
@@ -785,6 +786,7 @@ export class Graph {
 
   /**
    * Gets the current widths of the graph links.
+   * While link widths transition, these are the targets; `getLinkWidthByIndex` moves with them.
    *
    * @returns {Float32Array} A Float32Array representing the widths of links in the format [width1, width2, ..., widthn],
    * where `n` is the index of the link. Returns an empty Float32Array if no link widths are set.

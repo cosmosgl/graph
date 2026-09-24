@@ -1696,14 +1696,15 @@ export class Points extends CoreModule {
   /**
    * A point's size as `transitionedSize` in `exit-ramp.glsl` mixes it at `progress`
    * of a size transition, for consumers outside the GPU (`getPointRadiusByIndex`).
-   * The target resolves through `getResolvedPointSize`; a NaN source resolves to the
-   * config default without the exit ramp, which only differs for an absent point.
+   * Both ends resolve against the point's current absence — the shader's `exit`
+   * outside a position transition; the ramp of a point entering or leaving in the
+   * same cycle is not mirrored.
    */
   public getAnimatedSize (index: number, progress: number): number {
     const size = this.data.getResolvedPointSize(index)
     const source = this.sourceSizeData?.[index]
     if (source === undefined) return size
-    const from = Number.isNaN(source) ? this.config.pointDefaultSize : source
+    const from = this.data.resolvePointSize(index, source)
     return from + (size - from) * progress
   }
 
