@@ -121,5 +121,7 @@ Try it: [100k points](../?path=/story/examples-integrations--cosmos-graph-large)
 - **Other deck.gl layers** stack on top as usual. For labels or anything that needs positions on
   the CPU, read `simulation.getPointPositionsArray()`. Try it:
   [composing with deck layers](../?path=/story/examples-integrations--cosmos-graph-composition).
-- **Full control**: `CosmosPointsLayer` and `CosmosLinksLayer` render from a simulation you own.
-  See the [package README](https://github.com/cosmosgl/graph/tree/main/integrations/deck-layers).
+- **Your own simulation**: pass a `GraphSimulation` you created through `simulation`. The layer
+  renders and steps it but never destroys it. For a renderer of your own, sample
+  `PositionTextureSource` from `@cosmos.gl/graph`. See the
+  [package README](https://github.com/cosmosgl/graph/tree/main/integrations/deck-layers).

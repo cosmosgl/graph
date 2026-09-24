@@ -1,11 +1,11 @@
 import { Layer, project32, picking, UNIT } from '@deck.gl/core'
 import type { Accessor, Color, DefaultProps, LayerDataSource, LayerProps, Unit, UpdateParameters } from '@deck.gl/core'
 import { Model, Geometry } from '@luma.gl/engine'
+import type { PositionTextureSource } from '@cosmos.gl/graph'
 
 import { BLEND_PARAMETERS } from './blend-parameters'
 import { cosmosPointsUniforms } from './cosmos-points-layer-uniforms'
 import type { CosmosPointsProps } from './cosmos-points-layer-uniforms'
-import type { PositionTextureSource } from './types'
 
 const DEFAULT_POINT_COLOR: [number, number, number, number] = [74, 92, 191, 230]
 
@@ -139,6 +139,9 @@ const defaultProps: DefaultProps<CosmosPointsLayerProps> = {
  * attribute, no CPU copy, no per-frame attribute updates. Color and size are
  * ordinary deck instanced attributes, and picking works out of the box: the
  * instance index is the point index.
+ *
+ * Internal: the points sublayer of `CosmosGraphLayer`, not a package export —
+ * the composite keeps `data` aligned with the simulation's point index space.
  */
 export class CosmosPointsLayer<DataT = unknown> extends Layer<Required<CosmosPointsLayerOwnProps<DataT>>> {
   public static layerName = 'CosmosPointsLayer'

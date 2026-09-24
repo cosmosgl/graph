@@ -78,49 +78,51 @@ new CosmosGraphLayer({
 Live examples: the *Integrations* section of the
 [cosmos.gl Storybook](https://cosmosgl.github.io/graph).
 
-## The app-owned tier: primitive layers
+## Bring your own simulation
 
-`CosmosPointsLayer` and `CosmosLinksLayer` are the pure renderers underneath the
-composite, for full control: own the `GraphSimulation`, decide when it steps, share one
-simulation across visualizations, or compose your own layers between points and links.
-Anything exposing `getPointPositionTexture()` (the `PositionTextureSource` type)
-can feed them.
+Pass a `GraphSimulation` you created through `simulation` when the application needs to
+own it: create it before the layer exists, keep it across layer removals, or drive it
+from elsewhere in the app. It must run on deck's device. The layer still ingests
+`points` / `links` into it, steps it from deck's timeline and renders it, but never
+configures or destroys it. `simulationConfig` and `onSimulationCreated` apply only to a
+simulation the layer creates.
 
 ```js
 let deck
 const devicePromise = new Promise((resolve) => {
-  deck = new Deck({ /* … */, _animate: true, onDeviceInitialized: resolve, layers: [] })
+  deck = new Deck({ /* … */, onDeviceInitialized: resolve, layers: [] })
 })
 
 const simulation = new GraphSimulation(config, devicePromise) // deck's device, never destroyed by cosmos
-simulation.setPointPositions(positions)
-simulation.setLinks(links)
-simulation.applyData()
-await simulation.ready
-
 deck.setProps({
-  onBeforeRender: () => { if (simulation.isSimulationRunning) simulation.step() },
-  layers: [
-    new CosmosLinksLayer({
-      id: 'links',
-      graph: simulation,
-      // the cosmos pair array read as two interleaved binary attributes — no copy
-      data: {
-        length: links.length / 2,
-        attributes: {
-          getLinkSource: { value: links, size: 1, stride: 8 },
-          getLinkTarget: { value: links, size: 1, offset: 4, stride: 8 },
-        },
-      },
-    }),
-    new CosmosPointsLayer({ id: 'points', graph: simulation, data: { length: pointCount } }),
-  ],
+  layers: [new CosmosGraphLayer({ id: 'graph', simulation, points, links, pickable: true })],
 })
+
+// Take over stepping: pause it, step it yourself, then ask deck to repaint
+simulation.pause()
+simulation.step()
+deck.redraw()
 
 // Teardown order matters: the device belongs to deck.
 simulation.destroy()
 deck.finalize()
 ```
+
+Use one `CosmosGraphLayer` per simulation. A second layer would ingest the data again
+and step the simulation twice per frame. To show one graph in several views, render the
+same layer in every viewport.
+
+## Your own renderer: `PositionTextureSource`
+
+The layer's points and links are internal sublayers that `texelFetch` the live position
+texture. To draw it some other way (your own deck layer, a Three.js material, a MapLibre
+custom layer), type your input against `PositionTextureSource` from `@cosmos.gl/graph`.
+`Graph` and `GraphSimulation` both implement it. `getPointPositionTexture()` returns a
+`PointPositionTexture`: point `i` lives at texel `(i % textureSize, floor(i / textureSize))`
+as `[x, y, i, unused]`, an absent point reads as NaN, and the handle changes as the
+simulation ping-pongs, so re-fetch it whenever `version` changes. The sublayer sources
+([points](src/cosmos-points-layer.ts), [links](src/cosmos-links-layer.ts)) are a worked
+reference.
 
 ## The universal fallback: CPU readback
 

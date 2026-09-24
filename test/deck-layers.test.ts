@@ -2,8 +2,11 @@ import { describe, it, expect, vi } from 'vitest'
 import { Deck, OrthographicView } from '@deck.gl/core'
 import type { Device } from '@luma.gl/core'
 import { Graph, GraphSimulation, type GraphSimulationConfig } from '@cosmos.gl/graph'
-import { CosmosPointsLayer, CosmosLinksLayer, CosmosGraphLayer, type CosmosGraphPickingInfo } from '@cosmos.gl/deck-layers'
+import { CosmosGraphLayer, type CosmosGraphPickingInfo } from '@cosmos.gl/deck-layers'
 import type { LayersList, PickingInfo } from '@deck.gl/core'
+// The primitives are internal sublayers, not package exports
+import { CosmosPointsLayer } from '../integrations/deck-layers/src/cosmos-points-layer'
+import { CosmosLinksLayer } from '../integrations/deck-layers/src/cosmos-links-layer'
 
 /**
  * Runtime contract tests for @cosmos.gl/deck-layers: the layers render a live
@@ -455,6 +458,75 @@ describe('CosmosGraphLayer', () => {
       expect(deck.pickObject({ ...CENTER, radius: 2 })).toBeNull()
       expect(() => simulation?.step()).not.toThrow()
     } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('renders a provided simulation without configuring or destroying it', async () => {
+    const { deck, container, devicePromise } = createDeckDevice()
+    const provided = new GraphSimulation(STATIC_SIM, devicePromise)
+    const spaceSize = provided.config.spaceSize
+    const created = vi.fn()
+    const graphLayer = (simulation: GraphSimulation | null): CosmosGraphLayer => new CosmosGraphLayer({
+      id: 'graph',
+      simulation,
+      points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
+      links: new Float32Array([0, 1]),
+      getPointSize: 10,
+      // Both apply only to a layer-created simulation
+      simulationConfig: { ...STATIC_SIM, spaceSize: spaceSize / 2 },
+      onSimulationCreated: created,
+      pickable: true,
+    })
+    try {
+      deck.setProps({ layers: [graphLayer(provided)] })
+      await waitUntilPickable(deck)
+
+      // The layer ingested its data into the provided simulation and renders it
+      expect(provided.data.linksNumber).toBe(1)
+      expect(deck.pickObject({ ...CENTER, radius: 2 })?.index).toBe(0)
+      expect(created).not.toHaveBeenCalled()
+      expect(provided.config.spaceSize).toBe(spaceSize)
+
+      // Dropping the prop swaps to a layer-created simulation; the provided
+      // one outlives the swap and the layer's removal
+      deck.setProps({ layers: [graphLayer(null)] })
+      await waitUntilPickable(deck)
+      expect(created).toHaveBeenCalledTimes(1)
+      expect(created.mock.calls[0]?.[0]).not.toBe(provided)
+      deck.setProps({ layers: [] })
+      await waitFrames(5)
+      expect(Array.from(provided.getPointPositionsArray())).toEqual([1000, 1000, 1050, 1000])
+    } finally {
+      provided.destroy()
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('refuses a provided simulation on another device', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    // No device argument: the simulation creates its own hidden one
+    const foreign = new GraphSimulation(STATIC_SIM)
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer({
+        id: 'graph',
+        simulation: foreign,
+        points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
+        getPointSize: 10,
+        pickable: true,
+      }),
+    ])
+    try {
+      await foreign.ready
+      await waitFrames(10)
+      const deviceErrors = error.mock.calls.filter(([message]) => String(message).includes('different device'))
+      expect(deviceErrors).toHaveLength(1)
+      expect(deck.pickObject({ ...CENTER, radius: 2 })).toBeNull()
+    } finally {
+      error.mockRestore()
+      foreign.destroy()
       deck.finalize()
       container.remove()
     }
