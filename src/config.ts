@@ -434,6 +434,14 @@ export interface GraphConfigInterface {
    */
   simulationCluster: number;
   /**
+   * Attractor force coefficient. Scales the pull of every point toward its
+   * own attractor (set with `setPointAttractors`, per-point weights
+   * with `setPointAttractorStrength`). The force only runs for points that have
+   * an attractor; it does nothing when none are set.
+   * Default value: `0.1`
+   */
+  simulationAttraction: number;
+  /**
    * Collision force coefficient. When set to a value greater than 0,
    * points will push each other apart when they overlap.
    * Uses a spatial-hash grid, so it scales better than naive O(n²) collision.
