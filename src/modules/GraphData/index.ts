@@ -187,7 +187,14 @@ export class GraphData {
    * (collision, read-back, the image-size fallback).
    */
   public getResolvedPointSize (index: number): number {
-    const raw = this.pointSizes?.[index]
+    return this.resolvePointSize(index, this.pointSizes?.[index])
+  }
+
+  /**
+   * `getResolvedPointSize`'s rule for a raw size other than the point's current one:
+   * a size transition's source (`Points.getAnimatedSize`).
+   */
+  public resolvePointSize (index: number, raw: number | undefined): number {
     if (isNumber(raw)) return raw as number
     if (this.pointPositions && isPointAbsent(this.pointPositions, index)) return EXIT_DEFAULT_SIZE
     return this._config.pointDefaultSize
