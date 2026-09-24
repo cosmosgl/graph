@@ -21,6 +21,37 @@ export enum LinkStyle {
   Dotted = 2
 }
 
+/**
+ * Links grouped by one of their endpoints, in link order. The links of point `p` sit at
+ * `offsets[p]` up to, not including, `offsets[p + 1]` in `neighbors` and `linkIndices`.
+ * A link whose source or target is not a point is left out.
+ */
+export interface LinksByPoint {
+  /** `pointsNumber + 1` entries. */
+  offsets: Uint32Array;
+  /** The point at each link's other end. */
+  neighbors: Uint32Array;
+  /** Each link's index in `links`. */
+  linkIndices: Uint32Array;
+}
+
+type PointPairs = ([number, number][] | undefined)[]
+
+const toPointPairs = (linksByPoint: LinksByPoint | undefined): PointPairs | undefined => {
+  if (!linksByPoint) return undefined
+  const { offsets, neighbors, linkIndices } = linksByPoint
+  const pairs: PointPairs = new Array(offsets.length - 1).fill(undefined)
+  for (let point = 0; point < pairs.length; point++) {
+    const start = offsets[point] as number
+    const end = offsets[point + 1] as number
+    if (start === end) continue
+    const pointPairs: [number, number][] = new Array(end - start)
+    for (let i = start; i < end; i++) pointPairs[i - start] = [neighbors[i] as number, linkIndices[i] as number]
+    pairs[point] = pointPairs
+  }
+  return pairs
+}
+
 export class GraphData {
   public inputPointPositions: Float32Array | undefined
   public inputPointColors: Float32Array | undefined
@@ -58,7 +89,6 @@ export class GraphData {
   public pointImageIndices: Float32Array | undefined
   public pointImageSizes: Float32Array | undefined
 
-  public inputLinks: Float32Array | undefined
   public links: Float32Array | undefined
   public linkColors: Float32Array | undefined
   public linkWidths: Float32Array | undefined
@@ -72,13 +102,10 @@ export class GraphData {
   public clusterPositions: (number | undefined)[] | undefined
   public clusterStrength: Float32Array | undefined
 
-  /**
-   * Each inner array of `sourceIndexToTargetIndices` and `targetIndexToSourceIndices` contains pairs where:
-   *   - The first value is the target/source index in the point array.
-   *   - The second value is the link index in the array of links.
-  */
-  public sourceIndexToTargetIndices: ([number, number][] | undefined)[] | undefined
-  public targetIndexToSourceIndices: ([number, number][] | undefined)[] | undefined
+  /** Links grouped by source point; `neighbors` holds each link's target. Rebuilt only when the links or the point count change. */
+  public linksBySource: LinksByPoint | undefined
+  /** Links grouped by target point; `neighbors` holds each link's source. Rebuilt only when the links or the point count change. */
+  public linksByTarget: LinksByPoint | undefined
 
   public degree: number[] | undefined
   public inDegree: number[] | undefined
@@ -86,6 +113,11 @@ export class GraphData {
   private _config: GraphConfigInterface
   /** Lazily parsed `pointDefaultColor` — see the `defaultRgba` getter. */
   private _defaultRgba: [number, number, number, number] | undefined
+  private _inputLinks: Float32Array | undefined
+  private _areLinksByPointStale = true
+  private _linksByPointPointsNumber: number | undefined
+  private _sourceIndexToTargetIndices: PointPairs | undefined
+  private _targetIndexToSourceIndices: PointPairs | undefined
 
   public constructor (config: GraphConfigInterface) {
     this._config = config
@@ -99,6 +131,28 @@ export class GraphData {
     return this.links && this.links.length / 2
   }
 
+  public get inputLinks (): Float32Array | undefined {
+    return this._inputLinks
+  }
+
+  /**
+   * `[targetIndex, linkIndex]` pairs per source point, `undefined` for a point with no links.
+   * @deprecated Read `linksBySource` instead. This builds one array per link on first read.
+   */
+  public get sourceIndexToTargetIndices (): PointPairs | undefined {
+    this._sourceIndexToTargetIndices ??= toPointPairs(this.linksBySource)
+    return this._sourceIndexToTargetIndices
+  }
+
+  /**
+   * `[sourceIndex, linkIndex]` pairs per target point, `undefined` for a point with no links.
+   * @deprecated Read `linksByTarget` instead. This builds one array per link on first read.
+   */
+  public get targetIndexToSourceIndices (): PointPairs | undefined {
+    this._targetIndexToSourceIndices ??= toPointPairs(this.linksByTarget)
+    return this._targetIndexToSourceIndices
+  }
+
   /**
    * Parsed `pointDefaultColor`, cached between updates (`updatePointColor`
    * invalidates it, so config changes are picked up). Public so the draw pass can
@@ -108,6 +162,11 @@ export class GraphData {
   public get defaultRgba (): [number, number, number, number] {
     this._defaultRgba ??= getRgbaColor(this._config.pointDefaultColor)
     return this._defaultRgba
+  }
+
+  public set inputLinks (links: Float32Array | undefined) {
+    this._inputLinks = links
+    this._areLinksByPointStale = true
   }
 
   public updatePoints (): void {
@@ -487,8 +546,10 @@ export class GraphData {
 
     this.updateClusters()
 
-    this._createAdjacencyLists()
-    this._calculateDegrees()
+    if (this._areLinksByPointStale || this._linksByPointPointsNumber !== this.pointsNumber) {
+      this._groupLinksByPoint()
+      this._calculateDegrees()
+    }
   }
 
   /**
@@ -500,10 +561,15 @@ export class GraphData {
   public getNeighboringPointIndices (pointIndices: number | number[]): number[] {
     const indices = Array.isArray(pointIndices) ? pointIndices : [pointIndices]
     const result = new Set<number>()
+    const bothDirections = [this.linksBySource, this.linksByTarget]
     for (const index of indices) {
       if (!this.isPointIndex(index)) continue
-      for (const [pointIndex] of this.sourceIndexToTargetIndices?.[index] ?? []) result.add(pointIndex)
-      for (const [pointIndex] of this.targetIndexToSourceIndices?.[index] ?? []) result.add(pointIndex)
+      for (const linksByPoint of bothDirections) {
+        if (!linksByPoint) continue
+        const { offsets, neighbors } = linksByPoint
+        const end = offsets[index + 1] as number
+        for (let i = offsets[index] as number; i < end; i++) result.add(neighbors[i] as number)
+      }
     }
     return [...result]
   }
@@ -517,14 +583,17 @@ export class GraphData {
   public getConnectedLinkIndices (pointIndices: number | number[]): number[] {
     const indices = Array.isArray(pointIndices) ? pointIndices : [pointIndices]
     const indexSet = new Set(indices)
-    const result = new Set<number>()
+    const result: number[] = []
+    if (!this.linksBySource) return result
+    const { offsets, neighbors, linkIndices } = this.linksBySource
     for (const index of indexSet) {
       if (!this.isPointIndex(index)) continue
-      for (const [targetIndex, linkIndex] of this.sourceIndexToTargetIndices?.[index] ?? []) {
-        if (indexSet.has(targetIndex)) result.add(linkIndex)
+      const end = offsets[index + 1] as number
+      for (let i = offsets[index] as number; i < end; i++) {
+        if (indexSet.has(neighbors[i] as number)) result.push(linkIndices[i] as number)
       }
     }
-    return [...result]
+    return result
   }
 
   /**
@@ -552,48 +621,79 @@ export class GraphData {
     return [...result]
   }
 
-  private _createAdjacencyLists (): void {
-    if (this.linksNumber === undefined || this.links === undefined) {
-      this.sourceIndexToTargetIndices = undefined
-      this.targetIndexToSourceIndices = undefined
+  private _groupLinksByPoint (): void {
+    const { links, linksNumber, pointsNumber } = this
+    this._areLinksByPointStale = false
+    this._linksByPointPointsNumber = pointsNumber
+    this._sourceIndexToTargetIndices = undefined
+    this._targetIndexToSourceIndices = undefined
+    if (links === undefined || linksNumber === undefined || pointsNumber === undefined) {
+      this.linksBySource = undefined
+      this.linksByTarget = undefined
       return
     }
 
-    this.sourceIndexToTargetIndices = new Array(this.pointsNumber).fill(undefined)
-    this.targetIndexToSourceIndices = new Array(this.pointsNumber).fill(undefined)
-    for (let i = 0; i < this.linksNumber; i++) {
-      const sourceIndex = this.links[i * 2]
-      const targetIndex = this.links[i * 2 + 1]
-      // Both endpoints must be real points: an out-of-range index would extend
-      // these arrays past the point count and come back out of
-      // `getNeighboringPointIndices` as a point the caller cannot look up.
-      // Skipped rather than dropped, so link indices stay the caller's own.
-      if (this.isPointIndex(sourceIndex) && this.isPointIndex(targetIndex)) {
-        this.sourceIndexToTargetIndices[sourceIndex] ??= []
-        this.sourceIndexToTargetIndices[sourceIndex].push([targetIndex, i])
-
-        this.targetIndexToSourceIndices[targetIndex] ??= []
-        this.targetIndexToSourceIndices[targetIndex].push([sourceIndex, i])
-      }
+    const sourceOffsets = new Uint32Array(pointsNumber + 1)
+    const targetOffsets = new Uint32Array(pointsNumber + 1)
+    for (let i = 0; i < linksNumber; i++) {
+      const sourceIndex = links[i * 2]
+      const targetIndex = links[i * 2 + 1]
+      // Both endpoints must be real points, or `getNeighboringPointIndices` would
+      // return a point the caller cannot look up. Skipped rather than dropped, so
+      // link indices stay the caller's own.
+      if (!this.isPointIndex(sourceIndex) || !this.isPointIndex(targetIndex)) continue
+      sourceOffsets[sourceIndex + 1] = (sourceOffsets[sourceIndex + 1] as number) + 1
+      targetOffsets[targetIndex + 1] = (targetOffsets[targetIndex + 1] as number) + 1
     }
+    for (let point = 0; point < pointsNumber; point++) {
+      sourceOffsets[point + 1] = (sourceOffsets[point + 1] as number) + (sourceOffsets[point] as number)
+      targetOffsets[point + 1] = (targetOffsets[point + 1] as number) + (targetOffsets[point] as number)
+    }
+
+    const groupedLinksNumber = sourceOffsets[pointsNumber] as number
+    const linksBySource = { offsets: sourceOffsets, neighbors: new Uint32Array(groupedLinksNumber), linkIndices: new Uint32Array(groupedLinksNumber) }
+    const linksByTarget = { offsets: targetOffsets, neighbors: new Uint32Array(groupedLinksNumber), linkIndices: new Uint32Array(groupedLinksNumber) }
+    const nextSourceSlot = sourceOffsets.slice(0, pointsNumber)
+    const nextTargetSlot = targetOffsets.slice(0, pointsNumber)
+    for (let i = 0; i < linksNumber; i++) {
+      const sourceIndex = links[i * 2]
+      const targetIndex = links[i * 2 + 1]
+      if (!this.isPointIndex(sourceIndex) || !this.isPointIndex(targetIndex)) continue
+      const sourceSlot = nextSourceSlot[sourceIndex] as number
+      nextSourceSlot[sourceIndex] = sourceSlot + 1
+      linksBySource.neighbors[sourceSlot] = targetIndex
+      linksBySource.linkIndices[sourceSlot] = i
+      const targetSlot = nextTargetSlot[targetIndex] as number
+      nextTargetSlot[targetIndex] = targetSlot + 1
+      linksByTarget.neighbors[targetSlot] = sourceIndex
+      linksByTarget.linkIndices[targetSlot] = i
+    }
+    this.linksBySource = linksBySource
+    this.linksByTarget = linksByTarget
   }
 
   private _calculateDegrees (): void {
-    if (this.pointsNumber === undefined) {
+    const pointsNumber = this.pointsNumber
+    if (pointsNumber === undefined) {
       this.degree = undefined
       this.inDegree = undefined
       this.outDegree = undefined
       return
     }
 
-    this.degree = new Array(this.pointsNumber).fill(0)
-    this.inDegree = new Array(this.pointsNumber).fill(0)
-    this.outDegree = new Array(this.pointsNumber).fill(0)
+    this.degree = new Array(pointsNumber).fill(0)
+    this.inDegree = new Array(pointsNumber).fill(0)
+    this.outDegree = new Array(pointsNumber).fill(0)
 
-    for (let i = 0; i < this.pointsNumber; i++) {
-      this.inDegree[i] = this.targetIndexToSourceIndices?.[i]?.length ?? 0
-      this.outDegree[i] = this.sourceIndexToTargetIndices?.[i]?.length ?? 0
-      this.degree[i] = (this.inDegree[i] ?? 0) + (this.outDegree[i] ?? 0)
+    const sourceOffsets = this.linksBySource?.offsets
+    const targetOffsets = this.linksByTarget?.offsets
+    if (!sourceOffsets || !targetOffsets) return
+    for (let i = 0; i < pointsNumber; i++) {
+      const inDegree = (targetOffsets[i + 1] as number) - (targetOffsets[i] as number)
+      const outDegree = (sourceOffsets[i + 1] as number) - (sourceOffsets[i] as number)
+      this.inDegree[i] = inDegree
+      this.outDegree[i] = outDegree
+      this.degree[i] = inDegree + outDegree
     }
   }
 }
