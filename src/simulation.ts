@@ -44,6 +44,17 @@ export interface PointPositionTexture {
   version: number;
 }
 
+/**
+ * Anything that exposes a live cosmos.gl position texture — `GraphSimulation`,
+ * `Graph`, or a future engine with the same contract. A custom renderer (a
+ * deck.gl layer, a Three.js material, a MapLibre custom layer) types its
+ * position input against this shape rather than a concrete class, then
+ * samples the texture per `PointPositionTexture`'s texel layout.
+ */
+export interface PositionTextureSource {
+  getPointPositionTexture(): PointPositionTexture | undefined;
+}
+
 /** Options `Graph` threads into a composed simulation step. @internal */
 export interface SimulationStepOptions {
   /** Run the pointer-repulsion force pass before the regular forces. */
@@ -78,7 +89,7 @@ export interface SimulationStepOptions {
  * destroyed by `destroy()`; an externally supplied device is never destroyed,
  * cleared, submitted, or resized.
  */
-export class GraphSimulation {
+export class GraphSimulation implements PositionTextureSource {
   /**
    * The full internal configuration object. When constructed by `Graph`, this is
    * `Graph`'s own config so the two stay in sync; standalone instances hold a

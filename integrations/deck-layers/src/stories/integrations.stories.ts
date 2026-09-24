@@ -23,7 +23,8 @@ import cosmosGraphControlRaw from './cosmos-graph-control?raw'
 // Embedding cosmos.gl in deck.gl with `CosmosGraphLayer` from
 // @cosmos.gl/deck-layers — the layer owns the simulation, steps it from
 // deck's timeline, and exposes picking and drag-to-pin. The flagship's panes
-// carry the primitive-layer sources for advanced composition.
+// carry its internal sublayer sources — a reference for sampling the position
+// texture from a renderer of your own.
 const meta: Meta<CosmosStoryProps> = {
   title: 'Examples/Integrations',
   parameters: {

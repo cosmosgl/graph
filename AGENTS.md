@@ -42,11 +42,12 @@ contribution process, see `CONTRIBUTING.md`, `CHARTER.md`, `CODE_OF_CONDUCT.md`,
   globbed by the same root Storybook into the same flat sidebar.
 - `helper.ts` — utilities (e.g. `getRgbaColor`: parse a CSS/hex color into a normalized RGBA tuple).
 
-`integrations/deck-layers/` — the `@cosmos.gl/deck-layers` workspace package: deck.gl layers over the
+`integrations/deck-layers/` — the `@cosmos.gl/deck-layers` workspace package: a deck.gl layer over the
 standalone `GraphSimulation`. `CosmosGraphLayer` (composite: owns the simulation, steps it from deck's
-timeline, dual object/binary data modes, picking, drag-to-pin) plus the `CosmosPointsLayer` /
-`CosmosLinksLayer` primitives, which sample the live GPU position texture by instance index — typed
-against `PositionTextureSource`, never a concrete engine class. Versioned in lockstep with the root
+timeline, dual object/binary data modes, picking, drag-to-pin, or an app-provided `simulation`) —
+its only export. Its internal points/links sublayers sample the live GPU position texture by instance
+index, typed against `PositionTextureSource` (exported by `@cosmos.gl/graph`, implemented by `Graph`
+and `GraphSimulation`), never a concrete engine class. Versioned in lockstep with the root
 package (`pnpm bump <version>` sets both; `scripts/check-lockstep.mjs` guards every publish).
 
 `migration-notes.md` documents **breaking changes only** — data-format and config changes that require

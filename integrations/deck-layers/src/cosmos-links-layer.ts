@@ -1,11 +1,11 @@
 import { Layer, project32, picking, UNIT } from '@deck.gl/core'
 import type { Accessor, Color, DefaultProps, LayerDataSource, LayerProps, Unit, UpdateParameters } from '@deck.gl/core'
 import { Model, Geometry } from '@luma.gl/engine'
+import type { PositionTextureSource } from '@cosmos.gl/graph'
 
 import { BLEND_PARAMETERS } from './blend-parameters'
 import { cosmosLinksUniforms } from './cosmos-links-layer-uniforms'
 import type { CosmosLinksProps } from './cosmos-links-layer-uniforms'
-import type { PositionTextureSource } from './types'
 
 const DEFAULT_LINK_COLOR: [number, number, number, number] = [94, 115, 194, 64]
 
@@ -160,6 +160,10 @@ const defaultProps: DefaultProps<CosmosLinksLayerProps> = {
  * updates. Endpoint indices, color and width are ordinary deck instanced
  * attributes, and picking works out of the box: the instance index is the
  * link index.
+ *
+ * Internal: the links sublayer of `CosmosGraphLayer`, not a package export —
+ * the composite resolves every endpoint to a valid point index before it
+ * reaches this layer.
  */
 export class CosmosLinksLayer<DataT = unknown> extends Layer<Required<CosmosLinksLayerOwnProps<DataT>>> {
   public static layerName = 'CosmosLinksLayer'

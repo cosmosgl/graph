@@ -16,13 +16,13 @@ import { Store, ALPHA_MIN, MAX_HOVER_DETECTION_DELAY, MIN_MOUSE_MOVEMENT_THRESHO
 import { Transition, TransitionProperty } from '@/graph/modules/Transition'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
-import { GraphSimulation, type PointPositionTexture } from '@/graph/simulation'
+import { GraphSimulation, type PointPositionTexture, type PositionTextureSource } from '@/graph/simulation'
 
 /** Touch/pen long-press → context menu thresholds. */
 const LONG_PRESS_DURATION_MS = 500
 const LONG_PRESS_MOVE_THRESHOLD_PX = 10
 
-export class Graph {
+export class Graph implements PositionTextureSource {
   /** Current graph configuration. Always fully populated with default values for any unset properties. */
   public config: GraphConfigInterface = createDefaultConfig()
   /** The data model holding the ingested input arrays (owned by the simulation). */
@@ -2687,7 +2687,7 @@ export class Graph {
 
 export type { GraphConfig, GraphSimulationConfig, GraphSimulationConfigInterface } from './config'
 export { GraphSimulation } from './simulation'
-export type { PointPositionTexture } from './simulation'
+export type { PointPositionTexture, PositionTextureSource } from './simulation'
 export { PointShape, LinkStyle } from './modules/GraphData'
 export { TransitionEasing } from './modules/Transition'
 

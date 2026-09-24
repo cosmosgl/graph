@@ -126,11 +126,28 @@ type CosmosGraphLayerOwnProps<PointDataT, LinkDataT> = {
   onPointDrag?: ((info: CosmosGraphPickingInfo) => void) | null;
   /** Called when a point drag ends. */
   onPointDragEnd?: ((info: CosmosGraphPickingInfo) => void) | null;
-  /** Simulation configuration, passed through to `GraphSimulation` (forces, spaceSize, callbacks). */
+  /**
+   * An application-owned `GraphSimulation` to render instead of creating one.
+   * It must run on deck's device — construct it with the device from deck's
+   * `onDeviceInitialized`. The layer still ingests `points` / `links` into it,
+   * steps it while it runs (`pause()` it to take over stepping, then
+   * `deck.redraw()` after each manual `step()`), and renders it; it never
+   * configures or destroys it — `simulationConfig` and `onSimulationCreated`
+   * apply only to a layer-created simulation, and teardown is the
+   * application's, before `deck.finalize()`. One `CosmosGraphLayer` per
+   * simulation: a second would re-ingest and double-step it.
+   */
+  simulation?: GraphSimulation | null;
+  /**
+   * Simulation configuration, passed through to the layer-created
+   * `GraphSimulation` (forces, spaceSize, callbacks). Ignored when
+   * `simulation` is provided.
+   */
   simulationConfig?: GraphSimulationConfig;
   /**
-   * Called once with the layer-owned `GraphSimulation` — the escape hatch for
-   * advanced control (pause, pinning, sparse position writes).
+   * Called once with the layer-created `GraphSimulation` — the escape hatch for
+   * advanced control (pause, pinning, sparse position writes). Not called for
+   * a provided `simulation`.
    */
   onSimulationCreated?: ((simulation: GraphSimulation) => void) | null;
 }
@@ -153,6 +170,7 @@ const defaultProps: DefaultProps<CosmosGraphLayerProps> = {
   onPointDragStart: { type: 'function', value: null, optional: true },
   onPointDrag: { type: 'function', value: null, optional: true },
   onPointDragEnd: { type: 'function', value: null, optional: true },
+  simulation: { type: 'object', value: null, optional: true },
   simulationConfig: { type: 'object', value: {}, compare: 2 },
   onSimulationCreated: { type: 'function', value: null, optional: true },
   // getSubLayerProps forwards `parameters` into every sublayer, so the
@@ -182,14 +200,15 @@ const resolveAccessor = <In, Out>(accessor: Accessor<In, Out>, object: In, info:
   typeof accessor === 'function' ? (accessor as (o: In, i: AccessorContext<In>) => Out)(object, info) : accessor
 
 /**
- * The batteries-included cosmos.gl graph layer: give it points and links, and
- * it owns the rest. The layer creates a `GraphSimulation` on deck's device,
- * ingests the data, advances the simulation once per animation frame from
- * deck's shared timeline while it runs (deck goes idle when it settles — no
- * `_animate` required), renders through `CosmosLinksLayer` + `CosmosPointsLayer`
- * (positions stay GPU-resident), and destroys the simulation when the layer is
- * removed. Picking reports `elementType: 'point' | 'link'` alongside the index
- * and, for array data, the original object.
+ * The cosmos.gl graph layer: give it points and links, and it handles the
+ * rest. The layer creates a `GraphSimulation` on deck's device (or renders the
+ * application's, via `simulation`), ingests the data, advances the simulation
+ * once per animation frame from deck's shared timeline while it runs (deck
+ * goes idle when it settles — no `_animate` required), renders through its
+ * internal links and points sublayers (positions stay GPU-resident), and
+ * destroys a simulation it created when the layer is removed. Picking reports
+ * `elementType: 'point' | 'link'` alongside the index and, for array data, the
+ * original object.
  */
 export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends CompositeLayer<
   Required<CosmosGraphLayerOwnProps<PointDataT, LinkDataT>>
@@ -199,6 +218,8 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
 
   declare public state: {
     simulation?: GraphSimulation;
+    /** The `simulation` prop this state was built from; `null` when the layer created its own. */
+    providedSimulation: GraphSimulation | null;
     isReady: boolean;
     pointCount: number;
     pointsData: readonly PointDataT[] | { length: number; attributes?: Record<string, unknown> };
@@ -221,9 +242,8 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       )
     }
 
-    const simulation = new GraphSimulation(this.props.simulationConfig, Promise.resolve(device))
     this.state = {
-      simulation,
+      providedSimulation: null,
       isReady: false,
       pointCount: 0,
       pointsData: { length: 0 },
@@ -234,26 +254,23 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       // draw passes (draw runs per viewport and again while picking)
       animationHandle: timeline.attachAnimation({ setTime: () => this._onTimelineTick() }),
     }
-
-    this.props.onSimulationCreated?.(simulation)
-
-    simulation.ready.then(() => {
-      // `this` may be a stale descriptor by now; state is the stable identity
-      if (this.state?.simulation !== simulation) return
-      const layer = this.getCurrentLayer() ?? this
-      layer.setState({ isReady: true })
-    }).catch((error: Error) => {
-      console.error('@cosmos.gl/deck-layers: simulation failed to initialize', error)
-    })
+    this._attachSimulation(this.props.simulation ?? null)
   }
 
   public updateState (params: UpdateParameters<this>): void {
     super.updateState(params)
     const { props, oldProps, changeFlags } = params
+    // Swapping simulations re-ingests the current data into the new one
+    const providedSimulation = props.simulation ?? null
+    const simulationSwapped = providedSimulation !== this.state.providedSimulation
+    if (simulationSwapped) {
+      this._releaseSimulation()
+      this._attachSimulation(providedSimulation)
+    }
     const simulation = this.state.simulation
     if (!simulation) return
 
-    if (changeFlags.propsChanged && props.simulationConfig !== oldProps.simulationConfig) {
+    if (!providedSimulation && changeFlags.propsChanged && props.simulationConfig !== oldProps.simulationConfig) {
       simulation.setConfig(props.simulationConfig)
     }
     // Link endpoints are resolved at ingest, so a change to the id map or to
@@ -262,6 +279,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       ? changeFlags.updateTriggersChanged as CosmosUpdateTriggers
       : undefined
     const dataChanged =
+      simulationSwapped ||
       props.points !== oldProps.points ||
       props.links !== oldProps.links ||
       Boolean(
@@ -387,7 +405,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
 
   /** The whole simulation space; lets deck's viewport helpers frame the graph. */
   public getBounds (): [number[], number[]] | null {
-    const spaceSize = this.props.simulationConfig?.spaceSize ?? defaultConfigValues.spaceSize
+    const spaceSize = this._spaceSize()
     return [[0, 0, 0], [spaceSize, spaceSize, 0]]
   }
 
@@ -395,7 +413,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     if (this.state?.animationHandle !== undefined) {
       this.context.timeline.detachAnimation(this.state.animationHandle)
     }
-    this.state?.simulation?.destroy()
+    if (this.state) this._releaseSimulation()
     super.finalizeState(context)
   }
 
@@ -412,6 +430,45 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
         layer.updateAutoHighlight({ ...info, picked: false })
       }
     }
+  }
+
+  /** Adopts the provided simulation, or creates one on deck's device when `provided` is `null`. */
+  private _attachSimulation (provided: GraphSimulation | null): void {
+    const { device } = this.context
+    const simulation = provided ?? new GraphSimulation(this.props.simulationConfig, Promise.resolve(device))
+    this.setState({ simulation, providedSimulation: provided, isReady: false, draggedPointIndex: null })
+
+    if (!provided) this.props.onSimulationCreated?.(simulation)
+
+    simulation.ready.then(() => {
+      // `this` may be a stale descriptor by now; state is the stable identity
+      if (this.state?.simulation !== simulation) return
+      const layer = this.getCurrentLayer() ?? this
+      // Textures from another device cannot be sampled by deck's draws
+      if (simulation.device !== layer.context.device) {
+        console.error(
+          '@cosmos.gl/deck-layers: the provided simulation runs on a different device than deck — construct it with the device from deck\'s onDeviceInitialized'
+        )
+        return
+      }
+      layer.setState({ isReady: true })
+    }).catch((error: Error) => {
+      console.error('@cosmos.gl/deck-layers: simulation failed to initialize', error)
+    })
+  }
+
+  /** Destroys a layer-created simulation; a provided one is left to the application. */
+  private _releaseSimulation (): void {
+    const { simulation, providedSimulation } = this.state
+    if (simulation && !providedSimulation) simulation.destroy()
+    this.state.simulation = undefined
+  }
+
+  /** The simulation's space size — authoritative for a provided simulation too. */
+  private _spaceSize (): number {
+    return this.state?.simulation?.config.spaceSize ??
+      this.props.simulationConfig?.spaceSize ??
+      defaultConfigValues.spaceSize
   }
 
   private _onTimelineTick (): void {
@@ -436,7 +493,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     const simulation = this.state.simulation
     if (!simulation) return
     const { points, links, getPointId, getPointPosition } = this.props
-    const spaceSize = this.props.simulationConfig?.spaceSize ?? defaultConfigValues.spaceSize
+    const spaceSize = this._spaceSize()
 
     // Unseeded points land in the middle half of the space, clear of the walls
     const randomCoordinate = (): number => spaceSize * (0.25 + Math.random() * 0.5)
