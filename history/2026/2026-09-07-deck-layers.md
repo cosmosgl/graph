@@ -59,7 +59,8 @@ root↔package workspace cycle.
 `@cosmos.gl/deck-layers` productionizes what previously lived as story-local
 prototype code, on deck 9's own idioms:
 
-- **`CosmosPointsLayer` / `CosmosLinksLayer`** — instanced quads (no
+- **`CosmosPointsLayer` / `CosmosLinksLayer`** (internal since "One public
+  layer" below) — instanced quads (no
   driver-capped `gl_PointSize`; links extrude by half their width in screen
   space) built on the `project32` + `picking` shader modules with std140
   uniform-block sidecars. Positions never leave the GPU: each vertex
@@ -100,6 +101,32 @@ prototype code, on deck 9's own idioms:
   prop to its sublayers — `getSubLayerProps` doesn't — so accessor transitions
   animate.
 
+## One public layer
+
+Before the first stable release, the primitives stopped being package exports.
+Only `CosmosGraphLayer` is public now, and the two primitive layers are its
+internal sublayers. Everything that makes them safe to use lives in the
+composite: resolving ids to indices, dropping links whose endpoint isn't a
+point, stepping on the timeline, drag-to-pin, highlighting only the hovered
+sublayer. Used on their own they left callers to keep `data` aligned with the
+simulation's index space by hand, and getting that wrong silently reads the
+wrong texels. Once the stories were narrowed down, none of them used the
+primitives directly. Removing them while the package is still a beta costs
+nothing, and removing them after a stable release would be breaking.
+
+The two uses the primitives were meant for are covered in other ways:
+
+- **Owning the simulation**: a new `simulation` prop. The application creates
+  and destroys the simulation, and the layer ingests into it, steps it and
+  renders it. `simulationConfig` and `onSimulationCreated` apply only to a
+  simulation the layer creates. A simulation on another device is rejected
+  with an error, because deck's draws can't sample its textures.
+- **Writing your own renderer**: `PositionTextureSource` moved to
+  `@cosmos.gl/graph`, and `Graph` and `GraphSimulation` now declare
+  `implements PositionTextureSource`. A Three.js or MapLibre integration can
+  type against it without installing the deck package, and the sublayer
+  sources remain the worked example.
+
 ## What building the consumer taught the engine
 
 Three correctness rules came out of running the layers for real, each encoded
@@ -129,7 +156,7 @@ as a fix plus a regression test:
 
 Storybook → Examples → Integrations, six stories. The two data-mode stories:
 **zero-copy graph (10k points)** — binary data, self-stepping, hover
-highlight, drag-to-pin, with the primitive-layer sources as panes — and
+highlight, drag-to-pin, with the sublayer sources as panes — and
 **object data and accessors**, the deck-idiomatic on-ramp where picking hands
 back the original objects. Four showcase stories cover the capability
 classes: **100k points at full zero-copy scale** (binary styling channels

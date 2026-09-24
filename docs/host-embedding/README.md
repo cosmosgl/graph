@@ -43,8 +43,10 @@ place. The headline changes:
 - The package delivers what this document called "the integrating side's work":
   `CosmosGraphLayer` (a composite that owns its simulation, steps it from deck's
   timeline, takes object or binary data, and implements picking with original
-  objects and drag-to-pin) over rebuilt `CosmosPointsLayer` / `CosmosLinksLayer`
-  primitives on deck's shader-module system — positions still zero-copy.
+  objects and drag-to-pin, or renders an app-provided simulation) over internal
+  points/links sublayers on deck's shader-module system — positions still zero-copy.
+  Hosts writing their own renderer type against `PositionTextureSource`, exported by
+  `@cosmos.gl/graph`.
 - Of the five open items below: **all five are fixed** — the async snapshot fence
   (item 1) landed last, in `b8da115`.
 
