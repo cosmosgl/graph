@@ -29,6 +29,7 @@ export interface TrackedPositionsOptions {
   /**
    * Return the latest positions the GPU has already handed back instead of waiting for it to
    * catch up. While points move, they trail the drawn frame by a frame or more.
+   * The first read after tracking starts or changes still waits: there is nothing earlier to return.
    */
   nonBlocking?: boolean;
 }
