@@ -13,6 +13,8 @@ export enum TransitionProperty {
   Positions = 'positions',
   PointColors = 'pointColors',
   PointSizes = 'pointSizes',
+  PointStrokeColors = 'pointStrokeColors',
+  PointStrokeWidths = 'pointStrokeWidths',
   LinkColors = 'linkColors',
   LinkWidths = 'linkWidths',
 }

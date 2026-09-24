@@ -3,11 +3,15 @@ import type { Meta } from '@storybook/html'
 import { createStory, Story } from '@/graph/stories/create-story'
 import { CosmosStoryProps } from './create-cosmos'
 import { allShapes } from './points/shapes'
+import { pointStroke } from './points/stroke'
+import { strokeAndRings } from './points/stroke-and-rings'
 import { imageExample } from './points/images'
 import { pointLabels } from './points/labels'
 import { moscowMetroStations } from './points/position-rescaling'
 
 import shapesStoryRaw from './points/shapes/index?raw'
+import strokeStoryRaw from './points/stroke/index?raw'
+import strokeAndRingsStoryRaw from './points/stroke-and-rings/index?raw'
 import imagesStoryRaw from './points/images/index?raw'
 import labelsStoryRaw from './points/labels/index?raw'
 import labelsDataRaw from './points/labels/data?raw'
@@ -29,6 +33,28 @@ export const AllShapes: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: shapesStoryRaw },
+    ],
+  },
+}
+
+export const PointStroke: Story = {
+  ...createStory(pointStroke),
+  name: 'Point Stroke',
+  tags: ['interactive'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: strokeStoryRaw },
+    ],
+  },
+}
+
+export const StrokeAndRings: Story = {
+  ...createStory(strokeAndRings),
+  name: 'Stroke & Outline Rings',
+  tags: ['interactive'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: strokeAndRingsStoryRaw },
     ],
   },
 }

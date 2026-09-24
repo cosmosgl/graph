@@ -7,6 +7,7 @@ import type { Mat4Array, Hovered } from '@/graph/modules/Store'
 import { defaultConfigValues, EXIT_DEFAULT_SIZE, EXIT_DEFAULT_COLOR_CHANNEL, EDGE_RAMP_PX, POINT_RING_SCALE } from '@/graph/variables'
 import drawPointsFrag from '@/graph/modules/Points/draw-points.frag?raw'
 import drawPointsVert from '@/graph/modules/Points/draw-points.vert?raw'
+import { oklabModule } from '@/graph/modules/Shared/oklab-module'
 import findPointsInRectFrag from '@/graph/modules/Points/find-points-in-rect.frag?raw'
 import findPointsInPolygonFrag from '@/graph/modules/Points/find-points-in-polygon.frag?raw'
 import drawHighlightedFrag from '@/graph/modules/Points/draw-highlighted.frag?raw'
@@ -79,6 +80,14 @@ const POINT_SHADER_DEFINES = {
   EDGE_RAMP_PX: glslFloatLiteral(EDGE_RAMP_PX),
   POINT_RING_SCALE: glslFloatLiteral(POINT_RING_SCALE),
 } as unknown as Record<string, boolean>
+
+/** Stroke defaults handed to the point vertex shader every frame (see `Points.getStrokeUniforms`). */
+interface StrokeUniforms {
+  strokeContrast: number;
+  strokeDefaultShade: number;
+  strokeDefaultWidth: number;
+  strokeDefaultColor: [number, number, number, number];
+}
 
 export class Points extends CoreModule {
   public transition: Transition | undefined
@@ -183,6 +192,12 @@ export class Points extends CoreModule {
   private previousColorData: Float32Array | undefined
   private sourceSizeBuffer: Buffer | undefined
   private targetSizeBuffer: Buffer | undefined
+  private sourceStrokeColorBuffer: Buffer | undefined
+  private targetStrokeColorBuffer: Buffer | undefined
+  private previousStrokeColorData: Float32Array | undefined
+  private sourceStrokeWidthBuffer: Buffer | undefined
+  private targetStrokeWidthBuffer: Buffer | undefined
+  private previousStrokeWidthData: Float32Array | undefined
   private previousSizeData: Float32Array | undefined
   /**
    * CPU copy of `sourceSizeBuffer`. The hover/focus ring is a single quad, so its
@@ -286,6 +301,8 @@ export class Points extends CoreModule {
   private transitionProgress = 1
   private shouldAnimatePointColors = false
   private shouldAnimatePointSizes = false
+  private shouldAnimateStrokeColors = false
+  private shouldAnimateStrokeWidths = false
   private shouldAnimatePointPositions = false
 
   // Uniform stores for scalar uniforms
@@ -334,6 +351,12 @@ export class Points extends CoreModule {
       pointDefaultColor: [number, number, number, number];
       pointDefaultSize: number;
       pointsNumber: number;
+      strokeContrast: number;
+      strokeDefaultShade: number;
+      strokeDefaultWidth: number;
+      strokeDefaultColor: [number, number, number, number];
+      animateStrokeColors: number;
+      animateStrokeWidths: number;
     };
     drawFragmentUniforms: {
       greyoutOpacity: number;
@@ -653,6 +676,8 @@ export class Points extends CoreModule {
     // Ensure buffers exist before Model creation (Model needs attributes at creation time)
     if (!this.targetColorBuffer) this.updateColor()
     if (!this.targetSizeBuffer) this.updateSize()
+    if (!this.targetStrokeColorBuffer) this.updateStrokeColor()
+    if (!this.targetStrokeWidthBuffer) this.updateStrokeWidth()
     if (!this.shapeBuffer) this.updateShape()
     if (!this.imageIndicesBuffer) this.updateImageIndices()
     if (!this.imageSizesBuffer) this.updateImageSizes()
@@ -729,6 +754,12 @@ export class Points extends CoreModule {
           pointDefaultColor: 'vec4<f32>',
           pointDefaultSize: 'f32',
           pointsNumber: 'f32',
+          strokeContrast: 'f32',
+          strokeDefaultShade: 'f32',
+          strokeDefaultWidth: 'f32',
+          strokeDefaultColor: 'vec4<f32>',
+          animateStrokeColors: 'f32',
+          animateStrokeWidths: 'f32',
         },
         defaultUniforms: {
           // Order MUST match uniformTypes and shader declaration
@@ -763,6 +794,9 @@ export class Points extends CoreModule {
           pointDefaultColor: ensureVec4(getRgbaColor(config.pointDefaultColor), [0, 0, 0, 1]),
           pointDefaultSize: config.pointDefaultSize,
           pointsNumber: data.pointsNumber ?? 0,
+          ...this.getStrokeUniforms(),
+          animateStrokeColors: 0,
+          animateStrokeWidths: 0,
         },
       },
       drawFragmentUniforms: {
@@ -791,7 +825,7 @@ export class Points extends CoreModule {
     this.drawCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
-      modules: [pointSizeModule, exitRampModule],
+      modules: [pointSizeModule, exitRampModule, oklabModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       attributes: {
@@ -803,6 +837,10 @@ export class Points extends CoreModule {
         ...(this.shapeBuffer && { shape: this.shapeBuffer }),
         ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
         ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
+        ...(this.sourceStrokeColorBuffer && { sourceStrokeColor: this.sourceStrokeColorBuffer }),
+        ...(this.targetStrokeColorBuffer && { targetStrokeColor: this.targetStrokeColorBuffer }),
+        ...(this.sourceStrokeWidthBuffer && { sourceStrokeWidth: this.sourceStrokeWidthBuffer }),
+        ...(this.targetStrokeWidthBuffer && { targetStrokeWidth: this.targetStrokeWidthBuffer }),
       },
       bufferLayout: [
         { name: 'pointIndices', format: 'float32x2' },
@@ -813,6 +851,10 @@ export class Points extends CoreModule {
         { name: 'shape', format: 'float32' },
         { name: 'imageIndex', format: 'float32' },
         { name: 'imageSize', format: 'float32' },
+        { name: 'sourceStrokeColor', format: 'float32x4' },
+        { name: 'targetStrokeColor', format: 'float32x4' },
+        { name: 'sourceStrokeWidth', format: 'float32' },
+        { name: 'targetStrokeWidth', format: 'float32' },
       ],
       defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
       bindings: {
@@ -833,7 +875,7 @@ export class Points extends CoreModule {
     this.drawCoreCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
-      modules: [pointSizeModule, exitRampModule],
+      modules: [pointSizeModule, exitRampModule, oklabModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       indexBuffer: this.reversedPointIndexBuffer ?? null,
@@ -846,6 +888,10 @@ export class Points extends CoreModule {
         ...(this.shapeBuffer && { shape: this.shapeBuffer }),
         ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
         ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
+        ...(this.sourceStrokeColorBuffer && { sourceStrokeColor: this.sourceStrokeColorBuffer }),
+        ...(this.targetStrokeColorBuffer && { targetStrokeColor: this.targetStrokeColorBuffer }),
+        ...(this.sourceStrokeWidthBuffer && { sourceStrokeWidth: this.sourceStrokeWidthBuffer }),
+        ...(this.targetStrokeWidthBuffer && { targetStrokeWidth: this.targetStrokeWidthBuffer }),
       },
       bufferLayout: [
         { name: 'pointIndices', format: 'float32x2' },
@@ -856,6 +902,10 @@ export class Points extends CoreModule {
         { name: 'shape', format: 'float32' },
         { name: 'imageIndex', format: 'float32' },
         { name: 'imageSize', format: 'float32' },
+        { name: 'sourceStrokeColor', format: 'float32x4' },
+        { name: 'targetStrokeColor', format: 'float32x4' },
+        { name: 'sourceStrokeWidth', format: 'float32' },
+        { name: 'targetStrokeWidth', format: 'float32' },
       ],
       defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
       bindings: {
@@ -1482,6 +1532,58 @@ export class Points extends CoreModule {
     }
   }
 
+  public updateStrokeColor (): void {
+    const { store: { pointsTextureSize }, data } = this
+    if (!pointsTextureSize) return
+
+    // GraphData.updatePointStrokeColor() always populates pointStrokeColors before this runs
+    const colorData = data.pointStrokeColors as Float32Array
+    const { source, target, previous } = updateAttributeBuffers(
+      this.device,
+      colorData,
+      this.sourceStrokeColorBuffer,
+      this.targetStrokeColorBuffer,
+      this.previousStrokeColorData,
+      4
+    )
+    this.sourceStrokeColorBuffer = source
+    this.targetStrokeColorBuffer = target
+    this.previousStrokeColorData = previous
+
+    const attributes = {
+      ...(this.sourceStrokeColorBuffer && { sourceStrokeColor: this.sourceStrokeColorBuffer }),
+      ...(this.targetStrokeColorBuffer && { targetStrokeColor: this.targetStrokeColorBuffer }),
+    }
+    this.drawCommand?.setAttributes(attributes)
+    this.drawCoreCommand?.setAttributes(attributes)
+  }
+
+  public updateStrokeWidth (): void {
+    const { store: { pointsTextureSize }, data } = this
+    if (!pointsTextureSize) return
+
+    // GraphData.updatePointStrokeWidth() always populates pointStrokeWidths before this runs
+    const widthData = data.pointStrokeWidths as Float32Array
+    const { source, target, previous } = updateAttributeBuffers(
+      this.device,
+      widthData,
+      this.sourceStrokeWidthBuffer,
+      this.targetStrokeWidthBuffer,
+      this.previousStrokeWidthData,
+      1
+    )
+    this.sourceStrokeWidthBuffer = source
+    this.targetStrokeWidthBuffer = target
+    this.previousStrokeWidthData = previous
+
+    const attributes = {
+      ...(this.sourceStrokeWidthBuffer && { sourceStrokeWidth: this.sourceStrokeWidthBuffer }),
+      ...(this.targetStrokeWidthBuffer && { targetStrokeWidth: this.targetStrokeWidthBuffer }),
+    }
+    this.drawCommand?.setAttributes(attributes)
+    this.drawCoreCommand?.setAttributes(attributes)
+  }
+
   public updateShape (): void {
     const { device, data } = this
     if (data.pointsNumber === undefined || data.pointShapes === undefined) return
@@ -1714,10 +1816,15 @@ export class Points extends CoreModule {
     renderPass.end()
   }
 
-  public setTransitionProgress (progress: number, animateColors = false, animateSizes = false, animatePositions = false): void {
+  public setTransitionProgress (
+    progress: number, animateColors = false, animateSizes = false, animatePositions = false,
+    animateStrokeColors = false, animateStrokeWidths = false
+  ): void {
     this.transitionProgress = progress
     this.shouldAnimatePointColors = animateColors
     this.shouldAnimatePointSizes = animateSizes
+    this.shouldAnimateStrokeColors = animateStrokeColors
+    this.shouldAnimateStrokeWidths = animateStrokeWidths
     this.shouldAnimatePointPositions = animatePositions
   }
 
@@ -1725,6 +1832,8 @@ export class Points extends CoreModule {
     const { data, config, store } = this
     if (!this.targetColorBuffer) this.updateColor()
     if (!this.targetSizeBuffer) this.updateSize()
+    if (!this.targetStrokeColorBuffer) this.updateStrokeColor()
+    if (!this.targetStrokeWidthBuffer) this.updateStrokeWidth()
     if (!this.exitTexture) this.updateExit()
     if (!this.shapeBuffer) this.updateShape()
     if (!this.imageIndicesBuffer) this.updateImageIndices()
@@ -1778,6 +1887,9 @@ export class Points extends CoreModule {
       pointDefaultColor: ensureVec4(data.defaultRgba, [0, 0, 0, 1]),
       pointDefaultSize: config.pointDefaultSize,
       pointsNumber: data.pointsNumber,
+      ...this.getStrokeUniforms(),
+      animateStrokeColors: this.shouldAnimateStrokeColors ? 1 : 0,
+      animateStrokeWidths: this.shouldAnimateStrokeWidths ? 1 : 0,
     }
 
     const baseFragmentUniforms = {
@@ -3145,6 +3257,23 @@ export class Points extends CoreModule {
    * Makes sure the GPU has current and previous position textures at the right size.
    * This method only allocates; `updatePositions()` is responsible for putting data in them.
    */
+  /**
+   * Stroke defaults for the vertex shader. `strokeDefaultShade` is the derivation direction
+   * (0 auto per point, -1 darken, 1 lighten) or 2 when `pointDefaultStrokeColor` is an explicit
+   * color, carried in `strokeDefaultColor` (parsed once per config change by the store). The
+   * default width stays in CSS px; the shader scales it by `ratio`.
+   */
+  private getStrokeUniforms (): StrokeUniforms {
+    const { config, store } = this
+    const explicit = store.pointDefaultStrokeRgba
+    return {
+      strokeContrast: Math.min(1, Math.max(0, config.pointStrokeContrast)),
+      strokeDefaultShade: explicit ? 2 : store.pointDefaultStrokeShade,
+      strokeDefaultWidth: Math.max(0, config.pointDefaultStrokeWidth),
+      strokeDefaultColor: explicit ?? [0, 0, 0, 1],
+    }
+  }
+
   private ensurePositionTextures (pointsTextureSize: number): void {
     if (!this.currentPositionTexture || this.currentPositionTexture.width !== pointsTextureSize || this.currentPositionTexture.height !== pointsTextureSize) {
       if (this.currentPositionTexture && !this.currentPositionTexture.destroyed) {

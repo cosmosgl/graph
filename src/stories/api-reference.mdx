@@ -161,6 +161,36 @@ This method retrieves the current sizes of the graph points that were previously
 
 The returned array contains the processed point sizes used for rendering, including any default values that were applied during processing.
 
+### <a name="set_point_stroke_colors" href="#set_point_stroke_colors">#</a> graph.<b>setPointStrokeColors</b>(<i>pointStrokeColors</i>)
+
+Sets per-point stroke colors — the thin band along the inside edge of each point, enabled by `pointDefaultStrokeWidth` or `setPointStrokeWidths`.
+
+* **`pointStrokeColors`** (Float32Array): RGBA per point in 0..1, `[r1, g1, b1, a1, r2, g2, b2, a2, ...]`, aligned to the point index space. A `NaN` channel means "use `pointDefaultStrokeColor`" for that point, so a few points can carry an explicit color while the rest keep the derived shade. Greyed-out points always get the derived shade of their greyed fill.
+
+On the next `render()` the change animates with `transitionDuration`, as point colors do.
+
+**Example:**
+```javascript
+// First point stroked white, second on the default rule
+graph.setPointStrokeColors(new Float32Array([1, 1, 1, 1, NaN, NaN, NaN, NaN]));
+graph.render();
+```
+
+### <a name="set_point_stroke_widths" href="#set_point_stroke_widths">#</a> graph.<b>setPointStrokeWidths</b>(<i>pointStrokeWidths</i>)
+
+Sets per-point stroke widths, in CSS pixels.
+
+* **`pointStrokeWidths`** (Float32Array): One width per point, `[w1, w2, ...]`, aligned to the point index space. A `NaN` means "use `pointDefaultStrokeWidth`" for that point; `0` draws no stroke. A point whose on-screen diameter is smaller than its stroke width is drawn without a stroke.
+
+On the next `render()` the change animates with `transitionDuration`, as point sizes do.
+
+**Example:**
+```javascript
+// 2 px on the first point, the default on the second, none on the third
+graph.setPointStrokeWidths(new Float32Array([2, NaN, 0]));
+graph.render();
+```
+
 ### <a name="set_point_shapes" href="#set_point_shapes">#</a> graph.<b>setPointShapes</b>(<i>pointShapes</i>)
 
 This method sets the shapes for the graph points.

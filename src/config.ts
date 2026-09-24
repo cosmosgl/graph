@@ -6,6 +6,11 @@ import { defaultConfigValues } from '@/graph/variables'
 import { PointShape, LinkStyle } from '@/graph/modules/GraphData'
 import { type TransitionEasing } from '@/graph/modules/Transition'
 
+/**
+ * Rules for deriving a point's stroke color from its own fill (see `pointDefaultStrokeColor`).
+ */
+export type PointStrokeShade = 'auto' | 'darken' | 'lighten'
+
 export interface GraphConfigInterface {
   /**
    * If set to `false`, the simulation will not run.
@@ -117,6 +122,42 @@ export interface GraphConfigInterface {
   pointSizeScale: number;
 
   /**
+   * Default width, in CSS pixels, of the stroke drawn along the inside edge of a point: a thin
+   * band in a shade of the point's own color (see `pointDefaultStrokeColor`) that separates
+   * overlapping points. Used for every point that has no width of its own from
+   * `setPointStrokeWidths` (a `NaN` there means "use this default"). The stroke is inset, so it
+   * never enlarges the point, and its width stays constant while zooming even with
+   * `scalePointsOnZoom`. A point whose on-screen diameter is smaller than its stroke width is
+   * drawn without a stroke. Points with an image get the stroke on the shape only, underneath
+   * the image. `0` disables the stroke.
+   * Default value: `0`
+   */
+  pointDefaultStrokeWidth: number;
+
+  /**
+   * Default stroke color, used for every point that has no color of its own from
+   * `setPointStrokeColors` (a `NaN` channel there means "use this default"). Either a color —
+   * a hex string (e.g. `'#ffffff'`) or RGBA values in 0..1 — used as is, or a rule that derives
+   * the color from the point's own fill by a step of `pointStrokeContrast` in OKLab lightness:
+   * `'darken'` and `'lighten'` apply that direction to every point, `'auto'` decides per point
+   * from its own lightness (light points darken, dark points lighten) so the step always has
+   * room. Greyed-out points always get the derived shade of their greyed fill, so the stroke
+   * fades with the point.
+   * Default value: `'auto'`
+   */
+  pointDefaultStrokeColor: PointStrokeShade | string | [number, number, number, number];
+
+  /**
+   * Size of the OKLab lightness step (`L`, 0..1) between a point's fill and its derived stroke
+   * color. The step is perceptual, so every hue gets an equally visible stroke: `0.1` reads as
+   * a clear outline, `0.05` as a hint. Hue is preserved; chroma is reduced only where the
+   * shifted color would leave the sRGB gamut. Applies to the `'auto'`, `'darken'` and
+   * `'lighten'` rules of `pointDefaultStrokeColor`; explicit colors are used as given.
+   * Default value: `0.1`
+   */
+  pointStrokeContrast: number;
+
+  /**
    * Depth-based occlusion culling: skips shading and blending of point
    * fragments hidden underneath other opaque points. Greatly improves
    * performance when many large opaque points overlap; rendering output stays
@@ -180,6 +221,9 @@ export interface GraphConfigInterface {
    * Array of point indices to draw an outline ring around. The outline ring is a circle
    * rendered around the point regardless of the point's shape. When a point is both
    * outlined and greyed out (not highlighted), the ring color is dimmed to match.
+   * This is a selection mark drawn *outside* the body in one uniform color; for an edge color
+   * every point carries, in its own shade or a per-point color, see `pointDefaultStrokeColor`
+   * and `setPointStrokeColors`.
    * Default value: `undefined`
    */
   outlinedPointIndices?: number[];

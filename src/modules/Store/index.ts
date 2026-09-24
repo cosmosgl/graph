@@ -54,6 +54,13 @@ export class Store {
   public hoveredPointRingColor = [1, 1, 1, hoveredPointRingOpacity]
   public focusedPointRingColor = [1, 1, 1, focusedPointRingOpacity]
   public outlinedPointRingColor = [1, 1, 1, 1]
+  /**
+   * `pointDefaultStrokeColor`, parsed once per config change for the per-frame uniforms:
+   * a derivation rule as the shader's direction (0 auto, -1 darken, 1 lighten) with no color,
+   * or an explicit RGBA color.
+   */
+  public pointDefaultStrokeShade = 0
+  public pointDefaultStrokeRgba: [number, number, number, number] | undefined = undefined
   public highlightedPointSet: Set<number> | undefined = undefined
   public outlinedPointSet: Set<number> | undefined = undefined
   public hoveredLinkColor = [-1, -1, -1, -1]
@@ -278,6 +285,16 @@ export class Store {
     this.outlinedPointRingColor[1] = convertedRgba[1]
     this.outlinedPointRingColor[2] = convertedRgba[2]
     this.outlinedPointRingColor[3] = convertedRgba[3]
+  }
+
+  public setPointDefaultStrokeColor (value: string | [number, number, number, number]): void {
+    if (value === 'auto' || value === 'darken' || value === 'lighten') {
+      this.pointDefaultStrokeShade = value === 'auto' ? 0 : value === 'darken' ? -1 : 1
+      this.pointDefaultStrokeRgba = undefined
+    } else {
+      this.pointDefaultStrokeShade = 0
+      this.pointDefaultStrokeRgba = getRgbaColor(value)
+    }
   }
 
   public setHighlightedPointSet (indices: number[] | undefined): void {

@@ -42,6 +42,8 @@ in vec4 imageAtlasUV;
 in float shapeSize;
 in float imageSizeVarying;
 in float overallSize;
+in vec4 strokeColor;
+in float strokeWidthPx;
 
 out vec4 fragColor;
 
@@ -228,22 +230,36 @@ void main() {
         vec2 coreCoord = shapeCoord * (shapeDiameterPx / coreDiameterPx); // -1..1 across the core
         float halfRampPx = EDGE_RAMP_PX * 0.5;
 
-        float opacity;
+        // Signed distance to the edge in device pixels (negative inside). The fill ramp and the
+        // stroke band below are both read off it, so they anti-alias identically.
+        float edgeDistancePx;
         if (pointShape == CIRCLE) {
             // Along the radius: a ramp in r² skews coverage outward on small discs.
             float rPx = length(coreCoord) * coreDiameterPx * 0.5;
-            opacity = 1.0 - smoothstep(coreDiameterPx * 0.5 - halfRampPx, coreDiameterPx * 0.5 + halfRampPx, rPx);
+            edgeDistancePx = rPx - coreDiameterPx * 0.5;
         } else {
             float shapeDistance = getShapeDistance(coreCoord, pointShape);
-            // Half a ramp in field units, via the field's gradient per pixel: exact for a field that
-            // is linear across the ramp, as every polygon field is at its edge. All fragments of a
+            // Field units to pixels via the field's gradient per pixel: exact for a field that is
+            // linear across the ramp, as every polygon field is at its edge. All fragments of a
             // sprite share pointShape, so the derivative is taken in coherent control flow.
-            float shapeHalfRamp = max(halfRampPx * length(vec2(dFdx(shapeDistance), dFdy(shapeDistance))), 1e-6);
-            opacity = 1.0 - smoothstep(-shapeHalfRamp, shapeHalfRamp, shapeDistance);
+            float fieldPerPx = max(length(vec2(dFdx(shapeDistance), dFdy(shapeDistance))), 1e-6);
+            edgeDistancePx = shapeDistance / fieldPerPx;
         }
+        float opacity = 1.0 - smoothstep(-halfRampPx, halfRampPx, edgeDistancePx);
         opacity *= smallAlpha * shapeColor.a;
 
-        finalShapeColor = vec4(shapeColor.rgb, opacity);
+        // Edge stroke: an inset band [-strokeWidthPx, 0] along the edge in the per-point stroke
+        // color (resolved in the vertex stage: explicit, or a lightness step from the fill).
+        // Inset, so the point never grows and the sprite needs no room for it. A shape narrower
+        // than its stroke would be nothing but stroke, so it gets none.
+        vec3 shapeRgb = shapeColor.rgb;
+        if (strokeWidthPx > 0.0 && shapeDiameterPx >= strokeWidthPx) {
+            float bandDistancePx = abs(edgeDistancePx + strokeWidthPx * 0.5) - strokeWidthPx * 0.5;
+            float stroke = 1.0 - smoothstep(-halfRampPx, halfRampPx, bandDistancePx);
+            shapeRgb = mix(shapeRgb, strokeColor.rgb, stroke * strokeColor.a);
+        }
+
+        finalShapeColor = vec4(shapeRgb, opacity);
     }
 
     // Handle image rendering with centering logic

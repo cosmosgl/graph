@@ -22,6 +22,9 @@ export const defaultConfigValues = {
   pointGreyoutOpacity: undefined,
   pointGreyoutColor: undefined,
   pointSizeScale: 1,
+  pointDefaultStrokeWidth: 0,
+  pointDefaultStrokeColor: 'auto',
+  pointStrokeContrast: 0.1,
   pointOcclusionCulling: true,
   scalePointsOnZoom: false,
 
