@@ -744,6 +744,8 @@ This method retrieves the current X and Y coordinates of all points in the graph
 
 This method returns an array of cluster positions, where each pair of elements represents the x and y coordinates of a cluster.
 
+Reading positions back from the GPU blocks until the GPU finishes its queued work. Pass `{ nonBlocking: true }` to get the latest centroids it has already handed back instead: while points move they trail the drawn frame by a frame or more, which suits cluster labels redrawn on every simulation tick. The first read, and the first after the clusters change, still waits, since there are no earlier positions to return.
+
 ### <a name="ready" href="#ready">#</a> graph.<b>ready</b>
 
 A `Promise<void>` that resolves when the graph has completed initialization and is ready to use.
