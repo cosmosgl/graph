@@ -25,6 +25,7 @@ export enum LinkStyle {
  * Links grouped by one of their endpoints, in link order. The links of point `p` sit at
  * `offsets[p]` up to, not including, `offsets[p + 1]` in `neighbors` and `linkIndices`.
  * A link whose source or target is not a point is left out.
+ * Rebuilt only when the links or the point count change.
  */
 export interface LinksByPoint {
   /** `pointsNumber + 1` entries. */
@@ -102,9 +103,9 @@ export class GraphData {
   public clusterPositions: (number | undefined)[] | undefined
   public clusterStrength: Float32Array | undefined
 
-  /** Links grouped by source point; `neighbors` holds each link's target. Rebuilt only when the links or the point count change. */
+  /** Links grouped by source point; `neighbors` holds each link's target. */
   public linksBySource: LinksByPoint | undefined
-  /** Links grouped by target point; `neighbors` holds each link's source. Rebuilt only when the links or the point count change. */
+  /** Links grouped by target point; `neighbors` holds each link's source. */
   public linksByTarget: LinksByPoint | undefined
 
   public degree: number[] | undefined
@@ -114,8 +115,8 @@ export class GraphData {
   /** Lazily parsed `pointDefaultColor` — see the `defaultRgba` getter. */
   private _defaultRgba: [number, number, number, number] | undefined
   private _inputLinks: Float32Array | undefined
-  private _areLinksByPointStale = true
-  private _linksByPointPointsNumber: number | undefined
+  private _isLinkGroupingStale = true
+  private _linkGroupingPointsNumber: number | undefined
   private _sourceIndexToTargetIndices: PointPairs | undefined
   private _targetIndexToSourceIndices: PointPairs | undefined
 
@@ -129,10 +130,6 @@ export class GraphData {
 
   public get linksNumber (): number | undefined {
     return this.links && this.links.length / 2
-  }
-
-  public get inputLinks (): Float32Array | undefined {
-    return this._inputLinks
   }
 
   /**
@@ -164,14 +161,19 @@ export class GraphData {
     return this._defaultRgba
   }
 
+  /** Assigning, even the same array again, rebuilds `linksBySource` / `linksByTarget` on the next `update()`. */
+  public get inputLinks (): Float32Array | undefined {
+    return this._inputLinks
+  }
+
   public set inputLinks (links: Float32Array | undefined) {
     this._inputLinks = links
-    this._areLinksByPointStale = true
+    this._isLinkGroupingStale = true
   }
 
   public updatePoints (): void {
     // Positions must hold whole [x, y] pairs: an odd length makes `pointsNumber`
-    // fractional, which the adjacency and degree builds pass to `new Array()`.
+    // fractional, which the degree build passes to `new Array()`.
     // `subarray` is a view over the same buffer — the caller's array is not edited.
     if (this.inputPointPositions !== undefined && this.inputPointPositions.length % 2 !== 0) {
       console.warn(`Invalid point positions length: ${this.inputPointPositions.length}. The array must hold [x, y] pairs — the trailing value was ignored.`)
@@ -538,7 +540,7 @@ export class GraphData {
 
     this.updateClusters()
 
-    if (this._areLinksByPointStale || this._linksByPointPointsNumber !== this.pointsNumber) {
+    if (this._isLinkGroupingStale || this._linkGroupingPointsNumber !== this.pointsNumber) {
       this._groupLinksByPoint()
       this._calculateDegrees()
     }
@@ -615,8 +617,8 @@ export class GraphData {
 
   private _groupLinksByPoint (): void {
     const { links, linksNumber, pointsNumber } = this
-    this._areLinksByPointStale = false
-    this._linksByPointPointsNumber = pointsNumber
+    this._isLinkGroupingStale = false
+    this._linkGroupingPointsNumber = pointsNumber
     this._sourceIndexToTargetIndices = undefined
     this._targetIndexToSourceIndices = undefined
     if (links === undefined || linksNumber === undefined || pointsNumber === undefined) {
