@@ -481,8 +481,15 @@ export class Clusters extends CoreModule {
 
   /** Caches the positions of a finished `requestCentroidReadback()`, if one has finished. */
   public resolveCentroidReadback (): void {
-    const pixels = this.centroidReadback?.poll()
-    if (pixels) this.cacheCentroidPositions(pixels)
+    if (!this.centroidReadback?.inFlight) return
+    const pixels = this.centroidReadback.poll()
+    if (pixels) {
+      this.cacheCentroidPositions(pixels)
+    } else if (!this.centroidReadback.inFlight && this.points) {
+      // Fence failed or context lost: the read ended without pixels, so the cache is
+      // behind what the flag claims. The next read recomputes or asks again.
+      this.points.areClusterCentroidsUpToDate = false
+    }
   }
 
   public run (): void {
