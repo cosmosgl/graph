@@ -74,6 +74,17 @@ graph.setConfigPartial({ backgroundColor: '#111' })
 graph.setConfigPartial({ backgroundColor: undefined })
 ```
 
+### <a name="data_arrays" href="#data_arrays">#</a> Data arrays
+
+cosmos.gl keeps a reference to the arrays you pass to its `set*` methods — it doesn't copy them. If you change an array later, pass it to its method again before the next `render()`. Until then, cosmos.gl may use a mix of old and new values.
+
+```javascript
+links[2] = 2;
+links[3] = 0;
+graph.setLinks(links); // pass the edited array again
+graph.render();
+```
+
 ### <a name="set_point_positions" href="#set_point_positions">#</a> graph.<b>setPointPositions</b>(<i>pointPositions</i>, [<i>dontRescale</i>])
 
 This method sets the positions of points in a cosmos.gl graph using the provided coordinates array.
