@@ -2459,8 +2459,15 @@ export class Points extends CoreModule {
 
   /** Caches the positions of a finished `requestTrackedPositionsReadback()`, if one has finished. */
   public resolveTrackedPositionsReadback (): void {
-    const pixels = this.trackedPositionsReadback?.poll()
-    if (pixels) this.cacheTrackedPositions(pixels)
+    if (!this.trackedPositionsReadback?.inFlight) return
+    const pixels = this.trackedPositionsReadback.poll()
+    if (pixels) {
+      this.cacheTrackedPositions(pixels)
+    } else if (!this.trackedPositionsReadback.inFlight) {
+      // Fence failed or context lost: the read ended without pixels. Mark the positions
+      // stale so the next non-blocking read issues again instead of waiting for a write.
+      this.isTrackedReadbackStale = true
+    }
   }
 
   public getSampledPointPositionsMap (): Map<number, [number, number]> {
