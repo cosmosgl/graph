@@ -26,7 +26,8 @@ export class Clusters extends CoreModule {
 
   /**
    * Cached result of the last `getCentroidPositions()` computation, valid while
-   * `Points.areClusterCentroidsUpToDate` holds (positions unchanged since).
+   * `Points.areClusterCentroidsUpToDate` holds and no readback is in flight (a copy in
+   * flight is newer than this array).
    * Nulled in `create()` and `destroy()` to handle structural changes (e.g. `setPointPositions`,
    * `setPointClusters`).
    */
