@@ -25,11 +25,12 @@ import { Transition, TransitionProperty } from '@/graph/modules/Transition'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
 
-export interface TrackedPositionsOptions {
+export interface PositionsReadOptions {
   /**
    * Return the latest positions the GPU has already handed back instead of waiting for it to
    * catch up. While points move, they trail the drawn frame by a frame or more.
-   * The first read after tracking starts or changes still waits: there is nothing earlier to return.
+   * The first read, and the first after the tracked points or the clusters change, still
+   * waits: there is nothing earlier to return.
    */
   nonBlocking?: boolean;
 }
@@ -1165,12 +1166,17 @@ export class Graph {
 
   /**
    * Get current X and Y coordinates of the clusters.
+   * @param options Use `{ nonBlocking: true }` to take the latest positions the GPU has handed
+   * back without stalling for the current ones.
    * @returns Array of cluster positions in `[x0, y0, x1, y1, ...]` order. Do not mutate the returned array.
    */
-  public getClusterPositions (): Readonly<number[]> {
+  public getClusterPositions (options?: PositionsReadOptions): Readonly<number[]> {
     if (this._isDestroyed || !this.device || !this.clusters) return []
     if (this.graph.pointClusters === undefined || this.clusters.clusterCount === undefined) return []
-    return this.clusters.getCentroidPositions()
+    const positions = this.clusters.getCentroidPositions(options?.nonBlocking)
+    // Frames issue and collect the readback, as for `getTrackedPointPositionsMap`.
+    if (options?.nonBlocking && this.clusters.needsCentroidReadback) this.requestRender()
+    return positions
   }
 
   /**
@@ -1401,7 +1407,7 @@ export class Graph {
    * fade-out is still playing. A tracked index with no point behind it (at or past the current
    * point count) is omitted the same way, and reappears if the count grows to include it.
    */
-  public getTrackedPointPositionsMap (options?: TrackedPositionsOptions): ReadonlyMap<number, [number, number]> {
+  public getTrackedPointPositionsMap (options?: PositionsReadOptions): ReadonlyMap<number, [number, number]> {
     if (this._isDestroyed || !this.points) return new Map()
     const positions = this.points.getTrackedPositionsMap(options?.nonBlocking)
     // Frames issue and collect the readback. An idle loop would never run one, so a
@@ -2261,10 +2267,10 @@ export class Graph {
     // would stay occupied, blocking the next pick until something else wakes
     // the loop).
     if (this.points?.hasPendingPickReadback || this.lines?.hasPendingPickReadback) return true
-    // Same for a non-blocking tracked-positions readback: the one issued after
-    // the simulation's last step must still be collected, or an overlay reading
-    // with `nonBlocking` would stay a tick behind the settled layout.
-    if (this.points?.hasPendingTrackedReadback) return true
+    // Same for a non-blocking tracked-positions or cluster-centroid readback: the
+    // one issued after the simulation's last step must still be collected, or an
+    // overlay reading with `nonBlocking` would stay a tick behind the settled layout.
+    if (this.points?.hasPendingTrackedReadback || this.clusters?.hasPendingCentroidReadback) return true
     return this.hasPendingHoverWork()
   }
 
@@ -2302,6 +2308,7 @@ export class Graph {
     // Collect before the frame queues GPU work: `getBufferSubData` waits behind
     // whatever commands are already queued.
     this.points?.resolveTrackedPositionsReadback()
+    this.clusters?.resolveCentroidReadback()
 
     const shouldInterpolatePositions = this.transition.isActiveFor(TransitionProperty.Positions)
     const shouldAnimatePointColors = this.transition.isActiveFor(TransitionProperty.PointColors)
@@ -2373,7 +2380,9 @@ export class Graph {
 
     // After every position write this frame (transition, simulation step, drag) and its
     // trackPoints(), so a non-blocking read collected next frame sees the newest of them.
+    // The centroid readback sums those positions itself before it is issued.
     this.points?.requestTrackedPositionsReadback()
+    this.clusters?.requestCentroidReadback()
 
     this.fpsMonitor?.end(frameNow)
 

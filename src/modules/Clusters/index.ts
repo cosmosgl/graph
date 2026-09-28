@@ -6,6 +6,7 @@ import calculateCentermassFrag from '@/graph/modules/Clusters/calculate-centerma
 import calculateCentermassVert from '@/graph/modules/Clusters/calculate-centermass.vert?raw'
 import forceFrag from '@/graph/modules/Clusters/force-cluster.frag?raw'
 import { readPixels } from '@/graph/helper'
+import { PickingReadback } from '@/graph/modules/Points/picking-readback'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
@@ -30,6 +31,16 @@ export class Clusters extends CoreModule {
    * `setPointClusters`).
    */
   private cachedCentroidPositions: number[] | null = null
+  /**
+   * Async copy of `centermassFbo` for non-blocking reads, issued by
+   * `requestCentroidReadback()` and collected by `resolveCentroidReadback()`.
+   */
+  private centroidReadback: PickingReadback | undefined
+  /**
+   * Set by a non-blocking read that returned older positions; the next readback issued
+   * clears it, so readbacks stop when the reads do.
+   */
+  private isCentroidReadbackWanted = false
   private applyForcesVertexCoordBuffer: Buffer | undefined
 
   // Track previous sizes to detect changes
@@ -51,8 +62,22 @@ export class Clusters extends CoreModule {
     };
   }> | undefined
 
+  /** Whether a non-blocking centroid readback is still awaiting the GPU. */
+  public get hasPendingCentroidReadback (): boolean {
+    return this.centroidReadback?.inFlight ?? false
+  }
+
+  /** Whether a non-blocking read is waiting on a readback that no frame has issued yet. */
+  public get needsCentroidReadback (): boolean {
+    return this.isCentroidReadbackWanted && this.points?.areClusterCentroidsUpToDate === false
+  }
+
   public create (): void {
     this.cachedCentroidPositions = null
+    // `centermassFbo` may be reallocated below: a read in flight targets the old one, and
+    // the readback buffer is sized to it.
+    this.centroidReadback?.destroy()
+    this.centroidReadback = undefined
     const { device, store, data } = this
     const { pointsTextureSize } = store
     if (data.pointsNumber === undefined || (!data.pointClusters && !data.clusterPositions)) return
@@ -349,19 +374,20 @@ export class Clusters extends CoreModule {
    * Sums each cluster's point positions into `centermassFbo` (x, y, count per texel).
    * @param positionsTexture The positions to sum: `previousPositionTexture` inside a simulation
    * step, where the swap has just made it the freshest; `currentPositionTexture` anywhere else.
+   * @returns Whether the pass ran; it is skipped while GPU resources are missing.
    */
-  public calculateCentermass (positionsTexture: Texture | undefined): void {
+  public calculateCentermass (positionsTexture: Texture | undefined): boolean {
     const { device, points } = this
-    if (!points) return
+    if (!points) return false
 
-    if (!this.calculateCentermassCommand || !this.calculateCentermassUniformStore) return
+    if (!this.calculateCentermassCommand || !this.calculateCentermassUniformStore) return false
     // Ensure pointIndices is set (Model might exist but attributes not set yet)
-    if (!this.pointIndices) return
+    if (!this.pointIndices) return false
 
-    if (!this.centermassFbo || this.centermassFbo.destroyed) return
-    if (!this.clusterTexture || this.clusterTexture.destroyed) return
-    if (!positionsTexture || positionsTexture.destroyed) return
-    if (!points.exitTexture || points.exitTexture.destroyed) return
+    if (!this.centermassFbo || this.centermassFbo.destroyed) return false
+    if (!this.clusterTexture || this.clusterTexture.destroyed) return false
+    if (!positionsTexture || positionsTexture.destroyed) return false
+    if (!points.exitTexture || points.exitTexture.destroyed) return false
 
     // Update vertex count dynamically (using same fallback logic as initialization)
     this.calculateCentermassCommand.setVertexCount(this.data.pointsNumber ?? 0)
@@ -389,17 +415,32 @@ export class Clusters extends CoreModule {
     this.calculateCentermassCommand.draw(centermassPass)
 
     centermassPass.end()
+    return true
   }
 
   /**
    * Returns a cached result until the positions change, to avoid repeating the render
    * pass and the GPU-to-CPU transfer (`readPixels`), which stalls until the GPU catches up.
+   *
+   * With `nonBlocking`, changed positions don't stall: the result is the latest one
+   * `resolveCentroidReadback()` has collected, a frame or more behind the drawn points.
+   * It blocks only when there is no earlier result to return.
+   *
    * Do not mutate the returned array; it may be the internal cache.
    */
-  public getCentroidPositions (): Readonly<number[]> {
-    if (this.points?.areClusterCentroidsUpToDate && this.cachedCentroidPositions) {
+  public getCentroidPositions (nonBlocking = false): Readonly<number[]> {
+    if (this.points?.areClusterCentroidsUpToDate && this.cachedCentroidPositions && !this.hasPendingCentroidReadback) {
       return this.cachedCentroidPositions
     }
+
+    if (nonBlocking && this.cachedCentroidPositions) {
+      this.isCentroidReadbackWanted = true
+      return this.cachedCentroidPositions
+    }
+
+    // A read still in flight holds older positions than the one about to be taken.
+    this.isCentroidReadbackWanted = false
+    this.centroidReadback?.cancel()
 
     // Outside a simulation step `current` holds the latest positions (see `Graph.runSimulationStep`).
     this.calculateCentermass(this.points?.currentPositionTexture)
@@ -407,23 +448,41 @@ export class Clusters extends CoreModule {
     // Guard: calculateCentermass() may return early if GPU resources aren't ready
     if (!this.centermassFbo || this.centermassFbo.destroyed || this.clusterCount === undefined) return []
 
-    const pixels = readPixels(this.device, this.centermassFbo)
-    const positions: number[] = []
-    positions.length = this.clusterCount * 2
-    for (let i = 0; i < positions.length / 2; i += 1) {
-      const sumX = pixels[i * 4 + 0]
-      const sumY = pixels[i * 4 + 1]
-      const sumN = pixels[i * 4 + 2]
-      if (sumX !== undefined && sumY !== undefined && sumN !== undefined) {
-        positions[i * 2] = sumX / sumN
-        positions[i * 2 + 1] = sumY / sumN
-      }
-    }
-
-    this.cachedCentroidPositions = positions
+    const positions = this.cacheCentroidPositions(readPixels(this.device, this.centermassFbo))
     if (this.points) this.points.areClusterCentroidsUpToDate = true
-
     return positions
+  }
+
+  /**
+   * Sums the frame's final positions and starts a non-blocking read of them for
+   * `resolveCentroidReadback()` to collect on a later frame. Does nothing unless a non-blocking
+   * read asked for one and positions changed since the last issue, so it can run at the end of
+   * every frame.
+   */
+  public requestCentroidReadback (): void {
+    if (!this.isCentroidReadbackWanted || this.points?.areClusterCentroidsUpToDate !== false) return
+    // A read still in flight keeps the slot; the flags hold so the next frame retries.
+    if (this.centroidReadback?.inFlight) return
+    if (!this.centermassFbo || this.centermassFbo.destroyed || this.clusterCount === undefined) return
+    const gl = (this.device as unknown as { gl?: WebGL2RenderingContext }).gl
+    const handle = (this.centermassFbo as unknown as { handle?: WebGLFramebuffer }).handle
+    if (!gl || !handle) return // non-WebGL backend: the blocking path still works
+
+    // The simulation's own pass summed mid-step positions; sum the ones the frame drew.
+    if (!this.calculateCentermass(this.points?.currentPositionTexture)) return
+
+    const { width, height } = this.centermassFbo
+    this.centroidReadback ||= new PickingReadback(gl, width * height * 4)
+    if (this.centroidReadback.issue(handle, 0, 0, width, height)) {
+      this.isCentroidReadbackWanted = false
+      if (this.points) this.points.areClusterCentroidsUpToDate = true
+    }
+  }
+
+  /** Caches the positions of a finished `requestCentroidReadback()`, if one has finished. */
+  public resolveCentroidReadback (): void {
+    const pixels = this.centroidReadback?.poll()
+    if (pixels) this.cacheCentroidPositions(pixels)
   }
 
   public run (): void {
@@ -477,6 +536,8 @@ export class Clusters extends CoreModule {
    */
   public destroy (): void {
     this.cachedCentroidPositions = null
+    this.centroidReadback?.destroy()
+    this.centroidReadback = undefined
     // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
     this.calculateCentermassCommand?.destroy()
     this.calculateCentermassCommand = undefined
@@ -522,5 +583,23 @@ export class Clusters extends CoreModule {
       this.applyForcesVertexCoordBuffer.destroy()
     }
     this.applyForcesVertexCoordBuffer = undefined
+  }
+
+  /** Builds the centroid array from a centermass readback and stores it as the cache. */
+  private cacheCentroidPositions (pixels: Float32Array): Readonly<number[]> {
+    const positions: number[] = []
+    positions.length = (this.clusterCount ?? 0) * 2
+    for (let i = 0; i < positions.length / 2; i += 1) {
+      const sumX = pixels[i * 4 + 0]
+      const sumY = pixels[i * 4 + 1]
+      const sumN = pixels[i * 4 + 2]
+      if (sumX !== undefined && sumY !== undefined && sumN !== undefined) {
+        positions[i * 2] = sumX / sumN
+        positions[i * 2 + 1] = sumY / sumN
+      }
+    }
+
+    this.cachedCentroidPositions = positions
+    return positions
   }
 }

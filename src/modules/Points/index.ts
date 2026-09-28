@@ -172,10 +172,10 @@ export class Points extends CoreModule {
    */
   public targetPositionTexture: Texture | undefined
   /**
-   * Whether the cached cluster centroid positions are still valid.
-   * Set to `false` in `swapFbo()` whenever GPU point positions change (simulation tick or drag).
-   * Set to `true` by `Clusters.getCentroidPositions()` after a fresh computation.
-   * Used together with `Clusters.cachedCentroidPositions` to skip redundant GPU readbacks.
+   * Whether the positions are unchanged since the cluster centroids were last computed for
+   * the CPU: a blocking `Clusters.getCentroidPositions()`, or a readback `Clusters` issued.
+   * Cleared here whenever the GPU point positions change (simulation step, drag, transition,
+   * data upload); set by `Clusters`.
    */
   public areClusterCentroidsUpToDate = false
   private sourceColorBuffer: Buffer | undefined
