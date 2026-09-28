@@ -24,10 +24,10 @@ export class Clusters extends CoreModule {
   private clustersTextureSize: number | undefined
 
   /**
-   * Cached result of the last `getCentroidPositions()` computation.
-   * Populated when the simulation is inactive to avoid redundant GPU render passes and readbacks.
+   * Cached result of the last `getCentroidPositions()` computation, valid while
+   * `Points.areClusterCentroidsUpToDate` holds (positions unchanged since).
    * Nulled in `create()` and `destroy()` to handle structural changes (e.g. `setPointPositions`,
-   * `setPointClusters`). Positional changes are handled separately via `Points.areClusterCentroidsUpToDate`.
+   * `setPointClusters`).
    */
   private cachedCentroidPositions: number[] | null = null
   private applyForcesVertexCoordBuffer: Buffer | undefined
@@ -345,7 +345,12 @@ export class Clusters extends CoreModule {
     })
   }
 
-  public calculateCentermass (): void {
+  /**
+   * Sums each cluster's point positions into `centermassFbo` (x, y, count per texel).
+   * @param positionsTexture The positions to sum: `previousPositionTexture` inside a simulation
+   * step, where the swap has just made it the freshest; `currentPositionTexture` anywhere else.
+   */
+  public calculateCentermass (positionsTexture: Texture | undefined): void {
     const { device, points } = this
     if (!points) return
 
@@ -355,7 +360,7 @@ export class Clusters extends CoreModule {
 
     if (!this.centermassFbo || this.centermassFbo.destroyed) return
     if (!this.clusterTexture || this.clusterTexture.destroyed) return
-    if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
+    if (!positionsTexture || positionsTexture.destroyed) return
     if (!points.exitTexture || points.exitTexture.destroyed) return
 
     // Update vertex count dynamically (using same fallback logic as initialization)
@@ -371,7 +376,7 @@ export class Clusters extends CoreModule {
     // Update texture bindings dynamically
     this.calculateCentermassCommand.setBindings({
       clusterTexture: this.clusterTexture,
-      positionsTexture: points.previousPositionTexture,
+      positionsTexture,
       exitTexture: points.exitTexture,
     })
 
@@ -386,17 +391,18 @@ export class Clusters extends CoreModule {
     centermassPass.end()
   }
 
-  /** Do not mutate the returned array; it may be the internal cache. */
+  /**
+   * Returns a cached result until the positions change, to avoid repeating the render
+   * pass and the GPU-to-CPU transfer (`readPixels`), which stalls until the GPU catches up.
+   * Do not mutate the returned array; it may be the internal cache.
+   */
   public getCentroidPositions (): Readonly<number[]> {
-    const { config: { enableSimulation }, store: { isSimulationRunning } } = this
-    const simulationInactive = !enableSimulation || !isSimulationRunning
-
-    // Return cache when simulation is stopped and positions haven't changed
-    if (simulationInactive && this.points?.areClusterCentroidsUpToDate && this.cachedCentroidPositions) {
+    if (this.points?.areClusterCentroidsUpToDate && this.cachedCentroidPositions) {
       return this.cachedCentroidPositions
     }
 
-    this.calculateCentermass()
+    // Outside a simulation step `current` holds the latest positions (see `Graph.runSimulationStep`).
+    this.calculateCentermass(this.points?.currentPositionTexture)
 
     // Guard: calculateCentermass() may return early if GPU resources aren't ready
     if (!this.centermassFbo || this.centermassFbo.destroyed || this.clusterCount === undefined) return []
@@ -414,11 +420,8 @@ export class Clusters extends CoreModule {
       }
     }
 
-    // Warm the cache when simulation is inactive
-    if (simulationInactive && this.points) {
-      this.cachedCentroidPositions = positions
-      this.points.areClusterCentroidsUpToDate = true
-    }
+    this.cachedCentroidPositions = positions
+    if (this.points) this.points.areClusterCentroidsUpToDate = true
 
     return positions
   }
@@ -427,7 +430,7 @@ export class Clusters extends CoreModule {
     if (!this.data.pointClusters && !this.data.clusterPositions) return
 
     // Calculate centermass (creates its own RenderPass - different framebuffer)
-    this.calculateCentermass()
+    this.calculateCentermass(this.points?.previousPositionTexture)
 
     // Add safety check
     if (!this.applyForcesCommand || !this.applyForcesUniformStore) {
