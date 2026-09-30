@@ -5,29 +5,20 @@ import { createStory, Story } from '@/graph/stories/create-story'
 import generateMeshDataRaw from '@/graph/stories/generate-mesh-data?raw'
 import cosmosPointsLayerRaw from '../cosmos-points-layer?raw'
 import cosmosLinksLayerRaw from '../cosmos-links-layer?raw'
-import blendParametersRaw from '../blend-parameters?raw'
-import { deckGlZeroCopy } from './deck-gl-zero-copy'
-import { cosmosGraphObjects } from './cosmos-graph-objects'
-import { cosmosGraphLarge } from './cosmos-graph-large'
-import { cosmosGraphComposition } from './cosmos-graph-composition'
-import { cosmosGraphUpdates } from './cosmos-graph-updates'
-import { cosmosGraphControl } from './cosmos-graph-control'
-import { cosmosGraphOwnSimulations } from './cosmos-graph-own-simulations'
+import { graphLayer } from './graph-layer'
+import { bigGraph } from './big-graph'
+import { ownSimulations } from './own-simulations'
 
-import deckGlZeroCopyRaw from './deck-gl-zero-copy?raw'
-import cosmosGraphObjectsRaw from './cosmos-graph-objects?raw'
-import cosmosGraphLargeRaw from './cosmos-graph-large?raw'
-import cosmosGraphCompositionRaw from './cosmos-graph-composition?raw'
-import cosmosGraphUpdatesRaw from './cosmos-graph-updates?raw'
-import cosmosGraphControlRaw from './cosmos-graph-control?raw'
-import cosmosGraphOwnSimulationsRaw from './cosmos-graph-own-simulations?raw'
-import cosmosGraphOwnSimulationsCssRaw from './cosmos-graph-own-simulations.css?raw'
+import graphLayerRaw from './graph-layer?raw'
+import bigGraphRaw from './big-graph?raw'
+import ownSimulationsRaw from './own-simulations?raw'
+import styleRaw from './style.css?raw'
 
 // Embedding cosmos.gl in deck.gl with `CosmosGraphLayer` from
-// @cosmos.gl/deck-layers — the layer owns the simulation, steps it from
-// deck's timeline, and exposes picking and drag-to-pin. The flagship's panes
-// carry its internal sublayer sources — a reference for sampling the position
-// texture from a renderer of your own.
+// @cosmos.gl/deck-layers: the layer the deck.gl way, the layer at scale on
+// cosmos.gl's flat arrays, and the application owning the simulations. The
+// big-graph story carries the internal sublayer sources as panes — a
+// reference for sampling the position texture from a renderer of your own.
 const meta: Meta<CosmosStoryProps> = {
   title: 'Examples/Integrations',
   parameters: {
@@ -37,86 +28,41 @@ const meta: Meta<CosmosStoryProps> = {
   },
 }
 
-export const CosmosGraphZeroCopy: Story = {
-  ...createStory(deckGlZeroCopy),
-  name: 'CosmosGraphLayer: zero-copy graph (10k points)',
-  tags: ['advanced', 'interactive'],
+export const GraphLayer: Story = {
+  ...createStory(graphLayer),
+  name: 'Graph layer',
+  tags: ['beginner', 'interactive', 'labels'],
   parameters: {
     sourceCode: [
-      { name: 'Story', code: deckGlZeroCopyRaw },
-      { name: 'CosmosPointsLayer', code: cosmosPointsLayerRaw },
-      { name: 'CosmosLinksLayer', code: cosmosLinksLayerRaw },
-      { name: 'blend-parameters', code: blendParametersRaw },
-      { name: 'generate-mesh-data', code: generateMeshDataRaw },
+      { name: 'Story', code: graphLayerRaw },
+      { name: 'style.css', code: styleRaw },
     ],
   },
 }
 
-export const CosmosGraphObjectData: Story = {
-  ...createStory(cosmosGraphObjects),
-  name: 'CosmosGraphLayer: object data and accessors',
-  tags: ['beginner', 'interactive'],
-  parameters: {
-    sourceCode: [
-      { name: 'Story', code: cosmosGraphObjectsRaw },
-    ],
-  },
-}
-
-export const CosmosGraphLarge: Story = {
-  ...createStory(cosmosGraphLarge),
-  name: 'CosmosGraphLayer: 100k points at full zero-copy scale',
+export const BigGraph: Story = {
+  ...createStory(bigGraph),
+  name: 'Big graph',
   tags: ['advanced', 'perf', 'large-data'],
   parameters: {
     sourceCode: [
-      { name: 'Story', code: cosmosGraphLargeRaw },
+      { name: 'Story', code: bigGraphRaw },
+      { name: 'style.css', code: styleRaw },
+      { name: 'CosmosPointsLayer', code: cosmosPointsLayerRaw },
+      { name: 'CosmosLinksLayer', code: cosmosLinksLayerRaw },
       { name: 'generate-mesh-data', code: generateMeshDataRaw },
     ],
   },
 }
 
-export const CosmosGraphComposition: Story = {
-  ...createStory(cosmosGraphComposition),
-  name: 'CosmosGraphLayer: composing with deck layers',
-  tags: ['advanced', 'interactive', 'labels'],
-  parameters: {
-    sourceCode: [
-      { name: 'Story', code: cosmosGraphCompositionRaw },
-    ],
-  },
-}
-
-export const CosmosGraphUpdates: Story = {
-  ...createStory(cosmosGraphUpdates),
-  name: 'CosmosGraphLayer: live updates and restyling',
+export const OwnSimulations: Story = {
+  ...createStory(ownSimulations),
+  name: 'Your own simulations',
   tags: ['advanced', 'interactive'],
   parameters: {
     sourceCode: [
-      { name: 'Story', code: cosmosGraphUpdatesRaw },
-    ],
-  },
-}
-
-export const CosmosGraphControl: Story = {
-  ...createStory(cosmosGraphControl),
-  name: 'CosmosGraphLayer: simulation control and minimap',
-  tags: ['advanced', 'interactive'],
-  parameters: {
-    sourceCode: [
-      { name: 'Story', code: cosmosGraphControlRaw },
-      { name: 'generate-mesh-data', code: generateMeshDataRaw },
-    ],
-  },
-}
-
-export const CosmosGraphOwnSimulations: Story = {
-  ...createStory(cosmosGraphOwnSimulations),
-  name: 'CosmosGraphLayer: your own simulations',
-  tags: ['advanced', 'interactive'],
-  parameters: {
-    sourceCode: [
-      { name: 'Story', code: cosmosGraphOwnSimulationsRaw },
-      { name: 'style.css', code: cosmosGraphOwnSimulationsCssRaw },
+      { name: 'Story', code: ownSimulationsRaw },
+      { name: 'style.css', code: styleRaw },
       { name: 'generate-mesh-data', code: generateMeshDataRaw },
     ],
   },

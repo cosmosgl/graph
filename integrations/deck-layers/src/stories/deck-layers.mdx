@@ -15,7 +15,8 @@ npm install @cosmos.gl/deck-layers @cosmos.gl/graph
 ```
 
 Install matching versions of the two: they are released together. deck.gl and luma.gl come
-with your deck.gl app; only Yarn 1 users add `@luma.gl/core @luma.gl/engine` by hand.
+with your deck.gl app. If your package manager does not install peer dependencies for you, add
+`@luma.gl/core @luma.gl/engine` yourself.
 
 ## Your first graph
 
@@ -45,12 +46,18 @@ new Deck({
 })
 ```
 
-Try it: [object data and accessors](../?path=/story/examples-integrations--cosmos-graph-object-data).
+Links name points by id when `getPointId` is set, by index otherwise. A link whose end names no
+point is dropped, with one warning. Removing the layer destroys the simulation it created.
+
+Try it: [Graph layer](../?path=/story/examples-integrations--graph-layer).
 
 ## Style and tune
 
-Styling works like any deck.gl layer. Colors are RGBA in 0..255, sizes are in pixels.
-`simulationConfig` takes the same keys as the cosmos.gl [configuration](../?path=/docs/configuration--docs).
+Styling works like any deck.gl layer. Colors are RGBA in 0..255. Sizes and widths are in pixels
+unless `pointSizeUnits` or `linkWidthUnits` says `'meters'` or `'common'`. Unstyled points draw
+4 px in blue, links 1 px in a lighter blue. `simulationConfig` takes the simulation keys of the
+cosmos.gl [configuration](../?path=/docs/configuration--docs): the space size, the forces,
+`randomSeed`, and the simulation callbacks.
 
 ```js
 new CosmosGraphLayer({
@@ -68,7 +75,28 @@ new CosmosGraphLayer({
 })
 ```
 
-Try it: [live updates and restyling](../?path=/story/examples-integrations--cosmos-graph-updates).
+Try it: Recolor in [Graph layer](../?path=/story/examples-integrations--graph-layer).
+
+## Change the data
+
+A new `points` or `links` array reloads the graph. Keep the surviving layout by handing each
+point its last position through `getPointPosition`; points without one seed randomly. A data
+change does not reheat the simulation, so give it some energy afterwards.
+
+```js
+const positions = simulation.getPointPositionsArray() // before the change
+const lastPosition = new Map(nodes.map((p, i) => [p.id, [positions[i * 2], positions[i * 2 + 1]]]))
+
+new CosmosGraphLayer({
+  // …
+  points: nextNodes,
+  links: nextEdges,
+  getPointPosition: (p) => lastPosition.get(p.id),
+})
+simulation.start(0.5)
+```
+
+Try it: Add cluster and Remove cluster in [Graph layer](../?path=/story/examples-integrations--graph-layer).
 
 ## Interact
 
@@ -82,8 +110,12 @@ new CosmosGraphLayer({
   // …
   pickable: true,
   autoHighlight: true,
+  highlightColor: [255, 255, 255, 220],
   onClick: (info) => console.log(info.elementType, info.index, info.object), // 'point' | 'link'
   enablePointDrag: true,
+  dragReheatAlpha: 0.1,   // energy the graph gets when a drag starts; null leaves it still
+  unpinOnDragEnd: true,   // false keeps the point pinned where it was dropped
+  onPointDragEnd: (info) => console.log('dropped', info.index), // also onPointDragStart, onPointDrag
   onSimulationCreated: (sim) => { simulation = sim },
 })
 
@@ -92,7 +124,7 @@ simulation.start(0.3)                // reheat: 0 is still, 1 is full energy
 simulation.setPinnedPoint(3, true)   // hold point 3 where it is
 ```
 
-Try it: [simulation control](../?path=/story/examples-integrations--cosmos-graph-control).
+Try it: hover, drag, Pause and Reheat in [Graph layer](../?path=/story/examples-integrations--graph-layer).
 
 ## Big graphs
 
@@ -103,14 +135,14 @@ new CosmosGraphLayer({
   id: 'graph',
   points: {
     length: pointCount,
-    initialPositions: positions,                 // Float32Array [x0, y0, x1, y1, …], optional
+    initialPositions: positions,                 // Float32Array [x0, y0, x1, y1, …]; omit to seed randomly
     attributes: {
       getPointColor: { value: colors, size: 4 }, // Uint8Array, RGBA per point
       getPointSize: { value: sizes, size: 1 },   // Float32Array, one diameter per point
     },
   },
   links: {
-    pairs: linkIndices,                          // Float32Array [src0, tgt0, src1, tgt1, …]
+    pairs: linkIndices,                          // Float32Array [src0, tgt0, src1, tgt1, …]; alone, `links: linkIndices`
     attributes: {
       getLinkColor: { value: linkColors, size: 4 }, // Uint8Array, RGBA per link
       getLinkWidth: { value: linkWidths, size: 1 }, // Float32Array, one width per link
@@ -120,19 +152,41 @@ new CosmosGraphLayer({
 ```
 
 A new `points` or `links` object over the same arrays restyles in place; the simulation reloads
-only when the positions or the pairs change.
+only when the positions or the pairs change. A pair that names no point is skipped and keeps its
+index, so your color and width arrays stay aligned.
 
-Try it: [100k points](../?path=/story/examples-integrations--cosmos-graph-large).
+Try it: [Big graph](../?path=/story/examples-integrations--big-graph).
+
+## Your own simulation
+
+When the application should own the simulation — create it first, keep it across layer
+changes, or show several at once — create a `GraphSimulation` on deck's device, load it
+yourself, and pass it through `simulation` with no `points`. The layer then draws what you
+loaded, follows your changes, and never writes into it or destroys it. Several layers can draw
+one simulation; it steps once per frame however many draw it. Loading new data does not reheat
+it: call `start()` after `applyData()`. `links` on such a layer is ignored, with a warning: load
+them into the simulation. To step it yourself, `pause()` it, then `deck.redraw()` after each
+`step()`.
+
+```js
+const simulation = new GraphSimulation(config, devicePromise) // from deck's onDeviceInitialized
+simulation.setPointPositions(positions)
+simulation.setLinks(links)
+simulation.applyData()
+
+new CosmosGraphLayer({ id: 'graph', simulation, pickable: true })
+
+simulation.destroy() // before deck.finalize(): the device is deck's
+```
+
+Try it: [Your own simulations](../?path=/story/examples-integrations--own-simulations).
 
 ## Good to know
 
 - **WebGL 2 only**, and the layout is 2D: use `OrthographicView`.
 - **Other deck.gl layers** stack on top as usual. For labels or anything that needs positions on
-  the CPU, read `simulation.getPointPositionsArray()`. Try it:
-  [composing with deck layers](../?path=/story/examples-integrations--cosmos-graph-composition).
-- **Your own simulation**: pass a `GraphSimulation` you created through `simulation` and leave
-  `points` out. The layer draws what you loaded, follows your changes, and never destroys it;
-  several layers can draw one simulation. Try it:
-  [your own simulations](../?path=/story/examples-integrations--cosmos-graph-own-simulations).
-  For a renderer of your own, sample `PositionTextureSource` from `@cosmos.gl/graph`. See the
+  the CPU, read `simulation.getPointPositionsArray()` — the hub labels in
+  [Graph layer](../?path=/story/examples-integrations--graph-layer) are a `TextLayer` fed that way.
+- **A renderer of your own** samples `PositionTextureSource` from `@cosmos.gl/graph`; the layer's
+  internal sublayer sources, in the Big graph story's panes, are the worked reference. See the
   [package README](https://github.com/cosmosgl/graph/tree/main/integrations/deck-layers).

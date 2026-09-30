@@ -44,3 +44,14 @@
   background: rgba(0, 0, 0, 0.5);
   border-radius: 4px;
 }
+
+.hover {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 6px 12px;
+  font: 12px monospace;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+}
