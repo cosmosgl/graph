@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { Deck, OrthographicView } from '@deck.gl/core'
 import type { Device } from '@luma.gl/core'
 import { Graph, GraphSimulation, type GraphSimulationConfig } from '@cosmos.gl/graph'
-import { CosmosGraphLayer, type CosmosGraphPickingInfo } from '@cosmos.gl/deck-layers'
+import { CosmosGraphLayer, type CosmosGraphLinks, type CosmosGraphPickingInfo, type CosmosGraphPoints } from '@cosmos.gl/deck-layers'
 import type { LayersList, PickingInfo } from '@deck.gl/core'
 // The primitives are internal sublayers, not package exports
 import { CosmosPointsLayer } from '../integrations/deck-layers/src/cosmos-points-layer'
@@ -1022,6 +1022,108 @@ describe('CosmosGraphLayer with an application-loaded simulation', () => {
       expect(shared).toBeLessThan(alone * 1.5)
     } finally {
       provided.destroy()
+      deck.finalize()
+      container.remove()
+    }
+  })
+})
+
+// Binary links carry styling channels beside the pair array, and a restyle —
+// a new `points` or `links` object over the same positions or pairs — never
+// reloads the simulation, so the layout stays.
+describe('CosmosGraphLayer binary links and restyling', () => {
+  const INITIAL = [1000, 1000, 1050, 1000]
+  type LinkChannels = { getLinkColor?: { value: unknown }; getLinkWidth?: { value: unknown }; getLinkSource?: { value: unknown } }
+  // The links sublayer's data, reached through a pick on the link it draws
+  const linksSublayerData = (deck: Deck<OrthographicView>, at: { x: number; y: number }): { attributes: LinkChannels } => {
+    const info = deck.pickObject({ ...at, radius: 2 })
+    expect(info?.sourceLayer?.id).toBe('graph-links')
+    return info!.sourceLayer!.props.data as { attributes: LinkChannels }
+  }
+
+  it('styles binary links from attributes and restyles without reloading the simulation', async () => {
+    let simulation: GraphSimulation | undefined
+    const pairs = new Float32Array([0, 1])
+    const colors = new Uint8Array([255, 0, 0, 255])
+    const widths = new Float32Array([6])
+    const points = { length: 2, initialPositions: new Float32Array(INITIAL) }
+    const graphLayer = (links: CosmosGraphLinks<unknown>, pointsInput: CosmosGraphPoints<unknown> = points): CosmosGraphLayer => new CosmosGraphLayer({
+      id: 'graph',
+      points: pointsInput,
+      links,
+      getPointSize: 10,
+      simulationConfig: STATIC_SIM,
+      onSimulationCreated: (sim): void => { simulation = sim },
+      pickable: true,
+    })
+    const { deck, container } = await createDeck([
+      graphLayer({ pairs, attributes: { getLinkColor: { value: colors, size: 4 }, getLinkWidth: { value: widths, size: 1 } } }),
+    ])
+    try {
+      await waitUntilPickable(deck)
+      // The channels reach the links sublayer as they are, beside the endpoints
+      const { attributes } = linksSublayerData(deck, worldToScreen(1025, 1000))
+      expect(attributes.getLinkColor?.value).toBe(colors)
+      expect(attributes.getLinkWidth?.value).toBe(widths)
+      expect(attributes.getLinkSource?.value).toBe(pairs)
+
+      // The application moves a point; restyling the links must not undo it
+      simulation!.setPointPosition(0, 1000, 1030)
+      await waitFrames(2)
+      const recolored = new Uint8Array([0, 255, 0, 255])
+      deck.setProps({ layers: [graphLayer({ pairs, attributes: { getLinkColor: { value: recolored, size: 4 } } })] })
+      await waitFrames(5)
+      // The link now runs from (1000, 1030) to (1050, 1000)
+      expect(linksSublayerData(deck, worldToScreen(1025, 1015)).attributes.getLinkColor?.value).toBe(recolored)
+      expect(Array.from(simulation!.getPointPositionsArray())).toEqual([1000, 1030, 1050, 1000])
+
+      // Restyling binary points over the same `initialPositions` keeps the layout too
+      const pointColors = new Uint8Array(8).fill(255)
+      deck.setProps({ layers: [graphLayer({ pairs }, { ...points, attributes: { getPointColor: { value: pointColors, size: 4 } } })] })
+      await waitFrames(5)
+      expect(Array.from(simulation!.getPointPositionsArray())).toEqual([1000, 1030, 1050, 1000])
+
+      // New pairs load new links, still without touching the positions
+      const reversed = new Float32Array([1, 0])
+      deck.setProps({ layers: [graphLayer(reversed)] })
+      await waitFrames(5)
+      expect(simulation!.data.links).toBe(reversed)
+      expect(Array.from(simulation!.getPointPositionsArray())).toEqual([1000, 1030, 1050, 1000])
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('skips a pair that names no point and keeps link indices', async () => {
+    let simulation: GraphSimulation | undefined
+    // Three points; link 0 names point 7, link 1 a fraction, link 2 NaN — link 3 is fine
+    const pairs = new Float32Array([0, 7, 0, 2.5, NaN, 1, 0, 1])
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer({
+        id: 'graph',
+        points: { length: 3, initialPositions: new Float32Array([...INITIAL, 1000, 1030]) },
+        links: pairs,
+        getPointSize: 10,
+        simulationConfig: STATIC_SIM,
+        onSimulationCreated: (sim): void => { simulation = sim },
+        pickable: true,
+      }),
+    ])
+    try {
+      await waitUntilPickable(deck)
+      // Nothing dropped: the pair array is the simulation's, index for index
+      expect(simulation!.data.links).toBe(pairs)
+      expect(simulation!.data.linksNumber).toBe(4)
+      // The good link is drawn at its own index
+      const link = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as CosmosGraphPickingInfo | null
+      expect(link?.elementType).toBe('link')
+      expect(link?.index).toBe(3)
+      // Point 7's texel is unwritten, so a drawn link 0 would run from point 0 towards the origin
+      expect(deck.pickObject({ ...worldToScreen(980, 980), radius: 2 })).toBeNull()
+      // 2.5 truncated would be point 2, so a drawn link 1 would run from point 0 to it
+      expect(deck.pickObject({ ...worldToScreen(1000, 1015), radius: 2 })).toBeNull()
+    } finally {
       deck.finalize()
       container.remove()
     }

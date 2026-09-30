@@ -71,6 +71,12 @@ new CosmosGraphLayer({
   simulation at a low alpha so the graph responds around the moving point. View panning
   is suppressed only while a point is grabbed.
 - **Colors** follow the deck.gl convention: RGBA channels in 0..255.
+- **Binary styling**: in binary mode, `points.attributes` and `links.attributes` take typed
+  arrays keyed by the accessor they replace — `getPointColor`, `getPointSize`, `getLinkColor`,
+  `getLinkWidth` — and deck uploads them as they are. Links then take the form
+  `{ pairs, attributes }`; a bare pair array is `{ pairs }`. A new `points` or `links` object over
+  the same positions or pairs restyles in place: the simulation is reloaded only when the
+  positions or the pairs themselves change.
 - **Simulation control**: pass forces and callbacks through `simulationConfig`
   (`GraphSimulationConfig` from `@cosmos.gl/graph`); take the wheel through
   `onSimulationCreated`.

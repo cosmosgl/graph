@@ -44,12 +44,27 @@ export type CosmosGraphPoints<PointDataT> = readonly PointDataT[] | {
 }
 
 /**
- * Links input: an array to run accessors over, or the cosmos-native
- * `[source0, target0, source1, target1, …]` array of point indices.
- * An array link whose source or target does not resolve to a point is dropped
- * from both the simulation and the rendering, with one warning per data change.
+ * Binary styling channels for binary links, keyed by the accessor each one
+ * replaces. Colors are RGBA bytes (0..255), 4 per link; widths are one per
+ * link, in `linkWidthUnits`.
  */
-export type CosmosGraphLinks<LinkDataT> = readonly LinkDataT[] | Float32Array
+export type CosmosLinkAttributes = {
+  getLinkColor?: BinaryAttribute;
+  getLinkWidth?: BinaryAttribute;
+}
+
+/**
+ * Links input: an array to run accessors over, the cosmos-native
+ * `[source0, target0, source1, target1, …]` array of point indices, or that
+ * array as `pairs` with binary styling channels beside it. An array link whose
+ * source or target does not resolve to a point is dropped from both the
+ * simulation and the rendering, with one warning per data change; a pair that
+ * names no point is skipped by both and keeps its index.
+ */
+export type CosmosGraphLinks<LinkDataT> = readonly LinkDataT[] | Float32Array | {
+  pairs: Float32Array;
+  attributes?: CosmosLinkAttributes;
+}
 
 /** Picking info from a CosmosGraphLayer: which kind of element was hit. */
 export type CosmosGraphPickingInfo = PickingInfo & {
@@ -226,20 +241,32 @@ const resolveAccessor = <In, Out>(accessor: Accessor<In, Out>, object: In, info:
  */
 const steppedAt = new WeakMap<GraphSimulation, number>()
 
-/** The binary channels of the links sublayer: the endpoints, read straight from the cosmos pair array. */
-type CosmosLinkAttributes = {
+/** The endpoint channels of the links sublayer, read straight from the cosmos pair array. */
+type LinkEndpointAttributes = {
   getLinkSource: BinaryAttribute;
   getLinkTarget: BinaryAttribute;
 }
 
-/** The cosmos pair array as deck binary link data: two interleaved attributes, no copy. */
-const binaryLinksData = (links: Float32Array): { length: number; attributes: CosmosLinkAttributes } => ({
-  length: links.length / 2,
+type BinaryLinksData = { length: number; attributes: LinkEndpointAttributes & CosmosLinkAttributes }
+
+/**
+ * The cosmos pair array as deck binary link data: two interleaved endpoint
+ * attributes, no copy, plus the caller's styling channels — copied by name,
+ * never spread, so nothing can replace the endpoints.
+ */
+const binaryLinksData = (pairs: Float32Array, attributes?: CosmosLinkAttributes): BinaryLinksData => ({
+  length: pairs.length / 2,
   attributes: {
-    getLinkSource: { value: links, size: 1, stride: 8 },
-    getLinkTarget: { value: links, size: 1, offset: 4, stride: 8 },
+    getLinkSource: { value: pairs, size: 1, stride: 8 },
+    getLinkTarget: { value: pairs, size: 1, offset: 4, stride: 8 },
+    ...(attributes?.getLinkColor && { getLinkColor: attributes.getLinkColor }),
+    ...(attributes?.getLinkWidth && { getLinkWidth: attributes.getLinkWidth }),
   },
 })
+
+/** What the layer loaded when binary points carried no `initialPositions`: a seed of its own. */
+const SEEDED = Symbol('seeded')
+const NO_LINKS = new Float32Array(0)
 
 /**
  * The cosmos.gl graph layer: give it points and links, and it handles the
@@ -268,9 +295,19 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     isIngestPending: boolean;
     pointCount: number;
     pointsData: readonly PointDataT[] | { length: number; attributes?: CosmosPointAttributes };
-    linksData: readonly LinkDataT[] | { length: number; attributes: CosmosLinkAttributes } | null;
+    linksData: readonly LinkDataT[] | BinaryLinksData | null;
     /** Array links only: the resolved `[source, target]` point-index pairs, one per entry of `linksData`. */
     linkIndices: Float32Array | null;
+    /**
+     * Load mode: what the simulation holds, so a channel reloads only when its own
+     * input changes and a restyle leaves the layout alone. `loadedPositions` is the
+     * `initialPositions` array, `SEEDED`, or the points array; `loadedPairs` the pair
+     * array sent last; `idToIndex` the id map of the loaded points.
+     */
+    hasLoaded: boolean;
+    loadedPositions?: unknown;
+    loadedPairs?: Float32Array | null;
+    idToIndex?: Map<string | number, number> | null;
     /** Without `points`: the simulation's links array the render data was built from. */
     followedLinks?: Float32Array | null;
     draggedPointIndex: number | null;
@@ -293,6 +330,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       providedSimulation: null,
       isReady: false,
       isIngestPending: false,
+      hasLoaded: false,
       pointCount: 0,
       pointsData: { length: 0 },
       linksData: null,
@@ -321,23 +359,20 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     if (!providedSimulation && changeFlags.propsChanged && props.simulationConfig !== oldProps.simulationConfig) {
       simulation.setConfig(props.simulationConfig)
     }
-    // Link endpoints are resolved at ingest, so a change to the id map or to
-    // an endpoint accessor re-ingests like a data change
+    // Array links resolve against the id map and the position accessor at load,
+    // so a change to either counts as a change of that channel
     const triggers = typeof changeFlags.updateTriggersChanged === 'object'
       ? changeFlags.updateTriggersChanged as CosmosUpdateTriggers
       : undefined
-    const dataChanged =
-      simulationSwapped ||
-      props.points !== oldProps.points ||
-      props.links !== oldProps.links ||
-      Boolean(
-        triggers?.getPointPosition || triggers?.getPointId || triggers?.getLinkSource || triggers?.getLinkTarget
-      )
-    if (!dataChanged) return
+    const pointsChanged = simulationSwapped || props.points !== oldProps.points || Boolean(triggers?.getPointPosition)
+    const idsChanged = Boolean(triggers?.getPointId)
+    const linksChanged = simulationSwapped || props.links !== oldProps.links ||
+      Boolean(triggers?.getLinkSource || triggers?.getLinkTarget) || idsChanged
+    if (!pointsChanged && !linksChanged) return
 
     if (props.points) {
       // The layer's data goes into the simulation — once the device check has passed
-      if (this.state.isReady) this._updateSimulationData()
+      if (this.state.isReady) this._updateSimulationData(pointsChanged, linksChanged, idsChanged)
       else this.state.isIngestPending = true
     } else {
       // No data of its own: the layer draws what the simulation holds
@@ -345,6 +380,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
         console.warn('@cosmos.gl/deck-layers: `links` is ignored without `points` — load them into the simulation instead')
       }
       this.state.isIngestPending = false
+      this.state.hasLoaded = false
       if (this.state.isReady) this._syncFromSimulation(true)
     }
   }
@@ -495,7 +531,16 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
   private _attachSimulation (provided: GraphSimulation | null): void {
     const { device } = this.context
     const simulation = provided ?? new GraphSimulation(this.props.simulationConfig, Promise.resolve(device))
-    this.setState({ simulation, providedSimulation: provided, isReady: false, draggedPointIndex: null })
+    this.setState({
+      simulation,
+      providedSimulation: provided,
+      isReady: false,
+      hasLoaded: false,
+      loadedPositions: undefined,
+      loadedPairs: null,
+      idToIndex: null,
+      draggedPointIndex: null,
+    })
 
     if (!provided) this.props.onSimulationCreated?.(simulation)
 
@@ -513,7 +558,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       // Only now may the layer touch the simulation's data
       if (layer.state.isIngestPending) {
         layer.state.isIngestPending = false
-        layer._updateSimulationData()
+        layer._updateSimulationData(true, true, true)
       } else if (!layer.props.points) {
         layer._syncFromSimulation(true)
       }
@@ -582,94 +627,141 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     return [unprojected[0] as number, unprojected[1] as number]
   }
 
-  private _updateSimulationData (): void {
+  /**
+   * Load mode: puts the layer's `points` and `links` into the simulation and
+   * builds the render data from them. Each channel is sent only when its own
+   * input changed — a new `points` or `links` object with the same positions
+   * or pairs restyles in place and leaves the layout alone. A changed id map
+   * re-resolves array links without touching the positions.
+   */
+  private _updateSimulationData (pointsChanged: boolean, linksChanged: boolean, idsChanged: boolean): void {
     const simulation = this.state.simulation
     if (!simulation) return
     const { points, links, getPointId, getPointPosition } = this.props
     if (!points) return
+    const firstLoad = !this.state.hasLoaded
     const spaceSize = this._spaceSize()
 
     // Unseeded points land in the middle half of the space, clear of the walls
     const randomCoordinate = (): number => spaceSize * (0.25 + Math.random() * 0.5)
 
     let pointCount: number
-    let positions: Float32Array
     let pointsData: this['state']['pointsData']
-    let idToIndex: Map<string | number, number> | null = null
+    let positions: Float32Array | null = null // to load; null leaves the simulation's
+    let loadedPositions = this.state.loadedPositions
+    let idToIndex = this.state.idToIndex ?? null
 
     if (Array.isArray(points)) {
       const pointArray = points as readonly PointDataT[]
       pointCount = pointArray.length
-      positions = new Float32Array(pointCount * 2)
-      if (getPointId) idToIndex = new Map()
-      for (let i = 0; i < pointCount; i += 1) {
-        const point = pointArray[i] as PointDataT
-        const info: AccessorContext<PointDataT> = { index: i, data: pointArray, target: [] }
-        const position = getPointPosition ? resolveAccessor(getPointPosition, point, info) : null
-        positions[i * 2] = position ? position[0] : randomCoordinate()
-        positions[i * 2 + 1] = position ? position[1] : randomCoordinate()
-        if (idToIndex && getPointId) idToIndex.set(resolveAccessor(getPointId, point, info), i)
-      }
       pointsData = pointArray
+      // Object points carry positions and ids together: a change reloads both
+      if (firstLoad || pointsChanged) {
+        positions = new Float32Array(pointCount * 2)
+        idToIndex = getPointId ? new Map() : null
+        for (let i = 0; i < pointCount; i += 1) {
+          const point = pointArray[i] as PointDataT
+          const info: AccessorContext<PointDataT> = { index: i, data: pointArray, target: [] }
+          const position = getPointPosition ? resolveAccessor(getPointPosition, point, info) : null
+          positions[i * 2] = position ? position[0] : randomCoordinate()
+          positions[i * 2 + 1] = position ? position[1] : randomCoordinate()
+          if (idToIndex && getPointId) idToIndex.set(resolveAccessor(getPointId, point, info), i)
+        }
+        loadedPositions = pointArray
+      } else if (idsChanged) {
+        idToIndex = getPointId ? new Map() : null
+        if (idToIndex && getPointId) {
+          for (let i = 0; i < pointCount; i += 1) {
+            const info: AccessorContext<PointDataT> = { index: i, data: pointArray, target: [] }
+            idToIndex.set(resolveAccessor(getPointId, pointArray[i] as PointDataT, info), i)
+          }
+        }
+      }
     } else {
       const binaryPoints = points as { length: number; initialPositions?: Float32Array; attributes?: CosmosPointAttributes }
       pointCount = binaryPoints.length
-      if (binaryPoints.initialPositions) {
-        positions = binaryPoints.initialPositions
-      } else {
-        positions = new Float32Array(pointCount * 2)
-        for (let i = 0; i < positions.length; i += 1) positions[i] = randomCoordinate()
-      }
       pointsData = binaryPoints.attributes
         ? { length: pointCount, attributes: binaryPoints.attributes }
         : { length: pointCount }
+      idToIndex = null
+      // Positions reload when their input changed: another `initialPositions`
+      // array, a seed the layer must draw again for a new count, or a first load
+      const positionsInput: unknown = binaryPoints.initialPositions ?? SEEDED
+      if (firstLoad || positionsInput !== this.state.loadedPositions || pointCount !== this.state.pointCount) {
+        if (binaryPoints.initialPositions) {
+          positions = binaryPoints.initialPositions
+        } else {
+          positions = new Float32Array(pointCount * 2)
+          for (let i = 0; i < positions.length; i += 1) positions[i] = randomCoordinate()
+        }
+        loadedPositions = positionsInput
+      }
     }
 
-    let linkArray: Float32Array | null = null
-    let linksData: this['state']['linksData'] = null
-    let linkIndices: Float32Array | null = null
-    if (links instanceof Float32Array) {
-      linkArray = links
-      linksData = binaryLinksData(links)
+    let pairs: Float32Array | null = null // to load; null leaves the simulation's
+    let linksData: this['state']['linksData'] = this.state.linksData
+    let linkIndices: Float32Array | null = this.state.linkIndices
+    if (links instanceof Float32Array || (links && !Array.isArray(links) && 'pairs' in links)) {
+      const pairArray = links instanceof Float32Array ? links : links.pairs
+      linksData = binaryLinksData(pairArray, links instanceof Float32Array ? undefined : links.attributes)
+      linkIndices = null
+      if (firstLoad || pairArray !== this.state.loadedPairs) pairs = pairArray
     } else if (Array.isArray(links)) {
-      const linkObjects = links as readonly LinkDataT[]
-      const { getLinkSource, getLinkTarget } = this.props
-      // An endpoint is a point index, or a point id when the id map exists;
-      // anything that does not name a point drops the whole link from both
-      // the simulation and the rendering, so the two never disagree
-      const resolveEndpoint = (endpoint: string | number): number | undefined => {
-        const index = idToIndex ? idToIndex.get(endpoint) : endpoint
-        return typeof index === 'number' && Number.isInteger(index) && index >= 0 && index < pointCount
-          ? index
-          : undefined
+      // Array links resolve against the loaded points, so they reload with them
+      if (firstLoad || linksChanged || positions) {
+        const linkObjects = links as readonly LinkDataT[]
+        const { getLinkSource, getLinkTarget } = this.props
+        // An endpoint is a point index, or a point id when the id map exists;
+        // anything that does not name a point drops the whole link from both
+        // the simulation and the rendering, so the two never disagree
+        const resolveEndpoint = (endpoint: string | number): number | undefined => {
+          const index = idToIndex ? idToIndex.get(endpoint) : endpoint
+          return typeof index === 'number' && Number.isInteger(index) && index >= 0 && index < pointCount
+            ? index
+            : undefined
+        }
+        const keptLinks: LinkDataT[] = []
+        const keptIndices: number[] = []
+        for (let i = 0; i < linkObjects.length; i += 1) {
+          const link = linkObjects[i] as LinkDataT
+          const info: AccessorContext<LinkDataT> = { index: i, data: linkObjects, target: [] }
+          const source = resolveEndpoint(resolveAccessor(getLinkSource, link, info))
+          const target = resolveEndpoint(resolveAccessor(getLinkTarget, link, info))
+          if (source === undefined || target === undefined) continue
+          keptLinks.push(link)
+          keptIndices.push(source, target)
+        }
+        const dropped = linkObjects.length - keptLinks.length
+        if (dropped > 0) {
+          const hint = idToIndex ? 'getLinkSource / getLinkTarget against getPointId' : 'getLinkSource / getLinkTarget'
+          console.warn(
+            `@cosmos.gl/deck-layers: dropped ${dropped} of ${linkObjects.length} links whose source or target is not a point — check ${hint}`
+          )
+        }
+        pairs = Float32Array.from(keptIndices)
+        linkIndices = pairs
+        linksData = keptLinks
       }
-      const keptLinks: LinkDataT[] = []
-      const keptIndices: number[] = []
-      for (let i = 0; i < linkObjects.length; i += 1) {
-        const link = linkObjects[i] as LinkDataT
-        const info: AccessorContext<LinkDataT> = { index: i, data: linkObjects, target: [] }
-        const source = resolveEndpoint(resolveAccessor(getLinkSource, link, info))
-        const target = resolveEndpoint(resolveAccessor(getLinkTarget, link, info))
-        if (source === undefined || target === undefined) continue
-        keptLinks.push(link)
-        keptIndices.push(source, target)
-      }
-      const dropped = linkObjects.length - keptLinks.length
-      if (dropped > 0) {
-        const hint = idToIndex ? 'getLinkSource / getLinkTarget against getPointId' : 'getLinkSource / getLinkTarget'
-        console.warn(
-          `@cosmos.gl/deck-layers: dropped ${dropped} of ${linkObjects.length} links whose source or target is not a point — check ${hint}`
-        )
-      }
-      linkArray = Float32Array.from(keptIndices)
-      linkIndices = linkArray
-      linksData = keptLinks
+    } else {
+      linksData = null
+      linkIndices = null
+      if (firstLoad || this.state.loadedPairs !== NO_LINKS) pairs = NO_LINKS
     }
 
-    simulation.setPointPositions(positions)
-    simulation.setLinks(linkArray ?? new Float32Array(0))
-    simulation.applyData()
+    if (positions) simulation.setPointPositions(positions)
+    if (pairs) simulation.setLinks(pairs)
+    if (positions || pairs) simulation.applyData()
 
-    this.setState({ pointCount, pointsData, linksData, linkIndices, followedLinks: undefined })
+    this.setState({
+      hasLoaded: true,
+      pointCount,
+      pointsData,
+      linksData,
+      linkIndices,
+      followedLinks: undefined,
+      loadedPositions,
+      loadedPairs: pairs ?? this.state.loadedPairs,
+      idToIndex,
+    })
   }
 }

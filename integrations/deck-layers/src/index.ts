@@ -11,5 +11,6 @@ export {
   type CosmosGraphPoints,
   type CosmosPointAttributes,
   type CosmosGraphLinks,
+  type CosmosLinkAttributes,
   type CosmosGraphPickingInfo,
 } from './cosmos-graph-layer'
