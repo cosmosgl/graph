@@ -2,6 +2,7 @@ import { CompositeLayer } from '@deck.gl/core'
 import type {
   Accessor,
   AccessorContext,
+  BinaryAttribute,
   Color,
   DefaultProps,
   GetPickingInfoParams,
@@ -20,16 +21,26 @@ import { CosmosPointsLayer } from './cosmos-points-layer'
 import { CosmosLinksLayer } from './cosmos-links-layer'
 
 /**
+ * Binary styling channels for binary points, keyed by the accessor each one
+ * replaces: deck uploads the typed array as the instanced attribute instead of
+ * calling the accessor per point. Colors are RGBA bytes (0..255), 4 per point;
+ * sizes are one diameter per point, in `pointSizeUnits`.
+ */
+export type CosmosPointAttributes = {
+  getPointColor?: BinaryAttribute;
+  getPointSize?: BinaryAttribute;
+}
+
+/**
  * Points input: an array to run accessors over (picking returns the original
  * objects), or the cosmos-native binary form — a point count plus optional
- * `[x0, y0, x1, y1, …]` initial positions. Points without given positions are
- * seeded randomly inside the simulation space.
+ * `[x0, y0, x1, y1, …]` initial positions and binary styling channels. Points
+ * without given positions are seeded randomly inside the simulation space.
  */
 export type CosmosGraphPoints<PointDataT> = readonly PointDataT[] | {
   length: number;
   initialPositions?: Float32Array;
-  /** Optional binary styling channels, keyed by accessor name (`getPointColor`, `getPointSize`). */
-  attributes?: Record<string, unknown>;
+  attributes?: CosmosPointAttributes;
 }
 
 /**
@@ -49,9 +60,14 @@ export type CosmosGraphLayerProps<PointDataT = unknown, LinkDataT = unknown> =
   CosmosGraphLayerOwnProps<PointDataT, LinkDataT> & LayerProps
 
 type CosmosGraphLayerOwnProps<PointDataT, LinkDataT> = {
-  /** One entry per point — an array of your objects, or `{ length, initialPositions? }`. */
-  points: CosmosGraphPoints<PointDataT>;
-  /** One entry per link — an array of your objects, or a flat point-index pair array. */
+  /**
+   * One entry per point — an array of your objects, or `{ length, initialPositions?, attributes? }`.
+   * The layer loads them, with `links`, into the simulation. Omit it to draw the data the
+   * simulation already holds instead: the layer then writes nothing into the simulation and
+   * follows its point count and links — the mode for an application-loaded `simulation`.
+   */
+  points?: CosmosGraphPoints<PointDataT> | null;
+  /** One entry per link — an array of your objects, or a flat point-index pair array. Ignored without `points`. */
   links?: CosmosGraphLinks<LinkDataT> | null;
   /**
    * Stable point id accessor. When provided (with array points), link
@@ -129,13 +145,17 @@ type CosmosGraphLayerOwnProps<PointDataT, LinkDataT> = {
   /**
    * An application-owned `GraphSimulation` to render instead of creating one.
    * It must run on deck's device — construct it with the device from deck's
-   * `onDeviceInitialized`. The layer still ingests `points` / `links` into it,
-   * steps it while it runs (`pause()` it to take over stepping, then
-   * `deck.redraw()` after each manual `step()`), and renders it; it never
-   * configures or destroys it — `simulationConfig` and `onSimulationCreated`
-   * apply only to a layer-created simulation, and teardown is the
-   * application's, before `deck.finalize()`. One `CosmosGraphLayer` per
-   * simulation: a second would re-ingest and double-step it.
+   * `onDeviceInitialized`. The layer steps it while it runs (`pause()` it to
+   * take over stepping, then `deck.redraw()` after each manual `step()`) and
+   * renders it; it never configures or destroys it — `simulationConfig` and
+   * `onSimulationCreated` apply only to a layer-created simulation, and
+   * teardown is the application's, before `deck.finalize()`.
+   *
+   * `points` decides who loads the data. Given, the layer loads `points` and
+   * `links` into the simulation once the device check has passed, over whatever
+   * it held. Omitted, the layer draws the simulation's own data and follows its
+   * changes. Several layers may draw one simulation — it steps once per frame
+   * however many draw it — as long as at most one of them loads data.
    */
   simulation?: GraphSimulation | null;
   /**
@@ -153,6 +173,7 @@ type CosmosGraphLayerOwnProps<PointDataT, LinkDataT> = {
 }
 
 const defaultProps: DefaultProps<CosmosGraphLayerProps> = {
+  points: { type: 'object', value: null, optional: true },
   links: null,
   getPointId: { type: 'accessor', value: null },
   getPointPosition: { type: 'accessor', value: null },
@@ -200,13 +221,35 @@ const resolveAccessor = <In, Out>(accessor: Accessor<In, Out>, object: In, info:
   typeof accessor === 'function' ? (accessor as (o: In, i: AccessorContext<In>) => Out)(object, info) : accessor
 
 /**
+ * When each simulation last stepped, by timeline time: layers drawing the same
+ * simulation share one step per frame instead of each taking their own.
+ */
+const steppedAt = new WeakMap<GraphSimulation, number>()
+
+/** The binary channels of the links sublayer: the endpoints, read straight from the cosmos pair array. */
+type CosmosLinkAttributes = {
+  getLinkSource: BinaryAttribute;
+  getLinkTarget: BinaryAttribute;
+}
+
+/** The cosmos pair array as deck binary link data: two interleaved attributes, no copy. */
+const binaryLinksData = (links: Float32Array): { length: number; attributes: CosmosLinkAttributes } => ({
+  length: links.length / 2,
+  attributes: {
+    getLinkSource: { value: links, size: 1, stride: 8 },
+    getLinkTarget: { value: links, size: 1, offset: 4, stride: 8 },
+  },
+})
+
+/**
  * The cosmos.gl graph layer: give it points and links, and it handles the
  * rest. The layer creates a `GraphSimulation` on deck's device (or renders the
- * application's, via `simulation`), ingests the data, advances the simulation
- * once per animation frame from deck's shared timeline while it runs (deck
- * goes idle when it settles — no `_animate` required), renders through its
- * internal links and points sublayers (positions stay GPU-resident), and
- * destroys a simulation it created when the layer is removed. Picking reports
+ * application's, via `simulation`), loads the data — or, without `points`,
+ * follows the data the simulation holds — advances the simulation once per
+ * animation frame from deck's shared timeline while it runs (deck goes idle
+ * when it settles — no `_animate` required), renders through its internal
+ * links and points sublayers (positions stay GPU-resident), and destroys a
+ * simulation it created when the layer is removed. Picking reports
  * `elementType: 'point' | 'link'` alongside the index and, for array data, the
  * original object.
  */
@@ -221,11 +264,15 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     /** The `simulation` prop this state was built from; `null` when the layer created its own. */
     providedSimulation: GraphSimulation | null;
     isReady: boolean;
+    /** `points` changed before the simulation was ready: load them once it is. */
+    isIngestPending: boolean;
     pointCount: number;
-    pointsData: readonly PointDataT[] | { length: number; attributes?: Record<string, unknown> };
-    linksData: readonly LinkDataT[] | { length: number; attributes: Record<string, unknown> } | null;
+    pointsData: readonly PointDataT[] | { length: number; attributes?: CosmosPointAttributes };
+    linksData: readonly LinkDataT[] | { length: number; attributes: CosmosLinkAttributes } | null;
     /** Array links only: the resolved `[source, target]` point-index pairs, one per entry of `linksData`. */
     linkIndices: Float32Array | null;
+    /** Without `points`: the simulation's links array the render data was built from. */
+    followedLinks?: Float32Array | null;
     draggedPointIndex: number | null;
     animationHandle?: number;
   }
@@ -245,6 +292,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     this.state = {
       providedSimulation: null,
       isReady: false,
+      isIngestPending: false,
       pointCount: 0,
       pointsData: { length: 0 },
       linksData: null,
@@ -252,7 +300,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       draggedPointIndex: null,
       // Step the simulation exactly once per animation frame, independent of
       // draw passes (draw runs per viewport and again while picking)
-      animationHandle: timeline.attachAnimation({ setTime: () => this._onTimelineTick() }),
+      animationHandle: timeline.attachAnimation({ setTime: (time) => this._onTimelineTick(time) }),
     }
     this._attachSimulation(this.props.simulation ?? null)
   }
@@ -260,7 +308,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
   public updateState (params: UpdateParameters<this>): void {
     super.updateState(params)
     const { props, oldProps, changeFlags } = params
-    // Swapping simulations re-ingests the current data into the new one
+    // Swapping simulations loads the current data into the new one, or follows it
     const providedSimulation = props.simulation ?? null
     const simulationSwapped = providedSimulation !== this.state.providedSimulation
     if (simulationSwapped) {
@@ -285,8 +333,19 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       Boolean(
         triggers?.getPointPosition || triggers?.getPointId || triggers?.getLinkSource || triggers?.getLinkTarget
       )
-    if (dataChanged) {
-      this._updateSimulationData()
+    if (!dataChanged) return
+
+    if (props.points) {
+      // The layer's data goes into the simulation — once the device check has passed
+      if (this.state.isReady) this._updateSimulationData()
+      else this.state.isIngestPending = true
+    } else {
+      // No data of its own: the layer draws what the simulation holds
+      if (props.links) {
+        console.warn('@cosmos.gl/deck-layers: `links` is ignored without `points` — load them into the simulation instead')
+      }
+      this.state.isIngestPending = false
+      if (this.state.isReady) this._syncFromSimulation(true)
     }
   }
 
@@ -443,13 +502,20 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     simulation.ready.then(() => {
       // `this` may be a stale descriptor by now; state is the stable identity
       if (this.state?.simulation !== simulation) return
-      const layer = this.getCurrentLayer() ?? this
+      const layer = (this.getCurrentLayer() ?? this) as CosmosGraphLayer<PointDataT, LinkDataT>
       // Textures from another device cannot be sampled by deck's draws
       if (simulation.device !== layer.context.device) {
         console.error(
           '@cosmos.gl/deck-layers: the provided simulation runs on a different device than deck — construct it with the device from deck\'s onDeviceInitialized'
         )
         return
+      }
+      // Only now may the layer touch the simulation's data
+      if (layer.state.isIngestPending) {
+        layer.state.isIngestPending = false
+        layer._updateSimulationData()
+      } else if (!layer.props.points) {
+        layer._syncFromSimulation(true)
       }
       layer.setState({ isReady: true })
     }).catch((error: Error) => {
@@ -471,14 +537,41 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       defaultConfigValues.spaceSize
   }
 
-  private _onTimelineTick (): void {
+  private _onTimelineTick (time: number): void {
     const { simulation, isReady } = this.state ?? {}
-    if (!simulation || !isReady || !simulation.isSimulationRunning) return
-    simulation.step()
+    if (!simulation || !isReady) return
+    const layer = (this.getCurrentLayer() ?? this) as CosmosGraphLayer<PointDataT, LinkDataT>
+    // Without data of its own, the layer follows what the application loads
+    if (!layer.props.points) layer._syncFromSimulation()
+    if (!simulation.isSimulationRunning) return
+    // One step per frame per simulation, however many layers draw it
+    if (steppedAt.get(simulation) !== time) {
+      steppedAt.set(simulation, time)
+      simulation.step()
+    }
     // Repaint the frame this step just computed; when the simulation settles,
     // the flag stops being set and deck goes idle on its own
-    const layer = this.getCurrentLayer() ?? this
     layer.setNeedsRedraw()
+  }
+
+  /**
+   * Without `points`: builds the render data from what the simulation holds —
+   * its point count and links — and rebuilds it when either changes. Runs every
+   * tick, so it only compares until something differs.
+   */
+  private _syncFromSimulation (force = false): void {
+    const { simulation } = this.state
+    if (!simulation) return
+    const pointCount = simulation.data.pointsNumber ?? 0
+    const links = simulation.data.links ?? null
+    if (!force && pointCount === this.state.pointCount && links === this.state.followedLinks) return
+    this.setState({
+      pointCount,
+      pointsData: { length: pointCount },
+      linksData: links && links.length > 0 ? binaryLinksData(links) : null,
+      linkIndices: null,
+      followedLinks: links,
+    })
   }
 
   private _dragCoordinate (info: PickingInfo): [number, number] {
@@ -493,6 +586,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     const simulation = this.state.simulation
     if (!simulation) return
     const { points, links, getPointId, getPointPosition } = this.props
+    if (!points) return
     const spaceSize = this._spaceSize()
 
     // Unseeded points land in the middle half of the space, clear of the walls
@@ -518,7 +612,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       }
       pointsData = pointArray
     } else {
-      const binaryPoints = points as { length: number; initialPositions?: Float32Array; attributes?: Record<string, unknown> }
+      const binaryPoints = points as { length: number; initialPositions?: Float32Array; attributes?: CosmosPointAttributes }
       pointCount = binaryPoints.length
       if (binaryPoints.initialPositions) {
         positions = binaryPoints.initialPositions
@@ -536,14 +630,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     let linkIndices: Float32Array | null = null
     if (links instanceof Float32Array) {
       linkArray = links
-      // The cosmos pair array feeds deck as two interleaved binary attributes
-      linksData = {
-        length: links.length / 2,
-        attributes: {
-          getLinkSource: { value: links, size: 1, stride: 8 },
-          getLinkTarget: { value: links, size: 1, offset: 4, stride: 8 },
-        },
-      }
+      linksData = binaryLinksData(links)
     } else if (Array.isArray(links)) {
       const linkObjects = links as readonly LinkDataT[]
       const { getLinkSource, getLinkTarget } = this.props
@@ -583,6 +670,6 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     simulation.setLinks(linkArray ?? new Float32Array(0))
     simulation.applyData()
 
-    this.setState({ pointCount, pointsData, linksData, linkIndices })
+    this.setState({ pointCount, pointsData, linksData, linkIndices, followedLinks: undefined })
   }
 }
