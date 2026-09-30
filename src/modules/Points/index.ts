@@ -2137,12 +2137,13 @@ export class Points extends CoreModule {
    *
    * Returns the raw RGBA32F pixel array (`[x, y, index, unused]` per texel), or
    * `undefined` when there is nothing to read — including when a data rebuild
-   * resized the texture while the copy was in flight, since the snapshot would
-   * describe the old data. Uses a fresh staging buffer per call so overlapping
-   * reads can't corrupt each other.
+   * changed the point count while the copy was in flight, since the snapshot
+   * would describe the old data. The texture size alone cannot tell: counts
+   * like 3 and 4 share a 2×2 texture. Uses a fresh staging buffer per call so
+   * overlapping reads can't corrupt each other.
    */
   public async readPositionPixelsAsync (): Promise<Float32Array | undefined> {
-    const { device, store: { pointsTextureSize } } = this
+    const { device, store: { pointsTextureSize }, data: { pointsNumber } } = this
     if (!pointsTextureSize) return undefined
     if (!this.currentPositionFbo || this.currentPositionFbo.destroyed) return undefined
 
@@ -2167,7 +2168,7 @@ export class Points extends CoreModule {
       // Let the GPU pass the copy first, so the read returns at once.
       await this.waitForGpu()
       // A real async gap lets data updates land mid-flight
-      if (this.store.pointsTextureSize !== pointsTextureSize) return undefined
+      if (this.store.pointsTextureSize !== pointsTextureSize || this.data.pointsNumber !== pointsNumber) return undefined
       if (!this.currentPositionFbo || this.currentPositionFbo.destroyed) return undefined
       const bytes = await stagingBuffer.readAsync()
       return new Float32Array(bytes.buffer, bytes.byteOffset, byteLength / 4)
