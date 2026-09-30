@@ -4,11 +4,13 @@ import { createStory, Story } from '@/graph/stories/create-story'
 import { CosmosStoryProps } from './create-cosmos'
 import { allShapes } from './points/shapes'
 import { imageExample } from './points/images'
+import { pointRenderOrder } from './points/render-order'
 import { pointLabels } from './points/labels'
 import { moscowMetroStations } from './points/position-rescaling'
 
 import shapesStoryRaw from './points/shapes/index?raw'
 import imagesStoryRaw from './points/images/index?raw'
+import renderOrderStoryRaw from './points/render-order/index?raw'
 import labelsStoryRaw from './points/labels/index?raw'
 import labelsDataRaw from './points/labels/data?raw'
 import labelsLabelsRaw from './points/labels/labels?raw'
@@ -40,6 +42,17 @@ export const ImagePoints: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: imagesStoryRaw },
+    ],
+  },
+}
+
+export const RenderOrder: Story = {
+  ...createStory(pointRenderOrder),
+  name: 'Render Order',
+  tags: ['interactive'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: renderOrderStoryRaw },
     ],
   },
 }

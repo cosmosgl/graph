@@ -89,6 +89,11 @@ export class GraphData {
   public pointShapes: Float32Array | undefined
   public pointImageIndices: Float32Array | undefined
   public pointImageSizes: Float32Array | undefined
+  /**
+   * Resolved `setPointRenderOrder` draw order: every point index exactly once, back to
+   * front (the last entry is drawn on top). `undefined` when points draw in index order.
+   */
+  public pointRenderOrder: Uint32Array | undefined
 
   public links: Float32Array | undefined
   public linkColors: Float32Array | undefined
@@ -117,6 +122,9 @@ export class GraphData {
   private _inputLinks: Float32Array | undefined
   private _isLinkGroupingStale = true
   private _linkGroupingPointsNumber: number | undefined
+  private _inputPointRenderOrder: ArrayLike<number> | undefined
+  private _isPointRenderOrderStale = true
+  private _pointRenderOrderPointsNumber: number | undefined
   private _sourceIndexToTargetIndices: PointPairs | undefined
   private _targetIndexToSourceIndices: PointPairs | undefined
 
@@ -166,9 +174,22 @@ export class GraphData {
     return this._inputLinks
   }
 
+  /**
+   * Raw draw order from `setPointRenderOrder`. Assigning, even the same array again,
+   * re-resolves `pointRenderOrder` on the next `update()`.
+   */
+  public get inputPointRenderOrder (): ArrayLike<number> | undefined {
+    return this._inputPointRenderOrder
+  }
+
   public set inputLinks (links: Float32Array | undefined) {
     this._inputLinks = links
     this._isLinkGroupingStale = true
+  }
+
+  public set inputPointRenderOrder (order: ArrayLike<number> | undefined) {
+    this._inputPointRenderOrder = order
+    this._isPointRenderOrderStale = true
   }
 
   public updatePoints (): void {
@@ -345,6 +366,54 @@ export class GraphData {
         }
       }
     }
+  }
+
+  /**
+   * Resolves `inputPointRenderOrder` into `pointRenderOrder`, a full back-to-front
+   * permutation of the point indices. The input may list only some points: those are
+   * drawn on top in the listed order, and every unlisted point goes underneath them in
+   * index order. An index listed more than once takes its last position; entries that
+   * aren't point indices are ignored. An order that resolves to plain index order leaves
+   * `pointRenderOrder` undefined, so rendering takes the unindexed path.
+   * The O(n) rebuild runs only when the input is reassigned or the point count changes.
+   */
+  public updatePointRenderOrder (): void {
+    if (!this._isPointRenderOrderStale && this._pointRenderOrderPointsNumber === this.pointsNumber) return
+    this._isPointRenderOrderStale = false
+    this._pointRenderOrderPointsNumber = this.pointsNumber
+
+    const pointsNumber = this.pointsNumber ?? 0
+    const input = this._inputPointRenderOrder
+    if (!input || input.length === 0 || pointsNumber === 0) {
+      this.pointRenderOrder = undefined
+      return
+    }
+
+    const order = new Uint32Array(pointsNumber)
+    const isListed = new Uint8Array(pointsNumber)
+    // Walk the input from its end so a repeated index keeps its last (topmost)
+    // position; listed points fill the order from the top down.
+    let top = pointsNumber
+    for (let k = input.length - 1; k >= 0; k--) {
+      const index = input[k]
+      if (!this.isPointIndex(index) || isListed[index]) continue
+      isListed[index] = 1
+      order[--top] = index
+    }
+    // Unlisted points fill the rest from the bottom, in index order.
+    let bottom = 0
+    for (let i = 0; i < pointsNumber && bottom < top; i++) {
+      if (!isListed[i]) order[bottom++] = i
+    }
+
+    let isIndexOrder = true
+    for (let k = 0; k < pointsNumber; k++) {
+      if (order[k] !== k) {
+        isIndexOrder = false
+        break
+      }
+    }
+    this.pointRenderOrder = isIndexOrder ? undefined : order
   }
 
   /**
@@ -538,6 +607,7 @@ export class GraphData {
     this.updatePointShape()
     this.updatePointImageIndices()
     this.updatePointImageSizes()
+    this.updatePointRenderOrder()
 
     this.updateLinks()
     this.updateLinkColor()
