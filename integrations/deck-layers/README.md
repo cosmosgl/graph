@@ -82,10 +82,15 @@ Live examples: the *Integrations* section of the
 
 Pass a `GraphSimulation` you created through `simulation` when the application needs to
 own it: create it before the layer exists, keep it across layer removals, or drive it
-from elsewhere in the app. It must run on deck's device. The layer still ingests
-`points` / `links` into it, steps it from deck's timeline and renders it, but never
-configures or destroys it. `simulationConfig` and `onSimulationCreated` apply only to a
-simulation the layer creates.
+from elsewhere in the app. It must run on deck's device. The layer steps it from deck's
+timeline and renders it, but never configures or destroys it. `simulationConfig` and
+`onSimulationCreated` apply only to a simulation the layer creates.
+
+`points` decides who loads the data. Leave it out and the layer draws whatever the
+simulation holds and follows its changes: load the simulation yourself, before or after
+the layer exists, and the layout survives removing and re-adding the layer. Give the
+layer `points` (and `links`) and it loads them into the simulation, over whatever it
+held, once the device check has passed.
 
 ```js
 let deck
@@ -93,9 +98,15 @@ const devicePromise = new Promise((resolve) => {
   deck = new Deck({ /* … */, onDeviceInitialized: resolve, layers: [] })
 })
 
-const simulation = new GraphSimulation(config, devicePromise) // deck's device, never destroyed by cosmos
+// deck's device, never destroyed by cosmos; the application loads it
+const simulation = new GraphSimulation(config, devicePromise)
+simulation.setPointPositions(positions)
+simulation.setLinks(links)
+simulation.applyData()
+
 deck.setProps({
-  layers: [new CosmosGraphLayer({ id: 'graph', simulation, points, links, pickable: true })],
+  // no `points`: the layer draws the simulation as loaded
+  layers: [new CosmosGraphLayer({ id: 'graph', simulation, pickable: true })],
 })
 
 // Take over stepping: pause it, step it yourself, then ask deck to repaint
@@ -108,9 +119,10 @@ simulation.destroy()
 deck.finalize()
 ```
 
-Use one `CosmosGraphLayer` per simulation. A second layer would ingest the data again
-and step the simulation twice per frame. To show one graph in several views, render the
-same layer in every viewport.
+Several layers can draw one simulation, say a main view and a differently styled
+minimap: it steps once per frame however many layers draw it, as long as at most one of
+them carries `points`. Loading new data never reheats: call `simulation.start()` after
+`applyData()` when the simulation had settled.
 
 ## Your own renderer: `PositionTextureSource`
 

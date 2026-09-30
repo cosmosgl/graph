@@ -837,3 +837,193 @@ describe('CosmosGraphLayer', () => {
     }
   })
 })
+
+// An application-loaded simulation: with no `points` of its own, the layer
+// writes nothing into the simulation, draws what it holds and follows its
+// changes. A layer with `points` loads them, but only once the device check
+// has passed. Layers sharing a simulation step it once per frame.
+describe('CosmosGraphLayer with an application-loaded simulation', () => {
+  const INITIAL = [1000, 1000, 1050, 1000]
+  const SECOND_POINT = worldToScreen(1050, 1000)
+
+  // The application's simulation on deck's device, holding two points and one link
+  const loadedSimulation = (devicePromise: Promise<Device>, config: GraphSimulationConfig = STATIC_SIM): GraphSimulation => {
+    const simulation = new GraphSimulation(config, devicePromise)
+    simulation.setPointPositions(new Float32Array(INITIAL), true)
+    simulation.setLinks(new Float32Array([0, 1]))
+    simulation.applyData()
+    return simulation
+  }
+
+  // A layer without data of its own: it draws the simulation
+  const viewLayer = (simulation: GraphSimulation, id = 'graph'): CosmosGraphLayer =>
+    new CosmosGraphLayer({ id, simulation, getPointSize: 10, pickable: true })
+
+  // Bounded wait for a pick at a screen position that satisfies `accept`
+  const waitUntilPicked = async (
+    deck: Deck<OrthographicView>,
+    screen: { x: number; y: number },
+    accept: (info: PickingInfo | null) => boolean = (info): boolean => info !== null,
+    maxFrames = 240
+  ): Promise<void> => {
+    for (let i = 0; i < maxFrames; i += 1) {
+      await waitFrames(1)
+      if (accept(deck.pickObject({ ...screen, radius: 2 }))) return
+    }
+    throw new Error(`no accepted pick at (${screen.x}, ${screen.y}) within ${maxFrames} frames`)
+  }
+  // The second point stays at (1050, 1000) in every scenario below
+  const waitUntilRendered = (deck: Deck<OrthographicView>): Promise<void> => waitUntilPicked(deck, SECOND_POINT)
+
+  it('draws the simulation as loaded and keeps its layout across hide and show', async () => {
+    const { deck, container, devicePromise } = createDeckDevice()
+    const provided = loadedSimulation(devicePromise)
+    try {
+      deck.setProps({ layers: [viewLayer(provided)] })
+      await provided.ready
+      await waitUntilRendered(deck)
+
+      // Nothing was written: still the application's two points and one link, both drawn
+      expect(provided.data.pointsNumber).toBe(2)
+      expect(provided.data.linksNumber).toBe(1)
+      const link = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as CosmosGraphPickingInfo | null
+      expect(link?.elementType).toBe('link')
+
+      // The application moves a point in its simulation: a saved layout, an algorithm, a drag
+      provided.setPointPosition(0, 1000, 1030)
+      await waitFrames(2)
+      expect(Array.from(provided.getPointPositionsArray())).toEqual([1000, 1030, 1050, 1000])
+
+      // Hide the graph, then show it again: the layout is the simulation's, and it stays
+      deck.setProps({ layers: [] })
+      await waitFrames(5)
+      deck.setProps({ layers: [viewLayer(provided)] })
+      await waitUntilRendered(deck)
+      expect(Array.from(provided.getPointPositionsArray())).toEqual([1000, 1030, 1050, 1000])
+      expect(deck.pickObject({ ...worldToScreen(1000, 1030), radius: 2 })?.index).toBe(0)
+    } finally {
+      provided.destroy()
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('leaves the data of a simulation it refuses untouched', async () => {
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    // The application's simulation on its own device, already holding the application's data
+    const foreign = new GraphSimulation(STATIC_SIM)
+    foreign.setPointPositions(new Float32Array([1, 1, 2, 2, 3, 3]), true)
+    foreign.applyData()
+    await foreign.ready
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer({
+        id: 'graph',
+        simulation: foreign,
+        points: { length: 2, initialPositions: new Float32Array(INITIAL) },
+        links: new Float32Array([0, 1]),
+        getPointSize: 10,
+        pickable: true,
+      }),
+    ])
+    try {
+      await waitFrames(10)
+      expect(error.mock.calls.filter(([message]) => String(message).includes('different device'))).toHaveLength(1)
+      // Refused to render, so nothing of the application's changed
+      expect(foreign.data.pointsNumber).toBe(3)
+      expect(foreign.data.linksNumber ?? 0).toBe(0)
+      expect(Array.from(foreign.getPointPositionsArray())).toEqual([1, 1, 2, 2, 3, 3])
+    } finally {
+      error.mockRestore()
+      foreign.destroy()
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('shows a settled simulation as it is', async () => {
+    const { deck, container, devicePromise } = createDeckDevice()
+    // Cools to the alpha floor within a few steps
+    const provided = loadedSimulation(devicePromise, { ...STATIC_SIM, simulationDecay: 10 })
+    try {
+      deck.setProps({ layers: [viewLayer(provided)] })
+      await provided.ready
+      await waitUntilRendered(deck)
+      for (let i = 0; i < 240 && provided.isSimulationRunning; i += 1) await waitFrames(1)
+      expect(provided.isSimulationRunning).toBe(false)
+      const settled = Array.from(provided.getPointPositionsArray())
+
+      // Hidden and shown again, a settled simulation is still settled, on the same layout
+      deck.setProps({ layers: [] })
+      await waitFrames(5)
+      deck.setProps({ layers: [viewLayer(provided)] })
+      await waitUntilRendered(deck)
+      expect({
+        positions: Array.from(provided.getPointPositionsArray()),
+        running: provided.isSimulationRunning,
+      }).toEqual({ positions: settled, running: false })
+    } finally {
+      provided.destroy()
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('follows data the application loads after the layer attached', async () => {
+    const { deck, container, devicePromise } = createDeckDevice()
+    const provided = new GraphSimulation(STATIC_SIM, devicePromise)
+    try {
+      // An empty simulation: the layer draws nothing and waits
+      deck.setProps({ layers: [viewLayer(provided)] })
+      await provided.ready
+      await waitFrames(10)
+      expect(deck.pickObject({ ...CENTER, radius: 2 })).toBeNull()
+
+      // The application loads it: the layer picks the data up
+      provided.setPointPositions(new Float32Array(INITIAL), true)
+      provided.setLinks(new Float32Array([0, 1]))
+      provided.applyData()
+      await waitUntilRendered(deck)
+      expect(deck.pickObject({ ...CENTER, radius: 2 })?.index).toBe(0)
+      expect((deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as CosmosGraphPickingInfo | null)?.elementType).toBe('link')
+
+      // And follows a replacement: a third point appears
+      provided.setPointPositions(new Float32Array([...INITIAL, 1000, 1030]), true)
+      provided.applyData()
+      await waitUntilPicked(deck, worldToScreen(1000, 1030), (info) => info?.index === 2)
+    } finally {
+      provided.destroy()
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('steps a simulation shared by two layers once per frame', async () => {
+    const { deck, container, devicePromise } = createDeckDevice()
+    let ticks = 0
+    const provided = loadedSimulation(devicePromise, { ...STATIC_SIM, onSimulationTick: (): void => { ticks += 1 } })
+    const stepsOver = async (frames: number): Promise<number> => {
+      ticks = 0
+      await waitFrames(frames)
+      return ticks
+    }
+    try {
+      // One layer: the main view
+      deck.setProps({ layers: [viewLayer(provided, 'main')] })
+      await provided.ready
+      await waitUntilRendered(deck)
+      const alone = await stepsOver(30)
+      expect(alone).toBeGreaterThan(0)
+
+      // A second layer on the same simulation: a minimap styled differently
+      deck.setProps({ layers: [viewLayer(provided, 'main'), viewLayer(provided, 'minimap')] })
+      await waitFrames(10)
+      const shared = await stepsOver(30)
+      // The layout runs at the same speed: one step per frame, not one per layer
+      expect(shared).toBeLessThan(alone * 1.5)
+    } finally {
+      provided.destroy()
+      deck.finalize()
+      container.remove()
+    }
+  })
+})

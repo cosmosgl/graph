@@ -9,6 +9,7 @@ export {
   CosmosGraphLayer,
   type CosmosGraphLayerProps,
   type CosmosGraphPoints,
+  type CosmosPointAttributes,
   type CosmosGraphLinks,
   type CosmosGraphPickingInfo,
 } from './cosmos-graph-layer'
