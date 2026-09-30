@@ -173,6 +173,9 @@ export const pointRenderOrder = (): { graph: Graph; div: HTMLDivElement; destroy
   }
 
   config.onPointClick = (index): void => {
+    // A repeat click moves the point to the end rather than counting it twice
+    const previous = clickedPoints.indexOf(index)
+    if (previous !== -1) clickedPoints.splice(previous, 1)
     clickedPoints.push(index)
     applyRenderOrder()
   }
@@ -214,8 +217,9 @@ export const pointRenderOrder = (): { graph: Graph; div: HTMLDivElement; destroy
   let isTranslucent = false
   let isHighlighting = false
   const updateCullingReadout = (): void => {
-    const isActive = isOcclusionCullingOn && !isTranslucent && !isHighlighting
-    cullingReadout.textContent = `Occlusion culling is ${isActive ? 'active' : 'inactive'} (it needs opaque points and no highlighting).`
+    // Per-point alpha doesn't switch culling off: translucent points just skip the opaque core pass
+    const isActive = isOcclusionCullingOn && !isHighlighting
+    cullingReadout.textContent = `Occlusion culling is ${isActive ? 'active' : 'inactive'} (highlighting turns it off; translucent points skip it).`
   }
 
   const cullingInput = document.createElement('input')

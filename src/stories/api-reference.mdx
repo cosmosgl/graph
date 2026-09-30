@@ -261,7 +261,7 @@ This method sets the order in which points are drawn, from back to front. By def
   * **Repeated and invalid indices**: An index listed more than once takes its last position. Values that aren't point indices (negative, fractional, `NaN`, or beyond the point count) are ignored.
   * **Reset**: Pass `null` or `[]` to restore index order.
 
-Only the drawing order changes: point indices, the simulation, and every other per-point array keep their meaning, so there is no need to reorder your data to change what is on top. Hover and click picking, and label sampling (`getSampledPoints`), follow the render order, so the point on top is the one they report. While `highlightedPointIndices` is set, highlighted points are still drawn above greyed-out ones, and the order applies within each group.
+Only the drawing order changes: point indices, the simulation, and every other per-point array keep their meaning, so there is no need to reorder your data to change what is on top. Hover and click picking follow the render order, so the point on top is the one they report. While `highlightedPointIndices` is set, highlighted points are still drawn (and picked) above greyed-out ones, and the order applies within each group. Label sampling (`getSampledPoints`) follows the render order only and gives highlighted points no priority.
 
 The order is kept across `setPointPositions` calls and resolved against the current point count, so an index beyond it is ignored while it is out of range. The change takes effect on the next `render()` call and does not animate.
 
