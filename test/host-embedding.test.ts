@@ -151,6 +151,23 @@ describe('position snapshots', () => {
     }
   })
 
+  it('getPointPositionsAsync returns empty when the point count changed mid-flight, texture size or not', async () => {
+    // Four points: a 2×2 texture
+    const graph = await createHeadlessGraph()
+    try {
+      graph.step()
+      const snapshot = graph.getPointPositionsAsync()
+      // Three points still fit the 2×2 texture: only the count tells the datasets apart
+      graph.setPointPositions(new Float32Array([1000, 1000, 3000, 1000, 1000, 3000]))
+      graph.render()
+      expect((await snapshot).length).toBe(0)
+      // The next read describes the new dataset
+      expect((await graph.getPointPositionsAsync()).length).toBe(6)
+    } finally {
+      graph.destroy()
+    }
+  })
+
   it('an absent (NaN) point reads back as NaN, not as a frozen coordinate', async () => {
     const positions = new Float32Array([1000, 1000, NaN, NaN, 3000, 3000])
     const graph = await createHeadlessGraph(SIMULATION_CONFIG, positions)
