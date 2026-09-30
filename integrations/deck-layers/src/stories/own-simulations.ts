@@ -5,7 +5,7 @@ import type { GraphSimulationConfig } from '@cosmos.gl/graph'
 import { CosmosGraphLayer } from '@cosmos.gl/deck-layers'
 
 import { generateMeshData } from '@/graph/stories/generate-mesh-data'
-import './cosmos-graph-own-simulations.css'
+import './style.css'
 
 /**
  * The application owns the simulations; the layers are views of them.
@@ -19,7 +19,7 @@ import './cosmos-graph-own-simulations.css'
  * selected one is drawn by two layers yet steps once per frame. The actions
  * reach the selected simulation through the application's own handle.
  */
-export const cosmosGraphOwnSimulations = async (): Promise<{ div: HTMLDivElement; destroy: () => void }> => {
+export const ownSimulations = async (): Promise<{ div: HTMLDivElement; destroy: () => void }> => {
   const div = document.createElement('div')
   div.style.height = '100vh'
   div.style.width = '100%'
