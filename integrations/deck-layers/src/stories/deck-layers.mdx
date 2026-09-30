@@ -109,9 +109,18 @@ new CosmosGraphLayer({
       getPointSize: { value: sizes, size: 1 },   // Float32Array, one diameter per point
     },
   },
-  links: linkIndices,                            // Float32Array [src0, tgt0, src1, tgt1, …]
+  links: {
+    pairs: linkIndices,                          // Float32Array [src0, tgt0, src1, tgt1, …]
+    attributes: {
+      getLinkColor: { value: linkColors, size: 4 }, // Uint8Array, RGBA per link
+      getLinkWidth: { value: linkWidths, size: 1 }, // Float32Array, one width per link
+    },
+  },
 })
 ```
+
+A new `points` or `links` object over the same arrays restyles in place; the simulation reloads
+only when the positions or the pairs change.
 
 Try it: [100k points](../?path=/story/examples-integrations--cosmos-graph-large).
 

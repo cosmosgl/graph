@@ -6,11 +6,12 @@ import { generateMeshData } from '@/graph/stories/generate-mesh-data'
 
 /**
  * The zero-copy payoff at scale: a ~100,000-point mesh with ~200,000 links,
- * per-point colors and sizes — all binary. Positions live in the simulation's
- * GPU texture and never reach the CPU; colors and sizes are the generator's
- * arrays handed to deck as binary attributes; the links array feeds both the
- * simulation and the renderer without a copy. Hover and drag still work — the
- * picking pass samples the same live texture.
+ * per-point colors and sizes, per-link colors and widths — all binary.
+ * Positions live in the simulation's GPU texture and never reach the CPU; the
+ * styling channels are the generator's arrays handed to deck as binary
+ * attributes; the pair array feeds both the simulation and the renderer
+ * without a copy. Hover and drag still work — the picking pass samples the
+ * same live texture.
  */
 export const cosmosGraphLarge = async (): Promise<{ div: HTMLDivElement; destroy: () => void }> => {
   const div = document.createElement('div')
@@ -24,8 +25,10 @@ export const cosmosGraphLarge = async (): Promise<{ div: HTMLDivElement; destroy
   const linkCount = data.links.length / 2
   const spaceSize = defaultConfigValues.spaceSize
 
-  // cosmos channels are 0..1 floats; deck attributes take 0..255 bytes
+  // cosmos channels are 0..1 floats; deck attributes take 0..255 bytes —
+  // and 200k links want a light alpha
   const pointColors = Uint8Array.from(data.pointColors, (channel) => channel * 255)
+  const linkColors = Uint8Array.from(data.linkColors, (channel, i) => (i % 4 === 3 ? 0.1 : channel) * 255)
 
   const counts = `${pointCount.toLocaleString()} points · ${linkCount.toLocaleString()} links`
   const status = document.createElement('div')
@@ -56,8 +59,13 @@ export const cosmosGraphLarge = async (): Promise<{ div: HTMLDivElement; destroy
             getPointSize: { value: data.pointSizes, size: 1 },
           },
         },
-        links: data.links,
-        getLinkColor: [120, 130, 190, 22],
+        links: {
+          pairs: data.links,
+          attributes: {
+            getLinkColor: { value: linkColors, size: 4 },
+            getLinkWidth: { value: data.linkWidths, size: 1 },
+          },
+        },
         simulationConfig: {
           spaceSize,
           simulationGravity: 0.15,

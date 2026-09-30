@@ -34,6 +34,12 @@ vec2 getExtrusionOffset(vec2 lineClipspace, float offsetDirection, float width) 
   return dirScreenspace * offsetDirection * width / 2.0;
 }
 
+// The engine's isPointIndex: an integer in [0, pointCount). A fraction would
+// truncate to a neighbour, NaN would make int() undefined.
+bool namesPoint(float index, float pointCount) {
+  return index >= 0.0 && index < pointCount && index == floor(index);
+}
+
 vec4 fetchPointPosition(float index, int textureSize) {
   int pointIndex = int(index);
   // Point i lives at texel (i % size, i / size) as [x, y, i, unused] in space coordinates
@@ -41,13 +47,20 @@ vec4 fetchPointPosition(float index, int textureSize) {
 }
 
 void main(void) {
+  // An endpoint that names no point (an index outside the point count) is
+  // skipped, never dropped, so the instance index stays the link index — the
+  // rule the engine applies to the same pair in its link grouping. Its texel
+  // would be outside the live data.
+  float pointCount = cosmosLinks.pointCount;
+  bool namesNoPoint = !namesPoint(instanceSourceIndices, pointCount) || !namesPoint(instanceTargetIndices, pointCount);
+
   int textureSize = int(cosmosLinks.pointsTextureSize);
-  vec4 sourcePosition = fetchPointPosition(instanceSourceIndices, textureSize);
-  vec4 targetPosition = fetchPointPosition(instanceTargetIndices, textureSize);
+  vec4 sourcePosition = namesNoPoint ? vec4(0.0) : fetchPointPosition(instanceSourceIndices, textureSize);
+  vec4 targetPosition = namesNoPoint ? vec4(0.0) : fetchPointPosition(instanceTargetIndices, textureSize);
 
   // A removed (absent) endpoint's texel is NaN — see PointPositionTexture;
-  // collapse the quad so it clips away
-  if (isnan(sourcePosition.x) || isnan(targetPosition.x)) {
+  // collapse the quad, as for an endpoint that names no point, so it clips away
+  if (namesNoPoint || isnan(sourcePosition.x) || isnan(targetPosition.x)) {
     gl_Position = vec4(0.0);
     vColor = vec4(0.0);
     uv = vec2(0.0);
@@ -162,8 +175,9 @@ const defaultProps: DefaultProps<CosmosLinksLayerProps> = {
  * link index.
  *
  * Internal: the links sublayer of `CosmosGraphLayer`, not a package export —
- * the composite resolves every endpoint to a valid point index before it
- * reaches this layer.
+ * the composite resolves array links to point indices before they reach this
+ * layer, and a pair that names no point collapses in the shader, keeping its
+ * index.
  */
 export class CosmosLinksLayer<DataT = unknown> extends Layer<Required<CosmosLinksLayerOwnProps<DataT>>> {
   public static layerName = 'CosmosLinksLayer'
@@ -219,6 +233,7 @@ export class CosmosLinksLayer<DataT = unknown> extends Layer<Required<CosmosLink
     const moduleProps: CosmosLinksProps = {
       pointsTextureSize: positionInfo.textureSize,
       widthUnits: UNIT[this.props.linkWidthUnits],
+      pointCount: positionInfo.pointCount,
       positionsTexture: positionInfo.texture,
     }
     model.shaderInputs.setProps({ cosmosLinks: moduleProps })
