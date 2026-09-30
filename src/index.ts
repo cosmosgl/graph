@@ -151,7 +151,6 @@ export class Graph {
   private isPointSizeUpdateNeeded = false
   private isPointShapeUpdateNeeded = false
   private isPointImageIndicesUpdateNeeded = false
-  private isPointRenderOrderUpdateNeeded = false
   private isLinksUpdateNeeded = false
   private isLinkColorUpdateNeeded = false
   private isLinkWidthUpdateNeeded = false
@@ -726,10 +725,10 @@ export class Graph {
    * Example: `graph.setPointRenderOrder([7])` brings point 7 to the front and leaves the rest in
    * index order; `graph.setPointRenderOrder([7, 2])` draws point 2 on top and point 7 just below it.
    * @note Only the drawing order changes: point indices, the simulation and every other
-   * per-point array keep their meaning. Hover and click picking and label sampling
-   * (`getSampledPoints`) follow the render order, so the point on top is the one they report.
-   * While `highlightedPointIndices` is set, highlighted points still draw above greyed-out ones;
-   * the order applies within each group. The order is kept across `setPointPositions` calls and
+   * per-point array keep their meaning. Hover and click picking follow the render order, so the
+   * point on top is the one they report. While `highlightedPointIndices` is set, highlighted points
+   * still draw (and pick) above greyed-out ones; the order applies within each group. Label sampling
+   * (`getSampledPoints`) follows the render order only and gives highlighted points no priority. The order is kept across `setPointPositions` calls and
    * re-resolved against the current point count: an index beyond it is ignored while it is out
    * of range. The change takes effect on the next `render()` call and does not animate.
    */
@@ -737,7 +736,6 @@ export class Graph {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setPointRenderOrder(order))) return
     this.graph.inputPointRenderOrder = order ?? undefined
-    this.isPointRenderOrderUpdateNeeded = true
   }
 
   /**
@@ -1725,8 +1723,9 @@ export class Graph {
     if (this.isPointShapeUpdateNeeded) this.points.updateShape()
     if (this.isPointImageIndicesUpdateNeeded) this.points.updateImageIndices()
     if (this.isPointImageSizesUpdateNeeded) this.points.updateImageSizes()
-    // updatePositions() already rebuilt the order buffers for a new point set
-    if (this.isPointRenderOrderUpdateNeeded) this.points.updateRenderOrder()
+    // Unconditional (a no-op unless the resolved order changed): a config change can run
+    // create() before render() resolves a pending order, so a flag would be spent too early.
+    this.points.updateRenderOrder()
 
     if (this.isLinksUpdateNeeded) this.lines.updatePointsBuffer()
     if (this.isLinkColorUpdateNeeded) this.lines.updateColor()
@@ -1752,7 +1751,6 @@ export class Graph {
     this.isPointShapeUpdateNeeded = false
     this.isPointImageIndicesUpdateNeeded = false
     this.isPointImageSizesUpdateNeeded = false
-    this.isPointRenderOrderUpdateNeeded = false
     this.isLinksUpdateNeeded = false
     this.isLinkColorUpdateNeeded = false
     this.isLinkWidthUpdateNeeded = false

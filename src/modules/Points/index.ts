@@ -52,7 +52,7 @@ const DEFAULT_DRAW_PARAMETERS: RenderPipelineParameters = {
 
 /**
  * Occlusion-culling pass A: fully opaque point interiors drawn front-to-back
- * (reversed index order) so early-z rejects fragments hidden behind nearer points.
+ * (reversed render order) so early-z rejects fragments hidden behind nearer points.
  */
 const CORE_PASS_PARAMETERS: RenderPipelineParameters = {
   blend: false,
@@ -1611,11 +1611,6 @@ export class Points extends CoreModule {
   }
 
   /**
-   * Builds the image atlas from `data.inputImageData`. Returns `false` when the list cannot be
-   * packed (every image has zero width or height); the atlas, `imageCount` and the textures then
-   * stay as they were, so the caller must not keep the new list either.
-   */
-  /**
    * (Re)builds the buffers that carry the point draw order — `GraphData.pointRenderOrder`,
    * or index order when it is unset:
    * - `pointRenderOrderBuffer`, the order back to front, bound to the point draw (the
@@ -1625,8 +1620,8 @@ export class Points extends CoreModule {
    * - `reversedPointIndexBuffer`, the order front to back, for the occlusion core pass.
    * - `renderRankBuffer`, each point's position in the order. The draw shader turns it into
    *   depth, so the depth-tested core and fringe passes agree on which point is on top.
-   * Runs from `updatePositions()` (the point count may have changed) and after
-   * `setPointRenderOrder`; a no-op unless the point count or the resolved order changed.
+   * Runs from `updatePositions()` (the point count may have changed) and from every
+   * `Graph.create()`; a no-op unless the point count or the resolved order changed.
    */
   public updateRenderOrder (): void {
     const { device, data } = this
@@ -1679,6 +1674,11 @@ export class Points extends CoreModule {
     this.isPickingBufferStale = true
   }
 
+  /**
+   * Builds the image atlas from `data.inputImageData`. Returns `false` when the list cannot be
+   * packed (every image has zero width or height); the atlas, `imageCount` and the textures then
+   * stay as they were, so the caller must not keep the new list either.
+   */
   public createAtlas (): boolean {
     const { device, data, store } = this
     // The image set decides which points draw an image, and so which footprints include an image size
@@ -1909,7 +1909,7 @@ export class Points extends CoreModule {
     // Occlusion culling skips fragments hidden under opaque points via depth
     // testing. Applies only while points are effectively opaque; `false`
     // disables it entirely. Highlighting always falls back — its layered
-    // greyed/highlighted draw relies on paint order, not index order.
+    // greyed/highlighted draw relies on paint order, not render-rank depth.
     const useOcclusionCulling =
       config.pointOcclusionCulling &&
       config.pointOpacity >= 1 &&
@@ -1925,7 +1925,7 @@ export class Points extends CoreModule {
     }
 
     if (useOcclusionCulling && this.drawCoreCommand) {
-      // Pass A: opaque cores, front-to-back (reversed indices), depth write,
+      // Pass A: opaque cores, front-to-back (reversed render order), depth write,
       // no blending. Early-z rejects fragments hidden behind nearer cores.
       this.drawUniformStore.setUniforms({
         drawVertexUniforms: {
