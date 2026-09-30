@@ -12,6 +12,7 @@ import { cosmosGraphLarge } from './cosmos-graph-large'
 import { cosmosGraphComposition } from './cosmos-graph-composition'
 import { cosmosGraphUpdates } from './cosmos-graph-updates'
 import { cosmosGraphControl } from './cosmos-graph-control'
+import { cosmosGraphOwnSimulations } from './cosmos-graph-own-simulations'
 
 import deckGlZeroCopyRaw from './deck-gl-zero-copy?raw'
 import cosmosGraphObjectsRaw from './cosmos-graph-objects?raw'
@@ -19,6 +20,8 @@ import cosmosGraphLargeRaw from './cosmos-graph-large?raw'
 import cosmosGraphCompositionRaw from './cosmos-graph-composition?raw'
 import cosmosGraphUpdatesRaw from './cosmos-graph-updates?raw'
 import cosmosGraphControlRaw from './cosmos-graph-control?raw'
+import cosmosGraphOwnSimulationsRaw from './cosmos-graph-own-simulations?raw'
+import cosmosGraphOwnSimulationsCssRaw from './cosmos-graph-own-simulations.css?raw'
 
 // Embedding cosmos.gl in deck.gl with `CosmosGraphLayer` from
 // @cosmos.gl/deck-layers — the layer owns the simulation, steps it from
@@ -101,6 +104,19 @@ export const CosmosGraphControl: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: cosmosGraphControlRaw },
+      { name: 'generate-mesh-data', code: generateMeshDataRaw },
+    ],
+  },
+}
+
+export const CosmosGraphOwnSimulations: Story = {
+  ...createStory(cosmosGraphOwnSimulations),
+  name: 'CosmosGraphLayer: your own simulations',
+  tags: ['advanced', 'interactive'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: cosmosGraphOwnSimulationsRaw },
+      { name: 'style.css', code: cosmosGraphOwnSimulationsCssRaw },
       { name: 'generate-mesh-data', code: generateMeshDataRaw },
     ],
   },
