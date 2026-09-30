@@ -11,6 +11,8 @@ in vec4 targetColor;
 in float shape;
 in float imageIndex;
 in float imageSize;
+// Position of this point in the render order: 0 is drawn first (bottom)
+in float renderRank;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D pointStatus;
@@ -171,10 +173,10 @@ void main() {
   #else
   vec3 finalPosition = transformationMatrix * vec3(normalizedPosition, 1);
   #endif
-  // Depth encodes stacking order: higher point index = drawn on top = nearer
-  // (smaller z). Harmless when depth testing is off (depthCompare 'always').
-  float linearIndex = pointIndices.y * pointsTextureSize + pointIndices.x;
-  float depthZ = 1.0 - 2.0 * (linearIndex + 0.5) / max(pointsNumber, 1.0);
+  // Depth encodes stacking order: later in the render order = drawn on top = nearer
+  // (smaller z). The rank equals the point index unless setPointRenderOrder is used.
+  // Harmless when depth testing is off (depthCompare 'always').
+  float depthZ = 1.0 - 2.0 * (renderRank + 0.5) / max(pointsNumber, 1.0);
   gl_Position = vec4(finalPosition.rg, depthZ, 1.0);
 
   // Resolve NaN channels against the animated exit ramp before mixing — default
