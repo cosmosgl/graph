@@ -132,6 +132,7 @@ export class Graph implements PositionTextureSource {
   private isPointColorUpdateNeeded = false
   private isPointShapeUpdateNeeded = false
   private isPointImageIndicesUpdateNeeded = false
+  private isPointRenderOrderUpdateNeeded = false
   private isLinksUpdateNeeded = false
   private isLinkColorUpdateNeeded = false
   private isLinkWidthUpdateNeeded = false
@@ -509,6 +510,33 @@ export class Graph implements PositionTextureSource {
     if (this.ensureDevice(() => this.setPointImageSizes(imageSizes))) return
     this.graph.inputPointImageSizes = imageSizes
     this.isPointImageSizesUpdateNeeded = true
+  }
+
+  /**
+   * Sets the order in which points are drawn, from back to front: a point listed later is
+   * drawn on top of the points listed before it. By default points draw in index order,
+   * so a higher index is drawn on top.
+   *
+   * @param {ArrayLike<number> | null} order - Point indices from back to front, as a `number[]`
+   * or any typed array (e.g. a `Uint32Array`). The list may name only some points: they are
+   * drawn on top in the listed order, and every point left out is drawn underneath them in
+   * index order. An index listed more than once takes its last position; values that aren't
+   * point indices are ignored. Pass `null` or `[]` to restore index order.
+   * Example: `graph.setPointRenderOrder([7])` brings point 7 to the front and leaves the rest in
+   * index order; `graph.setPointRenderOrder([7, 2])` draws point 2 on top and point 7 just below it.
+   * @note Only the drawing order changes: point indices, the simulation and every other
+   * per-point array keep their meaning. Hover and click picking and label sampling
+   * (`getSampledPoints`) follow the render order, so the point on top is the one they report.
+   * While `highlightedPointIndices` is set, highlighted points still draw above greyed-out ones;
+   * the order applies within each group. The order is kept across `setPointPositions` calls and
+   * re-resolved against the current point count: an index beyond it is ignored while it is out
+   * of range. The change takes effect on the next `render()` call and does not animate.
+   */
+  public setPointRenderOrder (order: ArrayLike<number> | null): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointRenderOrder(order))) return
+    this.graph.inputPointRenderOrder = order ?? undefined
+    this.isPointRenderOrderUpdateNeeded = true
   }
 
   /**
@@ -1648,6 +1676,8 @@ export class Graph implements PositionTextureSource {
     if (this.isPointShapeUpdateNeeded) this.points.updateShape()
     if (this.isPointImageIndicesUpdateNeeded) this.points.updateImageIndices()
     if (this.isPointImageSizesUpdateNeeded) this.points.updateImageSizes()
+    // updatePositions() already rebuilt the order buffers for a new point set
+    if (this.isPointRenderOrderUpdateNeeded) this.points.updateRenderOrder()
 
     if (this.isLinksUpdateNeeded) this.lines.updatePointsBuffer()
     if (this.isLinkColorUpdateNeeded) this.lines.updateColor()
@@ -1659,6 +1689,7 @@ export class Graph implements PositionTextureSource {
     this.isPointShapeUpdateNeeded = false
     this.isPointImageIndicesUpdateNeeded = false
     this.isPointImageSizesUpdateNeeded = false
+    this.isPointRenderOrderUpdateNeeded = false
     this.isLinksUpdateNeeded = false
     this.isLinkColorUpdateNeeded = false
     this.isLinkWidthUpdateNeeded = false
