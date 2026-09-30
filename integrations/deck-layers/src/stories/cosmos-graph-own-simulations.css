@@ -1,0 +1,46 @@
+.actions {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  color: #ccc;
+}
+
+.actions-header {
+  font-weight: bold;
+  margin-bottom: 2px;
+}
+
+.action {
+  margin-left: 2px;
+  font-size: 10pt;
+  text-decoration: underline;
+  cursor: pointer;
+  user-select: none;
+}
+
+.thumbnail {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  padding: 4px 6px;
+  font: 11px monospace;
+  color: #fff;
+  cursor: pointer;
+  user-select: none;
+}
+
+.thumbnail.selected {
+  border-color: #fff;
+}
+
+.status {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  padding: 6px 12px;
+  font: 12px monospace;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 4px;
+}
