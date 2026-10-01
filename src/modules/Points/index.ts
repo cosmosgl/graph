@@ -2088,6 +2088,14 @@ export class Points extends CoreModule implements PointTrackerHost {
    * `currentPositionTexture`: every GPU write path (simulation, drag) swaps
    * first and then reads what was current, so the update survives the next tick.
    *
+   * A position transition is the one writer that does not read `current`: every
+   * frame it redraws it from the source and target textures. While one runs, the
+   * texel goes into those two as well, so the blend keeps the point where it was
+   * put and every other point finishes its animation. A queued transition counts
+   * too: `render()` builds its textures before the cycle becomes active, and
+   * callbacks run in between. A write made before that `render()` is replaced
+   * when it rebuilds both textures.
+   *
    * Absent points (NaN input position) are skipped — a sparse write must not
    * resurrect a removed point. Out-of-range indices are skipped too.
    */
@@ -2095,6 +2103,15 @@ export class Points extends CoreModule implements PointTrackerHost {
     const { store: { pointsTextureSize }, data } = this
     if (!pointsTextureSize || data.pointsNumber === undefined) return
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
+
+    const textures = [this.currentPositionTexture]
+    const isPositionTransitionAhead = this.transition?.isActiveFor(TransitionProperty.Positions) ||
+      this.transition?.isPendingFor(TransitionProperty.Positions)
+    if (isPositionTransitionAhead) {
+      for (const texture of [this.sourcePositionTexture, this.targetPositionTexture]) {
+        if (texture && !texture.destroyed) textures.push(texture)
+      }
+    }
 
     const texel = new Float32Array(4)
     for (let i = 0, n = indices.length; i < n; i += 1) {
@@ -2104,15 +2121,17 @@ export class Points extends CoreModule implements PointTrackerHost {
       texel[0] = positions[i * 2] as number
       texel[1] = positions[i * 2 + 1] as number
       texel[2] = index // drag-point.frag matches the drag target on the blue channel
-      this.currentPositionTexture.copyImageData({
-        data: texel,
-        x: index % pointsTextureSize,
-        y: Math.floor(index / pointsTextureSize),
-        width: 1,
-        height: 1,
-        bytesPerRow: getBytesPerRow('rgba32float', 1),
-        mipLevel: 0,
-      })
+      for (const texture of textures) {
+        texture.copyImageData({
+          data: texel,
+          x: index % pointsTextureSize,
+          y: Math.floor(index / pointsTextureSize),
+          width: 1,
+          height: 1,
+          bytesPerRow: getBytesPerRow('rgba32float', 1),
+          mipLevel: 0,
+        })
+      }
     }
 
     this.markPositionsChanged()
