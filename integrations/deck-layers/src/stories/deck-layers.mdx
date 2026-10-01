@@ -126,6 +126,39 @@ simulation.setPinnedPoint(3, true)   // hold point 3 where it is
 
 Try it: hover, drag, Pause and Reheat in [Graph layer](../?path=/story/examples-integrations--graph-layer).
 
+## Labels and other layers
+
+Other deck.gl layers stack on top as usual. To put labels or markers on a few points, ask the
+simulation for a tracker: it follows those points and tells you where they are.
+
+```js
+import { TextLayer } from '@deck.gl/layers'
+
+let tracker
+const refresh = () => deck.setProps({ layers: [graph(), labels()] })
+
+const graph = () => new CosmosGraphLayer({
+  // …
+  onSimulationCreated: (simulation) => { tracker = simulation.trackPoints([0, 5, 9]) }, // points to follow, by index
+  simulationConfig: { onSimulationTick: refresh }, // redraw the labels as the points move
+})
+
+const labels = () => new TextLayer({
+  id: 'labels',
+  data: tracker ? [...tracker.positions()] : [], // one [index, [x, y]] per tracked point
+  getPosition: ([, position]) => position,
+  getText: ([index]) => nodes[index].name,
+})
+
+tracker.setIndices([2, 3]) // follow other points
+tracker.destroy()          // when the labels go away
+```
+
+A point that is not there is left out of `positions()`. To read every point at once, use
+`simulation.getPointPositionsArray()`.
+
+Try it: the hub labels in [Graph layer](../?path=/story/examples-integrations--graph-layer).
+
 ## Big graphs
 
 Past a few thousand points, skip the objects: pass cosmos.gl's flat arrays. Nothing is copied.
@@ -184,13 +217,6 @@ Try it: [Your own simulations](../?path=/story/examples-integrations--own-simula
 ## Good to know
 
 - **WebGL 2 only**, and the layout is 2D: use `OrthographicView`.
-- **Other deck.gl layers** stack on top as usual. For labels or anything that needs positions on
-  the CPU, read `simulation.getPointPositionsArray()`.
-  To follow only a few points, ask for a tracker instead: `const tracker = simulation.trackPoints(indices)`,
-  then `tracker.positions({ nonBlocking: true })` each frame reads just those points and never
-  stalls — the hub labels in
-  [Graph layer](../?path=/story/examples-integrations--graph-layer) are a `TextLayer` fed that way.
-  Call `tracker.destroy()` when you are done.
 - **A renderer of your own** samples `PositionTextureSource` from `@cosmos.gl/graph`; the layer's
   internal sublayer sources, in the Big graph story's panes, are the worked reference. See the
   [package README](https://github.com/cosmosgl/graph/tree/main/integrations/deck-layers).

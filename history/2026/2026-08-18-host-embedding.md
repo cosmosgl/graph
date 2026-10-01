@@ -3,16 +3,21 @@
 # Host embedding: headless mode, external scheduling, GPU position sharing
 
 **Commits:** `feat(graph): headless mode and external frame scheduling`
-(`1344629`), `feat(points): expose GPU positions — texture handle, non-stalling
-snapshots, sparse writes, per-point pinning` (`7f1213f`), `feat(graph): render
+(`8598b4b`), `feat(points): expose GPU positions — texture handle, non-stalling
+snapshots, sparse writes, per-point pinning` (`3387937`), `feat(graph): render
 into a host pass with a host camera — drawToRenderPass and setViewTransform`
-(`c1752b6`), `fix(graph): reset ambient GL state before passes on an external
-device` (`881ecf9`), `feat(stories): deck.gl integration examples`
-(`ad1e651`), `build(deps): make luma.gl a peer dependency` (`7fdc05d`),
-`feat(simulation): extract GraphSimulation` (`22cbac2`), `feat(stories): run
-the zero-copy story on GraphSimulation` (`9d63bc4`), `feat(api): rename
-setPointPinned to setPinnedPoint` (`d19403d`), `feat(api): sanitize the pinned
-set and add isPointPinned` (`e541f5b`)
+(`6db7229`), `fix(graph): reset ambient GL state before passes on an external
+device` (`25c246b`), `feat(stories): deck.gl integration examples`
+(`b4211b0`), `build(deps): make luma.gl a peer dependency` (`119688f`),
+`feat(simulation): extract GraphSimulation` (`c8fa3f6`), `feat(stories): run
+the zero-copy story on GraphSimulation` (`0fda0ef`), `feat(api): rename
+setPointPinned to setPinnedPoint` (`765154b`), `feat(api): sanitize the pinned
+set and add isPointPinned` (`f11b9b5`), `test: host-embedding unit tests on
+real WebGL 2` (`c658e2f`), `fix(points): fence the async position read`
+(`af35256`), `fix(simulation): defer stop() until the device is ready`
+(`2ac47d0`), `fix(points): the async snapshot detects a point-count change
+mid-flight` (`e51befe`), `fix(points): a sparse write holds through a position
+transition` (`9b3e9d8`)
 
 ## Why
 
@@ -75,7 +80,10 @@ always up, so a deck view embedding cosmos rendering uses
 **Snapshots** — `getPointPositionsArray(out?)` (Float32Array, optional caller
 destination) and `getPointPositionsAsync(out?)` (staging-buffer copy +
 fence-based read; no GPU stall). `getPointPositions()` docs now state that it
-stalls, and it delegates to the array variant.
+stalls, and it delegates to the array variant. The async read waits behind a
+fence before it touches the buffer, and resolves empty when the data was
+rebuilt during the wait: it compares the point count as well as the texture
+size, because counts such as 3 and 4 share one texture.
 
 **Sparse updates and pinning** — `setPointPosition(index, x, y)` /
 `setPointPositionsByIndices(indices, positions)` write one texel per point into
@@ -84,6 +92,29 @@ untouched, so a data rebuild starts from the inputs again), and
 `setPinnedPoint(index, pinned)` flips one point's pin with a one-texel write
 instead of `setPinnedPoints`' full-texture rebuild. Together they map a host's
 drag interaction onto a running simulation.
+
+A sparse write also has to hold through a position transition. On a graph
+that animates `setPointPositions`, the transition does not read the live
+texture: every frame it redraws it from its own source and target textures, so
+a point a host moved was back on the animation one frame later. While a
+position transition is queued or active, the write goes into those two
+textures as well. Both sides of the blend then hold the host's coordinate, the
+other points still run to their targets, and `onTransitionEnd` reports a
+normal completion. Two alternatives were turned down:
+
+- **Ending the transition before the write**, as `start()` and `unpause()` do.
+  They can, because the simulation then moves every point. A sparse write
+  hands the other points to nobody: `render()` leaves the simulation paused
+  after a position transition, so they would stay on the frame they stopped
+  on and the layout the application asked for would never arrive.
+- **Checking only for an active transition.** `render()` builds the textures
+  before the cycle becomes active, and `onSimulationPause` and an interrupting
+  `onTransitionEnd(true)` run in between, so a queued transition counts too.
+
+Two rules stay as they were. An absent point is skipped, so a write cannot
+bring back a point that is fading out. And a write made before the `render()`
+that applies new positions is replaced by that data update, animated or not:
+the input arrays are untouched, and a data rebuild starts from them.
 
 The pin surface was aligned before the stable 3.5.0 lands (a beta-line-only
 break: 3.5.0-beta.1 exported the method as `setPointPinned`). The sparse method
@@ -116,11 +147,23 @@ resets blend, depth, scissor, stencil, cull, and color mask through luma's
 tracked `setParametersWebGL`. Cosmos-owned devices skip it, keeping existing
 behavior byte-identical.
 
+The draws that run between steps were found later, one consumer at a time,
+and reset the state the same way: the tracking draw after a sparse write
+(`fix(simulation): reset host GL state before sparse-write tracking draws`,
+`8fc0288`), then a tracker's gather wherever it is reached from and a cluster
+read's own pass (`feat(points): point trackers`, `58f4afe`; see
+[non-blocking position reads](2026-09-28-nonblocking-position-reads.md)).
+
 Verified on a shared deck.gl device: 100 steps interleaved with deck redraws
 keep all 10,000 index channels intact, and pin + sparse-move + step holds the
 point exactly.
 
 ## Example
+
+The three stories below were this milestone's examples. The first became
+`CosmosGraphLayer`, and the other two retired when the stories moved into the
+deck-side package and were focused on the layer; the current set is described
+in [deck-layers](2026-09-07-deck-layers.md).
 
 `src/stories/integrations/` (Storybook: **Examples/Integrations**), with
 `@deck.gl/core` + `@deck.gl/layers` `~9.3.0` as devDependencies — deck 9.3
@@ -149,7 +192,8 @@ standalone class: device ownership, the data model, the position engine
 (`Points`), the force modules, clusters, the step pipeline with alpha decay and
 end detection, all the ingest setters (positions, links, sizes, clusters,
 pinning, sparse writes), `applyData()` as the render()-counterpart, and the
-three position outputs. `Graph` now **composes** it — it creates the simulation,
+three position outputs, since joined by point trackers. `Graph` now
+**composes** it — it creates the simulation,
 shares one config object with it, aliases its store/data/points internally, and
 layers rendering, view state, transitions, and input on top. The interaction
 context (right-click repulsion, zoom-suspends-forces) threads into
@@ -184,11 +228,14 @@ headless `Graph`.
 ## Packaging
 
 `@luma.gl/*` moved from dependencies to peerDependencies (compatibility range
-`^9.3.0`), so the application owns the single luma.gl installation that
-cosmos.gl, deck.gl, and everything else share. The ES build keeps luma.gl
+`~9.3.0`, narrowed from a caret range: deck.gl 9.3 pairs with luma.gl 9.3, and
+with a caret a package manager placed a newer luma.gl next to deck's copy), so
+the application owns the single luma.gl installation that cosmos.gl, deck.gl,
+and everything else share. The ES build keeps luma.gl
 external (bundling a private copy would defeat the contract); the UMD build
-stays standalone for CDN use. Pinned `~9.3.6` devDependencies keep the repo's
-own toolchain deterministic. Breaking for package managers that don't
+stays standalone for CDN use. Pinned `~9.3.6` versions, in the workspace
+catalog since the repo became one, keep the repo's own toolchain
+deterministic. Breaking for package managers that don't
 auto-install peers — see `migration-notes.md`. Prerelease luma lines (the 9.4
 alphas) intentionally sit outside the range: supporting them means chaining
 users to an alpha, so that waits for a stable 9.4.
