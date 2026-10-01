@@ -38,7 +38,7 @@ place. The headline changes:
   and the deck-side package this document assigned to deck.gl-community is now
   built **here**: the repo is a pnpm workspace and `integrations/deck-layers`
   ships `@cosmos.gl/deck-layers`, versioned in lockstep with the engine.
-- **`GraphSimulation` was extracted** as a standalone exported class (`22cbac2`);
+- **`GraphSimulation` was extracted** as a standalone exported class (`feat(simulation): extract GraphSimulation`);
   `Graph` composes it, and the package builds on it.
 - The package delivers what this document called "the integrating side's work":
   `CosmosGraphLayer` (a composite that owns its simulation, steps it from deck's
@@ -48,12 +48,31 @@ place. The headline changes:
   Hosts writing their own renderer type against `PositionTextureSource`, exported by
   `@cosmos.gl/graph`.
 - Of the five open items below: **all five are fixed** — the async snapshot fence
-  (item 1) landed last, in `b8da115`.
+  (item 1) landed last, in `fix(points): fence the async position read`.
+- **`CosmosGraphLayer` became the package's only export**
+  (`refactor(deck-layers): CosmosGraphLayer is the only export`), and the rules for an
+  application's own simulation were settled: a layer without `points` draws what the
+  simulation holds and never writes into it, a layer with `points` loads them only after
+  it has checked the device, and a simulation steps once per frame however many layers
+  draw it. Binary links take `{ pairs, attributes }`.
+- **The stories are now three** — Graph layer, Big graph, Your own simulations — with a
+  guide page under Integrations / deck.gl. The three stories this document describes
+  below are gone: the zero-copy one became the layer, and the other two were removed
+  when the set was focused on it. Their APIs stay, covered by tests.
+- **Point trackers** (`feat(points): point trackers`): `simulation.trackPoints(indices)`
+  returns a handle that follows a few points for labels and markers, and `Graph`'s three
+  tracking methods run on one. Non-blocking reads of tracked and cluster positions, which
+  came from `main` with the rebases, also work where no render loop runs.
+- **Open item 2 was completed by the tracker commit**: the tracking draw resets the
+  host's GL state itself, wherever it is reached from.
+
+Commits are cited by subject. The branch has been rebased since this was written, so a
+hash would no longer resolve; `git log --grep` finds a commit by its subject.
 
 ## One Graph, three ownership modes
 
 *`feat(graph): headless mode and external frame scheduling — cosmos runs inside a host's
-frame` (`1344629`)*
+frame`*
 
 The constructor now accepts `null` in place of the container element. What changes between
 modes is ownership — who holds the canvas, the input, the clock, and the camera. The
@@ -82,7 +101,7 @@ floor" holds in every mode.
 ## Sharing a device without inheriting its state
 
 *`fix(graph): reset ambient GL state before passes on an external device — host blend
-state zeroed the simulation` (`881ecf9`)*
+state zeroed the simulation`*
 
 Verifying the zero-copy story surfaced the one real bug of the project, and it would have
 broken every shared-device embedding. luma.gl applies only the pipeline parameters a model
@@ -122,7 +141,7 @@ the frame.
 ## Positions at three costs
 
 *`feat(points): expose GPU positions — texture handle, non-stalling snapshots, sparse
-writes, per-point pinning` (`7f1213f`)*
+writes, per-point pinning`*
 
 The engine keeps positions in a square RGBA32F texture, ping-ponged between two buffers on
 every GPU write. This branch makes that state readable at whichever cost the consumer can
@@ -142,7 +161,7 @@ flowchart LR
 Hosts pick a tier per use: rendering samples the texture, throttled label/export snapshots
 use the async path, and the sync path remains for one-shot reads. `getPointPositions()`
 keeps its `number[]` shape and now delegates to the array variant.
-¹ The async path's no-stall promise is honored since `b8da115`
+¹ The async path's no-stall promise is honored since `fix(points): fence the async position read`
 ([open item 1](#open-items-before-undrafting)): a fence after the submit, then the read.
 
 ### The texture contract
@@ -187,7 +206,7 @@ is the drag idiom.
 ## Cosmos rendering under the host's camera
 
 *`feat(graph): render into a host pass with a host camera — drawToRenderPass and
-setViewTransform` (`c1752b6`)*
+setViewTransform`*
 
 Zero-copy sampling means the host writes its own shaders. For hosts that want cosmos's
 full pipeline instead — point shapes, per-point colors and sizes, curved per-link-colored
@@ -217,7 +236,7 @@ regardless of what previous layers left behind.
 ## One luma.gl — the breaking change
 
 *`build(deps): make luma.gl a peer dependency — one luma installation shared with the
-host` (`7fdc05d`)*
+host`*
 
 A `Device` created by one copy of luma.gl and consumed by another is not a supported
 boundary — the classes differ, the state trackers differ. Sharing a device therefore
@@ -248,8 +267,8 @@ nobody. Full instructions live in `migration-notes.md` under "Migrating to v3.5"
 
 ## Proof: three architectures, thirteen tests
 
-*`feat(stories): deck.gl integration examples` (`ad1e651`) — `test: host-embedding unit
-tests on real WebGL 2` (`313057b`)*
+*`feat(stories): deck.gl integration examples` — `test: host-embedding unit
+tests on real WebGL 2`*
 
 Each embedding architecture ships as a runnable Storybook story (Examples → Integrations)
 against deck.gl ~9.3, and the API contracts are locked by a vitest browser-mode suite
@@ -285,7 +304,7 @@ tiers:
 | --- | --- | --- | --- |
 | **Shared luma `Device`** (zero-copy) | Host resolves the *same* `@luma.gl` installation — the peer-dependency contract | deck.gl (this branch's stories), kepler.gl via deck, any luma.gl application | **Proven** — the only tier that is vis.gl-specific |
 | **Shared raw WebGL 2 context** (zero-copy) | Host exposes its `WebGL2RenderingContext`; `luma.attachDevice({handle: gl})` wraps it and a headless Graph runs on it — the position texture then lives in the *host's* context | MapLibre GL / Mapbox GL custom layers, Three.js (`ExternalTexture`), PixiJS (WebGL), regl, raw-WebGL apps | **Mechanically supported** — luma 9.3 ships the attach path (the same one deck's interleaved Mapbox mode uses); undemonstrated, and open item 2's entry-point guards become load-bearing here |
-| **Headless + snapshots** (CPU handoff) | None — positions cross as a `Float32Array` | Any renderer or framework: Cytoscape.js layout extensions, Sigma.js / Graphology, D3 apps past `d3-force` scale, React Flow auto-layout, notebooks, server-side layout precompute (the test suite already runs on SwiftShader with no screen) | **Universal today** — genuinely non-blocking since the async fence landed (open item 1, `b8da115`) |
+| **Headless + snapshots** (CPU handoff) | None — positions cross as a `Float32Array` | Any renderer or framework: Cytoscape.js layout extensions, Sigma.js / Graphology, D3 apps past `d3-force` scale, React Flow auto-layout, notebooks, server-side layout precompute (the test suite already runs on SwiftShader with no screen) | **Universal today** — genuinely non-blocking since the async fence landed (open item 1) |
 
 The biggest audiences are not renderers at all but graph libraries with *pluggable
 layouts* consuming the third tier as a pure layout engine — the RFC's "hidden layout
@@ -304,12 +323,12 @@ shipped signatures.
 
 | # | RFC ask | Status | How |
 | --- | --- | --- | --- |
-| 1 | Simulation-only class | delivered | Headless `Graph(null, …)` delivered the semantics first; the `GraphSimulation` class has since been extracted (`22cbac2`) and `Graph` composes it |
+| 1 | Simulation-only class | delivered | Headless `Graph(null, …)` delivered the semantics first; the `GraphSimulation` class has since been extracted (`feat(simulation): extract GraphSimulation`) and `Graph` composes it |
 | 2 | External frame scheduling | delivered | `enableRenderLoop: false`, `step()`, `renderOneFrame()`; no perpetual loop survives |
 | 3 | Optional DOM / canvas ownership | delivered | Headless never adopts, reparents, clears, submits, or resizes; ownership rules explicit per mode |
 | 4 | Read-only GPU position resource | delivered | `getPointPositionTexture()` with texel layout, ownership, ping-pong + `version` contract on the exported type |
 | 5 | Host render pass | delivered | `drawToRenderPass(pass, {points?, links?})` — no clear, end, or submit; points/links separable |
-| 6 | Efficient snapshots | delivered | `Float32Array` + caller-provided `out` + async variant + documented sync stall; the async path honors its no-stall claim through a fence (open item 1, `b8da115`) |
+| 6 | Efficient snapshots | delivered | `Float32Array` + caller-provided `out` + async variant + documented sync stall; the async path honors its no-stall claim through a fence (open item 1) |
 | 7 | Indexed mutation and pinning | delivered | `setPointPosition`, `setPointPositionsByIndices`, `setPinnedPoint` — the RFC's proposed operations; its `setPointPinned` ships as `setPinnedPoint`, paired with `setPinnedPoints` |
 | 8 | luma.gl dependency alignment | delivered | Peers at ~~`^9.3.0`~~ `~9.3.0`, single deduped install verified; ~~the range deliberately excludes the luma 9.4 *prerelease* line (semver ranges don't match foreign prereleases) and will cover stable 9.4 with no cosmos release~~ stable 9.4 shipped on 2026-09-05 and the caret range let npm place it beside deck 9.3's luma 9.3 (two copies), so the range now names the tested line and widens with a verified release |
 | 9 | Backend capability flags | not yet | Deliberately deferred (see below): the flags should describe a stabilized surface; adapters feature-detect method presence for now |
@@ -320,11 +339,11 @@ Where the RFC sketched concrete code, the deliberate divergences are the interes
 
 | RFC proposed | Branch shipped | Divergence, and why |
 | --- | --- | --- |
-| `new GraphSimulation(device, cfg)` · `simulation.initialize()` · `simulation.step()` · `simulation.destroy()` | `new Graph(null, cfg, device?)` · `graph.render()` · `graph.step()` · `graph.destroy()` | One class, two modes, instead of a second class. Same five-call lifecycle (`initialize()` ≈ `render()`); the extraction was deferred until a real consumer shaped the boundary — and has since shipped as `GraphSimulation` (`22cbac2`) |
+| `new GraphSimulation(device, cfg)` · `simulation.initialize()` · `simulation.step()` · `simulation.destroy()` | `new Graph(null, cfg, device?)` · `graph.render()` · `graph.step()` · `graph.destroy()` | One class, two modes, instead of a second class. Same five-call lifecycle (`initialize()` ≈ `render()`); the extraction was deferred until a real consumer shaped the boundary — and has since shipped as `GraphSimulation` (`feat(simulation): extract GraphSimulation`) |
 | "an option that disables the internal `requestAnimationFrame` loop"; host calls one sim step and optionally one render op | `enableRenderLoop: false` + `step()` + `renderOneFrame()` | Exceeds the ask: runtime-toggleable via `setConfig`, and the simulation-end check travels with the clock so `onSimulationEnd` fires under any scheduler |
 | `{texture, pointCount, `**`width, height`**`, version}`; document texel format, coordinate convention, ownership, ping-pong observation | `{texture, pointCount, `**`textureSize`**`, version}` on the exported `PointPositionTexture` type | The texture is always square, so one field encodes the invariant two would obscure. Every documentation clause the RFC listed is on the type; the optional buffer form is deferred with WebGPU |
 | a method recording draws into a supplied `RenderPass`; "separately configurable point and link rendering" | `drawToRenderPass(pass, {points?, links?})` — plus `setViewTransform({k, x, y}, screenSize?)` | Exact match, and the internal renderer now routes through the same method. `setViewTransform` wasn't asked for by name, but the RFC's "thin wrapper around an upstream encode(renderPass)" needs a camera — shipped with a documented, unit-tested formula |
-| snapshots: `Float32Array` return; optional destination; "an asynchronous readback option where supported"; document the sync stall | `getPointPositionsArray(out?)` · `getPointPositionsAsync(out?)` · stall documented on `getPointPositions()` | All four clauses shipped in shape. The async path's no-stall behavior is honored through a fence (open item 1, `b8da115`) — the RFC's "where supported" hedge was the wiser wording until it landed |
+| snapshots: `Float32Array` return; optional destination; "an asynchronous readback option where supported"; document the sync stall | `getPointPositionsArray(out?)` · `getPointPositionsAsync(out?)` · stall documented on `getPointPositions()` | All four clauses shipped in shape. The async path's no-stall behavior is honored through a fence (open item 1) — the RFC's "where supported" hedge was the wiser wording until it landed |
 | "Possible operations include `setPointPosition`, `setPointPinned`, and a batched sparse update API" | `setPointPosition(i, x, y)` · `setPinnedPoint(i, bool)` · `setPointPositionsByIndices(ids, xy)` | The proposed operations; `setPointPinned` ships as `setPinnedPoint` to pair with `setPinnedPoints`. Semantics specified beyond the ask: live-state writes on the drag path, input arrays never modified, absent points never resurrected, mismatched pairs rejected whole |
 | luma: move to peers **or** publish a documented compatibility range | Both: `peerDependencies` ~~`^9.3.0`~~ `~9.3.0`, documented in README + migration notes | The "or" became "and". ~~The range deliberately excludes the 9.4 prerelease line and admits stable 9.4 automatically~~ The range names the tested 9.3 line; admitting 9.4 automatically produced two luma copies next to deck 9.3 once 9.4 shipped |
 | capability flags for simulation, rendering, readback, external scheduling, shared resources | — | The one ask with no code: deferred until the surface the flags would describe has stabilized; adapters feature-detect for now |
@@ -375,7 +394,7 @@ downstream package.
 From the PR author's future-work comment, in dependency order:
 
 - **Awaiting a real consumer** — the `GraphSimulation` class extraction (since
-  delivered: `22cbac2`), capability flags (trivial, but they should describe a
+  delivered: `feat(simulation): extract GraphSimulation`), capability flags (trivial, but they should describe a
   stabilized surface), and formal readback-vs-zero-copy benchmarks with GPU timer
   queries.
 - **Blocked on upstream** — luma.gl 9.4 (the peer range intentionally skips the prerelease
@@ -389,17 +408,17 @@ From the PR author's future-work comment, in dependency order:
   and drag-to-pin built on exactly these primitives.
 
 Two earlier open questions were resolved in-branch: cosmos-side unit tests were added
-(`313057b`, with the GL-state regression test confirmed to fail when the fix is disabled),
+(`test: host-embedding unit tests on real WebGL 2`, with the GL-state regression test confirmed to fail when the fix is disabled),
 and a suspected `drawToRenderPass` depth-state rough edge turned out not to exist — every
 visible draw model already declares its depth state, and a redundant story-side override
-was removed (`ba7afa5`).
+was removed (`fix(stories): drop the ambient depth override`).
 
 ## Open items before undrafting
 
 A deep review of the branch confirmed the architecture and contracts above and left five
 items, in severity order. Status as of 2026-09-08: all five are fixed.
 
-1. **Fixed (`b8da115`) — the async snapshot reads behind a fence.** As reviewed: the enqueue half is right —
+1. **Fixed (`fix(points): fence the async position read`) — the async snapshot reads behind a fence.** As reviewed: the enqueue half is right —
    `copyTextureToBuffer` records a GPU-timeline `readPixels`-into-PBO copy — but luma
    9.3's WebGL `Buffer.readAsync` is a synchronous `getBufferSubData` in disguise, and
    calling it immediately forces the driver to drain every queued command the copy
@@ -417,7 +436,7 @@ items, in severity order. Status as of 2026-09-08: all five are fixed.
    read instead of hanging, and a data rebuild that resizes the texture mid-flight resolves
    an empty snapshot rather than old pixels against new data. A regression test holds the
    fence open and asserts the read waits.
-2. **Fixed (`9566be1`) — the GL-state reset guards the sparse-write path too.** As reviewed: `trackPoints()` is a
+2. **Fixed (`fix(simulation): reset host GL state before sparse-write tracking draws`, completed by `feat(points): point trackers`) — the GL-state reset guards the sparse-write path too.** As reviewed: `trackPoints()` is a
    raster draw reachable outside the guarded step/frame paths — through the new
    `setPointPositionsByIndices`, through `trackPointPositionsByIndices`, and through
    `render()` — so a shared-device host using point tracking can still hit the
@@ -425,7 +444,11 @@ items, in severity order. Status as of 2026-09-08: all five are fixed.
    has settled (no guarded step runs afterward to repair it — and a settled layout is
    exactly when users drag), and the regression test walks past this door: it never
    enables tracking, so `trackPoints()` early-returns. Cheap fix: reset at those public
-   entries too (a no-op on cosmos-owned devices).
+   entries too (a no-op on cosmos-owned devices). Completed later: the first fix reset the
+   state at the sparse-write entry only. The tracking draw now resets it itself, which
+   covers tracking setup and a read that finds its target behind, and a cluster read
+   resets it before its own pass. Tests leave a host scissor and a host color mask in
+   place and read between steps.
 3. **Fixed — the suite runs in CI** (`pnpm test` after a `playwright install` step in `ci.yml`). As reviewed: Out of
    the box the suite fails with a missing-browser error; after the one-time install, 13/13
    pass in ~6.5s. Add a CI step and one line in the contributor docs.
@@ -433,7 +456,7 @@ items, in severity order. Status as of 2026-09-08: all five are fixed.
    `graph.destroy()`, leaking a hidden WebGL context per story switch — and browsers cap
    live contexts (~16), so flipping stories eventually evicts the oldest, possibly the
    one on screen. The other two stories tear down correctly; the fix is one line.
-5. **Done (`d19403d`, `e541f5b`, `ed3dbc0`) — the pin API and migration-heading alignments landed.** As reviewed: Pinning now documents the declarative contract (an index beyond
+5. **Done (`feat(api): rename setPointPinned to setPinnedPoint`, `feat(api): sanitize the pinned set and add isPointPinned`, `docs(history): record the pin API alignment`) — the pin API and migration-heading alignments landed.** As reviewed: Pinning now documents the declarative contract (an index beyond
    the point count pins its point once the count grows — the tracking API's contract),
    drops entries that can never name a point, and exposes per-point state through
    `isPointPinned`. The migration heading says v3.5 while the
