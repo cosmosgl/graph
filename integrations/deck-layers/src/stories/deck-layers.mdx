@@ -185,8 +185,12 @@ Try it: [Your own simulations](../?path=/story/examples-integrations--own-simula
 
 - **WebGL 2 only**, and the layout is 2D: use `OrthographicView`.
 - **Other deck.gl layers** stack on top as usual. For labels or anything that needs positions on
-  the CPU, read `simulation.getPointPositionsArray()` — the hub labels in
+  the CPU, read `simulation.getPointPositionsArray()`.
+  To follow only a few points, ask for a tracker instead: `const tracker = simulation.trackPoints(indices)`,
+  then `tracker.positions({ nonBlocking: true })` each frame reads just those points and never
+  stalls — the hub labels in
   [Graph layer](../?path=/story/examples-integrations--graph-layer) are a `TextLayer` fed that way.
+  Call `tracker.destroy()` when you are done.
 - **A renderer of your own** samples `PositionTextureSource` from `@cosmos.gl/graph`; the layer's
   internal sublayer sources, in the Big graph story's panes, are the worked reference. See the
   [package README](https://github.com/cosmosgl/graph/tree/main/integrations/deck-layers).

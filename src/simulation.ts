@@ -12,6 +12,7 @@ import { ForceMouse } from '@/graph/modules/ForceMouse'
 import { Clusters } from '@/graph/modules/Clusters'
 import { GraphData } from '@/graph/modules/GraphData'
 import { Points } from '@/graph/modules/Points'
+import { PointTrackerImpl, type PointTracker } from '@/graph/modules/Points/point-tracker'
 import { Store, ALPHA_MIN } from '@/graph/modules/Store'
 
 /**
@@ -98,6 +99,9 @@ export interface SimulationStepOptions {
  * Resource ownership follows `Graph`'s rules: an internally created device is
  * destroyed by `destroy()`; an externally supplied device is never destroyed,
  * cleared, submitted, or resized.
+ *
+ * Besides the forces it serves the positions they produce: full snapshots, the
+ * position texture, trackers for chosen points, and cluster positions.
  */
 export class GraphSimulation implements PositionTextureSource {
   /**
@@ -207,6 +211,7 @@ export class GraphSimulation implements PositionTextureSource {
       this.store.isSimulationRunning = this.config.enableSimulation
 
       this.points = new Points(device, this.config, this.store, this.data)
+      this.points.resetHostState = (): void => this.resetExternalDeviceState()
       if (this.config.enableSimulation) this.ensureSimulationModules()
       this.clusters = new Clusters(device, this.config, this.store, this.data, this.points)
 
@@ -249,11 +254,6 @@ export class GraphSimulation implements PositionTextureSource {
   public get isSimulationRunning (): boolean {
     if (this._isDestroyed) return false
     return this.store.isSimulationRunning
-  }
-
-  /** Whether a non-blocking cluster read is waiting on a copy that no frame has issued yet. @internal */
-  public get needsCentroidReadback (): boolean {
-    return this.clusters?.needsCentroidReadback ?? false
   }
 
   /** Whether a non-blocking cluster-centroid copy is still awaiting the GPU. @internal */
@@ -436,8 +436,8 @@ export class GraphSimulation implements PositionTextureSource {
     // host's ambient GL state here too, or leftover blending corrupts it
     this.resetExternalDeviceState()
     this.points.setPointPositionsByIndices(indices, positions)
-    // trackPoints() must run after every write to the current position texture
-    this.points.trackPoints()
+    // gatherTrackers() must run after every write to the current position texture
+    this.points.gatherTrackers()
   }
 
   /**
@@ -579,25 +579,66 @@ export class GraphSimulation implements PositionTextureSource {
   }
 
   /**
+   * Follows the given points and returns their tracker — see `PointTracker` for what it
+   * reports. Every call returns a new tracker with its own set, so several parts of an
+   * application can follow different points. Works before data arrives and before the
+   * device is ready.
+   * @param indices The point indices to follow.
+   */
+  public trackPoints (indices: readonly number[]): PointTracker {
+    const tracker = new PointTrackerImpl(indices)
+    // Like every call on a destroyed simulation, this one does nothing: the tracker is never
+    // adopted, and its reads stay empty
+    if (this._isDestroyed) return tracker
+    // The points module arrives with the device
+    const adopt = (): void => this.points?.addTracker(tracker)
+    if (this.isReady) adopt()
+    else this.ensureDevice(adopt)
+    return tracker
+  }
+
+  /**
    * Get current X and Y coordinates of the clusters.
    * @param options Use `{ nonBlocking: true }` to take the latest positions the GPU has handed
-   * back without stalling for the current ones. `Graph`'s frames issue and collect that copy.
+   * back without stalling for the current ones.
    * @returns Array of cluster positions in `[x0, y0, x1, y1, ...]` order. Do not mutate the returned array.
    */
   public getClusterPositions (options?: PositionsReadOptions): Readonly<number[]> {
     if (this._isDestroyed || !this._device || !this.clusters) return []
     if (this.data.pointClusters === undefined || this.clusters.clusterCount === undefined) return []
-    return this.clusters.getCentroidPositions(options?.nonBlocking)
+    // The read sums positions with a draw of its own, between steps: the host's
+    // ambient GL state is in effect there
+    this.resetExternalDeviceState()
+    // A copy that has landed is newer than the cache
+    if (options?.nonBlocking) this.clusters.resolveCentroidReadback()
+    const positions = this.clusters.getCentroidPositions(options?.nonBlocking)
+    // A frame issues the copy after its last position write. Ask for one — an idle loop
+    // would never run it — and where none can be promised, issue the copy here, or a
+    // simulation nobody is stepping would keep these positions for good.
+    if (options?.nonBlocking && this.clusters.needsCentroidReadback && !(this.points?.requestTick?.() ?? false)) {
+      this.clusters.requestCentroidReadback()
+    }
+    return positions
   }
 
-  /** Starts the non-blocking cluster-centroid copy a read asked for; `Graph` calls it at the end of a frame. @internal */
-  public requestCentroidReadback (): void {
-    this.clusters?.requestCentroidReadback()
-  }
-
-  /** Collects a finished cluster-centroid copy; `Graph` calls it at the start of a frame. @internal */
-  public resolveCentroidReadback (): void {
+  /**
+   * Collects the non-blocking copies that have landed — tracked positions and cluster
+   * centroids. `Graph` calls it first in a frame, before the frame queues GPU work.
+   * Without frames, the reads collect for themselves. @internal
+   */
+  public collectReadbacks (): void {
+    this.points?.resolveTrackedPositionsReadback()
     this.clusters?.resolveCentroidReadback()
+  }
+
+  /**
+   * Issues the non-blocking copies reads asked for. `Graph` calls it last in a frame,
+   * after the frame's last position write, so a copy holds the newest positions.
+   * Without frames, the reads issue for themselves. @internal
+   */
+  public issueReadbacks (): void {
+    this.points?.requestTrackedPositionsReadback()
+    this.clusters?.requestCentroidReadback()
   }
 
   /**
@@ -728,7 +769,7 @@ export class GraphSimulation implements PositionTextureSource {
     // `previous` point to the freshest data so updatePosition() reads it
     // and writes the new result into `current`. After each swap+write pair
     // `current` holds the latest positions — the draw pass, hover detection,
-    // trackPoints and the next frame all read from `current`.
+    // gatherTrackers and the next frame all read from `current`.
     if (shouldRunSimulation) {
       if (simulationGravity) {
         this.points?.swapFbo()
@@ -793,7 +834,7 @@ export class GraphSimulation implements PositionTextureSource {
     }
 
     // Track points (runs regardless of simulation state)
-    this.points?.trackPoints()
+    this.points?.gatherTrackers()
 
     return shouldRunSimulation
   }
