@@ -2,7 +2,7 @@ import { Deck, OrthographicView } from '@deck.gl/core'
 import type { Layer, PickingInfo } from '@deck.gl/core'
 import { TextLayer } from '@deck.gl/layers'
 import { defaultConfigValues } from '@cosmos.gl/graph'
-import type { GraphSimulation } from '@cosmos.gl/graph'
+import type { GraphSimulation, PointTracker } from '@cosmos.gl/graph'
 import { CosmosGraphLayer } from '@cosmos.gl/deck-layers'
 import type { CosmosGraphPickingInfo } from '@cosmos.gl/deck-layers'
 
@@ -49,6 +49,9 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
   let clusterCount = 0
   let schemeIndex = 0
   let simulation: GraphSimulation | undefined
+  // Follows the hubs for their labels: a point's index is its place in `points`
+  let pointTracker: PointTracker | undefined
+  const hubIndices = (): number[] => points.flatMap((point, index) => (point.id.startsWith('hub') ? [index] : []))
   const lastPositions = new Map<string, [number, number]>()
   const snapshotPositions = (): void => {
     if (!simulation) return
@@ -72,6 +75,7 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
     if (group > 0) addedLinks.push({ source: `hub-${group - 1}`, target: hub })
     points = [...points, ...added]
     links = [...links, ...addedLinks]
+    pointTracker?.setIndices(hubIndices())
   }
   const removeCluster = (): void => {
     if (clusterCount === 0) return
@@ -82,6 +86,7 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
     // removed cluster has a surviving source and must go too
     const survivingIds = new Set(points.map((point) => point.id))
     links = links.filter((link) => survivingIds.has(link.source) && survivingIds.has(link.target))
+    pointTracker?.setIndices(hubIndices())
   }
 
   const deck = new Deck({
@@ -117,8 +122,13 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
         simulationFriction: 0.85,
         simulationDecay: 2000,
         onSimulationTick: refreshLabels,
+        onSimulationPause: refreshLabels,
+        onSimulationEnd: refreshLabels,
       },
-      onSimulationCreated: (sim): void => { simulation = sim },
+      onSimulationCreated: (sim): void => {
+        simulation = sim
+        pointTracker = sim.trackPoints(hubIndices())
+      },
       pickable: true,
       enablePointDrag: true,
       autoHighlight: true,
@@ -131,7 +141,7 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
       },
     })
 
-  // Labels on the hubs, from a tiny position snapshot per tick — fine at this size
+  // Labels on the hubs, placed from the tracker that follows them
   let hubLabels: HubLabel[] = []
   const labels = (): TextLayer<HubLabel> => new TextLayer<HubLabel>({
     id: 'hub-labels',
@@ -145,11 +155,15 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
   })
   const layers = (): Layer[] => [graph(), labels()]
   const refreshLabels = (): void => {
-    if (!simulation) return
-    const positions = simulation.getPointPositionsArray()
-    hubLabels = points.flatMap((point, index) => point.id.startsWith('hub')
-      ? [{ name: HUB_NAMES[point.group % HUB_NAMES.length] as string, position: [positions[index * 2] as number, positions[index * 2 + 1] as number] }]
-      : [])
+    if (!simulation || !pointTracker) return
+    // While the simulation runs the read never waits, and the labels trail the hubs by
+    // a tick. Once it rests, a plain read puts them exactly on the hubs.
+    const positions = pointTracker.positions({ nonBlocking: simulation.isSimulationRunning })
+    hubLabels = []
+    for (const [index, position] of positions) {
+      const point = points[index]
+      if (point) hubLabels.push({ name: HUB_NAMES[point.group % HUB_NAMES.length] as string, position })
+    }
     deck.setProps({ layers: layers() })
   }
 

@@ -18,6 +18,7 @@ import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
 import { GraphSimulation, type PointPositionTexture, type PositionTextureSource } from '@/graph/simulation'
 import type { PositionsReadOptions } from '@/graph/simulation'
+import type { PointTracker } from '@/graph/modules/Points/point-tracker'
 
 /** Touch/pen long-press → context menu thresholds. */
 const LONG_PRESS_DURATION_MS = 500
@@ -38,6 +39,8 @@ export class Graph implements PositionTextureSource {
    * force modules; `Graph` layers rendering, view state, and input on top.
    */
   private readonly simulation: GraphSimulation
+  /** The graph's one tracker, following the set given to `trackPointPositionsByIndices`. */
+  private tracker: PointTracker | undefined
   /** Canvas element, assigned asynchronously during device initialization */
   private canvas!: HTMLCanvasElement
   private attributionDivElement: HTMLElement | undefined
@@ -232,6 +235,16 @@ export class Graph implements PositionTextureSource {
 
       this.points = this.simulation.points
       if (this.points) this.points.transition = this.transition
+      // Frames issue and collect the non-blocking copies. An idle loop would never run one,
+      // so a read taken outside a frame (a timer, a button) asks for it here. Without a loop
+      // of its own no frame can be promised, and the read issues its copy itself.
+      if (this.points) {
+        this.points.requestTick = (): boolean => {
+          if (this._isHeadless || !this.config.enableRenderLoop) return false
+          this.requestRender()
+          return true
+        }
+      }
       this.lines = new Lines(device, this.config, this.store, this.graph, this.points as Points)
 
       this.store.backgroundColor = getRgbaColor(this.config.backgroundColor)
@@ -1053,10 +1066,7 @@ export class Graph implements PositionTextureSource {
    */
   public getClusterPositions (options?: PositionsReadOptions): Readonly<number[]> {
     if (this._isDestroyed) return []
-    const positions = this.simulation.getClusterPositions(options)
-    // Frames issue and collect the readback, as for `getTrackedPointPositionsMap`.
-    if (options?.nonBlocking && this.simulation.needsCentroidReadback) this.requestRender()
-    return positions
+    return this.simulation.getClusterPositions(options)
   }
 
   /**
@@ -1268,10 +1278,10 @@ export class Graph implements PositionTextureSource {
    */
   public trackPointPositionsByIndices (indices: number[]): void {
     if (this._isDestroyed) return
-
-    if (this.ensureDevice(() => this.trackPointPositionsByIndices(indices))) return
-    if (!this.points) return
-    this.points.trackPointsByIndices(indices)
+    // Untyped callers pass nothing to stop tracking
+    const tracked = (indices as number[] | undefined) ?? []
+    if (this.tracker) this.tracker.setIndices(tracked)
+    else this.tracker = this.simulation.trackPoints(tracked)
   }
 
   /**
@@ -1288,12 +1298,8 @@ export class Graph implements PositionTextureSource {
    * point count) is omitted the same way, and reappears if the count grows to include it.
    */
   public getTrackedPointPositionsMap (options?: PositionsReadOptions): ReadonlyMap<number, [number, number]> {
-    if (this._isDestroyed || !this.points) return new Map()
-    const positions = this.points.getTrackedPositionsMap(options?.nonBlocking)
-    // Frames issue and collect the readback. An idle loop would never run one, so a
-    // non-blocking read taken outside a frame (a timer, a button) would stay stale.
-    if (options?.nonBlocking && this.points.needsTrackedReadback) this.requestRender()
-    return positions
+    if (this._isDestroyed || !this.tracker) return new Map()
+    return this.tracker.positions(options)
   }
 
   /**
@@ -1305,8 +1311,8 @@ export class Graph implements PositionTextureSource {
    * is kept so positions stay aligned with the tracked indices.
    */
   public getTrackedPointPositionsArray (): number[] {
-    if (this._isDestroyed || !this.points) return []
-    return this.points.getTrackedPositionsArray()
+    if (this._isDestroyed || !this.tracker) return []
+    return this.tracker.positionsArray()
   }
 
   /**
@@ -2269,8 +2275,7 @@ export class Graph implements PositionTextureSource {
     }
     // Collect before the frame queues GPU work: `getBufferSubData` waits behind
     // whatever commands are already queued.
-    this.points?.resolveTrackedPositionsReadback()
-    this.simulation.resolveCentroidReadback()
+    this.simulation.collectReadbacks()
 
     const shouldInterpolatePositions = this.transition.isActiveFor(TransitionProperty.Positions)
     const shouldAnimatePointColors = this.transition.isActiveFor(TransitionProperty.PointColors)
@@ -2282,7 +2287,7 @@ export class Graph implements PositionTextureSource {
 
       if (shouldInterpolatePositions) {
         this.points?.interpolatePosition(this.transition.progress)
-        this.points?.trackPoints()
+        this.points?.gatherTrackers()
         this.markPickingBuffersStale()
       }
     }
@@ -2317,11 +2322,11 @@ export class Graph implements PositionTextureSource {
         // Swap-before-write: after the swap, `previous` holds the freshest positions so drag()
         // reads those and writes the drag result into `current`. This runs
         // after points.draw() above — the drag result becomes visible on
-        // the next frame; trackPoints() picks it up immediately below.
+        // the next frame; gatherTrackers() picks it up immediately below.
         this.points?.swapFbo()
         this.points?.drag()
         // Update tracked positions after drag, even when simulation is disabled
-        this.points?.trackPoints()
+        this.points?.gatherTrackers()
         this.markPickingBuffersStale()
       }
 
@@ -2330,10 +2335,9 @@ export class Graph implements PositionTextureSource {
     }
 
     // After every position write this frame (transition, simulation step, drag) and its
-    // trackPoints(), so a non-blocking read collected next frame sees the newest of them.
+    // gatherTrackers(), so a non-blocking read collected next frame sees the newest of them.
     // The centroid readback sums those positions itself before it is issued.
-    this.points?.requestTrackedPositionsReadback()
-    this.simulation.requestCentroidReadback()
+    this.simulation.issueReadbacks()
 
     this.fpsMonitor?.end(frameNow)
 
@@ -2742,6 +2746,7 @@ export type { GraphConfig, GraphSimulationConfig, GraphSimulationConfigInterface
 export { GraphSimulation } from './simulation'
 export type { PointPositionTexture, PositionTextureSource } from './simulation'
 export type { PositionsReadOptions } from './simulation'
+export type { PointTracker } from './modules/Points/point-tracker'
 export { PointShape, LinkStyle } from './modules/GraphData'
 export type { LinksByPoint } from './modules/GraphData'
 export { TransitionEasing } from './modules/Transition'
