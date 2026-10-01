@@ -32,6 +32,7 @@ const preview: Preview = {
           'Welcome to cosmos.gl',
           'Configuration',
           'API Reference',
+          'Integrations',
           'Examples',
           [
             'Get Started',
@@ -44,6 +45,7 @@ const preview: Preview = {
             'Showcase',
             'Rendering',
             'Performance',
+            'Integrations',
           ],
         ],
       },

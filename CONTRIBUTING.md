@@ -7,7 +7,7 @@ to. Please read [the full text](https://github.com/cosmos.gl/graph/CODE_OF_CONDU
 what actions will and will not be tolerated.
 
 ## Our Development Process
-We use Storybook to simplify the development process. You can start it by running `npm run storybook` in the root directory.
+We use Storybook to simplify the development process. You can start it by running `pnpm run storybook` in the root directory.
 If you've added a new feature, changed the configuration or public methods, please add a new example with its source code to Storybook if applicable and suggest changes to the docs.
 For non-trivial changes, consider adding a short note in `history/` to capture **why** the change happened.
 Use `history/README.md` for guidance, `history/PROMPT.md` to draft it with any LLM, or run the repo's `/history <why>` skill in Codex/Claude Code to let it gather context and write the file automatically. For follow-up commits that extend a topic that already has an entry, use `/history --update` to revise the latest entry in place.
@@ -17,7 +17,7 @@ We actively welcome pull requests. If you want to submit one, please follow the 
 
 1. Fork the repo and create your branch from `main`;
 2. Code;
-3. Make sure the project lints and builds after your changes;
+3. Make sure the project lints, typechecks, and builds after your changes;
 4. Submit your PR!
 
 ## License

@@ -4,8 +4,14 @@ import { defineConfig } from 'vite'
 import dts from 'vite-plugin-dts'
 import pkg from './package.json'
 
+// Peer dependencies (luma.gl) must stay external in the ES build: bundling a
+// private luma copy would defeat the peer-dependency contract — a host sharing
+// its Device with cosmos requires both to resolve the same @luma.gl/core.
+// The UMD build still bundles everything so the jsdelivr single file stays
+// standalone.
 const external = [
   ...Object.keys(pkg.dependencies || {}).map((dep) => new RegExp(`^${dep}(/.*)?$`)),
+  ...Object.keys(pkg.peerDependencies || {}).map((dep) => new RegExp(`^${dep}(/.*)?$`)),
   /d3-/,
 ]
 
@@ -34,6 +40,10 @@ export default defineConfig(({ mode }) => {
       alias: {
         '@/graph': resolve(__dirname, 'src/'),
         '@cosmos.gl/graph': resolve(__dirname, 'src/'),
+        // Storybook merges this config, so stories resolve the workspace
+        // package to live source; an alias instead of a root devDependency
+        // keeps the workspace free of a root↔package dependency cycle.
+        '@cosmos.gl/deck-layers': resolve(__dirname, 'integrations/deck-layers/src/'),
       },
     },
   }
