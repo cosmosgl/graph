@@ -787,7 +787,10 @@ export class Graph implements PositionTextureSource {
    * it does not modify the input array passed to `setPointPositions`, so a later
    * full data update starts from the input positions again. While the simulation
    * is running, forces move the point on the next tick unless it is pinned
-   * (`setPinnedPoint`).
+   * (`setPinnedPoint`). While positions animate after `setPointPositions`, the
+   * point stays where the write put it and the other points finish their
+   * animation. A `setPointPositions` applied by a later `render()` moves it to
+   * the position in that array.
    *
    * @param index - The index of the point.
    * @param x - New X coordinate, in space coordinates (as returned by `getPointPositions`).

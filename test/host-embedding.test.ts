@@ -361,3 +361,166 @@ describe('external frame scheduling', () => {
     }
   })
 })
+
+/**
+ * A position transition redraws the live texture from its source and target
+ * every frame, so a sparse write has to reach those two as well. These run on
+ * a graph that owns a canvas: a headless one snaps and has no transition.
+ */
+describe('sparse writes during a position transition', () => {
+  const MOVED = new Float32Array([1500, 1000, 3500, 1000, 1500, 3000, 3500, 3000])
+  const wait = (ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms) })
+
+  const withAnimatedGraph = async (
+    config: GraphConfig,
+    run: (graph: Graph, transitionEnded: (count?: number) => Promise<boolean | undefined>) => Promise<void>
+  ): Promise<void> => {
+    const div = document.createElement('div')
+    div.style.width = '200px'
+    div.style.height = '200px'
+    document.body.appendChild(div)
+    const endings: boolean[] = []
+    const graph = new Graph(div, {
+      spaceSize: 4096,
+      enableSimulation: false,
+      fitViewOnInit: false,
+      rescalePositions: false,
+      ...config,
+      onTransitionEnd: (interrupted: boolean): void => {
+        endings.push(interrupted)
+        config.onTransitionEnd?.(interrupted)
+      },
+    })
+    graph.setPointPositions(POSITIONS)
+    graph.render()
+    await graph.ready
+    await wait(100)
+    try {
+      // Resolves with the `count`-th ending: `false` for a completion, `true` for an interruption
+      await run(graph, async (count = 1) => {
+        for (let i = 0; i < 100 && endings.length < count; i += 1) await wait(30)
+        return endings[count - 1]
+      })
+    } finally {
+      graph.destroy()
+      div.remove()
+    }
+  }
+  const pointAt = (graph: Graph, index: number): [number, number] => {
+    const positions = graph.getPointPositions()
+    return [positions[index * 2] as number, positions[index * 2 + 1] as number]
+  }
+
+  it('a point moved mid-transition stays where it was put, and the others finish', async () => {
+    await withAnimatedGraph({}, async (graph, transitionEnded) => {
+      graph.setPointPositions(MOVED)
+      graph.render(undefined, 400)
+      await wait(120)
+      graph.setPointPosition(0, 2222, 3333)
+      expect(pointAt(graph, 0)).toEqual([2222, 3333])
+      // The next frames blend source and target again: the write must be in both
+      await wait(80)
+      expect(pointAt(graph, 0)).toEqual([2222, 3333])
+
+      expect(await transitionEnded()).toBe(false)
+      expect(pointAt(graph, 0)).toEqual([2222, 3333])
+      expect(pointAt(graph, 1)).toEqual([3500, 1000])
+      expect(pointAt(graph, 3)).toEqual([3500, 3000])
+    })
+  })
+
+  it('a point moved from the onTransition callback stays too', async () => {
+    let graphInCallback: Graph | undefined
+    let hasMoved = false
+    await withAnimatedGraph({
+      onTransition: (): void => {
+        if (hasMoved || !graphInCallback) return
+        hasMoved = true
+        // This frame has already decided to blend: the blend must reproduce the write
+        graphInCallback.setPointPosition(1, 2500, 2600)
+      },
+    }, async (graph, transitionEnded) => {
+      graphInCallback = graph
+      graph.setPointPositions(MOVED)
+      graph.render(undefined, 400)
+      expect(await transitionEnded()).toBe(false)
+      expect(hasMoved).toBe(true)
+      expect(pointAt(graph, 1)).toEqual([2500, 2600])
+      expect(pointAt(graph, 0)).toEqual([1500, 1000])
+    })
+  })
+
+  it('a point moved from onSimulationPause, which render() fires before the transition starts, stays', async () => {
+    let graphInCallback: Graph | undefined
+    let pauses = 0
+    await withAnimatedGraph({
+      ...SIMULATION_CONFIG,
+      enableSimulation: true,
+      onSimulationPause: (): void => {
+        pauses += 1
+        // The textures of the coming transition are built, the cycle is not active yet
+        graphInCallback?.setPointPosition(0, 2222, 3333)
+      },
+    }, async (graph, transitionEnded) => {
+      graphInCallback = graph
+      expect(graph.isSimulationRunning).toBe(true)
+      graph.setPointPositions(MOVED)
+      graph.render(undefined, 400)
+      // A position transition pauses a running simulation: the callback has run
+      expect(pauses).toBe(1)
+      expect(await transitionEnded()).toBe(false)
+      expect(pointAt(graph, 0)).toEqual([2222, 3333])
+      expect(pointAt(graph, 1)).toEqual([3500, 1000])
+    })
+  })
+
+  it('a point moved from onTransitionEnd(true), when a new cycle interrupts the old one, stays', async () => {
+    const LATER = new Float32Array([1500, 1400, 3500, 1400, 1500, 3400, 3500, 3400])
+    let graphInCallback: Graph | undefined
+    let interruptions = 0
+    await withAnimatedGraph({
+      onTransitionEnd: (interrupted: boolean): void => {
+        if (!interrupted) return
+        interruptions += 1
+        // The old cycle is cleared, the new one is queued with its textures in place
+        graphInCallback?.setPointPosition(0, 2222, 3333)
+      },
+    }, async (graph, transitionEnded) => {
+      graphInCallback = graph
+      graph.setPointPositions(MOVED)
+      graph.render(undefined, 600)
+      await wait(120)
+      graph.setPointPositions(LATER)
+      graph.render(undefined, 300)
+      // The first ending is the interruption; the second is the new cycle completing
+      expect(await transitionEnded(1)).toBe(true)
+      expect(interruptions).toBe(1)
+      expect(await transitionEnded(2)).toBe(false)
+      expect(pointAt(graph, 0)).toEqual([2222, 3333])
+      expect(pointAt(graph, 1)).toEqual([3500, 1400])
+    })
+  })
+
+  it('a point that is fading out is not brought back by a write', async () => {
+    await withAnimatedGraph({}, async (graph, transitionEnded) => {
+      graph.setPointPositions(new Float32Array([1500, 1000, 3500, 1000, NaN, NaN, 3500, 3000]))
+      graph.render(undefined, 400)
+      await wait(120)
+      graph.setPointPosition(2, 2222, 3333)
+      expect(await transitionEnded()).toBe(false)
+      expect(Number.isNaN(pointAt(graph, 2)[0])).toBe(true)
+      expect(pointAt(graph, 1)).toEqual([3500, 1000])
+    })
+  })
+
+  it('a point moved between setPointPositions and render ends on the new data', async () => {
+    await withAnimatedGraph({}, async (graph, transitionEnded) => {
+      graph.setPointPositions(MOVED)
+      // The data update is applied by render(), after this write: it wins
+      graph.setPointPosition(0, 2222, 3333)
+      graph.render(undefined, 400)
+      expect(await transitionEnded()).toBe(false)
+      expect(pointAt(graph, 0)).toEqual([1500, 1000])
+    })
+  })
+})
