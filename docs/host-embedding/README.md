@@ -261,8 +261,8 @@ have silently bundled a private copy — while the UMD/jsdelivr build stays stan
 Verified: `npm ls @luma.gl/core` resolves a single deduped 9.3.6 for cosmos + deck.gl
 9.3.10.
 
-**Who has to act:** npm 7+ users — nobody (peers auto-install). Yarn 1 or pnpm without
-auto-install-peers — add the four `@luma.gl/*` packages explicitly. CDN/UMD users —
+**Who has to act:** npm 7+ users — nobody (peers auto-install). ~~Yarn 1~~ Yarn or pnpm without
+auto-install-peers — add the four `@luma.gl/*` packages explicitly, at `~9.3.0`. CDN/UMD users —
 nobody. Full instructions live in `migration-notes.md` under "Migrating to v3.5".
 
 ## Proof: three architectures, thirteen tests

@@ -10,7 +10,7 @@ Versions are released in lockstep with `@cosmos.gl/graph` — install matching v
 ## Install
 
 ```bash
-npm install @cosmos.gl/deck-layers @cosmos.gl/graph @deck.gl/core @luma.gl/core @luma.gl/engine
+npm install @cosmos.gl/deck-layers @cosmos.gl/graph @deck.gl/core@~9.3.0 @luma.gl/core@~9.3.0 @luma.gl/engine@~9.3.0 @luma.gl/shadertools@~9.3.0 @luma.gl/webgl@~9.3.0
 ```
 
 `@cosmos.gl/graph`, `@deck.gl/core` and `@luma.gl/*` are peer dependencies: the whole

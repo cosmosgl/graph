@@ -228,17 +228,21 @@ headless `Graph`.
 ## Packaging
 
 `@luma.gl/*` moved from dependencies to peerDependencies (compatibility range
-`~9.3.0`, narrowed from a caret range: deck.gl 9.3 pairs with luma.gl 9.3, and
-with a caret a package manager placed a newer luma.gl next to deck's copy), so
+`~9.3.0`, narrowed from a caret range: deck.gl 9.3 takes luma.gl with a caret of
+its own, luma.gl's packages hold the 9.3 line through their peers, and with a
+caret here a package manager placed luma.gl 9.4 next to deck's 9.3 copy), so
 the application owns the single luma.gl installation that cosmos.gl, deck.gl,
 and everything else share. The ES build keeps luma.gl
 external (bundling a private copy would defeat the contract); the UMD build
 stays standalone for CDN use. Pinned `~9.3.6` versions, in the workspace
 catalog since the repo became one, keep the repo's own toolchain
 deterministic. Breaking for package managers that don't
-auto-install peers — see `migration-notes.md`. Prerelease luma lines (the 9.4
-alphas) intentionally sit outside the range: supporting them means chaining
-users to an alpha, so that waits for a stable 9.4.
+auto-install peers — see `migration-notes.md`. Stable luma.gl 9.4 shipped on
+2026-09-05 and sits outside the range on purpose. The engine passes its own
+tests on it, so the tilde is policy, not compatibility: with a caret npm placed
+9.4 beside deck 9.3's own 9.3.6, two copies. The deck layers pin deck.gl to the
+same line for a different reason: they fail on deck.gl 9.4. Widening either
+range is a verified release, never automatic.
 
 ## Notes
 
