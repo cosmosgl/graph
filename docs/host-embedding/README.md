@@ -1,6 +1,6 @@
 # cosmos.gl inside a host renderer
 
-**Branch `feat/host-embedding` → cosmosgl/graph [PR #257](https://github.com/cosmosgl/graph/pull/257) · base `main` · 32 commits**
+**Branch `feat/host-embedding` → cosmosgl/graph [PR #257](https://github.com/cosmosgl/graph/pull/257) · base `main` · ~~32~~ 63 commits**
 
 The simulation now runs headless on a host's GPU device and frame schedule, hands its
 positions over at three different costs, and can render itself into the host's pass under
@@ -8,7 +8,7 @@ the host's camera — with deck.gl as the worked example.
 
 | files | code diff | new public APIs | unit tests | stories | breaking change |
 | --- | --- | --- | --- | --- | --- |
-| 51 | +12,777 / −17,128 | 10 + a package | 35 (real WebGL 2, in CI) | 2 (deck.gl) | 1 (luma.gl → peer) |
+| ~~51~~ 62 | ~~+12,777 / −17,128~~ +16,910 / −17,415 | 10 + ~~a package~~ a class and a package | ~~35~~ 92 (real WebGL 2, in CI) | ~~2~~ 4 (deck.gl) | 1 (luma.gl → peer) |
 
 > A rendered version of this document with figures lives next to this file:
 > [`host-embedding.html`](./host-embedding.html).
@@ -265,7 +265,7 @@ Verified: `npm ls @luma.gl/core` resolves a single deduped 9.3.6 for cosmos + de
 auto-install-peers — add the four `@luma.gl/*` packages explicitly, at `~9.3.0`. CDN/UMD users —
 nobody. Full instructions live in `migration-notes.md` under "Migrating to v3.5".
 
-## Proof: three architectures, thirteen tests
+## Proof: ~~three architectures, thirteen tests~~ four stories, 92 tests
 
 *`feat(stories): deck.gl integration examples` — `test: host-embedding unit
 tests on real WebGL 2`*
@@ -281,17 +281,20 @@ running on a real WebGL 2 context in headless Chromium.
 | **CPU readback layout** (2k points) | cosmos as a pure layout engine on its own hidden device; stock `ScatterplotLayer`/`LineLayer` render | throttled `getPointPositionsAsync()` snapshots |
 
 *Since superseded:* the prototype stories consolidated into `@cosmos.gl/deck-layers`'s
-two `CosmosGraphLayer` stories (zero-copy flagship and object-data mode); the
+~~two~~ four `CosmosGraphLayer` stories (~~zero-copy flagship and object-data mode~~ the
+layer, the layer at scale, your own simulations, a graph on a map); the
 render-pass and readback prototypes retired in the story audit, their patterns kept in
 the package README and this document.
 
-The test suite (`pnpm test`, 35 passing, now a CI step) covers the headless lifecycle, snapshot
+The test suite (`pnpm test`, ~~35~~ 92 passing, now a CI step) covers the headless lifecycle, snapshot
 equivalence, the texture/version contract, sparse updates and pinning, absent-point NaN
 semantics, view injection against the documented formula, external scheduling to
 completion, and a regression test that enables blending on a raw shared context and proves
 the simulation survives 5 steps with a pinned, sparse-moved point exactly in place. Lint
 and build pass; a shared-device stress check keeps all 10,000 index channels intact across
-100 interleaved steps.
+100 interleaved steps. **Update:** the 92 tests run in four files — host embedding, the
+standalone simulation, the deck layer (picking, drag, stepping, the data rules), and point
+tracking — and `pnpm run typecheck` gates the whole repo beside them.
 
 ## More general than a deck.gl layer
 
