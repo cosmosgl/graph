@@ -28,7 +28,9 @@ the 9.3 line` (`bbab52b`), `refactor(deck-layers): CosmosGraphLayer is the
 only export` (`709e646`), ``feat(deck-layers): a layer without `points` draws
 the simulation as loaded`` (`3b817b5`), `feat(deck-layers): binary links take
 styling channels` (`cf3fdb6`), `feat(stories): your own simulations`
-(`c068334`), `feat(stories): three deck.gl stories` (`f054461`)
+(`c068334`), `feat(stories): three deck.gl stories` (`f054461`),
+`feat(stories): a graph on a map — the layer in deck.gl's map view, the layout
+in the map's space` (`ca9d341`)
 
 ## Why
 
@@ -223,9 +225,10 @@ as a fix plus a regression test:
 
 ## Example
 
-Storybook → Examples → Integrations, three stories, one per way of using the
-layer, and a guide page under Integrations → deck.gl whose sections point at
-them:
+Storybook → Examples → Integrations, four stories — one per way of using the
+layer, and one on a map — and a guide page under Integrations → deck.gl whose
+sections point at them (it also carries an "In React" snippet: a re-render
+keeps the simulation and its layout while the layer `id` stays the same):
 
 - **Graph layer** (`integrations/deck-layers/src/stories/graph-layer.ts`) —
   the deck.gl way: objects and accessors, links by id, hover with the picked
@@ -241,6 +244,20 @@ them:
   application creates and loads on deck's device, drawn by layers without
   `points`. Each has a thumbnail view, a click routes the main view to it, and
   the selected one is drawn by two layers yet steps once per frame.
+- **Graph on a map** (`graph-on-map.ts`) — the layer under deck's `MapView`,
+  with the layout in the map's own space. `coordinateSystem: CARTESIAN` plus a
+  `modelMatrix` scale the simulation space onto the Mercator world, and
+  longitude/latitude convert to layout coordinates once; deck forwards both
+  props to the sublayers and its projection applies them, so the layer needed
+  no change. Cities are pinned at their real places over Natural Earth
+  countries; generated travellers are tied to a home city and, some of them,
+  to a city they keep visiting, by one link per tie — copies of a link make
+  a stronger spring, and since the engine's degree factor is shared by all of
+  a point's links the rest position follows the tie ratio exactly. Gravity
+  and centering are off (the map's centre is not the graph's), the energy
+  never fades, and a trickle of departures and homecomings keeps the map
+  moving. One gap, noted in the guide: drag-to-pin unprojects through the
+  viewport and ignores the model matrix, so it is off on a map view.
 
 The six feature-by-feature stories these replaced, and the earlier
 render-pass and readback prototypes, retired in story audits; the prototypes'
