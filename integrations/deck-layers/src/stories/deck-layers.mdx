@@ -51,6 +51,28 @@ point is dropped, with one warning. Removing the layer destroys the simulation i
 
 Try it: [Graph layer](../?path=/story/examples-integrations--graph-layer).
 
+### In React
+
+The same layer goes into `<DeckGL>`. The layer object is created again on every render and its
+simulation carries on, as long as the `id` stays the same.
+
+```jsx
+import { DeckGL } from '@deck.gl/react'
+import { OrthographicView } from '@deck.gl/core'
+import { CosmosGraphLayer } from '@cosmos.gl/deck-layers'
+
+const view = new OrthographicView()
+const initialViewState = { target: [2048, 2048, 0], zoom: -2 }
+
+export function GraphView ({ nodes, edges }) {
+  // Keep `nodes` and `edges` the same arrays between renders: a new array reloads the graph
+  const layers = [
+    new CosmosGraphLayer({ id: 'graph', points: nodes, links: edges, getPointId: (p) => p.id, pickable: true }),
+  ]
+  return <DeckGL views={view} initialViewState={initialViewState} controller layers={layers} />
+}
+```
+
 ## Style and tune
 
 Styling works like any deck.gl layer. Colors are RGBA in 0..255. Sizes and widths are in pixels
@@ -214,9 +236,39 @@ simulation.destroy() // before deck.finalize(): the device is deck's
 
 Try it: [Your own simulations](../?path=/story/examples-integrations--own-simulations).
 
+## On a map
+
+The layer works in deck.gl's map views too. Give the layout the map's own space: a map view
+places the whole world on a 512-unit square, so one `modelMatrix` scales the simulation space
+onto it, and longitude and latitude convert to layout coordinates once.
+
+```js
+import { MapView, COORDINATE_SYSTEM } from '@deck.gl/core'
+
+const SPACE = 4096 // the simulation's spaceSize
+const toLayout = ([lng, lat]) => [
+  ((lng + 180) / 360) * SPACE,
+  ((Math.PI + Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))) / (2 * Math.PI)) * SPACE,
+]
+
+new CosmosGraphLayer({
+  // …
+  getPointPosition: (p) => toLayout(p.lngLat),
+  coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+  modelMatrix: [512 / SPACE, 0, 0, 0, 0, 512 / SPACE, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+  simulationConfig: { spaceSize: SPACE, simulationGravity: 0, simulationCenter: 0 },
+  onSimulationCreated: (simulation) => simulation.setPinnedPoints(cityIndices), // these stay on their places
+})
+```
+
+Pin the points that have a real place; the rest settle around them. `enablePointDrag` does not
+work on a map view yet.
+
+Try it: [Graph on a map](../?path=/story/examples-integrations--graph-on-map).
+
 ## Good to know
 
-- **WebGL 2 only**, and the layout is 2D: use `OrthographicView`.
+- **WebGL 2 only**, and the layout is 2D: use `OrthographicView`, or a map view as in "On a map".
 - **A renderer of your own** samples `PositionTextureSource` from `@cosmos.gl/graph`; the layer's
   internal sublayer sources, in the Big graph story's panes, are the worked reference. See the
   [package README](https://github.com/cosmosgl/graph/tree/main/integrations/deck-layers).
