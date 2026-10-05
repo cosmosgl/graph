@@ -397,8 +397,9 @@ From the PR author's future-work comment, in dependency order:
   delivered: `feat(simulation): extract GraphSimulation`), capability flags (trivial, but they should describe a
   stabilized surface), and formal readback-vs-zero-copy benchmarks with GPU timer
   queries.
-- **Blocked on upstream** — luma.gl 9.4 (the peer range intentionally skips the prerelease
-  line and admits stable 9.4 automatically) and WebGPU / compute-only devices (the
+- **Blocked on upstream** — luma.gl 9.4 (~~the peer range intentionally skips the prerelease
+  line and admits stable 9.4 automatically~~ the `~9.3.0` peer range excludes 9.4 and widens
+  only with a verified release, see row 8 above) and WebGPU / compute-only devices (the
   simulation is WebGL 2 fragment shaders over ping-pong FBOs throughout; a WebGPU backend
   is a compute rewrite plus a WGSL port).
 - **The integrating side's work** — a published adapter package, host-native picking that
