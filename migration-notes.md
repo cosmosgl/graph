@@ -11,19 +11,24 @@ resolve **one** luma.gl installation — a GPU `Device` shared between two
 independently installed luma.gl copies is not a supported boundary, and the
 public types no longer force casts between two copies of `Device`.
 
-The range names the 9.3 line on purpose. deck.gl 9.3 pins luma.gl 9.3, and a
-wider range lets npm place a newer luma.gl next to deck's copy — two copies,
-and a broken shared device — without any error. The range widens when
-cosmos.gl is verified on a newer line, as a release.
+The range names the 9.3 line on purpose. deck.gl 9.3 takes luma.gl with a caret
+range of its own, which admits 9.4; the 9.3 line is held by luma.gl itself
+(`@luma.gl/engine` 9.3.6 peers `@luma.gl/core` at `~9.3.0`). With a caret range
+here, npm placed luma.gl 9.4 next to deck's 9.3 copy — two copies, and a broken
+shared device — without any error. The range widens when cosmos.gl is verified
+on a newer line, as a release.
 
 What you need to do:
 
 - **npm 7+**: nothing — npm installs peer dependencies automatically.
-- **Yarn 1, or pnpm configured without auto-install-peers**: add luma.gl
-  explicitly alongside cosmos.gl:
+- **Yarn, or pnpm configured without auto-install-peers**: add luma.gl
+  explicitly alongside cosmos.gl, at the range — a bare install gets the latest
+  luma.gl, which is outside it:
 
 ```bash
-npm install @cosmos.gl/graph @luma.gl/core @luma.gl/engine @luma.gl/shadertools @luma.gl/webgl
+yarn add @cosmos.gl/graph @luma.gl/core@~9.3.0 @luma.gl/engine@~9.3.0 @luma.gl/shadertools@~9.3.0 @luma.gl/webgl@~9.3.0
+# or
+pnpm add @cosmos.gl/graph @luma.gl/core@~9.3.0 @luma.gl/engine@~9.3.0 @luma.gl/shadertools@~9.3.0 @luma.gl/webgl@~9.3.0
 ```
 
 - **CDN / UMD users**: nothing — `dist/index.min.js` still bundles luma.gl and

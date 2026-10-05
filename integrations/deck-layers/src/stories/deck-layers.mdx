@@ -11,12 +11,12 @@ of points stay interactive.
 ## Install
 
 ```bash
-npm install @cosmos.gl/deck-layers @cosmos.gl/graph
+npm install @cosmos.gl/deck-layers @cosmos.gl/graph @deck.gl/core@~9.3.0 @luma.gl/core@~9.3.0 @luma.gl/engine@~9.3.0 @luma.gl/shadertools@~9.3.0 @luma.gl/webgl@~9.3.0
 ```
 
-Install matching versions of the two: they are released together. deck.gl and luma.gl come
-with your deck.gl app. If your package manager does not install peer dependencies for you, add
-`@luma.gl/core @luma.gl/engine` yourself.
+Install matching versions of the two: they are released together. Name deck.gl and luma.gl at
+`~9.3.0` even if your app has them already: deck.gl 9.3 takes luma.gl with a caret that resolves
+to 9.4 today, and the layers need one luma.gl copy inside `~9.3.0`.
 
 ## Your first graph
 
