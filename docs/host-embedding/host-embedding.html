@@ -292,15 +292,15 @@
 <div class="shell">
 
 <header class="doc">
-  <p class="commitline">branch <b>feat/host-embedding</b> → cosmosgl/graph PR <b>#257</b> · base <b>main</b> · 9 commits</p>
+  <p class="commitline">branch <b>feat/host-embedding</b> → cosmosgl/graph PR <b>#257</b> · base <b>main</b> · 63 commits</p>
   <h1>cosmos.gl inside a host renderer</h1>
   <p class="standfirst">The simulation now runs headless on a host's GPU device and frame schedule, hands its positions over at three different costs, and can render itself into the host's pass under the host's camera — with deck.gl as the worked example.</p>
   <div class="statrow">
-    <div>files <strong>21</strong></div>
-    <div>code diff <strong>+1,977&thinsp;/&thinsp;−279</strong></div>
-    <div>new public APIs <strong>10</strong></div>
-    <div>unit tests <strong>13</strong> <span>(real WebGL&nbsp;2)</span></div>
-    <div>stories <strong>3</strong> <span>(deck.gl)</span></div>
+    <div>files <strong>62</strong></div>
+    <div>code diff <strong>+16,910&thinsp;/&thinsp;−17,415</strong></div>
+    <div>new public APIs <strong>10</strong> <span>(+ a class and a package)</span></div>
+    <div>unit tests <strong>92</strong> <span>(real WebGL&nbsp;2, in CI)</span></div>
+    <div>stories <strong>4</strong> <span>(deck.gl)</span></div>
     <div>breaking change <strong>1</strong> <span>(luma.gl → peer)</span></div>
   </div>
 </header>
@@ -608,13 +608,13 @@ screenY = k · ((S − spaceY) + (h − S) / 2) + y   <span class="cmt">// cosmo
   </figure>
 
   <div class="callout">
-    <p><b>Who has to act:</b> npm 7+ users — nobody (peers auto-install). Yarn 1 or pnpm without auto-install-peers — add the four <code>@luma.gl/*</code> packages explicitly. CDN/UMD users — nobody. Full instructions live in <code>migration-notes.md</code> under "Migrating to v3.5".</p>
+    <p><b>Who has to act:</b> npm 7+ users — nobody (peers auto-install). Yarn or pnpm without auto-install-peers — add the four <code>@luma.gl/*</code> packages explicitly, at <code>~9.3.0</code>. CDN/UMD users — nobody. Full instructions live in <code>migration-notes.md</code> under "Migrating to v3.5".</p>
   </div>
 </section>
 
 <section>
   <p class="eyebrow"><b>feat(stories):</b> deck.gl integration examples — <b>test:</b> host-embedding unit tests on real WebGL 2</p>
-  <h2>Proof: three architectures, thirteen tests</h2>
+  <h2>Proof: four stories, 92 tests</h2>
   <div class="prose">
     <p>Each embedding architecture ships as a runnable Storybook story (Examples → Integrations) against deck.gl ~9.3, and the API contracts are locked by a vitest browser-mode suite running on a real WebGL&nbsp;2 context in headless Chromium.</p>
   </div>
@@ -643,7 +643,7 @@ screenY = k · ((S − spaceY) + (h − S) / 2) + y   <span class="cmt">// cosmo
   </div>
 
   <div class="prose">
-    <p>The test suite (<code>npm test</code>, 13 passing) covers the headless lifecycle, snapshot equivalence, the texture/version contract, sparse updates and pinning, absent-point NaN semantics, view injection against the documented formula, external scheduling to completion, and a regression test that enables blending on a raw shared context and proves the simulation survives 5 steps with a pinned, sparse-moved point exactly in place. Lint and build pass; a shared-device stress check keeps all 10,000 index channels intact across 100 interleaved steps.</p>
+    <p>The test suite (<code>pnpm test</code>, 92 passing, now a CI step) covers the headless lifecycle, snapshot equivalence, the texture/version contract, sparse updates and pinning, absent-point NaN semantics, view injection against the documented formula, external scheduling to completion, and a regression test that enables blending on a raw shared context and proves the simulation survives 5 steps with a pinned, sparse-moved point exactly in place. Lint and build pass; a shared-device stress check keeps all 10,000 index channels intact across 100 interleaved steps.</p>
   </div>
 </section>
 
@@ -846,7 +846,7 @@ screenY = k · ((S − spaceY) + (h − S) / 2) + y   <span class="cmt">// cosmo
 </section>
 
 <footer class="doc">
-  <p><b>Pointers.</b> Implementation: cosmosgl/graph PR #257 (<code>feat/host-embedding</code>, 9 commits, draft) and its future-work comment. Motivating RFC: visgl/deck.gl-community PR #704 (<code>docs/rfcs/cosmos-layers.md</code>). Rationale log: <code>history/2026/2026-08-18-host-embedding.md</code>. Migration: <code>migration-notes.md</code> → "Migrating to v3.5". Stories: Storybook → Examples → Integrations.</p>
+  <p><b>Pointers.</b> Implementation: cosmosgl/graph PR #257 (<code>feat/host-embedding</code>, 63 commits) and its future-work comment. Motivating RFC: visgl/deck.gl-community PR #704 (<code>docs/rfcs/cosmos-layers.md</code>). Rationale log: <code>history/2026/2026-08-18-host-embedding.md</code>. Migration: <code>migration-notes.md</code> → "Migrating to v3.5". Stories: Storybook → Examples → Integrations.</p>
 </footer>
 
 </div>
