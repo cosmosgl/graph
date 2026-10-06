@@ -433,8 +433,8 @@ export class GraphSimulation implements PositionTextureSource {
     }
     const points = this.points
     if (!points) return
-    // The tracking draw below runs outside the simulation step: set the passes'
-    // ambient GL state here too, or leftover blending corrupts it
+    // The tracking draw below runs outside the simulation step: reset the host's
+    // scissor and colour mask here too, and hand its state back after
     this.withExternalDeviceState(() => {
       points.setPointPositionsByIndices(indices, positions)
       // gatherTrackers() must run after every write to the current position texture
@@ -771,19 +771,22 @@ export class GraphSimulation implements PositionTextureSource {
    * state back afterwards.
    *
    * luma applies only the pipeline `parameters` a Model declares; everything
-   * else (blend, depth, scissor, …) is inherited from the context's current
-   * state. An internally created device keeps the WebGL defaults, but an
-   * external device arrives mid-frame carrying the host's state — deck.gl, for
-   * example, leaves blending enabled, and blended writes into the RGBA32F
-   * position textures (whose texels carry alpha 0) zero out the whole
-   * simulation. The host depends on that state as much as cosmos depends on
-   * its own: deck.gl enables blending and depth testing once, when it creates
-   * the device, and its layers declare neither — left disabled, every later
-   * deck draw writes its anti-aliased edges straight into the canvas alpha.
-   * luma's state tracker records whatever the reset and the passes change and
-   * restores it when `work` returns. Callbacks that run inside `work`
-   * (`onSimulationTick`, hover events) see cosmos's state, and GL state they set
-   * through luma is undone with it.
+   * else is inherited from the context's current state. The overwrite passes
+   * declare their blend, depth, stencil and cull state
+   * (`DATA_PASS_PARAMETERS`); the other data passes declare their own blend
+   * and depth — the link index pass its culling too — and take what they leave
+   * undeclared from here. The scissor
+   * test and the colour mask have no pipeline parameter: an internally created device keeps
+   * the WebGL defaults, but an external device arrives mid-frame carrying the
+   * host's, and a scissor rectangle or a masked channel would clip or drop a
+   * pass's writes. This resets them, and blend and depth as well, for the
+   * passes that run inside `work`. The host depends on its own state in turn:
+   * deck.gl enables blending and depth testing once, when it creates the
+   * device, and its layers declare neither. luma's state tracker records
+   * whatever the reset and the passes change and restores it when `work`
+   * returns. Callbacks that run inside `work` (`onSimulationTick`, hover
+   * events) see cosmos's state, and GL state they set through luma is undone
+   * with it.
    * @internal
    */
   public withExternalDeviceState<T> (work: () => T): T {
