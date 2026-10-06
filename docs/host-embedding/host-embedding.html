@@ -364,7 +364,7 @@
   <h2>Sharing a device without inheriting its state</h2>
   <div class="prose">
     <p>Verifying the zero-copy story surfaced the one real bug of the project, and it would have broken every shared-device embedding. luma.gl applies only the pipeline parameters a model declares; everything else — blend, depth, scissor — is inherited from the context. cosmos's offscreen simulation passes declare none of it, because on a cosmos-owned device the context holds WebGL defaults. An external device arrives mid-frame carrying the <em>host's</em> state. deck.gl leaves blending enabled, and blended writes into the RGBA32F position textures — whose texels carry alpha&nbsp;0 — zeroed the entire simulation within a few ticks.</p>
-    <p>The fix: <code>resetExternalDeviceState()</code> restores blend, depth, scissor, stencil, cull, and color-mask at the top of every simulation step and every rendered frame — on externally supplied devices only. Cosmos-owned devices skip it entirely, keeping existing behavior byte-identical.</p>
+    <p>The fix: <code>withExternalDeviceState()</code> resets blend, depth, scissor, stencil, cull, and color-mask around every simulation step and every rendered frame — on externally supplied devices only — and hands the host its own state back when the work returns, through luma's state tracker. The restore came later: deck.gl enables blending and depth testing once, when it creates the device, and its own layers declare neither, so with the reset alone every deck layer drawn after the graph — text labels first — wrote its anti-aliased edges straight into the canvas alpha. Cosmos-owned devices skip both, keeping existing behavior byte-identical.</p>
   </div>
 
   <figure>

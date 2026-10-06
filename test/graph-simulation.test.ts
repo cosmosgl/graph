@@ -228,4 +228,51 @@ describe('GraphSimulation', () => {
       device.destroy()
     }
   })
+
+  it('hands an external device back in the state its host left it in', async () => {
+    const canvas = document.createElement('canvas')
+    const device = await luma.createDevice({
+      type: 'webgl',
+      adapters: [webgl2Adapter],
+      createCanvasContext: { canvas },
+    })
+    try {
+      const simulation = await createSimulation(SIMULATION_CONFIG, POSITIONS, Promise.resolve(device))
+      try {
+        // deck.gl sets this once, when it creates the device, and its layers draw on it
+        // without declaring it: whatever cosmos changes, the host must find as it left it
+        const gl = (device as Device & { gl: WebGL2RenderingContext }).gl
+        gl.enable(gl.BLEND)
+        gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+        gl.enable(gl.DEPTH_TEST)
+        gl.depthFunc(gl.LEQUAL)
+        const expectHostState = (): void => {
+          expect(gl.isEnabled(gl.BLEND)).toBe(true)
+          expect(gl.getParameter(gl.BLEND_SRC_RGB)).toBe(gl.SRC_ALPHA)
+          expect(gl.getParameter(gl.BLEND_DST_RGB)).toBe(gl.ONE_MINUS_SRC_ALPHA)
+          expect(gl.isEnabled(gl.DEPTH_TEST)).toBe(true)
+          expect(gl.getParameter(gl.DEPTH_FUNC)).toBe(gl.LEQUAL)
+        }
+
+        // Every entry point that runs a pass between the host's draws
+        simulation.step()
+        expectHostState()
+        simulation.setPointPositionsByIndices([0], [3500, 3500])
+        expectHostState()
+        const tracker = simulation.trackPoints([1, 2])
+        tracker.positions()
+        expectHostState()
+        tracker.destroy()
+        simulation.setPointClusters([0, 0, 1, 1])
+        simulation.applyData()
+        expect(simulation.getClusterPositions().length).toBe(4)
+        expectHostState()
+      } finally {
+        simulation.destroy()
+      }
+    } finally {
+      device.canvasContext?.destroy()
+      device.destroy()
+    }
+  })
 })

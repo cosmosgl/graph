@@ -330,6 +330,58 @@ describe('external device', () => {
   })
 })
 
+describe('external device with host state', () => {
+  it('renders a frame and answers point queries without touching the host state, or being touched by it', async () => {
+    const { device, destroy } = await createExternalDevice()
+    const div = document.createElement('div')
+    div.style.width = '200px'
+    div.style.height = '200px'
+    document.body.appendChild(div)
+    // One point on the space's bottom edge: a blended "found" flag would be scaled to 0 there
+    const positions = new Float32Array([1000, 0, 3000, 1000, 1000, 3000, 3000, 3000])
+    const graph = new Graph(div, {
+      spaceSize: 4096,
+      enableSimulation: false,
+      enableRenderLoop: false,
+      fitViewOnInit: false,
+      rescalePositions: false,
+    }, Promise.resolve(device))
+    graph.setPointPositions(positions)
+    graph.render()
+    await graph.ready
+    try {
+      // The whole space on a 180 px square inset 10 px into the 200 px screen
+      const k = 180 / 4096
+      const offset = k * (4096 - 200) / 2 + 10
+      graph.setViewTransform({ k, x: offset, y: offset }, [200, 200])
+      graph.renderOneFrame()
+
+      // A host such as deck.gl draws with this on, set once, and its layers rely on it
+      const gl = (device as Device & { gl: WebGL2RenderingContext }).gl
+      gl.enable(gl.BLEND)
+      gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+      gl.enable(gl.DEPTH_TEST)
+      graph.renderOneFrame()
+      expect(gl.isEnabled(gl.BLEND)).toBe(true)
+      expect(gl.getParameter(gl.BLEND_SRC_RGB)).toBe(gl.SRC_ALPHA)
+      expect(gl.isEnabled(gl.DEPTH_TEST)).toBe(true)
+
+      // The query passes write data, not color: the host's blending must not scale it.
+      // Each point sits in its own 100 px sampling cell of the 200 px screen.
+      expect([...graph.getSampledPoints().indices].sort()).toEqual([0, 1, 2, 3])
+      const corners = Array.from({ length: 4 }, (_, i) => graph.spaceToScreenPosition([positions[i * 2] as number, positions[i * 2 + 1] as number]))
+      const xs = corners.map(([x]) => x)
+      const ys = corners.map(([, y]) => y)
+      const rect: [[number, number], [number, number]] = [[Math.min(...xs) - 5, Math.min(...ys) - 5], [Math.max(...xs) + 5, Math.max(...ys) + 5]]
+      expect(graph.findPointsInRect(rect)).toEqual([0, 1, 2, 3])
+    } finally {
+      graph.destroy()
+      div.remove()
+      destroy()
+    }
+  })
+})
+
 describe('external frame scheduling', () => {
   it('enableRenderLoop: false + renderOneFrame drives a canvas-owning graph to completion', async () => {
     const div = document.createElement('div')

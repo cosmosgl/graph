@@ -701,6 +701,33 @@ describe('CosmosGraphLayer', () => {
     }
   })
 
+  it('leaves deck the blending and depth testing its own layers draw with', async () => {
+    const ticks = { count: 0 }
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer({
+        id: 'graph',
+        points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
+        links: new Float32Array([0, 1]),
+        getPointSize: 10,
+        simulationConfig: { ...STATIC_SIM, onSimulationTick: (): void => { ticks.count += 1 } },
+        pickable: true,
+      }),
+    ])
+    try {
+      await waitUntilPickable(deck)
+      for (let i = 0; i < 240 && ticks.count < 5; i += 1) await waitFrames(1)
+      expect(ticks.count).toBeGreaterThanOrEqual(5)
+      // deck enables both once, when it creates the device, and a text or path layer
+      // declares neither: with them off, glyph edges overwrite the canvas alpha
+      const gl = (deck as unknown as { device: Device & { gl: WebGL2RenderingContext } }).device.gl
+      expect(gl.isEnabled(gl.BLEND)).toBe(true)
+      expect(gl.isEnabled(gl.DEPTH_TEST)).toBe(true)
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
   it('drags a point: pins on start, moves with the pointer, releases on end', async () => {
     let simulation: GraphSimulation | undefined
     const calls = { start: 0, drag: 0, end: 0 }

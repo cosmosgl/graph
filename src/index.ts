@@ -2258,15 +2258,19 @@ export class Graph implements PositionTextureSource {
   }
 
   /**
-   * Renders a single frame (the actual rendering logic).
-   * This does NOT schedule the next frame.
+   * Renders a single frame. This does NOT schedule the next frame.
+   * On an external device the frame runs under cosmos's GL state and hands the
+   * host its own back afterwards.
    */
   private renderFrame (now?: number): void {
     if (this._isDestroyed) return
     if (!this.store.pointsTextureSize) return
 
-    this.simulation.resetExternalDeviceState()
+    this.simulation.withExternalDeviceState(() => this.drawFrame(now))
+  }
 
+  /** The actual rendering logic of a frame. */
+  private drawFrame (now?: number): void {
     const frameNow = now ?? performance.now()
     this.fpsMonitor?.begin()
     // Apply a screen-size change the observer flagged. Without a ResizeObserver
