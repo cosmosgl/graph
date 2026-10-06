@@ -147,10 +147,11 @@ export class Points extends CoreModule implements PointTrackerHost {
    */
   public requestTick: (() => boolean) | undefined
   /**
-   * Set by the simulation: restores the GL state the offscreen passes assume on a device
-   * shared with a host. The tracker gather calls it, because that draw also runs between steps.
+   * Set by the simulation: runs a pass under the GL state the offscreen passes assume on a
+   * device shared with a host, and hands the host its state back after. The tracker gather
+   * goes through it, because that draw also runs between steps.
    */
-  public resetHostState: (() => void) | undefined
+  public withHostState: ((work: () => void) => void) | undefined
   /**
    * Holds the previous frame of positions so simulation and drag shaders can
    * read it while writing the new frame into `currentPositionTexture` in the
@@ -926,6 +927,13 @@ export class Points extends CoreModule implements PointTrackerHost {
         findPointsInRectUniforms: this.findPointsInRectUniformStore.getManagedUniformBuffer('findPointsInRectUniforms'),
         // All texture bindings will be set dynamically in findPointsInRect() method
       },
+      parameters: {
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+        // The output carries data, not color: on a device shared with a host that
+        // leaves blending on, a blended write would scale it by its own alpha
+        blend: false,
+      },
     })
 
     // Create vertex buffer for quad
@@ -972,6 +980,13 @@ export class Points extends CoreModule implements PointTrackerHost {
         findPointsInPolygonUniforms: this.findPointsInPolygonUniformStore
           .getManagedUniformBuffer('findPointsInPolygonUniforms'),
         // All texture bindings will be set dynamically in findPointsInPolygon() method
+      },
+      parameters: {
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+        // The output carries data, not color: on a device shared with a host that
+        // leaves blending on, a blended write would scale it by its own alpha
+        blend: false,
       },
     })
 
@@ -1090,6 +1105,9 @@ export class Points extends CoreModule implements PointTrackerHost {
       parameters: {
         depthWriteEnabled: false,
         depthCompare: 'always',
+        // The output carries data, not color: on a device shared with a host that
+        // leaves blending on, a blended write would scale it by its own alpha
+        blend: false,
       },
     })
 
@@ -1717,21 +1735,25 @@ export class Points extends CoreModule implements PointTrackerHost {
     if (!this.trackPointsCommand) return false
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return false
 
+    const command = this.trackPointsCommand
+    const positionsTexture = this.currentPositionTexture
+    const gather = (): void => {
+      // Update texture bindings dynamically
+      command.setBindings({
+        positionsTexture,
+        trackedIndices: table,
+      })
+
+      const renderPass = this.device.beginRenderPass({
+        framebuffer: target,
+      })
+      command.draw(renderPass)
+      renderPass.end()
+    }
     // A tracker also gathers between steps (when created, given another set, or read
     // while behind), where the host's ambient GL state is in effect
-    this.resetHostState?.()
-
-    // Update texture bindings dynamically
-    this.trackPointsCommand.setBindings({
-      positionsTexture: this.currentPositionTexture,
-      trackedIndices: table,
-    })
-
-    const renderPass = this.device.beginRenderPass({
-      framebuffer: target,
-    })
-    this.trackPointsCommand.draw(renderPass)
-    renderPass.end()
+    if (this.withHostState) this.withHostState(gather)
+    else gather()
     return true
   }
 
