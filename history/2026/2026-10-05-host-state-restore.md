@@ -26,8 +26,11 @@ blending; text shows the problem at once.
   (`@internal`) replaces `resetExternalDeviceState()`. It runs `work` through luma's
   `withParametersWebGL`: luma's state tracker (on for every WebGL device) records what the
   reset and the passes change, and restores it when `work` returns. It also restores on a
-  throw outside an open render pass; a throw inside one pops luma's pass frame instead, which
-  is no worse than before.
+  throw: luma keeps one stack of state frames per context, and a render pass pushes its own
+  frame on top of the wrapper's, so a throw before the pass ends would leave both up and a
+  single pop would restore the pass frame and strand the host's beneath it, with blending
+  off for the rest of the session. The wrapper records the stack depth before it pushes and
+  pops back to it on the way out.
 - **Every entry point that used the reset now wraps its passes.** These are the simulation
   step, `setPointPositionsByIndices`, a cluster read (the blocking sum and the non-blocking
   copy it may issue), a tracker's gather (the `Points.withHostState` hook, replacing
@@ -77,8 +80,12 @@ blending; text shows the problem at once.
 
 ## Notes
 
-- Callbacks that run inside a wrapped pass (`onSimulationTick`, hover events) see cosmos's
-  state, and any GL state they set through luma is undone with it.
+- Callbacks that run inside a wrapped pass (`onSimulationTick`, hover events fired from a
+  frame) see cosmos's state, and any GL state they set through luma is undone with it. A
+  draw made on the device from such a callback is painted with blending off, and the
+  restore puts the state back, not those pixels: request the draw and make it after the
+  callback returns, as deck's own frame does. The same callbacks fired from a pointer event,
+  and the click, context-menu and drag callbacks, run outside the wrapper.
 - **Tests.** The engine suite checks that the host's blend function and depth function
   survive a step, a sparse write, a tracker read and a cluster read. It also checks that a
   `Graph` frame on a shared device leaves them alone, with sampled points and a rect query
