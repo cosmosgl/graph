@@ -1,5 +1,5 @@
 import { Device, Framebuffer, luma, type Texture } from '@luma.gl/core'
-import { webgl2Adapter } from '@luma.gl/webgl'
+import { webgl2Adapter, WebGLDevice, WebGLStateTracker } from '@luma.gl/webgl'
 
 import { applyConfig, createDefaultConfig, GraphConfigInterface, type GraphSimulationConfig } from '@/graph/config'
 import { getMaxPointSize, readPixels, isPointAbsent } from '@/graph/helper'
@@ -785,24 +785,36 @@ export class GraphSimulation implements PositionTextureSource {
    * device, and its layers declare neither. luma's state tracker records
    * whatever the reset and the passes change and restores it when `work`
    * returns. Callbacks that run inside `work` (`onSimulationTick`, hover
-   * events) see cosmos's state, and GL state they set through luma is undone
-   * with it.
+   * events fired from a frame) see cosmos's state, and GL state they set
+   * through luma is undone with it. A draw made on the device from such a
+   * callback is painted with blending off; the restore puts the state back,
+   * not those pixels. Request the draw and make it after the callback
+   * returns, as deck's own frame does.
    * @internal
    */
   public withExternalDeviceState<T> (work: () => T): T {
-    if (this.shouldDestroyDevice || !this._device) return work() // own device: no host code touches its state
-    return this._device.withParametersWebGL({
-      blend: false,
-      depthTest: false,
-      depthMask: true,
-      scissorTest: false,
-      stencilTest: false,
-      cull: false,
-      colorMask: [true, true, true, true],
-      // Restore in a `finally` too. It covers a throw outside an open render pass; a throw
-      // inside one leaves luma's pass frame on top, which this restore then pops instead
-      nocatch: false,
-    }, work) as T
+    const device = this._device
+    if (this.shouldDestroyDevice || !device) return work() // own device: no host code touches its state
+    // luma keeps one stack of state frames per context, and a render pass pushes its own
+    // frame on top of this one. A throw before the pass ends leaves both up, and a single
+    // pop would restore the pass frame and strand the host's beneath it: pop back to the
+    // depth found here instead. On a normal return luma has popped its frame already.
+    const tracker = device instanceof WebGLDevice ? WebGLStateTracker.get(device.gl) : undefined
+    const depth = tracker?.stateStack.length ?? 0
+    try {
+      return device.withParametersWebGL({
+        blend: false,
+        depthTest: false,
+        depthMask: true,
+        scissorTest: false,
+        stencilTest: false,
+        cull: false,
+        colorMask: [true, true, true, true],
+        nocatch: true,
+      }, work) as T
+    } finally {
+      if (tracker) while (tracker.stateStack.length > depth) tracker.pop()
+    }
   }
 
   /**
