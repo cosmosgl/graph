@@ -211,7 +211,7 @@ export class GraphSimulation implements PositionTextureSource {
       this.store.isSimulationRunning = this.config.enableSimulation
 
       this.points = new Points(device, this.config, this.store, this.data)
-      this.points.resetHostState = (): void => this.resetExternalDeviceState()
+      this.points.withHostState = (work): void => this.withExternalDeviceState(work)
       if (this.config.enableSimulation) this.ensureSimulationModules()
       this.clusters = new Clusters(device, this.config, this.store, this.data, this.points)
 
@@ -431,13 +431,15 @@ export class GraphSimulation implements PositionTextureSource {
         `for ${indices.length} indices, got ${positions.length}. Call ignored.`)
       return
     }
-    if (!this.points) return
-    // The tracking draw below runs outside the simulation step: reset the
-    // host's ambient GL state here too, or leftover blending corrupts it
-    this.resetExternalDeviceState()
-    this.points.setPointPositionsByIndices(indices, positions)
-    // gatherTrackers() must run after every write to the current position texture
-    this.points.gatherTrackers()
+    const points = this.points
+    if (!points) return
+    // The tracking draw below runs outside the simulation step: set the passes'
+    // ambient GL state here too, or leftover blending corrupts it
+    this.withExternalDeviceState(() => {
+      points.setPointPositionsByIndices(indices, positions)
+      // gatherTrackers() must run after every write to the current position texture
+      points.gatherTrackers()
+    })
   }
 
   /**
@@ -606,19 +608,21 @@ export class GraphSimulation implements PositionTextureSource {
   public getClusterPositions (options?: PositionsReadOptions): Readonly<number[]> {
     if (this._isDestroyed || !this._device || !this.clusters) return []
     if (this.data.pointClusters === undefined || this.clusters.clusterCount === undefined) return []
+    const clusters = this.clusters
     // The read sums positions with a draw of its own, between steps: the host's
     // ambient GL state is in effect there
-    this.resetExternalDeviceState()
-    // A copy that has landed is newer than the cache
-    if (options?.nonBlocking) this.clusters.resolveCentroidReadback()
-    const positions = this.clusters.getCentroidPositions(options?.nonBlocking)
-    // A frame issues the copy after its last position write. Ask for one — an idle loop
-    // would never run it — and where none can be promised, issue the copy here, or a
-    // simulation nobody is stepping would keep these positions for good.
-    if (options?.nonBlocking && this.clusters.needsCentroidReadback && !(this.points?.requestTick?.() ?? false)) {
-      this.clusters.requestCentroidReadback()
-    }
-    return positions
+    return this.withExternalDeviceState(() => {
+      // A copy that has landed is newer than the cache
+      if (options?.nonBlocking) clusters.resolveCentroidReadback()
+      const positions = clusters.getCentroidPositions(options?.nonBlocking)
+      // A frame issues the copy after its last position write. Ask for one — an idle loop
+      // would never run it — and where none can be promised, issue the copy here, or a
+      // simulation nobody is stepping would keep these positions for good.
+      if (options?.nonBlocking && clusters.needsCentroidReadback && !(this.points?.requestTick?.() ?? false)) {
+        clusters.requestCentroidReadback()
+      }
+      return positions
+    })
   }
 
   /**
@@ -746,11 +750,114 @@ export class GraphSimulation implements PositionTextureSource {
    * @internal
    */
   public runSimulationStep (forceExecution = false, options?: SimulationStepOptions): boolean {
-    const { config: { simulationGravity, simulationCenter, simulationCollision, enableSimulation }, store: { isSimulationRunning } } = this
+    if (!this.config.enableSimulation) return false
+    return this.withExternalDeviceState(() => this.runStepPasses(forceExecution, options))
+  }
 
-    if (!enableSimulation) return false
+  /**
+   * Ends the simulation: stops it, sets progress to 1, and fires
+   * `onSimulationEnd`. Called when the alpha decays below the floor.
+   * @internal
+   */
+  public end (): void {
+    this.store.isSimulationRunning = false
+    this.store.simulationProgress = 1
+    this.config.onSimulationEnd?.()
+  }
 
-    this.resetExternalDeviceState()
+  /**
+   * Runs `work` under the ambient GL state the simulation's offscreen passes
+   * assume, and on an **externally supplied** device hands the host its own
+   * state back afterwards.
+   *
+   * luma applies only the pipeline `parameters` a Model declares; everything
+   * else (blend, depth, scissor, …) is inherited from the context's current
+   * state. An internally created device keeps the WebGL defaults, but an
+   * external device arrives mid-frame carrying the host's state — deck.gl, for
+   * example, leaves blending enabled, and blended writes into the RGBA32F
+   * position textures (whose texels carry alpha 0) zero out the whole
+   * simulation. The host depends on that state as much as cosmos depends on
+   * its own: deck.gl enables blending and depth testing once, when it creates
+   * the device, and its layers declare neither — left disabled, every later
+   * deck draw writes its anti-aliased edges straight into the canvas alpha.
+   * luma's state tracker records whatever the reset and the passes change and
+   * restores it when `work` returns. Callbacks that run inside `work`
+   * (`onSimulationTick`, hover events) see cosmos's state, and GL state they set
+   * through luma is undone with it.
+   * @internal
+   */
+  public withExternalDeviceState<T> (work: () => T): T {
+    if (this.shouldDestroyDevice || !this._device) return work() // own device: no host code touches its state
+    return this._device.withParametersWebGL({
+      blend: false,
+      depthTest: false,
+      depthMask: true,
+      scissorTest: false,
+      stencilTest: false,
+      cull: false,
+      colorMask: [true, true, true, true],
+      // Restore in a `finally` too. It covers a throw outside an open render pass; a throw
+      // inside one leaves luma's pass frame on top, which this restore then pops instead
+      nocatch: false,
+    }, work) as T
+  }
+
+  /**
+   * (Re)creates the force modules after `enableSimulation` turns on.
+   * @internal
+   */
+  public ensureSimulationModules (): void {
+    if (!this._device || !this.points) return
+
+    this.forceGravity ||= new ForceGravity(this._device, this.config, this.store, this.data, this.points)
+    this.forceCenter ||= new ForceCenter(this._device, this.config, this.store, this.data, this.points)
+    this.forceManyBody ||= new ForceManyBody(this._device, this.config, this.store, this.data, this.points)
+    this.forceLinkIncoming ||= new ForceLink(this._device, this.config, this.store, this.data, this.points)
+    this.forceLinkOutgoing ||= new ForceLink(this._device, this.config, this.store, this.data, this.points)
+    this.forceMouse ||= new ForceMouse(this._device, this.config, this.store, this.data, this.points)
+    this.forceCollision ||= new ForceCollision(this._device, this.config, this.store, this.data, this.points)
+  }
+
+  /**
+   * Destroys the force modules and the points' simulation-only resources after
+   * `enableSimulation` turns off.
+   * @internal
+   */
+  public destroySimulationModules (): void {
+    this.forceGravity?.destroy()
+    this.forceGravity = undefined
+    this.forceCenter?.destroy()
+    this.forceCenter = undefined
+    this.forceManyBody?.destroy()
+    this.forceManyBody = undefined
+    this.forceLinkIncoming?.destroy()
+    this.forceLinkIncoming = undefined
+    this.forceLinkOutgoing?.destroy()
+    this.forceLinkOutgoing = undefined
+    this.forceMouse?.destroy()
+    this.forceMouse = undefined
+    this.forceCollision?.destroy()
+    this.forceCollision = undefined
+    // Force lazy re-allocation if collision is re-enabled on a new instance.
+    this.isForceCollisionReady = false
+    this.points?.destroySimulationResources()
+  }
+
+  /** Marks every per-force GPU resource for a rebuild on the next data apply. @internal */
+  public markForcesDirty (): void {
+    this.isForceManyBodyUpdateNeeded = true
+    this.isForceLinkUpdateNeeded = true
+    this.isForceCenterUpdateNeeded = true
+  }
+
+  /** Invalidates the lazily built collision-force resources. @internal */
+  public invalidateCollisionResources (): void {
+    this.isForceCollisionReady = false
+  }
+
+  /** The passes of one simulation step, under the ambient GL state `runSimulationStep` set. */
+  private runStepPasses (forceExecution: boolean, options?: SimulationStepOptions): boolean {
+    const { config: { simulationGravity, simulationCenter, simulationCollision }, store: { isSimulationRunning } } = this
 
     // Pointer repulsion (runs regardless of isSimulationRunning)
     if (options?.applyMouseRepulsion) {
@@ -837,97 +944,6 @@ export class GraphSimulation implements PositionTextureSource {
     this.points?.gatherTrackers()
 
     return shouldRunSimulation
-  }
-
-  /**
-   * Ends the simulation: stops it, sets progress to 1, and fires
-   * `onSimulationEnd`. Called when the alpha decays below the floor.
-   * @internal
-   */
-  public end (): void {
-    this.store.isSimulationRunning = false
-    this.store.simulationProgress = 1
-    this.config.onSimulationEnd?.()
-  }
-
-  /**
-   * Restores the ambient GL state the simulation's offscreen passes assume,
-   * before any GPU work on an **externally supplied** device.
-   *
-   * luma applies only the pipeline `parameters` a Model declares; everything
-   * else (blend, depth, scissor, …) is inherited from the context's current
-   * state. An internally created device keeps the WebGL defaults, but an
-   * external device arrives mid-frame carrying the host's state — deck.gl, for
-   * example, leaves blending enabled, and blended writes into the RGBA32F
-   * position textures (whose texels carry alpha 0) zero out the whole
-   * simulation.
-   * @internal
-   */
-  public resetExternalDeviceState (): void {
-    if (this.shouldDestroyDevice) return // own device: no host code touches its state
-    const device = this._device as (Device & { setParametersWebGL?: (parameters: Record<string, unknown>) => void }) | undefined
-    device?.setParametersWebGL?.({
-      blend: false,
-      depthTest: false,
-      depthMask: true,
-      scissorTest: false,
-      stencilTest: false,
-      cull: false,
-      colorMask: [true, true, true, true],
-    })
-  }
-
-  /**
-   * (Re)creates the force modules after `enableSimulation` turns on.
-   * @internal
-   */
-  public ensureSimulationModules (): void {
-    if (!this._device || !this.points) return
-
-    this.forceGravity ||= new ForceGravity(this._device, this.config, this.store, this.data, this.points)
-    this.forceCenter ||= new ForceCenter(this._device, this.config, this.store, this.data, this.points)
-    this.forceManyBody ||= new ForceManyBody(this._device, this.config, this.store, this.data, this.points)
-    this.forceLinkIncoming ||= new ForceLink(this._device, this.config, this.store, this.data, this.points)
-    this.forceLinkOutgoing ||= new ForceLink(this._device, this.config, this.store, this.data, this.points)
-    this.forceMouse ||= new ForceMouse(this._device, this.config, this.store, this.data, this.points)
-    this.forceCollision ||= new ForceCollision(this._device, this.config, this.store, this.data, this.points)
-  }
-
-  /**
-   * Destroys the force modules and the points' simulation-only resources after
-   * `enableSimulation` turns off.
-   * @internal
-   */
-  public destroySimulationModules (): void {
-    this.forceGravity?.destroy()
-    this.forceGravity = undefined
-    this.forceCenter?.destroy()
-    this.forceCenter = undefined
-    this.forceManyBody?.destroy()
-    this.forceManyBody = undefined
-    this.forceLinkIncoming?.destroy()
-    this.forceLinkIncoming = undefined
-    this.forceLinkOutgoing?.destroy()
-    this.forceLinkOutgoing = undefined
-    this.forceMouse?.destroy()
-    this.forceMouse = undefined
-    this.forceCollision?.destroy()
-    this.forceCollision = undefined
-    // Force lazy re-allocation if collision is re-enabled on a new instance.
-    this.isForceCollisionReady = false
-    this.points?.destroySimulationResources()
-  }
-
-  /** Marks every per-force GPU resource for a rebuild on the next data apply. @internal */
-  public markForcesDirty (): void {
-    this.isForceManyBodyUpdateNeeded = true
-    this.isForceLinkUpdateNeeded = true
-    this.isForceCenterUpdateNeeded = true
-  }
-
-  /** Invalidates the lazily built collision-force resources. @internal */
-  public invalidateCollisionResources (): void {
-    this.isForceCollisionReady = false
   }
 
   /**

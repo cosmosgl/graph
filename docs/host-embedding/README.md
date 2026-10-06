@@ -112,9 +112,13 @@ the context holds WebGL defaults. An external device arrives mid-frame carrying 
 position textures — whose texels carry alpha 0 — zeroed the entire simulation within a few
 ticks.
 
-The fix: `resetExternalDeviceState()` restores blend, depth, scissor, stencil, cull, and
-color-mask at the top of every simulation step and every rendered frame — on externally
-supplied devices only. Cosmos-owned devices skip it entirely, keeping existing behavior
+The fix: `withExternalDeviceState()` resets blend, depth, scissor, stencil, cull, and
+color-mask around every simulation step and every rendered frame — on externally supplied
+devices only — and hands the host its own state back when the work returns, through luma's
+state tracker. The restore came later: deck.gl enables blending and depth testing once, when
+it creates the device, and its own layers declare neither, so with the reset alone every
+deck layer drawn after the graph — text labels first — wrote its anti-aliased edges straight
+into the canvas alpha. Cosmos-owned devices skip both, keeping existing behavior
 byte-identical.
 
 ```mermaid
