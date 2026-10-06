@@ -2,7 +2,7 @@ import { Framebuffer, Buffer, Texture, UniformStore, RenderPass, type RenderPipe
 import { Model } from '@luma.gl/engine'
 // import { scaleLinear } from 'd3-scale'
 // import { extent } from 'd3-array'
-import { CoreModule } from '@/graph/modules/core-module'
+import { CoreModule, DATA_PASS_PARAMETERS } from '@/graph/modules/core-module'
 import type { Mat4Array, Hovered } from '@/graph/modules/Store'
 import { defaultConfigValues, EXIT_DEFAULT_SIZE, EXIT_DEFAULT_COLOR_CHANNEL, EDGE_RAMP_PX, POINT_RING_SCALE } from '@/graph/variables'
 import drawPointsFrag from '@/graph/modules/Points/draw-points.frag?raw'
@@ -705,6 +705,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         dragPointUniforms: this.dragPointUniformStore.getManagedUniformBuffer('dragPointUniforms'),
         // All texture bindings will be set dynamically in drag() method
       },
+      parameters: DATA_PASS_PARAMETERS,
     })
 
     // Create UniformStore for draw uniforms
@@ -927,13 +928,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         findPointsInRectUniforms: this.findPointsInRectUniformStore.getManagedUniformBuffer('findPointsInRectUniforms'),
         // All texture bindings will be set dynamically in findPointsInRect() method
       },
-      parameters: {
-        depthWriteEnabled: false,
-        depthCompare: 'always',
-        // The output carries data, not color: on a device shared with a host that
-        // leaves blending on, a blended write would scale it by its own alpha
-        blend: false,
-      },
+      parameters: DATA_PASS_PARAMETERS,
     })
 
     // Create vertex buffer for quad
@@ -981,13 +976,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           .getManagedUniformBuffer('findPointsInPolygonUniforms'),
         // All texture bindings will be set dynamically in findPointsInPolygon() method
       },
-      parameters: {
-        depthWriteEnabled: false,
-        depthCompare: 'always',
-        // The output carries data, not color: on a device shared with a host that
-        // leaves blending on, a blended write would scale it by its own alpha
-        blend: false,
-      },
+      parameters: DATA_PASS_PARAMETERS,
     })
 
     // Create UniformStore for fillPickingBuffer uniforms
@@ -1056,11 +1045,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         fillPickingBufferUniforms: this.fillPickingBufferUniformStore.getManagedUniformBuffer('fillPickingBufferUniforms'),
         // All texture bindings will be set dynamically in updatePickingBuffer() method
       },
-      parameters: {
-        depthWriteEnabled: false,
-        depthCompare: 'always',
-        blend: false, // Disable blending - we want to overwrite, not blend
-      },
+      parameters: DATA_PASS_PARAMETERS,
     })
 
     // Create UniformStore for fillSampledPoints uniforms
@@ -1102,13 +1087,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         fillSampledPointsUniforms: this.fillSampledPointsUniformStore.getManagedUniformBuffer('fillSampledPointsUniforms'),
         // All texture bindings will be set dynamically in getSampledPointPositionsMap() and getSampledPoints() methods
       },
-      parameters: {
-        depthWriteEnabled: false,
-        depthCompare: 'always',
-        // The output carries data, not color: on a device shared with a host that
-        // leaves blending on, a blended write would scale it by its own alpha
-        blend: false,
-      },
+      parameters: DATA_PASS_PARAMETERS,
     })
 
     this.drawHighlightedVertexCoordBuffer ||= device.createBuffer({
@@ -1228,6 +1207,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       bindings: {
         // All texture bindings will be set dynamically in gatherTrackedPositions() method
       },
+      parameters: DATA_PASS_PARAMETERS,
     })
   }
 
@@ -3000,6 +2980,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       bindings: {
         interpolatePositionUniforms: this.interpolatePositionUniformStore.getManagedUniformBuffer('interpolatePositionUniforms'),
       },
+      parameters: DATA_PASS_PARAMETERS,
     })
   }
 
@@ -3337,6 +3318,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         updatePositionUniforms: this.updatePositionUniformStore.getManagedUniformBuffer('updatePositionUniforms'),
         // All texture bindings will be set dynamically in updatePosition() method
       },
+      parameters: DATA_PASS_PARAMETERS,
     })
   }
 

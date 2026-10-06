@@ -1,6 +1,6 @@
 import { Buffer, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
-import { CoreModule } from '@/graph/modules/core-module'
+import { CoreModule, DATA_PASS_PARAMETERS } from '@/graph/modules/core-module'
 
 import forceFrag from '@/graph/modules/ForceMouse/force-mouse.frag?raw'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
@@ -53,10 +53,7 @@ export class ForceMouse extends CoreModule {
         forceMouseUniforms: this.uniformStore.getManagedUniformBuffer('forceMouseUniforms'),
         // All texture bindings will be set dynamically in run() method
       },
-      parameters: {
-        depthWriteEnabled: false,
-        depthCompare: 'always',
-      },
+      parameters: DATA_PASS_PARAMETERS,
     })
   }
 
