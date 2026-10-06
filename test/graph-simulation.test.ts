@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest'
 import { luma, type Device } from '@luma.gl/core'
-import { webgl2Adapter } from '@luma.gl/webgl'
+import { webgl2Adapter, WebGLStateTracker } from '@luma.gl/webgl'
 
 import { GraphSimulation, type GraphSimulationConfig } from '@cosmos.gl/graph'
 
@@ -267,6 +267,38 @@ describe('GraphSimulation', () => {
         simulation.applyData()
         expect(simulation.getClusterPositions().length).toBe(4)
         expectHostState()
+      } finally {
+        simulation.destroy()
+      }
+    } finally {
+      device.canvasContext?.destroy()
+      device.destroy()
+    }
+  })
+
+  it('hands the host its state back when a pass throws before it ends', async () => {
+    const canvas = document.createElement('canvas')
+    const device = await luma.createDevice({
+      type: 'webgl',
+      adapters: [webgl2Adapter],
+      createCanvasContext: { canvas },
+    })
+    try {
+      const simulation = await createSimulation(SIMULATION_CONFIG, POSITIONS, Promise.resolve(device))
+      try {
+        const gl = (device as Device & { gl: WebGL2RenderingContext }).gl
+        gl.enable(gl.BLEND)
+        // luma keeps one stack of state frames per context. A render pass pushes its own
+        // frame on top of the wrapper's, so a throw before the pass ends leaves two frames
+        // up: the wrapper must pop back to where it started, not once
+        const tracker = WebGLStateTracker.get(gl)
+        const depth = tracker.stateStack.length
+        expect(() => simulation.withExternalDeviceState(() => {
+          device.beginRenderPass({})
+          throw new Error('pass failed')
+        })).toThrow('pass failed')
+        expect(gl.isEnabled(gl.BLEND)).toBe(true)
+        expect(tracker.stateStack.length).toBe(depth)
       } finally {
         simulation.destroy()
       }
