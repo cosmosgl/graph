@@ -1,6 +1,6 @@
 import { Buffer, Framebuffer, Texture, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
-import { CoreModule } from '@/graph/modules/core-module'
+import { CoreModule, DATA_PASS_PARAMETERS } from '@/graph/modules/core-module'
 
 import calculateLevelFrag from '@/graph/modules/ForceManyBody/calculate-level.frag?raw'
 import calculateLevelPreciseVert from '@/graph/modules/ForceManyBody/calculate-level.vert?raw'
@@ -484,11 +484,7 @@ export class ForceManyBody extends CoreModule {
         forceAllPairsUniforms: this.forceAllPairsUniformStore.getManagedUniformBuffer('forceAllPairsUniforms'),
         // All texture bindings will be set dynamically in drawAllPairsForce() method
       },
-      parameters: {
-        blend: false,
-        depthWriteEnabled: false,
-        depthCompare: 'always',
-      },
+      parameters: DATA_PASS_PARAMETERS,
     })
 
     this.forceNearFieldCommand ||= new Model(device, {

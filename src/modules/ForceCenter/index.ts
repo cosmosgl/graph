@@ -1,6 +1,6 @@
 import { Buffer, Framebuffer, Texture, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
-import { CoreModule } from '@/graph/modules/core-module'
+import { CoreModule, DATA_PASS_PARAMETERS } from '@/graph/modules/core-module'
 
 import calculateCentermassFrag from '@/graph/modules/ForceCenter/calculate-centermass.frag?raw'
 import calculateCentermassVert from '@/graph/modules/ForceCenter/calculate-centermass.vert?raw'
@@ -139,10 +139,7 @@ export class ForceCenter extends CoreModule {
         forceCenterUniforms: this.forceUniformStore.getManagedUniformBuffer('forceCenterUniforms'),
         // All texture bindings will be set dynamically in run() method
       },
-      parameters: {
-        depthWriteEnabled: false,
-        depthCompare: 'always',
-      },
+      parameters: DATA_PASS_PARAMETERS,
     })
   }
 

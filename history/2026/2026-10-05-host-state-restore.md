@@ -44,13 +44,34 @@ blending; text shows the problem at once.
   as `[1000, 6000, 9000]`, and a query dropped a point at y = 0. They only worked before
   because the leaked reset left blending off. They are reached through `Graph` between
   frames, not through deck-layers.
+- **Every data pass declares its own pipeline state, through one constant.** The nine
+  models that relied on the wrapper for it — the gravity, centre, mouse and link forces,
+  the cluster force, and the position update, the interpolation, the tracker gather and
+  the drag — now carry it like the query passes. `DATA_PASS_PARAMETERS` in `core-module.ts`
+  is blend off, no depth write, depth always, stencil always and no culling — everything a
+  pipeline can declare — used at the fifteen passes that overwrite, so the rule is stated
+  once and a grep for the name lists them. Such a pass is then correct on its own against
+  the host's blend, depth, stencil and cull, inside the wrapper or reached from a new entry
+  point that is not. The passes with pipeline state of their own — the additive sums and
+  forces (centre of mass, collision, the many-body levels and near field), the near-field
+  slot build with its depth test, the link index pass with its back-face culling — declare
+  their blend and depth, the link index pass its culling too, and take what they leave
+  undeclared from the wrapper: stencil, and cull for all but the link pass. That holds only
+  when the caller entered the wrapper; the synchronous picks on click and drag start do not
+  (see "Not addressed"). Every pass still inherits the host's scissor and colour mask, which
+  no pipeline parameter expresses: those stay with the wrapper, with the restore. No
+  behaviour changes: blend and the depth test were already at these values on a
+  cosmos-owned device and under the wrapper, and the depth mask, newly off on five passes,
+  changes nothing while the test is off.
 
 ## Alternatives considered
 
 - **Fix only the deck layer.** This would leave `Graph`, app-driven `step()`, tracker reads
   and cluster reads leaking.
-- **Declare blend state on every simulation Model.** Pipeline parameters cannot turn off the
-  scissor test, so the ambient reset would still be needed.
+- **Declare every ambient state on every simulation Model, and drop the reset.** Pipeline
+  parameters cannot turn off the scissor test or set the colour mask, so the ambient reset
+  would still be needed. Blend, depth, stencil and cull are declared on every overwrite
+  pass since — see "What changed" above — and the reset stays for the two that cannot be.
 - **Raw `pushState()` / `popState()` pairs.** This is the smallest diff, but every exit has to
   be paired by hand, and a throwing `onSimulationTick` would skip the restore.
 
