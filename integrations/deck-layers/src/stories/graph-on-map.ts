@@ -330,7 +330,8 @@ export const graphOnMap = async (): Promise<{ div: HTMLDivElement; destroy: () =
         point.trip = pickTrip(point.home, now, 2 / 3)
         started ||= point.trip !== undefined
       } else if (point.trip.endsAt === undefined) {
-        const roundTrips = Math.ceil((now - point.trip.startedAt) / point.trip.period)
+        // At least one: a trip this trickle just started has run for no time at all
+        const roundTrips = Math.max(1, Math.ceil((now - point.trip.startedAt) / point.trip.period))
         point.trip.endsAt = point.trip.startedAt + roundTrips * point.trip.period
       }
     }
