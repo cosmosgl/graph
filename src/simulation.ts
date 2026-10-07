@@ -1,5 +1,5 @@
 import { Device, Framebuffer, luma, type Texture } from '@luma.gl/core'
-import { webgl2Adapter, WebGLDevice, WebGLStateTracker } from '@luma.gl/webgl'
+import { webgl2Adapter, WebGLStateTracker } from '@luma.gl/webgl'
 
 import { applyConfig, createDefaultConfig, GraphConfigInterface, type GraphSimulationConfig } from '@/graph/config'
 import { getMaxPointSize, readPixels, isPointAbsent } from '@/graph/helper'
@@ -799,7 +799,10 @@ export class GraphSimulation implements PositionTextureSource {
     // frame on top of this one. A throw before the pass ends leaves both up, and a single
     // pop would restore the pass frame and strand the host's beneath it: pop back to the
     // depth found here instead. On a normal return luma has popped its frame already.
-    const tracker = device instanceof WebGLDevice ? WebGLStateTracker.get(device.gl) : undefined
+    // The tracker lives on the context, not the device class: read it through `gl` so a
+    // device made by the host's own copy of luma is unwound too
+    const gl = (device as Device & { gl?: WebGL2RenderingContext }).gl
+    const tracker = gl ? WebGLStateTracker.get(gl) : undefined
     const depth = tracker?.stateStack.length ?? 0
     try {
       return device.withParametersWebGL({
