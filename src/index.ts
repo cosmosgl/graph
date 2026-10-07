@@ -527,9 +527,10 @@ export class Graph implements PositionTextureSource {
    * per-point array keep their meaning. Hover and click picking follow the render order, so the
    * point on top is the one they report. While `highlightedPointIndices` is set, highlighted points
    * still draw (and pick) above greyed-out ones; the order applies within each group. Label sampling
-   * (`getSampledPoints`) follows the render order only and gives highlighted points no priority. The order is kept across `setPointPositions` calls and
-   * re-resolved against the current point count: an index beyond it is ignored while it is out
-   * of range. The change takes effect on the next `render()` call and does not animate.
+   * (`getSampledPoints`) follows the render order only and gives highlighted points no priority.
+   * The order is kept across `setPointPositions` calls and re-resolved against the current
+   * point count: an index beyond it is ignored while it is out of range. The change takes
+   * effect on the next `render()` call and does not animate.
    */
   public setPointRenderOrder (order: ArrayLike<number> | null): void {
     if (this._isDestroyed) return
