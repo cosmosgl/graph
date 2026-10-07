@@ -1,10 +1,9 @@
 import { Deck, OrthographicView } from '@deck.gl/core'
-import type { Layer, PickingInfo } from '@deck.gl/core'
+import type { Layer } from '@deck.gl/core'
 import { TextLayer } from '@deck.gl/layers'
 import { defaultConfigValues } from '@cosmos.gl/graph'
-import type { GraphSimulation, PointTracker } from '@cosmos.gl/graph'
+import type { Graph } from '@cosmos.gl/graph'
 import { CosmosGraphLayer } from '@cosmos.gl/deck-layers'
-import type { CosmosGraphPickingInfo } from '@cosmos.gl/deck-layers'
 
 import './style.css'
 
@@ -19,13 +18,12 @@ const SCHEMES: [number, number, number, number][][] = [
 ]
 
 /**
- * `CosmosGraphLayer` the deck.gl way: the layer owns the simulation, the
+ * `CosmosGraphLayer` the deck.gl way: the layer owns the graph, the
  * application talks to deck.gl. Clusters of `{ id, group }` records, links by
  * id, accessors for color and size, labels on the hubs from a stock
- * `TextLayer`, hover reporting the picked record, drag-to-pin. The actions
- * pause and reheat through the simulation handle, add and remove clusters (a
- * data change keeps the surviving layout through `getPointPosition`), and
- * recolor through `updateTriggers` with an animated transition.
+ * `TextLayer`. The actions pause and reheat through the `Graph` handle, add
+ * and remove clusters (a data change keeps the surviving layout through
+ * `getPointPosition`), and recolor through `updateTriggers`.
  */
 export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () => void }> => {
   const div = document.createElement('div')
@@ -35,10 +33,6 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
 
   const spaceSize = defaultConfigValues.spaceSize
 
-  const hover = document.createElement('div')
-  hover.className = 'hover'
-  hover.textContent = 'hover to see the picked object'
-  div.appendChild(hover)
   const status = document.createElement('div')
   status.className = 'status'
   div.appendChild(status)
@@ -48,14 +42,13 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
   let links: StoryLink[] = []
   let clusterCount = 0
   let schemeIndex = 0
-  let simulation: GraphSimulation | undefined
-  // Follows the hubs for their labels: a point's index is its place in `points`
-  let pointTracker: PointTracker | undefined
+  let graph: Graph | undefined
+  // The hubs are tracked for their labels: a point's index is its place in `points`
   const hubIndices = (): number[] => points.flatMap((point, index) => (point.id.startsWith('hub') ? [index] : []))
   const lastPositions = new Map<string, [number, number]>()
   const snapshotPositions = (): void => {
-    if (!simulation) return
-    const positions = simulation.getPointPositionsArray()
+    if (!graph) return
+    const positions = graph.getPointPositionsArray()
     points.forEach((point, index) => {
       lastPositions.set(point.id, [positions[index * 2] as number, positions[index * 2 + 1] as number])
     })
@@ -75,7 +68,6 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
     if (group > 0) addedLinks.push({ source: `hub-${group - 1}`, target: hub })
     points = [...points, ...added]
     links = [...links, ...addedLinks]
-    pointTracker?.setIndices(hubIndices())
   }
   const removeCluster = (): void => {
     if (clusterCount === 0) return
@@ -86,20 +78,17 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
     // removed cluster has a surviving source and must go too
     const survivingIds = new Set(points.map((point) => point.id))
     links = links.filter((link) => survivingIds.has(link.source) && survivingIds.has(link.target))
-    pointTracker?.setIndices(hubIndices())
   }
 
   const deck = new Deck({
     parent: div,
-    views: new OrthographicView(),
+    views: new OrthographicView({ flipY: false }), // cosmos's space has y up
     initialViewState: { target: [spaceSize / 2, spaceSize / 2, 0], zoom: 1, minZoom: -5, maxZoom: 2 },
     controller: true,
-    pickingRadius: 5,
-    getCursor: ({ isDragging, isHovering }) => (isDragging ? 'grabbing' : isHovering ? 'pointer' : 'grab'),
     layers: [],
   })
 
-  const graph = (): Layer =>
+  const graphLayer = (): Layer =>
     new CosmosGraphLayer<StoryPoint, StoryLink>({
       id: 'graph',
       points,
@@ -112,8 +101,7 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
       getPointSize: (p): number => (p.id.startsWith('hub') ? 14 : 7),
       getLinkWidth: 1.5,
       updateTriggers: { getPointColor: schemeIndex },
-      transitions: { getPointColor: 600 },
-      simulationConfig: {
+      config: {
         spaceSize,
         simulationGravity: 0.3,
         simulationRepulsion: 1.5,
@@ -125,23 +113,14 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
         onSimulationPause: refreshLabels,
         onSimulationEnd: refreshLabels,
       },
-      onSimulationCreated: (sim): void => {
-        simulation = sim
-        pointTracker = sim.trackPoints(hubIndices())
-      },
-      pickable: true,
-      enablePointDrag: true,
-      autoHighlight: true,
-      highlightColor: [255, 255, 255, 220],
-      onHover: (info: PickingInfo): void => {
-        const picked = info as CosmosGraphPickingInfo
-        hover.textContent = picked.index >= 0
-          ? `${picked.elementType}: ${JSON.stringify(picked.object)}`
-          : 'hover to see the picked object'
+      onGraphCreated: (created): void => { graph = created },
+      // The loaded points have their indices now: follow the hubs among them
+      onGraphDataLoaded: ({ graph: loaded, pointsLoaded }): void => {
+        if (pointsLoaded) loaded.trackPointPositionsByIndices(hubIndices())
       },
     })
 
-  // Labels on the hubs, placed from the tracker that follows them
+  // Labels on the hubs, placed from the tracked positions
   let hubLabels: HubLabel[] = []
   const labels = (): TextLayer<HubLabel> => new TextLayer<HubLabel>({
     id: 'hub-labels',
@@ -153,12 +132,12 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
     getTextAnchor: 'start',
     getPixelOffset: [12, -12],
   })
-  const layers = (): Layer[] => [graph(), labels()]
+  const layers = (): Layer[] => [graphLayer(), labels()]
   const refreshLabels = (): void => {
-    if (!simulation || !pointTracker) return
+    if (!graph) return
     // While the simulation runs the read never waits, and the labels trail the hubs by
     // a tick. Once it rests, a plain read puts them exactly on the hubs.
-    const positions = pointTracker.positions({ nonBlocking: simulation.isSimulationRunning })
+    const positions = graph.getTrackedPointPositionsMap({ nonBlocking: graph.isSimulationRunning })
     hubLabels = []
     for (const [index, position] of positions) {
       const point = points[index]
@@ -169,7 +148,7 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
 
   let isPaused = false
   const setStatus = (): void => {
-    const state = simulation?.isSimulationRunning ? 'running' : isPaused ? 'paused' : 'settled'
+    const state = graph?.isSimulationRunning ? 'running' : isPaused ? 'paused' : 'settled'
     status.textContent = `${clusterCount} clusters · ${points.length} points · ${state}`
   }
   const render = (): void => {
@@ -178,7 +157,7 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
   }
   // A data change deserves fresh energy so the new topology settles
   const reheat = (alpha: number): void => {
-    simulation?.start(alpha)
+    graph?.start(alpha)
     isPaused = false
     pauseAction.textContent = 'Pause'
   }
@@ -198,13 +177,13 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
     return action
   }
   const pauseAction = makeAction('Pause', () => {
-    if (!simulation) return
-    if (simulation.isSimulationRunning) {
-      simulation.pause()
+    if (!graph) return
+    if (graph.isSimulationRunning) {
+      graph.pause()
       isPaused = true
       pauseAction.textContent = 'Start'
     } else {
-      simulation.unpause()
+      graph.unpause()
       isPaused = false
       pauseAction.textContent = 'Pause'
     }
@@ -227,7 +206,7 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
     div,
     destroy: (): void => {
       window.clearInterval(ticker)
-      // The layer owns the simulation: finalizing deck finalizes the layer, which destroys it
+      // The layer owns the graph: finalizing deck finalizes the layer, which destroys it
       deck.finalize()
     },
   }

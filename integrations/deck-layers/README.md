@@ -1,9 +1,10 @@
 # @cosmos.gl/deck-layers
 
-[deck.gl](https://deck.gl) layers for the [cosmos.gl](https://github.com/cosmosgl/graph)
-GPU force simulation — **zero position readback**. The simulation runs on deck.gl's own
-luma.gl device and the layers sample its live position texture with `texelFetch`:
-point coordinates never leave the GPU, at hundreds of thousands of points.
+A [deck.gl](https://deck.gl) layer that runs and draws a [cosmos.gl](https://github.com/cosmosgl/graph)
+graph. The simulation runs on deck.gl's own luma.gl device, and **cosmos.gl's own renderer**
+draws it into deck's render pass under deck's camera: positions never leave the GPU, and
+everything cosmos.gl can draw — point shapes, images, curved links, arrows, dashes, greyout,
+rings — is one `config` key away.
 
 Versions are released in lockstep with `@cosmos.gl/graph` — install matching versions.
 
@@ -14,22 +15,22 @@ npm install @cosmos.gl/deck-layers @cosmos.gl/graph @deck.gl/core@~9.3.0 @luma.g
 ```
 
 `@cosmos.gl/graph`, `@deck.gl/core` and `@luma.gl/*` are peer dependencies: the whole
-point is that cosmos, deck and the layers share **one** luma.gl device, which requires
+point is that cosmos, deck and the layer share **one** luma.gl device, which requires
 one luma.gl installation. deck.gl `~9.3` pairs with luma.gl `~9.3`.
 
 ## CosmosGraphLayer
 
-The batteries-included layer: give it points and links, it owns the rest. It creates the
-`GraphSimulation` on deck's device, ingests your data, advances the simulation once per
-frame from deck's timeline while it runs, and lets deck go idle when it settles — no
-render-loop wiring, no `_animate`, no device plumbing.
+Give it points and links, it owns the rest. It creates a headless `Graph` on deck's device,
+loads your data, advances the simulation once per frame from deck's timeline while it runs
+(deck goes idle when it settles), hands deck's view to cosmos.gl before each draw and lets
+cosmos.gl draw — no render-loop wiring, no `_animate`, no device plumbing.
 
 ```js
 import { Deck, OrthographicView } from '@deck.gl/core'
 import { CosmosGraphLayer } from '@cosmos.gl/deck-layers'
 
 new Deck({
-  views: new OrthographicView(),
+  views: new OrthographicView({ flipY: false }), // cosmos's space has y up
   initialViewState: { target: [2048, 2048, 0], zoom: -2 },
   controller: true,
   layers: [
@@ -38,17 +39,14 @@ new Deck({
       // cosmos-native binary mode — zero copies:
       points: { length: pointCount, initialPositions }, // Float32Array [x0, y0, x1, y1, …]
       links: linkIndices,                               // Float32Array [src0, tgt0, src1, tgt1, …]
-      pickable: true,
-      enablePointDrag: true,
-      autoHighlight: true,
+      config: { curvedLinks: true, linkDefaultArrows: true },
     }),
   ],
 })
 ```
 
 Or hand it plain objects and accessors, the deck-idiomatic way — the layer builds the
-id→index mapping, seeds unset positions randomly, and picking returns your original
-objects:
+id→index mapping and seeds unset positions randomly:
 
 ```js
 new CosmosGraphLayer({
@@ -58,45 +56,91 @@ new CosmosGraphLayer({
   getPointId: (p) => p.id,              // lets links reference ids
   getPointColor: (p) => COLORS[p.group],
   getPointSize: (p) => p.weight,
-  simulationConfig: { simulationGravity: 0.25, simulationRepulsion: 1.5 },
-  onSimulationCreated: (simulation) => { /* pause, pin, restart, sparse writes */ },
-  pickable: true,
+  config: { simulationGravity: 0.25, simulationRepulsion: 1.5, pointDefaultShape: PointShape.Hexagon },
+  onGraphCreated: (graph) => { /* pause, pin, restart, shapes, trackers, sparse writes */ },
 })
 ```
 
-- **Picking**: `info.elementType` is `'point'` or `'link'`, `info.index` is the
-  point/link index, and `info.object` is your original record in object mode.
-- **Dragging** (`enablePointDrag: true`): a drag grabs the point — pinned on grab, moved
-  with the pointer, released per `unpinOnDragEnd`; `dragReheatAlpha` restarts the
-  simulation at a low alpha so the graph responds around the moving point. View panning
-  is suppressed only while a point is grabbed.
-- **Colors** follow the deck.gl convention: RGBA channels in 0..255.
+- **Rendering is cosmos.gl's.** `config` is cosmos.gl's `GraphConfig` minus the keys deck owns
+  (`DECK_OWNED_CONFIG_KEYS`: the view and zoom, the frame loop, the pointer callbacks, the
+  canvas). Every other key works as in cosmos.gl, rendering keys included; a key left out
+  goes back to the engine default.
+- **Colors** follow the deck.gl convention in accessors: RGBA channels in 0..255, converted
+  for cosmos. Sizes and widths are in cosmos.gl's units (`scalePointsOnZoom`,
+  `pointSizeScale`, `linkWidthScale`).
 - **Binary styling**: in binary mode, `points.attributes` and `links.attributes` take typed
   arrays keyed by the accessor they replace — `getPointColor`, `getPointSize`, `getLinkColor`,
-  `getLinkWidth` — and deck uploads them as they are. Links then take the form
-  `{ pairs, attributes }`; a bare pair array is `{ pairs }`. A new `points` or `links` object over
-  the same positions or pairs restyles in place: the simulation is reloaded only when the
-  positions or the pairs themselves change.
-- **Simulation control**: pass forces and callbacks through `simulationConfig`
-  (`GraphSimulationConfig` from `@cosmos.gl/graph`); take the wheel through
-  `onSimulationCreated`.
+  `getLinkWidth`. A `Float32Array` is cosmos.gl's own form (colors in 0..1) and reaches the
+  graph as it is, zero copies; a `Uint8Array` of 0..255 bytes is converted. Links then take
+  the form `{ pairs, attributes }`; a bare pair array is `{ pairs }`. A new `points` or `links`
+  object over the same positions or pairs restyles in place: the graph is reloaded only
+  when the positions or the pairs themselves change.
+- **The view.** cosmos.gl's view is a uniform scale and a translation with y up, so the
+  layer draws under `OrthographicView({ flipY: false })` or a map view at pitch 0 and
+  bearing 0 (see *On a map* in the Storybook docs). A rotated, pitched or y-down view is
+  reported once in the console and not drawn.
+- **Not yet**: cosmos.gl draws into no picking buffer, so deck's `pickable`, `autoHighlight`,
+  hover, click and drag see nothing of the graph for now; and a headless `Graph` applies
+  data changes at once, so `transitions` and the transition keys of `config` have no effect.
+  Both are on the way: a picking mode in cosmos.gl's draw programs, and a host-driven
+  transition clock.
+
+### Driving the graph
+
+The layer's `Graph` is yours to call — `onGraphCreated` hands it over, and
+`onGraphDataLoaded` passes it with every load — except for what the layer does itself:
+
+| Yours | The layer's |
+|---|---|
+| `setPointShapes`, `setLinkArrows`, `setLinkStyles`, `setLinkStrength`, `setPointClusters`, `setClusterPositions`, `setPinnedPoint(s)`, `start` / `pause` / `unpause`, `trackPointPositionsByIndices`, position reads, `setPointPosition` / `setPointPositionsByIndices` | `setPointPositions`, `setLinks`, `setPointColors`, `setPointSizes`, `setLinkColors`, `setLinkWidths`: loaded again whenever `points`, `links` or their accessors change |
+| — | `config`: applied again whenever it changes, and `Graph.setConfig` resets what a new config leaves out, so set config through the prop |
+
+The layer also steps the graph each frame while it runs (`pause()` it to step it yourself,
+then `deck.redraw()` after each `step()`).
+
+Arrays you send per point or per link follow the graph's indices, and a reload can move
+them. `onGraphDataLoaded` fires after each load, once the graph holds the new data, and maps
+your data to those indices: `pointIndexById` (with `getPointId`) and `links`, the array
+links the graph holds in its order. Links whose endpoints name no point are dropped, so a
+link's index can differ from its index in your array. Send per-point and per-link arrays
+from there, and they line up:
+
+```js
+new CosmosGraphLayer({
+  // …
+  onGraphDataLoaded: ({ graph, pointsLoaded, linksLoaded, links }) => {
+    if (pointsLoaded) graph.setPointShapes(Float32Array.from(nodes, (n) => SHAPES[n.kind]))
+    if (linksLoaded && links) {
+      graph.setLinkArrows(links.map((l) => l.directed))
+      graph.setLinkStrength(Float32Array.from(links, (l) => l.weight))
+    }
+    graph.render() // applies what was set
+  },
+})
+```
+
+The engine reuses the last strength array it was sent whenever its length matches the link
+count, so a new link set of the same length would pull with the old strengths in the old
+order: send them again on every `linksLoaded`. The first call comes when the graph is ready,
+later ones during deck's layer update: calls on the graph are fine in both, while changes to
+layer props should wait.
 
 Live examples: the *Integrations* section of the
 [cosmos.gl Storybook](https://cosmosgl.github.io/graph).
 
-## Bring your own simulation
+## Bring your own graph
 
-Pass a `GraphSimulation` you created through `simulation` when the application needs to
-own it: create it before the layer exists, keep it across layer removals, or drive it
-from elsewhere in the app. It must run on deck's device. The layer steps it from deck's
-timeline and renders it, but never configures or destroys it. `simulationConfig` and
-`onSimulationCreated` apply only to a simulation the layer creates.
+Pass a headless `Graph` you created through `graph` when the application needs to own it:
+create it before the layer exists, keep it across layer removals, or drive it from
+elsewhere in the app. It must run on deck's device. The layer steps it from deck's timeline
+and draws it, but never configures or destroys it. `config` and `onGraphCreated` apply only
+to a graph the layer creates.
 
-`points` decides who loads the data. Leave it out and the layer draws whatever the
-simulation holds and follows its changes: load the simulation yourself, before or after
-the layer exists, and the layout survives removing and re-adding the layer. Give the
-layer `points` (and `links`) and it loads them into the simulation, over whatever it
-held, once the device check has passed.
+`points` decides who loads the data. Leave it out and the layer draws whatever the graph
+holds and writes nothing into it — not even the styling accessors: load and style the graph
+yourself, before or after the layer exists, and the layout survives removing and re-adding
+the layer. Give the layer `points` (and `links`) and it loads them into the graph, with its
+accessors, over whatever it held, once the device check has passed.
 
 ```js
 let deck
@@ -104,43 +148,47 @@ const devicePromise = new Promise((resolve) => {
   deck = new Deck({ /* … */, onDeviceInitialized: resolve, layers: [] })
 })
 
-// deck's device, never destroyed by cosmos; the application loads it
-const simulation = new GraphSimulation(config, devicePromise)
-simulation.setPointPositions(positions)
-simulation.setLinks(links)
-simulation.applyData()
+// headless, on deck's device, never destroyed by cosmos; the application loads it
+const graph = new Graph(null, config, devicePromise)
+graph.setPointPositions(positions)
+graph.setPointColors(colors) // cosmos's 0..1
+graph.setLinks(links)
+graph.render()
 
 deck.setProps({
-  // no `points`: the layer draws the simulation as loaded
-  layers: [new CosmosGraphLayer({ id: 'graph', simulation, pickable: true })],
+  // no `points`: the layer draws the graph as loaded
+  layers: [new CosmosGraphLayer({ id: 'graph', graph })],
 })
 
 // Take over stepping: pause it, step it yourself, then ask deck to repaint
-simulation.pause()
-simulation.step()
+graph.pause()
+graph.step()
 deck.redraw()
 
 // Teardown order matters: the device belongs to deck.
-simulation.destroy()
+graph.destroy()
 deck.finalize()
 ```
 
-Several layers can draw one simulation, say a main view and a differently styled
-minimap: it steps once per frame however many layers draw it, as long as at most one of
-them carries `points`. Loading new data never reheats: call `simulation.start()` after
-`applyData()` when the simulation had settled.
+Several layers can draw one graph, say a main view and a minimap: it steps once per frame
+however many layers draw it, as long as at most one of them carries `points`. Loading new
+data never reheats: call `graph.start()` after `render()` when the simulation had settled.
 
 ## Your own renderer: `PositionTextureSource`
 
-The layer's points and links are internal sublayers that `texelFetch` the live position
-texture. To draw it some other way (your own deck layer, a Three.js material, a MapLibre
-custom layer), type your input against `PositionTextureSource` from `@cosmos.gl/graph`.
-`Graph` and `GraphSimulation` both implement it. `getPointPositionTexture()` returns a
-`PointPositionTexture`: point `i` lives at texel `(i % textureSize, floor(i / textureSize))`
-as `[x, y, i, unused]`, an absent point reads as NaN, and the handle changes as the
-simulation ping-pongs, so re-fetch it whenever `version` changes. The sublayer sources
-([points](src/cosmos-points-layer.ts), [links](src/cosmos-links-layer.ts)) are a worked
-reference.
+To draw the layout some other way — your own deck layers with deck's picking and attribute
+pipeline, a Three.js material, a MapLibre custom layer — type your input against
+`PositionTextureSource` from `@cosmos.gl/graph`. `Graph` and `GraphSimulation` both implement
+it. `getPointPositionTexture()` returns a `PointPositionTexture`: point `i` lives at texel
+`(i % textureSize, floor(i / textureSize))` as `[x, y, i, unused]`, an absent point reads as
+NaN, and the handle changes as the simulation ping-pongs, so re-fetch it whenever `version`
+changes.
+
+The *Custom deck layers* story is the worked example: a standalone `GraphSimulation` on deck's
+device, drawn by two deck layers of its own (`CosmosPointsLayer`, `CosmosLinksLayer` in the
+story's sources) that `texelFetch` the texture by instance index — with binary attributes,
+`pickable`, `autoHighlight`, hover and a drag that pins the grabbed point. They are example
+code, not package exports: copy them and make them yours.
 
 ## The universal fallback: CPU readback
 
@@ -158,11 +206,12 @@ const graph = new GraphSimulation(config) // its own hidden device
 
 ## Constraints
 
-- **WebGL 2 only** — the cosmos.gl simulation is WebGL-only; the layer throws an
-  actionable error on a WebGPU device.
+- **WebGL 2 only** — cosmos.gl is WebGL-only; the layer throws an actionable error on a
+  WebGPU device.
 - **One luma.gl installation** — a `Device` shared across duplicate luma.gl copies is
   not a supported boundary; keep the peer versions aligned.
-- **2D** — cosmos.gl simulates in a 2D space; `OrthographicView` is the natural fit.
+- **A flat, y-up view** — `OrthographicView({ flipY: false })`, or a map at pitch 0 and
+  bearing 0. cosmos.gl's view cannot express pitch or bearing.
 
 ## License
 
