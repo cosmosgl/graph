@@ -153,8 +153,9 @@ Try it: hover, drag, Pause and Reheat in [Graph layer](../?path=/story/examples-
 ## Drive the simulation
 
 Any `GraphSimulation` method is yours to call — link strengths, clusters, pins — except
-`setPointPositions`, `setLinks` and the keys you pass in `simulationConfig`, which the layer
-applies again whenever `points`, `links` or `simulationConfig` change. Arrays you send per
+`setPointPositions` and `setLinks`, which the layer calls again whenever `points` or `links`
+change, and the keys you pass in `simulationConfig`, applied again whenever a new
+`simulationConfig` object arrives (an inline literal is new on every render). Arrays you send per
 point or per link follow the simulation's indices. `onSimulationDataLoaded` fires after each
 load and maps your data to them: `pointIndexById`, and `links`, the array links the
 simulation holds in its order (links that name no point are dropped). Send per-link arrays
