@@ -201,9 +201,11 @@ simulation ping-pongs, so re-fetch it whenever `version` changes. The sublayer s
 reference.
 
 The layer's own sublayers are a deliberately minimal default: circles and lines, straight or
-curved, with deck's picking, highlight, accessors and transitions. For anything beyond that,
-swap in a layer of your own through deck's standard `_subLayerProps` — it receives the same
-props (`graph`, the accessors, the engine keys) and can extend the default class:
+curved, with deck's picking, highlight, accessors and transitions. They are not exported.
+For anything beyond that, swap in a layer of your own through deck's standard
+`_subLayerProps` — it receives the props the composite passes (`graph`, `data`, the
+accessors and units, the engine keys) and draws from them itself; the sublayer sources
+above are the reference to start from:
 
 ```js
 new CosmosGraphLayer({

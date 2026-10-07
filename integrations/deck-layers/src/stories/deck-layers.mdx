@@ -302,6 +302,7 @@ Try it: [Graph on a map](../?path=/story/examples-integrations--graph-on-map).
 - **A renderer of your own** samples `PositionTextureSource` from `@cosmos.gl/graph`; the layer's
   internal sublayer sources, in the Big graph story's panes, are the worked reference. See the
   [package README](https://github.com/cosmosgl/graph/tree/main/integrations/deck-layers).
-- **The layer's own sublayers are a minimal default** — circles and lines. To draw more, swap in a
-  layer of your own with deck's `_subLayerProps: { links: { type: MyLinksLayer } }`; it gets the same
-  props and can extend the default class.
+- **The layer's own sublayers are a minimal default** — circles and lines, and not exported. To draw
+  more, swap in a layer of your own with deck's `_subLayerProps: { links: { type: MyLinksLayer } }`;
+  it gets the props the composite passes and draws from them itself, with the sublayer sources as
+  the reference.
