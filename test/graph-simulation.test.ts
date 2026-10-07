@@ -246,16 +246,26 @@ describe('GraphSimulation', () => {
         gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
         gl.enable(gl.DEPTH_TEST)
         gl.depthFunc(gl.LEQUAL)
+        // No pipeline parameter covers these two, so only the wrapper's reset keeps them
+        // off cosmos's writes: an empty scissor box and a closed mask would drop every one
+        gl.enable(gl.SCISSOR_TEST)
+        gl.scissor(0, 0, 0, 0)
+        gl.colorMask(false, false, false, false)
         const expectHostState = (): void => {
           expect(gl.isEnabled(gl.BLEND)).toBe(true)
           expect(gl.getParameter(gl.BLEND_SRC_RGB)).toBe(gl.SRC_ALPHA)
           expect(gl.getParameter(gl.BLEND_DST_RGB)).toBe(gl.ONE_MINUS_SRC_ALPHA)
           expect(gl.isEnabled(gl.DEPTH_TEST)).toBe(true)
           expect(gl.getParameter(gl.DEPTH_FUNC)).toBe(gl.LEQUAL)
+          expect(gl.isEnabled(gl.SCISSOR_TEST)).toBe(true)
+          expect(Array.from(gl.getParameter(gl.SCISSOR_BOX) as Int32Array)).toEqual([0, 0, 0, 0])
+          expect(gl.getParameter(gl.COLOR_WRITEMASK)).toEqual([false, false, false, false])
         }
 
         // Every entry point that runs a pass between the host's draws
+        const before = simulation.getPointPositionsArray()
         simulation.step()
+        expect(simulation.getPointPositionsArray()).not.toEqual(before)
         expectHostState()
         simulation.setPointPositionsByIndices([0], [3500, 3500])
         expectHostState()
