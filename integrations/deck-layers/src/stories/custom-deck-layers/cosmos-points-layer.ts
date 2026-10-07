@@ -51,8 +51,8 @@ void main(void) {
   // instanceSizes is a diameter; the quad expands by radius
   outerRadiusPixels = project_size_to_pixel(instanceSizes * 0.5, cosmosPoints.sizeUnits);
   // A non-positive size hides the point — and the edge-padding divide below
-  // is undefined at zero
-  if (outerRadiusPixels <= 0.0) {
+  // is undefined at zero. Written so NaN hides it too: NaN fails every comparison.
+  if (!(outerRadiusPixels > 0.0)) {
     collapse();
     return;
   }
@@ -140,8 +140,8 @@ const defaultProps: DefaultProps<CosmosPointsLayerProps> = {
  * ordinary deck instanced attributes, and picking works out of the box: the
  * instance index is the point index.
  *
- * Internal: the points sublayer of `CosmosGraphLayer`, not a package export —
- * the composite keeps `data` aligned with the simulation's point index space.
+ * Story code, not a package export: an example of a renderer of your own over
+ * `PositionTextureSource`, with deck's picking, highlight and transitions.
  */
 export class CosmosPointsLayer<DataT = unknown> extends Layer<Required<CosmosPointsLayerOwnProps<DataT>>> {
   public static layerName = 'CosmosPointsLayer'

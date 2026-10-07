@@ -1,7 +1,7 @@
 {
   "name": "@cosmos.gl/deck-layers",
   "version": "3.5.0",
-  "description": "deck.gl layers rendering the cosmos.gl GPU force simulation — zero-copy position sampling on a shared luma.gl device",
+  "description": "A deck.gl layer that runs and draws a cosmos.gl graph — cosmos.gl's own renderer under deck's camera, on a shared luma.gl device",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "license": "MIT",

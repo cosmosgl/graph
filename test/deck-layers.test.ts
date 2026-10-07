@@ -1,33 +1,32 @@
 import { describe, it, expect, vi } from 'vitest'
-import { Deck, OrthographicView } from '@deck.gl/core'
+import { Deck, MapView, OrthographicView } from '@deck.gl/core'
 import type { Device } from '@luma.gl/core'
-import { Graph, GraphSimulation, type GraphSimulationConfig } from '@cosmos.gl/graph'
-import { CosmosGraphLayer, type CosmosGraphLinks, type CosmosGraphPickingInfo, type CosmosGraphPoints } from '@cosmos.gl/deck-layers'
-import type { LayersList, PickingInfo } from '@deck.gl/core'
-// The primitives are internal sublayers, not package exports
-import { CosmosPointsLayer } from '../integrations/deck-layers/src/cosmos-points-layer'
-import { CosmosLinksLayer } from '../integrations/deck-layers/src/cosmos-links-layer'
+import { Graph, defaultConfigValues } from '@cosmos.gl/graph'
+import {
+  CosmosGraphLayer,
+  type CosmosGraphDataLoadedInfo,
+  type CosmosGraphLayerConfig,
+  type CosmosGraphLinks,
+} from '@cosmos.gl/deck-layers'
+import type { LayersList } from '@deck.gl/core'
 
 /**
- * Runtime contract tests for @cosmos.gl/deck-layers: the layers render a live
- * GraphSimulation on deck.gl's device and participate in deck's picking pass —
- * the picked index is the point index, and picking always reflects the
- * texture's current positions.
+ * Runtime contract tests for @cosmos.gl/deck-layers: the layer runs a headless
+ * cosmos.gl `Graph` on deck.gl's device, loads deck-style data into it, hands it
+ * deck's view before each draw and lets cosmos.gl draw into deck's render pass.
+ * cosmos.gl draws into no picking buffer yet, so the contracts are read from the
+ * graph: its data, its config, and the view it was given.
  */
 
 const WIDTH = 200
 const HEIGHT = 200
 // Points at known space coordinates; the view targets (1000, 1000) at zoom 0,
-// so world units map 1:1 to pixels around the canvas centre — and with
-// OrthographicView's default flipY, world +y runs down the screen.
+// so world units map 1:1 to pixels around the canvas centre — with flipY off,
+// as cosmos's space has y up
 const POSITIONS = new Float32Array([1000, 1000, 1050, 1000, 1000, 1030])
 const CENTER = { x: WIDTH / 2, y: HEIGHT / 2 }
 
-const worldToScreen = (x: number, y: number): { x: number; y: number } =>
-  ({ x: CENTER.x + (x - 1000), y: CENTER.y + (y - 1000) })
-
-// A deck with no layers, plus the promise of its device for a cosmos instance
-// to share
+// A deck with no layers, plus the promise of its device for a graph to share
 const createDeckDevice = (): {
   deck: Deck<OrthographicView>;
   container: HTMLDivElement;
@@ -44,7 +43,7 @@ const createDeckDevice = (): {
       parent: container,
       width: WIDTH,
       height: HEIGHT,
-      views: new OrthographicView(),
+      views: new OrthographicView({ flipY: false }),
       initialViewState: { target: [1000, 1000, 0], zoom: 0 },
       controller: false,
       onDeviceInitialized: resolve,
@@ -52,22 +51,6 @@ const createDeckDevice = (): {
     })
   })
   return { deck, container, devicePromise }
-}
-
-const createDeckWithSimulation = async (
-  config: GraphSimulationConfig = {},
-  positions: Float32Array = POSITIONS
-): Promise<{
-  deck: Deck<OrthographicView>;
-  graph: GraphSimulation;
-  container: HTMLDivElement;
-}> => {
-  const { deck, container, devicePromise } = createDeckDevice()
-  const graph = new GraphSimulation(config, devicePromise)
-  graph.setPointPositions(positions, true)
-  graph.applyData()
-  await graph.ready
-  return { deck, graph, container }
 }
 
 const waitFrames = (count: number): Promise<void> => new Promise((resolve) => {
@@ -80,33 +63,35 @@ const waitFrames = (count: number): Promise<void> => new Promise((resolve) => {
   requestAnimationFrame(tick)
 })
 
-// Deck initializes and updates layers on its own animation frames; wait until
-// the first pick lands instead of guessing a frame count, but stay bounded so
-// a layer that never renders still fails loudly.
-const waitUntilPickable = async (deck: Deck<OrthographicView>, maxFrames = 240): Promise<void> => {
+// Deck initializes and updates layers on its own animation frames: wait for a
+// condition instead of guessing a frame count, but stay bounded
+const waitUntil = async (condition: () => boolean, what: string, maxFrames = 240): Promise<void> => {
   for (let i = 0; i < maxFrames; i += 1) {
+    if (condition()) return
     await waitFrames(1)
-    if (deck.pickObject({ ...CENTER, radius: 2 })) return
   }
-  throw new Error(`deck produced no pick at the canvas centre within ${maxFrames} frames`)
+  throw new Error(`${what} did not happen within ${maxFrames} frames`)
 }
 
-// For CosmosGraphLayer tests: the layer creates and owns its own simulation.
-// Resolves once deck finished its async device initialization — picking
-// before that asserts inside deck.
-const createDeck = async (layers: LayersList): Promise<{ deck: Deck<OrthographicView>; container: HTMLDivElement }> => {
+// For CosmosGraphLayer tests: the layer creates and owns its own graph.
+// Resolves once deck finished its async device initialization.
+const createDeck = async (
+  layers: LayersList,
+  views: OrthographicView | MapView = new OrthographicView({ flipY: false }),
+  initialViewState: Record<string, unknown> = { target: [1000, 1000, 0], zoom: 0 }
+): Promise<{ deck: Deck<OrthographicView | MapView>; container: HTMLDivElement }> => {
   const container = document.createElement('div')
   container.style.width = `${WIDTH}px`
   container.style.height = `${HEIGHT}px`
   document.body.appendChild(container)
-  let deck!: Deck<OrthographicView>
+  let deck!: Deck<OrthographicView | MapView>
   await new Promise<void>((resolve) => {
     deck = new Deck({
       parent: container,
       width: WIDTH,
       height: HEIGHT,
-      views: new OrthographicView(),
-      initialViewState: { target: [1000, 1000, 0], zoom: 0 },
+      views,
+      initialViewState,
       controller: false,
       onLoad: resolve,
       layers,
@@ -116,7 +101,7 @@ const createDeck = async (layers: LayersList): Promise<{ deck: Deck<Orthographic
 }
 
 // All forces off: the simulation runs but nothing moves
-const STATIC_SIM: GraphSimulationConfig = {
+const STATIC: CosmosGraphLayerConfig = {
   rescalePositions: false,
   simulationGravity: 0,
   simulationCenter: 0,
@@ -124,488 +109,108 @@ const STATIC_SIM: GraphSimulationConfig = {
   simulationLinkSpring: 0,
 }
 
-describe('CosmosPointsLayer', () => {
-  it('picks points by index at their projected positions, on both axes', async () => {
-    const { deck, graph, container } = await createDeckWithSimulation()
-    try {
-      deck.setProps({
-        layers: [
-          new CosmosPointsLayer({
-            id: 'points',
-            graph,
-            data: { length: POSITIONS.length / 2 },
-            getPointSize: 10,
-            pickable: true,
-          }),
-        ],
-      })
-      await waitUntilPickable(deck)
-
-      // Point 0 sits at the view target — the canvas centre
-      const center = deck.pickObject({ ...CENTER, radius: 2 })
-      expect(center?.index).toBe(0)
-      expect(center?.layer?.id).toBe('points')
-      // The picked coordinate is the unprojected world position drag will rely on
-      expect(center?.coordinate?.[0]).toBeCloseTo(1000, 0)
-      expect(center?.coordinate?.[1]).toBeCloseTo(1000, 0)
-
-      // Point 1 is 50 world units to the right (= 50 px at zoom 0)
-      const right = deck.pickObject({ ...worldToScreen(1050, 1000), radius: 2 })
-      expect(right?.index).toBe(1)
-
-      // Point 2 pins the y convention: world +y is 30 px down the screen
-      const below = deck.pickObject({ ...worldToScreen(1000, 1030), radius: 2 })
-      expect(below?.index).toBe(2)
-
-      // Empty space picks nothing
-      const empty = deck.pickObject({ x: 20, y: 20, radius: 2 })
-      expect(empty).toBeNull()
-    } finally {
-      graph.destroy()
-      deck.finalize()
-      container.remove()
-    }
-  })
-
-  it('keeps picking in sync with the live texture as the simulation steps', async () => {
-    // A lone link spring: deterministic, pulls the pair together along x, and
-    // converges — the points can never leave the viewport.
-    const { deck, graph, container } = await createDeckWithSimulation({
-      simulationGravity: 0,
-      simulationCenter: 0,
-      simulationRepulsion: 0,
-      simulationLinkSpring: 2,
-      simulationLinkDistance: 10,
-      simulationFriction: 0.85,
-      simulationDecay: 1000,
-      randomSeed: 1,
-    }, new Float32Array([1000, 1000, 1050, 1000]))
-    try {
-      graph.setLinks(new Float32Array([0, 1]))
-      graph.applyData()
-      deck.setProps({
-        layers: [
-          new CosmosPointsLayer({ id: 'points', graph, data: { length: 2 }, getPointSize: 10, pickable: true }),
-        ],
-      })
-      await waitUntilPickable(deck)
-
-      for (let i = 0; i < 80; i += 1) graph.step()
-
-      const after = graph.getPointPositionsArray()
-      const [x0, y0] = [after[0] as number, after[1] as number]
-      // Point 0 was pulled right toward its link partner — far enough to
-      // leave the old pick radius, still inside the viewport (the spring
-      // keeps distance, not order, and may overshoot the midpoint)
-      expect(x0).toBeGreaterThan(1008)
-      expect(x0).toBeLessThan(1090)
-
-      // The CPU snapshot predicts the screen position; the picking pass must
-      // agree, because both read the same live texture
-      const screen = worldToScreen(x0, y0)
-      const moved = deck.pickObject({ x: Math.round(screen.x), y: Math.round(screen.y), radius: 3 })
-      expect(moved?.index).toBe(0)
-
-      // The old position no longer picks point 0
-      const old = deck.pickObject({ ...CENTER, radius: 2 })
-      expect(old?.index ?? null).not.toBe(0)
-    } finally {
-      graph.destroy()
-      deck.finalize()
-      container.remove()
-    }
-  })
-
-  it('returns the original datum from picking in accessor mode', async () => {
-    const { deck, graph, container } = await createDeckWithSimulation()
-    try {
-      const points = [{ label: 'first' }, { label: 'second' }, { label: 'third' }]
-      deck.setProps({
-        layers: [
-          new CosmosPointsLayer<{ label: string }>({
-            id: 'points',
-            graph,
-            data: points,
-            getPointSize: 10,
-            getPointColor: [255, 0, 0, 255],
-            pickable: true,
-          }),
-        ],
-      })
-      await waitUntilPickable(deck)
-
-      const info = deck.pickObject({ ...worldToScreen(1050, 1000), radius: 2 })
-      expect(info?.index).toBe(1)
-      expect(info?.object).toEqual({ label: 'second' })
-    } finally {
-      graph.destroy()
-      deck.finalize()
-      container.remove()
-    }
-  })
-
-  it('accepts binary attributes keyed by accessor name', async () => {
-    const { deck, graph, container } = await createDeckWithSimulation()
-    try {
-      const binaryData = {
-        length: POSITIONS.length / 2,
-        attributes: {
-          getPointSize: { value: new Float32Array([10, 10, 10]), size: 1 },
-          getPointColor: { value: new Uint8Array([255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255]), size: 4 },
-        },
-      }
-      deck.setProps({
-        layers: [
-          new CosmosPointsLayer({ id: 'points', graph, data: binaryData, pickable: true }),
-        ],
-      })
-      await waitUntilPickable(deck)
-
-      const info = deck.pickObject({ ...worldToScreen(1050, 1000), radius: 2 })
-      expect(info?.index).toBe(1)
-    } finally {
-      graph.destroy()
-      deck.finalize()
-      container.remove()
-    }
-  })
-
-  it('neither renders nor picks a NaN-absent point', async () => {
-    const { deck, graph, container } = await createDeckWithSimulation(
-      {},
-      new Float32Array([1000, 1000, NaN, NaN])
-    )
-    try {
-      deck.setProps({
-        layers: [
-          new CosmosPointsLayer({ id: 'points', graph, data: { length: 2 }, getPointSize: 10, pickable: true }),
-        ],
-      })
-      await waitUntilPickable(deck)
-
-      // The present point picks normally; the absent one appears nowhere —
-      // not at the centre, not at a collapsed-quad origin
-      expect(deck.pickObject({ ...CENTER, radius: 2 })?.index).toBe(0)
-      for (const probe of [{ x: 20, y: 20 }, { x: 180, y: 180 }, { x: 100, y: 180 }]) {
-        expect(deck.pickObject({ ...probe, radius: 2 })?.index ?? null).not.toBe(1)
-      }
-    } finally {
-      graph.destroy()
-      deck.finalize()
-      container.remove()
-    }
-  })
-
-  it('removes an existing point when its position becomes NaN — GraphSimulation snaps', async () => {
-    const { deck, graph, container } = await createDeckWithSimulation({}, new Float32Array([1000, 1000, 1050, 1000]))
-    try {
-      deck.setProps({
-        layers: [
-          new CosmosPointsLayer({ id: 'points', graph, data: { length: 2 }, getPointSize: 10, pickable: true }),
-        ],
-      })
-      await waitUntilPickable(deck)
-      const at1 = worldToScreen(1050, 1000)
-      expect(deck.pickObject({ ...at1, radius: 2 })?.index).toBe(1)
-
-      graph.setPointPositions(new Float32Array([1000, 1000, NaN, NaN]), true)
-      graph.applyData()
-
-      // The texel is NaN now, not the frozen last coordinate: nothing draws or picks there
-      expect(deck.pickObject({ ...at1, radius: 2 })).toBeNull()
-      expect(deck.pickObject({ ...CENTER, radius: 2 })?.index).toBe(0)
-    } finally {
-      graph.destroy()
-      deck.finalize()
-      container.remove()
-    }
-  })
-
-  it('removes an existing point when its position becomes NaN — a headless Graph snaps too', async () => {
-    // A headless Graph on deck's device is the other documented source. Its
-    // transitions are forced to snap (nothing would advance them), so the
-    // default 800 ms transitionDuration must not leave a frozen coordinate
-    const { deck, container, devicePromise } = createDeckDevice()
-    const graph = new Graph(null, { rescalePositions: false }, devicePromise)
-    graph.setPointPositions(new Float32Array([1000, 1000, 1050, 1000]))
-    graph.render()
-    await graph.ready
-    try {
-      deck.setProps({
-        layers: [
-          new CosmosPointsLayer({ id: 'points', graph, data: { length: 2 }, getPointSize: 10, pickable: true }),
-        ],
-      })
-      await waitUntilPickable(deck)
-      const at1 = worldToScreen(1050, 1000)
-      expect(deck.pickObject({ ...at1, radius: 2 })?.index).toBe(1)
-
-      graph.setPointPositions(new Float32Array([1000, 1000, NaN, NaN]))
-      graph.render()
-
-      expect(deck.pickObject({ ...at1, radius: 2 })).toBeNull()
-      expect(deck.pickObject({ ...CENTER, radius: 2 })?.index).toBe(0)
-    } finally {
-      graph.destroy()
-      deck.finalize()
-      container.remove()
-    }
-  })
-})
-
-describe('CosmosLinksLayer', () => {
-  it('picks links by link index along the extruded quad', async () => {
-    const { deck, graph, container } = await createDeckWithSimulation(
-      {},
-      new Float32Array([1000, 1000, 1050, 1000])
-    )
-    try {
-      // Cosmos-native links array read as two interleaved binary attributes
-      const links = new Float32Array([0, 1])
-      deck.setProps({
-        layers: [
-          new CosmosLinksLayer({
-            id: 'links',
-            graph,
-            data: {
-              length: 1,
-              attributes: {
-                getLinkSource: { value: links, size: 1, stride: 8 },
-                getLinkTarget: { value: links, size: 1, offset: 4, stride: 8 },
-              },
-            },
-            getLinkWidth: 8,
-            pickable: true,
-          }),
-        ],
-      })
-      await waitUntilPickable(deck)
-
-      const mid = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 })
-      expect(mid?.index).toBe(0)
-      expect(mid?.layer?.id).toBe('links')
-
-      // The quad is extruded by half the width to each side: 3 px off the
-      // centre line still hits at width 8, 8 px off misses
-      const nearEdge = deck.pickObject({ x: worldToScreen(1025, 1000).x, y: CENTER.y - 3, radius: 0 })
-      expect(nearEdge?.index).toBe(0)
-      const outside = deck.pickObject({ x: worldToScreen(1025, 1000).x, y: CENTER.y - 8, radius: 0 })
-      expect(outside).toBeNull()
-    } finally {
-      graph.destroy()
-      deck.finalize()
-      container.remove()
-    }
-  })
-
-  it('resolves accessor-mode links through the default source/target accessors', async () => {
-    const { deck, graph, container } = await createDeckWithSimulation(
-      {},
-      new Float32Array([1000, 1000, 1050, 1000])
-    )
-    try {
-      const linkData = [{ source: 0, target: 1, label: 'only' }]
-      deck.setProps({
-        layers: [
-          new CosmosLinksLayer({ id: 'links', graph, data: linkData, getLinkWidth: 8, pickable: true }),
-        ],
-      })
-      await waitUntilPickable(deck)
-
-      const info = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 })
-      expect(info?.index).toBe(0)
-      expect(info?.object).toEqual({ source: 0, target: 1, label: 'only' })
-    } finally {
-      graph.destroy()
-      deck.finalize()
-      container.remove()
-    }
-  })
-})
+/** The pixel deck puts a world position at, through the deck's first viewport. */
+const deckPixel = (deck: Deck<OrthographicView | MapView>, world: number[]): [number, number] => {
+  const pixel = deck.getViewports()[0]!.project(world)
+  return [pixel[0] as number, pixel[1] as number]
+}
 
 describe('CosmosGraphLayer', () => {
-  it('owns the simulation: creates, ingests, renders, picks, and destroys it', async () => {
-    let simulation: GraphSimulation | undefined
+  it('owns a headless graph on deck\'s device: creates, loads, draws under deck\'s view, destroys it', async () => {
+    let graph: Graph | undefined
+    let loaded = false
     const { deck, container } = await createDeck([
       new CosmosGraphLayer({
         id: 'graph',
-        points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
+        points: { length: 3, initialPositions: POSITIONS },
         links: new Float32Array([0, 1]),
-        getPointSize: 10,
-        getLinkWidth: 6,
-        simulationConfig: STATIC_SIM,
-        onSimulationCreated: (sim): void => { simulation = sim },
-        pickable: true,
+        config: STATIC,
+        onGraphCreated: (created): void => { graph = created },
+        onGraphDataLoaded: (): void => { loaded = true },
       }),
     ])
     try {
-      await waitUntilPickable(deck)
-      expect(simulation).toBeInstanceOf(GraphSimulation)
+      await waitUntil(() => loaded, 'the first load')
+      expect(graph).toBeInstanceOf(Graph)
+      expect(graph!.graph.pointsNumber).toBe(3)
+      expect(graph!.graph.linksNumber).toBe(1)
+      // deck's device, nothing of cosmos's own
+      expect(graph!.simulation.device).toBe((deck as unknown as { device: Device }).device)
 
-      const point = deck.pickObject({ ...CENTER, radius: 2 }) as CosmosGraphPickingInfo | null
-      expect(point?.index).toBe(0)
-      expect(point?.elementType).toBe('point')
-      // Picking bubbles to the composite
-      expect(point?.layer?.id).toBe('graph')
+      // The draw handed cosmos deck's view: cosmos projects where deck projects
+      await waitFrames(5)
+      for (const [x, y] of [[1000, 1000], [1050, 1000], [1000, 1030]]) {
+        const [sx, sy] = graph!.spaceToScreenPosition([x as number, y as number])
+        const [dx, dy] = deckPixel(deck, [x as number, y as number, 0])
+        expect(sx).toBeCloseTo(dx, 3)
+        expect(sy).toBeCloseTo(dy, 3)
+      }
+      const [cx, cy] = graph!.spaceToScreenPosition([1000, 1000])
+      expect(cx).toBeCloseTo(CENTER.x, 3)
+      expect(cy).toBeCloseTo(CENTER.y, 3)
 
-      const link = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as CosmosGraphPickingInfo | null
-      expect(link?.index).toBe(0)
-      expect(link?.elementType).toBe('link')
-
-      // Removing the layer destroys the owned simulation; the handle stays safe
+      // Removing the layer destroys the graph it created; the handle stays safe
+      const destroy = vi.spyOn(graph!, 'destroy')
       deck.setProps({ layers: [] })
       await waitFrames(5)
-      expect(deck.pickObject({ ...CENTER, radius: 2 })).toBeNull()
-      expect(() => simulation?.step()).not.toThrow()
+      expect(destroy).toHaveBeenCalledTimes(1)
+      expect(() => graph!.step()).not.toThrow()
     } finally {
       deck.finalize()
       container.remove()
     }
   })
 
-  it('renders a provided simulation without configuring or destroying it', async () => {
-    const { deck, container, devicePromise } = createDeckDevice()
-    const provided = new GraphSimulation(STATIC_SIM, devicePromise)
-    const spaceSize = provided.config.spaceSize
-    const created = vi.fn()
-    const graphLayer = (simulation: GraphSimulation | null): CosmosGraphLayer => new CosmosGraphLayer({
-      id: 'graph',
-      simulation,
-      points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
-      links: new Float32Array([0, 1]),
-      getPointSize: 10,
-      // Both apply only to a layer-created simulation
-      simulationConfig: { ...STATIC_SIM, spaceSize: spaceSize / 2 },
-      onSimulationCreated: created,
-      pickable: true,
-    })
+  it('draws under a map view through modelMatrix: cosmos\'s view matches deck\'s projection', async () => {
+    const SPACE = 4096
+    const toLayout = ([lng, lat]: [number, number]): [number, number] => [
+      ((lng + 180) / 360) * SPACE,
+      ((Math.PI + Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))) / (2 * Math.PI)) * SPACE,
+    ]
+    const cities: [number, number][] = [[-0.13, 51.51], [139.69, 35.69], [-46.63, -23.55]]
+    let graph: Graph | undefined
+    let loaded = false
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer<[number, number]>({
+        id: 'graph',
+        points: cities,
+        getPointPosition: (lngLat): [number, number] => toLayout(lngLat),
+        modelMatrix: [512 / SPACE, 0, 0, 0, 0, 512 / SPACE, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
+        config: { ...STATIC, spaceSize: SPACE },
+        onGraphCreated: (created): void => { graph = created },
+        onGraphDataLoaded: (): void => { loaded = true },
+      }),
+    ], new MapView({ repeat: false }), { longitude: 20, latitude: 22, zoom: 1.4 })
     try {
-      deck.setProps({ layers: [graphLayer(provided)] })
-      await waitUntilPickable(deck)
-
-      // The layer ingested its data into the provided simulation and renders it
-      expect(provided.data.linksNumber).toBe(1)
-      expect(deck.pickObject({ ...CENTER, radius: 2 })?.index).toBe(0)
-      expect(created).not.toHaveBeenCalled()
-      expect(provided.config.spaceSize).toBe(spaceSize)
-
-      // Dropping the prop swaps to a layer-created simulation; the provided
-      // one outlives the swap and the layer's removal
-      deck.setProps({ layers: [graphLayer(null)] })
-      await waitUntilPickable(deck)
-      expect(created).toHaveBeenCalledTimes(1)
-      expect(created.mock.calls[0]?.[0]).not.toBe(provided)
-      deck.setProps({ layers: [] })
+      await waitUntil(() => loaded, 'the first load')
       await waitFrames(5)
-      expect(Array.from(provided.getPointPositionsArray())).toEqual([1000, 1000, 1050, 1000])
+      // A city drawn by cosmos lands where deck puts its longitude and latitude
+      for (const lngLat of cities) {
+        const [sx, sy] = graph!.spaceToScreenPosition(toLayout(lngLat))
+        const [dx, dy] = deckPixel(deck, [...lngLat, 0])
+        expect(sx).toBeCloseTo(dx, 2)
+        expect(sy).toBeCloseTo(dy, 2)
+      }
     } finally {
-      provided.destroy()
       deck.finalize()
       container.remove()
     }
   })
 
-  it('refuses a provided simulation on another device', async () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-    // No device argument: the simulation creates its own hidden one
-    const foreign = new GraphSimulation(STATIC_SIM)
+  it('does not draw a y-down view, and says so once', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const isViewWarning = (message: unknown): boolean => String(message).includes('flipY')
     const { deck, container } = await createDeck([
       new CosmosGraphLayer({
         id: 'graph',
-        simulation: foreign,
-        points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
-        getPointSize: 10,
-        pickable: true,
+        points: { length: 3, initialPositions: POSITIONS },
+        config: STATIC,
       }),
-    ])
+    ], new OrthographicView()) // flipY on: y down, which cosmos's view cannot express
     try {
-      await foreign.ready
+      await waitUntil(() => warn.mock.calls.some(([message]) => isViewWarning(message)), 'the view warning')
       await waitFrames(10)
-      const deviceErrors = error.mock.calls.filter(([message]) => String(message).includes('different device'))
-      expect(deviceErrors).toHaveLength(1)
-      expect(deck.pickObject({ ...CENTER, radius: 2 })).toBeNull()
-    } finally {
-      error.mockRestore()
-      foreign.destroy()
-      deck.finalize()
-      container.remove()
-    }
-  })
-
-  it('resolves array data by point id and returns original objects from picking', async () => {
-    const points = [
-      { id: 'a', position: [1000, 1000] as const },
-      { id: 'b', position: [1050, 1000] as const },
-    ]
-    const links = [{ source: 'a', target: 'b' }]
-    const { deck, container } = await createDeck([
-      new CosmosGraphLayer<(typeof points)[number], (typeof links)[number]>({
-        id: 'graph',
-        points,
-        links,
-        getPointId: (p): string => p.id,
-        getPointPosition: (p): readonly [number, number] => p.position,
-        getPointSize: 10,
-        getLinkWidth: 6,
-        simulationConfig: STATIC_SIM,
-        pickable: true,
-      }),
-    ])
-    try {
-      await waitUntilPickable(deck)
-
-      const point = deck.pickObject({ ...worldToScreen(1050, 1000), radius: 2 }) as CosmosGraphPickingInfo | null
-      expect(point?.elementType).toBe('point')
-      expect(point?.object).toEqual(points[1])
-
-      const link = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as CosmosGraphPickingInfo | null
-      expect(link?.elementType).toBe('link')
-      expect(link?.object).toEqual(links[0])
-    } finally {
-      deck.finalize()
-      container.remove()
-    }
-  })
-
-  it('drops a link whose endpoint is not a point — from the simulation and the rendering alike', async () => {
-    const points = [
-      { id: 'a', position: [1000, 1000] as const },
-      { id: 'b', position: [1050, 1000] as const },
-      { id: 'c', position: [1000, 1030] as const },
-    ]
-    // The second link names a point that does not exist; resolved to index 0
-    // as a fallback it would draw from c to a
-    const links = [{ source: 'a', target: 'b' }, { source: 'c', target: 'ghost' }]
-    let simulation: GraphSimulation | undefined
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    const { deck, container } = await createDeck([
-      new CosmosGraphLayer<(typeof points)[number], (typeof links)[number]>({
-        id: 'graph',
-        points,
-        links,
-        getPointId: (p): string => p.id,
-        getPointPosition: (p): readonly [number, number] => p.position,
-        getPointSize: 10,
-        getLinkWidth: 6,
-        simulationConfig: STATIC_SIM,
-        onSimulationCreated: (sim): void => { simulation = sim },
-        pickable: true,
-      }),
-    ])
-    try {
-      await waitUntilPickable(deck)
-
-      const dropWarnings = warn.mock.calls.filter(([message]) => String(message).includes('dropped 1 of 2 links'))
-      expect(dropWarnings).toHaveLength(1)
-      // The simulation holds only the resolvable link
-      expect(simulation?.data.linksNumber).toBe(1)
-
-      // The surviving link still picks with its original object …
-      const link = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as CosmosGraphPickingInfo | null
-      expect(link?.elementType).toBe('link')
-      expect(link?.object).toEqual(links[0])
-      // … and nothing is drawn where the dropped link would have landed
-      expect(deck.pickObject({ ...worldToScreen(1000, 1015), radius: 2 })).toBeNull()
+      expect(warn.mock.calls.filter(([message]) => isViewWarning(message))).toHaveLength(1)
     } finally {
       warn.mockRestore()
       deck.finalize()
@@ -613,58 +218,323 @@ describe('CosmosGraphLayer', () => {
     }
   })
 
-  it('re-resolves link endpoints when getPointId changes over stable arrays', async () => {
-    // Under `id` the link runs a → b (horizontal); under `alt` the same link
-    // object resolves 'b' to the third point, so it runs a → c (vertical)
-    const points = [
-      { id: 'a', alt: 'a', position: [1000, 1000] as const },
-      { id: 'b', alt: 'c', position: [1050, 1000] as const },
-      { id: 'c', alt: 'b', position: [1000, 1030] as const },
-    ]
+  it('converts deck accessors into cosmos\'s channels, and restyles without reloading the layout', async () => {
+    type Point = { id: string; group: number }
+    const points: Point[] = [{ id: 'a', group: 0 }, { id: 'b', group: 1 }]
     const links = [{ source: 'a', target: 'b' }]
-    type P = (typeof points)[number]
-    type L = (typeof links)[number]
-    const makeLayer = (getPointId: (p: P) => string, trigger: number): CosmosGraphLayer<P, L> =>
-      new CosmosGraphLayer<P, L>({
-        id: 'graph',
-        points,
-        links,
-        getPointId,
-        getPointPosition: (p): readonly [number, number] => p.position,
-        getPointSize: 10,
-        getLinkWidth: 6,
-        simulationConfig: STATIC_SIM,
-        updateTriggers: { getPointId: trigger },
-        pickable: true,
-      })
-    const horizontal = worldToScreen(1025, 1000)
-    const vertical = worldToScreen(1000, 1015)
-    const { deck, container } = await createDeck([makeLayer((p) => p.id, 1)])
+    let graph: Graph | undefined
+    const graphLayer = (scheme: number): CosmosGraphLayer<Point> => new CosmosGraphLayer<Point>({
+      id: 'graph',
+      points,
+      links,
+      getPointId: (p): string => p.id,
+      getPointPosition: (p): [number, number] => (p.id === 'a' ? [1000, 1000] : [1050, 1000]),
+      getPointColor: (): [number, number, number, number] => (scheme === 0 ? [255, 0, 0, 255] : [0, 255, 0, 128]),
+      getPointSize: (p): number => (p.group === 0 ? 10 : 20),
+      getLinkColor: [0, 0, 255, 51],
+      getLinkWidth: 3,
+      updateTriggers: { getPointColor: scheme },
+      config: STATIC,
+      onGraphCreated: (created): void => { graph = created },
+    })
+    const { deck, container } = await createDeck([graphLayer(0)])
     try {
-      await waitUntilPickable(deck)
-      expect((deck.pickObject({ ...horizontal, radius: 2 }) as CosmosGraphPickingInfo | null)?.elementType).toBe('link')
-      expect(deck.pickObject({ ...vertical, radius: 2 })).toBeNull()
+      await waitUntil(() => (graph?.graph.pointColors?.length ?? 0) > 0, 'the first load')
+      // deck's 0..255 as cosmos's 0..1
+      expect(Array.from(graph!.graph.pointColors!)).toEqual([1, 0, 0, 1, 1, 0, 0, 1])
+      expect(Array.from(graph!.graph.pointSizes!)).toEqual([10, 20])
+      expect(Array.from(graph!.graph.linkColors!).map((c) => Math.round(c * 255))).toEqual([0, 0, 255, 51])
+      expect(Array.from(graph!.graph.linkWidths!)).toEqual([3])
 
-      // Same arrays, new id accessor and trigger: the link must move with the id map
-      deck.setProps({ layers: [makeLayer((p) => p.alt, 2)] })
-      await waitFrames(5)
-      expect((deck.pickObject({ ...vertical, radius: 2 }) as CosmosGraphPickingInfo | null)?.elementType).toBe('link')
-      expect(deck.pickObject({ ...horizontal, radius: 2 })).toBeNull()
+      // The application moves a point; a recolor through its trigger must not undo it
+      graph!.setPointPosition(0, 1000, 1030)
+      await waitFrames(2)
+      deck.setProps({ layers: [graphLayer(1)] })
+      await waitUntil(() => graph!.graph.pointColors?.[1] === 1, 'the recolor')
+      expect(Array.from(graph!.graph.pointColors!).map((c) => Math.round(c * 255))).toEqual([0, 255, 0, 128, 0, 255, 0, 128])
+      expect(Array.from(graph!.getPointPositionsArray())).toEqual([1000, 1030, 1050, 1000])
     } finally {
       deck.finalize()
       container.remove()
     }
   })
 
-  it('steps itself from deck timeline — no app render-loop wiring anywhere', async () => {
-    let simulation: GraphSimulation | undefined
+  it('hands Float32Array attributes to cosmos as they are, and converts byte colors', async () => {
+    const colors = new Float32Array([0.5, 0.25, 1, 1, 0, 0, 0, 1])
+    const sizes = new Float32Array([6, 8])
+    const byteLinkColors = new Uint8Array([255, 0, 0, 51])
+    let graph: Graph | undefined
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer({
+        id: 'graph',
+        points: {
+          length: 2,
+          initialPositions: new Float32Array([1000, 1000, 1050, 1000]),
+          attributes: { getPointColor: { value: colors, size: 4 }, getPointSize: { value: sizes, size: 1 } },
+        },
+        links: { pairs: new Float32Array([0, 1]), attributes: { getLinkColor: { value: byteLinkColors, size: 4 } } },
+        config: STATIC,
+        onGraphCreated: (created): void => { graph = created },
+      }),
+    ])
+    try {
+      await waitUntil(() => (graph?.graph.pointColors?.length ?? 0) > 0, 'the first load')
+      // cosmos's own form passes through by reference: zero copies for big graphs
+      expect(graph!.graph.inputPointColors).toBe(colors)
+      expect(Array.from(graph!.graph.pointSizes!)).toEqual([6, 8])
+      expect(Array.from(graph!.graph.linkColors!).map((c) => Math.round(c * 255))).toEqual([255, 0, 0, 51])
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('takes cosmos\'s config: rendering keys reach the graph, a dropped key returns to default, deck\'s keys are stripped', async () => {
+    let graph: Graph | undefined
+    const graphLayer = (config: CosmosGraphLayerConfig): CosmosGraphLayer => new CosmosGraphLayer({
+      id: 'graph',
+      points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
+      config,
+      onGraphCreated: (created): void => { graph = created },
+    })
+    const { deck, container } = await createDeck([
+      // enableZoom is deck's to decide: the type forbids it, a JS caller is stripped
+      graphLayer({ ...STATIC, curvedLinks: true, simulationLinkDistance: 77, ...({ enableZoom: false } as object) }),
+    ])
+    try {
+      await waitUntil(() => Boolean(graph), 'the graph')
+      expect(graph!.config.curvedLinks).toBe(true)
+      expect(graph!.config.simulationLinkDistance).toBe(77)
+      expect(graph!.config.enableZoom).toBe(defaultConfigValues.enableZoom)
+      // cosmos sizes pixels at the ratio deck's canvas draws at
+      const canvasContext = (deck as unknown as { device: Device }).device.canvasContext as { cssToDeviceRatio?: () => number } | null
+      expect(graph!.config.pixelRatio).toBe(canvasContext?.cssToDeviceRatio?.() ?? window.devicePixelRatio)
+
+      deck.setProps({ layers: [graphLayer({ ...STATIC, curvedLinks: true })] })
+      await waitUntil(() => graph!.config.simulationLinkDistance === defaultConfigValues.simulationLinkDistance, 'the reset')
+      expect(graph!.config.curvedLinks).toBe(true)
+      expect(graph!.config.simulationGravity).toBe(0)
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('resolves array links by id, drops the ones that name no point, and reports each load with the mapping', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    type Point = { id: string; position: readonly [number, number] }
+    type Link = { source: string; target: string; name: string }
+    const points: Point[] = [{ id: 'a', position: [1000, 1000] }, { id: 'b', position: [1050, 1000] }, { id: 'c', position: [1000, 1030] }]
+    // The middle link names no point: the graph holds the other two, in their order
+    const links: Link[] = [{ source: 'a', target: 'b', name: 'ab' }, { source: 'a', target: 'nope', name: 'dropped' }, { source: 'b', target: 'c', name: 'bc' }]
+    const STRENGTH: Record<string, number> = { ab: 0.25, bc: 0.75, ca: 0.5 }
+    let created: Graph | undefined
+    const loads: CosmosGraphDataLoadedInfo<Link>[] = []
+    const heldPairs: number[][] = []
+    const graphLayer = (
+      linkData: CosmosGraphLinks<Link>,
+      pointColor: [number, number, number, number] = [0, 0, 255, 255]
+    ): CosmosGraphLayer<Point, Link> =>
+      new CosmosGraphLayer<Point, Link>({
+        id: 'graph',
+        points,
+        links: linkData,
+        getPointId: (p): string => p.id,
+        getPointPosition: (p): readonly [number, number] => p.position,
+        getPointColor: pointColor,
+        config: STATIC,
+        onGraphCreated: (graph): void => { created = graph },
+        onGraphDataLoaded: (info): void => {
+          loads.push(info)
+          heldPairs.push(Array.from(info.graph.graph.links ?? []))
+          if (!info.links) return
+          info.graph.setLinkStrength(Float32Array.from(info.links, (l) => STRENGTH[l.name] as number))
+          info.graph.render()
+        },
+      })
+    const { deck, container } = await createDeck([graphLayer(links)])
+    try {
+      await waitUntil(() => loads.length === 1, 'the first load')
+      const [first] = loads
+      expect(first?.graph).toBe(created)
+      expect(first?.pointsLoaded).toBe(true)
+      expect(first?.linksLoaded).toBe(true)
+      expect(first?.pointIndexById?.get('c')).toBe(2)
+      expect(first?.links?.map((l) => l.name)).toEqual(['ab', 'bc'])
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('dropped 1 of 3 links'))
+      // The reported links are the ones the graph holds, in its order
+      const toPairs = (info: CosmosGraphDataLoadedInfo<Link> | undefined): number[] =>
+        (info?.links ?? []).flatMap((l) => [info?.pointIndexById?.get(l.source) as number, info?.pointIndexById?.get(l.target) as number])
+      expect(heldPairs[0]).toEqual(toPairs(first))
+      // ...so the strengths sent from it are the ones the graph applies
+      expect(Array.from(created!.graph.linkStrength ?? [])).toEqual([0.25, 0.75])
+
+      // A restyle loads nothing, so there is nothing to report
+      deck.setProps({ layers: [graphLayer(links, [255, 0, 0, 255])] })
+      await waitUntil(() => created!.graph.pointColors?.[0] === 1, 'the restyle')
+      expect(loads).toHaveLength(1)
+
+      // New links, same points: reported as a links load, and what it sends lines up again
+      const reordered: Link[] = [{ source: 'b', target: 'c', name: 'bc' }, { source: 'c', target: 'a', name: 'ca' }, { source: 'a', target: 'b', name: 'ab' }]
+      deck.setProps({ layers: [graphLayer(reordered)] })
+      await waitUntil(() => loads.length === 2, 'the second load')
+      expect(loads[1]?.pointsLoaded).toBe(false)
+      expect(loads[1]?.linksLoaded).toBe(true)
+      expect(loads[1]?.links?.map((l) => l.name)).toEqual(['bc', 'ca', 'ab'])
+      expect(heldPairs[1]).toEqual(toPairs(loads[1]))
+      expect(Array.from(created!.graph.linkStrength ?? [])).toEqual([0.75, 0.5, 0.25])
+
+      // Binary links are in the caller's own order: no links to report
+      deck.setProps({ layers: [graphLayer(new Float32Array([0, 1]))] })
+      await waitUntil(() => loads.length === 3, 'the third load')
+      expect(loads[2]?.linksLoaded).toBe(true)
+      expect(loads[2]?.links).toBeNull()
+    } finally {
+      warn.mockRestore()
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('reports a provided graph and an id-only remap, and survives a callback that throws', async () => {
+    const { deck, container, devicePromise } = createDeckDevice()
+    const provided = new Graph(null, STATIC, devicePromise)
+    type Point = { id: string; alias: string }
+    const points: Point[] = [{ id: 'a', alias: 'x' }, { id: 'b', alias: 'y' }]
+    // One pair array throughout: a new one would be a links load
+    const pairs = new Float32Array([0, 1])
+    const loads: CosmosGraphDataLoadedInfo[] = []
+    const errors: Error[] = []
+    const created = vi.fn()
+    const graphLayer = (getPointId: (p: Point) => string, trigger: number): CosmosGraphLayer<Point> => new CosmosGraphLayer<Point>({
+      id: 'graph',
+      graph: provided,
+      points,
+      links: pairs,
+      getPointId,
+      getPointPosition: (_, { index }): [number, number] => [1000 + index * 50, 1000],
+      updateTriggers: { getPointId: trigger },
+      onGraphCreated: created,
+      onGraphDataLoaded: (info): void => {
+        loads.push(info)
+        // An app bug on the first load must not keep the layer from becoming ready
+        if (loads.length === 1) throw new Error('app bug')
+      },
+      onError: (error): boolean => { errors.push(error); return true },
+    })
+    try {
+      await provided.ready
+      deck.setProps({ layers: [graphLayer((p) => p.id, 0)] })
+      await waitUntil(() => loads.length === 1, 'the first load')
+      expect(loads[0]?.graph).toBe(provided)
+      expect(created).not.toHaveBeenCalled()
+      expect(errors[0]?.message).toContain('onGraphDataLoaded')
+      expect(errors[0]?.message).toContain('app bug')
+      // The layer is ready in spite of the throw: it draws, so cosmos has deck's view
+      await waitFrames(5)
+      const [cx, cy] = provided.spaceToScreenPosition([1000, 1000])
+      expect(cx).toBeCloseTo(CENTER.x, 3)
+      expect(cy).toBeCloseTo(CENTER.y, 3)
+
+      // New ids over the same positions and pairs: nothing reloads, but ids reach indices anew
+      deck.setProps({ layers: [graphLayer((p) => p.alias, 1)] })
+      await waitUntil(() => loads.length === 2, 'the remap')
+      expect(loads[1]?.pointsLoaded).toBe(false)
+      expect(loads[1]?.linksLoaded).toBe(false)
+      expect(loads[1]?.pointIndexById?.get('y')).toBe(1)
+      expect(loads[1]?.links).toBeNull()
+    } finally {
+      provided.destroy()
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('draws a provided graph without configuring, loading into, or destroying it', async () => {
+    const { deck, container, devicePromise } = createDeckDevice()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const provided = new Graph(null, { ...STATIC, simulationLinkDistance: 77 }, devicePromise)
+    const colors = new Float32Array([1, 0, 0, 1, 0, 1, 0, 1])
+    provided.setPointPositions(POSITIONS.slice(0, 4))
+    provided.setPointColors(colors)
+    provided.setLinks(new Float32Array([0, 1]))
+    provided.render()
+    const created = vi.fn()
+    try {
+      await provided.ready
+      // No `points`: the layer draws what the graph holds. Its own accessors and config do not apply
+      deck.setProps({
+        layers: [new CosmosGraphLayer({
+          id: 'graph',
+          graph: provided,
+          links: new Float32Array([1, 0]),
+          getPointColor: [0, 0, 255, 255],
+          config: { simulationLinkDistance: 5 },
+          onGraphCreated: created,
+        })],
+      })
+      await waitFrames(10)
+      expect(created).not.toHaveBeenCalled()
+      expect(provided.graph.inputPointColors).toBe(colors)
+      expect(Array.from(provided.graph.links ?? [])).toEqual([0, 1])
+      expect(provided.config.simulationLinkDistance).toBe(77)
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('`links` is ignored without `points`'))
+      // It draws: cosmos has deck's view
+      const [cx, cy] = provided.spaceToScreenPosition([1000, 1000])
+      expect(cx).toBeCloseTo(CENTER.x, 3)
+      expect(cy).toBeCloseTo(CENTER.y, 3)
+
+      // Removing the layer leaves the application's graph alone
+      const destroy = vi.spyOn(provided, 'destroy')
+      deck.setProps({ layers: [] })
+      await waitFrames(5)
+      expect(destroy).not.toHaveBeenCalled()
+      expect(Array.from(provided.getPointPositionsArray())).toEqual([1000, 1000, 1050, 1000])
+    } finally {
+      warn.mockRestore()
+      provided.destroy()
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('refuses a provided graph on another device', async () => {
+    const { deck, container } = await createDeck([])
+    const other = new Graph(null, STATIC) // its own hidden device
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const loaded = vi.fn()
+    try {
+      await other.ready
+      deck.setProps({
+        layers: [new CosmosGraphLayer({
+          id: 'graph',
+          graph: other,
+          points: { length: 2, initialPositions: POSITIONS.slice(0, 4) },
+          onGraphDataLoaded: loaded,
+        })],
+      })
+      await waitUntil(() => error.mock.calls.length > 0, 'the device error')
+      expect(error).toHaveBeenCalledWith(expect.stringContaining('different device'))
+      await waitFrames(5)
+      // Nothing was loaded into it
+      expect(loaded).not.toHaveBeenCalled()
+      expect(other.graph.pointsNumber ?? 0).toBe(0)
+    } finally {
+      error.mockRestore()
+      other.destroy()
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('steps itself from deck\'s timeline — no app render-loop wiring anywhere', async () => {
+    let graph: Graph | undefined
     const { deck, container } = await createDeck([
       new CosmosGraphLayer({
         id: 'graph',
         points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
         links: new Float32Array([0, 1]),
-        getPointSize: 10,
-        simulationConfig: {
+        config: {
           rescalePositions: false,
           simulationGravity: 0,
           simulationCenter: 0,
@@ -675,26 +545,18 @@ describe('CosmosGraphLayer', () => {
           simulationDecay: 1000,
           randomSeed: 1,
         },
-        onSimulationCreated: (sim): void => { simulation = sim },
-        pickable: true,
+        onGraphCreated: (created): void => { graph = created },
       }),
     ])
     try {
-      // Nothing here calls step(): the layer's timeline animation must move
-      // the linked points on its own
+      // Nothing here calls step(): the layer's timeline animation must move the linked points
       let x0 = 1000
-      for (let i = 0; i < 240 && Math.abs(x0 - 1000) < 8; i += 1) {
-        await waitFrames(1)
-        const positions = simulation?.getPointPositionsArray()
+      await waitUntil(() => {
+        const positions = graph?.getPointPositionsArray()
         if (positions && positions.length >= 2) x0 = positions[0] as number
-      }
+        return Math.abs(x0 - 1000) >= 8
+      }, 'the points moving')
       expect(Math.abs(x0 - 1000)).toBeGreaterThanOrEqual(8)
-
-      // And picking tracks the moved point
-      const positions = simulation!.getPointPositionsArray()
-      const screen = worldToScreen(positions[0] as number, positions[1] as number)
-      const moved = deck.pickObject({ x: Math.round(screen.x), y: Math.round(screen.y), radius: 3 })
-      expect(moved?.index).toBe(0)
     } finally {
       deck.finalize()
       container.remove()
@@ -708,15 +570,12 @@ describe('CosmosGraphLayer', () => {
         id: 'graph',
         points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
         links: new Float32Array([0, 1]),
-        getPointSize: 10,
-        simulationConfig: { ...STATIC_SIM, onSimulationTick: (): void => { ticks.count += 1 } },
-        pickable: true,
+        config: { ...STATIC, onSimulationTick: (): void => { ticks.count += 1 } },
       }),
     ])
     try {
-      await waitUntilPickable(deck)
-      for (let i = 0; i < 240 && ticks.count < 5; i += 1) await waitFrames(1)
-      expect(ticks.count).toBeGreaterThanOrEqual(5)
+      await waitUntil(() => ticks.count >= 5, 'five steps')
+      await waitFrames(2)
       // deck enables both once, when it creates the device, and a text or path layer
       // declares neither: with them off, glyph edges overwrite the canvas alpha
       const gl = (deck as unknown as { device: Device & { gl: WebGL2RenderingContext } }).device.gl
@@ -728,428 +587,58 @@ describe('CosmosGraphLayer', () => {
     }
   })
 
-  it('drags a point: pins on start, moves with the pointer, releases on end', async () => {
-    let simulation: GraphSimulation | undefined
-    const calls = { start: 0, drag: 0, end: 0 }
-    const { deck, container } = await createDeck([
-      new CosmosGraphLayer({
-        id: 'graph',
-        points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
-        getPointSize: 10,
-        simulationConfig: STATIC_SIM,
-        onSimulationCreated: (sim): void => { simulation = sim },
-        pickable: true,
-        enablePointDrag: true,
-        dragReheatAlpha: null,
-        onPointDragStart: (): void => { calls.start += 1 },
-        onPointDrag: (): void => { calls.drag += 1 },
-        onPointDragEnd: (): void => { calls.end += 1 },
-      }),
-    ])
-    try {
-      await waitUntilPickable(deck)
-      const info = deck.pickObject({ ...CENTER, radius: 2 }) as CosmosGraphPickingInfo
-      const layer = info.layer as unknown as CosmosGraphLayer
-      let stopped = 0
-      const event = { stopImmediatePropagation: (): void => { stopped += 1 } }
-
-      expect(layer.onDragStart(info, event)).toBe(true)
-      expect(simulation?.isPointPinned(0)).toBe(true)
-      expect(stopped).toBe(1)
-      expect(calls.start).toBe(1)
-
-      // Deck freezes info.index for the gesture and refreshes coordinate
-      expect(layer.onDrag({ ...info, coordinate: [1010, 985] }, event)).toBe(true)
-      const positions = simulation!.getPointPositionsArray()
-      expect(positions[0]).toBeCloseTo(1010, 0)
-      expect(positions[1]).toBeCloseTo(985, 0)
-      // Picking tracks the dragged point at its new position
-      const moved = deck.pickObject({ ...worldToScreen(1010, 985), radius: 2 })
-      expect(moved?.index).toBe(0)
-      expect(calls.drag).toBe(1)
-
-      expect(layer.onDragEnd(info, event)).toBe(true)
-      expect(simulation?.isPointPinned(0)).toBe(false)
-      expect(calls.end).toBe(1)
-    } finally {
-      deck.finalize()
-      container.remove()
-    }
-  })
-
-  it('ignores drags off points, and keeps the pin when unpinOnDragEnd is false', async () => {
-    let simulation: GraphSimulation | undefined
-    const { deck, container } = await createDeck([
-      new CosmosGraphLayer({
-        id: 'graph',
-        points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
-        links: new Float32Array([0, 1]),
-        getPointSize: 10,
-        getLinkWidth: 6,
-        simulationConfig: STATIC_SIM,
-        onSimulationCreated: (sim): void => { simulation = sim },
-        pickable: true,
-        enablePointDrag: true,
-        dragReheatAlpha: null,
-        unpinOnDragEnd: false,
-      }),
-    ])
-    try {
-      await waitUntilPickable(deck)
-      let stopped = 0
-      const event = { stopImmediatePropagation: (): void => { stopped += 1 } }
-
-      // A link is not draggable: the gesture falls through to the controller
-      const linkInfo = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as CosmosGraphPickingInfo
-      expect(linkInfo.elementType).toBe('link')
-      const layer = linkInfo.layer as unknown as CosmosGraphLayer
-      expect(layer.onDragStart(linkInfo, event)).toBe(false)
-      expect(stopped).toBe(0)
-      expect(simulation?.isPointPinned(0)).toBe(false)
-
-      // unpinOnDragEnd: false keeps the point where it was dropped
-      const pointInfo = deck.pickObject({ ...CENTER, radius: 2 }) as CosmosGraphPickingInfo
-      layer.onDragStart(pointInfo, event)
-      layer.onDrag({ ...pointInfo, coordinate: [995, 1010] }, event)
-      layer.onDragEnd(pointInfo, event)
-      expect(simulation?.isPointPinned(0)).toBe(true)
-    } finally {
-      deck.finalize()
-      container.remove()
-    }
-  })
-
-  it('highlights only the hovered sublayer — point N must not tint link N', async () => {
-    const { deck, container } = await createDeck([
-      new CosmosGraphLayer({
-        id: 'graph',
-        points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
-        links: new Float32Array([0, 1]),
-        getPointSize: 10,
-        getLinkWidth: 6,
-        simulationConfig: STATIC_SIM,
-        pickable: true,
-        autoHighlight: true,
-      }),
-    ])
-    const pointsProto = CosmosPointsLayer.prototype.updateAutoHighlight
-    const linksProto = CosmosLinksLayer.prototype.updateAutoHighlight
-    try {
-      await waitUntilPickable(deck)
-      const calls: { id: string; picked: boolean }[] = []
-      const spy = function (this: { id: string }, info: PickingInfo): void {
-        calls.push({ id: this.id, picked: Boolean(info.picked) })
-      }
-      CosmosPointsLayer.prototype.updateAutoHighlight = spy
-      CosmosLinksLayer.prototype.updateAutoHighlight = spy
-
-      // Hovering a point highlights the points sublayer and clears the links one
-      const pointInfo = deck.pickObject({ ...CENTER, radius: 2 }) as CosmosGraphPickingInfo
-      const composite = pointInfo.layer as unknown as { _updateAutoHighlight (info: PickingInfo): void }
-      composite._updateAutoHighlight({ ...pointInfo, picked: true })
-      expect(calls).toContainEqual({ id: 'graph-points', picked: true })
-      expect(calls).toContainEqual({ id: 'graph-links', picked: false })
-
-      // And the other way around for a link
-      calls.length = 0
-      const linkInfo = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as CosmosGraphPickingInfo
-      composite._updateAutoHighlight({ ...linkInfo, picked: true })
-      expect(calls).toContainEqual({ id: 'graph-links', picked: true })
-      expect(calls).toContainEqual({ id: 'graph-points', picked: false })
-    } finally {
-      CosmosPointsLayer.prototype.updateAutoHighlight = pointsProto
-      CosmosLinksLayer.prototype.updateAutoHighlight = linksProto
-      deck.finalize()
-      container.remove()
-    }
-  })
-})
-
-// An application-loaded simulation: with no `points` of its own, the layer
-// writes nothing into the simulation, draws what it holds and follows its
-// changes. A layer with `points` loads them, but only once the device check
-// has passed. Layers sharing a simulation step it once per frame.
-describe('CosmosGraphLayer with an application-loaded simulation', () => {
-  const INITIAL = [1000, 1000, 1050, 1000]
-  const SECOND_POINT = worldToScreen(1050, 1000)
-
-  // The application's simulation on deck's device, holding two points and one link
-  const loadedSimulation = (devicePromise: Promise<Device>, config: GraphSimulationConfig = STATIC_SIM): GraphSimulation => {
-    const simulation = new GraphSimulation(config, devicePromise)
-    simulation.setPointPositions(new Float32Array(INITIAL), true)
-    simulation.setLinks(new Float32Array([0, 1]))
-    simulation.applyData()
-    return simulation
-  }
-
-  // A layer without data of its own: it draws the simulation
-  const viewLayer = (simulation: GraphSimulation, id = 'graph'): CosmosGraphLayer =>
-    new CosmosGraphLayer({ id, simulation, getPointSize: 10, pickable: true })
-
-  // Bounded wait for a pick at a screen position that satisfies `accept`
-  const waitUntilPicked = async (
-    deck: Deck<OrthographicView>,
-    screen: { x: number; y: number },
-    accept: (info: PickingInfo | null) => boolean = (info): boolean => info !== null,
-    maxFrames = 240
-  ): Promise<void> => {
-    for (let i = 0; i < maxFrames; i += 1) {
-      await waitFrames(1)
-      if (accept(deck.pickObject({ ...screen, radius: 2 }))) return
-    }
-    throw new Error(`no accepted pick at (${screen.x}, ${screen.y}) within ${maxFrames} frames`)
-  }
-  // The second point stays at (1050, 1000) in every scenario below
-  const waitUntilRendered = (deck: Deck<OrthographicView>): Promise<void> => waitUntilPicked(deck, SECOND_POINT)
-
-  it('draws the simulation as loaded and keeps its layout across hide and show', async () => {
-    const { deck, container, devicePromise } = createDeckDevice()
-    const provided = loadedSimulation(devicePromise)
-    try {
-      deck.setProps({ layers: [viewLayer(provided)] })
-      await provided.ready
-      await waitUntilRendered(deck)
-
-      // Nothing was written: still the application's two points and one link, both drawn
-      expect(provided.data.pointsNumber).toBe(2)
-      expect(provided.data.linksNumber).toBe(1)
-      const link = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as CosmosGraphPickingInfo | null
-      expect(link?.elementType).toBe('link')
-
-      // The application moves a point in its simulation: a saved layout, an algorithm, a drag
-      provided.setPointPosition(0, 1000, 1030)
-      await waitFrames(2)
-      expect(Array.from(provided.getPointPositionsArray())).toEqual([1000, 1030, 1050, 1000])
-
-      // Hide the graph, then show it again: the layout is the simulation's, and it stays
-      deck.setProps({ layers: [] })
-      await waitFrames(5)
-      deck.setProps({ layers: [viewLayer(provided)] })
-      await waitUntilRendered(deck)
-      expect(Array.from(provided.getPointPositionsArray())).toEqual([1000, 1030, 1050, 1000])
-      expect(deck.pickObject({ ...worldToScreen(1000, 1030), radius: 2 })?.index).toBe(0)
-    } finally {
-      provided.destroy()
-      deck.finalize()
-      container.remove()
-    }
-  })
-
-  it('leaves the data of a simulation it refuses untouched', async () => {
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
-    // The application's simulation on its own device, already holding the application's data
-    const foreign = new GraphSimulation(STATIC_SIM)
-    foreign.setPointPositions(new Float32Array([1, 1, 2, 2, 3, 3]), true)
-    foreign.applyData()
-    await foreign.ready
-    const { deck, container } = await createDeck([
-      new CosmosGraphLayer({
-        id: 'graph',
-        simulation: foreign,
-        points: { length: 2, initialPositions: new Float32Array(INITIAL) },
-        links: new Float32Array([0, 1]),
-        getPointSize: 10,
-        pickable: true,
-      }),
-    ])
-    try {
-      await waitFrames(10)
-      expect(error.mock.calls.filter(([message]) => String(message).includes('different device'))).toHaveLength(1)
-      // Refused to render, so nothing of the application's changed
-      expect(foreign.data.pointsNumber).toBe(3)
-      expect(foreign.data.linksNumber ?? 0).toBe(0)
-      expect(Array.from(foreign.getPointPositionsArray())).toEqual([1, 1, 2, 2, 3, 3])
-    } finally {
-      error.mockRestore()
-      foreign.destroy()
-      deck.finalize()
-      container.remove()
-    }
-  })
-
-  it('shows a settled simulation as it is', async () => {
-    const { deck, container, devicePromise } = createDeckDevice()
-    // Cools to the alpha floor within a few steps
-    const provided = loadedSimulation(devicePromise, { ...STATIC_SIM, simulationDecay: 10 })
-    try {
-      deck.setProps({ layers: [viewLayer(provided)] })
-      await provided.ready
-      await waitUntilRendered(deck)
-      for (let i = 0; i < 240 && provided.isSimulationRunning; i += 1) await waitFrames(1)
-      expect(provided.isSimulationRunning).toBe(false)
-      const settled = Array.from(provided.getPointPositionsArray())
-
-      // Hidden and shown again, a settled simulation is still settled, on the same layout
-      deck.setProps({ layers: [] })
-      await waitFrames(5)
-      deck.setProps({ layers: [viewLayer(provided)] })
-      await waitUntilRendered(deck)
-      expect({
-        positions: Array.from(provided.getPointPositionsArray()),
-        running: provided.isSimulationRunning,
-      }).toEqual({ positions: settled, running: false })
-    } finally {
-      provided.destroy()
-      deck.finalize()
-      container.remove()
-    }
-  })
-
-  it('follows data the application loads after the layer attached', async () => {
-    const { deck, container, devicePromise } = createDeckDevice()
-    const provided = new GraphSimulation(STATIC_SIM, devicePromise)
-    try {
-      // An empty simulation: the layer draws nothing and waits
-      deck.setProps({ layers: [viewLayer(provided)] })
-      await provided.ready
-      await waitFrames(10)
-      expect(deck.pickObject({ ...CENTER, radius: 2 })).toBeNull()
-
-      // The application loads it: the layer picks the data up
-      provided.setPointPositions(new Float32Array(INITIAL), true)
-      provided.setLinks(new Float32Array([0, 1]))
-      provided.applyData()
-      await waitUntilRendered(deck)
-      expect(deck.pickObject({ ...CENTER, radius: 2 })?.index).toBe(0)
-      expect((deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as CosmosGraphPickingInfo | null)?.elementType).toBe('link')
-
-      // And follows a replacement: a third point appears
-      provided.setPointPositions(new Float32Array([...INITIAL, 1000, 1030]), true)
-      provided.applyData()
-      await waitUntilPicked(deck, worldToScreen(1000, 1030), (info) => info?.index === 2)
-    } finally {
-      provided.destroy()
-      deck.finalize()
-      container.remove()
-    }
-  })
-
-  it('steps a simulation shared by two layers once per frame', async () => {
+  it('steps a graph shared by two layers once per frame', async () => {
     const { deck, container, devicePromise } = createDeckDevice()
     let ticks = 0
-    const provided = loadedSimulation(devicePromise, { ...STATIC_SIM, onSimulationTick: (): void => { ticks += 1 } })
-    const stepsOver = async (frames: number): Promise<number> => {
-      ticks = 0
-      await waitFrames(frames)
-      return ticks
-    }
+    const provided = new Graph(null, { ...STATIC, simulationDecay: 100000, onSimulationTick: (): void => { ticks += 1 } }, devicePromise)
+    provided.setPointPositions(POSITIONS)
+    provided.render()
     try {
-      // One layer: the main view
-      deck.setProps({ layers: [viewLayer(provided, 'main')] })
       await provided.ready
-      await waitUntilRendered(deck)
-      const alone = await stepsOver(30)
-      expect(alone).toBeGreaterThan(0)
-
-      // A second layer on the same simulation: a minimap styled differently
-      deck.setProps({ layers: [viewLayer(provided, 'main'), viewLayer(provided, 'minimap')] })
-      await waitFrames(10)
-      const shared = await stepsOver(30)
-      // The layout runs at the same speed: one step per frame, not one per layer
-      expect(shared).toBeLessThan(alone * 1.5)
+      deck.setProps({
+        layers: [
+          new CosmosGraphLayer({ id: 'main', graph: provided }),
+          new CosmosGraphLayer({ id: 'mini', graph: provided }),
+        ],
+      })
+      await waitFrames(5)
+      const before = ticks
+      const frames = 20
+      await waitFrames(frames)
+      // Two layers, one step per frame: never twice per frame. (A frame or two may pass
+      // without a step while deck idles between redraws.)
+      expect(ticks - before).toBeGreaterThan(frames / 2)
+      expect(ticks - before).toBeLessThanOrEqual(frames + 2)
     } finally {
       provided.destroy()
       deck.finalize()
       container.remove()
     }
   })
-})
 
-// Binary links carry styling channels beside the pair array, and a restyle —
-// a new `points` or `links` object over the same positions or pairs — never
-// reloads the simulation, so the layout stays.
-describe('CosmosGraphLayer binary links and restyling', () => {
-  const INITIAL = [1000, 1000, 1050, 1000]
-  type LinkChannels = { getLinkColor?: { value: unknown }; getLinkWidth?: { value: unknown }; getLinkSource?: { value: unknown } }
-  // The links sublayer's data, reached through a pick on the link it draws
-  const linksSublayerData = (deck: Deck<OrthographicView>, at: { x: number; y: number }): { attributes: LinkChannels } => {
-    const info = deck.pickObject({ ...at, radius: 2 })
-    expect(info?.sourceLayer?.id).toBe('graph-links')
-    return info!.sourceLayer!.props.data as { attributes: LinkChannels }
-  }
-
-  it('styles binary links from attributes and restyles without reloading the simulation', async () => {
-    let simulation: GraphSimulation | undefined
-    const pairs = new Float32Array([0, 1])
-    const colors = new Uint8Array([255, 0, 0, 255])
-    const widths = new Float32Array([6])
-    const points = { length: 2, initialPositions: new Float32Array(INITIAL) }
-    const graphLayer = (links: CosmosGraphLinks<unknown>, pointsInput: CosmosGraphPoints<unknown> = points): CosmosGraphLayer => new CosmosGraphLayer({
+  it('seeds unpositioned points from the graph\'s RNG, so randomSeed reproduces the layout', async () => {
+    const layouts: number[][] = []
+    const graphLayer = (): CosmosGraphLayer => new CosmosGraphLayer({
       id: 'graph',
-      points: pointsInput,
-      links,
-      getPointSize: 10,
-      simulationConfig: STATIC_SIM,
-      onSimulationCreated: (sim): void => { simulation = sim },
-      pickable: true,
+      points: { length: 3 },
+      config: { ...STATIC, randomSeed: 7 },
+      onGraphDataLoaded: ({ graph }): void => { layouts.push(Array.from(graph.getPointPositionsArray())) },
     })
-    const { deck, container } = await createDeck([
-      graphLayer({ pairs, attributes: { getLinkColor: { value: colors, size: 4 }, getLinkWidth: { value: widths, size: 1 } } }),
-    ])
+    const { deck, container } = await createDeck([graphLayer()])
     try {
-      await waitUntilPickable(deck)
-      // The channels reach the links sublayer as they are, beside the endpoints
-      const { attributes } = linksSublayerData(deck, worldToScreen(1025, 1000))
-      expect(attributes.getLinkColor?.value).toBe(colors)
-      expect(attributes.getLinkWidth?.value).toBe(widths)
-      expect(attributes.getLinkSource?.value).toBe(pairs)
-
-      // The application moves a point; restyling the links must not undo it
-      simulation!.setPointPosition(0, 1000, 1030)
+      await waitUntil(() => layouts.length === 1, 'the first load')
+      // A second layer is a second graph with the same seed
+      deck.setProps({ layers: [] })
       await waitFrames(2)
-      const recolored = new Uint8Array([0, 255, 0, 255])
-      deck.setProps({ layers: [graphLayer({ pairs, attributes: { getLinkColor: { value: recolored, size: 4 } } })] })
-      await waitFrames(5)
-      // The link now runs from (1000, 1030) to (1050, 1000)
-      expect(linksSublayerData(deck, worldToScreen(1025, 1015)).attributes.getLinkColor?.value).toBe(recolored)
-      expect(Array.from(simulation!.getPointPositionsArray())).toEqual([1000, 1030, 1050, 1000])
-
-      // Restyling binary points over the same `initialPositions` keeps the layout too
-      const pointColors = new Uint8Array(8).fill(255)
-      deck.setProps({ layers: [graphLayer({ pairs }, { ...points, attributes: { getPointColor: { value: pointColors, size: 4 } } })] })
-      await waitFrames(5)
-      expect(Array.from(simulation!.getPointPositionsArray())).toEqual([1000, 1030, 1050, 1000])
-
-      // New pairs load new links, still without touching the positions
-      const reversed = new Float32Array([1, 0])
-      deck.setProps({ layers: [graphLayer(reversed)] })
-      await waitFrames(5)
-      expect(simulation!.data.links).toBe(reversed)
-      expect(Array.from(simulation!.getPointPositionsArray())).toEqual([1000, 1030, 1050, 1000])
-    } finally {
-      deck.finalize()
-      container.remove()
-    }
-  })
-
-  it('skips a pair that names no point and keeps link indices', async () => {
-    let simulation: GraphSimulation | undefined
-    // Three points; link 0 names point 7, link 1 a fraction, link 2 NaN — link 3 is fine
-    const pairs = new Float32Array([0, 7, 0, 2.5, NaN, 1, 0, 1])
-    const { deck, container } = await createDeck([
-      new CosmosGraphLayer({
-        id: 'graph',
-        points: { length: 3, initialPositions: new Float32Array([...INITIAL, 1000, 1030]) },
-        links: pairs,
-        getPointSize: 10,
-        simulationConfig: STATIC_SIM,
-        onSimulationCreated: (sim): void => { simulation = sim },
-        pickable: true,
-      }),
-    ])
-    try {
-      await waitUntilPickable(deck)
-      // Nothing dropped: the pair array is the simulation's, index for index
-      expect(simulation!.data.links).toBe(pairs)
-      expect(simulation!.data.linksNumber).toBe(4)
-      // The good link is drawn at its own index
-      const link = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as CosmosGraphPickingInfo | null
-      expect(link?.elementType).toBe('link')
-      expect(link?.index).toBe(3)
-      // Point 7's texel is unwritten, so a drawn link 0 would run from point 0 towards the origin
-      expect(deck.pickObject({ ...worldToScreen(980, 980), radius: 2 })).toBeNull()
-      // 2.5 truncated would be point 2, so a drawn link 1 would run from point 0 to it
-      expect(deck.pickObject({ ...worldToScreen(1000, 1015), radius: 2 })).toBeNull()
+      deck.setProps({ layers: [graphLayer()] })
+      await waitUntil(() => layouts.length === 2, 'the second load')
+      expect(layouts[1]).toEqual(layouts[0])
+      // Still in the middle half of the space, clear of the walls
+      const spaceSize = defaultConfigValues.spaceSize
+      for (const coordinate of layouts[0] as number[]) {
+        expect(coordinate).toBeGreaterThanOrEqual(spaceSize * 0.25)
+        expect(coordinate).toBeLessThanOrEqual(spaceSize * 0.75)
+      }
     } finally {
       deck.finalize()
       container.remove()

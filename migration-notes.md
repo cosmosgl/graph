@@ -1,5 +1,55 @@
 # Migration Guide
 
+## Migrating `@cosmos.gl/deck-layers` past 3.5
+
+### `CosmosGraphLayer` Draws With cosmos.gl's Renderer
+
+The layer no longer renders through sublayers of its own. It owns a headless
+`Graph` on deck's device and lets cosmos.gl's renderer draw into deck's render
+pass under deck's camera, so every cosmos.gl rendering option works through
+`config`. This changes the layer's API:
+
+| Before (3.5) | Now |
+|---|---|
+| `simulationConfig: GraphSimulationConfig` | `config: CosmosGraphLayerConfig` — cosmos.gl's `GraphConfig` minus the keys deck owns (`DECK_OWNED_CONFIG_KEYS`). Rendering keys work. |
+| `simulation: GraphSimulation` (provided) | `graph: Graph` — a headless `new Graph(null, config, devicePromise)` on deck's device |
+| `onSimulationCreated(simulation)` | `onGraphCreated(graph)` |
+| `pointSizeUnits`, `linkWidthUnits` | removed — sizes are cosmos.gl's (`scalePointsOnZoom`, `pointSizeScale`, `linkWidthScale`) |
+| `pickable`, `autoHighlight`, `onHover` / `onClick`, `info.elementType` | not available yet — cosmos.gl draws into no picking buffer. Coming with the engine's picking mode. |
+| `enablePointDrag`, `dragReheatAlpha`, `unpinOnDragEnd`, `onPointDrag*` | removed with picking |
+| `transitions` on accessors | no effect — a headless `Graph` applies changes at once |
+| `_subLayerProps`, `highlightedObjectIndex` | no sublayers to address |
+| `OrthographicView()` | `OrthographicView({ flipY: false })` — cosmos.gl's space has y up; a y-down, rotated or pitched view is reported once and not drawn. Map views work at pitch 0 and bearing 0. |
+
+Binary attributes: a `Float32Array` color channel is now cosmos.gl's 0..1 and is handed
+over as it is (zero copies); `Uint8Array` 0..255 bytes are converted as before.
+
+New: `onGraphDataLoaded(info)` fires after each load of `points` or `links` with the graph,
+what the load replaced, the id→index map and the array links in the graph's order — the
+place to send per-point and per-link arrays (`setPointShapes`, `setLinkStrength`, …) so they
+line up with the graph's indices.
+
+```js
+// before
+new CosmosGraphLayer({
+  id: 'graph', points, links,
+  simulationConfig: { simulationGravity: 0.25 },
+  onSimulationCreated: (simulation) => { /* … */ },
+  pickable: true, autoHighlight: true, enablePointDrag: true,
+})
+
+// now
+new CosmosGraphLayer({
+  id: 'graph', points, links,
+  config: { simulationGravity: 0.25, curvedLinks: true, pointDefaultShape: PointShape.Hexagon },
+  onGraphCreated: (graph) => { /* … */ },
+})
+```
+
+If you need deck's picking, hover or drag today, render the layout with deck layers of your
+own over `PositionTextureSource` — the *Custom deck layers* story carries the former sublayers
+as a starting point.
+
 ## Migrating to v3.5
 
 ### luma.gl Is Now a Peer Dependency
