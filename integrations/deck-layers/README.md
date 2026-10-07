@@ -81,6 +81,56 @@ new CosmosGraphLayer({
   (`GraphSimulationConfig` from `@cosmos.gl/graph`); take the wheel through
   `onSimulationCreated`.
 
+### Driving the simulation the layer loads
+
+The layer's `GraphSimulation` is yours to call — `onSimulationCreated` hands it over, and
+`onSimulationDataLoaded` passes it with every load — except for what the layer does itself:
+
+| Yours | The layer's |
+|---|---|
+| `setLinkStrength`, `setPointClusters`, `setClusterPositions`, `setPinnedPoint(s)`, `start` / `pause`, `trackPoints`, position reads, `setPointPosition` / `setPointPositionsByIndices` | `setPointPositions` and `setLinks`: the layer reloads them whenever `points` or `links` change |
+| `setConfig`, for keys not in `simulationConfig` | the keys in `simulationConfig`, applied again whenever a new `simulationConfig` object arrives (an inline literal is new on every render) |
+
+The layer also steps the simulation each frame while it runs (`pause()` it to step it
+yourself), and with `enablePointDrag` it pins, moves and reheats the dragged point. To keep
+your own pins through a drag, toggle them with `setPinnedPoint(i, …)` rather than replacing
+the set.
+
+Arrays you send per point or per link follow the simulation's indices, and a reload can
+move them. `onSimulationDataLoaded` fires after each load, once the simulation holds the
+new data, and maps your data to those indices: `pointIndexById` (with `getPointId`) and
+`links`, the array links the simulation holds in its order. Links whose endpoints name no
+point are dropped, so a link's index can differ from its index in your array. Send per-link
+arrays from there, and they line up:
+
+```js
+let simulation
+let loadedLinks = []
+const sendStrengths = () => {
+  if (!simulation) return
+  simulation.setLinkStrength(Float32Array.from(loadedLinks, (link) => link.weight)) // your per-link weight
+  simulation.applyData()
+}
+
+new CosmosGraphLayer({
+  // …
+  onSimulationDataLoaded: ({ simulation: sim, linksLoaded, links }) => {
+    if (!linksLoaded || !links) return
+    simulation = sim
+    loadedLinks = links
+    sendStrengths() // and again whenever the weights change
+  },
+})
+```
+
+The simulation reuses the last strength array it was sent whenever its length matches the
+link count. So a new link set of the same length would pull with the old strengths in the
+old order: send them again on every `linksLoaded`. Each strength update rebuilds the link
+force, which also draws every link's random rest-length variation again; set
+`simulationLinkDistRandomVariationRange: [1, 1]` when you update strengths often. The first
+call comes when the simulation is ready, later ones during deck's layer update: calls on
+the simulation are fine in both, while changes to layer props should wait.
+
 Live examples: the *Integrations* section of the
 [cosmos.gl Storybook](https://cosmosgl.github.io/graph).
 

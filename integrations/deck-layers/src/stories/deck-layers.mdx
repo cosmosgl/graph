@@ -148,6 +148,32 @@ simulation.setPinnedPoint(3, true)   // hold point 3 where it is
 
 Try it: hover, drag, Pause and Reheat in [Graph layer](../?path=/story/examples-integrations--graph-layer).
 
+## Drive the simulation
+
+Any `GraphSimulation` method is yours to call — link strengths, clusters, pins — except
+`setPointPositions`, `setLinks` and the keys you pass in `simulationConfig`, which the layer
+applies again whenever `points`, `links` or `simulationConfig` change. Arrays you send per
+point or per link follow the simulation's indices. `onSimulationDataLoaded` fires after each
+load and maps your data to them: `pointIndexById`, and `links`, the array links the
+simulation holds in its order (links that name no point are dropped). Send per-link arrays
+from there, and again on every reload. The layer also steps the simulation while it runs
+(`pause()` it to step it yourself), and with `enablePointDrag` it pins, moves and reheats the
+dragged point.
+
+```js
+new CosmosGraphLayer({
+  // …
+  onSimulationDataLoaded: ({ simulation, linksLoaded, links }) => {
+    if (!linksLoaded || !links) return
+    simulation.setLinkStrength(Float32Array.from(links, (link) => link.weight)) // your per-link weight
+    simulation.applyData()
+  },
+})
+```
+
+Try it: [Graph on a map](../?path=/story/examples-integrations--graph-on-map) sets the link
+strengths every frame, so the travellers on a trip fly between two cities.
+
 ## Labels and other layers
 
 Other deck.gl layers stack on top as usual. To put labels or markers on a few points, ask the

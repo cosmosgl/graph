@@ -71,6 +71,43 @@ export type CosmosGraphPickingInfo = PickingInfo & {
   elementType?: 'point' | 'link';
 }
 
+/**
+ * What `onSimulationDataLoaded` reports: the simulation, what the load replaced,
+ * and how your data maps to the simulation's point and link indices. Per-point
+ * and per-link arrays you hand the simulation (`setLinkStrength`,
+ * `setPointClusters`, …) follow those indices. `links` and `pointIndexById` are
+ * the layer's own state: read or copy them, never mutate them.
+ */
+export type CosmosGraphDataLoadedInfo<LinkDataT = unknown> = {
+  /** The simulation the data was loaded into: layer-created or provided. */
+  simulation: GraphSimulation;
+  /**
+   * The point positions were replaced, and with them possibly the point count.
+   * Per-point arrays sent before this load may no longer line up.
+   */
+  pointsLoaded: boolean;
+  /**
+   * The links were replaced. Per-link arrays sent before this load may no longer
+   * line up: the simulation reuses the last one it was sent whenever its length
+   * matches the new link count, in the old order.
+   */
+  linksLoaded: boolean;
+  /**
+   * Point `i` is always entry `i` of `points` (or pair `i` of `initialPositions`).
+   * With array points and `getPointId`, this maps each id to its index; a repeated
+   * id maps to its last point. Otherwise `null`.
+   */
+  pointIndexById: ReadonlyMap<string | number, number> | null;
+  /**
+   * Array links: the links the simulation holds, in its order — link `i` is
+   * `info.links[i]`, and a picked link's `index` indexes it too. Links whose
+   * endpoints name no point are not among them, so an index into your `links`
+   * array can differ. Binary links, or no `links` prop: `null`, and link `i` is
+   * pair `i` of your pair array.
+   */
+  links: readonly LinkDataT[] | null;
+}
+
 export type CosmosGraphLayerProps<PointDataT = unknown, LinkDataT = unknown> =
   CosmosGraphLayerOwnProps<PointDataT, LinkDataT> & LayerProps
 
@@ -185,6 +222,20 @@ type CosmosGraphLayerOwnProps<PointDataT, LinkDataT> = {
    * a provided `simulation`.
    */
   onSimulationCreated?: ((simulation: GraphSimulation) => void) | null;
+  /**
+   * Called after each load of `points` or `links` into the simulation, once the
+   * simulation holds the new data — and, with both load flags `false`, when only
+   * the id map changed. Use it to send what lines up with the simulation's
+   * indices — link strengths, clusters, pins — again after a reload:
+   * `info.pointIndexById` and `info.links` map your data to those indices. Not
+   * called when the layer draws a simulation's own data (no `points`).
+   *
+   * The first call comes when the simulation is ready (and again after a
+   * `simulation` swap), later ones during deck's layer update. Calls on
+   * `info.simulation` are fine in either; defer anything that changes layer props.
+   * A throw goes to deck's `onError`, and the load stands.
+   */
+  onSimulationDataLoaded?: ((info: CosmosGraphDataLoadedInfo<LinkDataT>) => void) | null;
 }
 
 const defaultProps: DefaultProps<CosmosGraphLayerProps> = {
@@ -209,6 +260,7 @@ const defaultProps: DefaultProps<CosmosGraphLayerProps> = {
   simulation: { type: 'object', value: null, optional: true },
   simulationConfig: { type: 'object', value: {}, compare: 2 },
   onSimulationCreated: { type: 'function', value: null, optional: true },
+  onSimulationDataLoaded: { type: 'function', value: null, optional: true },
   // getSubLayerProps forwards `parameters` into every sublayer, so the
   // composite must carry the same pipeline-state default the primitives do
   parameters: { type: 'object', value: BLEND_PARAMETERS, optional: true, compare: 2 },
@@ -752,6 +804,8 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     if (pairs) simulation.setLinks(pairs)
     if (positions || pairs) simulation.applyData()
 
+    // A new id map with nothing reloaded still changes how ids reach indices
+    const idsRemapped = idToIndex !== this.state.idToIndex
     this.setState({
       hasLoaded: true,
       pointCount,
@@ -763,5 +817,22 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       loadedPairs: pairs ?? this.state.loadedPairs,
       idToIndex,
     })
+
+    // After the simulation holds the data, so what the callback sends lines up with it.
+    // A throw is the app's error, not the layer's: it goes to deck's onError and leaves
+    // the load, and the layer's readiness after a first load, intact.
+    if (positions || pairs || idsRemapped) {
+      try {
+        this.props.onSimulationDataLoaded?.({
+          simulation,
+          pointsLoaded: Boolean(positions),
+          linksLoaded: Boolean(pairs),
+          pointIndexById: idToIndex,
+          links: Array.isArray(links) ? linksData as readonly LinkDataT[] : null,
+        })
+      } catch (error) {
+        this.raiseError(error as Error, 'onSimulationDataLoaded')
+      }
+    }
   }
 }

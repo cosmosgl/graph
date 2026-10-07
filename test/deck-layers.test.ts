@@ -2,7 +2,13 @@ import { describe, it, expect, vi } from 'vitest'
 import { Deck, OrthographicView } from '@deck.gl/core'
 import type { Device } from '@luma.gl/core'
 import { Graph, GraphSimulation, type GraphSimulationConfig } from '@cosmos.gl/graph'
-import { CosmosGraphLayer, type CosmosGraphLinks, type CosmosGraphPickingInfo, type CosmosGraphPoints } from '@cosmos.gl/deck-layers'
+import {
+  CosmosGraphLayer,
+  type CosmosGraphDataLoadedInfo,
+  type CosmosGraphLinks,
+  type CosmosGraphPickingInfo,
+  type CosmosGraphPoints,
+} from '@cosmos.gl/deck-layers'
 import type { LayersList, PickingInfo } from '@deck.gl/core'
 // The primitives are internal sublayers, not package exports
 import { CosmosPointsLayer } from '../integrations/deck-layers/src/cosmos-points-layer'
@@ -562,6 +568,142 @@ describe('CosmosGraphLayer', () => {
       expect(link?.elementType).toBe('link')
       expect(link?.object).toEqual(links[0])
     } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('reports each load with the index mapping, so per-link arrays sent from it line up', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    type Point = { id: string; position: readonly [number, number] }
+    type Link = { source: string; target: string; name: string }
+    const points: Point[] = [
+      { id: 'a', position: [1000, 1000] },
+      { id: 'b', position: [1050, 1000] },
+      { id: 'c', position: [1000, 1030] },
+    ]
+    // The middle link names no point: the simulation holds the other two, in their order
+    const links: Link[] = [{ source: 'a', target: 'b', name: 'ab' }, { source: 'a', target: 'nope', name: 'dropped' }, { source: 'b', target: 'c', name: 'bc' }]
+    const STRENGTH: Record<string, number> = { ab: 0.25, bc: 0.75, ca: 0.5 }
+    let created: GraphSimulation | undefined
+    const loads: CosmosGraphDataLoadedInfo<Link>[] = []
+    // What the simulation holds when the callback runs, as point-index pairs
+    const heldPairs: number[][] = []
+    const graphLayer = (linkData: CosmosGraphLinks<Link>, pointColor: [number, number, number, number] = [0, 0, 255, 255]): CosmosGraphLayer<Point, Link> =>
+      new CosmosGraphLayer<Point, Link>({
+        id: 'graph',
+        points,
+        links: linkData,
+        getPointId: (p): string => p.id,
+        getPointPosition: (p): readonly [number, number] => p.position,
+        getPointSize: 10,
+        getPointColor: pointColor,
+        simulationConfig: STATIC_SIM,
+        onSimulationCreated: (sim): void => { created = sim },
+        onSimulationDataLoaded: (info): void => {
+          loads.push(info)
+          heldPairs.push(Array.from(info.simulation.data.links ?? []))
+          if (!info.links) return
+          info.simulation.setLinkStrength(Float32Array.from(info.links, (l) => STRENGTH[l.name] as number))
+          info.simulation.applyData()
+        },
+        pickable: true,
+      })
+    const { deck, container } = await createDeck([graphLayer(links)])
+    try {
+      await waitUntilPickable(deck)
+      expect(loads).toHaveLength(1)
+      const [first] = loads
+      expect(first?.simulation).toBe(created)
+      expect(first?.pointsLoaded).toBe(true)
+      expect(first?.linksLoaded).toBe(true)
+      expect(first?.pointIndexById?.get('c')).toBe(2)
+      expect(first?.links?.map((l) => l.name)).toEqual(['ab', 'bc'])
+      // The reported links are the ones the simulation holds, in its order
+      const toPairs = (info: CosmosGraphDataLoadedInfo<Link> | undefined): number[] =>
+        (info?.links ?? []).flatMap((l) => [info?.pointIndexById?.get(l.source) as number, info?.pointIndexById?.get(l.target) as number])
+      expect(heldPairs[0]).toEqual(toPairs(first))
+      // ...so the strengths sent from it are the ones the simulation applies
+      expect(Array.from(created!.data.linkStrength ?? [])).toEqual([0.25, 0.75])
+
+      // A restyle loads nothing, so there is nothing to report
+      deck.setProps({ layers: [graphLayer(links, [255, 0, 0, 255])] })
+      await waitFrames(5)
+      expect(loads).toHaveLength(1)
+
+      // New links, same points: reported as a links load, and what it sends lines up again
+      const reordered: Link[] = [{ source: 'b', target: 'c', name: 'bc' }, { source: 'c', target: 'a', name: 'ca' }, { source: 'a', target: 'b', name: 'ab' }]
+      deck.setProps({ layers: [graphLayer(reordered)] })
+      await waitFrames(5)
+      expect(loads).toHaveLength(2)
+      expect(loads[1]?.pointsLoaded).toBe(false)
+      expect(loads[1]?.linksLoaded).toBe(true)
+      expect(loads[1]?.links?.map((l) => l.name)).toEqual(['bc', 'ca', 'ab'])
+      expect(heldPairs[1]).toEqual(toPairs(loads[1]))
+      expect(Array.from(created!.data.linkStrength ?? [])).toEqual([0.75, 0.5, 0.25])
+
+      // Binary links are in the caller's own order: no links to report
+      deck.setProps({ layers: [graphLayer(new Float32Array([0, 1]))] })
+      await waitFrames(5)
+      expect(loads).toHaveLength(3)
+      expect(loads[2]?.linksLoaded).toBe(true)
+      expect(loads[2]?.links).toBeNull()
+    } finally {
+      warn.mockRestore()
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('reports a provided simulation and an id-only remap, and survives a callback that throws', async () => {
+    const { deck, container, devicePromise } = createDeckDevice()
+    const provided = new GraphSimulation(STATIC_SIM, devicePromise)
+    type Point = { id: string; alias: string }
+    const points: Point[] = [{ id: 'a', alias: 'x' }, { id: 'b', alias: 'y' }]
+    // One pair array throughout: a new one would be a links load
+    const pairs = new Float32Array([0, 1])
+    const loads: CosmosGraphDataLoadedInfo[] = []
+    const errors: Error[] = []
+    const created = vi.fn()
+    const graphLayer = (getPointId: (p: Point) => string, trigger: number): CosmosGraphLayer<Point> => new CosmosGraphLayer<Point>({
+      id: 'graph',
+      simulation: provided,
+      points,
+      links: pairs,
+      getPointId,
+      getPointPosition: (_, { index }): [number, number] => [1000 + index * 50, 1000],
+      getPointSize: 10,
+      updateTriggers: { getPointId: trigger },
+      onSimulationCreated: created,
+      onSimulationDataLoaded: (info): void => {
+        loads.push(info)
+        // An app bug on the first load must not keep the layer from becoming ready
+        if (loads.length === 1) throw new Error('app bug')
+      },
+      onError: (error): boolean => { errors.push(error); return true },
+      pickable: true,
+    })
+    try {
+      // Picking asserts until deck's device is up
+      await provided.ready
+      deck.setProps({ layers: [graphLayer((p) => p.id, 0)] })
+      await waitUntilPickable(deck)
+      expect(loads).toHaveLength(1)
+      expect(loads[0]?.simulation).toBe(provided)
+      expect(created).not.toHaveBeenCalled()
+      expect(errors[0]?.message).toContain('onSimulationDataLoaded')
+      expect(errors[0]?.message).toContain('app bug')
+
+      // New ids over the same positions and pairs: nothing reloads, but ids reach indices anew
+      deck.setProps({ layers: [graphLayer((p) => p.alias, 1)] })
+      await waitFrames(5)
+      expect(loads).toHaveLength(2)
+      expect(loads[1]?.pointsLoaded).toBe(false)
+      expect(loads[1]?.linksLoaded).toBe(false)
+      expect(loads[1]?.pointIndexById?.get('y')).toBe(1)
+      expect(loads[1]?.links).toBeNull()
+    } finally {
+      provided.destroy()
       deck.finalize()
       container.remove()
     }
