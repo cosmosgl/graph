@@ -404,6 +404,44 @@ describe('CosmosLinksLayer', () => {
     }
   })
 
+  it('draws a curved link along the engine curve, and straight again when uncurved', async () => {
+    const { deck, graph, container } = await createDeckWithSimulation(
+      {},
+      new Float32Array([1000, 1000, 1050, 1000])
+    )
+    try {
+      const linksLayer = (curvedLinks: boolean): CosmosLinksLayer<{ source: number; target: number }> => new CosmosLinksLayer({
+        id: 'links',
+        graph,
+        data: [{ source: 0, target: 1 }],
+        getLinkWidth: 4,
+        curvedLinks,
+        curvedLinkWeight: 0.8,
+        curvedLinkControlPointDistance: 0.5,
+        pickable: true,
+      })
+      deck.setProps({ layers: [linksLayer(true)] })
+      // The link's ends are where they always are
+      for (let i = 0; i < 240 && !deck.pickObject({ ...worldToScreen(1002, 1000), radius: 2 }); i += 1) await waitFrames(1)
+
+      // The rational curve's middle sits w·h/(1+w) of the chord's length off the
+      // chord, along its normal: (0, 50) here, which runs down the screen
+      const apex = worldToScreen(1025, 1000 + (0.8 * 0.5 / 1.8) * 50)
+      expect(deck.pickObject({ ...apex, radius: 1 })?.index).toBe(0)
+      expect(deck.pickObject({ ...worldToScreen(1025, 1000), radius: 0 })).toBeNull()
+
+      // Back to one straight quad, through the same layer
+      deck.setProps({ layers: [linksLayer(false)] })
+      await waitFrames(5)
+      expect(deck.pickObject({ ...worldToScreen(1025, 1000), radius: 1 })?.index).toBe(0)
+      expect(deck.pickObject({ ...apex, radius: 0 })).toBeNull()
+    } finally {
+      graph.destroy()
+      deck.finalize()
+      container.remove()
+    }
+  })
+
   it('resolves accessor-mode links through the default source/target accessors', async () => {
     const { deck, graph, container } = await createDeckWithSimulation(
       {},

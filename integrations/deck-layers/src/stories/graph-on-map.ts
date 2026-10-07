@@ -8,20 +8,23 @@ import type { GraphSimulation } from '@cosmos.gl/graph'
 import './style.css'
 
 type City = { name: string; lngLat: [number, number] }
-// A traveller on a trip keeps flying between home and the city it visits. One headed
-// home for good finishes the round trip it is on.
-type Trip = { city: number; startedAt: number; period: number; endsAt: number | undefined }
+// A traveller on a trip keeps flying between home and the city it visits, along the route
+// between them. One headed home for good finishes the round trip it is on.
+type Trip = { city: number; route: number; startedAt: number; period: number; endsAt: number | undefined }
 type StoryPoint = {
   id: string;
   name: string;
+  kind: 'city' | 'waypoint' | 'traveller';
   home: number;
   trip: Trip | undefined;
-  isCity: boolean;
-  // How far along its way a traveller is: 0 at home, 1 at the city it visits
+  // How far along its route a traveller is: 0 at home, 1 at the city it visits
   progress: number;
 }
-// A traveller is tied to its home, and on a trip to the city it visits
-type StoryLink = { source: string; target: string; kind: 'home' | 'away'; traveller: StoryPoint }
+// A route is drawn between two cities. A tie is a spring from a traveller to one of the
+// three points its route's curve is made of: home, the route's waypoint, the city it visits.
+type StoryLink =
+  | { source: string; target: string; kind: 'route' }
+  | { source: string; target: string; kind: 'home' | 'waypoint' | 'away'; traveller: StoryPoint }
 type CityLabel = { name: string; position: [number, number] }
 
 const COUNTRIES = 'https://cdn.jsdelivr.net/gh/nvkelso/natural-earth-vector@v5.1.2/geojson/ne_110m_admin_0_countries.geojson'
@@ -65,13 +68,35 @@ const toLayout = ([lng, lat]: [number, number]): [number, number] => [
   ((Math.PI + Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))) / (2 * Math.PI)) * SPACE,
 ]
 
+// The layer draws a curved link as a rational quadratic Bézier: its point at t is the
+// average of the source, a control point and the target, weighted (1-t)², 2t(1-t)·w and t².
+// A traveller held by three springs with those weights rests on that very curve.
+const CURVE_WEIGHT = 0.8
+const CURVE_CONTROL_DISTANCE = 0.3
+// Where the layer puts a route's control point: on the chord's normal, a share of the
+// chord's length from its middle
+const routeWaypoint = ([from, to]: [number, number]): [number, number] => {
+  const [ax, ay] = toLayout((CITIES[from] as City).lngLat)
+  const [bx, by] = toLayout((CITIES[to] as City).lngLat)
+  return [(ax + bx) / 2 - (by - ay) * CURVE_CONTROL_DISTANCE, (ay + by) / 2 + (bx - ax) * CURVE_CONTROL_DISTANCE]
+}
+// Normalised, so a traveller is pulled as hard at every point of its way
+const curveWeights = (t: number): Record<'home' | 'waypoint' | 'away', number> => {
+  const home = (1 - t) ** 2
+  const waypoint = 2 * t * (1 - t) * CURVE_WEIGHT
+  const away = t ** 2
+  const sum = home + waypoint + away
+  return { home: home / sum, waypoint: waypoint / sum, away: away / sum }
+}
+
 /**
  * A graph on a map. deck.gl draws the countries and owns the camera; cosmos.gl lays
  * the graph out in the map's own space. Every city is a point pinned at its real
- * place, and every other point is a traveller tied to its home city. Most stay
- * close to home. A traveller on a trip keeps flying to another city and back: it
- * is tied to both, and the two ties trade strength as it goes, so the simulation
- * flies it along the line between them. The story sets those strengths on the
+ * place, joined to its neighbours by curved routes, and every other point is a
+ * traveller tied to its home city. Most stay close to home. A traveller on a trip
+ * keeps flying to another city and back: its ties to home, to the route's curve and
+ * to the city it visits trade strength as it goes, and those strengths trace the
+ * curve, so the simulation flies it along the arc. The story sets them on the
  * simulation itself, every frame, through the indices the layer reports when it
  * loads the links. A few travellers set off or turn for home every half second,
  * and the simulation never cools down, so the map never rests. Shuffle the trips
@@ -93,12 +118,12 @@ export const graphOnMap = async (): Promise<{ div: HTMLDivElement; destroy: () =
   // `elapsed` is how far into its first round trip the traveller already is.
   const pickTrip = (home: number, now: number, share = 0.4, elapsed = 0): Trip | undefined => {
     if (Math.random() >= share) return undefined
-    const destinations = ROUTES.flatMap(([a, b]) => (a === home ? [b] : b === home ? [a] : []))
-    const city = destinations[Math.floor(Math.random() * destinations.length)]
-    if (city === undefined) return undefined
+    const routes = ROUTES.flatMap(([a, b], route) => (a === home ? [{ city: b, route }] : b === home ? [{ city: a, route }] : []))
+    const picked = routes[Math.floor(Math.random() * routes.length)]
+    if (!picked) return undefined
     const [shortest, longest] = ROUND_TRIP_MS
     const period = shortest + Math.random() * (longest - shortest)
-    return { city, startedAt: now - elapsed * period, period, endsAt: undefined }
+    return { ...picked, startedAt: now - elapsed * period, period, endsAt: undefined }
   }
   // 0 at home, 1 at the visited city, easing in and out at both ends
   const tripProgress = (trip: Trip, now: number): number => (1 - Math.cos((2 * Math.PI * (now - trip.startedAt)) / trip.period)) / 2
@@ -107,26 +132,41 @@ export const graphOnMap = async (): Promise<{ div: HTMLDivElement; destroy: () =
   const points: StoryPoint[] = []
   const seeds = new Map<string, [number, number]>()
   CITIES.forEach((city, cityIndex) => {
+    points.push({ id: `city-${cityIndex}`, name: city.name, kind: 'city', home: cityIndex, trip: undefined, progress: 0 })
+    seeds.set(`city-${cityIndex}`, toLayout(city.lngLat))
+  })
+  // A route's waypoint is the control point of its curve: an invisible pinned point
+  ROUTES.forEach((route, routeIndex) => {
+    points.push({ id: `waypoint-${routeIndex}`, name: '', kind: 'waypoint', home: route[0], trip: undefined, progress: 0 })
+    seeds.set(`waypoint-${routeIndex}`, routeWaypoint(route))
+  })
+  CITIES.forEach((city, cityIndex) => {
     const [x, y] = toLayout(city.lngLat)
-    points.push({ id: `city-${cityIndex}`, name: city.name, home: cityIndex, trip: undefined, isCity: true, progress: 0 })
-    seeds.set(`city-${cityIndex}`, [x, y])
     for (let traveller = 0; traveller < TRAVELLERS_PER_CITY; traveller += 1) {
       const id = `traveller-${cityIndex}-${traveller}`
       const name = TRAVELLER_NAMES[Math.floor(Math.random() * TRAVELLER_NAMES.length)] as string
-      points.push({ id, name, home: cityIndex, trip: pickTrip(cityIndex, start, 0.4, Math.random()), isCity: false, progress: 0 })
+      points.push({ id, name, kind: 'traveller', home: cityIndex, trip: pickTrip(cityIndex, start, 0.4, Math.random()), progress: 0 })
       seeds.set(id, [x + (Math.random() - 0.5) * 80, y + (Math.random() - 0.5) * 80])
     }
   })
-  const travellers = points.filter((point) => !point.isCity)
-  const cityIndices = points.flatMap((point, index) => (point.isCity ? [index] : []))
+  const travellers = points.filter((point) => point.kind === 'traveller')
+  const pinnedIndices = points.flatMap((point, index) => (point.kind === 'traveller' ? [] : [index]))
 
-  // Every tie is a link, and each link is a spring. The traveller is the source of both
-  // of its ties, so the simulation applies their pulls in the same pass.
-  const tie = (): StoryLink[] => travellers.flatMap((traveller): StoryLink[] => {
-    const home: StoryLink = { source: traveller.id, target: `city-${traveller.home}`, kind: 'home', traveller }
-    if (!traveller.trip) return [home]
-    return [home, { source: traveller.id, target: `city-${traveller.trip.city}`, kind: 'away', traveller }]
-  })
+  // The routes, and every traveller's ties: to home always, and on a trip to its route's
+  // waypoint and the city it visits. Each tie is a spring, with the traveller as its
+  // source, so the simulation applies all three pulls in the same pass.
+  const tie = (): StoryLink[] => [
+    ...ROUTES.map(([a, b]): StoryLink => ({ source: `city-${a}`, target: `city-${b}`, kind: 'route' })),
+    ...travellers.flatMap((traveller): StoryLink[] => {
+      const home: StoryLink = { source: traveller.id, target: `city-${traveller.home}`, kind: 'home', traveller }
+      if (!traveller.trip) return [home]
+      return [
+        home,
+        { source: traveller.id, target: `waypoint-${traveller.trip.route}`, kind: 'waypoint', traveller },
+        { source: traveller.id, target: `city-${traveller.trip.city}`, kind: 'away', traveller },
+      ]
+    }),
+  ]
   let links = tie()
 
   // The strengths go to the simulation directly. They line up with the links it holds,
@@ -138,18 +178,17 @@ export const graphOnMap = async (): Promise<{ div: HTMLDivElement; destroy: () =
   const degree = new Map<string, number>()
   // cosmos.gl splits a spring's pull between its two ends by degree — the better-connected
   // end moves less — and takes the square root of the strength. A traveller's end of each
-  // tie gets only its share (the city's share moves nothing: cities are pinned); dividing
-  // that out and squaring leaves each tie pulling with exactly its weight: home
-  // 1 - progress, away progress. The weights add up to one, so the traveller rests that far
-  // along the line from home to the city it visits.
+  // tie gets only its share (the other end's share moves nothing: cities and waypoints are
+  // pinned); dividing that out and squaring leaves each tie pulling with exactly its curve
+  // weight, so the traveller rests on the route's curve, `progress` along it.
   const sendStrengths = (): void => {
     if (!simulation || loadedLinks.length === 0) return // nothing loaded yet
     const strengths = new Float32Array(loadedLinks.length)
     loadedLinks.forEach((link, i) => {
-      const { progress } = link.traveller
-      const weight = link.kind === 'home' ? 1 - progress : progress
-      const cityDegree = degree.get(link.target) ?? 1
-      const share = cityDegree / (cityDegree + (degree.get(link.source) ?? 1))
+      if (link.kind === 'route') return // between pinned cities: nothing to pull
+      const weight = curveWeights(link.traveller.progress)[link.kind]
+      const anchorDegree = degree.get(link.target) ?? 1
+      const share = anchorDegree / (anchorDegree + (degree.get(link.source) ?? 1))
       strengths[i] = (weight / share) ** 2
     })
     simulation.setLinkStrength(strengths)
@@ -184,8 +223,13 @@ export const graphOnMap = async (): Promise<{ div: HTMLDivElement; destroy: () =
       getPointId: (p): string => p.id,
       getPointPosition: (p): [number, number] | undefined => seeds.get(p.id),
       getPointColor: (p): [number, number, number, number] => [...(PALETTE[p.home % PALETTE.length] as [number, number, number]), 235],
-      getPointSize: (p): number => (p.isCity ? 11 : 4.5),
-      getLinkColor: [150, 170, 220, 45],
+      getPointSize: (p): number => (p.kind === 'city' ? 11 : p.kind === 'traveller' ? 4.5 : 0),
+      // The routes are drawn; the ties are springs and nothing else
+      getLinkColor: [150, 170, 220, 110],
+      getLinkWidth: (l): number => (l.kind === 'route' ? 1.5 : 0),
+      curvedLinks: true,
+      curvedLinkWeight: CURVE_WEIGHT,
+      curvedLinkControlPointDistance: CURVE_CONTROL_DISTANCE,
       // The graph lives in the map's space
       coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
       modelMatrix: MODEL_MATRIX,
@@ -204,10 +248,10 @@ export const graphOnMap = async (): Promise<{ div: HTMLDivElement; destroy: () =
         // The energy never fades, so the simulation follows every change without a reheat
         simulationDecay: Infinity,
       },
-      // The cities stay on their places; everything else moves
+      // The cities and the waypoints stay on their places; the travellers move
       onSimulationCreated: (created): void => {
         simulation = created
-        created.setPinnedPoints(cityIndices)
+        created.setPinnedPoints(pinnedIndices)
       },
       // A new set of links is in: the strengths follow its order from now on
       onSimulationDataLoaded: (info): void => {
@@ -227,9 +271,9 @@ export const graphOnMap = async (): Promise<{ div: HTMLDivElement; destroy: () =
         const picked = info as CosmosGraphPickingInfo
         // Leaving a point or a link reports it once more, with no object: only a point names itself
         const point = picked.elementType === 'point' ? picked.object as StoryPoint | undefined : undefined
-        if (!point) {
+        if (!point || point.kind === 'waypoint') {
           hover.textContent = 'hover to see the picked object'
-        } else if (point.isCity) {
+        } else if (point.kind === 'city') {
           // Counted at hover time: deck reports a hover only when the pointer moves
           const away = travellers.filter((t) => t.home === point.home && t.trip).length
           const visiting = travellers.filter((t) => t.trip?.city === point.home).length

@@ -171,6 +171,28 @@ type CosmosGraphLayerOwnProps<PointDataT, LinkDataT> = {
    */
   linkWidthUnits?: Unit;
   /**
+   * Draws links as curves: rational quadratic Béziers, as `curvedLinks` does in the engine.
+   * @default false
+   */
+  curvedLinks?: boolean;
+  /**
+   * Number of segments in a curved link.
+   * @default 19
+   */
+  curvedLinkSegments?: number;
+  /**
+   * The weight of the curve's control point: higher pulls the curve toward it.
+   * @default 0.8
+   */
+  curvedLinkWeight?: number;
+  /**
+   * Where the control point sits on the normal from the link's midpoint, in link
+   * lengths. The side follows the source-to-target direction: a link and its
+   * reverse bend opposite ways.
+   * @default 0.5
+   */
+  curvedLinkControlPointDistance?: number;
+  /**
    * Lets pointer drags grab a point: pinned on drag start, moved with the
    * pointer, released per `unpinOnDragEnd`. View panning is suppressed while
    * a point is grabbed.
@@ -251,6 +273,10 @@ const defaultProps: DefaultProps<CosmosGraphLayerProps> = {
   getLinkColor: { type: 'accessor', value: [94, 115, 194, 64] },
   getLinkWidth: { type: 'accessor', value: 1 },
   linkWidthUnits: 'pixels',
+  curvedLinks: defaultConfigValues.curvedLinks,
+  curvedLinkSegments: defaultConfigValues.curvedLinkSegments,
+  curvedLinkWeight: defaultConfigValues.curvedLinkWeight,
+  curvedLinkControlPointDistance: defaultConfigValues.curvedLinkControlPointDistance,
   enablePointDrag: false,
   dragReheatAlpha: 0.1,
   unpinOnDragEnd: true,
@@ -441,7 +467,10 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     const { simulation, isReady, pointCount, pointsData, linksData, linkIndices } = this.state
     if (!simulation || !isReady || pointCount === 0) return null
 
-    const { getPointSize, getPointColor, pointSizeUnits, getLinkColor, getLinkWidth, linkWidthUnits } = this.props
+    const {
+      getPointSize, getPointColor, pointSizeUnits, getLinkColor, getLinkWidth, linkWidthUnits,
+      curvedLinks, curvedLinkSegments, curvedLinkWeight, curvedLinkControlPointDistance,
+    } = this.props
     const triggers: CosmosUpdateTriggers = this.props.updateTriggers ?? {}
     const layers: Layer[] = []
 
@@ -463,6 +492,10 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
             getLinkColor,
             getLinkWidth,
             linkWidthUnits,
+            curvedLinks,
+            curvedLinkSegments,
+            curvedLinkWeight,
+            curvedLinkControlPointDistance,
             // getSubLayerProps does not forward `transitions`
             transitions: this.props.transitions,
           },

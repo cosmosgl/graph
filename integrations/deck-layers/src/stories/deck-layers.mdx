@@ -79,7 +79,8 @@ Styling works like any deck.gl layer. Colors are RGBA in 0..255. Sizes and width
 unless `pointSizeUnits` or `linkWidthUnits` says `'meters'` or `'common'`. Unstyled points draw
 4 px in blue, links 1 px in a lighter blue. `simulationConfig` takes the simulation keys of the
 cosmos.gl [configuration](../?path=/docs/configuration--docs): the space size, the forces,
-`randomSeed`, and the simulation callbacks.
+`randomSeed`, and the simulation callbacks. `curvedLinks` bends the links into the engine's
+curves, tuned by `curvedLinkSegments`, `curvedLinkWeight` and `curvedLinkControlPointDistance`.
 
 ```js
 new CosmosGraphLayer({
@@ -87,6 +88,7 @@ new CosmosGraphLayer({
   getPointColor: (p) => (p.group === 0 ? [88, 143, 219, 235] : [219, 138, 88, 235]),
   getPointSize: (p) => (p.isHub ? 12 : 6),
   getLinkWidth: 1.5,
+  curvedLinks: true,
   updateTriggers: { getPointColor: palette }, // re-run the accessor when `palette` changes
   transitions: { getPointColor: 600 },        // animate the change
   simulationConfig: {
@@ -172,7 +174,8 @@ new CosmosGraphLayer({
 ```
 
 Try it: [Graph on a map](../?path=/story/examples-integrations--graph-on-map) sets the link
-strengths every frame, so the travellers on a trip fly between two cities.
+strengths every frame, so the travellers on a trip fly along the curved routes between two
+cities.
 
 ## Labels and other layers
 

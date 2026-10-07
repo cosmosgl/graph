@@ -46,6 +46,15 @@ vec4 fetchPointPosition(float index, int textureSize) {
   return texelFetch(positionsTexture, ivec2(pointIndex % textureSize, pointIndex / textureSize), 0);
 }
 
+// The engine's curve: a rational quadratic Bézier from a to b, pulled toward the
+// control point c by the weight w. With c on the chord it is the straight link.
+vec3 linkCurve(vec2 a, vec2 b, vec2 c, float t, float w) {
+  float s = 1.0 - t;
+  vec2 dividend = s * s * a + 2.0 * s * t * w * c + t * t * b;
+  float divisor = s * s + 2.0 * s * t * w + t * t;
+  return vec3(dividend / divisor, 0.0);
+}
+
 void main(void) {
   // An endpoint that names no point (an index outside the point count) is
   // skipped, never dropped, so the instance index stays the link index — the
@@ -67,27 +76,34 @@ void main(void) {
     return;
   }
 
-  vec3 sourceWorld = vec3(sourcePosition.xy, 0.0);
-  vec3 targetWorld = vec3(targetPosition.xy, 0.0);
-  geometry.worldPosition = sourceWorld;
-  geometry.worldPositionAlt = targetWorld;
+  vec2 a = sourcePosition.xy;
+  vec2 b = targetPosition.xy;
+  geometry.worldPosition = vec3(a, 0.0);
+  geometry.worldPositionAlt = vec3(b, 0.0);
 
-  vec4 sourceCommonspace;
-  vec4 targetCommonspace;
-  vec4 source = project_position_to_clipspace(sourceWorld, vec3(0.0), vec3(0.0), sourceCommonspace);
-  vec4 target = project_position_to_clipspace(targetWorld, vec3(0.0), vec3(0.0), targetCommonspace);
+  // The control point sits on the chord's normal (as long as the chord) at
+  // controlPointDistance link lengths from the midpoint; 0 keeps the link straight
+  vec2 chord = b - a;
+  vec2 control = (a + b) / 2.0 + vec2(-chord.y, chord.x) * cosmosLinks.controlPointDistance;
+  float w = cosmosLinks.curveWeight;
 
-  // positions.x selects the endpoint, positions.y the extrusion side
-  float segmentIndex = positions.x;
-  vec4 p = mix(source, target, segmentIndex);
-  geometry.position = mix(sourceCommonspace, targetCommonspace, segmentIndex);
+  // positions.x is the parameter along the link, positions.y the extrusion side
+  float t = positions.x;
+  float dt = 1.0 / cosmosLinks.curveSegments;
+  vec4 commonspace;
+  vec4 p = project_position_to_clipspace(linkCurve(a, b, control, t, w), vec3(0.0), vec3(0.0), commonspace);
+  // The tangent from the neighbouring samples, clamped to the ends, so the
+  // ribbon keeps its width around the bend
+  vec4 behind = project_position_to_clipspace(linkCurve(a, b, control, max(t - dt, 0.0), w), vec3(0.0), vec3(0.0));
+  vec4 ahead = project_position_to_clipspace(linkCurve(a, b, control, min(t + dt, 1.0), w), vec3(0.0), vec3(0.0));
+  geometry.position = commonspace;
   uv = positions.xy;
   geometry.uv = uv;
   geometry.pickingColor = instancePickingColors;
 
   float widthPixels = project_size_to_pixel(instanceWidths, cosmosLinks.widthUnits);
 
-  vec3 offset = vec3(getExtrusionOffset(target.xy - source.xy, positions.y, widthPixels), 0.0);
+  vec3 offset = vec3(getExtrusionOffset(ahead.xy - behind.xy, positions.y, widthPixels), 0.0);
   DECKGL_FILTER_SIZE(offset, geometry);
   DECKGL_FILTER_GL_POSITION(p, geometry);
   gl_Position = p + vec4(project_pixel_size_to_clipspace(offset.xy), 0.0, 0.0);
@@ -154,6 +170,14 @@ type CosmosLinksLayerOwnProps<DataT> = {
    * @default 'pixels'
    */
   linkWidthUnits?: Unit;
+  /** Draws links as curves. @default false */
+  curvedLinks?: boolean;
+  /** Number of segments in a curved link. @default 19 */
+  curvedLinkSegments?: number;
+  /** The weight of the curve's control point. @default 0.8 */
+  curvedLinkWeight?: number;
+  /** The control point's distance from the link's midpoint, in link lengths. @default 0.5 */
+  curvedLinkControlPointDistance?: number;
 }
 
 const defaultProps: DefaultProps<CosmosLinksLayerProps> = {
@@ -162,15 +186,32 @@ const defaultProps: DefaultProps<CosmosLinksLayerProps> = {
   getLinkColor: { type: 'accessor', value: DEFAULT_LINK_COLOR },
   getLinkWidth: { type: 'accessor', value: 1 },
   linkWidthUnits: 'pixels',
+  curvedLinks: false,
+  curvedLinkSegments: { type: 'number', value: 19, min: 1 },
+  curvedLinkWeight: 0.8,
+  curvedLinkControlPointDistance: 0.5,
   parameters: { type: 'object', value: BLEND_PARAMETERS, optional: true, compare: 2 },
 }
 
 /**
+ * A triangle strip of `segments` quads along the link: x is the curve
+ * parameter (0 at the source, 1 at the target), y the extrusion side.
+ */
+const linkStripPositions = (segments: number): Float32Array => {
+  const positions = new Float32Array((segments + 1) * 2 * 3)
+  for (let i = 0; i <= segments; i += 1) {
+    const t = i / segments
+    positions.set([t, -1, 0, t, 1, 0], i * 6)
+  }
+  return positions
+}
+
+/**
  * Renders every cosmos.gl link as an instanced quad stretched between its two
- * endpoints: the vertex shader `texelFetch`es both point positions from the
- * simulation's live GPU texture and extrudes the quad by half the link width
- * in screen space — no position attribute, no CPU copy, no per-frame attribute
- * updates. Endpoint indices, color and width are ordinary deck instanced
+ * endpoints — or, curved, a strip of quads along the engine's curve: the vertex
+ * shader `texelFetch`es both point positions from the simulation's live GPU
+ * texture and extrudes the quad by half the link width in screen space — no
+ * position attribute, no CPU copy, no per-frame attribute updates. Endpoint indices, color and width are ordinary deck instanced
  * attributes, and picking works out of the box: the instance index is the
  * link index.
  *
@@ -183,7 +224,7 @@ export class CosmosLinksLayer<DataT = unknown> extends Layer<Required<CosmosLink
   public static layerName = 'CosmosLinksLayer'
   public static defaultProps = defaultProps
 
-  declare public state: { model?: Model }
+  declare public state: { model?: Model; segments?: number }
 
   public getShaders (): ReturnType<Layer['getShaders']> {
     return super.getShaders({ vs, fs, modules: [project32, picking, cosmosLinksUniforms] })
@@ -218,9 +259,14 @@ export class CosmosLinksLayer<DataT = unknown> extends Layer<Required<CosmosLink
   public updateState (params: UpdateParameters<this>): void {
     super.updateState(params)
 
-    if (params.changeFlags.extensionsChanged) {
+    // A straight link is one quad; a curve needs a strip of them
+    const { curvedLinks, curvedLinkSegments } = params.props
+    const segments = curvedLinks ? Math.max(1, Math.round(curvedLinkSegments)) : 1
+    if (params.changeFlags.extensionsChanged || segments !== this.state.segments) {
       this.state.model?.destroy()
-      this.state.model = this._getModel()
+      this.state.segments = segments
+      this.state.model = this._getModel(segments)
+      // The new model has none of the instanced buffers yet
       this.getAttributeManager()!.invalidateAll()
     }
   }
@@ -230,18 +276,21 @@ export class CosmosLinksLayer<DataT = unknown> extends Layer<Required<CosmosLink
     const { model } = this.state
     if (!positionInfo || !model || positionInfo.pointCount === 0) return
 
+    const { curvedLinks, curvedLinkWeight, curvedLinkControlPointDistance } = this.props
     const moduleProps: CosmosLinksProps = {
       pointsTextureSize: positionInfo.textureSize,
       widthUnits: UNIT[this.props.linkWidthUnits],
       pointCount: positionInfo.pointCount,
+      controlPointDistance: curvedLinks ? curvedLinkControlPointDistance : 0,
+      curveWeight: curvedLinkWeight,
+      curveSegments: this.state.segments ?? 1,
       positionsTexture: positionInfo.texture,
     }
     model.shaderInputs.setProps({ cosmosLinks: moduleProps })
     model.draw(this.context.renderPass)
   }
 
-  private _getModel (): Model {
-    // positions.x selects source/target, positions.y the extrusion side
+  private _getModel (segments: number): Model {
     return new Model(this.context.device, {
       ...this.getShaders(),
       id: this.props.id,
@@ -249,7 +298,7 @@ export class CosmosLinksLayer<DataT = unknown> extends Layer<Required<CosmosLink
       geometry: new Geometry({
         topology: 'triangle-strip',
         attributes: {
-          positions: { size: 3, value: new Float32Array([0, -1, 0, 0, 1, 0, 1, -1, 0, 1, 1, 0]) },
+          positions: { size: 3, value: linkStripPositions(segments) },
         },
       }),
       isInstanced: true,
