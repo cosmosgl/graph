@@ -125,6 +125,28 @@ graph.start(0.5)
 
 Try it: Add cluster and Remove cluster in [Graph layer](../?path=/story/examples-integrations--graph-layer).
 
+## Interact
+
+Clicks and hovers report a point or a link: `info.elementType`, `info.index` within that kind,
+and `info.object` for array data. `autoHighlight` lights the hovered element with cosmos.gl's
+focus ring (`config.focusedPointRingColor`) or focused-link width. A drag grabs a point and the
+graph follows it — on a map as well.
+
+```js
+new CosmosGraphLayer({
+  // …
+  pickable: true,
+  autoHighlight: true,
+  onClick: (info) => console.log(info.elementType, info.index, info.object), // 'point' | 'link'
+  enablePointDrag: true,
+  dragReheatAlpha: 0.1,   // energy the graph gets when a drag starts; null leaves it still
+  unpinOnDragEnd: true,   // false keeps the point pinned where it was dropped
+  onPointDragEnd: (info) => console.log('dropped', info.index), // also onPointDragStart, onPointDrag
+})
+```
+
+Try it: hover and drag in [Graph layer](../?path=/story/examples-integrations--graph-layer).
+
 ## Drive the graph
 
 `onGraphCreated` hands you the `Graph`, and any of its methods is yours to call — shapes,
@@ -276,8 +298,8 @@ Try it: [Graph on a map](../?path=/story/examples-integrations--graph-on-map).
 
 ## Custom deck layers
 
-To draw the layout with deck layers of your own — for deck's picking, `autoHighlight`,
-attribute transitions and drag today — sample the live position texture:
+To draw the layout with deck layers of your own — for deck's attribute pipeline, its
+transitions and extensions — sample the live position texture:
 `PositionTextureSource` from `@cosmos.gl/graph`, implemented by `Graph` and `GraphSimulation`.
 The *Custom deck layers* story does exactly that over a standalone `GraphSimulation`; its two
 layers are in the story's panes, as a starting point for yours.
@@ -288,8 +310,6 @@ Try it: [Custom deck layers](../?path=/story/examples-integrations--custom-deck-
 
 - **WebGL 2 only**, and the layout is 2D under a flat, y-up view: `OrthographicView({ flipY: false })`,
   or a map at pitch 0 and bearing 0.
-- **Picking, hover, click and drag** on the graph are not available yet: cosmos.gl draws into no
-  picking buffer. They come with the engine's picking mode; until then, the *Custom deck layers*
-  story shows the way to have them with layers of your own.
+- **Transitions** have no effect yet: a headless `Graph` applies a change at once.
 - **The package README** has the full ownership table and the `PositionTextureSource` contract:
   [github.com/cosmosgl/graph/tree/main/integrations/deck-layers](https://github.com/cosmosgl/graph/tree/main/integrations/deck-layers).

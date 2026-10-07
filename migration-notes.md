@@ -15,8 +15,8 @@ pass under deck's camera, so every cosmos.gl rendering option works through
 | `simulation: GraphSimulation` (provided) | `graph: Graph` — a headless `new Graph(null, config, devicePromise)` on deck's device |
 | `onSimulationCreated(simulation)` | `onGraphCreated(graph)` |
 | `pointSizeUnits`, `linkWidthUnits` | removed — sizes are cosmos.gl's (`scalePointsOnZoom`, `pointSizeScale`, `linkWidthScale`) |
-| `pickable`, `autoHighlight`, `onHover` / `onClick`, `info.elementType` | not available yet — cosmos.gl draws into no picking buffer. Coming with the engine's picking mode. |
-| `enablePointDrag`, `dragReheatAlpha`, `unpinOnDragEnd`, `onPointDrag*` | removed with picking |
+| `autoHighlight` with `highlightColor` | `autoHighlight` lights the hovered element with cosmos.gl's focus ring / focused-link width; `highlightColor` is not used — set `config.focusedPointRingColor` |
+| `enablePointDrag` on a map | works now: the drag goes through cosmos.gl's own screen → space inverse |
 | `transitions` on accessors | no effect — a headless `Graph` applies changes at once |
 | `_subLayerProps`, `highlightedObjectIndex` | no sublayers to address |
 | `OrthographicView()` | `OrthographicView({ flipY: false })` — cosmos.gl's space has y up; a y-down, rotated or pitched view is reported once and not drawn. Map views work at pitch 0 and bearing 0. |
@@ -46,9 +46,10 @@ new CosmosGraphLayer({
 })
 ```
 
-If you need deck's picking, hover or drag today, render the layout with deck layers of your
-own over `PositionTextureSource` — the *Custom deck layers* story carries the former sublayers
-as a starting point.
+Picking, hover and click are unchanged in use: `pickable`, `onHover` / `onClick`,
+`info.elementType`, `info.index` and `info.object` work as before — cosmos.gl draws its picking
+colors in deck's pick pass. The *Custom deck layers* story carries the former sublayers as a
+starting point for a renderer of your own over `PositionTextureSource`.
 
 ## Migrating to v3.5
 

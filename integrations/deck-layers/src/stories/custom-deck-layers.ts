@@ -18,9 +18,9 @@ import './style.css'
  * leave the GPU, and the rest is ordinary deck: binary attributes for color and size,
  * `pickable` with hover and `autoHighlight`, and a drag that pins the grabbed point
  * and moves it through `setPointPosition`. The frame loop is the application's too:
- * deck's `_animate` follows the simulation's run state, and `onBeforeRender` steps it. What you give up is cosmos.gl's rendering
- * — shapes, arrows, dashes — and what you gain is deck's picking and attribute
- * pipeline, until the engine's picking mode brings the two together.
+ * deck's `_animate` follows the simulation's run state, and `onBeforeRender` steps it.
+ * What you give up is cosmos.gl's rendering — shapes, arrows, dashes — and what you
+ * gain is deck's attribute pipeline: transitions, extensions, `highlightColor`.
  */
 export const customDeckLayers = async (): Promise<{ div: HTMLDivElement; destroy: () => void }> => {
   const div = document.createElement('div')

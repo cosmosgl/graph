@@ -1,9 +1,10 @@
 import { Deck, OrthographicView } from '@deck.gl/core'
-import type { Layer } from '@deck.gl/core'
+import type { Layer, PickingInfo } from '@deck.gl/core'
 import { TextLayer } from '@deck.gl/layers'
 import { defaultConfigValues } from '@cosmos.gl/graph'
 import type { Graph } from '@cosmos.gl/graph'
 import { CosmosGraphLayer } from '@cosmos.gl/deck-layers'
+import type { CosmosGraphPickingInfo } from '@cosmos.gl/deck-layers'
 
 import './style.css'
 
@@ -21,7 +22,8 @@ const SCHEMES: [number, number, number, number][][] = [
  * `CosmosGraphLayer` the deck.gl way: the layer owns the graph, the
  * application talks to deck.gl. Clusters of `{ id, group }` records, links by
  * id, accessors for color and size, labels on the hubs from a stock
- * `TextLayer`. The actions pause and reheat through the `Graph` handle, add
+ * `TextLayer`, hover reporting the picked record, drag-to-pin. The actions
+ * pause and reheat through the `Graph` handle, add
  * and remove clusters (a data change keeps the surviving layout through
  * `getPointPosition`), and recolor through `updateTriggers`.
  */
@@ -33,6 +35,10 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
 
   const spaceSize = defaultConfigValues.spaceSize
 
+  const hover = document.createElement('div')
+  hover.className = 'hover'
+  hover.textContent = 'hover to see the picked object'
+  div.appendChild(hover)
   const status = document.createElement('div')
   status.className = 'status'
   div.appendChild(status)
@@ -85,6 +91,8 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
     views: new OrthographicView({ flipY: false }), // cosmos's space has y up
     initialViewState: { target: [spaceSize / 2, spaceSize / 2, 0], zoom: 1, minZoom: -5, maxZoom: 2 },
     controller: true,
+    pickingRadius: 5,
+    getCursor: ({ isDragging, isHovering }) => (isDragging ? 'grabbing' : isHovering ? 'pointer' : 'grab'),
     layers: [],
   })
 
@@ -117,6 +125,15 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
       // The loaded points have their indices now: follow the hubs among them
       onGraphDataLoaded: ({ graph: loaded, pointsLoaded }): void => {
         if (pointsLoaded) loaded.trackPointPositionsByIndices(hubIndices())
+      },
+      pickable: true,
+      enablePointDrag: true,
+      autoHighlight: true,
+      onHover: (info: PickingInfo): void => {
+        const picked = info as CosmosGraphPickingInfo
+        hover.textContent = picked.index >= 0
+          ? `${picked.elementType}: ${JSON.stringify(picked.object)}`
+          : 'hover to see the picked object'
       },
     })
 

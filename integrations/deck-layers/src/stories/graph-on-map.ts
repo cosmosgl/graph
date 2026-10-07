@@ -1,7 +1,8 @@
 import { Deck, MapView } from '@deck.gl/core'
-import type { Layer, LayerProps } from '@deck.gl/core'
+import type { Layer, LayerProps, PickingInfo } from '@deck.gl/core'
 import { GeoJsonLayer, TextLayer } from '@deck.gl/layers'
 import { CosmosGraphLayer } from '@cosmos.gl/deck-layers'
+import type { CosmosGraphPickingInfo } from '@cosmos.gl/deck-layers'
 import { PointShape } from '@cosmos.gl/graph'
 import type { Graph } from '@cosmos.gl/graph'
 
@@ -109,6 +110,9 @@ export const graphOnMap = async (): Promise<{ div: HTMLDivElement; destroy: () =
   div.style.width = '100%'
   div.style.position = 'relative'
 
+  const hover = document.createElement('div')
+  hover.className = 'hover'
+  hover.textContent = 'hover to see the picked object'
   const status = document.createElement('div')
   status.className = 'status'
 
@@ -199,6 +203,8 @@ export const graphOnMap = async (): Promise<{ div: HTMLDivElement; destroy: () =
     initialViewState: { longitude: 20, latitude: 22, zoom: 1.4, minZoom: 0.5, maxZoom: 8 },
     // cosmos's view cannot express pitch or bearing: the map stays flat and north-up
     controller: { dragRotate: false, touchRotate: false, keyboard: false },
+    pickingRadius: 5,
+    getCursor: ({ isDragging, isHovering }) => (isDragging ? 'grabbing' : isHovering ? 'pointer' : 'grab'),
     layers: [],
   })
 
@@ -274,6 +280,27 @@ export const graphOnMap = async (): Promise<{ div: HTMLDivElement; destroy: () =
           degree.set(target, (degree.get(target) ?? 0) + 1)
         }
         sendStrengths()
+      },
+      pickable: true,
+      autoHighlight: true,
+      onHover: (info: PickingInfo): void => {
+        const picked = info as CosmosGraphPickingInfo
+        // Leaving a point or a link reports it once more, with no object: only a point names itself
+        const point = picked.elementType === 'point' ? picked.object as StoryPoint | undefined : undefined
+        if (!point || point.kind === 'waypoint') {
+          hover.textContent = 'hover to see the picked object'
+        } else if (point.kind === 'city') {
+          // Counted at hover time: deck reports a hover only when the pointer moves
+          const away = travellers.filter((t) => t.home === point.home && t.trip).length
+          const visiting = travellers.filter((t) => t.trip?.city === point.home).length
+          hover.textContent = `${point.name} · home to ${TRAVELLERS_PER_CITY} travellers · ${away} on trips · ${visiting} visiting`
+        } else {
+          const home = (CITIES[point.home] as City).name
+          const trip = point.trip
+            ? ` · ${point.trip.endsAt === undefined ? 'keeps flying to' : 'heading home from'} ${(CITIES[point.trip.city] as City).name}`
+            : ''
+          hover.textContent = `${point.name} · lives in ${home}${trip}`
+        }
       },
     })
 
@@ -361,7 +388,7 @@ export const graphOnMap = async (): Promise<{ div: HTMLDivElement; destroy: () =
     animationFrame = requestAnimationFrame(tick)
   }
   // Above the canvas deck created: the countries are opaque
-  div.append(actions, status)
+  div.append(actions, hover, status)
 
   render()
   animationFrame = requestAnimationFrame(tick)

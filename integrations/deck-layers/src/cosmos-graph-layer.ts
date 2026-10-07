@@ -5,9 +5,12 @@ import type {
   BinaryAttribute,
   Color,
   DefaultProps,
+  GetPickingInfoParams,
   LayerContext,
   LayerProps,
+  PickingInfo,
   UpdateParameters,
+  Viewport,
 } from '@deck.gl/core'
 import { Graph } from '@cosmos.gl/graph'
 import type { GraphConfig } from '@cosmos.gl/graph'
@@ -122,6 +125,15 @@ export type CosmosGraphDataLoadedInfo<LinkDataT = unknown> = {
   links: readonly LinkDataT[] | null;
 }
 
+/**
+ * Picking info from a CosmosGraphLayer: which kind of element was hit, with `index`
+ * counting within that kind (point `i` or link `i`), and `object` the original record
+ * for array data.
+ */
+export type CosmosGraphPickingInfo = PickingInfo & {
+  elementType?: 'point' | 'link';
+}
+
 export type CosmosGraphLayerProps<PointDataT = unknown, LinkDataT = unknown> =
   CosmosGraphLayerOwnProps<PointDataT, LinkDataT> & LayerProps
 
@@ -179,6 +191,30 @@ type CosmosGraphLayerOwnProps<PointDataT, LinkDataT> = {
    */
   getLinkWidth?: Accessor<LinkDataT, number>;
   /**
+   * Lets pointer drags grab a point: pinned on drag start, moved with the pointer,
+   * released per `unpinOnDragEnd`. View panning is suppressed while a point is
+   * grabbed. Needs `pickable`.
+   * @default false
+   */
+  enablePointDrag?: boolean;
+  /**
+   * Simulation alpha to restart with when a drag starts, so the graph responds
+   * to the moving point; `null` leaves the simulation untouched.
+   * @default 0.1
+   */
+  dragReheatAlpha?: number | null;
+  /**
+   * Release the point on drag end; `false` keeps it pinned where dropped.
+   * @default true
+   */
+  unpinOnDragEnd?: boolean;
+  /** Called when a point drag starts. */
+  onPointDragStart?: ((info: CosmosGraphPickingInfo) => void) | null;
+  /** Called for every pointer move while a point is dragged. */
+  onPointDrag?: ((info: CosmosGraphPickingInfo) => void) | null;
+  /** Called when a point drag ends. */
+  onPointDragEnd?: ((info: CosmosGraphPickingInfo) => void) | null;
+  /**
    * cosmos.gl's configuration — forces, space size, rendering options such as
    * `curvedLinks`, `pointDefaultShape`, `linkDefaultArrows`, the simulation
    * callbacks — passed to the layer-created `Graph`. A key left out goes back
@@ -234,12 +270,23 @@ const defaultProps: DefaultProps<CosmosGraphLayerProps> = {
   getLinkTarget: { type: 'accessor', value: (l: unknown) => (l as { target: number }).target },
   getLinkColor: { type: 'accessor', value: [94, 115, 194, 64] },
   getLinkWidth: { type: 'accessor', value: 1 },
+  enablePointDrag: false,
+  dragReheatAlpha: 0.1,
+  unpinOnDragEnd: true,
+  onPointDragStart: { type: 'function', value: null, optional: true },
+  onPointDrag: { type: 'function', value: null, optional: true },
+  onPointDragEnd: { type: 'function', value: null, optional: true },
   config: { type: 'object', value: {}, compare: 2 },
   graph: { type: 'object', value: null, optional: true },
   onGraphCreated: { type: 'function', value: null, optional: true },
   onGraphDataLoaded: { type: 'function', value: null, optional: true },
   // cosmos draws its space coordinates as world coordinates; `modelMatrix` places the space
   coordinateSystem: COORDINATE_SYSTEM.CARTESIAN,
+}
+
+/** The slice of a deck gesture event the drag handlers need. */
+type DragGestureEvent = {
+  stopImmediatePropagation?: () => void;
 }
 
 /** The update-trigger keys the layer reads. */
@@ -351,8 +398,13 @@ const NO_LINKS = new Float32Array(0)
  * at pitch 0 and bearing 0, with `modelMatrix` placing the space in the world.
  * A rotated, pitched or y-down view is reported once and not drawn.
  *
- * Not yet: cosmos.gl draws into no picking buffer, so deck's `pickable`,
- * `autoHighlight`, hover and click see nothing of the graph.
+ * Picking is deck's: in deck's pick pass cosmos.gl draws its picking colors
+ * (an index per point and per link, hard-edged), so `pickable` gives hover and
+ * click with `info.elementType`, `info.index` and, for array data, `info.object`.
+ * `autoHighlight` lights the hovered point or link with cosmos.gl's own focus
+ * ring and focused-link width (`config.focusedPointRingColor`,
+ * `config.focusedLinkWidthIncrease`); `highlightColor` is not used.
+ * `enablePointDrag` grabs a point and moves it, on a map as well.
  */
 export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends Layer<
   Required<CosmosGraphLayerOwnProps<PointDataT, LinkDataT>>
@@ -384,6 +436,13 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     /** The view was found unsupported and said so; said once. */
     viewWarned?: boolean;
     linksWarned?: boolean;
+    draggedPointIndex: number | null;
+    /**
+     * The element deck's auto-highlight has under the pointer. The focus keys the
+     * graph holds are derived from it and the app's `config` in one place
+     * (`_focusConfig`), so a config rebuild and a hover write agree.
+     */
+    hovered: { type: 'point' | 'link'; index: number } | null;
     animationHandle?: number;
   }
 
@@ -407,6 +466,8 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       pointCount: 0,
       linkCount: 0,
       keptLinks: null,
+      draggedPointIndex: null,
+      hovered: null,
       // Step the simulation exactly once per animation frame, independent of
       // draw passes (draw runs per viewport)
       animationHandle: timeline.attachAnimation({ setTime: (time) => this._onTimelineTick(time) }),
@@ -465,17 +526,87 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     }
   }
 
-  public draw (opts: { shaderModuleProps?: { picking?: { isActive?: number | boolean } } }): void {
+  public draw (opts: {
+    shaderModuleProps?: { picking?: { isActive?: number | boolean } };
+    parameters?: { blendColor?: number[] };
+  }): void {
     const { graph, isReady } = this.state
     if (!graph || !isReady) return
-    // cosmos draws colors, not picking colors: nothing of it belongs in deck's pick pass
-    if (opts.shaderModuleProps?.picking?.isActive) return
 
-    const view = this._viewTransform(graph)
-    if (!view) return
     const { viewport } = this.context
+    const view = this._viewTransform(graph, viewport)
+    if (!view) return
     graph.setViewTransform(view, [viewport.width, viewport.height])
+    if (opts.shaderModuleProps?.picking?.isActive) {
+      // deck's pick pass: cosmos draws its picking colors with the alpha deck uses to tell
+      // layers apart (the pass's blend constant), links offset past the points so one layer
+      // carries both index spaces — getPickingInfo splits them again
+      graph.drawToRenderPass(this.context.renderPass, {
+        picking: {
+          alpha: opts.parameters?.blendColor?.[3] ?? 1,
+          linkIndexOffset: graph.graph.pointsNumber ?? 0,
+        },
+      })
+      return
+    }
     graph.drawToRenderPass(this.context.renderPass)
+  }
+
+  public getPickingInfo ({ info }: GetPickingInfoParams): CosmosGraphPickingInfo {
+    const picked: CosmosGraphPickingInfo = info
+    const graph = this.state.graph
+    if (!graph || info.index < 0) return picked
+    const pointCount = graph.graph.pointsNumber ?? 0
+    const { points, links } = this.props
+    if (info.index >= pointCount) {
+      picked.elementType = 'link'
+      picked.index = info.index - pointCount
+      picked.object = Array.isArray(links) ? this.state.keptLinks?.[picked.index] : undefined
+    } else {
+      picked.elementType = 'point'
+      picked.object = Array.isArray(points) ? points[info.index] : undefined
+    }
+    return picked
+  }
+
+  public onDragStart (info: PickingInfo, event: DragGestureEvent): boolean {
+    const { graph } = this.state
+    const { enablePointDrag, dragReheatAlpha } = this.props
+    const picked = info as CosmosGraphPickingInfo
+    if (!enablePointDrag || !graph || picked.elementType !== 'point' || info.index < 0) return false
+
+    // A direct field write: per-gesture state must not re-run the layer's update
+    this.state.draggedPointIndex = info.index
+    graph.setPinnedPoint(info.index, true)
+    if (dragReheatAlpha !== null) graph.start(dragReheatAlpha)
+    // A grabbed point must not also pan the view
+    event.stopImmediatePropagation?.()
+    this.props.onPointDragStart?.(picked)
+    return true
+  }
+
+  public onDrag (info: PickingInfo, event: DragGestureEvent): boolean {
+    const { graph, draggedPointIndex } = this.state
+    if (!graph || draggedPointIndex === null) return false
+
+    const position = this._dragPosition(graph, info)
+    if (position) graph.setPointPosition(draggedPointIndex, position[0], position[1])
+    event.stopImmediatePropagation?.()
+    // Repaint even when the simulation is settled and the ticker is idle
+    ;(this.getCurrentLayer() ?? this).setNeedsRedraw()
+    this.props.onPointDrag?.(info as CosmosGraphPickingInfo)
+    return true
+  }
+
+  public onDragEnd (info: PickingInfo, event: DragGestureEvent): boolean {
+    const { graph, draggedPointIndex } = this.state
+    if (!graph || draggedPointIndex === null) return false
+
+    if (this.props.unpinOnDragEnd) graph.setPinnedPoint(draggedPointIndex, false)
+    this.state.draggedPointIndex = null
+    event.stopImmediatePropagation?.()
+    this.props.onPointDragEnd?.(info as CosmosGraphPickingInfo)
+    return true
   }
 
   /** The whole simulation space, in space coordinates; lets deck's viewport helpers frame the graph. */
@@ -495,6 +626,54 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
   /** No deck attributes: cosmos.gl holds every channel and draws them itself. */
   protected _getAttributeManager (): null {
     return null
+  }
+
+  /**
+   * deck's auto-highlight, through cosmos.gl's own emphasis: the hovered point gets
+   * the focus ring, the hovered link the focused-link width. deck's picking module
+   * has no model of ours to tint, so `highlightColor` does not apply.
+   */
+  protected _updateAutoHighlight (info: PickingInfo): void {
+    const { graph, isReady } = this.state
+    if (!graph || !isReady) return
+    const picked = info as CosmosGraphPickingInfo
+    const type = info.picked && info.index >= 0 ? picked.elementType : undefined
+    // A direct field write, as for a drag: hover state must not re-run the layer's update
+    this.state.hovered = type === 'point' || type === 'link' ? { type, index: info.index } : null
+    graph.setConfigPartial(this._focusConfig())
+    this.setNeedsRedraw()
+  }
+
+  /**
+   * The focus keys the graph should hold: the hovered element while deck's
+   * auto-highlight has one, the app's own `focusedPointIndex` / `focusedLinkIndex`
+   * otherwise. The one source for both the config rebuild and the hover write, so
+   * neither overwrites the other: a config change mid-hover keeps the highlight,
+   * and leaving hands the app's focus back.
+   */
+  private _focusConfig (): Pick<GraphConfig, 'focusedPointIndex' | 'focusedLinkIndex'> {
+    const { hovered } = this.state
+    const { config } = this.props
+    return {
+      focusedPointIndex: hovered?.type === 'point' ? hovered.index : config?.focusedPointIndex,
+      focusedLinkIndex: hovered?.type === 'link' ? hovered.index : config?.focusedLinkIndex,
+    }
+  }
+
+  /**
+   * The pointer in space coordinates, through the view of the viewport the pointer
+   * is in — the same derivation `draw` hands cosmos, inverted — under a map as well
+   * as an orthographic view. Not through the view cosmos holds: that is whichever
+   * viewport drew the graph last, a thumbnail's as easily as the one being dragged
+   * in. Pixels are relative to that viewport. Where the view cannot be derived the
+   * point stays where it is.
+   */
+  private _dragPosition (graph: Graph, info: PickingInfo): [number, number] | null {
+    const viewport = info.viewport ?? this.context.viewport
+    const view = this._viewTransform(graph, viewport)
+    if (!view) return null
+    // Space is y up; the space origin's pixel and the scale are the whole affine map
+    return [(info.x - viewport.x - view.originX) / view.k, (view.originY - (info.y - viewport.y)) / view.k]
   }
 
   /** Adopts the provided graph, or creates a headless one on deck's device when `provided` is `null`. */
@@ -556,6 +735,8 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     const config: Partial<Record<keyof GraphConfig, unknown>> = { ...this.props.config }
     for (const key of DECK_OWNED_CONFIG_KEYS) delete config[key]
     config.pixelRatio = this._pixelRatio()
+    // The hovered element keeps its focus through a config rebuild
+    Object.assign(config, this._focusConfig())
     return config as GraphConfig
   }
 
@@ -568,14 +749,17 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
   }
 
   /**
-   * cosmos's view for deck's current viewport: a uniform scale `k` (pixels per
-   * space unit) and a translation, per `setViewTransform`'s space → screen
-   * formula, inverted. Three anchors through deck's projection — the space
-   * origin, its x axis, its y axis — give the scale and tell whether the view
-   * is one cosmos can draw: unrotated, unpitched, y up.
+   * cosmos's view for a deck viewport: a uniform scale `k` (pixels per space
+   * unit) and a translation, per `setViewTransform`'s space → screen formula,
+   * inverted. Three anchors through deck's projection — the space origin, its
+   * x axis, its y axis — give the scale and tell whether the view is one cosmos
+   * can draw: unrotated, unpitched, y up. The space origin's pixel is returned
+   * too, for mapping the other way.
    */
-  private _viewTransform (graph: Graph): { k: number; x: number; y: number } | null {
-    const { viewport } = this.context
+  private _viewTransform (
+    graph: Graph,
+    viewport: Viewport
+  ): { k: number; x: number; y: number; originX: number; originY: number } | null {
     const spaceSize = graph.config.spaceSize
     const modelMatrix = this.props.modelMatrix
     const toPixel = (sx: number, sy: number): [number, number] => {
@@ -599,7 +783,8 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       if (!this.state.viewWarned) {
         this.state.viewWarned = true
         console.warn(
-          '@cosmos.gl/deck-layers: cosmos.gl draws under a flat, north-up, y-up view only — use OrthographicView({ flipY: false }) or a map at pitch 0 and bearing 0. The graph is not drawn.'
+          '@cosmos.gl/deck-layers: cosmos.gl draws under a flat, north-up, y-up view only — ' +
+          'use OrthographicView({ flipY: false }) or a map at pitch 0 and bearing 0. The graph is not drawn.'
         )
       }
       return null
@@ -609,6 +794,8 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       k,
       x: originX - (k * (viewport.width - spaceSize)) / 2,
       y: originY - k * (spaceSize + (viewport.height - spaceSize) / 2),
+      originX,
+      originY,
     }
   }
 

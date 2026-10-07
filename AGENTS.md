@@ -48,7 +48,8 @@ deck's device or draws an app-provided `graph`, steps it from deck's timeline, d
 modes with deck accessors converted to cosmos's channels, cosmos's `GraphConfig` as `config`) — its
 only layer export. It renders through the engine's host-embedding hooks — `setViewTransform` with
 deck's camera, then `drawToRenderPass` into deck's pass — so cosmos's own renderer draws, and no
-shader lives in the package. deck picking does not see cosmos's draws yet. The former
+shader lives in the package. deck picking works the same way: in deck's pick pass the layer calls
+`drawToRenderPass` with `picking`, and cosmos draws index colors in deck's encoding. The former
 points/links sublayers live on as story code (`src/stories/custom-deck-layers/`), the worked example
 of a renderer over `PositionTextureSource`. Versioned in lockstep with the root package
 (`pnpm bump <version>` sets both; `scripts/check-lockstep.mjs` guards every publish).
