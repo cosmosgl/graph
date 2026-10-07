@@ -103,7 +103,9 @@ void main(void) {
 
   float widthPixels = project_size_to_pixel(instanceWidths, cosmosLinks.widthUnits);
 
-  vec3 offset = vec3(getExtrusionOffset(ahead.xy - behind.xy, positions.y, widthPixels), 0.0);
+  // The tangent on screen: each sample divided by its own w, which differs between
+  // the two under a pitched view
+  vec3 offset = vec3(getExtrusionOffset(ahead.xy / ahead.w - behind.xy / behind.w, positions.y, widthPixels), 0.0);
   DECKGL_FILTER_SIZE(offset, geometry);
   DECKGL_FILTER_GL_POSITION(p, geometry);
   gl_Position = p + vec4(project_pixel_size_to_clipspace(offset.xy), 0.0, 0.0);
