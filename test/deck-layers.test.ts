@@ -7,15 +7,17 @@ import {
   type CosmosGraphDataLoadedInfo,
   type CosmosGraphLayerConfig,
   type CosmosGraphLinks,
+  type CosmosGraphPickingInfo,
 } from '@cosmos.gl/deck-layers'
-import type { LayersList } from '@deck.gl/core'
+import type { Layer, LayersList, PickingInfo } from '@deck.gl/core'
 
 /**
  * Runtime contract tests for @cosmos.gl/deck-layers: the layer runs a headless
  * cosmos.gl `Graph` on deck.gl's device, loads deck-style data into it, hands it
  * deck's view before each draw and lets cosmos.gl draw into deck's render pass.
- * cosmos.gl draws into no picking buffer yet, so the contracts are read from the
- * graph: its data, its config, and the view it was given.
+ * Covered: data loading and accessors, the view handed to cosmos, config,
+ * simulation stepping, deck picking through cosmos's picking mode
+ * (`deck.pickObject`), auto-highlight, and drag-to-pin.
  */
 
 const WIDTH = 200
@@ -25,6 +27,10 @@ const HEIGHT = 200
 // as cosmos's space has y up
 const POSITIONS = new Float32Array([1000, 1000, 1050, 1000, 1000, 1030])
 const CENTER = { x: WIDTH / 2, y: HEIGHT / 2 }
+
+/** Where the test view puts a space position: y up, as cosmos's space has it. */
+const worldToScreen = (x: number, y: number): { x: number; y: number } =>
+  ({ x: CENTER.x + (x - 1000), y: CENTER.y - (y - 1000) })
 
 // A deck with no layers, plus the promise of its device for a graph to share
 const createDeckDevice = (): {
@@ -613,6 +619,224 @@ describe('CosmosGraphLayer', () => {
       provided.destroy()
       deck.finalize()
       container.remove()
+    }
+  })
+
+  it('picks points and links through deck: element type, index within it, and the original object', async () => {
+    type Point = { id: string; position: readonly [number, number] }
+    type Link = { source: string; target: string; name: string }
+    const points: Point[] = [{ id: 'a', position: [1000, 1000] }, { id: 'b', position: [1050, 1000] }, { id: 'c', position: [1000, 1030] }]
+    const links: Link[] = [{ source: 'a', target: 'b', name: 'ab' }]
+    let graph: Graph | undefined
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer<Point, Link>({
+        id: 'graph',
+        points,
+        links,
+        getPointId: (p): string => p.id,
+        getPointPosition: (p): readonly [number, number] => p.position,
+        getPointSize: 10,
+        getLinkWidth: 6,
+        config: STATIC,
+        onGraphCreated: (created): void => { graph = created },
+        pickable: true,
+      }),
+    ])
+    try {
+      await waitUntil(() => deck.pickObject({ ...CENTER, radius: 2 }) !== null, 'the first pick')
+      const point = deck.pickObject({ ...CENTER, radius: 2 }) as CosmosGraphPickingInfo
+      expect(point.elementType).toBe('point')
+      expect(point.index).toBe(0)
+      expect(point.object).toEqual(points[0])
+      expect(point.layer?.id).toBe('graph')
+      const other = deck.pickObject({ ...worldToScreen(1000, 1030), radius: 2 }) as CosmosGraphPickingInfo
+      expect(other.elementType).toBe('point')
+      expect(other.index).toBe(2)
+
+      // The link between a and b, at its middle: its own index space
+      const link = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as CosmosGraphPickingInfo
+      expect(link.elementType).toBe('link')
+      expect(link.index).toBe(0)
+      expect(link.object).toEqual(links[0])
+
+      // Empty space picks nothing
+      expect(deck.pickObject({ x: 20, y: 180, radius: 2 })).toBeNull()
+
+      // Picking follows the live positions: move a point and pick it where it went
+      graph!.setPointPosition(2, 1000, 1060)
+      await waitFrames(3)
+      expect((deck.pickObject({ ...worldToScreen(1000, 1060), radius: 2 }) as CosmosGraphPickingInfo | null)?.index).toBe(2)
+      expect(deck.pickObject({ ...worldToScreen(1000, 1030), radius: 0 })).toBeNull()
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('highlights the hovered element with cosmos\'s focus ring and focused-link width', async () => {
+    let graph: Graph | undefined
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer({
+        id: 'graph',
+        points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
+        links: new Float32Array([0, 1]),
+        getPointSize: 10,
+        getLinkWidth: 6,
+        config: STATIC,
+        onGraphCreated: (created): void => { graph = created },
+        pickable: true,
+        autoHighlight: true,
+      }),
+    ])
+    try {
+      await waitUntil(() => deck.pickObject({ ...CENTER, radius: 2 }) !== null, 'the first pick')
+      const point = deck.pickObject({ ...CENTER, radius: 2 }) as PickingInfo
+      const layer = point.layer as Layer
+      layer.updateAutoHighlight({ ...point, picked: true })
+      expect(graph!.config.focusedPointIndex).toBe(0)
+      expect(graph!.config.focusedLinkIndex).toBeUndefined()
+
+      const link = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as PickingInfo
+      layer.updateAutoHighlight({ ...link, picked: true })
+      expect(graph!.config.focusedLinkIndex).toBe(0)
+      expect(graph!.config.focusedPointIndex).toBeUndefined()
+
+      // Leaving clears both
+      layer.updateAutoHighlight({ ...link, picked: false, index: -1 })
+      expect(graph!.config.focusedPointIndex).toBeUndefined()
+      expect(graph!.config.focusedLinkIndex).toBeUndefined()
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('keeps the hover focus through a config change, and hands the app\'s focus back on leave', async () => {
+    let graph: Graph | undefined
+    const graphLayer = (config: CosmosGraphLayerConfig): CosmosGraphLayer => new CosmosGraphLayer({
+      id: 'graph',
+      points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
+      getPointSize: 10,
+      config,
+      onGraphCreated: (created): void => { graph = created },
+      pickable: true,
+      autoHighlight: true,
+    })
+    // The app focuses point 1 itself
+    const { deck, container } = await createDeck([graphLayer({ ...STATIC, focusedPointIndex: 1 })])
+    try {
+      await waitUntil(() => deck.pickObject({ ...CENTER, radius: 2 }) !== null, 'the first pick')
+      expect(graph!.config.focusedPointIndex).toBe(1)
+
+      // Hovering point 0 takes the focus over
+      const point = deck.pickObject({ ...CENTER, radius: 2 }) as PickingInfo
+      const layer = point.layer as Layer
+      layer.updateAutoHighlight({ ...point, picked: true })
+      expect(graph!.config.focusedPointIndex).toBe(0)
+
+      // A config change mid-hover rebuilds the graph's config: the highlight survives it
+      deck.setProps({ layers: [graphLayer({ ...STATIC, focusedPointIndex: 1, simulationGravity: 0.5 })] })
+      await waitUntil(() => graph!.config.simulationGravity === 0.5, 'the config change')
+      expect(graph!.config.focusedPointIndex).toBe(0)
+
+      // Leaving returns the app's focus rather than clearing it
+      const current = deck.pickObject({ ...CENTER, radius: 2 }) as PickingInfo
+      ;(current.layer as Layer).updateAutoHighlight({ ...current, picked: false, index: -1 })
+      expect(graph!.config.focusedPointIndex).toBe(1)
+      expect(graph!.config.focusedLinkIndex).toBeUndefined()
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('drags a point: pins on start, moves it to the pointer through cosmos\'s view, releases on end', async () => {
+    let graph: Graph | undefined
+    const dragEnd = vi.fn()
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer({
+        id: 'graph',
+        points: { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) },
+        getPointSize: 10,
+        config: STATIC,
+        onGraphCreated: (created): void => { graph = created },
+        pickable: true,
+        enablePointDrag: true,
+        dragReheatAlpha: null,
+        onPointDragEnd: dragEnd,
+      }),
+    ])
+    try {
+      await waitUntil(() => deck.pickObject({ ...CENTER, radius: 2 }) !== null, 'the first pick')
+      const info = deck.pickObject({ ...CENTER, radius: 2 }) as PickingInfo
+      const layer = info.layer as CosmosGraphLayer
+      expect(layer.onDragStart(info, {})).toBe(true)
+      expect(graph!.graph.inputPinnedPoints).toContain(0)
+
+      // The pointer at (150, 70) is space (1050, 1030) under this view: y up
+      expect(layer.onDrag({ ...info, x: 150, y: 70 }, {})).toBe(true)
+      const positions = graph!.getPointPositionsArray()
+      expect(positions[0]).toBeCloseTo(1050, 2)
+      expect(positions[1]).toBeCloseTo(1030, 2)
+
+      expect(layer.onDragEnd({ ...info, x: 150, y: 70 }, {})).toBe(true)
+      expect(graph!.graph.inputPinnedPoints ?? []).not.toContain(0)
+      expect(dragEnd).toHaveBeenCalledTimes(1)
+
+      // Off a point, a drag is the view's
+      expect(layer.onDragStart({ ...info, index: -1, picked: false }, {})).toBe(false)
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('maps a drag through the viewport the pointer is in, not the view cosmos drew last', async () => {
+    const { deck, container, devicePromise } = createDeckDevice()
+    const provided = new Graph(null, STATIC, devicePromise)
+    // One point, at pixel (60, 140) of the main view — outside the thumbnail's quadrant
+    provided.setPointPositions(new Float32Array([960, 960]))
+    provided.setPointSizes(new Float32Array([10]))
+    provided.render()
+    try {
+      await provided.ready
+      // The same graph in two views: the main one and a quarter-scale thumbnail drawn
+      // after it, so the view cosmos holds at drag time is the thumbnail's
+      ;(deck as unknown as Deck<OrthographicView[]>).setProps({
+        views: [
+          new OrthographicView({ id: 'main', flipY: false }),
+          new OrthographicView({ id: 'thumb', x: 100, y: 0, width: 100, height: 100, flipY: false }),
+        ],
+        viewState: {
+          main: { target: [1000, 1000, 0], zoom: 0 },
+          thumb: { target: [1000, 1000, 0], zoom: -2 },
+        },
+        layerFilter: ({ layer, viewport }): boolean => layer.id === viewport.id,
+        layers: [
+          new CosmosGraphLayer({ id: 'main', graph: provided, pickable: true, enablePointDrag: true, dragReheatAlpha: null }),
+          new CosmosGraphLayer({ id: 'thumb', graph: provided }),
+        ],
+      })
+      await waitUntil(() => deck.pickObject({ x: 60, y: 140, radius: 2 }) !== null, 'the first pick')
+      const info = deck.pickObject({ x: 60, y: 140, radius: 2 }) as PickingInfo
+      expect(info.layer?.id).toBe('main')
+      const layer = info.layer as CosmosGraphLayer
+      expect(layer.onDragStart(info, {})).toBe(true)
+      // A frame between the grab and the move, as in any real drag: it draws the main
+      // view and then the thumbnail, which leaves cosmos holding the thumbnail's view
+      deck.redraw('drag')
+      await waitFrames(1)
+
+      // (80, 120) in the main view is space (980, 980); through the thumbnail's view it would be far off
+      expect(layer.onDrag({ ...info, x: 80, y: 120 }, {})).toBe(true)
+      const positions = provided.getPointPositionsArray()
+      expect(positions[0]).toBeCloseTo(980, 1)
+      expect(positions[1]).toBeCloseTo(980, 1)
+      expect(layer.onDragEnd({ ...info, x: 80, y: 120 }, {})).toBe(true)
+    } finally {
+      deck.finalize()
+      container.remove()
+      provided.destroy()
     }
   })
 

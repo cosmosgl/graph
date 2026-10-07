@@ -2,7 +2,8 @@
  * A deck.gl layer that runs and draws a cosmos.gl graph. The simulation runs
  * on deck.gl's own luma.gl device, and cosmos.gl's own renderer draws it into
  * deck's render pass under deck's camera — positions never leave the GPU, and
- * every cosmos.gl rendering option is available through `config`.
+ * every cosmos.gl rendering option is available through `config`. Picking is
+ * deck's: cosmos.gl draws its picking colors in deck's pick pass.
  */
 export {
   CosmosGraphLayer,
@@ -14,4 +15,5 @@ export {
   type CosmosGraphLinks,
   type CosmosLinkAttributes,
   type CosmosGraphDataLoadedInfo,
+  type CosmosGraphPickingInfo,
 } from './cosmos-graph-layer'

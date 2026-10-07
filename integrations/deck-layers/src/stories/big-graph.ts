@@ -1,7 +1,9 @@
 import { Deck, OrthographicView } from '@deck.gl/core'
+import type { PickingInfo } from '@deck.gl/core'
 import { defaultConfigValues } from '@cosmos.gl/graph'
 import type { Graph } from '@cosmos.gl/graph'
 import { CosmosGraphLayer } from '@cosmos.gl/deck-layers'
+import type { CosmosGraphPickingInfo } from '@cosmos.gl/deck-layers'
 
 import { generateMeshData } from '@/graph/stories/generate-mesh-data'
 import './style.css'
@@ -11,7 +13,8 @@ import './style.css'
  * per-point colors and sizes, per-link colors and widths — all cosmos.gl's
  * flat arrays, handed to the layer as binary attributes and to cosmos.gl as
  * they are. Positions live in the simulation's GPU texture and never reach
- * the CPU; cosmos.gl's own renderer draws every frame under deck's camera.
+ * the CPU; cosmos.gl's own renderer draws every frame under deck's camera, and
+ * draws its picking colors in deck's pick pass, so hover and drag work at scale.
  */
 export const bigGraph = async (): Promise<{ div: HTMLDivElement; destroy: () => void }> => {
   const div = document.createElement('div')
@@ -29,6 +32,10 @@ export const bigGraph = async (): Promise<{ div: HTMLDivElement; destroy: () => 
   // the link alpha alone is lowered: 200k links want a light touch
   const linkColors = Float32Array.from(data.linkColors, (channel, i) => (i % 4 === 3 ? 0.1 : channel))
 
+  const hover = document.createElement('div')
+  hover.className = 'hover'
+  hover.textContent = 'hover to see the picked element'
+  div.appendChild(hover)
   const status = document.createElement('div')
   status.className = 'status'
   div.appendChild(status)
@@ -46,6 +53,8 @@ export const bigGraph = async (): Promise<{ div: HTMLDivElement; destroy: () => 
     views: new OrthographicView({ flipY: false }), // cosmos's space has y up
     initialViewState: { target: [spaceSize / 2, spaceSize / 2, 0], zoom: -2.8, minZoom: -5, maxZoom: 2 },
     controller: true,
+    pickingRadius: 4,
+    getCursor: ({ isDragging, isHovering }) => (isDragging ? 'grabbing' : isHovering ? 'pointer' : 'grab'),
     layers: [
       new CosmosGraphLayer({
         id: 'cosmos-large',
@@ -75,6 +84,13 @@ export const bigGraph = async (): Promise<{ div: HTMLDivElement; destroy: () => 
           simulationDecay: 5000,
         },
         onGraphCreated: (created): void => { graph = created },
+        pickable: true,
+        enablePointDrag: true,
+        autoHighlight: true,
+        onHover: (info: PickingInfo): void => {
+          const picked = info as CosmosGraphPickingInfo
+          hover.textContent = picked.index >= 0 ? `${picked.elementType} ${picked.index}` : 'hover to see the picked element'
+        },
       }),
     ],
   })

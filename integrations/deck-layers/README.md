@@ -40,6 +40,9 @@ new Deck({
       points: { length: pointCount, initialPositions }, // Float32Array [x0, y0, x1, y1, …]
       links: linkIndices,                               // Float32Array [src0, tgt0, src1, tgt1, …]
       config: { curvedLinks: true, linkDefaultArrows: true },
+      pickable: true,
+      enablePointDrag: true,
+      autoHighlight: true,
     }),
   ],
 })
@@ -79,11 +82,19 @@ new CosmosGraphLayer({
   layer draws under `OrthographicView({ flipY: false })` or a map view at pitch 0 and
   bearing 0 (see *On a map* in the Storybook docs). A rotated, pitched or y-down view is
   reported once in the console and not drawn.
-- **Not yet**: cosmos.gl draws into no picking buffer, so deck's `pickable`, `autoHighlight`,
-  hover, click and drag see nothing of the graph for now; and a headless `Graph` applies
-  data changes at once, so `transitions` and the transition keys of `config` have no effect.
-  Both are on the way: a picking mode in cosmos.gl's draw programs, and a host-driven
-  transition clock.
+- **Picking is deck's.** In deck's pick pass cosmos.gl draws its picking colors — an index
+  per point and per link, hard-edged, dash gaps included — so `pickable` gives hover and
+  click: `info.elementType` is `'point'` or `'link'`, `info.index` counts within that kind,
+  and `info.object` is your original record for array data. `autoHighlight` lights the
+  hovered point or link with cosmos.gl's own focus ring and focused-link width
+  (`config.focusedPointRingColor`, `config.focusedLinkWidthIncrease`); deck's `highlightColor`
+  is not used.
+- **Dragging** (`enablePointDrag: true`, with `pickable`): a drag grabs the point — pinned on
+  grab, moved with the pointer, released per `unpinOnDragEnd`; `dragReheatAlpha` restarts the
+  simulation at a low alpha so the graph responds around the moving point. View panning is
+  suppressed only while a point is grabbed. Works on a map as well.
+- **Not yet**: a headless `Graph` applies data changes at once, so `transitions` and the
+  transition keys of `config` have no effect; a host-driven transition clock is the next step.
 
 ### Driving the graph
 
@@ -187,8 +198,8 @@ changes.
 The *Custom deck layers* story is the worked example: a standalone `GraphSimulation` on deck's
 device, drawn by two deck layers of its own (`CosmosPointsLayer`, `CosmosLinksLayer` in the
 story's sources) that `texelFetch` the texture by instance index — with binary attributes,
-`pickable`, `autoHighlight`, hover and a drag that pins the grabbed point. They are example
-code, not package exports: copy them and make them yours.
+deck's attribute transitions and `highlightColor`, hover and a drag that pins the grabbed
+point. They are example code, not package exports: copy them and make them yours.
 
 ## The universal fallback: CPU readback
 

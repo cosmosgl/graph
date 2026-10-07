@@ -57,6 +57,8 @@ export const miniGraphs = async (): Promise<{ div: HTMLDivElement; destroy: () =
       },
       // Each layer belongs to the view its id names
       layerFilter: ({ layer, viewport }) => layer.id.startsWith(viewport.id),
+      pickingRadius: 5,
+      getCursor: ({ isDragging, isHovering }) => (isDragging ? 'grabbing' : isHovering ? 'pointer' : 'grab'),
       onDeviceInitialized: resolve,
       layers: [],
     })
@@ -101,7 +103,8 @@ export const miniGraphs = async (): Promise<{ div: HTMLDivElement; destroy: () =
   let current = datasets[0] as Dataset
 
   // One layer per thumbnail and one for the main view, all without `points`
-  const graphLayer = (id: string, dataset: Dataset): CosmosGraphLayer => new CosmosGraphLayer({ id, graph: dataset.graph })
+  const graphLayer = (id: string, dataset: Dataset): CosmosGraphLayer =>
+    new CosmosGraphLayer({ id, graph: dataset.graph, pickable: id === 'main', autoHighlight: id === 'main', enablePointDrag: id === 'main' })
 
   const stateOf = (dataset: Dataset): string =>
     dataset.graph.isSimulationRunning ? 'running' : dataset.isPaused ? 'paused' : 'settled'
