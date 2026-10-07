@@ -2,7 +2,7 @@
 
 # Handing the host its GL state back
 
-**Commits:** PR #278: `fix(simulation): hand the host its GL state back after passes on a shared device` (`dd9395e`), `fix(force, points): every overwrite pass declares its pipeline state itself — correct outside the wrapper too` (`5b59ba5`), `fix(simulation): the host-state wrapper pops back to its own depth — a throw inside a pass no longer strands the host's state` (`5cbabfb`); review follow-up, same PR: `fix(simulation): the throw-path restore finds the tracker through gl — a host's own luma copy is unwound too` (`d7abb96`), `fix(force, points, links): every model declares its full pipeline state — correct outside the wrapper, whatever the host's winding` (`695d970`), `fix(simulation): pin the host's scissor and colour mask across the wrapper — and that the reset keeps them off cosmos's draws` (`560b48a`)
+**Commits:** PR #278: `fix(simulation): hand the host its GL state back after passes on a shared device` (`66180d8`), `fix(force, points): every overwrite pass declares its pipeline state itself — correct outside the wrapper too` (`f35661b`), `fix(simulation): the host-state wrapper pops back to its own depth — a throw inside a pass no longer strands the host's state` (`c4551e3`); review follow-up, same PR: `fix(simulation): the throw-path restore finds the tracker through gl — a host's own luma copy is unwound too` (`2ef53f2`), `fix(force, points, links): every model declares its full pipeline state — correct outside the wrapper, whatever the host's winding` (`867b23d`), `fix(simulation): pin the host's scissor and colour mask across the wrapper — and that the reset keeps them off cosmos's draws` (`2c4be82`)
 
 ## Why
 
