@@ -15,6 +15,7 @@ import fillPickingBufferFrag from '@/graph/modules/Points/fill-picking-buffer.fr
 import fillPickingBufferVert from '@/graph/modules/Points/fill-picking-buffer.vert?raw'
 import { pointSizeModule } from '@/graph/modules/Points/point-size-module'
 import { exitRampModule } from '@/graph/modules/Points/exit-ramp-module'
+import { pickingColorModule } from '@/graph/modules/Shared/picking-color-module'
 import fillGridWithSampledPointsFrag from '@/graph/modules/Points/fill-sampled-points.frag?raw'
 import fillGridWithSampledPointsVert from '@/graph/modules/Points/fill-sampled-points.vert?raw'
 import updatePositionFrag from '@/graph/modules/Points/update-position.frag?raw'
@@ -48,8 +49,6 @@ const BLEND_PARAMETERS = {
 const DEFAULT_DRAW_PARAMETERS: RenderPipelineParameters = {
   ...BASE_PIPELINE_PARAMETERS,
   ...BLEND_PARAMETERS,
-  depthWriteEnabled: false,
-  depthCompare: 'always',
 }
 
 /**
@@ -71,7 +70,6 @@ const CORE_PASS_PARAMETERS: RenderPipelineParameters = {
 const FRINGE_PASS_PARAMETERS: RenderPipelineParameters = {
   ...BASE_PIPELINE_PARAMETERS,
   ...BLEND_PARAMETERS,
-  depthWriteEnabled: false,
   depthCompare: 'less',
 }
 
@@ -250,6 +248,8 @@ export class Points extends CoreModule implements PointTrackerHost {
    */
   private drawCoreCommand: Model | undefined
   private drawHighlightedCommand: Model | undefined
+  /** The host picking pass: the draw program over the same attributes, blend off, hard edges. */
+  private drawPickingCommand: Model | undefined
   private updatePositionCommand: Model | undefined
   private interpolatePositionCommand: Model | undefined
   private dragPointCommand: Model | undefined
@@ -349,6 +349,8 @@ export class Points extends CoreModule implements PointTrackerHost {
       outlineColor: [number, number, number, number];
       outlineWidth: number;
       renderMode: number;
+      pickingAlpha: number;
+      pickingIndexOffset: number;
     };
   }> | undefined
 
@@ -784,8 +786,12 @@ export class Points extends CoreModule implements PointTrackerHost {
           outlineColor: 'vec4<f32>',
           outlineWidth: 'f32',
           renderMode: 'f32',
+          pickingAlpha: 'f32',
+          pickingIndexOffset: 'f32',
         },
         defaultUniforms: {
+          pickingAlpha: 1,
+          pickingIndexOffset: 0,
           // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
           greyoutOpacity: config.pointGreyoutOpacity ?? -1,
           pointOpacity: config.pointOpacity,
@@ -801,7 +807,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.drawCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
-      modules: [pointSizeModule, exitRampModule],
+      modules: [pointSizeModule, exitRampModule, pickingColorModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       attributes: {
@@ -843,7 +849,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.drawCoreCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
-      modules: [pointSizeModule, exitRampModule],
+      modules: [pointSizeModule, exitRampModule, pickingColorModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       indexBuffer: this.reversedPointIndexBuffer ?? null,
@@ -1772,6 +1778,68 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.shouldAnimatePointPositions = animatePositions
   }
 
+  /**
+   * Draws the points as picking colors for a host's pick pass: every fragment a point
+   * covers carries `index + indexOffset + 1` as RGB bytes and `alpha`, with hard edges
+   * and no blending — the sibling of the engine's own index pass, in the encoding deck.gl
+   * and most hosts decode. Runs over the visible draw's buffers and textures. @internal
+   */
+  public drawPicking (renderPass: RenderPass, alpha: number, indexOffset = 0): void {
+    const { data, store } = this
+    if (!this.targetColorBuffer) this.updateColor()
+    if (!this.targetSizeBuffer) this.updateSize()
+    if (!this.exitTexture) this.updateExit()
+    if (!this.shapeBuffer) this.updateShape()
+    if (!this.imageIndicesBuffer) this.updateImageIndices()
+    if (!this.imageSizesBuffer) this.updateImageSizes()
+    if (!this.drawCommand || !this.drawUniformStore) return
+    if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
+    if (!this.pointStatusTexture || this.pointStatusTexture.destroyed) return
+    if (!this.exitTexture || this.exitTexture.destroyed) return
+    if (!this.imageAtlasTexture || !this.imageAtlasCoordsTexture) this.createAtlas()
+    if (!this.imageAtlasTexture || !this.imageAtlasCoordsTexture) return
+    if (this.imageAtlasTexture.destroyed || this.imageAtlasCoordsTexture.destroyed) return
+    if (!data.pointsNumber) return
+    if (!store.screenSize || store.screenSize[0] === 0 || store.screenSize[1] === 0) return
+
+    // Its own model, so the visible draw's pipeline is never toggled; the buffers may
+    // have been recreated since the last pick, so they are bound anew each time
+    this.drawPickingCommand ||= new Model(this.device, {
+      fs: drawPointsFrag,
+      vs: drawPointsVert,
+      modules: [pointSizeModule, exitRampModule, pickingColorModule],
+      topology: 'point-list',
+      vertexCount: data.pointsNumber,
+      attributes: this.getDrawCommandAttributes(),
+      bufferLayout: [
+        { name: 'pointIndices', format: 'float32x2' },
+        { name: 'sourceSize', format: 'float32' },
+        { name: 'targetSize', format: 'float32' },
+        { name: 'sourceColor', format: 'float32x4' },
+        { name: 'targetColor', format: 'float32x4' },
+        { name: 'shape', format: 'float32' },
+        { name: 'imageIndex', format: 'float32' },
+        { name: 'imageSize', format: 'float32' },
+      ],
+      defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
+      bindings: {
+        drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer('drawVertexUniforms'),
+        drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer('drawFragmentUniforms'),
+      },
+      parameters: BASE_PIPELINE_PARAMETERS,
+    })
+    this.drawPickingCommand.setAttributes(this.getDrawCommandAttributes())
+    this.drawPickingCommand.setVertexCount(data.pointsNumber)
+
+    const { vertex, fragment } = this.getDrawUniforms()
+    this.drawUniformStore.setUniforms({
+      drawVertexUniforms: { ...vertex, skipHighlighted: 0, skipGreyed: 0 },
+      drawFragmentUniforms: { ...fragment, renderMode: 3, pickingAlpha: alpha, pickingIndexOffset: indexOffset },
+    })
+    this.drawPickingCommand.setBindings(this.getDrawTextureBindings())
+    this.drawPickingCommand.draw(renderPass)
+  }
+
   public draw (renderPass: RenderPass): void {
     const { data, config, store } = this
     if (!this.targetColorBuffer) this.updateColor()
@@ -1804,51 +1872,8 @@ export class Points extends CoreModule implements PointTrackerHost {
     // Update vertex count dynamically
     this.drawCommand.setVertexCount(data.pointsNumber)
 
-    // Base uniforms that don't change between layers
-    // Convert booleans to floats (1.0 or 0.0) since uniform type is 'f32'
-    const baseVertexUniforms = {
-      ratio: config.pixelRatio,
-      transformationMatrix: store.transformationMatrix4x4,
-      pointsTextureSize: store.pointsTextureSize ?? 0,
-      sizeScale: config.pointSizeScale,
-      spaceSize: store.adjustedSpaceSize,
-      screenSize: ensureVec2(store.screenSize, [0, 0]),
-      greyoutColor: ensureVec4(store.greyoutPointColor, [-1, -1, -1, -1]),
-      backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
-      scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0, // Convert boolean to float
-      maxPointSize: store.maxPointSize,
-      isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
-      hasImages: (this.imageCount > 0) ? 1 : 0, // Convert boolean to float
-      imageCount: this.imageCount,
-      imageAtlasCoordsTextureSize: this.imageAtlasCoordsTextureSize ?? 0,
-      transitionProgress: this.transitionProgress,
-      animateColors: this.shouldAnimatePointColors ? 1 : 0,
-      animateSizes: this.shouldAnimatePointSizes ? 1 : 0,
-      animatePositions: this.shouldAnimatePointPositions ? 1 : 0,
-      // Cached parse — draw() runs per frame, so no color-string parsing here.
-      pointDefaultColor: ensureVec4(data.defaultRgba, [0, 0, 0, 1]),
-      pointDefaultSize: config.pointDefaultSize,
-      pointsNumber: data.pointsNumber,
-    }
-
-    const baseFragmentUniforms = {
-      // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
-      greyoutOpacity: config.pointGreyoutOpacity ?? -1,
-      pointOpacity: config.pointOpacity,
-      isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
-      backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
-      outlineColor: ensureVec4(store.outlinedPointRingColor, [1, 1, 1, 1]),
-      outlineWidth: 0.9,
-      renderMode: 0,
-    }
-
-    const textureBindings = {
-      positionsTexture: this.currentPositionTexture,
-      pointStatus: this.pointStatusTexture,
-      exitTexture: this.exitTexture,
-      imageAtlasTexture: this.imageAtlasTexture,
-      imageAtlasCoords: this.imageAtlasCoordsTexture,
-    }
+    const { vertex: baseVertexUniforms, fragment: baseFragmentUniforms } = this.getDrawUniforms()
+    const textureBindings = this.getDrawTextureBindings()
 
     const hasHighlighting = config.highlightedPointIndices !== undefined
 
@@ -2625,6 +2650,8 @@ export class Points extends CoreModule implements PointTrackerHost {
   public destroy (): void {
     // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
     this.drawCommand?.destroy()
+    this.drawPickingCommand?.destroy()
+    this.drawPickingCommand = undefined
     this.drawCommand = undefined
     this.drawCoreCommand?.destroy()
     this.drawCoreCommand = undefined
@@ -3435,5 +3462,74 @@ export class Points extends CoreModule implements PointTrackerHost {
       usage: Buffer.INDEX | Buffer.COPY_DST,
     })
     this.drawCoreCommand?.setIndexBuffer(this.reversedPointIndexBuffer)
+  }
+
+  /** The uniforms every points draw shares — the visible passes and the host picking pass. */
+  private getDrawUniforms (): {
+    vertex: Record<string, unknown>;
+    fragment: Record<string, unknown>;
+    } {
+    const { data, config, store } = this
+    const vertex = {
+      ratio: config.pixelRatio,
+      transformationMatrix: store.transformationMatrix4x4,
+      pointsTextureSize: store.pointsTextureSize ?? 0,
+      sizeScale: config.pointSizeScale,
+      spaceSize: store.adjustedSpaceSize,
+      screenSize: ensureVec2(store.screenSize, [0, 0]),
+      greyoutColor: ensureVec4(store.greyoutPointColor, [-1, -1, -1, -1]),
+      backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
+      scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0, // Convert boolean to float
+      maxPointSize: store.maxPointSize,
+      isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
+      hasImages: (this.imageCount > 0) ? 1 : 0, // Convert boolean to float
+      imageCount: this.imageCount,
+      imageAtlasCoordsTextureSize: this.imageAtlasCoordsTextureSize ?? 0,
+      transitionProgress: this.transitionProgress,
+      animateColors: this.shouldAnimatePointColors ? 1 : 0,
+      animateSizes: this.shouldAnimatePointSizes ? 1 : 0,
+      animatePositions: this.shouldAnimatePointPositions ? 1 : 0,
+      // Cached parse — draw() runs per frame, so no color-string parsing here.
+      pointDefaultColor: ensureVec4(data.defaultRgba, [0, 0, 0, 1]),
+      pointDefaultSize: config.pointDefaultSize,
+      pointsNumber: data.pointsNumber,
+    }
+    const fragment = {
+      // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
+      greyoutOpacity: config.pointGreyoutOpacity ?? -1,
+      pointOpacity: config.pointOpacity,
+      isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
+      backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
+      outlineColor: ensureVec4(store.outlinedPointRingColor, [1, 1, 1, 1]),
+      outlineWidth: 0.9,
+      renderMode: 0,
+    }
+    return { vertex, fragment }
+  }
+
+  /** The textures every points draw samples. */
+  private getDrawTextureBindings (): Record<string, Texture> {
+    const bindings = {
+      positionsTexture: this.currentPositionTexture,
+      pointStatus: this.pointStatusTexture,
+      exitTexture: this.exitTexture,
+      imageAtlasTexture: this.imageAtlasTexture,
+      imageAtlasCoords: this.imageAtlasCoordsTexture,
+    }
+    return bindings as Record<string, Texture>
+  }
+
+  /** The attribute buffers of the draw program, as they are now. */
+  private getDrawCommandAttributes (): Record<string, Buffer> {
+    return {
+      ...(this.drawPointIndices && { pointIndices: this.drawPointIndices }),
+      ...(this.sourceSizeBuffer && { sourceSize: this.sourceSizeBuffer }),
+      ...(this.targetSizeBuffer && { targetSize: this.targetSizeBuffer }),
+      ...(this.sourceColorBuffer && { sourceColor: this.sourceColorBuffer }),
+      ...(this.targetColorBuffer && { targetColor: this.targetColorBuffer }),
+      ...(this.shapeBuffer && { shape: this.shapeBuffer }),
+      ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
+      ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
+    } as Record<string, Buffer>
   }
 }

@@ -382,6 +382,58 @@ describe('external device with host state', () => {
   })
 })
 
+describe('host picking', () => {
+  it('draws picking colors for a host pick pass: index + 1 as RGB bytes, the host alpha, hard edges', async () => {
+    const { device, destroy } = await createExternalDevice()
+    // Two points 50 units apart, one link between them; the view puts (1000, 1000) at the
+    // centre of a 200 × 200 target, one pixel per space unit, at pixel ratio 1
+    const graph = new Graph(null, {
+      spaceSize: 4096,
+      pixelRatio: 1,
+      enableSimulation: false,
+      rescalePositions: false,
+      pointDefaultSize: 20,
+      linkDefaultWidth: 6,
+      linkVisibilityMinTransparency: 1,
+    }, Promise.resolve(device))
+    graph.setPointPositions(new Float32Array([1000, 1000, 1050, 1000]))
+    graph.setLinks(new Float32Array([0, 1]))
+    graph.render()
+    await graph.ready
+    const target = device.createTexture({ format: 'rgba8unorm', width: 200, height: 200 })
+    const framebuffer = device.createFramebuffer({ width: 200, height: 200, colorAttachments: [target] })
+    try {
+      // setViewTransform's formula, inverted for k = 1 and (1000, 1000) → (100, 100)
+      const S = 4096
+      graph.setViewTransform({ k: 1, x: 100 - (1000 + (200 - S) / 2), y: 100 - ((S - 1000) + (200 - S) / 2) }, [200, 200])
+      expect(graph.spaceToScreenPosition([1000, 1000])).toEqual([100, 100])
+
+      const renderPass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0] })
+      graph.drawToRenderPass(renderPass, { picking: { alpha: 7 / 255, linkIndexOffset: 2 } })
+      renderPass.end()
+      device.submit()
+      const pixels = device.readPixelsToArrayWebGL(framebuffer) as Uint8Array
+      // GL reads rows bottom-up
+      const at = (x: number, y: number): number[] => Array.from(pixels.subarray(((199 - y) * 200 + x) * 4, ((199 - y) * 200 + x) * 4 + 4))
+
+      // Point 0 at the centre, point 1 fifty pixels right: index + 1 in R, the host's alpha
+      expect(at(100, 100)).toEqual([1, 0, 0, 7])
+      expect(at(150, 100)).toEqual([2, 0, 0, 7])
+      // The link between them: linkIndexOffset + 0 + 1
+      expect(at(125, 100)).toEqual([3, 0, 0, 7])
+      // Hard edges: just outside the 20 px point, and off the link, nothing
+      expect(at(100, 113)).toEqual([0, 0, 0, 0])
+      expect(at(125, 112)).toEqual([0, 0, 0, 0])
+      expect(at(20, 20)).toEqual([0, 0, 0, 0])
+    } finally {
+      graph.destroy()
+      framebuffer.destroy()
+      target.destroy()
+      destroy()
+    }
+  })
+})
+
 describe('external frame scheduling', () => {
   it('enableRenderLoop: false + renderOneFrame drives a canvas-owning graph to completion', async () => {
     const div = document.createElement('div')

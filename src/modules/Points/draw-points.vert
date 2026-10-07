@@ -101,6 +101,8 @@ out vec4 imageAtlasUV;
 out float shapeSize;
 out float imageSizeVarying;
 out float overallSize;
+// The point's index, for the host picking pass
+flat out float vPointIndex;
 
 // The size rule is the shared pointSize module, so drawing, picking and selection agree on it.
 float calculatePointSize(float size) {
@@ -174,6 +176,7 @@ void main() {
   // Depth encodes stacking order: higher point index = drawn on top = nearer
   // (smaller z). Harmless when depth testing is off (depthCompare 'always').
   float linearIndex = pointIndices.y * pointsTextureSize + pointIndices.x;
+  vPointIndex = linearIndex;
   float depthZ = 1.0 - 2.0 * (linearIndex + 0.5) / max(pointsNumber, 1.0);
   gl_Position = vec4(finalPosition.rg, depthZ, 1.0);
 
