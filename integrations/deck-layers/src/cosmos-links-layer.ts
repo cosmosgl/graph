@@ -1,11 +1,13 @@
 import { Layer, project32, picking, UNIT } from '@deck.gl/core'
 import type { Accessor, Color, DefaultProps, LayerDataSource, LayerProps, Unit, UpdateParameters } from '@deck.gl/core'
 import { Model, Geometry } from '@luma.gl/engine'
+import { conicParametricCurveModule } from '@cosmos.gl/graph'
 import type { PositionTextureSource } from '@cosmos.gl/graph'
 
 import { BLEND_PARAMETERS } from './blend-parameters'
 import { cosmosLinksUniforms } from './cosmos-links-layer-uniforms'
 import type { CosmosLinksProps } from './cosmos-links-layer-uniforms'
+import { LINK_ENGINE_DEFAULTS, type LinkEngineProps } from './engine-props'
 
 const DEFAULT_LINK_COLOR: [number, number, number, number] = [94, 115, 194, 64]
 
@@ -46,13 +48,11 @@ vec4 fetchPointPosition(float index, int textureSize) {
   return texelFetch(positionsTexture, ivec2(pointIndex % textureSize, pointIndex / textureSize), 0);
 }
 
-// The engine's curve: a rational quadratic Bézier from a to b, pulled toward the
-// control point c by the weight w. With c on the chord it is the straight link.
+// The engine's curve, from its own shader module: a rational quadratic Bézier from a
+// to b, pulled toward the control point c by the weight w. With c on the chord it is
+// the straight link.
 vec3 linkCurve(vec2 a, vec2 b, vec2 c, float t, float w) {
-  float s = 1.0 - t;
-  vec2 dividend = s * s * a + 2.0 * s * t * w * c + t * t * b;
-  float divisor = s * s + 2.0 * s * t * w + t * t;
-  return vec3(dividend / divisor, 0.0);
+  return vec3(conicParametricCurve(a, b, c, t, w), 0.0);
 }
 
 void main(void) {
@@ -170,15 +170,7 @@ type CosmosLinksLayerOwnProps<DataT> = {
    * @default 'pixels'
    */
   linkWidthUnits?: Unit;
-  /** Draws links as curves. @default false */
-  curvedLinks?: boolean;
-  /** Number of segments in a curved link. @default 19 */
-  curvedLinkSegments?: number;
-  /** The weight of the curve's control point. @default 0.8 */
-  curvedLinkWeight?: number;
-  /** The control point's distance from the link's midpoint, in link lengths. @default 0.5 */
-  curvedLinkControlPointDistance?: number;
-}
+} & LinkEngineProps
 
 const defaultProps: DefaultProps<CosmosLinksLayerProps> = {
   getLinkSource: { type: 'accessor', value: (l: unknown) => (l as { source: number }).source },
@@ -186,10 +178,7 @@ const defaultProps: DefaultProps<CosmosLinksLayerProps> = {
   getLinkColor: { type: 'accessor', value: DEFAULT_LINK_COLOR },
   getLinkWidth: { type: 'accessor', value: 1 },
   linkWidthUnits: 'pixels',
-  curvedLinks: false,
-  curvedLinkSegments: { type: 'number', value: 19, min: 1 },
-  curvedLinkWeight: 0.8,
-  curvedLinkControlPointDistance: 0.5,
+  ...LINK_ENGINE_DEFAULTS,
   parameters: { type: 'object', value: BLEND_PARAMETERS, optional: true, compare: 2 },
 }
 
@@ -227,7 +216,7 @@ export class CosmosLinksLayer<DataT = unknown> extends Layer<Required<CosmosLink
   declare public state: { model?: Model; segments?: number }
 
   public getShaders (): ReturnType<Layer['getShaders']> {
-    return super.getShaders({ vs, fs, modules: [project32, picking, cosmosLinksUniforms] })
+    return super.getShaders({ vs, fs, modules: [project32, picking, conicParametricCurveModule, cosmosLinksUniforms] })
   }
 
   public initializeState (): void {

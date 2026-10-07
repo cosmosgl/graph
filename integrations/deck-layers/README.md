@@ -79,7 +79,12 @@ new CosmosGraphLayer({
   positions or the pairs themselves change.
 - **Curved links**: `curvedLinks` draws links as the engine's curves — rational quadratic
   Béziers — tuned by `curvedLinkSegments`, `curvedLinkWeight` and
-  `curvedLinkControlPointDistance`, with the engine's names and defaults.
+  `curvedLinkControlPointDistance`. Rendering options that mirror engine config take their
+  names, types, docs and defaults from cosmos's `GraphConfig`.
+- **Highlight**: `autoHighlight` lights up the hovered point or link. A static
+  `highlightedObjectIndex` names a point — points and links have separate index spaces — so
+  to highlight a link, set it on the links sublayer:
+  `_subLayerProps: { links: { highlightedObjectIndex } }`.
 - **Simulation control**: pass forces and callbacks through `simulationConfig`
   (`GraphSimulationConfig` from `@cosmos.gl/graph`); take the wheel through
   `onSimulationCreated`.
@@ -194,6 +199,18 @@ as `[x, y, i, unused]`, an absent point reads as NaN, and the handle changes as 
 simulation ping-pongs, so re-fetch it whenever `version` changes. The sublayer sources
 ([points](src/cosmos-points-layer.ts), [links](src/cosmos-links-layer.ts)) are a worked
 reference.
+
+The layer's own sublayers are a deliberately minimal default: circles and lines, straight or
+curved, with deck's picking, highlight, accessors and transitions. For anything beyond that,
+swap in a layer of your own through deck's standard `_subLayerProps` — it receives the same
+props (`graph`, the accessors, the engine keys) and can extend the default class:
+
+```js
+new CosmosGraphLayer({
+  // …
+  _subLayerProps: { links: { type: MyLinksLayer }, points: { type: MyPointsLayer } },
+})
+```
 
 ## The universal fallback: CPU readback
 

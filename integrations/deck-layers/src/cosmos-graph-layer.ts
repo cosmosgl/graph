@@ -19,6 +19,7 @@ import type { GraphSimulationConfig } from '@cosmos.gl/graph'
 import { BLEND_PARAMETERS } from './blend-parameters'
 import { CosmosPointsLayer } from './cosmos-points-layer'
 import { CosmosLinksLayer } from './cosmos-links-layer'
+import { LINK_ENGINE_DEFAULTS, LINK_ENGINE_KEYS, omitKeys, pickKeys, type LinkEngineProps } from './engine-props'
 
 /**
  * Binary styling channels for binary points, keyed by the accessor each one
@@ -171,28 +172,6 @@ type CosmosGraphLayerOwnProps<PointDataT, LinkDataT> = {
    */
   linkWidthUnits?: Unit;
   /**
-   * Draws links as curves: rational quadratic Béziers, as `curvedLinks` does in the engine.
-   * @default false
-   */
-  curvedLinks?: boolean;
-  /**
-   * Number of segments in a curved link.
-   * @default 19
-   */
-  curvedLinkSegments?: number;
-  /**
-   * The weight of the curve's control point: higher pulls the curve toward it.
-   * @default 0.8
-   */
-  curvedLinkWeight?: number;
-  /**
-   * Where the control point sits on the normal from the link's midpoint, in link
-   * lengths. The side follows the source-to-target direction: a link and its
-   * reverse bend opposite ways.
-   * @default 0.5
-   */
-  curvedLinkControlPointDistance?: number;
-  /**
    * Lets pointer drags grab a point: pinned on drag start, moved with the
    * pointer, released per `unpinOnDragEnd`. View panning is suppressed while
    * a point is grabbed.
@@ -258,7 +237,7 @@ type CosmosGraphLayerOwnProps<PointDataT, LinkDataT> = {
    * A throw goes to deck's `onError`, and the load stands.
    */
   onSimulationDataLoaded?: ((info: CosmosGraphDataLoadedInfo<LinkDataT>) => void) | null;
-}
+} & LinkEngineProps // rendering options that mirror engine config, with the engine's names, types, docs and defaults
 
 const defaultProps: DefaultProps<CosmosGraphLayerProps> = {
   points: { type: 'object', value: null, optional: true },
@@ -273,10 +252,7 @@ const defaultProps: DefaultProps<CosmosGraphLayerProps> = {
   getLinkColor: { type: 'accessor', value: [94, 115, 194, 64] },
   getLinkWidth: { type: 'accessor', value: 1 },
   linkWidthUnits: 'pixels',
-  curvedLinks: defaultConfigValues.curvedLinks,
-  curvedLinkSegments: defaultConfigValues.curvedLinkSegments,
-  curvedLinkWeight: defaultConfigValues.curvedLinkWeight,
-  curvedLinkControlPointDistance: defaultConfigValues.curvedLinkControlPointDistance,
+  ...LINK_ENGINE_DEFAULTS,
   enablePointDrag: false,
   dragReheatAlpha: 0.1,
   unpinOnDragEnd: true,
@@ -435,7 +411,13 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     if (!simulation) return
 
     if (!providedSimulation && changeFlags.propsChanged && props.simulationConfig !== oldProps.simulationConfig) {
-      simulation.setConfig(props.simulationConfig)
+      // setConfig applies only the keys it is given, and reads `undefined` as the
+      // default: a key the new config leaves out goes back to the engine default
+      const config: GraphSimulationConfig = { ...props.simulationConfig }
+      for (const key of Object.keys(oldProps.simulationConfig ?? {}) as (keyof GraphSimulationConfig)[]) {
+        if (!(key in config)) config[key] = undefined
+      }
+      simulation.setConfig(config)
     }
     // Array links resolve against the id map and the position accessor at load,
     // so a change to either counts as a change of that channel
@@ -467,18 +449,22 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     const { simulation, isReady, pointCount, pointsData, linksData, linkIndices } = this.state
     if (!simulation || !isReady || pointCount === 0) return null
 
-    const {
-      getPointSize, getPointColor, pointSizeUnits, getLinkColor, getLinkWidth, linkWidthUnits,
-      curvedLinks, curvedLinkSegments, curvedLinkWeight, curvedLinkControlPointDistance,
-    } = this.props
+    const { getPointSize, getPointColor, pointSizeUnits, getLinkColor, getLinkWidth, linkWidthUnits } = this.props
     const triggers: CosmosUpdateTriggers = this.props.updateTriggers ?? {}
+    // getSubLayerProps does not forward `transitions`; the engine keys stay out of
+    // them, because the composite interpolates those itself
+    const transitions = omitKeys(this.props.transitions, LINK_ENGINE_KEYS)
     const layers: Layer[] = []
 
     if (linksData) {
+      // deck's `_subLayerProps: { links: { type } }` swaps in a layer of the app's own
       layers.push(
-        new CosmosLinksLayer<LinkDataT>(
+        new (this.getSubLayerClass('links', CosmosLinksLayer) as typeof CosmosLinksLayer)<LinkDataT>(
           this.getSubLayerProps({
             id: 'links',
+            // Points and links have separate index spaces, and deck forwards one
+            // highlightedObjectIndex to every sublayer: the composite's names a point
+            highlightedObjectIndex: null,
             updateTriggers: {
               getLinkSource: triggers.getLinkSource,
               getLinkTarget: triggers.getLinkTarget,
@@ -492,12 +478,8 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
             getLinkColor,
             getLinkWidth,
             linkWidthUnits,
-            curvedLinks,
-            curvedLinkSegments,
-            curvedLinkWeight,
-            curvedLinkControlPointDistance,
-            // getSubLayerProps does not forward `transitions`
-            transitions: this.props.transitions,
+            ...pickKeys(this.props, LINK_ENGINE_KEYS),
+            transitions,
           },
           Array.isArray(linksData) && linkIndices
             ? {
@@ -512,7 +494,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     }
 
     layers.push(
-      new CosmosPointsLayer<PointDataT>(
+      new (this.getSubLayerClass('points', CosmosPointsLayer) as typeof CosmosPointsLayer)<PointDataT>(
         this.getSubLayerProps({
           id: 'points',
           updateTriggers: {
@@ -526,8 +508,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
           getPointSize,
           getPointColor,
           pointSizeUnits,
-          // getSubLayerProps does not forward `transitions`
-          transitions: this.props.transitions,
+          transitions,
         }
       )
     )
@@ -727,8 +708,9 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     const firstLoad = !this.state.hasLoaded
     const spaceSize = this._spaceSize()
 
-    // Unseeded points land in the middle half of the space, clear of the walls
-    const randomCoordinate = (): number => spaceSize * (0.25 + Math.random() * 0.5)
+    // Unseeded points land in the middle half of the space, clear of the walls. They
+    // are drawn from the simulation's own RNG, so a `randomSeed` reproduces the layout
+    const randomCoordinate = (): number => spaceSize * simulation.store.getRandomFloat(0.25, 0.75)
 
     let pointCount: number
     let pointsData: this['state']['pointsData']

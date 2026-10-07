@@ -2755,6 +2755,8 @@ export type { PointPositionTexture, PositionTextureSource } from './simulation'
 export type { PositionsReadOptions } from './simulation'
 export type { PointTracker } from './modules/Points/point-tracker'
 export { PointShape, LinkStyle } from './modules/GraphData'
+// The link curve as a luma shader module, for renderers that draw the engine's curve themselves
+export { conicParametricCurveModule } from './modules/Lines/conic-curve-module'
 export type { LinksByPoint } from './modules/GraphData'
 export { TransitionEasing } from './modules/Transition'
 

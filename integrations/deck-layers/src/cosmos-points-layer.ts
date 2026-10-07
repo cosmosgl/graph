@@ -51,8 +51,8 @@ void main(void) {
   // instanceSizes is a diameter; the quad expands by radius
   outerRadiusPixels = project_size_to_pixel(instanceSizes * 0.5, cosmosPoints.sizeUnits);
   // A non-positive size hides the point — and the edge-padding divide below
-  // is undefined at zero
-  if (outerRadiusPixels <= 0.0) {
+  // is undefined at zero. Written so NaN hides it too: NaN fails every comparison.
+  if (!(outerRadiusPixels > 0.0)) {
     collapse();
     return;
   }
