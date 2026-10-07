@@ -252,6 +252,37 @@ This method sets the sizes for the point images in the graph.
 
 Each size value in the array specifies the size of a point image using the same order as the points in the graph data. The sizes are applied to images that have been set using `setImageData()` and referenced via `setPointImageIndices()`.
 
+### <a name="set_point_render_order" href="#set_point_render_order">#</a> graph.<b>setPointRenderOrder</b>(<i>order</i>)
+
+This method sets the order in which points are drawn, from back to front. By default points are drawn in index order, so a point with a higher index is drawn on top of the points before it.
+
+* **`order`** (`ArrayLike<number> | null`): Point indices from back to front, as a `number[]` or any typed array (for example a `Uint32Array`). A point listed later is drawn on top of the points listed before it.
+  * **Partial lists**: The list may name only some points. Those are drawn on top in the listed order, and every point left out is drawn underneath them in index order, so `[7]` brings point 7 to the front.
+  * **Repeated and invalid indices**: An index listed more than once takes its last position. Values that aren't point indices (negative, fractional, `NaN`, or beyond the point count) are ignored.
+  * **Reset**: Pass `null` or `[]` to restore index order.
+
+Only the drawing order changes: point indices, the simulation, and every other per-point array keep their meaning, so there is no need to reorder your data to change what is on top. Hover and click picking follow the render order, so the point on top is the one they report. While `highlightedPointIndices` is set, highlighted points are still drawn (and picked) above greyed-out ones, and the order applies within each group. Label sampling (`getSampledPoints`) follows the render order only and gives highlighted points no priority.
+
+The order is kept across `setPointPositions` calls and resolved against the current point count, so an index beyond it is ignored while it is out of range. The change takes effect on the next `render()` call and does not animate.
+
+**Example:**
+```javascript
+// Bring point 7 to the front; the rest keep index order underneath it
+graph.setPointRenderOrder([7])
+graph.render()
+
+// Draw small points on top of big ones: sort the indices by size, biggest first
+const order = Array.from(sizes.keys()).sort((a, b) => sizes[b] - sizes[a])
+graph.setPointRenderOrder(order)
+graph.render()
+
+// Back to index order
+graph.setPointRenderOrder(null)
+graph.render()
+```
+
+**See example:** [Render Order](../?path=/story/examples-points--render-order) switches between partial and full orders and brings clicked points to the front.
+
 ### <a name="set_links" href="#set_links">#</a> graph.<b>setLinks</b>(<i>links</i>)
 
 This method sets the links (connections) between points in a cosmos.gl graph.

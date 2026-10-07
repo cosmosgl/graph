@@ -19,7 +19,7 @@ import fillGridWithSampledPointsFrag from '@/graph/modules/Points/fill-sampled-p
 import fillGridWithSampledPointsVert from '@/graph/modules/Points/fill-sampled-points.vert?raw'
 import updatePositionFrag from '@/graph/modules/Points/update-position.frag?raw'
 import interpolatePositionFrag from '@/graph/modules/Points/interpolate-position.frag?raw'
-import { createIndexesForBuffer, updateAttributeBuffers } from '@/graph/modules/Shared/buffer'
+import { createIndexesForBuffer, updateAttributeBuffer, updateAttributeBuffers } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import trackPositionsFrag from '@/graph/modules/Points/track-positions.frag?raw'
 import dragPointFrag from '@/graph/modules/Points/drag-point.frag?raw'
@@ -53,7 +53,7 @@ const DEFAULT_DRAW_PARAMETERS: RenderPipelineParameters = {
 
 /**
  * Occlusion-culling pass A: fully opaque point interiors drawn front-to-back
- * (reversed index order) so early-z rejects fragments hidden behind nearer points.
+ * (reversed render order) so early-z rejects fragments hidden behind nearer points.
  */
 const CORE_PASS_PARAMETERS: RenderPipelineParameters = {
   blend: false,
@@ -279,8 +279,26 @@ export class Points extends CoreModule implements PointTrackerHost {
   private polygonPathTexture: Texture | undefined
   private polygonPathLength = 0
   private drawPointIndices: Buffer | undefined
-  /** Uint32 element indices `[N-1 … 0]` for the front-to-back core pass. */
+  /**
+   * Uint32 element indices holding `GraphData.pointRenderOrder` (back to front), bound to
+   * every pass that paints in draw order: the point draw, the picking fill and the
+   * label-sampling fill. Exists only while a custom order is set; without one those
+   * passes draw unindexed, in index order.
+   */
+  private pointRenderOrderBuffer: Buffer | undefined
+  /**
+   * Uint32 element indices for the front-to-back core pass: the render order reversed
+   * (`[N-1 … 0]` in index order).
+   */
   private reversedPointIndexBuffer: Buffer | undefined
+  /**
+   * Float per point: its position in the render order (its index in index order).
+   * The draw shader turns it into depth, so the core and fringe passes agree on
+   * which point is on top.
+   */
+  private renderRankBuffer: Buffer | undefined
+  /** The `GraphData.pointRenderOrder` the order buffers were last built from. */
+  private appliedRenderOrder: Uint32Array | undefined
   /** Cached pass-B parameter state; parameters only switch on an actual mode change. */
   private isOcclusionCullingActive = false
   private hoveredPointIndices: Buffer | undefined
@@ -607,7 +625,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         pointIndices: this.drawPointIndices,
       })
     }
-    this.updateReversedPointIndexBuffer()
+    this.updateRenderOrder()
 
     if (!this.hoveredPointIndices || this.hoveredPointIndices.byteLength !== requiredByteLength) {
       if (this.hoveredPointIndices && !this.hoveredPointIndices.destroyed) {
@@ -661,6 +679,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     if (!this.shapeBuffer) this.updateShape()
     if (!this.imageIndicesBuffer) this.updateImageIndices()
     if (!this.imageSizesBuffer) this.updateImageSizes()
+    if (!this.renderRankBuffer) this.updateRenderOrder()
     if (!this.pointStatusTexture) this.updatePointStatus()
     if (config.enableSimulation) this.ensureUpdatePositionProgram()
 
@@ -799,6 +818,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       modules: [pointSizeModule, exitRampModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
+      indexBuffer: this.pointRenderOrderBuffer ?? null,
       attributes: {
         ...(this.drawPointIndices && { pointIndices: this.drawPointIndices }),
         ...(this.sourceSizeBuffer && { sourceSize: this.sourceSizeBuffer }),
@@ -808,6 +828,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         ...(this.shapeBuffer && { shape: this.shapeBuffer }),
         ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
         ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
+        ...(this.renderRankBuffer && { renderRank: this.renderRankBuffer }),
       },
       bufferLayout: [
         { name: 'pointIndices', format: 'float32x2' },
@@ -818,6 +839,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         { name: 'shape', format: 'float32' },
         { name: 'imageIndex', format: 'float32' },
         { name: 'imageSize', format: 'float32' },
+        { name: 'renderRank', format: 'float32' },
       ],
       defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
       bindings: {
@@ -834,7 +856,6 @@ export class Points extends CoreModule implements PointTrackerHost {
     // buffers as drawCommand (PipelineFactory reuses the cached GL program),
     // but draws front-to-back via the reversed index buffer with depth writes
     // and no blending. draw() decides each frame whether to use it.
-    this.updateReversedPointIndexBuffer()
     this.drawCoreCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
@@ -851,6 +872,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         ...(this.shapeBuffer && { shape: this.shapeBuffer }),
         ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
         ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
+        ...(this.renderRankBuffer && { renderRank: this.renderRankBuffer }),
       },
       bufferLayout: [
         { name: 'pointIndices', format: 'float32x2' },
@@ -861,6 +883,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         { name: 'shape', format: 'float32' },
         { name: 'imageIndex', format: 'float32' },
         { name: 'imageSize', format: 'float32' },
+        { name: 'renderRank', format: 'float32' },
       ],
       defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
       bindings: {
@@ -1020,6 +1043,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       modules: [pointSizeModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
+      indexBuffer: this.pointRenderOrderBuffer ?? null,
       attributes: {
         ...(this.hoveredPointIndices && { pointIndices: this.hoveredPointIndices }),
         ...(this.targetSizeBuffer && { size: this.targetSizeBuffer }),
@@ -1072,6 +1096,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       vs: fillGridWithSampledPointsVert,
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
+      indexBuffer: this.pointRenderOrderBuffer ?? null,
       attributes: {
         ...(this.sampledPointIndices && { pointIndices: this.sampledPointIndices }),
       },
@@ -1599,6 +1624,70 @@ export class Points extends CoreModule implements PointTrackerHost {
   }
 
   /**
+   * (Re)builds the buffers that carry the point draw order — `GraphData.pointRenderOrder`,
+   * or index order when it is unset:
+   * - `pointRenderOrderBuffer`, the order back to front, bound to the point draw (the
+   *   standard, fringe and both highlight passes), the picking fill and the label-sampling
+   *   fill, so each paints points in that order. It exists only while a custom order is set;
+   *   without one those passes draw unindexed, as they did before render order existed.
+   * - `reversedPointIndexBuffer`, the order front to back, for the occlusion core pass.
+   * - `renderRankBuffer`, each point's position in the order. The draw shader turns it into
+   *   depth, so the depth-tested core and fringe passes agree on which point is on top.
+   * Runs from `updatePositions()` (the point count may have changed) and from every
+   * `Graph.create()`; a no-op unless the point count or the resolved order changed.
+   */
+  public updateRenderOrder (): void {
+    const { device, data } = this
+    const pointsNumber = data.pointsNumber ?? 0
+    if (pointsNumber === 0) return
+    const requiredByteLength = pointsNumber * 4
+    // GraphData resolves the order against the current point count. Guard anyway: an
+    // indexed draw reads exactly `pointsNumber` elements, so any other length breaks it.
+    const order = data.pointRenderOrder?.length === pointsNumber ? data.pointRenderOrder : undefined
+    if (
+      order === this.appliedRenderOrder &&
+      this.renderRankBuffer?.byteLength === requiredByteLength &&
+      this.reversedPointIndexBuffer?.byteLength === requiredByteLength
+    ) return
+    this.appliedRenderOrder = order
+
+    const renderRanks = new Float32Array(pointsNumber)
+    const reversedOrder = new Uint32Array(pointsNumber)
+    if (order) {
+      for (let rank = 0; rank < pointsNumber; rank++) {
+        const index = order[rank] as number
+        renderRanks[index] = rank
+        reversedOrder[pointsNumber - 1 - rank] = index
+      }
+    } else {
+      for (let i = 0; i < pointsNumber; i++) {
+        renderRanks[i] = i
+        reversedOrder[i] = pointsNumber - 1 - i
+      }
+    }
+
+    this.renderRankBuffer = updateAttributeBuffer(device, this.renderRankBuffer, renderRanks)
+    this.drawCommand?.setAttributes({ renderRank: this.renderRankBuffer })
+    this.drawCoreCommand?.setAttributes({ renderRank: this.renderRankBuffer })
+
+    this.reversedPointIndexBuffer = this.writeIndexBuffer(this.reversedPointIndexBuffer, reversedOrder)
+    this.drawCoreCommand?.setIndexBuffer(this.reversedPointIndexBuffer)
+
+    const previousOrderBuffer = this.pointRenderOrderBuffer
+    this.pointRenderOrderBuffer = order ? this.writeIndexBuffer(previousOrderBuffer, order) : undefined
+    // `null` returns a model to unindexed drawing
+    const orderBuffer = this.pointRenderOrderBuffer ?? null
+    this.drawCommand?.setIndexBuffer(orderBuffer)
+    this.fillPickingBufferCommand?.setIndexBuffer(orderBuffer)
+    this.fillSampledPointsFboCommand?.setIndexBuffer(orderBuffer)
+    // Unbound from every model above before it goes
+    if (!order && previousOrderBuffer && !previousOrderBuffer.destroyed) previousOrderBuffer.destroy()
+
+    // Each picking-buffer pixel holds the point written there last, so the order decides it
+    this.isPickingBufferStale = true
+  }
+
+  /**
    * Builds the image atlas from `data.inputImageData`. Returns `false` when the list cannot be
    * packed (every image has zero width or height); the atlas, `imageCount` and the textures then
    * stay as they were, so the caller must not keep the new list either.
@@ -1774,6 +1863,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     if (!this.shapeBuffer) this.updateShape()
     if (!this.imageIndicesBuffer) this.updateImageIndices()
     if (!this.imageSizesBuffer) this.updateImageSizes()
+    if (!this.renderRankBuffer) this.updateRenderOrder()
 
     if (!this.drawCommand || !this.drawUniformStore) return
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
@@ -1849,7 +1939,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     // Occlusion culling skips fragments hidden under opaque points via depth
     // testing. Applies only while points are effectively opaque; `false`
     // disables it entirely. Highlighting always falls back — its layered
-    // greyed/highlighted draw relies on paint order, not index order.
+    // greyed/highlighted draw relies on paint order, not render-rank depth.
     const useOcclusionCulling =
       config.pointOcclusionCulling &&
       config.pointOpacity >= 1 &&
@@ -1865,7 +1955,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     }
 
     if (useOcclusionCulling && this.drawCoreCommand) {
-      // Pass A: opaque cores, front-to-back (reversed indices), depth write,
+      // Pass A: opaque cores, front-to-back (reversed render order), depth write,
       // no blending. Early-z rejects fragments hidden behind nearer cores.
       this.drawUniformStore.setUniforms({
         drawVertexUniforms: {
@@ -2806,6 +2896,15 @@ export class Points extends CoreModule implements PointTrackerHost {
       this.reversedPointIndexBuffer.destroy()
     }
     this.reversedPointIndexBuffer = undefined
+    if (this.pointRenderOrderBuffer && !this.pointRenderOrderBuffer.destroyed) {
+      this.pointRenderOrderBuffer.destroy()
+    }
+    this.pointRenderOrderBuffer = undefined
+    if (this.renderRankBuffer && !this.renderRankBuffer.destroyed) {
+      this.renderRankBuffer.destroy()
+    }
+    this.renderRankBuffer = undefined
+    this.appliedRenderOrder = undefined
     if (this.hoveredPointIndices && !this.hoveredPointIndices.destroyed) {
       this.hoveredPointIndices.destroy()
     }
@@ -3405,27 +3504,16 @@ export class Points extends CoreModule implements PointTrackerHost {
   }
 
   /**
-   * (Re)builds the uint32 element index buffer `[N-1 … 0]` that lets the
-   * occlusion-culling core pass draw the shared attribute buffers in reversed
-   * (front-to-back) order. Content depends only on the point count, so the
-   * buffer is rebuilt only when `pointsNumber` changes.
+   * Creates, resizes, or rewrites a uint32 element index buffer so it holds exactly
+   * `data`. A rewrite keeps the buffer, so models already holding it see the new
+   * contents; a new buffer must be passed to each model's `setIndexBuffer`.
    */
-  private updateReversedPointIndexBuffer (): void {
-    const { device, data } = this
-    const pointsNumber = data.pointsNumber ?? 0
-    if (pointsNumber === 0) return
-    const requiredByteLength = pointsNumber * 4
-    if (this.reversedPointIndexBuffer?.byteLength === requiredByteLength) return
-
-    const reversedIndexData = new Uint32Array(pointsNumber)
-    for (let i = 0; i < pointsNumber; i++) reversedIndexData[i] = pointsNumber - 1 - i
-    if (this.reversedPointIndexBuffer && !this.reversedPointIndexBuffer.destroyed) {
-      this.reversedPointIndexBuffer.destroy()
+  private writeIndexBuffer (buffer: Buffer | undefined, data: Uint32Array): Buffer {
+    if (!buffer || buffer.destroyed || buffer.byteLength !== data.byteLength) {
+      if (buffer && !buffer.destroyed) buffer.destroy()
+      return this.device.createBuffer({ data, usage: Buffer.INDEX | Buffer.COPY_DST })
     }
-    this.reversedPointIndexBuffer = device.createBuffer({
-      data: reversedIndexData,
-      usage: Buffer.INDEX | Buffer.COPY_DST,
-    })
-    this.drawCoreCommand?.setIndexBuffer(this.reversedPointIndexBuffer)
+    buffer.write(data)
+    return buffer
   }
 }
