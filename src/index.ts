@@ -38,7 +38,12 @@ export class Graph implements PositionTextureSource {
    * controllers. Owns the device, the data model, the position engine, and the
    * force modules; `Graph` layers rendering, view state, and input on top.
    */
-  private readonly simulation: GraphSimulation
+  /**
+   * The simulation this graph runs and draws — the same `GraphSimulation` a host
+   * can run on its own. For embeddings that need what `Graph` does not forward:
+   * the device, the seeded RNG in `store`, the data model.
+   */
+  public readonly simulation: GraphSimulation
   /** The graph's one tracker, following the set given to `trackPointPositionsByIndices`. */
   private tracker: PointTracker | undefined
   /** Canvas element, assigned asynchronously during device initialization */
@@ -2755,6 +2760,8 @@ export type { PointPositionTexture, PositionTextureSource } from './simulation'
 export type { PositionsReadOptions } from './simulation'
 export type { PointTracker } from './modules/Points/point-tracker'
 export { PointShape, LinkStyle } from './modules/GraphData'
+// The link curve as a luma shader module, for renderers that draw the engine's curve themselves
+export { conicParametricCurveModule } from './modules/Lines/conic-curve-module'
 export type { LinksByPoint } from './modules/GraphData'
 export { TransitionEasing } from './modules/Transition'
 
