@@ -1,6 +1,6 @@
 import { Buffer, Framebuffer, Texture, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
-import { CoreModule, DATA_PASS_PARAMETERS } from '@/graph/modules/core-module'
+import { CoreModule, BASE_PIPELINE_PARAMETERS } from '@/graph/modules/core-module'
 
 import calculateLevelFrag from '@/graph/modules/ForceManyBody/calculate-level.frag?raw'
 import calculateLevelPreciseVert from '@/graph/modules/ForceManyBody/calculate-level.vert?raw'
@@ -309,6 +309,7 @@ export class ForceManyBody extends CoreModule {
         // All texture bindings will be set dynamically in drawLevels() method
       },
       parameters: {
+        ...BASE_PIPELINE_PARAMETERS,
         blend: true,
         blendColorOperation: 'add',
         blendColorSrcFactor: 'one',
@@ -363,6 +364,7 @@ export class ForceManyBody extends CoreModule {
         // All texture bindings will be set dynamically in drawForces() method
       },
       parameters: {
+        ...BASE_PIPELINE_PARAMETERS,
         blend: true,
         blendColorOperation: 'add',
         blendColorSrcFactor: 'one',
@@ -416,6 +418,7 @@ export class ForceManyBody extends CoreModule {
         // All texture bindings will be set dynamically in drawNearFieldSlots() method
       },
       parameters: {
+        ...BASE_PIPELINE_PARAMETERS,
         blend: false,
         depthWriteEnabled: true,
         depthCompare: 'less',
@@ -484,7 +487,7 @@ export class ForceManyBody extends CoreModule {
         forceAllPairsUniforms: this.forceAllPairsUniformStore.getManagedUniformBuffer('forceAllPairsUniforms'),
         // All texture bindings will be set dynamically in drawAllPairsForce() method
       },
-      parameters: DATA_PASS_PARAMETERS,
+      parameters: BASE_PIPELINE_PARAMETERS,
     })
 
     this.forceNearFieldCommand ||= new Model(device, {
@@ -508,6 +511,7 @@ export class ForceManyBody extends CoreModule {
         // All texture bindings will be set dynamically in drawForces() method
       },
       parameters: {
+        ...BASE_PIPELINE_PARAMETERS,
         blend: true,
         blendColorOperation: 'add',
         blendColorSrcFactor: 'one',

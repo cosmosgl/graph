@@ -5,21 +5,22 @@ import { Points } from '@/graph/modules/Points'
 import { Store } from '@/graph/modules/Store'
 
 /**
- * Pipeline state for a pass that overwrites data, not color, in a float texture:
- * no blending, no depth, no stencil, no culling — everything a pipeline can
- * declare. Such a pass declares it itself, so it is correct inside a host-state
- * wrapper and reached from an entry point that has none alike; luma applies it
- * around the draw and restores the state after. A pass that blends additively or
- * depth-tests declares its own blend and depth instead, and the link index pass
- * its culling as well. The scissor test and the colour mask have no pipeline
- * parameter; only the wrapper resets those.
+ * The neutral pipeline state: no blending, no depth, no stencil, no culling,
+ * counter-clockwise winding — every state a pipeline can declare that changes
+ * what cosmos draws. Every model declares it: a pass that overwrites data uses it
+ * as is, and every other model spreads it first and overrides its own blend,
+ * depth or culling. A model is then correct against whatever state the host left,
+ * inside a host-state wrapper and reached from an entry point that has none alike;
+ * luma applies it around the draw and restores the state after. The scissor test
+ * and the colour mask have no pipeline parameter; only the wrapper resets those.
  */
-export const DATA_PASS_PARAMETERS: RenderPipelineParameters = Object.freeze({
+export const BASE_PIPELINE_PARAMETERS: RenderPipelineParameters = Object.freeze({
   blend: false,
   depthWriteEnabled: false,
   depthCompare: 'always',
   stencilCompare: 'always',
   cullMode: 'none',
+  frontFace: 'ccw',
 })
 
 export class CoreModule {

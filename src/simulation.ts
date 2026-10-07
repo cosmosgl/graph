@@ -771,11 +771,9 @@ export class GraphSimulation implements PositionTextureSource {
    * state back afterwards.
    *
    * luma applies only the pipeline `parameters` a Model declares; everything
-   * else is inherited from the context's current state. The overwrite passes
-   * declare their blend, depth, stencil and cull state
-   * (`DATA_PASS_PARAMETERS`); the other data passes declare their own blend
-   * and depth — the link index pass its culling too — and take what they leave
-   * undeclared from here. The scissor
+   * else is inherited from the context's current state. Every model declares its
+   * blend, depth, stencil, cull and winding state (`BASE_PIPELINE_PARAMETERS`).
+   * The scissor
    * test and the colour mask have no pipeline parameter: an internally created device keeps
    * the WebGL defaults, but an external device arrives mid-frame carrying the
    * host's, and a scissor rectangle or a masked channel would clip or drop a

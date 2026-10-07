@@ -1,6 +1,6 @@
 import { Buffer, Framebuffer, Texture, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
-import { CoreModule } from '@/graph/modules/core-module'
+import { CoreModule, BASE_PIPELINE_PARAMETERS } from '@/graph/modules/core-module'
 
 import buildGridVert from '@/graph/modules/ForceCollision/build-grid.vert?raw'
 import buildGridFrag from '@/graph/modules/ForceCollision/build-grid.frag?raw'
@@ -197,6 +197,7 @@ export class ForceCollision extends CoreModule {
         // Texture bindings set dynamically in run()
       },
       parameters: {
+        ...BASE_PIPELINE_PARAMETERS,
         blend: true,
         blendColorOperation: 'add',
         blendColorSrcFactor: 'one',
@@ -248,6 +249,7 @@ export class ForceCollision extends CoreModule {
         // Texture bindings set dynamically in run()
       },
       parameters: {
+        ...BASE_PIPELINE_PARAMETERS,
         blend: true,
         blendColorOperation: 'add',
         blendColorSrcFactor: 'one',
