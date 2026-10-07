@@ -1,6 +1,6 @@
 import { Buffer, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
-import { CoreModule, DATA_PASS_PARAMETERS } from '@/graph/modules/core-module'
+import { CoreModule, BASE_PIPELINE_PARAMETERS } from '@/graph/modules/core-module'
 
 import forceFrag from '@/graph/modules/ForceGravity/force-gravity.frag?raw'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
@@ -54,7 +54,7 @@ export class ForceGravity extends CoreModule {
         forceGravityUniforms: this.uniformStore.getManagedUniformBuffer('forceGravityUniforms'),
         // All texture bindings will be set dynamically in run() method
       },
-      parameters: DATA_PASS_PARAMETERS,
+      parameters: BASE_PIPELINE_PARAMETERS,
     })
   }
 

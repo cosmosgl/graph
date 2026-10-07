@@ -1,6 +1,6 @@
 import { Framebuffer, Buffer, Texture, UniformStore, RenderPass, type RenderPipelineParameters } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
-import { CoreModule, DATA_PASS_PARAMETERS } from '@/graph/modules/core-module'
+import { CoreModule, BASE_PIPELINE_PARAMETERS } from '@/graph/modules/core-module'
 import type { Mat4Array } from '@/graph/modules/Store'
 import { conicParametricCurveModule } from '@/graph/modules/Lines/conic-curve-module'
 import drawLineFrag from '@/graph/modules/Lines/draw-curve-line.frag?raw'
@@ -307,7 +307,7 @@ export class Lines extends CoreModule {
       bindings: {
         fillSampledLinksUniforms: this.fillSampledLinksUniformStore.getManagedUniformBuffer('fillSampledLinksUniforms'),
       },
-      parameters: DATA_PASS_PARAMETERS,
+      parameters: BASE_PIPELINE_PARAMETERS,
     })
 
     this.updateSampledLinksGrid()
@@ -1206,6 +1206,7 @@ export class Lines extends CoreModule {
    */
   private getLinkBlendParameters (blend: boolean): RenderPipelineParameters {
     const base: RenderPipelineParameters = {
+      ...BASE_PIPELINE_PARAMETERS,
       cullMode: 'back',
       depthWriteEnabled: false,
       depthCompare: 'always',

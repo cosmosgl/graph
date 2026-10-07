@@ -108,11 +108,14 @@ broken every shared-device embedding. luma.gl applies only the pipeline paramete
 declares; everything else — blend, depth, scissor — is inherited from the context.
 ~~cosmos's offscreen simulation passes declare none of it, because on a cosmos-owned device
 the context holds WebGL defaults.~~ cosmos's offscreen passes once declared none of it,
-because on a cosmos-owned device the context holds WebGL defaults; the overwrite passes
+because on a cosmos-owned device the context holds WebGL defaults; ~~the overwrite passes
 now declare their blend, depth, stencil and cull state themselves (`DATA_PASS_PARAMETERS`)
 and the other data passes their blend and depth, the link index pass its culling too, so
 what is still inherited is the scissor test and the colour mask, which no pipeline parameter
-expresses, and stencil and cull wherever a pass leaves them undeclared. An external device arrives mid-frame carrying the
+expresses, and stencil and cull wherever a pass leaves them undeclared.~~ every model now
+declares its blend, depth, stencil, cull and winding state itself (`BASE_PIPELINE_PARAMETERS`),
+so what is still inherited is the scissor test and the colour mask, which no pipeline
+parameter expresses. An external device arrives mid-frame carrying the
 *host's* state. deck.gl leaves blending enabled, and blended writes into the RGBA32F
 position textures — whose texels carry alpha 0 — zeroed the entire simulation within a few
 ticks.
