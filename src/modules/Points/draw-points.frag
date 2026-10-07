@@ -14,6 +14,8 @@ layout(std140) uniform drawFragmentUniforms {
   vec4 outlineColor;
   float outlineWidth;
   float renderMode;
+  float pickingAlpha;
+  float pickingIndexOffset;
 } drawFragment;
 
 #define greyoutOpacity drawFragment.greyoutOpacity
@@ -23,6 +25,8 @@ layout(std140) uniform drawFragmentUniforms {
 #define outlineColor drawFragment.outlineColor
 #define outlineWidth drawFragment.outlineWidth
 #define renderMode drawFragment.renderMode
+#define pickingAlpha drawFragment.pickingAlpha
+#define pickingIndexOffset drawFragment.pickingIndexOffset
 #else
 uniform float greyoutOpacity;
 uniform float pointOpacity;
@@ -31,6 +35,8 @@ uniform vec4 backgroundColor;
 uniform vec4 outlineColor;
 uniform float outlineWidth;
 uniform float renderMode;
+uniform float pickingAlpha;
+uniform float pickingIndexOffset;
 #endif
 
 
@@ -42,6 +48,7 @@ in vec4 imageAtlasUV;
 in float shapeSize;
 in float imageSizeVarying;
 in float overallSize;
+flat in float vPointIndex;
 
 out vec4 fragColor;
 
@@ -217,6 +224,9 @@ void main() {
 
     vec4 finalShapeColor = vec4(0.0);
     vec4 finalImageColor = vec4(0.0);
+    // Geometric coverage, before color alpha: what the host picking pass decides on
+    float shapeCoverage = 0.0;
+    bool imageCovered = false;
     
     // Ramp of EDGE_RAMP_PX device pixels centred on the shape edge. The sprite is the shape's own
     // size: the outer half of the ramp is clipped only where the shape touches the sprite's sides.
@@ -241,6 +251,7 @@ void main() {
             float shapeHalfRamp = max(halfRampPx * length(vec2(dFdx(shapeDistance), dFdy(shapeDistance))), 1e-6);
             opacity = 1.0 - smoothstep(-shapeHalfRamp, shapeHalfRamp, shapeDistance);
         }
+        shapeCoverage = opacity;
         opacity *= smallAlpha * shapeColor.a;
 
         finalShapeColor = vec4(shapeColor.rgb, opacity);
@@ -264,6 +275,7 @@ void main() {
                 vec2 atlasUV = mix(imageAtlasUV.xy, imageAtlasUV.zw, (imageCoord + 1.0) * 0.5);
                 vec4 imageColor = texture(imageAtlasTexture, atlasUV);
                 finalImageColor = applyGreyoutToImage(imageColor, isGreyedOut);
+                imageCovered = true;
             }
         } else {
             // Image is same size or larger than overall size, no scaling needed
@@ -271,7 +283,18 @@ void main() {
             vec2 atlasUV = mix(imageAtlasUV.xy, imageAtlasUV.zw, (imageCoord + 1.0) * 0.5);
             vec4 imageColor = texture(imageAtlasTexture, atlasUV);
             finalImageColor = applyGreyoutToImage(imageColor, isGreyedOut);
+            imageCovered = true;
         }
+    }
+
+    // Host picking: a fragment counts where the shape covers at least half of it (and the
+    // point is not fully transparent) or an image does; it carries the index and the host's
+    // alpha, with no blending and no ramp — the hard edge is the picked outline
+    if (renderMode > 2.5) {
+        bool covered = (shapeCoverage >= 0.5 && shapeColor.a > 0.0) || imageCovered;
+        if (!covered) discard;
+        fragColor = vec4(encodePickingColor(vPointIndex + pickingIndexOffset), pickingAlpha);
+        return;
     }
 
     float finalPointAlpha = max(finalShapeColor.a, finalImageColor.a);

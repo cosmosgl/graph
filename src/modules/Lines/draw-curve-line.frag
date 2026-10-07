@@ -25,6 +25,8 @@ layout(std140) uniform drawLineFragmentUniforms {
   float hoveredLinkIndex;
   vec4 hoveredLinkColor;
   float linkBlending;
+  float pickingAlpha;
+  float pickingIndexOffset;
 } drawLineFrag;
 
 #define renderMode drawLineFrag.renderMode
@@ -34,8 +36,10 @@ layout(std140) uniform drawLineFragmentUniforms {
 #define hoveredLinkIndex drawLineFrag.hoveredLinkIndex
 #define hoveredLinkColor drawLineFrag.hoveredLinkColor
 #define linkBlending drawLineFrag.linkBlending
+#define pickingAlpha drawLineFrag.pickingAlpha
+#define pickingIndexOffset drawLineFrag.pickingIndexOffset
 #else
-// renderMode: 0.0 = normal rendering, 1.0 = index buffer rendering for picking
+// renderMode: 0.0 = normal rendering, 1.0 = index buffer rendering for picking, 3.0 = host picking colors
 uniform float renderMode;
 uniform float linkDashLength;
 uniform float linkDashGap;
@@ -43,6 +47,8 @@ uniform float linkColorInterpolateFromEndpoints;
 uniform float hoveredLinkIndex;
 uniform vec4 hoveredLinkColor;
 uniform float linkBlending;
+uniform float pickingAlpha;
+uniform float pickingIndexOffset;
 #endif
 
 out vec4 fragColor;
@@ -145,7 +151,13 @@ void main() {
     opacity *= hoveredLinkColor.a;
   }
 
-  if (renderMode > 0.0) {
+  if (renderMode > 2.5) {
+    // Host picking: the link's index and the host's alpha, where the stroke covers at
+    // least half the fragment and the link is not fully transparent; dash gaps stay
+    // pickable, as in the engine's own index pass
+    if (coverage < 0.5 || rgbaColor.a <= 0.0) discard;
+    fragColor = vec4(encodePickingColor(linkIndex + pickingIndexOffset), pickingAlpha);
+  } else if (renderMode > 0.0) {
     if (opacity <= 0.0) discard;
     fragColor = vec4(linkIndex, 0.0, 0.0, 1.0);
   } else if (linkBlending < 0.5) {

@@ -1524,10 +1524,22 @@ export class Graph implements PositionTextureSource {
    * with its own shaders instead). No-op until data has been provided and
    * `render()` called.
    *
+   * With `picking`, the pass draws picking colors instead of the graph: every fragment a
+   * point or link covers carries its index + 1 as RGB bytes (point `i` as `i + 1`, link
+   * `j` as `linkIndexOffset + j + 1`) and `picking.alpha`, with hard edges and no blending.
+   * That is the encoding deck.gl decodes — a deck layer records this in deck's pick pass
+   * with the pass's constant alpha — and most hosts can. Decode as
+   * `r + g * 256 + b * 65536 - 1`; 0 is "nothing here". Dash gaps count as covered, as in
+   * the engine's own hover picking.
+   *
    * @param renderPass - The host's open render pass to record into.
-   * @param options - Set `points` or `links` to `false` to draw only the other.
+   * @param options - Set `points` or `links` to `false` to draw only the other; `picking`
+   *   draws picking colors with the given `alpha`, links offset by `linkIndexOffset`.
    */
-  public drawToRenderPass (renderPass: RenderPass, options?: { points?: boolean; links?: boolean }): void {
+  public drawToRenderPass (
+    renderPass: RenderPass,
+    options?: { points?: boolean; links?: boolean; picking?: { alpha: number; linkIndexOffset?: number } }
+  ): void {
     if (this._isDestroyed || !this.device) return
     if (!this.store.pointsTextureSize) return
 
@@ -1538,6 +1550,13 @@ export class Graph implements PositionTextureSource {
       !!this.graph.linksNumber &&
       this.graph.linksNumber > 0
 
+    if (options?.picking) {
+      const { alpha, linkIndexOffset = 0 } = options.picking
+      // Points after links, as in the visible draw: where they overlap, the point is picked
+      if (shouldDrawLinks) this.lines?.drawPicking(renderPass, alpha, linkIndexOffset)
+      if (options.points ?? true) this.points?.drawPicking(renderPass, alpha)
+      return
+    }
     if (shouldDrawLinks) {
       this.lines?.draw(renderPass)
     }

@@ -3,10 +3,12 @@ import { Model } from '@luma.gl/engine'
 import { CoreModule, BASE_PIPELINE_PARAMETERS } from '@/graph/modules/core-module'
 import type { Mat4Array } from '@/graph/modules/Store'
 import { conicParametricCurveModule } from '@/graph/modules/Lines/conic-curve-module'
+import { pickingColorModule } from '@/graph/modules/Shared/picking-color-module'
 import drawLineFrag from '@/graph/modules/Lines/draw-curve-line.frag?raw'
 import drawLineVert from '@/graph/modules/Lines/draw-curve-line.vert?raw'
 import fillGridWithSampledLinksFrag from '@/graph/modules/Lines/fill-sampled-links.frag?raw'
 import fillGridWithSampledLinksVert from '@/graph/modules/Lines/fill-sampled-links.vert?raw'
+import type { Points } from '@/graph/modules/Points'
 import { PickingReadback } from '@/graph/modules/Points/picking-readback'
 import { resolvePickedLinkIndex } from '@/graph/modules/Points/picking-utils'
 import { defaultConfigValues, EXIT_DEFAULT_COLOR_CHANNEL, EDGE_RAMP_PX } from '@/graph/variables'
@@ -49,6 +51,8 @@ export class Lines extends CoreModule {
   public linkStatusTexture: Texture | undefined
   private linkStatusTextureSize = 0
   private drawCurveCommand: Model | undefined
+  /** The host picking pass: the draw program over the same attributes, blend off, hard edges. */
+  private drawPickingCommand: Model | undefined
   private drawCurvePickingCommand: Model | undefined
   private isLinkBlendingActive: boolean | undefined
   private pickingReadback: PickingReadback | undefined
@@ -125,6 +129,8 @@ export class Lines extends CoreModule {
       hoveredLinkIndex: number;
       hoveredLinkColor: [number, number, number, number];
       linkBlending: number;
+      pickingAlpha: number;
+      pickingIndexOffset: number;
     };
   }> | undefined
 
@@ -246,8 +252,12 @@ export class Lines extends CoreModule {
           hoveredLinkIndex: 'f32',
           hoveredLinkColor: 'vec4<f32>',
           linkBlending: 'f32',
+          pickingAlpha: 'f32',
+          pickingIndexOffset: 'f32',
         },
         defaultUniforms: {
+          pickingAlpha: 1,
+          pickingIndexOffset: 0,
           renderMode: 0.0,
           linkDashLength: config.linkDashLength,
           linkDashGap: config.linkDashGap,
@@ -314,8 +324,45 @@ export class Lines extends CoreModule {
     this.updateLinkStatus()
   }
 
+  /**
+   * Draws the links as picking colors for a host's pick pass: every fragment a link covers
+   * carries `linkIndex + indexOffset + 1` as RGB bytes and `alpha`, with hard edges and no
+   * blending — the sibling of the engine's own index pass, in the encoding deck.gl and most
+   * hosts decode. Runs over the visible draw's buffers and textures. @internal
+   */
+  public drawPicking (renderPass: RenderPass, alpha: number, indexOffset = 0): void {
+    const { points } = this
+    if (!points) return
+    if (!points.currentPositionTexture || points.currentPositionTexture.destroyed) return
+    if (!points.exitTexture) points.updateExit()
+    if (!points.exitTexture || points.exitTexture.destroyed) return
+    if (!this.pointABuffer || !this.pointBBuffer) this.updatePointsBuffer()
+    if (!this.targetColorBuffer) this.updateColor()
+    if (!this.targetWidthBuffer) this.updateWidth()
+    if (!this.arrowBuffer) this.updateArrow()
+    if (!this.linkStyleBuffer) this.updateStyle()
+    if (!this.curveLineGeometry) this.updateCurveLineGeometry()
+    if (!this.drawLineUniformStore || !this.linkStatusTexture) return
+    if (!this.data.linksNumber) return
+
+    // Its own model, so the visible draw's pipeline is never toggled; the buffers and the
+    // curve geometry may have changed since the last pick, so they are bound anew each time
+    this.drawPickingCommand ||= this.createDrawCurveCommand(BASE_PIPELINE_PARAMETERS)
+    this.drawPickingCommand.setAttributes(this.getDrawCurveCommandAttributes())
+    this.drawPickingCommand.setVertexCount(this.curveLineGeometry?.length ?? 0)
+
+    const uniforms = this.getDrawUniforms()
+    this.drawLineUniformStore.setUniforms({
+      drawLineUniforms: { ...uniforms.drawLineUniforms, renderMode: 3.0 },
+      drawLineFragmentUniforms: { ...uniforms.drawLineFragmentUniforms, renderMode: 3.0, pickingAlpha: alpha, pickingIndexOffset: indexOffset },
+    })
+    this.drawPickingCommand.setBindings(this.getDrawBindings(points))
+    this.drawPickingCommand.setInstanceCount(this.data.linksNumber)
+    this.drawPickingCommand.draw(renderPass)
+  }
+
   public draw (renderPass: RenderPass): void {
-    const { config, points, store } = this
+    const { points } = this
     if (!points) return
     if (!points.currentPositionTexture || points.currentPositionTexture.destroyed) return
     if (!points.exitTexture) points.updateExit()
@@ -330,65 +377,8 @@ export class Lines extends CoreModule {
 
     this.updateLinkBlending()
 
-    const hasHighlighting = config.highlightedLinkIndices !== undefined
-
-    // Update uniforms
-    this.drawLineUniformStore.setUniforms({
-      drawLineUniforms: {
-        transformationMatrix: store.transformationMatrix4x4,
-        widthScale: config.linkWidthScale,
-        linkArrowsSizeScale: config.linkArrowsSizeScale,
-        spaceSize: store.adjustedSpaceSize,
-        screenSize: ensureVec2(store.screenSize, [0, 0]),
-        linkVisibilityDistanceRange: ensureVec2(config.linkVisibilityDistanceRange, [0, 0]),
-        linkVisibilityMinTransparency: config.linkVisibilityMinTransparency,
-        linkOpacity: config.linkOpacity,
-        greyoutOpacity: config.linkGreyoutOpacity,
-        curvedWeight: config.curvedLinkWeight,
-        curvedLinkControlPointDistance: config.curvedLinkControlPointDistance,
-        curvedLinkSegments: config.curvedLinks ? config.curvedLinkSegments : 1,
-        scaleLinksOnZoom: config.scaleLinksOnZoom ? 1 : 0,
-        maxPointSize: store.maxPointSize,
-        renderMode: 0.0, // Normal rendering
-        hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
-        hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease,
-        isLinkHighlightingActive: hasHighlighting ? 1 : 0,
-        linkStatusTextureSize: this.linkStatusTextureSize,
-        focusedLinkIndex: config.focusedLinkIndex ?? -1,
-        focusedLinkWidthIncrease: config.focusedLinkWidthIncrease,
-        transitionProgress: this.transitionProgress,
-        animateColors: this.shouldAnimateLinkColors ? 1 : 0,
-        animateWidths: this.shouldAnimateLinkWidths ? 1 : 0,
-        animatePositions: this.shouldAnimatePositions ? 1 : 0,
-        // Cached parse — draw() runs per frame, so no color-string parsing here.
-        pointDefaultColor: ensureVec4(this.data.defaultRgba, [0, 0, 0, 1]),
-        linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
-        linkBlending: config.linkBlending ? 1 : 0,
-        pixelRatio: config.pixelRatio,
-      },
-      drawLineFragmentUniforms: {
-        renderMode: 0.0, // Normal rendering
-        linkDashLength: config.linkDashLength,
-        linkDashGap: config.linkDashGap,
-        linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
-        hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
-        hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
-        linkBlending: config.linkBlending ? 1 : 0,
-      },
-    })
-
-    // Update texture bindings dynamically
-    this.drawCurveCommand.setBindings({
-      positionsTexture: points.currentPositionTexture,
-      linkStatus: this.linkStatusTexture,
-      exitTexture: points.exitTexture,
-      // Endpoint colors for gradient links. The sampler must always have a valid texture
-      // bound, but the stand-in is never sampled: with the gradient off the vertex shader
-      // skips the fetches, and with it on Points.updateColor() has built the real texture
-      // (initial create runs it before the first draw; runtime toggles go through
-      // updateStateFromConfig, which re-runs it on the flag change).
-      pointColorsTexture: points.pointColorsTexture ?? points.currentPositionTexture,
-    })
+    this.drawLineUniformStore.setUniforms(this.getDrawUniforms())
+    this.drawCurveCommand.setBindings(this.getDrawBindings(points))
 
     // Update instance count
     this.drawCurveCommand.setInstanceCount(this.data.linksNumber ?? 0)
@@ -1038,6 +1028,8 @@ export class Lines extends CoreModule {
     // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
     this.drawCurveCommand?.destroy()
     this.drawCurveCommand = undefined
+    this.drawPickingCommand?.destroy()
+    this.drawPickingCommand = undefined
     this.drawCurvePickingCommand?.destroy()
     this.drawCurvePickingCommand = undefined
     this.isLinkBlendingActive = undefined
@@ -1143,7 +1135,7 @@ export class Lines extends CoreModule {
     return new Model(this.device, {
       vs: drawLineVert,
       fs: drawLineFrag,
-      modules: [conicParametricCurveModule],
+      modules: [conicParametricCurveModule, pickingColorModule],
       topology: 'triangle-strip',
       vertexCount: this.curveLineGeometry?.length ?? 0,
       attributes: this.getDrawCurveCommandAttributes(),
@@ -1208,8 +1200,6 @@ export class Lines extends CoreModule {
     const base: RenderPipelineParameters = {
       ...BASE_PIPELINE_PARAMETERS,
       cullMode: 'back',
-      depthWriteEnabled: false,
-      depthCompare: 'always',
     }
     if (!blend) return { ...base, blend: false }
     return {
@@ -1238,5 +1228,69 @@ export class Lines extends CoreModule {
       data: new Float32Array(4).fill(0),
     })
     this.linkStatusTextureSize = 0
+  }
+
+  /** The uniforms every links draw shares — the visible pass and the host picking pass. */
+  private getDrawUniforms (): Parameters<NonNullable<typeof this.drawLineUniformStore>['setUniforms']>[0] {
+    const { config, store } = this
+    const hasHighlighting = config.highlightedLinkIndices !== undefined
+    return {
+      drawLineUniforms: {
+        transformationMatrix: store.transformationMatrix4x4,
+        widthScale: config.linkWidthScale,
+        linkArrowsSizeScale: config.linkArrowsSizeScale,
+        spaceSize: store.adjustedSpaceSize,
+        screenSize: ensureVec2(store.screenSize, [0, 0]),
+        linkVisibilityDistanceRange: ensureVec2(config.linkVisibilityDistanceRange, [0, 0]),
+        linkVisibilityMinTransparency: config.linkVisibilityMinTransparency,
+        linkOpacity: config.linkOpacity,
+        greyoutOpacity: config.linkGreyoutOpacity,
+        curvedWeight: config.curvedLinkWeight,
+        curvedLinkControlPointDistance: config.curvedLinkControlPointDistance,
+        curvedLinkSegments: config.curvedLinks ? config.curvedLinkSegments : 1,
+        scaleLinksOnZoom: config.scaleLinksOnZoom ? 1 : 0,
+        maxPointSize: store.maxPointSize,
+        renderMode: 0.0, // Normal rendering
+        hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
+        hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease,
+        isLinkHighlightingActive: hasHighlighting ? 1 : 0,
+        linkStatusTextureSize: this.linkStatusTextureSize,
+        focusedLinkIndex: config.focusedLinkIndex ?? -1,
+        focusedLinkWidthIncrease: config.focusedLinkWidthIncrease,
+        transitionProgress: this.transitionProgress,
+        animateColors: this.shouldAnimateLinkColors ? 1 : 0,
+        animateWidths: this.shouldAnimateLinkWidths ? 1 : 0,
+        animatePositions: this.shouldAnimatePositions ? 1 : 0,
+        // Cached parse — draw() runs per frame, so no color-string parsing here.
+        pointDefaultColor: ensureVec4(this.data.defaultRgba, [0, 0, 0, 1]),
+        linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
+        linkBlending: config.linkBlending ? 1 : 0,
+        pixelRatio: config.pixelRatio,
+      },
+      drawLineFragmentUniforms: {
+        renderMode: 0.0, // Normal rendering
+        linkDashLength: config.linkDashLength,
+        linkDashGap: config.linkDashGap,
+        linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
+        hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
+        hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
+        linkBlending: config.linkBlending ? 1 : 0,
+      },
+    }
+  }
+
+  /** The textures every links draw samples. */
+  private getDrawBindings (points: Points): Record<string, Texture> {
+    return {
+      positionsTexture: points.currentPositionTexture,
+      linkStatus: this.linkStatusTexture,
+      exitTexture: points.exitTexture,
+      // Endpoint colors for gradient links. The sampler must always have a valid texture
+      // bound, but the stand-in is never sampled: with the gradient off the vertex shader
+      // skips the fetches, and with it on Points.updateColor() has built the real texture
+      // (initial create runs it before the first draw; runtime toggles go through
+      // updateStateFromConfig, which re-runs it on the flag change).
+      pointColorsTexture: points.pointColorsTexture ?? points.currentPositionTexture,
+    } as Record<string, Texture>
   }
 }
