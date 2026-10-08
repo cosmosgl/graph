@@ -34,14 +34,13 @@ export class Graph implements PositionTextureSource {
   /** Whether the graph has completed initialization */
   public isReady = false
   /**
-   * The force simulation this graph composes with its renderer and interaction
-   * controllers. Owns the device, the data model, the position engine, and the
-   * force modules; `Graph` layers rendering, view state, and input on top.
-   */
-  /**
-   * The simulation this graph runs and draws — the same `GraphSimulation` a host
-   * can run on its own. For embeddings that need what `Graph` does not forward:
-   * the device, the seeded RNG in `store`, the data model.
+   * The force simulation behind this graph. It owns the device, the data model,
+   * the point positions and the forces. `Graph` adds rendering, the view and
+   * user input on top of it.
+   *
+   * It is the same `GraphSimulation` an app can run on its own. Apps that embed
+   * cosmos.gl use it to reach what `Graph` does not expose: the device, the
+   * seeded random generator in `store`, and the data model.
    */
   public readonly simulation: GraphSimulation
   /** The graph's one tracker, following the set given to `trackPointPositionsByIndices`. */
