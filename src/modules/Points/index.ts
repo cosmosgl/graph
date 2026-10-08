@@ -1971,82 +1971,13 @@ export class Points extends CoreModule implements PointTrackerHost {
       this.drawCommand.draw(renderPass)
     }
 
-    // Draw highlighted point rings if enabled
-    if (config.renderHoveredPointRing && store.hoveredPoint && this.drawHighlightedCommand && this.drawHighlightedUniformStore) {
-      if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
-      if (!this.pointStatusTexture || this.pointStatusTexture.destroyed) return
-      this.drawHighlightedUniformStore.setUniforms({
-        drawHighlightedUniforms: {
-          ...this.getRingSizeUniforms(store.hoveredPoint.index),
-          transformationMatrix: store.transformationMatrix4x4,
-          pointsTextureSize: store.pointsTextureSize ?? 0,
-          sizeScale: config.pointSizeScale,
-          spaceSize: store.adjustedSpaceSize,
-          screenSize: ensureVec2(store.screenSize, [0, 0]),
-          scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0,
-          pointIndex: store.hoveredPoint.index,
-          maxPointSize: store.maxPointSize,
-          color: ensureVec4(store.hoveredPointRingColor, [0, 0, 0, 1]),
-          universalPointOpacity: config.pointOpacity,
-          // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
-          greyoutOpacity: config.pointGreyoutOpacity ?? -1,
-          isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0,
-          backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
-          greyoutColor: ensureVec4(store.greyoutPointColor, [0, 0, 0, 1]),
-          animatePositions: this.shouldAnimatePointPositions ? 1 : 0,
-          transitionProgress: this.transitionProgress,
-          animateSizes: this.shouldAnimatePointSizes ? 1 : 0,
-          pointDefaultSize: config.pointDefaultSize,
-          width: 0.85,
-          pixelRatio: config.pixelRatio,
-        },
-      })
-      // Update texture bindings dynamically
-      this.drawHighlightedCommand.setBindings({
-        positionsTexture: this.currentPositionTexture,
-        pointStatus: this.pointStatusTexture,
-        exitTexture: this.exitTexture,
-      })
-      this.drawHighlightedCommand.draw(renderPass)
-    }
-
-    if (store.focusedPoint && this.drawHighlightedCommand && this.drawHighlightedUniformStore) {
-      if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
-      if (!this.pointStatusTexture || this.pointStatusTexture.destroyed) return
-      this.drawHighlightedUniformStore.setUniforms({
-        drawHighlightedUniforms: {
-          ...this.getRingSizeUniforms(store.focusedPoint.index),
-          transformationMatrix: store.transformationMatrix4x4,
-          pointsTextureSize: store.pointsTextureSize ?? 0,
-          sizeScale: config.pointSizeScale,
-          spaceSize: store.adjustedSpaceSize,
-          screenSize: ensureVec2(store.screenSize, [0, 0]),
-          scalePointsOnZoom: (config.scalePointsOnZoom) ? 1 : 0,
-          pointIndex: store.focusedPoint.index,
-          maxPointSize: store.maxPointSize,
-          color: ensureVec4(store.focusedPointRingColor, [0, 0, 0, 1]),
-          universalPointOpacity: config.pointOpacity,
-          // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
-          greyoutOpacity: config.pointGreyoutOpacity ?? -1,
-          isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0,
-          backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
-          greyoutColor: ensureVec4(store.greyoutPointColor, [0, 0, 0, 1]),
-          animatePositions: this.shouldAnimatePointPositions ? 1 : 0,
-          transitionProgress: this.transitionProgress,
-          animateSizes: this.shouldAnimatePointSizes ? 1 : 0,
-          pointDefaultSize: config.pointDefaultSize,
-          width: 0.85,
-          pixelRatio: config.pixelRatio,
-        },
-      })
-      // Update texture bindings dynamically
-      this.drawHighlightedCommand.setBindings({
-        positionsTexture: this.currentPositionTexture,
-        pointStatus: this.pointStatusTexture,
-        exitTexture: this.exitTexture,
-      })
-      this.drawHighlightedCommand.draw(renderPass)
-    }
+    // Hover rings: the pointer's while renderHoveredPointRing is on, a host's always,
+    // one ring where both name the same point. The focus ring draws over them
+    const pointerHovered = config.renderHoveredPointRing ? store.hoveredPoint?.index : undefined
+    const hostHovered = store.hostHoveredPointIndex
+    if (pointerHovered !== undefined) this.drawPointRing(renderPass, pointerHovered, store.hoveredPointRingColor)
+    if (hostHovered !== undefined && hostHovered !== pointerHovered) this.drawPointRing(renderPass, hostHovered, store.hoveredPointRingColor)
+    if (store.focusedPoint) this.drawPointRing(renderPass, store.focusedPoint.index, store.focusedPointRingColor)
   }
 
   public updatePosition (): void {
@@ -3157,6 +3088,48 @@ export class Points extends CoreModule implements PointTrackerHost {
    */
   private markPositionsChanged (): void {
     this.positionVersion++
+  }
+
+  /** Draws one ring around point `index`, in `color` — the hover and focus rings alike. */
+  private drawPointRing (renderPass: RenderPass, index: number, color: number[]): void {
+    const { config, store } = this
+    if (!this.drawHighlightedCommand || !this.drawHighlightedUniformStore) return
+    if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
+    if (!this.pointStatusTexture || this.pointStatusTexture.destroyed) return
+    if (!this.exitTexture || this.exitTexture.destroyed) return
+    this.drawHighlightedUniformStore.setUniforms({
+      drawHighlightedUniforms: {
+        ...this.getRingSizeUniforms(index),
+        transformationMatrix: store.transformationMatrix4x4,
+        pointsTextureSize: store.pointsTextureSize ?? 0,
+        sizeScale: config.pointSizeScale,
+        spaceSize: store.adjustedSpaceSize,
+        screenSize: ensureVec2(store.screenSize, [0, 0]),
+        scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0,
+        pointIndex: index,
+        maxPointSize: store.maxPointSize,
+        color: ensureVec4(color, [0, 0, 0, 1]),
+        universalPointOpacity: config.pointOpacity,
+        // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
+        greyoutOpacity: config.pointGreyoutOpacity ?? -1,
+        isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0,
+        backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
+        greyoutColor: ensureVec4(store.greyoutPointColor, [0, 0, 0, 1]),
+        animatePositions: this.shouldAnimatePointPositions ? 1 : 0,
+        transitionProgress: this.transitionProgress,
+        animateSizes: this.shouldAnimatePointSizes ? 1 : 0,
+        pointDefaultSize: config.pointDefaultSize,
+        width: 0.85,
+        pixelRatio: config.pixelRatio,
+      },
+    })
+    // Update texture bindings dynamically
+    this.drawHighlightedCommand.setBindings({
+      positionsTexture: this.currentPositionTexture,
+      pointStatus: this.pointStatusTexture,
+      exitTexture: this.exitTexture,
+    })
+    this.drawHighlightedCommand.draw(renderPass)
   }
 
   /**

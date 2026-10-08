@@ -434,6 +434,79 @@ describe('host picking', () => {
   })
 })
 
+describe('host hover', () => {
+  it('draws the hover ring and hovered-link width a host sets, whatever renderHoveredPointRing says, and leaves focus alone', async () => {
+    const { device, destroy } = await createExternalDevice()
+    // The host-picking test's scene: two points, one link, one pixel per space unit.
+    // renderHoveredPointRing is off: it gates only cosmos.gl's own pointer hover
+    const graph = new Graph(null, {
+      spaceSize: 4096,
+      pixelRatio: 1,
+      enableSimulation: false,
+      rescalePositions: false,
+      pointDefaultSize: 20,
+      linkDefaultWidth: 2,
+      linkVisibilityMinTransparency: 1,
+      renderHoveredPointRing: false,
+    }, Promise.resolve(device))
+    graph.setPointPositions(new Float32Array([1000, 1000, 1050, 1000]))
+    graph.setLinks(new Float32Array([0, 1]))
+    graph.render()
+    await graph.ready
+    const target = device.createTexture({ format: 'rgba8unorm', width: 200, height: 200 })
+    const framebuffer = device.createFramebuffer({ width: 200, height: 200, colorAttachments: [target] })
+    const draw = (): Uint8Array => {
+      const renderPass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0] })
+      graph.drawToRenderPass(renderPass)
+      renderPass.end()
+      device.submit()
+      return (device.readPixelsToArrayWebGL(framebuffer) as Uint8Array).slice()
+    }
+    const changed = (a: Uint8Array, b: Uint8Array): number => {
+      let count = 0
+      for (let i = 0; i < a.length; i += 4) {
+        if (a[i] !== b[i] || a[i + 1] !== b[i + 1] || a[i + 2] !== b[i + 2] || a[i + 3] !== b[i + 3]) count += 1
+      }
+      return count
+    }
+    const covered = (pixels: Uint8Array): number => {
+      let count = 0
+      for (let i = 3; i < pixels.length; i += 4) if (pixels[i]! > 0) count += 1
+      return count
+    }
+    try {
+      const S = 4096
+      graph.setViewTransform({ k: 1, x: 100 - (1000 + (200 - S) / 2), y: 100 - ((S - 1000) + (200 - S) / 2) }, [200, 200])
+      const plain = draw()
+
+      graph.setHostHoveredPoint(0)
+      const ringed = draw()
+      expect(changed(plain, ringed)).toBeGreaterThan(0)
+      // Hover is not focus: the config and the focus ring stay as they were
+      expect(graph.config.focusedPointIndex).toBeUndefined()
+
+      // A config update keeps the host's hover
+      graph.setConfigPartial({ hoveredPointRingColor: 'white' })
+      expect(changed(ringed, draw())).toBe(0)
+
+      graph.setHostHoveredPoint(undefined)
+      expect(changed(plain, draw())).toBe(0)
+
+      // The hovered link draws wider, by hoveredLinkWidthIncrease
+      graph.setHostHoveredLink(0)
+      expect(covered(draw())).toBeGreaterThan(covered(plain))
+      expect(graph.config.focusedLinkIndex).toBeUndefined()
+      graph.setHostHoveredLink(undefined)
+      expect(changed(plain, draw())).toBe(0)
+    } finally {
+      graph.destroy()
+      framebuffer.destroy()
+      target.destroy()
+      destroy()
+    }
+  })
+})
+
 describe('external frame scheduling', () => {
   it('enableRenderLoop: false + renderOneFrame drives a canvas-owning graph to completion', async () => {
     const div = document.createElement('div')

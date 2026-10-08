@@ -1565,6 +1565,32 @@ export class Graph implements PositionTextureSource {
   }
 
   /**
+   * Hover a point that a host found with its own picking, such as deck.gl's pick pass.
+   * The point gets the hover ring (`hoveredPointRingColor`), whatever
+   * `renderHoveredPointRing` says — that flag gates only cosmos.gl's own pointer hover.
+   * Kept apart from the pointer hover: no mouse callbacks fire, and focus is not touched.
+   * A config update keeps it.
+   * @param index - The point to hover, or `undefined` to clear.
+   */
+  public setHostHoveredPoint (index?: number): void {
+    if (this._isDestroyed) return
+    this.store.hostHoveredPointIndex = index
+    this.requestRender()
+  }
+
+  /**
+   * Hover a link that a host found with its own picking. The link gets the hovered-link
+   * width and color (`hoveredLinkWidthIncrease`, `hoveredLinkColor`); while set, it is the
+   * hovered link cosmos.gl draws. Same rules as `setHostHoveredPoint`.
+   * @param index - The link to hover, or `undefined` to clear.
+   */
+  public setHostHoveredLink (index?: number): void {
+    if (this._isDestroyed) return
+    this.store.hostHoveredLinkIndex = index
+    this.requestRender()
+  }
+
+  /**
    * Render a single frame immediately, without scheduling any further frames.
    * Intended for hosts that drive cosmos.gl from their own scheduler
    * (`enableRenderLoop: false`): call `renderOneFrame()` from the host's frame

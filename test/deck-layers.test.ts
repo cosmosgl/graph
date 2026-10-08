@@ -17,7 +17,7 @@ import type { Layer, LayersList, PickingInfo } from '@deck.gl/core'
  * deck's view before each draw and lets cosmos.gl draw into deck's render pass.
  * Covered: data loading and accessors, the view handed to cosmos, config,
  * simulation stepping, deck picking through cosmos's picking mode
- * (`deck.pickObject`), auto-highlight, and drag-to-pin.
+ * (`deck.pickObject`), auto-highlight through the graph's host hover, and drag-to-pin.
  */
 
 const WIDTH = 200
@@ -673,7 +673,7 @@ describe('CosmosGraphLayer', () => {
     }
   })
 
-  it('highlights the hovered element with cosmos\'s focus ring and focused-link width', async () => {
+  it('highlights the hovered element with cosmos\'s hover ring and hovered-link width, leaving focus alone', async () => {
     let graph: Graph | undefined
     const { deck, container } = await createDeck([
       new CosmosGraphLayer({
@@ -690,19 +690,22 @@ describe('CosmosGraphLayer', () => {
     ])
     try {
       await waitUntil(() => deck.pickObject({ ...CENTER, radius: 2 }) !== null, 'the first pick')
+      const store = graph!.simulation.store
       const point = deck.pickObject({ ...CENTER, radius: 2 }) as PickingInfo
       const layer = point.layer as Layer
       layer.updateAutoHighlight({ ...point, picked: true })
-      expect(graph!.config.focusedPointIndex).toBe(0)
-      expect(graph!.config.focusedLinkIndex).toBeUndefined()
+      expect(store.hostHoveredPointIndex).toBe(0)
+      expect(store.hostHoveredLinkIndex).toBeUndefined()
 
       const link = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as PickingInfo
       layer.updateAutoHighlight({ ...link, picked: true })
-      expect(graph!.config.focusedLinkIndex).toBe(0)
-      expect(graph!.config.focusedPointIndex).toBeUndefined()
+      expect(store.hostHoveredLinkIndex).toBe(0)
+      expect(store.hostHoveredPointIndex).toBeUndefined()
 
-      // Leaving clears both
+      // Leaving clears both, and focus was never written
       layer.updateAutoHighlight({ ...link, picked: false, index: -1 })
+      expect(store.hostHoveredPointIndex).toBeUndefined()
+      expect(store.hostHoveredLinkIndex).toBeUndefined()
       expect(graph!.config.focusedPointIndex).toBeUndefined()
       expect(graph!.config.focusedLinkIndex).toBeUndefined()
     } finally {
@@ -711,7 +714,7 @@ describe('CosmosGraphLayer', () => {
     }
   })
 
-  it('keeps the hover focus through a config change, and hands the app\'s focus back on leave', async () => {
+  it('keeps the app\'s focus through a hover, and the hover through a config change', async () => {
     let graph: Graph | undefined
     const graphLayer = (config: CosmosGraphLayerConfig): CosmosGraphLayer => new CosmosGraphLayer({
       id: 'graph',
@@ -726,27 +729,102 @@ describe('CosmosGraphLayer', () => {
     const { deck, container } = await createDeck([graphLayer({ ...STATIC, focusedPointIndex: 1 })])
     try {
       await waitUntil(() => deck.pickObject({ ...CENTER, radius: 2 }) !== null, 'the first pick')
-      expect(graph!.config.focusedPointIndex).toBe(1)
+      const store = graph!.simulation.store
 
-      // Hovering point 0 takes the focus over
+      // Hovering point 0 rings it; the app's focus stays on point 1
       const point = deck.pickObject({ ...CENTER, radius: 2 }) as PickingInfo
       const layer = point.layer as Layer
       layer.updateAutoHighlight({ ...point, picked: true })
-      expect(graph!.config.focusedPointIndex).toBe(0)
+      expect(graph!.config.focusedPointIndex).toBe(1)
+      expect(store.hostHoveredPointIndex).toBe(0)
 
-      // A config change mid-hover rebuilds the graph's config: the highlight survives it
+      // A config change mid-hover rebuilds the graph's config: the hover survives it
       deck.setProps({ layers: [graphLayer({ ...STATIC, focusedPointIndex: 1, simulationGravity: 0.5 })] })
       await waitUntil(() => graph!.config.simulationGravity === 0.5, 'the config change')
-      expect(graph!.config.focusedPointIndex).toBe(0)
+      expect(store.hostHoveredPointIndex).toBe(0)
+      expect(graph!.config.focusedPointIndex).toBe(1)
 
-      // Leaving returns the app's focus rather than clearing it
       const current = deck.pickObject({ ...CENTER, radius: 2 }) as PickingInfo
       ;(current.layer as Layer).updateAutoHighlight({ ...current, picked: false, index: -1 })
+      expect(store.hostHoveredPointIndex).toBeUndefined()
       expect(graph!.config.focusedPointIndex).toBe(1)
-      expect(graph!.config.focusedLinkIndex).toBeUndefined()
     } finally {
       deck.finalize()
       container.remove()
+    }
+  })
+
+  it('hovers a provided graph without touching its focus: a click during the hover sticks', async () => {
+    const { deck, container, devicePromise } = createDeckDevice()
+    // The app's graph, with its own focus and data; the layer gets no config and no points
+    const provided = new Graph(null, { ...STATIC, focusedPointIndex: 1, focusedLinkIndex: 0 }, devicePromise)
+    provided.setPointPositions(new Float32Array([1000, 1000, 1050, 1000]))
+    provided.setLinks(new Float32Array([0, 1]))
+    provided.setPointSizes(new Float32Array([10, 10]))
+    provided.setLinkWidths(new Float32Array([6]))
+    provided.render()
+    try {
+      await provided.ready
+      deck.setProps({ layers: [new CosmosGraphLayer({ id: 'graph', graph: provided, pickable: true, autoHighlight: true })] })
+      await waitUntil(() => deck.pickObject({ ...CENTER, radius: 2 }) !== null, 'the first pick')
+      const store = provided.simulation.store
+
+      // Hovering a point and then a link leaves the graph's own focus as it was
+      const point = deck.pickObject({ ...CENTER, radius: 2 }) as PickingInfo
+      const layer = point.layer as Layer
+      layer.updateAutoHighlight({ ...point, picked: true })
+      expect(provided.config.focusedPointIndex).toBe(1)
+      expect(store.hostHoveredPointIndex).toBe(0)
+      const link = deck.pickObject({ ...worldToScreen(1025, 1000), radius: 2 }) as PickingInfo
+      layer.updateAutoHighlight({ ...link, picked: true })
+      expect(provided.config.focusedPointIndex).toBe(1)
+      expect(provided.config.focusedLinkIndex).toBe(0)
+      layer.updateAutoHighlight({ ...link, picked: false, index: -1 })
+      expect(provided.config.focusedPointIndex).toBe(1)
+      expect(provided.config.focusedLinkIndex).toBe(0)
+
+      // The app selects the point under the pointer; leaving keeps the selection
+      layer.updateAutoHighlight({ ...point, picked: true })
+      provided.setConfigPartial({ focusedPointIndex: 0 })
+      layer.updateAutoHighlight({ ...point, picked: false, index: -1 })
+      expect(provided.config.focusedPointIndex).toBe(0)
+
+      // Removing the layer mid-hover takes its hover off the app's graph
+      layer.updateAutoHighlight({ ...point, picked: true })
+      expect(store.hostHoveredPointIndex).toBe(0)
+      deck.setProps({ layers: [] })
+      await waitUntil(() => store.hostHoveredPointIndex === undefined, 'the layer\'s removal')
+    } finally {
+      deck.finalize()
+      container.remove()
+      provided.destroy()
+    }
+  })
+
+  it('keeps the hover when a layer that holds none is removed from the shared graph', async () => {
+    const { deck, container, devicePromise } = createDeckDevice()
+    const provided = new Graph(null, STATIC, devicePromise)
+    provided.setPointPositions(new Float32Array([1000, 1000, 1050, 1000]))
+    provided.setPointSizes(new Float32Array([10, 10]))
+    provided.render()
+    const main = new CosmosGraphLayer({ id: 'main', graph: provided, pickable: true, autoHighlight: true })
+    const thumb = new CosmosGraphLayer({ id: 'thumb', graph: provided })
+    try {
+      await provided.ready
+      // One graph, two layers: the main one highlights, the second one only draws
+      deck.setProps({ layers: [main, thumb] })
+      await waitUntil(() => deck.pickObject({ ...CENTER, radius: 2 }) !== null, 'the first pick')
+      const point = deck.pickObject({ ...CENTER, radius: 2 }) as PickingInfo
+      ;(point.layer as Layer).updateAutoHighlight({ ...point, picked: true })
+      expect(provided.simulation.store.hostHoveredPointIndex).toBe(0)
+
+      deck.setProps({ layers: [main] })
+      await waitUntil(() => thumb.lifecycle.startsWith('Finalized'), 'the second layer\'s removal')
+      expect(provided.simulation.store.hostHoveredPointIndex).toBe(0)
+    } finally {
+      deck.finalize()
+      container.remove()
+      provided.destroy()
     }
   })
 
