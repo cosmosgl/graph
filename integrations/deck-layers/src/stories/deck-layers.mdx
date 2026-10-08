@@ -73,7 +73,8 @@ export function GraphView ({ nodes, edges }) {
 
 ## Style and tune
 
-Colors come through accessors in deck's 0..255 and reach cosmos.gl converted. Everything else
+Colors come through accessors in deck's 0..255 and reach cosmos.gl converted. Leave an
+accessor out and the config key draws instead, such as `pointDefaultColor`. Everything else
 is cosmos.gl's: `config` takes the cosmos.gl [configuration](../?path=/docs/configuration--docs)
 — the forces, the space size, `randomSeed`, the simulation callbacks, and the rendering
 options, since cosmos.gl does the rendering: `curvedLinks`, `linkDefaultArrows`,

@@ -115,6 +115,9 @@ const STATIC: CosmosGraphLayerConfig = {
   simulationLinkSpring: 0,
 }
 
+/** cosmos's 0..1 channels as 0..255 bytes, for exact comparisons. */
+const bytes = (channels: Float32Array): number[] => Array.from(channels, (c) => Math.round(c * 255))
+
 /** The pixel deck puts a world position at, through the deck's first viewport. */
 const deckPixel = (deck: Deck<OrthographicView | MapView>, world: number[]): [number, number] => {
   const pixel = deck.getViewports()[0]!.project(world)
@@ -292,6 +295,118 @@ describe('CosmosGraphLayer', () => {
     } finally {
       deck.finalize()
       container.remove()
+    }
+  })
+
+  it('passes deck\'s prop check with constant, function and unset style accessors', () => {
+    const constants = new CosmosGraphLayer({
+      id: 'graph',
+      getPointSize: 4,
+      getPointColor: [74, 92, 191, 230],
+      getLinkColor: [0, 0, 255, 51],
+      getLinkWidth: 1.5,
+    })
+    expect(() => constants.validateProps()).not.toThrow()
+    const functions = new CosmosGraphLayer({ id: 'graph', getPointSize: (): number => 4, getLinkColor: (): [number, number, number] => [0, 0, 0] })
+    expect(() => functions.validateProps()).not.toThrow()
+    expect(() => new CosmosGraphLayer({ id: 'graph' }).validateProps()).not.toThrow()
+  })
+
+  it('leaves a style accessor that is left out to the config key, and cosmos\'s default under it', async () => {
+    const points = { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) }
+    const links = new Float32Array([0, 1])
+    let graph: Graph | undefined
+    const graphLayer = (config: CosmosGraphLayerConfig): CosmosGraphLayer => new CosmosGraphLayer({
+      id: 'graph',
+      points,
+      links,
+      config,
+      onGraphCreated: (created): void => { graph = created },
+    })
+    const { deck, container } = await createDeck([graphLayer(STATIC)])
+    try {
+      await waitUntil(() => graph?.getPointSizes().length === 2, 'the first load')
+      // Nothing uploaded: cosmos's own defaults draw
+      expect(graph!.graph.inputPointColors).toBeUndefined()
+      expect(bytes(graph!.getPointColors())).toEqual([179, 179, 179, 255, 179, 179, 179, 255])
+      expect(Array.from(graph!.getPointSizes())).toEqual([4, 4])
+      expect(bytes(graph!.getLinkColors())).toEqual([102, 102, 102, 255])
+      expect(Array.from(graph!.getLinkWidths())).toEqual([1])
+
+      // The config keys draw instead, and follow their changes
+      deck.setProps({
+        layers: [graphLayer({
+          ...STATIC,
+          pointDefaultColor: '#ff0000',
+          pointDefaultSize: 20,
+          linkDefaultColor: '#00ff00',
+          linkDefaultWidth: 3,
+        })],
+      })
+      await waitUntil(() => graph!.getPointSizes()[0] === 20, 'the config change')
+      expect(bytes(graph!.getPointColors())).toEqual([255, 0, 0, 255, 255, 0, 0, 255])
+      expect(bytes(graph!.getLinkColors())).toEqual([0, 255, 0, 255])
+      expect(Array.from(graph!.getLinkWidths())).toEqual([3])
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('draws an accessor the app gives over the config key, and the key again once it is dropped', async () => {
+    const points = { length: 2, initialPositions: new Float32Array([1000, 1000, 1050, 1000]) }
+    const links = new Float32Array([0, 1])
+    const config = { ...STATIC, pointDefaultSize: 20, linkDefaultColor: '#00ff00' }
+    let graph: Graph | undefined
+    const { deck, container } = await createDeck([new CosmosGraphLayer({
+      id: 'graph',
+      points,
+      links,
+      // The same values as the old defaults: an accessor given is uploaded, whatever its value
+      getPointSize: 4,
+      getLinkColor: [0, 0, 255, 255],
+      config,
+      onGraphCreated: (created): void => { graph = created },
+    })])
+    try {
+      await waitUntil(() => graph?.getPointSizes().length === 2, 'the first load')
+      expect(Array.from(graph!.getPointSizes())).toEqual([4, 4])
+      expect(bytes(graph!.getLinkColors())).toEqual([0, 0, 255, 255])
+
+      // The accessors dropped: the layer clears what it uploaded, and the keys draw
+      deck.setProps({ layers: [new CosmosGraphLayer({ id: 'graph', points, links, config })] })
+      await waitUntil(() => graph!.getPointSizes()[0] === 20, 'the dropped accessor')
+      expect(bytes(graph!.getLinkColors())).toEqual([0, 255, 0, 255])
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('leaves the style arrays an app set on its own graph alone when it gives no accessor', async () => {
+    const { deck, container, devicePromise } = createDeckDevice()
+    const provided = new Graph(null, STATIC, devicePromise)
+    // The app styles its own graph
+    provided.setPointColors(new Float32Array([1, 0, 0, 1, 1, 0, 0, 1]))
+    try {
+      await provided.ready
+      const layer = (initialPositions: Float32Array): CosmosGraphLayer => new CosmosGraphLayer({
+        id: 'graph',
+        graph: provided,
+        points: { length: 2, initialPositions },
+      })
+      deck.setProps({ layers: [layer(new Float32Array([1000, 1000, 1050, 1000]))] })
+      await waitUntil(() => provided.getPointPositionsArray().length === 4, 'the first load')
+      expect(bytes(provided.getPointColors())).toEqual([255, 0, 0, 255, 255, 0, 0, 255])
+
+      // A reload of the same count keeps them too
+      deck.setProps({ layers: [layer(new Float32Array([1000, 1030, 1050, 1030]))] })
+      await waitUntil(() => provided.getPointPositionsArray()[1] === 1030, 'the reload')
+      expect(bytes(provided.getPointColors())).toEqual([255, 0, 0, 255, 255, 0, 0, 255])
+    } finally {
+      deck.finalize()
+      container.remove()
+      provided.destroy()
     }
   })
 

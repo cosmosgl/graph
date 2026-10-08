@@ -18,6 +18,7 @@ pass under deck's camera, so every cosmos.gl rendering option works through
 | `autoHighlight` with `highlightColor` | `autoHighlight` lights the hovered element with cosmos.gl's hover ring / hovered-link width; `highlightColor` is not used — set `config.hoveredPointRingColor`, `config.hoveredLinkColor` |
 | `enablePointDrag` on a map | works now: the drag goes through cosmos.gl's own screen → space inverse |
 | `transitions` on accessors | no effect — a headless `Graph` applies changes at once |
+| `getPointColor` / `getLinkColor` defaults `[74, 92, 191, 230]` / `[94, 115, 194, 64]` | no default: an accessor left out draws `config.pointDefaultColor` / `config.linkDefaultColor`, cosmos.gl's grey `#b3b3b3` / `#666666` unless set. For the old colors, set `pointDefaultColor: 'rgba(74, 92, 191, 0.9)'` and `linkDefaultColor: 'rgba(94, 115, 194, 0.25)'`. Sizes and widths keep their defaults (4, 1). |
 | `_subLayerProps`, `highlightedObjectIndex` | no sublayers to address |
 | `OrthographicView()` | `OrthographicView({ flipY: false })` — cosmos.gl's space has y up; a y-down, rotated or pitched view is reported once and not drawn. Map views work at pitch 0 and bearing 0. |
 

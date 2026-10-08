@@ -160,14 +160,16 @@ type CosmosGraphLayerOwnProps<PointDataT, LinkDataT> = {
   /**
    * Point size accessor, in cosmos.gl's units: pixels at zoom 1, scaled with the view
    * when `config.scalePointsOnZoom` is on, times `config.pointSizeScale`. `0` hides the point.
-   * @default 4
+   * Unset, every point draws `config.pointDefaultSize`.
+   * @default null
    */
-  getPointSize?: Accessor<PointDataT, number>;
+  getPointSize?: Accessor<PointDataT, number> | null;
   /**
    * Point RGBA color accessor, channels in 0..255 (deck's convention; converted for cosmos).
-   * @default [74, 92, 191, 230]
+   * Unset, every point draws `config.pointDefaultColor`.
+   * @default null
    */
-  getPointColor?: Accessor<PointDataT, Color>;
+  getPointColor?: Accessor<PointDataT, Color> | null;
   /**
    * Source accessor for array links: a point index, or a point id when
    * `getPointId` is set.
@@ -181,15 +183,17 @@ type CosmosGraphLayerOwnProps<PointDataT, LinkDataT> = {
    */
   getLinkTarget?: Accessor<LinkDataT, string | number>;
   /**
-   * Link RGBA color accessor, channels in 0..255.
-   * @default [94, 115, 194, 64]
+   * Link RGBA color accessor, channels in 0..255. Unset, every link draws
+   * `config.linkDefaultColor`.
+   * @default null
    */
-  getLinkColor?: Accessor<LinkDataT, Color>;
+  getLinkColor?: Accessor<LinkDataT, Color> | null;
   /**
    * Link width accessor, in cosmos.gl's units (see `config.scaleLinksOnZoom`, `config.linkWidthScale`).
-   * @default 1
+   * Unset, every link draws `config.linkDefaultWidth`.
+   * @default null
    */
-  getLinkWidth?: Accessor<LinkDataT, number>;
+  getLinkWidth?: Accessor<LinkDataT, number> | null;
   /**
    * Lets pointer drags grab a point: pinned on drag start, moved with the pointer,
    * released per `unpinOnDragEnd`. View panning is suppressed while a point is
@@ -259,17 +263,25 @@ type CosmosGraphLayerOwnProps<PointDataT, LinkDataT> = {
   onGraphDataLoaded?: ((info: CosmosGraphDataLoadedInfo<LinkDataT>) => void) | null;
 }
 
+/**
+ * deck's accessor check takes a function, or a constant of the default's type. A style
+ * accessor defaults to unset, so its check also takes the constant: a number or a color.
+ */
+const isStyleAccessor = (constant: 'number' | 'color') => (value: unknown): boolean =>
+  value == null || typeof value === 'function' ||
+  (constant === 'number' ? typeof value === 'number' : Array.isArray(value) || ArrayBuffer.isView(value))
+
 const defaultProps: DefaultProps<CosmosGraphLayerProps> = {
   points: { type: 'object', value: null, optional: true },
   links: null,
   getPointId: { type: 'accessor', value: null },
   getPointPosition: { type: 'accessor', value: null },
-  getPointSize: { type: 'accessor', value: 4 },
-  getPointColor: { type: 'accessor', value: [74, 92, 191, 230] },
+  getPointSize: { type: 'accessor', value: null, validate: isStyleAccessor('number') },
+  getPointColor: { type: 'accessor', value: null, validate: isStyleAccessor('color') },
   getLinkSource: { type: 'accessor', value: (l: unknown) => (l as { source: number }).source },
   getLinkTarget: { type: 'accessor', value: (l: unknown) => (l as { target: number }).target },
-  getLinkColor: { type: 'accessor', value: [94, 115, 194, 64] },
-  getLinkWidth: { type: 'accessor', value: 1 },
+  getLinkColor: { type: 'accessor', value: null, validate: isStyleAccessor('color') },
+  getLinkWidth: { type: 'accessor', value: null, validate: isStyleAccessor('number') },
   enablePointDrag: false,
   dragReheatAlpha: 0.1,
   unpinOnDragEnd: true,
@@ -333,7 +345,7 @@ const configEquals = (a: Record<string, unknown> | undefined, b: Record<string, 
  */
 const toColorArray = <In>(
   count: number,
-  accessor: Accessor<In, Color>,
+  accessor: Accessor<In, Color> | null,
   objects: readonly In[] | null,
   attribute: BinaryAttribute | undefined
 ): Float32Array => {
@@ -344,7 +356,7 @@ const toColorArray = <In>(
   const colors = new Float32Array(count * 4)
   const data = objects ?? { length: count }
   for (let i = 0; i < count; i += 1) {
-    const color = resolveAccessor(accessor, objects?.[i] as In, { index: i, data, target: [] })
+    const color = resolveAccessor(accessor as Accessor<In, Color>, objects?.[i] as In, { index: i, data, target: [] })
     colors[i * 4] = (color[0] as number) / 255
     colors[i * 4 + 1] = (color[1] as number) / 255
     colors[i * 4 + 2] = (color[2] as number) / 255
@@ -356,7 +368,7 @@ const toColorArray = <In>(
 /** One value per element, from a binary attribute (passed through) or an accessor. */
 const toValueArray = <In>(
   count: number,
-  accessor: Accessor<In, number>,
+  accessor: Accessor<In, number> | null,
   objects: readonly In[] | null,
   attribute: BinaryAttribute | undefined
 ): Float32Array => {
@@ -367,7 +379,7 @@ const toValueArray = <In>(
   const values = new Float32Array(count)
   const data = objects ?? { length: count }
   for (let i = 0; i < count; i += 1) {
-    values[i] = resolveAccessor(accessor, objects?.[i] as In, { index: i, data, target: [] })
+    values[i] = resolveAccessor(accessor as Accessor<In, number>, objects?.[i] as In, { index: i, data, target: [] })
   }
   return values
 }
@@ -381,6 +393,22 @@ const steppedAt = new WeakMap<Graph, number>()
 /** What the layer loaded when binary points carried no `initialPositions`: a seed of its own. */
 const SEEDED = Symbol('seeded')
 const NO_LINKS = new Float32Array(0)
+/** An empty style array: the engine takes it as no data and draws the config default. */
+const NO_STYLE = new Float32Array(0)
+
+/** A style channel is the app's per-element data when an accessor or a binary attribute gives it. */
+const isChannelSet = (accessor: unknown, attribute: BinaryAttribute | undefined): boolean =>
+  accessor != null || attribute != null
+
+/** The binary styling channels of a `points` prop, if it is in binary form. */
+const pointAttributesOf = (points: unknown): CosmosPointAttributes | undefined =>
+  points && !Array.isArray(points) ? (points as { attributes?: CosmosPointAttributes }).attributes : undefined
+
+/** The binary styling channels of a `links` prop, if it is `{ pairs, attributes }`. */
+const linkAttributesOf = (links: unknown): CosmosLinkAttributes | undefined =>
+  links && !Array.isArray(links) && !(links instanceof Float32Array)
+    ? (links as { attributes?: CosmosLinkAttributes }).attributes
+    : undefined
 
 /**
  * The cosmos.gl graph layer: give it points and links, and cosmos.gl lays them
@@ -511,9 +539,25 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       accessorReplaced(props.getLinkColor, oldProps.getLinkColor) || accessorReplaced(props.getLinkWidth, oldProps.getLinkWidth)
     if (!pointsChanged && !linksChanged && !pointStyleChanged && !linkStyleChanged) return
 
+    // A channel the layer uploaded and the app no longer gives goes back to the config
+    // default. Only the layer's own upload is cleared: it had data to load (`points`) on
+    // this graph, so an array the application set itself is never touched
+    const uploaded = Boolean(oldProps.points) && !graphSwapped
+    const oldPoints = pointAttributesOf(oldProps.points)
+    const newPoints = pointAttributesOf(props.points)
+    const oldLinks = linkAttributesOf(oldProps.links)
+    const newLinks = linkAttributesOf(props.links)
+    const stopped = (before: boolean, now: boolean): boolean => uploaded && before && !now
+    const unsetChannels = {
+      pointColorUnset: stopped(isChannelSet(oldProps.getPointColor, oldPoints?.getPointColor), isChannelSet(props.getPointColor, newPoints?.getPointColor)),
+      pointSizeUnset: stopped(isChannelSet(oldProps.getPointSize, oldPoints?.getPointSize), isChannelSet(props.getPointSize, newPoints?.getPointSize)),
+      linkColorUnset: stopped(isChannelSet(oldProps.getLinkColor, oldLinks?.getLinkColor), isChannelSet(props.getLinkColor, newLinks?.getLinkColor)),
+      linkWidthUnset: stopped(isChannelSet(oldProps.getLinkWidth, oldLinks?.getLinkWidth), isChannelSet(props.getLinkWidth, newLinks?.getLinkWidth)),
+    }
+
     if (props.points) {
       // The layer's data goes into the graph — once the device check has passed
-      if (this.state.isReady) this._load({ pointsChanged, linksChanged, idsChanged, pointStyleChanged, linkStyleChanged })
+      if (this.state.isReady) this._load({ pointsChanged, linksChanged, idsChanged, pointStyleChanged, linkStyleChanged, ...unsetChannels })
       else this.state.isIngestPending = true
     } else {
       // No data of its own: the layer draws what the graph holds and writes nothing
@@ -695,7 +739,17 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       // Only now may the layer touch the graph's data
       if (layer.state.isIngestPending) {
         layer.state.isIngestPending = false
-        layer._load({ pointsChanged: true, linksChanged: true, idsChanged: true, pointStyleChanged: true, linkStyleChanged: true })
+        layer._load({
+          pointsChanged: true,
+          linksChanged: true,
+          idsChanged: true,
+          pointStyleChanged: true,
+          linkStyleChanged: true,
+          pointColorUnset: false,
+          pointSizeUnset: false,
+          linkColorUnset: false,
+          linkWidthUnset: false,
+        })
       }
       layer.setState({ isReady: true })
     }).catch((error: Error) => {
@@ -819,6 +873,10 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     idsChanged: boolean;
     pointStyleChanged: boolean;
     linkStyleChanged: boolean;
+    pointColorUnset: boolean;
+    pointSizeUnset: boolean;
+    linkColorUnset: boolean;
+    linkWidthUnset: boolean;
   }): void {
     const graph = this.state.graph
     if (!graph) return
@@ -937,16 +995,25 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     // Positions are space coordinates by contract: not rescaled unless the config asks
     if (positions) graph.setPointPositions(positions, this.props.config?.rescalePositions === undefined ? true : undefined)
     if (pairs) graph.setLinks(pairs)
-    // Styles: deck accessors and attributes, as cosmos's arrays. They follow a
-    // reload (the count may have changed) and their own accessors
+    // Styles: deck accessors and attributes, as cosmos's arrays. A channel the app gives
+    // follows a reload (the count may have changed) and its own accessor; a channel it
+    // does not give is left to the config default, and cleared when it just stopped
     const { getPointColor, getPointSize, getLinkColor, getLinkWidth } = this.props
     if (positions || changes.pointStyleChanged) {
-      graph.setPointColors(toColorArray(pointCount, getPointColor, pointObjects, pointAttributes?.getPointColor))
-      graph.setPointSizes(toValueArray(pointCount, getPointSize, pointObjects, pointAttributes?.getPointSize))
+      if (isChannelSet(getPointColor, pointAttributes?.getPointColor)) {
+        graph.setPointColors(toColorArray(pointCount, getPointColor, pointObjects, pointAttributes?.getPointColor))
+      } else if (changes.pointColorUnset) graph.setPointColors(NO_STYLE)
+      if (isChannelSet(getPointSize, pointAttributes?.getPointSize)) {
+        graph.setPointSizes(toValueArray(pointCount, getPointSize, pointObjects, pointAttributes?.getPointSize))
+      } else if (changes.pointSizeUnset) graph.setPointSizes(NO_STYLE)
     }
     if (pairs || changes.linkStyleChanged) {
-      graph.setLinkColors(toColorArray(linkCount, getLinkColor, keptLinks, linkAttributes?.getLinkColor))
-      graph.setLinkWidths(toValueArray(linkCount, getLinkWidth, keptLinks, linkAttributes?.getLinkWidth))
+      if (isChannelSet(getLinkColor, linkAttributes?.getLinkColor)) {
+        graph.setLinkColors(toColorArray(linkCount, getLinkColor, keptLinks, linkAttributes?.getLinkColor))
+      } else if (changes.linkColorUnset) graph.setLinkColors(NO_STYLE)
+      if (isChannelSet(getLinkWidth, linkAttributes?.getLinkWidth)) {
+        graph.setLinkWidths(toValueArray(linkCount, getLinkWidth, keptLinks, linkAttributes?.getLinkWidth))
+      } else if (changes.linkWidthUnset) graph.setLinkWidths(NO_STYLE)
     }
     // A headless graph applies at once: no transition, and the simulation keeps its alpha
     graph.render()

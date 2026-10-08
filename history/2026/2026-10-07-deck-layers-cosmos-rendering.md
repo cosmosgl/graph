@@ -45,6 +45,14 @@ curves exactly on deck's labels through zoom and pan, so the layer was rebuilt a
   cosmos's typed arrays on load and on trigger change. A `Float32Array` attribute is cosmos's
   own form and passes through by reference, so big graphs stay zero-copy. The units props
   (`pointSizeUnits`, `linkWidthUnits`) are gone: sizes are cosmos's.
+  The four style accessors have no default. In 3.5.0 they had to: deck's attribute manager
+  fills every instance of the sublayers it drew. With cosmos drawing, an accessor left out
+  sends nothing, and `pointDefaultColor` / `pointDefaultSize` / `linkDefaultColor` /
+  `linkDefaultWidth` draw instead — keys of `config` that would otherwise type-check and do
+  nothing, under a constant uploaded over them. A channel the layer uploaded and the app
+  then drops is cleared back to the config default; an array the app set on the graph
+  itself is never touched. Unstyled graphs therefore draw in cosmos's grey, not the old
+  blue.
 - **The `Graph` is the escape hatch, and `onGraphDataLoaded` keeps it aligned.** `simulation` /
   `onSimulationCreated` became `graph` / `onGraphCreated`, handing out a full `Graph`. For
   everything the props do not cover — link strengths that change over time, shapes, arrows,
