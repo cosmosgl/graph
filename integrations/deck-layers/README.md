@@ -4,7 +4,7 @@ A [deck.gl](https://deck.gl) layer that runs and draws a [cosmos.gl](https://git
 graph. The simulation runs on deck.gl's own luma.gl device, and **cosmos.gl's own renderer**
 draws it into deck's render pass under deck's camera: positions never leave the GPU, and
 everything cosmos.gl can draw — point shapes, images, curved links, arrows, dashes, greyout,
-rings — is one `config` key away.
+rings — is yours through `config` and the `Graph`.
 
 Versions are released in lockstep with `@cosmos.gl/graph` — install matching versions.
 
@@ -106,7 +106,7 @@ The layer's `Graph` is yours to call — `onGraphCreated` hands it over, and
 
 | Yours | The layer's |
 |---|---|
-| `setPointShapes`, `setLinkArrows`, `setLinkStyles`, `setLinkStrength`, `setPointClusters`, `setClusterPositions`, `setPinnedPoint(s)`, `start` / `pause` / `unpause`, `trackPointPositionsByIndices`, position reads, `setPointPosition` / `setPointPositionsByIndices` | `setPointPositions`, `setLinks`, `setPointColors`, `setPointSizes`, `setLinkColors`, `setLinkWidths`: loaded again whenever `points`, `links` or their accessors change |
+| `setPointShapes`, `setLinkArrows`, `setLinkStyles`, `setLinkStrength`, `setPointClusters`, `setClusterPositions`, `setPinnedPoint(s)`, `start` / `pause` / `unpause`, `trackPointPositionsByIndices`, position reads, `setPointPosition` / `setPointPositionsByIndices` | `setPointPositions`, `setLinks`: loaded again whenever `points` or `links` change. `setPointColors`, `setPointSizes`, `setLinkColors`, `setLinkWidths`: the layer's while you give the matching accessor or attribute, yours otherwise |
 | — | `config`: applied again whenever it changes, and `Graph.setConfig` resets what a new config leaves out, so set config through the prop |
 
 The layer also steps the graph each frame while it runs (`pause()` it to step it yourself,
@@ -206,8 +206,7 @@ WebGL contexts.
 The *Custom deck layers* story is the worked example: a standalone `GraphSimulation` on deck's
 device, drawn by two deck layers of its own (`PointsLayer`, `LinksLayer` in the
 story's sources) that `texelFetch` the texture by instance index — with binary attributes,
-deck's attribute transitions and `highlightColor`, hover and a drag that pins the grabbed
-point. They are example code, not package exports: copy them and make them yours.
+`highlightColor`, hover and a drag that pins the grabbed point. They are example code, not package exports: copy them and make them yours.
 
 ## The universal fallback: CPU readback
 

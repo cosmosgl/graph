@@ -1,6 +1,6 @@
 # Migration Guide
 
-## Migrating `@cosmos.gl/deck-layers` past 3.5
+## Migrating `@cosmos.gl/deck-layers` 3.5.0 → 3.5.1
 
 ### `CosmosGraphLayer` Draws With cosmos.gl's Renderer
 
@@ -9,21 +9,23 @@ The layer no longer renders through sublayers of its own. It owns a headless
 pass under deck's camera, so every cosmos.gl rendering option works through
 `config`. This changes the layer's API:
 
-| Before (3.5) | Now |
+| Before (3.5.0) | Now |
 |---|---|
 | `simulationConfig: GraphSimulationConfig` | `config: CosmosGraphLayerConfig` — cosmos.gl's `GraphConfig` minus the keys deck owns (`DECK_OWNED_CONFIG_KEYS`). Rendering keys work. |
 | `simulation: GraphSimulation` (provided) | `graph: Graph` — a headless `new Graph(null, config, devicePromise)` on deck's device |
 | `onSimulationCreated(simulation)` | `onGraphCreated(graph)` |
 | `pointSizeUnits`, `linkWidthUnits` | removed — sizes are cosmos.gl's (`scalePointsOnZoom`, `pointSizeScale`, `linkWidthScale`) |
 | `autoHighlight` with `highlightColor` | `autoHighlight` lights the hovered element with cosmos.gl's hover ring / hovered-link width; `highlightColor` is not used — set `config.hoveredPointRingColor`, `config.hoveredLinkColor` |
-| `enablePointDrag` on a map | works now: the drag goes through cosmos.gl's own screen → space inverse |
+| `enablePointDrag` on a map | works now: the pointer maps to space through the view the layer derives for the viewport it is in |
 | `transitions` on accessors | no effect — a headless `Graph` applies changes at once |
 | `getPointColor` / `getLinkColor` defaults `[74, 92, 191, 230]` / `[94, 115, 194, 64]` | no default: an accessor left out draws `config.pointDefaultColor` / `config.linkDefaultColor`, cosmos.gl's grey `#b3b3b3` / `#666666` unless set. For the old colors, set `pointDefaultColor: 'rgba(74, 92, 191, 0.9)'` and `linkDefaultColor: 'rgba(94, 115, 194, 0.25)'`. Sizes and widths keep their defaults (4, 1). |
-| `_subLayerProps`, `highlightedObjectIndex` | no sublayers to address |
+| `_subLayerProps` | no sublayers to address |
+| `highlightedObjectIndex` | not supported: an integer turns `autoHighlight` off (deck skips it) and nothing is drawn instead — cosmos.gl's shaders do not take deck's picking highlight. To light an element yourself, leave `autoHighlight` off and call `graph.setHostHoveredPoint(index)` / `graph.setHostHoveredLink(index)` |
+| `parameters` (default blending for the sublayers) | no effect on the graph: cosmos.gl's draws declare their own pipeline state |
 | `OrthographicView()` | `OrthographicView({ flipY: false })` — cosmos.gl's space has y up; a y-down, rotated or pitched view is reported once and not drawn. Map views work at pitch 0 and bearing 0. |
 
 Binary attributes: a `Float32Array` color channel is now cosmos.gl's 0..1 and is handed
-over as it is (zero copies); `Uint8Array` 0..255 bytes are converted as before.
+over as it is (zero copies); `Uint8Array` 0..255 bytes are still accepted, converted to 0..1.
 
 New: `onGraphDataLoaded(info)` fires after each load of `points` or `links` with the graph,
 what the load replaced, the id→index map and the array links in the graph's order — the
@@ -44,6 +46,7 @@ new CosmosGraphLayer({
   id: 'graph', points, links,
   config: { simulationGravity: 0.25, curvedLinks: true, pointDefaultShape: PointShape.Hexagon },
   onGraphCreated: (graph) => { /* … */ },
+  pickable: true, autoHighlight: true, enablePointDrag: true,
 })
 ```
 

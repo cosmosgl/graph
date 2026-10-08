@@ -2,7 +2,11 @@
 
 # `CosmosGraphLayer` draws with cosmos.gl's renderer
 
-**Commits:** `feat(graph): expose the simulation and the curve shader module for host embeddings` (`289c226`), `feat(deck-layers): CosmosGraphLayer draws with cosmos.gl's renderer — the sublayers become the Custom deck layers story` (`0559292`), `fix(deck-layers): link ribbons extrude along the on-screen tangent — square to the curve on a pitched map` (`ff17a44`), `fix(stories): a trip the trickle just started runs at least one round trip — not ended on the frame it began` (`8ffaa0e`)
+**Commits:** `feat(graph): expose the simulation and the curve shader module for host embeddings` (`289c226`), `feat(deck-layers): CosmosGraphLayer draws with cosmos.gl's renderer — the sublayers become the Custom deck layers story` (`0559292`), `fix(deck-layers): link ribbons extrude along the on-screen tangent — square to the curve on a pitched map` (`ff17a44`), `fix(stories): a trip the trickle just started runs at least one round trip — not ended on the frame it began` (`8ffaa0e`), `refactor(stories): the custom deck layers are the story's own — straight links in their own shader, plain names, a positionSource prop` (`a632c4e`), `fix(deck-layers): a style accessor left out sends nothing — the config's default keys draw` (`c05c10c`)
+
+`a632c4e` replaces the curve parts of two earlier commits: the curve shader module `289c226`
+exported was withdrawn before release, and the curved ribbons `ff17a44` fixed became straight
+links, which keep its divide by `w`.
 
 ## Why
 
@@ -11,8 +15,7 @@ own GLSL that `texelFetch`ed the simulation's position texture. That design boug
 deck-native picking, `autoHighlight`, accessors and transitions, and any deck view. It also
 meant the layer drew circles and lines and nothing else: every rendering option cosmos.gl
 has — shapes, images, arrows, dashes, greyout, rings — would have had to be written a second
-time in those shaders, and a review of cosmos's config against the layer counted about 27
-such keys. The sublayers were internal and unexported, which made them a source of
+time in those shaders, as would most of cosmos's other rendering keys. The sublayers were internal and unexported, which made them a source of
 confusion: they looked like the start of a second renderer.
 
 The maintainer's call was the other way round: the deck layer should use cosmos.gl's
@@ -63,19 +66,17 @@ curves exactly on deck's labels through zoom and pan, so the layer was rebuilt a
   for it. `onGraphDataLoaded(info)` fires once the graph holds each load with the graph,
   what was replaced, the id→index map and the array links in the graph's order, so arrays
   sent from it line up. A throw in it goes to deck's `onError` and the load stands.
-- **Removed for now**: `pickable`-driven hover and click, `autoHighlight`, `enablePointDrag`
-  and the drag callbacks, `elementType`. cosmos draws into no picking buffer, so deck's pick
-  pass sees nothing of the graph; the layer skips its draw during that pass. deck's
-  `transitions` have no effect either: a headless `Graph` forces its transition duration to 0.
-  Picking followed the same day — see [host picking](2026-10-07-host-picking.md).
+- **Picking was out of the first cut** — hover and click, `autoHighlight`, drag — and
+  followed the same day: see [host picking](2026-10-07-host-picking.md). deck's
+  `transitions` have no effect: a headless `Graph` forces its transition duration to 0.
 - **Unpositioned points are seeded from the graph's RNG**, so `config.randomSeed` reproduces
   a layout; 3.5.0 used `Math.random`.
 - **The sublayers moved to a story.** `points-layer.ts`, `links-layer.ts`, their
   uniform modules and `blend-parameters.ts` live in
   `integrations/deck-layers/src/stories/custom-deck-layers/`, as the example of a renderer
   of your own over `PositionTextureSource` — with deck's picking, `autoHighlight` and a
-  drag, which the package no longer has. The links layer draws straight links with its own
-  shader: a renderer of your own takes positions from cosmos.gl, not its rendering code.
+  drag. The links layer draws straight links with its own shader: a renderer of your own
+  takes positions from cosmos.gl, not its rendering code.
 - **`Graph.simulation` is public**, a backward-compatible addition: the `GraphSimulation` a
   graph runs, for a host that wants the simulation's own API.
 
@@ -105,7 +106,7 @@ curves exactly on deck's labels through zoom and pan, so the layer was rebuilt a
   shaders, forever a step behind the engine. A key list deriving the sublayer props' names,
   types and defaults from `GraphConfig` was prototyped; it removes the duplication of names,
   not of shaders.
-- **Expose `GraphConfig` on the old layer.** About 36 of the 40 rendering keys would have
+- **Expose `GraphConfig` on the old layer.** Most of its rendering keys would have
   type-checked and silently done nothing.
 - **Keep both renderers in the package.** Two layers with different capabilities invite the
   same confusion the sublayers caused; the custom one is better as example code.
