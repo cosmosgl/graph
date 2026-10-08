@@ -384,11 +384,13 @@ describes existed first as a running prototype in the Integrations stories:
 | --- | --- | --- |
 | **Phase 1: `CosmosLayout`** — hidden canvas, throttled `getPointPositions()`, `snapshotIntervalMs`, final-snapshot "calculate-then-render" mode | **CPU readback story** — headless graph on its own hidden device, 100 ms-throttled `getPointPositionsAsync(out)`, final snapshot on `onSimulationEnd`, stock `ScatterplotLayer`/`LineLayer` | Stable ID↔index mapping, `GraphLayout` lifecycle translation, topology updates, bounds. The story already upgrades the RFC's sketch from `getPointPositions()` to the reusable-destination async API |
 | **Phase 2, option A** — deck-specific shaders sample the exported position resource | **Zero-copy story** — custom `CosmosPointsLayer`/`CosmosLinksLayer`, `texelFetch` by `gl_VertexID`, positions never leave the GPU | Production layer authoring: deck picking, shader modules, effects. The story is the texture-contract demo, not the layer |
-| **Phase 2, option B** — "a thin wrapper around an upstream `encode(renderPass)` method" | **Cosmos-rendering story** — `setViewTransform` + `drawToRenderPass` under deck's camera; full cosmos pipeline in a ~25-line layer | Nothing to build — but these draws can't join deck's picking pass, so the RFC's "picking returns original objects" criterion pushes production toward option A. That answers the RFC's open question 3 with running code |
+| **Phase 2, option B** — "a thin wrapper around an upstream `encode(renderPass)` method" | **Cosmos-rendering story** — `setViewTransform` + `drawToRenderPass` under deck's camera; full cosmos pipeline in a ~25-line layer | Nothing to build — ~~but these draws can't join deck's picking pass, so the RFC's "picking returns original objects" criterion pushes production toward option A. That answers the RFC's open question 3 with running code~~ *since delivered:* `drawToRenderPass` gained a `picking` option, so these draws join deck's pick pass, and `CosmosGraphLayer` is built on option B |
 
 *The "what remains deck-side" column has since been delivered:* `@cosmos.gl/deck-layers`
-ships option A as production layers (deck shader modules, picking by instance index,
-id↔index mapping, drag-to-pin) with `CosmosGraphLayer` on top.
+ships ~~option A as production layers (deck shader modules, picking by instance index,
+id↔index mapping, drag-to-pin) with `CosmosGraphLayer` on top~~ option B: `CosmosGraphLayer`
+draws with cosmos.gl's renderer and picks through its picking mode; option A lives on as the
+*Custom deck layers* story.
 
 ### The RFC's production acceptance criteria, today
 
