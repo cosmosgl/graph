@@ -14,10 +14,10 @@ import bigGraphRaw from './big-graph?raw'
 import miniGraphsRaw from './mini-graphs?raw'
 import graphOnMapRaw from './graph-on-map?raw'
 import customDeckLayersRaw from './custom-deck-layers?raw'
-import cosmosPointsLayerRaw from './custom-deck-layers/cosmos-points-layer?raw'
-import cosmosPointsLayerUniformsRaw from './custom-deck-layers/cosmos-points-layer-uniforms?raw'
-import cosmosLinksLayerRaw from './custom-deck-layers/cosmos-links-layer?raw'
-import cosmosLinksLayerUniformsRaw from './custom-deck-layers/cosmos-links-layer-uniforms?raw'
+import pointsLayerRaw from './custom-deck-layers/points-layer?raw'
+import pointsLayerUniformsRaw from './custom-deck-layers/points-layer-uniforms?raw'
+import linksLayerRaw from './custom-deck-layers/links-layer?raw'
+import linksLayerUniformsRaw from './custom-deck-layers/links-layer-uniforms?raw'
 import blendParametersRaw from './custom-deck-layers/blend-parameters?raw'
 import styleRaw from './style.css?raw'
 
@@ -92,10 +92,10 @@ export const CustomDeckLayers: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: customDeckLayersRaw },
-      { name: 'CosmosPointsLayer', code: cosmosPointsLayerRaw },
-      { name: 'cosmos-points-layer-uniforms', code: cosmosPointsLayerUniformsRaw },
-      { name: 'CosmosLinksLayer', code: cosmosLinksLayerRaw },
-      { name: 'cosmos-links-layer-uniforms', code: cosmosLinksLayerUniformsRaw },
+      { name: 'PointsLayer', code: pointsLayerRaw },
+      { name: 'points-layer-uniforms', code: pointsLayerUniformsRaw },
+      { name: 'LinksLayer', code: linksLayerRaw },
+      { name: 'links-layer-uniforms', code: linksLayerUniformsRaw },
       { name: 'blend-parameters', code: blendParametersRaw },
       { name: 'style.css', code: styleRaw },
       { name: 'generate-mesh-data', code: generateMeshDataRaw },

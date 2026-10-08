@@ -4,14 +4,14 @@ import { Model, Geometry } from '@luma.gl/engine'
 import type { PositionTextureSource } from '@cosmos.gl/graph'
 
 import { BLEND_PARAMETERS } from './blend-parameters'
-import { cosmosPointsUniforms } from './cosmos-points-layer-uniforms'
-import type { CosmosPointsProps } from './cosmos-points-layer-uniforms'
+import { pointsLayerUniforms } from './points-layer-uniforms'
+import type { PointsLayerModuleProps } from './points-layer-uniforms'
 
 const DEFAULT_POINT_COLOR: [number, number, number, number] = [74, 92, 191, 230]
 
 const vs = /* glsl */ `\
 #version 300 es
-#define SHADER_NAME cosmos-points-layer-vertex-shader
+#define SHADER_NAME points-layer-vertex-shader
 
 in vec3 positions;
 
@@ -35,7 +35,7 @@ void collapse() {
 
 void main(void) {
   int pointIndex = gl_InstanceID;
-  int textureSize = int(cosmosPoints.pointsTextureSize);
+  int textureSize = int(pointsLayer.pointsTextureSize);
   // Point i lives at texel (i % size, i / size) as [x, y, i, unused] in space coordinates
   vec4 pointPosition = texelFetch(positionsTexture, ivec2(pointIndex % textureSize, pointIndex / textureSize), 0);
 
@@ -49,7 +49,7 @@ void main(void) {
   geometry.pickingColor = instancePickingColors;
 
   // instanceSizes is a diameter; the quad expands by radius
-  outerRadiusPixels = project_size_to_pixel(instanceSizes * 0.5, cosmosPoints.sizeUnits);
+  outerRadiusPixels = project_size_to_pixel(instanceSizes * 0.5, pointsLayer.sizeUnits);
   // A non-positive size hides the point — and the edge-padding divide below
   // is undefined at zero. Written so NaN hides it too: NaN fails every comparison.
   if (!(outerRadiusPixels > 0.0)) {
@@ -74,7 +74,7 @@ void main(void) {
 
 const fs = /* glsl */ `\
 #version 300 es
-#define SHADER_NAME cosmos-points-layer-fragment-shader
+#define SHADER_NAME points-layer-fragment-shader
 
 precision highp float;
 
@@ -98,17 +98,20 @@ void main(void) {
 }
 `
 
-export type CosmosPointsLayerProps<DataT = unknown> = CosmosPointsLayerOwnProps<DataT> & LayerProps
+export type PointsLayerProps<DataT = unknown> = PointsLayerOwnProps<DataT> & LayerProps
 
-type CosmosPointsLayerOwnProps<DataT> = {
+type PointsLayerOwnProps<DataT> = {
   /**
    * One entry per simulation point, in point-index order: an array to run
    * accessors over, or `{ length }` when accessors are constants. The length
    * must equal the simulation's point count.
    */
   data: LayerDataSource<DataT>;
-  /** The simulation whose live position texture to sample. */
-  graph: PositionTextureSource;
+  /**
+   * Where point positions come from: a `GraphSimulation` or a `Graph`.
+   * The layer reads them from its live position texture on every draw.
+   */
+  positionSource: PositionTextureSource;
   /**
    * Point diameter accessor, in `pointSizeUnits`; `0` hides the point.
    * @default 4
@@ -126,7 +129,7 @@ type CosmosPointsLayerOwnProps<DataT> = {
   pointSizeUnits?: Unit;
 }
 
-const defaultProps: DefaultProps<CosmosPointsLayerProps> = {
+const defaultProps: DefaultProps<PointsLayerProps> = {
   getPointSize: { type: 'accessor', value: 4 },
   getPointColor: { type: 'accessor', value: DEFAULT_POINT_COLOR },
   pointSizeUnits: 'pixels',
@@ -141,16 +144,16 @@ const defaultProps: DefaultProps<CosmosPointsLayerProps> = {
  * instance index is the point index.
  *
  * Story code, not a package export: an example of a renderer of your own over
- * `PositionTextureSource`, with deck's picking, highlight and transitions.
+ * cosmos.gl's positions, with deck's picking, highlight and transitions.
  */
-export class CosmosPointsLayer<DataT = unknown> extends Layer<Required<CosmosPointsLayerOwnProps<DataT>>> {
-  public static layerName = 'CosmosPointsLayer'
+export class PointsLayer<DataT = unknown> extends Layer<Required<PointsLayerOwnProps<DataT>>> {
+  public static layerName = 'PointsLayer'
   public static defaultProps = defaultProps
 
   declare public state: { model?: Model }
 
   public getShaders (): ReturnType<Layer['getShaders']> {
-    return super.getShaders({ vs, fs, modules: [project32, picking, cosmosPointsUniforms] })
+    return super.getShaders({ vs, fs, modules: [project32, picking, pointsLayerUniforms] })
   }
 
   public initializeState (): void {
@@ -182,16 +185,16 @@ export class CosmosPointsLayer<DataT = unknown> extends Layer<Required<CosmosPoi
   }
 
   public draw (): void {
-    const positionInfo = this.props.graph.getPointPositionTexture()
+    const positionInfo = this.props.positionSource.getPointPositionTexture()
     const { model } = this.state
     if (!positionInfo || !model || positionInfo.pointCount === 0) return
 
-    const moduleProps: CosmosPointsProps = {
+    const moduleProps: PointsLayerModuleProps = {
       pointsTextureSize: positionInfo.textureSize,
       sizeUnits: UNIT[this.props.pointSizeUnits],
       positionsTexture: positionInfo.texture,
     }
-    model.shaderInputs.setProps({ cosmosPoints: moduleProps })
+    model.shaderInputs.setProps({ pointsLayer: moduleProps })
     model.draw(this.context.renderPass)
   }
 
