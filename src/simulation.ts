@@ -18,6 +18,7 @@ import { Store, ALPHA_MIN } from '@/graph/modules/Store'
 /**
  * A read-only view of the GPU point-position texture, for hosts (e.g. a deck.gl
  * layer) that sample positions directly instead of reading them back to the CPU.
+ * The texture lives on the simulation's device; sample it only from that device.
  * See `GraphSimulation.getPointPositionTexture()`.
  */
 export interface PointPositionTexture {
