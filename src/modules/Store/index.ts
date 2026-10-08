@@ -46,6 +46,10 @@ export class Store {
   public focusedPoint: Focused | undefined = undefined
   public draggingPointIndex: number | undefined = undefined
   public hoveredLinkIndex: number | undefined = undefined
+  /** The point a host hovers through `Graph.setHostHoveredPoint`; separate from the pointer's `hoveredPoint`. */
+  public hostHoveredPointIndex: number | undefined = undefined
+  /** The link a host hovers through `Graph.setHostHoveredLink`; separate from the pointer's `hoveredLinkIndex`. */
+  public hostHoveredLinkIndex: number | undefined = undefined
   public adjustedSpaceSize = defaultConfigValues.spaceSize
   public isSpaceKeyPressed = false
   public div: HTMLDivElement | undefined

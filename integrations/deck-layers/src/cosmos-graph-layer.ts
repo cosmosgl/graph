@@ -401,9 +401,10 @@ const NO_LINKS = new Float32Array(0)
  * Picking is deck's: in deck's pick pass cosmos.gl draws its picking colors
  * (an index per point and per link, hard-edged), so `pickable` gives hover and
  * click with `info.elementType`, `info.index` and, for array data, `info.object`.
- * `autoHighlight` lights the hovered point or link with cosmos.gl's own focus
- * ring and focused-link width (`config.focusedPointRingColor`,
- * `config.focusedLinkWidthIncrease`); `highlightColor` is not used.
+ * `autoHighlight` lights the hovered point or link with cosmos.gl's own hover
+ * ring and hovered-link width (`config.hoveredPointRingColor`,
+ * `config.hoveredLinkWidthIncrease`, `config.hoveredLinkColor`) and leaves focus
+ * to the application; `highlightColor` is not used.
  * `enablePointDrag` grabs a point and moves it, on a map as well.
  */
 export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends Layer<
@@ -438,11 +439,10 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     linksWarned?: boolean;
     draggedPointIndex: number | null;
     /**
-     * The element deck's auto-highlight has under the pointer. The focus keys the
-     * graph holds are derived from it and the app's `config` in one place
-     * (`_focusConfig`), so a config rebuild and a hover write agree.
+     * This layer's last auto-highlight write was a hover. Several layers may draw one
+     * graph, and the hover lives on the graph: only the layer holding it clears it.
      */
-    hovered: { type: 'point' | 'link'; index: number } | null;
+    holdsHover: boolean;
     animationHandle?: number;
   }
 
@@ -467,7 +467,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       linkCount: 0,
       keptLinks: null,
       draggedPointIndex: null,
-      hovered: null,
+      holdsHover: false,
       // Step the simulation exactly once per animation frame, independent of
       // draw passes (draw runs per viewport)
       animationHandle: timeline.attachAnimation({ setTime: (time) => this._onTimelineTick(time) }),
@@ -629,35 +629,23 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
   }
 
   /**
-   * deck's auto-highlight, through cosmos.gl's own emphasis: the hovered point gets
-   * the focus ring, the hovered link the focused-link width. deck's picking module
-   * has no model of ours to tint, so `highlightColor` does not apply.
+   * deck's auto-highlight, through cosmos.gl's own hover emphasis: the hovered point
+   * gets the hover ring, the hovered link the hovered-link width and color. It is the
+   * graph's host hover, so the graph's config — focus included — stays the
+   * application's. deck's picking module has no model of ours to tint, so
+   * `highlightColor` does not apply.
    */
   protected _updateAutoHighlight (info: PickingInfo): void {
     const { graph, isReady } = this.state
     if (!graph || !isReady) return
-    const picked = info as CosmosGraphPickingInfo
-    const type = info.picked && info.index >= 0 ? picked.elementType : undefined
+    const type = info.picked && info.index >= 0 ? (info as CosmosGraphPickingInfo).elementType : undefined
+    const pointIndex = type === 'point' ? info.index : undefined
+    const linkIndex = type === 'link' ? info.index : undefined
+    graph.setHostHoveredPoint(pointIndex)
+    graph.setHostHoveredLink(linkIndex)
     // A direct field write, as for a drag: hover state must not re-run the layer's update
-    this.state.hovered = type === 'point' || type === 'link' ? { type, index: info.index } : null
-    graph.setConfigPartial(this._focusConfig())
+    this.state.holdsHover = pointIndex !== undefined || linkIndex !== undefined
     this.setNeedsRedraw()
-  }
-
-  /**
-   * The focus keys the graph should hold: the hovered element while deck's
-   * auto-highlight has one, the app's own `focusedPointIndex` / `focusedLinkIndex`
-   * otherwise. The one source for both the config rebuild and the hover write, so
-   * neither overwrites the other: a config change mid-hover keeps the highlight,
-   * and leaving hands the app's focus back.
-   */
-  private _focusConfig (): Pick<GraphConfig, 'focusedPointIndex' | 'focusedLinkIndex'> {
-    const { hovered } = this.state
-    const { config } = this.props
-    return {
-      focusedPointIndex: hovered?.type === 'point' ? hovered.index : config?.focusedPointIndex,
-      focusedLinkIndex: hovered?.type === 'link' ? hovered.index : config?.focusedLinkIndex,
-    }
   }
 
   /**
@@ -715,11 +703,20 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     })
   }
 
-  /** Destroys a layer-created graph; a provided one is left to the application. */
+  /**
+   * Destroys a layer-created graph; a provided one is left to the application, without
+   * the hover this layer put on it. deck sends no leave to a layer it removes.
+   */
   private _releaseGraph (): void {
-    const { graph, providedGraph } = this.state
-    if (graph && !providedGraph) graph.destroy()
+    const { graph, providedGraph, holdsHover } = this.state
+    if (graph && providedGraph) {
+      if (holdsHover) {
+        graph.setHostHoveredPoint(undefined)
+        graph.setHostHoveredLink(undefined)
+      }
+    } else if (graph) graph.destroy()
     this.state.graph = undefined
+    this.state.holdsHover = false
   }
 
   /** The graph's space size — authoritative for a provided graph too. */
@@ -735,8 +732,6 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     const config: Partial<Record<keyof GraphConfig, unknown>> = { ...this.props.config }
     for (const key of DECK_OWNED_CONFIG_KEYS) delete config[key]
     config.pixelRatio = this._pixelRatio()
-    // The hovered element keeps its focus through a config rebuild
-    Object.assign(config, this._focusConfig())
     return config as GraphConfig
   }
 

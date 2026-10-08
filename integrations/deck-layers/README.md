@@ -86,9 +86,10 @@ new CosmosGraphLayer({
   per point and per link, hard-edged, dash gaps included — so `pickable` gives hover and
   click: `info.elementType` is `'point'` or `'link'`, `info.index` counts within that kind,
   and `info.object` is your original record for array data. `autoHighlight` lights the
-  hovered point or link with cosmos.gl's own focus ring and focused-link width
-  (`config.focusedPointRingColor`, `config.focusedLinkWidthIncrease`); deck's `highlightColor`
-  is not used.
+  hovered point or link with cosmos.gl's own hover ring and hovered-link width
+  (`config.hoveredPointRingColor`, `config.hoveredLinkWidthIncrease`,
+  `config.hoveredLinkColor`); focus (`focusedPointIndex`, `focusedLinkIndex`) stays yours.
+  deck's `highlightColor` is not used.
 - **Dragging** (`enablePointDrag: true`, with `pickable`): a drag grabs the point — pinned on
   grab, moved with the pointer, released per `unpinOnDragEnd`; `dragReheatAlpha` restarts the
   simulation at a low alpha so the graph responds around the moving point. View panning is

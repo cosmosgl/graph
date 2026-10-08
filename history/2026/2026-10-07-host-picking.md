@@ -2,7 +2,7 @@
 
 # Host picking: cosmos.gl draws picking colors for a host's pick pass
 
-**Commits:** `feat(points, links): a picking mode for a host's pick pass — drawToRenderPass draws index colors` (`ed15163`), `feat(deck-layers): deck picking, auto-highlight and drag through cosmos's picking mode` (`65a5c9e`)
+**Commits:** `feat(points, links): a picking mode for a host's pick pass — drawToRenderPass draws index colors` (`ed15163`), `feat(deck-layers): deck picking, auto-highlight and drag through cosmos's picking mode` (`65a5c9e`), `fix(deck-layers): autoHighlight hovers through the graph's host hover — the app's focus is never written` (<!-- TODO -->)
 
 ## Why
 
@@ -40,10 +40,17 @@ idea, so the engine gained a sibling mode rather than the layer a second rendere
   (blend off). Links are offset by the point count, so one layer carries both index spaces
   and `getPickingInfo` splits them again into `elementType` and an index within the kind,
   with `object` for array data.
-- **`autoHighlight`** maps onto cosmos's own emphasis: the hovered point gets the focus ring,
-  the hovered link the focused-link width, through `setConfigPartial({ focusedPointIndex,
-  focusedLinkIndex })`. deck's `highlightColor` tints through its picking shader module, which
-  cosmos's shaders do not include; `config.focusedPointRingColor` is the knob.
+- **`autoHighlight`** maps onto cosmos's own hover emphasis: the hovered point gets the hover
+  ring, the hovered link the hovered-link width and color, through the engine's host hover
+  (`setHostHoveredPoint` / `setHostHoveredLink`). That hover lives in store fields of its own,
+  apart from the pointer hover a canvas `Graph` picks, so it fires no mouse callbacks; the
+  ring draws whatever `renderHoveredPointRing` says, as that flag gates only the pointer
+  hover. deck's `highlightColor` tints through its picking shader module, which cosmos's
+  shaders do not include; `config.hoveredPointRingColor` is the knob.
+  The first cut wrote the hover into `focusedPointIndex` / `focusedLinkIndex`. Focus is the
+  application's state, though: on a graph the app passed in, every hover erased the app's
+  focus, and a click that selected the hovered point was undone on leave. Hover is
+  transient and focus is chosen, so they live apart, and the graph's config stays the app's.
 - **Drag-to-pin is back**, and works on a map now: the pointer maps to space by inverting
   the view the layer derives for the viewport the pointer is in — the same derivation
   `draw` hands cosmos — so it holds under a map as well as an orthographic view; the 3.5.0

@@ -15,7 +15,7 @@ pass under deck's camera, so every cosmos.gl rendering option works through
 | `simulation: GraphSimulation` (provided) | `graph: Graph` — a headless `new Graph(null, config, devicePromise)` on deck's device |
 | `onSimulationCreated(simulation)` | `onGraphCreated(graph)` |
 | `pointSizeUnits`, `linkWidthUnits` | removed — sizes are cosmos.gl's (`scalePointsOnZoom`, `pointSizeScale`, `linkWidthScale`) |
-| `autoHighlight` with `highlightColor` | `autoHighlight` lights the hovered element with cosmos.gl's focus ring / focused-link width; `highlightColor` is not used — set `config.focusedPointRingColor` |
+| `autoHighlight` with `highlightColor` | `autoHighlight` lights the hovered element with cosmos.gl's hover ring / hovered-link width; `highlightColor` is not used — set `config.hoveredPointRingColor`, `config.hoveredLinkColor` |
 | `enablePointDrag` on a map | works now: the drag goes through cosmos.gl's own screen → space inverse |
 | `transitions` on accessors | no effect — a headless `Graph` applies changes at once |
 | `_subLayerProps`, `highlightedObjectIndex` | no sublayers to address |

@@ -1234,6 +1234,8 @@ export class Lines extends CoreModule {
   private getDrawUniforms (): Parameters<NonNullable<typeof this.drawLineUniformStore>['setUniforms']>[0] {
     const { config, store } = this
     const hasHighlighting = config.highlightedLinkIndices !== undefined
+    // One hovered link is drawn: a host's, when it set one, else the pointer's
+    const hoveredLinkIndex = store.hostHoveredLinkIndex ?? store.hoveredLinkIndex ?? -1
     return {
       drawLineUniforms: {
         transformationMatrix: store.transformationMatrix4x4,
@@ -1251,7 +1253,7 @@ export class Lines extends CoreModule {
         scaleLinksOnZoom: config.scaleLinksOnZoom ? 1 : 0,
         maxPointSize: store.maxPointSize,
         renderMode: 0.0, // Normal rendering
-        hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
+        hoveredLinkIndex,
         hoveredLinkWidthIncrease: config.hoveredLinkWidthIncrease,
         isLinkHighlightingActive: hasHighlighting ? 1 : 0,
         linkStatusTextureSize: this.linkStatusTextureSize,
@@ -1272,7 +1274,7 @@ export class Lines extends CoreModule {
         linkDashLength: config.linkDashLength,
         linkDashGap: config.linkDashGap,
         linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
-        hoveredLinkIndex: store.hoveredLinkIndex ?? -1,
+        hoveredLinkIndex,
         hoveredLinkColor: ensureVec4(store.hoveredLinkColor, [-1, -1, -1, -1]),
         linkBlending: config.linkBlending ? 1 : 0,
       },
