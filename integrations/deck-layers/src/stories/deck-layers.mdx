@@ -140,7 +140,7 @@ new CosmosGraphLayer({
   autoHighlight: true,
   onClick: (info) => console.log(info.elementType, info.index, info.object), // 'point' | 'link'
   enablePointDrag: true,
-  dragReheatAlpha: 0.1,   // energy the graph gets when a drag starts; null leaves it still
+  dragReheatAlpha: 0.1,   // energy the graph gets when a drag starts; null leaves the simulation as it is
   unpinOnDragEnd: true,   // false keeps the point pinned where it was dropped
   onPointDragEnd: (info) => console.log('dropped', info.index), // also onPointDragStart, onPointDrag
 })

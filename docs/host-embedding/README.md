@@ -8,7 +8,7 @@ the host's camera — with deck.gl as the worked example.
 
 | files | code diff | new public APIs | unit tests | stories | breaking change |
 | --- | --- | --- | --- | --- | --- |
-| ~~51~~ 62 | ~~+12,777 / −17,128~~ +16,910 / −17,415 | 10 + ~~a package~~ a class and a package | ~~35~~ 92 (real WebGL 2, in CI) | ~~2~~ 4 (deck.gl) | 1 (luma.gl → peer) |
+| ~~51~~ 62 | ~~+12,777 / −17,128~~ +16,910 / −17,415 | 10 + ~~a package~~ a class and a package | ~~35~~ ~~92~~ 96 (real WebGL 2, in CI) | ~~2~~ ~~4~~ 5 (deck.gl) | 1 (luma.gl → peer) |
 
 > A rendered version of this document with figures lives next to this file:
 > [`host-embedding.html`](./host-embedding.html).
@@ -41,10 +41,14 @@ place. The headline changes:
 - **`GraphSimulation` was extracted** as a standalone exported class (`feat(simulation): extract GraphSimulation`);
   `Graph` composes it, and the package builds on it.
 - The package delivers what this document called "the integrating side's work":
-  `CosmosGraphLayer` (a composite that owns its simulation, steps it from deck's
+  `CosmosGraphLayer` (~~a composite that owns its simulation, steps it from deck's
   timeline, takes object or binary data, and implements picking with original
   objects and drag-to-pin, or renders an app-provided simulation) over internal
-  points/links sublayers on deck's shader-module system — positions still zero-copy.
+  points/links sublayers on deck's shader-module system~~ a primitive deck layer that owns
+  a headless `Graph`, or draws an app-provided one, steps it from deck's timeline, takes
+  object or binary data, and lets cosmos.gl's own renderer draw into deck's pass under
+  deck's camera, picking with original objects, hover and drag-to-pin included; the former
+  sublayers live on as the *Custom deck layers* story) — positions still zero-copy.
   Hosts writing their own renderer type against `PositionTextureSource`, exported by
   `@cosmos.gl/graph`.
 - Of the five open items below: **all five are fixed** — the async snapshot fence
@@ -55,7 +59,8 @@ place. The headline changes:
   simulation holds and never writes into it, a layer with `points` loads them only after
   it has checked the device, and a simulation steps once per frame however many layers
   draw it. Binary links take `{ pairs, attributes }`.
-- **The stories are now three** — Graph layer, Big graph, Your own simulations — with a
+- **The stories are now ~~three~~ five** — Graph layer, Big graph, ~~Your own simulations~~
+  Mini graphs, Graph on a map, Custom deck layers — with a
   guide page under Integrations / deck.gl. The three stories this document describes
   below are gone: the zero-copy one became the layer, and the other two were removed
   when the set was focused on it. Their APIs stay, covered by tests.
@@ -226,10 +231,14 @@ links, arrows — two methods let cosmos draw *inside* the host's frame:
 
 - `drawToRenderPass(renderPass, {points?, links?})` records the point and link draws into
   a host-owned pass without clearing, ending, or submitting it. The internal renderer now
-  routes through the same method, so there is one draw path, not two.
+  routes through the same method, so there is one draw path, not two. With `picking`
+  (`{ alpha, linkIndexOffset }`) it draws index colors for a host's pick pass instead.
 - `setViewTransform({k, x, y}, screenSize?)` injects the host's camera through the exact
   code path the interactive zoom uses, so picking, point-radius scaling, and the
   space↔screen conversions all stay consistent.
+- `setHostHoveredPoint(index?)` / `setHostHoveredLink(index?)` light cosmos's hover ring and
+  hovered-link width for an element the host picked itself, apart from cosmos's pointer
+  hover and from the app's focus.
 
 The transform contract is documented as a formula and asserted by a unit test — with
 `S = spaceSize`, `[w, h] = screenSize`, a point at space position `(spaceX, spaceY)` lands
@@ -277,7 +286,7 @@ Verified: `npm ls @luma.gl/core` resolves a single deduped 9.3.6 for cosmos + de
 auto-install-peers — add the four `@luma.gl/*` packages explicitly, at `~9.3.0`. CDN/UMD users —
 nobody. Full instructions live in `migration-notes.md` under "Migrating to v3.5".
 
-## Proof: ~~three architectures, thirteen tests~~ four stories, 92 tests
+## Proof: ~~three architectures, thirteen tests~~ ~~four~~ five stories, ~~92~~ 96 tests
 
 *`feat(stories): deck.gl integration examples` — `test: host-embedding unit
 tests on real WebGL 2`*
@@ -294,17 +303,18 @@ running on a real WebGL 2 context in headless Chromium.
 
 *Since superseded:* the prototype stories consolidated into `@cosmos.gl/deck-layers`'s
 ~~two~~ four `CosmosGraphLayer` stories (~~zero-copy flagship and object-data mode~~ the
-layer, the layer at scale, your own simulations, a graph on a map); the
+layer, the layer at scale, ~~your own simulations~~ mini graphs, a graph on a map), plus
+*Custom deck layers*, the former sublayers as story code; the
 render-pass and readback prototypes retired in the story audit, their patterns kept in
 the package README and this document.
 
-The test suite (`pnpm test`, ~~35~~ 92 passing, now a CI step) covers the headless lifecycle, snapshot
+The test suite (`pnpm test`, ~~35~~ ~~92~~ 96 passing, now a CI step) covers the headless lifecycle, snapshot
 equivalence, the texture/version contract, sparse updates and pinning, absent-point NaN
 semantics, view injection against the documented formula, external scheduling to
 completion, and a regression test that enables blending on a raw shared context and proves
 the simulation survives 5 steps with a pinned, sparse-moved point exactly in place. Lint
 and build pass; a shared-device stress check keeps all 10,000 index channels intact across
-100 interleaved steps. **Update:** the 92 tests run in four files — host embedding, the
+100 interleaved steps. **Update:** the ~~92~~ 96 tests run in four files — host embedding, the
 standalone simulation, the deck layer (picking, drag, stepping, the data rules), and point
 tracking — and `pnpm run typecheck` gates the whole repo beside them.
 
@@ -342,7 +352,7 @@ shipped signatures.
 | 2 | External frame scheduling | delivered | `enableRenderLoop: false`, `step()`, `renderOneFrame()`; no perpetual loop survives |
 | 3 | Optional DOM / canvas ownership | delivered | Headless never adopts, reparents, clears, submits, or resizes; ownership rules explicit per mode |
 | 4 | Read-only GPU position resource | delivered | `getPointPositionTexture()` with texel layout, ownership, ping-pong + `version` contract on the exported type |
-| 5 | Host render pass | delivered | `drawToRenderPass(pass, {points?, links?})` — no clear, end, or submit; points/links separable |
+| 5 | Host render pass | delivered | `drawToRenderPass(pass, {points?, links?})` — no clear, end, or submit; points/links separable; a `picking` option draws index colors for a host's pick pass |
 | 6 | Efficient snapshots | delivered | `Float32Array` + caller-provided `out` + async variant + documented sync stall; the async path honors its no-stall claim through a fence (open item 1) |
 | 7 | Indexed mutation and pinning | delivered | `setPointPosition`, `setPointPositionsByIndices`, `setPinnedPoint` — the RFC's proposed operations; its `setPointPinned` ships as `setPinnedPoint`, paired with `setPinnedPoints` |
 | 8 | luma.gl dependency alignment | delivered | Peers at ~~`^9.3.0`~~ `~9.3.0`, single deduped install verified; ~~the range deliberately excludes the luma 9.4 *prerelease* line (semver ranges don't match foreign prereleases) and will cover stable 9.4 with no cosmos release~~ stable 9.4 shipped on 2026-09-05 and the caret range let npm place it beside deck 9.3's luma 9.3 (two copies), so the range now names the tested line and widens with a verified release |
@@ -357,7 +367,7 @@ Where the RFC sketched concrete code, the deliberate divergences are the interes
 | `new GraphSimulation(device, cfg)` · `simulation.initialize()` · `simulation.step()` · `simulation.destroy()` | `new Graph(null, cfg, device?)` · `graph.render()` · `graph.step()` · `graph.destroy()` | One class, two modes, instead of a second class. Same five-call lifecycle (`initialize()` ≈ `render()`); the extraction was deferred until a real consumer shaped the boundary — and has since shipped as `GraphSimulation` (`feat(simulation): extract GraphSimulation`) |
 | "an option that disables the internal `requestAnimationFrame` loop"; host calls one sim step and optionally one render op | `enableRenderLoop: false` + `step()` + `renderOneFrame()` | Exceeds the ask: runtime-toggleable via `setConfig`, and the simulation-end check travels with the clock so `onSimulationEnd` fires under any scheduler |
 | `{texture, pointCount, `**`width, height`**`, version}`; document texel format, coordinate convention, ownership, ping-pong observation | `{texture, pointCount, `**`textureSize`**`, version}` on the exported `PointPositionTexture` type | The texture is always square, so one field encodes the invariant two would obscure. Every documentation clause the RFC listed is on the type; the optional buffer form is deferred with WebGPU |
-| a method recording draws into a supplied `RenderPass`; "separately configurable point and link rendering" | `drawToRenderPass(pass, {points?, links?})` — plus `setViewTransform({k, x, y}, screenSize?)` | Exact match, and the internal renderer now routes through the same method. `setViewTransform` wasn't asked for by name, but the RFC's "thin wrapper around an upstream encode(renderPass)" needs a camera — shipped with a documented, unit-tested formula |
+| a method recording draws into a supplied `RenderPass`; "separately configurable point and link rendering" | `drawToRenderPass(pass, {points?, links?})` — plus `setViewTransform({k, x, y}, screenSize?)`, and later a `picking` option and the host-hover setters | Exact match, and the internal renderer now routes through the same method. `setViewTransform` wasn't asked for by name, but the RFC's "thin wrapper around an upstream encode(renderPass)" needs a camera — shipped with a documented, unit-tested formula |
 | snapshots: `Float32Array` return; optional destination; "an asynchronous readback option where supported"; document the sync stall | `getPointPositionsArray(out?)` · `getPointPositionsAsync(out?)` · stall documented on `getPointPositions()` | All four clauses shipped in shape. The async path's no-stall behavior is honored through a fence (open item 1) — the RFC's "where supported" hedge was the wiser wording until it landed |
 | "Possible operations include `setPointPosition`, `setPointPinned`, and a batched sparse update API" | `setPointPosition(i, x, y)` · `setPinnedPoint(i, bool)` · `setPointPositionsByIndices(ids, xy)` | The proposed operations; `setPointPinned` ships as `setPinnedPoint` to pair with `setPinnedPoints`. Semantics specified beyond the ask: live-state writes on the drag path, input arrays never modified, absent points never resurrected, mismatched pairs rejected whole |
 | luma: move to peers **or** publish a documented compatibility range | Both: `peerDependencies` ~~`^9.3.0`~~ `~9.3.0`, documented in README + migration notes | The "or" became "and". ~~The range deliberately excludes the 9.4 prerelease line and admits stable 9.4 automatically~~ The range names the tested 9.3 line; admitting 9.4 automatically produced two luma copies next to deck 9.3 once 9.4 shipped |

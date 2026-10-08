@@ -83,8 +83,8 @@ Requires Node ≥ 22, pnpm ≥ 10 (the repo is a pnpm workspace: the root is the
 - `pnpm run watch` — rebuild on change.
 - `pnpm run lint` — ESLint over `src` (`lint-staged` runs on commit).
 - `pnpm test` — the vitest browser suite (real WebGL 2 in headless Chromium): engine host-embedding
-  contracts and the deck-layers runtime tests (data loading, the view handed to cosmos, config,
-  simulation stepping).
+  contracts and the deck-layers runtime tests (data loading and style channels, the view handed
+  to cosmos, config, simulation stepping, picking, hover and drag).
 - `pnpm run typecheck` — `tsc --noEmit` over everything we author, stories and `test/` included
   (the base `tsconfig.json` drives declaration emit, so it is scoped to what ships and excludes
   `src/stories`; `tsconfig.typecheck.json` widens the program). **Ensure the project lints,

@@ -2,7 +2,7 @@
 
 # Host picking: cosmos.gl draws picking colors for a host's pick pass
 
-**Commits:** `feat(points, links): a picking mode for a host's pick pass — drawToRenderPass draws index colors` (`ed15163`), `feat(deck-layers): deck picking, auto-highlight and drag through cosmos's picking mode` (`65a5c9e`), `fix(deck-layers): autoHighlight hovers through the graph's host hover — the app's focus is never written` (<!-- TODO -->)
+**Commits:** `feat(points, links): a picking mode for a host's pick pass — drawToRenderPass draws index colors` (`ed15163`), `feat(deck-layers): deck picking, auto-highlight and drag through cosmos's picking mode` (`65a5c9e`), `fix(deck-layers): autoHighlight hovers through the graph's host hover — the app's focus is never written` (`b9babaf`)
 
 ## Why
 
@@ -77,7 +77,8 @@ idea, so the engine gained a sibling mode rather than the layer a second rendere
 - **Tests.** The engine suite draws the picking pass into an RGBA8 target and reads it back:
   `[1,0,0,a]`, `[2,0,0,a]` at the two points, `[3,0,0,a]` on the link with an offset of 2,
   zeros just outside the point's hard edge. The deck suite picks points and links through
-  `deck.pickObject`, follows a moved point, checks `autoHighlight`'s focus keys, and drags.
+  `deck.pickObject`, follows a moved point, checks `autoHighlight`'s host hover and that the
+  app's focus stays, and drags.
 - **Soft edges are not picked.** deck's own layers pick wherever a fragment is not
   discarded, which includes their anti-aliasing fringe; cosmos picks the half-coverage
   outline. The difference is under a pixel.
