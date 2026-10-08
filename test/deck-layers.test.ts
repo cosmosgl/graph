@@ -410,6 +410,25 @@ describe('CosmosGraphLayer', () => {
     }
   })
 
+  it('rescales points it loads into a provided graph by the graph\'s own config', async () => {
+    const { deck, container, devicePromise } = createDeckDevice()
+    const provided = new Graph(null, { ...STATIC, rescalePositions: true }, devicePromise)
+    // The engine rescales in place, into the array it was given: compare to a snapshot
+    const input = POSITIONS.slice()
+    try {
+      await provided.ready
+      deck.setProps({
+        layers: [new CosmosGraphLayer({ id: 'graph', graph: provided, points: { length: 3, initialPositions: POSITIONS.slice() } })],
+      })
+      await waitUntil(() => provided.getPointPositionsArray().length === 6, 'the load')
+      expect(Array.from(provided.getPointPositionsArray())).not.toEqual(Array.from(input))
+    } finally {
+      deck.finalize()
+      container.remove()
+      provided.destroy()
+    }
+  })
+
   it('takes cosmos\'s config: rendering keys reach the graph, a dropped key returns to default, deck\'s keys are stripped', async () => {
     let graph: Graph | undefined
     const graphLayer = (config: CosmosGraphLayerConfig): CosmosGraphLayer => new CosmosGraphLayer({

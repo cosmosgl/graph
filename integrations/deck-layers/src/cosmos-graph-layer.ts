@@ -992,8 +992,8 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       if (firstLoad || this.state.loadedPairs !== NO_LINKS) pairs = NO_LINKS
     }
 
-    // Positions are space coordinates by contract: not rescaled unless the config asks
-    if (positions) graph.setPointPositions(positions, this.props.config?.rescalePositions === undefined ? true : undefined)
+    // Positions are space coordinates by contract: not rescaled unless the graph's config asks
+    if (positions) graph.setPointPositions(positions, graph.config.rescalePositions === undefined ? true : undefined)
     if (pairs) graph.setLinks(pairs)
     // Styles: deck accessors and attributes, as cosmos's arrays. A channel the app gives
     // follows a reload (the count may have changed) and its own accessor; a channel it
