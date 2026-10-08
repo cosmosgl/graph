@@ -22,10 +22,10 @@ const SCHEMES: [number, number, number, number][][] = [
  * `CosmosGraphLayer` the deck.gl way: the layer owns the graph, the
  * application talks to deck.gl. Clusters of `{ id, group }` records, links by
  * id, accessors for color and size, labels on the hubs from a stock
- * `TextLayer`, hover reporting the picked record, drag-to-pin. The actions
- * pause and reheat through the `Graph` handle, add
- * and remove clusters (a data change keeps the surviving layout through
- * `getPointPosition`), and recolor through `updateTriggers`.
+ * `TextLayer`, hover reporting the picked record, a point drag that pins
+ * while held and releases on drop. The actions pause and reheat through the
+ * `Graph` handle, add and remove clusters (a data change keeps the surviving
+ * layout through `getPointPosition`), and recolor through `updateTriggers`.
  */
 export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () => void }> => {
   const div = document.createElement('div')

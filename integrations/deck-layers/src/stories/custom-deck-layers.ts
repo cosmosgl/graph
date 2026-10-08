@@ -49,7 +49,7 @@ export const customDeckLayers = async (): Promise<{ div: HTMLDivElement; destroy
   const devicePromise = new Promise<Device>((resolve) => {
     deck = new Deck({
       parent: div,
-      views: new OrthographicView(),
+      views: new OrthographicView({ flipY: false }), // cosmos's space has y up
       initialViewState: { target: [spaceSize / 2, spaceSize / 2, 0], zoom: -2, minZoom: -5, maxZoom: 2 },
       controller: true,
       pickingRadius: 5,
