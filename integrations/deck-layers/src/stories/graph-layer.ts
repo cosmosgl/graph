@@ -111,6 +111,7 @@ export const graphLayer = async (): Promise<{ div: HTMLDivElement; destroy: () =
       updateTriggers: { getPointColor: schemeIndex },
       config: {
         spaceSize,
+        linkDefaultColor: 'rgba(94, 115, 194, 0.25)',
         simulationGravity: 0.3,
         simulationRepulsion: 1.5,
         simulationLinkDistance: 8,

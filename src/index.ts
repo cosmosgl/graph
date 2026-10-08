@@ -393,6 +393,8 @@ export class Graph implements PositionTextureSource {
    * @param {Float32Array} pointColors - A Float32Array representing the colors of points in the format [r1, g1, b1, a1, r2, g2, b2, a2, ..., rn, gn, bn, an],
    * where each color is represented in RGBA format.
    * Example: `new Float32Array([1, 0, 0, 1, 0, 1, 0, 1])` sets the first point to red and the second point to green.
+   * An array whose length does not match the point count is ignored: every channel then
+   * resolves as `NaN` does (see the note). Pass an empty array to go back to the defaults.
    * @note A `NaN` channel resolves to the config default for a normal point, or to the exit default
    * (transparent) for an **absent** point (one whose position is `NaN`) — letting you control how a
    * removed point fades out (see `setPointPositions`).
@@ -434,6 +436,8 @@ export class Graph implements PositionTextureSource {
    * @param {Float32Array} pointSizes - A Float32Array representing the sizes of points in the format [size1, size2, ..., sizen],
    * where `n` is the index of the point.
    * Example: `new Float32Array([10, 20, 30])` sets the first point to size 10, the second point to size 20, and the third point to size 30.
+   * An array whose length does not match the point count is ignored: every size then
+   * resolves as `NaN` does (see the note). Pass an empty array to go back to the defaults.
    * @note A `NaN` size resolves to the config default for a normal point, or to the exit default (`0`)
    * for an **absent** point (one whose position is `NaN`) — letting you control how a removed point
    * fades out (see `setPointPositions`).
@@ -562,6 +566,8 @@ export class Graph implements PositionTextureSource {
    * @param {Float32Array} linkColors - A Float32Array representing the colors of links in the format [r1, g1, b1, a1, r2, g2, b2, a2, ..., rn, gn, bn, an],
    * where each color is in RGBA format.
    * Example: `new Float32Array([1, 0, 0, 1, 0, 1, 0, 1])` sets the first link to red and the second link to green.
+   * An array whose length does not match the link count is ignored: every link draws
+   * `config.linkDefaultColor`. Pass an empty array to go back to the default.
    */
   public setLinkColors (linkColors: Float32Array): void {
     if (this._isDestroyed) return
@@ -588,6 +594,8 @@ export class Graph implements PositionTextureSource {
    * @param {Float32Array} linkWidths - A Float32Array representing the widths of links in the format [width1, width2, ..., widthn],
    * where `n` is the index of the link.
    * Example: `new Float32Array([1, 2, 3])` sets the first link to width 1, the second link to width 2, and the third link to width 3.
+   * An array whose length does not match the link count is ignored: every link draws
+   * `config.linkDefaultWidth`. Pass an empty array to go back to the default.
    */
   public setLinkWidths (linkWidths: Float32Array): void {
     if (this._isDestroyed) return

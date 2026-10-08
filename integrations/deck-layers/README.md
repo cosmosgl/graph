@@ -70,7 +70,9 @@ new CosmosGraphLayer({
   goes back to the engine default.
 - **Colors** follow the deck.gl convention in accessors: RGBA channels in 0..255, converted
   for cosmos. Sizes and widths are in cosmos.gl's units (`scalePointsOnZoom`,
-  `pointSizeScale`, `linkWidthScale`).
+  `pointSizeScale`, `linkWidthScale`). An accessor you leave out sends nothing: every
+  element then draws the config key instead (`pointDefaultColor`, `pointDefaultSize`,
+  `linkDefaultColor`, `linkDefaultWidth`), or cosmos.gl's default when that is left out too.
 - **Binary styling**: in binary mode, `points.attributes` and `links.attributes` take typed
   arrays keyed by the accessor they replace — `getPointColor`, `getPointSize`, `getLinkColor`,
   `getLinkWidth`. A `Float32Array` is cosmos.gl's own form (colors in 0..1) and reaches the
