@@ -1,6 +1,6 @@
 {
   "name": "@cosmos.gl/deck-layers",
-  "version": "3.5.0",
+  "version": "3.5.1",
   "description": "A deck.gl layer that runs and draws a cosmos.gl graph — cosmos.gl's own renderer under deck's camera, on a shared luma.gl device",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
