@@ -196,7 +196,7 @@ NaN, and the handle changes as the simulation ping-pongs, so re-fetch it wheneve
 changes.
 
 The *Custom deck layers* story is the worked example: a standalone `GraphSimulation` on deck's
-device, drawn by two deck layers of its own (`CosmosPointsLayer`, `CosmosLinksLayer` in the
+device, drawn by two deck layers of its own (`PointsLayer`, `LinksLayer` in the
 story's sources) that `texelFetch` the texture by instance index — with binary attributes,
 deck's attribute transitions and `highlightColor`, hover and a drag that pins the grabbed
 point. They are example code, not package exports: copy them and make them yours.

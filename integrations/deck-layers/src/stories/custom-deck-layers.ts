@@ -2,10 +2,11 @@ import { Deck, OrthographicView } from '@deck.gl/core'
 import type { PickingInfo } from '@deck.gl/core'
 import type { Device } from '@luma.gl/core'
 import { GraphSimulation, defaultConfigValues } from '@cosmos.gl/graph'
+import type { GraphSimulationConfig } from '@cosmos.gl/graph'
 
 import { generateMeshData } from '@/graph/stories/generate-mesh-data'
-import { CosmosPointsLayer } from './custom-deck-layers/cosmos-points-layer'
-import { CosmosLinksLayer } from './custom-deck-layers/cosmos-links-layer'
+import { PointsLayer } from './custom-deck-layers/points-layer'
+import { LinksLayer } from './custom-deck-layers/links-layer'
 import './style.css'
 
 /**
@@ -60,8 +61,7 @@ export const customDeckLayers = async (): Promise<{ div: HTMLDivElement; destroy
     })
   })
 
-  // The simulation alone: no rendering of its own, on deck's device
-  const simulation = new GraphSimulation({
+  const config: GraphSimulationConfig = {
     spaceSize,
     simulationGravity: 0.15,
     simulationRepulsion: 0.5,
@@ -77,7 +77,9 @@ export const customDeckLayers = async (): Promise<{ div: HTMLDivElement; destroy
       deck.setProps({ _animate: false })
       setStatus()
     },
-  }, devicePromise)
+  }
+  // The simulation alone: no rendering of its own, on deck's device
+  const simulation = new GraphSimulation(config, devicePromise)
   simulation.setPointPositions(data.pointPositions)
   simulation.setLinks(data.links)
   simulation.applyData()
@@ -86,10 +88,10 @@ export const customDeckLayers = async (): Promise<{ div: HTMLDivElement; destroy
   let dragged: number | null = null
   const stopPanning = (event: { stopImmediatePropagation?: () => void }): void => { event.stopImmediatePropagation?.() }
 
-  const layers = (): (CosmosPointsLayer | CosmosLinksLayer)[] => [
-    new CosmosLinksLayer({
+  const layers = (): (PointsLayer | LinksLayer)[] => [
+    new LinksLayer({
       id: 'links',
-      graph: simulation,
+      positionSource: simulation,
       // The pair array, read in place as two interleaved attributes
       data: {
         length: linkCount,
@@ -105,9 +107,9 @@ export const customDeckLayers = async (): Promise<{ div: HTMLDivElement; destroy
       highlightColor: [255, 255, 255, 200],
       onHover: (info: PickingInfo): void => { if (info.index >= 0) hover.textContent = `link ${info.index}` },
     }),
-    new CosmosPointsLayer({
+    new PointsLayer({
       id: 'points',
-      graph: simulation,
+      positionSource: simulation,
       data: {
         length: pointCount,
         attributes: {

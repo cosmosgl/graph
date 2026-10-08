@@ -62,16 +62,14 @@ curves exactly on deck's labels through zoom and pan, so the layer was rebuilt a
   Picking followed the same day — see [host picking](2026-10-07-host-picking.md).
 - **Unpositioned points are seeded from the graph's RNG**, so `config.randomSeed` reproduces
   a layout; 3.5.0 used `Math.random`.
-- **The sublayers moved to a story.** `cosmos-points-layer.ts`, `cosmos-links-layer.ts`, their
+- **The sublayers moved to a story.** `points-layer.ts`, `links-layer.ts`, their
   uniform modules and `blend-parameters.ts` live in
   `integrations/deck-layers/src/stories/custom-deck-layers/`, as the example of a renderer
   of your own over `PositionTextureSource` — with deck's picking, `autoHighlight` and a
-  drag, which the package no longer has. The links layer gained the engine's curve on the
-  way (`conicParametricCurveModule`, a strip of quads along it), so it shows curves too.
-- **Two engine exports for hosts**, both backward compatible: `Graph.simulation` is public
-  (the `GraphSimulation` a graph runs, for a host that wants the simulation's own API), and
-  `conicParametricCurveModule` is exported so a renderer of its own draws the engine's curve
-  rather than a copy of it.
+  drag, which the package no longer has. The links layer draws straight links with its own
+  shader: a renderer of your own takes positions from cosmos.gl, not its rendering code.
+- **`Graph.simulation` is public**, a backward-compatible addition: the `GraphSimulation` a
+  graph runs, for a host that wants the simulation's own API.
 
 ## Example
 
