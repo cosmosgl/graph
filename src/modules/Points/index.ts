@@ -1972,9 +1972,14 @@ export class Points extends CoreModule implements PointTrackerHost {
     }
 
     // Hover rings: the pointer's while renderHoveredPointRing is on, a host's always,
-    // one ring where both name the same point. The focus ring draws over them
+    // one ring where both name the same point. The focus ring draws over them. A host's
+    // index draws only while it names a current point, as the pointer's pick requires
     const pointerHovered = config.renderHoveredPointRing ? store.hoveredPoint?.index : undefined
-    const hostHovered = store.hostHoveredPointIndex
+    const hostIndex = store.hostHoveredPointIndex
+    const hostHovered = hostIndex !== undefined && Number.isInteger(hostIndex) && hostIndex >= 0 &&
+      hostIndex < (this.data.pointsNumber ?? 0)
+      ? hostIndex
+      : undefined
     if (pointerHovered !== undefined) this.drawPointRing(renderPass, pointerHovered, store.hoveredPointRingColor)
     if (hostHovered !== undefined && hostHovered !== pointerHovered) this.drawPointRing(renderPass, hostHovered, store.hoveredPointRingColor)
     if (store.focusedPoint) this.drawPointRing(renderPass, store.focusedPoint.index, store.focusedPointRingColor)

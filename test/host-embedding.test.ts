@@ -505,6 +505,48 @@ describe('host hover', () => {
       destroy()
     }
   })
+
+  it('draws no ring for a host-hovered point the data no longer has', async () => {
+    const { device, destroy } = await createExternalDevice()
+    const graph = new Graph(null, {
+      spaceSize: 4096,
+      pixelRatio: 1,
+      enableSimulation: false,
+      rescalePositions: false,
+      pointDefaultSize: 20,
+    }, Promise.resolve(device))
+    graph.setPointPositions(new Float32Array([60, 60, 110, 60]))
+    graph.render()
+    await graph.ready
+    const target = device.createTexture({ format: 'rgba8unorm', width: 200, height: 200 })
+    const framebuffer = device.createFramebuffer({ width: 200, height: 200, colorAttachments: [target] })
+    const draw = (): Uint8Array => {
+      const renderPass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0] })
+      graph.drawToRenderPass(renderPass)
+      renderPass.end()
+      device.submit()
+      return (device.readPixelsToArrayWebGL(framebuffer) as Uint8Array).slice()
+    }
+    try {
+      // One pixel per space unit, with the space origin on screen at (40, 160): a ring
+      // read from outside the data would land there
+      const S = 4096
+      graph.setViewTransform({ k: 1, x: 40 - (200 - S) / 2, y: 160 - S - (200 - S) / 2 }, [200, 200])
+      graph.setHostHoveredPoint(1)
+
+      // The data shrinks to one point; the host has not hovered again yet
+      graph.setPointPositions(new Float32Array([60, 60]))
+      graph.render()
+      const hovered = draw()
+      graph.setHostHoveredPoint(undefined)
+      expect(Array.from(hovered)).toEqual(Array.from(draw()))
+    } finally {
+      graph.destroy()
+      framebuffer.destroy()
+      target.destroy()
+      destroy()
+    }
+  })
 })
 
 describe('external frame scheduling', () => {
