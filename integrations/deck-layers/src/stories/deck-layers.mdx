@@ -302,7 +302,8 @@ To draw the layout with deck layers of your own — for deck's attribute pipelin
 transitions and extensions — sample the live position texture:
 `PositionTextureSource` from `@cosmos.gl/graph`, implemented by `Graph` and `GraphSimulation`.
 The *Custom deck layers* story does exactly that over a standalone `GraphSimulation`; its two
-layers are in the story's panes, as a starting point for yours.
+layers are in the story's panes, as a starting point for yours. Positions stay on the GPU,
+so this scales like `CosmosGraphLayer` does. Create the simulation on deck's device.
 
 Try it: [Custom deck layers](../?path=/story/examples-integrations--custom-deck-layers).
 

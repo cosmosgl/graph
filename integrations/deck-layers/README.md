@@ -195,6 +195,11 @@ it. `getPointPositionTexture()` returns a `PointPositionTexture`: point `i` live
 NaN, and the handle changes as the simulation ping-pongs, so re-fetch it whenever `version`
 changes.
 
+Positions never leave the GPU: no readback, no copy, no upload per frame, so the cost of a
+moving layout doesn't grow with the point count. The one requirement is a shared device: the
+simulation must run on your renderer's luma.gl device, because a texture can't be used across
+WebGL contexts.
+
 The *Custom deck layers* story is the worked example: a standalone `GraphSimulation` on deck's
 device, drawn by two deck layers of its own (`PointsLayer`, `LinksLayer` in the
 story's sources) that `texelFetch` the texture by instance index — with binary attributes,
@@ -209,9 +214,9 @@ recipe works with any rendering host, at the cost of a per-snapshot GPU→CPU co
 Practical up to tens of thousands of points; throttle the snapshots.
 
 ```js
-const graph = new GraphSimulation(config) // its own hidden device
-// per animation frame: graph.step()
-// every ~100 ms: await graph.getPointPositionsAsync(positions), then update
+const simulation = new GraphSimulation(config) // its own hidden device
+// per animation frame: simulation.step()
+// every ~100 ms: await simulation.getPointPositionsAsync(positions), then update
 // a ScatterplotLayer/LineLayer with `data: {length, attributes}` and an updateTrigger
 ```
 
