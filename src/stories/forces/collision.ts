@@ -118,6 +118,7 @@ export const collision = (): { graph: Graph; div: HTMLDivElement } => {
     linkWidths,
     simulationCollision: 0.95,
     simulationCollisionPadding: 2,
+    simulationCollisionIterations: 25,
     simulationCollisionRadius: undefined, // Use point sizes for collision radius
     simulationRepulsion: 0.8,
     simulationGravity: 0.05,
