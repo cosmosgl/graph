@@ -52,6 +52,47 @@ describe('GraphSimulation', () => {
     }
   })
 
+  it('collision separates a pile of overlapping points, with every other force off', async () => {
+    // 60 points of size 10 seeded inside a 4-unit disc: every pair overlaps deeply.
+    const n = 60
+    const positions = new Float32Array(n * 2)
+    for (let i = 0; i < n; i += 1) {
+      const angle = i * 2.399963
+      const radius = 2 * Math.sqrt((i + 1) / n)
+      positions[i * 2] = 2048 + Math.cos(angle) * radius
+      positions[i * 2 + 1] = 2048 + Math.sin(angle) * radius
+    }
+    const padding = 0.5
+    const contact = 2 * (10 / 2 + padding)
+    const overlappingPairs = (pos: Float32Array): number => {
+      let count = 0
+      for (let i = 0; i < n; i += 1) {
+        for (let j = i + 1; j < n; j += 1) {
+          const d = Math.hypot((pos[i * 2] as number) - (pos[j * 2] as number), (pos[i * 2 + 1] as number) - (pos[j * 2 + 1] as number))
+          if (d < contact - 0.1) count += 1 // allow ~1% settling slack
+        }
+      }
+      return count
+    }
+    const simulation = await createSimulation({
+      ...SIMULATION_CONFIG,
+      simulationGravity: 0,
+      simulationRepulsion: 0,
+      simulationLinkSpring: 0,
+      pointDefaultSize: 10,
+      simulationCollision: 1,
+      simulationCollisionPadding: padding,
+      simulationCollisionIterations: 2,
+    }, positions)
+    try {
+      expect(overlappingPairs(simulation.getPointPositionsArray())).toBeGreaterThan(1000)
+      for (let i = 0; i < 60; i += 1) simulation.step()
+      expect(overlappingPairs(simulation.getPointPositionsArray())).toBe(0)
+    } finally {
+      simulation.destroy()
+    }
+  })
+
   it('floors a link\'s rest length at the contact distance while collision is on', async () => {
     // Two size-20 points (contact distance 20) joined by a spring asking for 1 unit.
     const positions = new Float32Array([2000, 2048, 2100, 2048])

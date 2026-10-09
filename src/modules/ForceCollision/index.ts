@@ -5,6 +5,7 @@ import { CoreModule, BASE_PIPELINE_PARAMETERS } from '@/graph/modules/core-modul
 import buildGridVert from '@/graph/modules/ForceCollision/build-grid.vert?raw'
 import buildGridFrag from '@/graph/modules/ForceCollision/build-grid.frag?raw'
 import forceFrag from '@/graph/modules/ForceCollision/force-collision-spatial.frag?raw'
+import forceAllPairsFrag from '@/graph/modules/ForceCollision/force-collision-allpairs.frag?raw'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
@@ -14,6 +15,17 @@ type GridTarget = {
   texture: Texture;
   fbo: Framebuffer;
 }
+
+/**
+ * At or below this many points collision is exact: one full-screen pass tests
+ * every pair (`force-collision-allpairs.frag`). Above it, the spatial-hash grid
+ * with cell-average contacts takes over. Same threshold as the many-body force,
+ * for the same reason — an n² texel loop is trivial work at this scale — and
+ * because the grid's averaging is exactly what stalls in a dense pile: a point
+ * gets no push unless it overlaps a cell *mean*, so pairs can sit inside each
+ * other while every mean is out of range.
+ */
+const ALL_PAIRS_MAX_POINTS = 4096
 
 // Grid offsets for multiple passes (improves collision detection at cell boundaries)
 const GRID_OFFSETS: [number, number][] = [
@@ -31,6 +43,7 @@ export class ForceCollision extends CoreModule {
 
   private buildGridCommand: Model | undefined
   private forceCommand: Model | undefined
+  private forceAllPairsCommand: Model | undefined
 
   private buildGridUniformStore: UniformStore<{
     buildGridUniforms: {
@@ -52,8 +65,21 @@ export class ForceCollision extends CoreModule {
     };
   }> | undefined
 
+  private forceAllPairsUniformStore: UniformStore<{
+    forceCollisionAllPairsUniforms: {
+      pointsTextureSize: number;
+      pointsNumber: number;
+      collisionStrength: number;
+      collisionRadius: number;
+      collisionPadding: number;
+      maxRadius: number;
+    };
+  }> | undefined
+
   private gridTextureSize = 0
   private cellSize = 0
+  /** The largest effective radius in the graph (fixed or size-derived, plus padding). */
+  private maxRadius = 0
   private previousPointsTextureSize: number | undefined
   private previousSpaceSize: number | undefined
 
@@ -65,6 +91,11 @@ export class ForceCollision extends CoreModule {
   public get resolvedSizeTexture (): Texture | undefined {
     if (!this.sizeTexture || this.sizeTexture.destroyed) return undefined
     return this.sizeTexture
+  }
+
+  /** Small graphs skip the grid entirely (see ALL_PAIRS_MAX_POINTS). */
+  private get usesAllPairs (): boolean {
+    return (this.data.pointsNumber ?? 0) <= ALL_PAIRS_MAX_POINTS
   }
 
   public create (): void {
@@ -84,47 +115,53 @@ export class ForceCollision extends CoreModule {
     const collisionRadius = config.simulationCollisionRadius ?? 0
     const collisionPadding = config.simulationCollisionPadding ?? 0
     const effectiveRadius = (collisionRadius > 0 ? collisionRadius : maxSize * 0.5) + collisionPadding
+    this.maxRadius = effectiveRadius
 
-    // Two touching points interact up to 2 × effectiveRadius apart, and the 3x3
-    // neighbourhood scan only reaches one cell of separation, so the cell must
-    // span the full interaction range. The offset passes shuffle cell alignment
-    // to catch boundary collisions; they do not extend the search radius.
-    this.cellSize = Math.max(effectiveRadius * 2, 8)
-
-    // Grid dimension from that cell size, capped by texture size. Rounding down
-    // is what keeps the fitted cell at or above the interaction range — rounding
-    // up divides the space into cells smaller than it. A large radius therefore
-    // yields a coarse grid: the cell size is the constraint, not the cell count.
-    this.gridTextureSize = Math.min(
-      512,
-      Math.max(1, Math.floor(store.adjustedSpaceSize / this.cellSize))
-    )
-
-    // Recalculate cell size to fit the grid evenly (only ever grows it)
-    this.cellSize = store.adjustedSpaceSize / this.gridTextureSize
-
-    // Allocate one grid framebuffer per offset pass. These are scratch buffers
-    // (cleared and rebuilt every tick in run()), so reuse them when the grid
-    // dimensions are unchanged instead of reallocating on every create().
-    const gridTargetsValid =
-      this.gridTargets.length === GRID_OFFSETS.length &&
-      this.gridTargets.every((t) => !t.texture.destroyed && !t.fbo.destroyed && t.texture.width === this.gridTextureSize)
-    if (!gridTargetsValid) {
+    if (this.usesAllPairs) {
+      // The exact path needs no grid; free one left over from a larger graph.
       this.destroyGridTargets()
-      this.gridTargets = GRID_OFFSETS.map(() => {
-        const texture = device.createTexture({
-          width: this.gridTextureSize,
-          height: this.gridTextureSize,
-          format: 'rgba32float',
-          usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
+    } else {
+      // Two touching points interact up to 2 × effectiveRadius apart, and the 3x3
+      // neighbourhood scan only reaches one cell of separation, so the cell must
+      // span the full interaction range. The offset passes shuffle cell alignment
+      // to catch boundary collisions; they do not extend the search radius.
+      this.cellSize = Math.max(effectiveRadius * 2, 8)
+
+      // Grid dimension from that cell size, capped by texture size. Rounding down
+      // is what keeps the fitted cell at or above the interaction range — rounding
+      // up divides the space into cells smaller than it. A large radius therefore
+      // yields a coarse grid: the cell size is the constraint, not the cell count.
+      this.gridTextureSize = Math.min(
+        512,
+        Math.max(1, Math.floor(store.adjustedSpaceSize / this.cellSize))
+      )
+
+      // Recalculate cell size to fit the grid evenly (only ever grows it)
+      this.cellSize = store.adjustedSpaceSize / this.gridTextureSize
+
+      // Allocate one grid framebuffer per offset pass. These are scratch buffers
+      // (cleared and rebuilt every tick in run()), so reuse them when the grid
+      // dimensions are unchanged instead of reallocating on every create().
+      const gridTargetsValid =
+        this.gridTargets.length === GRID_OFFSETS.length &&
+        this.gridTargets.every((t) => !t.texture.destroyed && !t.fbo.destroyed && t.texture.width === this.gridTextureSize)
+      if (!gridTargetsValid) {
+        this.destroyGridTargets()
+        this.gridTargets = GRID_OFFSETS.map(() => {
+          const texture = device.createTexture({
+            width: this.gridTextureSize,
+            height: this.gridTextureSize,
+            format: 'rgba32float',
+            usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
+          })
+          const fbo = device.createFramebuffer({
+            width: this.gridTextureSize,
+            height: this.gridTextureSize,
+            colorAttachments: [texture],
+          })
+          return { texture, fbo }
         })
-        const fbo = device.createFramebuffer({
-          width: this.gridTextureSize,
-          height: this.gridTextureSize,
-          colorAttachments: [texture],
-        })
-        return { texture, fbo }
-      })
+      }
     }
 
     // Create size texture for collision radius calculation
@@ -238,6 +275,42 @@ export class ForceCollision extends CoreModule {
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
     })
 
+    // Exact all-pairs command for small graphs (see ALL_PAIRS_MAX_POINTS)
+    this.forceAllPairsUniformStore ||= new UniformStore(device, {
+      forceCollisionAllPairsUniforms: {
+        uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
+          pointsTextureSize: 'f32',
+          pointsNumber: 'f32',
+          collisionStrength: 'f32',
+          collisionRadius: 'f32',
+          collisionPadding: 'f32',
+          maxRadius: 'f32',
+        },
+      },
+    })
+
+    this.forceAllPairsCommand ||= new Model(device, {
+      fs: forceAllPairsFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.forceVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        forceCollisionAllPairsUniforms: this.forceAllPairsUniformStore.getManagedUniformBuffer('forceCollisionAllPairsUniforms'),
+        // Texture bindings set dynamically in drawAllPairs()
+      },
+      parameters: BASE_PIPELINE_PARAMETERS,
+    })
+
     this.forceCommand ||= new Model(device, {
       fs: forceFrag,
       vs: updateVert,
@@ -272,19 +345,99 @@ export class ForceCollision extends CoreModule {
   }
 
   public run (): void {
-    const { device, store, data, points, config } = this
+    const { store, data, points } = this
     if (!points) return
-    if (!this.buildGridCommand || !this.buildGridUniformStore) return
-    if (!this.forceCommand || !this.forceUniformStore) return
-    if (!this.pointIndices) return
     if (data.pointsNumber === undefined) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
     if (!points.exitTexture || points.exitTexture.destroyed) return
     if (!points.velocityFbo || points.velocityFbo.destroyed) return
     if (!this.sizeTexture || this.sizeTexture.destroyed) return
-    if (this.gridTargets.length !== GRID_OFFSETS.length) return
     // Skip if sizes changed and create() wasn't called yet
     if (store.pointsTextureSize !== this.previousPointsTextureSize || store.adjustedSpaceSize !== this.previousSpaceSize) return
+
+    if (this.usesAllPairs) this.drawAllPairs()
+    else this.drawGrid()
+  }
+
+  /**
+   * Destruction order matters
+   * Models -> Framebuffers -> Textures -> UniformStores -> Buffers
+   */
+  public destroy (): void {
+    // 1. Destroy Models FIRST
+    this.buildGridCommand?.destroy()
+    this.buildGridCommand = undefined
+    this.forceCommand?.destroy()
+    this.forceCommand = undefined
+    this.forceAllPairsCommand?.destroy()
+    this.forceAllPairsCommand = undefined
+
+    // 2. Destroy Framebuffers (before the textures they reference) & 3. their textures
+    this.destroyGridTargets()
+
+    // 3. Destroy remaining Textures
+    if (this.sizeTexture && !this.sizeTexture.destroyed) this.sizeTexture.destroy()
+    this.sizeTexture = undefined
+
+    // 4. Destroy UniformStores
+    this.buildGridUniformStore?.destroy()
+    this.buildGridUniformStore = undefined
+    this.forceUniformStore?.destroy()
+    this.forceUniformStore = undefined
+    this.forceAllPairsUniformStore?.destroy()
+    this.forceAllPairsUniformStore = undefined
+
+    // 5. Destroy Buffers (passed via attributes - NOT owned by Models)
+    if (this.pointIndices && !this.pointIndices.destroyed) this.pointIndices.destroy()
+    this.pointIndices = undefined
+    if (this.forceVertexCoordBuffer && !this.forceVertexCoordBuffer.destroyed) this.forceVertexCoordBuffer.destroy()
+    this.forceVertexCoordBuffer = undefined
+  }
+
+  /**
+   * The small-graph path: one exact all-pairs pass into the velocity FBO.
+   * Replaces the grid build and the four offset passes below ALL_PAIRS_MAX_POINTS.
+   */
+  private drawAllPairs (): void {
+    const { device, store, data, points, config } = this
+    if (!points || !points.previousPositionTexture || !points.exitTexture || !points.velocityFbo || !this.sizeTexture) return
+    if (!this.forceAllPairsCommand || !this.forceAllPairsUniformStore) return
+    if (!data.pointsNumber) return
+
+    this.forceAllPairsUniformStore.setUniforms({
+      forceCollisionAllPairsUniforms: {
+        pointsTextureSize: store.pointsTextureSize ?? 0,
+        pointsNumber: data.pointsNumber,
+        collisionStrength: config.simulationCollision ?? 0,
+        collisionRadius: config.simulationCollisionRadius ?? 0,
+        collisionPadding: config.simulationCollisionPadding ?? 0,
+        maxRadius: this.maxRadius,
+      },
+    })
+
+    this.forceAllPairsCommand.setBindings({
+      positionsTexture: points.previousPositionTexture,
+      sizeTexture: this.sizeTexture,
+      exitTexture: points.exitTexture,
+    })
+
+    const pass = device.beginRenderPass({
+      framebuffer: points.velocityFbo,
+      clearColor: [0, 0, 0, 0],
+    })
+    this.forceAllPairsCommand.draw(pass)
+    pass.end()
+  }
+
+  /** The large-graph path: the spatial-hash grid with cell-average contacts, four offset passes. */
+  private drawGrid (): void {
+    const { device, data, points, config } = this
+    if (!points || !points.previousPositionTexture || !points.exitTexture || !points.velocityFbo || !this.sizeTexture) return
+    if (!this.buildGridCommand || !this.buildGridUniformStore) return
+    if (!this.forceCommand || !this.forceUniformStore) return
+    if (!this.pointIndices) return
+    if (data.pointsNumber === undefined) return
+    if (this.gridTargets.length !== GRID_OFFSETS.length) return
 
     const collisionRadius = config.simulationCollisionRadius ?? 0
     const collisionPadding = config.simulationCollisionPadding ?? 0
@@ -351,37 +504,6 @@ export class ForceCollision extends CoreModule {
       this.forceCommand.draw(forcePass)
     }
     forcePass.end()
-  }
-
-  /**
-   * Destruction order matters
-   * Models -> Framebuffers -> Textures -> UniformStores -> Buffers
-   */
-  public destroy (): void {
-    // 1. Destroy Models FIRST
-    this.buildGridCommand?.destroy()
-    this.buildGridCommand = undefined
-    this.forceCommand?.destroy()
-    this.forceCommand = undefined
-
-    // 2. Destroy Framebuffers (before the textures they reference) & 3. their textures
-    this.destroyGridTargets()
-
-    // 3. Destroy remaining Textures
-    if (this.sizeTexture && !this.sizeTexture.destroyed) this.sizeTexture.destroy()
-    this.sizeTexture = undefined
-
-    // 4. Destroy UniformStores
-    this.buildGridUniformStore?.destroy()
-    this.buildGridUniformStore = undefined
-    this.forceUniformStore?.destroy()
-    this.forceUniformStore = undefined
-
-    // 5. Destroy Buffers (passed via attributes - NOT owned by Models)
-    if (this.pointIndices && !this.pointIndices.destroyed) this.pointIndices.destroy()
-    this.pointIndices = undefined
-    if (this.forceVertexCoordBuffer && !this.forceVertexCoordBuffer.destroyed) this.forceVertexCoordBuffer.destroy()
-    this.forceVertexCoordBuffer = undefined
   }
 
   private destroyGridTargets (): void {
