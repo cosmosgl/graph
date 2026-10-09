@@ -514,13 +514,17 @@ export interface GraphConfigInterface {
   /**
    * Collision force coefficient. When set to a value greater than 0,
    * points will push each other apart when they overlap.
-   * Uses a spatial-hash grid, so it scales better than naive O(n²) collision.
    *
    * Unlike the other forces, collision is a constraint: its correction is not
    * scaled by the simulation's alpha and is integrated without friction, so
    * overlap keeps resolving at full strength while the layout cools. While it
    * is on, link rest lengths are floored at the contact distance (see
    * `simulationLinkDistance`).
+   *
+   * At or below 4,096 points every pair is tested exactly and `1` projects each
+   * overlapping pair to contact per pass; values up to `2` over-relax, which
+   * settles jammed piles faster. Above 4,096 points a spatial-hash approximation
+   * takes over.
    * Default value: `0`
    */
   simulationCollision: number;
@@ -539,9 +543,11 @@ export interface GraphConfigInterface {
    */
   simulationCollisionPadding: number;
   /**
-   * Collision passes per simulation tick. Each pass rebuilds the spatial-hash
-   * grid from the latest positions and applies one bounded correction, so more
-   * passes unwind a dense pile in fewer ticks, at a linear cost per pass.
+   * Collision passes per simulation tick. Each pass re-runs the collision on
+   * the latest positions — every pair at or below 4,096 points, a fresh
+   * spatial-hash build above — and applies one bounded correction, so more
+   * passes unwind a dense pile in fewer ticks, with the cost linear in the
+   * number of passes.
    * `1` suits sparse graphs; dense clusters with many links pulling inward
    * resolve noticeably better at `2`–`4`. Fractions are truncated; values
    * below `1`, `NaN` and `Infinity` run a single pass.
