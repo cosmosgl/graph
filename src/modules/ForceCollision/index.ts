@@ -2,66 +2,103 @@ import { Buffer, Framebuffer, Texture, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule, BASE_PIPELINE_PARAMETERS } from '@/graph/modules/core-module'
 
-import buildGridVert from '@/graph/modules/ForceCollision/build-grid.vert?raw'
-import buildGridFrag from '@/graph/modules/ForceCollision/build-grid.frag?raw'
-import forceFrag from '@/graph/modules/ForceCollision/force-collision-spatial.frag?raw'
 import forceAllPairsFrag from '@/graph/modules/ForceCollision/force-collision-allpairs.frag?raw'
+import forceSlotsFrag from '@/graph/modules/ForceCollision/force-collision-slots.frag?raw'
+import peelSlotsVert from '@/graph/modules/ForceManyBody/build-nearfield-slots.vert?raw'
+import peelSlotsFrag from '@/graph/modules/ForceManyBody/build-nearfield-slots.frag?raw'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
+import { getFinestGridSize, getNearFieldSlotCount } from '@/graph/modules/Shared/cell-slots'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 import { defaultConfigValues } from '@/graph/variables'
 
-type GridTarget = {
+/**
+ * At or below this many points collision is exact in one full-screen pass that
+ * tests every pair (`force-collision-allpairs.frag`). Above it, a spatial hash
+ * with depth-peeled per-cell point slots takes over (`force-collision-slots.frag`):
+ * pairwise too, exact while a cell holds at most `getNearFieldSlotCount` points,
+ * and resolving against a fresh random subset of a denser cell every pass.
+ *
+ * Same threshold as the many-body force. Around it the two paths cost about
+ * the same: measured end to end on an Apple M3 Max, 2.7 ms per pass for the
+ * all-pairs loop at 4,000 points and 2.4 ms for the slot path at 5,000 (32
+ * slots, a cost dominated by one render pass per peeled slot rather than by
+ * the point count). The all-pairs side grows with n², so doubling the
+ * threshold would roughly quadruple it.
+ */
+const ALL_PAIRS_MAX_POINTS = 4096
+
+/** A depth-peeling render target ([point index, hash] per cell). */
+type SlotTarget = {
   texture: Texture;
   fbo: Framebuffer;
 }
 
+/** Ping-pong pair: each peel pass writes one and reads the other. */
+const PEEL_TARGETS = 2
+
 /**
- * At or below this many points collision is exact: one full-screen pass tests
- * every pair (`force-collision-allpairs.frag`). Above it, the spatial-hash grid
- * with cell-average contacts takes over. Same threshold as the many-body force,
- * for the same reason — an n² texel loop is trivial work at this scale — and
- * because the grid's averaging is exactly what stalls in a dense pile: a point
- * gets no push unless it overlaps a cell *mean*, so pairs can sit inside each
- * other while every mean is out of range.
+ * GPU collision force: discs of radius `size / 2` (or a fixed radius), plus
+ * padding, pushed apart wherever they overlap.
+ *
+ * It is a constraint, not a force. Every overlapping pair is projected to
+ * contact along the line of centers, split by r² so the smaller disc yields
+ * (d3-force's forceCollide), scaled by `simulationCollision` and capped at one
+ * own radius per pass. The correction is not scaled by alpha and the
+ * simulation integrates it with friction 1, so overlap keeps resolving at full
+ * strength while the layout cools; `simulationCollisionIterations` repeats the
+ * pass per tick. While collision is on, the link force reads
+ * `resolvedSizeTexture` to floor each spring's rest length at the contact
+ * distance, so the springs never demand overlap.
+ *
+ * Two paths, split at ALL_PAIRS_MAX_POINTS: exact all-pairs below, and above it
+ * a uniform grid whose cell spans the contact range (so the 3×3 neighbourhood
+ * is exhaustive) with K depth-peeled point slots per cell, built every pass
+ * with the many-body force's peel shader.
  */
-const ALL_PAIRS_MAX_POINTS = 4096
-
-// Grid offsets for multiple passes (improves collision detection at cell boundaries)
-const GRID_OFFSETS: [number, number][] = [
-  [0.0, 0.0],
-  [0.5, 0.0],
-  [0.0, 0.5],
-  [0.5, 0.5],
-]
-
 export class ForceCollision extends CoreModule {
-  private gridTargets: GridTarget[] = []
   private sizeTexture: Texture | undefined
   private pointIndices: Buffer | undefined
-  private forceVertexCoordBuffer: Buffer | undefined
+  private vertexCoordBuffer: Buffer | undefined
 
-  private buildGridCommand: Model | undefined
-  private forceCommand: Model | undefined
+  /** Slot count for the current point count (getNearFieldSlotCount); 0 on the all-pairs path. */
+  private slotCount = 0
+  /**
+   * Per-cell point slots: one sampler2DArray layer per depth-peeling pass, each
+   * holding [point index, hash] per grid cell — rebuilt every pass.
+   */
+  private slotsArrayTexture: Texture | undefined
+  /**
+   * The two ping-pong peel render targets: pass k draws into k % 2 while
+   * reading the previous pass's result from (k + 1) % 2, then the result is
+   * copied into layer k of slotsArrayTexture (sampling one layer of a texture
+   * while rendering to another is a WebGL feedback loop).
+   */
+  private peelTargets: SlotTarget[] = []
+
+  private peelCommand: Model | undefined
+  private forceSlotsCommand: Model | undefined
   private forceAllPairsCommand: Model | undefined
 
-  private buildGridUniformStore: UniformStore<{
-    buildGridUniforms: {
-      gridTextureSize: number;
+  private peelUniformStore: UniformStore<{
+    buildNearFieldSlotsUniforms: {
+      pointsTextureSize: number;
+      levelGridSize: number;
       cellSize: number;
-      gridOffset: [number, number];
+      hasPreviousSlot: number;
+      randomSeed: number;
     };
   }> | undefined
 
-  private forceUniformStore: UniformStore<{
-    forceCollisionUniforms: {
-      gridTextureSize: number;
+  private forceSlotsUniformStore: UniformStore<{
+    forceCollisionSlotsUniforms: {
+      pointsTextureSize: number;
+      gridSize: number;
       cellSize: number;
+      slotCount: number;
       collisionStrength: number;
       collisionRadius: number;
       collisionPadding: number;
-      pointsNumber: number;
-      gridOffset: [number, number];
     };
   }> | undefined
 
@@ -76,7 +113,8 @@ export class ForceCollision extends CoreModule {
     };
   }> | undefined
 
-  private gridTextureSize = 0
+  /** Cells per axis of the slot grid; 0 on the all-pairs path. */
+  private gridSize = 0
   private cellSize = 0
   /** The largest effective radius in the graph (fixed or size-derived, plus padding). */
   private maxRadius = 0
@@ -102,69 +140,43 @@ export class ForceCollision extends CoreModule {
     const { device, store, data, config } = this
     if (!store.pointsTextureSize || data.pointsNumber === undefined) return
 
-    // Calculate grid size based on space size and collision radius.
-    // Scan the size buffer instead of spreading it into Math.max — spreading a
-    // large typed array as arguments can throw a RangeError on big graphs.
+    // The largest effective radius sizes the grid cell and bounds the all-pairs
+    // pair reject. Scan the size buffer instead of spreading it into Math.max —
+    // spreading a large typed array as arguments can throw a RangeError on big
+    // graphs — and resolve sizes, since raw input arrays may hold NaN ("use the
+    // default"), which would poison Math.max.
     const defaultSize = config.pointDefaultSize ?? defaultConfigValues.pointDefaultSize
     let maxSize = defaultSize
     if (data.pointSizes && data.pointsNumber !== undefined) {
-      // Resolve sizes: raw input arrays may hold NaN ("use the default"), which
-      // would poison Math.max.
       for (let i = 0; i < data.pointsNumber; i++) maxSize = Math.max(maxSize, data.getResolvedPointSize(i))
     }
     const collisionRadius = config.simulationCollisionRadius ?? 0
     const collisionPadding = config.simulationCollisionPadding ?? 0
-    const effectiveRadius = (collisionRadius > 0 ? collisionRadius : maxSize * 0.5) + collisionPadding
-    this.maxRadius = effectiveRadius
+    this.maxRadius = (collisionRadius > 0 ? collisionRadius : maxSize * 0.5) + collisionPadding
 
     if (this.usesAllPairs) {
       // The exact path needs no grid; free one left over from a larger graph.
-      this.destroyGridTargets()
+      this.destroySlotTargets()
+      this.gridSize = 0
+      this.cellSize = 0
     } else {
-      // Two touching points interact up to 2 × effectiveRadius apart, and the 3x3
-      // neighbourhood scan only reaches one cell of separation, so the cell must
-      // span the full interaction range. The offset passes shuffle cell alignment
-      // to catch boundary collisions; they do not extend the search radius.
-      this.cellSize = Math.max(effectiveRadius * 2, 8)
-
-      // Grid dimension from that cell size, capped by texture size. Rounding down
-      // is what keeps the fitted cell at or above the interaction range — rounding
-      // up divides the space into cells smaller than it. A large radius therefore
-      // yields a coarse grid: the cell size is the constraint, not the cell count.
-      this.gridTextureSize = Math.min(
-        512,
-        Math.max(1, Math.floor(store.adjustedSpaceSize / this.cellSize))
-      )
-
-      // Recalculate cell size to fit the grid evenly (only ever grows it)
-      this.cellSize = store.adjustedSpaceSize / this.gridTextureSize
-
-      // Allocate one grid framebuffer per offset pass. These are scratch buffers
-      // (cleared and rebuilt every tick in run()), so reuse them when the grid
-      // dimensions are unchanged instead of reallocating on every create().
-      const gridTargetsValid =
-        this.gridTargets.length === GRID_OFFSETS.length &&
-        this.gridTargets.every((t) => !t.texture.destroyed && !t.fbo.destroyed && t.texture.width === this.gridTextureSize)
-      if (!gridTargetsValid) {
-        this.destroyGridTargets()
-        this.gridTargets = GRID_OFFSETS.map(() => {
-          const texture = device.createTexture({
-            width: this.gridTextureSize,
-            height: this.gridTextureSize,
-            format: 'rgba32float',
-            usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_DST,
-          })
-          const fbo = device.createFramebuffer({
-            width: this.gridTextureSize,
-            height: this.gridTextureSize,
-            colorAttachments: [texture],
-          })
-          return { texture, fbo }
-        })
-      }
+      // Two touching points interact up to 2 × maxRadius apart, and the force
+      // pass scans only the 3×3 block around a point's cell — one cell of
+      // separation — so the cell must span the full contact range for the scan
+      // to be exhaustive. Flooring the count keeps the fitted cell at or above
+      // it; a large radius therefore yields a coarse grid.
+      const cellsAtContactRange = Math.max(1, Math.floor(store.adjustedSpaceSize / Math.max(this.maxRadius * 2, 8)))
+      // Also no finer than the many-body force's finest grid for this point
+      // count (~2·√n per axis): that keeps the average occupancy near ¼ point
+      // per cell, so the slots list most cells in full, and bounds the slot
+      // textures — K layers of grid² texels — instead of letting a small radius
+      // push the grid to 512² regardless of how few points there are.
+      this.gridSize = Math.max(1, Math.min(cellsAtContactRange, getFinestGridSize(data.pointsNumber)))
+      this.cellSize = store.adjustedSpaceSize / this.gridSize
+      this.createSlotTargets()
     }
 
-    // Create size texture for collision radius calculation
+    // Resolved sizes, for the collision radii and the link force's rest-length floor
     const sizeState = new Float32Array(store.pointsTextureSize * store.pointsTextureSize * 4)
     for (let i = 0; i < data.pointsNumber; i++) {
       sizeState[i * 4] = data.getResolvedPointSize(i)
@@ -193,14 +205,14 @@ export class ForceCollision extends CoreModule {
       y: 0,
     })
 
-    // Create / update point indices buffer
+    // Point indices for the peel draw (one vertex per point)
     if (!this.pointIndices || this.previousPointsTextureSize !== store.pointsTextureSize) {
       if (this.pointIndices && !this.pointIndices.destroyed) this.pointIndices.destroy()
       this.pointIndices = device.createBuffer({
         data: createIndexesForBuffer(store.pointsTextureSize),
         usage: Buffer.VERTEX | Buffer.COPY_DST,
       })
-      this.buildGridCommand?.setAttributes({
+      this.peelCommand?.setAttributes({
         pointIndices: this.pointIndices,
       })
     }
@@ -213,65 +225,7 @@ export class ForceCollision extends CoreModule {
     const { device, store, data } = this
     if (!data.pointsNumber || !store.pointsTextureSize) return
 
-    // Build-grid command: positions each point into its grid cell (additive accumulation)
-    this.buildGridUniformStore ||= new UniformStore(device, {
-      buildGridUniforms: {
-        uniformTypes: {
-          gridTextureSize: 'f32',
-          cellSize: 'f32',
-          gridOffset: 'vec2<f32>',
-        },
-      },
-    })
-
-    this.buildGridCommand ||= new Model(device, {
-      fs: buildGridFrag,
-      vs: buildGridVert,
-      topology: 'point-list',
-      vertexCount: data.pointsNumber,
-      attributes: {
-        ...this.pointIndices && { pointIndices: this.pointIndices },
-      },
-      bufferLayout: [
-        { name: 'pointIndices', format: 'float32x2' },
-      ],
-      defines: {
-        USE_UNIFORM_BUFFERS: true,
-      },
-      bindings: {
-        buildGridUniforms: this.buildGridUniformStore.getManagedUniformBuffer('buildGridUniforms'),
-        // Texture bindings set dynamically in run()
-      },
-      parameters: {
-        ...BASE_PIPELINE_PARAMETERS,
-        blend: true,
-        blendColorOperation: 'add',
-        blendColorSrcFactor: 'one',
-        blendColorDstFactor: 'one',
-        blendAlphaOperation: 'add',
-        blendAlphaSrcFactor: 'one',
-        blendAlphaDstFactor: 'one',
-        depthWriteEnabled: false,
-        depthCompare: 'always',
-      },
-    })
-
-    // Collision force command: reads the spatial hash grid (additive accumulation)
-    this.forceUniformStore ||= new UniformStore(device, {
-      forceCollisionUniforms: {
-        uniformTypes: {
-          gridTextureSize: 'f32',
-          cellSize: 'f32',
-          collisionStrength: 'f32',
-          collisionRadius: 'f32',
-          collisionPadding: 'f32',
-          pointsNumber: 'f32',
-          gridOffset: 'vec2<f32>',
-        },
-      },
-    })
-
-    this.forceVertexCoordBuffer ||= device.createBuffer({
+    this.vertexCoordBuffer ||= device.createBuffer({
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
     })
 
@@ -296,7 +250,7 @@ export class ForceCollision extends CoreModule {
       topology: 'triangle-strip',
       vertexCount: 4,
       attributes: {
-        vertexCoord: this.forceVertexCoordBuffer,
+        vertexCoord: this.vertexCoordBuffer,
       },
       bufferLayout: [
         { name: 'vertexCoord', format: 'float32x2' },
@@ -311,13 +265,72 @@ export class ForceCollision extends CoreModule {
       parameters: BASE_PIPELINE_PARAMETERS,
     })
 
-    this.forceCommand ||= new Model(device, {
-      fs: forceFrag,
+    // Slot peeling command (point list; the depth test selects the eligible
+    // point with the smallest per-pass hash per cell). The uniform block name
+    // is the peel shader's.
+    this.peelUniformStore ||= new UniformStore(device, {
+      buildNearFieldSlotsUniforms: {
+        uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
+          pointsTextureSize: 'f32',
+          levelGridSize: 'f32',
+          cellSize: 'f32',
+          hasPreviousSlot: 'f32',
+          randomSeed: 'f32',
+        },
+      },
+    })
+
+    this.peelCommand ||= new Model(device, {
+      fs: peelSlotsFrag,
+      vs: peelSlotsVert,
+      topology: 'point-list',
+      vertexCount: data.pointsNumber,
+      attributes: {
+        ...this.pointIndices && { pointIndices: this.pointIndices },
+      },
+      bufferLayout: [
+        { name: 'pointIndices', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        buildNearFieldSlotsUniforms: this.peelUniformStore.getManagedUniformBuffer('buildNearFieldSlotsUniforms'),
+        // Texture bindings set dynamically in drawSlots()
+      },
+      parameters: {
+        ...BASE_PIPELINE_PARAMETERS,
+        blend: false,
+        depthWriteEnabled: true,
+        depthCompare: 'less',
+      },
+    })
+
+    // Slot contact command: one fragment per point, resolving against the
+    // peeled slots of its 3×3 cells
+    this.forceSlotsUniformStore ||= new UniformStore(device, {
+      forceCollisionSlotsUniforms: {
+        uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
+          pointsTextureSize: 'f32',
+          gridSize: 'f32',
+          cellSize: 'f32',
+          slotCount: 'f32',
+          collisionStrength: 'f32',
+          collisionRadius: 'f32',
+          collisionPadding: 'f32',
+        },
+      },
+    })
+
+    this.forceSlotsCommand ||= new Model(device, {
+      fs: forceSlotsFrag,
       vs: updateVert,
       topology: 'triangle-strip',
       vertexCount: 4,
       attributes: {
-        vertexCoord: this.forceVertexCoordBuffer,
+        vertexCoord: this.vertexCoordBuffer,
       },
       bufferLayout: [
         { name: 'vertexCoord', format: 'float32x2' },
@@ -326,21 +339,10 @@ export class ForceCollision extends CoreModule {
         USE_UNIFORM_BUFFERS: true,
       },
       bindings: {
-        forceCollisionUniforms: this.forceUniformStore.getManagedUniformBuffer('forceCollisionUniforms'),
-        // Texture bindings set dynamically in run()
+        forceCollisionSlotsUniforms: this.forceSlotsUniformStore.getManagedUniformBuffer('forceCollisionSlotsUniforms'),
+        // Texture bindings set dynamically in drawSlots()
       },
-      parameters: {
-        ...BASE_PIPELINE_PARAMETERS,
-        blend: true,
-        blendColorOperation: 'add',
-        blendColorSrcFactor: 'one',
-        blendColorDstFactor: 'one',
-        blendAlphaOperation: 'add',
-        blendAlphaSrcFactor: 'one',
-        blendAlphaDstFactor: 'one',
-        depthWriteEnabled: false,
-        depthCompare: 'always',
-      },
+      parameters: BASE_PIPELINE_PARAMETERS,
     })
   }
 
@@ -356,7 +358,7 @@ export class ForceCollision extends CoreModule {
     if (store.pointsTextureSize !== this.previousPointsTextureSize || store.adjustedSpaceSize !== this.previousSpaceSize) return
 
     if (this.usesAllPairs) this.drawAllPairs()
-    else this.drawGrid()
+    else this.drawSlots()
   }
 
   /**
@@ -365,38 +367,37 @@ export class ForceCollision extends CoreModule {
    */
   public destroy (): void {
     // 1. Destroy Models FIRST
-    this.buildGridCommand?.destroy()
-    this.buildGridCommand = undefined
-    this.forceCommand?.destroy()
-    this.forceCommand = undefined
+    this.peelCommand?.destroy()
+    this.peelCommand = undefined
+    this.forceSlotsCommand?.destroy()
+    this.forceSlotsCommand = undefined
     this.forceAllPairsCommand?.destroy()
     this.forceAllPairsCommand = undefined
 
-    // 2. Destroy Framebuffers (before the textures they reference) & 3. their textures
-    this.destroyGridTargets()
+    // 2. Destroy Framebuffers (before the textures they reference) & their textures
+    this.destroySlotTargets()
 
     // 3. Destroy remaining Textures
     if (this.sizeTexture && !this.sizeTexture.destroyed) this.sizeTexture.destroy()
     this.sizeTexture = undefined
 
     // 4. Destroy UniformStores
-    this.buildGridUniformStore?.destroy()
-    this.buildGridUniformStore = undefined
-    this.forceUniformStore?.destroy()
-    this.forceUniformStore = undefined
+    this.peelUniformStore?.destroy()
+    this.peelUniformStore = undefined
+    this.forceSlotsUniformStore?.destroy()
+    this.forceSlotsUniformStore = undefined
     this.forceAllPairsUniformStore?.destroy()
     this.forceAllPairsUniformStore = undefined
 
     // 5. Destroy Buffers (passed via attributes - NOT owned by Models)
     if (this.pointIndices && !this.pointIndices.destroyed) this.pointIndices.destroy()
     this.pointIndices = undefined
-    if (this.forceVertexCoordBuffer && !this.forceVertexCoordBuffer.destroyed) this.forceVertexCoordBuffer.destroy()
-    this.forceVertexCoordBuffer = undefined
+    if (this.vertexCoordBuffer && !this.vertexCoordBuffer.destroyed) this.vertexCoordBuffer.destroy()
+    this.vertexCoordBuffer = undefined
   }
 
   /**
    * The small-graph path: one exact all-pairs pass into the velocity FBO.
-   * Replaces the grid build and the four offset passes below ALL_PAIRS_MAX_POINTS.
    */
   private drawAllPairs (): void {
     const { device, store, data, points, config } = this
@@ -429,90 +430,165 @@ export class ForceCollision extends CoreModule {
     pass.end()
   }
 
-  /** The large-graph path: the spatial-hash grid with cell-average contacts, four offset passes. */
-  private drawGrid (): void {
-    const { device, data, points, config } = this
+  /**
+   * The large-graph path. First `slotCount` depth-peeling passes over the
+   * points, each capturing the eligible point with the smallest per-pass random
+   * hash per cell (see build-nearfield-slots.vert) and publishing it as one
+   * layer of the slot array; re-seeded every pass so a dense cell rotates all
+   * its points through contact. Then one full-screen pass resolves every point
+   * against the slots of its 3×3 cells, into the velocity FBO.
+   */
+  private drawSlots (): void {
+    const { device, store, data, points, config } = this
     if (!points || !points.previousPositionTexture || !points.exitTexture || !points.velocityFbo || !this.sizeTexture) return
-    if (!this.buildGridCommand || !this.buildGridUniformStore) return
-    if (!this.forceCommand || !this.forceUniformStore) return
-    if (!this.pointIndices) return
-    if (data.pointsNumber === undefined) return
-    if (this.gridTargets.length !== GRID_OFFSETS.length) return
+    if (!this.peelCommand || !this.peelUniformStore) return
+    if (!this.forceSlotsCommand || !this.forceSlotsUniformStore) return
+    if (!this.pointIndices || !data.pointsNumber) return
+    if (this.peelTargets.length !== PEEL_TARGETS) return
+    if (!this.slotsArrayTexture || this.slotsArrayTexture.destroyed) return
+    if (!this.gridSize || !this.slotCount) return
 
-    const collisionRadius = config.simulationCollisionRadius ?? 0
-    const collisionPadding = config.simulationCollisionPadding ?? 0
+    const randomSeed = store.getRandomFloat(0, 1)
 
-    // Step 1: Build the spatial hash grid for each offset pass.
-    // Each grid is cleared and accumulated within its own render pass.
-    this.buildGridCommand.setVertexCount(data.pointsNumber)
-    this.buildGridCommand.setBindings({
-      positionsTexture: points.previousPositionTexture,
-      sizeTexture: this.sizeTexture,
-      exitTexture: points.exitTexture,
-    })
-    for (const [i, gridOffset] of GRID_OFFSETS.entries()) {
-      const target = this.gridTargets[i]
-      if (!target || target.fbo.destroyed || target.texture.destroyed) continue
+    this.peelCommand.setVertexCount(data.pointsNumber)
+    for (let slot = 0; slot < this.slotCount; slot += 1) {
+      const target = this.peelTargets[slot % PEEL_TARGETS]
+      const previous = this.peelTargets[(slot + 1) % PEEL_TARGETS]
+      if (!target || target.fbo.destroyed || !previous || previous.texture.destroyed) continue
 
-      this.buildGridUniformStore.setUniforms({
-        buildGridUniforms: {
-          gridTextureSize: this.gridTextureSize,
+      this.peelUniformStore.setUniforms({
+        buildNearFieldSlotsUniforms: {
+          pointsTextureSize: store.pointsTextureSize ?? 0,
+          levelGridSize: this.gridSize,
           cellSize: this.cellSize,
-          gridOffset,
+          hasPreviousSlot: slot === 0 ? 0 : 1,
+          // The seed is shared by all slots of one pass — peeling relies on a
+          // consistent hash ordering across them.
+          randomSeed,
         },
       })
 
-      const gridPass = device.beginRenderPass({
-        framebuffer: target.fbo,
-        clearColor: [0, 0, 0, 0],
+      this.peelCommand.setBindings({
+        positionsTexture: points.previousPositionTexture,
+        exitTexture: points.exitTexture,
+        // Pass 0 never samples previousSlot, but the binding must exist for the
+        // draw to run — any texture that is not the render target works.
+        previousSlot: slot === 0 ? points.previousPositionTexture : previous.texture,
       })
-      this.buildGridCommand.draw(gridPass)
-      gridPass.end()
+
+      const peelPass = device.beginRenderPass({
+        framebuffer: target.fbo,
+        // Cleared slot = empty: index -1 with hash 1 keeps later passes ineligible
+        clearColor: [-1, 1, 0, 0],
+        clearDepth: 1,
+      })
+      this.peelCommand.draw(peelPass)
+      peelPass.end()
+
+      // Publish this pass's result as layer `slot` of the array the force pass reads
+      const commandEncoder = device.createCommandEncoder()
+      commandEncoder.copyTextureToTexture({
+        sourceTexture: target.texture,
+        destinationTexture: this.slotsArrayTexture,
+        destinationOrigin: [0, 0, slot],
+        width: this.gridSize,
+        height: this.gridSize,
+      })
+      // finish() destroys the encoder itself and returns the command buffer.
+      device.submit(commandEncoder.finish())
     }
 
-    // Step 2: Accumulate the collision forces from all offset passes into velocityFbo
-    // within a single render pass (cleared once, then blended additively).
-    // The position/size bindings are constant across passes, so set them once;
-    // setBindings merges, so only gridTexture changes per offset in the loop.
-    this.forceCommand.setBindings({
+    this.forceSlotsUniformStore.setUniforms({
+      forceCollisionSlotsUniforms: {
+        pointsTextureSize: store.pointsTextureSize ?? 0,
+        gridSize: this.gridSize,
+        cellSize: this.cellSize,
+        slotCount: this.slotCount,
+        collisionStrength: config.simulationCollision ?? 0,
+        collisionRadius: config.simulationCollisionRadius ?? 0,
+        collisionPadding: config.simulationCollisionPadding ?? 0,
+      },
+    })
+
+    this.forceSlotsCommand.setBindings({
       positionsTexture: points.previousPositionTexture,
       sizeTexture: this.sizeTexture,
+      exitTexture: points.exitTexture,
+      slotsTexture: this.slotsArrayTexture,
     })
+
     const forcePass = device.beginRenderPass({
       framebuffer: points.velocityFbo,
       clearColor: [0, 0, 0, 0],
     })
-    for (const [i, gridOffset] of GRID_OFFSETS.entries()) {
-      const target = this.gridTargets[i]
-      if (!target || target.texture.destroyed) continue
-
-      this.forceUniformStore.setUniforms({
-        forceCollisionUniforms: {
-          gridTextureSize: this.gridTextureSize,
-          cellSize: this.cellSize,
-          collisionStrength: config.simulationCollision ?? 0,
-          collisionRadius,
-          collisionPadding,
-          pointsNumber: data.pointsNumber,
-          gridOffset,
-        },
-      })
-
-      this.forceCommand.setBindings({
-        gridTexture: target.texture,
-      })
-      this.forceCommand.draw(forcePass)
-    }
+    this.forceSlotsCommand.draw(forcePass)
     forcePass.end()
   }
 
-  private destroyGridTargets (): void {
-    for (const target of this.gridTargets) {
-      if (target.fbo && !target.fbo.destroyed) target.fbo.destroy()
+  /**
+   * Allocates the slot resources for the current grid: the two ping-pong
+   * depth-peeling targets ([point index, hash] per cell, with a depth
+   * attachment each for the peel's smallest-hash selection) and the slot array
+   * texture (one layer per peeling pass) that the force pass reads. Reused when
+   * the grid size and slot count are unchanged.
+   */
+  private createSlotTargets (): void {
+    const { device } = this
+    const slots = getNearFieldSlotCount(this.data.pointsNumber ?? 0)
+    const existing = this.peelTargets[0]
+    if (
+      existing &&
+      !existing.texture.destroyed &&
+      existing.texture.width === this.gridSize &&
+      existing.texture.height === this.gridSize &&
+      this.peelTargets.length === PEEL_TARGETS &&
+      this.slotsArrayTexture &&
+      !this.slotsArrayTexture.destroyed &&
+      this.slotCount === slots
+    ) return
+
+    this.destroySlotTargets()
+    this.slotCount = slots
+    for (let target = 0; target < PEEL_TARGETS; target += 1) {
+      const texture = device.createTexture({
+        width: this.gridSize,
+        height: this.gridSize,
+        format: 'rg32float',
+        usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_SRC,
+      })
+      const fbo = device.createFramebuffer({
+        width: this.gridSize,
+        height: this.gridSize,
+        colorAttachments: [texture],
+        // Depth resolution must cover the 24-bit peel hash: the depth test picks
+        // each slot's winner, but the next pass's eligibility compares the full
+        // hash from the color target. A 16-bit depth buffer quantizes ties into
+        // existence, and a tie resolved by draw order can exclude the true
+        // smallest-hash point from the whole pass's sample.
+        depthStencilAttachment: 'depth24plus',
+      })
+      this.peelTargets.push({ texture, fbo })
     }
-    for (const target of this.gridTargets) {
-      if (target.texture && !target.texture.destroyed) target.texture.destroy()
+    this.slotsArrayTexture = device.createTexture({
+      dimension: '2d-array',
+      width: this.gridSize,
+      height: this.gridSize,
+      depth: slots,
+      format: 'rg32float',
+      usage: Texture.SAMPLE | Texture.COPY_DST,
+    })
+  }
+
+  private destroySlotTargets (): void {
+    for (const target of this.peelTargets) {
+      if (!target.fbo.destroyed) target.fbo.destroy()
     }
-    this.gridTargets = []
+    for (const target of this.peelTargets) {
+      if (!target.texture.destroyed) target.texture.destroy()
+    }
+    this.peelTargets = []
+    if (this.slotsArrayTexture && !this.slotsArrayTexture.destroyed) this.slotsArrayTexture.destroy()
+    this.slotsArrayTexture = undefined
+    this.slotCount = 0
   }
 }
