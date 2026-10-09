@@ -521,10 +521,12 @@ export interface GraphConfigInterface {
    * is on, link rest lengths are floored at the contact distance (see
    * `simulationLinkDistance`).
    *
-   * At or below 4,096 points every pair is tested exactly and `1` projects each
-   * overlapping pair to contact per pass; values up to `2` over-relax, which
-   * settles jammed piles faster. Above 4,096 points a spatial-hash approximation
-   * takes over.
+   * `1` projects each overlapping pair to contact per pass; values up to `2`
+   * over-relax, which settles jammed piles faster. At or below 4,096 points every
+   * pair is tested; above that a spatial hash with depth-peeled neighbour slots
+   * takes over — still pairwise, exact while a cell holds at most 32 points
+   * (16 above 16k points, 8 above 65k), and sampled afresh every pass in a
+   * denser cell.
    * Default value: `0`
    */
   simulationCollision: number;

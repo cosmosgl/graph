@@ -93,6 +93,56 @@ describe('GraphSimulation', () => {
     }
   })
 
+  it('collision separates piles above the all-pairs threshold (depth-peeled slot path)', async () => {
+    // 4,200 points — above the 4,096 all-pairs threshold — as 42 piles of 100
+    // size-10 points, each pile seeded inside a 4-unit disc. The piles sit far
+    // apart, so only pairs within a pile can ever overlap.
+    const piles = 42
+    const perPile = 100
+    const n = piles * perPile
+    const positions = new Float32Array(n * 2)
+    for (let p = 0; p < piles; p += 1) {
+      const cx = 400 + (p % 7) * 500
+      const cy = 400 + Math.floor(p / 7) * 500
+      for (let i = 0; i < perPile; i += 1) {
+        const angle = i * 2.399963
+        const radius = 2 * Math.sqrt((i + 1) / perPile)
+        positions[(p * perPile + i) * 2] = cx + Math.cos(angle) * radius
+        positions[(p * perPile + i) * 2 + 1] = cy + Math.sin(angle) * radius
+      }
+    }
+    const contact = 2 * (10 / 2 + 0.5)
+    const overlappingPairs = (pos: Float32Array): number => {
+      let count = 0
+      for (let p = 0; p < piles; p += 1) {
+        for (let i = p * perPile; i < (p + 1) * perPile; i += 1) {
+          for (let j = i + 1; j < (p + 1) * perPile; j += 1) {
+            const d = Math.hypot((pos[i * 2] as number) - (pos[j * 2] as number), (pos[i * 2 + 1] as number) - (pos[j * 2 + 1] as number))
+            if (d < contact - 0.1) count += 1
+          }
+        }
+      }
+      return count
+    }
+    const simulation = await createSimulation({
+      ...SIMULATION_CONFIG,
+      simulationGravity: 0,
+      simulationRepulsion: 0,
+      simulationLinkSpring: 0,
+      pointDefaultSize: 10,
+      simulationCollision: 1,
+      simulationCollisionPadding: 0.5,
+      simulationCollisionIterations: 2,
+    }, positions)
+    try {
+      expect(overlappingPairs(simulation.getPointPositionsArray())).toBeGreaterThan(100000)
+      for (let i = 0; i < 100; i += 1) simulation.step()
+      expect(overlappingPairs(simulation.getPointPositionsArray())).toBe(0)
+    } finally {
+      simulation.destroy()
+    }
+  })
+
   it('floors a link\'s rest length at the contact distance while collision is on', async () => {
     // Two size-20 points (contact distance 20) joined by a spring asking for 1 unit.
     const positions = new Float32Array([2000, 2048, 2100, 2048])
