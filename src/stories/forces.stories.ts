@@ -4,6 +4,7 @@ import { createStory, Story } from '@/graph/stories/create-story'
 import { CosmosStoryProps } from './create-cosmos'
 import { attractors } from './forces/attractors'
 import { collision } from './forces/collision'
+import { hubClusters } from './forces/hub-clusters'
 import { withLabels } from './forces/with-labels'
 
 import createCosmosRaw from './create-cosmos?raw'
@@ -11,6 +12,7 @@ import generateMeshDataRaw from './generate-mesh-data?raw'
 import createClusterLabelsRaw from './create-cluster-labels?raw'
 import attractorsRaw from './forces/attractors?raw'
 import collisionRaw from './forces/collision?raw'
+import hubClustersRaw from './forces/hub-clusters?raw'
 import withLabelsStoryRaw from './forces/with-labels?raw'
 
 const meta: Meta<CosmosStoryProps> = {
@@ -23,6 +25,18 @@ export const Collision: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: collisionRaw },
+      { name: 'create-cosmos', code: createCosmosRaw },
+    ],
+  },
+}
+
+export const HubClusters: Story = {
+  ...createStory(hubClusters),
+  name: 'Collision vs Hub Springs',
+  tags: ['advanced'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: hubClustersRaw },
       { name: 'create-cosmos', code: createCosmosRaw },
     ],
   },
