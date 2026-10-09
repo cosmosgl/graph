@@ -472,6 +472,16 @@ export interface GraphConfigInterface {
    * Default value: `0`
    */
   simulationCollisionPadding: number;
+  /**
+   * Collision passes per simulation tick. Each pass rebuilds the spatial-hash
+   * grid from the latest positions and applies one bounded correction, so more
+   * passes unwind a dense pile in fewer ticks, at a linear cost per pass.
+   * `1` suits sparse graphs; dense clusters with many links pulling inward
+   * resolve noticeably better at `2`–`4`. Fractions are truncated; values
+   * below `1`, `NaN` and `Infinity` run a single pass.
+   * Default value: `1`
+   */
+  simulationCollisionIterations: number;
 
   /**
    * Callback function that will be called when the simulation starts.
@@ -867,6 +877,7 @@ export type GraphSimulationConfigInterface = Pick<GraphConfigInterface,
   | 'simulationCollision'
   | 'simulationCollisionRadius'
   | 'simulationCollisionPadding'
+  | 'simulationCollisionIterations'
   | 'randomSeed'
   | 'rescalePositions'
   | 'onSimulationStart'

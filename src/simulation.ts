@@ -943,13 +943,21 @@ export class GraphSimulation implements PositionTextureSource {
       // corrects the overlap they introduce within the same tick, instead of
       // lagging one frame behind and oscillating against them.
       //
-      // It is a constraint, not a force: the pass is a bounded position
+      // It is a constraint, not a force: each pass is a bounded position
       // correction, integrated with friction 1 so it lands in full, and the
-      // shader does not scale it by alpha.
+      // shader does not scale it by alpha. Extra iterations repeat the whole
+      // grid-build + resolve pass on the freshest positions, so a dense pile
+      // unwinds in fewer ticks at a linear cost per pass.
       if (simulationCollision) {
-        this.points?.swapFbo()
-        this.forceCollision?.run()
-        this.points?.updatePosition(1)
+        // A non-finite count (NaN from an empty input, Infinity) runs one pass:
+        // Infinity would never return, and NaN would silently skip collision.
+        const requested = this.config.simulationCollisionIterations
+        const iterations = Number.isFinite(requested) ? Math.max(1, Math.floor(requested)) : 1
+        for (let i = 0; i < iterations; i++) {
+          this.points?.swapFbo()
+          this.forceCollision?.run()
+          this.points?.updatePosition(1)
+        }
       }
 
       // Alpha decay and progress
