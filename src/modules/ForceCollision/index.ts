@@ -57,6 +57,16 @@ export class ForceCollision extends CoreModule {
   private previousPointsTextureSize: number | undefined
   private previousSpaceSize: number | undefined
 
+  /**
+   * The resolved point sizes (`r` channel), one texel per point, laid out like the
+   * position texture. Built by `create()`; the link force reads it to keep spring
+   * rest lengths from demanding overlap. `undefined` until collision first runs.
+   */
+  public get resolvedSizeTexture (): Texture | undefined {
+    if (!this.sizeTexture || this.sizeTexture.destroyed) return undefined
+    return this.sizeTexture
+  }
+
   public create (): void {
     const { device, store, data, config } = this
     if (!store.pointsTextureSize || data.pointsNumber === undefined) return

@@ -52,6 +52,40 @@ describe('GraphSimulation', () => {
     }
   })
 
+  it('floors a link\'s rest length at the contact distance while collision is on', async () => {
+    // Two size-20 points (contact distance 20) joined by a spring asking for 1 unit.
+    const positions = new Float32Array([2000, 2048, 2100, 2048])
+    const distance = (pos: Float32Array): number => Math.hypot((pos[2] as number) - (pos[0] as number), (pos[3] as number) - (pos[1] as number))
+    const base: GraphSimulationConfig = {
+      ...SIMULATION_CONFIG,
+      simulationGravity: 0,
+      simulationRepulsion: 0,
+      simulationLinkSpring: 1,
+      simulationLinkDistance: 1,
+      simulationLinkDistRandomVariationRange: [1, 1],
+      pointDefaultSize: 20,
+    }
+    const settle = async (config: GraphSimulationConfig): Promise<number> => {
+      const simulation = await createSimulation(config, positions)
+      try {
+        simulation.setLinks(new Float32Array([0, 1]))
+        simulation.applyData()
+        for (let i = 0; i < 150; i += 1) simulation.step()
+        return distance(simulation.getPointPositionsArray())
+      } finally {
+        simulation.destroy()
+      }
+    }
+    // Without collision the spring closes to its 1-unit rest length …
+    expect(await settle({ ...base, simulationCollision: 0 })).toBeLessThan(3)
+    // … with collision on, the rest length is floored at contact and the pair settles touching.
+    // Strength 0.2 closes only a fifth of an overlap per tick, so collision alone could not
+    // restore contact against the spring each tick: only the floor keeps the pair at 20.
+    const withCollision = await settle({ ...base, simulationCollision: 0.2 })
+    expect(withCollision).toBeGreaterThan(19)
+    expect(withCollision).toBeLessThan(21.5)
+  })
+
   it('applies links through setLinks + applyData and pulls linked points together', async () => {
     const simulation = await createSimulation({ ...SIMULATION_CONFIG, simulationGravity: 0, simulationRepulsion: 0 })
     try {

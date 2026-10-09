@@ -122,8 +122,8 @@ export const collision = (): { graph: Graph; div: HTMLDivElement } => {
     simulationRepulsion: 0.8,
     simulationGravity: 0.05,
     simulationCluster: 0.01,
-    // Link distance must clear the points' collision radii (sizes up to ~30),
-    // otherwise the spring pulls connected points into an unresolvable pile.
+    // While collision is on, the engine floors each spring's rest length at the
+    // pair's contact distance, so a link distance of 50 only adds room beyond it.
     simulationLinkSpring: 0.3,
     simulationLinkDistance: 50,
     simulationDecay: 100000,
