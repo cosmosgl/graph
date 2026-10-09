@@ -468,7 +468,9 @@ export interface GraphConfigInterface {
    */
   simulationLinkSpring: number;
   /**
-   * Minimum link distance.
+   * Minimum link distance. While `simulationCollision` is on, a link's rest
+   * length is never less than the two endpoints' combined collision radii
+   * (plus padding), so a spring can never pull a pair into overlap.
    * Default value: `10`
    */
   simulationLinkDistance: number;
@@ -516,7 +518,9 @@ export interface GraphConfigInterface {
    *
    * Unlike the other forces, collision is a constraint: its correction is not
    * scaled by the simulation's alpha and is integrated without friction, so
-   * overlap keeps resolving at full strength while the layout cools.
+   * overlap keeps resolving at full strength while the layout cools. While it
+   * is on, link rest lengths are floored at the contact distance (see
+   * `simulationLinkDistance`).
    * Default value: `0`
    */
   simulationCollision: number;
