@@ -929,6 +929,10 @@ export class GraphSimulation implements PositionTextureSource {
       // Collision runs after the attraction forces (links, clusters) so it
       // corrects the overlap they introduce within the same tick, instead of
       // lagging one frame behind and oscillating against them.
+      //
+      // It is a constraint, not a force: the pass is a bounded position
+      // correction, integrated with friction 1 so it lands in full, and the
+      // shader does not scale it by alpha.
       if (simulationCollision) {
         // Lazily allocate the collision GPU resources on first use (or after a
         // data change marked them stale), so a simulation that never enables
@@ -940,7 +944,7 @@ export class GraphSimulation implements PositionTextureSource {
         }
         this.points?.swapFbo()
         this.forceCollision?.run()
-        this.points?.updatePosition()
+        this.points?.updatePosition(1)
       }
 
       // Alpha decay and progress

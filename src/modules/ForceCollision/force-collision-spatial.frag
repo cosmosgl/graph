@@ -9,7 +9,6 @@ uniform sampler2D gridTexture;
 layout(std140) uniform forceCollisionUniforms {
   float gridTextureSize;
   float cellSize;
-  float alpha;
   float collisionStrength;
   float collisionRadius;
   float collisionPadding;
@@ -19,7 +18,6 @@ layout(std140) uniform forceCollisionUniforms {
 
 #define gridTextureSize forceCollision.gridTextureSize
 #define cellSize forceCollision.cellSize
-#define alpha forceCollision.alpha
 #define collisionStrength forceCollision.collisionStrength
 #define collisionRadius forceCollision.collisionRadius
 #define collisionPadding forceCollision.collisionPadding
@@ -28,7 +26,6 @@ layout(std140) uniform forceCollisionUniforms {
 #else
 uniform float gridTextureSize;
 uniform float cellSize;
-uniform float alpha;
 uniform float collisionStrength;
 uniform float collisionRadius;
 uniform float collisionPadding;
@@ -131,8 +128,14 @@ void main() {
         vec2 direction = distVector / dist;
 
         // Apply repulsion force with soft curve
-        // Divide by 4 since we run 4 passes with different offsets
-        float force = alpha * collisionStrength * softOverlap * 0.25 * effectiveCount;
+        // Divide by 4 since we run 4 passes with different offsets.
+        // Deliberately not scaled by alpha: collision is a constraint, not a
+        // cooling force. The springs and cluster pull fade with alpha, so an
+        // overlap they introduced while hot must still be resolvable once the
+        // simulation has cooled — otherwise it freezes in. (d3-force's
+        // forceCollide ignores alpha for the same reason.) The per-pass cap
+        // below bounds the push, so full strength is stable at any alpha.
+        float force = collisionStrength * softOverlap * 0.25 * effectiveCount;
 
         // Clamp maximum force to prevent instability
         force = min(force, combinedRadius * 0.5);
@@ -141,7 +144,7 @@ void main() {
       } else if (dist <= 0.001 && effectiveCount > 0.0) {
         // Points at same position - push based on index
         float angle = currentIndex * 0.618033988749895;
-        float force = min(alpha * collisionStrength * combinedRadius * 0.1, combinedRadius * 0.3);
+        float force = min(collisionStrength * combinedRadius * 0.1, combinedRadius * 0.3);
         velocity.rg += force * effectiveCount * vec2(cos(angle), sin(angle));
       }
     }

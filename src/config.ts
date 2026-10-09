@@ -447,6 +447,10 @@ export interface GraphConfigInterface {
    * Collision force coefficient. When set to a value greater than 0,
    * points will push each other apart when they overlap.
    * Uses a spatial-hash grid, so it scales better than naive O(n²) collision.
+   *
+   * Unlike the other forces, collision is a constraint: its correction is not
+   * scaled by the simulation's alpha and is integrated without friction, so
+   * overlap keeps resolving at full strength while the layout cools.
    * Default value: `0`
    */
   simulationCollision: number;
