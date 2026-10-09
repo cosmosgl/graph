@@ -44,7 +44,6 @@ export class ForceCollision extends CoreModule {
     forceCollisionUniforms: {
       gridTextureSize: number;
       cellSize: number;
-      alpha: number;
       collisionStrength: number;
       collisionRadius: number;
       collisionPadding: number;
@@ -216,7 +215,6 @@ export class ForceCollision extends CoreModule {
         uniformTypes: {
           gridTextureSize: 'f32',
           cellSize: 'f32',
-          alpha: 'f32',
           collisionStrength: 'f32',
           collisionRadius: 'f32',
           collisionPadding: 'f32',
@@ -329,7 +327,6 @@ export class ForceCollision extends CoreModule {
         forceCollisionUniforms: {
           gridTextureSize: this.gridTextureSize,
           cellSize: this.cellSize,
-          alpha: store.alpha,
           collisionStrength: config.simulationCollision ?? 0,
           collisionRadius,
           collisionPadding,
