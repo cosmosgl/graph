@@ -1,17 +1,21 @@
 #version 300 es
 precision highp float;
 
-// One depth-peeling pass of the near-field point-slot build.
+// One depth-peeling pass of a per-cell point-slot build. Shared by the
+// many-body near field and the collision force (ForceCollision/index.ts),
+// which bind their own grid size and cell size.
 //
-// The precise grid's near field needs actual point-to-point forces (cell
-// centroids alone exert a purely radial force that flattens dense hubs into
-// disks and spikes). Each peeling pass selects, per finest-level cell, the
-// not-yet-peeled point with the smallest per-tick random hash: the depth test
-// keeps the smallest `hashValue` among eligible points, and eligibility excludes
-// points already captured by the previous slot (hash <= previous slot's hash).
-// Running K passes yields a uniform random K-subset per cell, re-randomized
-// every tick via `randomSeed`; force-nearfield.frag turns it into an unbiased
-// estimate of the cell's exact all-pairs repulsion (Monte-Carlo P3M).
+// A grid's near field needs actual point-to-point interactions (cell centroids
+// alone exert a purely radial force that flattens dense hubs into disks and
+// spikes, and a contact test against a centroid cannot see a pair that overlaps
+// while the cell mean sits out of range). Each peeling pass selects, per cell,
+// the not-yet-peeled point with the smallest per-tick random hash: the depth
+// test keeps the smallest `hashValue` among eligible points, and eligibility
+// excludes points already captured by the previous slot (hash <= previous
+// slot's hash). Running K passes yields a uniform random K-subset per cell,
+// re-randomized every tick via `randomSeed`; force-nearfield.frag turns it into
+// an unbiased estimate of the cell's exact all-pairs repulsion (Monte-Carlo
+// P3M), and force-collision-slots.frag resolves contacts against it directly.
 
 uniform sampler2D positionsTexture;
 uniform sampler2D previousSlot;

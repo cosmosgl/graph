@@ -5,13 +5,13 @@ precision highp float;
 precision highp int;
 
 // Exact pairwise collision for small graphs: one fragment per point, looping
-// over every other point. Used at or below ALL_PAIRS_MAX_POINTS (index.ts),
-// where an n² texel loop is trivial work and exactness is what matters.
+// over every other point. Used at or below ALL_PAIRS_MAX_POINTS (index.ts);
+// above it, force-collision-slots.frag tests real per-cell neighbours instead.
 //
-// The spatial-hash path reacts to each cell's *average* occupant, and in a
-// dense pile that stalls: a point gets no push unless it overlaps an average,
-// so two points can sit inside each other while every cell mean is out of
-// range — and two near-coincident points see the same field and never part.
+// Both replaced a grid that reacted to each cell's *average* occupant. In a
+// dense pile that stalled: a point got no push unless it overlapped an
+// average, so two points could sit inside each other while every cell mean was
+// out of range, and near-coincident points saw the same field and never parted.
 // Here every overlapping pair is resolved directly, d3-force style: the pair
 // is projected to contact along the line between the centers, and the
 // correction is split by r² so the smaller disc yields to the bigger one.
