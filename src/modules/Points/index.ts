@@ -2175,7 +2175,15 @@ export class Points extends CoreModule implements PointTrackerHost {
     if (store.focusedPoint) this.drawPointRing(renderPass, store.focusedPoint.index, store.focusedPointRingColor)
   }
 
-  public updatePosition (): void {
+  /**
+   * Integrates the velocity texture into the positions: `pos += v × friction`,
+   * clamped to the space.
+   *
+   * @param friction - The integrator's friction for this write. Defaults to the
+   *   configured `simulationFriction`; the collision force passes `1` because its
+   *   output is a position correction that must land in full, not a force to damp.
+   */
+  public updatePosition (friction: number = this.config.simulationFriction): void {
     if (!this.updatePositionCommand || !this.updatePositionUniformStore || !this.currentPositionFbo || this.currentPositionFbo.destroyed) return
     if (!this.previousPositionTexture || this.previousPositionTexture.destroyed) return
     if (!this.velocityTexture || this.velocityTexture.destroyed) return
@@ -2184,7 +2192,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
     this.updatePositionUniformStore.setUniforms({
       updatePositionUniforms: {
-        friction: this.config.simulationFriction,
+        friction,
         spaceSize: this.store.adjustedSpaceSize,
       },
     })
