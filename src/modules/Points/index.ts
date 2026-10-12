@@ -444,6 +444,19 @@ export class Points extends CoreModule implements PointTrackerHost {
     return false
   }
 
+  /** Whether the GPU has yet to reach a pick or tracked-positions copy in flight. */
+  public get isReadbackPending (): boolean {
+    if (this.pickingReadback?.isPending) return true
+    for (const tracker of this.trackers) if (tracker.isReadbackPending) return true
+    return false
+  }
+
+  /** Drops every pick and tracked-positions copy in flight; the next read asks again. */
+  public cancelPendingReadbacks (): void {
+    this.discardPendingPick()
+    for (const tracker of this.trackers) tracker.cancelReadback()
+  }
+
   public updatePositions (): boolean {
     const { device, store, data, config: { rescalePositions, enableSimulation } } = this
 

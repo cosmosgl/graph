@@ -116,6 +116,18 @@ export class PointTrackerImpl implements PointTracker {
     return this.readback?.inFlight ?? false
   }
 
+  /** Whether the GPU has yet to reach the copy in flight. */
+  public get isReadbackPending (): boolean {
+    return this.readback?.isPending ?? false
+  }
+
+  /** Drops the copy in flight; the next non-blocking read asks for another. */
+  public cancelReadback (): void {
+    if (!this.readback?.inFlight) return
+    this.readback.cancel()
+    this.issuedVersion = -1
+  }
+
   public positions (options?: PositionsReadOptions): ReadonlyMap<number, [number, number]> {
     const { host } = this
     if (!host || !this.indices.length) return new Map()

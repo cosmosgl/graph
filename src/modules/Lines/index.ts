@@ -142,6 +142,11 @@ export class Lines extends CoreModule {
     return this.pickingReadback?.inFlight ?? false
   }
 
+  /** Whether the GPU has yet to reach the link pick in flight. */
+  public get isPickReadbackPending (): boolean {
+    return this.pickingReadback?.isPending ?? false
+  }
+
   public initPrograms (): void {
     const { device, config, store, data } = this
 

@@ -68,9 +68,21 @@ export class Clusters extends CoreModule {
     return this.centroidReadback?.inFlight ?? false
   }
 
+  /** Whether the GPU has yet to reach the centroid copy in flight. */
+  public get isCentroidReadbackPending (): boolean {
+    return this.centroidReadback?.isPending ?? false
+  }
+
   /** Whether a non-blocking read is waiting on a readback that no frame has issued yet. */
   public get needsCentroidReadback (): boolean {
     return this.isCentroidReadbackWanted && this.points?.areClusterCentroidsUpToDate === false
+  }
+
+  /** Drops the centroid copy in flight; the next read recomputes or asks again. */
+  public cancelCentroidReadback (): void {
+    if (!this.centroidReadback?.inFlight) return
+    this.centroidReadback.cancel()
+    if (this.points) this.points.areClusterCentroidsUpToDate = false
   }
 
   public create (): void {
