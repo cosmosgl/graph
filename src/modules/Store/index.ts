@@ -21,6 +21,15 @@ export const READBACK_WAIT_POLL_MS = 1
  * signals without the context being lost.
  */
 export const READBACK_WAIT_CAP_MS = 1000
+/**
+ * A non-blocking read is cold when more than this many simulation steps ran since the previous
+ * read: the cache holds positions from before the pause, and a cold read waits like a first
+ * read so an overlay that resumes appears in place. Steps rather than frames or wall time: a
+ * step is when positions move, every host runs them through one method, with or without a
+ * render loop, and a slow frame is still one step. A reader asking every step never waits;
+ * one that reads every other step, or every fourth, stays on the fast path.
+ */
+export const READBACK_COLD_STEPS = 8
 
 /**
  * Maximum number of executions to delay before performing hover detection.

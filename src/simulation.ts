@@ -55,7 +55,9 @@ export interface PositionsReadOptions {
    * false`, a headless graph, a standalone simulation) may queue frames ahead of the copy, and
    * the positions then trail by a frame or more.
    * The first read, and the first after the tracked points or the clusters change, still
-   * waits: there is nothing earlier to return.
+   * waits: there is nothing earlier to return. So does a read after more than a few simulation
+   * steps without one, whose cache predates the pause — an overlay that resumes appears in
+   * place.
    */
   nonBlocking?: boolean;
 }
@@ -968,6 +970,7 @@ export class GraphSimulation implements PositionTextureSource {
         this.store.alpha = Math.max(this.store.alpha, 0.1)
       }
       this.store.simulationProgress = Math.sqrt(Math.min(1, ALPHA_MIN / this.store.alpha))
+      if (this.points) this.points.stepVersion += 1
 
       this.config.onSimulationTick?.(
         this.store.alpha,
