@@ -143,6 +143,12 @@ export class Points extends CoreModule implements PointTrackerHost {
    */
   public pointListVersion = 0
   /**
+   * Goes up on every simulation step that ran, on any host. A reader compares it to the
+   * step of its last read to learn that it paused while points moved: its cache then
+   * predates the pause.
+   */
+  public stepVersion = 0
+  /**
    * Set by `Graph`: asks for a frame that will issue a non-blocking copy, and tells whether
    * one is coming. Unset on a standalone simulation, where the read issues the copy itself.
    */

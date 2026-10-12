@@ -7,6 +7,7 @@ import calculateCentermassVert from '@/graph/modules/Clusters/calculate-centerma
 import forceFrag from '@/graph/modules/Clusters/force-cluster.frag?raw'
 import { readPixels } from '@/graph/helper'
 import { PickingReadback } from '@/graph/modules/Points/picking-readback'
+import { READBACK_COLD_STEPS } from '@/graph/modules/Store'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
@@ -42,6 +43,8 @@ export class Clusters extends CoreModule {
    * clears it, so readbacks stop when the reads do.
    */
   private isCentroidReadbackWanted = false
+  /** The points module's step at the last centroid read, any mode. A read many steps later finds a cold cache. */
+  private lastCentroidReadStep = -1
   private applyForcesVertexCoordBuffer: Buffer | undefined
 
   // Track previous sizes to detect changes
@@ -444,11 +447,18 @@ export class Clusters extends CoreModule {
    * Do not mutate the returned array; it may be the internal cache.
    */
   public getCentroidPositions (nonBlocking = false): Readonly<number[]> {
+    // Nobody asked while the points moved on: the cache predates the pause. Such a read
+    // waits like a first read, so cluster labels that resume appear in place. Recorded
+    // before the up-to-date return, so a reader who kept asking while nothing moved stays warm.
+    const step = this.points?.stepVersion ?? 0
+    const isCold = step - this.lastCentroidReadStep > READBACK_COLD_STEPS
+    this.lastCentroidReadStep = step
+
     if (this.points?.areClusterCentroidsUpToDate && this.cachedCentroidPositions && !this.hasPendingCentroidReadback) {
       return this.cachedCentroidPositions
     }
 
-    if (nonBlocking && this.cachedCentroidPositions) {
+    if (nonBlocking && this.cachedCentroidPositions && !isCold) {
       this.isCentroidReadbackWanted = true
       return this.cachedCentroidPositions
     }

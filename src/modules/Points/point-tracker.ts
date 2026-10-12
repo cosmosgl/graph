@@ -4,6 +4,7 @@ import type { PositionsReadOptions } from '@/graph/simulation'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import { readPixels, isPointAbsent } from '@/graph/helper'
 import { PickingReadback } from '@/graph/modules/Points/picking-readback'
+import { READBACK_COLD_STEPS } from '@/graph/modules/Store'
 
 /**
  * Follows a set of points — returned by `GraphSimulation.trackPoints()`.
@@ -53,6 +54,8 @@ export interface PointTrackerHost {
   readonly positionVersion: number;
   /** Goes up when the count or the set of absent points changes. */
   readonly pointListVersion: number;
+  /** Goes up on every simulation step that ran, on any host. */
+  readonly stepVersion: number;
   /**
    * Asks for a tick that will issue a non-blocking copy; `true` when one is coming.
    * Unset, or `false`, when nothing drives ticks — the read then issues the copy itself.
@@ -106,6 +109,8 @@ export class PointTrackerImpl implements PointTracker {
    * clears it, so copies stop when the reads do.
    */
   private isReadbackWanted = false
+  /** The host's step at the last read, any mode. A read many steps later finds a cold cache. */
+  private lastReadStep = -1
 
   public constructor (indices: readonly number[]) {
     this.indices = [...indices]
@@ -136,9 +141,16 @@ export class PointTrackerImpl implements PointTracker {
     this.resolveReadback()
     const version = host.positionVersion
     const pointList = host.pointListVersion
+    // Nobody asked while the points moved on: the cache predates the pause, and no copy was
+    // issued since. Such a read waits like a first read, so an overlay that resumes appears
+    // in place instead of jumping there a copy later. Recorded before the up-to-date return,
+    // so a reader who kept asking while nothing moved stays warm.
+    const step = host.stepVersion
+    const isCold = step - this.lastReadStep > READBACK_COLD_STEPS
+    this.lastReadStep = step
     if (this.cached && this.cachedVersion === version && this.cachedPointList === pointList) return this.cached
 
-    if (options?.nonBlocking && this.cached) {
+    if (options?.nonBlocking && this.cached && !isCold) {
       // Its coordinates stay as old as they are: only the points that are gone leave
       if (this.cachedPointList !== pointList) this.dropGonePoints()
       this.isReadbackWanted = true

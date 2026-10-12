@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest'
 
 import { Graph, type GraphConfig } from '@cosmos.gl/graph'
+import { READBACK_WAIT_CAP_MS, READBACK_COLD_STEPS } from '@/graph/modules/Store'
 
 /**
  * Frame pacing while a non-blocking readback is pending.
@@ -31,9 +32,6 @@ const RUNNING_CONFIG: GraphConfig = {
 
 /** Four points around the space center, none at equilibrium. */
 const POSITIONS = new Float32Array([1000, 1000, 3000, 1000, 1000, 3000, 3000, 3000])
-
-/** The cap after which a fence that never signals is given up on and the loop draws again. */
-const WAIT_CAP_MS = 1000
 
 const wait = (ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms) })
 
@@ -226,7 +224,7 @@ describe('the render loop holds the next frame while a readback is pending', () 
       await wait(300)
       expect(running.ticks()).toBe(held)
       // Past the cap the pending copy is dropped, and with nobody reading, no new one is issued
-      await wait(WAIT_CAP_MS)
+      await wait(READBACK_WAIT_CAP_MS)
       const resumed = running.ticks()
       expect(resumed).toBeGreaterThan(held)
       await wait(150)
@@ -294,6 +292,112 @@ describe('the hold ends with the loop', () => {
     } finally {
       release()
       graph.destroy()
+    }
+  })
+})
+
+/**
+ * A non-blocking read returns the latest copy. After a pause in reading that copy
+ * predates the pause, and an overlay would appear where the points were and jump a
+ * copy later. A read that comes long after the last one waits like a first read.
+ */
+describe('a non-blocking read after a pause in reading', () => {
+  /** Lets steps run with nobody reading, counted in steps: the suite's frame rate varies. */
+  const pauseReading = async (running: RunningGraph, steps = READBACK_COLD_STEPS + 3): Promise<void> => {
+    const start = running.ticks()
+    for (let i = 0; i < 500 && running.ticks() - start < steps; i += 1) await wait(10)
+    expect(running.ticks() - start).toBeGreaterThanOrEqual(steps)
+  }
+
+  it('returns the current tracked positions, not the ones from before the pause', async () => {
+    const running = await createRunningGraph()
+    try {
+      running.graph.trackPointPositionsByIndices([0])
+      const stale = running.graph.getTrackedPointPositionsMap({ nonBlocking: true }).get(0)
+      await pauseReading(running)
+      // Same task, no frame between the two reads: a blocking read says where the point is now
+      const resumed = running.graph.getTrackedPointPositionsMap({ nonBlocking: true }).get(0)
+      const current = running.graph.getTrackedPointPositionsMap().get(0)
+      expect(resumed).toEqual(current)
+      expect(resumed).not.toEqual(stale)
+    } finally {
+      running.destroy()
+    }
+  })
+
+  it('returns the current cluster centroids, not the ones from before the pause', async () => {
+    const running = await createRunningGraph()
+    try {
+      running.graph.setPointClusters([0, 0, 1, 1])
+      running.graph.render()
+      await running.graph.ready
+      const stale = [...running.graph.getClusterPositions({ nonBlocking: true })]
+      await pauseReading(running)
+      const resumed = [...running.graph.getClusterPositions({ nonBlocking: true })]
+      const current = [...running.graph.getClusterPositions()]
+      expect(resumed).toEqual(current)
+      expect(resumed).not.toEqual(stale)
+    } finally {
+      running.destroy()
+    }
+  })
+
+  it('a reader that keeps asking stays on the non-blocking path', async () => {
+    const running = await createRunningGraph()
+    // A read that waits ends in a synchronous readPixels into an array; the copies the
+    // non-blocking path issues read into a buffer, by offset. Nothing else in these frames
+    // reads pixels: no pointer is on the canvas.
+    const readPixels = vi.spyOn(WebGL2RenderingContext.prototype, 'readPixels')
+    const waitedReads = (): number => readPixels.mock.calls.filter((args) => typeof args[6] !== 'number').length
+    try {
+      running.graph.trackPointPositionsByIndices([0])
+      running.graph.getTrackedPointPositionsMap({ nonBlocking: true })
+      expect(waitedReads()).toBe(1) // the first read, with nothing earlier to return
+      readPixels.mockClear()
+      // One read after every step, for a dozen steps
+      let reads = 0
+      let lastTick = running.ticks()
+      for (let i = 0; i < 300 && reads < 12; i += 1) {
+        await wait(10)
+        if (running.ticks() === lastTick) continue
+        lastTick = running.ticks()
+        running.graph.getTrackedPointPositionsMap({ nonBlocking: true })
+        reads += 1
+      }
+      expect(reads).toBe(12)
+      expect(waitedReads()).toBe(0)
+    } finally {
+      readPixels.mockRestore()
+      running.destroy()
+    }
+  })
+
+  it('a cluster reader that kept asking while nothing moved stays on the non-blocking path', async () => {
+    const running = await createRunningGraph()
+    try {
+      running.graph.setPointClusters([0, 0, 1, 1])
+      running.graph.render()
+      await running.graph.ready
+      running.graph.getClusterPositions({ nonBlocking: true })
+      // A zoom with the simulation blocked, or a pause: no step runs, the centroids stay
+      // current, and every read returns them from the up-to-date cache
+      running.graph.pause()
+      await wait(60)
+      const still = [...running.graph.getClusterPositions({ nonBlocking: true })]
+      for (let i = 0; i < 10; i += 1) {
+        await wait(50)
+        expect([...running.graph.getClusterPositions({ nonBlocking: true })]).toEqual(still)
+      }
+      // The points move again. The reader never paused, so the first read after the move
+      // returns the cache — the still centroids — rather than waiting for the new ones
+      running.graph.unpause()
+      const before = running.ticks()
+      for (let i = 0; i < 200 && running.ticks() === before; i += 1) await wait(5)
+      const resumed = [...running.graph.getClusterPositions({ nonBlocking: true })]
+      expect(resumed).toEqual(still)
+      expect([...running.graph.getClusterPositions()]).not.toEqual(still)
+    } finally {
+      running.destroy()
     }
   })
 })
