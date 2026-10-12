@@ -49,7 +49,11 @@ export interface PointPositionTexture {
 export interface PositionsReadOptions {
   /**
    * Return the latest positions the GPU has already handed back instead of waiting for it to
-   * catch up. While points move, they trail the drawn frame by a frame or more.
+   * catch up. While points move, they trail the drawn frame. Under a `Graph`'s own render
+   * loop that is one frame: while a copy is on its way, the loop holds its next frame until the
+   * GPU has finished the previous one. A host that drives frames itself (`enableRenderLoop:
+   * false`, a headless graph, a standalone simulation) may queue frames ahead of the copy, and
+   * the positions then trail by a frame or more.
    * The first read, and the first after the tracked points or the clusters change, still
    * waits: there is nothing earlier to return.
    */
@@ -260,6 +264,21 @@ export class GraphSimulation implements PositionTextureSource {
   /** Whether a non-blocking cluster-centroid copy is still awaiting the GPU. @internal */
   public get hasPendingCentroidReadback (): boolean {
     return this.clusters?.hasPendingCentroidReadback ?? false
+  }
+
+  /**
+   * Whether the GPU has yet to reach a copy in flight — a pick, tracked positions or cluster
+   * centroids. `Graph` holds its next frame while this is true, so the copy is collected with
+   * nothing queued ahead of it. @internal
+   */
+  public get isReadbackPending (): boolean {
+    return (this.points?.isReadbackPending ?? false) || (this.clusters?.isCentroidReadbackPending ?? false)
+  }
+
+  /** Drops every copy in flight; each reader asks for another on its next read. @internal */
+  public cancelPendingReadbacks (): void {
+    this.points?.cancelPendingReadbacks()
+    this.clusters?.cancelCentroidReadback()
   }
 
   /**

@@ -9,6 +9,20 @@ export const ALPHA_MIN = 0.001
 export const MAX_POINT_SIZE = 64
 
 /**
+ * While a non-blocking copy is on its way, the render loop holds its next frame and checks
+ * the copy's fence on this timer instead of at the next animation frame. A fence only
+ * changes state between tasks, so a timer sees it as soon as it signals; waiting for the
+ * next animation frame would round every GPU frame up to a display frame.
+ */
+export const READBACK_WAIT_POLL_MS = 1
+/**
+ * A fence that has not signaled after this long is given up on: its copy is dropped and the
+ * loop draws again. Far longer than any GPU frame — a safety net for a fence that never
+ * signals without the context being lost.
+ */
+export const READBACK_WAIT_CAP_MS = 1000
+
+/**
  * Maximum number of executions to delay before performing hover detection.
  * This threshold prevents excessive hover detection calls for performance optimization.
  * The `findHoveredItem` method will skip actual detection until this count is reached.
