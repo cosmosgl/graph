@@ -28,6 +28,15 @@ export class PickingReadback {
   }
 
   /**
+   * Whether the GPU has yet to reach the copy. Unlike `poll()` it collects nothing, so the
+   * result stays for a later `poll()`. A failed wait or a lost context reads as not pending.
+   */
+  public get isPending (): boolean {
+    if (!this.isInFlight || !this.sync) return false
+    return this.gl.clientWaitSync(this.sync, 0, 0) === this.gl.TIMEOUT_EXPIRED
+  }
+
+  /**
    * Starts an async read of an RGBA32F window from the framebuffer.
    * Returns `false` (and does nothing) while a previous read is still in flight.
    */
