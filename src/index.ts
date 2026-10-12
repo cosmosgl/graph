@@ -12,7 +12,9 @@ import { GraphData } from '@/graph/modules/GraphData'
 import { Lines } from '@/graph/modules/Lines'
 import { Points } from '@/graph/modules/Points'
 import { numberArraysEqual } from '@/graph/modules/Points/picking-utils'
-import { Store, ALPHA_MIN, MAX_HOVER_DETECTION_DELAY, MIN_MOUSE_MOVEMENT_THRESHOLD, type Hovered } from '@/graph/modules/Store'
+import {
+  Store, ALPHA_MIN, MAX_HOVER_DETECTION_DELAY, MIN_MOUSE_MOVEMENT_THRESHOLD, READBACK_WAIT_POLL_MS, READBACK_WAIT_CAP_MS, type Hovered,
+} from '@/graph/modules/Store'
 import { Transition, TransitionProperty } from '@/graph/modules/Transition'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
@@ -51,6 +53,10 @@ export class Graph implements PositionTextureSource {
   private canvasD3Selection: Selection<HTMLCanvasElement, undefined, null, undefined> | undefined
   private device: Device | undefined
   private requestAnimationFrameId = 0
+  /** The timer re-checking a pending copy's fence; `frame()` treats it as a frame scheduled. */
+  private readbackWaitTimeoutId = 0
+  /** When the hold for a pending copy began; 0 while no frame is held. */
+  private readbackWaitStartedAt = 0
   /**
    * Detects canvas element resizes:
    * resize → `_shouldSyncScreenSize` + `requestRender()` → `syncScreenSize()` next frame.
@@ -2231,7 +2237,8 @@ export class Graph implements PositionTextureSource {
     // Headless instances have nothing to draw; with `enableRenderLoop: false` the
     // host schedules frames instead (`step()` / `renderOneFrame()`).
     if (this._isHeadless || !this.config.enableRenderLoop) return
-    if (this.requestAnimationFrameId) return // frame already scheduled
+    // A frame already scheduled, or held for a pending copy — the held frame runs the request
+    if (this.requestAnimationFrameId || this.readbackWaitTimeoutId) return
     // Nothing renderable: before the first render(), or after render() cleared
     // the data. Without this guard a later pointermove would resurrect drawing
     // of stale GPU buffers (empty-data render() stops frames but doesn't clear
@@ -2240,20 +2247,53 @@ export class Graph implements PositionTextureSource {
 
     this.requestAnimationFrameId = window.requestAnimationFrame((now) => {
       this.requestAnimationFrameId = 0
-
-      // Check if simulation should end BEFORE rendering
-      // This prevents one extra simulation step after alpha decays below ALPHA_MIN
-      const { store: { alpha, isSimulationRunning } } = this
-      if (alpha < ALPHA_MIN && isSimulationRunning) {
-        this.end()
-      }
-
-      this.renderFrame(now)
-
-      if (!this._isDestroyed && this.shouldKeepRendering()) {
-        this.frame()
-      }
+      this.runFrame(now)
     })
+  }
+
+  /**
+   * Runs the frame `frame()` scheduled, unless a non-blocking copy is still on its way.
+   *
+   * A frame end issues the copies non-blocking reads asked for, behind a fence, and the next
+   * frame start collects them. Chrome's `getBufferSubData` waits for the GPU process to run
+   * every command queued before it, and a GPU-bound loop queues several frames ahead, so a
+   * copy collected behind those frames stalls the main thread for all of them and holds
+   * positions as many frames old. Holding the next frame until the fence signals keeps one
+   * frame in flight: the copy is collected with nothing queued ahead of it, one frame behind
+   * the drawn points. The timer catches the fence sooner than the next animation frame would.
+   * A fence that never signals is given up on after `READBACK_WAIT_CAP_MS`.
+   */
+  private runFrame (now: number): void {
+    if (this._isDestroyed) return
+
+    // The simulation's copies (point pick, tracked positions, centroids) and the link pick,
+    // which lives on the renderer
+    if (this.simulation.isReadbackPending || this.lines?.isPickReadbackPending) {
+      if (!this.readbackWaitStartedAt) this.readbackWaitStartedAt = now
+      if (now - this.readbackWaitStartedAt < READBACK_WAIT_CAP_MS) {
+        this.readbackWaitTimeoutId = window.setTimeout(() => {
+          this.readbackWaitTimeoutId = 0
+          this.runFrame(performance.now())
+        }, READBACK_WAIT_POLL_MS)
+        return
+      }
+      this.simulation.cancelPendingReadbacks()
+      this.lines?.discardPendingPick()
+    }
+    this.readbackWaitStartedAt = 0
+
+    // Check if simulation should end BEFORE rendering
+    // This prevents one extra simulation step after alpha decays below ALPHA_MIN
+    const { store: { alpha, isSimulationRunning } } = this
+    if (alpha < ALPHA_MIN && isSimulationRunning) {
+      this.end()
+    }
+
+    this.renderFrame(now)
+
+    if (!this._isDestroyed && this.shouldKeepRendering()) {
+      this.frame()
+    }
   }
 
   /**
@@ -2413,6 +2453,11 @@ export class Graph implements PositionTextureSource {
       window.cancelAnimationFrame(this.requestAnimationFrameId)
       this.requestAnimationFrameId = 0 // Reset to 0
     }
+    if (this.readbackWaitTimeoutId) {
+      window.clearTimeout(this.readbackWaitTimeoutId)
+      this.readbackWaitTimeoutId = 0
+    }
+    this.readbackWaitStartedAt = 0
   }
 
   /**
