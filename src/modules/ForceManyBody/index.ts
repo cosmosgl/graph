@@ -9,7 +9,9 @@ import forceNearFieldFrag from '@/graph/modules/ForceManyBody/force-nearfield.fr
 import forceAllPairsFrag from '@/graph/modules/ForceManyBody/force-allpairs.frag?raw'
 import buildNearFieldSlotsVert from '@/graph/modules/ForceManyBody/build-nearfield-slots.vert?raw'
 import buildNearFieldSlotsFrag from '@/graph/modules/ForceManyBody/build-nearfield-slots.frag?raw'
+import { withGridCell } from '@/graph/modules/ForceManyBody/grid-cell'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
+import { DataBounds } from '@/graph/modules/Shared/data-bounds'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 
@@ -21,12 +23,41 @@ const MAX_GRID_SIZE = 512
 
 /**
  * Finest grid resolution per axis for a point count: ~2·√n, floored at 8²,
- * capped at MAX_GRID_SIZE. Shared by the pyramid allocation and the all-pairs
- * pass's per-tick velocity clamp, which must bound with the same cell size the
- * grid path would use at the same count.
+ * capped at MAX_GRID_SIZE. Sizes the pyramid, the data-bounds floor
+ * (MIN_FINEST_CELL_SIZE) and the per-tick step bound (getMaxStep).
  */
 const getFinestGridSize = (pointsNumber: number): number =>
   Math.min(MAX_GRID_SIZE, Math.max(8, Math.pow(2, Math.ceil(Math.log2(2 * Math.sqrt(pointsNumber))))))
+
+/**
+ * The per-tick bound on the close-range repulsion kick, for both paths: the
+ * all-pairs pass (which also splits near from far pairs at it) and the grid
+ * path's near-field pass. It is 2 × the finest cell of a layout spanning the
+ * space at this point count — a fixed length, deliberately not 2 × the grid's
+ * actual cell: the grid follows the data, and a cell-relative bound would
+ * tighten as a layout contracts, throttling the kicks that break dense clumps
+ * apart exactly when they are needed. One helper so both passes bound with the
+ * same value and the dynamics stay continuous across ALL_PAIRS_MAX_POINTS.
+ */
+const getMaxStep = (adjustedSpaceSize: number, pointsNumber: number): number =>
+  2 * (adjustedSpaceSize / getFinestGridSize(pointsNumber))
+
+/**
+ * The smallest finest-level cell the grid may have, in world units: the
+ * data-bounds floor is this × the finest grid size. All points coincident (or
+ * a single live point) is a legitimate layout with a zero-size box, and the
+ * grid still needs a non-zero cell to index.
+ *
+ * A quarter of the force kernel's `distanceMin` (1 unit, where its falloff
+ * softens from 1/d to 1/√d). The finest grid has 2–4·√n cells per axis below
+ * MAX_GRID_SIZE and fewer above it, so the floor binds only once the points'
+ * mean spacing drops below about one unit, where the kernel has already
+ * softened. Once it binds, the box is larger than the data, which pads the
+ * layout's edge to the middle of a cell on every level and costs the far field
+ * accuracy: at one unit per cell it bound on a 100k-point square a tenth of
+ * the space wide (mean spacing 1.3 units) and raised its error 0.06% → 0.30%.
+ */
+const MIN_FINEST_CELL_SIZE = 0.25
 
 /**
  * How many points per finest-level cell get exact pairwise repulsion each tick.
@@ -106,6 +137,15 @@ const PEEL_TARGETS = 2
  * petals. Small/sparse graphs land at most one point per cell, so the near field
  * samples each cell exhaustively and the far cells' centroids are exact — the
  * approximation only kicks in once cells hold more points than sampling slots.
+ *
+ * The pyramid covers the data, not the space: every tick DataBounds reduces the
+ * live points to their bounding square on the GPU, and every level divides that
+ * square (grid-cell.ts). A space-anchored grid gave a layout covering a fraction
+ * f of each axis only f² of the cells — an average of n/(R·f)² points per finest
+ * cell for R cells per axis, at most 0.25/f² below 65k points but 0.38/f² at
+ * 100k, past the 8 near-field slots there once f drops below ~0.22 — and binned
+ * points outside the space into its edge cells. Following the data makes the
+ * resolution depend on the point count alone, wherever the layout sits.
  */
 export class ForceManyBody extends CoreModule {
   private randomValuesTexture: Texture | undefined
@@ -139,17 +179,18 @@ export class ForceManyBody extends CoreModule {
 
   private forceVertexCoordBuffer: Buffer | undefined
 
+  /** This tick's data bounds — the square every grid level divides (grid path only). */
+  private dataBounds: DataBounds | undefined
+
   private calculateLevelsUniformStore: UniformStore<{
     calculateLevelsPreciseUniforms: {
       levelGridSize: number;
-      cellSize: number;
     };
   }> | undefined
 
   private forceLevelUniformStore: UniformStore<{
     forceLevelPreciseUniforms: {
       levelGridSize: number;
-      cellSize: number;
       isFirstLevel: number;
       alpha: number;
       repulsion: number;
@@ -160,7 +201,6 @@ export class ForceManyBody extends CoreModule {
     buildNearFieldSlotsUniforms: {
       pointsTextureSize: number;
       levelGridSize: number;
-      cellSize: number;
       hasPreviousSlot: number;
       randomSeed: number;
     };
@@ -170,7 +210,7 @@ export class ForceManyBody extends CoreModule {
     forceNearFieldUniforms: {
       pointsTextureSize: number;
       levelGridSize: number;
-      cellSize: number;
+      maxStep: number;
       alpha: number;
       repulsion: number;
       slotCount: number;
@@ -273,24 +313,25 @@ export class ForceManyBody extends CoreModule {
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
     })
 
+    // Allocates its fixed-size targets on its first run, so an all-pairs graph never does.
+    this.dataBounds ||= new DataBounds(device)
+
     // Grid aggregation command (point list, additive blend)
     this.calculateLevelsUniformStore ||= new UniformStore(device, {
       calculateLevelsPreciseUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
           levelGridSize: 'f32',
-          cellSize: 'f32',
         },
         defaultUniforms: {
           levelGridSize: 0,
-          cellSize: 0,
         },
       },
     })
 
     this.calculateLevelsCommand ||= new Model(device, {
       fs: calculateLevelFrag,
-      vs: calculateLevelPreciseVert,
+      vs: withGridCell(calculateLevelPreciseVert),
       topology: 'point-list',
       vertexCount: data.pointsNumber,
       attributes: {
@@ -328,14 +369,12 @@ export class ForceManyBody extends CoreModule {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
           levelGridSize: 'f32',
-          cellSize: 'f32',
           isFirstLevel: 'f32',
           alpha: 'f32',
           repulsion: 'f32',
         },
         defaultUniforms: {
           levelGridSize: 0,
-          cellSize: 0,
           isFirstLevel: 0,
           alpha: store.alpha,
           repulsion: this.config.simulationRepulsion,
@@ -344,7 +383,7 @@ export class ForceManyBody extends CoreModule {
     })
 
     this.forceLevelCommand ||= new Model(device, {
-      fs: forceLevelPreciseFrag,
+      fs: withGridCell(forceLevelPreciseFrag),
       vs: updateVert,
       topology: 'triangle-strip',
       vertexCount: 4,
@@ -385,14 +424,12 @@ export class ForceManyBody extends CoreModule {
           // Order MUST match shader declaration order (std140 layout)
           pointsTextureSize: 'f32',
           levelGridSize: 'f32',
-          cellSize: 'f32',
           hasPreviousSlot: 'f32',
           randomSeed: 'f32',
         },
         defaultUniforms: {
           pointsTextureSize: store.pointsTextureSize,
           levelGridSize: 0,
-          cellSize: 0,
           hasPreviousSlot: 0,
           randomSeed: 0,
         },
@@ -401,7 +438,7 @@ export class ForceManyBody extends CoreModule {
 
     this.buildNearFieldSlotsCommand ||= new Model(device, {
       fs: buildNearFieldSlotsFrag,
-      vs: buildNearFieldSlotsVert,
+      vs: withGridCell(buildNearFieldSlotsVert),
       topology: 'point-list',
       vertexCount: data.pointsNumber,
       attributes: {
@@ -432,7 +469,7 @@ export class ForceManyBody extends CoreModule {
           // Order MUST match shader declaration order (std140 layout)
           pointsTextureSize: 'f32',
           levelGridSize: 'f32',
-          cellSize: 'f32',
+          maxStep: 'f32',
           alpha: 'f32',
           repulsion: 'f32',
           slotCount: 'f32',
@@ -440,7 +477,7 @@ export class ForceManyBody extends CoreModule {
         defaultUniforms: {
           pointsTextureSize: store.pointsTextureSize,
           levelGridSize: 0,
-          cellSize: 0,
+          maxStep: 0,
           alpha: store.alpha,
           repulsion: this.config.simulationRepulsion,
           slotCount: 0,
@@ -491,7 +528,7 @@ export class ForceManyBody extends CoreModule {
     })
 
     this.forceNearFieldCommand ||= new Model(device, {
-      fs: forceNearFieldFrag,
+      fs: withGridCell(forceNearFieldFrag),
       vs: updateVert,
       topology: 'triangle-strip',
       vertexCount: 4,
@@ -527,8 +564,9 @@ export class ForceManyBody extends CoreModule {
 
   public run (): void {
     // Skip if point topology changed and create() wasn't called yet. Space size
-    // is intentionally not guarded: grid allocation is point-count-based and
-    // every draw computes cellSize from the live adjustedSpaceSize.
+    // is intentionally not guarded: grid allocation is point-count-based, the
+    // grid's placement is recomputed from the data every tick (drawBounds), and
+    // the step bound reads the live adjustedSpaceSize.
     if (
       this.store.pointsTextureSize !== this.previousPointsTextureSize ||
       this.data.pointsNumber !== this.previousPointsNumber
@@ -546,6 +584,12 @@ export class ForceManyBody extends CoreModule {
     // (create() builds them; this guards a partial/failed allocation).
     if (this.levelTargets.size === 0 || this.peelTargets.length !== PEEL_TARGETS || !this.slotsArrayTexture) return
 
+    // Bounds first, once per tick: the passes below all index the grid they
+    // define, and must index the same one — the aggregation and the forces
+    // binning against different boxes would break the decomposition's
+    // exactly-once coverage.
+    this.drawBounds()
+    if (!this.dataBounds?.texture) return
     this.drawLevels()
     this.drawNearFieldSlots()
     this.drawForces()
@@ -575,6 +619,10 @@ export class ForceManyBody extends CoreModule {
     }
     this.randomValuesTexture = undefined
     this.destroyLevelTargets()
+    // Self-contained (its own Models -> Framebuffers -> Textures -> UniformStores
+    // -> Buffers); after the Models above, which bind its texture.
+    this.dataBounds?.destroy()
+    this.dataBounds = undefined
 
     // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
     this.calculateLevelsUniformStore?.destroy()
@@ -619,10 +667,9 @@ export class ForceManyBody extends CoreModule {
         pointsNumber: data.pointsNumber,
         alpha: store.alpha,
         repulsion: this.config.simulationRepulsion,
-        // The near-field pass's per-tick bound and the shader's near/far split
-        // radius, computed from the finest cell size the grid path would use
-        // at this point count.
-        maxStep: 2 * (store.adjustedSpaceSize / getFinestGridSize(data.pointsNumber)),
+        // The grid path's near-field bound at this point count (getMaxStep),
+        // also the shader's near/far split radius.
+        maxStep: getMaxStep(store.adjustedSpaceSize, data.pointsNumber),
       },
     })
 
@@ -640,11 +687,33 @@ export class ForceManyBody extends CoreModule {
     drawPass.end()
   }
 
+  /**
+   * Recomputes this tick's data bounds from the positions the passes below
+   * bin, floored so the finest cell is at least MIN_FINEST_CELL_SIZE.
+   */
+  private drawBounds (): void {
+    const { store, data, points } = this
+    if (!points || !this.dataBounds) return
+    if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
+    if (!points.exitTexture || points.exitTexture.destroyed) return
+    if (!data.pointsNumber || !store.pointsTextureSize) return
+
+    this.dataBounds.run({
+      positionsTexture: points.previousPositionTexture,
+      exitTexture: points.exitTexture,
+      pointsTextureSize: store.pointsTextureSize,
+      pointsNumber: data.pointsNumber,
+      minExtent: getFinestGridSize(data.pointsNumber) * MIN_FINEST_CELL_SIZE,
+    })
+  }
+
   /** Aggregates points into every grid level texture. */
   private drawLevels (): void {
-    const { device, store, data, points } = this
+    const { device, data, points } = this
     if (!points) return
     if (!this.calculateLevelsCommand || !this.calculateLevelsUniformStore) return
+    const dataBoundsTexture = this.dataBounds?.texture
+    if (!dataBoundsTexture) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
     if (!points.exitTexture || points.exitTexture.destroyed) return
     if (!data.pointsNumber) return
@@ -658,9 +727,6 @@ export class ForceManyBody extends CoreModule {
       this.calculateLevelsUniformStore.setUniforms({
         calculateLevelsPreciseUniforms: {
           levelGridSize: target.gridSize,
-          // Computed per level from the space size so the power-of-two halving
-          // chain stays bit-exact between levels (the coverage invariant relies on it).
-          cellSize: store.adjustedSpaceSize / target.gridSize,
         },
       })
 
@@ -670,6 +736,7 @@ export class ForceManyBody extends CoreModule {
       this.calculateLevelsCommand.setBindings({
         positionsTexture: points.previousPositionTexture,
         exitTexture: points.exitTexture,
+        dataBoundsTexture,
       })
 
       const levelPass = device.beginRenderPass({
@@ -700,6 +767,8 @@ export class ForceManyBody extends CoreModule {
     if (!this.slotsArrayTexture || this.slotsArrayTexture.destroyed) return
     const finest = this.levelTargets.get(this.levels - 1)
     if (!finest || finest.texture.destroyed) return
+    const dataBoundsTexture = this.dataBounds?.texture
+    if (!dataBoundsTexture) return
 
     const randomSeed = store.getRandomFloat(0, 1)
 
@@ -712,7 +781,6 @@ export class ForceManyBody extends CoreModule {
         buildNearFieldSlotsUniforms: {
           pointsTextureSize: store.pointsTextureSize ?? 0,
           levelGridSize: finest.gridSize,
-          cellSize: store.adjustedSpaceSize / finest.gridSize,
           hasPreviousSlot: slot === 0 ? 0 : 1,
           // The seed is shared by all slots of one tick — peeling relies on a
           // consistent hash ordering across the passes.
@@ -729,6 +797,7 @@ export class ForceManyBody extends CoreModule {
         previousSlot: slot === 0
           ? points.previousPositionTexture
           : previous.texture,
+        dataBoundsTexture,
       })
 
       const slotPass = device.beginRenderPass({
@@ -760,7 +829,7 @@ export class ForceManyBody extends CoreModule {
    * pass reading the finest level to close its 3×3 neighborhood.
    */
   private drawForces (): void {
-    const { device, store, points } = this
+    const { device, store, data, points } = this
     if (!points) return
     if (!this.forceLevelCommand || !this.forceLevelUniformStore) return
     if (!this.forceNearFieldCommand || !this.forceNearFieldUniformStore) return
@@ -769,6 +838,8 @@ export class ForceManyBody extends CoreModule {
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
     if (!this.randomValuesTexture || this.randomValuesTexture.destroyed) return
     if (!points.velocityFbo || points.velocityFbo.destroyed) return
+    const dataBoundsTexture = this.dataBounds?.texture
+    if (!dataBoundsTexture) return
 
     const drawPass = device.beginRenderPass({
       framebuffer: points.velocityFbo,
@@ -778,12 +849,10 @@ export class ForceManyBody extends CoreModule {
     for (let level = 0; level < this.levels; level += 1) {
       const target = this.levelTargets.get(level)
       if (!target || target.texture.destroyed) continue
-      const cellSize = store.adjustedSpaceSize / target.gridSize
 
       this.forceLevelUniformStore.setUniforms({
         forceLevelPreciseUniforms: {
           levelGridSize: target.gridSize,
-          cellSize,
           isFirstLevel: level === 0 ? 1 : 0,
           alpha: store.alpha,
           repulsion: this.config.simulationRepulsion,
@@ -794,6 +863,7 @@ export class ForceManyBody extends CoreModule {
       this.forceLevelCommand.setBindings({
         positionsTexture: points.previousPositionTexture,
         levelTexture: target.texture,
+        dataBoundsTexture,
       })
       this.forceLevelCommand.draw(drawPass)
 
@@ -805,7 +875,7 @@ export class ForceManyBody extends CoreModule {
           forceNearFieldUniforms: {
             pointsTextureSize: store.pointsTextureSize ?? 0,
             levelGridSize: target.gridSize,
-            cellSize,
+            maxStep: getMaxStep(store.adjustedSpaceSize, data.pointsNumber ?? 0),
             alpha: store.alpha,
             repulsion: this.config.simulationRepulsion,
             slotCount: this.nearFieldSlots,
@@ -817,6 +887,7 @@ export class ForceManyBody extends CoreModule {
           levelTexture: target.texture,
           randomValues: this.randomValuesTexture,
           slotsTexture: this.slotsArrayTexture,
+          dataBoundsTexture,
         })
         this.forceNearFieldCommand.draw(drawPass)
       }
