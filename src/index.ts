@@ -538,7 +538,8 @@ export class Graph implements PositionTextureSource {
    * Example: `graph.setPointRenderOrder([7])` brings point 7 to the front and leaves the rest in
    * index order; `graph.setPointRenderOrder([7, 2])` draws point 2 on top and point 7 just below it.
    * @note Only the drawing order changes: point indices, the simulation and every other
-   * per-point array keep their meaning. Hover and click picking follow the render order, so the
+   * per-point array keep their meaning. Hover and click picking, and a host's pick pass
+   * (`drawToRenderPass` with `picking`), follow the render order, so the
    * point on top is the one they report. While `highlightedPointIndices` is set, highlighted points
    * still draw (and pick) above greyed-out ones; the order applies within each group. Label sampling
    * (`getSampledPoints`) follows the render order only and gives highlighted points no priority.

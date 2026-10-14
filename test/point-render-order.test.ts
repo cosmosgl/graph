@@ -216,6 +216,15 @@ describe('drawing by the render order', () => {
       expect(pickedAtCentre()).toBe(1)
       graph.setPointRenderOrder(null)
       expect(pickedAtCentre()).toBe(3)
+
+      // Highlighting layers the host pick like the visible draw: a highlighted point
+      // wins over every greyed one, whatever the order; the order applies within a group
+      graph.setConfigPartial({ highlightedPointIndices: [0, 2] })
+      expect(pickedAtCentre()).toBe(2)
+      graph.setPointRenderOrder([2, 1, 0, 3])
+      expect(pickedAtCentre()).toBe(0)
+      graph.setConfigPartial({ highlightedPointIndices: undefined })
+      expect(pickedAtCentre()).toBe(3)
     } finally {
       graph.destroy()
       framebuffer.destroy()
