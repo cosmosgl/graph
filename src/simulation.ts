@@ -495,7 +495,6 @@ export class GraphSimulation implements PositionTextureSource {
   public applyData (simulationAlpha?: number): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.applyData(simulationAlpha))) return
-    this.data.update()
     this.update(simulationAlpha)
   }
 
@@ -739,6 +738,8 @@ export class GraphSimulation implements PositionTextureSource {
     const positionsUpdated = this.isPointPositionsUpdateNeeded
     if (!this.points) return { positionsUpdated: false }
 
+    // The simulation's textures exist at the current sizes before the programs bind to them
+    if (this.config.enableSimulation) this.points.ensureSimulationResources()
     if (this.isPointPositionsUpdateNeeded) this.points.updatePositions()
     if (this.isPointSizeUpdateNeeded) this.points.updateSize()
 
@@ -1048,13 +1049,11 @@ export class GraphSimulation implements PositionTextureSource {
 
     if (this.config.enableSimulation) {
       this.ensureSimulationModules()
-      this.points?.ensureSimulationResources()
       this.markForcesDirty()
-      // Rebuild simulation resources before binding programs to them.
-      this.applyDataUpdates()
-      this.initPrograms()
+      // The rebuild: resolves pending inputs, sizes the textures, builds the
+      // simulation's resources and binds the programs, then reheats
+      this.update(1)
       this.store.simulationProgress = 0
-      this.store.alpha = 1
       this.store.isSimulationRunning = true
       this.config.onSimulationStart?.()
       return
@@ -1073,6 +1072,9 @@ export class GraphSimulation implements PositionTextureSource {
    * @param simulationAlpha - Optional alpha value to set. If not provided, keeps current alpha.
    */
   private update (simulationAlpha = this.store.alpha): void {
+    // Every rebuild comes through here, from applyData() or from a config change, so the
+    // pending inputs are resolved here, before the texture sizes and the uploads read them
+    this.data.update()
     this.updateTextureSizes()
     this.applyDataUpdates()
     this.initPrograms()
