@@ -12,17 +12,17 @@ uniform sampler2D exitTexture;
 layout(std140) uniform fillSampledPointsUniforms {
   float pointsTextureSize;
   mat4 transformationMatrix;
-  float spaceSize;
+  vec2 worldOrigin;
   vec2 screenSize;
 } fillSampledPoints;
 
 #define pointsTextureSize fillSampledPoints.pointsTextureSize
 #define transformationMatrix fillSampledPoints.transformationMatrix
-#define spaceSize fillSampledPoints.spaceSize
+#define worldOrigin fillSampledPoints.worldOrigin
 #define screenSize fillSampledPoints.screenSize
 #else
 uniform float pointsTextureSize;
-uniform float spaceSize;
+uniform vec2 worldOrigin;
 uniform vec2 screenSize;
 uniform mat3 transformationMatrix;
 #endif
@@ -41,8 +41,8 @@ void main() {
   }
 
   vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
-  vec2 p = 2.0 * pointPosition.rg / spaceSize - 1.0;
-  p *= spaceSize / screenSize;
+  // World space to normalized device coordinates (worldOrigin at the screen centre)
+  vec2 p = (pointPosition.rg - worldOrigin) * (2.0 / screenSize);
   #ifdef USE_UNIFORM_BUFFERS
   // Convert mat4 to mat3 for vec3 multiplication
   mat3 transformMat3 = mat3(transformationMatrix);

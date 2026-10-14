@@ -1,4 +1,3 @@
-import { scaleLinear } from 'd3-scale'
 import { mat3 } from 'gl-matrix'
 import { Random } from 'random'
 import { getRgbaColor, rgbToBrightness } from '@/graph/helper'
@@ -74,6 +73,16 @@ export class Store {
   /** The link a host hovers through `Graph.setHostHoveredLink`; separate from the pointer's `hoveredLinkIndex`. */
   public hostHoveredLinkIndex: number | undefined = undefined
   public adjustedSpaceSize = defaultConfigValues.spaceSize
+  /**
+   * The world position at the centre of the screen under an identity view, and the point
+   * gravity pulls toward. Mapping world space to the screen is a translation by this
+   * origin, never a scale: one world unit is one CSS pixel at zoom 1 whatever `spaceSize`
+   * is. Only `adjustSpaceSize` sets it — to the centre of the space, `adjustedSpaceSize / 2`
+   * on both axes — and every world ↔ screen mapping reads it live from here: the shaders,
+   * `scaleX`/`scaleY`, `Zoom.convertScreenToSpacePosition`, and hosts inverting
+   * `Graph.setViewTransform`.
+   */
+  public worldOrigin: [number, number] = [defaultConfigValues.spaceSize / 2, defaultConfigValues.spaceSize / 2]
   public isSpaceKeyPressed = false
   public div: HTMLDivElement | undefined
   public webglMaxTextureSize = 16384 // Default fallback value
@@ -98,8 +107,6 @@ export class Store {
   // Whether link hovering is enabled based on configured event handlers
   public isLinkHoveringEnabled = false
   private alphaTarget = 0
-  private scalePointX = scaleLinear()
-  private scalePointY = scaleLinear()
   private random = new Random()
   private _backgroundColor: [number, number, number, number] = [0, 0, 0, 0]
 
@@ -252,18 +259,20 @@ export class Store {
       configSpaceSize = minSpaceSize
     }
 
+    let adjustedSpaceSize = configSpaceSize
     // Validate webglMaxTextureSize (values below minSpaceSize are invalid; clamp would exceed limit)
     if (!Number.isFinite(webglMaxTextureSize) || webglMaxTextureSize <= 0 || webglMaxTextureSize < minSpaceSize) {
       console.warn(`Invalid webglMaxTextureSize: ${webglMaxTextureSize}. Using configSpaceSize without WebGL limit adjustment.`)
-      this.adjustedSpaceSize = configSpaceSize
-      return
+    } else if (configSpaceSize >= webglMaxTextureSize) {
+      // Handle WebGL limits - ensure result is still >= minSpaceSize
+      adjustedSpaceSize = Math.max(webglMaxTextureSize / 2, minSpaceSize)
+      console.warn(`The \`spaceSize\` has been reduced to ${adjustedSpaceSize} due to WebGL limits`)
     }
 
-    // Handle WebGL limits - ensure result is still >= minSpaceSize
-    if (configSpaceSize >= webglMaxTextureSize) {
-      this.adjustedSpaceSize = Math.max(webglMaxTextureSize / 2, minSpaceSize)
-      console.warn(`The \`spaceSize\` has been reduced to ${this.adjustedSpaceSize} due to WebGL limits`)
-    } else this.adjustedSpaceSize = configSpaceSize
+    this.adjustedSpaceSize = adjustedSpaceSize
+    // The world is centred on the middle of the space. The only place the origin is set,
+    // so the only place to change if the two ever part.
+    this.worldOrigin = [adjustedSpaceSize / 2, adjustedSpaceSize / 2]
   }
 
   /**
@@ -274,22 +283,22 @@ export class Store {
   }
 
   public updateScreenSize (width: number, height: number): void {
-    const { adjustedSpaceSize } = this
     this.screenSize = [width, height]
-    this.scalePointX
-      .domain([0, adjustedSpaceSize])
-      .range([(width - adjustedSpaceSize) / 2, (width + adjustedSpaceSize) / 2])
-    this.scalePointY
-      .domain([adjustedSpaceSize, 0])
-      .range([(height - adjustedSpaceSize) / 2, (height + adjustedSpaceSize) / 2])
   }
 
+  /**
+   * World x to screen x before the zoom transform: a translation that puts `worldOrigin` at
+   * the centre of the screen, at slope 1 (one world unit is one CSS pixel). Computed from the
+   * live `worldOrigin` and `screenSize` — no cached copy to fall out of step when either
+   * changes — and exact for float32 positions and whole-pixel screen sizes.
+   */
   public scaleX (x: number): number {
-    return this.scalePointX(x)
+    return x - this.worldOrigin[0] + this.screenSize[0] / 2
   }
 
+  /** World y to screen y before the zoom transform, as `scaleX` but y flipped (world y up, screen y down). */
   public scaleY (y: number): number {
-    return this.scalePointY(y)
+    return this.worldOrigin[1] - y + this.screenSize[1] / 2
   }
 
   public setHoveredPointRingColor (color: string | [number, number, number, number]): void {

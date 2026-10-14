@@ -206,6 +206,40 @@ describe('CosmosGraphLayer', () => {
     }
   })
 
+  it('follows the space the engine uses, not the raw config: an invalid spaceSize still draws under deck\'s view', async () => {
+    // The engine replaces a spaceSize of 0 with its default; the layer must place cosmos's
+    // view by that, the world origin cosmos actually centres its screen on
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let graph: Graph | undefined
+    let loaded = false
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer({
+        id: 'graph',
+        points: { length: 3, initialPositions: POSITIONS },
+        config: { ...STATIC, spaceSize: 0 },
+        onGraphCreated: (created): void => { graph = created },
+        onGraphDataLoaded: (): void => { loaded = true },
+      }),
+    ])
+    try {
+      await waitUntil(() => loaded, 'the first load')
+      await waitFrames(5)
+      expect(warn.mock.calls.some(([message]) => String(message).includes('flipY'))).toBe(false)
+      for (const [x, y] of [[1000, 1000], [1050, 1000], [1000, 1030]]) {
+        const [sx, sy] = graph!.spaceToScreenPosition([x as number, y as number])
+        const [dx, dy] = deckPixel(deck, [x as number, y as number, 0])
+        expect(sx).toBeCloseTo(dx, 3)
+        expect(sy).toBeCloseTo(dy, 3)
+      }
+    } finally {
+      error.mockRestore()
+      warn.mockRestore()
+      deck.finalize()
+      container.remove()
+    }
+  })
+
   it('does not draw a y-down view, and says so once', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const isViewWarning = (message: unknown): boolean => String(message).includes('flipY')

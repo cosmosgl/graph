@@ -1632,14 +1632,16 @@ export class Graph implements PositionTextureSource {
    * gesture would: the shader projection matrix, picking, point-radius zoom
    * scaling, and the space↔screen conversion methods.
    *
-   * The transform follows the d3-zoom convention. With `S = spaceSize` (adjusted),
-   * `[w, h] = screenSize` in CSS pixels, a point at space position
+   * The transform follows the d3-zoom convention. With `[ox, oy]` the world
+   * origin — the centre of the `spaceSize` square (adjusted), `ox = oy = spaceSize / 2`
+   * — and `[w, h] = screenSize` in CSS pixels, a point at space position
    * `(spaceX, spaceY)` lands on screen (y down) at:
    * ```
-   * screenX = k * (spaceX + (w - S) / 2) + x
-   * screenY = k * ((S - spaceY) + (h - S) / 2) + y
+   * screenX = k * (spaceX - ox + w / 2) + x
+   * screenY = k * (oy - spaceY + h / 2) + y
    * ```
-   * (cosmos space y points up; screen y points down.)
+   * At the identity transform the world origin sits at the centre of the screen and
+   * one space unit is one CSS pixel. (cosmos space y points up; screen y points down.)
    *
    * @param transform - View transform: `k` scale (screen pixels per space unit),
    *   `x`/`y` translation in screen pixels.
