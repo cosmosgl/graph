@@ -22,7 +22,7 @@ layout(std140) uniform drawLineUniforms {
   mat4 transformationMatrix;
   float widthScale;
   float linkArrowsSizeScale;
-  float spaceSize;
+  vec2 worldOrigin;
   vec2 screenSize;
   vec2 linkVisibilityDistanceRange;
   float linkVisibilityMinTransparency;
@@ -53,7 +53,7 @@ layout(std140) uniform drawLineUniforms {
 #define transformationMatrix drawLine.transformationMatrix
 #define widthScale drawLine.widthScale
 #define linkArrowsSizeScale drawLine.linkArrowsSizeScale
-#define spaceSize drawLine.spaceSize
+#define worldOrigin drawLine.worldOrigin
 #define screenSize drawLine.screenSize
 #define linkVisibilityDistanceRange drawLine.linkVisibilityDistanceRange
 #define linkVisibilityMinTransparency drawLine.linkVisibilityMinTransparency
@@ -83,7 +83,7 @@ layout(std140) uniform drawLineUniforms {
 uniform mat3 transformationMatrix;
 uniform float widthScale;
 uniform float linkArrowsSizeScale;
-uniform float spaceSize;
+uniform vec2 worldOrigin;
 uniform vec2 screenSize;
 uniform vec2 linkVisibilityDistanceRange;
 uniform float linkVisibilityMinTransparency;
@@ -378,9 +378,8 @@ void main() {
   
   pointCurr += yBasisCurved * linkWidthPx * position.y;
   
-  // Transform to clip space coordinates
-  vec2 p = 2.0 * pointCurr / spaceSize - 1.0;
-  p *= spaceSize / screenSize;
+  // World space to normalized device coordinates (worldOrigin at the screen centre)
+  vec2 p = (pointCurr - worldOrigin) * (2.0 / screenSize);
   
   #ifdef USE_UNIFORM_BUFFERS
   mat3 transformMat3 = mat3(transformationMatrix);

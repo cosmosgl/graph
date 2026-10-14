@@ -366,7 +366,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       sizeScale: number;
       pointsTextureSize: number;
       transformationMatrix: Mat4Array;
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       greyoutColor: [number, number, number, number];
       backgroundColor: [number, number, number, number];
@@ -407,7 +407,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
   private findPointsInRectUniformStore: UniformStore<{
     findPointsInRectUniforms: {
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       sizeScale: number;
       transformationMatrix: Mat4Array;
@@ -421,7 +421,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
   private findPointsInPolygonUniformStore: UniformStore<{
     findPointsInPolygonUniforms: {
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       transformationMatrix: Mat4Array;
       polygonPathLength: number;
@@ -434,7 +434,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       sizeScale: number;
       pointsTextureSize: number;
       transformationMatrix: Mat4Array;
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       scalePointsOnZoom: number;
       pickingPixelRatio: number;
@@ -451,7 +451,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     fillSampledPointsUniforms: {
       pointsTextureSize: number;
       transformationMatrix: Mat4Array;
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
     };
   }> | undefined
@@ -468,7 +468,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       sizeScale: number;
       pointsTextureSize: number;
       transformationMatrix: Mat4Array;
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       scalePointsOnZoom: number; // f32 in shader, not boolean
       maxPointSize: number;
@@ -798,7 +798,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           transformationMatrix: 'mat4x4<f32>',
           pointsTextureSize: 'f32',
           sizeScale: 'f32',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           greyoutColor: 'vec4<f32>',
           backgroundColor: 'vec4<f32>',
@@ -838,7 +838,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           })(),
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           greyoutColor: ensureVec4(store.greyoutPointColor, [0, 0, 0, 1]),
           backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
@@ -943,7 +943,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
           sizeScale: 'f32',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           ratio: 'f32',
           transformationMatrix: 'mat4x4<f32>',
@@ -954,7 +954,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         },
         defaultUniforms: {
           sizeScale: config.pointSizeScale,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           ratio: config.pixelRatio,
           transformationMatrix: store.transformationMatrix4x4,
@@ -1000,13 +1000,13 @@ export class Points extends CoreModule implements PointTrackerHost {
       findPointsInPolygonUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           transformationMatrix: 'mat4x4<f32>',
           polygonPathLength: 'f32',
         },
         defaultUniforms: {
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           transformationMatrix: store.transformationMatrix4x4,
           polygonPathLength: this.polygonPathLength,
@@ -1045,7 +1045,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           // Order MUST match shader declaration order (std140 layout)
           pointsTextureSize: 'f32',
           sizeScale: 'f32',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           ratio: 'f32',
           pickingPixelRatio: 'f32',
@@ -1061,7 +1061,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         defaultUniforms: {
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           ratio: config.pixelRatio,
           pickingPixelRatio: PICKING_RESOLUTION_SCALE,
@@ -1115,13 +1115,13 @@ export class Points extends CoreModule implements PointTrackerHost {
           // Order MUST match shader declaration order (std140 layout)
           pointsTextureSize: 'f32',
           transformationMatrix: 'mat4x4<f32>',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
         },
         defaultUniforms: {
           pointsTextureSize: store.pointsTextureSize ?? 0,
           transformationMatrix: store.transformationMatrix4x4,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
         },
       },
@@ -1166,7 +1166,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           transformationMatrix: 'mat4x4<f32>',
           pointsTextureSize: 'f32',
           sizeScale: 'f32',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           scalePointsOnZoom: 'f32',
           pointIndex: 'f32',
@@ -1192,7 +1192,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           transformationMatrix: store.transformationMatrix4x4,
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0,
           pointIndex: -1,
@@ -2389,7 +2389,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
     this.findPointsInRectUniformStore.setUniforms({
       findPointsInRectUniforms: {
-        spaceSize: this.store.adjustedSpaceSize,
+        worldOrigin: this.store.worldOrigin,
         screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         sizeScale: this.config.pointSizeScale,
         transformationMatrix: this.store.transformationMatrix4x4,
@@ -2425,7 +2425,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
     this.findPointsInPolygonUniformStore.setUniforms({
       findPointsInPolygonUniforms: {
-        spaceSize: this.store.adjustedSpaceSize,
+        worldOrigin: this.store.worldOrigin,
         screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         transformationMatrix: this.store.transformationMatrix4x4,
         polygonPathLength: this.polygonPathLength,
@@ -2531,7 +2531,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       sizeScale: this.config.pointSizeScale,
       pointsTextureSize: this.store.pointsTextureSize ?? 0,
       transformationMatrix: this.store.transformationMatrix4x4,
-      spaceSize: this.store.adjustedSpaceSize,
+      worldOrigin: this.store.worldOrigin,
       screenSize,
       scalePointsOnZoom: this.config.scalePointsOnZoom ? 1 : 0,
       // Sprite sizes are computed in CSS px and rasterized into the smaller buffer
@@ -2690,7 +2690,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         fillSampledPointsUniforms: {
           pointsTextureSize: this.store.pointsTextureSize ?? 0,
           transformationMatrix: this.store.transformationMatrix4x4,
-          spaceSize: this.store.adjustedSpaceSize,
+          worldOrigin: this.store.worldOrigin,
           screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         },
       })
@@ -2740,7 +2740,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         fillSampledPointsUniforms: {
           pointsTextureSize: this.store.pointsTextureSize ?? 0,
           transformationMatrix: this.store.transformationMatrix4x4,
-          spaceSize: this.store.adjustedSpaceSize,
+          worldOrigin: this.store.worldOrigin,
           screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         },
       })
@@ -3308,7 +3308,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         transformationMatrix: store.transformationMatrix4x4,
         pointsTextureSize: store.pointsTextureSize ?? 0,
         sizeScale: config.pointSizeScale,
-        spaceSize: store.adjustedSpaceSize,
+        worldOrigin: store.worldOrigin,
         screenSize: ensureVec2(store.screenSize, [0, 0]),
         scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0,
         pointIndex: index,
@@ -3727,7 +3727,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       transformationMatrix: store.transformationMatrix4x4,
       pointsTextureSize: store.pointsTextureSize ?? 0,
       sizeScale: config.pointSizeScale,
-      spaceSize: store.adjustedSpaceSize,
+      worldOrigin: store.worldOrigin,
       screenSize: ensureVec2(store.screenSize, [0, 0]),
       greyoutColor: ensureVec4(store.greyoutPointColor, [-1, -1, -1, -1]),
       backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
