@@ -31,7 +31,7 @@ layout(std140) uniform drawVertexUniforms {
   mat4 transformationMatrix;
   float pointsTextureSize;
   float sizeScale;
-  float spaceSize;
+  vec2 worldOrigin;
   vec2 screenSize;
   vec4 greyoutColor;
   vec4 backgroundColor;
@@ -62,7 +62,7 @@ layout(std140) uniform drawVertexUniforms {
 #define transformationMatrix drawVertex.transformationMatrix
 #define pointsTextureSize drawVertex.pointsTextureSize
 #define sizeScale drawVertex.sizeScale
-#define spaceSize drawVertex.spaceSize
+#define worldOrigin drawVertex.worldOrigin
 #define screenSize drawVertex.screenSize
 #define greyoutColor drawVertex.greyoutColor
 #define backgroundColor drawVertex.backgroundColor
@@ -92,7 +92,7 @@ uniform float ratio;
 uniform mat3 transformationMatrix;
 uniform float pointsTextureSize;
 uniform float sizeScale;
-uniform float spaceSize;
+uniform vec2 worldOrigin;
 uniform vec2 screenSize;
 uniform vec4 greyoutColor;
 uniform vec4 backgroundColor;
@@ -225,13 +225,10 @@ void main() {
   vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
   vec2 point = pointPosition.rg;
 
-  // Transform point position to normalized device coordinates
-  // Convert from space coordinates [0, spaceSize] to normalized [-1, 1]
-  vec2 normalizedPosition = 2.0 * point / spaceSize - 1.0;
-
-  // Apply aspect ratio correction - this is needed to map the square space to the rectangular screen
-  // The transformation matrix handles zoom/pan, but we need this to handle aspect ratio
-  normalizedPosition *= spaceSize / screenSize;
+  // World space to normalized device coordinates: worldOrigin lands at the centre of
+  // the screen and one world unit spans one CSS pixel at zoom 1, whatever the space
+  // size. The transformation matrix applies zoom and pan on top.
+  vec2 normalizedPosition = (point - worldOrigin) * (2.0 / screenSize);
 
   #ifdef USE_UNIFORM_BUFFERS
   mat3 transformMat3 = mat3(transformationMatrix);

@@ -13,7 +13,7 @@ uniform sampler2D exitTexture;
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform fillSampledLinksUniforms {
   mat4 transformationMatrix;
-  float spaceSize;
+  vec2 worldOrigin;
   vec2 screenSize;
   float curvedWeight;
   float curvedLinkControlPointDistance;
@@ -21,13 +21,13 @@ layout(std140) uniform fillSampledLinksUniforms {
 } fillSampledLinks;
 
 #define transformationMatrix fillSampledLinks.transformationMatrix
-#define spaceSize fillSampledLinks.spaceSize
+#define worldOrigin fillSampledLinks.worldOrigin
 #define screenSize fillSampledLinks.screenSize
 #define curvedWeight fillSampledLinks.curvedWeight
 #define curvedLinkControlPointDistance fillSampledLinks.curvedLinkControlPointDistance
 #define curvedLinkSegments fillSampledLinks.curvedLinkSegments
 #else
-uniform float spaceSize;
+uniform vec2 worldOrigin;
 uniform vec2 screenSize;
 uniform float curvedWeight;
 uniform float curvedLinkControlPointDistance;
@@ -71,8 +71,8 @@ void main() {
     mid = (a + b) * 0.5;
   }
 
-  vec2 p = 2.0 * mid / spaceSize - 1.0;
-  p *= spaceSize / screenSize;
+  // World space to normalized device coordinates (worldOrigin at the screen centre)
+  vec2 p = (mid - worldOrigin) * (2.0 / screenSize);
   #ifdef USE_UNIFORM_BUFFERS
   mat3 transformMat3 = mat3(transformationMatrix);
   vec3 final = transformMat3 * vec3(p, 1);
