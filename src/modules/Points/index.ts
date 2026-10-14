@@ -291,8 +291,8 @@ export class Points extends CoreModule implements PointTrackerHost {
   private drawPointIndices: Buffer | undefined
   /**
    * Uint32 element indices holding `GraphData.pointRenderOrder` (back to front), bound to
-   * every pass that paints in draw order: the point draw, the picking fill and the
-   * label-sampling fill. Exists only while a custom order is set; without one those
+   * every pass that paints in draw order: the point draw, the host picking pass, the
+   * picking fill and the label-sampling fill. Exists only while a custom order is set; without one those
    * passes draw unindexed, in index order.
    */
   private pointRenderOrderBuffer: Buffer | undefined
@@ -1654,8 +1654,8 @@ export class Points extends CoreModule implements PointTrackerHost {
    * (Re)builds the buffers that carry the point draw order — `GraphData.pointRenderOrder`,
    * or index order when it is unset:
    * - `pointRenderOrderBuffer`, the order back to front, bound to the point draw (the
-   *   standard, fringe and both highlight passes), the picking fill and the label-sampling
-   *   fill, so each paints points in that order. It exists only while a custom order is set;
+   *   standard, fringe and both highlight passes), the host picking pass, the picking fill
+   *   and the label-sampling fill, so each paints points in that order. It exists only while a custom order is set;
    *   without one those passes draw unindexed, as they did before render order existed.
    * - `reversedPointIndexBuffer`, the order front to back, for the occlusion core pass.
    * - `renderRankBuffer`, each point's position in the order. The draw shader turns it into
@@ -1705,6 +1705,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     // `null` returns a model to unindexed drawing
     const orderBuffer = this.pointRenderOrderBuffer ?? null
     this.drawCommand?.setIndexBuffer(orderBuffer)
+    this.drawPickingCommand?.setIndexBuffer(orderBuffer)
     this.fillPickingBufferCommand?.setIndexBuffer(orderBuffer)
     this.fillSampledPointsFboCommand?.setIndexBuffer(orderBuffer)
     // Unbound from every model above before it goes
@@ -1918,6 +1919,8 @@ export class Points extends CoreModule implements PointTrackerHost {
       modules: [pointSizeModule, exitRampModule, pickingColorModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber,
+      // The render order, so the host picks the point the visible draw put on top
+      indexBuffer: this.pointRenderOrderBuffer ?? null,
       attributes: this.getDrawCommandAttributes(),
       bufferLayout: [
         { name: 'pointIndices', format: 'float32x2' },
@@ -1928,6 +1931,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         { name: 'shape', format: 'float32' },
         { name: 'imageIndex', format: 'float32' },
         { name: 'imageSize', format: 'float32' },
+        { name: 'renderRank', format: 'float32' },
       ],
       defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
       bindings: {
@@ -3615,6 +3619,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       ...(this.shapeBuffer && { shape: this.shapeBuffer }),
       ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
       ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
+      ...(this.renderRankBuffer && { renderRank: this.renderRankBuffer }),
     } as Record<string, Buffer>
   }
 }

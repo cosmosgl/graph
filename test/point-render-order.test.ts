@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { luma } from '@luma.gl/core'
+import { webgl2Adapter } from '@luma.gl/webgl'
 
 import { Graph, type GraphConfig } from '@cosmos.gl/graph'
 import { GraphData } from '@/graph/modules/GraphData'
@@ -176,6 +178,50 @@ describe('drawing by the render order', () => {
       expect(topPoint(graph)).toBe(0)
     } finally {
       destroy()
+    }
+  })
+
+  it('draws a host pick pass by the order, so the host picks the point on top', async () => {
+    const canvas = document.createElement('canvas')
+    const device = await luma.createDevice({ type: 'webgl', adapters: [webgl2Adapter], createCanvasContext: { canvas } })
+    // Four stacked points under a 200 × 200 target, one pixel per space unit: the pick
+    // pass writes index + 1 into the red byte, and the point drawn last wins the pixel
+    const graph = new Graph(null, {
+      spaceSize: SPACE_SIZE,
+      pixelRatio: 1,
+      enableSimulation: false,
+      rescalePositions: false,
+      pointDefaultSize: 20,
+    }, Promise.resolve(device))
+    graph.setPointPositions(new Float32Array(4 * 2).fill(1000))
+    graph.render()
+    await graph.ready
+    const target = device.createTexture({ format: 'rgba8unorm', width: 200, height: 200 })
+    const framebuffer = device.createFramebuffer({ width: 200, height: 200, colorAttachments: [target] })
+    const pickedAtCentre = (): number => {
+      graph.render()
+      const renderPass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0] })
+      graph.drawToRenderPass(renderPass, { picking: { alpha: 1 } })
+      renderPass.end()
+      device.submit()
+      const pixels = device.readPixelsToArrayWebGL(framebuffer) as Uint8Array
+      return (pixels[(100 * 200 + 100) * 4] as number) - 1
+    }
+    try {
+      graph.setViewTransform({ k: 1, x: 100 - (1000 + (200 - SPACE_SIZE) / 2), y: 100 - ((SPACE_SIZE - 1000) + (200 - SPACE_SIZE) / 2) }, [200, 200])
+      expect(graph.spaceToScreenPosition([1000, 1000])).toEqual([100, 100])
+
+      expect(pickedAtCentre()).toBe(3)
+      graph.setPointRenderOrder([1])
+      expect(pickedAtCentre()).toBe(1)
+      graph.setPointRenderOrder(null)
+      expect(pickedAtCentre()).toBe(3)
+    } finally {
+      graph.destroy()
+      framebuffer.destroy()
+      target.destroy()
+      device.canvasContext?.destroy()
+      device.destroy()
     }
   })
 })
