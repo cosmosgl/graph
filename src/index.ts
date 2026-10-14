@@ -2012,10 +2012,10 @@ export class Graph implements PositionTextureSource {
       this.lines?.updateLinkStatus()
     }
     // The collision grid's cell size is derived from the collision radius and
-    // padding, so a change to either requires rebuilding the grid textures.
-    // In derived-radius mode (radius 0/undefined) the radius — and the size
-    // texture — come from point sizes, so a pointDefaultSize change must also
-    // invalidate the collision resources.
+    // padding, so a change to either must recompute it before the next
+    // collision pass. In derived-radius mode (radius 0/undefined) the radius —
+    // and the size texture — come from point sizes, so a pointDefaultSize
+    // change must also invalidate the collision resources.
     if (prevConfig.simulationCollisionRadius !== this.config.simulationCollisionRadius ||
         prevConfig.simulationCollisionPadding !== this.config.simulationCollisionPadding ||
         ((this.config.simulationCollisionRadius === undefined || this.config.simulationCollisionRadius === 0) &&
@@ -2033,9 +2033,6 @@ export class Graph implements PositionTextureSource {
     }
     if (prevConfig.spaceSize !== this.config.spaceSize) {
       this.store.adjustSpaceSize(this.config.spaceSize, this.device?.limits.maxTextureDimension2D ?? 4096)
-      // Collision grid dimensions depend on adjustedSpaceSize, so rebuild them
-      // lazily before the next collision pass.
-      this.simulation.invalidateCollisionResources()
       this.syncScreenSize(true)
       this.update(this.store.isSimulationRunning ? this.store.alpha : 0)
     }
