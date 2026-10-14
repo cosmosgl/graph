@@ -1944,12 +1944,20 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.drawPickingCommand.setVertexCount(data.pointsNumber)
 
     const { vertex, fragment } = this.getDrawUniforms()
-    this.drawUniformStore.setUniforms({
-      drawVertexUniforms: { ...vertex, skipHighlighted: 0, skipGreyed: 0 },
-      drawFragmentUniforms: { ...fragment, renderMode: 3, pickingAlpha: alpha, pickingIndexOffset: indexOffset },
-    })
+    const pickingFragment = { ...fragment, renderMode: 3, pickingAlpha: alpha, pickingIndexOffset: indexOffset }
     this.drawPickingCommand.setBindings(this.getDrawTextureBindings())
-    this.drawPickingCommand.draw(renderPass)
+    // The visible draw's layering: greyed points first, highlighted on top, so the host
+    // picks the point it sees
+    const layers = this.config.highlightedPointIndices !== undefined
+      ? [{ skipHighlighted: 1, skipGreyed: 0 }, { skipHighlighted: 0, skipGreyed: 1 }]
+      : [{ skipHighlighted: 0, skipGreyed: 0 }]
+    for (const skips of layers) {
+      this.drawUniformStore.setUniforms({
+        drawVertexUniforms: { ...vertex, ...skips },
+        drawFragmentUniforms: pickingFragment,
+      })
+      this.drawPickingCommand.draw(renderPass)
+    }
   }
 
   public draw (renderPass: RenderPass): void {
