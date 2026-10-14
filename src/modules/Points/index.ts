@@ -618,7 +618,6 @@ export class Points extends CoreModule implements PointTrackerHost {
     }
     this.areClusterCentroidsUpToDate = false
     this.markPositionsChanged()
-    if (this.config.enableSimulation) this.ensureSimulationResources()
 
     // Create searchTexture and framebuffer
     if (!this.searchTexture || this.searchTexture.width !== pointsTextureSize || this.searchTexture.height !== pointsTextureSize) {
@@ -3026,40 +3025,33 @@ export class Points extends CoreModule implements PointTrackerHost {
     if (!pointsTextureSize) return
     this.ensureUpdatePositionProgram()
 
-    const velocityData = new Float32Array(pointsTextureSize * pointsTextureSize * 4).fill(0)
-    if (!this.velocityTexture || this.velocityTexture.width !== pointsTextureSize || this.velocityTexture.height !== pointsTextureSize) {
-      if (this.velocityFbo && !this.velocityFbo.destroyed) {
-        this.velocityFbo.destroy()
-      }
-      if (this.velocityTexture && !this.velocityTexture.destroyed) {
-        this.velocityTexture.destroy()
-      }
-      this.velocityTexture = device.createTexture({
-        width: pointsTextureSize,
-        height: pointsTextureSize,
-        format: 'rgba32float',
-      })
-      this.velocityTexture.copyImageData({
-        data: velocityData,
-        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
-      })
-      this.velocityFbo = device.createFramebuffer({
-        width: pointsTextureSize,
-        height: pointsTextureSize,
-        colorAttachments: [this.velocityTexture],
-      })
-    } else {
-      this.velocityTexture.copyImageData({
-        data: velocityData,
-        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
-      })
+    // The velocity texture is per-pass scratch: every force pass clears it before
+    // writing, and the position update consumes it in the same pass. So it only has
+    // to exist at the current size; its contents never need resetting.
+    if (this.velocityTexture && this.velocityTexture.width === pointsTextureSize && this.velocityTexture.height === pointsTextureSize) return
+    if (this.velocityFbo && !this.velocityFbo.destroyed) {
+      this.velocityFbo.destroy()
     }
+    if (this.velocityTexture && !this.velocityTexture.destroyed) {
+      this.velocityTexture.destroy()
+    }
+    this.velocityTexture = device.createTexture({
+      width: pointsTextureSize,
+      height: pointsTextureSize,
+      format: 'rgba32float',
+    })
+    this.velocityTexture.copyImageData({
+      data: new Float32Array(pointsTextureSize * pointsTextureSize * 4),
+      bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
+      mipLevel: 0,
+      x: 0,
+      y: 0,
+    })
+    this.velocityFbo = device.createFramebuffer({
+      width: pointsTextureSize,
+      height: pointsTextureSize,
+      colorAttachments: [this.velocityTexture],
+    })
   }
 
   public createTransitionResources (): void {
