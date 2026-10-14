@@ -33,7 +33,7 @@ uniform highp sampler2DArray slotsTexture;
 layout(std140) uniform forceNearFieldUniforms {
   float pointsTextureSize;
   float levelGridSize;
-  float cellSize;
+  float maxStep;
   float alpha;
   float repulsion;
   float slotCount;
@@ -41,18 +41,20 @@ layout(std140) uniform forceNearFieldUniforms {
 
 #define pointsTextureSize forceNearField.pointsTextureSize
 #define levelGridSize forceNearField.levelGridSize
-#define cellSize forceNearField.cellSize
+#define maxStep forceNearField.maxStep
 #define alpha forceNearField.alpha
 #define repulsion forceNearField.repulsion
 #define slotCount forceNearField.slotCount
 #else
 uniform float pointsTextureSize;
 uniform float levelGridSize;
-uniform float cellSize;
+uniform float maxStep;
 uniform float alpha;
 uniform float repulsion;
 uniform float slotCount;
 #endif
+
+// @grid-cell
 
 out vec4 fragColor;
 
@@ -104,7 +106,7 @@ void main() {
   vec4 random = texelFetch(randomValues, pointTexel, 0);
 
   int gridSize = int(levelGridSize);
-  ivec2 pointCell = clamp(ivec2(floor(position / cellSize)), ivec2(0), ivec2(gridSize - 1));
+  ivec2 pointCell = gridCell(position, levelGridSize);
 
   vec2 velocity = vec2(0.0);
 
@@ -143,7 +145,7 @@ void main() {
   // Random jitter proportional to the velocity, to keep points from sticking.
   velocity += velocity * random.rg;
 
-  // Bound the per-tick kick to the neighborhood scale. The estimator is unbiased
+  // Bound the per-tick kick to a fixed length. The estimator is unbiased
   // but high-variance: in a cell holding far more points than sampled slots, the
   // count/sampled weight can turn a few close samples into a huge one-tick kick.
   // Unbounded, that flings points across the screen at startup and — because the
@@ -151,7 +153,13 @@ void main() {
   // centers, leaving voids. Clamping the magnitude keeps the spreading direction
   // while capping the fling; genuine spreading kicks are far below this bound and
   // pass through untouched. The far-field grid levels still drive bulk expansion.
-  float maxStep = 2.0 * cellSize;
+  //
+  // maxStep is 2 × the finest cell of a layout spanning the space (index.ts),
+  // not 2 × this tick's cell: the grid follows the data, and a cell-relative
+  // bound would tighten as a layout contracts — throttling the kicks that break
+  // dense clumps apart exactly when they are needed — and would stop matching
+  // the all-pairs pass's bound, which keeps the dynamics continuous across the
+  // point-count threshold between the two paths.
   float speed = length(velocity);
   if (speed > maxStep) velocity *= maxStep / speed;
 
