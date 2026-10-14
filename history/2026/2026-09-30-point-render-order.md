@@ -2,7 +2,7 @@
 
 # Point render order
 
-**Commits:** <!-- TODO -->
+**Commits:** `feat(points): set the point render order without reordering the data` (`5d16e38`), `fix(points): apply a pending render order even when a config change runs create() first` (`adb19b9`), `chore(points): test how a render order resolves and draws — and rewrap its JSDoc note` (`b69e398`); rebase follow-up: `fix(points): the host picking pass draws by the render order — a host picks the point on top` (`7e558f5`)
 
 ## Why
 
@@ -28,7 +28,8 @@ to front, applied on the next `render()`:
 | negative, fractional, `NaN`, ≥ point count | ignored (an out-of-range index comes back if the count grows) |
 | `null`, `[]`, or anything that resolves to index order | index order, unindexed draw path |
 
-Picking (hover, click) and label sampling (`getSampledPoints`) follow the order. While
+Picking (hover, click), label sampling (`getSampledPoints`) and a host's pick pass
+(`drawToRenderPass` with `picking`) follow the order. While
 `highlightedPointIndices` is set, highlighted points stay above greyed-out ones and the
 order applies within each group. The order survives `setPointPositions` and is resolved
 again against the new point count.
@@ -42,7 +43,8 @@ again against the new point count.
 - **Buffers** (`Points.updateRenderOrder()`, a no-op unless the count or the resolved
   order changed):
   - `pointRenderOrderBuffer`, a uint32 element index buffer holding the order. It is bound
-    to the point draw (standard, fringe and both highlight passes), the picking fill and
+    to the point draw (standard, fringe and both highlight passes), the host picking pass,
+    the picking fill and
     the label-sampling fill, so each draws with `drawElements` in that order. It exists
     only while an order is set. Without one, `setIndexBuffer(null)` puts those models back
     on the old `drawArrays` path.
@@ -59,7 +61,14 @@ again against the new point count.
 
 ## Verification
 
-In-browser tests on Storybook's Vite server:
+`test/point-render-order.test.ts` in `pnpm test`: how an order resolves (partial lists,
+repeats, invalid entries, orders that collapse to index order, the count growing and
+shrinking, an array edited in place), and that the GPU draws by it — the sampled point,
+with every point stacked in one cell, is the one drawn last; an order set before the
+device is ready, across count changes, and right before a config change that rebuilds the
+graph; and a host pick pass picking the point on top.
+
+Earlier, in-browser tests on Storybook's Vite server:
 - **Top-point checks:** three stacked points, checking the pixel color, the picked index,
   the sampled index and `gl.getError()`. They cover every input shape above, culling on
   and off, highlighting, translucent blending, point count growing and shrinking, absent
@@ -90,8 +99,8 @@ In-browser tests on Storybook's Vite server:
   about 3 ms.
 - **Label sampling** still ignores highlight priority, as before: it follows the render
   order only.
-- **`pointsTextureSize`** is no longer read by `draw-points.vert`. It stays in the
-  uniform block so the std140 layout shared with `drawCoreCommand` doesn't change.
+- **A host's pick pass** draws every point in one pass, like label sampling, so it too
+  follows the render order only.
 
 ## Example
 
