@@ -25,23 +25,22 @@ uniform sampler2D exitTexture;
 layout(std140) uniform buildNearFieldSlotsUniforms {
   float pointsTextureSize;
   float levelGridSize;
-  float cellSize;
   float hasPreviousSlot;
   float randomSeed;
 } buildNearFieldSlots;
 
 #define pointsTextureSize buildNearFieldSlots.pointsTextureSize
 #define levelGridSize buildNearFieldSlots.levelGridSize
-#define cellSize buildNearFieldSlots.cellSize
 #define hasPreviousSlot buildNearFieldSlots.hasPreviousSlot
 #define randomSeed buildNearFieldSlots.randomSeed
 #else
 uniform float pointsTextureSize;
 uniform float levelGridSize;
-uniform float cellSize;
 uniform float hasPreviousSlot;
 uniform float randomSeed;
 #endif
+
+// @grid-cell
 
 in vec2 pointIndices;
 
@@ -82,9 +81,8 @@ void main() {
   float hashValue = (float(h >> 8u) + 0.5) / 16777216.0;
   hashValue = 0.001 + hashValue * 0.998;
 
-  // Must match the cell formula of the aggregation and force shaders exactly.
-  int gridSize = int(levelGridSize);
-  ivec2 cell = clamp(ivec2(floor(pointPosition.rg / cellSize)), ivec2(0), ivec2(gridSize - 1));
+  // The cell formula shared with the aggregation and force shaders (grid-cell.ts).
+  ivec2 cell = gridCell(pointPosition.rg, levelGridSize);
 
   if (hasPreviousSlot > 0.5) {
     vec2 previous = texelFetch(previousSlot, cell, 0).rg;
