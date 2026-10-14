@@ -2,7 +2,7 @@
 
 # Point render order
 
-**Commits:** `feat(points): set the point render order without reordering the data` (`5d16e38`), `fix(points): apply a pending render order even when a config change runs create() first` (`adb19b9`), `chore(points): test how a render order resolves and draws — and rewrap its JSDoc note` (`b69e398`); rebase follow-up: `fix(points): the host picking pass draws by the render order — a host picks the point on top` (`7e558f5`)
+**Commits:** `feat(points): set the point render order without reordering the data` (`5d16e38`), `fix(points): apply a pending render order even when a config change runs create() first` (`adb19b9`), `chore(points): test how a render order resolves and draws — and rewrap its JSDoc note` (`b69e398`); rebase follow-ups: `fix(points): the host picking pass draws by the render order — a host picks the point on top` (`7e558f5`), `fix(points): the host picking pass layers highlighted over greyed — a host picks the point it sees` (`704fde4`)
 
 ## Why
 
@@ -99,8 +99,9 @@ Earlier, in-browser tests on Storybook's Vite server:
   about 3 ms.
 - **Label sampling** still ignores highlight priority, as before: it follows the render
   order only.
-- **A host's pick pass** draws every point in one pass, like label sampling, so it too
-  follows the render order only.
+- **A host's pick pass** layers like the visible draw: greyed points first, highlighted on
+  top, the order within each group. Before, it drew every point in one pass, so a greyed
+  point later in index order won the pick over a highlighted one it was drawn under.
 
 ## Example
 
