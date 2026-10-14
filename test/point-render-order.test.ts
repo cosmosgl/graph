@@ -208,7 +208,11 @@ describe('drawing by the render order', () => {
       return (pixels[(100 * 200 + 100) * 4] as number) - 1
     }
     try {
-      graph.setViewTransform({ k: 1, x: 100 - (1000 + (200 - SPACE_SIZE) / 2), y: 100 - ((SPACE_SIZE - 1000) + (200 - SPACE_SIZE) / 2) }, [200, 200])
+      // setViewTransform's formula, inverted for k = 1 and (1000, 1000) → (100, 100), with
+      // the world origin at the centre of the space
+      const ox = SPACE_SIZE / 2
+      const oy = SPACE_SIZE / 2
+      graph.setViewTransform({ k: 1, x: 100 - (1000 - ox + 200 / 2), y: 100 - (oy - 1000 + 200 / 2) }, [200, 200])
       expect(graph.spaceToScreenPosition([1000, 1000])).toEqual([100, 100])
 
       expect(pickedAtCentre()).toBe(3)

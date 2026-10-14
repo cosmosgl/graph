@@ -802,14 +802,18 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
    * unit) and a translation, per `setViewTransform`'s space → screen formula,
    * inverted. Three anchors through deck's projection — the space origin, its
    * x axis, its y axis — give the scale and tell whether the view is one cosmos
-   * can draw: unrotated, unpitched, y up. The space origin's pixel is returned
-   * too, for mapping the other way.
+   * can draw: unrotated, unpitched, y up. The translation then follows from where
+   * the space origin lands and the world origin cosmos centres its screen on, read
+   * from the engine (`spaceSize / 2` on both axes, after the engine's own space-size
+   * adjustment). The space origin's pixel is returned too, for mapping the other way.
    */
   private _viewTransform (
     graph: Graph,
     viewport: Viewport
   ): { k: number; x: number; y: number; originX: number; originY: number } | null {
-    const spaceSize = graph.config.spaceSize
+    // The engine's own values, not the config's: they are what cosmos draws with, and they
+    // stay valid when `config.spaceSize` is not (the engine falls back to a default)
+    const { adjustedSpaceSize: spaceSize, worldOrigin } = graph.simulation.store
     const modelMatrix = this.props.modelMatrix
     const toPixel = (sx: number, sy: number): [number, number] => {
       // Space → common (through modelMatrix, column-major, z = 0) → world → pixel.
@@ -839,10 +843,14 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       return null
     }
     this.state.viewWarned = false
+    // setViewTransform's formula at the space origin (0, 0), solved for the translation:
+    // originX = k * (w / 2 - ox) + x, originY = k * (oy + h / 2) + y, with (ox, oy) the
+    // world origin cosmos centres the screen on
+    const [worldOriginX, worldOriginY] = worldOrigin
     return {
       k,
-      x: originX - (k * (viewport.width - spaceSize)) / 2,
-      y: originY - k * (spaceSize + (viewport.height - spaceSize) / 2),
+      x: originX - k * (viewport.width / 2 - worldOriginX),
+      y: originY - k * (worldOriginY + viewport.height / 2),
       originX,
       originY,
     }

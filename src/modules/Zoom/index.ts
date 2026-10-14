@@ -171,16 +171,20 @@ export class Zoom {
       .scale(scale)
   }
 
+  /**
+   * Inverse of `convertSpaceToScreenPosition`: undoes the zoom transform, then the slope-1
+   * translation `Store.scaleX`/`scaleY` make around `worldOrigin` — offsets from the world
+   * position at the screen's top-left corner, y flipped.
+   */
   public convertScreenToSpacePosition (screenPosition: [number, number]): [number, number] {
-    const { eventTransform: { x, y, k }, store: { screenSize } } = this
+    const { eventTransform: { x, y, k }, store: { screenSize, worldOrigin } } = this
     const w = screenSize[0]
     const h = screenSize[1]
     const invertedX = (screenPosition[0] - x) / k
     const invertedY = (screenPosition[1] - y) / k
-    const spacePosition = [invertedX, (h - invertedY)] as [number, number]
-    spacePosition[0] -= (w - this.store.adjustedSpaceSize) / 2
-    spacePosition[1] -= (h - this.store.adjustedSpaceSize) / 2
-    return spacePosition
+    const left = worldOrigin[0] - w / 2
+    const top = worldOrigin[1] + h / 2
+    return [left + invertedX, top - invertedY]
   }
 
   public convertSpaceToScreenPosition (spacePosition: [number, number]): [number, number] {

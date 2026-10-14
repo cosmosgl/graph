@@ -80,7 +80,7 @@ export class Lines extends CoreModule {
   private fillSampledLinksUniformStore: UniformStore<{
     fillSampledLinksUniforms: {
       transformationMatrix: Mat4Array;
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       curvedWeight: number;
       curvedLinkControlPointDistance: number;
@@ -94,7 +94,7 @@ export class Lines extends CoreModule {
       transformationMatrix: Mat4Array;
       widthScale: number;
       linkArrowsSizeScale: number;
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       linkVisibilityDistanceRange: [number, number];
       linkVisibilityMinTransparency: number;
@@ -189,7 +189,7 @@ export class Lines extends CoreModule {
           transformationMatrix: 'mat4x4<f32>',
           widthScale: 'f32',
           linkArrowsSizeScale: 'f32',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           linkVisibilityDistanceRange: 'vec2<f32>',
           linkVisibilityMinTransparency: 'f32',
@@ -220,7 +220,7 @@ export class Lines extends CoreModule {
           transformationMatrix: store.transformationMatrix4x4,
           widthScale: config.linkWidthScale,
           linkArrowsSizeScale: config.linkArrowsSizeScale,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           linkVisibilityDistanceRange: ensureVec2(config.linkVisibilityDistanceRange, [0, 0]),
           linkVisibilityMinTransparency: config.linkVisibilityMinTransparency,
@@ -283,7 +283,7 @@ export class Lines extends CoreModule {
       fillSampledLinksUniforms: {
         uniformTypes: {
           transformationMatrix: 'mat4x4<f32>',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           curvedWeight: 'f32',
           curvedLinkControlPointDistance: 'f32',
@@ -291,7 +291,7 @@ export class Lines extends CoreModule {
         },
         defaultUniforms: {
           transformationMatrix: store.transformationMatrix4x4,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           curvedWeight: config.curvedLinkWeight,
           curvedLinkControlPointDistance: config.curvedLinkControlPointDistance,
@@ -761,7 +761,7 @@ export class Lines extends CoreModule {
       this.fillSampledLinksUniformStore.setUniforms({
         fillSampledLinksUniforms: {
           transformationMatrix: this.store.transformationMatrix4x4,
-          spaceSize: this.store.adjustedSpaceSize,
+          worldOrigin: this.store.worldOrigin,
           screenSize: ensureVec2(this.store.screenSize, [0, 0]),
           curvedWeight: this.config.curvedLinkWeight,
           curvedLinkControlPointDistance: this.config.curvedLinkControlPointDistance,
@@ -809,7 +809,7 @@ export class Lines extends CoreModule {
       this.fillSampledLinksUniformStore.setUniforms({
         fillSampledLinksUniforms: {
           transformationMatrix: this.store.transformationMatrix4x4,
-          spaceSize: this.store.adjustedSpaceSize,
+          worldOrigin: this.store.worldOrigin,
           screenSize: ensureVec2(this.store.screenSize, [0, 0]),
           curvedWeight: this.config.curvedLinkWeight,
           curvedLinkControlPointDistance: this.config.curvedLinkControlPointDistance,
@@ -878,7 +878,7 @@ export class Lines extends CoreModule {
         transformationMatrix: store.transformationMatrix4x4,
         widthScale: config.linkWidthScale,
         linkArrowsSizeScale: config.linkArrowsSizeScale,
-        spaceSize: store.adjustedSpaceSize,
+        worldOrigin: store.worldOrigin,
         screenSize: ensureVec2(store.screenSize, [0, 0]),
         linkVisibilityDistanceRange: ensureVec2(config.linkVisibilityDistanceRange, [0, 0]),
         linkVisibilityMinTransparency: config.linkVisibilityMinTransparency,
@@ -1246,7 +1246,7 @@ export class Lines extends CoreModule {
         transformationMatrix: store.transformationMatrix4x4,
         widthScale: config.linkWidthScale,
         linkArrowsSizeScale: config.linkArrowsSizeScale,
-        spaceSize: store.adjustedSpaceSize,
+        worldOrigin: store.worldOrigin,
         screenSize: ensureVec2(store.screenSize, [0, 0]),
         linkVisibilityDistanceRange: ensureVec2(config.linkVisibilityDistanceRange, [0, 0]),
         linkVisibilityMinTransparency: config.linkVisibilityMinTransparency,
