@@ -8,6 +8,7 @@ import { pointOcclusionCulling } from './performance/point-occlusion-culling'
 import { onDemandRendering } from './performance/on-demand-rendering'
 import { repulsionBenchmark } from './performance/repulsion-benchmark'
 import { countryBordersComparison } from './performance/country-borders-comparison'
+import { spaceWall } from './performance/space-wall'
 
 import createCosmosRaw from './create-cosmos?raw'
 import generateMeshDataRaw from './generate-mesh-data?raw'
@@ -19,6 +20,7 @@ import onDemandRenderingRaw from './performance/on-demand-rendering?raw'
 import repulsionBenchmarkRaw from './performance/repulsion-benchmark?raw'
 import countryBordersComparisonRaw from './performance/country-borders-comparison?raw'
 import countryBordersDataRaw from './performance/country-borders-data?raw'
+import spaceWallRaw from './performance/space-wall?raw'
 
 // These exist to show a cost or a limit rather than a feature. Most run an FPS
 // monitor; several will be slow to start on weak hardware.
@@ -98,6 +100,17 @@ export const CountryBordersComparison: Story = {
     sourceCode: [
       { name: 'Story', code: countryBordersComparisonRaw },
       { name: 'Data', code: countryBordersDataRaw },
+    ],
+  },
+}
+
+export const SpaceWall: Story = {
+  ...createStory(spaceWall),
+  name: 'Space Size Wall',
+  tags: ['perf', 'advanced', 'large-data'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: spaceWallRaw },
     ],
   },
 }
