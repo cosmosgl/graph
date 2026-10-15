@@ -3,7 +3,8 @@ import { luma, Texture, type Device } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
 
 import { Graph, defaultConfigValues, type GraphConfig } from '@cosmos.gl/graph'
-import { DataBounds } from '@/graph/modules/Shared/data-bounds'
+import { DataBounds, type DataBoundsRunOptions } from '@/graph/modules/Shared/data-bounds'
+import { COARSEST_GRID_SIZE } from '@/graph/modules/ForceManyBody'
 import { COLLISION_GRID_SIZE, COLLISION_ROTATIONS, collisionRotationSeed, withCollisionGrid } from '@/graph/modules/ForceCollision/collision-grid'
 
 /**
@@ -100,13 +101,20 @@ describe('data bounds (the box the many-body grid divides)', () => {
   const COUNT = 39000
   const MIN_EXTENT = 64
 
-  const runBounds = (device: Device, positions: Float32Array, exit: Float32Array, exitSize: number, pointsNumber: number): Float32Array => {
+  const runBounds = (
+    device: Device,
+    positions: Float32Array,
+    exit: Float32Array,
+    exitSize: number,
+    pointsNumber: number,
+    originShift?: DataBoundsRunOptions['originShift']
+  ): Float32Array => {
     const positionsTexture = createFloatTexture(device, 'rgba32float', SIZE, positions)
     // The engine's exit texture: rg32float, G = absent (or its 1×1 all-present stand-in)
     const exitTexture = createFloatTexture(device, 'rg32float', exitSize, exit)
     const bounds = new DataBounds(device)
     try {
-      bounds.run({ positionsTexture, exitTexture, pointsTextureSize: SIZE, pointsNumber, minExtent: MIN_EXTENT })
+      bounds.run({ positionsTexture, exitTexture, pointsTextureSize: SIZE, pointsNumber, minExtent: MIN_EXTENT, originShift })
       expect(bounds.texture).toBeDefined()
       return device.readPixelsToArrayWebGL(bounds.texture as Texture) as Float32Array
     } finally {
@@ -175,6 +183,30 @@ describe('data bounds (the box the many-body grid divides)', () => {
       for (let i = 0; i < SIZE * SIZE; i += 1) exit[i * 2 + 1] = 1
       const box = runBounds(device, positions, exit, SIZE, COUNT)
       expectBox(box, expectedBox([0, 0], [0, 0], MIN_EXTENT))
+    } finally {
+      destroyDevice(device)
+    }
+  })
+
+  it('pads by one coarsest cell and slides the origin back by the given part of it, keeping the points inside', async () => {
+    const device = await createDevice()
+    try {
+      const { positions, exit } = createPoints()
+      const [fx, fy, fitted] = expectedBox([50, 380], [320, 510], MIN_EXTENT)
+      const cellsPerAxis = 8
+      const cell = fitted / (cellsPerAxis - 1)
+      const extent = fitted + cell
+      // Asymmetric offsets, so swapped axes or a misordered uniform fail; and both ends of the range
+      for (const offset of [[0.25, 0.75], [0, 0.999999], [0.999999, 0]] as [number, number][]) {
+        const box = runBounds(device, positions, exit, SIZE, COUNT, { cellsPerAxis, offset })
+        expectBox(box, [fx - offset[0] * cell, fy - offset[1] * cell, extent, 1 / extent])
+        // The live points' extremes stay inside whatever the offset
+        const [ox, oy, side] = box as unknown as [number, number, number]
+        expect(ox).toBeLessThanOrEqual(50)
+        expect(ox + side).toBeGreaterThanOrEqual(320)
+        expect(oy).toBeLessThanOrEqual(380)
+        expect(oy + side).toBeGreaterThanOrEqual(510)
+      }
     } finally {
       destroyDevice(device)
     }
@@ -297,8 +329,8 @@ describe('the many-body grid follows the data', () => {
 
     // The near field's step bound is a fixed length — 2 × 4096 / 256 = 32 units
     // at this point count, before friction — not 2 × this tick's cell, which
-    // the floored box makes a quarter unit: the first kick spreads the stack
-    // tens of units, not a fraction of one.
+    // the floored, padded box makes about 2/7 of a unit: the first kick spreads
+    // the stack tens of units, not a fraction of one.
     expect(firstStepExtent).toBeGreaterThan(16)
     expect(firstStepExtent).toBeLessThanOrEqual(64)
 
@@ -313,6 +345,63 @@ describe('the many-body grid follows the data', () => {
     expect(nonFinite).toBe(0)
     expect(distinct.size).toBe(COUNT)
     expect(extentOf(result)).toBeGreaterThan(firstStepExtent)
+  })
+
+  it('shifts the grid every tick by less than one coarsest cell, always over every point', async () => {
+    // A fixed grid keeps its cell boundaries on fixed lines, and the force jumps
+    // at every boundary: dense layouts drew a cross along the box's centre lines.
+    let seed = 777
+    const random = (): number => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
+    const positions = new Float32Array(COUNT * 2)
+    for (let i = 0; i < COUNT; i += 1) {
+      positions[i * 2] = 1000 + random() * 600
+      positions[i * 2 + 1] = 2000 + random() * 300
+    }
+    // The positions the next step bins: with gravity and centering off, the
+    // many-body pass is the step's first, so it reads what the last step wrote.
+    let binned: Float32Array = positions
+    const shifts: [number, number][] = []
+    await runManyBody(positions, 8, (graph) => {
+      const forceManyBody = (graph.simulation as unknown as { forceManyBody?: { dataBounds?: DataBounds } }).forceManyBody
+      const texture = forceManyBody?.dataBounds?.texture
+      expect(texture).toBeDefined()
+      const box = graph.simulation.device?.readPixelsToArrayWebGL(texture as Texture) as Float32Array
+      const [ox, oy, extent] = box as unknown as [number, number, number]
+      let minX = Infinity
+      let maxX = -Infinity
+      let minY = Infinity
+      let maxY = -Infinity
+      for (let i = 0; i < COUNT; i += 1) {
+        const x = binned[i * 2] as number
+        const y = binned[i * 2 + 1] as number
+        minX = Math.min(minX, x)
+        maxX = Math.max(maxX, x)
+        minY = Math.min(minY, y)
+        maxY = Math.max(maxY, y)
+      }
+      const fitted = Math.max(maxX - minX, maxY - minY)
+      const cell = fitted / (COARSEST_GRID_SIZE - 1)
+      // Padded by one coarsest cell…
+      expect(Math.abs(extent - (fitted + cell))).toBeLessThanOrEqual(1e-5 * extent)
+      // …over every point…
+      expect(ox).toBeLessThanOrEqual(minX)
+      expect(oy).toBeLessThanOrEqual(minY)
+      expect(ox + extent).toBeGreaterThanOrEqual(maxX)
+      expect(oy + extent).toBeGreaterThanOrEqual(maxY)
+      // …slid back from the fitted square by less than that cell
+      const u = ((minX + maxX) / 2 - fitted / 2 - ox) / cell
+      const v = ((minY + maxY) / 2 - fitted / 2 - oy) / cell
+      for (const shift of [u, v]) {
+        expect(shift).toBeGreaterThan(-1e-3)
+        expect(shift).toBeLessThan(1 + 1e-3)
+      }
+      shifts.push([u, v])
+      binned = graph.getPointPositionsArray()
+    })
+    // Re-drawn every tick, and spread over the cell rather than stuck near one place
+    expect(new Set(shifts.map(([u, v]) => `${u.toFixed(4)},${v.toFixed(4)}`)).size).toBe(shifts.length)
+    const us = shifts.map(([u]) => u)
+    expect(Math.max(...us) - Math.min(...us)).toBeGreaterThan(0.3)
   })
 })
 

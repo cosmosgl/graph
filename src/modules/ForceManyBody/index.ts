@@ -23,7 +23,9 @@ const MAX_GRID_SIZE = 512
 
 /**
  * Cells per axis of the coarsest grid level; every finer level doubles it, up to
- * getFinestGridSize.
+ * getFinestGridSize. Also the unit of the per-tick origin shift (see
+ * ForceManyBody), which pads the data square by one cell of this grid: a
+ * seventh of the square's side.
  *
  * 8 rather than 4. The 4² level was the slowest pass, most likely from blending
  * contention: every point is drawn into each level with additive blending, and
@@ -31,7 +33,9 @@ const MAX_GRID_SIZE = 512
  * third off the step at 100k–300k points (6.9 → 4.6 ms and 19.3 → 12.4 ms on an
  * M3 Max), less at smaller counts. Its centroids each stood in for a sixteenth
  * of the layout, so starting finer is also more accurate: the force error on a
- * 100k-point disk fell from 0.22% to 0.09%.
+ * 100k-point disk fell from 0.22% to 0.09%. And it keeps the shift's padding to
+ * a seventh of the square instead of a third, which would have coarsened every
+ * level's cells by as much.
  */
 export const COARSEST_GRID_SIZE = 8
 
@@ -46,30 +50,33 @@ const getFinestGridSize = (pointsNumber: number): number =>
 /**
  * The per-tick bound on the close-range repulsion kick, for both paths: the
  * all-pairs pass (which also splits near from far pairs at it) and the grid
- * path's near-field pass. It is 2 × the finest cell of a layout spanning the
- * space at this point count — a fixed length, deliberately not 2 × the grid's
- * actual cell: the grid follows the data, and a cell-relative bound would
- * tighten as a layout contracts, throttling the kicks that break dense clumps
- * apart exactly when they are needed. One helper so both passes bound with the
- * same value and the dynamics stay continuous across ALL_PAIRS_MAX_POINTS.
+ * path's near-field pass. It is 2 × spaceSize / the finest grid size at this
+ * point count, twice the finest cell the grid had when it covered the space: a
+ * fixed length, deliberately not tied to the grid's actual cell. The grid
+ * follows the data, and a cell-relative bound would tighten as a layout
+ * contracts, throttling the kicks that break dense clumps apart exactly when
+ * they are needed. One helper so both passes bound with the same value and the
+ * dynamics stay continuous across ALL_PAIRS_MAX_POINTS.
  */
 const getMaxStep = (adjustedSpaceSize: number, pointsNumber: number): number =>
   2 * (adjustedSpaceSize / getFinestGridSize(pointsNumber))
 
 /**
- * The smallest finest-level cell the grid may have, in world units: the
- * data-bounds floor is this × the finest grid size. All points coincident (or
- * a single live point) is a legitimate layout with a zero-size box, and the
- * grid still needs a non-zero cell to index.
+ * The floor on the finest-level cell, in world units, applied to the fitted
+ * data square: the data-bounds floor is this × the finest grid size. The origin
+ * shift pads the square after the floor, so the grid's finest cell is at least
+ * this × 8/7 (COARSEST_GRID_SIZE over COARSEST_GRID_SIZE − 1). All points
+ * coincident (or a single live point) is a legitimate layout with a zero-size
+ * box, and the grid still needs a non-zero cell to index.
  *
  * A quarter of the force kernel's `distanceMin` (1 unit, where its falloff
  * softens from 1/d to 1/√d). The finest grid has 2–4·√n cells per axis below
  * MAX_GRID_SIZE and fewer above it, so the floor binds only once the points'
  * mean spacing drops below about one unit, where the kernel has already
- * softened. Once it binds, the box is larger than the data, which pads the
- * layout's edge to the middle of a cell on every level and costs the far field
- * accuracy: at one unit per cell it bound on a 100k-point square a tenth of
- * the space wide (mean spacing 1.3 units) and raised its error 0.06% → 0.30%.
+ * softened. Once it binds, every cell is wider than the data needs, which
+ * costs the far field accuracy: at one unit per cell it bound on a 100k-point
+ * square a tenth of the space wide (mean spacing 1.3 units) and raised its
+ * error 0.06% → 0.30% (measured before the shift's padding existed).
  */
 const MIN_FINEST_CELL_SIZE = 0.25
 
@@ -160,6 +167,25 @@ const PEEL_TARGETS = 2
  * 100k, past the 8 near-field slots there once f drops below ~0.22 — and binned
  * points outside the space into its edge cells. Following the data makes the
  * resolution depend on the point count alone, wherever the layout sits.
+ *
+ * Where that square's cell boundaries fall moves every tick (DataBounds'
+ * originShift). Each level picks the cells it takes as centroids from the
+ * point's own cell, so a point crossing a boundary swaps whole cells between
+ * "one centroid" and "refined by the next level", and the force jumps there. A
+ * fixed grid keeps those jumps on fixed lines, and every boundary of the
+ * coarsest level is a boundary on every finer level, so the jumps along it add
+ * up. A dense layout settled into a visible cross along the square's centre
+ * lines, its points pushed off them: there a crossing switches a column of
+ * coarsest cells on both sides, where near the box's edge the shell is clipped
+ * and only one column switches. Padding the square by one coarsest cell and
+ * sliding it by a uniform random part of that cell turns each jump into
+ * per-tick noise around a continuous force, annealed by alpha like the near
+ * field's sampling noise. Unlike that noise it reaches every point, however
+ * sparse its cell: at a 300k-point equilibrium with alpha held at 1 the layout
+ * moves 0.0023 point spacings per tick instead of 0.001. The price is a seventh
+ * more extent per axis for the same cell count, so occupied cells hold ~1.3×
+ * the points, which costs ~6% of a step at 100k–300k points (+0.25 ms and
+ * +0.8 ms on an M3 Max, against the same pyramid without the shift).
  */
 export class ForceManyBody extends CoreModule {
   private randomValuesTexture: Texture | undefined
@@ -703,7 +729,8 @@ export class ForceManyBody extends CoreModule {
 
   /**
    * Recomputes this tick's data bounds from the positions the passes below
-   * bin, floored so the finest cell is at least MIN_FINEST_CELL_SIZE.
+   * bin, floored so the finest cell is at least MIN_FINEST_CELL_SIZE, and
+   * places the grid over them at a fresh random offset (see the class doc).
    */
   private drawBounds (): void {
     const { store, data, points } = this
@@ -718,6 +745,12 @@ export class ForceManyBody extends CoreModule {
       pointsTextureSize: store.pointsTextureSize,
       pointsNumber: data.pointsNumber,
       minExtent: getFinestGridSize(data.pointsNumber) * MIN_FINEST_CELL_SIZE,
+      // A fresh uniform shift every tick, from the simulation's random stream
+      // (seeded by randomSeed when set)
+      originShift: {
+        cellsPerAxis: COARSEST_GRID_SIZE,
+        offset: [store.getRandomFloat(0, 1), store.getRandomFloat(0, 1)],
+      },
     })
   }
 
