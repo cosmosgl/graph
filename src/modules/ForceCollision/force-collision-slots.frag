@@ -21,8 +21,8 @@ precision highp int;
 // The pairwise response is the all-pairs shader's and must stay identical to
 // it: project the pair to contact along the line of centers, split by r² so
 // the smaller disc yields, scale by `collisionStrength`, cap at one own radius
-// per pass. Like it, this is a position correction and not a force: no alpha,
-// integrated with friction 1.
+// per pass. Like it, this is a position correction and not a force: no alpha
+// unless `collisionCooling` opts in, integrated with friction 1.
 
 uniform sampler2D positionsTexture;
 uniform sampler2D sizeTexture;
@@ -40,6 +40,8 @@ layout(std140) uniform forceCollisionSlotsUniforms {
   float collisionStrength;
   float collisionRadius;
   float collisionPadding;
+  float alpha;
+  float collisionCooling; // 0: full strength at every alpha; 1: scaled by alpha like the other forces
 } forceCollisionSlots;
 
 #define pointsTextureSize forceCollisionSlots.pointsTextureSize
@@ -49,6 +51,8 @@ layout(std140) uniform forceCollisionSlotsUniforms {
 #define collisionStrength forceCollisionSlots.collisionStrength
 #define collisionRadius forceCollisionSlots.collisionRadius
 #define collisionPadding forceCollisionSlots.collisionPadding
+#define alpha forceCollisionSlots.alpha
+#define collisionCooling forceCollisionSlots.collisionCooling
 #else
 uniform float pointsTextureSize;
 uniform float gridSize;
@@ -57,6 +61,8 @@ uniform float slotCount;
 uniform float collisionStrength;
 uniform float collisionRadius;
 uniform float collisionPadding;
+uniform float alpha;
+uniform float collisionCooling;
 #endif
 
 out vec4 fragColor;
@@ -134,7 +140,9 @@ void main() {
     }
   }
 
-  correction *= collisionStrength;
+  // Optional cooling: alpha^cooling, 1 at cooling 0 (the branch avoids pow(0, 0)).
+  float cooling = collisionCooling > 0.0 ? pow(max(alpha, 0.0), collisionCooling) : 1.0;
+  correction *= collisionStrength * cooling;
 
   // Cap the per-pass correction at one own radius. A point deep in a pile sums
   // many overlapping pairs into one large vector; the cap keeps the direction

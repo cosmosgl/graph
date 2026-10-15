@@ -450,8 +450,9 @@ export interface GraphConfigInterface {
    * points will push each other apart when they overlap.
    *
    * Unlike the other forces, collision is a constraint: its correction is not
-   * scaled by the simulation's alpha and is integrated without friction, so
-   * overlap keeps resolving at full strength while the layout cools. While it
+   * scaled by the simulation's alpha (unless `simulationCollisionCooling` says
+   * so) and is integrated without friction, so overlap keeps resolving at full
+   * strength while the layout cools. While it
    * is on, link rest lengths are floored at the contact distance (see
    * `simulationLinkDistance`).
    *
@@ -490,6 +491,17 @@ export interface GraphConfigInterface {
    * Default value: `1`
    */
   simulationCollisionIterations: number;
+  /**
+   * How much the collision correction cools with the simulation's alpha, as the
+   * power alpha is raised to. `0` keeps collision at full strength until the
+   * simulation ends — overlap goes on resolving after every other force has
+   * faded. `1` scales it by alpha like the other forces, so a layout that is
+   * still being compressed (gravity past the packing limit, for instance) stops
+   * jittering as it cools, at the price of overlap that remains when alpha is
+   * low. Values between take alpha to that power: `0.5` cools half as fast.
+   * Default value: `0`
+   */
+  simulationCollisionCooling: number;
 
   /**
    * Callback function that will be called when the simulation starts.
@@ -886,6 +898,7 @@ export type GraphSimulationConfigInterface = Pick<GraphConfigInterface,
   | 'simulationCollisionRadius'
   | 'simulationCollisionPadding'
   | 'simulationCollisionIterations'
+  | 'simulationCollisionCooling'
   | 'randomSeed'
   | 'rescalePositions'
   | 'onSimulationStart'
