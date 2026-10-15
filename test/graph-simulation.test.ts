@@ -143,6 +143,35 @@ describe('GraphSimulation', () => {
     }
   })
 
+  it('simulationCollisionCooling scales the collision correction by alpha', async () => {
+    // Two size-10 points overlapping by 8 of their 10-unit contact distance, nothing else on.
+    const positions = new Float32Array([2048, 2048, 2050, 2048])
+    const distance = (pos: Float32Array): number => Math.hypot((pos[2] as number) - (pos[0] as number), (pos[3] as number) - (pos[1] as number))
+    const base: GraphSimulationConfig = {
+      ...SIMULATION_CONFIG,
+      simulationGravity: 0,
+      simulationRepulsion: 0,
+      simulationLinkSpring: 0,
+      pointDefaultSize: 10,
+      simulationCollision: 1,
+    }
+    const settle = async (cooling: number): Promise<number> => {
+      const simulation = await createSimulation({ ...base, simulationCollisionCooling: cooling }, positions)
+      try {
+        // A nearly cooled simulation: alpha 0.01
+        simulation.start(0.01)
+        for (let i = 0; i < 20; i += 1) simulation.step()
+        return distance(simulation.getPointPositionsArray())
+      } finally {
+        simulation.destroy()
+      }
+    }
+    // Cooling 0: full strength regardless of alpha — the pair is projected to contact.
+    expect(await settle(0)).toBeGreaterThan(9.5)
+    // Cooling 1: the correction is scaled by alpha, so at 0.01 the pair barely moves.
+    expect(await settle(1)).toBeLessThan(4)
+  })
+
   it('floors a link\'s rest length at the contact distance while collision is on', async () => {
     // Two size-20 points (contact distance 20) joined by a spring asking for 1 unit.
     const positions = new Float32Array([2000, 2048, 2100, 2048])

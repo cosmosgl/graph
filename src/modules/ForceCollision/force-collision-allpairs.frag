@@ -16,12 +16,12 @@ precision highp int;
 // is projected to contact along the line between the centers, and the
 // correction is split by r² so the smaller disc yields to the bigger one.
 //
-// The output is a position correction, not a force: it is not scaled by
-// alpha (collision is a constraint that must hold while the layout cools),
-// the integrator applies it with friction 1, and its magnitude is capped at
-// one own radius per pass so a deep pile unwinds over a few passes instead of
-// flinging apart. `collisionStrength` is the relaxation factor (1 = full
-// projection per pass).
+// The output is a position correction, not a force: by default it is not
+// scaled by alpha (collision is a constraint that must hold while the layout
+// cools; `collisionCooling` opts into alpha^cooling), the integrator applies it
+// with friction 1, and its magnitude is capped at one own radius per pass so a
+// deep pile unwinds over a few passes instead of flinging apart.
+// `collisionStrength` is the relaxation factor (1 = full projection per pass).
 
 uniform sampler2D positionsTexture;
 uniform sampler2D sizeTexture;
@@ -35,6 +35,8 @@ layout(std140) uniform forceCollisionAllPairsUniforms {
   float collisionRadius;
   float collisionPadding;
   float maxRadius; // the largest effective radius in the graph: the pair-reject bound
+  float alpha;
+  float collisionCooling; // 0: full strength at every alpha; 1: scaled by alpha like the other forces
 } forceCollisionAllPairs;
 
 #define pointsTextureSize forceCollisionAllPairs.pointsTextureSize
@@ -43,6 +45,8 @@ layout(std140) uniform forceCollisionAllPairsUniforms {
 #define collisionRadius forceCollisionAllPairs.collisionRadius
 #define collisionPadding forceCollisionAllPairs.collisionPadding
 #define maxRadius forceCollisionAllPairs.maxRadius
+#define alpha forceCollisionAllPairs.alpha
+#define collisionCooling forceCollisionAllPairs.collisionCooling
 #else
 uniform float pointsTextureSize;
 uniform float pointsNumber;
@@ -50,6 +54,8 @@ uniform float collisionStrength;
 uniform float collisionRadius;
 uniform float collisionPadding;
 uniform float maxRadius;
+uniform float alpha;
+uniform float collisionCooling;
 #endif
 
 out vec4 fragColor;
@@ -125,7 +131,9 @@ void main() {
     correction += direction * (overlap * otherRadius2 / (selfRadius2 + otherRadius2));
   }
 
-  correction *= collisionStrength;
+  // Optional cooling: alpha^cooling, 1 at cooling 0 (the branch avoids pow(0, 0)).
+  float cooling = collisionCooling > 0.0 ? pow(max(alpha, 0.0), collisionCooling) : 1.0;
+  correction *= collisionStrength * cooling;
 
   // Cap the per-pass correction at one own radius. A point deep in a pile sums
   // many overlapping pairs into one large vector; the cap keeps the direction

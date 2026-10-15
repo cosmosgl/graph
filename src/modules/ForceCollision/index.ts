@@ -99,6 +99,8 @@ export class ForceCollision extends CoreModule {
       collisionStrength: number;
       collisionRadius: number;
       collisionPadding: number;
+      alpha: number;
+      collisionCooling: number;
     };
   }> | undefined
 
@@ -110,6 +112,8 @@ export class ForceCollision extends CoreModule {
       collisionRadius: number;
       collisionPadding: number;
       maxRadius: number;
+      alpha: number;
+      collisionCooling: number;
     };
   }> | undefined
 
@@ -240,6 +244,8 @@ export class ForceCollision extends CoreModule {
           collisionRadius: 'f32',
           collisionPadding: 'f32',
           maxRadius: 'f32',
+          alpha: 'f32',
+          collisionCooling: 'f32',
         },
       },
     })
@@ -320,6 +326,8 @@ export class ForceCollision extends CoreModule {
           collisionStrength: 'f32',
           collisionRadius: 'f32',
           collisionPadding: 'f32',
+          alpha: 'f32',
+          collisionCooling: 'f32',
         },
       },
     })
@@ -413,6 +421,8 @@ export class ForceCollision extends CoreModule {
         collisionRadius: config.simulationCollisionRadius ?? 0,
         collisionPadding: config.simulationCollisionPadding ?? 0,
         maxRadius: this.maxRadius,
+        alpha: store.alpha,
+        collisionCooling: config.simulationCollisionCooling ?? 0,
       },
     })
 
@@ -507,6 +517,8 @@ export class ForceCollision extends CoreModule {
         collisionStrength: config.simulationCollision ?? 0,
         collisionRadius: config.simulationCollisionRadius ?? 0,
         collisionPadding: config.simulationCollisionPadding ?? 0,
+        alpha: store.alpha,
+        collisionCooling: config.simulationCollisionCooling ?? 0,
       },
     })
 

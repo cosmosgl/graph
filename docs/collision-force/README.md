@@ -19,6 +19,7 @@ The force is driven by four config keys (interface in `src/config.ts`, defaults 
 | `simulationCollisionRadius` | A fixed collision radius for every point. `0` or `undefined` derive it per point as `size / 2`. | `undefined` |
 | `simulationCollisionPadding` | Extra room added to every radius, in space units, so neighbours settle `2 × padding` apart instead of touching. | `0` |
 | `simulationCollisionIterations` | Collision passes per tick. More passes unwind a dense pile in fewer ticks, at a linear cost per pass. | `1` |
+| `simulationCollisionCooling` | How much the correction cools with alpha, as the power alpha is raised to: `0` never, `1` like the other forces. | `0` |
 
 Throughout, **R** means a point's *effective radius*: the fixed radius or half its size, plus
 the padding.
@@ -29,7 +30,7 @@ tests every pair. Above it, `force-collision-slots.frag` tests every pair *withi
 uniform grid whose cell spans the contact range, with each cell's occupants listed by depth
 peeling so the force pass sees real neighbours, never a cell average. Both paths resolve a
 contact the same way, and both treat collision as a **constraint**: the correction is not
-scaled by the simulation's `alpha`, it is integrated without friction, and while collision is
+scaled by the simulation's `alpha` (unless `simulationCollisionCooling` opts in), it is integrated without friction, and while collision is
 on the link force floors every spring's rest length at the pair's contact distance.
 
 ## The problem this force solves
@@ -172,11 +173,15 @@ would settle into a standing oscillation.
 Collision is also the one force treated as a **constraint rather than a force**, in three
 ways that together let it dominate a dense cluster:
 
-- **No `alpha`.** Every other force is proportional to the cooling factor. Alpha decays
-  exponentially, so roughly the last two thirds of a simulation's ticks run below a tenth of
-  full strength; a collision push that cooled with it froze whatever overlap the springs had
-  introduced while hot. The shaders apply `strength` straight, and the per-pass cap is what
-  keeps full strength stable at every alpha.
+- **No `alpha`, by default.** Every other force is proportional to the cooling factor. Alpha
+  decays exponentially, so roughly the last two thirds of a simulation's ticks run below a
+  tenth of full strength; a collision push that cooled with it froze whatever overlap the
+  springs had introduced while hot. The shaders apply `strength` straight, and the per-pass
+  cap is what keeps full strength stable at every alpha. `simulationCollisionCooling` opts
+  back in, multiplying the correction by `alpha^cooling`: at `1` collision fades like the
+  other forces, which suits a layout that stays under compression (the 50k stress story,
+  where gravity presses past the packing limit) and would otherwise jitter for as long as the
+  simulation runs — at the price of the overlap left when alpha is low.
 - **No friction.** `updatePosition(1)` integrates the collision velocity with friction 1, so
   the bounded correction lands in full instead of losing 15 % to the integrator's damping.
 - **The springs agree with it.** Before the forces run, the tick builds the collision
@@ -320,4 +325,5 @@ its own centroid near field hit the same wall, and the same shader now serves bo
 - **Relaxation** — resolving a constraint by repeated small, bounded corrections rather than
   one exact solve; the per-pass cap makes collision a relaxation, and `strength` is its factor.
 - **Alpha** — the simulation's global cooling factor, from 1 at start to `ALPHA_MIN`
-  (`0.001`) when it stops; every force except collision is proportional to it.
+  (`0.001`) when it stops; every force except collision is proportional to it, and collision
+  only to the power `simulationCollisionCooling` sets.
