@@ -16,6 +16,15 @@ The problem-and-fix story behind that follow-up — the measurements, the captur
 and its own figures — is also a standalone page: [`jitter-fix.html`](./jitter-fix.html)
 (self-contained; open it locally in a browser — GitHub shows only its source).
 
+The grid has since stopped being nailed to the simulation space, too. Its *resolution* has
+followed the point count since #240, but until the grid was made to follow the data — part
+of the work that stopped `spaceSize` bounding a layout — its *placement* was
+`[0, spaceSize]`. Every level now divides the bounding square of the live points, recomputed
+on the GPU every tick — see
+[step 1](#step-1--fit-the-grid-to-the-data), and
+[The grid follows the data](#the-grid-follows-the-data-not-the-space) for what the old
+placement cost (engineering record: `history/2026/2026-10-14-unbounded-space.md`).
+
 ## The problem both algorithms solve
 
 Repulsion is an *n-body* force: every point pushes away every other point. Computed literally
@@ -67,17 +76,90 @@ The scheme is known in physics simulation as **P3M** (particle–particle / part
 mesh handles the far field, true particle–particle forces handle the near field. The same idea
 already powers the 3D force on the `feat/3d` branch; #240 ports it back to 2D.
 
-### Step 1 — aggregate the grid pyramid
+### Step 1 — fit the grid to the data
+
+![Where the grid sits: over the space before, over the data now](i-grid-follows-data.svg)
+
+Every level of the pyramid divides one square, and that square is the **bounding box of the
+live points**, recomputed on the GPU every tick before anything is binned (`DataBounds`,
+`src/modules/Shared/data-bounds.ts`). It used to be the simulation space, `[0, spaceSize]`: a
+layout covering part of the space got only the cells over that part, and points outside the
+space were filed into its edge cells. Fitted to the data, the grid's resolution is a property of
+the point set alone — wherever the layout sits and however much of the space it covers.
+
+The box is a reduction in three full-screen passes, and it never comes back to the CPU — a
+readback would stall the pipeline every tick, so every pass that needs it reads it as a texture:
+
+1. **64 × 64 partial boxes** (`reduce-bounds-buckets.frag`). Fragment *b* strides through the
+   point list — points *b*, *b* + 4096, *b* + 2·4096, … — so the work splits evenly however the
+   points sit in the texture or in space; at a million points that is ~245 per fragment.
+2. **8 × 8** (`reduce-bounds-blocks.frag`): each fragment folds an 8 × 8 block of those. Without
+   this middle pass the last fragment folded all 4,096 partial boxes in sequence — ~0.75 ms per
+   tick, 11 % of a 100k-point step on an M3 Max. With it, the whole reduction costs ~0.16 ms up
+   to 300k points (~0.38 ms at a million).
+3. **One texel** (`reduce-bounds-final.frag`): `[originX, originY, extent, 1 / extent]`.
+
+What goes into that texel:
+
+- **Only live, finite positions.** Absent points (`exit.g > 0.5`) and non-finite positions are
+  skipped. The whole grid derives from this box, so one diverged point would otherwise set the
+  cell size for every other point. The test reads the exponent bits rather than comparing: a
+  compiler allowed to assume no NaNs may fold a comparison away.
+- **A square, centred on the data.** The levels are square and halve exactly; a non-square box
+  would give non-square cells. Its side is the larger of the two spans.
+- **No margin.** The outermost points sit exactly on the box's edge, where the edge clamp files
+  them into the last cell the same way on every level. A margin only widens the cells over the
+  data and leaves the layout's edge mid-cell on every level, which measurably costs the far
+  field accuracy there: 0.124 % error instead of 0.060 % on a square layout, 0.31 % instead of
+  0.23 % on a disk (100k points, against an exact all-pairs sum).
+- **A floor of ¼ unit per finest cell** (`MIN_FINEST_CELL_SIZE`; the extent is at least
+  0.25 × the finest grid size). One point, or a stack of coincident points, is a legitimate
+  layout with a zero-size box, and the grid still needs a non-zero cell to index. A quarter of
+  the kernel's `distanceMin` — the 1-unit scale where its falloff softens — so the floor binds
+  only once the points' mean spacing drops below about a unit, where the kernel has softened
+  already. At one unit per cell it bound on an ordinary 100k-point square a tenth of the space
+  wide (mean spacing 1.3 units) and raised its error from 0.06 % to 0.30 %.
+
+**One cell formula, spliced into four shaders.** Four programs bin a point: the aggregation
+(`calculate-level.vert`), the per-level far field (`force-level.frag`), the near-field peel
+(`build-nearfield-slots.vert`) and the near-field force (`force-nearfield.frag`). The pyramid
+charges every point to exactly one pass (step 3) only while they agree cell for cell — a point
+binned into one cell by the aggregation and looked up in its neighbour by a force pass is
+counted twice or not at all. So the formula lives once, in `grid-cell.ts`, and `withGridCell`
+splices it into all four at a `// @grid-cell` marker:
+
+```glsl
+vec4 dataBox = texelFetch(dataBoundsTexture, ivec2(0), 0); // [originX, originY, extent, 1/extent]
+float cellsPerUnit = dataBox.w * cellsPerAxis;             // × a power of two: exact
+ivec2 cell = clamp(ivec2(floor((worldPosition - dataBox.xy) * cellsPerUnit)), ivec2(0), lastCell);
+```
+
+It is division-free on purpose. The four are separate programs, two vertex and two fragment,
+and GLSL ES allows a highp division to be off by 2.5 ULP, so a quotient could round differently
+from one program to the next and put a point sitting right on a cell boundary in different
+cells. A subtraction and a multiplication must be correctly rounded, so every program gets the
+same bits; the one inexact step, the extent's reciprocal, is taken once by the reduction and
+shared through the texel. Scaling it by the level's power-of-two cell count changes only the
+exponent, so a point's offset from the origin on level L + 1 is exactly twice its offset on
+level L, and its cell there is `2·cell` or `2·cell + 1` on each axis — the parent–child relation
+the 6×6 refinement in step 3 relies on, which the edge clamp preserves. `withGridCell` also
+throws if a host shader's uniform `#define` would rewrite one of the formula's identifiers, a
+mistake that otherwise surfaces as a compile error far from its cause, or not at all.
+
+### Step 2 — aggregate the grid pyramid
 
 Same raw material as before: a pyramid of grids at 4², 8², 16², … resolution, up to an adaptive
-finest level of about **2·√n cells per axis** (floored at 8², capped at 512²). Each tick, every
-point is drawn into each grid as a 1-pixel point with additive blending, accumulating
-`[Σx, Σy, count]` per cell (`calculate-level.vert/frag`).
+finest level of about **2·√n cells per axis** (floored at 8², capped at 512²), every one of them
+over the data box from step 1. Each tick, every point is drawn into each grid as a 1-pixel point
+with additive blending, accumulating `[Σx, Σy, count]` per cell (`calculate-level.vert/frag`).
 
-The 2·√n target means an *average of ¼ point per finest cell* — most cells are empty or hold
-one point. Keep that in mind for step 3.
+The 2·√n target means an *average of at most ¼ point per finest cell* over the data box — most
+cells are empty or hold one point (past the 512² cap the average climbs: 0.38 at 100k points).
+Because the grid follows the data, that holds wherever the layout sits and however far gravity
+has pulled it in; on a grid fixed to the space it held only for a layout that filled the space.
+Keep that in mind for step 4.
 
-### Step 2 — the pyramid tiles space exactly once
+### Step 3 — the pyramid tiles the data box exactly once
 
 ![Grid pyramid coverage](b-grid-pyramid.svg)
 
@@ -90,13 +172,14 @@ The `theta` bands are gone. Instead there is one fixed, resolution-independent r
   aligned **6×6 child block** — and applies centroid forces there, again minus its *own* 3×3.
 - After the finest level, the only region not yet accounted for is the finest 3×3 neighborhood.
   That is the **near field**, and it is the only part where the centroid trick would do damage
-  (up close, direction errors matter). It gets step 3 instead.
+  (up close, direction errors matter). It gets step 4 instead.
 
-Every cell of space is charged to exactly one pass: **no gaps, no double counting, nothing to
-tune.** Far-field centroid error is negligible by construction, because a cell is only ever
-used at a distance at least ~1 cell away from its own size scale.
+Every cell of the box is charged to exactly one pass, and every live point lies in the box:
+**no gaps, no double counting, nothing to tune.** Far-field centroid error is negligible by
+construction, because a cell is only ever used at a distance at least ~1 cell away from its own
+size scale.
 
-### Step 3 — the Monte-Carlo near field
+### Step 4 — the Monte-Carlo near field
 
 This is the heart of the change. The exact near-field force on a point is the sum of pairwise
 forces from every other point in the 3×3 finest-cell neighborhood. Computing all of them is
@@ -159,9 +242,9 @@ centroid term**, so the tangential force component survives:
 Two properties fall out for free:
 
 - **Sparse cells are exact.** A cell with ≤ K points is sampled exhaustively
-  (`others == sampled`, weight = 1). With the finest grid at 2·√n per axis, the average cell
-  holds ¼ point — so for typical graphs the near field *is* the exact all-pairs force, and the
-  approximation only kicks in inside genuinely dense hubs.
+  (`others == sampled`, weight = 1). With the finest grid at 2·√n per axis over the data, the
+  average cell holds at most ¼ point (step 2) — so for typical graphs the near field *is* the
+  exact all-pairs force, and the approximation only kicks in inside genuinely dense hubs.
 - **The sampling noise is (mostly) a feature.** The estimate is unbiased but noisy, and the
   noise is re-rolled every tick. Because every force is scaled by `alpha`, the noise *anneals*:
   large early, when clumps need breaking apart, shrinking to nothing as the layout settles. It
@@ -169,7 +252,7 @@ Two properties fall out for free:
   The caveat — and what the 2026-08-14 follow-up fixed — is layouts where the density never
   disperses: see [When the noise stops annealing](#when-the-noise-stops-annealing) below.
 
-### Step 4 — two stability guards
+### Step 5 — two stability guards
 
 Both live in `force-nearfield.frag`, both born from real failure modes:
 
@@ -178,22 +261,32 @@ Both live in `force-nearfield.frag`, both born from real failure modes:
   forever, while their combined cell count repels everything else away, carving an empty "void
   ring" around the stack. Instead, each point kicks along its own per-point random vector, so a
   pile disperses.
-- **Per-tick velocity clamp (2 × cell size).** The `others/sampled` weight is unbiased but
+- **Per-tick kick bound (a fixed length).** The `others/sampled` weight is unbiased but
   high-variance: in a cell holding far more points than sampling slots, a couple of very close
   samples can be multiplied into a huge one-tick kick — flinging points across the screen at
-  startup and ejecting points from dense cluster centers. The clamp caps the magnitude and
-  keeps the direction; genuine spreading kicks are far below the bound, and bulk expansion is
-  driven by the far-field levels anyway.
+  startup and ejecting points from dense cluster centers. The bound caps the magnitude and
+  keeps the direction; genuine spreading kicks are far below it, and bulk expansion is driven
+  by the far-field levels anyway. It is `2 × spaceSize / finest grid size` (`getMaxStep` in
+  `index.ts`): twice the finest cell of a layout spanning the space at this point count, the
+  value it had when the grid covered the space. It is deliberately *not* twice the grid's
+  actual cell: the grid follows the data, and a cell-relative bound would tighten as a layout
+  contracts — throttling the kicks that break dense clumps apart exactly when they are needed.
+  The all-pairs path bounds with the same helper, so the dynamics stay continuous across the
+  4,096-point threshold.
 
 ### The per-tick pipeline
 
 ![GPU pipeline](d-gpu-pipeline.svg)
 
 Orchestrated by `src/modules/ForceManyBody/index.ts`:
-`drawLevels()` → `drawNearFieldSlots()` → `drawForces()` (per-level force passes plus the
-near-field pass, all blending additively into the shared velocity texture). Integration into
-positions is the same step every other force uses. Small graphs replace all three with a
-single `drawAllPairsForce()` pass — next section.
+`drawBounds()` → `drawLevels()` → `drawNearFieldSlots()` → `drawForces()` (per-level force
+passes plus the near-field pass, all blending additively into the shared velocity texture). The
+bounds come first, once per tick, because every later pass must bin against the same box: the
+aggregation and the forces binning against different boxes would break the exactly-once
+coverage. Integration into positions is the same step every other force uses; it bounds a
+step's length, not where the step lands — a non-finite step is dropped, one longer than
+`spaceSize` is shortened to it, and nothing holds a point inside the space. Small graphs replace
+all four with a single `drawAllPairsForce()` pass — next section.
 
 ## When the noise stops annealing
 
@@ -214,7 +307,7 @@ Two changes closed it (2026-08-14):
 
 1. **Small graphs skip the estimator entirely** — the all-pairs path below. This is the case
    where sustained dense hubs are both most common and cheapest to compute exactly.
-2. **K became adaptive** (32/16/8 — see step 3). Mid-size graphs get 2–4× more samples, which
+2. **K became adaptive** (32/16/8 — see step 4). Mid-size graphs get 2–4× more samples, which
    both extends the exactly-covered occupancy range and shrinks the residual variance
    (amplitude ∝ occupancy/K · 1/√K) — while the ≥ 65k tier keeps today's 8-slot cost
    unchanged.
@@ -231,9 +324,10 @@ At or below **4,096 points** (`ALL_PAIRS_MAX_POINTS`) the force runs as one full
 inverse-distance pairwise force the grid path uses, with the same coincident-point random
 kick. No pyramid, no peeling, no sampling — the result is exact at *any* cell occupancy, so
 there is no noise to anneal and nothing to shimmer. The two paths also bound the same thing:
-pairs within the near-field scale (2 × the finest cell size the grid path would use) are
-jittered and capped like the near-field pass's sum, so a coincident stack expands instead of
-teleporting, while farther pairs pass through unbounded like the level passes.
+pairs within the near-field scale (the grid path's fixed kick bound, `getMaxStep`: twice the
+finest cell of a layout spanning the space) are jittered and capped like the near-field pass's
+sum, so a coincident stack expands instead of teleporting, while farther pairs pass through
+unbounded like the level passes. Having no grid, this path never needed the data bounds.
 
 ![The two paths](g-two-paths.svg)
 
@@ -247,6 +341,81 @@ next power of two would already cost several milliseconds.
 small graphs. That held for dispersing layouts; the sustained-density case above is why it
 came back.)
 
+## The grid follows the data, not the space
+
+Before the grid followed the data, every level's cell was `adjustedSpaceSize / gridSize`
+(`spaceSize` as the engine adjusted it), counted from world zero. That made the grid's usable
+resolution depend on something nobody chose: how much of the space the layout happened to
+cover. A layout spanning a fraction *f* of each axis
+lands in (*f*·R)² of the R² finest cells — an average of 0.25/*f*² points per cell instead of at
+most 0.25 (0.38/*f*² at 100k points, past the 512² cap) — so the near field's K slots saturate as
+*f* shrinks. And a small *f* was the common case, not an edge case: gravity keeps most layouts
+well inside the default space (10k points settle 1,272 units wide, *f* ≈ 0.31). The same grid
+filed every point outside the space into an edge cell, harmless only while the clamp kept every
+point inside (the **Performance → Space Size Wall** story shows a large layout growing past the
+space it used to pile against).
+
+Measured on the real GPU (Apple M3 Max, ANGLE Metal): 100k points (finest grid 512², 8
+near-field slots) uniform in a square of side *f* × 4096, every other force off, the velocity
+after one step compared with an exact float64 all-pairs sum of the same kernel — the RMS error
+over 1,500 query points relative to the exact force's RMS, averaged over 20 ticks, each a fresh
+near-field sample:
+
+| *f* (layout side / space side) | finest-cell occupancy on the space-anchored grid | error, space-anchored | error, data-anchored |
+|---|---|---|---|
+| 1.0 | 0.38 | 0.060 % | 0.060 % |
+| 0.5 | 1.53 | 0.060 % | 0.057 % |
+| 0.25 | 6.10 | 0.354 % | 0.057 % |
+| 0.18 | 11.8 | 0.868 % | 0.056 % |
+| 0.1 | 38.1 | 1.840 % | 0.057 % |
+
+Fitted to the data, the occupancy is 0.38 at every *f* and the error is flat: the 8 slots
+sample every cell exhaustively — one tick's error equals the 20-tick mean's, there is no
+sampling noise left — and the remaining 0.06 % is the far field's centroid approximation.
+Anchored to the space, the error grew sixfold by *f* = 0.25 and thirtyfold by 0.1, and not only
+as noise: the 20-tick mean still erred by 0.40 % at *f* = 0.18 and 0.52 % at 0.1. Other shapes
+and sizes agree — a 100k-point disk stays at ~0.23 % (was 0.24 % → 2.0 %), 20k points at
+~0.11 % (was up to 0.35 %). Beyond accuracy:
+
+- **Translation invariance.** The same 20k-point blob at two places in the space ends 0.0009 %
+  of its extent apart after 30 steps (was 0.025 %), and nudged by a few units, 0.0001 % (was
+  0.011 %) — the float32 noise floor. A fixed grid cut the two copies differently.
+- **Settled layouts are unchanged.** 100k and 10k points at the default gravity settle at
+  extents 4,044 and 1,272, as before; the all-pairs path is untouched. The reduction itself
+  costs ~0.16 ms per tick; in a paired A/B the whole step changed by +0.28 ms at 300k points
+  (1.3 %) and by nothing measurable at 100k.
+
+### Known limits
+
+- **One far point stretches the box for everyone.** The box is a plain bounding box, so a
+  single far but finite point widens it, and every cell with it. A 100k-point blob with one
+  point at 10⁷ units settled at an extent of 1,201 instead of 4,044 while that point stayed
+  out there: the rest of the layout shared a handful of cells, the over-occupied regime of the
+  table above at its worst. Gravity brings such a point back — no faster than `spaceSize` per
+  tick, since each sub-step's length is bounded — and the grid recovers with it; with no
+  gravity, or with the point pinned, it never does. A point 10⁵ units away had no visible
+  effect. The stretched box costs time too: over a 600-step run the same blob averaged
+  42.8 ms per step with the point starting at 10⁶ units (it came back partway through) and
+  72.1 ms with it at 10⁷, against 6.8 ms without it. The cause was not investigated.
+- **A very tight start bursts harder on the first tick.** From a blob a few dozen units wide,
+  the first tick's spread is about ten times what it was on the space-anchored grid, whose cells
+  were so coarse that the whole blob fell into the near field and its bounded kick; the
+  data-fitted levels resolve the blob and push with the full far-field force. The final layouts
+  are equivalent. Without the clamp, that burst can carry points past the edge of the space for
+  two or three ticks — 36 % and 78 % of the points of the **Forces → Clusters with Labels** and
+  **Interaction → Lasso Selection** stories at step 1, none by step 3 — instead of piling them
+  on it.
+- **A diverging configuration runs away.** Nothing holds positions in the space any more, so a
+  configuration that diverges — a link spring far too stiff, say — no longer piles up on the
+  space's edges: its points fly off, at most `spaceSize` per force per tick (link spring ≥ 10
+  with the decay pinned: ~8,190 units per tick), and the box and the grid follow them out.
+  Non-finite steps are dropped, so the positions stay finite.
+- **float32 positions.** The gap between neighbouring float32 values, measured against the
+  kernel's 1-unit `distanceMin`, is 0.05 % at 4,096 units from zero, 0.78 % at 65,536, 6.3 % at
+  10⁶ and 100 % at 8.4 × 10⁶. About 10⁶ units is the practical ceiling for a layout's
+  coordinates; the engine warns when `spaceSize` puts the world origin past it (above 2²¹), but
+  enforces nothing.
+
 ## Why it is better than the old one
 
 | | Old (theta-banded quadtree) | New (grid + Monte-Carlo near field) |
@@ -255,6 +424,7 @@ came back.)
 | Dense hubs | collapse into disks / petals | spread into natural clouds |
 | Stacked points | never separate (void rings) | random kick disperses them |
 | Coverage seams | depend on `theta` tuning | exact once-tiling, nothing to tune |
+| Grid placement | fixed to the space, `[0, spaceSize]` | fitted to the live data every tick — resolution independent of where the layout sits |
 | Small graphs (≤ 4,096 points) | always approximate | **exact** — dedicated all-pairs pass |
 | Sparse cells (larger graphs) | always approximate | **exact** (cells ≤ K points, K = 8–32) |
 | Bias | systematic (centroid direction) | none — unbiased estimator; noise anneals with alpha |
@@ -283,12 +453,16 @@ over-K-occupancy hub cells in graphs above 4k points while alpha is high.
 Cost side: the slot array texture plus two peel targets at the finest grid resolution (at the
 512² cap with K = 8 that is 10 × 512² × 2 floats = 20 MB of GPU memory; smaller graphs have
 more layers but a proportionally smaller grid) and the K peeling passes per tick — all already
-included in the benchmark numbers above.
+included in the benchmark numbers above — plus the data-bounds reduction: three small targets
+(64², 8² and one texel, ~65 KB) and ~0.16 ms per tick.
 
 ## Glossary
 
 - **Barnes-Hut** — the classic n-body approximation: treat a far-away group of points as one
   point at their center of mass. Both algorithms use this for the far field.
+- **Data bounds** — the live points' bounding square, published as one texel
+  `[originX, originY, extent, 1/extent]` and recomputed on the GPU every tick; every level of the
+  pyramid divides it.
 - **P3M (particle–particle / particle–mesh)** — hybrid scheme: mesh (grid centroids) for far
   interactions, direct particle pairs for near ones. The new algorithm is a P3M with a
   Monte-Carlo particle–particle term.

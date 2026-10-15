@@ -107,6 +107,8 @@ graph.setPointPositions(positions);
 
 By default an absent point fades to nothing (size and opacity → 0). To customize the exit look, pass per-point values via `setPointSizes` / `setPointColors` (e.g. recolor while fading); a `NaN` entry in those arrays means "use the exit default" for an absent point. This works with the simulation on or off — a `NaN` position is excluded from the force layout rather than corrupting it. Adding a point is the mirror (`NaN → real`, fades in). cosmos.gl does not auto-compact away the gaps — drop them yourself when convenient and snap the renumber with [`render(undefined, 0)`](#render). See the **Examples / Beginners → Add & Remove Points** story.
 
+**Positions are not bounded by `spaceSize`, but they are finite.** A layout may extend beyond the `[0, spaceSize]` square as far as its forces take it. A coordinate of `±Infinity` is placed on the matching edge of that square (`0` or `spaceSize`); the input array itself is left as it is.
+
 **Example:**
 ```javascript
 graph.setPointPositions(new Float32Array([1, 2, 3, 4, 5, 6]));
@@ -478,7 +480,7 @@ This method sets the point clusters for the graph.
 
 This method sets the positions of the point clusters for the graph.
 
-* **`clusterPositions`** (Array of `(number | undefined)`): An array where every two elements represent the x and y coordinates for a cluster position. `undefined` means the cluster's position is not defined and will use centermass positioning instead.
+* **`clusterPositions`** (Array of `(number | undefined)`): An array where every two elements represent the x and y coordinates for a cluster position. `undefined` means the cluster's position is not defined and will use centermass positioning instead. So does a non-finite coordinate (`NaN`, `±Infinity`); any finite one is a position, negative ones included.
 * **Example:**
   ```javascript
   graph.setClusterPositions([10, 20, 30, 40, undefined, undefined]);
@@ -822,6 +824,8 @@ This method converts a flat array of point positions into an array of tuple pair
 ### <a name="get_point_positions" href="#get_point_positions">#</a> graph.<b>getPointPositions</b>()
 
 This method retrieves the current X and Y coordinates of all points in the graph as an array of numbers. The returned array is in the same order as the point positions were added to the graph.
+
+Positions are not confined to `[0, spaceSize]`: a layout that outgrows the space, or starts outside it, reads back with coordinates beyond it, negative ones included.
 
 ### <a name="get_cluster_positions" href="#get_cluster_positions">#</a> graph.<b>getClusterPositions</b>()
 

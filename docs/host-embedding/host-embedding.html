@@ -542,11 +542,12 @@ graph.setPinnedPoint(index, false)         <span class="cmt">// release on drag 
       <li><code>drawToRenderPass(renderPass, {points?, links?})</code> records the point and link draws into a host-owned pass without clearing, ending, or submitting it. The internal renderer now routes through the same method, so there is one draw path, not two.</li>
       <li><code>setViewTransform({k, x, y}, screenSize?)</code> injects the host's camera through the exact code path the interactive zoom uses, so picking, point-radius scaling, and the space↔screen conversions all stay consistent.</li>
     </ul>
-    <p>The transform contract is documented as a formula and asserted by a unit test — with <code>S = spaceSize</code>, <code>[w, h] = screenSize</code>, a point at space position <code>(spaceX, spaceY)</code> lands at:</p>
+    <p>The transform contract is documented as a formula and asserted by a unit test — with <code>[ox, oy]</code> the world origin (the centre of the <code>spaceSize</code> square, <code>ox = oy = spaceSize / 2</code>) and <code>[w, h] = screenSize</code>, a point at space position <code>(spaceX, spaceY)</code> lands at:</p>
   </div>
-  <pre><code>screenX = k · (spaceX + (w − S) / 2) + x
-screenY = k · ((S − spaceY) + (h − S) / 2) + y   <span class="cmt">// cosmos space y is up; screen y is down</span></code></pre>
+  <pre><code>screenX = k · (spaceX − ox + w / 2) + x
+screenY = k · (oy − spaceY + h / 2) + y   <span class="cmt">// cosmos space y is up; screen y is down</span></code></pre>
   <div class="prose">
+    <p>At the identity transform the world origin sits at the centre of the screen and one space unit is one CSS pixel, whatever <code>spaceSize</code> is. (The formula first shipped written with <code>S = spaceSize</code> — <code>(w − S) / 2</code> is <code>w / 2 − ox</code> — and was restated through the origin when <code>spaceSize</code> stopped bounding positions; the numbers are the same.)</p>
     <p>A deck.gl layer inverts this from its viewport in four lines and then calls <code>drawToRenderPass</code> — the whole layer is ~25 lines with no custom shaders. Cosmos's visible draw models declare their complete pipeline state, so they compose into the host's pass regardless of what previous layers left behind.</p>
   </div>
 </section>
