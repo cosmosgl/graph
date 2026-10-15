@@ -1,12 +1,15 @@
 // Regenerates the SVG diagrams for this folder. Run from here:
 //   node gen-diagrams.mjs
-// The grid panels bin points with the SAME rules as the shaders — build-grid.vert's
-// cell = floor((p + offset · cell) / cell), clamped to the grid; force-collision-
-// spatial.frag's 3×3 scan, own-cell self-subtraction and cell averages — so what a
-// panel labels "seen" or "masked" is computed, not drawn by hand, and the script
-// asserts the story each panel tells. Keep the constants in sync with
-// src/modules/ForceCollision/index.ts and the two shaders, then re-run so the
-// diagrams don't fossilize. Same visual language as docs/many-body-force/*.svg.
+// The grid panels bin points with the SAME rules as the shaders — collision-grid.ts's
+// collisionCell: half cells h = floor((p − origin) · 2 / cell), a cell is h >> 1, or
+// (h + 1) >> 1 on a half-shifted lattice; force-collision-spatial.frag's 3×3 scan,
+// own-cell self-subtraction and cell averages — so what a panel labels "seen" or
+// "masked" is computed, not drawn by hand, and the script asserts the story each
+// panel tells. Each panel is a piece of the hash's origin block, where a cell's texel
+// is the cell itself, so the panels draw plain cells. Keep the constants in sync with
+// src/modules/ForceCollision/index.ts, collision-grid.ts and the two shaders, then
+// re-run so the diagrams don't fossilize. Same visual language as
+// docs/many-body-force/*.svg.
 import { writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -49,20 +52,23 @@ const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion fa
 
 // ------------------------------------------------------------- shader mirror
 // A point is { p: [x, y], r: effectiveRadius }. Sizes are 2·r and padding is 0,
-// so the shader's "avgSize * 0.5 + padding" is simply the mean radius.
-const clamp = (v, lo, hi) => Math.min(Math.max(v, lo), hi)
+// so the shader's "avgSize * 0.5 + padding" is simply the mean radius. Positions
+// are panel-local: the panel's corner stands in for the data origin.
 
-// build-grid.vert: floor((p + offset · cell) / cell), clamped to the grid.
-const binCell = (p, cell, offset, gridSize) => [
-  clamp(Math.floor((p[0] + offset[0] * cell) / cell), 0, gridSize - 1),
-  clamp(Math.floor((p[1] + offset[1] * cell) / cell), 0, gridSize - 1),
-]
+// collision-grid.ts collisionCell: the position binned into half cells, then the
+// lattice shift added in integers — a cell is two half cells, one more on a
+// half-shifted lattice. No clamp: the hash has no edge (and the panels' cells all
+// lie inside the origin's block, where the hash is the identity).
+const binCell = (p, cell, offset) => [0, 1].map((k) => {
+  const half = Math.floor((p[k] * 2) / cell)
+  return Math.floor((half + offset[k] * 2) / 2)
+})
 
 // The additive-blend accumulation: per cell [Σx, Σy, Σsize, count].
-const buildGrid = (points, cell, offset, gridSize) => {
+const buildGrid = (points, cell, offset) => {
   const grid = new Map()
   points.forEach((pt, i) => {
-    const key = binCell(pt.p, cell, offset, gridSize).join(',')
+    const key = binCell(pt.p, cell, offset).join(',')
     const acc = grid.get(key) ?? { sx: 0, sy: 0, ssize: 0, count: 0, members: [] }
     acc.sx += pt.p[0]; acc.sy += pt.p[1]; acc.ssize += 2 * pt.r; acc.count += 1; acc.members.push(i)
     grid.set(key, acc)
@@ -72,15 +78,14 @@ const buildGrid = (points, cell, offset, gridSize) => {
 
 // force-collision-spatial.frag for one point: the 3×3 scan with self-subtraction.
 // Returns one record per non-empty neighbouring cell (after removing self).
-const resolve = (focusIdx, points, cell, offset, gridSize) => {
-  const grid = buildGrid(points, cell, offset, gridSize)
+const resolve = (focusIdx, points, cell, offset) => {
+  const grid = buildGrid(points, cell, offset)
   const me = points[focusIdx]
-  const [cx, cy] = binCell(me.p, cell, offset, gridSize)
+  const [cx, cy] = binCell(me.p, cell, offset)
   const out = []
   for (let dx = -1; dx <= 1; dx++) {
     for (let dy = -1; dy <= 1; dy++) {
       const nx = cx + dx; const ny = cy + dy
-      if (nx < 0 || nx >= gridSize || ny < 0 || ny >= gridSize) continue
       const acc = grid.get(`${nx},${ny}`)
       if (!acc) continue
       let { sx, sy, ssize, count } = acc
@@ -136,9 +141,9 @@ const disc = (x, y, r, { fill = C.disc, stroke = C.discStroke, width = 1.5 } = {
   const panel = (ox, title, subtitle, cell, kind) => {
     const g = Math.round(S / cell)
     const oy = 100
-    const res = resolve(0, points, cell, [0, 0], g)
+    const res = resolve(0, points, cell, [0, 0])
     const [cx, cy] = res.ownCell
-    const nCell = binCell(N.p, cell, [0, 0], g)
+    const nCell = binCell(N.p, cell, [0, 0])
     const nInBlock = Math.abs(nCell[0] - cx) <= 1 && Math.abs(nCell[1] - cy) <= 1
     if (kind === 'today') assert(nInBlock, 'with cell = 2R the overlapping neighbour must be inside the 3×3 block')
     else assert(!nInBlock, 'with cell = R the overlapping neighbour must fall outside the 3×3 block')
@@ -173,7 +178,7 @@ const disc = (x, y, r, { fill = C.disc, stroke = C.discStroke, width = 1.5 } = {
     // legend
     const ly = oy + S + 22
     s += `<rect x="${ox}" y="${ly - 11}" width="14" height="14" fill="${C.blueSoft}" stroke="${C.gridLine}"/>`
-    s += txt(ox + 20, ly, `3×3 neighbourhood the shader scans (${g} × ${g} grid)`, { size: 12 })
+    s += txt(ox + 20, ly, `3×3 neighbourhood the shader scans (${g} × ${g} cells)`, { size: 12 })
     s += `<line x1="${ox + 2}" y1="${ly + 17}" x2="${ox + 12}" y2="${ly + 27}" stroke="${C.blue}" stroke-width="2"/>`
     s += `<line x1="${ox + 2}" y1="${ly + 27}" x2="${ox + 12}" y2="${ly + 17}" stroke="${C.blue}" stroke-width="2"/>`
     s += txt(ox + 20, ly + 26, 'cell average the point is compared against', { size: 12 })
@@ -194,11 +199,11 @@ const disc = (x, y, r, { fill = C.disc, stroke = C.discStroke, width = 1.5 } = {
   b += mono(mx + 12, 198, '  radius = size/2', { size: 11.5, fill: C.sub })
   b += mono(mx + 12, 214, '  or the fixed radius', { size: 11.5, fill: C.sub })
   b += mono(mx + 12, 244, 'cell = max(2R, 8)', { size: 12, weight: '600', fill: C.accent })
-  b += mono(mx + 12, 268, 'grid = min(512,', { size: 12 })
-  b += mono(mx + 12, 284, '  max(1, ⌊space/cell⌋))', { size: 12 })
-  b += mono(mx + 12, 308, 'cell = space / grid', { size: 12 })
-  b += txt(mx + 104, 346, 'floor, not ceil: fitting', { size: 11.5, fill: C.sub, anchor: 'middle' })
-  b += txt(mx + 104, 362, 'may only grow the cell', { size: 11.5, fill: C.sub, anchor: 'middle' })
+  b += mono(mx + 12, 268, 'counted from the', { size: 11.5, fill: C.sub })
+  b += mono(mx + 12, 284, '  data origin, hashed', { size: 11.5, fill: C.sub })
+  b += mono(mx + 12, 300, '  onto a 1024² grid', { size: 11.5, fill: C.sub })
+  b += txt(mx + 104, 346, 'never refitted: the cell is', { size: 11.5, fill: C.sub, anchor: 'middle' })
+  b += txt(mx + 104, 362, 'the range at any layout size', { size: 11.5, fill: C.sub, anchor: 'middle' })
   b += txt(W / 2, H - 34, 'A point inside the middle cell reaches at most one cell in any direction within 2R, so a cell that spans the contact range', { size: 12.5, fill: C.sub, anchor: 'middle' })
   b += txt(W / 2, H - 16, 'makes the 3×3 scan exhaustive: no touching pair is left uncompared.', { size: 12.5, fill: C.sub, anchor: 'middle' })
   await writeFile(join(OUT, 'a-contact-range.svg'), svgDoc(W, H, b))
@@ -222,8 +227,8 @@ const disc = (x, y, r, { fill = C.disc, stroke = C.discStroke, width = 1.5 } = {
   assert(!overlaps(A, Cc) && !overlaps(A, D), 'C and D must not overlap A')
   const OFFSETS = [[0, 0], [0.5, 0], [0, 0.5], [0.5, 0.5]]
   const results = OFFSETS.map((offset) => {
-    const res = resolve(0, points, cell, offset, g)
-    const bCell = binCell(B.p, cell, offset, g).join(',')
+    const res = resolve(0, points, cell, offset)
+    const bCell = binCell(B.p, cell, offset).join(',')
     const rec = res.cells.find((c) => c.cell.join(',') === bCell)
     return { offset, res, rec }
   })
@@ -342,7 +347,7 @@ const disc = (x, y, r, { fill = C.disc, stroke = C.discStroke, width = 1.5 } = {
 // ---------------------------------------------------------------- Diagram D
 // Where collision sits in the tick, and its own two-phase pipeline.
 {
-  const W = 980; const H = 520
+  const W = 980; const H = 528
   let b = ''
   const box = (x, y, w, h, title, lines, color, soft, titleSize = 13) => {
     let s = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9" fill="${soft}" stroke="${color}" stroke-width="1.6"/>`
@@ -368,40 +373,35 @@ const disc = (x, y, r, { fill = C.disc, stroke = C.discStroke, width = 1.5 } = {
 
   // Row 2: collision internals
   b += txt(20, 208, 'Inside the collision force', { size: 15, weight: '600' })
-  const ry = 232
-  b += box(20, ry, 150, 104, 'inputs', ['positions (latest)', 'resolved sizes', 'exit status'], C.frame, '#f6f8fb')
-  b += arrow(170, ry + 52, 206, ry + 52, C.frame, 2.5)
-  b += box(208, ry, 220, 104, '1 · build grid  × 4', ['point-list draw, additive blend:', '[Σx, Σy, Σsize, count] per cell,', 'one grid per half-cell offset', 'absent points culled'], C.teal, C.tealSoft)
-  // four little grids
-  const gx = 452; const gy = ry + 6
-  const OFFS = [[0, 0], [0.5, 0], [0, 0.5], [0.5, 0.5]]
-  OFFS.forEach((o, k) => {
-    const x = gx + (k % 2) * 48; const y = gy + Math.floor(k / 2) * 48
-    b += `<rect x="${x}" y="${y}" width="40" height="40" fill="#ffffff" stroke="${C.teal}" stroke-width="1.2"/>`
-    for (let i = 1; i < 4; i++) {
-      const lx = x + (i - o[0]) * 10; const ly = y + (i - o[1]) * 10
-      b += `<line x1="${f1(lx)}" y1="${y}" x2="${f1(lx)}" y2="${y + 40}" stroke="${C.gridLine}" stroke-width="0.8"/>`
-      b += `<line x1="${x}" y1="${f1(ly)}" x2="${x + 40}" y2="${f1(ly)}" stroke="${C.gridLine}" stroke-width="0.8"/>`
-    }
-    if (o[0]) b += `<line x1="${f1(x + 5)}" y1="${y}" x2="${f1(x + 5)}" y2="${y + 40}" stroke="${C.gridLine}" stroke-width="0.8"/>`
-    if (o[1]) b += `<line x1="${x}" y1="${f1(y + 5)}" x2="${x + 40}" y2="${f1(y + 5)}" stroke="${C.gridLine}" stroke-width="0.8"/>`
-  })
-  b += arrow(428, ry + 52, 448, ry + 52, C.frame, 2.5)
-  b += txt(gx + 44, ry + 104 + 14, '4 grid textures', { size: 11, fill: C.sub, anchor: 'middle' })
-  b += txt(gx + 44, ry + 104 + 28, '(≤ 512², rgba32float)', { size: 11, fill: C.sub, anchor: 'middle' })
-  b += arrow(gx + 92, ry + 52, gx + 116, ry + 52, C.frame, 2.5)
-  b += box(gx + 118, ry, 236, 104, '2 · force pass  × 4', ['full-screen, one fragment per point;', 'reads 9 cells of grid k, pushes off', 'each cell average (¼ weight), caps;', 'adds into the velocity texture'], C.blue, C.blueSoft)
-  b += arrow(gx + 354, ry + 52, gx + 378, ry + 52, C.frame, 2.5)
-  b += box(gx + 380, ry, 128, 104, 'integrate', ['pos += v · friction', 'clamp to space', '(shared step)'], C.amber, C.amberSoft)
+  const ry = 232; const bh = 104
+  const inX = 20; const inW = 126
+  const dbX = 172; const dbW = 150
+  const frameX = 350; const frameW = 430
+  const buildX = 362; const buildW = 180
+  const forceX = 568; const forceW = 200
+  const intX = 808; const intW = 152
+  b += box(inX, ry, inW, bh, 'inputs', ['positions (latest)', 'resolved sizes', 'exit status'], C.frame, '#f6f8fb')
+  b += arrow(inX + inW, ry + 52, dbX - 2, ry + 52, C.frame, 2.5)
+  b += box(dbX, ry, dbW, bh, '0 · data bounds', ['the live points’ box,', 'reduced on the GPU;', 'cells are counted', 'from its origin'], C.accent, C.accentSoft)
+  b += arrow(dbX + dbW, ry + 52, frameX - 2, ry + 52, C.frame, 2.5)
+  // The four offset passes run in sequence over one reused grid.
+  b += `<rect x="${frameX}" y="${ry - 26}" width="${frameW}" height="${bh + 40}" rx="12" fill="none" stroke="${C.frame}" stroke-width="1.4" stroke-dasharray="6 4"/>`
+  b += txt(buildX, ry - 9, '× 4 offset passes in sequence, one reused 1024² grid', { size: 11.5, fill: C.sub, weight: '600' })
+  b += box(buildX, ry, buildW, bh, '1 · build grid', ['point-list draw, additive:', '[Σx, Σy, Σsize, count]', 'per hashed cell; absent and', 'non-finite points culled'], C.teal, C.tealSoft)
+  b += arrow(buildX + buildW, ry + 52, forceX - 2, ry + 52, C.frame, 2.5)
+  b += box(forceX, ry, forceW, bh, '2 · force pass', ['one fragment per point:', 'reads its 9 hashed cells,', 'pushes off each average', '(¼ weight) into velocity'], C.blue, C.blueSoft)
+  b += arrow(frameX + frameW, ry + 52, intX - 2, ry + 52, C.frame, 2.5)
+  b += box(intX, ry, intW, bh, 'integrate', ['pos += v · friction', 'step ≤ spaceSize,', 'non-finite dropped', '(shared step)'], C.amber, C.amberSoft)
   // return arrow to inputs
-  b += `<path d="M ${gx + 444} ${ry + 104} L ${gx + 444} ${ry + 150} L 95 ${ry + 150} L 95 ${ry + 108}" fill="none" stroke="${C.frame}" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)"/>`
-  b += txt(300, ry + 145, 'next tick (after the other forces have run again)', { size: 11, fill: C.sub, anchor: 'middle' })
+  const backY = ry + 170
+  b += `<path d="M ${intX + intW / 2} ${ry + bh} L ${intX + intW / 2} ${backY} L ${inX + inW / 2} ${backY} L ${inX + inW / 2} ${ry + bh + 4}" fill="none" stroke="${C.frame}" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)"/>`
+  b += txt(230, backY - 5, 'next tick (after the other forces have run again)', { size: 11, fill: C.sub, anchor: 'middle' })
 
-  b += txt(20, 420, 'Cost per tick is O(n) with a fixed constant — 4 × n binned vertices, then 4 × n fragments doing 9 grid fetches — and does not', { size: 12 })
-  b += txt(20, 437, 'grow with how crowded a cell is: the cell is one aggregate however many points it holds. Crowding costs quality and ticks to converge, not time.', { size: 12 })
-  b += txt(20, 463, 'Memory: 4 grids × grid² × 16 B — 16 MB at the 512² cap, which the default size 4 reaches — plus 16 B per point of sizes; allocated lazily on', { size: 12, fill: C.sub })
-  b += txt(20, 480, 'first use, never while strength is 0. The velocity texture is cleared once at the start of the force pass; the four offset passes blend into it', { size: 12, fill: C.sub })
-  b += txt(20, 497, 'additively before the single integration.', { size: 12, fill: C.sub })
+  b += txt(20, 428, 'Cost per tick is O(n) with a fixed constant — the bounds reduction, 4 × n binned vertices, then 4 × n fragments doing 9 grid fetches — and', { size: 12 })
+  b += txt(20, 445, 'does not grow with how crowded a cell is: the cell is one aggregate however many points it holds. Crowding costs quality and ticks to converge, not time.', { size: 12 })
+  b += txt(20, 471, 'Memory: one 1024² rgba32float grid (16 MiB) whatever the point size, the bounds targets (~65 KB) and 16 B per point of sizes; allocated', { size: 12, fill: C.sub })
+  b += txt(20, 488, 'lazily on first use, never while strength is 0. The velocity texture is cleared by the first force pass only; the four offset passes blend', { size: 12, fill: C.sub })
+  b += txt(20, 505, 'into it additively before the single integration.', { size: 12, fill: C.sub })
   await writeFile(join(OUT, 'd-tick-pipeline.svg'), svgDoc(W, H, b))
 }
 
