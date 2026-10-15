@@ -291,7 +291,8 @@ The 300k extent by step: 50: 6,664 · 100: 6,973 · 150: 7,007 · 200: 7,011, th
   edges can move by less than a pixel there.
 - `e572df5`: positions, picks, conversions and renders are identical to the previous commit.
 - `94a354a`: the all-pairs path, renders and picks are bit-identical. Grid-path layouts
-  settle where they did (100k at 4,044, 10k at 1,272).
+  settle where they did (100k at 4,044, 10k at 1,272), except that one starting from a very
+  tight blob can settle into a different arrangement (see [Still open](#still-open)).
 - `4f04e3e`: only the collision scenario changes. Every other simulation, render and pick
   is bit-identical.
 - `fd67d37`: against the previous commit, the only scenarios that change are the two that
@@ -423,8 +424,11 @@ inconsistent with itself. What an app can now see:
   first tick.
 - A configuration that keeps diverging no longer piles up on the walls; it runs away. With
   a link spring ≥ 10 and decay held, that was about 8,190 units per tick, with no NaN.
-- From a very tight start blob, the first-tick burst can overshoot past the space for two
-  or three ticks.
+- A graph above 4,096 points that starts from a very tight blob gets a much stronger first
+  tick (see [Still open](#still-open)). It can overshoot past the space for up to two ticks,
+  and it settles to a similar extent but not always into the same arrangement: against
+  `main`, the Radial Mesh, Worm and Actions stories fold differently and Lasso Selection
+  orders its clusters differently.
 - A custom cluster position with a negative coordinate is now honoured instead of falling
   back to the cluster's centre of mass.
 
@@ -478,7 +482,11 @@ inconsistent with itself. What an app can now see:
   at 1e6) and 72.1 ms (point at 1e7). Not investigated.
 - **The first-tick burst from a tight start blob** is about 10× larger than on `main`
   since `94a354a`. The coarse space-anchored cells used to put a whole 41-unit blob into
-  the near field, whose per-tick kick is bounded. Final layouts are equivalent.
+  the near field, whose per-tick kick is bounded. Layouts settle to a similar extent, but
+  stories that start 10k or more points from such a blob (Radial Mesh, Worm, Actions,
+  Lasso Selection) settle into a different fold or arrangement than on `main`: per-point
+  median differences of 9–210 units, where `main` itself differs between Metal and
+  SwiftShader by 0.3–14. Bounding the first tick's far-field push is a candidate follow-up.
 - **`simulationRepulsionTheta` is still a documented no-op** (out of scope here).
 - **`spaceSize` still sets two length scales**: the per-sub-step displacement ceiling and
   the near-field kick bound `2·spaceSize / finestGridSize(n)`. Both are fixed values, as
