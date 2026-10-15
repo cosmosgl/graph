@@ -2,9 +2,11 @@
 //   node gen-diagrams.cjs .
 // Grid-coverage panels compute cell coverage with the SAME rules as the
 // shaders (first level: whole grid minus 3×3; others: 6×6 child block minus
-// 3×3), so the pictures are exact, not artistic impressions. Keep this script
-// in sync with force-level.frag / build-nearfield-slots.vert when the algorithm
-// changes, then re-run it so the diagrams don't fossilize.
+// 3×3), and the data-bounds panels bin points with grid-cell.ts's formula, so
+// the pictures are exact, not artistic impressions. Keep this script in sync
+// with force-level.frag / build-nearfield-slots.vert / grid-cell.ts /
+// Shared/data-bounds.ts when the algorithm changes, then re-run it so the
+// diagrams don't fossilize.
 const fs = require('fs')
 const path = require('path')
 
@@ -38,6 +40,8 @@ ${body}
 
 const arrow = (x1, y1, x2, y2, stroke, width = 2, dash = '') =>
   `<line x1="${x1.toFixed(1)}" y1="${y1.toFixed(1)}" x2="${x2.toFixed(1)}" y2="${y2.toFixed(1)}" stroke="${stroke}" stroke-width="${width}" marker-end="url(#arr)" ${dash ? `stroke-dasharray="${dash}"` : ''}/>`
+
+const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion failed: ${msg}`) }
 
 // ---------------------------------------------------------------- Diagram A
 // Old centroid near field (radial only) vs new pairwise near field.
@@ -108,10 +112,11 @@ const arrow = (x1, y1, x2, y2, stroke, width = 2, dash = '') =>
 
 // ---------------------------------------------------------------- Diagram B
 // The grid pyramid: who covers what (computed with the shader's own rules).
+// Every level divides the same square: this tick's data bounds (Diagram I).
 {
-  const W = 980; const H = 460
-  const SIDE = 264 // panel pixel size of the square space
-  const p = [0.58, 0.36] // the point, in space coordinates 0..1
+  const W = 980; const H = 478
+  const SIDE = 264 // panel pixel size of the data box
+  const p = [0.58, 0.36] // the point, in data-box coordinates 0..1
   const levels = [4, 8, 16]
   let b = ''
 
@@ -137,7 +142,7 @@ const arrow = (x1, y1, x2, y2, stroke, width = 2, dash = '') =>
     b += `<circle cx="${ox + p[0] * SIDE}" cy="${oy + p[1] * SIDE}" r="5" fill="${C.point}"/>`
     b += txt(ox + SIDE / 2, 40, `Level ${li}: ${g} × ${g} cells`, { size: 15, weight: '600', anchor: 'middle' })
     const covLabel = li === 0
-      ? 'whole space minus the 3×3 shell'
+      ? 'whole data box minus the 3×3 shell'
       : 'previous 3×3 refined, minus its own 3×3'
     b += txt(ox + SIDE / 2, 60, covLabel, { size: 11.5, fill: C.sub, anchor: 'middle' })
     // legend chip
@@ -147,7 +152,8 @@ const arrow = (x1, y1, x2, y2, stroke, width = 2, dash = '') =>
     b += txt(ox + 20, oy + SIDE + 47, li === levels.length - 1 ? '3×3 → near field (Monte-Carlo pairs)' : '3×3 → deferred to the next level', { size: 12 })
     if (li < levels.length - 1) b += arrow(ox + SIDE + 14, oy + SIDE / 2, ox + SIDE + 44, oy + SIDE / 2, C.frame, 2.5)
   })
-  b += txt(W / 2, H - 14, 'Every region of space is charged to exactly one pass — no gaps, no double counting. The finest grid adapts to n (≈ 2·√n cells per axis, 8²…512²).', { size: 13, fill: C.sub, anchor: 'middle' })
+  b += txt(W / 2, H - 32, 'Every region of the data box — the live points’ bounding square — is charged to exactly one pass: no gaps, no double counting.', { size: 13, fill: C.sub, anchor: 'middle' })
+  b += txt(W / 2, H - 14, 'The finest grid adapts to n (≈ 2·√n cells per axis, 8²…512²), and every level divides the same box.', { size: 13, fill: C.sub, anchor: 'middle' })
   fs.writeFileSync(path.join(OUT, 'b-grid-pyramid.svg'), svgDoc(W, H, b))
 }
 
@@ -214,7 +220,7 @@ const arrow = (x1, y1, x2, y2, stroke, width = 2, dash = '') =>
 // ---------------------------------------------------------------- Diagram D
 // The per-tick GPU pipeline.
 {
-  const W = 980; const H = 322
+  const W = 980; const H = 372
   let b = ''
   const box = (x, y, w, h, title, lines, color, soft) => {
     let s = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="9" fill="${soft}" stroke="${color}" stroke-width="1.6"/>`
@@ -222,18 +228,29 @@ const arrow = (x1, y1, x2, y2, stroke, width = 2, dash = '') =>
     lines.forEach((l, i) => { s += txt(x + w / 2, y + 46 + i * 17, l, { size: 11.5, anchor: 'middle', fill: C.text }) })
     return s
   }
-  const midY = 96
+  const midY = 96; const bh = 110
   b += txt(20, 40, 'One simulation tick of the repulsion force (all on the GPU)', { size: 16, weight: '600' })
-  b += box(20, midY, 150, 110, 'positions', ['one texel per point', '(x, y)'], C.frame, '#f6f8fb')
-  b += arrow(170, midY + 55, 208, midY + 55, C.frame, 2.5)
-  b += box(210, midY, 220, 110, '1 · aggregate levels', ['draw n points into each grid,', 'additive blend accumulates', '[Σx, Σy, count] per cell'], C.covered[1], C.coveredSoft[1])
-  b += arrow(430, midY + 55, 468, midY + 55, C.frame, 2.5)
-  b += box(470, midY, 220, 110, '2 · build near-field slots', ['K depth-peel passes over the', 'finest grid: a fresh random', 'K-subset per cell (K = 32/16/8)'], C.covered[0], C.coveredSoft[0])
-  b += arrow(690, midY + 55, 728, midY + 55, C.frame, 2.5)
-  b += box(730, midY, 230, 110, '3 · force passes', ['per level: centroid repulsion', '+ near field: weighted pairs;', 'all add into the velocity texture'], C.covered[2], C.coveredSoft[2])
-  b += txt(20, 250, 'The integration step (velocity → positions) is shared with all other forces and unchanged.', { size: 12.5, fill: C.sub })
-  b += txt(20, 272, 'Levels: 4², 8², … up to ≈ 2·√n per axis (capped 512²). Slot array: K layers × finest grid, [point index, hash] each.', { size: 12.5, fill: C.sub })
-  b += txt(20, 294, 'Graphs of ≤ 4,096 points skip all three passes: a single exact all-pairs pass writes the velocity texture directly.', { size: 12.5, fill: C.sub })
+  // positions, then four stages; x positions of each box
+  const posX = 20; const posW = 118; const gap = 28; const sw = 178
+  const stageX = [0, 1, 2, 3].map((i) => posX + posW + gap + i * (sw + gap))
+  b += box(posX, midY, posW, bh, 'positions', ['one texel', 'per point (x, y)'], C.frame, '#f6f8fb')
+  b += arrow(posX + posW, midY + 55, stageX[0] - 2, midY + 55, C.frame, 2.5)
+  b += box(stageX[0], midY, sw, bh, '0 · data bounds', ['live points → one texel:', '[origin, extent, 1/extent]', '64² → 8² → 1 reduction'], C.accent, '#f3eeff')
+  b += arrow(stageX[0] + sw, midY + 55, stageX[1] - 2, midY + 55, C.frame, 2.5)
+  b += box(stageX[1], midY, sw, bh, '1 · aggregate levels', ['draw n points into each', 'level over that square:', '[Σx, Σy, count] per cell'], C.covered[1], C.coveredSoft[1])
+  b += arrow(stageX[1] + sw, midY + 55, stageX[2] - 2, midY + 55, C.frame, 2.5)
+  b += box(stageX[2], midY, sw, bh, '2 · near-field slots', ['K depth-peel passes over', 'the finest grid: a fresh', 'random K-subset per cell'], C.covered[0], C.coveredSoft[0])
+  b += arrow(stageX[2] + sw, midY + 55, stageX[3] - 2, midY + 55, C.frame, 2.5)
+  b += box(stageX[3], midY, sw, bh, '3 · force passes', ['levels: centroid repulsion', '+ near field: weighted', 'pairs → velocity texture'], C.covered[2], C.coveredSoft[2])
+  // The bounds texel feeds every later stage's cell lookup.
+  const busY = midY + bh + 26
+  const from = stageX[0] + sw / 2
+  b += `<path d="M ${from} ${midY + bh} L ${from} ${busY} L ${stageX[3] + sw / 2} ${busY}" fill="none" stroke="${C.accent}" stroke-width="1.6" stroke-dasharray="5 4"/>`
+  for (const i of [1, 2, 3]) b += arrow(stageX[i] + sw / 2, busY, stageX[i] + sw / 2, midY + bh + 3, C.accent, 1.6, '5 4')
+  b += txt(from + 10, busY + 18, 'the texel every pass bins with — one shared, division-free gridCell() (grid-cell.ts)', { size: 12, fill: C.accent })
+  b += txt(20, 300, 'The integration step (velocity → positions) is shared with all other forces: it bounds a step’s length, not the position it lands on.', { size: 12.5, fill: C.sub })
+  b += txt(20, 322, 'Levels: 4², 8², … up to ≈ 2·√n per axis (capped 512²), all over the data box. Slot array: K = 32/16/8 layers × finest grid, [point index, hash] each.', { size: 12.5, fill: C.sub })
+  b += txt(20, 344, 'Graphs of ≤ 4,096 points skip all four stages: a single exact all-pairs pass writes the velocity texture directly.', { size: 12.5, fill: C.sub })
   fs.writeFileSync(path.join(OUT, 'd-gpu-pipeline.svg'), svgDoc(W, H, b))
 }
 
@@ -394,6 +411,107 @@ const arrow = (x1, y1, x2, y2, stroke, width = 2, dash = '') =>
   b += txt(20, 390, 'Why not render into layer k directly? Pass k must sample pass k−1\'s output — and sampling one layer of a texture while', { size: 13 })
   b += txt(20, 410, 'rendering to another layer of the same texture is a WebGL feedback loop. So passes render to plain 2D targets instead.', { size: 13 })
   fs.writeFileSync(path.join(OUT, 'h-pingpong-peel.svg'), svgDoc(W, H, b))
+}
+
+// ---------------------------------------------------------------- Diagram I
+// Where the grid sits. Anchored to the space, a compact layout lands in a few
+// over-full cells; fitted to the data, the same points get the whole grid. The
+// cells are counted with grid-cell.ts's formula, the box built the way
+// reduce-bounds-final.frag builds it (square, centred, no margin).
+{
+  const W = 980; const H = 470
+  const SIDE = 264 // panel pixel size
+  const G = 16 // cells per axis — the finest level for n = 64 (2·√n)
+  const N = 64
+  const F = 0.3 // fraction of each axis of the space the layout spans
+  // mulberry32: a fixed seed keeps the picture stable from run to run
+  let seed = 7
+  const rnd = () => {
+    seed = (seed + 0x6d2b79f5) | 0
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+  const centre = [0.3, 0.6] // in space coordinates 0..1
+  const pts = []
+  for (let i = 0; i < N; i++) pts.push([centre[0] + (rnd() - 0.5) * F, centre[1] + (rnd() - 0.5) * F])
+  // reduce-bounds-final.frag: the bounding square, centred on the data, no margin
+  const lo = [Math.min(...pts.map((q) => q[0])), Math.min(...pts.map((q) => q[1]))]
+  const hi = [Math.max(...pts.map((q) => q[0])), Math.max(...pts.map((q) => q[1]))]
+  const extent = Math.max(hi[0] - lo[0], hi[1] - lo[1])
+  const origin = [(lo[0] + hi[0]) / 2 - extent / 2, (lo[1] + hi[1]) / 2 - extent / 2]
+  // grid-cell.ts: clamp(floor((p − origin) · (1/extent · N)), 0, N − 1)
+  const gridCell = (q, o, e) => [0, 1].map((k) => Math.min(G - 1, Math.max(0, Math.floor((q[k] - o[k]) * ((1 / e) * G)))))
+  const occupancy = (o, e) => {
+    const counts = new Map()
+    for (const q of pts) { const key = gridCell(q, o, e).join(','); counts.set(key, (counts.get(key) ?? 0) + 1) }
+    return counts
+  }
+  const shade = (c) => (!c ? '#ffffff' : c === 1 ? C.coveredSoft[0] : c === 2 ? '#a9c8ff' : C.covered[0])
+  const panel = (ox, title, sub, o, e, toPx) => {
+    const oy = 78
+    const counts = occupancy(o, e)
+    const cell = SIDE / G
+    let s = txt(ox + SIDE / 2, 40, title, { size: 15, weight: '600', anchor: 'middle' })
+    s += txt(ox + SIDE / 2, 60, sub, { size: 11.5, fill: C.sub, anchor: 'middle' })
+    for (let j = 0; j < G; j++) {
+      for (let i = 0; i < G; i++) {
+        s += `<rect x="${(ox + i * cell).toFixed(1)}" y="${(oy + j * cell).toFixed(1)}" width="${cell.toFixed(1)}" height="${cell.toFixed(1)}" fill="${shade(counts.get(`${i},${j}`))}" stroke="${C.gridLine}" stroke-width="0.7"/>`
+      }
+    }
+    s += `<rect x="${ox}" y="${oy}" width="${SIDE}" height="${SIDE}" fill="none" stroke="${C.frame}" stroke-width="1.4"/>`
+    // the data box, in this panel's pixels
+    const [bx, by] = toPx(origin); const bs = toPx([origin[0] + extent, origin[1]])[0] - bx
+    s += `<rect x="${bx.toFixed(1)}" y="${by.toFixed(1)}" width="${bs.toFixed(1)}" height="${bs.toFixed(1)}" fill="none" stroke="${C.accent}" stroke-width="1.8" stroke-dasharray="5 3"/>`
+    for (const q of pts) { const [x, y] = toPx(q); s += `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="2.3" fill="${C.point}"/>` }
+    const used = counts.size
+    const max = Math.max(...counts.values())
+    s += txt(ox, oy + SIDE + 24, `${N} points in ${used} of ${G * G} cells — up to ${max} in one`, { size: 12.5, weight: '600' })
+    return { s, used, max }
+  }
+  let b = ''
+  // Space-anchored: panel = the space [0, 1]²
+  const spacePx = (q) => [26 + q[0] * SIDE, 78 + q[1] * SIDE]
+  const before = panel(26, 'Before: the grid covers the space', 'spaceSize / R per cell, counted from world zero', [0, 0], 1, spacePx)
+  b += before.s
+  // Data-anchored: panel = the data box
+  const boxPx = (q) => [346 + ((q[0] - origin[0]) / extent) * SIDE, 78 + ((q[1] - origin[1]) / extent) * SIDE]
+  const after = panel(346, 'Now: the grid covers the data', 'extent / R per cell, counted from the data origin', origin, extent, boxPx)
+  b += after.s
+  assert(before.used < after.used && before.max > after.max, 'the data-anchored grid must spread the points over more, emptier cells')
+  b += `<rect x="26" y="${78 + SIDE + 36}" width="14" height="14" fill="none" stroke="${C.accent}" stroke-width="1.8" stroke-dasharray="5 3"/>`
+  b += txt(46, 78 + SIDE + 47, 'data box: the live points’ bounding square', { size: 12 })
+  b += `<rect x="346" y="${78 + SIDE + 36}" width="14" height="14" fill="${C.coveredSoft[0]}" stroke="${C.gridLine}"/>`
+  b += `<rect x="362" y="${78 + SIDE + 36}" width="14" height="14" fill="#a9c8ff" stroke="${C.gridLine}"/>`
+  b += `<rect x="378" y="${78 + SIDE + 36}" width="14" height="14" fill="${C.covered[0]}" stroke="${C.gridLine}"/>`
+  b += txt(398, 78 + SIDE + 47, '1 · 2 · 3+ points in a cell', { size: 12 })
+
+  // The reduction that produces the box, every tick.
+  const rx = 666
+  b += txt(rx, 40, 'The box, every tick, on the GPU', { size: 15, weight: '600' })
+  b += txt(rx, 60, 'three passes, never read back to the CPU', { size: 11.5, fill: C.sub })
+  const stage = (y, size, divs, fill, lines) => {
+    const x = rx + (40 - size) / 2
+    let s = `<rect x="${x}" y="${y}" width="${size}" height="${size}" fill="${fill}" stroke="${C.frame}" stroke-width="1.2"/>`
+    for (let i = 1; i < divs; i++) {
+      const d = (i * size) / divs
+      s += `<line x1="${(x + d).toFixed(1)}" y1="${y}" x2="${(x + d).toFixed(1)}" y2="${y + size}" stroke="${C.gridLine}" stroke-width="0.7"/>`
+      s += `<line x1="${x}" y1="${(y + d).toFixed(1)}" x2="${x + size}" y2="${(y + d).toFixed(1)}" stroke="${C.gridLine}" stroke-width="0.7"/>`
+    }
+    lines.forEach(([t, opts], i) => { s += txt(rx + 54, y + 13 + i * 16, t, { size: 12, ...opts }) })
+    return s
+  }
+  const ys = [86, 160, 234, 300]
+  const sizes = [40, 40, 26, 14]
+  b += stage(ys[0], sizes[0], 6, '#f6f8fb', [['positions — one texel per point', { weight: '600' }], ['absent and non-finite skipped', { fill: C.sub }], ['(exponent bits, not a compare)', { fill: C.sub }]])
+  b += stage(ys[1], sizes[1], 8, C.coveredSoft[1], [['64 × 64 partial boxes', { weight: '600' }], ['fragment b takes points', { fill: C.sub }], ['b, b + 4096, b + 2·4096, …', { fill: C.sub }]])
+  b += stage(ys[2], sizes[2], 4, C.coveredSoft[1], [['8 × 8 — each folds an 8 × 8', { weight: '600' }], ['block of the partial boxes', { fill: C.sub }]])
+  b += stage(ys[3], sizes[3], 1, '#f3eeff', [['1 texel', { weight: '600', fill: C.accent }], ['[originX, originY, extent, 1/extent]', { fill: C.accent }], ['squared, centred, no margin,', { fill: C.sub }], ['≥ ¼ unit per finest cell', { fill: C.sub }]])
+  for (let i = 0; i < 3; i++) b += arrow(rx + 20, ys[i] + sizes[i] + 3, rx + 20, ys[i + 1] - 3, C.frame, 2)
+
+  b += txt(W / 2, H - 32, 'Anchored to the space, a layout spanning a fraction f of each axis gets (f·R)² of the R² cells — 0.25/f² points per cell, not ≤ 0.25.', { size: 12.5, fill: C.sub, anchor: 'middle' })
+  b += txt(W / 2, H - 14, 'Fitted to the data, the average occupancy over the box depends on the point count alone, wherever the layout sits and whatever its size.', { size: 12.5, fill: C.sub, anchor: 'middle' })
+  fs.writeFileSync(path.join(OUT, 'i-grid-follows-data.svg'), svgDoc(W, H, b))
 }
 
 console.log('generated:', fs.readdirSync(OUT).join(', '))
