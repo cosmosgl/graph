@@ -41,6 +41,10 @@ from the collision force's resolved-size texture. The tick now builds the collis
 ahead of the forces so that texture exists for the link passes. `simulationLinkDistance`
 below the contact distance means "as close as contact allows".
 
+**`simulationCollisionCooling`** (default `0`) is the way back: it multiplies the correction
+by `alpha^cooling`, so `1` fades collision with the other forces, for layouts that stay under
+compression and would otherwise jitter until the simulation ends; `0` keeps the constraint.
+
 **`simulationCollisionIterations`** (default `1`) repeats the grid-build-or-all-pairs pass
 plus integration that many times per tick on the freshest positions. Linear cost per pass;
 dense hubs resolve noticeably better at 2–4.
