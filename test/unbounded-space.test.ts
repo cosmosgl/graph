@@ -1,8 +1,8 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { luma, Texture, type Device } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
 
-import { Graph, type GraphConfig } from '@cosmos.gl/graph'
+import { Graph, defaultConfigValues, type GraphConfig } from '@cosmos.gl/graph'
 import { DataBounds } from '@/graph/modules/Shared/data-bounds'
 import { COLLISION_GRID_SIZE, COLLISION_ROTATIONS, collisionRotationSeed, withCollisionGrid } from '@/graph/modules/ForceCollision/collision-grid'
 
@@ -183,9 +183,15 @@ describe('data bounds (the box the many-body grid divides)', () => {
 
 /**
  * Runs the many-body force alone (no gravity, no centering, no links) on a point
- * set, the way the space-wall harnesses do, and returns the positions.
+ * set, the way the space-wall harnesses do, and returns the positions. `config`
+ * overrides any of it.
  */
-const runManyBody = async (positions: Float32Array, steps: number, onStep?: (graph: Graph, step: number) => void): Promise<Float32Array> => {
+const runManyBody = async (
+  positions: Float32Array,
+  steps: number,
+  onStep?: (graph: Graph, step: number) => void,
+  config: GraphConfig = {}
+): Promise<Float32Array> => {
   const div = document.createElement('div')
   div.style.width = '400px'
   div.style.height = '300px'
@@ -200,6 +206,7 @@ const runManyBody = async (positions: Float32Array, steps: number, onStep?: (gra
     simulationCenter: 0,
     simulationDecay: 1e12,
     randomSeed: 5,
+    ...config,
   })
   try {
     graph.setPointPositions(positions, true)
@@ -238,8 +245,8 @@ describe('the many-body grid follows the data', () => {
   const COUNT = 5000
 
   it('lays out the same blob wherever it sits, to float rounding', async () => {
-    // A 200-unit blob, 30 steps: it stays well inside the space at every centre,
-    // so the position clamp never acts and only the grid's placement differs.
+    // A 200-unit blob, 30 steps, at centres inside the space: only the grid's
+    // placement can differ (and, before the clamp went, nothing reached it).
     let seed = 4242
     const random = (): number => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
     const blob = new Float64Array(COUNT * 2)
@@ -437,8 +444,7 @@ describe('the collision hash follows the data', () => {
     // grid of 12-unit cells. The space-anchored hash, capped at 512 cells over
     // the space, had 15.6-unit cells; a cell widened to fit 512 over the
     // layout would be ~14.8. Either spreads every copy less. (A layout wide
-    // enough to share texels needs more room than the position clamp allows
-    // in SwiftShader's 8192-unit maximum space.)
+    // enough to share texels: the 200,000-unit outlier test below.)
     const COUNT = 400
     const centres = [[300, 300], [4000, 4000], [7700, 7700]] as const
     const result = await runCollision(placeClusters(createCluster(COUNT, 120), centres), 100, { spaceSize: 8000 })
@@ -694,5 +700,318 @@ void main() {
     } finally {
       gl.getExtension('WEBGL_lose_context')?.loseContext()
     }
+  })
+})
+
+describe('positions are not bounded by the space', () => {
+  // Every force off: nothing moves a point but the test
+  const STILL: GraphConfig = {
+    spaceSize: 4096,
+    enableRenderLoop: false,
+    simulationGravity: 0,
+    simulationCenter: 0,
+    simulationRepulsion: 0,
+    simulationDecay: 1e12,
+    randomSeed: 3,
+  }
+
+  it('keeps a point where it was put, outside the space, through the simulation', async () => {
+    // The position clamp moved these onto the border at the first step: to
+    // (0, 4096) and (4096, 0).
+    const positions = new Float32Array([-5000, 9000, 20000, -300, 2048, 2048])
+    await withCanvasGraph(STILL, positions, async (graph) => {
+      graph.pause()
+      for (let step = 0; step < 20; step += 1) graph.step()
+      expect(Array.from(graph.getPointPositionsArray())).toEqual(Array.from(positions))
+      // And a host can move one out there
+      graph.setPointPosition(2, -12345.5, 54321.25)
+      for (let step = 0; step < 20; step += 1) graph.step()
+      expect(Array.from(graph.getPointPositionsArray())).toEqual([-5000, 9000, 20000, -300, -12345.5, 54321.25])
+    })
+  })
+
+  it('lets a layout larger than the space grow past it', async () => {
+    // 5000 points (the grid path) in a 100-unit blob at the centre of a
+    // 512-unit space, gravity off: repulsion has nothing to balance it.
+    const COUNT = 5000
+    const SPACE = 512
+    let seed = 4242
+    const random = (): number => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
+    const positions = new Float32Array(COUNT * 2)
+    for (let i = 0; i < COUNT; i += 1) {
+      const angle = random() * 2 * Math.PI
+      const radius = Math.sqrt(random()) * 100
+      positions[i * 2] = SPACE / 2 + Math.cos(angle) * radius
+      positions[i * 2 + 1] = SPACE / 2 + Math.sin(angle) * radius
+    }
+    const result = await runManyBody(positions, 50, undefined, { spaceSize: SPACE })
+    let beyond = 0
+    let nonFinite = 0
+    for (let i = 0; i < COUNT; i += 1) {
+      const x = result[i * 2] as number
+      const y = result[i * 2 + 1] as number
+      if (!Number.isFinite(x) || !Number.isFinite(y)) nonFinite += 1
+      else if (x < 0 || x > SPACE || y < 0 || y > SPACE) beyond += 1
+    }
+    // Measured on SwiftShader: extent 1322 with 4059 points beyond the space.
+    // With the position clamp, 512 — the space — and none beyond it.
+    expect(nonFinite).toBe(0)
+    expect(extentOf(result)).toBeGreaterThan(2 * SPACE)
+    expect(beyond).toBeGreaterThan(COUNT / 2)
+  })
+
+  it('takes a spaceSize above the device\'s texture limit as it is: the world origin is spaceSize / 2', async () => {
+    // A spaceSize at or above the texture size limit used to be halved — down
+    // to half the limit — which moved the world origin and the initial view
+    // away from where the config put them.
+    const warn = vi.spyOn(console, 'warn')
+    try {
+      const SPACE = 100000
+      await withCanvasGraph({ spaceSize: SPACE, enableSimulation: false }, new Float32Array([0, 0]), async (graph, div) => {
+        const limit = graph.simulation.device?.limits.maxTextureDimension2D ?? 0
+        expect(limit).toBeGreaterThan(0)
+        const centreOfScreen = (spaceSize: number): void => {
+          graph.setViewTransform({ k: 1, x: 0, y: 0 })
+          const [x, y] = graph.spaceToScreenPosition([spaceSize / 2, spaceSize / 2])
+          expect(x).toBeCloseTo(div.clientWidth / 2, 6)
+          expect(y).toBeCloseTo(div.clientHeight / 2, 6)
+        }
+        // Set at creation, and changed on a live graph
+        expect(SPACE).toBeGreaterThan(limit)
+        centreOfScreen(SPACE)
+        graph.setConfigPartial({ spaceSize: 3 * limit })
+        centreOfScreen(3 * limit)
+      })
+      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('spaceSize'))
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('warns about a spaceSize whose world origin is past float32\'s fine range, and uses it as given', async () => {
+    // A layout settles around the world origin, spaceSize / 2. Past 2^21 that origin is past
+    // ~1e6, where float32 positions get too coarse for the forces: warned about, not reduced
+    const warn = vi.spyOn(console, 'warn')
+    try {
+      const SPACE = 2 ** 22
+      await withCanvasGraph({ spaceSize: SPACE, enableSimulation: false }, new Float32Array([0, 0]), async (graph, div) => {
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('spaceSize (4194304)'))
+        graph.setViewTransform({ k: 1, x: 0, y: 0 })
+        const [x, y] = graph.spaceToScreenPosition([SPACE / 2, SPACE / 2])
+        expect(x).toBeCloseTo(div.clientWidth / 2, 6)
+        expect(y).toBeCloseTo(div.clientHeight / 2, 6)
+        // The largest one that does not warn
+        warn.mockClear()
+        graph.setConfigPartial({ spaceSize: 2 ** 21 })
+        expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('spaceSize'))
+      })
+    } finally {
+      warn.mockRestore()
+    }
+  })
+})
+
+describe('the step bound (update-position.frag)', () => {
+  it('drops a non-finite step and shortens a long one to maxStep, along its direction', async () => {
+    // Velocities written straight into the velocity texture, then one position
+    // update. friction 1: the step is the velocity. maxStep is the space, 4096.
+    const MAX_STEP = 4096
+    const velocities: readonly (readonly [number, number])[] = [
+      [NaN, 0], [0, NaN], [NaN, NaN], [Infinity, 0], [-Infinity, 5], [Infinity, -Infinity],
+      // Finite but huge: its length, and the reciprocal of 3e38, are past float32's range
+      [1e10, 0], [-1e20, 2e20], [2e19, 2e19], [3e38, 3e38], [3e38, -1],
+      // Within the bound, the bound itself, and just over it
+      [100, -50], [MAX_STEP, 0], [2890, 2890], [2900, 2900],
+    ]
+    const count = velocities.length
+    const positions = new Float32Array(count * 2)
+    for (let i = 0; i < count; i += 1) positions.set([1000 + i * 10, -3000 + i * 7], i * 2)
+    await withCanvasGraph({ spaceSize: 4096, simulationFriction: 1, enableRenderLoop: false }, positions, async (graph) => {
+      graph.pause()
+      const points = graph.simulation.points
+      const size = graph.simulation.store.pointsTextureSize
+      expect(points?.velocityTexture).toBeDefined()
+      const velocity = new Float32Array(size * size * 4)
+      velocities.forEach(([x, y], i) => velocity.set([x, y], i * 4))
+      points?.velocityTexture?.copyImageData({ data: velocity, bytesPerRow: size * 16, mipLevel: 0, x: 0, y: 0 })
+      const before = graph.getPointPositionsArray()
+      points?.updatePosition()
+      const after = graph.getPointPositionsArray()
+
+      velocities.forEach(([vx, vy], i) => {
+        const x = after[i * 2] as number
+        const y = after[i * 2 + 1] as number
+        expect(Number.isFinite(x) && Number.isFinite(y)).toBe(true)
+        if (!Number.isFinite(vx) || !Number.isFinite(vy)) {
+          // Not a step at all: the point stays exactly where it was
+          expect([x, y]).toEqual([before[i * 2], before[i * 2 + 1]])
+          return
+        }
+        const length = Math.hypot(vx, vy)
+        const scale = length > MAX_STEP ? MAX_STEP / length : 1
+        // float32 positions in the thousands: a few thousandths of a unit
+        expect(x - (before[i * 2] as number)).toBeCloseTo(vx * scale, 2)
+        expect(y - (before[i * 2 + 1] as number)).toBeCloseTo(vy * scale, 2)
+      })
+    })
+  })
+})
+
+describe('an infinite input coordinate', () => {
+  // A present point with an infinite coordinate (only NaN marks a point
+  // absent). The clamp used to catch it — sometimes. Without it, its first step
+  // is non-finite and its position stays infinite, and the many-body pass sums
+  // it with the others: every point's force turns NaN at the first step.
+  for (const [path, count] of [['all-pairs', 800], ['grid', 5000]] as const) {
+    it(`lands on the edge of the space and leaves every point finite (${path} path)`, async () => {
+      let seed = 808
+      const random = (): number => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
+      const positions = new Float32Array(count * 2)
+      for (let i = 0; i < count * 2; i += 1) positions[i] = 2048 + (random() - 0.5) * 600
+      positions.set([Infinity, 2000], 0)
+      positions.set([1500, -Infinity], 2)
+      let firstStep: number[] = []
+      // Default forces, gravity included
+      const result = await runManyBody(positions, 10, (graph, step) => {
+        if (step === 1) firstStep = Array.from(graph.getPointPositionsArray().subarray(0, 4))
+      }, { simulationGravity: 0.25 })
+      // Measured on SwiftShader with the clamp deleted and nothing else: every
+      // other point NaN from the first step, on both paths.
+      let nonFinite = 0
+      for (let i = 0; i < count * 2; i += 1) if (!Number.isFinite(result[i] as number)) nonFinite += 1
+      expect(nonFinite).toBe(0)
+      // After one step, near the edge it was placed on — (4096, 2000) and
+      // (1500, 0) — not at the old clamp's (0, 0)
+      expect(firstStep[0]).toBeGreaterThan(3000)
+      expect(firstStep[1]).toBeCloseTo(2000, -2)
+      expect(firstStep[3]).toBeLessThan(1000)
+      // The input is not modified
+      expect(positions[0]).toBe(Infinity)
+      expect(extentOf(result.subarray(4))).toBeGreaterThan(500)
+    })
+  }
+
+  it('lands on the edge from setPointPosition too, and a NaN target is ignored', async () => {
+    const config: GraphConfig = { spaceSize: 4096, enableRenderLoop: false, simulationGravity: 0, simulationRepulsion: 0 }
+    await withCanvasGraph(config, new Float32Array([100, 200, 300, 400]), async (graph) => {
+      graph.pause()
+      graph.setPointPosition(0, -Infinity, 1e39) // 1e39 is past float32: Infinity
+      graph.setPointPosition(1, NaN, 5)
+      expect(Array.from(graph.getPointPositionsArray())).toEqual([0, 4096, 300, 400])
+    })
+  })
+})
+
+describe('a non-finite simulationFriction', () => {
+  it('runs at the default friction instead of turning every position non-finite', async () => {
+    // update-position drops a non-finite velocity, but friction is applied after that test:
+    // a NaN friction made every step NaN, and an infinite one made a resting point's
+    // 0 × Infinity = NaN — the graph vanished for good.
+    let seed = 515
+    const random = (): number => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
+    const positions = new Float32Array(800 * 2)
+    for (let i = 0; i < positions.length; i += 1) positions[i] = 2048 + (random() - 0.5) * 400
+    const run = (simulationFriction: number): Promise<Float32Array> =>
+      runManyBody(positions, 20, undefined, { simulationGravity: 0.25, simulationFriction })
+    const reference = Array.from(await run(defaultConfigValues.simulationFriction))
+    expect(reference.every(Number.isFinite)).toBe(true)
+    for (const friction of [NaN, Infinity, -Infinity]) {
+      expect(Array.from(await run(friction))).toEqual(reference)
+    }
+  })
+})
+
+describe('custom cluster positions', () => {
+  it('pulls a cluster to any finite position, negative coordinates included; a non-finite one means its centre of mass', async () => {
+    // A negative coordinate used to mean "no custom position": with positions in [0, spaceSize]
+    // it could never be a place. Clusters 0 and 1 go to positions with a negative coordinate,
+    // cluster 2 has none, and cluster 3 a NaN one: those two keep to their centres of mass.
+    const CLUSTERS = 4
+    const COUNT = 400
+    let seed = 99
+    const random = (): number => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
+    const positions = new Float32Array(COUNT * 2)
+    for (let i = 0; i < positions.length; i += 1) positions[i] = 2048 + (random() - 0.5) * 200
+    const div = document.createElement('div')
+    div.style.width = '400px'
+    div.style.height = '300px'
+    document.body.appendChild(div)
+    const graph = new Graph(div, {
+      spaceSize: 4096,
+      enableRenderLoop: false,
+      fitViewOnInit: false,
+      rescalePositions: false,
+      simulationGravity: 0,
+      simulationCenter: 0,
+      simulationRepulsion: 0,
+      simulationCluster: 1,
+      simulationDecay: 1e12,
+      randomSeed: 7,
+    })
+    try {
+      graph.setPointPositions(positions, true)
+      graph.setPointClusters(Array.from({ length: COUNT }, (_, i) => i % CLUSTERS))
+      graph.setClusterPositions([-3000, 2048, 2048, -5000, undefined, undefined, NaN, 100])
+      graph.render(1, 0)
+      await graph.ready
+      graph.pause()
+      for (let step = 0; step < 100; step += 1) graph.step()
+      const result = graph.getPointPositionsArray()
+      const centroids = Array.from({ length: CLUSTERS }, (_, cluster) => {
+        let x = 0
+        let y = 0
+        for (let i = cluster; i < COUNT; i += CLUSTERS) {
+          x += result[i * 2] as number
+          y += result[i * 2 + 1] as number
+        }
+        return [x / (COUNT / CLUSTERS), y / (COUNT / CLUSTERS)]
+      })
+      expect(centroids[0]![0]).toBeCloseTo(-3000, 0)
+      expect(centroids[0]![1]).toBeCloseTo(2048, 0)
+      expect(centroids[1]![0]).toBeCloseTo(2048, 0)
+      expect(centroids[1]![1]).toBeCloseTo(-5000, 0)
+      for (const cluster of [2, 3]) {
+        expect(Math.abs(centroids[cluster]![0]! - 2048)).toBeLessThan(30)
+        expect(Math.abs(centroids[cluster]![1]! - 2048)).toBeLessThan(30)
+      }
+    } finally {
+      graph.destroy()
+      div.remove()
+    }
+  })
+})
+
+describe('collision away from the space', () => {
+  it('spreads an overlapping cluster far outside the space as it does inside it', async () => {
+    const COUNT = 800
+    const cluster = createCluster(COUNT, 120)
+    const extentAt = async (centre: readonly [number, number]): Promise<number> =>
+      extentOf(await runCollision(placeClusters(cluster, [centre]), 100))
+    const inside = await extentAt([2048, 2048])
+    // Measured on SwiftShader from 120 units: 211.8 inside, 209.9 at 20,000 and
+    // 213.6 at -9,000. With the position clamp the far clusters collapsed into a
+    // corner of the space (11.2); without it, a hash anchored at world zero left
+    // them at 119.7 — collision did nothing outside the space.
+    expect(inside).toBeGreaterThan(200)
+    for (const centre of [[20000, 20000], [-9000, -9000]] as const) {
+      expect(Math.abs((await extentAt(centre)) / inside - 1)).toBeLessThan(0.05)
+    }
+  })
+
+  it('resolves a cluster the same with one point 200,000 units away', async () => {
+    // A data box 200,000 units wide: ~16,700 contact ranges, 16 times the
+    // hash's 1024 texels per axis. The cell stays the contact range and the
+    // cells wrap. Measured on SwiftShader: extent 213.1 with 4042 overlapping
+    // pairs — the cluster alone gives 211.8 and 4074; a cell widened to fit the
+    // grid over the box (195 units) gives 120.4 and 7560, no spread at all.
+    const COUNT = 800
+    const positions = new Float32Array(COUNT * 2 + 2)
+    positions.set(placeClusters(createCluster(COUNT, 120), [[2048, 2048]]))
+    positions.set([202048, 2048], COUNT * 2)
+    const result = await runCollision(positions, 100)
+    expect(extentOf(result.subarray(0, COUNT * 2))).toBeGreaterThan(200)
+    expect(countPairsCloserThan(result, 0, COUNT, 0.9 * 12)).toBeLessThan(4600)
+    // The outlier stays where it is
+    expect(Array.from(result.subarray(COUNT * 2))).toEqual([202048, 2048])
   })
 })

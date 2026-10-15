@@ -116,12 +116,20 @@ export class Clusters extends CoreModule {
     const clustersTextureDataSize = this.clustersTextureSize * this.clustersTextureSize * 4
 
     const clusterState = new Float32Array(pointsTextureDataSize)
-    const clusterPositions = new Float32Array(clustersTextureDataSize).fill(-1)
+    // Per cluster: [x, y, hasPosition, 0]. Whether a cluster has a custom position is its own
+    // channel, not a sign: positions are not bounded, so a negative coordinate is a place
+    // like any other. Without both coordinates, as finite numbers, the cluster is pulled to
+    // its centre of mass (force-cluster.frag).
+    const clusterPositions = new Float32Array(clustersTextureDataSize)
     const clusterForceCoefficient = new Float32Array(pointsTextureDataSize).fill(1)
     if (data.clusterPositions) {
       for (let cluster = 0; cluster < this.clusterCount; ++cluster) {
-        clusterPositions[cluster * 4 + 0] = data.clusterPositions[cluster * 2 + 0] ?? -1
-        clusterPositions[cluster * 4 + 1] = data.clusterPositions[cluster * 2 + 1] ?? -1
+        const x = data.clusterPositions[cluster * 2 + 0]
+        const y = data.clusterPositions[cluster * 2 + 1]
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+        clusterPositions[cluster * 4 + 0] = x as number
+        clusterPositions[cluster * 4 + 1] = y as number
+        clusterPositions[cluster * 4 + 2] = 1
       }
     }
 

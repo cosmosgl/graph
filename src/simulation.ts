@@ -214,7 +214,7 @@ export class GraphSimulation implements PositionTextureSource {
       }
       this._device = device
 
-      this.store.adjustSpaceSize(this.config.spaceSize, device.limits.maxTextureDimension2D)
+      this.store.adjustSpaceSize(this.config.spaceSize)
       this.store.setWebGLMaxTextureSize(device.limits.maxTextureDimension2D)
       this.store.maxPointSize = getMaxPointSize(device, this.config.pixelRatio)
 
@@ -314,7 +314,7 @@ export class GraphSimulation implements PositionTextureSource {
       this.isForceCollisionReady = false
     }
     if (prevConfig.spaceSize !== this.config.spaceSize) {
-      this.store.adjustSpaceSize(this.config.spaceSize, this._device?.limits.maxTextureDimension2D ?? 4096)
+      this.store.adjustSpaceSize(this.config.spaceSize)
       this.update(this.store.isSimulationRunning ? this.store.alpha : 0)
     }
   }

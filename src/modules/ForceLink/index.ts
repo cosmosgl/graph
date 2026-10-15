@@ -74,7 +74,9 @@ export class ForceLink extends CoreModule {
           const bias = degreeSum !== 0 ? degree / degreeSum : 0.5
           const minDegree = Math.min(degree, connectedDegree)
           // Strength must reach the texture finite and non-negative — Math.sqrt emits
-          // NaN otherwise, and the position clamp downstream lands the point at (0, 0).
+          // NaN otherwise, which turns the link pull on both of its points NaN — and
+          // update-position drops a non-finite step, so neither would ever move by
+          // any of its links.
           let strength = data.linkStrength?.[initialLinkIndex]
           if (strength === undefined || !Number.isFinite(strength) || strength < 0) {
             strength = 1 / Math.max(minDegree, 1) // max() prevents division by zero
