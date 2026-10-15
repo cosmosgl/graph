@@ -10,7 +10,8 @@ precision highp float;
 // refines (its aligned 6×6 child block), and which force-nearfield.frag finally
 // covers at the finest level. The exclusion shell is fixed at Chebyshev
 // distance 1. Every level divides this tick's data bounds (grid-cell.ts), not
-// the space.
+// the space, shifted by a fresh random offset every tick so the boundaries where
+// that split changes never stay on one line (ForceManyBody's class doc).
 
 uniform sampler2D positionsTexture;
 uniform sampler2D levelTexture;

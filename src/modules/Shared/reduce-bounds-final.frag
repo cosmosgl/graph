@@ -7,7 +7,9 @@ precision highp int;
 // Last pass of the data-bounds reduction (see data-bounds.ts): the middle
 // pass's partial boxes folded into the one texel every consumer reads,
 // [originX, originY, extent, 1 / extent] — a square of side `extent` whose
-// lower-left corner is the origin.
+// lower-left corner is the origin. Optionally padded by one cell of the
+// consumer's coarsest grid and shifted by the part of it the consumer asks for
+// (DataBoundsRunOptions.originShift).
 
 uniform sampler2D partialsTexture;
 
@@ -15,13 +17,24 @@ uniform sampler2D partialsTexture;
 layout(std140) uniform reduceBoundsFinalUniforms {
   float partialGridSize;
   float minExtent;
+  float shiftCellsPerAxis;
+  float shiftOffsetX;
+  float shiftOffsetY;
 } reduceBoundsFinal;
 
 #define partialGridSize reduceBoundsFinal.partialGridSize
 #define minExtent reduceBoundsFinal.minExtent
+#define shiftCellsPerAxis reduceBoundsFinal.shiftCellsPerAxis
+#define shiftOffsetX reduceBoundsFinal.shiftOffsetX
+#define shiftOffsetY reduceBoundsFinal.shiftOffsetY
 #else
 uniform float partialGridSize;
 uniform float minExtent;
+// 0 = no shift: the box is fitted to the points.
+uniform float shiftCellsPerAxis;
+// How far the origin slides back inside the padding cell, per axis, in [0, 1).
+uniform float shiftOffsetX;
+uniform float shiftOffsetY;
 #endif
 
 // The first pass's empty-bucket sentinel (must match reduce-bounds-buckets.frag).
@@ -60,16 +73,29 @@ void main() {
   // box's edge, where the consumers' edge clamp files them into the last cell
   // the same way on every level. A margin would only widen the cells over the
   // data and leave the layout's edge mid-cell on every level, which measurably
-  // costs the far field accuracy at the edge.
+  // costs the far field accuracy at the edge. The origin shift below accepts
+  // that cost to move the cell boundaries off fixed lines.
   //
   // The floor is what makes a zero-size box (one point, or every point
   // stacked) usable: consumers divide the extent into cells and need a
   // non-zero cell size. The caller sets it from its own smallest meaningful
   // cell.
   float extent = max(span, minExtent);
+  vec2 origin = centre - 0.5 * extent;
+
+  // Origin shift: grow the box by one cell of the consumer's coarsest grid and
+  // slide it back by the given part of that cell. The fitted square stays
+  // inside whatever the offset, since the padding is exactly the slide's range,
+  // while every cell boundary of every level lands somewhere new. With G cells
+  // per axis over the padded box, one cell is extent / (G - 1) of the fitted one.
+  if (shiftCellsPerAxis > 1.0) {
+    float cell = extent / (shiftCellsPerAxis - 1.0);
+    origin -= vec2(shiftOffsetX, shiftOffsetY) * cell;
+    extent += cell;
+  }
 
   // The reciprocal is the one inexact step of the consumers' cell formula,
   // taken once here so every shader that bins a point reads the same bits
   // (grid-cell.ts).
-  bounds = vec4(centre - 0.5 * extent, extent, 1.0 / extent);
+  bounds = vec4(origin, extent, 1.0 / extent);
 }
