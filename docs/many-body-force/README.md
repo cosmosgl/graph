@@ -400,11 +400,15 @@ and sizes agree — a 100k-point disk stays at ~0.23 % (was 0.24 % → 2.0 %), 2
 - **A very tight start bursts harder on the first tick.** From a blob a few dozen units wide,
   the first tick's spread is about ten times what it was on the space-anchored grid, whose cells
   were so coarse that the whole blob fell into the near field and its bounded kick; the
-  data-fitted levels resolve the blob and push with the full far-field force. The final layouts
-  are equivalent. Without the clamp, that burst can carry points past the edge of the space for
-  two or three ticks — 36 % and 78 % of the points of the **Forces → Clusters with Labels** and
-  **Interaction → Lasso Selection** stories at step 1, none by step 3 — instead of piling them
-  on it.
+  data-fitted levels resolve the blob and push with the full far-field force. Layouts then
+  settle to a similar extent, but not always into the same arrangement: against `main`, the
+  **Showcase → Radial Mesh**, **Showcase → Worm** and **Get Started → Actions** stories (10k
+  points from a 41-unit blob) fold differently, and **Interaction → Lasso Selection** puts the
+  same 25 clusters in a different order — per-point median differences of 9–210 units, where
+  `main` itself differs between Metal and SwiftShader by 0.3–14. Without the clamp, the burst
+  can also carry points past the edge of the space for up to two ticks — 36 % and 78 % of the
+  points of **Forces → Clusters with Labels** and **Interaction → Lasso Selection** at step 1,
+  none by step 3 — instead of piling them on it.
 - **A diverging configuration runs away.** Nothing holds positions in the space any more, so a
   configuration that diverges — a link spring far too stiff, say — no longer piles up on the
   space's edges: its points fly off, at most `spaceSize` per force per tick (link spring ≥ 10
