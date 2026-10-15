@@ -410,7 +410,9 @@ export interface GraphConfigInterface {
    */
   simulationLinkSpring: number;
   /**
-   * Minimum link distance.
+   * Minimum link distance. While `simulationCollision` is on, a link's rest
+   * length is never less than the two endpoints' combined collision radii
+   * (plus padding), so a spring can never pull a pair into overlap.
    * Default value: `10`
    */
   simulationLinkDistance: number;
@@ -446,7 +448,20 @@ export interface GraphConfigInterface {
   /**
    * Collision force coefficient. When set to a value greater than 0,
    * points will push each other apart when they overlap.
-   * Uses a spatial-hash grid, so it scales better than naive O(n²) collision.
+   *
+   * Unlike the other forces, collision is a constraint: its correction is not
+   * scaled by the simulation's alpha (unless `simulationCollisionCooling` says
+   * so) and is integrated without friction, so overlap keeps resolving at full
+   * strength while the layout cools. While it
+   * is on, link rest lengths are floored at the contact distance (see
+   * `simulationLinkDistance`).
+   *
+   * `1` projects each overlapping pair to contact per pass; values up to `2`
+   * over-relax, which settles jammed piles faster. At or below 4,096 points every
+   * pair is tested; above that a spatial hash with depth-peeled neighbour slots
+   * takes over — still pairwise, exact while a cell holds at most 32 points
+   * (16 above 16k points, 8 above 65k), and sampled afresh every pass in a
+   * denser cell.
    * Default value: `0`
    */
   simulationCollision: number;
@@ -464,6 +479,29 @@ export interface GraphConfigInterface {
    * Default value: `0`
    */
   simulationCollisionPadding: number;
+  /**
+   * Collision passes per simulation tick. Each pass re-runs the collision on
+   * the latest positions — every pair at or below 4,096 points, a fresh
+   * spatial-hash build above — and applies one bounded correction, so more
+   * passes unwind a dense pile in fewer ticks, with the cost linear in the
+   * number of passes.
+   * `1` suits sparse graphs; dense clusters with many links pulling inward
+   * resolve noticeably better at `2`–`4`. Fractions are truncated; values
+   * below `1`, `NaN` and `Infinity` run a single pass.
+   * Default value: `1`
+   */
+  simulationCollisionIterations: number;
+  /**
+   * How much the collision correction cools with the simulation's alpha, as the
+   * power alpha is raised to. `0` keeps collision at full strength until the
+   * simulation ends — overlap goes on resolving after every other force has
+   * faded. `1` scales it by alpha like the other forces, so a layout that is
+   * still being compressed (gravity past the packing limit, for instance) stops
+   * jittering as it cools, at the price of overlap that remains when alpha is
+   * low. Values between take alpha to that power: `0.5` cools half as fast.
+   * Default value: `0`
+   */
+  simulationCollisionCooling: number;
 
   /**
    * Callback function that will be called when the simulation starts.
@@ -859,6 +897,8 @@ export type GraphSimulationConfigInterface = Pick<GraphConfigInterface,
   | 'simulationCollision'
   | 'simulationCollisionRadius'
   | 'simulationCollisionPadding'
+  | 'simulationCollisionIterations'
+  | 'simulationCollisionCooling'
   | 'randomSeed'
   | 'rescalePositions'
   | 'onSimulationStart'

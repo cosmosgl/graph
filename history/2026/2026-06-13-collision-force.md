@@ -143,7 +143,10 @@ add a config/data path that affects collision sizing, add an invalidation there 
 - **Deep dive:** `docs/collision-force/README.md` walks through the cell-size argument (why
   the cell is the whole contact range), the four offset grids, the cell-average push and its
   caps, the tick ordering, and the cost and limits of the averaging — with generated figures
-  (`node gen-diagrams.mjs` from that folder).
+  (`node gen-diagrams.mjs` from that folder). Superseded by
+  `history/2026/2026-10-07-collision-constraint.md`: the cell-average path was replaced by
+  pairwise contacts, the README was rewritten for them, and the figures and their generator
+  were removed (recover them from any commit before that change).
 
 ## Known limitations / future work
 

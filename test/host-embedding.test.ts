@@ -743,3 +743,62 @@ describe('sparse writes during a position transition', () => {
     })
   })
 })
+
+/**
+ * A point removed with an animated same-count setPointPositions keeps its last
+ * finite position on the GPU after the fade (the transition freezes an exiting
+ * point at its source), while the exit texture marks it absent at once. Every
+ * pass that reads another point's data must skip it through exit.G, never
+ * through a NaN position — the collision force included.
+ */
+describe('collision skips removed points', () => {
+  const wait = (ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms) })
+
+  it('a removed point does not push the live points that overlap where it was', async () => {
+    const div = document.createElement('div')
+    div.style.width = '200px'
+    div.style.height = '200px'
+    document.body.appendChild(div)
+    const endings: boolean[] = []
+    const graph = new Graph(div, {
+      spaceSize: 4096,
+      fitViewOnInit: false,
+      rescalePositions: false,
+      // Collision is the only force: nothing else can move point 0.
+      simulationGravity: 0,
+      simulationCenter: 0,
+      simulationRepulsion: 0,
+      simulationLinkSpring: 0,
+      simulationCollision: 1,
+      simulationCollisionPadding: 1,
+      simulationDecay: 100000,
+      onTransitionEnd: (interrupted: boolean): void => { endings.push(interrupted) },
+    })
+    try {
+      // Point 1 starts clear of point 0 (contact distance 22).
+      graph.setPointPositions(new Float32Array([2000, 2000, 2030, 2000, 3000, 3000]))
+      graph.setPointSizes(new Float32Array([20, 20, 20]))
+      graph.render()
+      await graph.ready
+      await wait(100)
+      graph.pause()
+      // Overlap point 1 with point 0 while paused, then remove it with a fade.
+      graph.setPointPosition(1, 2010, 2000)
+      graph.setPointPositions(new Float32Array([2000, 2000, NaN, NaN, 3000, 3000]))
+      // Wait for this fade to complete; earlier transitions may end (interrupted) first.
+      const from = endings.length
+      graph.render(undefined, 200)
+      for (let i = 0; i < 100 && !endings.slice(from).includes(false); i += 1) await wait(30)
+      expect(endings.slice(from)).toContain(false)
+
+      const before = graph.getPointPositions()
+      for (let i = 0; i < 20; i += 1) graph.step()
+      const after = graph.getPointPositions()
+      const moved = Math.hypot((after[0] as number) - (before[0] as number), (after[1] as number) - (before[1] as number))
+      expect(moved).toBeLessThan(0.01)
+    } finally {
+      graph.destroy()
+      div.remove()
+    }
+  })
+})

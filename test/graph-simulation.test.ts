@@ -52,6 +52,160 @@ describe('GraphSimulation', () => {
     }
   })
 
+  it('collision separates a pile of overlapping points, with every other force off', async () => {
+    // 60 points of size 10 seeded inside a 4-unit disc: every pair overlaps deeply.
+    const n = 60
+    const positions = new Float32Array(n * 2)
+    for (let i = 0; i < n; i += 1) {
+      const angle = i * 2.399963
+      const radius = 2 * Math.sqrt((i + 1) / n)
+      positions[i * 2] = 2048 + Math.cos(angle) * radius
+      positions[i * 2 + 1] = 2048 + Math.sin(angle) * radius
+    }
+    const padding = 0.5
+    const contact = 2 * (10 / 2 + padding)
+    const overlappingPairs = (pos: Float32Array): number => {
+      let count = 0
+      for (let i = 0; i < n; i += 1) {
+        for (let j = i + 1; j < n; j += 1) {
+          const d = Math.hypot((pos[i * 2] as number) - (pos[j * 2] as number), (pos[i * 2 + 1] as number) - (pos[j * 2 + 1] as number))
+          if (d < contact - 0.1) count += 1 // allow ~1% settling slack
+        }
+      }
+      return count
+    }
+    const simulation = await createSimulation({
+      ...SIMULATION_CONFIG,
+      simulationGravity: 0,
+      simulationRepulsion: 0,
+      simulationLinkSpring: 0,
+      pointDefaultSize: 10,
+      simulationCollision: 1,
+      simulationCollisionPadding: padding,
+      simulationCollisionIterations: 2,
+    }, positions)
+    try {
+      expect(overlappingPairs(simulation.getPointPositionsArray())).toBeGreaterThan(1000)
+      for (let i = 0; i < 60; i += 1) simulation.step()
+      expect(overlappingPairs(simulation.getPointPositionsArray())).toBe(0)
+    } finally {
+      simulation.destroy()
+    }
+  })
+
+  it('collision separates piles above the all-pairs threshold (depth-peeled slot path)', async () => {
+    // 4,200 points — above the 4,096 all-pairs threshold — as 42 piles of 100
+    // size-10 points, each pile seeded inside a 4-unit disc. The piles sit far
+    // apart, so only pairs within a pile can ever overlap.
+    const piles = 42
+    const perPile = 100
+    const n = piles * perPile
+    const positions = new Float32Array(n * 2)
+    for (let p = 0; p < piles; p += 1) {
+      const cx = 400 + (p % 7) * 500
+      const cy = 400 + Math.floor(p / 7) * 500
+      for (let i = 0; i < perPile; i += 1) {
+        const angle = i * 2.399963
+        const radius = 2 * Math.sqrt((i + 1) / perPile)
+        positions[(p * perPile + i) * 2] = cx + Math.cos(angle) * radius
+        positions[(p * perPile + i) * 2 + 1] = cy + Math.sin(angle) * radius
+      }
+    }
+    const contact = 2 * (10 / 2 + 0.5)
+    const overlappingPairs = (pos: Float32Array): number => {
+      let count = 0
+      for (let p = 0; p < piles; p += 1) {
+        for (let i = p * perPile; i < (p + 1) * perPile; i += 1) {
+          for (let j = i + 1; j < (p + 1) * perPile; j += 1) {
+            const d = Math.hypot((pos[i * 2] as number) - (pos[j * 2] as number), (pos[i * 2 + 1] as number) - (pos[j * 2 + 1] as number))
+            if (d < contact - 0.1) count += 1
+          }
+        }
+      }
+      return count
+    }
+    const simulation = await createSimulation({
+      ...SIMULATION_CONFIG,
+      simulationGravity: 0,
+      simulationRepulsion: 0,
+      simulationLinkSpring: 0,
+      pointDefaultSize: 10,
+      simulationCollision: 1,
+      simulationCollisionPadding: 0.5,
+      simulationCollisionIterations: 2,
+    }, positions)
+    try {
+      expect(overlappingPairs(simulation.getPointPositionsArray())).toBeGreaterThan(100000)
+      for (let i = 0; i < 100; i += 1) simulation.step()
+      expect(overlappingPairs(simulation.getPointPositionsArray())).toBe(0)
+    } finally {
+      simulation.destroy()
+    }
+  })
+
+  it('simulationCollisionCooling scales the collision correction by alpha', async () => {
+    // Two size-10 points overlapping by 8 of their 10-unit contact distance, nothing else on.
+    const positions = new Float32Array([2048, 2048, 2050, 2048])
+    const distance = (pos: Float32Array): number => Math.hypot((pos[2] as number) - (pos[0] as number), (pos[3] as number) - (pos[1] as number))
+    const base: GraphSimulationConfig = {
+      ...SIMULATION_CONFIG,
+      simulationGravity: 0,
+      simulationRepulsion: 0,
+      simulationLinkSpring: 0,
+      pointDefaultSize: 10,
+      simulationCollision: 1,
+    }
+    const settle = async (cooling: number): Promise<number> => {
+      const simulation = await createSimulation({ ...base, simulationCollisionCooling: cooling }, positions)
+      try {
+        // A nearly cooled simulation: alpha 0.01
+        simulation.start(0.01)
+        for (let i = 0; i < 20; i += 1) simulation.step()
+        return distance(simulation.getPointPositionsArray())
+      } finally {
+        simulation.destroy()
+      }
+    }
+    // Cooling 0: full strength regardless of alpha — the pair is projected to contact.
+    expect(await settle(0)).toBeGreaterThan(9.5)
+    // Cooling 1: the correction is scaled by alpha, so at 0.01 the pair barely moves.
+    expect(await settle(1)).toBeLessThan(4)
+  })
+
+  it('floors a link\'s rest length at the contact distance while collision is on', async () => {
+    // Two size-20 points (contact distance 20) joined by a spring asking for 1 unit.
+    const positions = new Float32Array([2000, 2048, 2100, 2048])
+    const distance = (pos: Float32Array): number => Math.hypot((pos[2] as number) - (pos[0] as number), (pos[3] as number) - (pos[1] as number))
+    const base: GraphSimulationConfig = {
+      ...SIMULATION_CONFIG,
+      simulationGravity: 0,
+      simulationRepulsion: 0,
+      simulationLinkSpring: 1,
+      simulationLinkDistance: 1,
+      simulationLinkDistRandomVariationRange: [1, 1],
+      pointDefaultSize: 20,
+    }
+    const settle = async (config: GraphSimulationConfig): Promise<number> => {
+      const simulation = await createSimulation(config, positions)
+      try {
+        simulation.setLinks(new Float32Array([0, 1]))
+        simulation.applyData()
+        for (let i = 0; i < 150; i += 1) simulation.step()
+        return distance(simulation.getPointPositionsArray())
+      } finally {
+        simulation.destroy()
+      }
+    }
+    // Without collision the spring closes to its 1-unit rest length …
+    expect(await settle({ ...base, simulationCollision: 0 })).toBeLessThan(3)
+    // … with collision on, the rest length is floored at contact and the pair settles touching.
+    // Strength 0.2 closes only a fifth of an overlap per tick, so collision alone could not
+    // restore contact against the spring each tick: only the floor keeps the pair at 20.
+    const withCollision = await settle({ ...base, simulationCollision: 0.2 })
+    expect(withCollision).toBeGreaterThan(19)
+    expect(withCollision).toBeLessThan(21.5)
+  })
+
   it('applies links through setLinks + applyData and pulls linked points together', async () => {
     const simulation = await createSimulation({ ...SIMULATION_CONFIG, simulationGravity: 0, simulationRepulsion: 0 })
     try {
