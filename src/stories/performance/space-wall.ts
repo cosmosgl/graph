@@ -1,22 +1,29 @@
 import { Graph, type GraphConfig } from '@cosmos.gl/graph'
 
-// Where `spaceSize` stops being a coordinate system and becomes a wall. Every
-// force sub-step hard-clamps positions into `[0, spaceSize]`
-// (Points/update-position.frag), so a layout whose natural extent is larger
-// than the space cannot grow into it: it piles up along the border instead and
-// takes the border's square shape.
+// Where `spaceSize` used to stop being a coordinate system and become a wall,
+// and what a layout does now that it is not one. Positions used to be
+// hard-clamped into `[0, spaceSize]` on every force sub-step, so a layout whose
+// natural extent was larger than the space could not grow into it: it piled up
+// along the border and took the border's square shape (300k points at default
+// gravity: 58% of them on the border). Now nothing bounds a position
+// (Points/update-position.frag bounds the length of one sub-step instead), and
+// the layout grows past the space as far as its forces take it.
 //
 // The dashed square is the space, drawn in DOM from `spaceToScreenPosition` so
-// it follows zoom and pan. Points sitting on the border are red. The readout
-// reports, for the tick it was read at, the share of points pinned to the wall,
-// the layout's extent, and extent / spaceSize — the numbers that say whether
-// the clamp is costing a given graph anything.
+// it follows zoom and pan. Points beyond it are red. The readout reports, for
+// the tick it was read at, the share of points beyond the space, the layout's
+// extent next to the size gravity settles it at, and extent / spaceSize.
 //
 // Gravity is the control that decides it. It is a linear spring towards the
-// space centre, so it caps the extent on its own: at 0.25 a layout settles near
-// 2·√(40n) units across, which fits 10k points easily, fits 100k with ~1% to
-// spare, and jams 300k against the wall. At 0 repulsion has nothing to balance
-// it, so the layout keeps expanding until the wall stops it.
+// world origin (the space's centre), so it caps the extent on its own: at 0.25
+// a layout settles near 2·√(40n) units across, which fits 10k points in the
+// space easily, fits 100k with ~1% to spare, and takes 300k well past it — into
+// the disk the spring and the repulsion balance at, ~7,000 units across, with
+// over half of its points beyond the space. At 0 repulsion has nothing to
+// balance it, and the layout keeps expanding.
+//
+// "fit space" frames the space and "fit layout" frames the points: they are no
+// longer the same thing. Both animate, so they need frames.
 //
 // Every size or gravity button restarts from the same seeded blob at tick 0.
 // Runs agree in what the readout reports, not bit for bit: `randomSeed` seeds
@@ -28,23 +35,25 @@ import { Graph, type GraphConfig } from '@cosmos.gl/graph'
 // automated preview pane included), so a frame-driven story there advances
 // nothing and measures nothing. The button runs `graph.step()` synchronously
 // and then refreshes the readout and the colours. The initial framing is
-// synchronous for the same reason; "fit space" animates, so it needs frames.
+// synchronous for the same reason.
 
 const SPACE_SIZE = 4096
 const SIZES = [10_000, 100_000, 300_000] as const
 const GRAVITIES = [0, 0.25] as const
 const STEPS_PER_BURST = 200
 const READOUT_INTERVAL_MS = 250
-/** Margin around the framed space, as a fraction of the viewport on each side. */
+/** Margin around the framed space or layout, as a fraction of the viewport on each side. */
 const FRAME_PADDING = 0.05
 const BLOB_SEED = 99
 const SIMULATION_SEED = 3
 
-const WALL_COLOR = [0.95, 0.22, 0.24, 0.95] as const
-const FREE_COLOR = [0.35, 0.55, 0.85, 0.6] as const
+const BEYOND_COLOR = [0.95, 0.22, 0.24, 0.95] as const
+const INSIDE_COLOR = [0.35, 0.55, 0.85, 0.6] as const
+/** The gravity the 2·√(40n) equilibrium extent was measured at. */
+const EQUILIBRIUM_GRAVITY = 0.25
 
-type WallStats = {
-  atWall: number;
+type SpaceStats = {
+  beyond: number;
   nonFinite: number;
   extent: number;
 }
@@ -74,20 +83,21 @@ const makeBlobPositions = (n: number): Float32Array => {
 }
 
 /**
- * On the wall: either coordinate sits on the border. The clamp writes exactly
- * `0` or exactly `spaceSize` (both exact in float32), so no epsilon is needed —
- * a point at the bound got there by being clamped, not by landing there.
+ * Beyond the space: either coordinate strictly outside `[0, spaceSize]`. A
+ * point exactly on the border counts as inside — it is where the old clamp
+ * left every point the space stopped.
  */
-const isAtWall = (x: number, y: number): boolean =>
-  x <= 0 || x >= SPACE_SIZE || y <= 0 || y >= SPACE_SIZE
+const isBeyondSpace = (x: number, y: number): boolean =>
+  x < 0 || x > SPACE_SIZE || y < 0 || y > SPACE_SIZE
 
 /**
- * One pass over the read-back positions: counts the wall, measures the extent,
- * and paints `colors`. Only the first `pointsNumber` points are read, so a
- * reused readback buffer can never contribute a stale tail.
+ * One pass over the read-back positions: counts the points beyond the space,
+ * measures the extent, and paints `colors`. Only the first `pointsNumber`
+ * points are read, so a reused readback buffer can never contribute a stale
+ * tail.
  */
-const measureAndPaint = (positions: Float32Array, pointsNumber: number, colors: Float32Array): WallStats => {
-  let atWall = 0
+const measureAndPaint = (positions: Float32Array, pointsNumber: number, colors: Float32Array): SpaceStats => {
+  let beyond = 0
   let nonFinite = 0
   let minX = Infinity
   let maxX = -Infinity
@@ -96,26 +106,26 @@ const measureAndPaint = (positions: Float32Array, pointsNumber: number, colors: 
   for (let i = 0; i < pointsNumber; i += 1) {
     const x = positions[i * 2] as number
     const y = positions[i * 2 + 1] as number
-    // A NaN position must not reach the extent or the wall count. Counted, so
+    // A NaN position must not reach the extent or the count. Counted, so
     // a diverged simulation shows up in the readout instead of hiding in it.
     if (!Number.isFinite(x) || !Number.isFinite(y)) {
       nonFinite += 1
       continue
     }
-    const pinned = isAtWall(x, y)
-    if (pinned) atWall += 1
+    const outside = isBeyondSpace(x, y)
+    if (outside) beyond += 1
     if (x < minX) minX = x
     if (x > maxX) maxX = x
     if (y < minY) minY = y
     if (y > maxY) maxY = y
-    const [r, g, b, a] = pinned ? WALL_COLOR : FREE_COLOR
+    const [r, g, b, a] = outside ? BEYOND_COLOR : INSIDE_COLOR
     colors[i * 4] = r
     colors[i * 4 + 1] = g
     colors[i * 4 + 2] = b
     colors[i * 4 + 3] = a
   }
   const extent = Number.isFinite(minX) ? Math.max(maxX - minX, maxY - minY) : 0
-  return { atWall, nonFinite, extent }
+  return { beyond, nonFinite, extent }
 }
 
 export const spaceWall = (): { graph: Graph; div: HTMLDivElement; destroy?: () => void } => {
@@ -127,7 +137,7 @@ export const spaceWall = (): { graph: Graph; div: HTMLDivElement; destroy?: () =
   div.appendChild(canvasHost)
 
   // The space border. Its corners come from spaceToScreenPosition, so it sits
-  // exactly where the clamp is, at any zoom and pan.
+  // exactly on the space, at any zoom and pan.
   const border = document.createElement('div')
   // border-box keeps the dashed line inside the box, so all four outer edges
   // are the space's edges. content-box would put the right and bottom edges
@@ -156,7 +166,7 @@ export const spaceWall = (): { graph: Graph; div: HTMLDivElement; destroy?: () =
 
   const legend = document.createElement('div')
   legend.style.cssText = 'margin-top:6px;opacity:0.6;'
-  legend.textContent = 'red = on the spaceSize border (clamped)'
+  legend.textContent = 'red = beyond the spaceSize square'
   panel.appendChild(legend)
 
   let pointsNumber: number = SIZES[1]
@@ -179,7 +189,7 @@ export const spaceWall = (): { graph: Graph; div: HTMLDivElement; destroy?: () =
     renderLinks: false,
     pointDefaultSize: 2,
     simulationGravity: gravity,
-    // Never let the simulation cool off: the wall is a steady state to watch,
+    // Never let the simulation cool off: the extent is a steady state to watch,
     // not a transient, and a decayed alpha would freeze it mid-expansion.
     // Every other force setting is stock.
     simulationDecay: 1e12,
@@ -221,6 +231,13 @@ export const spaceWall = (): { graph: Graph; div: HTMLDivElement; destroy?: () =
     hasFramed = true
   }
 
+  const frameLayout = (duration: number): void => {
+    // Same guard as frameSpace: an unmeasured container fits to the zoom floor
+    if (canvasHost.clientWidth <= 0 || canvasHost.clientHeight <= 0) return
+    graph.fitView(duration, FRAME_PADDING)
+    hasFramed = true
+  }
+
   // Reads the positions back and refreshes the readout and the colours. The
   // readback is a synchronous GPU stall (~2.4 MB at 300k points), so it runs on
   // a timer and after a step burst, never per frame, and only when a tick has
@@ -233,14 +250,19 @@ export const spaceWall = (): { graph: Graph; div: HTMLDivElement; destroy?: () =
       if (positions.length >= pointsNumber * 2) {
         readback = positions
         readTick = tick
-        const { atWall, nonFinite, extent } = measureAndPaint(positions, pointsNumber, colors)
+        const { beyond, nonFinite, extent } = measureAndPaint(positions, pointsNumber, colors)
+        // Where gravity 0.25 settles a layout of this size; without gravity
+        // nothing does
+        const equilibrium = gravity === EQUILIBRIUM_GRAVITY
+          ? `settles near 2√(40n) = ${Math.round(2 * Math.sqrt(40 * pointsNumber))}`
+          : 'no gravity, no equilibrium'
         readout.textContent = [
           `points: ${pointsNumber}`,
           `gravity: ${gravity}`,
           `state: ${isRunning ? 'running' : 'paused'}`,
           `tick: ${tick}`,
-          `at wall: ${((100 * atWall) / pointsNumber).toFixed(2)}% (${atWall})`,
-          `extent: ${Math.round(extent)}`,
+          `beyond space: ${((100 * beyond) / pointsNumber).toFixed(2)}% (${beyond})`,
+          `extent: ${Math.round(extent)} (${equilibrium})`,
           `extent / spaceSize: ${(extent / SPACE_SIZE).toFixed(3)}`,
           `non-finite: ${nonFinite}`,
         ].join('\n')
@@ -338,6 +360,8 @@ export const spaceWall = (): { graph: Graph; div: HTMLDivElement; destroy?: () =
     refresh(true)
   }, () => !isRunning)
   addButton(actionRow, 'fit space', () => frameSpace(250))
+  // The points, wherever they went: past the space, this is a wider view
+  addButton(actionRow, 'fit layout', () => frameLayout(250))
 
   repaintButtons()
 

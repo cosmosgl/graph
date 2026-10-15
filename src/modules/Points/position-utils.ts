@@ -1,15 +1,38 @@
 import { isPointAbsent } from '@/graph/helper'
 
 /**
+ * A present point's coordinate as the GPU receives it, already rounded to
+ * float32: an infinity is placed on the matching edge of the space — `0` for
+ * `-Infinity`, `spaceSize` for `+Infinity` — and every other value is kept.
+ * (NaN is not a coordinate: it marks the point absent, which callers handle.)
+ *
+ * Every present position on the GPU is finite, and stays finite: the
+ * simulation drops a non-finite step (update-position.frag). An infinite input
+ * would break that from the first tick — it makes the many-body and collision
+ * sums, and so every other point's forces, NaN, and no step could ever bring
+ * the point back. The old position clamp mostly hid this by pulling such a
+ * point back into the space at its first step; the matching edge keeps it in
+ * the space too, on the side the input pointed to.
+ */
+export function toFiniteCoordinate (value: number, spaceSize: number): number {
+  if (value === Infinity) return spaceSize
+  if (value === -Infinity) return 0
+  return value
+}
+
+/**
  * Build RGBA32F texture data from a flat `[x, y, x, y, ...]` point positions array.
  *
  * Layout per pixel: `[x, y, index, 0]`. The blue channel encodes the point index —
  * `drag-point.frag` reads it to match the drag target. Alpha is unused by shaders.
+ * An infinite coordinate of a present point lands on the edge of the space
+ * (`toFiniteCoordinate`); the input array is not modified.
  */
 export function buildPositionTextureData (
   pointPositions: Float32Array | undefined,
   pointsTextureSize: number,
-  pointsNumber: number
+  pointsNumber: number,
+  spaceSize: number
 ): Float32Array {
   const positionData = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
   if (!pointPositions) return positionData
@@ -18,8 +41,8 @@ export function buildPositionTextureData (
     // Normalize a half-NaN position to fully NaN: absence is all-or-nothing by the
     // time it reaches the GPU, so shaders can test a single channel.
     const absent = isPointAbsent(pointPositions, i)
-    positionData[i * 4 + 0] = absent ? NaN : pointPositions[i * 2 + 0] as number
-    positionData[i * 4 + 1] = absent ? NaN : pointPositions[i * 2 + 1] as number
+    positionData[i * 4 + 0] = absent ? NaN : toFiniteCoordinate(pointPositions[i * 2 + 0] as number, spaceSize)
+    positionData[i * 4 + 1] = absent ? NaN : toFiniteCoordinate(pointPositions[i * 2 + 1] as number, spaceSize)
     positionData[i * 4 + 2] = i
   }
 

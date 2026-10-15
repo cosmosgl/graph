@@ -60,8 +60,31 @@ export interface GraphConfigInterface {
    */
   backgroundColor: string | [number, number, number, number];
   /**
-   * Simulation space size.
-   * Default value: `4096` (larger values may crash on some devices, e.g. iOS; see https://github.com/cosmosgl/graph/issues/203).
+   * The size of the square, `[0, spaceSize]` on both axes, that sets where the
+   * world sits and the scale rescaled layouts start at. It bounds no position.
+   *
+   * - **The world origin** is its centre, `spaceSize / 2` on both axes: the
+   *   point at the centre of the screen under the initial (identity) view, and
+   *   the point gravity pulls toward. One world unit is one CSS pixel at zoom 1
+   *   whatever `spaceSize` is.
+   * - **Rescaling** (`rescalePositions`) is measured against it: input
+   *   positions are centred on the square and scaled to a size derived from it
+   *   and the point count. Input already wider than the square is left as is.
+   * - **No bound:** a layout extends beyond the square as far as its forces
+   *   take it — a large graph, or one with no gravity, simply grows past it.
+   *   A diverging configuration (a link spring far too stiff, say) is no
+   *   longer held on the square's edges either: its points fly off, at most
+   *   `spaceSize` per force per tick.
+   * - **Step lengths:** besides that per-step displacement ceiling, it sets the
+   *   bound on the many-body force's close-range kick, `2 · spaceSize` divided
+   *   by the many-body grid's finest size for the point count. Both are fixed
+   *   lengths: they do not follow the layout.
+   * - **Precision:** positions are float32, so a layout stays well resolved
+   *   out to coordinates of about ±1,000,000. A layout settles around the
+   *   world origin, so keep `spaceSize` at most 2,097,152 (2^21, an origin of
+   *   about 1e6); a larger value is used as given, with a console warning.
+   *
+   * Default value: `4096`
    */
   spaceSize: number;
 

@@ -6,6 +6,12 @@ import type { GraphConfigInterface } from '@/graph/config'
 
 export const ALPHA_MIN = 0.001
 export const MAX_POINT_SIZE = 64
+/**
+ * The largest `spaceSize` whose world origin, `spaceSize / 2` = 2^20 ≈ 1e6, stays within the
+ * range where float32 positions resolve the simulation finely (an ULP of at most 1/8 unit).
+ * Larger values are used as given, with a warning (`Store.adjustSpaceSize`).
+ */
+export const MAX_RESOLVED_SPACE_SIZE = 2 ** 21
 
 /**
  * While a non-blocking copy is on its way, the render loop holds its next frame and checks
@@ -72,6 +78,7 @@ export class Store {
   public hostHoveredPointIndex: number | undefined = undefined
   /** The link a host hovers through `Graph.setHostHoveredLink`; separate from the pointer's `hoveredLinkIndex`. */
   public hostHoveredLinkIndex: number | undefined = undefined
+  /** The `spaceSize` the engine uses: the config's, once `adjustSpaceSize` has validated it. */
   public adjustedSpaceSize = defaultConfigValues.spaceSize
   /**
    * The world position at the centre of the screen under an identity view, and the point
@@ -236,36 +243,45 @@ export class Store {
   }
 
   /**
-   * If the config parameter `spaceSize` exceeds the limits of WebGL,
-   * it reduces the space size without changing the config parameter.
-   * Ensures `spaceSize` is always a positive number >= 2 (required for Math.log2).
+   * Resolves the configured `spaceSize` into the value the engine uses: the
+   * config's own, unless it is not a usable size — not a positive finite number
+   * (the default is used) or below 2 (2 is used). Sets the world origin from it.
+   *
+   * There is no device limit on it. One used to halve any `spaceSize` at or
+   * above the WebGL texture size limit, back when the many-body grid's finest
+   * level was a `spaceSize`-wide texture (issue #203: iOS crashed allocating
+   * it). The grid's resolution has followed the point count since, and its
+   * placement now follows the data, as the collision hash's does: nothing is
+   * dimensioned by `spaceSize` any more, so the halving only moved the world
+   * origin away from where the config put it.
    */
-  public adjustSpaceSize (configSpaceSize: number, webglMaxTextureSize: number): void {
+  public adjustSpaceSize (configSpaceSize: number): void {
     if (configSpaceSize <= 0 || !isFinite(configSpaceSize)) {
       console.error(`Invalid spaceSize value: ${configSpaceSize}. Using default value of ${defaultConfigValues.spaceSize}`)
       configSpaceSize = defaultConfigValues.spaceSize
     }
-    // Enforce minimum value of 2 (since we use Math.log2, minimum should be 2^1 = 2)
+    // The minimum the engine has always enforced: a config below it has always run at 2
     const minSpaceSize = 2
     if (configSpaceSize < minSpaceSize) {
       console.warn(`spaceSize (${configSpaceSize}) is too small. Using minimum value of ${minSpaceSize}`)
       configSpaceSize = minSpaceSize
     }
 
-    let adjustedSpaceSize = configSpaceSize
-    // Validate webglMaxTextureSize (values below minSpaceSize are invalid; clamp would exceed limit)
-    if (!Number.isFinite(webglMaxTextureSize) || webglMaxTextureSize <= 0 || webglMaxTextureSize < minSpaceSize) {
-      console.warn(`Invalid webglMaxTextureSize: ${webglMaxTextureSize}. Using configSpaceSize without WebGL limit adjustment.`)
-    } else if (configSpaceSize >= webglMaxTextureSize) {
-      // Handle WebGL limits - ensure result is still >= minSpaceSize
-      adjustedSpaceSize = Math.max(webglMaxTextureSize / 2, minSpaceSize)
-      console.warn(`The \`spaceSize\` has been reduced to ${adjustedSpaceSize} due to WebGL limits`)
+    // Warned about, not reduced: positions are float32, and a layout settles around the
+    // world origin (gravity pulls toward it). Past an origin of about ±1e6 the gap between
+    // neighbouring float32 values nears the forces' 1-unit scale, and the layout coarsens
+    // or freezes onto that lattice.
+    if (configSpaceSize > MAX_RESOLVED_SPACE_SIZE) {
+      console.warn(
+        `spaceSize (${configSpaceSize}) puts the world origin at ${configSpaceSize / 2}, where float32 positions ` +
+        `are too coarse for the simulation; keep spaceSize at most ${MAX_RESOLVED_SPACE_SIZE}`
+      )
     }
 
-    this.adjustedSpaceSize = adjustedSpaceSize
+    this.adjustedSpaceSize = configSpaceSize
     // The world is centred on the middle of the space. The only place the origin is set,
     // so the only place to change if the two ever part.
-    this.worldOrigin = [adjustedSpaceSize / 2, adjustedSpaceSize / 2]
+    this.worldOrigin = [configSpaceSize / 2, configSpaceSize / 2]
   }
 
   /**
