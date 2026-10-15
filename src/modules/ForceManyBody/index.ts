@@ -22,6 +22,20 @@ import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 const MAX_GRID_SIZE = 512
 
 /**
+ * Cells per axis of the coarsest grid level; every finer level doubles it, up to
+ * getFinestGridSize.
+ *
+ * 8 rather than 4. The 4² level was the slowest pass, most likely from blending
+ * contention: every point is drawn into each level with additive blending, and
+ * on 4² about a sixteenth of all points lands on each texel. Dropping it took a
+ * third off the step at 100k–300k points (6.9 → 4.6 ms and 19.3 → 12.4 ms on an
+ * M3 Max), less at smaller counts. Its centroids each stood in for a sixteenth
+ * of the layout, so starting finer is also more accurate: the force error on a
+ * 100k-point disk fell from 0.22% to 0.09%.
+ */
+export const COARSEST_GRID_SIZE = 8
+
+/**
  * Finest grid resolution per axis for a point count: ~2·√n, floored at 8²,
  * capped at MAX_GRID_SIZE. Sizes the pyramid, the data-bounds floor
  * (MIN_FINEST_CELL_SIZE) and the per-tick step bound (getMaxStep).
@@ -897,7 +911,7 @@ export class ForceManyBody extends CoreModule {
   }
 
   /**
-   * Allocates the grid level pyramid: grids of 4², 8², … up to an adaptive
+   * Allocates the grid level pyramid: grids of 8², 16², … up to an adaptive
    * finest resolution (~2·√n cells per axis, floored at 8² and capped at
    * MAX_GRID_SIZE). Textures are not zero-filled here — drawLevels clears them
    * every tick.
@@ -907,11 +921,11 @@ export class ForceManyBody extends CoreModule {
     const pointsNumber = this.data.pointsNumber ?? 0
 
     const finestGridSize = getFinestGridSize(pointsNumber)
-    this.levels = Math.log2(finestGridSize) - 1
+    this.levels = Math.log2(finestGridSize / COARSEST_GRID_SIZE) + 1
 
     for (let level = 0; level < this.levels; level += 1) {
-      // A level's size only depends on its index (level L is always a 2^(L+2)
-      // grid), so any level we already built is guaranteed to still be the right
+      // A level's size only depends on its index (level L is always a
+      // COARSEST_GRID_SIZE·2^L grid), so any level we already built is guaranteed to still be the right
       // size. That's why we can just skip the ones we have and build only what's
       // missing — on the first run, or the finer levels we need again after the
       // pyramid grew back. (Shrinking is handled by the drop loop below.) The
@@ -919,7 +933,7 @@ export class ForceManyBody extends CoreModule {
       // createNearFieldSlotTargets.
       if (this.levelTargets.has(level)) continue
 
-      const gridSize = Math.pow(2, level + 2)
+      const gridSize = COARSEST_GRID_SIZE * Math.pow(2, level)
       const texture = device.createTexture({
         width: gridSize,
         height: gridSize,
