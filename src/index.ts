@@ -372,6 +372,9 @@ export class Graph implements PositionTextureSource {
    * Absent points are excluded from the force layout, so this is safe with the simulation on or off.
    * cosmos.gl does not auto-compact the gaps — drop them yourself and snap the renumber with
    * `render(undefined, 0)`.
+   * @note Positions are not bounded by `spaceSize`, but they are finite: a coordinate of
+   * `±Infinity` is placed on the matching edge of the `[0, spaceSize]` square (`0` or
+   * `spaceSize`). The input array itself is left as it is.
    */
   public setPointPositions (pointPositions: Float32Array, dontRescale?: boolean | undefined): void {
     if (this._isDestroyed) return
@@ -804,6 +807,7 @@ export class Graph implements PositionTextureSource {
    * @param {(number | undefined)[]} clusterPositions - Array of cluster positions.
    *   - Every two elements represent the x and y coordinates for a cluster position.
    *   - `undefined` means the cluster's position is not defined and will use centermass positioning instead.
+   *     So does a non-finite coordinate (`NaN`, `±Infinity`); any finite one is a position, negative ones included.
    * @example
    *   `[10, 20, 30, 40, undefined, undefined]` places the first cluster at (10, 20) and the second at (30, 40);
    * the third cluster will be positioned at its centermass automatically.
@@ -944,6 +948,9 @@ export class Graph implements PositionTextureSource {
    * @param y - New Y coordinate, in space coordinates.
    * @note An **absent** point (NaN position — see `setPointPositions`) is not a valid
    * target: the call is a no-op. No-op before the first `render()` call as well.
+   * @note A `NaN` coordinate is ignored too — this call cannot remove a point — and
+   * `±Infinity` is placed on the matching edge of the `[0, spaceSize]` square, as in
+   * `setPointPositions`.
    */
   public setPointPosition (index: number, x: number, y: number): void {
     this.setPointPositionsByIndices([index], [x, y])
@@ -1633,9 +1640,11 @@ export class Graph implements PositionTextureSource {
    * scaling, and the space↔screen conversion methods.
    *
    * The transform follows the d3-zoom convention. With `[ox, oy]` the world
-   * origin — the centre of the `spaceSize` square (adjusted), `ox = oy = spaceSize / 2`
-   * — and `[w, h] = screenSize` in CSS pixels, a point at space position
-   * `(spaceX, spaceY)` lands on screen (y down) at:
+   * origin — the centre of the `spaceSize` square, `ox = oy = S / 2`, where `S` is the
+   * `spaceSize` the engine runs at: the configured one, except the default when that is
+   * not a positive finite number, and 2 when it is below 2 — and `[w, h] = screenSize`
+   * in CSS pixels, a point at space position `(spaceX, spaceY)` lands on screen
+   * (y down) at:
    * ```
    * screenX = k * (spaceX - ox + w / 2) + x
    * screenY = k * (oy - spaceY + h / 2) + y
@@ -2032,7 +2041,7 @@ export class Graph implements PositionTextureSource {
       }
     }
     if (prevConfig.spaceSize !== this.config.spaceSize) {
-      this.store.adjustSpaceSize(this.config.spaceSize, this.device?.limits.maxTextureDimension2D ?? 4096)
+      this.store.adjustSpaceSize(this.config.spaceSize)
       this.syncScreenSize(true)
       this.update(this.store.isSimulationRunning ? this.store.alpha : 0)
     }
@@ -2728,7 +2737,7 @@ export class Graph implements PositionTextureSource {
    * to luma.gl's autoResize.
    *
    * Skips the work when the CSS size is unchanged. Pass `force` when state must
-   * be rebuilt at the same size (e.g. `spaceSize` remaps the world).
+   * be rebuilt at the same size (e.g. a new `spaceSize` moves the world origin).
    */
   private syncScreenSize (force = false): void {
     // Headless: no canvas, no screen — every view-dependent quantity stays inert.
