@@ -307,7 +307,7 @@ describe('host view injection', () => {
 
       // A headless graph has no canvas to re-measure, and the host keeps its view — but the
       // new origin must reach space → screen as it reaches screen → space and the shaders
-      // (6000 is below the test device's texture-size cap, so the engine keeps it: origin 3000)
+      // (spaceSize is used as given: origin 3000)
       graph.setConfigPartial({ spaceSize: 6000 })
       expect(graph.spaceToScreenPosition([3500, 2000])).toEqual([k * (3500 - 3000 + w / 2) + x, k * (3000 - 2000 + h / 2) + y])
       const [backX, backY] = graph.spaceToScreenPosition(graph.screenToSpacePosition([0, 0]))

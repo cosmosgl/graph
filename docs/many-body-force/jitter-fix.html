@@ -344,8 +344,9 @@ if (sampled &gt; 0.0) velocity += (others / sampled) * pairSum;</code></pre>
   pins it: "must stay identical"), including the coincident-point random kick — so the physics
   is unchanged, only computed exactly. No grid, no peeling, no sampling → exact at <em>any</em>
   cell occupancy → zero noise, nothing to shimmer. And the two paths bound the same thing:
-  pairs within the grid path's near-field scale are jittered and capped at 2 × the finest cell
-  size it would use (so a coincident stack expands instead of teleporting), while farther
+  pairs within the grid path's near-field scale are jittered and capped at its fixed bound,
+  2 × the finest cell of a layout spanning the space (so a coincident stack expands instead of
+  teleporting), while farther
   pairs pass through unbounded, as the level passes do — dynamics stay continuous across the
   threshold.</p>
 

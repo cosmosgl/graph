@@ -241,13 +241,18 @@ links, arrows — two methods let cosmos draw *inside* the host's frame:
   hover and from the app's focus.
 
 The transform contract is documented as a formula and asserted by a unit test — with
-`S = spaceSize`, `[w, h] = screenSize`, a point at space position `(spaceX, spaceY)` lands
-at:
+`[ox, oy]` the world origin (the centre of the `spaceSize` square, `ox = oy = spaceSize / 2`)
+and `[w, h] = screenSize`, a point at space position `(spaceX, spaceY)` lands at:
 
 ```text
-screenX = k · (spaceX + (w − S) / 2) + x
-screenY = k · ((S − spaceY) + (h − S) / 2) + y   // cosmos space y is up; screen y is down
+screenX = k · (spaceX − ox + w / 2) + x
+screenY = k · (oy − spaceY + h / 2) + y   // cosmos space y is up; screen y is down
 ```
+
+At the identity transform the world origin sits at the centre of the screen and one space unit
+is one CSS pixel, whatever `spaceSize` is. (The formula first shipped written with
+`S = spaceSize` — `(w − S) / 2` is `w / 2 − ox` — and was restated through the origin when
+`spaceSize` stopped bounding positions; the numbers are the same.)
 
 A deck.gl layer inverts this from its viewport in four lines and then calls
 `drawToRenderPass` — the whole layer is ~25 lines with no custom shaders. Cosmos's visible
