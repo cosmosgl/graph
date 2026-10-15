@@ -114,8 +114,9 @@ So the cells are counted from the data and wrap onto a texture of a fixed size
 (`collision-grid.ts`):
 
 - **The origin is this tick's data bounds.** Collision runs its own `DataBounds`, the GPU
-  reduction the many-body grid fits itself to
-  ([its step 1](../many-body-force/README.md#step-1--fit-the-grid-to-the-data)): collision is
+  reduction the many-body grid is laid over
+  ([its step 1](../many-body-force/README.md#step-1--fit-the-grid-to-the-data)), without the
+  many-body force's per-tick shift: the box is the fitted, floored square. Collision is
   opt-in and must work with repulsion off, and it runs after the link and cluster sub-steps
   have moved the points, so it reduces the positions it is about to bin. The cells are
   counted from the box's origin and the sums are taken relative to its centre; the cell size

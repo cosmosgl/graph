@@ -2,8 +2,9 @@
 //   node gen-diagrams.cjs .
 // Grid-coverage panels compute cell coverage with the SAME rules as the
 // shaders (first level: whole grid minus 3×3; others: 6×6 child block minus
-// 3×3), and the data-bounds panels bin points with grid-cell.ts's formula, so
-// the pictures are exact, not artistic impressions. Keep this script in sync
+// 3×3), and the data-bounds panels bin points with grid-cell.ts's formula over
+// the box reduce-bounds-final.frag builds, so the pictures are exact, not
+// artistic impressions. Keep this script in sync
 // with force-level.frag / build-nearfield-slots.vert / grid-cell.ts /
 // Shared/data-bounds.ts when the algorithm changes, then re-run it so the
 // diagrams don't fossilize.
@@ -112,12 +113,14 @@ const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion fa
 
 // ---------------------------------------------------------------- Diagram B
 // The grid pyramid: who covers what (computed with the shader's own rules).
-// Every level divides the same square: this tick's data bounds (Diagram I).
+// Every level divides the same square: this tick's data box (Diagram I), whose
+// placement shifts every tick (Diagram J). The first three levels from
+// ForceManyBody's COARSEST_GRID_SIZE (8).
 {
   const W = 980; const H = 478
   const SIDE = 264 // panel pixel size of the data box
   const p = [0.58, 0.36] // the point, in data-box coordinates 0..1
-  const levels = [4, 8, 16]
+  const levels = [8, 16, 32]
   let b = ''
 
   levels.forEach((g, li) => {
@@ -152,8 +155,8 @@ const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion fa
     b += txt(ox + 20, oy + SIDE + 47, li === levels.length - 1 ? '3×3 → near field (Monte-Carlo pairs)' : '3×3 → deferred to the next level', { size: 12 })
     if (li < levels.length - 1) b += arrow(ox + SIDE + 14, oy + SIDE / 2, ox + SIDE + 44, oy + SIDE / 2, C.frame, 2.5)
   })
-  b += txt(W / 2, H - 32, 'Every region of the data box — the live points’ bounding square — is charged to exactly one pass: no gaps, no double counting.', { size: 13, fill: C.sub, anchor: 'middle' })
-  b += txt(W / 2, H - 14, 'The finest grid adapts to n (≈ 2·√n cells per axis, 8²…512²), and every level divides the same box.', { size: 13, fill: C.sub, anchor: 'middle' })
+  b += txt(W / 2, H - 32, 'Every region of the data box — the live points’ bounding square, padded by one coarsest cell — is charged to exactly one pass.', { size: 13, fill: C.sub, anchor: 'middle' })
+  b += txt(W / 2, H - 14, 'Levels start at 8² and double up to the finest, which adapts to n (≈ 2·√n cells per axis, 8²…512²); every level divides the same box.', { size: 13, fill: C.sub, anchor: 'middle' })
   fs.writeFileSync(path.join(OUT, 'b-grid-pyramid.svg'), svgDoc(W, H, b))
 }
 
@@ -235,7 +238,7 @@ const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion fa
   const stageX = [0, 1, 2, 3].map((i) => posX + posW + gap + i * (sw + gap))
   b += box(posX, midY, posW, bh, 'positions', ['one texel', 'per point (x, y)'], C.frame, '#f6f8fb')
   b += arrow(posX + posW, midY + 55, stageX[0] - 2, midY + 55, C.frame, 2.5)
-  b += box(stageX[0], midY, sw, bh, '0 · data bounds', ['live points → one texel:', '[origin, extent, 1/extent]', '64² → 8² → 1 reduction'], C.accent, '#f3eeff')
+  b += box(stageX[0], midY, sw, bh, '0 · data bounds', ['live points → one texel:', '[origin, extent, 1/extent],', 'padded + shifted each tick'], C.accent, '#f3eeff')
   b += arrow(stageX[0] + sw, midY + 55, stageX[1] - 2, midY + 55, C.frame, 2.5)
   b += box(stageX[1], midY, sw, bh, '1 · aggregate levels', ['draw n points into each', 'level over that square:', '[Σx, Σy, count] per cell'], C.covered[1], C.coveredSoft[1])
   b += arrow(stageX[1] + sw, midY + 55, stageX[2] - 2, midY + 55, C.frame, 2.5)
@@ -249,7 +252,7 @@ const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion fa
   for (const i of [1, 2, 3]) b += arrow(stageX[i] + sw / 2, busY, stageX[i] + sw / 2, midY + bh + 3, C.accent, 1.6, '5 4')
   b += txt(from + 10, busY + 18, 'the texel every pass bins with — one shared, division-free gridCell() (grid-cell.ts)', { size: 12, fill: C.accent })
   b += txt(20, 300, 'The integration step (velocity → positions) is shared with all other forces: it bounds a step’s length, not the position it lands on.', { size: 12.5, fill: C.sub })
-  b += txt(20, 322, 'Levels: 4², 8², … up to ≈ 2·√n per axis (capped 512²), all over the data box. Slot array: K = 32/16/8 layers × finest grid, [point index, hash] each.', { size: 12.5, fill: C.sub })
+  b += txt(20, 322, 'Levels: 8², 16², … up to ≈ 2·√n per axis (capped 512²), all over the data box. Slot array: K = 32/16/8 layers × finest grid, [point index, hash] each.', { size: 12.5, fill: C.sub })
   b += txt(20, 344, 'Graphs of ≤ 4,096 points skip all four stages: a single exact all-pairs pass writes the velocity texture directly.', { size: 12.5, fill: C.sub })
   fs.writeFileSync(path.join(OUT, 'd-gpu-pipeline.svg'), svgDoc(W, H, b))
 }
@@ -417,7 +420,9 @@ const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion fa
 // Where the grid sits. Anchored to the space, a compact layout lands in a few
 // over-full cells; fitted to the data, the same points get the whole grid. The
 // cells are counted with grid-cell.ts's formula, the box built the way
-// reduce-bounds-final.frag builds it (square, centred, no margin).
+// reduce-bounds-final.frag builds it for the many-body force: the data's
+// bounding square, padded by one cell of the coarsest (8²) level and slid back
+// by one tick's shift.
 {
   const W = 980; const H = 470
   const SIDE = 264 // panel pixel size
@@ -435,11 +440,18 @@ const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion fa
   const centre = [0.3, 0.6] // in space coordinates 0..1
   const pts = []
   for (let i = 0; i < N; i++) pts.push([centre[0] + (rnd() - 0.5) * F, centre[1] + (rnd() - 0.5) * F])
-  // reduce-bounds-final.frag: the bounding square, centred on the data, no margin
+  // reduce-bounds-final.frag: the bounding square around the data's centre…
   const lo = [Math.min(...pts.map((q) => q[0])), Math.min(...pts.map((q) => q[1]))]
   const hi = [Math.max(...pts.map((q) => q[0])), Math.max(...pts.map((q) => q[1]))]
-  const extent = Math.max(hi[0] - lo[0], hi[1] - lo[1])
-  const origin = [(lo[0] + hi[0]) / 2 - extent / 2, (lo[1] + hi[1]) / 2 - extent / 2]
+  const fitted = Math.max(hi[0] - lo[0], hi[1] - lo[1])
+  const fittedOrigin = [(lo[0] + hi[0]) / 2 - fitted / 2, (lo[1] + hi[1]) / 2 - fitted / 2]
+  // …padded by one coarsest cell and slid back by one tick's shift (originShift)
+  const COARSEST = 8
+  const shift = [0.35, 0.6]
+  const pad = fitted / (COARSEST - 1)
+  const extent = fitted + pad
+  const origin = [fittedOrigin[0] - shift[0] * pad, fittedOrigin[1] - shift[1] * pad]
+  assert(origin[0] <= lo[0] && origin[1] <= lo[1] && origin[0] + extent >= hi[0] && origin[1] + extent >= hi[1], 'the shifted box must contain every point')
   // grid-cell.ts: clamp(floor((p − origin) · (1/extent · N)), 0, N − 1)
   const gridCell = (q, o, e) => [0, 1].map((k) => Math.min(G - 1, Math.max(0, Math.floor((q[k] - o[k]) * ((1 / e) * G)))))
   const occupancy = (o, e) => {
@@ -476,11 +488,11 @@ const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion fa
   b += before.s
   // Data-anchored: panel = the data box
   const boxPx = (q) => [346 + ((q[0] - origin[0]) / extent) * SIDE, 78 + ((q[1] - origin[1]) / extent) * SIDE]
-  const after = panel(346, 'Now: the grid covers the data', 'extent / R per cell, counted from the data origin', origin, extent, boxPx)
+  const after = panel(346, 'Now: the grid covers the data', 'extent / R per cell, from this tick’s shifted origin', origin, extent, boxPx)
   b += after.s
   assert(before.used < after.used && before.max > after.max, 'the data-anchored grid must spread the points over more, emptier cells')
   b += `<rect x="26" y="${78 + SIDE + 36}" width="14" height="14" fill="none" stroke="${C.accent}" stroke-width="1.8" stroke-dasharray="5 3"/>`
-  b += txt(46, 78 + SIDE + 47, 'data box: the live points’ bounding square', { size: 12 })
+  b += txt(46, 78 + SIDE + 47, 'data box: bounding square + one coarsest cell', { size: 12 })
   b += `<rect x="346" y="${78 + SIDE + 36}" width="14" height="14" fill="${C.coveredSoft[0]}" stroke="${C.gridLine}"/>`
   b += `<rect x="362" y="${78 + SIDE + 36}" width="14" height="14" fill="#a9c8ff" stroke="${C.gridLine}"/>`
   b += `<rect x="378" y="${78 + SIDE + 36}" width="14" height="14" fill="${C.covered[0]}" stroke="${C.gridLine}"/>`
@@ -506,12 +518,108 @@ const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion fa
   b += stage(ys[0], sizes[0], 6, '#f6f8fb', [['positions — one texel per point', { weight: '600' }], ['absent and non-finite skipped', { fill: C.sub }], ['(exponent bits, not a compare)', { fill: C.sub }]])
   b += stage(ys[1], sizes[1], 8, C.coveredSoft[1], [['64 × 64 partial boxes', { weight: '600' }], ['fragment b takes points', { fill: C.sub }], ['b, b + 4096, b + 2·4096, …', { fill: C.sub }]])
   b += stage(ys[2], sizes[2], 4, C.coveredSoft[1], [['8 × 8 — each folds an 8 × 8', { weight: '600' }], ['block of the partial boxes', { fill: C.sub }]])
-  b += stage(ys[3], sizes[3], 1, '#f3eeff', [['1 texel', { weight: '600', fill: C.accent }], ['[originX, originY, extent, 1/extent]', { fill: C.accent }], ['squared, centred, no margin,', { fill: C.sub }], ['≥ ¼ unit per finest cell', { fill: C.sub }]])
+  b += stage(ys[3], sizes[3], 1, '#f3eeff', [['1 texel', { weight: '600', fill: C.accent }], ['[originX, originY, extent, 1/extent]', { fill: C.accent }], ['squared, ≥ ¼ unit per finest cell,', { fill: C.sub }], ['padded ⅐, shifted each tick', { fill: C.sub }]])
   for (let i = 0; i < 3; i++) b += arrow(rx + 20, ys[i] + sizes[i] + 3, rx + 20, ys[i + 1] - 3, C.frame, 2)
 
-  b += txt(W / 2, H - 32, 'Anchored to the space, a layout spanning a fraction f of each axis gets (f·R)² of the R² cells — 0.25/f² points per cell, not ≤ 0.25.', { size: 12.5, fill: C.sub, anchor: 'middle' })
-  b += txt(W / 2, H - 14, 'Fitted to the data, the average occupancy over the box depends on the point count alone, wherever the layout sits and whatever its size.', { size: 12.5, fill: C.sub, anchor: 'middle' })
+  b += txt(W / 2, H - 32, 'Anchored to the space, a layout spanning a fraction f of each axis gets (f·R)² of the R² cells — 0.25/f² points per cell, not ≤ ⅓.', { size: 12.5, fill: C.sub, anchor: 'middle' })
+  b += txt(W / 2, H - 14, 'Laid over the data, the average occupancy depends on the point count alone, wherever the layout sits and whatever its size.', { size: 12.5, fill: C.sub, anchor: 'middle' })
   fs.writeFileSync(path.join(OUT, 'i-grid-follows-data.svg'), svgDoc(W, H, b))
+}
+
+// ---------------------------------------------------------------- Diagram J
+// Why a fixed grid draws lines: a point crossing a cell boundary swaps whole
+// cells between "one centroid" and "refined by the next level" (coverage by
+// force-level.frag's first-level rule), so the force jumps there. Shifting the
+// grid every tick (reduce-bounds-final.frag: pad by one coarsest cell, slide
+// the origin back by u of it) moves every boundary off any fixed line.
+{
+  const W = 980; const H = 486
+  const SIDE = 264
+  const G = 8 // the coarsest level: ForceManyBody's COARSEST_GRID_SIZE
+  const oy = 78
+  // Level 0 coverage for a point in cell pc: every cell except its 3×3 shell
+  const roleOf = (i, j, pc) => (Math.max(Math.abs(i - pc[0]), Math.abs(j - pc[1])) <= 1 ? 'deferred' : 'centroid')
+  const left = [0.49, 0.43]
+  const right = [0.51, 0.43]
+  const cellOf = (p) => [Math.floor(p[0] * G), Math.floor(p[1] * G)]
+  const pcL = cellOf(left); const pcR = cellOf(right)
+  assert(pcL[0] === G / 2 - 1 && pcR[0] === G / 2, 'the two points must straddle the centre line')
+  let changed = 0
+  const coverage = (ox, p, pc, other, title, sub) => {
+    const cell = SIDE / G
+    let s = txt(ox + SIDE / 2, 40, title, { size: 15, weight: '600', anchor: 'middle' })
+    s += txt(ox + SIDE / 2, 60, sub, { size: 11.5, fill: C.sub, anchor: 'middle' })
+    let outline = ''
+    for (let j = 0; j < G; j++) {
+      for (let i = 0; i < G; i++) {
+        const role = roleOf(i, j, pc)
+        const fill = role === 'centroid' ? C.coveredSoft[0] : C.deferred
+        const x = ox + i * cell; const y = oy + j * cell
+        s += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${cell.toFixed(1)}" height="${cell.toFixed(1)}" fill="${fill}" stroke="${C.gridLine}" stroke-width="0.7"/>`
+        if (other && role !== roleOf(i, j, other)) {
+          changed += 1
+          outline += `<rect x="${(x + 1.5).toFixed(1)}" y="${(y + 1.5).toFixed(1)}" width="${(cell - 3).toFixed(1)}" height="${(cell - 3).toFixed(1)}" fill="none" stroke="${C.old}" stroke-width="2.2"/>`
+        }
+      }
+    }
+    s += outline
+    s += `<rect x="${ox}" y="${oy}" width="${SIDE}" height="${SIDE}" fill="none" stroke="${C.frame}" stroke-width="1.4"/>`
+    s += `<line x1="${ox + SIDE / 2}" y1="${oy - 6}" x2="${ox + SIDE / 2}" y2="${oy + SIDE + 6}" stroke="${C.accent}" stroke-width="1.6" stroke-dasharray="4 3"/>`
+    s += `<circle cx="${(ox + p[0] * SIDE).toFixed(1)}" cy="${(oy + p[1] * SIDE).toFixed(1)}" r="5" fill="${C.point}"/>`
+    return s
+  }
+  let b = ''
+  b += coverage(26, left, pcL, null, 'Just left of the centre line', `level 0, ${G} × ${G}: centroids everywhere but its 3×3`)
+  b += coverage(346, right, pcR, pcL, 'Just right of it', 'the 3×3 moved one column: six cells changed hands')
+  assert(changed === 6, `crossing one boundary must swap two columns of three cells (got ${changed})`)
+  b += `<rect x="26" y="${oy + SIDE + 14}" width="14" height="14" fill="${C.coveredSoft[0]}" stroke="${C.gridLine}"/>`
+  b += txt(46, oy + SIDE + 25, 'one centroid at this level', { size: 12 })
+  b += `<rect x="26" y="${oy + SIDE + 36}" width="14" height="14" fill="${C.deferred}" stroke="${C.gridLine}"/>`
+  b += txt(46, oy + SIDE + 47, 'refined by the finer levels', { size: 12 })
+  b += `<rect x="346" y="${oy + SIDE + 14}" width="14" height="14" fill="none" stroke="${C.old}" stroke-width="2.2"/>`
+  b += txt(366, oy + SIDE + 25, 'switched treatment: the force jumps', { size: 12 })
+  b += `<line x1="346" y1="${oy + SIDE + 43}" x2="360" y2="${oy + SIDE + 43}" stroke="${C.accent}" stroke-width="1.6" stroke-dasharray="4 3"/>`
+  b += txt(366, oy + SIDE + 47, 'a boundary on every level at once', { size: 12 })
+
+  // Panel 3: one axis of the data square under three ticks' shifts
+  const ox = 666
+  const E = 1 // the fitted data square's side
+  const cellPad = E / (G - 1) // reduce-bounds-final.frag: one coarsest cell of the padded box
+  const span = E + 2 * cellPad // every shifted box fits in [-cellPad, E + cellPad]
+  const toPx = (v) => ox + ((v + cellPad) / span) * SIDE
+  b += txt(ox + SIDE / 2, 40, 'Shifted every tick', { size: 15, weight: '600', anchor: 'middle' })
+  b += txt(ox + SIDE / 2, 60, 'one axis: box = data square + one coarsest cell', { size: 11.5, fill: C.sub, anchor: 'middle' })
+  const shifts = [0.15, 0.4, 0.8]
+  const rulerH = 22
+  const rulerY = (k) => oy + 34 + k * 82
+  shifts.forEach((u, k) => {
+    const origin = -u * cellPad
+    const extent = E + cellPad
+    assert(origin <= 0 && origin + extent >= E, 'the shifted box must contain the data square')
+    const y = rulerY(k)
+    const color = C.covered[k]
+    b += txt(ox, y - 10, `tick ${k + 1}: origin slid back ${u} of a cell`, { size: 12 })
+    // the data square's span
+    b += `<rect x="${toPx(0).toFixed(1)}" y="${y}" width="${(toPx(E) - toPx(0)).toFixed(1)}" height="${rulerH}" fill="#f3eeff"/>`
+    // the shifted box and its cells
+    b += `<rect x="${toPx(origin).toFixed(1)}" y="${y}" width="${(toPx(origin + extent) - toPx(origin)).toFixed(1)}" height="${rulerH}" fill="none" stroke="${color}" stroke-width="1.6"/>`
+    for (let i = 1; i < G; i++) {
+      const x = toPx(origin + (i * extent) / G)
+      b += `<line x1="${x.toFixed(1)}" y1="${y}" x2="${x.toFixed(1)}" y2="${y + rulerH}" stroke="${color}" stroke-width="1.6"/>`
+    }
+    // The data's centre line: a boundary only when the slide is exactly half a cell
+    assert(Math.abs(u - 0.5) > 0.05, 'pick shifts that keep a boundary off the centre line')
+    const cx = toPx(E / 2)
+    b += `<line x1="${cx.toFixed(1)}" y1="${y - 5}" x2="${cx.toFixed(1)}" y2="${y + rulerH + 5}" stroke="${C.accent}" stroke-width="1.8" stroke-dasharray="3 2"/>`
+  })
+  b += `<rect x="${ox}" y="${oy + SIDE + 14}" width="14" height="14" fill="#f3eeff"/>`
+  b += txt(ox + 20, oy + SIDE + 25, 'the data square, fixed', { size: 12 })
+  b += `<line x1="${ox}" y1="${oy + SIDE + 43}" x2="${ox + 14}" y2="${oy + SIDE + 43}" stroke="${C.accent}" stroke-width="1.6" stroke-dasharray="4 3"/>`
+  b += txt(ox + 20, oy + SIDE + 47, 'its centre line, a fixed grid\u2019s boundary', { size: 12 })
+
+  b += txt(W / 2, H - 32, 'On a fixed grid every coarsest-level boundary is a boundary on every level, so the jumps add up, most at the centre lines: a cross.', { size: 12.5, fill: C.sub, anchor: 'middle' })
+  b += txt(W / 2, H - 14, 'Shifted by a uniform random part of one coarsest cell each tick, every boundary lands somewhere new, and the jumps average into a continuous force.', { size: 12.5, fill: C.sub, anchor: 'middle' })
+  fs.writeFileSync(path.join(OUT, 'j-grid-seams.svg'), svgDoc(W, H, b))
 }
 
 console.log('generated:', fs.readdirSync(OUT).join(', '))
