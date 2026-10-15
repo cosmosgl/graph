@@ -57,7 +57,7 @@ so that removing the clamp would take two lines (S = `spaceSize`):
 | Job | Before | Now | Commit |
 |---|---|---|---|
 | Centring offset for the view | each draw/pick shader computed `(2p/S − 1)·(S/screen)`, which is `(2p − S)/screen`; `Store`'s d3 scales were a slope-1 translation | `Store.worldOrigin`, `[S/2, S/2]`, set only in `adjustSpaceSize` | `02883ea` |
-| Many-body grid placement | every level's cell was `S / gridSize`, counted from world zero | every level divides the live data's bounding square, reduced on the GPU each tick | `94a354a` |
+| Many-body grid placement | every level's cell was `S / gridSize`, counted from world zero | every level divides the live data's bounding square, reduced on the GPU each tick (since the seam fix, padded by one coarsest cell and shifted at random every tick) | `94a354a` |
 | Collision grid placement | `floor(p / cell)` from world zero, over a grid covering `[0, S]` | contact-range cells counted from the data's origin, folded onto a rotated 1024² spatial hash | `4f04e3e` |
 | Bound on positions | clamp to `[0, S]` after every sub-step | none | `fd67d37` |
 | Divergence guard (undocumented) | the clamp was the only thing that contained a blown-up force | a non-finite step is dropped; a step longer than S is shortened to S | `fd67d37` |
@@ -100,7 +100,8 @@ clamp kept them inside. `94a354a`:
 - **`Shared/data-bounds.ts` (`DataBounds`)** reduces positions to their bounding box in
   three GPU passes: 64×64 partial boxes, then 8×8, then a single rgba32float texel
   `[originX, originY, extent, 1/extent]`. The box is squared, unpadded, and floored at the
-  caller's `minExtent`. Nothing is read back, because a readback would stall the pipeline
+  caller's `minExtent`. (The many-body force later asked for a padded box at a random offset
+  every tick, to remove a seam: `history/2026/2026-10-15-many-body-grid-seams.md`.) Nothing is read back, because a readback would stall the pipeline
   every tick. Absent points are skipped by their exit flag, and non-finite positions by a
   test on their exponent bits, which a fast-math compiler can't fold away, so one diverged
   point can't set the cell size for the whole graph.
@@ -321,6 +322,9 @@ on measurement:
 - **No padding around the data box** (the plan said about 6%). Halving between levels is
   exact without padding, and a margin leaves the layout's edge mid-cell on every level.
   Error rose from 0.060% to 0.124% on a square layout and from 0.23% to 0.31% on a disk.
+  Reversed for the many-body grid the next day: a one-coarsest-cell pad at a random offset
+  every tick removes the grid's centre-line seam, and with the pyramid starting at 8² it
+  costs less than this fixed margin did (`history/2026/2026-10-15-many-body-grid-seams.md`).
 - **A floor of 0.25 units per finest cell, not 1.** The floor only has to keep one point,
   or a coincident stack, indexable. At 1 unit it kicked in at ordinary densities: a
   100k-point square a tenth of the space wide (mean spacing 1.3 units) went from 0.06% to
