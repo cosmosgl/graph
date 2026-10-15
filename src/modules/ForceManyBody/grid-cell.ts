@@ -20,7 +20,7 @@
  * the reciprocal of the extent, is taken once by DataBounds and shared through
  * the texel.
  *
- * Every level scales that reciprocal by its power-of-two cell count (4, 8, …),
+ * Every level scales that reciprocal by its power-of-two cell count (8, 16, …),
  * which only changes the exponent: level L+1's scale is exactly twice level
  * L's, so the scaled offset from the origin is exactly twice as large, and
  * floor(2q) ∈ {2·floor(q), 2·floor(q) + 1}: cell(L+1) = 2·cell(L) or
