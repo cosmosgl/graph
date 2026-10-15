@@ -3,7 +3,7 @@ precision highp float;
 
 // One grid level of precise many-body repulsion (Barnes-Hut-style approximation).
 //
-// Levels are 2D grids of increasing resolution (4², 8², …) holding
+// Levels are 2D grids of increasing resolution (8², 16², …) holding
 // [sum(x), sum(y), count, 0] per cell. The decomposition tiles space exactly
 // once across the level passes: after level L the only un-accumulated region is
 // the 3×3 Chebyshev-1 neighborhood of the point's cell, which the next level
