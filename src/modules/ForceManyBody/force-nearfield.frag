@@ -154,8 +154,8 @@ void main() {
   // while capping the fling; genuine spreading kicks are far below this bound and
   // pass through untouched. The far-field grid levels still drive bulk expansion.
   //
-  // maxStep is 2 × the finest cell of a layout spanning the space (index.ts),
-  // not 2 × this tick's cell: the grid follows the data, and a cell-relative
+  // maxStep is 2 × spaceSize / the finest grid size (getMaxStep, index.ts), not
+  // 2 × this tick's cell: the grid follows the data, and a cell-relative
   // bound would tighten as a layout contracts — throttling the kicks that break
   // dense clumps apart exactly when they are needed — and would stop matching
   // the all-pairs pass's bound, which keeps the dynamics continuous across the

@@ -43,15 +43,36 @@ export type DataBoundsRunOptions = {
    * cells, so the caller passes the smallest box that still gives it usable cells.
    */
   minExtent: number;
+  /**
+   * Places the consumer's grid at an offset of the caller's choosing. After the
+   * `minExtent` floor, the square is padded by one cell of the consumer's
+   * coarsest grid, `extent / (cellsPerAxis - 1)` of the fitted side, and its
+   * origin slides back by `offset` of that cell. The padding is exactly the
+   * slide's range, so the fitted square stays inside whatever the offset.
+   * Omitted, the box is the fitted, floored square.
+   *
+   * For a consumer whose result depends on which cell a point falls in: a cell
+   * boundary that stays put becomes a line in the layout. A caller that draws a
+   * fresh uniform offset every run spreads each level's boundaries evenly over
+   * a whole coarsest cell, and with it over whole cells of every finer level.
+   * DataBounds itself draws nothing; ForceManyBody does.
+   */
+  originShift?: {
+    /** Cells per axis of the consumer's coarsest grid over the padded box. */
+    cellsPerAxis: number;
+    /** How far the origin slides back inside the padding cell, per axis, each in [0, 1). */
+    offset: [number, number];
+  };
 }
 
 /**
  * The bounding box of the live points, recomputed on the GPU and published as
  * one rgba32float texel: `[originX, originY, extent, 1 / extent]` — a square of
  * side `extent` with its minimum corner at the origin, fitted to the points and
- * floored at the caller's `minExtent`. The reciprocal is computed once here so
- * that every consumer scales by the same bits instead of dividing on its own
- * (grid-cell.ts).
+ * floored at the caller's `minExtent`, then, with `originShift`, padded by one
+ * coarsest cell and shifted by the caller's offset. The reciprocal is computed
+ * once here so that every consumer scales by the same bits instead of dividing
+ * on its own (grid-cell.ts).
  *
  * A spatial grid anchored to `[0, spaceSize]` gives a layout only the cells over
  * the part of the space it covers, and lumps points outside the space into its
@@ -62,8 +83,9 @@ export type DataBoundsRunOptions = {
  *
  * Absent points (`exit.g > 0.5`) and non-finite positions are left out: the
  * whole grid derives from this box, so one diverged point would otherwise set
- * the cell size for every other point. When nothing is left, the box degenerates
- * to a `minExtent` square centred on (0, 0).
+ * the cell size for every other point. When nothing is left, the fitted square
+ * degenerates to a `minExtent` square centred on (0, 0), which `originShift`
+ * then pads and shifts like any other.
  */
 export class DataBounds {
   private readonly device: Device
@@ -93,6 +115,9 @@ export class DataBounds {
     reduceBoundsFinalUniforms: {
       partialGridSize: number;
       minExtent: number;
+      shiftCellsPerAxis: number;
+      shiftOffsetX: number;
+      shiftOffsetY: number;
     };
   }> | undefined
 
@@ -109,7 +134,7 @@ export class DataBounds {
   /** Recomputes the box from the given positions. Every pass overwrites its target. */
   public run (options: DataBoundsRunOptions): void {
     const { device } = this
-    const { positionsTexture, exitTexture, pointsTextureSize, pointsNumber, minExtent } = options
+    const { positionsTexture, exitTexture, pointsTextureSize, pointsNumber, minExtent, originShift } = options
     if (!pointsNumber || !pointsTextureSize) return
     if (positionsTexture.destroyed || exitTexture.destroyed) return
 
@@ -159,6 +184,9 @@ export class DataBounds {
       reduceBoundsFinalUniforms: {
         partialGridSize: BLOCK_GRID_SIZE,
         minExtent,
+        shiftCellsPerAxis: originShift?.cellsPerAxis ?? 0,
+        shiftOffsetX: originShift?.offset[0] ?? 0,
+        shiftOffsetY: originShift?.offset[1] ?? 0,
       },
     })
     this.finalCommand.setBindings({
@@ -261,10 +289,16 @@ export class DataBounds {
           // Order MUST match shader declaration order (std140 layout)
           partialGridSize: 'f32',
           minExtent: 'f32',
+          shiftCellsPerAxis: 'f32',
+          shiftOffsetX: 'f32',
+          shiftOffsetY: 'f32',
         },
         defaultUniforms: {
           partialGridSize: BLOCK_GRID_SIZE,
           minExtent: 1,
+          shiftCellsPerAxis: 0,
+          shiftOffsetX: 0,
+          shiftOffsetY: 0,
         },
       },
     })
