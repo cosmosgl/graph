@@ -3,7 +3,7 @@ import { luma, Texture, type Device } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
 
 import { Graph, defaultConfigValues, type GraphConfig } from '@cosmos.gl/graph'
-import { DataBounds, type DataBoundsRunOptions } from '@/graph/modules/Shared/data-bounds'
+import { DataBounds, getBucketGridSize, type DataBoundsRunOptions } from '@/graph/modules/Shared/data-bounds'
 import { COARSEST_GRID_SIZE } from '@/graph/modules/ForceManyBody'
 import { COLLISION_GRID_SIZE, COLLISION_ROTATIONS, collisionRotationSeed, withCollisionGrid } from '@/graph/modules/ForceCollision/collision-grid'
 
@@ -210,6 +210,161 @@ describe('data bounds (the box the many-body grid divides)', () => {
     } finally {
       destroyDevice(device)
     }
+  })
+})
+
+describe('data bounds across the bucket-grid threshold', () => {
+  // 1,000,000 texels: enough for both tiers on one texture — 262,144 points run
+  // 64² → 8² → 1, anything above runs 128² → 16² → 1.
+  const SIZE = 1000
+  const THRESHOLD = 262_144
+  const MIN_EXTENT = 64
+
+  type InternalTarget = { texture: Texture; fbo: { destroyed: boolean } }
+  type Internals = { bucketsTarget?: InternalTarget; blocksTarget?: InternalTarget }
+  const internals = (bounds: DataBounds): Internals => bounds as unknown as Internals
+
+  /**
+   * Live points inside [100, 300]×[400, 500] + `offset`, the box's extremes and
+   * the absent and non-finite points planted below index 1000 — so every point
+   * count from 1000 up publishes the same box — and garbage past `liveCount`.
+   */
+  const createPoints = (offset: [number, number], liveCount = SIZE * SIZE): { positions: Float32Array; exit: Float32Array } => {
+    const positions = new Float32Array(SIZE * SIZE * 4)
+    const exit = new Float32Array(SIZE * SIZE * 2)
+    let seed = 11
+    const random = (): number => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
+    const set = (index: number, x: number, y: number): void => {
+      positions[index * 4] = x + offset[0]
+      positions[index * 4 + 1] = y + offset[1]
+    }
+    for (let i = 0; i < liveCount; i += 1) set(i, 101 + random() * 198, 401 + random() * 98)
+    for (let i = liveCount; i < SIZE * SIZE; i += 1) set(i, -5000, -5000)
+    set(900, 50, 450)
+    set(901, 320, 450)
+    set(902, 200, 380)
+    set(903, 200, 510)
+    set(7, NaN, NaN)
+    exit[7 * 2 + 1] = 1
+    set(8, 1e6, -1e6)
+    exit[8 * 2 + 1] = 1
+    positions[9 * 4] = Infinity
+    positions[10 * 4] = NaN
+    positions[10 * 4 + 1] = NaN
+    positions[11 * 4 + 1] = -Infinity
+    return { positions, exit }
+  }
+
+  const withTextures = async (
+    data: { positions: Float32Array; exit: Float32Array },
+    run: (device: Device, textures: { positionsTexture: Texture; exitTexture: Texture }) => void
+  ): Promise<void> => {
+    const device = await createDevice()
+    const positionsTexture = createFloatTexture(device, 'rgba32float', SIZE, data.positions)
+    const exitTexture = createFloatTexture(device, 'rg32float', SIZE, data.exit)
+    try {
+      run(device, { positionsTexture, exitTexture })
+    } finally {
+      positionsTexture.destroy()
+      exitTexture.destroy()
+      destroyDevice(device)
+    }
+  }
+
+  it('sizes the first pass from the point count: 64² up to 262,144 points, 128² above', () => {
+    for (const n of [1, 4096, 100_000, THRESHOLD - 1, THRESHOLD]) expect(getBucketGridSize(n)).toBe(64)
+    for (const n of [THRESHOLD + 1, 300_000, 1_000_000, 1e8]) expect(getBucketGridSize(n)).toBe(128)
+  })
+
+  it('publishes the same box, bit for bit, on either side of the threshold', async () => {
+    // min and max are exact, so the order the tiers fold the points in cannot
+    // change the box. Two places — near the origin and a million units out —
+    // with and without the origin shift.
+    for (const offset of [[0, 0], [3e6, -2e6]] as [number, number][]) {
+      await withTextures(createPoints(offset), (device, { positionsTexture, exitTexture }) => {
+        for (const originShift of [undefined, { cellsPerAxis: 8, offset: [0.25, 0.75] as [number, number] }]) {
+          const boxes = [THRESHOLD, THRESHOLD + 1, 600_000, SIZE * SIZE].map((pointsNumber) => {
+            const bounds = new DataBounds(device)
+            try {
+              bounds.run({ positionsTexture, exitTexture, pointsTextureSize: SIZE, pointsNumber, minExtent: MIN_EXTENT, originShift })
+              return Array.from(device.readPixelsToArrayWebGL(bounds.texture as Texture) as Float32Array)
+            } finally {
+              bounds.destroy()
+            }
+          })
+          for (const box of boxes.slice(1)) expect(box).toEqual(boxes[0])
+          if (!originShift) {
+            const [ox, oy] = offset
+            expectBox(new Float32Array(boxes[0] as number[]), expectedBox([50 + ox, 380 + oy], [320 + ox, 510 + oy], MIN_EXTENT))
+          }
+        }
+      })
+    }
+  })
+
+  it('skips the slots past the point count, and floors a coincident stack, on the 128² tier too', async () => {
+    const liveCount = 999_000
+    await withTextures(createPoints([0, 0], liveCount), (device, { positionsTexture, exitTexture }) => {
+      const bounds = new DataBounds(device)
+      try {
+        bounds.run({ positionsTexture, exitTexture, pointsTextureSize: SIZE, pointsNumber: liveCount, minExtent: MIN_EXTENT })
+        expect(internals(bounds).bucketsTarget?.texture.width).toBe(128)
+        expectBox(device.readPixelsToArrayWebGL(bounds.texture as Texture) as Float32Array, expectedBox([50, 380], [320, 510], MIN_EXTENT))
+      } finally {
+        bounds.destroy()
+      }
+    })
+    const stack = new Float32Array(SIZE * SIZE * 4)
+    for (let i = 0; i < SIZE * SIZE; i += 1) { stack[i * 4] = 1234.5; stack[i * 4 + 1] = -987.25 }
+    await withTextures({ positions: stack, exit: new Float32Array(SIZE * SIZE * 2) }, (device, { positionsTexture, exitTexture }) => {
+      const boxes = [THRESHOLD, SIZE * SIZE].map((pointsNumber) => {
+        const bounds = new DataBounds(device)
+        try {
+          bounds.run({ positionsTexture, exitTexture, pointsTextureSize: SIZE, pointsNumber, minExtent: MIN_EXTENT })
+          return Array.from(device.readPixelsToArrayWebGL(bounds.texture as Texture) as Float32Array)
+        } finally {
+          bounds.destroy()
+        }
+      })
+      expect(boxes[1]).toEqual(boxes[0])
+      expectBox(new Float32Array(boxes[1] as number[]), expectedBox([1234.5, -987.25], [1234.5, -987.25], MIN_EXTENT))
+    })
+  })
+
+  it('keeps the box texture through growth and shrink, reuses same-size targets and frees replaced ones', async () => {
+    await withTextures(createPoints([0, 0]), (device, { positionsTexture, exitTexture }) => {
+      const bounds = new DataBounds(device)
+      const expected = expectedBox([50, 380], [320, 510], MIN_EXTENT)
+      try {
+        let boxTexture: Texture | undefined
+        let previous: Internals = {}
+        for (const pointsNumber of [1000, 300_000, 300_001, 1000, THRESHOLD, THRESHOLD + 1, SIZE * SIZE, 5000]) {
+          bounds.run({ positionsTexture, exitTexture, pointsTextureSize: SIZE, pointsNumber, minExtent: MIN_EXTENT })
+          const bucketGridSize = getBucketGridSize(pointsNumber)
+          const current = { ...internals(bounds) }
+          expect(current.bucketsTarget?.texture.width).toBe(bucketGridSize)
+          expect(current.blocksTarget?.texture.width).toBe(bucketGridSize / 8)
+          // Same tier: the same targets. A new tier: new targets, the old ones destroyed
+          for (const key of ['bucketsTarget', 'blocksTarget'] as const) {
+            const before = previous[key]
+            if (!before) continue
+            const resized = before.texture.width !== current[key]?.texture.width
+            expect(current[key] === before).toBe(!resized)
+            expect(before.texture.destroyed && before.fbo.destroyed).toBe(resized)
+          }
+          // The published texture is one object for the instance's whole life
+          boxTexture ??= bounds.texture
+          expect(bounds.texture).toBe(boxTexture)
+          expectBox(device.readPixelsToArrayWebGL(bounds.texture as Texture) as Float32Array, expected)
+          previous = current
+        }
+        const last = { ...internals(bounds) }
+        bounds.destroy()
+        expect(last.bucketsTarget?.texture.destroyed && last.blocksTarget?.texture.destroyed && boxTexture?.destroyed).toBe(true)
+      } finally {
+        bounds.destroy()
+      }
+    })
   })
 })
 
