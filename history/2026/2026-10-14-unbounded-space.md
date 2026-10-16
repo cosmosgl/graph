@@ -309,7 +309,7 @@ The 300k extent by step: 50: 6,664 · 100: 6,973 · 150: 7,007 · 200: 7,011, th
 
 | What | Cost |
 |---|---|
-| Many-body bounds reduction | 0.16 ms per tick from 5k to 300k points; 0.38 ms at 1M |
+| Many-body bounds reduction | 0.16 ms per tick from 5k to 300k points; 0.22 ms at 1M and 0.45 ms at 2M, with the first pass at 128² above 262,144 points (0.58 ms and 1.28 ms at 64²) |
 | Many-body step time, paired interleaved A/B against the commit before (blob, gravity 0.25, after 60 warm-up steps) | 5k +0.05 ms (+1.5%) · 8k +0.035 ms (+1.1%) · 20k −0.44 ms (−15%, not investigated) · 100k −0.03 ms (−0.4%) · 300k +0.28 ms (+1.3%) |
 | Collision, when on | a fixed ~0.3 ms per step: +9–13% at 5k–20k points, +2–3% at 100k, over 50% for a few hundred points. Nothing when off |
 | Step bound (clamp → step-length bound), paired interleaved A/B against the commit before, 13 rounds | 100k: −0.01 ms (6.815 → 6.800 ms per step), where both versions run the same layout — nothing measurable. At 300k the step is 2.3 ms faster (21.43 → 19.16 ms), but there the layouts differ (the old one piled on the border), so that is not the shader's cost |
