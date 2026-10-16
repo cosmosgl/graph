@@ -8,22 +8,41 @@ import reduceBoundsFinalFrag from '@/graph/modules/Shared/reduce-bounds-final.fr
 import quadVert from '@/graph/modules/Shared/quad.vert?raw'
 
 /**
- * Partial boxes per axis in the first reduction pass: 64² = 4096 fragments, so
- * even a million-point graph strides only ~245 points per fragment.
- */
-const BUCKET_GRID_SIZE = 64
-
-/**
- * Partial boxes per axis each fragment of the middle pass folds: 64² → 8² → 1,
- * so no fragment reads more than 64 of them. The last pass is a single
- * fragment, and folding all 4096 first-pass boxes there in sequence cost a
- * fixed ~0.75 ms per tick on an M3 Max, 11% of a 100k-point step. With the
- * middle pass the whole reduction takes ~0.16 ms up to 300k points.
+ * Partial boxes per axis each fragment of the middle pass folds, so no fragment
+ * reads more than 64 of them. The last pass is a single fragment, and folding
+ * all 4096 first-pass boxes there in sequence cost a fixed ~0.75 ms per tick on
+ * an M3 Max, 11% of a 100k-point step. With the middle pass the whole reduction
+ * takes ~0.16 ms up to 300k points.
  */
 const BLOCK_SIZE = 8
 
-/** Partial boxes per axis the middle pass leaves for the last one. */
-const BLOCK_GRID_SIZE = BUCKET_GRID_SIZE / BLOCK_SIZE
+/** First-pass partial boxes per axis for up to 64² · POINTS_PER_BUCKET points. */
+const MIN_BUCKET_GRID_SIZE = 64
+
+/** First-pass partial boxes per axis above that. */
+const MAX_BUCKET_GRID_SIZE = 128
+
+/**
+ * Points each first-pass fragment should scan before the grid grows. Each one
+ * walks its share of the point list in sequence, so the scan's length is what
+ * grows with the graph: at 64² a million points is ~245 per fragment.
+ */
+const POINTS_PER_BUCKET = 64
+
+/**
+ * First-pass partial boxes per axis for a point count: 64² (→ 8² → 1) up to
+ * 262,144 points, 128² (→ 16² → 1) above. A power of two that BLOCK_SIZE
+ * divides, so the middle pass always folds whole blocks. Above the threshold
+ * the first pass runs 4× the fragments, each scanning a quarter of the points,
+ * and the last pass folds 256 partial boxes instead of 64.
+ */
+export const getBucketGridSize = (pointsNumber: number): number => Math.max(
+  MIN_BUCKET_GRID_SIZE,
+  Math.min(
+    MAX_BUCKET_GRID_SIZE,
+    2 ** Math.ceil(Math.log2(Math.sqrt(pointsNumber / POINTS_PER_BUCKET)))
+  )
+)
 
 type Target = {
   texture: Texture;
@@ -138,7 +157,9 @@ export class DataBounds {
     if (!pointsNumber || !pointsTextureSize) return
     if (positionsTexture.destroyed || exitTexture.destroyed) return
 
-    this.ensureResources()
+    const bucketGridSize = getBucketGridSize(pointsNumber)
+    const blockGridSize = bucketGridSize / BLOCK_SIZE
+    this.ensureResources(bucketGridSize, blockGridSize)
     const buckets = this.bucketsTarget
     const blocks = this.blocksTarget
     const bounds = this.boundsTarget
@@ -151,7 +172,7 @@ export class DataBounds {
       reduceBoundsBucketsUniforms: {
         pointsTextureSize,
         pointsNumber,
-        bucketGridSize: BUCKET_GRID_SIZE,
+        bucketGridSize,
       },
     })
     this.bucketsCommand.setBindings({
@@ -182,7 +203,7 @@ export class DataBounds {
 
     this.finalUniformStore.setUniforms({
       reduceBoundsFinalUniforms: {
-        partialGridSize: BLOCK_GRID_SIZE,
+        partialGridSize: blockGridSize,
         minExtent,
         shiftCellsPerAxis: originShift?.cellsPerAxis ?? 0,
         shiftOffsetX: originShift?.offset[0] ?? 0,
@@ -232,19 +253,18 @@ export class DataBounds {
     this.vertexCoordBuffer = undefined
   }
 
-  /** Allocates the fixed-size targets and the three passes on first use. */
-  private ensureResources (): void {
+  /**
+   * Allocates the three passes on first use, and the first two targets at the
+   * sizes this run needs — replacing them when the point count crosses the
+   * bucket-grid threshold. The 1×1 box target never changes size, so its
+   * texture is the same object for the instance's whole life.
+   */
+  private ensureResources (bucketGridSize: number, blockGridSize: number): void {
     const { device } = this
 
-    if (!this.bucketsTarget || this.bucketsTarget.texture.destroyed) {
-      this.bucketsTarget = this.createTarget(BUCKET_GRID_SIZE)
-    }
-    if (!this.blocksTarget || this.blocksTarget.texture.destroyed) {
-      this.blocksTarget = this.createTarget(BLOCK_GRID_SIZE)
-    }
-    if (!this.boundsTarget || this.boundsTarget.texture.destroyed) {
-      this.boundsTarget = this.createTarget(1)
-    }
+    this.bucketsTarget = this.ensureTarget(this.bucketsTarget, bucketGridSize)
+    this.blocksTarget = this.ensureTarget(this.blocksTarget, blockGridSize)
+    this.boundsTarget = this.ensureTarget(this.boundsTarget, 1)
 
     this.vertexCoordBuffer ||= device.createBuffer({
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
@@ -261,7 +281,7 @@ export class DataBounds {
         defaultUniforms: {
           pointsTextureSize: 0,
           pointsNumber: 0,
-          bucketGridSize: BUCKET_GRID_SIZE,
+          bucketGridSize: MIN_BUCKET_GRID_SIZE,
         },
       },
     })
@@ -294,7 +314,7 @@ export class DataBounds {
           shiftOffsetY: 'f32',
         },
         defaultUniforms: {
-          partialGridSize: BLOCK_GRID_SIZE,
+          partialGridSize: MIN_BUCKET_GRID_SIZE / BLOCK_SIZE,
           minExtent: 1,
           shiftCellsPerAxis: 0,
           shiftOffsetX: 0,
@@ -305,6 +325,16 @@ export class DataBounds {
     this.finalCommand ||= this.createPass(reduceBoundsFinalFrag, {
       reduceBoundsFinalUniforms: this.finalUniformStore.getManagedUniformBuffer('reduceBoundsFinalUniforms'),
     })
+  }
+
+  /** The given target if it is alive and `size` wide, else a new one — the old one destroyed. */
+  private ensureTarget (target: Target | undefined, size: number): Target {
+    if (target && !target.texture.destroyed && !target.fbo.destroyed && target.texture.width === size) return target
+    if (target) {
+      if (!target.fbo.destroyed) target.fbo.destroy()
+      if (!target.texture.destroyed) target.texture.destroy()
+    }
+    return this.createTarget(size)
   }
 
   private createTarget (size: number): Target {
