@@ -92,14 +92,22 @@ the point set alone — wherever the layout sits and however much of the space i
 The box is a reduction in three full-screen passes, and it never comes back to the CPU — a
 readback would stall the pipeline every tick, so every pass that needs it reads it as a texture:
 
-1. **64 × 64 partial boxes** (`reduce-bounds-buckets.frag`). Fragment *b* strides through the
-   point list — points *b*, *b* + 4096, *b* + 2·4096, … — so the work splits evenly however the
-   points sit in the texture or in space; at a million points that is ~245 per fragment.
-2. **8 × 8** (`reduce-bounds-blocks.frag`): each fragment folds an 8 × 8 block of those. Without
-   this middle pass the last fragment folded all 4,096 partial boxes in sequence — ~0.75 ms per
-   tick, 11 % of a 100k-point step on an M3 Max. With it, the whole reduction costs ~0.16 ms up
-   to 300k points (~0.38 ms at a million).
-3. **One texel** (`reduce-bounds-final.frag`): `[originX, originY, extent, 1 / extent]`.
+1. **64 × 64 partial boxes up to 262,144 points, 128 × 128 above**
+   (`reduce-bounds-buckets.frag`). Fragment *b* of *G*² strides through the point list —
+   points *b*, *b* + *G*², *b* + 2·*G*², … — so the work splits evenly however the points sit in
+   the texture or in space. That scan is the only part of the reduction that grows with the
+   graph: at 64² a million points is ~245 per fragment and the reduction took 0.58 ms on an
+   M3 Max, at 128² it is ~61 and 0.22 ms (2M: 1.28 → 0.45 ms). The grid is chosen per run from
+   the point count (`getBucketGridSize`: the power of two giving about 64 points per fragment,
+   between 64 and 128), so graphs up to 262,144 points run exactly as before.
+2. **8 × 8 or 16 × 16** (`reduce-bounds-blocks.frag`): each fragment folds an 8 × 8 block of
+   those. Without this middle pass the last fragment folded all 4,096 partial boxes in
+   sequence — ~0.75 ms per tick, 11 % of a 100k-point step on an M3 Max. With it, the whole
+   reduction costs ~0.16 ms up to 300k points.
+3. **One texel** (`reduce-bounds-final.frag`): `[originX, originY, extent, 1 / extent]`. Its
+   texture is the same object for the instance's life; only the first two targets are resized
+   when the point count crosses the threshold. Min and max are exact, so either grid publishes
+   the same box bit for bit.
 
 What goes into that texel:
 
@@ -546,7 +554,8 @@ Cost side: the slot array texture plus two peel targets at the finest grid resol
 512² cap with K = 8 that is 10 × 512² × 2 floats = 20 MB of GPU memory; smaller graphs have
 more layers but a proportionally smaller grid) and the K peeling passes per tick — all already
 included in the benchmark numbers above — plus the data-bounds reduction: three small targets
-(64², 8² and one texel, ~65 KB) and ~0.16 ms per tick.
+(64², 8² and one texel, ~65 KB; 128², 16² and one texel, ~260 KB above 262,144 points) and
+~0.16 ms per tick (0.22 ms at a million points).
 
 ## Glossary
 
