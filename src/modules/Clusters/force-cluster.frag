@@ -35,9 +35,11 @@ void main() {
   if (pointClusterIndices.x >= 0.0 && pointClusterIndices.y >= 0.0) {
     // clusterTexture stores whole texel coordinates, so truncating to int is exact.
     ivec2 clusterTexel = ivec2(pointClusterIndices.xy);
-    // positioning points to custom cluster position or either to the center of mass
-    vec2 clusterPositions = texelFetch(clusterPositionsTexture, clusterTexel, 0).xy;
-    if (clusterPositions.x < 0.0 || clusterPositions.y < 0.0) {
+    // Pulled to the cluster's custom position if it has one (.z = 1, set on the CPU:
+    // any coordinate, negative ones included, is a position), else to its centre of mass
+    vec3 clusterPosition = texelFetch(clusterPositionsTexture, clusterTexel, 0).xyz;
+    vec2 clusterPositions = clusterPosition.xy;
+    if (clusterPosition.z < 0.5) {
       vec4 centermassValues = texelFetch(centermassTexture, clusterTexel, 0);
       clusterPositions = centermassValues.xy / centermassValues.b;
     }

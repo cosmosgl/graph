@@ -278,13 +278,41 @@ describe('host view injection', () => {
       const y = 20
       const w = 800
       const h = 600
-      const S = 4096
+      // The world origin: the centre of the default 4096 space
+      const ox = 4096 / 2
+      const oy = 4096 / 2
       graph.setViewTransform({ k, x, y }, [w, h])
 
       const [screenX, screenY] = graph.spaceToScreenPosition([100, 100])
-      expect(screenX).toBeCloseTo(k * (100 + (w - S) / 2) + x, 3)
-      expect(screenY).toBeCloseTo(k * ((S - 100) + (h - S) / 2) + y, 3)
+      expect(screenX).toBeCloseTo(k * (100 - ox + w / 2) + x, 3)
+      expect(screenY).toBeCloseTo(k * (oy - 100 + h / 2) + y, 3)
       expect(graph.getZoomLevel()).toBe(k)
+    } finally {
+      graph.destroy()
+    }
+  })
+
+  it('space → screen is an exact translation by the live world origin, through a spaceSize change', async () => {
+    const graph = await createHeadlessGraph()
+    try {
+      const k = 1.5
+      const x = 10
+      const y = 20
+      const w = 800
+      const h = 600
+      graph.setViewTransform({ k, x, y }, [w, h])
+      // Whole space units land on exact screen values: the map is a plain translation with
+      // nothing to round (an interpolating screen-wide scale would round 1393 in both axes)
+      expect(graph.spaceToScreenPosition([1393, 1393])).toEqual([k * (1393 - 2048 + w / 2) + x, k * (2048 - 1393 + h / 2) + y])
+
+      // A headless graph has no canvas to re-measure, and the host keeps its view — but the
+      // new origin must reach space → screen as it reaches screen → space and the shaders
+      // (spaceSize is used as given: origin 3000)
+      graph.setConfigPartial({ spaceSize: 6000 })
+      expect(graph.spaceToScreenPosition([3500, 2000])).toEqual([k * (3500 - 3000 + w / 2) + x, k * (3000 - 2000 + h / 2) + y])
+      const [backX, backY] = graph.spaceToScreenPosition(graph.screenToSpacePosition([0, 0]))
+      expect(backX).toBeCloseTo(0, 6)
+      expect(backY).toBeCloseTo(0, 6)
     } finally {
       graph.destroy()
     }
@@ -403,9 +431,11 @@ describe('host picking', () => {
     const target = device.createTexture({ format: 'rgba8unorm', width: 200, height: 200 })
     const framebuffer = device.createFramebuffer({ width: 200, height: 200, colorAttachments: [target] })
     try {
-      // setViewTransform's formula, inverted for k = 1 and (1000, 1000) → (100, 100)
-      const S = 4096
-      graph.setViewTransform({ k: 1, x: 100 - (1000 + (200 - S) / 2), y: 100 - ((S - 1000) + (200 - S) / 2) }, [200, 200])
+      // setViewTransform's formula, inverted for k = 1 and (1000, 1000) → (100, 100), with
+      // the world origin at the centre of the default 4096 space
+      const ox = 4096 / 2
+      const oy = 4096 / 2
+      graph.setViewTransform({ k: 1, x: 100 - (1000 - ox + 200 / 2), y: 100 - (oy - 1000 + 200 / 2) }, [200, 200])
       expect(graph.spaceToScreenPosition([1000, 1000])).toEqual([100, 100])
 
       const renderPass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0] })
@@ -475,8 +505,10 @@ describe('host hover', () => {
       return count
     }
     try {
-      const S = 4096
-      graph.setViewTransform({ k: 1, x: 100 - (1000 + (200 - S) / 2), y: 100 - ((S - 1000) + (200 - S) / 2) }, [200, 200])
+      // (1000, 1000) on screen at (100, 100), with the world origin at the centre of the default 4096 space
+      const ox = 4096 / 2
+      const oy = 4096 / 2
+      graph.setViewTransform({ k: 1, x: 100 - (1000 - ox + 200 / 2), y: 100 - (oy - 1000 + 200 / 2) }, [200, 200])
       const plain = draw()
 
       graph.setHostHoveredPoint(0)
@@ -530,8 +562,9 @@ describe('host hover', () => {
     try {
       // One pixel per space unit, with the space origin on screen at (40, 160): a ring
       // read from outside the data would land there
-      const S = 4096
-      graph.setViewTransform({ k: 1, x: 40 - (200 - S) / 2, y: 160 - S - (200 - S) / 2 }, [200, 200])
+      const ox = 4096 / 2
+      const oy = 4096 / 2
+      graph.setViewTransform({ k: 1, x: 40 - (200 / 2 - ox), y: 160 - (oy + 200 / 2) }, [200, 200])
       graph.setHostHoveredPoint(1)
 
       // The data shrinks to one point; the host has not hovered again yet

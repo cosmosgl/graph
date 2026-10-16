@@ -11,7 +11,7 @@ export class ForceGravity extends CoreModule {
   private uniformStore: UniformStore<{
     forceGravityUniforms: {
       gravity: number;
-      spaceSize: number;
+      worldOrigin: [number, number];
       alpha: number;
     };
   }> | undefined
@@ -27,8 +27,9 @@ export class ForceGravity extends CoreModule {
     this.uniformStore ||= new UniformStore(device, {
       forceGravityUniforms: {
         uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
           gravity: 'f32',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           alpha: 'f32',
         },
       },
@@ -68,7 +69,7 @@ export class ForceGravity extends CoreModule {
     this.uniformStore.setUniforms({
       forceGravityUniforms: {
         gravity: this.config.simulationGravity,
-        spaceSize: store.adjustedSpaceSize,
+        worldOrigin: store.worldOrigin,
         alpha: store.alpha,
       },
     })

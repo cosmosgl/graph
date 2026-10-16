@@ -28,7 +28,7 @@ import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 import { readPixels, isPointAbsent, getRgbaColor } from '@/graph/helper'
 import { ensureVec2, ensureVec4, glslFloatLiteral } from '@/graph/modules/Shared/uniform-utils'
 import { createAtlasDataFromImageData } from '@/graph/modules/Points/atlas-utils'
-import { buildPositionTextureData, buildSourcePositionTextureData } from '@/graph/modules/Points/position-utils'
+import { buildPositionTextureData, buildSourcePositionTextureData, toFiniteCoordinate } from '@/graph/modules/Points/position-utils'
 import { PickingReadback } from '@/graph/modules/Points/picking-readback'
 import { PointTrackerImpl, type PointTrackerHost } from '@/graph/modules/Points/point-tracker'
 import { PICKING_RESOLUTION_SCALE, PICKING_WINDOW_SIZE } from '@/graph/modules/Points/picking-constants'
@@ -81,6 +81,17 @@ const POINT_SHADER_DEFINES = {
   EDGE_RAMP_PX: glslFloatLiteral(EDGE_RAMP_PX),
   POINT_RING_SCALE: glslFloatLiteral(POINT_RING_SCALE),
 } as unknown as Record<string, boolean>
+
+/**
+ * `simulationFriction` as update-position.frag receives it: a non-finite value runs at the
+ * default. The shader keeps positions finite by dropping a non-finite velocity, which it reads
+ * from a texture; friction is applied after that test, and a NaN or infinite friction makes
+ * every step non-finite (even a resting point's: `0 × Infinity` is NaN), so it would turn
+ * every position non-finite for good.
+ */
+function getFriction (friction: number): number {
+  return Number.isFinite(friction) ? friction : defaultConfigValues.simulationFriction
+}
 
 export class Points extends CoreModule implements PointTrackerHost {
   public transition: Transition | undefined
@@ -322,7 +333,8 @@ export class Points extends CoreModule implements PointTrackerHost {
   private updatePositionUniformStore: UniformStore<{
     updatePositionUniforms: {
       friction: number;
-      spaceSize: number;
+      /** The longest step one sub-step may take (see update-position.frag). */
+      maxStep: number;
     };
   }> | undefined
 
@@ -345,7 +357,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       sizeScale: number;
       pointsTextureSize: number;
       transformationMatrix: Mat4Array;
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       greyoutColor: [number, number, number, number];
       backgroundColor: [number, number, number, number];
@@ -380,7 +392,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
   private findPointsInRectUniformStore: UniformStore<{
     findPointsInRectUniforms: {
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       sizeScale: number;
       transformationMatrix: Mat4Array;
@@ -394,7 +406,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
   private findPointsInPolygonUniformStore: UniformStore<{
     findPointsInPolygonUniforms: {
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       transformationMatrix: Mat4Array;
       polygonPathLength: number;
@@ -407,7 +419,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       sizeScale: number;
       pointsTextureSize: number;
       transformationMatrix: Mat4Array;
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       scalePointsOnZoom: number;
       pickingPixelRatio: number;
@@ -424,7 +436,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     fillSampledPointsUniforms: {
       pointsTextureSize: number;
       transformationMatrix: Mat4Array;
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
     };
   }> | undefined
@@ -441,7 +453,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       sizeScale: number;
       pointsTextureSize: number;
       transformationMatrix: Mat4Array;
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       scalePointsOnZoom: number; // f32 in shader, not boolean
       maxPointSize: number;
@@ -521,7 +533,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       (this.transition?.duration ?? this.config.transitionDuration) > 0 &&
       !!this.currentPositionTexture
 
-    const targetState = buildPositionTextureData(data.pointPositions, pointsTextureSize, targetCount)
+    const targetState = buildPositionTextureData(data.pointPositions, pointsTextureSize, targetCount, store.adjustedSpaceSize)
 
     // Position transition: `interpolatePosition()` blends source → target each frame.
     // Target is always the new layout.
@@ -760,7 +772,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           transformationMatrix: 'mat4x4<f32>',
           pointsTextureSize: 'f32',
           sizeScale: 'f32',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           greyoutColor: 'vec4<f32>',
           backgroundColor: 'vec4<f32>',
@@ -794,7 +806,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           })(),
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           greyoutColor: ensureVec4(store.greyoutPointColor, [0, 0, 0, 1]),
           backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
@@ -935,7 +947,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
           sizeScale: 'f32',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           ratio: 'f32',
           transformationMatrix: 'mat4x4<f32>',
@@ -946,7 +958,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         },
         defaultUniforms: {
           sizeScale: config.pointSizeScale,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           ratio: config.pixelRatio,
           transformationMatrix: store.transformationMatrix4x4,
@@ -992,13 +1004,13 @@ export class Points extends CoreModule implements PointTrackerHost {
       findPointsInPolygonUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           transformationMatrix: 'mat4x4<f32>',
           polygonPathLength: 'f32',
         },
         defaultUniforms: {
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           transformationMatrix: store.transformationMatrix4x4,
           polygonPathLength: this.polygonPathLength,
@@ -1037,7 +1049,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           // Order MUST match shader declaration order (std140 layout)
           pointsTextureSize: 'f32',
           sizeScale: 'f32',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           ratio: 'f32',
           pickingPixelRatio: 'f32',
@@ -1053,7 +1065,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         defaultUniforms: {
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           ratio: config.pixelRatio,
           pickingPixelRatio: PICKING_RESOLUTION_SCALE,
@@ -1107,13 +1119,13 @@ export class Points extends CoreModule implements PointTrackerHost {
           // Order MUST match shader declaration order (std140 layout)
           pointsTextureSize: 'f32',
           transformationMatrix: 'mat4x4<f32>',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
         },
         defaultUniforms: {
           pointsTextureSize: store.pointsTextureSize ?? 0,
           transformationMatrix: store.transformationMatrix4x4,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
         },
       },
@@ -1158,7 +1170,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           transformationMatrix: 'mat4x4<f32>',
           pointsTextureSize: 'f32',
           sizeScale: 'f32',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           scalePointsOnZoom: 'f32',
           pointIndex: 'f32',
@@ -1184,7 +1196,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           transformationMatrix: store.transformationMatrix4x4,
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0,
           pointIndex: -1,
@@ -2115,8 +2127,10 @@ export class Points extends CoreModule implements PointTrackerHost {
 
     this.updatePositionUniformStore.setUniforms({
       updatePositionUniforms: {
-        friction: this.config.simulationFriction,
-        spaceSize: this.store.adjustedSpaceSize,
+        friction: getFriction(this.config.simulationFriction),
+        // The width of the space: the displacement ceiling the old position
+        // clamp implied. A ceiling, not a stability bound (update-position.frag).
+        maxStep: this.store.adjustedSpaceSize,
       },
     })
 
@@ -2185,7 +2199,10 @@ export class Points extends CoreModule implements PointTrackerHost {
    * when it rebuilds both textures.
    *
    * Absent points (NaN input position) are skipped — a sparse write must not
-   * resurrect a removed point. Out-of-range indices are skipped too.
+   * resurrect a removed point. Out-of-range indices are skipped too, and so are
+   * NaN targets: a sparse write cannot remove a point either. An infinite
+   * coordinate lands on the edge of the space, as in a full upload
+   * (`toFiniteCoordinate`).
    */
   public setPointPositionsByIndices (indices: ArrayLike<number>, positions: ArrayLike<number>): void {
     const { store: { pointsTextureSize }, data } = this
@@ -2208,6 +2225,13 @@ export class Points extends CoreModule implements PointTrackerHost {
       if (data.pointPositions && isPointAbsent(data.pointPositions, index)) continue
       texel[0] = positions[i * 2] as number
       texel[1] = positions[i * 2 + 1] as number
+      // Same contract as a full upload: a present position on the GPU is finite.
+      // NaN is not a position — it would not make the point absent (only
+      // setPointPositions can), just non-finite — so that write is skipped. An
+      // infinity, also one from the float32 rounding above, lands on the edge.
+      if (Number.isNaN(texel[0]) || Number.isNaN(texel[1])) continue
+      texel[0] = toFiniteCoordinate(texel[0] as number, this.store.adjustedSpaceSize)
+      texel[1] = toFiniteCoordinate(texel[1] as number, this.store.adjustedSpaceSize)
       texel[2] = index // drag-point.frag matches the drag target on the blue channel
       for (const texture of textures) {
         texture.copyImageData({
@@ -2313,7 +2337,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
     this.findPointsInRectUniformStore.setUniforms({
       findPointsInRectUniforms: {
-        spaceSize: this.store.adjustedSpaceSize,
+        worldOrigin: this.store.worldOrigin,
         screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         sizeScale: this.config.pointSizeScale,
         transformationMatrix: this.store.transformationMatrix4x4,
@@ -2349,7 +2373,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
     this.findPointsInPolygonUniformStore.setUniforms({
       findPointsInPolygonUniforms: {
-        spaceSize: this.store.adjustedSpaceSize,
+        worldOrigin: this.store.worldOrigin,
         screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         transformationMatrix: this.store.transformationMatrix4x4,
         polygonPathLength: this.polygonPathLength,
@@ -2455,7 +2479,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       sizeScale: this.config.pointSizeScale,
       pointsTextureSize: this.store.pointsTextureSize ?? 0,
       transformationMatrix: this.store.transformationMatrix4x4,
-      spaceSize: this.store.adjustedSpaceSize,
+      worldOrigin: this.store.worldOrigin,
       screenSize,
       scalePointsOnZoom: this.config.scalePointsOnZoom ? 1 : 0,
       // Sprite sizes are computed in CSS px and rasterized into the smaller buffer
@@ -2614,7 +2638,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         fillSampledPointsUniforms: {
           pointsTextureSize: this.store.pointsTextureSize ?? 0,
           transformationMatrix: this.store.transformationMatrix4x4,
-          spaceSize: this.store.adjustedSpaceSize,
+          worldOrigin: this.store.worldOrigin,
           screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         },
       })
@@ -2664,7 +2688,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         fillSampledPointsUniforms: {
           pointsTextureSize: this.store.pointsTextureSize ?? 0,
           transformationMatrix: this.store.transformationMatrix4x4,
-          spaceSize: this.store.adjustedSpaceSize,
+          worldOrigin: this.store.worldOrigin,
           screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         },
       })
@@ -3238,7 +3262,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         transformationMatrix: store.transformationMatrix4x4,
         pointsTextureSize: store.pointsTextureSize ?? 0,
         sizeScale: config.pointSizeScale,
-        spaceSize: store.adjustedSpaceSize,
+        worldOrigin: store.worldOrigin,
         screenSize: ensureVec2(store.screenSize, [0, 0]),
         scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0,
         pointIndex: index,
@@ -3428,11 +3452,11 @@ export class Points extends CoreModule implements PointTrackerHost {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
           friction: 'f32',
-          spaceSize: 'f32',
+          maxStep: 'f32',
         },
         defaultUniforms: {
-          friction: config.simulationFriction,
-          spaceSize: store.adjustedSpaceSize,
+          friction: getFriction(config.simulationFriction),
+          maxStep: store.adjustedSpaceSize,
         },
       },
     })
@@ -3572,7 +3596,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       transformationMatrix: store.transformationMatrix4x4,
       pointsTextureSize: store.pointsTextureSize ?? 0,
       sizeScale: config.pointSizeScale,
-      spaceSize: store.adjustedSpaceSize,
+      worldOrigin: store.worldOrigin,
       screenSize: ensureVec2(store.screenSize, [0, 0]),
       greyoutColor: ensureVec4(store.greyoutPointColor, [-1, -1, -1, -1]),
       backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),

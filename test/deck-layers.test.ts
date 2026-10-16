@@ -206,6 +206,40 @@ describe('CosmosGraphLayer', () => {
     }
   })
 
+  it('follows the space the engine uses, not the raw config: an invalid spaceSize still draws under deck\'s view', async () => {
+    // The engine replaces a spaceSize of 0 with its default; the layer must place cosmos's
+    // view by that, the world origin cosmos actually centres its screen on
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let graph: Graph | undefined
+    let loaded = false
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer({
+        id: 'graph',
+        points: { length: 3, initialPositions: POSITIONS },
+        config: { ...STATIC, spaceSize: 0 },
+        onGraphCreated: (created): void => { graph = created },
+        onGraphDataLoaded: (): void => { loaded = true },
+      }),
+    ])
+    try {
+      await waitUntil(() => loaded, 'the first load')
+      await waitFrames(5)
+      expect(warn.mock.calls.some(([message]) => String(message).includes('flipY'))).toBe(false)
+      for (const [x, y] of [[1000, 1000], [1050, 1000], [1000, 1030]]) {
+        const [sx, sy] = graph!.spaceToScreenPosition([x as number, y as number])
+        const [dx, dy] = deckPixel(deck, [x as number, y as number, 0])
+        expect(sx).toBeCloseTo(dx, 3)
+        expect(sy).toBeCloseTo(dy, 3)
+      }
+    } finally {
+      error.mockRestore()
+      warn.mockRestore()
+      deck.finalize()
+      container.remove()
+    }
+  })
+
   it('does not draw a y-down view, and says so once', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     const isViewWarning = (message: unknown): boolean => String(message).includes('flipY')
@@ -1052,6 +1086,93 @@ describe('CosmosGraphLayer', () => {
     }
   })
 
+  it('bounds the layout it holds, not the space: the live positions, and before the first load the input', async () => {
+    // Outside the space on every side, plus an absent point
+    const positions = new Float32Array([-6000, 500, 1000, 1000, 9000, -2500, NaN, NaN])
+    const expected = [[-6000, -2500, 0], [9000, 1000, 0]]
+    let graph: Graph | undefined
+    let loaded = false
+    const layer = new CosmosGraphLayer({
+      id: 'graph',
+      points: { length: 4, initialPositions: positions },
+      config: STATIC,
+      onGraphCreated: (created): void => { graph = created },
+      onGraphDataLoaded: (): void => { loaded = true },
+    })
+    // Before deck has initialized it: the box of the positions it is about to load
+    expect(layer.getBounds()).toEqual(expected)
+    // Unseeded points start in the middle half of the space
+    const spaceSize = defaultConfigValues.spaceSize
+    expect(new CosmosGraphLayer({ id: 'seeded', points: { length: 5 } }).getBounds())
+      .toEqual([[spaceSize * 0.25, spaceSize * 0.25, 0], [spaceSize * 0.75, spaceSize * 0.75, 0]])
+
+    const { deck, container } = await createDeck([layer])
+    try {
+      await waitUntil(() => loaded, 'the first load')
+      const live = (): CosmosGraphLayer => layer.getCurrentLayer() as CosmosGraphLayer
+      // Read from the graph: the same box, the absent point still left out
+      expect(live().getBounds()).toEqual(expected)
+      // and it follows the layout
+      graph!.setPointPosition(1, 20000, 30000)
+      expect(live().getBounds()).toEqual([[-6000, -2500, 0], [20000, 30000, 0]])
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('bounds the space\'s square when there is nothing to measure, and places input as the engine will', () => {
+    const square = (size: number): number[][] => [[0, 0, 0], [size, size, 0]]
+    const spaceSize = defaultConfigValues.spaceSize
+    // No points yet, every point absent, or positions the graph rescales on load: the square
+    // the graph starts in — what getBounds always returned before layouts could leave it
+    expect(new CosmosGraphLayer({ id: 'empty' }).getBounds()).toEqual(square(spaceSize))
+    expect(new CosmosGraphLayer({ id: 'absent', points: { length: 2, initialPositions: new Float32Array([NaN, NaN, NaN, 5]) } }).getBounds())
+      .toEqual(square(spaceSize))
+    expect(new CosmosGraphLayer({
+      id: 'rescaled',
+      points: { length: 2, initialPositions: new Float32Array([-6000, 0, 9000, 0]) },
+      config: { rescalePositions: true, spaceSize: 1000 },
+    }).getBounds()).toEqual(square(1000))
+    // Object points through getPointPosition: an infinite coordinate lands on the matching
+    // edge of the space, NaN leaves the point out, and a missing position is seeded in the
+    // middle half
+    const objects = [{ p: [-6000, 500] }, { p: [Infinity, -Infinity] }, { p: [NaN, 7] }, { p: [1e39, 300] }]
+    expect(new CosmosGraphLayer<{ p: number[] }>({
+      id: 'objects',
+      points: objects,
+      getPointPosition: (d): [number, number] => d.p as [number, number],
+      config: { spaceSize: 1000 },
+    }).getBounds()).toEqual([[-6000, 0, 0], [1000, 500, 0]])
+    expect(new CosmosGraphLayer<{ p: number[] | null }>({
+      id: 'unseeded objects',
+      points: [{ p: [100, 100] }, { p: null }],
+      getPointPosition: (d): [number, number] | null => d.p as [number, number] | null,
+      config: { spaceSize: 1000 },
+    }).getBounds()).toEqual([[100, 100, 0], [750, 750, 0]])
+  })
+
+  it('bounds a provided graph by its live positions, and by its own space before it holds any', async () => {
+    const { deck, container, devicePromise } = createDeckDevice()
+    const provided = new Graph(null, { ...STATIC, spaceSize: 1000 }, devicePromise)
+    try {
+      await provided.ready
+      const layer = new CosmosGraphLayer({ id: 'graph', graph: provided })
+      deck.setProps({ layers: [layer] })
+      const live = (): CosmosGraphLayer | null => layer.getCurrentLayer() as CosmosGraphLayer | null
+      await waitUntil(() => Boolean(live()?.isLoaded), 'the layer to attach the graph')
+      // The graph's spaceSize, not the default's
+      expect(live()!.getBounds()).toEqual([[0, 0, 0], [1000, 1000, 0]])
+      provided.setPointPositions(new Float32Array([-300, 40, 2500, -90]))
+      provided.render(0)
+      expect(live()!.getBounds()).toEqual([[-300, -90, 0], [2500, 40, 0]])
+    } finally {
+      deck.finalize()
+      container.remove()
+      provided.destroy()
+    }
+  })
+
   it('seeds unpositioned points from the graph\'s RNG, so randomSeed reproduces the layout', async () => {
     const layouts: number[][] = []
     const graphLayer = (): CosmosGraphLayer => new CosmosGraphLayer({
@@ -1069,7 +1190,7 @@ describe('CosmosGraphLayer', () => {
       deck.setProps({ layers: [graphLayer()] })
       await waitUntil(() => layouts.length === 2, 'the second load')
       expect(layouts[1]).toEqual(layouts[0])
-      // Still in the middle half of the space, clear of the walls
+      // In the middle half of the space, around the world origin
       const spaceSize = defaultConfigValues.spaceSize
       for (const coordinate of layouts[0] as number[]) {
         expect(coordinate).toBeGreaterThanOrEqual(spaceSize * 0.25)

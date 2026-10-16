@@ -157,9 +157,11 @@ export class GraphSimulation implements PositionTextureSource {
   private isForceCenterUpdateNeeded = false
   private isPointClusterUpdateNeeded = false
 
-  // Whether the collision force's GPU resources (grid/size textures, programs)
-  // are allocated and match the current data. Allocated lazily the first time
-  // collision runs, so a simulation that never enables it pays no memory cost.
+  // Whether the collision force's GPU resources (its fixed-size grid and data
+  // bounds; the size texture, index buffer and contact cell size that follow
+  // the points; its programs) are allocated and match the current data and
+  // config. Allocated lazily the first time collision runs, so a simulation
+  // that never enables it pays no memory cost.
   private isForceCollisionReady = false
 
   private _isDestroyed = false
@@ -209,7 +211,7 @@ export class GraphSimulation implements PositionTextureSource {
       }
       this._device = device
 
-      this.store.adjustSpaceSize(this.config.spaceSize, device.limits.maxTextureDimension2D)
+      this.store.adjustSpaceSize(this.config.spaceSize)
       this.store.setWebGLMaxTextureSize(device.limits.maxTextureDimension2D)
       this.store.maxPointSize = getMaxPointSize(device, this.config.pixelRatio)
 
@@ -309,9 +311,7 @@ export class GraphSimulation implements PositionTextureSource {
       this.isForceCollisionReady = false
     }
     if (prevConfig.spaceSize !== this.config.spaceSize) {
-      this.store.adjustSpaceSize(this.config.spaceSize, this._device?.limits.maxTextureDimension2D ?? 4096)
-      // Collision grid dimensions depend on adjustedSpaceSize
-      this.isForceCollisionReady = false
+      this.store.adjustSpaceSize(this.config.spaceSize)
       this.update(this.store.isSimulationRunning ? this.store.alpha : 0)
     }
   }
@@ -723,9 +723,10 @@ export class GraphSimulation implements PositionTextureSource {
     if (this.isPointSizeUpdateNeeded) this.points.updateSize()
 
     if (this.isForceManyBodyUpdateNeeded) this.forceManyBody?.create()
-    // Collision grid/size textures depend on point count and sizes. Mark them
-    // stale so they're rebuilt lazily the next time the collision force runs,
-    // rather than reallocating here while collision may be disabled.
+    // The collision force's size texture, index buffer and contact cell size
+    // follow point count and sizes (its grid does not: a fixed size). Mark
+    // them stale so they're rebuilt lazily the next time the collision force
+    // runs, rather than reallocating here while collision may be disabled.
     if (this.isForceManyBodyUpdateNeeded || this.isPointSizeUpdateNeeded) this.isForceCollisionReady = false
     if (this.isForceLinkUpdateNeeded) {
       this.forceLinkIncoming?.create(LinkDirection.INCOMING)

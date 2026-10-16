@@ -17,7 +17,7 @@ layout(std140) uniform drawHighlightedUniforms {
   mat4 transformationMatrix;
   float pointsTextureSize;
   float sizeScale;
-  float spaceSize;
+  vec2 worldOrigin;
   vec2 screenSize;
   float scalePointsOnZoom;
   float pointIndex;
@@ -43,7 +43,7 @@ layout(std140) uniform drawHighlightedUniforms {
 #define transformationMatrix drawHighlighted.transformationMatrix
 #define pointsTextureSize drawHighlighted.pointsTextureSize
 #define sizeScale drawHighlighted.sizeScale
-#define spaceSize drawHighlighted.spaceSize
+#define worldOrigin drawHighlighted.worldOrigin
 #define screenSize drawHighlighted.screenSize
 #define scalePointsOnZoom drawHighlighted.scalePointsOnZoom
 #define pointIndex drawHighlighted.pointIndex
@@ -65,7 +65,7 @@ uniform float imageSize;
 uniform mat3 transformationMatrix;
 uniform float pointsTextureSize;
 uniform float sizeScale;
-uniform float spaceSize;
+uniform vec2 worldOrigin;
 uniform vec2 screenSize;
 uniform float scalePointsOnZoom;
 uniform float pointIndex;
@@ -167,9 +167,8 @@ void main () {
   vec2 yBasis = normalize(vec2(-xBasis.y, xBasis.x));
   vec2 pointPositionInScreenSpace = a + xBasis * vertexCoord.x + yBasis * radius * vertexCoord.y;
 
-  // Transform point position to normalized device coordinates
-  vec2 p = 2.0 * pointPositionInScreenSpace / spaceSize - 1.0;
-  p *= spaceSize / screenSize;
+  // World space to normalized device coordinates (worldOrigin at the screen centre)
+  vec2 p = (pointPositionInScreenSpace - worldOrigin) * (2.0 / screenSize);
   #ifdef USE_UNIFORM_BUFFERS
   mat3 transformMat3 = mat3(transformationMatrix);
   vec3 final = transformMat3 * vec3(p, 1);

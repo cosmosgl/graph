@@ -7,34 +7,36 @@ uniform sampler2D gridTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceCollisionUniforms {
-  float gridTextureSize;
-  float cellSize;
   float alpha;
   float collisionStrength;
   float collisionRadius;
   float collisionPadding;
   float pointsNumber;
   vec2 gridOffset; // Must match the offset used when building the grid
+  float cellsPerUnit; // 1 / the hash's cell size, the same bits build-grid.vert gets
+  float rotationSeed; // This tick's addition to the hash's block rotations, the same as build-grid.vert's
 } forceCollision;
 
-#define gridTextureSize forceCollision.gridTextureSize
-#define cellSize forceCollision.cellSize
 #define alpha forceCollision.alpha
 #define collisionStrength forceCollision.collisionStrength
 #define collisionRadius forceCollision.collisionRadius
 #define collisionPadding forceCollision.collisionPadding
 #define pointsNumber forceCollision.pointsNumber
 #define gridOffset forceCollision.gridOffset
+#define cellsPerUnit forceCollision.cellsPerUnit
+#define rotationSeed forceCollision.rotationSeed
 #else
-uniform float gridTextureSize;
-uniform float cellSize;
 uniform float alpha;
 uniform float collisionStrength;
 uniform float collisionRadius;
 uniform float collisionPadding;
 uniform float pointsNumber;
 uniform vec2 gridOffset;
+uniform float cellsPerUnit;
+uniform float rotationSeed;
 #endif
+
+// @collision-grid
 
 out vec4 fragColor;
 
@@ -58,35 +60,24 @@ void main() {
   float currentSize = currentSizeData.r;
   float currentCollisionRadius = (collisionRadius > 0.0 ? collisionRadius : currentSize * 0.5) + collisionPadding;
 
-  vec2 currentPos = pointPosition.rg;
+  // The grid holds positions relative to the data box's centre; compare in
+  // the same frame (collision-grid.ts).
+  vec2 currentPos = collisionLocal(pointPosition.rg);
 
-  // Apply the same offset used when building the grid
-  vec2 offsetPos = currentPos + gridOffset * cellSize;
-
-  // Calculate which grid cell this point is in (with offset).
-  // Clamp to the grid bounds to match build-grid.vert, so a point that drifts
-  // outside the space still reads the edge cell it was binned into.
-  float myCellX = clamp(floor(offsetPos.x / cellSize), 0.0, gridTextureSize - 1.0);
-  float myCellY = clamp(floor(offsetPos.y / cellSize), 0.0, gridTextureSize - 1.0);
+  // The cell build-grid.vert binned this point into on this pass's grid — the
+  // same bits, from the shared formula (collision-grid.ts), so the self-removal
+  // below subtracts the point from the texel that actually holds it.
+  highp ivec2 myCell = collisionCell(pointPosition.rg, gridOffset, cellsPerUnit);
 
   // Track total neighbor count for damping
   float totalNeighbors = 0.0;
 
-  // Check 3x3 neighborhood of cells
+  // Check 3x3 neighborhood of cells. The hash has no edge: each neighbour
+  // hashes onto the grid like every binned cell (collision-grid.ts), so the
+  // neighbour across a block boundary is wherever that block's cells went.
   for (int dx = -1; dx <= 1; dx++) {
     for (int dy = -1; dy <= 1; dy++) {
-      float neighborCellX = myCellX + float(dx);
-      float neighborCellY = myCellY + float(dy);
-
-      // Skip cells outside grid bounds
-      if (neighborCellX < 0.0 || neighborCellX >= gridTextureSize ||
-          neighborCellY < 0.0 || neighborCellY >= gridTextureSize) {
-        continue;
-      }
-
-      // Sample the grid cell (the bounds check above keeps the fetch in range)
-      ivec2 cell = ivec2(neighborCellX, neighborCellY);
-      vec4 cellData = texelFetch(gridTexture, cell, 0);
+      vec4 cellData = texelFetch(gridTexture, collisionTexel(myCell + ivec2(dx, dy), gridOffset, rotationSeed), 0);
 
       float cellCount = cellData.w;
       if (cellCount < 0.5) continue; // Empty cell
@@ -118,8 +109,17 @@ void main() {
       vec2 distVector = currentPos - avgPos;
       float dist = length(distVector);
 
+      // Closer than the rounding error of that average, the direction to it is
+      // noise, and points closer than this count as coincident. The texel's
+      // sums are float32 additions: n points summed err by up to n − 1
+      // roundings of the running total, so the average of the others is off
+      // by up to about 2^-23 of the sum's magnitude — over 0.001 for a stack
+      // of a few hundred points a thousand units from the data's centre, which
+      // otherwise read their noise as one common direction and moved as a block.
+      float coincidence = max(0.001, length(cellData.xy) * 1.1920929e-7);
+
       // Check for collision
-      if (dist < combinedRadius && dist > 0.001) {
+      if (dist < combinedRadius && dist > coincidence) {
         // Calculate overlap ratio (0 = just touching, 1 = fully overlapping)
         float overlapRatio = (combinedRadius - dist) / combinedRadius;
 
@@ -138,7 +138,7 @@ void main() {
         force = min(force, combinedRadius * 0.5);
 
         velocity.rg += force * direction;
-      } else if (dist <= 0.001 && effectiveCount > 0.0) {
+      } else if (dist <= coincidence && effectiveCount > 0.0) {
         // Points at same position - push based on index
         float angle = currentIndex * 0.618033988749895;
         float force = min(alpha * collisionStrength * combinedRadius * 0.1, combinedRadius * 0.3);

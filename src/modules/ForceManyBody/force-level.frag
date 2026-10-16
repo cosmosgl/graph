@@ -3,13 +3,15 @@ precision highp float;
 
 // One grid level of precise many-body repulsion (Barnes-Hut-style approximation).
 //
-// Levels are 2D grids of increasing resolution (4², 8², …) holding
+// Levels are 2D grids of increasing resolution (8², 16², …) holding
 // [sum(x), sum(y), count, 0] per cell. The decomposition tiles space exactly
 // once across the level passes: after level L the only un-accumulated region is
 // the 3×3 Chebyshev-1 neighborhood of the point's cell, which the next level
 // refines (its aligned 6×6 child block), and which force-nearfield.frag finally
 // covers at the finest level. The exclusion shell is fixed at Chebyshev
-// distance 1.
+// distance 1. Every level divides this tick's data bounds (grid-cell.ts), not
+// the space, shifted by a fresh random offset every tick so the boundaries where
+// that split changes never stay on one line (ForceManyBody's class doc).
 
 uniform sampler2D positionsTexture;
 uniform sampler2D levelTexture;
@@ -17,24 +19,23 @@ uniform sampler2D levelTexture;
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceLevelPreciseUniforms {
   float levelGridSize;
-  float cellSize;
   float isFirstLevel;
   float alpha;
   float repulsion;
 } forceLevelPrecise;
 
 #define levelGridSize forceLevelPrecise.levelGridSize
-#define cellSize forceLevelPrecise.cellSize
 #define isFirstLevel forceLevelPrecise.isFirstLevel
 #define alpha forceLevelPrecise.alpha
 #define repulsion forceLevelPrecise.repulsion
 #else
 uniform float levelGridSize;
-uniform float cellSize;
 uniform float isFirstLevel;
 uniform float alpha;
 uniform float repulsion;
 #endif
+
+// @grid-cell
 
 out vec4 fragColor;
 
@@ -62,8 +63,8 @@ void main() {
   vec2 position = pointPosition.rg;
 
   int gridSize = int(levelGridSize);
-  // Must match the aggregation shader's cell formula exactly.
-  ivec2 pointCell = clamp(ivec2(floor(position / cellSize)), ivec2(0), ivec2(gridSize - 1));
+  // The aggregation shader's cell formula (grid-cell.ts), shared exactly.
+  ivec2 pointCell = gridCell(position, levelGridSize);
 
   vec2 velocity = vec2(0.0);
 
