@@ -304,14 +304,17 @@ void main() {
 
   // Stroke: the per-point channels have their own transition properties, so a stroke change
   // never restarts the fill's transition (whose source buffer holds older colors) and vice versa.
-  strokeColor = animateStrokeColors > 0.0
-    ? mix(resolveStrokeColor(sourceStrokeColor, shapeColor.rgb, isGreyedOut),
-          resolveStrokeColor(targetStrokeColor, shapeColor.rgb, isGreyedOut), transitionProgress)
-    : resolveStrokeColor(targetStrokeColor, shapeColor.rgb, isGreyedOut);
   float strokeWidth = animateStrokeWidths > 0.0
     ? mix(resolveStrokeWidth(sourceStrokeWidth), resolveStrokeWidth(targetStrokeWidth), transitionProgress)
     : resolveStrokeWidth(targetStrokeWidth);
   strokeWidthPx = max(strokeWidth, 0.0) * ratio;
+  strokeColor = vec4(0.0);
+  if (strokeWidthPx > 0.0) {
+    strokeColor = animateStrokeColors > 0.0
+      ? mix(resolveStrokeColor(sourceStrokeColor, shapeColor.rgb, isGreyedOut),
+            resolveStrokeColor(targetStrokeColor, shapeColor.rgb, isGreyedOut), transitionProgress)
+      : resolveStrokeColor(targetStrokeColor, shapeColor.rgb, isGreyedOut);
+  }
 
   if (!hasImage) {
     imageAtlasUV = vec4(-1.0);

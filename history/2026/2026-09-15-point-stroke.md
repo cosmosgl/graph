@@ -3,7 +3,7 @@
 # Per-point edge stroke in a shade of the point's own color
 
 **Date:** 2026-09-15
-**Commits:** `feat(points): per-point edge stroke in a shade of the point's own color` (<!-- TODO -->)
+**Commits:** `feat(points): per-point edge stroke in a shade of the point's own color` ([#267](https://github.com/cosmosgl/graph/pull/267))
 
 ## Why
 
@@ -21,7 +21,7 @@ Three config keys, all in `GraphConfigInterface` / `defaultConfigValues`, and tw
 setters that follow the `pointDefaultColor` / `setPointColors` pattern:
 
 ```ts
-pointDefaultStrokeWidth: 0.5,     // CSS px; 0 (the default) disables the stroke
+pointDefaultStrokeWidth: 0.5,     // example width in CSS px; 0 (the default) disables the stroke
 pointDefaultStrokeColor: 'auto',  // 'auto' | 'darken' | 'lighten' | a color
 pointStrokeContrast: 0.1,         // OKLab lightness step for the derived rules
 
@@ -89,7 +89,7 @@ as the fill, so it anti-aliases exactly like the fill and costs nothing beyond a
 - **Small points are skipped.** A point whose diameter is below the stroke width is drawn
   without a stroke rather than as a solid blob of stroke color. Points just above that cut
   are still mostly stroke — the rule is a floor, not a fade.
-- **Off by default, nothing changes.** With `pointStrokeWidth: 0` the band is never mixed
+- **Off by default, nothing changes.** With `pointDefaultStrokeWidth: 0` the band is never mixed
   in; the fill path is the unchanged edge ramp.
 
 Images composite above the stroke, as they already did above the fill.
