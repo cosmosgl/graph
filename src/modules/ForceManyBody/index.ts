@@ -153,14 +153,32 @@ type LevelTarget = {
   gridSize: number;
 }
 
-/** A near-field depth-peeling render target ([point index, hash] per cell). */
-type SlotTarget = {
-  texture: Texture;
-  fbo: Framebuffer;
-}
+/** The near-field slots alternate between this many array textures (see NearFieldSlots). */
+const SLOT_ARRAYS = 2
 
-/** Ping-pong pair: each peel pass writes one and reads the other. */
-const PEEL_TARGETS = 2
+/**
+ * The near-field point slots: one depth-peeling pass per slot over the finest
+ * level's grid, each holding [point index, hash] per cell, rebuilt every tick
+ * (build-nearfield-slots.vert). Pass k samples pass k−1's output, and sampling
+ * one layer of a texture while rendering to another layer of the same texture
+ * is a WebGL feedback loop. So slot k is layer k / 2 of arrays[k % 2], pass k
+ * renders into that layer and samples the other array, and the force pass
+ * reads both. Peeling into a pair of 2D targets and copying each pass into
+ * its layer of one array costs about as much again as the passes at small
+ * point counts, each copy its own encoder and submit. One depth attachment
+ * serves every pass, since each clears it.
+ */
+type NearFieldSlots = {
+  /** Peeling passes per tick. */
+  count: number;
+  /** Cells per axis of every target — the finest level's grid. */
+  gridSize: number;
+  /** Even slots in [0], odd slots in [1], each ceil(count / 2) layers deep. */
+  arrays: Texture[];
+  depth: Texture;
+  /** One per slot, attaching its layer and the shared depth. */
+  fbos: Framebuffer[];
+}
 
 /**
  * GPU many-body (repulsion) force.
@@ -213,23 +231,8 @@ export class ForceManyBody extends CoreModule {
   /** Grid level count; `0` until create() allocates the pyramid. */
   private levels = 0
   private levelTargets = new Map<number, LevelTarget>()
-  /** Near-field slot count for the current point count (getNearFieldSlotCount). */
-  private nearFieldSlots = 0
-  /**
-   * Near-field point slots: one sampler2DArray layer per depth-peeling pass,
-   * sharing the finest level's grid layout, each holding [point index, hash]
-   * per cell — rebuilt every tick (see build-nearfield-slots.vert).
-   */
-  private slotsArrayTexture: Texture | undefined
-  /**
-   * The two ping-pong peel render targets: pass k draws into k % 2 while
-   * reading the previous pass's result from (k + 1) % 2, then the result is
-   * copied into layer k of slotsArrayTexture. Peeling can't render into the
-   * array layers directly — pass k needs to sample pass k−1's output, and
-   * sampling one layer of a texture while rendering to another is a WebGL
-   * feedback loop.
-   */
-  private peelTargets: SlotTarget[] = []
+  /** Near-field slots over the finest grid level; `undefined` until create() allocates them. */
+  private nearField: NearFieldSlots | undefined
 
   private calculateLevelsCommand: Model | undefined
   private forceLevelCommand: Model | undefined
@@ -265,6 +268,7 @@ export class ForceManyBody extends CoreModule {
       levelGridSize: number;
       hasPreviousSlot: number;
       randomSeed: number;
+      previousLayer: number;
     };
   }> | undefined
 
@@ -492,12 +496,14 @@ export class ForceManyBody extends CoreModule {
           levelGridSize: 'f32',
           hasPreviousSlot: 'f32',
           randomSeed: 'f32',
+          previousLayer: 'f32',
         },
         defaultUniforms: {
           pointsTextureSize: store.pointsTextureSize,
           levelGridSize: 0,
           hasPreviousSlot: 0,
           randomSeed: 0,
+          previousLayer: 0,
         },
       },
     })
@@ -648,7 +654,7 @@ export class ForceManyBody extends CoreModule {
 
     // Nothing to do until the grid pyramid and near-field slots are allocated
     // (create() builds them; this guards a partial/failed allocation).
-    if (this.levelTargets.size === 0 || this.peelTargets.length !== PEEL_TARGETS || !this.slotsArrayTexture) return
+    if (this.levelTargets.size === 0 || !this.nearField) return
 
     // Bounds first, once per tick: the passes below all index the grid they
     // define, and must index the same one — the aggregation and the forces
@@ -822,22 +828,21 @@ export class ForceManyBody extends CoreModule {
   }
 
   /**
-   * Rebuilds the near-field point slots for this tick: `nearFieldSlots`
-   * depth-peeling passes over the points, each capturing the eligible point with
+   * Rebuilds the near-field point slots for this tick: one depth-peeling pass
+   * per slot over the points, each capturing the eligible point with
    * the smallest per-tick random hash per finest-level cell (see
    * build-nearfield-slots.vert). Re-seeded every tick so dense cells rotate all
-   * their points through exact pairwise treatment. Each pass ping-pongs between
-   * the two peel targets (reading the previous pass's output), then its result
-   * is copied into its layer of the slot array texture.
+   * their points through exact pairwise treatment. Pass k renders into its own
+   * layer and samples pass k−1's from the other array (see NearFieldSlots).
    */
   private drawNearFieldSlots (): void {
-    const { device, store, data, points } = this
+    const { device, store, data, points, nearField } = this
     if (!points) return
     if (!this.buildNearFieldSlotsCommand || !this.buildNearFieldSlotsUniformStore) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
     if (!points.exitTexture || points.exitTexture.destroyed) return
     if (!data.pointsNumber || !this.pointIndices) return
-    if (!this.slotsArrayTexture || this.slotsArrayTexture.destroyed) return
+    if (!nearField || nearField.arrays.some(array => array.destroyed)) return
     const finest = this.levelTargets.get(this.levels - 1)
     if (!finest || finest.texture.destroyed) return
     const dataBoundsTexture = this.dataBounds?.texture
@@ -845,10 +850,10 @@ export class ForceManyBody extends CoreModule {
 
     const randomSeed = store.getRandomFloat(0, 1)
 
-    for (let slot = 0; slot < this.nearFieldSlots; slot += 1) {
-      const target = this.peelTargets[slot % PEEL_TARGETS]
-      const previous = this.peelTargets[(slot + 1) % PEEL_TARGETS]
-      if (!target || target.fbo.destroyed || !previous || previous.texture.destroyed) continue
+    for (let slot = 0; slot < nearField.count; slot += 1) {
+      const fbo = nearField.fbos[slot]
+      const previous = nearField.arrays[(slot + 1) % SLOT_ARRAYS]
+      if (!fbo || fbo.destroyed || !previous) continue
 
       this.buildNearFieldSlotsUniformStore.setUniforms({
         buildNearFieldSlotsUniforms: {
@@ -858,6 +863,7 @@ export class ForceManyBody extends CoreModule {
           // The seed is shared by all slots of one tick — peeling relies on a
           // consistent hash ordering across the passes.
           randomSeed,
+          previousLayer: Math.max(0, slot - 1) >> 1,
         },
       })
 
@@ -866,34 +872,19 @@ export class ForceManyBody extends CoreModule {
         positionsTexture: points.previousPositionTexture,
         exitTexture: points.exitTexture,
         // Pass 0 never samples previousSlot, but the binding must exist for the
-        // draw to run — any texture that is not the render target works.
-        previousSlot: slot === 0
-          ? points.previousPositionTexture
-          : previous.texture,
+        // draw to run; the other array is never pass 0's render target.
+        previousSlot: previous,
         dataBoundsTexture,
       })
 
       const slotPass = device.beginRenderPass({
-        framebuffer: target.fbo,
+        framebuffer: fbo,
         // Cleared slot = empty: index -1 with hash 1 keeps later passes ineligible
         clearColor: [-1, 1, 0, 0],
         clearDepth: 1,
       })
       this.buildNearFieldSlotsCommand.draw(slotPass)
       slotPass.end()
-
-      // Publish this pass's result as layer `slot` of the array texture that
-      // the near-field force pass samples.
-      const commandEncoder = device.createCommandEncoder()
-      commandEncoder.copyTextureToTexture({
-        sourceTexture: target.texture,
-        destinationTexture: this.slotsArrayTexture,
-        destinationOrigin: [0, 0, slot],
-        width: finest.gridSize,
-        height: finest.gridSize,
-      })
-      // finish() destroys the encoder itself and returns the command buffer.
-      device.submit(commandEncoder.finish())
     }
   }
 
@@ -902,12 +893,11 @@ export class ForceManyBody extends CoreModule {
    * pass reading the finest level to close its 3×3 neighborhood.
    */
   private drawForces (): void {
-    const { device, store, data, points } = this
+    const { device, store, data, points, nearField } = this
     if (!points) return
     if (!this.forceLevelCommand || !this.forceLevelUniformStore) return
     if (!this.forceNearFieldCommand || !this.forceNearFieldUniformStore) return
-    if (this.peelTargets.length !== PEEL_TARGETS) return
-    if (!this.slotsArrayTexture || this.slotsArrayTexture.destroyed) return
+    if (!nearField || nearField.arrays.some(array => array.destroyed)) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
     if (!this.randomValuesTexture || this.randomValuesTexture.destroyed) return
     if (!points.velocityFbo || points.velocityFbo.destroyed) return
@@ -953,7 +943,7 @@ export class ForceManyBody extends CoreModule {
             maxStep: getMaxStep(store.adjustedSpaceSize, data.pointsNumber ?? 0),
             alpha: store.alpha,
             repulsion: this.config.simulationRepulsion,
-            slotCount: this.nearFieldSlots,
+            slotCount: nearField.count,
           },
         })
 
@@ -961,7 +951,8 @@ export class ForceManyBody extends CoreModule {
           positionsTexture: points.previousPositionTexture,
           levelTexture: target.texture,
           randomValues: this.randomValuesTexture,
-          slotsTexture: this.slotsArrayTexture,
+          slotsEven: nearField.arrays[0]!,
+          slotsOdd: nearField.arrays[1]!,
           dataBoundsTexture,
         })
         this.forceNearFieldCommand.draw(drawPass)
@@ -991,7 +982,7 @@ export class ForceManyBody extends CoreModule {
       // missing — on the first run, or the finer levels we need again after the
       // pyramid grew back. (Shrinking is handled by the drop loop below.) The
       // near-field slots are the opposite case — they really can change size, see
-      // createNearFieldSlotTargets.
+      // createNearFieldSlots.
       if (this.levelTargets.has(level)) continue
 
       const gridSize = COARSEST_GRID_SIZE * Math.pow(2, level)
@@ -1020,77 +1011,79 @@ export class ForceManyBody extends CoreModule {
 
     // Near-field slot textures share the finest level's grid layout
     const finest = this.levelTargets.get(this.levels - 1)
-    if (finest) this.createNearFieldSlotTargets(finest)
+    if (finest) this.createNearFieldSlots(finest)
   }
 
   /**
-   * Allocates the near-field sampling resources: the two ping-pong depth-peeling
-   * targets ([point index, hash] per cell, with a depth attachment each for the
-   * peel's smallest-hash selection) and the slot array texture (one layer per
-   * peeling pass) that the force pass samples.
+   * Allocates the near-field slots (NearFieldSlots): the two slot arrays, the
+   * depth attachment the peel's smallest-hash selection runs on, and one
+   * framebuffer per slot attaching its layer.
    */
-  private createNearFieldSlotTargets (finest: LevelTarget): void {
+  private createNearFieldSlots (finest: LevelTarget): void {
     const { device } = this
-    const slots = getNearFieldSlotCount(this.data.pointsNumber ?? 0)
+    const count = getNearFieldSlotCount(this.data.pointsNumber ?? 0)
     // These targets follow the finest level's grid, and that grid does change
     // size as the graph grows or shrinks (it snaps to powers of two) — and the
     // slot count changes with the point count too. If everything we already
     // have matches, keep it; otherwise throw it away and rebuild.
-    const existing = this.peelTargets[0]
+    const existing = this.nearField
     if (
       existing &&
-      !existing.texture.destroyed &&
-      existing.texture.width === finest.gridSize &&
-      existing.texture.height === finest.gridSize &&
-      this.peelTargets.length === PEEL_TARGETS &&
-      this.slotsArrayTexture &&
-      !this.slotsArrayTexture.destroyed &&
-      this.nearFieldSlots === slots
+      existing.gridSize === finest.gridSize &&
+      existing.count === count &&
+      existing.fbos.length === count &&
+      existing.fbos.every(fbo => !fbo.destroyed) &&
+      existing.arrays.every(array => !array.destroyed) &&
+      !existing.depth.destroyed
     ) return
 
-    this.destroyNearFieldSlotTargets()
-    this.nearFieldSlots = slots
-    for (let target = 0; target < PEEL_TARGETS; target += 1) {
-      const texture = device.createTexture({
+    this.destroyNearFieldSlots()
+    const layers = Math.ceil(count / SLOT_ARRAYS)
+    const arrays: Texture[] = []
+    for (let array = 0; array < SLOT_ARRAYS; array += 1) {
+      arrays.push(device.createTexture({
+        dimension: '2d-array',
         width: finest.gridSize,
         height: finest.gridSize,
+        depth: layers,
         format: 'rg32float',
-        usage: Texture.SAMPLE | Texture.RENDER | Texture.COPY_SRC,
-      })
-      const fbo = device.createFramebuffer({
-        width: finest.gridSize,
-        height: finest.gridSize,
-        colorAttachments: [texture],
-        // Depth resolution must cover the 24-bit peel hash: the depth test picks
-        // each slot's winner, but the next pass's eligibility compares the full
-        // hash from the color target. A 16-bit depth buffer quantizes ties into
-        // existence, and a tie resolved by draw order can exclude the true
-        // smallest-hash point from the whole tick's sample.
-        depthStencilAttachment: 'depth24plus',
-      })
-      this.peelTargets.push({ texture, fbo })
+        usage: Texture.SAMPLE | Texture.RENDER,
+      }))
     }
-    this.slotsArrayTexture = device.createTexture({
-      dimension: '2d-array',
+    // Depth resolution must cover the 24-bit peel hash: the depth test picks
+    // each slot's winner, but the next pass's eligibility compares the full
+    // hash from the color target. A 16-bit depth buffer quantizes ties into
+    // existence, and a tie resolved by draw order can exclude the true
+    // smallest-hash point from the whole tick's sample.
+    const depth = device.createTexture({
       width: finest.gridSize,
       height: finest.gridSize,
-      depth: slots,
-      format: 'rg32float',
-      usage: Texture.SAMPLE | Texture.COPY_DST,
+      format: 'depth24plus',
+      usage: Texture.RENDER,
     })
+    const fbos: Framebuffer[] = []
+    for (let slot = 0; slot < count; slot += 1) {
+      fbos.push(device.createFramebuffer({
+        width: finest.gridSize,
+        height: finest.gridSize,
+        colorAttachments: [arrays[slot % SLOT_ARRAYS]!.createView({ dimension: '2d', baseArrayLayer: slot >> 1, arrayLayerCount: 1, mipLevelCount: 1 })],
+        depthStencilAttachment: depth,
+      }))
+    }
+    this.nearField = { count, gridSize: finest.gridSize, arrays, depth, fbos }
   }
 
-  private destroyNearFieldSlotTargets (): void {
-    for (const target of this.peelTargets) {
-      if (!target.fbo.destroyed) target.fbo.destroy()
-      if (!target.texture.destroyed) target.texture.destroy()
+  private destroyNearFieldSlots (): void {
+    const { nearField } = this
+    if (!nearField) return
+    for (const fbo of nearField.fbos) {
+      if (!fbo.destroyed) fbo.destroy()
     }
-    this.peelTargets = []
-    if (this.slotsArrayTexture && !this.slotsArrayTexture.destroyed) {
-      this.slotsArrayTexture.destroy()
+    for (const array of nearField.arrays) {
+      if (!array.destroyed) array.destroy()
     }
-    this.slotsArrayTexture = undefined
-    this.nearFieldSlots = 0
+    if (!nearField.depth.destroyed) nearField.depth.destroy()
+    this.nearField = undefined
   }
 
   private destroyLevelTargets (): void {
@@ -1099,6 +1092,6 @@ export class ForceManyBody extends CoreModule {
       if (!target.texture.destroyed) target.texture.destroy()
     }
     this.levelTargets.clear()
-    this.destroyNearFieldSlotTargets()
+    this.destroyNearFieldSlots()
   }
 }
