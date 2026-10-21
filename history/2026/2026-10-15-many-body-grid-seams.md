@@ -1,9 +1,9 @@
 <!-- suggested path: history/2026/2026-10-15-many-body-grid-seams.md -->
 
-# Many-body grid seams: the grid shifts every tick, the pyramid starts at 8², and far-field centroids keep two cells away
+# Many-body grid seams: the grid shifts every tick, the pyramid starts at 8², and far-field centroids keep two cells away below 25k points
 
 **Date:** 2026-10-15
-**Commits:** `perf(force): start the many-body pyramid at 8² — the 4² level was its slowest pass` (`49f83d9`), `fix(force): shift the many-body grid every tick — fixed cell boundaries drew a cross` (`e29bb10`), `docs(force): the many-body grid shifts every tick and starts at 8²` (`6c35257`), `fix(force): use far-field centroids only from two cells away — clustered layouts jittered` (`c30843e`)
+**Commits:** `perf(force): start the many-body pyramid at 8² — the 4² level was its slowest pass` (`49f83d9`), `fix(force): shift the many-body grid every tick — fixed cell boundaries drew a cross` (`e29bb10`), `docs(force): the many-body grid shifts every tick and starts at 8²` (`6c35257`), `fix(force): use far-field centroids only from two cells away — clustered layouts jittered` (`c30843e`), `feat(force): choose the far-field shell by point count — simulationRepulsionQuality forces it` (`e53aea7`), `feat(stories): the motion check switches the far field live, and loses its readouts` (`1c4b884`)
 
 ## Why
 
@@ -74,7 +74,7 @@ the quarter lines, the fix 0.986–1.005), so the cross needs a dense, large lay
   uniform data, visible on clustered data until the shell below widened. The collision
   force owns its own `DataBounds` and passes no shift.
 - **Far-field centroids are used only from two cells away** (`c30843e`). Every level but
-  the finest now leaves a 5×5 block of cells (Chebyshev radius 2) to the next level instead
+  the finest leaves a 5×5 block of cells (Chebyshev radius 2) to the next level instead
   of 3×3, and each level refines the block its parent left — `(4r+2)²` cells from
   `(cell/2)·2 − 2r` — minus its own. A centroid's error falls with the square of its
   distance in cell sizes, so from two cells away it is about a quarter of what it was from
@@ -84,6 +84,13 @@ the quarter lines, the fix 0.986–1.005), so the cross needs a dense, large lay
   a level's own radius and its parent's as uniforms, so one loop shape serves every level. A
   level's block fits inside the one it refines whenever r(L+1) ≤ 2·r(L), and every cell is
   still charged to exactly one pass.
+- **The wide shell is the default only up to 25,000 points** (`e53aea7`). It costs a third
+  of a step above that and nothing below (measured below), and what it fixes is a
+  hot-simulation effect that a settled layout does not show. `simulationRepulsionQuality`
+  names the choice: `'precise'` is the 5×5 shell, `'fast'` the 3×3, and the default `'auto'`
+  is precise up to `PRECISE_FAR_FIELD_MAX_POINTS` (25,000) and fast above. The radius was
+  already a per-level uniform, so the shader did not change; the setting is read every tick
+  and applies to the next step through `setConfigPartial`.
 - **The pyramid starts at 8², not 4²** (`49f83d9`). `COARSEST_GRID_SIZE` names the
   coarsest level; the finest level is unchanged. Two reasons:
   - The shift pads by one *coarsest* cell. From 4², that is a third of the box, which
@@ -145,18 +152,28 @@ square and 0.093% → 0.098% on the 100k disk. Other effects:
   at three places still passes at float rounding, and on the real GPU two placements of a
   20k-point blob end 0.0006% of the extent apart (0.0009% before), nudged ones 0.0004%.
 
-### The wider shell (`c30843e`)
+### The wider shell (`c30843e`) and its threshold (`e53aea7`)
 
-Far-field texel reads per point over seven levels go 217 → 505 (coarsest level 55 → 39, each
-middle level 27 → 75, finest 27 → 91); aggregation, bounds reduction and near field are
-unchanged. **Performance → Repulsion Benchmark** story, Chrome on Apple Silicon, ms per step:
+Far-field texel reads per point over seven levels go 217 → 505 for an interior point
+(coarsest level 55 → 39, each middle level 27 → 75, finest 27 → 91; averaged over a uniform
+layout with the edge clipping, 208 → 464); aggregation, bounds reduction and near field are
+unchanged. **Performance → Repulsion Benchmark** story, Chrome on an Apple M3, medians of
+five interleaved rounds, ms per step:
 
-| | 2k | 5k | 20k | 50k | 100k | 200k |
-|---|---|---|---|---|---|---|
-| 3×3 shell (`08b58ed`) | 1.68 | 4.29 | 3.14 | 4.33 | 7.14 | 13.88 |
-| 5×5 shell above the finest | 1.68 | 4.28 | 3.21 | 5.87 | 9.83 | 18.48 |
+| | 2k | 5k | 16k | 20k | 30k | 40k | 50k | 65k | 100k | 200k |
+|---|---|---|---|---|---|---|---|---|---|---|
+| 3×3 shell | 1.75 | 4.38 | 4.44 | 3.20 | 3.27 | 3.92 | 4.65 | 5.50 | 7.06 | 14.29 |
+| 5×5 shell above the finest | 1.75 | 4.40 | 4.60 | 3.27 | 4.23 | 5.36 | 6.10 | 7.48 | 9.72 | 18.75 |
+| extra | 0 | 0 | +4 % | +2 % | +29 % | +37 % | +31 % | +36 % | +38 % | +31 % |
 
-2k and 5k run the all-pairs path and do not change. From 50k up the step costs a third more.
+2k points run the all-pairs path. 5k runs the grid with 32 near-field slots, and up to about
+25k points a step waits on the fixed cost of its render passes — some 40 to 60 per tick,
+most of them peeling — rather than on the far field's reads: the step at 5k and 16k (32
+slots) is slower than at 20k (16 slots), and the wider shell's extra reads fill GPU time
+that was idle. From 30k up the far field is the largest part of the step, about half of it
+with the 5×5 shell, and the extra shows in full. That is where the 25,000-point threshold
+comes from. The crossover is machine-specific: a slower GPU with the same CPU moves it
+lower, a slower driver raises it.
 
 Steady-state motion on the Lasso Selection layout (RMS displacement per tick at alpha 1, in
 point spacings, 400 warm-up and 60 measured steps, one seed; a one-off vitest script, not
@@ -177,6 +194,25 @@ the near field's incoherent sampling noise. The harness error for the 5×5 shell
 measured; by construction it can only have fallen, since more cells are refined and nothing
 else moved.
 
+The same metric on the four scenarios of the Steady-State Motion story, read from the
+readouts it had at `e40a649` (RMS per tick in point spacings over 60 ticks):
+
+| alpha held at 1 | 3×3 | 5×5 |
+|---|---|---|
+| 163 points, exact path | 0.0025 | 0.0024 |
+| 10k lattice, links and collision | 0.0393 | 0.0380 |
+| 22,500 points in 25 clusters | 0.0230 | 0.0086 |
+| 100k uniform blob | 0.0012 | 0.0004 |
+
+Only the clustered layout changes by an amount the eye can see; the blob's threefold
+difference is far below a pixel, and the lattice's larger motion is the near field's and
+the collision's, the same under both shells. With the stock decay of 5,000 the clusters'
+3×3 motion is 0.0260 at alpha 0.7, 0.0112 at 0.5, 0.0070 at 0.3 and 0.0024 at 0.1 — below
+the 5×5 shell's held-alpha level once alpha passes about 0.3, which the default decay
+reaches after some 870 ticks, fifteen seconds at 60 fps. So the jitter is the price of a
+hot simulation: a layout that holds alpha high on clustered data, as every Storybook example
+does through the shared helper's decay of 10⁷, sees it; a layout that settles does not.
+
 ## Where this departs from earlier decisions
 
 The unbounded-space work (`history/2026/2026-10-14-unbounded-space.md`) chose **no padding
@@ -188,6 +224,16 @@ less than the margin did: square 0.066% and disk 0.098% for the 20-tick mean, 0.
 
 ## Alternatives not taken
 
+- **A rounded shell.** Dropping the four corner cells of the 5×5 shell (21 cells) keeps
+  every used centroid at least as far away as the axis-aligned cells the shell already keeps,
+  still tiles exactly once (checked by simulation over seven levels) and cuts the far-field
+  reads by 13 %. Measured over five interleaved rounds it saved only 0.3 / 0.34 / 0.59 ms at
+  50k / 100k / 200k points, 3–5 % of the step: the loop still walks the 10×10 block and skips
+  the corner children by a branch. Not adopted.
+- **Opting into the wide shell instead of out of it.** A 3×3 default everywhere would have
+  shipped a visible regression against `main` for clustered graphs under 25k points, where
+  the wide shell is free; a 5×5 default everywhere would have cost a third of a step above
+  that for an effect a settled layout does not show. The tier takes each where it is cheap.
 - **A continuous split.** Weighting each cell's centroid by a smooth function of the
   point's position in its cell, instead of the hard shell, would make the force
   deterministic and continuous. It needs wider neighbourhoods per level and an ancestor
@@ -219,11 +265,29 @@ less than the margin did: square 0.066% and disk 0.098% for the 20-tick mean, 0.
   pyramid and seam figures with the shaders' coverage rule and asserts that a boundary
   crossing now swaps ten cells; checked by eye in Storybook that Lasso Selection no longer
   jitters and that no cross appears there or in Space Size Wall at 300k.
+- The threshold and key (`e53aea7`): two browser tests on a 25-cluster layout in
+  `test/unbounded-space.test.ts` pin the tiering through the public API alone — `'auto'`
+  equals `'precise'` at 5,000 points and `'fast'` at 26,000, bit for bit; the two shells lay
+  out differently; a switch on a running graph changes the steps that follow. Both fail
+  against the code before the change.
+
+## Example
+
+`src/stories/performance/steady-state-motion.ts`, **Performance → Steady-State Motion**
+(`1c4b884`): four layouts with alpha held at 1 — the country graph on the exact path, a
+linked lattice with collision, the Lasso clusters under repulsion 8, a 100k blob — each
+tracing one point from its densest cell, with three buttons that apply
+`simulationRepulsionQuality` to all four live. Each pane's header says what the setting
+resolves to there, so `'auto'` reads "precise" on the clusters and "fast" on the blob. The
+story fits the view once, at tick 180, when the layout has formed. Its earlier readouts
+(motion, coherent share, a copy button) were measurement tooling and are gone; the numbers
+above were taken with them.
 
 ## Still open
 
-- Measured on an Apple M3 Max (ANGLE Metal) and SwiftShader only; the wider shell's timing
-  and motion on one Apple Silicon Mac in Chrome.
+- Measured on an Apple M3 Max (ANGLE Metal) and SwiftShader only. The 25,000-point threshold
+  is that machine's crossover from pass-bound to GPU-bound steps; on an integrated GPU the
+  wide shell costs below it too.
 - The seam metric lives in an ad-hoc harness, not in a story or a test: a dense 300k-point
   layout is too slow for SwiftShader in CI.
 - The harness accuracy tables have not been re-run with the 5×5 shell.
