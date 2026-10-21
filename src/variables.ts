@@ -80,6 +80,7 @@ export const defaultConfigValues = {
   simulationCenter: 0,
   simulationRepulsion: 1.0,
   simulationRepulsionTheta: 1.15,
+  simulationRepulsionQuality: 'auto',
   simulationLinkSpring: 1,
   simulationLinkDistance: 10,
   simulationLinkDistRandomVariationRange: [1, 1.2],

@@ -1272,3 +1272,63 @@ describe('collision away from the space', () => {
     expect(Array.from(result.subarray(COUNT * 2))).toEqual([202048, 2048])
   })
 })
+
+describe('the far-field shell (simulationRepulsionQuality)', () => {
+  // Clustered data, where a one-cell and a two-cell shell differ most: a coarse
+  // cell holds much of a cluster or splits one. A uniform blob would barely tell
+  // the shells apart.
+  const clustered = (count: number): Float32Array => {
+    let seed = 777
+    const random = (): number => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
+    const positions = new Float32Array(count * 2)
+    for (let i = 0; i < count; i += 1) {
+      const cluster = i % 25
+      const angle = random() * 2 * Math.PI
+      const radius = Math.sqrt(random()) * 80
+      positions[i * 2] = 1000 + (cluster % 5) * 500 + Math.cos(angle) * radius
+      positions[i * 2 + 1] = 1000 + Math.floor(cluster / 5) * 500 + Math.sin(angle) * radius
+    }
+    return positions
+  }
+  /** RMS distance between two layouts of the same points, as a fraction of the first one's extent. */
+  const apart = (a: Float32Array, b: Float32Array): number => {
+    let sumSquares = 0
+    for (let i = 0; i < a.length; i += 2) {
+      sumSquares += ((a[i] as number) - (b[i] as number)) ** 2 + ((a[i + 1] as number) - (b[i + 1] as number)) ** 2
+    }
+    return Math.sqrt(sumSquares / (a.length / 2)) / extentOf(a)
+  }
+  const layout = (
+    positions: Float32Array,
+    quality: GraphConfig['simulationRepulsionQuality'],
+    steps: number,
+    onStep?: (graph: Graph, step: number) => void
+  ): Promise<Float32Array> => runManyBody(positions, steps, onStep, { simulationRepulsionQuality: quality })
+
+  it("'auto' is precise up to 25,000 points and fast above, and the two shells lay out differently", async () => {
+    const small = clustered(5000)
+    const precise = await layout(small, 'precise', 10)
+    const fast = await layout(small, 'fast', 10)
+    const auto = await layout(small, 'auto', 10)
+    expect(apart(precise, fast)).toBeGreaterThan(1e-6)
+    expect(apart(auto, precise)).toBeLessThan(1e-9)
+
+    const large = clustered(26_000)
+    const largeFast = await layout(large, 'fast', 3)
+    const largeAuto = await layout(large, 'auto', 3)
+    const largePrecise = await layout(large, 'precise', 3)
+    expect(apart(largePrecise, largeFast)).toBeGreaterThan(1e-6)
+    expect(apart(largeAuto, largeFast)).toBeLessThan(1e-9)
+  })
+
+  it('applies to the next step when set on a running graph', async () => {
+    // Both runs call setConfigPartial at the same step, so only the value differs.
+    const small = clustered(5000)
+    const switchTo = (quality: GraphConfig['simulationRepulsionQuality']) => (graph: Graph, step: number): void => {
+      if (step === 5) graph.setConfigPartial({ simulationRepulsionQuality: quality })
+    }
+    const stayedFast = await layout(small, 'fast', 10, switchTo('fast'))
+    const switched = await layout(small, 'fast', 10, switchTo('precise'))
+    expect(apart(switched, stayedFast)).toBeGreaterThan(1e-6)
+  })
+})
