@@ -6,8 +6,9 @@ precision highp float;
 // Levels are 2D grids of increasing resolution (8², 16², …) holding
 // [sum(x), sum(y), count, 0] per cell. The decomposition tiles space exactly
 // once across the level passes: after level L the only un-accumulated region is
-// a shell of Chebyshev radius r around the point's cell — 5×5 on every level
-// but the finest, 3×3 there (getShellRadius in index.ts) — which the next level
+// a shell of Chebyshev radius r around the point's cell — 5×5 or 3×3 on every
+// level but the finest by simulationRepulsionQuality, 3×3 there (getShellRadius
+// in index.ts) — which the next level
 // refines as its aligned (4r+2)² child block, and which force-nearfield.frag
 // finally covers at the finest level. Every level divides this tick's data
 // bounds (grid-cell.ts), not the space, shifted by a fresh random offset every

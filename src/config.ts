@@ -19,6 +19,12 @@ export type PointStrokeShade = 'auto' | 'darken' | 'lighten'
  */
 type ColorString = string & Record<never, never>
 
+/**
+ * How far the many-body force keeps its far-field approximation from the point
+ * it acts on (`simulationRepulsionQuality`).
+ */
+export type RepulsionQuality = 'auto' | 'precise' | 'fast'
+
 export interface GraphConfigInterface {
   /**
    * If set to `false`, the simulation will not run.
@@ -485,6 +491,18 @@ export interface GraphConfigInterface {
    * Default value: `1.15`
    */
   simulationRepulsionTheta: number;
+  /**
+   * How the many-body force sums distant points. Above 4,096 points the far field
+   * is a grid of cell centroids. `'precise'` keeps every centroid at least two
+   * cells away from the point it acts on; `'fast'` allows one. One cell away is
+   * accurate on evenly spread data, but on clustered data, while the simulation
+   * is hot, it shows as a shimmer that moves whole lines of points; two cells
+   * away removes it and costs about a third more per step above 25,000 points,
+   * nothing below. `'auto'` is `'precise'` up to 25,000 points and `'fast'` above.
+   * The shimmer scales with alpha, so a settled layout looks the same either way.
+   * Default value: `'auto'`
+   */
+  simulationRepulsionQuality: RepulsionQuality;
   /**
    * Link spring force coefficient.
    * Default value: `1`
@@ -982,6 +1000,7 @@ export type GraphSimulationConfigInterface = Pick<GraphConfigInterface,
   | 'simulationCenter'
   | 'simulationRepulsion'
   | 'simulationRepulsionTheta'
+  | 'simulationRepulsionQuality'
   | 'simulationLinkSpring'
   | 'simulationLinkDistance'
   | 'simulationLinkDistRandomVariationRange'

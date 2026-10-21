@@ -97,6 +97,7 @@ cosmos.gl layout algorithm was inspired by the [d3-force](https://github.com/d3/
 | simulationCenter | Centering force coefficient | 0.0 – 1.0 | `0.0` |
 | simulationRepulsion | Repulsion force coefficient | 0.0 – 2.0 | `1.0` |
 | simulationRepulsionTheta | **Deprecated, no effect.** The Many-Body force now repels close points individually (a grid pyramid with an unbiased Monte-Carlo near field), so there is no theta approximation to tune. | - | `1.15` |
+| simulationRepulsionQuality | How far the Many-Body force keeps its far-field approximation from a point. `'precise'` stays calm on clustered data while the simulation is hot and costs about a third more per step above 25,000 points, nothing below; `'fast'` can shimmer there until the layout cools; `'auto'` is precise up to 25,000 points and fast above. | `'auto'`, `'precise'`, `'fast'` | `'auto'` |
 | simulationLinkSpring | Link spring force coefficient | 0.0 – 2.0 | `1.0` |
 | simulationLinkDistance | Minimum link distance. While `simulationCollision` is on, a link's rest length is never less than the sum of its two endpoints' effective collision radii, each including `simulationCollisionPadding`, so a spring can never pull a pair into overlap. | 1 – 20 | `10` |
 | simulationLinkDistRandomVariationRange | Link distance randomness multiplier range | [0.8 – 1.2,<br/> 1.2 – 2.0] | `[1, 1.2]` |

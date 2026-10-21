@@ -3003,7 +3003,7 @@ export class Graph implements PositionTextureSource {
   }
 }
 
-export type { GraphConfig, GraphSimulationConfig, GraphSimulationConfigInterface, PointStrokeShade } from './config'
+export type { GraphConfig, GraphSimulationConfig, GraphSimulationConfigInterface, PointStrokeShade, RepulsionQuality } from './config'
 export { GraphSimulation } from './simulation'
 export type { PointPositionTexture, PositionTextureSource } from './simulation'
 export type { PositionsReadOptions } from './simulation'
