@@ -830,7 +830,9 @@ export class Graph implements PositionTextureSource {
    * `setPointAttractorStrength`.
    *
    * @param {Float32Array} attractors - A Float32Array of attractor positions in the format [x1, y1, x2, y2, ..., xn, yn],
-   * where `n` is the index of the point, in simulation space coordinates (same space as `setPointPositions`).
+   * where `n` is the index of the point, in simulation space after any position rescaling.
+   * `rescalePositions` transforms point positions only, not attractor targets. Set `rescalePositions: false`
+   * to supply point positions and attractors in the original data coordinate space.
    * A non-finite value (`NaN`, `±Infinity`) in either coordinate means that point has no attractor.
    * The array must hold exactly one pair per point; otherwise it is ignored.
    * Example: `new Float32Array([100, 100, NaN, NaN, 300, 250])` pulls point 0 toward (100, 100) and point 2 toward (300, 250); point 1 is free.
