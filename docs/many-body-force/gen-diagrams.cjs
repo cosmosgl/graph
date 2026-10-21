@@ -1,8 +1,9 @@
 // Regenerates the SVG diagrams for this folder. Run from here:
 //   node gen-diagrams.cjs .
 // Grid-coverage panels compute cell coverage with the SAME rules as the
-// shaders (first level: whole grid minus 3×3; others: 6×6 child block minus
-// 3×3), and the data-bounds panels bin points with grid-cell.ts's formula over
+// shaders (first level: whole grid minus its shell; others: the child block of
+// the shell above minus their own shell; shells are 5×5 on every level but the
+// finest, 3×3 there), and the data-bounds panels bin points with grid-cell.ts's formula over
 // the box reduce-bounds-final.frag builds, so the pictures are exact, not
 // artistic impressions. Keep this script in sync
 // with force-level.frag / build-nearfield-slots.vert / grid-cell.ts /
@@ -127,16 +128,21 @@ const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion fa
     const ox = 26 + li * 320; const oy = 78
     const cell = SIDE / g
     const pc = [Math.floor(p[0] * g), Math.floor(p[1] * g)]
-    // coverage per shader: first level = whole grid minus 3×3;
-    // later levels = 6×6 child block (base = (pc>>1)<<1 - 2) minus 3×3
-    const base = [(pc[0] >> 1 << 1) - 2, (pc[1] >> 1 << 1) - 2]
+    // coverage per shader (force-level.frag, getShellRadius): shell radius r is
+    // 2 on every level but the finest, 1 there. First level = whole grid minus
+    // its shell; later levels = the (4·rPrev+2)² child block of the shell above
+    // (base = (pc>>1)<<1 - 2·rPrev) minus their own shell.
+    const r = li === levels.length - 1 ? 1 : 2
+    const rPrev = 2
+    const block = 2 * (2 * rPrev + 1)
+    const base = [(pc[0] >> 1 << 1) - 2 * rPrev, (pc[1] >> 1 << 1) - 2 * rPrev]
     for (let j = 0; j < g; j++) {
       for (let i = 0; i < g; i++) {
         const cheb = Math.max(Math.abs(i - pc[0]), Math.abs(j - pc[1]))
-        const inBlock = li === 0 || (i >= base[0] && i < base[0] + 6 && j >= base[1] && j < base[1] + 6)
+        const inBlock = li === 0 || (i >= base[0] && i < base[0] + block && j >= base[1] && j < base[1] + block)
         let fill = '#ffffff'
-        if (inBlock && cheb >= 2) fill = C.coveredSoft[li]
-        else if (inBlock && cheb <= 1) fill = li === levels.length - 1 ? C.nearSoft : C.deferred
+        if (inBlock && cheb > r) fill = C.coveredSoft[li]
+        else if (inBlock && cheb <= r) fill = li === levels.length - 1 ? C.nearSoft : C.deferred
         b += `<rect x="${(ox + i * cell).toFixed(1)}" y="${(oy + j * cell).toFixed(1)}" width="${cell.toFixed(1)}" height="${cell.toFixed(1)}" fill="${fill}" stroke="${C.gridLine}" stroke-width="0.7"/>`
       }
     }
@@ -145,14 +151,16 @@ const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion fa
     b += `<circle cx="${ox + p[0] * SIDE}" cy="${oy + p[1] * SIDE}" r="5" fill="${C.point}"/>`
     b += txt(ox + SIDE / 2, 40, `Level ${li}: ${g} × ${g} cells`, { size: 15, weight: '600', anchor: 'middle' })
     const covLabel = li === 0
-      ? 'whole data box minus the 3×3 shell'
-      : 'previous 3×3 refined, minus its own 3×3'
+      ? 'whole data box minus the 5×5 shell'
+      : li === levels.length - 1
+        ? 'previous 5×5 refined, minus its own 3×3'
+        : 'previous 5×5 refined, minus its own 5×5'
     b += txt(ox + SIDE / 2, 60, covLabel, { size: 11.5, fill: C.sub, anchor: 'middle' })
     // legend chip
     b += `<rect x="${ox}" y="${oy + SIDE + 14}" width="14" height="14" fill="${C.coveredSoft[li]}" stroke="${C.gridLine}"/>`
     b += txt(ox + 20, oy + SIDE + 25, li === levels.length - 1 ? 'centroid force at this level' : 'centroid force at this level', { size: 12 })
     b += `<rect x="${ox}" y="${oy + SIDE + 36}" width="14" height="14" fill="${li === levels.length - 1 ? C.nearSoft : C.deferred}" stroke="${C.gridLine}"/>`
-    b += txt(ox + 20, oy + SIDE + 47, li === levels.length - 1 ? '3×3 → near field (Monte-Carlo pairs)' : '3×3 → deferred to the next level', { size: 12 })
+    b += txt(ox + 20, oy + SIDE + 47, li === levels.length - 1 ? '3×3 → near field (Monte-Carlo pairs)' : '5×5 → deferred to the next level', { size: 12 })
     if (li < levels.length - 1) b += arrow(ox + SIDE + 14, oy + SIDE / 2, ox + SIDE + 44, oy + SIDE / 2, C.frame, 2.5)
   })
   b += txt(W / 2, H - 32, 'Every region of the data box — the live points’ bounding square, padded by one coarsest cell — is charged to exactly one pass.', { size: 13, fill: C.sub, anchor: 'middle' })
@@ -537,8 +545,9 @@ const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion fa
   const SIDE = 264
   const G = 8 // the coarsest level: ForceManyBody's COARSEST_GRID_SIZE
   const oy = 78
-  // Level 0 coverage for a point in cell pc: every cell except its 3×3 shell
-  const roleOf = (i, j, pc) => (Math.max(Math.abs(i - pc[0]), Math.abs(j - pc[1])) <= 1 ? 'deferred' : 'centroid')
+  // Level 0 coverage for a point in cell pc: every cell except its 5×5 shell
+  // (getShellRadius: radius 2 on every level but the finest)
+  const roleOf = (i, j, pc) => (Math.max(Math.abs(i - pc[0]), Math.abs(j - pc[1])) <= 2 ? 'deferred' : 'centroid')
   const left = [0.49, 0.43]
   const right = [0.51, 0.43]
   const cellOf = (p) => [Math.floor(p[0] * G), Math.floor(p[1] * G)]
@@ -569,9 +578,9 @@ const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion fa
     return s
   }
   let b = ''
-  b += coverage(26, left, pcL, null, 'Just left of the centre line', `level 0, ${G} × ${G}: centroids everywhere but its 3×3`)
-  b += coverage(346, right, pcR, pcL, 'Just right of it', 'the 3×3 moved one column: six cells changed hands')
-  assert(changed === 6, `crossing one boundary must swap two columns of three cells (got ${changed})`)
+  b += coverage(26, left, pcL, null, 'Just left of the centre line', `level 0, ${G} × ${G}: centroids everywhere but its 5×5`)
+  b += coverage(346, right, pcR, pcL, 'Just right of it', 'the 5×5 moved one column: ten cells changed hands')
+  assert(changed === 10, `crossing one boundary must swap two columns of five cells (got ${changed})`)
   b += `<rect x="26" y="${oy + SIDE + 14}" width="14" height="14" fill="${C.coveredSoft[0]}" stroke="${C.gridLine}"/>`
   b += txt(46, oy + SIDE + 25, 'one centroid at this level', { size: 12 })
   b += `<rect x="26" y="${oy + SIDE + 36}" width="14" height="14" fill="${C.deferred}" stroke="${C.gridLine}"/>`
