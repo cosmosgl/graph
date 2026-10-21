@@ -1,9 +1,9 @@
 <!-- suggested path: history/2026/2026-10-15-many-body-grid-seams.md -->
 
-# Many-body grid seams: the grid shifts every tick, and the pyramid starts at 8²
+# Many-body grid seams: the grid shifts every tick, the pyramid starts at 8², and far-field centroids keep two cells away
 
 **Date:** 2026-10-15
-**Commits:** `perf(force): start the many-body pyramid at 8² — the 4² level was its slowest pass` (`49f83d9`), `fix(force): shift the many-body grid every tick — fixed cell boundaries drew a cross` (`e29bb10`), `docs(force): the many-body grid shifts every tick and starts at 8²` (`6c35257`)
+**Commits:** `perf(force): start the many-body pyramid at 8² — the 4² level was its slowest pass` (`49f83d9`), `fix(force): shift the many-body grid every tick — fixed cell boundaries drew a cross` (`e29bb10`), `docs(force): the many-body grid shifts every tick and starts at 8²` (`6c35257`), `fix(force): use far-field centroids only from two cells away — clustered layouts jittered` (`c30843e`)
 
 ## Why
 
@@ -26,6 +26,19 @@ sides, and points drift off it.
 
 The pyramid tiles the box exactly once (no gaps, no double counting), and the docs called
 that "seam-free". It is, for coverage. The force it produces was never continuous.
+
+The shift moves the jumps; it does not shrink them. That showed a week later on clustered
+data, which none of the measurements below used. In the **Interaction → Lasso Selection**
+story (22,500 points in 25 clusters, repulsion 8, gravity 1.5, alpha held high) every point
+shook visibly against `main`, while the uniform 300k blob of the Space Size Wall story stayed
+calm. A coarse cell there holds much of a cluster or cuts one in half, so its centroid is a
+poor stand-in for its points, and a jump that is a rounding error on a uniform blob is a
+visible kick on a cluster. Experiments isolated it: with the shift turned off the jitter
+went and the cross came back (at 22.5k points too, not only at 300k); a coarser finest grid
+or a slowly drifting offset left the jitter and showed the cross travelling as a wave;
+starting the pyramid at 16² or 32² dimmed it level by level. So the error was at every
+level, and the fix had to make the jump smaller: a centroid used from one cell away is too
+close for graph data.
 
 ## The seam, measured
 
@@ -57,8 +70,20 @@ the quarter lines, the fix 0.986–1.005), so the cross needs a dense, large lay
   simulation's random stream (seeded by `randomSeed` when set). A uniform shift over one whole coarsest cell is also
   uniform modulo every finer cell, so every level's boundaries are spread evenly over the
   data and the jumps average into a continuous force. What is left is per-tick noise that
-  alpha anneals, the same trade the Monte-Carlo near field already makes. The collision
+  alpha anneals, the same trade the Monte-Carlo near field already makes — small enough on
+  uniform data, visible on clustered data until the shell below widened. The collision
   force owns its own `DataBounds` and passes no shift.
+- **Far-field centroids are used only from two cells away** (`c30843e`). Every level but
+  the finest now leaves a 5×5 block of cells (Chebyshev radius 2) to the next level instead
+  of 3×3, and each level refines the block its parent left — `(4r+2)²` cells from
+  `(cell/2)·2 − 2r` — minus its own. A centroid's error falls with the square of its
+  distance in cell sizes, so from two cells away it is about a quarter of what it was from
+  one. The finest level keeps 3×3: its cells hold about one point each, so their centroids
+  are the points themselves, and the near-field pass that closes the 3×3 is unchanged.
+  `getShellRadius` in `index.ts` is the one place the rule lives; `force-level.frag` receives
+  a level's own radius and its parent's as uniforms, so one loop shape serves every level. A
+  level's block fits inside the one it refines whenever r(L+1) ≤ 2·r(L), and every cell is
+  still charged to exactly one pass.
 - **The pyramid starts at 8², not 4²** (`49f83d9`). `COARSEST_GRID_SIZE` names the
   coarsest level; the finest level is unchanged. Two reasons:
   - The shift pads by one *coarsest* cell. From 4², that is a third of the box, which
@@ -77,7 +102,9 @@ the quarter lines, the fix 0.986–1.005), so the cross needs a dense, large lay
 
 ## Cost and accuracy
 
-All paired and interleaved in one page, median of 11 rounds, blob start, gravity 0.25:
+The tables in this section were measured with the 3×3 shell on every level, before
+`c30843e`; the wider shell's own numbers follow them. All paired and interleaved in one page,
+median of 11 rounds, blob start, gravity 0.25:
 
 | step time | 5k | 20k | 100k | 300k |
 |---|---|---|---|---|
@@ -118,6 +145,38 @@ square and 0.093% → 0.098% on the 100k disk. Other effects:
   at three places still passes at float rounding, and on the real GPU two placements of a
   20k-point blob end 0.0006% of the extent apart (0.0009% before), nudged ones 0.0004%.
 
+### The wider shell (`c30843e`)
+
+Far-field texel reads per point over seven levels go 217 → 505 (coarsest level 55 → 39, each
+middle level 27 → 75, finest 27 → 91); aggregation, bounds reduction and near field are
+unchanged. **Performance → Repulsion Benchmark** story, Chrome on Apple Silicon, ms per step:
+
+| | 2k | 5k | 20k | 50k | 100k | 200k |
+|---|---|---|---|---|---|---|
+| 3×3 shell (`08b58ed`) | 1.68 | 4.29 | 3.14 | 4.33 | 7.14 | 13.88 |
+| 5×5 shell above the finest | 1.68 | 4.28 | 3.21 | 5.87 | 9.83 | 18.48 |
+
+2k and 5k run the all-pairs path and do not change. From 50k up the step costs a third more.
+
+Steady-state motion on the Lasso Selection layout (RMS displacement per tick at alpha 1, in
+point spacings, 400 warm-up and 60 measured steps, one seed; a one-off vitest script, not
+kept):
+
+| | motion |
+|---|---|
+| `main` | 0.0137 |
+| 3×3 shell with the shift (`08b58ed`) | 0.0181 |
+| 5×5 shell on every level but the finest | 0.0082 |
+| radius 2 on the coarsest level only / two / four coarsest levels | 0.0100 / 0.0101 / 0.0090 |
+
+The three partial variants were tried for their lower cost (265, 313 and 409 reads) and
+rejected by eye: the Lasso story still rippled with each of them. A jump at a fine-level
+boundary moves a whole line of points together, and the eye picks that out far below what
+the RMS says — which is also why `main` scores above the fix yet looks calm: its motion is
+the near field's incoherent sampling noise. The harness error for the 5×5 shell has not been
+measured; by construction it can only have fallen, since more cells are refined and nothing
+else moved.
+
 ## Where this departs from earlier decisions
 
 The unbounded-space work (`history/2026/2026-10-14-unbounded-space.md`) chose **no padding
@@ -130,13 +189,21 @@ less than the margin did: square 0.066% and disk 0.098% for the 20-tick mean, 0.
 ## Alternatives not taken
 
 - **A continuous split.** Weighting each cell's centroid by a smooth function of the
-  point's position in its cell, instead of the hard 3×3 shell, would make the force
+  point's position in its cell, instead of the hard shell, would make the force
   deterministic and continuous. It needs wider neighbourhoods per level and an ancestor
-  weight product, probably two to three times the far-field work. Not tried.
+  weight product, probably two to three times the far-field work — which is what the 5×5
+  shell now costs the far field, so it is the natural next step if the remaining faint
+  ripples on clustered data matter. Not tried.
 - **A larger coarsest level** (16²) would shrink the padding to 1/15, but the first level
-  visits every cell for every point (256 instead of 64). Not tried.
+  visits every cell for every point (256 instead of 64). Tried only as a diagnostic for the
+  jitter: 16² and 32² starts dimmed it without removing it.
 - **Staggered grids** averaged per tick would halve the jump deterministically and double
   the cost. Not tried.
+- **A slowly drifting offset** instead of a fresh random one per tick: consecutive ticks
+  see nearly the same grid, so the force changes smoothly, and a shift by exactly one
+  coarsest cell lands every boundary on a boundary again, so the wrap is seamless. Tried;
+  the jitter stayed and the cross travelled through the layout as a wave. The jump has to
+  shrink, not move.
 
 ## Verification
 
@@ -148,9 +215,20 @@ less than the margin did: square 0.066% and disk 0.098% for the 20-tick mean, 0.
 - The seam, accuracy and timing numbers above come from a real-GPU headless harness
   (Playwright, ANGLE Metal) comparing self-contained bundles of `main`, the commit before
   this change, and this change.
+- The wider shell (`c30843e`): the 160 browser tests pass; `gen-diagrams.cjs` recomputes the
+  pyramid and seam figures with the shaders' coverage rule and asserts that a boundary
+  crossing now swaps ten cells; checked by eye in Storybook that Lasso Selection no longer
+  jitters and that no cross appears there or in Space Size Wall at 300k.
 
 ## Still open
 
-- Measured on an Apple M3 Max (ANGLE Metal) and SwiftShader only.
+- Measured on an Apple M3 Max (ANGLE Metal) and SwiftShader only; the wider shell's timing
+  and motion on one Apple Silicon Mac in Chrome.
 - The seam metric lives in an ad-hoc harness, not in a story or a test: a dense 300k-point
   layout is too slow for SwiftShader in CI.
+- The harness accuracy tables have not been re-run with the 5×5 shell.
+- The motion metric is RMS and blind to coherence, which is what the eye sees; a metric
+  that measures line-shaped displacement would let the shell width be chosen by number
+  rather than by eye.
+- Faint ripples remain on clustered data with the 5×5 shell; the continuous split above is
+  the candidate for removing them.
