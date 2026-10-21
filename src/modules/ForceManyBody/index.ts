@@ -35,11 +35,24 @@ import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 export const COARSEST_GRID_SIZE = 8
 
 /**
- * Chebyshev radius of the shell a level leaves to the next: 2 (a 5×5 block of
- * cells) on every level but the finest, 1 (3×3) on the finest, which the
- * near-field pass closes. The next level refines a shell of radius r as its
- * aligned (4r+2)² child block minus its own shell (force-level.frag), which
- * fits inside the block as long as r(L+1) ≤ 2·r(L).
+ * Up to this many points `simulationRepulsionQuality: 'auto'` keeps far-field
+ * centroids two cells away (getShellRadius); above it, one. Below about 25k
+ * points a step is bound by the fixed cost of its render passes, not by the far
+ * field's reads, so the wider shell is free there: +2 % at 20k points on an
+ * Apple M3. From 30k up the far field is the largest part of the step and the
+ * wider shell costs a third of it: +29 % at 30k, +31–38 % from 40k to 200k.
+ * Per-point jitter also shrinks on screen as points multiply, so large graphs
+ * give up the least by taking the narrow shell.
+ */
+const PRECISE_FAR_FIELD_MAX_POINTS = 25_000
+
+/**
+ * Chebyshev radius of the shell a level leaves to the next. With the precise
+ * far field it is 2 (a 5×5 block of cells) on every level but the finest;
+ * otherwise, and always on the finest level, 1 (3×3), which the near-field pass
+ * closes. The next level refines a shell of radius r as its aligned (4r+2)²
+ * child block minus its own shell (force-level.frag), which fits inside the
+ * block as long as r(L+1) ≤ 2·r(L).
  *
  * A cell's centroid stands in for its points with an error that falls with the
  * square of the distance in cell sizes, so a lump used from two cells away
@@ -47,11 +60,14 @@ export const COARSEST_GRID_SIZE = 8
  * uniform data either is small. On clustered data a coarse cell holds much of
  * a cluster or splits one, its centroid stands for very uneven mass, and with
  * the grid shifting every tick (drawBounds) the one-cell error reaches every
- * point as visible jitter. The finest level's cells hold about one point each
- * (getFinestGridSize), so their centroids are exact and its shell stays 3×3,
- * which keeps the near field's cost where it was.
+ * point as visible jitter while alpha is high: on 22,500 points in 25 clusters
+ * with alpha held at 1, 0.023 point spacings per tick against 0.009 with the
+ * two-cell shell, most of it coherent. The finest level's cells hold about one
+ * point each (getFinestGridSize), so their centroids are exact and its shell
+ * stays 3×3, which keeps the near field's cost where it was.
  */
-const getShellRadius = (level: number, levels: number): number => (level === levels - 1 ? 1 : 2)
+const getShellRadius = (level: number, levels: number, precise: boolean): number =>
+  (precise && level !== levels - 1 ? 2 : 1)
 
 /**
  * The per-tick bound on the close-range repulsion kick, for both paths: the
@@ -130,8 +146,9 @@ const PEEL_TARGETS = 2
  * all-pairs pass (see that constant for why). Above it:
  *
  * A Barnes-Hut-style grid pyramid (each level refines the shell of cells the
- * level above left around the point, minus its own shell: 5×5 on every level but
- * the finest, getShellRadius) whose finest 3×3 neighborhood is closed by an
+ * level above left around the point, minus its own shell: 5×5 or 3×3 by
+ * simulationRepulsionQuality on every level but the finest, getShellRadius)
+ * whose finest 3×3 neighborhood is closed by an
  * unbiased Monte-Carlo near field: a per-tick depth-peeled random subset of each
  * cell's points, Horvitz–Thompson-weighted so the expected force equals the exact
  * all-pairs sum. Close points therefore repel each other individually instead of
@@ -256,6 +273,19 @@ export class ForceManyBody extends CoreModule {
   /** Small graphs skip the grid + Monte-Carlo machinery entirely (see ALL_PAIRS_MAX_POINTS). */
   private get usesAllPairs (): boolean {
     return (this.data.pointsNumber ?? 0) <= ALL_PAIRS_MAX_POINTS
+  }
+
+  /**
+   * Whether this tick's far field keeps centroids two cells away
+   * (simulationRepulsionQuality; 'auto' tiers by PRECISE_FAR_FIELD_MAX_POINTS).
+   * Read every tick: the shell is a per-level uniform, so the setting applies
+   * to the next step without rebuilding anything.
+   */
+  private get preciseFarField (): boolean {
+    const quality = this.config.simulationRepulsionQuality
+    if (quality === 'precise') return true
+    if (quality === 'fast') return false
+    return (this.data.pointsNumber ?? 0) <= PRECISE_FAR_FIELD_MAX_POINTS
   }
 
   public create (): void {
@@ -880,6 +910,7 @@ export class ForceManyBody extends CoreModule {
       clearColor: [0, 0, 0, 0],
     })
 
+    const precise = this.preciseFarField
     for (let level = 0; level < this.levels; level += 1) {
       const target = this.levelTargets.get(level)
       if (!target || target.texture.destroyed) continue
@@ -890,8 +921,8 @@ export class ForceManyBody extends CoreModule {
           isFirstLevel: level === 0 ? 1 : 0,
           alpha: store.alpha,
           repulsion: this.config.simulationRepulsion,
-          shellRadius: getShellRadius(level, this.levels),
-          parentShellRadius: level === 0 ? 0 : getShellRadius(level - 1, this.levels),
+          shellRadius: getShellRadius(level, this.levels, precise),
+          parentShellRadius: level === 0 ? 0 : getShellRadius(level - 1, this.levels, precise),
         },
       })
 

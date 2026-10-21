@@ -194,11 +194,13 @@ The `theta` bands are gone. Instead there is one fixed, resolution-independent r
 (`force-level.frag`):
 
 - The **coarsest level** applies centroid repulsion from *every* cell except a **shell**
-  around the point's cell: the 5×5 block of cells within Chebyshev distance 2.
+  around the point's cell: the 5×5 block of cells within Chebyshev distance 2, or the 3×3
+  block within distance 1 — the far field's quality setting, below.
 - Each **finer level** takes over exactly that deferred shell — which at double resolution is
-  its aligned **10×10 child block** — and applies centroid forces there, again minus its *own*
-  shell. Every level but the finest leaves a 5×5 shell; the finest leaves 3×3
-  (`getShellRadius` in `index.ts`), so the last level refines the 10×10 block minus its 3×3.
+  its aligned **10×10 child block** (6×6 for a 3×3 shell) — and applies centroid forces there,
+  again minus its *own* shell. With the precise setting every level but the finest leaves a
+  5×5 shell; the finest always leaves 3×3 (`getShellRadius` in `index.ts`), so the last level
+  refines the 10×10 block minus its 3×3.
 - After the finest level, the only region not yet accounted for is the finest 3×3 neighborhood.
   That is the **near field**, and it is the only part where the centroid trick would do damage
   (up close, direction errors matter). It gets step 4 instead.
@@ -221,7 +223,21 @@ about 2.3× the texel reads (coarsest level 55 → 39, each middle level 27 → 
 217 → 505 over seven levels); the aggregation and the near field are unchanged. In the
 **Performance → Repulsion Benchmark** story (Chrome, Apple Silicon) that is +2 % at 20k points
 and +33–38 % from 50k to 200k (4.33 → 5.87 ms, 7.14 → 9.83 ms, 13.88 → 18.48 ms per step); 2k
-and 5k points run the all-pairs path and are unchanged. Small, but not continuous — next.
+points run the all-pairs path, 5k the grid with 32 near-field slots, and both are bound by
+their passes' fixed cost, so neither changes.
+
+That cost is why the shell is a setting, `simulationRepulsionQuality`: `'precise'` is the 5×5
+shell, `'fast'` the 3×3, and the default `'auto'` is precise up to 25,000 points and fast above.
+Below about 25k points a step waits on the fixed cost of its render passes, not on the far
+field's reads, so the wider shell is free there (+4 % at 16k, +2 % at 20k); at 30k it already
+costs +29 %, and a third from 40k up. What the 3×3 shell leaves is a hot-simulation effect: on
+the clustered layout above it moves 0.023 spacings per tick with alpha held at 1 (0.009 with
+the 5×5 shell), and with the stock decay of 5,000 that falls to the 5×5 shell's held level by
+alpha ≈ 0.3, about 870 ticks in; a settled layout looks the same either way. The exact path and
+a 10k lattice measure the same under both shells, and a 100k uniform blob moves 0.001 spacings
+per tick under either (**Performance → Steady-State Motion**, whose far-field switch applies the
+setting to all four panes live and whose pane headers say which shell `'auto'` resolves to).
+Small, but not continuous — next.
 
 ### Exactly once is not continuous: why the grid shifts every tick
 
