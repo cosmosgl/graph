@@ -14,7 +14,7 @@ All configuration properties are optional. When creating a graph or calling `set
 | Property | Description | Default |
 |---|---|---|
 | enableSimulation | If set to `false`, the simulation will not run. This property can be changed at runtime using `setConfig()` or `setConfigPartial()`. Re-enabling simulation recreates the required simulation resources immediately. | `true` |
-| transitionDuration | Duration in milliseconds of the animated transitions applied when point positions, point colors, point sizes, link colors, or link widths change via the corresponding setters.<br /><br />Set to `0` (or any value `<= 0`) to disable animated transitions and snap to the new state instead. See [Transitions](#transitions) below for details and migration notes. | `800` |
+| transitionDuration | Duration in milliseconds of the animated transitions applied when point positions, point colors, point sizes, point stroke colors, point stroke widths, link colors, or link widths change via the corresponding setters.<br /><br />Set to `0` (or any value `<= 0`) to disable animated transitions and snap to the new state instead. See [Transitions](#transitions) below for details and migration notes. | `800` |
 | transitionEasing | Easing curve used for animated transitions. Accepts a `TransitionEasing` enum value (e.g. `TransitionEasing.CubicInOut`) or its string literal (e.g. `'cubic-in-out'`).<br /><br />Allowed values: `linear`, `quad-in`, `quad-out`, `quad-in-out`, `cubic-in`, `cubic-out`, `cubic-in-out`, `sin-in`, `sin-out`, `sin-in-out`, `exp-in`, `exp-out`, `exp-in-out`, `circle-in`, `circle-out`, `circle-in-out`. | `TransitionEasing.CubicInOut` |
 | backgroundColor | Canvas background color | `#222222` |
 | spaceSize | Simulation space size (default 4096; larger values may crash on some devices, e.g. iOS) | `4096` |
@@ -147,6 +147,8 @@ By default, changes made through the following setters are animated on the next 
 - `setPointPositions`
 - `setPointColors`
 - `setPointSizes`
+- `setPointStrokeColors`
+- `setPointStrokeWidths`
 - `setLinkColors`
 - `setLinkWidths`
 

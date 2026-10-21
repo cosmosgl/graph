@@ -2980,6 +2980,24 @@ export class Points extends CoreModule implements PointTrackerHost {
     }
     this.targetColorBuffer = undefined
     this.previousColorData = undefined
+    if (this.sourceStrokeColorBuffer && !this.sourceStrokeColorBuffer.destroyed) {
+      this.sourceStrokeColorBuffer.destroy()
+    }
+    this.sourceStrokeColorBuffer = undefined
+    if (this.targetStrokeColorBuffer && !this.targetStrokeColorBuffer.destroyed) {
+      this.targetStrokeColorBuffer.destroy()
+    }
+    this.targetStrokeColorBuffer = undefined
+    this.previousStrokeColorData = undefined
+    if (this.sourceStrokeWidthBuffer && !this.sourceStrokeWidthBuffer.destroyed) {
+      this.sourceStrokeWidthBuffer.destroy()
+    }
+    this.sourceStrokeWidthBuffer = undefined
+    if (this.targetStrokeWidthBuffer && !this.targetStrokeWidthBuffer.destroyed) {
+      this.targetStrokeWidthBuffer.destroy()
+    }
+    this.targetStrokeWidthBuffer = undefined
+    this.previousStrokeWidthData = undefined
     if (this.sourceSizeBuffer && !this.sourceSizeBuffer.destroyed) {
       this.sourceSizeBuffer.destroy()
     }
