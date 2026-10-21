@@ -17,6 +17,17 @@ import { COUNTRY_BORDER_LINKS } from './country-borders-data'
 // as a dot, drift as a smooth arc, jitter as a tangle — the shape of the motion,
 // which no number gives.
 //
+// The samples picker sets simulationRepulsionSamples on every pane without a
+// restart: "auto" leaves it unset, so the engine measures how full the finest
+// cells are and picks the count itself; a number fixes it. In these four
+// layouts the finest cells hold at most a few points once settled, so every
+// count from 8 up samples them exhaustively and the picker changes only what
+// a tick costs, not the motion. The count shows on layouts whose cells hold
+// more points than it: there too few samples read as per-point jitter in the
+// meter and the trail. A restart under a different count forms the layout
+// along a different path from the dense start, which changes the traced point
+// and its trail without changing the settled motion.
+//
 // Run it before merging a force change; "Copy results" gives a Markdown table
 // for the PR. Public API only.
 
@@ -145,7 +156,7 @@ type Pane = {
   destroy: () => void;
 }
 
-const createPane = (scenario: Scenario, holdAlpha: boolean): Pane => {
+const createPane = (scenario: Scenario, holdAlpha: boolean, samples: number | undefined): Pane => {
   const element = document.createElement('div')
   element.style.cssText = 'position:relative;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;border:1px solid #3a3f47;'
 
@@ -346,6 +357,7 @@ const createPane = (scenario: Scenario, holdAlpha: boolean): Pane => {
     // Alpha held: what a long-running or reheated layout experiences. Stock
     // decay anneals any force noise away, which is also worth seeing.
     ...(holdAlpha ? { simulationDecay: 1e12 } : {}),
+    simulationRepulsionSamples: samples,
     ...scenario.config,
     onSimulationTick: (): void => {
       tick += 1
@@ -433,7 +445,7 @@ export const steadyStateMotion = (): { graph: Graph; div: HTMLDivElement; destro
       pane.graph.destroy()
     }
     grid.innerHTML = ''
-    panes = SCENARIOS.map((scenario) => createPane(scenario, holdAlpha))
+    panes = SCENARIOS.map((scenario) => createPane(scenario, holdAlpha, samples()))
     for (const pane of panes) grid.appendChild(pane.element)
     paused = false
     pauseButton.textContent = 'Pause'
@@ -454,6 +466,24 @@ export const steadyStateMotion = (): { graph: Graph; div: HTMLDivElement; destro
   hold.append(holdBox, document.createTextNode('hold alpha at 1 (off: stock decay, the layout settles and stops)'))
   bar.appendChild(hold)
 
+  // Applies on the next tick, so the meters show the change in place
+  const samplesLabel = document.createElement('label')
+  samplesLabel.style.cssText = 'display:flex;gap:6px;align-items:center;cursor:pointer;'
+  const samplesSelect = document.createElement('select')
+  samplesSelect.style.cssText = 'font:inherit;padding:3px 6px;background:#2a2f37;color:#e0e0e0;border:1px solid #3a3f47;'
+  for (const value of ['auto', '8', '16', '32', '64']) {
+    const option = document.createElement('option')
+    option.value = value
+    option.textContent = value
+    samplesSelect.appendChild(option)
+  }
+  const samples = (): number | undefined => samplesSelect.value === 'auto' ? undefined : Number(samplesSelect.value)
+  samplesSelect.addEventListener('change', () => {
+    for (const pane of panes) pane.graph.setConfigPartial({ simulationRepulsionSamples: samples() })
+  })
+  samplesLabel.append(document.createTextNode('samples'), samplesSelect)
+  bar.appendChild(samplesLabel)
+
   const status = document.createElement('span')
   status.style.cssText = 'color:#9aa3ad;margin-left:auto;'
   bar.appendChild(status)
@@ -465,7 +495,8 @@ export const steadyStateMotion = (): { graph: Graph; div: HTMLDivElement; destro
         : `| ${pane.title} | window not filled | | | |`
     })
     const table = [
-      `| scenario (alpha ${holdAlpha ? 'held at 1' : 'stock decay'}, last ${WINDOW} ticks) | motion, spacings/tick | coherent share | extent | tick |`,
+      `| scenario (alpha ${holdAlpha ? 'held at 1' : 'stock decay'}, samples ${samplesSelect.value}, last ${WINDOW} ticks) ` +
+        '| motion, spacings/tick | coherent share | extent | tick |',
       '|---|---|---|---|---|',
       ...rows,
     ].join('\n')

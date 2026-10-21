@@ -285,20 +285,26 @@ computes an **unbiased estimate** instead:
 **Sampling (`build-nearfield-slots.vert`):** every tick, each point gets a fresh pseudo-random
 hash. K "depth peeling" passes then run over the finest grid; pass *k* selects, per cell,
 the point with the smallest hash *not yet selected by passes 0..k−1* (the GPU depth test does
-the per-cell minimum for free). After K passes, the K layers of a **slot array texture**
-(`sampler2DArray`, one layer per pass) hold a uniform random K-subset of each cell's points —
-re-drawn from scratch every tick.
+the per-cell minimum for free). After K passes, the K layers of two **slot array textures**
+(`sampler2DArray`, one layer per pass, even slots in one and odd slots in the other) hold a
+uniform random K-subset of each cell's points — re-drawn from scratch every tick.
 
-**K adapts to the graph size** (`getNearFieldSlotCount` in `index.ts`): 32 slots up to 16k
-points, 16 up to 65k, 8 above. Peeling is inherently sequential — one render pass per slot —
-so K is a direct trade between per-tick cost and sampling variance; big graphs keep the cheap
-estimator (per-point noise is sub-pixel at that scale), smaller ones buy more slots so that
-realistic hub-cell occupancies are covered exactly. Each pass ping-pongs between two plain 2D
-targets (pass *k* must sample pass *k−1*'s output, and sampling one layer of a texture while
-rendering to another layer of the same texture is a WebGL feedback loop) and its result is
-copied into its array layer.
+**K is the configuration or a measurement** (`nearFieldSlotCount` in `index.ts`).
+`simulationRepulsionSamples` fixes it, and a change applies on the next tick. Unset, every 30
+steps a one-pass reduction (`occupancy.frag`) turns the finest level's per-cell counts into
+16² block sums, a fenced readback collects them on a later tick, and Σ count² / Σ count — the
+occupancy a typical point experiences — rounded up to a power of two is the count the layout
+wants: cells that full are sampled exhaustively. The tick's budget caps it: K × points, the
+peel work per tick, stays under 1.6M point-samples, and both clamp to 8..64. Peeling is
+inherently sequential — one render pass per slot — so K is a direct trade between per-tick
+cost and sampling variance, and the point count alone cannot see which side of it a layout is
+on: at the same count a clustered layout holds many times the points per finest cell of a
+scattered one. Pass *k* renders into layer *k* / 2 of array *k* % 2 and samples the other
+array (pass *k* must sample pass *k−1*'s output, and sampling one layer of a texture while
+rendering to another layer of the same texture is a WebGL feedback loop); one depth buffer
+serves every pass, and nothing is copied.
 
-![Peeling ping-pong into the slot array](h-pingpong-peel.svg)
+![Peeling ping-pong between the two slot arrays](h-pingpong-peel.svg)
 
 **The hash must be an integer hash.** The first version used the classic
 `fract(sin(index * 12.9898 + seed * 78.233) * 43758.5453)` one-liner, which is quietly broken at
@@ -403,7 +409,8 @@ Two changes closed it (2026-08-14):
 
 1. **Small graphs skip the estimator entirely** — the all-pairs path below. This is the case
    where sustained dense hubs are both most common and cheapest to compute exactly.
-2. **K became adaptive** (32/16/8 — see step 4). Mid-size graphs get 2–4× more samples, which
+2. **K became adaptive** (32/16/8 by point count — see step 4; since replaced by the measured
+   count described under *Sampling* above). Mid-size graphs get 2–4× more samples, which
    both extends the exactly-covered occupancy range and shrinks the residual variance
    (amplitude ∝ occupancy/K · 1/√K) — while the ≥ 65k tier keeps today's 8-slot cost
    unchanged.

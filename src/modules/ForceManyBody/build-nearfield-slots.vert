@@ -14,7 +14,9 @@ precision highp float;
 // estimate of the cell's exact all-pairs repulsion (Monte-Carlo P3M).
 
 uniform sampler2D positionsTexture;
-uniform sampler2D previousSlot;
+// The slot array holding pass k−1 (the other one of the two, see NearFieldSlots
+// in index.ts); previousLayer is its layer. Float data — highp.
+uniform highp sampler2DArray previousSlot;
 uniform sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
@@ -23,17 +25,20 @@ layout(std140) uniform buildNearFieldSlotsUniforms {
   float levelGridSize;
   float hasPreviousSlot;
   float randomSeed;
+  float previousLayer;
 } buildNearFieldSlots;
 
 #define pointsTextureSize buildNearFieldSlots.pointsTextureSize
 #define levelGridSize buildNearFieldSlots.levelGridSize
 #define hasPreviousSlot buildNearFieldSlots.hasPreviousSlot
 #define randomSeed buildNearFieldSlots.randomSeed
+#define previousLayer buildNearFieldSlots.previousLayer
 #else
 uniform float pointsTextureSize;
 uniform float levelGridSize;
 uniform float hasPreviousSlot;
 uniform float randomSeed;
+uniform float previousLayer;
 #endif
 
 // @grid-cell
@@ -81,7 +86,7 @@ void main() {
   ivec2 cell = gridCell(pointPosition.rg, levelGridSize);
 
   if (hasPreviousSlot > 0.5) {
-    vec2 previous = texelFetch(previousSlot, cell, 0).rg;
+    vec2 previous = texelFetch(previousSlot, ivec3(cell, int(previousLayer)), 0).rg;
     // Eligible only if the previous slot captured a point with a smaller hash.
     // An empty previous slot (index -1) means the cell is exhausted — otherwise
     // this pass would re-capture already-peeled points and double-count them.
