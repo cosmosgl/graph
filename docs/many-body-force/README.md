@@ -428,8 +428,8 @@ The **Performance → Steady-State Motion** story is the live check for this and
 force change since: four graphs that exercise the paths differently (the real graph that
 surfaced the shimmer on the exact path; a linked lattice with collision, a clustered layout
 under strong repulsion and a dense uniform blob on the grid path), each with alpha held at 1
-a sliding-window readout of RMS motion per tick in point spacings and of how much of it is
-coherent between neighbours, and a trajectory trace of one dense-cell point. It replaced a
+and a trajectory trace of one dense-cell point, and a far-field switch that applies
+`simulationRepulsionQuality` to all four live. It replaced a
 two-pane story that forced the pre-fix sampled
 configuration back on through an internals patch; once the grid followed the data that
 forcing no longer reproduced the old behaviour on a small layout.

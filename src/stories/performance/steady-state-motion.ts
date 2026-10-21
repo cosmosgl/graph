@@ -1,30 +1,34 @@
-import { Graph, GraphConfig } from '@cosmos.gl/graph'
+import { Graph, GraphConfig, type RepulsionQuality } from '@cosmos.gl/graph'
 import { COUNTRY_BORDER_LINKS } from './country-borders-data'
 
 // Is a settled layout still? Four graphs that exercise the force paths
 // differently run side by side with alpha held at 1, so any motion left at
-// equilibrium is the forces' own, not a transient. Each pane reads its
-// positions back every tick and reports two numbers over a sliding window:
+// equilibrium is the forces' own, not a transient. Each pane traces one point
+// from its densest cell: a still point reads as a dot, drift as a smooth arc,
+// jitter as a tangle — the shape of the motion, which no number gives.
 //
-// - motion: RMS displacement per tick, in point spacings (extent / √n) — the
-//   metric the many-body history entries use;
-// - coherent: the share of that motion shared by neighbours — the energy of
-//   per-bin mean displacement over the total. Independent sampling noise
-//   scores near 0, a jump along a grid boundary near 1. The eye sees the
-//   second and forgives the first, so RMS alone understates ripples.
+// The far-field switch applies `simulationRepulsionQuality` to all four panes
+// live: on `auto` the 22,500-point clusters run the precise shell and the 100k
+// blob the fast one, and each pane's header says which; forcing either shows
+// what the setting trades.
 //
-// Each pane also traces one point from its densest cell: a still point reads
-// as a dot, drift as a smooth arc, jitter as a tangle — the shape of the motion,
-// which no number gives.
-//
-// Run it before merging a force change; "Copy results" gives a Markdown table
-// for the PR. Public API only.
+// Run it before merging a force change. Public API only.
 
 const SEED = 42
 const SPACE = 4096
-const WINDOW = 60 // ticks
 const TRAIL_WINDOW = 360 // ticks of path kept in the trajectory panel
-const TRAIL_PICK_TICK = 180 // pick the traced point once the layout has formed
+const FORMED_TICK = 180 // the layout has formed: fit the view once and pick the traced point
+// Mirrors the documented default of `simulationRepulsionQuality: 'auto'`, so a
+// pane can say which shell it runs; the engine does not expose the resolved value.
+const PRECISE_UP_TO = 25_000
+
+/** What `simulationRepulsionQuality` resolves to for a pane of n points. */
+const describeFarField = (quality: RepulsionQuality, n: number): string =>
+  (quality === 'auto' ? `auto · ${n <= PRECISE_UP_TO ? 'precise' : 'fast'}` : quality)
+
+const TEXT = '#e0e0e0'
+const MUTED = '#9aa3ad'
+const LINE = '#2e333b'
 
 // ── Seeded data ─────────────────────────────────────────────────────────────
 
@@ -102,65 +106,60 @@ const blob = (n: number, radius: number, rng: () => number): Data => {
 
 type Scenario = {
   title: string;
-  why: string;
   data: (rng: () => number) => Data;
   config: GraphConfig;
 }
 
+// The country-borders graph runs the exact all-pairs path; the other three run
+// the grid path: a linked lattice with collision, the Lasso Selection settings
+// (clustered data under strong repulsion, where the grid shift showed as
+// jitter) and a dense even blob, where a fixed grid drew a cross.
 const SCENARIOS: Scenario[] = [
   {
-    title: '163 points, 642 links — exact all-pairs path',
-    why: 'the country-borders graph: small, link-driven, below the grid threshold',
+    title: '163 points · 642 links',
     data: countryBorders,
     config: { pointDefaultSize: 6, linkDefaultWidth: 1 },
   },
   {
-    title: '10,000 points, lattice links + collision — grid path',
-    why: 'links and collision on the grid path, just above the threshold',
+    title: '10,000 points · lattice · collision',
     data: (rng) => lattice(100, 100, rng),
     config: { pointDefaultSize: 3, linkDefaultWidth: 0.5, simulationCollision: 1 },
   },
   {
-    title: '22,500 points, 25 clusters — cluster force, repulsion 8, gravity 1.5',
-    why: 'the Lasso Selection settings: clustered data under strong repulsion, where the grid shift showed as jitter',
+    title: '22,500 points · 25 clusters · repulsion 8',
     data: (rng) => clustered(22500, 25, rng),
     config: { pointDefaultSize: 3, simulationRepulsion: 8, simulationGravity: 1.5, simulationCluster: 0.3 },
   },
   {
-    title: '100,000 points, uniform blob — repulsion + gravity only',
-    why: 'a dense, even layout: where a fixed grid drew a cross along its centre lines',
+    title: '100,000 points · blob',
     data: (rng) => blob(100_000, 200, rng),
     config: { pointDefaultSize: 1.5 },
   },
 ]
 
-// ── One pane: a graph and its meter ─────────────────────────────────────────
+// ── One pane: a graph and its trajectory ────────────────────────────────────
 
 type Pane = {
   element: HTMLDivElement;
   graph: Graph;
-  title: string;
-  /** Window means, or undefined until the window has filled. */
-  results: () => { motion: number; coherent: number; extent: number; ticks: number } | undefined;
+  /** Applies the far-field setting live; the next step uses it. */
+  setQuality: (quality: RepulsionQuality) => void;
   destroy: () => void;
 }
 
-const createPane = (scenario: Scenario, holdAlpha: boolean): Pane => {
+const createPane = (scenario: Scenario, quality: RepulsionQuality): Pane => {
   const element = document.createElement('div')
-  element.style.cssText = 'position:relative;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;border:1px solid #3a3f47;'
+  element.style.cssText = `position:relative;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;border:1px solid ${LINE};`
 
-  // Right padding leaves room for the trajectory panel in the block's corner
+  // One line; the right padding leaves room for the trajectory panel in the corner
   const header = document.createElement('div')
-  header.style.cssText = 'padding:8px 188px 8px 12px;font-size:12px;line-height:1.5;flex:none;'
-  const titleLine = document.createElement('div')
-  titleLine.style.cssText = 'font-weight:bold;color:#7fd1c0;'
+  header.style.cssText = 'display:flex;gap:8px;align-items:center;padding:6px 176px 6px 10px;font-size:12px;line-height:1.4;flex:none;'
+  const titleLine = document.createElement('span')
+  titleLine.style.cssText = `color:${TEXT};`
   titleLine.textContent = scenario.title
-  const whyLine = document.createElement('div')
-  whyLine.style.cssText = 'color:#9aa3ad;'
-  whyLine.textContent = scenario.why
-  const meter = document.createElement('div')
-  meter.textContent = 'warming up…'
-  header.append(titleLine, whyLine, meter)
+  const farFieldTag = document.createElement('span')
+  farFieldTag.style.cssText = `font-size:10px;padding:1px 7px;border:1px solid ${LINE};border-radius:999px;color:${MUTED};white-space:nowrap;`
+  header.append(titleLine, farFieldTag)
   element.appendChild(header)
 
   const host = document.createElement('div')
@@ -170,31 +169,27 @@ const createPane = (scenario: Scenario, holdAlpha: boolean): Pane => {
   // Top-right corner of the whole block, over the header
   const trailPanel = document.createElement('div')
   trailPanel.style.cssText =
-    'position:absolute;top:8px;right:8px;width:160px;background:rgba(26,29,35,0.88);border:1px solid #3a3f47;padding:6px;pointer-events:none;'
+    `position:absolute;top:8px;right:8px;width:160px;background:rgba(26,29,35,0.88);border:1px solid ${LINE};padding:6px;pointer-events:none;`
   const trailCanvas = document.createElement('canvas')
   trailCanvas.style.cssText = 'display:block;width:148px;height:148px;'
   const trailLabel = document.createElement('div')
-  trailLabel.style.cssText = 'margin-top:4px;font-size:10px;line-height:1.4;color:#9aa3ad;'
-  trailLabel.textContent = 'trajectory: waiting for the layout to form…'
+  trailLabel.style.cssText = `margin-top:4px;font-size:10px;line-height:1.4;color:${MUTED};`
+  trailLabel.textContent = 'one point, waiting for the layout…'
   trailPanel.append(trailCanvas, trailLabel)
   element.appendChild(trailPanel)
 
   const { positions, links, clusters } = scenario.data(mulberry32(SEED))
   const n = positions.length / 2
-  // Displacement bins for the coherence share: a few points per bin, 2² to 16².
+  farFieldTag.textContent = describeFarField(quality, n)
+  // Bins for picking the traced point from the densest cell: a few points per bin, 2² to 16².
   const bins = Math.min(16, Math.max(2, Math.floor(Math.sqrt(n) / 8)))
-  const binSumX = new Float64Array(bins * bins)
-  const binSumY = new Float64Array(bins * bins)
-  const binCount = new Uint32Array(bins * bins)
 
   let current: Float32Array<ArrayBufferLike> = new Float32Array(n * 2)
   let previous: Float32Array<ArrayBufferLike> | undefined
   let box = { minX: 0, minY: 0, maxX: 0, maxY: 0 }
-  const motionWindow: number[] = []
-  const coherentWindow: number[] = []
-  let extent = 0
   let tick = 0
 
+  /** Reads this tick's positions back and keeps their bounding box for the bin pick. */
   const measure = (): void => {
     current = graph.getPointPositionsArray(current)
     if (current.length !== n * 2) return
@@ -203,35 +198,6 @@ const createPane = (scenario: Scenario, holdAlpha: boolean): Pane => {
       const x = current[i] as number; const y = current[i + 1] as number
       if (x < minX) minX = x; if (x > maxX) maxX = x
       if (y < minY) minY = y; if (y > maxY) maxY = y
-    }
-    if (previous) {
-      // Bin on the previous tick's box so one pass does both sums
-      const width = Math.max(box.maxX - box.minX, 1e-9)
-      const height = Math.max(box.maxY - box.minY, 1e-9)
-      binSumX.fill(0); binSumY.fill(0); binCount.fill(0)
-      let energy = 0
-      for (let i = 0; i < n; i += 1) {
-        const dx = (current[i * 2] as number) - (previous[i * 2] as number)
-        const dy = (current[i * 2 + 1] as number) - (previous[i * 2 + 1] as number)
-        energy += dx * dx + dy * dy
-        const bx = Math.min(bins - 1, Math.max(0, Math.floor(((previous[i * 2] as number) - box.minX) / width * bins)))
-        const by = Math.min(bins - 1, Math.max(0, Math.floor(((previous[i * 2 + 1] as number) - box.minY) / height * bins)))
-        const b = by * bins + bx
-        binSumX[b] = (binSumX[b] as number) + dx
-        binSumY[b] = (binSumY[b] as number) + dy
-        binCount[b] = (binCount[b] as number) + 1
-      }
-      let coherentEnergy = 0
-      for (let b = 0; b < bins * bins; b += 1) {
-        const count = binCount[b] as number
-        if (count > 0) coherentEnergy += ((binSumX[b] as number) ** 2 + (binSumY[b] as number) ** 2) / count
-      }
-      extent = Math.max(maxX - minX, maxY - minY)
-      const spacing = extent / Math.sqrt(n)
-      motionWindow.push(spacing > 0 ? Math.sqrt(energy / n) / spacing : 0)
-      coherentWindow.push(energy > 0 ? coherentEnergy / energy : 0)
-      if (motionWindow.length > WINDOW) motionWindow.shift()
-      if (coherentWindow.length > WINDOW) coherentWindow.shift()
     }
     box = { minX, minY, maxX, maxY }
     const swap: Float32Array<ArrayBufferLike> = previous ?? new Float32Array(n * 2)
@@ -243,7 +209,7 @@ const createPane = (scenario: Scenario, holdAlpha: boolean): Pane => {
   let tracedIndex = -1
   const trail: number[] = []
 
-  /** A point from the fullest coherence bin of the current positions (`previous` after measure). */
+  /** A point from the fullest bin of the current positions (`previous` after measure). */
   const pickFromDensestBin = (): number => {
     if (!previous) return 0
     const width = Math.max(box.maxX - box.minX, 1e-9)
@@ -307,33 +273,29 @@ const createPane = (scenario: Scenario, holdAlpha: boolean): Pane => {
     ctx.fill()
 
     const barUnits = niceUnits((0.4 * size) / scale)
-    ctx.strokeStyle = '#9aa3ad'
+    ctx.strokeStyle = MUTED
     ctx.lineWidth = 1
     ctx.beginPath()
     ctx.moveTo(10, size - 10.5)
     ctx.lineTo(10 + barUnits * scale, size - 10.5)
     ctx.stroke()
-    ctx.fillStyle = '#9aa3ad'
+    ctx.fillStyle = MUTED
     ctx.font = '10px monospace'
     ctx.fillText(`${barUnits} u`, 12, size - 15)
-
-    trailLabel.textContent = `point ${tracedIndex}, last ${trail.length / 2} ticks: path spans ${span.toFixed(2)} u`
   }
 
   const traceStep = (): void => {
     if (!previous) return
-    if (tracedIndex < 0 && tick >= TRAIL_PICK_TICK) tracedIndex = pickFromDensestBin()
+    if (tracedIndex < 0 && tick >= FORMED_TICK) {
+      // One fit, on the formed layout; the seed fit before it only frames the start.
+      graph.fitView(600)
+      tracedIndex = pickFromDensestBin()
+      trailLabel.textContent = `one point, last ${TRAIL_WINDOW} ticks`
+    }
     if (tracedIndex < 0) return
     trail.push(previous[tracedIndex * 2] as number, previous[tracedIndex * 2 + 1] as number)
     if (trail.length > TRAIL_WINDOW * 2) trail.splice(0, trail.length - TRAIL_WINDOW * 2)
     drawTrail()
-  }
-
-  const mean = (values: number[]): number => values.reduce((a, b) => a + b, 0) / values.length
-
-  const results = (): ReturnType<Pane['results']> => {
-    if (motionWindow.length < WINDOW) return undefined
-    return { motion: mean(motionWindow), coherent: mean(coherentWindow), extent, ticks: tick }
   }
 
   const config: GraphConfig = {
@@ -343,26 +305,20 @@ const createPane = (scenario: Scenario, holdAlpha: boolean): Pane => {
     rescalePositions: false,
     renderLinks: links !== undefined,
     randomSeed: SEED,
-    // Alpha held: what a long-running or reheated layout experiences. Stock
-    // decay anneals any force noise away, which is also worth seeing.
-    ...(holdAlpha ? { simulationDecay: 1e12 } : {}),
+    // Alpha held at 1: what a long-running or reheated layout experiences.
+    // Stock decay would anneal any force noise away within a minute.
+    simulationDecay: 1e12,
+    simulationRepulsionQuality: quality,
     ...scenario.config,
     onSimulationTick: (): void => {
       tick += 1
       measure()
       traceStep()
-      if (tick % 10 === 0) {
-        const r = results()
-        meter.textContent = r
-          ? `motion ${r.motion.toFixed(4)} spacings/tick · coherent ${r.coherent.toFixed(2)} · extent ${r.extent.toFixed(0)} · tick ${r.ticks}`
-          : `tick ${tick}: filling the ${WINDOW}-tick window…`
-      }
     },
   }
 
   const graph = new Graph(host, config)
   let destroyed = false
-  const timers: number[] = []
   const setup = async (): Promise<void> => {
     await graph.ready
     if (destroyed) return
@@ -371,10 +327,6 @@ const createPane = (scenario: Scenario, holdAlpha: boolean): Pane => {
     if (clusters) graph.setPointClusters(clusters)
     graph.render()
     graph.start(1)
-    // Re-fit while the layout finds its shape, then leave the camera alone
-    for (const delay of [1500, 4000, 8000]) {
-      timers.push(window.setTimeout(() => { if (!destroyed) graph.fitView(400) }, delay))
-    }
   }
   // eslint-disable-next-line no-console
   setup().catch((error) => console.error('[steady-state-motion] failed', error))
@@ -382,11 +334,12 @@ const createPane = (scenario: Scenario, holdAlpha: boolean): Pane => {
   return {
     element,
     graph,
-    title: scenario.title,
-    results,
+    setQuality: (next: RepulsionQuality): void => {
+      graph.setConfigPartial({ simulationRepulsionQuality: next })
+      farFieldTag.textContent = describeFarField(next, n)
+    },
     destroy: (): void => {
       destroyed = true
-      for (const timer of timers) window.clearTimeout(timer)
     },
   }
 }
@@ -398,84 +351,45 @@ export const steadyStateMotion = (): { graph: Graph; div: HTMLDivElement; destro
   outer.style.cssText = 'height:100vh;width:100%;background:#1a1d23;color:#e0e0e0;font-family:monospace;display:flex;flex-direction:column;overflow:hidden;'
 
   const bar = document.createElement('div')
-  bar.style.cssText = 'display:flex;gap:8px;align-items:center;padding:8px 12px;font-size:12px;flex:none;border-bottom:1px solid #3a3f47;'
+  bar.style.cssText = `display:flex;gap:20px;align-items:center;padding:6px 12px;font-size:12px;flex:none;border-bottom:1px solid ${LINE};color:${MUTED};`
   outer.appendChild(bar)
 
   const grid = document.createElement('div')
   grid.style.cssText = 'flex:1;min-height:0;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;'
   outer.appendChild(grid)
 
-  let holdAlpha = true
-  let paused = false
-  let panes: Pane[] = []
+  let quality: RepulsionQuality = 'auto'
+  const panes: Pane[] = SCENARIOS.map((scenario) => createPane(scenario, quality))
+  for (const pane of panes) grid.appendChild(pane.element)
 
-  const addButton = (label: string, onClick: () => void): HTMLButtonElement => {
+  // simulationRepulsionQuality as three buttons, applied to every pane without a restart
+  const farField = document.createElement('div')
+  farField.style.cssText = 'display:flex;gap:8px;align-items:center;'
+  farField.append(document.createTextNode('far field'))
+  const segments = document.createElement('div')
+  segments.style.cssText = `display:inline-flex;border:1px solid ${LINE};border-radius:6px;overflow:hidden;`
+  const buttons = (['auto', 'precise', 'fast'] as const).map((option) => {
     const button = document.createElement('button')
-    button.textContent = label
-    button.style.cssText = 'font:inherit;padding:4px 10px;background:#2a2f37;color:#e0e0e0;border:1px solid #3a3f47;cursor:pointer;'
-    button.addEventListener('click', onClick)
-    bar.appendChild(button)
-    return button
-  }
-
-  const pauseButton = addButton('Pause', () => {
-    paused = !paused
-    pauseButton.textContent = paused ? 'Resume' : 'Pause'
-    for (const pane of panes) {
-      if (paused) pane.graph.pause()
-      else pane.graph.start(1)
-    }
-  })
-
-  const mount = (): void => {
-    for (const pane of panes) {
-      pane.destroy()
-      pane.graph.destroy()
-    }
-    grid.innerHTML = ''
-    panes = SCENARIOS.map((scenario) => createPane(scenario, holdAlpha))
-    for (const pane of panes) grid.appendChild(pane.element)
-    paused = false
-    pauseButton.textContent = 'Pause'
-  }
-
-  addButton('Restart', mount)
-  addButton('Fit all', () => { for (const pane of panes) pane.graph.fitView(400) })
-
-  const hold = document.createElement('label')
-  hold.style.cssText = 'display:flex;gap:6px;align-items:center;cursor:pointer;'
-  const holdBox = document.createElement('input')
-  holdBox.type = 'checkbox'
-  holdBox.checked = holdAlpha
-  holdBox.addEventListener('change', () => {
-    holdAlpha = holdBox.checked
-    mount()
-  })
-  hold.append(holdBox, document.createTextNode('hold alpha at 1 (off: stock decay, the layout settles and stops)'))
-  bar.appendChild(hold)
-
-  const status = document.createElement('span')
-  status.style.cssText = 'color:#9aa3ad;margin-left:auto;'
-  bar.appendChild(status)
-  addButton('Copy results', () => {
-    const rows = panes.map((pane) => {
-      const r = pane.results()
-      return r
-        ? `| ${pane.title} | ${r.motion.toFixed(4)} | ${r.coherent.toFixed(2)} | ${r.extent.toFixed(0)} | ${r.ticks} |`
-        : `| ${pane.title} | window not filled | | | |`
+    button.textContent = option
+    button.style.cssText = 'font:inherit;padding:3px 10px;background:transparent;border:0;cursor:pointer;'
+    button.addEventListener('click', () => {
+      quality = option
+      for (const pane of panes) pane.setQuality(quality)
+      paint()
     })
-    const table = [
-      `| scenario (alpha ${holdAlpha ? 'held at 1' : 'stock decay'}, last ${WINDOW} ticks) | motion, spacings/tick | coherent share | extent | tick |`,
-      '|---|---|---|---|---|',
-      ...rows,
-    ].join('\n')
-    navigator.clipboard.writeText(table).then(
-      () => { status.textContent = 'copied as Markdown' },
-      () => { status.textContent = 'clipboard unavailable — see console'; console.log(table) } // eslint-disable-line no-console
-    )
+    segments.appendChild(button)
+    return { option, button }
   })
-
-  mount()
+  const paint = (): void => {
+    for (const { option, button } of buttons) {
+      const active = option === quality
+      button.style.background = active ? LINE : 'transparent'
+      button.style.color = active ? TEXT : MUTED
+    }
+  }
+  paint()
+  farField.appendChild(segments)
+  bar.appendChild(farField)
 
   return {
     // The story contract destroys this one; the other three are ours
