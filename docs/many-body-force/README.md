@@ -408,10 +408,15 @@ Two changes closed it (2026-08-14):
    (amplitude ∝ occupancy/K · 1/√K) — while the ≥ 65k tier keeps today's 8-slot cost
    unchanged.
 
-The **Performance → Repulsion Jitter: Fixed vs Before** story shows this live: the real
-graph that surfaced it, run side by side — today's exact path next to the pre-fix sampled
-configuration (forced back on through a story-only internals patch) — each with alpha held
-at 1, a sliding-window step/turn meter, and a trajectory trace of one dense-cell point.
+The **Performance → Steady-State Motion** story is the live check for this and for every
+force change since: four graphs that exercise the paths differently (the real graph that
+surfaced the shimmer on the exact path; a linked lattice with collision, a clustered layout
+under strong repulsion and a dense uniform blob on the grid path), each with alpha held at 1
+a sliding-window readout of RMS motion per tick in point spacings and of how much of it is
+coherent between neighbours, and a trajectory trace of one dense-cell point. It replaced a
+two-pane story that forced the pre-fix sampled
+configuration back on through an internals patch; once the grid followed the data that
+forcing no longer reproduced the old behaviour on a small layout.
 
 ## Small graphs are exact: the all-pairs path
 
