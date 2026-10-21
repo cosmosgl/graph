@@ -9,7 +9,9 @@ import forceNearFieldFrag from '@/graph/modules/ForceManyBody/force-nearfield.fr
 import forceAllPairsFrag from '@/graph/modules/ForceManyBody/force-allpairs.frag?raw'
 import buildNearFieldSlotsVert from '@/graph/modules/ForceManyBody/build-nearfield-slots.vert?raw'
 import buildNearFieldSlotsFrag from '@/graph/modules/ForceManyBody/build-nearfield-slots.frag?raw'
+import occupancyFrag from '@/graph/modules/ForceManyBody/occupancy.frag?raw'
 import { withGridCell } from '@/graph/modules/ForceManyBody/grid-cell'
+import { PickingReadback } from '@/graph/modules/Points/picking-readback'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import { DataBounds } from '@/graph/modules/Shared/data-bounds'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
@@ -100,30 +102,50 @@ const getMaxStep = (adjustedSpaceSize: number, pointsNumber: number): number =>
 const MIN_FINEST_CELL_SIZE = 0.25
 
 /**
- * How many points per finest-level cell get exact pairwise repulsion each tick.
- * A cell holding at most this many points is sampled exhaustively — its near
- * field is exact. Above it, a fresh random subset is drawn every tick and
+ * The automatic near-field slot count, used when `simulationRepulsionSamples`
+ * is not set. A cell holding at most K points is sampled exhaustively — its
+ * near field is exact. Above it, a fresh random subset is drawn every tick and
  * Horvitz–Thompson weighted; unbiased, but the per-tick re-drawing makes the
- * force estimate noisy in proportion to occupancy/slots. In layouts where
- * something keeps density up (link attraction into hubs, gravity) while alpha
- * stays high, that noise is visible as per-point shimmer.
+ * force estimate noisy in proportion to occupancy/K, which shows as per-point
+ * shimmer wherever something keeps density up (link attraction into hubs,
+ * gravity, a cluster force) while alpha stays high.
  *
- * So the slot count scales down as the graph grows: small graphs get enough
- * slots that realistic cell occupancies are covered exactly (the country-scale
- * graph that surfaced the jitter peaks around ~50 points per cell), while large
- * graphs keep the cheap 8-slot estimator — at that scale per-point noise is
- * sub-pixel and the peel cost (slots × points per tick) dominates instead.
- * The slots live in one sampler2DArray layer each, so this is a plain runtime
- * value — no shader changes needed to retune it.
+ * K is chosen from two measured quantities, and the smaller wins:
  *
- * Graphs at or below ALL_PAIRS_MAX_POINTS never reach this path at all — they
- * take the exact all-pairs pass instead, so the tiers start above it.
+ * - What the layout wants: the finest-cell occupancy a typical point
+ *   experiences (Σ count² / Σ count over the finest level, see occupancy.frag),
+ *   read back without blocking every OCCUPANCY_INTERVAL steps and rounded up to
+ *   a power of two. The point count alone cannot see this: at the same count a
+ *   clustered layout fills its cells far beyond a scattered one.
+ * - What the tick can afford: K × points, the peel work per tick, stays under
+ *   a budget measured where the frame leaves vsync on a laptop GPU.
+ *
+ * Both are clamped to [MIN_AUTO_SLOTS, MAX_AUTO_SLOTS]. The slots live in one
+ * array-texture layer each, so a changed K is a reallocation, not a shader
+ * change. Graphs at or below ALL_PAIRS_MAX_POINTS never reach this path at all —
+ * they take the exact all-pairs pass instead.
  */
-const getNearFieldSlotCount = (pointsNumber: number): number => {
-  if (pointsNumber <= 16384) return 32
-  if (pointsNumber <= 65536) return 16
-  return 8
+const MIN_AUTO_SLOTS = 8
+const MAX_AUTO_SLOTS = 64
+/** Point-samples per tick the automatic choice may spend. */
+const NEAR_FIELD_BUDGET = 1.6e6
+/** Simulation steps between occupancy measurements. */
+const OCCUPANCY_INTERVAL = 30
+/** Blocks per axis the occupancy pass reduces the finest level into (its readback is this²). */
+const OCCUPANCY_BLOCKS = 16
+
+const clampPowerOfTwo = (value: number, min: number, max: number, roundUp: boolean): number => {
+  const exponent = roundUp ? Math.ceil(Math.log2(value)) : Math.floor(Math.log2(value))
+  return Math.min(max, Math.max(min, Math.pow(2, exponent)))
 }
+
+/** The largest power-of-two slot count whose per-tick work fits the budget at this size. */
+const getAffordableSlotCount = (pointsNumber: number): number =>
+  clampPowerOfTwo(NEAR_FIELD_BUDGET / Math.max(1, pointsNumber), MIN_AUTO_SLOTS, MAX_AUTO_SLOTS, false)
+
+/** The smallest power-of-two slot count that samples cells of this occupancy exhaustively. */
+const getWantedSlotCount = (occupancy: number): number =>
+  clampPowerOfTwo(Math.max(1, occupancy), MIN_AUTO_SLOTS, MAX_AUTO_SLOTS, true)
 
 /**
  * At or below this point count the whole force is computed exactly: one
@@ -296,14 +318,63 @@ export class ForceManyBody extends CoreModule {
   private previousPointsTextureSize: number | undefined
   private previousPointsNumber: number | undefined
 
+  /** Reduces the finest level's counts into OCCUPANCY_BLOCKS² block statistics (occupancy.frag). */
+  private occupancyCommand: Model | undefined
+  private occupancyTarget: { texture: Texture; fbo: Framebuffer } | undefined
+  private occupancyReadback: PickingReadback | undefined
+  /** Simulation steps run on the grid path since create(); schedules the measurements. */
+  private occupancyTick = 0
+  /**
+   * The automatic slot count in force, `undefined` until the first measurement
+   * lands (MIN_AUTO_SLOTS applies meanwhile). A change takes two consecutive
+   * measurements that agree, so a layout settling at a boundary does not
+   * reallocate the slot arrays every measurement; `proposedSlotCount` holds the
+   * one awaiting confirmation.
+   */
+  private autoSlotCount: number | undefined
+  private proposedSlotCount: number | undefined
+
+  private occupancyUniformStore: UniformStore<{
+    occupancyUniforms: {
+      levelTextureWidth: number;
+      levelTextureHeight: number;
+      blockWidth: number;
+      blockHeight: number;
+    };
+  }> | undefined
+
   /** Small graphs skip the grid + Monte-Carlo machinery entirely (see ALL_PAIRS_MAX_POINTS). */
   private get usesAllPairs (): boolean {
     return (this.data.pointsNumber ?? 0) <= ALL_PAIRS_MAX_POINTS
   }
 
+  /**
+   * Peeling passes per tick, i.e. layers across the slot arrays. The force
+   * pass loops over a slotCount uniform, so a changed value reallocates the
+   * arrays on the next tick. The configured count when there is one; otherwise
+   * the measured want, capped by what the size affords (see MIN_AUTO_SLOTS),
+   * and the floor before the first measurement lands.
+   */
+  private get nearFieldSlotCount (): number {
+    const configured = this.config.simulationRepulsionSamples
+    if (configured !== undefined) return configured
+    return Math.min(this.autoSlotCount ?? MIN_AUTO_SLOTS, getAffordableSlotCount(this.data.pointsNumber ?? 0))
+  }
+
+  private get usesAutoSlotCount (): boolean {
+    return this.config.simulationRepulsionSamples === undefined
+  }
+
   public create (): void {
     const { device, store } = this
     if (!store.pointsTextureSize) return
+
+    // A new point set is a new layout: measure it afresh rather than carry the
+    // previous one's occupancy into its allocation.
+    this.occupancyReadback?.cancel()
+    this.occupancyTick = 0
+    this.autoSlotCount = undefined
+    this.proposedSlotCount = undefined
 
     // (Re)allocate the grid pyramid + near-field slots for the current point
     // count (resizing levels and dropping any that the pyramid no longer needs).
@@ -381,6 +452,66 @@ export class ForceManyBody extends CoreModule {
 
     // Allocates its fixed-size targets on its first run, so an all-pairs graph never does.
     this.dataBounds ||= new DataBounds(device)
+
+    // Occupancy reduction (fullscreen quad over the block target; its readback
+    // drives the automatic slot count).
+    this.occupancyUniformStore ||= new UniformStore(device, {
+      occupancyUniforms: {
+        uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
+          levelTextureWidth: 'f32',
+          levelTextureHeight: 'f32',
+          blockWidth: 'f32',
+          blockHeight: 'f32',
+        },
+        defaultUniforms: {
+          levelTextureWidth: 0,
+          levelTextureHeight: 0,
+          blockWidth: 0,
+          blockHeight: 0,
+        },
+      },
+    })
+
+    this.occupancyCommand ||= new Model(device, {
+      fs: occupancyFrag,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.forceVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        occupancyUniforms: this.occupancyUniformStore.getManagedUniformBuffer('occupancyUniforms'),
+        // levelTexture is bound per measurement in measureOccupancy()
+      },
+      parameters: {
+        ...BASE_PIPELINE_PARAMETERS,
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      },
+    })
+
+    if (!this.occupancyTarget || this.occupancyTarget.texture.destroyed) {
+      const texture = device.createTexture({
+        width: OCCUPANCY_BLOCKS,
+        height: OCCUPANCY_BLOCKS,
+        format: 'rgba32float',
+        usage: Texture.SAMPLE | Texture.RENDER,
+      })
+      const fbo = device.createFramebuffer({
+        width: OCCUPANCY_BLOCKS,
+        height: OCCUPANCY_BLOCKS,
+        colorAttachments: [texture],
+      })
+      this.occupancyTarget = { texture, fbo }
+    }
 
     // Grid aggregation command (point list, additive blend)
     this.calculateLevelsUniformStore ||= new UniformStore(device, {
@@ -652,9 +783,15 @@ export class ForceManyBody extends CoreModule {
       return
     }
 
+    // A changed slot count — a configuration change or a landed occupancy
+    // measurement — reallocates the slot arrays in place; the levels are
+    // untouched.
+    this.collectOccupancy()
+    if (this.nearField && this.nearField.count !== this.nearFieldSlotCount) this.createLevels()
     // Nothing to do until the grid pyramid and near-field slots are allocated
     // (create() builds them; this guards a partial/failed allocation).
-    if (this.levelTargets.size === 0 || !this.nearField) return
+    const finest = this.levelTargets.get(this.levels - 1)
+    if (!finest || !this.nearField) return
 
     // Bounds first, once per tick: the passes below all index the grid they
     // define, and must index the same one — the aggregation and the forces
@@ -663,6 +800,7 @@ export class ForceManyBody extends CoreModule {
     this.drawBounds()
     if (!this.dataBounds?.texture) return
     this.drawLevels()
+    this.measureOccupancy(finest.texture, finest.gridSize)
     this.drawNearFieldSlots()
     this.drawForces()
   }
@@ -683,6 +821,10 @@ export class ForceManyBody extends CoreModule {
     this.forceNearFieldCommand = undefined
     this.forceAllPairsCommand?.destroy()
     this.forceAllPairsCommand = undefined
+    this.occupancyCommand?.destroy()
+    this.occupancyCommand = undefined
+    this.occupancyReadback?.destroy()
+    this.occupancyReadback = undefined
 
     // 2. Destroy Framebuffers + 3. Textures (grid targets destroy their FBOs
     // before their textures internally)
@@ -691,6 +833,11 @@ export class ForceManyBody extends CoreModule {
     }
     this.randomValuesTexture = undefined
     this.destroyLevelTargets()
+    if (this.occupancyTarget) {
+      if (!this.occupancyTarget.fbo.destroyed) this.occupancyTarget.fbo.destroy()
+      if (!this.occupancyTarget.texture.destroyed) this.occupancyTarget.texture.destroy()
+      this.occupancyTarget = undefined
+    }
     // Self-contained (its own Models -> Framebuffers -> Textures -> UniformStores
     // -> Buffers); after the Models above, which bind its texture.
     this.dataBounds?.destroy()
@@ -707,6 +854,8 @@ export class ForceManyBody extends CoreModule {
     this.forceNearFieldUniformStore = undefined
     this.forceAllPairsUniformStore?.destroy()
     this.forceAllPairsUniformStore = undefined
+    this.occupancyUniformStore?.destroy()
+    this.occupancyUniformStore = undefined
 
     // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
     if (this.pointIndices && !this.pointIndices.destroyed) {
@@ -717,6 +866,75 @@ export class ForceManyBody extends CoreModule {
       this.forceVertexCoordBuffer.destroy()
     }
     this.forceVertexCoordBuffer = undefined
+  }
+
+  /**
+   * While the slot count is automatic: every OCCUPANCY_INTERVAL steps (and on
+   * the first), reduces the finest level just aggregated into block statistics
+   * and starts a non-blocking read of them. Skipped while a previous read is
+   * still in flight.
+   */
+  private measureOccupancy (levelTexture: Texture, gridSize: number): void {
+    const { device } = this
+    if (!this.usesAutoSlotCount) return
+    const tick = this.occupancyTick
+    this.occupancyTick += 1
+    if (tick % OCCUPANCY_INTERVAL !== 0) return
+    if (!this.occupancyCommand || !this.occupancyUniformStore) return
+    if (!this.occupancyTarget || this.occupancyTarget.fbo.destroyed || levelTexture.destroyed) return
+    if (this.occupancyReadback?.inFlight) return
+
+    const gl = (device as unknown as { gl?: WebGL2RenderingContext }).gl
+    const handle = (this.occupancyTarget.fbo as unknown as { handle?: WebGLFramebuffer }).handle
+    if (!gl || !handle) return
+
+    const blockSize = Math.ceil(gridSize / OCCUPANCY_BLOCKS)
+    this.occupancyUniformStore.setUniforms({
+      occupancyUniforms: {
+        levelTextureWidth: gridSize,
+        levelTextureHeight: gridSize,
+        blockWidth: blockSize,
+        blockHeight: blockSize,
+      },
+    })
+    this.occupancyCommand.setBindings({ levelTexture })
+    const pass = device.beginRenderPass({
+      framebuffer: this.occupancyTarget.fbo,
+      clearColor: [0, 0, 0, 0],
+    })
+    this.occupancyCommand.draw(pass)
+    pass.end()
+
+    this.occupancyReadback ||= new PickingReadback(gl, OCCUPANCY_BLOCKS * OCCUPANCY_BLOCKS * 4)
+    this.occupancyReadback.issue(handle, 0, 0, OCCUPANCY_BLOCKS, OCCUPANCY_BLOCKS)
+  }
+
+  /**
+   * Collects a finished occupancy read, if one has finished, and turns it into
+   * the automatic slot count: the power of two at or above the occupancy a
+   * typical point experiences, Σ count² / Σ count over all finest cells. The
+   * first measurement applies at once; later ones take two in a row that agree.
+   * The result is only a want — nearFieldSlotCount caps it by the size budget.
+   */
+  private collectOccupancy (): void {
+    const blocks = this.occupancyReadback?.poll()
+    if (!blocks) return
+    let sum = 0
+    let sumSquares = 0
+    for (let i = 0; i < OCCUPANCY_BLOCKS * OCCUPANCY_BLOCKS; i += 1) {
+      sum += blocks[i * 4 + 1]!
+      sumSquares += blocks[i * 4 + 2]!
+    }
+    if (sum <= 0) return
+    const wanted = getWantedSlotCount(sumSquares / sum)
+    if (this.autoSlotCount === undefined || wanted === this.proposedSlotCount) {
+      this.autoSlotCount = wanted
+      this.proposedSlotCount = undefined
+    } else if (wanted !== this.autoSlotCount) {
+      this.proposedSlotCount = wanted
+    } else {
+      this.proposedSlotCount = undefined
+    }
   }
 
   /**
@@ -1021,7 +1239,7 @@ export class ForceManyBody extends CoreModule {
    */
   private createNearFieldSlots (finest: LevelTarget): void {
     const { device } = this
-    const count = getNearFieldSlotCount(this.data.pointsNumber ?? 0)
+    const count = this.nearFieldSlotCount
     // These targets follow the finest level's grid, and that grid does change
     // size as the graph grows or shrinks (it snaps to powers of two) — and the
     // slot count changes with the point count too. If everything we already

@@ -76,6 +76,7 @@ export const defaultConfigValues = {
   simulationGravity: 0.25,
   simulationCenter: 0,
   simulationRepulsion: 1.0,
+  simulationRepulsionSamples: undefined,
   simulationRepulsionTheta: 1.15,
   simulationLinkSpring: 1,
   simulationLinkDistance: 10,

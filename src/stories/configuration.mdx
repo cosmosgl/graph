@@ -93,6 +93,7 @@ cosmos.gl layout algorithm was inspired by the [d3-force](https://github.com/d3/
 | simulationGravity | Gravity force coefficient | 0.0 – 1.0 | `0.25` |
 | simulationCenter | Centering force coefficient | 0.0 – 1.0 | `0.0` |
 | simulationRepulsion | Repulsion force coefficient | 0.0 – 2.0 | `1.0` |
+| simulationRepulsionSamples | Close-range repulsion samples per grid cell above 4,096 points. Cells holding at most this many points are repelled exactly; denser cells are sampled anew every tick, which can show as shimmer in held layouts. Each sample adds one render pass per tick. Unset, the engine measures how full the cells are and picks 8 to 64 within a per-tick budget. | 8 – 64 | `undefined` |
 | simulationRepulsionTheta | **Deprecated, no effect.** The Many-Body force now repels close points individually (a grid pyramid with an unbiased Monte-Carlo near field), so there is no theta approximation to tune. | - | `1.15` |
 | simulationLinkSpring | Link spring force coefficient | 0.0 – 2.0 | `1.0` |
 | simulationLinkDistance | Minimum link distance | 1 – 20 | `10` |

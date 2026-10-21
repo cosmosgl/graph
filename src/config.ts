@@ -419,6 +419,18 @@ export interface GraphConfigInterface {
    */
   simulationRepulsion: number;
   /**
+   * Near-field repulsion samples per grid cell, a positive integer.
+   * A cell holding at most this many points is repelled exactly; denser cells are
+   * sampled anew every tick. Each sample is one render pass over all points per
+   * tick and one layer of the slot array textures, so GPU time and memory grow
+   * with it. Leave it unset and the engine measures how full the cells are every
+   * 30 steps and picks a count from 8 to 64 that samples them exhaustively, within
+   * a per-tick budget that shrinks as the graph grows. Has no effect on graphs of
+   * 4,096 points or fewer, which use the exact all-pairs pass.
+   * Default value: `undefined`
+   */
+  simulationRepulsionSamples?: number;
+  /**
    * @deprecated No longer used. The many-body force now repels close points
    * individually — a grid pyramid closed by an unbiased Monte-Carlo near field
    * that stays exact while cells are sparse and only approximates once a cell
@@ -873,6 +885,7 @@ export type GraphSimulationConfigInterface = Pick<GraphConfigInterface,
   | 'simulationGravity'
   | 'simulationCenter'
   | 'simulationRepulsion'
+  | 'simulationRepulsionSamples'
   | 'simulationRepulsionTheta'
   | 'simulationLinkSpring'
   | 'simulationLinkDistance'
@@ -940,6 +953,10 @@ export function applyConfig (
   source: GraphConfig,
   useDefaultsForUndefined = false
 ): void {
+  const samples = source.simulationRepulsionSamples
+  if (samples !== undefined && (!Number.isSafeInteger(samples) || samples <= 0)) {
+    throw new RangeError('simulationRepulsionSamples must be a positive integer')
+  }
   const overrides: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(source)) {
     if (value !== undefined) { // skip explicit undefined; handled below if useDefaultsForUndefined
