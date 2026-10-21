@@ -160,7 +160,7 @@ same bits; the one inexact step, the extent's reciprocal, is taken once by the r
 shared through the texel. Scaling it by the level's power-of-two cell count changes only the
 exponent, so a point's offset from the origin on level L + 1 is exactly twice its offset on
 level L, and its cell there is `2·cell` or `2·cell + 1` on each axis — the parent–child relation
-the 6×6 refinement in step 3 relies on, which the edge clamp preserves. `withGridCell` also
+the child-block refinement in step 3 relies on, which the edge clamp preserves. `withGridCell` also
 throws if a host shader's uniform `#define` would rewrite one of the formula's identifiers, a
 mistake that otherwise surfaces as a compile error far from its cause, or not at all.
 
@@ -193,18 +193,35 @@ Keep that in mind for step 4.
 The `theta` bands are gone. Instead there is one fixed, resolution-independent rule
 (`force-level.frag`):
 
-- The **coarsest level** applies centroid repulsion from *every* cell except the 3×3
-  neighborhood around the point's cell.
-- Each **finer level** takes over exactly that deferred 3×3 — which at double resolution is its
-  aligned **6×6 child block** — and applies centroid forces there, again minus its *own* 3×3.
+- The **coarsest level** applies centroid repulsion from *every* cell except a **shell**
+  around the point's cell: the 5×5 block of cells within Chebyshev distance 2.
+- Each **finer level** takes over exactly that deferred shell — which at double resolution is
+  its aligned **10×10 child block** — and applies centroid forces there, again minus its *own*
+  shell. Every level but the finest leaves a 5×5 shell; the finest leaves 3×3
+  (`getShellRadius` in `index.ts`), so the last level refines the 10×10 block minus its 3×3.
 - After the finest level, the only region not yet accounted for is the finest 3×3 neighborhood.
   That is the **near field**, and it is the only part where the centroid trick would do damage
   (up close, direction errors matter). It gets step 4 instead.
 
 Every cell of the box is charged to exactly one pass, and every live point lies in the box:
 **no gaps, no double counting, nothing to tune.** Far-field centroid error is small by
-construction, because a cell is only ever used at a distance at least ~1 cell away from its own
-size scale. Small, but not continuous — next.
+construction, because above the finest level a cell is only ever used from at least two cells
+away, where a centroid's error is about a quarter of what it is from one cell away; and the
+finest level's cells hold about one point each (step 2), so their centroids are the points
+themselves. The 5×5 shell is what clustered data needs: a coarse cell there holds much of a
+cluster or splits one, and its centroid stands for very uneven mass. With the 3×3 shell on
+every level and the grid shifting every tick (next), that error reached every point as
+visible jitter in a clustered layout (25 clusters of 900 points at repulsion 8), where a
+uniform 300k blob stayed calm. Measured as RMS displacement per tick at alpha 1 on that layout,
+in point spacings: `main` 0.0137, the 3×3 shell with the shift 0.0181, the 5×5 shell 0.0082.
+Widening only the coarsest one, two or four levels gave 0.0100, 0.0101 and 0.0090 but still
+rippled to the eye — a jump at a fine-level boundary moves a whole line of points together, and
+the eye picks that out well below what the RMS says. The wider shell costs the far-field passes
+about 2.3× the texel reads (coarsest level 55 → 39, each middle level 27 → 75, finest 27 → 91,
+217 → 505 over seven levels); the aggregation and the near field are unchanged. In the
+**Performance → Repulsion Benchmark** story (Chrome, Apple Silicon) that is +2 % at 20k points
+and +33–38 % from 50k to 200k (4.33 → 5.87 ms, 7.14 → 9.83 ms, 13.88 → 18.48 ms per step); 2k
+and 5k points run the all-pairs path and are unchanged. Small, but not continuous — next.
 
 ### Exactly once is not continuous: why the grid shifts every tick
 
@@ -212,7 +229,7 @@ size scale. Small, but not continuous — next.
 
 Exactly-once coverage says every cell is charged to one pass. It says nothing about what
 happens when a *point* moves. Each level picks the cells it takes as centroids from the
-point's own cell, so a point that crosses a cell boundary carries its 3×3 shell with it:
+point's own cell, so a point that crosses a cell boundary carries its shell with it:
 one column of cells switches from "one centroid" to "refined by the finer levels", and the
 column on the other side switches back. The two treatments approximate the same mass
 slightly differently, so the force **jumps** at every cell boundary of every level.
@@ -221,7 +238,7 @@ Each jump is small. On a fixed grid it is also always in the same place, and eve
 of the coarsest level is a boundary on *every* finer level too, so the jumps along it add up.
 From a 4² start those are the data box's centre and quarter lines, and the centre lines dip
 deepest: a crossing there switches a column of coarsest cells on both sides, while at a
-quarter line the 3×3 shell is clipped by the box's edge and only one column switches. In a
+quarter line the shell is clipped by the box's edge and only one column switches. In a
 dense layout the force near a centre line points away from it on both sides, and points
 drift off the line until the layout shows a **cross**: a thin, emptier line along each
 centre line, and fainter ones on the quarter lines. The space-anchored grid on `main` drew
@@ -237,8 +254,9 @@ every level's boundaries spread evenly over the data from tick to tick, and the 
 average into a continuous force. What remains is per-tick noise that alpha anneals, the
 same trade the near field makes in step 4.
 
-Measured on the real GPU (300k points, gravity 0.25, 1,500 ticks): the point density in a
-thin strip on a line, divided by the density around it (1.0 = no seam).
+Measured on the real GPU (300k points, gravity 0.25, 1,500 ticks), with the 3×3 shell on every
+level — before the 5×5 shell above the finest level, which has not been re-measured here: the
+point density in a thin strip on a line, divided by the density around it (1.0 = no seam).
 
 | | centre lines | quarter lines | off-boundary lines |
 |---|---|---|---|
@@ -433,8 +451,10 @@ point outside the space into an edge cell, harmless only while the clamp kept ev
 (the **Performance → Space Size Wall** story shows a large layout growing past the space it used
 to pile against).
 
-Measured on the real GPU (Apple M3 Max, ANGLE Metal): 100k points (finest grid 512², 8
-near-field slots) uniform in a square of side *f* × 4096, every other force off, the velocity
+Measured on the real GPU (Apple M3 Max, ANGLE Metal), with the 3×3 shell on every level —
+before the 5×5 shell above the finest level, which has not been re-measured here: 100k points
+(finest grid 512², 8 near-field slots) uniform in a square of side *f* × 4096, every other
+force off, the velocity
 after one step compared with an exact float64 all-pairs sum of the same kernel — the RMS error
 over 1,500 query points relative to the exact force's RMS, averaged over 20 ticks, each a fresh
 near-field sample:
@@ -527,7 +547,7 @@ square and 0.15 % / 0.10 % on a disk. Beyond accuracy:
 | Speed | baseline | **~1.2–4× faster per step** across the practical range |
 | Code paths | one, plus the theta special-casing | two: exact ≤ 4k points, grid + sampling above |
 
-The speedup comes from the fixed 3×3/6×6 loop structure (compact, coherent texel fetches;
+The speedup comes from the fixed per-level loop structure (compact, coherent texel fetches;
 no data-dependent band walking) — measure it yourself with the **Performance → Repulsion
 Benchmark** story, which steps the simulation directly and forces a readback so the numbers aren't capped
 by the display refresh rate. The before/after videos in the

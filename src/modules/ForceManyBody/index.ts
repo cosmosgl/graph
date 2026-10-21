@@ -49,6 +49,25 @@ const getFinestGridSize = (pointsNumber: number): number =>
   Math.min(MAX_GRID_SIZE, Math.max(8, Math.pow(2, Math.ceil(Math.log2(2 * Math.sqrt(pointsNumber))))))
 
 /**
+ * Chebyshev radius of the shell a level leaves to the next: 2 (a 5×5 block of
+ * cells) on every level but the finest, 1 (3×3) on the finest, which the
+ * near-field pass closes. The next level refines a shell of radius r as its
+ * aligned (4r+2)² child block minus its own shell (force-level.frag), which
+ * fits inside the block as long as r(L+1) ≤ 2·r(L).
+ *
+ * A cell's centroid stands in for its points with an error that falls with the
+ * square of the distance in cell sizes, so a lump used from two cells away
+ * carries about a quarter of the error of one used from one cell away. On
+ * uniform data either is small. On clustered data a coarse cell holds much of
+ * a cluster or splits one, its centroid stands for very uneven mass, and with
+ * the grid shifting every tick (drawBounds) the one-cell error reaches every
+ * point as visible jitter. The finest level's cells hold about one point each
+ * (getFinestGridSize), so their centroids are exact and its shell stays 3×3,
+ * which keeps the near field's cost where it was.
+ */
+const getShellRadius = (level: number, levels: number): number => (level === levels - 1 ? 1 : 2)
+
+/**
  * The per-tick bound on the close-range repulsion kick, for both paths: the
  * all-pairs pass (which also splits near from far pairs at it) and the grid
  * path's near-field pass. It is 2 × spaceSize / the finest grid size at this
@@ -150,8 +169,9 @@ const PEEL_TARGETS = 2
  * Graphs at or below ALL_PAIRS_MAX_POINTS are computed exactly in a single
  * all-pairs pass (see that constant for why). Above it:
  *
- * A Barnes-Hut-style grid pyramid (each level covers its aligned 6×6 child block
- * minus the Chebyshev-1 shell) whose finest 3×3 neighborhood is closed by an
+ * A Barnes-Hut-style grid pyramid (each level refines the shell of cells the
+ * level above left around the point, minus its own shell: 5×5 on every level but
+ * the finest, getShellRadius) whose finest 3×3 neighborhood is closed by an
  * unbiased Monte-Carlo near field: a per-tick depth-peeled random subset of each
  * cell's points, Horvitz–Thompson-weighted so the expected force equals the exact
  * all-pairs sum. Close points therefore repel each other individually instead of
@@ -235,6 +255,8 @@ export class ForceManyBody extends CoreModule {
       isFirstLevel: number;
       alpha: number;
       repulsion: number;
+      shellRadius: number;
+      parentShellRadius: number;
     };
   }> | undefined
 
@@ -413,12 +435,16 @@ export class ForceManyBody extends CoreModule {
           isFirstLevel: 'f32',
           alpha: 'f32',
           repulsion: 'f32',
+          shellRadius: 'f32',
+          parentShellRadius: 'f32',
         },
         defaultUniforms: {
           levelGridSize: 0,
           isFirstLevel: 0,
           alpha: store.alpha,
           repulsion: this.config.simulationRepulsion,
+          shellRadius: 2,
+          parentShellRadius: 0,
         },
       },
     })
@@ -904,6 +930,8 @@ export class ForceManyBody extends CoreModule {
           isFirstLevel: level === 0 ? 1 : 0,
           alpha: store.alpha,
           repulsion: this.config.simulationRepulsion,
+          shellRadius: getShellRadius(level, this.levels),
+          parentShellRadius: level === 0 ? 0 : getShellRadius(level - 1, this.levels),
         },
       })
 
