@@ -1,0 +1,2096 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The many-body grid: following the data, two cells away</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  /* Layout: one reading column (~68ch) for prose; figures, canvases and tables may run to the 960px rail.
+     Part I and Part II share one identity. */
+  :root {
+    --bg: #f7f7f4;
+    --bg-2: #eeeee9;
+    --fg: #1d2126;
+    --fg-2: #5b6470;
+    --line: #d4d6d0;
+    --data: #0a7c74;         /* the grid, cells summed as centroids */
+    --data-soft: rgba(10, 124, 116, 0.14);
+    --shell: #c2641a;        /* the shell: cells left to the next level */
+    --shell-soft: rgba(194, 100, 26, 0.16);
+    --near: #8a3b8f;         /* the near field */
+    --near-soft: rgba(138, 59, 143, 0.16);
+    --point: #2b3440;
+    --code-bg: #ecece7;
+    --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #15181c; --bg-2: #1d2126; --fg: #e4e6e2; --fg-2: #9aa3ad; --line: #30363d;
+      --data: #3fbfb4; --data-soft: rgba(63, 191, 180, 0.18);
+      --shell: #e08a45; --shell-soft: rgba(224, 138, 69, 0.2);
+      --near: #c97fd0; --near-soft: rgba(201, 127, 208, 0.2);
+      --point: #d8dce0; --code-bg: #1d2126;
+      color-scheme: dark;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #15181c; --bg-2: #1d2126; --fg: #e4e6e2; --fg-2: #9aa3ad; --line: #30363d;
+    --data: #3fbfb4; --data-soft: rgba(63, 191, 180, 0.18);
+    --shell: #e08a45; --shell-soft: rgba(224, 138, 69, 0.2);
+    --near: #c97fd0; --near-soft: rgba(201, 127, 208, 0.2);
+    --point: #d8dce0; --code-bg: #1d2126;
+    color-scheme: dark;
+  }
+
+  body {
+    background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 16px; line-height: 1.55;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+    padding-block: 0 64px;
+  }
+  main { max-width: 960px; margin: 0 auto; }
+  .prose { max-width: 68ch; }
+  header { padding-block: 48px 24px; border-bottom: 1px solid var(--line); margin-bottom: 32px; }
+  .eyebrow { font-family: var(--mono); font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--fg-2); }
+  h1 { font-size: clamp(28px, 4vw, 40px); line-height: 1.1; margin: 8px 0 12px; font-weight: 600; text-wrap: balance; letter-spacing: -0.01em; }
+  h2 { font-size: 24px; margin: 56px 0 12px; font-weight: 600; text-wrap: balance; letter-spacing: -0.01em; }
+  h3 { font-size: 18px; margin: 32px 0 8px; font-weight: 600; }
+  p { margin: 0 0 14px; }
+  .lede { font-size: 18px; color: var(--fg-2); }
+  a { color: var(--data); }
+  code { font-family: var(--mono); font-size: 0.9em; background: var(--code-bg); padding: 1px 5px; border-radius: 3px; }
+  pre { font-family: var(--mono); font-size: 13px; line-height: 1.5; background: var(--code-bg); border: 1px solid var(--line);
+        border-radius: 6px; padding: 14px 16px; overflow-x: auto; margin: 12px 0 18px; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+  .c { color: var(--fg-2); font-style: italic; }
+  .k { color: var(--data); }
+  .del { color: var(--shell); text-decoration: line-through; opacity: 0.8; }
+  .src { display: block; font-family: var(--mono); font-size: 12px; color: var(--fg-2); margin: 0 0 -8px; }
+
+  figure { margin: 24px 0 28px; }
+  figure svg { max-width: 100%; height: auto; display: block; color: var(--fg); }
+  figcaption { font-size: 14px; color: var(--fg-2); margin-top: 8px; max-width: 68ch; }
+  .scroll { overflow-x: auto; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 13px; color: var(--fg-2); margin-top: 6px; }
+  .legend span::before { content: ""; display: inline-block; width: 14px; height: 10px; vertical-align: middle; margin-right: 6px; border-radius: 2px; background: currentColor; opacity: 0.55; }
+  .legend .l-data { color: var(--data); }
+  .legend .l-shell { color: var(--shell); }
+  .legend .l-near { color: var(--near); }
+
+  table { border-collapse: collapse; font-size: 14px; margin: 12px 0 20px; font-variant-numeric: tabular-nums; }
+  th, td { text-align: left; padding: 6px 14px 6px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { font-weight: 600; color: var(--fg-2); font-size: 13px; }
+  td code { font-size: 13px; }
+
+  .demo { border: 1px solid var(--line); border-radius: 8px; background: var(--bg-2); padding: 14px; margin: 20px 0 28px; }
+  .demo-row { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
+  .demo canvas { max-width: 100%; height: auto; display: block; border-radius: 4px; background: var(--bg); }
+  .controls { display: flex; flex-direction: column; gap: 10px; min-width: 0; flex: 1 1 220px; font-size: 14px; }
+  .controls label { display: flex; align-items: center; gap: 8px; }
+  .controls .seg { display: flex; flex-wrap: wrap; gap: 6px; }
+  .controls button { font: inherit; font-size: 13px; font-weight: 500; padding: 6px 12px; border-radius: 6px; border: 1px solid var(--line); background: var(--bg); color: var(--fg); cursor: pointer; }
+  .controls button[aria-pressed="true"] { border-color: var(--data); background: var(--data); color: #fff; }
+  .controls button:focus-visible, .controls input:focus-visible { outline: 2px solid var(--shell); outline-offset: 2px; }
+  .readout { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; white-space: pre-wrap; }
+  .readout b { color: var(--data); font-weight: 500; }
+  .readout i { color: var(--shell); font-style: normal; }
+  .note { border-left: 3px solid var(--data); padding: 2px 0 2px 14px; color: var(--fg-2); font-size: 15px; margin: 18px 0; }
+  .sw { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin-right: 5px; opacity: 0.8; }
+  .sw-data { background: var(--data); } .sw-shell { background: var(--shell); } .sw-near { background: var(--near); } .sw-heat { background: var(--fg); opacity: 0.6; }
+  .roles { list-style: none; padding: 0; margin: 12px 0 18px; display: grid; gap: 10px; }
+  .roles li { padding-left: 0; }
+  .summary { border: 1px solid var(--line); border-radius: 8px; background: var(--bg-2); padding: 14px 18px; margin: 20px 0; font-size: 15px; }
+  .summary dt { font-weight: 600; margin-top: 10px; }
+  .summary dt:first-child { margin-top: 0; }
+  .summary dd { margin: 2px 0 0; }
+  .words { display: grid; grid-template-columns: max-content 1fr; gap: 6px 16px; font-size: 14px; margin: 12px 0 8px; }
+  .words dt { font-weight: 600; }
+  .words dd { margin: 0; color: var(--fg-2); }
+  .toc { font-size: 14px; display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 4px 24px; margin: 0 0 8px; padding: 0; list-style: none; }
+  .toc li { padding: 4px 0; border-bottom: 1px dotted var(--line); }
+  .toc a { text-decoration: none; color: var(--fg); }
+  .toc a:hover { color: var(--data); }
+  .grid4 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+  .grid4 figure { margin: 0; }
+  .grid4 canvas { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 4px; background: var(--bg); }
+  .grid4 figcaption { font-size: 13px; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+  :root { --space: #8e96a0; --shift: #c2641a; --shift-soft: rgba(194, 100, 26, 0.14); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --space: #7d8793; --shift: #e08a45; --shift-soft: rgba(224, 138, 69, 0.18); } }
+  :root[data-theme="dark"] { --space: #7d8793; --shift: #e08a45; --shift-soft: rgba(224, 138, 69, 0.18); }
+  .legend .l-space { color: var(--space); }
+  .legend .l-shift { color: var(--shift); }
+  .texel { font-family: var(--mono); font-size: 12.5px; line-height: 1.6; background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; white-space: pre; overflow-x: auto; }
+  .texel b { color: var(--data); font-weight: 500; }
+  .texel i { color: var(--shift); font-style: normal; }
+  .part-head { margin: 72px 0 24px; padding-top: 32px; border-top: 2px solid var(--fg); }
+  .part-head h2 { font-size: clamp(24px, 3.4vw, 32px); margin: 6px 0 12px; }
+  .toc-group { margin: 14px 0 0; font-weight: 600; font-size: 14px; }
+  .afterword table td, .afterword table th { padding-right: 12px; }
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div class="eyebrow">cosmos.gl · ForceManyBody · PR #282</div>
+  <h1>The many-body grid: following the data, two cells away</h1>
+  <p class="lede prose">Two pages written while the no-space-wall branch took shape, kept together. Part I takes apart how the force's grid pyramid came to divide the live data's bounding square, reduced on the GPU each tick and shifted by a random part of a cell. Part II is what that shift exposed on clustered data, and why the far field now keeps its centroids two cells away. An afterword records how that shell became a size-tiered setting the same day.</p>
+  <p class="lede prose" style="font-size:15px">The code listings are the branch at the commits named in each part; the interactive figures compute the same rules in the page. Every demo redraws on theme change.</p>
+  <div class="toc-group">Part I · <a href="#part-one">How the grid follows the data</a></div>
+  <ul class="toc">
+    <li><a href="#a-why">1 · Why the grid moved off the space</a></li>
+    <li><a href="#a-reduce">2 · Reducing the bounding square on the GPU</a></li>
+    <li><a href="#a-cell">3 · One cell formula, four shaders</a></li>
+    <li><a href="#a-pyramid">4 · The pyramid textures</a></li>
+    <li><a href="#a-seams">5 · Why a fixed grid draws a cross</a></li>
+    <li><a href="#a-shift">6 · The per-tick shift</a></li>
+    <li><a href="#a-pipeline">7 · The whole tick</a></li>
+    <li><a href="#a-spacesize">8 · What spaceSize still does, and how to retire it</a></li>
+  </ul>
+  <div class="toc-group">Part II · <a href="#part-two">Why the far field keeps two cells away</a></div>
+  <ul class="toc">
+    <li><a href="#b-seen">1 · What was seen</a></li>
+    <li><a href="#b-textures">2 · How a level builds the force, and what its texture holds</a></li>
+    <li><a href="#b-jump">3 · Why the force jumps at a boundary, and why 5 × 5 halves the jump</a></li>
+    <li><a href="#b-shift">4 · Why moving the grid could not fix it</a></li>
+    <li><a href="#b-ladder">5 · What was tried, in order</a></li>
+    <li><a href="#b-rule">6 · The rule, and why it stays exact</a></li>
+    <li><a href="#b-code">7 · The code</a></li>
+    <li><a href="#b-cost">8 · What it costs, and what it measured</a></li>
+    <li><a href="#b-open">9 · What remains</a></li>
+  </ul>
+  <div class="toc-group"><a href="#afterword">Afterword · The shell became a setting</a></div>
+</header>
+
+<section class="part-head" id="part-one">
+  <div class="eyebrow">Part I</div>
+  <h2>How the many-body grid follows the data</h2>
+  <p class="lede prose">One sentence in the PR packs three mechanisms: <em>every level divides the live data's bounding square, reduced on the GPU each tick and shifted by a random part of a cell so no cell boundary stays put.</em> This page takes the sentence apart, texture by texture, with the shader code that does each step.</p>
+</section>
+
+
+<section id="a-why" class="prose">
+<h2>1 · Why the grid moved off the space</h2>
+<p>The many-body force is a Barnes-Hut style approximation. It lays a stack of square grids over the layout, sums every point into a cell on each grid, and lets a point feel far cells as single lumps of mass. Where the grids sit decides how many cells the layout actually gets to use.</p>
+<p>On <code>main</code> every grid covered the fixed square <code>[0, spaceSize]</code>. A layout that fills a tenth of the space lands in a hundredth of the cells. Gravity pulls almost every layout well inside the space, so this was the normal case, not an edge case: 10k points settle about 1,270 units wide inside a 4,096 square.</p>
+</section>
+
+<figure>
+  <div class="scroll">
+  <svg viewBox="0 0 760 300" role="img" aria-label="Left: an 8 by 8 grid over the whole space with a small layout occupying only a few cells. Right: the same 8 by 8 grid fitted to the layout's bounding square, so the layout spans all cells." width="760" height="300">
+    <defs>
+      <pattern id="a-dots" width="6" height="6" patternUnits="userSpaceOnUse"><circle cx="3" cy="3" r="1.1" fill="currentColor"/></pattern>
+    </defs>
+    <!-- left: grid on the space -->
+    <g transform="translate(40,40)">
+      <text x="0" y="-16" font-size="13" font-weight="600" fill="currentColor">main: grid over [0, spaceSize]</text>
+      <rect x="0" y="0" width="224" height="224" fill="none" stroke="var(--space)" stroke-width="1.5"/>
+      <g stroke="var(--space)" stroke-width="0.8" opacity="0.7">
+        <line x1="28" y1="0" x2="28" y2="224"/><line x1="56" y1="0" x2="56" y2="224"/><line x1="84" y1="0" x2="84" y2="224"/><line x1="112" y1="0" x2="112" y2="224"/><line x1="140" y1="0" x2="140" y2="224"/><line x1="168" y1="0" x2="168" y2="224"/><line x1="196" y1="0" x2="196" y2="224"/>
+        <line x1="0" y1="28" x2="224" y2="28"/><line x1="0" y1="56" x2="224" y2="56"/><line x1="0" y1="84" x2="224" y2="84"/><line x1="0" y1="112" x2="224" y2="112"/><line x1="0" y1="140" x2="224" y2="140"/><line x1="0" y1="168" x2="224" y2="168"/><line x1="0" y1="196" x2="224" y2="196"/>
+      </g>
+      <circle cx="112" cy="112" r="34" fill="url(#a-dots)" stroke="none"/>
+      <rect x="78" y="78" width="68" height="68" fill="none" stroke="var(--data)" stroke-width="1.2" stroke-dasharray="4 3"/>
+      <text x="0" y="246" font-size="12" fill="var(--fg-2)">layout spans ~2.4 of 8 cells per axis</text>
+      <text x="0" y="262" font-size="12" fill="var(--fg-2)">≈ 6 of 64 cells hold every point</text>
+    </g>
+    <!-- arrow -->
+    <g transform="translate(300,150)" stroke="currentColor" fill="currentColor">
+      <line x1="0" y1="0" x2="110" y2="0" stroke-width="1.5"/>
+      <polygon points="110,0 100,-5 100,5"/>
+      <text x="55" y="-10" font-size="12" text-anchor="middle" stroke="none">fit the grid to the data</text>
+    </g>
+    <!-- right: grid on the data -->
+    <g transform="translate(470,40)">
+      <text x="0" y="-16" font-size="13" font-weight="600" fill="currentColor">this PR: grid over the data box</text>
+      <rect x="0" y="0" width="224" height="224" fill="none" stroke="var(--space)" stroke-width="1" stroke-dasharray="2 4" opacity="0.6"/>
+      <circle cx="112" cy="112" r="34" fill="url(#a-dots)" stroke="none"/>
+      <rect x="78" y="78" width="68" height="68" fill="none" stroke="var(--data)" stroke-width="1.5"/>
+      <g stroke="var(--data)" stroke-width="0.7" opacity="0.8">
+        <line x1="86.5" y1="78" x2="86.5" y2="146"/><line x1="95" y1="78" x2="95" y2="146"/><line x1="103.5" y1="78" x2="103.5" y2="146"/><line x1="112" y1="78" x2="112" y2="146"/><line x1="120.5" y1="78" x2="120.5" y2="146"/><line x1="129" y1="78" x2="129" y2="146"/><line x1="137.5" y1="78" x2="137.5" y2="146"/>
+        <line x1="78" y1="86.5" x2="146" y2="86.5"/><line x1="78" y1="95" x2="146" y2="95"/><line x1="78" y1="103.5" x2="146" y2="103.5"/><line x1="78" y1="112" x2="146" y2="112"/><line x1="78" y1="120.5" x2="146" y2="120.5"/><line x1="78" y1="129" x2="146" y2="129"/><line x1="78" y1="137.5" x2="146" y2="137.5"/>
+      </g>
+      <text x="0" y="246" font-size="12" fill="var(--fg-2)">the same 8 × 8 cells, all over the points</text>
+      <text x="0" y="262" font-size="12" fill="var(--fg-2)">the space square is only a reference now</text>
+    </g>
+  </svg>
+  </div>
+  <figcaption>The same 8 × 8 coarsest level, placed two ways. The grid's resolution already followed the point count since #240. What changed is its placement: the square it divides is the bounding square of the live points.</figcaption>
+  <div class="legend"><span class="l-space">[0, spaceSize]</span><span class="l-data">data bounding square</span></div>
+</figure>
+
+<section class="prose">
+<p>The measured cost of the old placement, at 100k points with the finest grid at 512² and 8 near-field sampling slots, against an exact float64 all-pairs force:</p>
+<table>
+  <thead><tr><th>layout side / space side</th><th>points per finest cell, main</th><th>error, main</th><th>error, this PR</th></tr></thead>
+  <tbody>
+    <tr><td>1.0</td><td>0.38</td><td>0.060 %</td><td>0.091 %</td></tr>
+    <tr><td>0.25</td><td>6.10</td><td>0.354 %</td><td>0.089 %</td></tr>
+    <tr><td>0.1</td><td>38.1</td><td>1.840 %</td><td>0.090 %</td></tr>
+  </tbody>
+</table>
+<p>Flat in the layout's size, because the grid no longer knows where the layout sits in the space. The rest of this page is how that is done without ever reading a position back to the CPU.</p>
+</section>
+
+<section id="a-reduce" class="prose">
+<h2>2 · Reducing the bounding square on the GPU</h2>
+<p>To fit the grid, the engine needs <code>min</code> and <code>max</code> of every live position, every tick. A readback would stall the pipeline, so the reduction runs as three full-screen fragment passes, each writing a smaller texture, until one texel is left. That texel is then read by the shaders that bin points. It lives in <code>src/modules/Shared/data-bounds.ts</code>.</p>
+</section>
+
+<figure>
+  <div class="scroll">
+  <svg viewBox="0 0 900 330" role="img" aria-label="Four textures in a row: the positions texture with one texel per point, the 64 by 64 buckets texture of partial boxes, the 8 by 8 blocks texture, and the final 1 by 1 bounds texel holding origin, extent and the reciprocal of the extent." width="900" height="330">
+    <defs>
+      <marker id="a-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+    </defs>
+    <!-- positions texture -->
+    <g transform="translate(20,40)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">positionsTexture</text>
+      <text x="0" y="2" font-size="11.5" fill="var(--fg-2)">S × S, rgba32float, one texel per point</text>
+      <g transform="translate(0,14)">
+        <rect x="0" y="0" width="160" height="160" fill="var(--bg-2)" stroke="currentColor" stroke-width="1"/>
+        <g stroke="var(--line)" stroke-width="0.8">
+          <line x1="40" y1="0" x2="40" y2="160"/><line x1="80" y1="0" x2="80" y2="160"/><line x1="120" y1="0" x2="120" y2="160"/>
+          <line x1="0" y1="40" x2="160" y2="40"/><line x1="0" y1="80" x2="160" y2="80"/><line x1="0" y1="120" x2="160" y2="120"/>
+        </g>
+        <g font-family="var(--mono)" font-size="9.5" fill="currentColor" text-anchor="middle">
+          <text x="20" y="24">p0</text><text x="60" y="24">p1</text><text x="100" y="24">p2</text><text x="140" y="24">p3</text>
+          <text x="20" y="64">p4</text><text x="60" y="64">p5</text><text x="100" y="64">p6</text><text x="140" y="64">p7</text>
+          <text x="20" y="104">p8</text><text x="60" y="104">…</text>
+          <text x="140" y="144" fill="var(--fg-2)">pad</text>
+        </g>
+        <!-- highlight the stride for bucket 1 -->
+        <rect x="40" y="0" width="40" height="40" fill="none" stroke="var(--data)" stroke-width="2"/>
+        <rect x="40" y="80" width="40" height="40" fill="none" stroke="var(--data)" stroke-width="2" stroke-dasharray="3 2"/>
+      </g>
+      <text x="0" y="200" font-size="11.5" fill="var(--fg-2)">texel i = (i mod S, i div S)</text>
+      <text x="0" y="216" font-size="11.5" fill="var(--fg-2)">.rg = world (x, y)</text>
+    </g>
+    <!-- arrow 1 -->
+    <g stroke="currentColor" fill="currentColor" font-size="11">
+      <line x1="200" y1="110" x2="248" y2="110" stroke-width="1.4" marker-end="url(#a-arr)"/>
+      <text x="224" y="98" text-anchor="middle" stroke="none">pass 1</text>
+      <text x="224" y="130" text-anchor="middle" stroke="none" fill="var(--fg-2)">stride</text>
+    </g>
+    <!-- buckets -->
+    <g transform="translate(258,40)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">buckets</text>
+      <text x="0" y="2" font-size="11.5" fill="var(--fg-2)">64² (128² above 262,144 points)</text>
+      <g transform="translate(0,14)">
+        <rect x="0" y="0" width="160" height="160" fill="var(--bg-2)" stroke="currentColor" stroke-width="1"/>
+        <g stroke="var(--line)" stroke-width="0.6">
+          <line x1="20" y1="0" x2="20" y2="160"/><line x1="40" y1="0" x2="40" y2="160"/><line x1="60" y1="0" x2="60" y2="160"/><line x1="80" y1="0" x2="80" y2="160"/><line x1="100" y1="0" x2="100" y2="160"/><line x1="120" y1="0" x2="120" y2="160"/><line x1="140" y1="0" x2="140" y2="160"/>
+          <line x1="0" y1="20" x2="160" y2="20"/><line x1="0" y1="40" x2="160" y2="40"/><line x1="0" y1="60" x2="160" y2="60"/><line x1="0" y1="80" x2="160" y2="80"/><line x1="0" y1="100" x2="160" y2="100"/><line x1="0" y1="120" x2="160" y2="120"/><line x1="0" y1="140" x2="160" y2="140"/>
+        </g>
+        <rect x="20" y="0" width="20" height="20" fill="var(--data-soft)" stroke="var(--data)" stroke-width="2"/>
+        <rect x="0" y="0" width="160" height="160" fill="none" stroke="var(--shift)" stroke-width="1.2" stroke-dasharray="3 3"/>
+        <text x="80" y="92" font-size="10" text-anchor="middle" fill="var(--shift)">one 8 × 8 block</text>
+      </g>
+      <text x="0" y="200" font-size="11.5" fill="var(--fg-2)">texel b = [minX, minY, maxX, maxY]</text>
+      <text x="0" y="216" font-size="11.5" fill="var(--fg-2)">of points b, b+64², b+2·64², …</text>
+    </g>
+    <!-- arrow 2 -->
+    <g stroke="currentColor" fill="currentColor" font-size="11">
+      <line x1="438" y1="110" x2="486" y2="110" stroke-width="1.4" marker-end="url(#a-arr)"/>
+      <text x="462" y="98" text-anchor="middle" stroke="none">pass 2</text>
+      <text x="462" y="130" text-anchor="middle" stroke="none" fill="var(--fg-2)">fold 8×8</text>
+    </g>
+    <!-- blocks -->
+    <g transform="translate(496,40)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">blocks</text>
+      <text x="0" y="2" font-size="11.5" fill="var(--fg-2)">8² (16² above the threshold)</text>
+      <g transform="translate(0,14)">
+        <rect x="0" y="0" width="160" height="160" fill="var(--bg-2)" stroke="currentColor" stroke-width="1"/>
+        <g stroke="var(--line)" stroke-width="0.8">
+          <line x1="20" y1="0" x2="20" y2="160"/><line x1="40" y1="0" x2="40" y2="160"/><line x1="60" y1="0" x2="60" y2="160"/><line x1="80" y1="0" x2="80" y2="160"/><line x1="100" y1="0" x2="100" y2="160"/><line x1="120" y1="0" x2="120" y2="160"/><line x1="140" y1="0" x2="140" y2="160"/>
+          <line x1="0" y1="20" x2="160" y2="20"/><line x1="0" y1="40" x2="160" y2="40"/><line x1="0" y1="60" x2="160" y2="60"/><line x1="0" y1="80" x2="160" y2="80"/><line x1="0" y1="100" x2="160" y2="100"/><line x1="0" y1="120" x2="160" y2="120"/><line x1="0" y1="140" x2="160" y2="140"/>
+        </g>
+        <rect x="0" y="0" width="20" height="20" fill="var(--shift-soft)" stroke="var(--shift)" stroke-width="2"/>
+      </g>
+      <text x="0" y="200" font-size="11.5" fill="var(--fg-2)">each texel = min/max of one</text>
+      <text x="0" y="216" font-size="11.5" fill="var(--fg-2)">8 × 8 block of partial boxes</text>
+    </g>
+    <!-- arrow 3 -->
+    <g stroke="currentColor" fill="currentColor" font-size="11">
+      <line x1="676" y1="110" x2="724" y2="110" stroke-width="1.4" marker-end="url(#a-arr)"/>
+      <text x="700" y="98" text-anchor="middle" stroke="none">pass 3</text>
+      <text x="700" y="130" text-anchor="middle" stroke="none" fill="var(--fg-2)">fold all</text>
+    </g>
+    <!-- final -->
+    <g transform="translate(734,40)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">bounds</text>
+      <text x="0" y="2" font-size="11.5" fill="var(--fg-2)">1 × 1, the texel every shader reads</text>
+      <g transform="translate(40,54)">
+        <rect x="0" y="0" width="80" height="80" fill="var(--data-soft)" stroke="var(--data)" stroke-width="2"/>
+        <g font-family="var(--mono)" font-size="11" fill="currentColor" text-anchor="middle">
+          <text x="40" y="22">r originX</text><text x="40" y="38">g originY</text><text x="40" y="54">b extent</text><text x="40" y="70">a 1/extent</text>
+        </g>
+      </g>
+      <text x="0" y="200" font-size="11.5" fill="var(--fg-2)">square, floored, padded,</text>
+      <text x="0" y="216" font-size="11.5" fill="var(--fg-2)">shifted (section 6)</text>
+    </g>
+    <!-- footer note -->
+    <text x="20" y="300" font-size="12" fill="var(--fg-2)">Every pass is a full-screen quad; every texel is one fragment. All three targets are rgba32float. Nothing comes back to the CPU.</text>
+  </svg>
+  </div>
+  <figcaption>The reduction, texture by texture. The highlighted bucket texel (1, 0) collects points 1, 4097, 8193 and so on. The highlighted blocks texel folds the dashed 8 × 8 block of buckets. The last pass folds every block into one texel.</figcaption>
+</figure>
+
+<section class="prose">
+<h3>Pass 1: partial boxes with a stride</h3>
+<p>Fragment <code>b</code> of the buckets texture does not take a tile of the positions texture. It strides through the point list: points <code>b</code>, <code>b + 64²</code>, <code>b + 2·64²</code>, and so on. The work splits evenly whatever order the points were uploaded in and wherever they sit in space. A fragment skips absent points and non-finite positions, so one NaN cannot set the grid size for the whole graph.</p>
+</section>
+<span class="src">src/modules/Shared/reduce-bounds-buckets.frag</span>
+<pre><code>out vec4 bounds; <span class="c">// [minX, minY, maxX, maxY]</span>
+
+<span class="k">bool</span> isUsable(vec2 position) {
+  <span class="c">// Exponent bits all set = Inf or NaN. Read the bits rather than compare:</span>
+  <span class="c">// a fast-math compiler may fold `x != x` away.</span>
+  uvec2 exponent = floatBitsToUint(position) &amp; 0x7f800000u;
+  <span class="k">if</span> (any(equal(exponent, uvec2(0x7f800000u)))) <span class="k">return</span> false;
+  <span class="k">return</span> all(lessThanEqual(abs(position), vec2(BOUNDS_LIMIT)));
+}
+
+<span class="k">void</span> main() {
+  ivec2 bucket = ivec2(gl_FragCoord.xy);
+  <span class="k">int</span> stride = buckets * buckets;          <span class="c">// 64² = 4096</span>
+
+  vec2 lo = vec2(BOUNDS_LIMIT);             <span class="c">// an empty bucket stays neutral</span>
+  vec2 hi = vec2(-BOUNDS_LIMIT);
+
+  <span class="k">for</span> (<span class="k">int</span> i = bucket.y * buckets + bucket.x; i &lt; count; i += stride) {
+    ivec2 texel = ivec2(i % size, i / size);
+    <span class="k">if</span> (texelFetch(exitTexture, texel, 0).g &gt; 0.5) <span class="k">continue</span>;   <span class="c">// absent point</span>
+    vec2 position = texelFetch(positionsTexture, texel, 0).rg;
+    <span class="k">if</span> (!isUsable(position)) <span class="k">continue</span>;
+    lo = min(lo, position);
+    hi = max(hi, position);
+  }
+  bounds = vec4(lo, hi);
+}</code></pre>
+
+<section class="prose">
+<h3>Why a stride and not a tile</h3>
+<p>Any split of the point list gives the same final box, bit for bit, because min and max are exact and order-independent. So the split is chosen for cost alone. The obvious alternative is a tile: fragment <code>b</code> takes a contiguous run of <code>k = ⌈N / 4096⌉</code> points. Both have the same longest loop. The difference is what the GPU reads on each loop iteration.</p>
+<p>A GPU does not run fragments one at a time. It runs neighbouring fragments in lockstep groups, 32 on NVIDIA and Apple, 32 or 64 on AMD, and texture reads go through a cache of neighbouring texels. On iteration <code>j</code> the group of fragments <code>b, b+1, b+2, …</code> reads:</p>
+</section>
+
+<figure>
+  <div class="scroll">
+  <svg viewBox="0 0 760 210" role="img" aria-label="Two rows of the positions texture. Top, stride: on one loop iteration, 32 neighbouring fragments read 32 neighbouring texels, one cache line. Bottom, tile: the same 32 fragments read texels k apart, scattered across the texture." width="760" height="210">
+    <g font-size="12" fill="currentColor">
+      <text x="20" y="28" font-weight="600">stride (the code): iteration j, fragments b … b+31 read points j·4096 + b … j·4096 + b + 31</text>
+      <g transform="translate(20,40)">
+        <rect x="0" y="0" width="720" height="26" fill="var(--bg-2)" stroke="var(--line)"/>
+        <rect x="200" y="0" width="176" height="26" fill="var(--data-soft)" stroke="var(--data)" stroke-width="2"/>
+        <text x="288" y="17" text-anchor="middle" font-family="var(--mono)" font-size="11">32 adjacent texels</text>
+        <text x="0" y="44" fill="var(--fg-2)">one contiguous span of the positions texture per iteration; the group walks the texture front to back</text>
+      </g>
+      <text x="20" y="128" font-weight="600">tile: iteration j, fragments b … b+31 read points b·k + j, (b+1)·k + j, (b+2)·k + j, …</text>
+      <g transform="translate(20,140)">
+        <rect x="0" y="0" width="720" height="26" fill="var(--bg-2)" stroke="var(--line)"/>
+        <g fill="var(--shift)" stroke="none">
+          <rect x="4" y="0" width="5" height="26"/><rect x="27" y="0" width="5" height="26"/><rect x="50" y="0" width="5" height="26"/><rect x="73" y="0" width="5" height="26"/><rect x="96" y="0" width="5" height="26"/><rect x="119" y="0" width="5" height="26"/><rect x="142" y="0" width="5" height="26"/><rect x="165" y="0" width="5" height="26"/><rect x="188" y="0" width="5" height="26"/><rect x="211" y="0" width="5" height="26"/><rect x="234" y="0" width="5" height="26"/><rect x="257" y="0" width="5" height="26"/><rect x="280" y="0" width="5" height="26"/><rect x="303" y="0" width="5" height="26"/><rect x="326" y="0" width="5" height="26"/><rect x="349" y="0" width="5" height="26"/><rect x="372" y="0" width="5" height="26"/><rect x="395" y="0" width="5" height="26"/><rect x="418" y="0" width="5" height="26"/><rect x="441" y="0" width="5" height="26"/><rect x="464" y="0" width="5" height="26"/><rect x="487" y="0" width="5" height="26"/><rect x="510" y="0" width="5" height="26"/><rect x="533" y="0" width="5" height="26"/><rect x="556" y="0" width="5" height="26"/><rect x="579" y="0" width="5" height="26"/><rect x="602" y="0" width="5" height="26"/><rect x="625" y="0" width="5" height="26"/><rect x="648" y="0" width="5" height="26"/><rect x="671" y="0" width="5" height="26"/><rect x="694" y="0" width="5" height="26"/><rect x="712" y="0" width="5" height="26"/>
+        </g>
+        <text x="0" y="44" fill="var(--fg-2)">32 texels each k apart (k ≈ 245 at a million points): a different cache line for every fragment, every iteration</text>
+      </g>
+    </g>
+  </svg>
+  </div>
+  <figcaption>What one lockstep group of fragments reads on one loop iteration. The pass is nothing but these reads, so the stride's contiguous span is where its speed comes from.</figcaption>
+</figure>
+
+<section class="prose">
+<p>This is the standard GPU reduction pattern, not a cosmos invention. Mark Harris's NVIDIA deck <a href="https://developer.download.nvidia.com/compute/cuda/1.1-Beta/x86_website/projects/reduction/doc/reduction.pdf">Optimizing Parallel Reduction in CUDA</a> (2007) arrives at it as its final kernel: each thread first sums many elements in a loop whose step is the whole grid's size, annotated on slide 33 as "gridSize loop stride to maintain coalescing!", and only then does the tree reduction. That kernel ran 30 times faster than the first version on the same GPU, and slide 37 attributes most of it to addressing and this cascading, not to loop unrolling. His 2013 post <a href="https://developer.nvidia.com/blog/cuda-pro-tip-write-flexible-kernels-grid-stride-loops/">Write Flexible Kernels with Grid-Stride Loops</a> names the pattern and states the reason in one sentence: "By using a loop with stride equal to the grid size, we ensure that all addressing within warps is unit-stride, so we get maximum memory coalescing." NVIDIA's <a href="https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html#coalesced-access-to-global-memory">Best Practices Guide</a> has the measurement behind it: effective bandwidth falls as the stride between neighbouring threads grows, until every thread pays for its own memory transaction.</p>
+<p>Those sources are about CUDA threads and global memory. The same mechanics hold for a fragment shader: fragments are dispatched in the same lockstep groups (Fabian Giesen's <a href="https://fgiesen.wordpress.com/2011/07/10/a-trip-through-the-graphics-pipeline-2011-part-8/">A trip through the Graphics Pipeline, part 8</a> describes the 32-thread warp of 2 × 2 pixel quads), and <code>texelFetch</code> goes through the texture cache. Adjacent fragments reading adjacent texels is the fragment-shader form of a coalesced load.</p>
+<p>The cosmos reduction mirrors Harris's shape pass for pass. His "algorithm cascading", each thread folding many elements sequentially before any tree step, is pass 1 folding about 64 points per fragment (<code>POINTS_PER_BUCKET</code>). His kernel launches as the only global synchronisation are the three render passes here. He found 1,024 to 4,096 elements per thread best on a 2007 GPU; cosmos settled on about 64 by measuring the pass on an M3 Max, where fewer points per fragment and more fragments won. Two smaller things the stride gives for free: the loop is a single bound, <code>i &lt; count</code>, with no chunk size or remainder to handle, and every fragment gets either <code>k</code> or <code>k − 1</code> points, so none sits idle while another holds the leftover.</p>
+</section>
+
+<section class="prose">
+<h3>Pass 2: fold 8 × 8 blocks</h3>
+<p>This pass exists for one reason: folding all 4,096 partial boxes in a single fragment cost about 0.75 ms per tick on an M3 Max, 11 % of a 100k-point step. With a middle pass the whole reduction costs about 0.16 ms. Each fragment reads an 8 × 8 block of the buckets texture and writes its min and max.</p>
+</section>
+<span class="src">src/modules/Shared/reduce-bounds-blocks.frag</span>
+<pre><code>ivec2 first = ivec2(gl_FragCoord.xy) * size;        <span class="c">// size = 8</span>
+<span class="k">for</span> (<span class="k">int</span> y = 0; y &lt; size; y += 1) {
+  <span class="k">for</span> (<span class="k">int</span> x = 0; x &lt; size; x += 1) {
+    vec4 partial = texelFetch(partialsTexture, first + ivec2(x, y), 0);
+    lo = min(lo, partial.xy);
+    hi = max(hi, partial.zw);
+  }
+}
+bounds = vec4(lo, hi);</code></pre>
+
+<section class="prose">
+<h3>Pass 3: one texel, made square</h3>
+<p>The last fragment folds the 8 × 8 blocks texture and turns the rectangle into the texel the consumers want. Three things happen to it here. It becomes a square around the data's centre, because the levels halve exactly and non-square cells would break that. It is floored at a minimum extent, so one point or a coincident stack still yields a usable cell. And it is optionally padded and shifted, which is section 6. The reciprocal is computed here, once, so every shader multiplies by the same bits instead of dividing on its own.</p>
+</section>
+<span class="src">src/modules/Shared/reduce-bounds-final.frag</span>
+<pre><code><span class="c">// ... fold the blocks texture into lo / hi as in pass 2 ...</span>
+
+<span class="k">if</span> (hi.x &lt; lo.x) { lo = vec2(0.0); hi = vec2(0.0); }   <span class="c">// no usable point at all</span>
+
+vec2 centre = 0.5 * (lo + hi);
+<span class="k">float</span> span = max(hi.x - lo.x, hi.y - lo.y);          <span class="c">// square: the larger side</span>
+<span class="k">float</span> extent = max(span, minExtent);                 <span class="c">// floor: ¼ unit per finest cell</span>
+vec2 origin = centre - 0.5 * extent;
+
+<span class="c">// Origin shift (section 6): pad by one coarsest cell, slide back by a part of it.</span>
+<span class="k">if</span> (shiftCellsPerAxis &gt; 1.0) {
+  <span class="k">float</span> cell = extent / (shiftCellsPerAxis - 1.0);   <span class="c">// 8 cells over the padded box → 1/7 of the fitted side</span>
+  origin -= vec2(shiftOffsetX, shiftOffsetY) * cell;
+  extent += cell;
+}
+
+bounds = vec4(origin, extent, 1.0 / extent);        <span class="c">// [originX, originY, extent, 1/extent]</span></code></pre>
+
+<section id="a-cell" class="prose">
+<h2>3 · One cell formula, four shaders</h2>
+<p>A level is an N × N grid of square cells laid over the data square from pass 3. Everything the pyramid does starts with one question: <em>given a world position, which cell is it in?</em> The answer is a pair of integers, column and row. Four shaders ask it, and they ask it from two sides:</p>
+<table>
+  <thead><tr><th>shader</th><th>asks about</th><th>side</th></tr></thead>
+  <tbody>
+    <tr><td><code>calculate-level.vert</code></td><td>point Q, to add it into a level's cell sum</td><td>filing</td></tr>
+    <tr><td><code>build-nearfield-slots.vert</code></td><td>point Q, to write it into a finest-cell slot</td><td>filing</td></tr>
+    <tr><td><code>force-level.frag</code></td><td>point P, to pick which cells to read and which 3 × 3 to skip</td><td>looking up</td></tr>
+    <tr><td><code>force-nearfield.frag</code></td><td>point P, to pick which 3 × 3 of slots to read</td><td>looking up</td></tr>
+  </tbody>
+</table>
+<p>The filing side puts each point's mass into a drawer. The looking-up side opens drawers around P. The force comes out right only if a point filed into drawer 5 is also found when the lookup opens drawer 5, and nowhere else. Section 4 shows how the lookup divides the plane into rings so that each point is read exactly once. Here the point is simpler: the two sides must name the same drawer for the same position.</p>
+</section>
+
+<figure>
+  <div class="scroll">
+  <svg viewBox="0 0 760 290" role="img" aria-label="Left: a finest-level grid with point P and its 3 by 3 neighbourhood shaded; point Q sits on the boundary between columns 5 and 6, just inside column 5. Right: a zoom on that boundary showing two shaders computing Q's column with their own division and getting 5.9999998 and 6.0000001, so one files Q in column 5 and the other looks for it in column 6." width="760" height="290">
+    <!-- left: grid -->
+    <g transform="translate(40,34)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">finest level, around P</text>
+      <rect x="96" y="32" width="96" height="96" fill="var(--data-soft)" stroke="none"/>
+      <g stroke="var(--line)" stroke-width="1">
+        <line x1="0" y1="0" x2="0" y2="192"/><line x1="32" y1="0" x2="32" y2="192"/><line x1="64" y1="0" x2="64" y2="192"/><line x1="96" y1="0" x2="96" y2="192"/><line x1="128" y1="0" x2="128" y2="192"/><line x1="160" y1="0" x2="160" y2="192"/><line x1="224" y1="0" x2="224" y2="192"/><line x1="256" y1="0" x2="256" y2="192"/>
+        <line x1="0" y1="0" x2="256" y2="0"/><line x1="0" y1="32" x2="256" y2="32"/><line x1="0" y1="64" x2="256" y2="64"/><line x1="0" y1="96" x2="256" y2="96"/><line x1="0" y1="128" x2="256" y2="128"/><line x1="0" y1="160" x2="256" y2="160"/><line x1="0" y1="192" x2="256" y2="192"/>
+      </g>
+      <line x1="192" y1="0" x2="192" y2="192" stroke="var(--shift)" stroke-width="2"/>
+      <text x="16" y="212" font-size="11" fill="var(--fg-2)" text-anchor="middle">0</text>
+      <text x="48" y="212" font-size="11" fill="var(--fg-2)" text-anchor="middle">1</text>
+      <text x="80" y="212" font-size="11" fill="var(--fg-2)" text-anchor="middle">2</text>
+      <text x="112" y="212" font-size="11" fill="var(--fg-2)" text-anchor="middle">3</text>
+      <text x="144" y="212" font-size="11" fill="var(--fg-2)" text-anchor="middle">4</text>
+      <text x="176" y="212" font-size="11" fill="var(--fg-2)" text-anchor="middle">5</text>
+      <text x="208" y="212" font-size="11" fill="var(--fg-2)" text-anchor="middle">6</text>
+      <text x="240" y="212" font-size="11" fill="var(--fg-2)" text-anchor="middle">7</text>
+      <text x="128" y="232" font-size="12" fill="var(--fg-2)" text-anchor="middle">column</text>
+      <circle cx="144" cy="80" r="4.5" fill="var(--point)"/>
+      <text x="150" y="76" font-size="12" font-weight="600" fill="currentColor">P</text>
+      <circle cx="190.5" cy="60" r="4.5" fill="var(--shift)"/>
+      <text x="196" y="56" font-size="12" font-weight="600" fill="var(--shift)">Q</text>
+      <text x="144" y="150" font-size="11" fill="var(--data)" text-anchor="middle">P's 3 × 3: columns 3–5</text>
+    </g>
+    <!-- arrow -->
+    <g transform="translate(330,120)" stroke="currentColor" fill="currentColor">
+      <line x1="0" y1="0" x2="60" y2="0" stroke-width="1.5"/>
+      <polygon points="60,0 50,-5 50,5"/>
+      <text x="30" y="-10" font-size="12" text-anchor="middle" stroke="none">zoom</text>
+    </g>
+    <!-- right: zoom on the boundary -->
+    <g transform="translate(420,34)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">Q at the boundary, two divisions</text>
+      <rect x="0" y="0" width="300" height="192" fill="none" stroke="var(--line)"/>
+      <line x1="150" y1="0" x2="150" y2="192" stroke="var(--shift)" stroke-width="2"/>
+      <text x="75" y="18" font-size="12" fill="var(--fg-2)" text-anchor="middle">column 5</text>
+      <text x="225" y="18" font-size="12" fill="var(--fg-2)" text-anchor="middle">column 6</text>
+      <text x="150" y="36" font-size="11" fill="var(--shift)" text-anchor="middle">q = 6.0 exactly</text>
+      <circle cx="146" cy="96" r="5" fill="var(--shift)"/>
+      <text x="146" y="86" font-size="12" font-weight="600" fill="var(--shift)" text-anchor="middle">Q</text>
+      <!-- the two readings -->
+      <g font-size="12" fill="currentColor">
+        <text x="12" y="130">filing shader divides:</text>
+        <text x="12" y="146" font-family="var(--mono)" font-size="11.5">q = 5.9999998 → cell 5</text>
+        <text x="12" y="170">lookup shader divides:</text>
+        <text x="12" y="186" font-family="var(--mono)" font-size="11.5" fill="var(--shift)">q = 6.0000001 → cell 6</text>
+      </g>
+      <text x="0" y="214" font-size="12" fill="var(--fg-2)">far field skips 3–5: Q's mass skipped (right).</text>
+      <text x="0" y="230" font-size="12" fill="var(--fg-2)">near field reads slots 3–5: Q's slot is in 6, missed.</text>
+      <text x="0" y="248" font-size="12" font-weight="600" fill="currentColor">Q is counted zero times.</text>
+    </g>
+  </svg>
+  </div>
+  <figcaption>Why the four shaders cannot each do their own arithmetic. A point exactly on a cell boundary is filed by one shader and looked up by another. If their roundings differ by one bit, the point falls between two passes, or is counted by both.</figcaption>
+</figure>
+
+<section class="prose">
+<p>The cure is boring on purpose: one formula, written once in <code>grid-cell.ts</code>, pasted into all four shaders at a <code>// @grid-cell</code> marker, so the source text is identical. Identical text is not enough on its own, because the four are separately compiled programs. The GLSL ES spec lets a compiler implement division slightly inexactly, by up to 2.5 units in the last decimal place, and two compilers may choose differently. Subtraction and multiplication, by contrast, must be correctly rounded: same inputs, same bits, in every program. So the formula uses only those two, and the one division it needs, <code>1/extent</code>, was done once in pass 3 and travels in the texel.</p>
+</section>
+<span class="src">src/modules/ForceManyBody/grid-cell.ts (the GLSL that gets spliced in)</span>
+<pre><code>uniform highp sampler2D dataBoundsTexture;   <span class="c">// the 1×1 texel from pass 3</span>
+
+ivec2 gridCell(vec2 worldPosition, <span class="k">float</span> cellsPerAxis) {
+  vec4 dataBox = texelFetch(dataBoundsTexture, ivec2(0), 0);          <span class="c">// 1. read [originX, originY, extent, 1/extent]</span>
+  <span class="k">float</span> cellsPerUnit = dataBox.w * cellsPerAxis;                   <span class="c">// 2. cells per world unit = (1/extent) × N</span>
+  ivec2 lastCell = ivec2(<span class="k">int</span>(cellsPerAxis) - 1);
+  <span class="k">return</span> clamp(ivec2(floor((worldPosition - dataBox.xy) * cellsPerUnit)),  <span class="c">// 3. offset from corner, 4. scale, 5. floor</span>
+               ivec2(0), lastCell);                                   <span class="c">// 6. outside the box → edge cell</span>
+}</code></pre>
+
+<section class="prose">
+<p>In words: measure how far the point is from the box's lower-left corner, multiply by how many cells fit in one world unit, and drop the fraction. A point left of or below the box gets cell 0, one past the far edge gets the last cell. The multiplication in step 2 is also exact: N is a power of two, and multiplying a float by a power of two changes only its exponent.</p>
+<p>Worked through with numbers. Say the texel holds origin (940, 1840) and extent 1600, so <code>1/extent = 0.000625</code>. A point at (1360, 2900):</p>
+<table>
+  <thead><tr><th>level</th><th>cellsPerUnit</th><th>(p − origin) · cellsPerUnit</th><th>cell</th></tr></thead>
+  <tbody>
+    <tr><td>8²</td><td>0.005</td><td>(420, 1060) · 0.005 = (2.10, 5.30)</td><td>(2, 5)</td></tr>
+    <tr><td>16²</td><td>0.01</td><td>(4.20, 10.60)</td><td>(4, 10) = 2·(2, 5)</td></tr>
+    <tr><td>32²</td><td>0.02</td><td>(8.40, 21.20)</td><td>(8, 21) = 2·(4, 10) + (0, 1)</td></tr>
+  </tbody>
+</table>
+<p>Read the last column downward. Each level's cell is twice the previous one's, or twice plus one. That is the parent–child relation: a cell on one level splits into exactly four on the next, and a point in the parent is always in one of those four children.</p>
+</section>
+
+<figure>
+  <svg viewBox="0 0 560 190" role="img" aria-label="Left: one cell of the 8 by 8 level, labelled (2, 5), with the example point inside it near the lower left. Right: the same cell split into four children of the 16 by 16 level, labelled (4, 10), (5, 10), (4, 11), (5, 11); the point sits in (4, 10)." width="560" height="190">
+    <g transform="translate(30,30)">
+      <text x="0" y="-12" font-size="13" font-weight="600" fill="currentColor">level 8²: cell (2, 5)</text>
+      <rect x="0" y="0" width="128" height="128" fill="var(--data-soft)" stroke="var(--data)" stroke-width="1.5"/>
+      <circle cx="12.8" cy="89.6" r="4.5" fill="var(--point)"/>
+      <text x="20" y="94" font-size="12" fill="currentColor">(2.10, 5.30)</text>
+    </g>
+    <g transform="translate(200,94)" stroke="currentColor" fill="currentColor">
+      <line x1="0" y1="0" x2="110" y2="0" stroke-width="1.5"/>
+      <polygon points="110,0 100,-5 100,5"/>
+      <text x="55" y="-12" font-size="12" text-anchor="middle" stroke="none">× 2 cells per axis</text>
+      <text x="55" y="18" font-size="11" text-anchor="middle" stroke="none" fill="var(--fg-2)">exponent + 1, no rounding</text>
+    </g>
+    <g transform="translate(360,30)">
+      <text x="0" y="-12" font-size="13" font-weight="600" fill="currentColor">level 16²: its four children</text>
+      <rect x="0" y="0" width="128" height="128" fill="none" stroke="var(--data)" stroke-width="1.5"/>
+      <rect x="0" y="64" width="64" height="64" fill="var(--data-soft)" stroke="none"/>
+      <line x1="64" y1="0" x2="64" y2="128" stroke="var(--data)" stroke-width="1"/>
+      <line x1="0" y1="64" x2="128" y2="64" stroke="var(--data)" stroke-width="1"/>
+      <text x="32" y="36" font-size="11" fill="var(--fg-2)" text-anchor="middle">(4, 11)</text>
+      <text x="96" y="36" font-size="11" fill="var(--fg-2)" text-anchor="middle">(5, 11)</text>
+      <text x="32" y="112" font-size="11" fill="var(--data)" text-anchor="middle" font-weight="600">(4, 10)</text>
+      <text x="96" y="100" font-size="11" fill="var(--fg-2)" text-anchor="middle">(5, 10)</text>
+      <circle cx="12.8" cy="89.6" r="4.5" fill="var(--point)"/>
+    </g>
+  </svg>
+  <figcaption>Doubling the cell count doubles the scaled offset exactly, so the point's cell on the finer level is 2·(2, 5) or 2·(2, 5) + 1 on each axis. The clamp keeps this at the edges too: below the box both levels give 0, above it N − 1 and 2N − 1.</figcaption>
+</figure>
+
+<section class="prose">
+<p>Section 4 leans on this relation. On each finer level the force shader reads the children of the 3 × 3 block it skipped on the coarser level, a 6 × 6 block, and skips its own 3 × 3 inside it. That only lines up if "the children of my parent's neighbours" are exactly the cells the formula produces one level down, which the exact doubling guarantees. Since <code>c30843e</code> the coarse levels skip 5 × 5 and read 10 × 10 child blocks; the relation is the same, with <code>2·r</code> in place of the fixed 2.</p>
+</section>
+
+<section id="a-pyramid" class="prose">
+<h2>4 · The pyramid textures</h2>
+<p>A level is a plain 2D texture with one texel per cell. Every tick each point is drawn into every level as a 1-pixel point sprite with additive blending, so a texel accumulates <code>[Σx, Σy, count, 0]</code> over the points in its cell. The cell's centre of mass is <code>Σ / count</code>, computed by whoever reads it.</p>
+</section>
+<span class="src">src/modules/ForceManyBody/calculate-level.vert</span>
+<pre><code>vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
+vColor = vec4(pointPosition.rg, 1.0, 0.0);              <span class="c">// what additive blending sums: [x, y, 1, 0]</span>
+
+ivec2 cell = gridCell(pointPosition.rg, levelGridSize);  <span class="c">// the shared formula</span>
+
+vec2 levelPosition = 2.0 * (vec2(cell) + 0.5) / levelGridSize - 1.0;   <span class="c">// cell centre in NDC</span>
+gl_Position = vec4(levelPosition, 0.0, 1.0);
+gl_PointSize = 1.0;                                     <span class="c">// one fragment, one texel</span></code></pre>
+
+<figure>
+  <div class="scroll">
+  <svg viewBox="0 0 900 290" role="img" aria-label="Three level textures of 8, 16 and 32 cells per axis, all covering the same data box. One texel of the 8 by 8 level is expanded to show its content: sum of x, sum of y, count, zero. The point's cell on each level is highlighted and the 3 by 3 neighbourhood around it is marked as deferred to the next level." width="900" height="290">
+    <defs>
+      <pattern id="a-dots2" width="5" height="5" patternUnits="userSpaceOnUse"><circle cx="2.5" cy="2.5" r="0.9" fill="currentColor" opacity="0.55"/></pattern>
+    </defs>
+    <!-- level 8 -->
+    <g transform="translate(20,40)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">level 0 · 8² cells</text>
+      <rect x="0" y="0" width="176" height="176" fill="url(#a-dots2)" stroke="var(--data)" stroke-width="1.5"/>
+      <g stroke="var(--data)" stroke-width="0.7" opacity="0.8">
+        <line x1="22" y1="0" x2="22" y2="176"/><line x1="44" y1="0" x2="44" y2="176"/><line x1="66" y1="0" x2="66" y2="176"/><line x1="88" y1="0" x2="88" y2="176"/><line x1="110" y1="0" x2="110" y2="176"/><line x1="132" y1="0" x2="132" y2="176"/><line x1="154" y1="0" x2="154" y2="176"/>
+        <line x1="0" y1="22" x2="176" y2="22"/><line x1="0" y1="44" x2="176" y2="44"/><line x1="0" y1="66" x2="176" y2="66"/><line x1="0" y1="88" x2="176" y2="88"/><line x1="0" y1="110" x2="176" y2="110"/><line x1="0" y1="132" x2="176" y2="132"/><line x1="0" y1="154" x2="176" y2="154"/>
+      </g>
+      <!-- 3x3 deferred -->
+      <rect x="22" y="44" width="66" height="66" fill="var(--shift-soft)" stroke="none"/>
+      <!-- point's cell (2,5) → x=44..66, y from top: row index 5 from bottom = 176-6*22=44..66 -->
+      <rect x="44" y="66" width="22" height="22" fill="var(--data-soft)" stroke="var(--data)" stroke-width="2"/>
+      <circle cx="56" cy="79" r="2.6" fill="var(--shift)"/>
+      <text x="0" y="196" font-size="11.5" fill="var(--fg-2)">point's cell (2, 5); its 3 × 3 shell is left</text>
+      <text x="0" y="212" font-size="11.5" fill="var(--fg-2)">to level 1; all 55 other cells act as centroids</text>
+    </g>
+    <!-- level 16 -->
+    <g transform="translate(240,40)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">level 1 · 16² cells</text>
+      <rect x="0" y="0" width="176" height="176" fill="url(#a-dots2)" stroke="var(--data)" stroke-width="1.5"/>
+      <g stroke="var(--data)" stroke-width="0.5" opacity="0.7">
+        <line x1="11" y1="0" x2="11" y2="176"/><line x1="22" y1="0" x2="22" y2="176"/><line x1="33" y1="0" x2="33" y2="176"/><line x1="44" y1="0" x2="44" y2="176"/><line x1="55" y1="0" x2="55" y2="176"/><line x1="66" y1="0" x2="66" y2="176"/><line x1="77" y1="0" x2="77" y2="176"/><line x1="88" y1="0" x2="88" y2="176"/><line x1="99" y1="0" x2="99" y2="176"/><line x1="110" y1="0" x2="110" y2="176"/><line x1="121" y1="0" x2="121" y2="176"/><line x1="132" y1="0" x2="132" y2="176"/><line x1="143" y1="0" x2="143" y2="176"/><line x1="154" y1="0" x2="154" y2="176"/><line x1="165" y1="0" x2="165" y2="176"/>
+        <line x1="0" y1="11" x2="176" y2="11"/><line x1="0" y1="22" x2="176" y2="22"/><line x1="0" y1="33" x2="176" y2="33"/><line x1="0" y1="44" x2="176" y2="44"/><line x1="0" y1="55" x2="176" y2="55"/><line x1="0" y1="66" x2="176" y2="66"/><line x1="0" y1="77" x2="176" y2="77"/><line x1="0" y1="88" x2="176" y2="88"/><line x1="0" y1="99" x2="176" y2="99"/><line x1="0" y1="110" x2="176" y2="110"/><line x1="0" y1="121" x2="176" y2="121"/><line x1="0" y1="132" x2="176" y2="132"/><line x1="0" y1="143" x2="176" y2="143"/><line x1="0" y1="154" x2="176" y2="154"/><line x1="0" y1="165" x2="176" y2="165"/>
+      </g>
+      <!-- 6x6 child block of the level-0 3x3: x 22..88, y 44..110 -->
+      <rect x="22" y="44" width="66" height="66" fill="none" stroke="var(--shift)" stroke-width="1.6" stroke-dasharray="4 2"/>
+      <!-- own 3x3 at level 1: cell (4,10) → x=44..55, y from top = 176-11*11=55..66; shell x 33..66, y 44..77 -->
+      <rect x="33" y="44" width="33" height="33" fill="var(--shift-soft)" stroke="none"/>
+      <rect x="44" y="55" width="11" height="11" fill="var(--data-soft)" stroke="var(--data)" stroke-width="2"/>
+      <circle cx="51" cy="61" r="2.6" fill="var(--shift)"/>
+      <text x="0" y="196" font-size="11.5" fill="var(--fg-2)">the deferred 3 × 3 is this level's 6 × 6 block;</text>
+      <text x="0" y="212" font-size="11.5" fill="var(--fg-2)">27 of its 36 cells act, its own 3 × 3 is deferred</text>
+    </g>
+    <!-- texel zoom -->
+    <g transform="translate(470,40)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">one level texel</text>
+      <rect x="0" y="0" width="150" height="110" fill="var(--data-soft)" stroke="var(--data)" stroke-width="2"/>
+      <g font-family="var(--mono)" font-size="12" fill="currentColor">
+        <text x="14" y="26">r  Σ x</text>
+        <text x="14" y="48">g  Σ y</text>
+        <text x="14" y="70">b  count</text>
+        <text x="14" y="92">a  0</text>
+      </g>
+      <text x="0" y="134" font-size="11.5" fill="var(--fg-2)">additive blending of [x, y, 1, 0]</text>
+      <text x="0" y="150" font-size="11.5" fill="var(--fg-2)">per point drawn into the cell</text>
+      <text x="0" y="176" font-size="11.5" fill="var(--fg-2)">centroid = (r, g) / b</text>
+      <text x="0" y="192" font-size="11.5" fill="var(--fg-2)">force ∝ alpha · repulsion · b / dist</text>
+    </g>
+    <!-- sizes column -->
+    <g transform="translate(660,40)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">the pyramid at 100k points</text>
+      <g font-family="var(--mono)" font-size="12" fill="currentColor">
+        <text x="0" y="14">level 0    8² </text>
+        <text x="0" y="34">level 1   16² </text>
+        <text x="0" y="54">level 2   32² </text>
+        <text x="0" y="74">level 3   64² </text>
+        <text x="0" y="94">level 4  128² </text>
+        <text x="0" y="114">level 5  256² </text>
+        <text x="0" y="134">level 6  512²  ← finest</text>
+      </g>
+      <text x="0" y="166" font-size="11.5" fill="var(--fg-2)">finest ≈ 2·√n per axis, capped at 512</text>
+      <text x="0" y="182" font-size="11.5" fill="var(--fg-2)">(getFinestGridSize), coarsest fixed at 8</text>
+      <text x="0" y="198" font-size="11.5" fill="var(--fg-2)">(COARSEST_GRID_SIZE). All cover the</text>
+      <text x="0" y="214" font-size="11.5" fill="var(--fg-2)">same data box.</text>
+    </g>
+    <text x="20" y="272" font-size="12" fill="var(--fg-2)">Exactly once: each level takes every cell outside the point's 3 × 3 shell that the coarser level left to it. After the finest level only the finest 3 × 3 remains, which the near-field pass handles with real pairs.</text>
+  </svg>
+  </div>
+  <figcaption>Two levels over the same box, and what one texel holds. The orange dot is the point from the worked example. Each level charges the orange-shaded 3 × 3 shell to the next level, and that shell is exactly a 6 × 6 block of child cells there.</figcaption>
+</figure>
+
+<section class="prose">
+<p>The force shader walks the texture accordingly. The coarsest level loops over the whole grid minus the 3 × 3 shell; every finer level loops over the 6 × 6 child block of the coarser shell minus its own 3 × 3. The base of that 6 × 6 block is where the parent-child relation from section 3 is needed: <code>(pointCell / 2) * 2 - 2</code> is only the right corner if this level's cell really is <code>2·parent</code> or <code>2·parent + 1</code>.</p>
+<div class="note">Since <code>c30843e</code> (21 October) the shell is per level. Every level but the finest leaves a 5 × 5 shell, radius 2, and the next level refines it as a 10 × 10 block, <code>(4r+2)²</code> cells from <code>(pointCell / 2) * 2 - 2·r</code>; the finest keeps 3 × 3 for the near field. A centroid is then only used from two cells away, where its error is about a quarter. The shader takes the level's own radius and its parent's as two uniforms, <code>shellRadius</code> and <code>parentShellRadius</code>, and <code>getShellRadius</code> in <code>index.ts</code> is the one place the rule lives. The listing below is the branch at <code>08b58ed</code>, before that change; the figure above keeps its 3 × 3 and 6 × 6 for the same reason. Why the change was needed, what it costs and what it measured: <a href="#part-two">Part II</a>; what became of it since, the <a href="#afterword">afterword</a>.</div>
+</section>
+<span class="src">src/modules/ForceManyBody/force-level.frag at 08b58ed (before c30843e)</span>
+<pre><code>ivec2 pointCell = gridCell(position, levelGridSize);   <span class="c">// same bits as the aggregation</span>
+
+<span class="k">if</span> (isFirstLevel &gt; 0.5) {
+  <span class="c">// Coarsest level: every cell except the 3×3 neighbourhood.</span>
+  <span class="k">for</span> (<span class="k">int</span> j = 0; j &lt; gridSize; j += 1)
+    <span class="k">for</span> (<span class="k">int</span> i = 0; i &lt; gridSize; i += 1) {
+      ivec2 cellDist = abs(ivec2(i, j) - pointCell);
+      <span class="k">if</span> (max(cellDist.x, cellDist.y) &lt;= 1) <span class="k">continue</span>;
+      velocity += cellVelocity(ivec2(i, j), position);
+    }
+} <span class="k">else</span> {
+  <span class="c">// The coarser level's 3×3 is this level's aligned 6×6 child block.</span>
+  ivec2 base = (pointCell / 2) * 2 - 2;
+  <span class="k">for</span> (<span class="k">int</span> j = 0; j &lt; 6; j += 1)
+    <span class="k">for</span> (<span class="k">int</span> i = 0; i &lt; 6; i += 1) {
+      ivec2 cell = base + ivec2(i, j);
+      <span class="k">if</span> (any(lessThan(cell, ivec2(0))) || any(greaterThanEqual(cell, ivec2(gridSize)))) <span class="k">continue</span>;
+      ivec2 cellDist = abs(cell - pointCell);
+      <span class="k">if</span> (max(cellDist.x, cellDist.y) &lt;= 1) <span class="k">continue</span>;        <span class="c">// own 3×3: next level, or near field</span>
+      velocity += cellVelocity(cell, position);
+    }
+}</code></pre>
+
+<section id="a-seams" class="prose">
+<h2>5 · Why a fixed grid draws a cross</h2>
+<p>Exactly-once coverage says every cell is charged to one pass. It says nothing about what happens when a point moves. The set of cells a level treats as centroids is chosen relative to the point's own cell, so when the point steps across a cell boundary the whole 3 × 3 shell moves with it. One column of cells switches from "one centroid here" to "refined by finer levels", and the column on the other side switches back. The two treatments approximate the same mass slightly differently, so the force jumps at the boundary.</p>
+</section>
+
+<figure>
+  <div class="scroll">
+  <svg viewBox="0 0 760 290" role="img" aria-label="Two 8 by 8 grids. Left: a point just left of a cell boundary, with its 3 by 3 shell shaded. Right: the same point just right of the boundary; the shell has moved one column, so one column of cells changed from centroid to deferred and another from deferred to centroid." width="760" height="290">
+    <g transform="translate(40,40)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">point in cell (3, 4), just left of the boundary</text>
+      <rect x="0" y="0" width="192" height="192" fill="none" stroke="var(--data)" stroke-width="1.5"/>
+      <g stroke="var(--data)" stroke-width="0.7" opacity="0.8">
+        <line x1="24" y1="0" x2="24" y2="192"/><line x1="48" y1="0" x2="48" y2="192"/><line x1="72" y1="0" x2="72" y2="192"/><line x1="96" y1="0" x2="96" y2="192"/><line x1="120" y1="0" x2="120" y2="192"/><line x1="144" y1="0" x2="144" y2="192"/><line x1="168" y1="0" x2="168" y2="192"/>
+        <line x1="0" y1="24" x2="192" y2="24"/><line x1="0" y1="48" x2="192" y2="48"/><line x1="0" y1="72" x2="192" y2="72"/><line x1="0" y1="96" x2="192" y2="96"/><line x1="0" y1="120" x2="192" y2="120"/><line x1="0" y1="144" x2="192" y2="144"/><line x1="0" y1="168" x2="192" y2="168"/>
+      </g>
+      <!-- shell: cells x 2..4, y 3..5 → px x 48..120, y from top rows 3..5 → 192-6*24=48 .. 120 -->
+      <rect x="48" y="48" width="72" height="72" fill="var(--shift-soft)" stroke="none"/>
+      <!-- own cell (3,4): x 72..96, y from top: 192-5*24=72..96 -->
+      <rect x="72" y="72" width="24" height="24" fill="var(--data-soft)" stroke="var(--data)" stroke-width="2"/>
+      <circle cx="93" cy="84" r="3" fill="var(--shift)"/>
+      <!-- the boundary -->
+      <line x1="96" y1="0" x2="96" y2="192" stroke="var(--shift)" stroke-width="2"/>
+      <text x="48" y="212" font-size="11.5" fill="var(--fg-2)" text-anchor="start">deferred: columns 2, 3, 4</text>
+      <text x="0" y="230" font-size="11.5" fill="var(--fg-2)">column 5 is a centroid at this level</text>
+    </g>
+    <g transform="translate(300,130)" stroke="currentColor" fill="currentColor">
+      <line x1="0" y1="0" x2="100" y2="0" stroke-width="1.5"/>
+      <polygon points="100,0 90,-5 90,5"/>
+      <text x="50" y="-10" font-size="12" text-anchor="middle" stroke="none">moves 2 units right</text>
+    </g>
+    <g transform="translate(440,40)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">point in cell (4, 4), just right of it</text>
+      <rect x="0" y="0" width="192" height="192" fill="none" stroke="var(--data)" stroke-width="1.5"/>
+      <g stroke="var(--data)" stroke-width="0.7" opacity="0.8">
+        <line x1="24" y1="0" x2="24" y2="192"/><line x1="48" y1="0" x2="48" y2="192"/><line x1="72" y1="0" x2="72" y2="192"/><line x1="96" y1="0" x2="96" y2="192"/><line x1="120" y1="0" x2="120" y2="192"/><line x1="144" y1="0" x2="144" y2="192"/><line x1="168" y1="0" x2="168" y2="192"/>
+        <line x1="0" y1="24" x2="192" y2="24"/><line x1="0" y1="48" x2="192" y2="48"/><line x1="0" y1="72" x2="192" y2="72"/><line x1="0" y1="96" x2="192" y2="96"/><line x1="0" y1="120" x2="192" y2="120"/><line x1="0" y1="144" x2="192" y2="144"/><line x1="0" y1="168" x2="192" y2="168"/>
+      </g>
+      <!-- shell: x 3..5 → 72..144 -->
+      <rect x="72" y="48" width="72" height="72" fill="var(--shift-soft)" stroke="none"/>
+      <rect x="96" y="72" width="24" height="24" fill="var(--data-soft)" stroke="var(--data)" stroke-width="2"/>
+      <circle cx="99" cy="84" r="3" fill="var(--shift)"/>
+      <line x1="96" y1="0" x2="96" y2="192" stroke="var(--shift)" stroke-width="2"/>
+      <!-- switched columns -->
+      <rect x="48" y="48" width="24" height="72" fill="none" stroke="var(--fg)" stroke-width="1.5" stroke-dasharray="3 2"/>
+      <rect x="120" y="48" width="24" height="72" fill="none" stroke="var(--fg)" stroke-width="1.5" stroke-dasharray="3 2"/>
+      <text x="0" y="212" font-size="11.5" fill="var(--fg-2)">column 2 became a centroid; column 5 became deferred</text>
+      <text x="0" y="230" font-size="11.5" fill="var(--fg-2)">(dashed): six cells changed treatment, the force jumps</text>
+    </g>
+    <text x="40" y="270" font-size="12" fill="var(--fg-2)">On a fixed grid this jump sits on the same line every tick. Every boundary of the 8² level is also a boundary of every finer level, so the jumps along it add up.</text>
+  </svg>
+  </div>
+  <figcaption>A two-unit move across one boundary of the coarsest level swaps the treatment of two whole columns. Each jump is small. On a fixed grid it is also always in the same place, and dense layouts show it as a thin, emptier line.</figcaption>
+</figure>
+
+<section class="prose">
+<p>The centre lines dip deepest. A crossing there switches a column of coarsest cells on both sides of the point, while near the box's edge the 3 × 3 shell is clipped and only one column switches. In a 300k-point layout the density in a thin strip along a centre line, divided by the density around it:</p>
+<table>
+  <thead><tr><th>grid</th><th>centre lines</th><th>quarter lines</th><th>off-boundary lines</th></tr></thead>
+  <tbody>
+    <tr><td>main, on the space (<code>spaceSize</code> 8192)</td><td>0.79</td><td>1.00</td><td>1.00</td></tr>
+    <tr><td>on the data, fixed, from 4²</td><td>0.87</td><td>0.97</td><td>1.00</td></tr>
+    <tr><td>on the data, fixed, from 8²</td><td>0.99</td><td>0.98</td><td>1.00</td></tr>
+    <tr><td>on the data, shifted every tick, from 8²</td><td>1.01</td><td>1.00</td><td>1.00</td></tr>
+  </tbody>
+</table>
+<p><code>main</code> drew the same cross, along the centre lines of the space. Fitting the grid to the data had only moved it to the layout's centre, where it is far more visible.</p>
+</section>
+
+<section id="a-shift" class="prose">
+<h2>6 · The per-tick shift</h2>
+<p>If the boundaries cannot be made continuous, they can be made to move. Every tick, pass 3 pads the fitted square by one cell of the coarsest grid and slides the origin back by a random fraction of that cell on each axis. With 8 cells over the padded box, one cell is a seventh of the fitted side. The padding equals the slide's full range, so the data stays inside whatever the draw.</p>
+<p>A uniform random shift over one coarsest cell is uniform modulo every finer cell as well, since finer cells divide the coarse one exactly. So over many ticks every level's boundaries land evenly everywhere, the jumps average into a continuous force, and what is left is per-tick noise that alpha anneals.</p>
+<p>That noise was small on the uniform layouts the author measured and visible on clustered ones: in the Lasso Selection story every point shook. The shift moves the jumps without shrinking them, and on clustered data a coarse cell's centroid stands for very uneven mass. <code>c30843e</code> shrank the jumps by widening the shell to 5 × 5 above the finest level, as section 4 notes; the shift itself is unchanged. The experiments that led there, and the three recordings, are on <a href="#part-two">Part II</a>.</p>
+</section>
+
+<div class="demo" id="a-demo">
+  <div class="demo-row">
+    <canvas id="a-cv" width="460" height="460" aria-label="Live demo: a cloud of points, its fitted bounding square, the padded and shifted box, and the 8 by 8 grid over it. Each tick draws a new shift."></canvas>
+    <div class="controls">
+      <button id="a-tick" type="button">Tick: draw a new shift</button>
+      <label><input type="checkbox" id="a-shiftOn" checked> shift the grid (<code>originShift</code>)</label>
+      <label><input type="checkbox" id="a-showFine"> also draw level 1 (16²)</label>
+      <label><input type="checkbox" id="a-showSpace" checked> draw <code>[0, spaceSize]</code> for reference</label>
+      <label><input type="checkbox" id="a-animate"> run ticks continuously</label>
+      <div class="texel" id="a-texel"></div>
+      <div style="font-size:13px;color:var(--fg-2)">The orange band is the padding, one coarsest cell wide. The grid's origin sits somewhere inside it, decided by the two offsets. The fitted square never leaves the grid.</div>
+    </div>
+  </div>
+  <div class="legend"><span class="l-space">[0, spaceSize]</span><span class="l-data">fitted square and grid</span><span class="l-shift">padding and shift</span></div>
+</div>
+
+<section class="prose">
+<p>The engine side is small. The force asks <code>DataBounds</code> for the shift each tick with two uniform draws from the simulation's random stream, which <code>randomSeed</code> seeds when set. That is also why two copies of the same blob at different places now get the same grid: the shift is relative to the data, not to the space.</p>
+</section>
+<span class="src">src/modules/ForceManyBody/index.ts · drawBounds()</span>
+<pre><code><span class="k">this</span>.dataBounds.run({
+  positionsTexture: points.previousPositionTexture,
+  exitTexture: points.exitTexture,
+  pointsTextureSize: store.pointsTextureSize,
+  pointsNumber: data.pointsNumber,
+  minExtent: getFinestGridSize(data.pointsNumber) * MIN_FINEST_CELL_SIZE,   <span class="c">// ¼ unit per finest cell</span>
+  <span class="c">// A fresh uniform shift every tick, from the simulation's random stream</span>
+  <span class="c">// (seeded by randomSeed when set)</span>
+  originShift: {
+    cellsPerAxis: COARSEST_GRID_SIZE,                                      <span class="c">// 8</span>
+    offset: [store.getRandomFloat(0, 1), store.getRandomFloat(0, 1)],
+  },
+})</code></pre>
+
+<section class="prose">
+<p>Three decisions sit behind the numbers, each measured rather than assumed.</p>
+<table>
+  <thead><tr><th>decision</th><th>why</th></tr></thead>
+  <tbody>
+    <tr><td>Pad only together with the shift</td><td>A fixed margin leaves the layout's edge mid-cell on every level and buys nothing: 0.124 % vs 0.060 % error on a square. The shift needs the padding and pays for it by removing the seams.</td></tr>
+    <tr><td>Start the pyramid at 8², not 4²</td><td>From 4² the padding would be a third of the box, not a seventh. The 4² pass was also the slowest (a sixteenth of all points blends into each texel) and the least accurate. Dropping it took about 30 % off a step at 100k to 300k points.</td></tr>
+    <tr><td>Floor the box at ¼ unit per finest cell</td><td>Only has to keep a single point or a coincident stack indexable. At 1 unit it bound at ordinary densities and raised the error of a tenth-of-the-space square from 0.06 % to 0.30 %.</td></tr>
+  </tbody>
+</table>
+<p>What the shift costs: a little accuracy per tick, since the layout's edge now falls mid-cell (0.091 % per tick instead of 0.055 % on a square, 0.066 % for the 20-tick mean), about 6 % of a step because occupied cells hold roughly 1.3 times the points, and a per-tick motion of 0.0023 point spacings at a 300k equilibrium with alpha held at 1, against 0.001 without. All of it anneals with alpha.</p>
+</section>
+
+<section id="a-pipeline" class="prose">
+<h2>7 · The whole tick</h2>
+<p>The order matters. The bounds run first and once, because every later pass bins against the box they define, this tick's shift included. If the aggregation and the force binned against different boxes the exactly-once coverage would break.</p>
+</section>
+
+<figure>
+  <div class="scroll">
+  <svg viewBox="0 0 900 250" role="img" aria-label="Flow of one many-body tick: positions and exit textures feed drawBounds, which writes the bounds texel; drawLevels writes the pyramid textures; drawNearFieldSlots writes the slot array; drawForces reads all of them and blends into the velocity texture." width="900" height="250">
+    <defs>
+      <marker id="a-arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+    </defs>
+    <g font-size="12" fill="currentColor">
+      <!-- inputs -->
+      <rect x="20" y="90" width="130" height="56" rx="4" fill="var(--bg-2)" stroke="currentColor"/>
+      <text x="85" y="113" text-anchor="middle" font-weight="600">positionsTexture</text>
+      <text x="85" y="131" text-anchor="middle" fill="var(--fg-2)">exitTexture</text>
+      <!-- drawBounds -->
+      <rect x="190" y="90" width="130" height="56" rx="4" fill="var(--data-soft)" stroke="var(--data)" stroke-width="1.5"/>
+      <text x="255" y="113" text-anchor="middle" font-weight="600">drawBounds()</text>
+      <text x="255" y="131" text-anchor="middle" fill="var(--fg-2)">3 passes → 1 texel</text>
+      <!-- drawLevels -->
+      <rect x="360" y="90" width="130" height="56" rx="4" fill="var(--bg-2)" stroke="currentColor"/>
+      <text x="425" y="113" text-anchor="middle" font-weight="600">drawLevels()</text>
+      <text x="425" y="131" text-anchor="middle" fill="var(--fg-2)">8² … 512², [Σx Σy n 0]</text>
+      <!-- slots -->
+      <rect x="530" y="90" width="130" height="56" rx="4" fill="var(--bg-2)" stroke="currentColor"/>
+      <text x="595" y="113" text-anchor="middle" font-weight="600">drawNearFieldSlots()</text>
+      <text x="595" y="131" text-anchor="middle" fill="var(--fg-2)">K peels, finest grid</text>
+      <!-- forces -->
+      <rect x="700" y="90" width="130" height="56" rx="4" fill="var(--bg-2)" stroke="currentColor"/>
+      <text x="765" y="113" text-anchor="middle" font-weight="600">drawForces()</text>
+      <text x="765" y="131" text-anchor="middle" fill="var(--fg-2)">levels + near field</text>
+      <!-- arrows -->
+      <g stroke="currentColor" stroke-width="1.4">
+        <line x1="150" y1="118" x2="188" y2="118" marker-end="url(#a-arr2)"/>
+        <line x1="320" y1="118" x2="358" y2="118" marker-end="url(#a-arr2)"/>
+        <line x1="490" y1="118" x2="528" y2="118" marker-end="url(#a-arr2)"/>
+        <line x1="660" y1="118" x2="698" y2="118" marker-end="url(#a-arr2)"/>
+      </g>
+      <!-- bounds texel feeding the three -->
+      <rect x="205" y="20" width="100" height="30" rx="3" fill="var(--data-soft)" stroke="var(--data)"/>
+      <text x="255" y="40" text-anchor="middle" font-family="var(--mono)" font-size="11">dataBoundsTexture</text>
+      <g stroke="var(--data)" stroke-width="1.2" fill="none">
+        <line x1="255" y1="90" x2="255" y2="52" marker-end="url(#a-arr2)"/>
+        <path d="M305,35 L425,35 L425,88" marker-end="url(#a-arr2)"/>
+        <path d="M305,35 L595,35 L595,88" marker-end="url(#a-arr2)"/>
+        <path d="M305,35 L765,35 L765,88" marker-end="url(#a-arr2)"/>
+      </g>
+      <text x="470" y="30" font-size="11" fill="var(--data)">read by gridCell() in all four shaders</text>
+      <!-- velocity out -->
+      <rect x="700" y="190" width="130" height="40" rx="4" fill="var(--bg-2)" stroke="currentColor"/>
+      <text x="765" y="215" text-anchor="middle" font-weight="600">velocity texture</text>
+      <line x1="765" y1="146" x2="765" y2="188" stroke="currentColor" stroke-width="1.4" marker-end="url(#a-arr2)"/>
+      <text x="780" y="172" font-size="11" fill="var(--fg-2)">additive blend</text>
+      <!-- note -->
+      <text x="20" y="190" font-size="12" fill="var(--fg-2)">Then update-position.frag integrates: a non-finite step is dropped, a step longer than spaceSize is shortened.</text>
+      <text x="20" y="208" font-size="12" fill="var(--fg-2)">Nothing clamps the position any more. Next tick, drawBounds() measures where the points now are.</text>
+      <text x="20" y="226" font-size="12" fill="var(--fg-2)">Graphs of at most 4,096 points skip all of this: one exact all-pairs pass, no grid, no bounds.</text>
+    </g>
+  </svg>
+  </div>
+  <figcaption>One many-body tick in <code>ForceManyBody.run()</code>. The bounds texel is written once and read by every later pass, so the grid is the same in all of them.</figcaption>
+</figure>
+
+<section id="a-spacesize" class="prose">
+<h2>8 · What spaceSize still does, and how to retire it</h2>
+<p>With the wall gone, <code>spaceSize</code> has no geometric meaning left. It is one number doing six unrelated jobs that happen to share a value, plus a coordinate offset that exists only because v1 put the origin in the corner of a texture. This is every live use on the branch, from a grep of <code>src/</code>:</p>
+<table>
+  <thead><tr><th>job today</th><th>where</th><th>what it really is</th></tr></thead>
+  <tbody>
+    <tr><td>world origin at <code>spaceSize / 2</code></td><td><code>Store.adjustSpaceSize</code>, every draw and pick shader, <code>Zoom</code>, <code>scaleX/scaleY</code></td><td>a coordinate convention</td></tr>
+    <tr><td>initial layout size, 1.2 × or 0.1 × <code>spaceSize</code></td><td><code>Points.rescaleInitialNodePositions</code></td><td>a length in world units</td></tr>
+    <tr><td>per-force step cap, <code>maxStep = spaceSize</code></td><td><code>Points.updatePosition</code> callers</td><td>a non-finite guard</td></tr>
+    <tr><td>many-body kick cap, <code>2 · spaceSize / finestGrid</code></td><td><code>ForceManyBody.getMaxStep</code></td><td>a tuned length, already "deliberately not tied to the grid"</td></tr>
+    <tr><td><code>±Infinity</code> input lands on 0 or <code>spaceSize</code></td><td><code>position-utils.toFiniteCoordinate</code></td><td>bad-input handling</td></tr>
+    <tr><td>precision warning above 2²¹</td><td><code>Store.adjustSpaceSize</code></td><td>a check on position magnitude</td></tr>
+  </tbody>
+</table>
+</section>
+
+<figure>
+  <div class="scroll">
+  <svg viewBox="0 0 760 310" role="img" aria-label="Left: one box labelled spaceSize = 4096 with six arrows fanning out to six jobs. Right: the same six jobs, each fed by its own named thing: origin (0, 0), a layout-size constant, a step-guard constant, a kick-cap constant, absent-or-warn handling, and a check at ingest." width="760" height="310">
+    <defs>
+      <marker id="a-arr8" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker>
+    </defs>
+    <g transform="translate(20,20)">
+      <text x="0" y="0" font-size="13" font-weight="600" fill="currentColor">today: one number, six jobs</text>
+      <rect x="0" y="118" width="120" height="40" rx="4" fill="var(--space)" fill-opacity="0.18" stroke="var(--space)"/>
+      <text x="60" y="143" text-anchor="middle" font-family="var(--mono)" font-size="12" fill="currentColor">spaceSize 4096</text>
+      <g font-size="12" fill="currentColor">
+        <text x="200" y="34">world origin</text>
+        <text x="200" y="76">initial layout size</text>
+        <text x="200" y="118">per-force step cap</text>
+        <text x="200" y="160">many-body kick cap</text>
+        <text x="200" y="202">±Infinity input</text>
+        <text x="200" y="244">precision warning</text>
+      </g>
+      <g stroke="var(--space)" stroke-width="1.2" fill="none" marker-end="url(#a-arr8)">
+        <path d="M120,138 C160,138 160,30 192,30"/>
+        <path d="M120,138 C160,138 160,72 192,72"/>
+        <path d="M120,138 L192,114"/>
+        <path d="M120,138 L192,156"/>
+        <path d="M120,138 C160,138 160,198 192,198"/>
+        <path d="M120,138 C160,138 160,240 192,240"/>
+      </g>
+    </g>
+    <g transform="translate(400,20)">
+      <text x="0" y="0" font-size="13" font-weight="600" fill="currentColor">after: each job names its own thing</text>
+      <g font-family="var(--mono)" font-size="11.5" fill="var(--data)">
+        <text x="0" y="34">origin (0, 0)</text>
+        <text x="0" y="76">INITIAL_LAYOUT_SIZE</text>
+        <text x="0" y="118">MAX_STEP (guard)</text>
+        <text x="0" y="160">MAX_KICK / finestGrid</text>
+        <text x="0" y="202">absent + warning</text>
+        <text x="0" y="244">check at ingest</text>
+      </g>
+      <g stroke="var(--data)" stroke-width="1.2" fill="none" marker-end="url(#a-arr8)">
+        <line x1="150" y1="30" x2="192" y2="30"/><line x1="150" y1="72" x2="192" y2="72"/><line x1="150" y1="114" x2="192" y2="114"/>
+        <line x1="150" y1="156" x2="192" y2="156"/><line x1="150" y1="198" x2="192" y2="198"/><line x1="150" y1="240" x2="192" y2="240"/>
+      </g>
+      <g font-size="12" fill="currentColor">
+        <text x="200" y="34">world origin</text>
+        <text x="200" y="76">initial layout size</text>
+        <text x="200" y="118">per-force step cap</text>
+        <text x="200" y="160">many-body kick cap</text>
+        <text x="200" y="202">±Infinity input</text>
+        <text x="200" y="244">precision warning</text>
+      </g>
+    </g>
+    <text x="20" y="296" font-size="12" fill="var(--fg-2)">Same values at the default on both sides. The right side can be read without knowing the history of the left.</text>
+  </svg>
+  </div>
+  <figcaption>The coupling to remove. Six jobs share one config value today; each gets its own named constant or rule, and the coordinate origin becomes (0, 0).</figcaption>
+</figure>
+
+<section class="prose">
+<h3>The target</h3>
+<p>Positions are plain numbers with the origin at (0, 0). The force kernel's own unit, where <code>distanceMin</code> is 1 and the finest cell is at least a quarter, is the only scale the engine knows. Each job becomes:</p>
+<table>
+  <thead><tr><th>job</th><th>replacement</th></tr></thead>
+  <tbody>
+    <tr><td>world origin</td><td>(0, 0). Delete <code>worldOrigin</code> and the subtraction in every draw and pick shader. Screen centre at zoom 1 shows the origin.</td></tr>
+    <tr><td>initial layout size</td><td>A size from the point count, about <code>k · √n</code> world units, as one named constant with its measured rationale.</td></tr>
+    <tr><td>per-force step cap</td><td>A named constant in world units, large enough to be only a non-finite guard. It was never tuned.</td></tr>
+    <tr><td>many-body kick cap</td><td>The same formula with a named constant in place of <code>spaceSize</code>, so the value is unchanged at the default and the dependence on n stays.</td></tr>
+    <tr><td>±Infinity input</td><td>Treat as absent with a warning, or map to the origin. Bad input should not inherit a magic edge.</td></tr>
+    <tr><td>precision warning</td><td>Warn at ingest when a position's magnitude exceeds 2²⁰, the same check applied to what actually matters.</td></tr>
+  </tbody>
+</table>
+<p>The migration for users is one sentence: positions saved under the old convention are centred on 2,048, so subtract 2,048 from x and y once, or keep the data and pan. Nothing else in the public API moves, and the defaults keep layouts looking the same.</p>
+
+<h3>Staging</h3>
+<ol>
+  <li><strong>Now, non-breaking.</strong> Give the four internal constants their own names and let <code>spaceSize</code> feed only the origin and the initial scale. Bit-identical at the default, a pure refactor, reviewable on its own.</li>
+  <li><strong>Next major.</strong> Delete the config key and the origin subtraction, add the one-sentence migration-notes entry. By then the diff is one key and one uniform, which downstream apps that pass the key through can absorb in one release.</li>
+  <li><strong>Separately, with readings.</strong> If the initial layout size or the kick cap is to be derived from n or from the kernel unit rather than copied from the old default, that is a tuning change. It gets its own PR with before-and-after measurements, the way the 8² coarsest level and the 64-point bucket were done.</li>
+</ol>
+<p>Why not a rename. A key called <code>worldSize</code> or <code>worldOrigin</code> would preserve the coupling under a truer name. The point of removing it is that the six jobs stop sharing a value they have no reason to share.</p>
+<div class="note">Posted on the PR on 21 October as a <a href="https://github.com/cosmosgl/graph/pull/282#issuecomment-6311708386">proposal</a>, after an audit of every read on the branch. The audit added a seventh job, the deck-layers package's default placement and view-transform probe, and a fourth rescale number, the "no rescale above a range of <code>S</code>" cutoff. The posted plan is in two steps: name the values and deprecate the key now, identical for every graph; then the origin to (0, 0) and the key removed, breaking, with the author choosing whether that second step lands in this PR or in the next major. It also says plainly that the 4,096-unit reference length survives in the constants until a separate, measured retune.</div>
+</section>
+
+<section class="prose">
+<div class="note">Everything above describes <code>feat/no-space-wall</code> at <code>08b58ed</code>, with the notes marked "since c30843e" for the shell change. The branch now also carries <code>f69da0f</code>, the history entry updated for the shell, and <code>e40a649</code>, which replaced the "Repulsion Jitter: Fixed vs Before" story with Performance → Steady-State Motion, four graphs with alpha held at 1 reporting RMS motion, its coherent share and a traced point. The engineering records are <code>history/2026/2026-10-14-unbounded-space.md</code> and <code>history/2026/2026-10-15-many-body-grid-seams.md</code>; the design walkthrough with the original figures is <code>docs/many-body-force/README.md</code>; the shell change in depth is <a href="#part-two">Part II</a>.</div>
+</section>
+
+<section class="part-head" id="part-two">
+  <div class="eyebrow">Part II · commit c30843e</div>
+  <h2>Why the far field keeps two cells away</h2>
+  <p class="lede prose">The branch let the many-body grid follow the data. On it, a clustered layout shook. The grid moved a little every tick to erase a cross. That meant its cell boundaries, and the small force jump at each of them, swept over every point every tick, and the jump became visible motion. This part is the long version of the <a href="https://github.com/cosmosgl/graph/pull/282#issuecomment-6311022545">fix comment</a>. It shows where the jump comes from, what the level textures look like around a point, what each experiment showed, and what the fix costs.</p>
+  <dl class="summary prose">
+    <dt>What was seen</dt>
+    <dd>A clustered 22,500-point layout shook on the branch and was still on <code>main</code>. A uniform 300k blob was still on both.</dd>
+    <dt>What was done</dt>
+    <dd>One rule in the far-field shader changed. Each level used to sum every cell as one lump, except the 3 × 3 block around the point. That block went to the next, finer level. Now every level but the finest hands down a 5 × 5 block instead. Commit <code>c30843e</code>: one shader loop and one function, plus docs.</dd>
+    <dt>Why it works</dt>
+    <dd>The force jumps when a point crosses a cell boundary. The cells just outside its block swap between "one lump" and "refined", and the jump is the lump's error. That error falls as 1/d³ with distance. A 5 × 5 block moves the nearest lump from two cells away to three, which halves the jump. The grid's per-tick shift had been turning the jump into motion. The shift stays, and now has half as much to spread.</dd>
+    <dt>What it costs</dt>
+    <dd>About a third more time per step from 50,000 points up. Two percent at 20,000, nothing below. Motion at rest fell from 0.0181 to 0.0082 point spacings per tick. <code>main</code> sits at 0.0137. That cost is why the shell later became a setting with a size-tiered default, <code>simulationRepulsionQuality</code>; the <a href="#afterword">afterword</a> has the numbers.</dd>
+  </dl>
+  <div class="prose">
+  <p style="margin-bottom:4px"><b>Words used in this part</b></p>
+  <dl class="words">
+    <dt>level</dt><dd>one grid of the pyramid over the data's square: 8², 16², … up to about 2·√n cells per axis. Each is a texture with one texel per cell.</dd>
+    <dt>texel</dt><dd>one cell's record: the sum of x, the sum of y and the count of the points inside it.</dd>
+    <dt>lump, centroid</dt><dd>treating all of a cell's points as one mass at their average position. Cheap: one texel read. Wrong by an amount that falls with distance.</dd>
+    <dt>boundary</dt><dd>the line between two neighbouring cells of a level. A point crossing one changes its cell index by one. Every coarse boundary is also a boundary of every finer level. When the grid shifts, every boundary moves with it.</dd>
+    <dt>shell</dt><dd>the block of cells around the point's own cell that a level does not sum, and hands to the next level. 3 × 3 before, 5 × 5 now above the finest level. The author's word; it is a solid block, not a ring.</dd>
+    <dt>block</dt><dd>on the next level, the children of the shell above: 6 × 6 cells before, 10 × 10 now. A level sums its block minus its own shell.</dd>
+    <dt>near field</dt><dd>the finest level's 3 × 3, handled by a separate pass with real points, no lumps.</dd>
+    <dt>shift</dt><dd>the grid's origin moves by a random fraction of a coarsest cell every tick, so no cell boundary stays on one line.</dd>
+  </dl>
+  </div>
+</section>
+
+
+<section id="b-seen" class="prose">
+<h2>1 · What was seen</h2>
+<p>The Interaction → Lasso Selection story has 22,500 points in 25 clusters. Repulsion is 8, gravity 1.5, the cluster force 0.3. Its decay is so slow that alpha stays near 1. On <code>main</code> the layout settles and sits still. On the PR branch at <code>08b58ed</code> every point shook. The author had measured the shift on the Space Size Wall story, a uniform blob of 300,000 points. That one was calm on both.</p>
+<p>Three recordings of the same story, same view:</p>
+<table>
+  <thead><tr><th>build</th><th>what it shows</th><th>recording</th></tr></thead>
+  <tbody>
+    <tr><td><code>main</code> 68f1803</td><td>grid fixed to the space, 3 × 3 shell; still</td><td><a href="https://github.com/user-attachments/assets/1023bb9a-cf12-449a-b5ea-21d08930b2b6">video</a></td></tr>
+    <tr><td>branch 08b58ed</td><td>grid shifted every tick, 3 × 3 shell; jitter</td><td><a href="https://github.com/user-attachments/assets/0c271c4c-a07f-46e3-985e-1357fd2d503a">video</a></td></tr>
+    <tr><td>with c30843e</td><td>5 × 5 shell above the finest level; still, no cross</td><td><a href="https://github.com/user-attachments/assets/cf95c805-e3ac-47bb-b4f5-25a6c9c37e47">video</a></td></tr>
+  </tbody>
+</table>
+<p>The rest of the page explains the middle row, and how the third row was found.</p>
+</section>
+
+<section id="b-textures" class="prose">
+<h2>2 · How a level builds the force, and what its texture holds</h2>
+<p>The far field is a stack of grids over the data's square: 8², 16², 32², up to about 2·√n cells per axis. Each grid is a texture. Each texel holds the sum of positions and the count of the points in its cell, so a centroid can be formed. The force on a point P is built level by level. A level sums the cells it is responsible for as centroids. It leaves a block of cells around P's own cell, the <em>shell</em>, to the next finer level. That level splits each of those cells into four. One picture of the whole scheme first, then the real textures.</p>
+</section>
+
+<figure>
+  <div class="scroll">
+  <svg viewBox="0 0 760 300" role="img" aria-label="Schematic of one level: the point P in the middle, its 5 by 5 shell shaded orange, the surrounding cells shaded teal with arrows from their centroids to P. To the right, the next level: the shell's cells split into four each, the same scheme again at half the cell size, and at the finest level a purple 3 by 3 where individual points act." width="760" height="300">
+    <defs><marker id="b-arr-s" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+    <g transform="translate(30,40)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">one level: lumps outside the shell push P</text>
+      <rect x="0" y="0" width="224" height="224" fill="var(--data-soft)"/>
+      <rect x="32" y="32" width="160" height="160" fill="var(--shell-soft)"/>
+      <g stroke="var(--line)" stroke-width="0.8">
+        <line x1="32" y1="0" x2="32" y2="224"/><line x1="64" y1="0" x2="64" y2="224"/><line x1="96" y1="0" x2="96" y2="224"/><line x1="128" y1="0" x2="128" y2="224"/><line x1="160" y1="0" x2="160" y2="224"/><line x1="192" y1="0" x2="192" y2="224"/>
+        <line x1="0" y1="32" x2="224" y2="32"/><line x1="0" y1="64" x2="224" y2="64"/><line x1="0" y1="96" x2="224" y2="96"/><line x1="0" y1="128" x2="224" y2="128"/><line x1="0" y1="160" x2="224" y2="160"/><line x1="0" y1="192" x2="224" y2="192"/>
+      </g>
+      <rect x="0" y="0" width="224" height="224" fill="none" stroke="var(--line)"/>
+      <!-- lumps: centroid dots in a few teal cells with arrows toward P -->
+      <g fill="var(--data)">
+        <circle cx="16" cy="16" r="4"/><circle cx="112" cy="14" r="4"/><circle cx="208" cy="48" r="4"/><circle cx="14" cy="144" r="4"/><circle cx="208" cy="176" r="4"/><circle cx="80" cy="210" r="4"/>
+      </g>
+      <g stroke="var(--data)" stroke-width="1.3" fill="none" marker-end="url(#b-arr-s)" opacity="0.9">
+        <line x1="22" y1="22" x2="96" y2="96"/><line x1="112" y1="20" x2="112" y2="96"/><line x1="202" y1="52" x2="128" y2="100"/><line x1="20" y1="142" x2="96" y2="120"/><line x1="202" y1="172" x2="130" y2="124"/><line x1="84" y1="204" x2="108" y2="130"/>
+      </g>
+      <circle cx="112" cy="112" r="5" fill="var(--point)"/>
+      <text x="120" y="108" font-size="12" font-weight="600" fill="currentColor">P</text>
+      <text x="112" y="60" font-size="11" fill="var(--shell)" text-anchor="middle">shell: not summed here,</text>
+      <text x="112" y="74" font-size="11" fill="var(--shell)" text-anchor="middle">handed to the next level</text>
+      <text x="0" y="246" font-size="12" fill="var(--fg-2)">each teal cell: one texel read, one push from its centroid</text>
+    </g>
+    <g transform="translate(290,150)" stroke="currentColor" fill="currentColor">
+      <line x1="0" y1="0" x2="60" y2="0" stroke-width="1.5"/><polygon points="60,0 50,-5 50,5"/>
+      <text x="30" y="-10" font-size="12" text-anchor="middle" stroke="none">next level</text>
+      <text x="30" y="18" font-size="11" text-anchor="middle" stroke="none" fill="var(--fg-2)">cells split in four</text>
+    </g>
+    <g transform="translate(400,40)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">the shell, one level down: same scheme, half the cell</text>
+      <rect x="0" y="0" width="224" height="224" fill="var(--data-soft)" stroke="var(--shell)" stroke-width="1.5"/>
+      <rect x="56" y="56" width="112" height="112" fill="var(--shell-soft)"/>
+      <g stroke="var(--line)" stroke-width="0.6">
+        <line x1="22.4" y1="0" x2="22.4" y2="224"/><line x1="44.8" y1="0" x2="44.8" y2="224"/><line x1="67.2" y1="0" x2="67.2" y2="224"/><line x1="89.6" y1="0" x2="89.6" y2="224"/><line x1="112" y1="0" x2="112" y2="224"/><line x1="134.4" y1="0" x2="134.4" y2="224"/><line x1="156.8" y1="0" x2="156.8" y2="224"/><line x1="179.2" y1="0" x2="179.2" y2="224"/><line x1="201.6" y1="0" x2="201.6" y2="224"/>
+        <line x1="0" y1="22.4" x2="224" y2="22.4"/><line x1="0" y1="44.8" x2="224" y2="44.8"/><line x1="0" y1="67.2" x2="224" y2="67.2"/><line x1="0" y1="89.6" x2="224" y2="89.6"/><line x1="0" y1="112" x2="224" y2="112"/><line x1="0" y1="134.4" x2="224" y2="134.4"/><line x1="0" y1="156.8" x2="224" y2="156.8"/><line x1="0" y1="179.2" x2="224" y2="179.2"/><line x1="0" y1="201.6" x2="224" y2="201.6"/>
+      </g>
+      <g fill="var(--data)"><circle cx="11" cy="11" r="3"/><circle cx="212" cy="34" r="3"/><circle cx="34" cy="190" r="3"/><circle cx="190" cy="212" r="3"/></g>
+      <g stroke="var(--data)" stroke-width="1.2" fill="none" marker-end="url(#b-arr-s)" opacity="0.9">
+        <line x1="16" y1="16" x2="100" y2="100"/><line x1="206" y1="38" x2="124" y2="100"/><line x1="38" y1="186" x2="100" y2="124"/><line x1="186" y1="208" x2="124" y2="124"/>
+      </g>
+      <circle cx="112" cy="112" r="5" fill="var(--point)"/>
+      <text x="0" y="246" font-size="12" fill="var(--fg-2)">the orange frame is the shell from the left; its 10 × 10 children minus</text>
+      <text x="0" y="262" font-size="12" fill="var(--fg-2)">this level's own shell are summed; at the finest level the shell is the</text>
+      <text x="0" y="278" font-size="12" fill="var(--near)">near field: 3 × 3 cells of real points, no lumps</text>
+    </g>
+  </svg>
+  </div>
+  <figcaption>One level and the next. Every cell of the plane is summed as a lump on exactly one level, or it lands in the finest level's near field. The shell's width is the only thing the commit changed.</figcaption>
+</figure>
+
+<section class="prose">
+<p>The demo below builds the level textures of a clustered layout like the Lasso story's: 22,500 points in 25 clusters, levels 8² to 256². The engine would go to 512² for this count; the page stops one level short so the texels stay visible. Each texel's count is drawn as a tile in the page's text colour. More points make a more solid tile. An empty cell has no tile and shows only its colour. Pick a level and a shell radius, and click to move P. Teal cells are summed as centroids on this level. Orange cells are the shell, handed down. The near field exists on the finest level only, 256² here. Select it and the shell turns purple: the 3 × 3 block where real points are used instead of centroids. Those cells are under two pixels wide here, so the shell, the refined block and the near field are outlined on every level. At 256² an inset in the corner magnifies the cells around P.</p>
+</section>
+
+<div class="demo" id="b-texture-demo">
+  <div class="demo-row">
+    <canvas id="b-tex-canvas" width="480" height="480" aria-label="Count texture of one pyramid level over a clustered layout, with the cells summed on this level and the shell left to the next level marked around the point P"></canvas>
+    <div class="controls">
+      <div>Level</div>
+      <div class="seg" id="b-tex-levels"></div>
+      <div>Shell radius on this level</div>
+      <div class="seg" id="b-tex-radius">
+        <button type="button" data-r="1" aria-pressed="false">1 · 3 × 3 (before)</button>
+        <button type="button" data-r="2" aria-pressed="true">2 · 5 × 5 (after)</button>
+      </div>
+      <label><input type="checkbox" id="b-tex-log" checked> log scale for the count tiles (off: a tile's opacity is count over the fullest cell, and only the clusters' cores show)</label>
+      <div class="readout" id="b-tex-readout"></div>
+      <div class="legend"><span class="l-data">summed as centroids here (outline: the block refined on this level)</span><span class="l-shell">shell, left to the next level</span><span class="l-near">near field, finest level only</span></div>
+    </div>
+  </div>
+</div>
+
+<section class="prose">
+<p>Three things to look for. The <span class="sw sw-shell"></span>orange shell is a solid block, not a ring. It includes P's own cell. On every level but the coarsest, the <span class="sw sw-data"></span>teal cells form a frame around the shell. That is because a level only handles what the level above left to it. And on the coarse levels the orange cells are exactly the <span class="sw sw-heat"></span>solid ones. Those are the cells where a cluster sits, where a centroid stands for the most uneven mass.</p>
+<h3>What each colour does to the force on P</h3>
+<ul class="roles">
+  <li><span class="sw sw-heat"></span><b>The tile</b> is the texel's count: how many points fell into that cell on this level. It is drawn in the page's text colour, faint for a few points and solid for many. An empty cell has no tile. The colour and the tile answer two different questions. The colour says whether the shader reads the cell on this level. The tile says whether there is any mass in it to push with. An empty teal cell is still read, which costs one texel fetch, and the shader adds no force for it. The texel also holds the summed x and y of its points. Divided by the count, that is the centroid.</li>
+  <li><span class="sw sw-data"></span><b>Teal</b> cells push P on this level, each as one lump. The push is proportional to the count, points away from the centroid, and falls off as 1/d. One texel read per cell. These cells are far enough away for a centroid to stand in for their points. How far is the shell radius: one cell before the fix, two after.</li>
+  <li><span class="sw sw-shell"></span><b>Orange</b> cells add nothing on this level. They are too close for a lump. They go to the next level, where each becomes four smaller cells and the same decision is made again. When P crosses a cell boundary, this block moves with it. The cells that enter or leave it swap between "one lump now" and "four lumps on the next level". The difference between those two is the jump.</li>
+  <li><span class="sw sw-near"></span><b>Purple</b> appears on the finest level only. Its nine cells hold the points that push P one by one, through the near-field pass with its sampling slots. No centroid at all. This is the only part of the force where close points repel each other individually. It is what keeps dense hubs from collapsing into disks.</li>
+</ul>
+<p>Across the whole pyramid, every cell of the plane plays one of these roles for P on exactly one level. It is summed as a lump somewhere, or it is inside the finest near field. That is the exact-once decomposition. The all-levels view below shows it.</p>
+</section>
+
+<section class="prose">
+<h3>All levels at once</h3>
+<p>The same layout, the same P, every level with the chosen radius. Together the teal regions tile the plane around P exactly once. The last tile, 256², is zoomed in around P, because its cells are under a pixel at this size. It shows the block the 128² level left, and inside it the purple 3 × 3 that the near-field pass handles with real points.</p>
+</section>
+<div class="grid4" id="b-tex-all"></div>
+<div class="legend" style="margin: 8px 0 24px"><span class="l-data">centroids on this level</span><span class="l-shell">left to the next level</span><span class="l-near">near field</span></div>
+
+<section class="prose">
+<h3>Follow one point</h3>
+<p>The small square in every view is one more point, Q, a little over one coarse cell from P. On each level its cell is outlined in the colour of its role for P. Read the levels from coarse to fine. On the coarse levels Q sits inside P's shell: orange, not yet counted. On exactly one level it sits in a teal cell: counted there, as part of that cell's lump. On every finer level its cell lies outside P's block: already counted above, and not read again. That is the exact-once rule, for one point.</p>
+<p>Now press the shift button. The grid moves by a random fraction of a coarsest cell, the way the engine moves it every tick. Q and P stay where they are, but the cell boundaries around them move, so the level that counts Q can change. When it changes, the force Q exerts on P changes from one lump's version to another, smaller lump's version, or the other way. That change is the jump. Press a few times and watch the counted level move up and down.</p>
+</section>
+<div class="demo">
+  <div class="demo-row">
+    <div class="controls" style="flex: 1 1 100%">
+      <div class="seg">
+        <button type="button" id="b-tex-shift">Shift the grid, as the engine does every tick</button>
+        <button type="button" id="b-tex-noshift">No shift</button>
+      </div>
+      <div class="readout" id="b-q-readout"></div>
+    </div>
+  </div>
+</div>
+
+<section id="b-jump" class="prose">
+<h2>3 · Why the force jumps at a boundary, and why 5 × 5 halves the jump</h2>
+<p>The whole mechanism, in six steps.</p>
+<ol>
+  <li><b>The shell follows P.</b> Each level draws a block around P's own cell, the shell, and skips it. Everything outside the shell is counted as lumps. When P's cell changes, the shell slides with it.</li>
+  <li><b>Cells change role at a boundary.</b> When P crosses a cell boundary, or a boundary crosses P, the cells just outside the shell swap roles. One that was a single lump is now inside the shell, and the next level counts it as four smaller lumps. One on the other side goes from four small lumps to one big one.</li>
+  <li><b>That is a step in the force.</b> The points in those cells did not move. Only the counting changed. So the force on P steps between one tick and the next, by the difference between one lump and four. A true force would have changed by almost nothing in that time.</li>
+  <li><b>The step is as big as a lump's error.</b> A lump is a shortcut: one point standing in for many. It is wrong by more when the cell is close to P, and by more when its points are heaped to one side. Graph clusters are heaped. One cell away, which a 3 × 3 shell allows, is close.</li>
+  <li><b>The shift turns the step into motion.</b> The grid moves every tick, so a boundary passes over every point often. The step is felt everywhere, in bands, every tick. That is the jitter.</li>
+  <li><b>The fix moves the shell out by one cell.</b> The cells that change role are now one cell farther from P. There the same lump is about three tenths as wrong, and the step halves.</li>
+</ol>
+<p>Step 2 in a picture:</p>
+</section>
+
+<figure>
+  <div class="scroll">
+  <svg viewBox="0 0 760 300" role="img" aria-label="Left: a point P just left of a cell boundary, with its 3 by 3 shell shaded and the cells beyond summed as centroids. Right: P just right of the boundary; the shell moved one column, so one column of cells changed from centroid to refined and another the other way, marked in orange." width="760" height="300">
+    <g transform="translate(30,40)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">P just left of the boundary</text>
+      <rect x="0" y="0" width="256" height="224" fill="var(--data-soft)" stroke="none"/>
+      <rect x="64" y="64" width="96" height="96" fill="var(--shell-soft)" stroke="none"/>
+      <g stroke="var(--line)" stroke-width="1">
+        <line x1="32" y1="0" x2="32" y2="224"/><line x1="64" y1="0" x2="64" y2="224"/><line x1="96" y1="0" x2="96" y2="224"/><line x1="160" y1="0" x2="160" y2="224"/><line x1="192" y1="0" x2="192" y2="224"/><line x1="224" y1="0" x2="224" y2="224"/>
+        <line x1="0" y1="32" x2="256" y2="32"/><line x1="0" y1="64" x2="256" y2="64"/><line x1="0" y1="96" x2="256" y2="96"/><line x1="0" y1="128" x2="256" y2="128"/><line x1="0" y1="160" x2="256" y2="160"/><line x1="0" y1="192" x2="256" y2="192"/>
+      </g>
+      <line x1="128" y1="0" x2="128" y2="224" stroke="var(--shell)" stroke-width="2"/>
+      <rect x="0" y="0" width="256" height="224" fill="none" stroke="var(--line)"/>
+      <circle cx="124" cy="112" r="4.5" fill="var(--point)"/>
+      <text x="108" y="106" font-size="12" font-weight="600" fill="currentColor">P</text>
+      <text x="0" y="246" font-size="12" fill="var(--fg-2)">shell: columns 2–4 · centroids: everything else</text>
+    </g>
+    <g transform="translate(330,150)" stroke="currentColor" fill="currentColor">
+      <line x1="0" y1="0" x2="60" y2="0" stroke-width="1.5"/>
+      <polygon points="60,0 50,-5 50,5"/>
+      <text x="30" y="-10" font-size="12" text-anchor="middle" stroke="none">P moves 8 units</text>
+    </g>
+    <g transform="translate(470,40)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">P just right of it</text>
+      <rect x="0" y="0" width="256" height="224" fill="var(--data-soft)" stroke="none"/>
+      <rect x="96" y="64" width="96" height="96" fill="var(--shell-soft)" stroke="none"/>
+      <g stroke="var(--line)" stroke-width="1">
+        <line x1="32" y1="0" x2="32" y2="224"/><line x1="64" y1="0" x2="64" y2="224"/><line x1="96" y1="0" x2="96" y2="224"/><line x1="160" y1="0" x2="160" y2="224"/><line x1="192" y1="0" x2="192" y2="224"/><line x1="224" y1="0" x2="224" y2="224"/>
+        <line x1="0" y1="32" x2="256" y2="32"/><line x1="0" y1="64" x2="256" y2="64"/><line x1="0" y1="96" x2="256" y2="96"/><line x1="0" y1="128" x2="256" y2="128"/><line x1="0" y1="160" x2="256" y2="160"/><line x1="0" y1="192" x2="256" y2="192"/>
+      </g>
+      <line x1="128" y1="0" x2="128" y2="224" stroke="var(--shell)" stroke-width="2"/>
+      <g fill="none" stroke="var(--shell)" stroke-width="2.2">
+        <rect x="65.5" y="65.5" width="29" height="29"/><rect x="65.5" y="97.5" width="29" height="29"/><rect x="65.5" y="129.5" width="29" height="29"/>
+        <rect x="161.5" y="65.5" width="29" height="29"/><rect x="161.5" y="97.5" width="29" height="29"/><rect x="161.5" y="129.5" width="29" height="29"/>
+      </g>
+      <rect x="0" y="0" width="256" height="224" fill="none" stroke="var(--line)"/>
+      <circle cx="132" cy="112" r="4.5" fill="var(--point)"/>
+      <text x="138" y="106" font-size="12" font-weight="600" fill="currentColor">P</text>
+      <text x="0" y="246" font-size="12" fill="var(--fg-2)">six cells changed hands: the force jumps by their</text>
+      <text x="0" y="262" font-size="12" fill="var(--fg-2)">centroid-versus-children difference, in one tick</text>
+    </g>
+  </svg>
+  </div>
+  <figcaption>One boundary crossing on a level with a 3 × 3 shell. The outlined cells switched treatment. With a 5 × 5 shell, ten cells switch instead of six. But each is one cell farther from P, and the difference per cell is under a third as large. So the whole jump roughly halves. The arithmetic is below the next demo.</figcaption>
+</figure>
+
+
+
+<section class="prose">
+<h3>Step 4: how wrong is a lump, and why distance fixes it</h3>
+<p>A lump puts all of a cell's points at their average position. A point on the near side of the cell really pushes P a bit harder than that; a point on the far side pushes a bit less. Because the average sits in the middle, those two errors nearly cancel. What is left is small and comes from the force law bending: 1/r is a curve, not a line, so the near side's extra push slightly outweighs the far side's shortfall. That leftover is the lump's error. It grows with how spread out the points are, and it shrinks with distance as 1/d³. In one line: a cell of width c at distance d, with mass m, pushes with about m/d and is wrong by about m·c²/d³.</p>
+<p>Why 1/d³ and not 1/d: distance helps twice. The farther the cell, the smaller it looks from P, so the points inside it look more like one point; that is the (c/d)² part. And the farther the cell, the weaker its push to begin with; that is the 1/d part. Moving the nearest lump from two cell widths to three cuts its error to (2/3)³, about 0.3. The exponent is for this engine's 1/d repulsion; a 1/d² force would give 1/d⁴.</p>
+</section>
+
+<figure>
+  <div class="scroll">
+  <svg viewBox="0 0 760 360" role="img" aria-label="Two panels, identical except for distance. Left: P and one cell of spread points two cell widths away; thin arrows from each point to P and one thick arrow from the centroid, with the small difference marked as the error. Right: the same cell three widths away; the wedge of P's view is narrower, the arrows shorter, the error much smaller. Below, bars to scale: the pull falls to 0.67, the error to 0.30." width="760" height="360">
+    <defs><marker id="b-arr-e" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>
+    <!-- left panel: d = 2c, c = 60px, P at x=40 -->
+    <g transform="translate(20,30)">
+      <text x="0" y="0" font-size="13" font-weight="600" fill="currentColor">the same cell, two widths away</text>
+      <g transform="translate(40,100)">
+        <path d="M0,0 L90,-30 M0,0 L90,30" stroke="var(--data)" stroke-width="1" stroke-dasharray="3 3" fill="none" opacity="0.6"/>
+        <rect x="90" y="-30" width="60" height="60" fill="var(--data-soft)" stroke="var(--data)"/>
+        <g fill="var(--fg)" opacity="0.65"><circle cx="100" cy="-18" r="2.2"/><circle cx="110" cy="8" r="2.2"/><circle cx="138" cy="-10" r="2.2"/><circle cx="128" cy="20" r="2.2"/><circle cx="118" cy="-2" r="2.2"/><circle cx="143" cy="14" r="2.2"/><circle cx="98" cy="16" r="2.2"/></g>
+        <!-- thin pulls from each point -->
+        <g stroke="var(--fg)" stroke-width="0.6" opacity="0.35"><line x1="100" y1="-18" x2="4" y2="-1"/><line x1="110" y1="8" x2="4" y2="0"/><line x1="138" y1="-10" x2="4" y2="-1"/><line x1="128" y1="20" x2="4" y2="1"/><line x1="118" y1="-2" x2="4" y2="0"/><line x1="143" y1="14" x2="4" y2="1"/><line x1="98" y1="16" x2="4" y2="1"/></g>
+        <circle cx="120" cy="0" r="4" fill="var(--data)"/>
+        <circle cx="0" cy="0" r="5" fill="var(--point)"/>
+        <text x="-4" y="-12" font-size="12" font-weight="600" fill="currentColor">P</text>
+        <text x="120" y="48" font-size="11" fill="var(--fg-2)" text-anchor="middle">d = 2c · fills ≈ 28° of P's view</text>
+      </g>
+      <!-- force arrows (repulsion: away from the cell, to the left), drawn below -->
+      <g transform="translate(40,200)">
+        <text x="0" y="-8" font-size="11" fill="var(--fg-2)">push on P, to scale</text>
+        <line x1="150" y1="6" x2="30" y2="6" stroke="var(--fg)" stroke-width="3" marker-end="url(#b-arr-e)"/>
+        <text x="156" y="10" font-size="11" fill="currentColor">exact: every point summed</text>
+        <line x1="150" y1="24" x2="31.5" y2="24" stroke="var(--data)" stroke-width="3" marker-end="url(#b-arr-e)"/>
+        <text x="156" y="28" font-size="11" fill="var(--data)">lump: the centroid once</text>
+        <text x="0" y="52" font-size="11" fill="var(--shell)">the two differ by the lump's error — too small to see at this scale, so:</text>
+      </g>
+    </g>
+    <!-- right panel: d = 3c -->
+    <g transform="translate(400,30)">
+      <text x="0" y="0" font-size="13" font-weight="600" fill="currentColor">the same cell, three widths away</text>
+      <g transform="translate(40,100)">
+        <path d="M0,0 L150,-30 M0,0 L150,30" stroke="var(--data)" stroke-width="1" stroke-dasharray="3 3" fill="none" opacity="0.6"/>
+        <rect x="150" y="-30" width="60" height="60" fill="var(--data-soft)" stroke="var(--data)"/>
+        <g fill="var(--fg)" opacity="0.65"><circle cx="160" cy="-18" r="2.2"/><circle cx="170" cy="8" r="2.2"/><circle cx="198" cy="-10" r="2.2"/><circle cx="188" cy="20" r="2.2"/><circle cx="178" cy="-2" r="2.2"/><circle cx="203" cy="14" r="2.2"/><circle cx="158" cy="16" r="2.2"/></g>
+        <g stroke="var(--fg)" stroke-width="0.6" opacity="0.35"><line x1="160" y1="-18" x2="4" y2="-1"/><line x1="170" y1="8" x2="4" y2="0"/><line x1="198" y1="-10" x2="4" y2="-1"/><line x1="188" y1="20" x2="4" y2="1"/><line x1="178" y1="-2" x2="4" y2="0"/><line x1="203" y1="14" x2="4" y2="1"/><line x1="158" y1="16" x2="4" y2="1"/></g>
+        <circle cx="180" cy="0" r="4" fill="var(--data)"/>
+        <circle cx="0" cy="0" r="5" fill="var(--point)"/>
+        <text x="-4" y="-12" font-size="12" font-weight="600" fill="currentColor">P</text>
+        <text x="180" y="48" font-size="11" fill="var(--fg-2)" text-anchor="middle">d = 3c · fills ≈ 19° of P's view</text>
+      </g>
+      <g transform="translate(40,200)">
+        <text x="0" y="-8" font-size="11" fill="var(--fg-2)">push on P, to scale</text>
+        <line x1="110" y1="6" x2="30" y2="6" stroke="var(--fg)" stroke-width="3" marker-end="url(#b-arr-e)"/>
+        <text x="116" y="10" font-size="11" fill="currentColor">exact</text>
+        <line x1="110" y1="24" x2="30.5" y2="24" stroke="var(--data)" stroke-width="3" marker-end="url(#b-arr-e)"/>
+        <text x="116" y="28" font-size="11" fill="var(--data)">lump</text>
+      </g>
+    </g>
+    <!-- bars: pull and error, each relative to the 2c case -->
+    <g transform="translate(60,300)" font-size="11">
+      <text x="0" y="0" fill="currentColor" font-weight="600">what moving from 2c to 3c does</text>
+      <text x="0" y="22" fill="var(--fg-2)">pull</text>
+      <rect x="60" y="13" width="240" height="10" fill="var(--fg)" opacity="0.35"/><text x="306" y="22" fill="var(--fg-2)">at 2c: 1</text>
+      <rect x="60" y="27" width="160" height="10" fill="var(--fg)" opacity="0.7"/><text x="226" y="36" fill="currentColor">at 3c: × 2/3 (1/d)</text>
+      <text x="400" y="22" fill="var(--fg-2)">error of the lump</text>
+      <rect x="520" y="13" width="180" height="10" fill="var(--shell)" opacity="0.4"/><text x="706" y="22" fill="var(--fg-2)">1</text>
+      <rect x="520" y="27" width="54" height="10" fill="var(--shell)"/><text x="580" y="36" fill="currentColor">× 0.30 (1/d³)</text>
+    </g>
+  </svg>
+  </div>
+  <figcaption>Distance helps twice. The pull falls as 1/d, so at three widths it is two thirds of what it was at two. The lump's share of error falls as (c/d)², the angular size squared, to 4/9. The absolute error is the product, 8/27, about 0.30. The table below measures this on the page's own clustered cell.</figcaption>
+</figure>
+
+<section class="prose">
+<table id="b-lump-table">
+  <thead><tr><th>nearest lump at</th><th>its pull on P</th><th>error of the lump</th><th>error relative to pull</th><th>error vs 2c</th></tr></thead>
+  <tbody><tr><td colspan="5">computing…</td></tr></tbody>
+</table>
+<p class="note">Measured in the page. One cell of 60 clustered points from the toy; P placed 2, 3 and 4 cell widths from its centre; exact sum against centroid with the shader's kernel. The last column is what moving the shell out one cell buys per switching cell. The next table counts the cells.</p>
+</section>
+
+<section class="prose">
+<h3>Why two cells away is enough, in numbers</h3>
+<p>The cells that change role sit just outside the shell, so the shell radius sets how far away they are, and with it how big their error is.</p>
+<table>
+  <thead><tr><th>shell</th><th>handed down</th><th>first lump at</th><th>error per switching cell</th><th>cells that switch</th><th>total jump</th></tr></thead>
+  <tbody>
+    <tr><td>3 × 3, radius 1 (before)</td><td>distance 0 and 1</td><td>d = 2c</td><td>∝ 1/8</td><td>6</td><td>1</td></tr>
+    <tr><td>5 × 5, radius 2 (now)</td><td>distance 0 to 2</td><td>d = 3c</td><td>∝ 1/27</td><td>10</td><td>≈ 0.5</td></tr>
+    <tr><td>7 × 7, radius 3</td><td>distance 0 to 3</td><td>d = 4c</td><td>∝ 1/64</td><td>14</td><td>≈ 0.3</td></tr>
+  </tbody>
+</table>
+<p>Per changing cell the step falls to about three tenths. Ten cells change instead of six. So the whole step about halves. The measurement agrees: motion at rest went from 0.0181 to 0.0082 point spacings per tick, a factor of 0.45. Radius 3 would take another 40 percent off, for twice the reads again on every level that uses it. The finest level is left out of all this. Its cells hold about one point each, and a lump of one point is that point, with no error to shrink.</p>
+</section>
+
+
+
+<section class="prose">
+<h3>Optional: see the steps computed</h3>
+<p>A toy with the shader's arithmetic. A row of cells, each holding a small cluster. P slides along the row. At each position the force on P is summed over the cells: exact for cells inside the shell, one lump for the rest. The curve for radius 1 steps at every boundary. The curve for radius 2 steps too, but less, because the cells that change role are one cell farther away. The readout gives the largest step for each radius and their ratio, near two. Drag the slider or let it run.</p>
+</section>
+
+<div class="demo" id="b-jump-demo">
+  <div class="demo-row">
+    <canvas id="b-jump-canvas" width="560" height="300" aria-label="Force on a moving point P from a row of clustered cells, as a curve over P's position: exact force, and the far-field approximation with shell radius 1 and radius 2. The approximations step at cell boundaries; radius 2 steps less."></canvas>
+    <div class="controls">
+      <label>P's position <input type="range" id="b-jump-x" min="0" max="1000" value="0" style="flex:1"></label>
+      <label><input type="checkbox" id="b-jump-animate" checked> animate</label>
+      <label>cluster tightness <input type="range" id="b-jump-tight" min="1" max="10" value="6" style="flex:1"></label>
+      <div class="readout" id="b-jump-readout"></div>
+    </div>
+  </div>
+</div>
+
+<section id="b-shift" class="prose">
+<h2>4 · Why moving the grid could not fix it</h2>
+<p>The size of the jump is set by the shell and by the data. How it looks on screen is set by how the grid moves. A fixed grid, the random shift the author added, and a slow drift tried during the investigation show the same jump three ways. Moving the boundaries changes when and where each point feels it. It never changes how big it is.</p>
+</section>
+
+<figure>
+  <div class="scroll">
+  <svg viewBox="0 0 760 230" role="img" aria-label="Three panels. Fixed grid: the jumps lie on fixed lines and points thin out along them into a cross. Random shift every tick: the lines land somewhere new each tick, and every point jitters. Slow drift: the lines move steadily and sweep through the layout as waves." width="760" height="230">
+    <g transform="translate(20,30)">
+      <text x="110" y="-10" font-size="13" font-weight="600" fill="currentColor" text-anchor="middle">fixed grid</text>
+      <rect x="0" y="0" width="220" height="150" fill="var(--bg-2)" stroke="var(--line)"/>
+      <line x1="110" y1="0" x2="110" y2="150" stroke="var(--shell)" stroke-width="2"/>
+      <line x1="0" y1="75" x2="220" y2="75" stroke="var(--shell)" stroke-width="2"/>
+      <g fill="var(--point)" opacity="0.7">
+        <circle cx="30" cy="20" r="2"/><circle cx="60" cy="40" r="2"/><circle cx="80" cy="30" r="2"/><circle cx="45" cy="60" r="2"/><circle cx="150" cy="25" r="2"/><circle cx="180" cy="50" r="2"/><circle cx="160" cy="60" r="2"/><circle cx="200" cy="30" r="2"/>
+        <circle cx="35" cy="100" r="2"/><circle cx="70" cy="120" r="2"/><circle cx="55" cy="135" r="2"/><circle cx="90" cy="110" r="2"/><circle cx="140" cy="100" r="2"/><circle cx="175" cy="125" r="2"/><circle cx="195" cy="110" r="2"/><circle cx="150" cy="135" r="2"/>
+      </g>
+      <text x="110" y="172" font-size="12" fill="var(--fg-2)" text-anchor="middle">jumps on fixed lines; points drift off them</text>
+      <text x="110" y="188" font-size="12" font-weight="600" fill="var(--shell)" text-anchor="middle">a cross</text>
+    </g>
+    <g transform="translate(270,30)">
+      <text x="110" y="-10" font-size="13" font-weight="600" fill="currentColor" text-anchor="middle">random shift every tick</text>
+      <rect x="0" y="0" width="220" height="150" fill="var(--bg-2)" stroke="var(--line)"/>
+      <g stroke="var(--shell)" stroke-width="1.2" opacity="0.5">
+        <line x1="40" y1="0" x2="40" y2="150"/><line x1="95" y1="0" x2="95" y2="150"/><line x1="160" y1="0" x2="160" y2="150"/>
+        <line x1="0" y1="30" x2="220" y2="30"/><line x1="0" y1="90" x2="220" y2="90"/><line x1="0" y1="125" x2="220" y2="125"/>
+      </g>
+      <g fill="var(--point)" opacity="0.7">
+        <circle cx="30" cy="20" r="2"/><circle cx="62" cy="43" r="2"/><circle cx="78" cy="29" r="2"/><circle cx="47" cy="58" r="2"/><circle cx="152" cy="23" r="2"/><circle cx="178" cy="52" r="2"/><circle cx="162" cy="58" r="2"/><circle cx="198" cy="32" r="2"/>
+        <circle cx="33" cy="102" r="2"/><circle cx="72" cy="118" r="2"/><circle cx="53" cy="137" r="2"/><circle cx="92" cy="108" r="2"/><circle cx="138" cy="102" r="2"/><circle cx="177" cy="123" r="2"/><circle cx="193" cy="112" r="2"/><circle cx="152" cy="133" r="2"/>
+      </g>
+      <g stroke="var(--point)" stroke-width="1" opacity="0.5">
+        <line x1="30" y1="20" x2="33" y2="17"/><line x1="62" y1="43" x2="59" y2="46"/><line x1="152" y1="23" x2="155" y2="26"/><line x1="92" y1="108" x2="89" y2="105"/><line x1="177" y1="123" x2="180" y2="120"/><line x1="53" y1="137" x2="50" y2="139"/>
+      </g>
+      <text x="110" y="172" font-size="12" fill="var(--fg-2)" text-anchor="middle">lines land somewhere new each tick</text>
+      <text x="110" y="188" font-size="12" font-weight="600" fill="var(--shell)" text-anchor="middle">jitter everywhere</text>
+    </g>
+    <g transform="translate(520,30)">
+      <text x="110" y="-10" font-size="13" font-weight="600" fill="currentColor" text-anchor="middle">slow drift</text>
+      <rect x="0" y="0" width="220" height="150" fill="var(--bg-2)" stroke="var(--line)"/>
+      <line x1="80" y1="0" x2="80" y2="150" stroke="var(--shell)" stroke-width="2"/>
+      <line x1="96" y1="0" x2="96" y2="150" stroke="var(--shell)" stroke-width="1" stroke-dasharray="3 3" opacity="0.6"/>
+      <line x1="112" y1="0" x2="112" y2="150" stroke="var(--shell)" stroke-width="1" stroke-dasharray="3 3" opacity="0.3"/>
+      <g fill="var(--point)" opacity="0.7">
+        <circle cx="30" cy="20" r="2"/><circle cx="60" cy="40" r="2"/><circle cx="84" cy="30" r="2"/><circle cx="45" cy="60" r="2"/><circle cx="150" cy="25" r="2"/><circle cx="180" cy="50" r="2"/><circle cx="160" cy="60" r="2"/><circle cx="200" cy="30" r="2"/>
+        <circle cx="35" cy="100" r="2"/><circle cx="76" cy="120" r="2"/><circle cx="55" cy="135" r="2"/><circle cx="90" cy="110" r="2"/><circle cx="140" cy="100" r="2"/><circle cx="175" cy="125" r="2"/><circle cx="195" cy="110" r="2"/><circle cx="150" cy="135" r="2"/>
+      </g>
+      <g stroke="currentColor" fill="currentColor"><line x1="84" y1="160" x2="104" y2="160" stroke-width="1.2"/><polygon points="104,160 98,157 98,163"/></g>
+      <text x="110" y="180" font-size="12" fill="var(--fg-2)" text-anchor="middle">the line sweeps through the layout</text>
+      <text x="110" y="196" font-size="12" font-weight="600" fill="var(--shell)" text-anchor="middle">waves</text>
+    </g>
+  </svg>
+  </div>
+  <figcaption>The same jump, shown three ways. Moving the grid rearranges it in time and space and removes none of it. The fixed grid piles it on lines. The random shift spreads it over every point, every tick. The drift sweeps it across the layout. The shell radius is the only knob tried that changes the jump's size, by moving the nearest lump farther from P.</figcaption>
+</figure>
+
+<section id="b-ladder" class="prose">
+<h2>5 · What was tried, in order</h2>
+<p>Each row is a local edit on <code>08b58ed</code>, looked at in the Lasso story. The order matters. Each result ruled something out before the next edit.</p>
+<table>
+  <thead><tr><th>change</th><th>jitter</th><th>cross</th><th>what it ruled out</th></tr></thead>
+  <tbody>
+    <tr><td>shift offset <code>[0, 0]</code></td><td>gone</td><td>visible, at 22.5k too</td><td>the shift is the trigger; the cross is real at this size, so the shift cannot simply go</td></tr>
+    <tr><td>finest grid ~√n instead of ~2·√n (256² here)</td><td>stays</td><td>travels through the layout as a wave</td><td>the finest ring is not the source: its cells hold about one point, so their centroids are exact</td></tr>
+    <tr><td>offset drifting 1/73, 1/47 cell per tick instead of random</td><td>stays</td><td>travels as a wave</td><td>how the grid moves only changes how the jump looks</td></tr>
+    <tr><td>pyramid from 16²</td><td>much less</td><td>gone</td><td>the coarsest level carried most of it</td></tr>
+    <tr><td>pyramid from 32²</td><td>still some</td><td>gone</td><td>but every level carries some: removing levels one at a time never finishes</td></tr>
+    <tr><td>5 × 5 shell on every level but the finest</td><td>gone</td><td>gone</td><td>shrink the jump at every level at once</td></tr>
+  </tbody>
+</table>
+<p>The fourth and fifth rows were the turning point. A finer start removed one level's share at a time, and the jitter dimmed in steps. So the error was not in one level. It was in the rule all levels share: a centroid used from one cell away is too close for graph data.</p>
+</section>
+
+<section id="b-rule" class="prose">
+<h2>6 · The rule, and why it stays exact</h2>
+<p>Every level but the finest now leaves a shell of radius 2, the 5 × 5 block, to the next level. The finest level keeps radius 1. Its cells hold about one point each, so their centroids are the points themselves. A wider shell there would only make the near-field pass, the expensive one, cover 25 cells instead of 9, for nothing.</p>
+<p>A level refines the shell its parent left as a block of children. A parent shell of radius r is 2r + 1 cells wide. Its children form a block 4r + 2 cells wide: 6 for radius 1, 10 for radius 2. The level sums that block minus its own shell. For every cell to be charged to exactly one pass, the level's own shell must lie inside the block it refines. Otherwise some cells would be handed down and never picked up.</p>
+</section>
+
+<figure>
+  <div class="scroll">
+  <svg viewBox="0 0 760 330" role="img" aria-label="Left: a level with a 5 by 5 shell around the point's cell. Right: the next level, where that shell is a 10 by 10 block of children; the point's own 5 by 5 shell on this level sits inside it with at least two cells to spare on every side, and a 3 by 3 shell sits even deeper." width="760" height="330">
+    <g transform="translate(40,40)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">level L: shell radius 2</text>
+      <rect x="0" y="0" width="200" height="200" fill="var(--data-soft)"/>
+      <rect x="25" y="50" width="125" height="125" fill="var(--shell-soft)" stroke="var(--shell)" stroke-width="1.5"/>
+      <g stroke="var(--line)" stroke-width="0.8">
+        <line x1="25" y1="0" x2="25" y2="200"/><line x1="50" y1="0" x2="50" y2="200"/><line x1="75" y1="0" x2="75" y2="200"/><line x1="100" y1="0" x2="100" y2="200"/><line x1="125" y1="0" x2="125" y2="200"/><line x1="150" y1="0" x2="150" y2="200"/><line x1="175" y1="0" x2="175" y2="200"/>
+        <line x1="0" y1="25" x2="200" y2="25"/><line x1="0" y1="50" x2="200" y2="50"/><line x1="0" y1="75" x2="200" y2="75"/><line x1="0" y1="100" x2="200" y2="100"/><line x1="0" y1="125" x2="200" y2="125"/><line x1="0" y1="150" x2="200" y2="150"/><line x1="0" y1="175" x2="200" y2="175"/>
+      </g>
+      <rect x="0" y="0" width="200" height="200" fill="none" stroke="var(--line)"/>
+      <circle cx="90" cy="118" r="4" fill="var(--point)"/>
+      <text x="96" y="114" font-size="12" font-weight="600" fill="currentColor">P</text>
+      <text x="0" y="222" font-size="12" fill="var(--fg-2)">the 5 × 5 shell is left to level L+1</text>
+    </g>
+    <g transform="translate(290,140)" stroke="currentColor" fill="currentColor">
+      <line x1="0" y1="0" x2="60" y2="0" stroke-width="1.5"/>
+      <polygon points="60,0 50,-5 50,5"/>
+      <text x="30" y="-12" font-size="12" text-anchor="middle" stroke="none">× 2 cells per axis</text>
+      <text x="30" y="18" font-size="11" text-anchor="middle" stroke="none" fill="var(--fg-2)">(4r+2)² = 10 × 10 children</text>
+    </g>
+    <g transform="translate(400,40)">
+      <text x="0" y="-14" font-size="13" font-weight="600" fill="currentColor">level L+1: refines the block minus its own shell</text>
+      <rect x="0" y="0" width="250" height="250" fill="var(--data-soft)" stroke="var(--shell)" stroke-width="1.5"/>
+      <g stroke="var(--line)" stroke-width="0.6">
+        <line x1="25" y1="0" x2="25" y2="250"/><line x1="50" y1="0" x2="50" y2="250"/><line x1="75" y1="0" x2="75" y2="250"/><line x1="100" y1="0" x2="100" y2="250"/><line x1="125" y1="0" x2="125" y2="250"/><line x1="150" y1="0" x2="150" y2="250"/><line x1="175" y1="0" x2="175" y2="250"/><line x1="200" y1="0" x2="200" y2="250"/><line x1="225" y1="0" x2="225" y2="250"/>
+        <line x1="0" y1="25" x2="250" y2="25"/><line x1="0" y1="50" x2="250" y2="50"/><line x1="0" y1="75" x2="250" y2="75"/><line x1="0" y1="100" x2="250" y2="100"/><line x1="0" y1="125" x2="250" y2="125"/><line x1="0" y1="150" x2="250" y2="150"/><line x1="0" y1="175" x2="250" y2="175"/><line x1="0" y1="200" x2="250" y2="200"/><line x1="0" y1="225" x2="250" y2="225"/>
+      </g>
+      <!-- P's cell is child column 5, row 5 (0-based) of the 10×10 block: own 5×5 shell = cols 3..7 -->
+      <rect x="75" y="75" width="125" height="125" fill="var(--shell-soft)" stroke="var(--shell)" stroke-width="1.5"/>
+      <rect x="100" y="100" width="75" height="75" fill="none" stroke="var(--near)" stroke-width="1.5" stroke-dasharray="4 3"/>
+      <circle cx="137" cy="137" r="4" fill="var(--point)"/>
+      <text x="143" y="133" font-size="12" font-weight="600" fill="currentColor">P</text>
+      <text x="0" y="272" font-size="12" fill="var(--fg-2)">P's cell is 2r or 2r+1 in from the block's edge, so a shell of</text>
+      <text x="0" y="288" font-size="12" fill="var(--fg-2)">radius r′ fits whenever r′ ≤ 2r: radius 2 (solid) and radius 1 (dashed) both do</text>
+    </g>
+  </svg>
+  </div>
+  <figcaption>The rule that keeps every cell charged exactly once: a level's own shell must lie inside the block it refines. That holds whenever r(L+1) ≤ 2·r(L). The code uses 2 then 2, or 2 then 1 at the finest level. Both satisfy it.</figcaption>
+</figure>
+
+<section id="b-code" class="prose">
+<h2>7 · The code</h2>
+<p>The rule lives in one function. The shader receives a level's own radius and its parent's as two uniforms, and keeps one loop shape for every level.</p>
+</section>
+<span class="src">src/modules/ForceManyBody/index.ts</span>
+<pre><code><span class="k">const</span> getShellRadius = (level: number, levels: number): number =&gt; (level === levels - 1 ? 1 : 2)
+
+<span class="c">// drawForces(), per level</span>
+shellRadius: getShellRadius(level, this.levels),
+parentShellRadius: level === 0 ? 0 : getShellRadius(level - 1, this.levels),</code></pre>
+<span class="src">src/modules/ForceManyBody/force-level.frag — the loop, before and after</span>
+<pre><code><span class="k">int</span> shell = <span class="k">int</span>(shellRadius);
+<span class="k">if</span> (isFirstLevel &gt; 0.5) {
+  <span class="c">// Coarsest level: every cell except the shell, which finer levels refine.</span>
+  <span class="k">for</span> (<span class="k">int</span> j = 0; j &lt; gridSize; j += 1) <span class="k">for</span> (<span class="k">int</span> i = 0; i &lt; gridSize; i += 1) {
+    ivec2 cellDist = abs(ivec2(i, j) - pointCell);
+    <span class="k">if</span> (max(cellDist.x, cellDist.y) &lt;= <span class="del">1</span> shell) <span class="k">continue</span>;
+    velocity += cellVelocity(ivec2(i, j), position);
+  }
+} <span class="k">else</span> {
+  <span class="c">// The coarser level left its (2r+1)² shell; those cells refine to the aligned (4r+2)² child block.</span>
+  <span class="k">int</span> parentShell = <span class="k">int</span>(parentShellRadius);
+  <span class="k">int</span> blockSize = 2 * (2 * parentShell + 1);                 <span class="c">// 6 → 10</span>
+  ivec2 base = (pointCell / 2) * 2 - <span class="del">2</span> 2 * parentShell;       <span class="c">// -2 → -4</span>
+  <span class="k">for</span> (<span class="k">int</span> j = 0; j &lt; <span class="del">6</span> blockSize; j += 1) <span class="k">for</span> (<span class="k">int</span> i = 0; i &lt; <span class="del">6</span> blockSize; i += 1) {
+    ivec2 cell = base + ivec2(i, j);
+    <span class="k">if</span> (any(lessThan(cell, ivec2(0))) || any(greaterThanEqual(cell, ivec2(gridSize)))) <span class="k">continue</span>;
+    ivec2 cellDist = abs(cell - pointCell);
+    <span class="k">if</span> (max(cellDist.x, cellDist.y) &lt;= <span class="del">1</span> shell) <span class="k">continue</span>;
+    velocity += cellVelocity(cell, position);
+  }
+}</code></pre>
+<section class="prose">
+<p>Struck-through numbers are what the branch had. <code>(pointCell / 2) * 2</code> is integer division followed by multiplication. It finds the first child of P's parent cell. That is why the cell index must double exactly from one level to the next; <a href="#a-cell">Part I, section 3</a> covers it.</p>
+</section>
+
+<section id="b-cost" class="prose">
+<h2>8 · What it costs, and what it measured</h2>
+<h3>Texel reads per point</h3>
+<table>
+  <thead><tr><th>level</th><th>reads before</th><th>reads after</th><th>why</th></tr></thead>
+  <tbody>
+    <tr><td>coarsest 8²</td><td>64 − 9 = 55</td><td>64 − 25 = 39</td><td>whole grid minus the shell: a wider shell is fewer cells here</td></tr>
+    <tr><td>each middle level</td><td>36 − 9 = 27</td><td>100 − 25 = 75</td><td>the parent's block grew from 6 × 6 to 10 × 10</td></tr>
+    <tr><td>finest</td><td>36 − 9 = 27</td><td>100 − 9 = 91</td><td>10 × 10 block, own 3 × 3 kept for the near field</td></tr>
+    <tr><td><b>7 levels</b></td><td><b>217</b></td><td><b>505</b></td><td>about 2.3 × the far-field fetches; aggregation and near field unchanged</td></tr>
+  </tbody>
+</table>
+<h3>Step time, Repulsion Benchmark story</h3>
+<p>Chrome on Apple Silicon, milliseconds per step, display refresh bypassed.</p>
+<table>
+  <thead><tr><th>points</th><th>branch 08b58ed</th><th>with c30843e</th><th>change</th></tr></thead>
+  <tbody>
+    <tr><td>2,000</td><td>1.68</td><td>1.68</td><td>all-pairs path, unchanged</td></tr>
+    <tr><td>5,000</td><td>4.29</td><td>4.28</td><td>unchanged (the bump is the adaptive 32-slot near field, not this)</td></tr>
+    <tr><td>20,000</td><td>3.14</td><td>3.21</td><td>+2 %</td></tr>
+    <tr><td>50,000</td><td>4.33</td><td>5.87</td><td>+36 %</td></tr>
+    <tr><td>100,000</td><td>7.14</td><td>9.83</td><td>+38 %</td></tr>
+    <tr><td>200,000</td><td>13.88</td><td>18.48</td><td>+33 %</td></tr>
+  </tbody>
+</table>
+<h3>Motion at equilibrium</h3>
+<p>RMS displacement per tick, in point spacings (extent over √n). The Lasso layout with alpha held at 1, 400 warm-up and 60 measured steps, one seed. This is the metric from the author's history entry.</p>
+</section>
+
+<figure>
+  <div class="scroll">
+  <svg viewBox="0 0 760 290" role="img" aria-label="Bar chart of steady-state motion in point spacings per tick: main 0.0137, branch 0.0181, 5 by 5 shell on all levels but the finest 0.0082, and three partial variants with radius 2 on the coarsest one, two or four levels at 0.0100, 0.0101 and 0.0090." width="760" height="290">
+    <g font-size="12" fill="currentColor">
+      <!-- scale: 0.020 → 440px; bars from x=250 -->
+      <g stroke="var(--line)" stroke-width="1">
+        <line x1="250" y1="20" x2="250" y2="230"/>
+        <line x1="360" y1="20" x2="360" y2="230" stroke-dasharray="2 4"/><line x1="470" y1="20" x2="470" y2="230" stroke-dasharray="2 4"/><line x1="580" y1="20" x2="580" y2="230" stroke-dasharray="2 4"/><line x1="690" y1="20" x2="690" y2="230" stroke-dasharray="2 4"/>
+      </g>
+      <g fill="var(--fg-2)" font-size="11">
+        <text x="250" y="246" text-anchor="middle">0</text><text x="360" y="246" text-anchor="middle">0.005</text><text x="470" y="246" text-anchor="middle">0.010</text><text x="580" y="246" text-anchor="middle">0.015</text><text x="690" y="246" text-anchor="middle">0.020</text>
+        <text x="470" y="266" text-anchor="middle">RMS displacement per tick, point spacings</text>
+      </g>
+      <text x="240" y="40" text-anchor="end">main 68f1803</text>
+      <rect x="250" y="28" width="301" height="18" fill="var(--fg-2)" opacity="0.5"/><text x="557" y="42" font-size="11">0.0137</text>
+      <text x="240" y="72" text-anchor="end">branch 08b58ed, 3 × 3 shell</text>
+      <rect x="250" y="60" width="398" height="18" fill="var(--shell)"/><text x="654" y="74" font-size="11">0.0181</text>
+      <text x="240" y="104" text-anchor="end">radius 2 on 8² only</text>
+      <rect x="250" y="92" width="220" height="18" fill="var(--data)" opacity="0.45"/><text x="476" y="106" font-size="11">0.0100 · still rippled</text>
+      <text x="240" y="136" text-anchor="end">radius 2 on 8² and 16²</text>
+      <rect x="250" y="124" width="222" height="18" fill="var(--data)" opacity="0.45"/><text x="478" y="138" font-size="11">0.0101 · still rippled</text>
+      <text x="240" y="168" text-anchor="end">radius 2 on 8² to 64²</text>
+      <rect x="250" y="156" width="198" height="18" fill="var(--data)" opacity="0.45"/><text x="454" y="170" font-size="11">0.0090 · still rippled</text>
+      <text x="240" y="200" text-anchor="end" font-weight="600">c30843e: radius 2 on all but the finest</text>
+      <rect x="250" y="188" width="180" height="18" fill="var(--data)"/><text x="436" y="202" font-size="11" font-weight="600">0.0082</text>
+    </g>
+  </svg>
+  </div>
+  <figcaption>The committed rule moves less than main. The three partial variants score close to it and still rippled to the eye. The metric is blind to coherence: a jump at a fine-level boundary moves a whole line of points together, and the eye picks that out well below the RMS. Main's higher score is the near field's sampling noise, which is incoherent, and the eye forgives it.</figcaption>
+</figure>
+
+<section id="b-open" class="prose">
+<h2>9 · What remains</h2>
+<ul>
+  <li><b>Faint ripples</b> remain on clustered data with the 5 × 5 shell. Radius 2 cuts the jump at a boundary to about half, as section 3 works out. It does not remove it, and the random shift still spreads what is left. Radius 3 on the coarsest levels is the next dial, at 147 reads per level instead of 75. The structural alternative is a continuous weighting at the shell boundary, which the author's history entry lists as not tried. It would remove the jump rather than shrink it, at roughly the far-field cost the shell now has.</li>
+  <li><b>The harness error</b> with the 5 × 5 shell is not measured. By construction it can only have fallen. More cells are refined, and nothing else moved.</li>
+  <li><b>The cost</b> is a third of the step from 50,000 points up. The far-field passes are now a large share of the step, so any later saving there pays off directly.</li>
+  <li><b>The metric</b> that would have told the partial variants apart from the full rule is coherence, not RMS. The Steady-State Motion story added in <code>e40a649</code> reports both.</li>
+</ul>
+<div class="note">Commit <code>c30843e</code> on <code>feat/no-space-wall</code>; the history record is <code>history/2026/2026-10-15-many-body-grid-seams.md</code>, updated in <code>f69da0f</code>. <a href="#part-one">Part I</a> covers the bounds reduction, the cell formula and the shift this part builds on; the <a href="#afterword">afterword</a> covers what became of the shell after this commit.</div>
+</section>
+
+<section class="part-head afterword" id="afterword">
+  <div class="eyebrow">Afterword · commits e53aea7 and 1c4b884</div>
+  <h2>The shell became a setting</h2>
+  <div class="prose">
+  <p>Part II ends with the 5 × 5 shell on every level but the finest, for every graph, at a third of a step above 50,000 points. The same day the shell became a choice. <code>simulationRepulsionQuality</code> takes <code>'precise'</code> for the 5 × 5 shell, <code>'fast'</code> for the 3 × 3, and its default <code>'auto'</code> is precise up to 25,000 points and fast above. The radius was already a per-level uniform, so the shader did not change; the setting is read every tick and applies to the next step.</p>
+  <h3>Where the threshold comes from</h3>
+  <p>Below about 25,000 points a step waits on the fixed cost of its render passes, some forty to sixty per tick and most of them near-field peeling, rather than on the far field's reads, so the wider shell's extra reads fill GPU time that was idle. From 30,000 up the far field is the largest part of the step and the extra shows in full. Repulsion Benchmark story, Chrome on an Apple M3, medians of five interleaved rounds, milliseconds per step:</p>
+  </div>
+  <table>
+    <thead><tr><th></th><th>2k</th><th>5k</th><th>16k</th><th>20k</th><th>30k</th><th>40k</th><th>50k</th><th>65k</th><th>100k</th><th>200k</th></tr></thead>
+    <tbody>
+      <tr><td>3 × 3 shell</td><td>1.75</td><td>4.38</td><td>4.44</td><td>3.20</td><td>3.27</td><td>3.92</td><td>4.65</td><td>5.50</td><td>7.06</td><td>14.29</td></tr>
+      <tr><td>5 × 5 shell above the finest</td><td>1.75</td><td>4.40</td><td>4.60</td><td>3.27</td><td>4.23</td><td>5.36</td><td>6.10</td><td>7.48</td><td>9.72</td><td>18.75</td></tr>
+      <tr><td>extra</td><td>0</td><td>0</td><td>+4 %</td><td>+2 %</td><td>+29 %</td><td>+37 %</td><td>+31 %</td><td>+36 %</td><td>+38 %</td><td>+31 %</td></tr>
+    </tbody>
+  </table>
+  <div class="prose">
+  <p>2,000 points run the all-pairs path. 5,000 runs the grid with 32 near-field slots, which is why it is slower than 20,000 with 16: the step follows the pass count, not the point count, until the GPU work overtakes it. The crossover is one machine's; a slower GPU with the same CPU moves it lower.</p>
+  <h3>What the fast shell gives up, and when</h3>
+  <p>The Steady-State Motion story's four layouts under both shells, RMS displacement per tick in point spacings with alpha held at 1:</p>
+  </div>
+  <table>
+    <thead><tr><th>layout</th><th>3 × 3</th><th>5 × 5</th></tr></thead>
+    <tbody>
+      <tr><td>163 points, exact all-pairs path</td><td>0.0025</td><td>0.0024</td></tr>
+      <tr><td>10,000 points, lattice with links and collision</td><td>0.0393</td><td>0.0380</td></tr>
+      <tr><td>22,500 points in 25 clusters, repulsion 8</td><td>0.0230</td><td>0.0086</td></tr>
+      <tr><td>100,000 points, uniform blob</td><td>0.0012</td><td>0.0004</td></tr>
+    </tbody>
+  </table>
+  <div class="prose">
+  <p>Only the clustered layout changes by an amount the eye can see. The blob's threefold difference is far below a pixel, and the lattice's larger motion is the near field's and the collision's, the same under both shells. The jitter is also a hot-simulation effect: with the stock decay of 5,000 the clusters' 3 × 3 motion is 0.0260 at alpha 0.7, 0.0112 at 0.5, 0.0070 at 0.3 and 0.0024 at 0.1, so it falls below the 5 × 5 shell's held-alpha level once alpha passes about 0.3, which the default decay reaches after some 870 ticks, fifteen seconds at 60 fps. A layout that holds alpha high on clustered data sees it; a layout that settles does not. Below 25,000 points, where the wide shell is free, every graph keeps it; above, the fast shell is the default and the key opts in.</p>
+  <h3>Tried and not taken</h3>
+  <p>A rounded shell, the 5 × 5 minus its four corner cells, keeps every used centroid at least as far away as the axis-aligned cells the shell already keeps, still tiles exactly once, and cuts the far-field reads by 13 %. Measured over five interleaved rounds it saved 0.3, 0.34 and 0.59 ms at 50k, 100k and 200k points, 3 to 5 % of the step: the loop still walks the 10 × 10 block and skips the corner children by a branch. Not adopted.</p>
+  <h3>Where to see it</h3>
+  <p>The <b>Performance → Steady-State Motion</b> story runs the four layouts above with alpha held at 1 and three buttons, auto, precise and fast, that apply the setting to all four live. Each pane's header says what the setting resolves to at its point count, so <code>'auto'</code> reads "precise" on the clusters and "fast" on the blob. The engineering record is <code>history/2026/2026-10-15-many-body-grid-seams.md</code>; the design walkthrough is <code>docs/many-body-force/README.md</code>, step 3.</p>
+  </div>
+</section>
+
+</main>
+
+<script>
+(function () {
+  // Deterministic point cloud: a gaussian blob, the shape gravity produces.
+  function mulberry32(a) { return function () { a |= 0; a = a + 0x6D2B79F5 | 0; var t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+  var rndPts = mulberry32(7);
+  var pts = [];
+  for (var i = 0; i < 420; i++) {
+    var u = rndPts(), v = rndPts();
+    var r = Math.sqrt(-2 * Math.log(u + 1e-9)) * 0.14, a = 2 * Math.PI * v;
+    pts.push([0.42 + r * Math.cos(a), 0.56 + r * Math.sin(a)]);   // in space units / spaceSize
+  }
+  var rndShift = mulberry32(11);
+  var cv = document.getElementById('a-cv'), ctx = cv.getContext('2d');
+  var tickBtn = document.getElementById('a-tick'), shiftOn = document.getElementById('a-shiftOn');
+  var showFine = document.getElementById('a-showFine'), showSpace = document.getElementById('a-showSpace');
+  var animate = document.getElementById('a-animate'), texelEl = document.getElementById('a-texel');
+  var offset = [rndShift(), rndShift()];
+  var SPACE = 4096, COARSE = 8;
+
+  function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+  function draw() {
+    var W = cv.width, H = cv.height, pad = 30;
+    // view: the space square fills the canvas minus padding
+    var s = (W - 2 * pad);
+    function X(x) { return pad + x / SPACE * s; }
+    function Y(y) { return H - pad - y / SPACE * s; }
+    ctx.clearRect(0, 0, W, H);
+
+    // the reduction, on the CPU for the demo
+    var lo = [Infinity, Infinity], hi = [-Infinity, -Infinity];
+    pts.forEach(function (p) {
+      var x = p[0] * SPACE, y = p[1] * SPACE;
+      lo[0] = Math.min(lo[0], x); lo[1] = Math.min(lo[1], y); hi[0] = Math.max(hi[0], x); hi[1] = Math.max(hi[1], y);
+    });
+    var centre = [(lo[0] + hi[0]) / 2, (lo[1] + hi[1]) / 2];
+    var span = Math.max(hi[0] - lo[0], hi[1] - lo[1]);
+    var extent = Math.max(span, 512 * 0.25);
+    var fitOrigin = [centre[0] - extent / 2, centre[1] - extent / 2];
+    var origin = fitOrigin.slice(), ext = extent, cell = 0;
+    if (shiftOn.checked) {
+      cell = extent / (COARSE - 1);
+      origin = [fitOrigin[0] - offset[0] * cell, fitOrigin[1] - offset[1] * cell];
+      ext = extent + cell;
+    }
+
+    // space square
+    if (showSpace.checked) {
+      ctx.setLineDash([3, 5]); ctx.strokeStyle = css('--space'); ctx.lineWidth = 1;
+      ctx.strokeRect(X(0), Y(SPACE), s, s); ctx.setLineDash([]);
+      ctx.fillStyle = css('--space'); ctx.font = '11px ' + css('--mono');
+      ctx.fillText('[0, spaceSize]', X(0) + 4, Y(SPACE) + 13);
+    }
+    // padding band
+    if (shiftOn.checked) {
+      ctx.fillStyle = css('--shift-soft');
+      ctx.beginPath();
+      ctx.rect(X(origin[0]), Y(origin[1] + ext), ext / SPACE * s, ext / SPACE * s);
+      ctx.rect(X(fitOrigin[0]), Y(fitOrigin[1] + extent), extent / SPACE * s, extent / SPACE * s);
+      ctx.fill('evenodd');
+    }
+    // grid over the (padded) box
+    function grid(n, color, width, alpha) {
+      ctx.strokeStyle = color; ctx.lineWidth = width; ctx.globalAlpha = alpha;
+      for (var k = 0; k <= n; k++) {
+        var gx = X(origin[0] + ext * k / n), gy = Y(origin[1] + ext * k / n);
+        ctx.beginPath(); ctx.moveTo(gx, Y(origin[1])); ctx.lineTo(gx, Y(origin[1] + ext)); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(X(origin[0]), gy); ctx.lineTo(X(origin[0] + ext), gy); ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+    if (showFine.checked) grid(16, css('--data'), 0.6, 0.45);
+    grid(8, css('--data'), 1, 0.9);
+    // fitted square
+    ctx.strokeStyle = css('--data'); ctx.lineWidth = 1.5; ctx.setLineDash([5, 3]);
+    ctx.strokeRect(X(fitOrigin[0]), Y(fitOrigin[1] + extent), extent / SPACE * s, extent / SPACE * s);
+    ctx.setLineDash([]);
+    // points
+    ctx.fillStyle = css('--point');
+    pts.forEach(function (p) { ctx.beginPath(); ctx.arc(X(p[0] * SPACE), Y(p[1] * SPACE), 1.6, 0, 6.283); ctx.fill(); });
+    // origin marker
+    ctx.fillStyle = css('--shift');
+    ctx.beginPath(); ctx.arc(X(origin[0]), Y(origin[1]), 4, 0, 6.283); ctx.fill();
+    ctx.font = '11px ' + css('--mono'); ctx.fillText('origin', X(origin[0]) + 7, Y(origin[1]) + 4);
+
+    texelEl.innerHTML =
+      'fitted square   lo = (' + lo[0].toFixed(0) + ', ' + lo[1].toFixed(0) + ')  hi = (' + hi[0].toFixed(0) + ', ' + hi[1].toFixed(0) + ')\n' +
+      '                extent = ' + extent.toFixed(1) + '  (larger span)\n' +
+      (shiftOn.checked
+        ? 'coarsest cell   extent / 7 = <i>' + cell.toFixed(1) + '</i>\n' +
+          'offset          <i>[' + offset[0].toFixed(3) + ', ' + offset[1].toFixed(3) + ']</i>  (getRandomFloat ×2)\n'
+        : 'no shift        grid origin = fitted origin\n\n') +
+      '\nbounds texel    [<b>' + origin[0].toFixed(1) + '</b>, <b>' + origin[1].toFixed(1) + '</b>, <b>' + ext.toFixed(1) + '</b>, <b>' + (1 / ext).toExponential(3) + '</b>]\n' +
+      '                 originX   originY   extent    1/extent';
+  }
+
+  function tick() { offset = [rndShift(), rndShift()]; draw(); }
+  tickBtn.addEventListener('click', tick);
+  [shiftOn, showFine, showSpace].forEach(function (el) { el.addEventListener('change', draw); });
+  var timer = null;
+  animate.addEventListener('change', function () {
+    if (animate.checked) { timer = setInterval(tick, 350); } else { clearInterval(timer); timer = null; }
+  });
+  if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').addEventListener) {
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', draw);
+  }
+  draw();
+})();
+</script>
+
+<script>
+(() => {
+  // ── Shared: a seeded clustered layout like the Lasso story's ──
+  const mulberry32 = (seed) => { let a = seed >>> 0; return () => { a = (a + 0x6D2B79F5) >>> 0; let t = a; t = Math.imul(t ^ (t >>> 15), t | 1); t ^= t + Math.imul(t ^ (t >>> 7), t | 61); return ((t ^ (t >>> 14)) >>> 0) / 4294967296 } }
+  const gauss = (rng) => { let u = 0, v = 0; while (u === 0) u = rng(); while (v === 0) v = rng(); return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v) }
+  const N = 22500, CLUSTERS = 25
+  const rng = mulberry32(7)
+  const centres = []
+  for (let k = 0; k < CLUSTERS; k += 1) {
+    // Clusters on a loose spiral, the way generate-mesh-data places them
+    const a = 15 * Math.PI * (k / CLUSTERS), r = 60 + 740 * (k / CLUSTERS)
+    centres.push([Math.cos(a) * r, Math.sin(a) * r])
+  }
+  const pts = new Float32Array(N * 2)
+  for (let i = 0; i < N; i += 1) {
+    const c = centres[i % CLUSTERS]
+    pts[i * 2] = c[0] + gauss(rng) * 70
+    pts[i * 2 + 1] = c[1] + gauss(rng) * 70
+  }
+  // Bounding square, fitted, then padded by one coarsest cell as the engine does (offset 0.4 here)
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (let i = 0; i < N; i += 1) { const x = pts[i * 2], y = pts[i * 2 + 1]; if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y }
+  const span = Math.max(maxX - minX, maxY - minY)
+  const cell8 = span / 7
+  // The engine's box: the fitted square padded by one coarsest cell, origin slid back by a fraction of that cell
+  let shift = [0.4, 0.4]
+  let box = { x: 0, y: 0, extent: span + cell8 }
+  const setShift = (sx, sy) => {
+    shift = [sx, sy]
+    box = { x: (minX + maxX) / 2 - span / 2 - sx * cell8, y: (minY + maxY) / 2 - span / 2 - sy * cell8, extent: span + cell8 }
+  }
+  setShift(0.4, 0.4)
+
+  const cellOf = (x, y, G) => [
+    Math.min(G - 1, Math.max(0, Math.floor((x - box.x) / box.extent * G))),
+    Math.min(G - 1, Math.max(0, Math.floor((y - box.y) / box.extent * G))),
+  ]
+  const countTexture = (G) => {
+    const counts = new Uint32Array(G * G)
+    for (let i = 0; i < N; i += 1) { const [cx, cy] = cellOf(pts[i * 2], pts[i * 2 + 1], G); counts[cy * G + cx] += 1 }
+    return counts
+  }
+  const LEVELS = [8, 16, 32, 64, 128, 256]  // 2·√22500 = 300 → 512 in the engine; stop at 256 to keep texels visible
+  let textures = new Map(LEVELS.map((G) => [G, countTexture(G)]))
+  const rebuildTextures = () => { textures = new Map(LEVELS.map((G) => [G, countTexture(G)])) }
+
+  // Role of a cell on level G for point P with this level's radius r (parent radius rp): 'sum' | 'shell' | 'out'
+  const roleOf = (i, j, pc, G, r, rp, isFirst) => {
+    const cheb = Math.max(Math.abs(i - pc[0]), Math.abs(j - pc[1]))
+    if (!isFirst) {
+      const block = 2 * (2 * rp + 1)
+      const bx = Math.floor(pc[0] / 2) * 2 - 2 * rp, by = Math.floor(pc[1] / 2) * 2 - 2 * rp
+      if (i < bx || i >= bx + block || j < by || j >= by + block) return 'out'
+    }
+    return cheb <= r ? 'shell' : 'sum'
+  }
+  const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+
+  const drawLevel = (canvas, G, P, radius, log, labelSummed, inset, insetFull) => {
+    const ctx = canvas.getContext('2d')
+    const size = canvas.width
+    const counts = textures.get(G)
+    const isFirst = G === LEVELS[0]
+    const isFinest = G === LEVELS[LEVELS.length - 1]
+    const r = isFinest ? 1 : radius
+    const rp = radius
+    const pc = cellOf(P[0], P[1], G)
+    let maxCount = 1
+    for (let k = 0; k < counts.length; k += 1) if (counts[k] > maxCount) maxCount = counts[k]
+    const cellPx = size / G
+    const fg = css('--fg'), bg = css('--bg')
+    const data = css('--data'), shell = css('--shell'), near = css('--near')
+    ctx.fillStyle = bg
+    ctx.fillRect(0, 0, size, size)
+    let summed = 0, shellCells = 0, shellPoints = 0
+    for (let j = 0; j < G; j += 1) for (let i = 0; i < G; i += 1) {
+      const n = counts[j * G + i]
+      const t = n === 0 ? 0 : (log ? Math.log1p(n) / Math.log1p(maxCount) : n / maxCount)
+      const role = roleOf(i, j, pc, G, r, rp, isFirst)
+      // Heat as the foreground colour at an alpha from the count; role as a tint underneath
+      const x = i * cellPx, y = size - (j + 1) * cellPx
+      if (role === 'sum') summed += 1
+      else if (role === 'shell') { shellCells += 1; shellPoints += n }
+      if (insetFull) continue  // the magnified view below is the whole drawing
+      if (role === 'sum') { ctx.fillStyle = data; ctx.globalAlpha = 0.18; ctx.fillRect(x, y, cellPx, cellPx) }
+      else if (role === 'shell') { ctx.fillStyle = isFinest ? near : shell; ctx.globalAlpha = 0.22; ctx.fillRect(x, y, cellPx, cellPx) }
+      ctx.globalAlpha = 0.12 + 0.88 * t
+      if (n > 0) { ctx.fillStyle = fg; ctx.fillRect(x + 0.5, y + 0.5, Math.max(cellPx - 1, 1), Math.max(cellPx - 1, 1)) }
+    }
+    ctx.globalAlpha = 1
+    if (G <= 64 && !insetFull) {
+      ctx.strokeStyle = css('--line'); ctx.lineWidth = 0.5
+      for (let k = 0; k <= G; k += 1) { ctx.beginPath(); ctx.moveTo(k * cellPx, 0); ctx.lineTo(k * cellPx, size); ctx.stroke(); ctx.beginPath(); ctx.moveTo(0, k * cellPx); ctx.lineTo(size, k * cellPx); ctx.stroke() }
+    }
+    // Outlines, so the shell, the refined block and the near field stay visible when a texel is under a pixel
+    const rectOf = (x0, y0, x1, y1) => [x0 * cellPx, size - (y1 + 1) * cellPx, (x1 - x0 + 1) * cellPx, (y1 - y0 + 1) * cellPx]
+    if (!insetFull) {
+      ctx.lineWidth = 2
+      if (!isFirst) {
+        const block = 2 * (2 * rp + 1)
+        const bx = Math.floor(pc[0] / 2) * 2 - 2 * rp, by = Math.floor(pc[1] / 2) * 2 - 2 * rp
+        ctx.strokeStyle = data; ctx.strokeRect(...rectOf(bx, by, bx + block - 1, by + block - 1))
+      }
+      ctx.strokeStyle = isFinest ? near : shell
+      ctx.strokeRect(...rectOf(pc[0] - r, pc[1] - r, pc[0] + r, pc[1] + r))
+    }
+    // P
+    const px = (P[0] - box.x) / box.extent * size, py = size - (P[1] - box.y) / box.extent * size
+    if (inset && isFinest) {
+      // Magnifier on the finest level only, where a texel is under two pixels: the cells around P, enlarged, same tints and outlines
+      const span = isFirst ? 2 * r + 5 : 2 * (2 * rp + 1) + 4
+      const half = Math.floor(span / 2)
+      const cx0 = (isFirst ? pc[0] : Math.floor(pc[0] / 2) * 2 - 2 * rp + (2 * rp + 1)) - half
+      const cy0 = (isFirst ? pc[1] : Math.floor(pc[1] / 2) * 2 - 2 * rp + (2 * rp + 1)) - half
+      const M = insetFull ? 0 : 10, W = insetFull ? size : 168, ox = insetFull ? 0 : size - W - M, oy = M, cp = W / span
+      ctx.fillStyle = bg; ctx.fillRect(ox - 1, oy - 1, W + 2, W + 2)
+      for (let j = 0; j < span; j += 1) for (let i = 0; i < span; i += 1) {
+        const ci = cx0 + i, cj = cy0 + j
+        const x = ox + i * cp, y = oy + W - (j + 1) * cp
+        if (ci < 0 || cj < 0 || ci >= G || cj >= G) continue
+        const n = counts[cj * G + ci]
+        const t = n === 0 ? 0 : (log ? Math.log1p(n) / Math.log1p(maxCount) : n / maxCount)
+        const role = roleOf(ci, cj, pc, G, r, rp, isFirst)
+        if (role === 'sum') { ctx.fillStyle = data; ctx.globalAlpha = 0.18; ctx.fillRect(x, y, cp, cp) }
+        else if (role === 'shell') { ctx.fillStyle = isFinest ? near : shell; ctx.globalAlpha = 0.22; ctx.fillRect(x, y, cp, cp) }
+        if (n > 0) { ctx.globalAlpha = 0.12 + 0.88 * t; ctx.fillStyle = fg; ctx.fillRect(x + 1, y + 1, cp - 2, cp - 2) }
+        ctx.globalAlpha = 1
+        ctx.strokeStyle = css('--line'); ctx.lineWidth = 0.5; ctx.strokeRect(x, y, cp, cp)
+      }
+      const irect = (x0, y0, x1, y1) => [ox + (x0 - cx0) * cp, oy + W - (y1 - cy0 + 1) * cp, (x1 - x0 + 1) * cp, (y1 - y0 + 1) * cp]
+      ctx.lineWidth = 2
+      if (!isFirst) { const block = 2 * (2 * rp + 1); const bx = Math.floor(pc[0] / 2) * 2 - 2 * rp, by = Math.floor(pc[1] / 2) * 2 - 2 * rp; ctx.strokeStyle = data; ctx.strokeRect(...irect(bx, by, bx + block - 1, by + block - 1)) }
+      ctx.strokeStyle = isFinest ? near : shell; ctx.strokeRect(...irect(pc[0] - r, pc[1] - r, pc[0] + r, pc[1] + r))
+      const ipx = ox + ((P[0] - box.x) / box.extent * G - cx0) * cp, ipy = oy + W - ((P[1] - box.y) / box.extent * G - cy0) * cp
+      ctx.fillStyle = shell; ctx.beginPath(); ctx.arc(ipx, ipy, 4, 0, Math.PI * 2); ctx.fill(); ctx.strokeStyle = bg; ctx.lineWidth = 1.5; ctx.stroke()
+      ctx.strokeStyle = css('--fg-2'); ctx.lineWidth = 1; ctx.strokeRect(ox - 1, oy - 1, W + 2, W + 2)
+      ctx.fillStyle = css('--fg-2'); ctx.font = '11px ' + css('--mono')
+      if (!insetFull) ctx.fillText(`around P, ${span} × ${span} cells of ${G}²`, ox, oy + W + 14)
+    }
+    // Q: the point followed across levels. Its cell is outlined in the colour of its role for P on this level.
+    const qc = cellOf(Q[0], Q[1], G)
+    const qRole = roleOf(qc[0], qc[1], pc, G, r, rp, isFirst)
+    if (!insetFull) {
+      ctx.lineWidth = 3
+      ctx.strokeStyle = qRole === 'sum' ? data : qRole === 'shell' ? (isFinest ? near : shell) : css('--fg-2')
+      ctx.strokeRect(...rectOf(qc[0], qc[1], qc[0], qc[1]))
+      const qx = (Q[0] - box.x) / box.extent * size, qy = size - (Q[1] - box.y) / box.extent * size
+      ctx.fillStyle = fg; ctx.fillRect(qx - 4, qy - 4, 8, 8)
+      ctx.strokeStyle = bg; ctx.lineWidth = 1.5; ctx.strokeRect(qx - 4, qy - 4, 8, 8)
+      ctx.fillStyle = shell; ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2); ctx.fill()
+      ctx.strokeStyle = bg; ctx.lineWidth = 1.5; ctx.stroke()
+    }
+    if (labelSummed) {
+      ctx.fillStyle = fg; ctx.font = '12px ' + css('--mono')
+      ctx.fillText(`${G}² · ${summed} cells summed · shell ${isFinest ? 'near field' : shellCells + ' cells'}`, 8, 16)
+    }
+    return { summed, shellCells, shellPoints, pc, r, maxCount, qRole, qCount: counts[qc[1] * G + qc[0]] }
+  }
+
+  // ── Demo 1: one level, interactive ──
+  const texCanvas = document.getElementById('b-tex-canvas')
+  const levelsBox = document.getElementById('b-tex-levels')
+  const radiusBox = document.getElementById('b-tex-radius')
+  const logBox = document.getElementById('b-tex-log')
+  const readout = document.getElementById('b-tex-readout')
+  let level = 16, radius = 2
+  // P: inside a cluster near the middle. Q: a point one and a bit coarse cells away, followed across levels.
+  let P = [centres[12][0] + 20, centres[12][1] - 15]
+  const qOffset = [1.35 * cell8, 0.3 * cell8]
+  let Q = [P[0] + qOffset[0], P[1] + qOffset[1]]
+  for (const G of LEVELS) {
+    const b = document.createElement('button'); b.type = 'button'; b.textContent = `${G}²`; b.dataset.g = G
+    b.setAttribute('aria-pressed', String(G === level)); levelsBox.appendChild(b)
+  }
+  const renderOne = () => {
+    const info = drawLevel(texCanvas, level, P, radius, logBox.checked, false, true)
+    const isFinest = level === LEVELS[LEVELS.length - 1]
+    const cellUnits = box.extent / level
+    readout.innerHTML =
+      `level <b>${level}²</b> · cell <b>${cellUnits.toFixed(1)}</b> units · P in cell (${info.pc[0]}, ${info.pc[1]})\n` +
+      `summed as centroids here: <b>${info.summed}</b> cells\n` +
+      (isFinest
+        ? `near field: <i>9</i> cells, <i>${info.shellPoints}</i> real points`
+        : `shell left to ${level * 2}²: <i>${info.shellCells}</i> cells holding <i>${info.shellPoints}</i> points\n` +
+          `nearest centroid used from <b>${info.r + 1}</b> cells away`) +
+      `\nfullest cell on this level: ${info.maxCount} points`
+  }
+  levelsBox.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return
+    level = Number(b.dataset.g)
+    for (const o of levelsBox.children) o.setAttribute('aria-pressed', String(o === b))
+    renderOne()
+  })
+  radiusBox.addEventListener('click', (e) => {
+    const b = e.target.closest('button'); if (!b) return
+    radius = Number(b.dataset.r)
+    for (const o of radiusBox.children) o.setAttribute('aria-pressed', String(o === b))
+    renderOne(); renderAll()
+  })
+  logBox.addEventListener('change', () => { renderOne(); renderAll() })
+  texCanvas.addEventListener('click', (e) => {
+    const rect = texCanvas.getBoundingClientRect()
+    const u = (e.clientX - rect.left) / rect.width, v = 1 - (e.clientY - rect.top) / rect.height
+    P = [box.x + u * box.extent, box.y + v * box.extent]
+    Q = [P[0] + qOffset[0], P[1] + qOffset[1]]
+    renderOne(); renderAll()
+  })
+
+  // ── Demo 1b: all levels ──
+  const allBox = document.getElementById('b-tex-all')
+  const allCanvases = LEVELS.map((G) => {
+    const fig = document.createElement('figure')
+    const c = document.createElement('canvas'); c.width = 240; c.height = 240
+    c.setAttribute('aria-label', `Level ${G} squared count texture with the cells summed on this level and the shell marked`)
+    const cap = document.createElement('figcaption')
+    fig.append(c, cap); allBox.appendChild(fig)
+    return { G, c, cap }
+  })
+  const renderAll = () => {
+    for (const { G, c, cap } of allCanvases) {
+      const isFinest = G === LEVELS[LEVELS.length - 1]
+      // The finest level's cells are under a pixel here, so its tile shows the magnified neighbourhood of P instead
+      const info = drawLevel(c, G, P, radius, logBox.checked, false, isFinest, isFinest)
+      cap.textContent = isFinest
+        ? `${G}², zoomed in around P. Teal: the 10 × 10 block left by ${G / 2}², ${info.summed} cells summed here. Purple: the 3 × 3 near field, ${info.shellPoints} real points.`
+        : `${G}²: ${info.summed} cells summed, ${info.shellCells} left to ${G * 2}²`
+      qInfos.push({ G, isFinest, ...info })
+    }
+    renderQ()
+  }
+  let qInfos = []
+  const qReadout = document.getElementById('b-q-readout')
+  const renderQ = () => {
+    const lines = qInfos.map(({ G, isFinest, qRole, qCount }) => {
+      const where = qRole === 'shell'
+        ? (isFinest ? `<i>in the near field: counted here as a real point</i>` : `<i>in P's shell: not yet</i>`)
+        : qRole === 'sum' ? `<b>counted here, as part of a lump of ${qCount} point${qCount === 1 ? '' : 's'}</b>`
+        : `outside the block: already counted on a coarser level`
+      return `${String(G + '²').padEnd(5)} ${where}`
+    })
+    const counted = qInfos.find((i) => i.qRole === 'sum') ?? qInfos.find((i) => i.isFinest && i.qRole === 'shell')
+    qReadout.innerHTML = `grid shift this tick: (${shift[0].toFixed(2)}, ${shift[1].toFixed(2)}) of a coarsest cell\n` + lines.join('\n') +
+      `\n\nQ is counted for P exactly once: on level <b>${counted ? counted.G + '²' : '?'}</b>` +
+      (counted && counted.qRole === 'sum' ? `, as a lump of ${counted.qCount}` : ', as a real point')
+    qInfos = []
+  }
+  const shiftButton = document.getElementById('b-tex-shift')
+  const noShiftButton = document.getElementById('b-tex-noshift')
+  if (shiftButton) shiftButton.addEventListener('click', () => { setShift(Math.random(), Math.random()); rebuildTextures(); renderOne(); renderAll() })
+  if (noShiftButton) noShiftButton.addEventListener('click', () => { setShift(0, 0); rebuildTextures(); renderOne(); renderAll() })
+
+  // ── Demo 2: the jump, computed ──
+  const jc = document.getElementById('b-jump-canvas')
+  const jx = document.getElementById('b-jump-x')
+  const jAnim = document.getElementById('b-jump-animate')
+  const jTight = document.getElementById('b-jump-tight')
+  const jRead = document.getElementById('b-jump-readout')
+  const CELLS = 12, PER = 60
+  const jrng = mulberry32(3)
+  const cellSeeds = Array.from({ length: CELLS }, () => ({ ox: jrng() - 0.5, oy: jrng() - 0.5, pts: Array.from({ length: PER }, () => [gauss(jrng), gauss(jrng)]) }))
+  const buildCells = (tight) => cellSeeds.map((s, k) => {
+    const sd = 0.5 / tight
+    const cx = k + 0.5 + s.ox * (1 - 3 * sd), cy = 0.5 + s.oy * (1 - 3 * sd)
+    const p = s.pts.map(([gx, gy]) => [Math.min(k + 0.98, Math.max(k + 0.02, cx + gx * sd)), Math.min(0.98, Math.max(0.02, cy + gy * sd))])
+    const mx = p.reduce((a, q) => a + q[0], 0) / PER, my = p.reduce((a, q) => a + q[1], 0) / PER
+    return { k, p, centroid: [mx, my] }
+  })
+  // d3-style clamped 1/d kernel from the shader: v = m / sqrt(l), l clamped below by distanceMin² (1 cell unit here = 1)
+  const kernel = (dx, dy, m) => { let l = dx * dx + dy * dy; if (l <= 0) return [0, 0]; const dmin2 = 0.0025; if (l < dmin2) l = Math.sqrt(dmin2 * l); const v = m / Math.sqrt(l); const n = Math.hypot(dx, dy); return [v * dx / n, v * dy / n] }
+  const forceOn = (px, py, cells, radius) => {
+    const pcell = Math.floor(px)
+    let ex = 0, ax = 0  // x components: exact, and approximated with this shell radius
+    for (const c of cells) {
+      let sx = 0
+      for (const [qx, qy] of c.p) { const [fx] = kernel(px - qx, py - qy, 1); sx += fx }
+      ex += sx
+      if (radius === Infinity || Math.abs(c.k - pcell) <= radius) ax += sx
+      else { const [fx] = kernel(px - c.centroid[0], py - c.centroid[1], PER); ax += fx }
+    }
+    return { exact: ex, approx: ax }
+  }
+  let samples = null, cells = null, lastTight = -1
+  const resample = () => {
+    const tight = Number(jTight.value)
+    if (tight === lastTight) return
+    lastTight = tight
+    cells = buildCells(tight)
+    samples = []
+    const py = 0.5
+    for (let s = 0; s <= 400; s += 1) {
+      const px = 2 + (CELLS - 4) * (s / 400)
+      const r1 = forceOn(px, py, cells, 1), r2 = forceOn(px, py, cells, 2)
+      samples.push({ px, exact: r1.exact, r1: r1.approx, r2: r2.approx })
+    }
+  }
+  const drawJump = () => {
+    resample()
+    const ctx = jc.getContext('2d'), W = jc.width, H = jc.height
+    const fg = css('--fg'), bg = css('--bg'), line = css('--line'), data = css('--data'), shell = css('--shell'), fg2 = css('--fg-2')
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, H)
+    const padL = 44, padR = 12, padT = 14, padB = 70
+    const plotW = W - padL - padR, plotH = H - padT - padB
+    // Error curves: approx − exact, so the jumps are visible at scale
+    const errs1 = samples.map((s) => s.r1 - s.exact), errs2 = samples.map((s) => s.r2 - s.exact)
+    const maxAbs = Math.max(0.02, ...errs1.map(Math.abs), ...errs2.map(Math.abs))
+    const x0 = samples[0].px, x1 = samples[samples.length - 1].px
+    const X = (px) => padL + (px - x0) / (x1 - x0) * plotW
+    const Y = (e) => padT + plotH / 2 - e / maxAbs * (plotH / 2)
+    // boundaries
+    ctx.strokeStyle = line; ctx.lineWidth = 1
+    for (let k = Math.ceil(x0); k <= Math.floor(x1); k += 1) { ctx.beginPath(); ctx.moveTo(X(k), padT); ctx.lineTo(X(k), padT + plotH); ctx.stroke() }
+    ctx.beginPath(); ctx.moveTo(padL, Y(0)); ctx.lineTo(padL + plotW, Y(0)); ctx.stroke()
+    const curve = (errs, color, width) => { ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath(); samples.forEach((s, i) => { const x = X(s.px), y = Y(errs[i]); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y) }); ctx.stroke() }
+    curve(errs1, shell, 2)
+    curve(errs2, data, 2)
+    // P marker
+    const t = Number(jx.value) / 1000
+    const idx = Math.round(t * (samples.length - 1))
+    const s = samples[idx]
+    ctx.strokeStyle = fg2; ctx.setLineDash([3, 3]); ctx.beginPath(); ctx.moveTo(X(s.px), padT); ctx.lineTo(X(s.px), padT + plotH); ctx.stroke(); ctx.setLineDash([])
+    ctx.fillStyle = shell; ctx.beginPath(); ctx.arc(X(s.px), Y(errs1[idx]), 4, 0, Math.PI * 2); ctx.fill()
+    ctx.fillStyle = data; ctx.beginPath(); ctx.arc(X(s.px), Y(errs2[idx]), 4, 0, Math.PI * 2); ctx.fill()
+    // the row of cells with their points, below the plot
+    const rowY = padT + plotH + 16, rowH = 30
+    for (const c of cells) {
+      if (c.k < Math.floor(x0) || c.k > Math.ceil(x1)) continue
+      const pcell = Math.floor(s.px)
+      const d = Math.abs(c.k - pcell)
+      ctx.fillStyle = d <= 1 ? shell : d <= 2 ? data : fg2
+      ctx.globalAlpha = d <= 1 ? 0.25 : d <= 2 ? 0.2 : 0.08
+      ctx.fillRect(X(c.k), rowY, X(c.k + 1) - X(c.k), rowH)
+      ctx.globalAlpha = 0.8; ctx.fillStyle = fg
+      for (const [qx, qy] of c.p) ctx.fillRect(X(qx) - 0.6, rowY + qy * rowH - 0.6, 1.2, 1.2)
+      ctx.globalAlpha = 1
+    }
+    ctx.fillStyle = shell; ctx.beginPath(); ctx.arc(X(s.px), rowY + rowH / 2, 4, 0, Math.PI * 2); ctx.fill()
+    // labels
+    ctx.fillStyle = fg2; ctx.font = '11px ' + css('--mono')
+    ctx.fillText('error of the far-field sum vs exact (x component)', padL, padT - 3)
+    ctx.fillText(`+${maxAbs.toFixed(3)}`, 4, padT + 10); ctx.fillText('0', 4, Y(0) + 4); ctx.fillText(`−${maxAbs.toFixed(3)}`, 4, padT + plotH)
+    ctx.fillText('cells along the row; tinted: exact within the shell (orange r = 1, teal adds r = 2); grey: centroid', padL, rowY + rowH + 14)
+    // jump sizes: largest step between adjacent samples
+    const maxStep = (errs) => { let m = 0; for (let i = 1; i < errs.length; i += 1) m = Math.max(m, Math.abs(errs[i] - errs[i - 1])); return m }
+    const j1 = maxStep(errs1), j2 = maxStep(errs2)
+    jRead.innerHTML = `P at x = ${s.px.toFixed(2)} cells\n` +
+      `error, radius 1: <i>${errs1[idx].toFixed(4)}</i>   radius 2: <b>${errs2[idx].toFixed(4)}</b>\n` +
+      `largest one-sample jump along the row\n  radius 1: <i>${j1.toFixed(4)}</i>   radius 2: <b>${j2.toFixed(4)}</b>   ratio ${(j1 / Math.max(j2, 1e-9)).toFixed(1)}×\n` +
+      `(force units: one point at one cell's distance = 1)`
+  }
+  jx.addEventListener('input', drawJump)
+  jTight.addEventListener('input', drawJump)
+  const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  if (reduced) jAnim.checked = false
+  let dir = 1
+  const tickAnim = () => {
+    if (jAnim.checked && document.visibilityState === 'visible') {
+      let v = Number(jx.value) + 3 * dir
+      if (v >= 1000) { v = 1000; dir = -1 } else if (v <= 0) { v = 0; dir = 1 }
+      jx.value = String(v); drawJump()
+    }
+    setTimeout(tickAnim, 40)
+  }
+
+  // ── Lump error vs distance, measured on the toy's cells ──
+  const lumpTable = document.querySelector('#b-lump-table tbody')
+  if (lumpTable) {
+    const c0 = buildCells(6)[3]  // one cell of the row; its points live in [3, 4] × [0, 1]
+    const rows = [2, 3, 4].map((d) => {
+      const px = c0.centroid[0] + d, py = c0.centroid[1]
+      let ex = 0, ey = 0
+      for (const [qx, qy] of c0.p) { const [fx, fy] = kernel(px - qx, py - qy, 1); ex += fx; ey += fy }
+      const [cx, cy] = kernel(px - c0.centroid[0], py - c0.centroid[1], c0.p.length)
+      const pull = Math.hypot(cx, cy), err = Math.hypot(ex - cx, ey - cy)
+      return { d, pull, err }
+    })
+    const e2 = rows[0].err
+    lumpTable.innerHTML = rows.map((r) =>
+      `<tr><td>d = ${r.d}c</td><td>${r.pull.toFixed(2)}</td><td>${r.err.toFixed(4)}</td><td>${(100 * r.err / r.pull).toFixed(2)} %</td><td>× ${(r.err / e2).toFixed(2)}${r.d === 3 ? ' (1/d³ predicts 0.30)' : r.d === 4 ? ' (predicts 0.125)' : ''}</td></tr>`
+    ).join('')
+  }
+
+  // ── Boot, and redraw on theme change ──
+  const renderEverything = () => { renderOne(); renderAll(); drawJump() }
+  renderEverything()
+  tickAnim()
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', renderEverything)
+  new MutationObserver(renderEverything).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] })
+})()
+</script>
+</body>
+</html>
