@@ -266,9 +266,10 @@ if (sampled &gt; 0.0) velocity += (others / sampled) * pairSum;</code></pre>
   where it is annealing something, never at equilibrium of a small or medium graph.</p></blockquote>
 
   <h3>The trajectory, measured</h3>
-  <p>The <strong>Performance → Repulsion Jitter: Fixed vs Before</strong> Storybook story runs
+  <p>The <strong>Performance → Repulsion Jitter: Fixed vs Before</strong> Storybook story (since
+  replaced by <strong>Steady-State Motion</strong>) ran
   the country graph twice with identical data and seed — once on today's exact path, once with
-  the pre-fix sampled configuration (K = 8) forced back on — and traces one point from the
+  the pre-fix sampled configuration (K = 8) forced back on — and traced one point from the
   densest finest cell. These are its trajectory panels, captured live, same point in both
   configurations:</p>
 
@@ -442,8 +443,8 @@ for (int s = 0; s &lt; slots; s += 1) {
   200k 13.79 ms/step. The 5k reading sitting above 20k is the adaptive K at work: 5k is just
   over the all-pairs threshold, so it pays 32 sequential peel passes; 20k runs K = 16.</p>
   <p>Nothing changed at the API surface: no new config, and <code>simulationRepulsion</code>
-  behaves as before. See it live in <strong>Performance → Repulsion Jitter: Fixed vs
-  Before</strong>, and the full algorithm in the <a href="./README.md">deep dive</a>.</p>
+  behaves as before. See the exact path at rest in <strong>Performance → Steady-State
+  Motion</strong>, and the full algorithm in the <a href="./README.md">deep dive</a>.</p>
 </section>
 </div>
 </body>
