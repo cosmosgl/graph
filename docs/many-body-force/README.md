@@ -14,7 +14,11 @@ describes the grid + Monte-Carlo machinery that larger graphs use.
 
 The problem-and-fix story behind that follow-up — the measurements, the captured trajectories,
 and its own figures — is also a standalone page: [`jitter-fix.html`](./jitter-fix.html)
-(self-contained; open it locally in a browser — GitHub shows only its source).
+(self-contained; open it locally in a browser — GitHub shows only its source). A second page,
+[`grid-and-shell.html`](./grid-and-shell.html), takes apart how the grid came to follow the data
+(the bounds reduction, the shared cell formula, the per-tick shift) and why the far field keeps
+its centroids two cells away, with interactive figures that compute the shaders' rules in the
+page, and an afterword on the size-tiered `simulationRepulsionQuality` setting.
 
 The grid has since stopped being nailed to the simulation space, too. Its *resolution* has
 followed the point count since #240, but until the grid was made to follow the data — part
