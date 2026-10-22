@@ -3,7 +3,7 @@
 # Unbounded space: `spaceSize` places the world instead of walling it in
 
 **Date:** 2026-10-14
-**Commits:** `feat(stories): add Space Size Wall — measure where spaceSize stops the layout` (`c2f9f43`), `refactor(store): name the world origin the view has always been centred on` (`02883ea`), `fix(zoom): lower the zoom-out floor that silently cut large fits short` (`e572df5`), `feat(force): the many-body grid follows the data, not the space` (`94a354a`), `fix(force): anchor the collision hash to the data — it was inert outside the space` (`4f04e3e`), `feat(points): remove the position clamp — spaceSize no longer confines a layout` (`fd67d37`), `docs: the force and embedding docs describe an unbounded space` (`8e413fc`)
+**Commits:** `feat(stories): add Space Size Wall — measure where spaceSize stops the layout` (`c2f9f43`), `refactor(store): name the world origin the view has always been centred on` (`02883ea`), `fix(zoom): lower the zoom-out floor that silently cut large fits short` (`e572df5`), `feat(force): the many-body grid follows the data, not the space` (`94a354a`), `fix(force): anchor the collision hash to the data — it was inert outside the space` (`4f04e3e`), `feat(points): remove the position clamp — spaceSize no longer confines a layout` (`fd67d37`), `docs: the force and embedding docs describe an unbounded space` (`8e413fc`), `refactor(space): name what spaceSize still sets, and deprecate the key` (`3a0dae6`)
 
 ## Why
 
@@ -27,6 +27,11 @@ so every existing graph whose `spaceSize` is below the device's texture size lim
 exactly as before. (One at or above it ran at half that limit and now runs as configured;
 see [what an app may now observe](#not-breaking--what-an-app-may-now-observe).) It no
 longer bounds any position. The change is **non-breaking**.
+
+A week later the key was marked `@deprecated` (`3a0dae6`): once nothing is sized by it,
+what is left is a world origin and a few tuned lengths that happened to be written as
+multiples of it, and the next major can retire the key and put the origin at (0, 0). See
+[the key, deprecated](#the-key-deprecated).
 
 ## The wall, measured
 
@@ -184,7 +189,8 @@ position a point lands on:
 - `config.ts` and `variables.ts` now describe what `spaceSize` actually does. It places the
   world origin, which is the screen centre at the initial view and gravity's attractor. It
   is the square `rescalePositions` measures against. It sets the per-sub-step displacement
-  ceiling and the many-body kick bound. It bounds no position.
+  ceiling and the many-body kick bound. It bounds no position. (Since `3a0dae6` the JSDoc
+  is an `@deprecated` paragraph saying the same in fewer words.)
 - The Space Size Wall story now counts points *beyond* the space instead of on its border,
   and gains a "fit layout" button next to "fit space", because those two views are no
   longer the same.
@@ -203,6 +209,62 @@ pinch and double-click gestures, `setZoomLevel` and `initialZoomLevel` can now g
 1e-6, where they used to stop at 0.001. Keeping gestures at 0.001 while fits go lower would
 snap a deep fit back to 0.001 on the next wheel event, so the one extent is lowered
 everywhere.
+
+### The key, deprecated
+
+With the wall gone, `spaceSize` still reached the engine through one validated copy,
+`Store.adjustedSpaceSize`, and five things were derived from it under a name that
+promised a size. `3a0dae6` is step one of the retirement proposed on the PR (comment
+6311708386): name each job, deprecate the key, change no layout. Step two — the origin at
+(0, 0), the key removed, a migration shift of `spaceSize / 2` — is a breaking change and
+waits for a major.
+
+| Job | Source in 3.x | In the major |
+|---|---|---|
+| The world origin | `Store.worldOrigin`, `spaceSize / 2`, the only thing the key really sets | the constant (0, 0) |
+| The per-sub-step displacement ceiling | `Store.stepGuard`, 4,096 at the default | frozen at 4,096 |
+| The many-body kick span, divided by the finest grid size for the point count | `Store.kickSpan`, 8,192 at the default | frozen at 8,192 |
+| Where an infinite input coordinate lands | `Store.infiniteInputEdge`, 4,096 at the default | the origin, or absent with a warning |
+| The initial rescale's cutoff, density threshold and two target sides | named inside the rescale (`rescaleCutoff`, `densePointCount`, `sparseTarget`, `denseTarget`), still fractions of the config key; the centre now reads `store.worldOrigin` | constants, until a retune derives the start size from the point count |
+
+The three lengths sit behind a private `Store.referenceLength`: the validated `spaceSize`
+in 3.x, so a config that sets the key behaves as it did, and a constant in the major, when
+they freeze together. Nothing outside the Store can ask for a "space size" any more; the
+deck.gl layer reads the origin, probes deck's scale with a local constant (deck's Mercator
+round trip is linear along the east axis, and the north probe only supplies a sign), and
+keeps the config key only for its unseeded placement square.
+
+A non-default value logs one warning per graph and per change, worded as the JSDoc is:
+the key bounds nothing, it places the origin and scales the initial rescale and a few
+step bounds, leave it at the default. The default set explicitly, as the stories' helper
+does, says nothing. The warning gives no migration formula, because where the origin
+lands is the major's decision. A warn-once set was considered and dropped: module state
+that hides the warning for the next graph on a page and leaks across tests. The
+teaching examples (README, welcome, quick start, API reference, the deck.gl guide) no
+longer set the key; the stories that use 4,096 for their own geometry pass the default
+and stay silent.
+
+Two findings from the same review say why the origin should move, and they are the
+argument for step two:
+
+- **0..1 input renders on a lattice when zoomed in** with `rescalePositions: false` and
+  the simulation off. Every draw shader subtracts the origin in float32, and at 2,048 the
+  float32 step is 2⁻¹² ≈ 2.4e-4 units: 2,000 points spanning 2e-4 units collapse onto two
+  screen positions, with errors of 0.2 px at zoom 1e3, 2.6 px at 1e4 and 37 px at 1e5
+  (the shader arithmetic replayed in float64/float32 with the repo's gl-matrix). With the
+  origin at 0 every point is distinct and the error stays at 0.1 px. It is the mechanism
+  behind deck.gl's issue 647 (icons thrashing at high zoom), whose durable fix was
+  projecting relative to the viewport centre; for data near 0 an origin at 0 is the same
+  fix with no shader work. Today the only workaround is `spaceSize: 2`, an origin of (1, 1).
+- **0..1 input flies in from the corner** with the simulation on and no rescale: only
+  gravity knows where the origin is (repulsion, links and the centre force are
+  translation-invariant), so the cloud drifts about 2,900 units to (2048, 2048) at some
+  70 units per tick before it settles. With the origin at 0 it starts where it is.
+
+A camera-relative anchor (the matrix built in float64 around the world position at the
+screen centre, the shaders subtracting that anchor) would be the general fix for data at
+any magnitude; it is a later follow-up, and it cannot go beyond the input's own float32
+step, since `setPointPositions` takes a `Float32Array`.
 
 ## Results
 
@@ -435,6 +497,12 @@ inconsistent with itself. What an app can now see:
   orders its clusters differently.
 - A custom cluster position with a negative coordinate is now honoured instead of falling
   back to the cluster's centre of mass.
+- Since `3a0dae6`, a config that sets `spaceSize` to anything but 4096 logs one
+  deprecation warning per graph and per change. TypeScript marks the key `@deprecated`.
+  Nothing else changes for such a config, with two already-warned corners: a rescale under
+  an invalid (≤ 0, non-finite) or sub-minimum (< 2) `spaceSize` now centres on the origin
+  the engine actually uses instead of the raw value (a single point under `spaceSize: -5`
+  lands at (2048, 2048), not (−2.5, −2.5)).
 
 ## Verification
 
@@ -455,6 +523,12 @@ inconsistent with itself. What an app can now see:
   `test/deck-layers.test.ts` checks `getBounds()` against live positions, input and the
   fallback. `test/host-embedding.test.ts` checks that space → screen stays an exact
   translation by the live origin through a `spaceSize` change.
+- `3a0dae6` adds a deprecation test: the default set explicitly at construction is silent,
+  a switch to 2048 warns once, a switch back to the default is silent, and a graph built
+  with 1000 warns at construction. The two existing no-warning assertions ignore the
+  deprecation line. The rescale's offset keeps its exact double — `(2·centre − side) / 2`
+  rather than `centre − side / 2`, which differs in one double in eight (never after
+  float32 rounding, in 200k samples) — so default layouts stay bit-identical. 189 tests.
 - Large-scale numbers (100k–1M) come from the real-GPU harness and are reported here, not
   committed as tests.
 
@@ -494,4 +568,16 @@ inconsistent with itself. What an app can now see:
 - **`simulationRepulsionTheta` is still a documented no-op** (out of scope here).
 - **`spaceSize` still sets two length scales**: the per-sub-step displacement ceiling and
   the near-field kick bound `2·spaceSize / finestGridSize(n)`. Both are fixed values, as
-  before. Making force lengths relative to the layout was explicitly out of scope.
+  before, now named `Store.stepGuard` and `Store.kickSpan`; they follow the key in 3.x and
+  freeze at their defaults in the major. Making force lengths relative to the layout was
+  explicitly out of scope. Making the ceiling a config key was considered and rejected: at
+  4,096 it binds nothing in a healthy layout (gravity alone reaches it only some 164,000
+  units from the origin at the default strength), so as a knob it would be meaningless at
+  its default and silently harmful when set low. A real per-tick displacement cap that
+  anneals with alpha is a separate feature, if ever.
+- **Step two of the retirement** (a major): the origin at (0, 0), the key removed with a
+  migration note (shift a saved layout by `spaceSize / 2` on each axis, or run it with
+  gravity 0), the three lengths frozen, the rescale targets derived from the point count
+  (the settle law above gives the scale: about 2·√(40n)), an infinite input placed at the
+  origin or dropped with a warning, the precision check moved to ingest. Whether it lands
+  with this PR or later is the author's call.
