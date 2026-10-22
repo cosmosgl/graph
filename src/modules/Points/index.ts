@@ -9,6 +9,7 @@ import { defaultConfigValues, EXIT_DEFAULT_SIZE, EXIT_DEFAULT_COLOR_CHANNEL, EDG
 import drawPointsFrag from '@/graph/modules/Points/draw-points.frag?raw'
 import drawPointsVert from '@/graph/modules/Points/draw-points.vert?raw'
 import { oklabModule } from '@/graph/modules/Shared/oklab-module'
+import { shapeGeometryModule } from '@/graph/modules/Shared/shape-geometry-module'
 import findPointsInRectFrag from '@/graph/modules/Points/find-points-in-rect.frag?raw'
 import findPointsInPolygonFrag from '@/graph/modules/Points/find-points-in-polygon.frag?raw'
 import drawHighlightedFrag from '@/graph/modules/Points/draw-highlighted.frag?raw'
@@ -3395,7 +3396,7 @@ export class Points extends CoreModule implements PointTrackerHost {
   }
 
   private getDrawCommandModules (): ShaderModule[] {
-    return [pointSizeModule, exitRampModule, ...(this.isStrokeCompiled ? [oklabModule] : []), pickingColorModule]
+    return [shapeGeometryModule, pointSizeModule, exitRampModule, ...(this.isStrokeCompiled ? [oklabModule] : []), pickingColorModule]
   }
 
   private getDrawCommandBufferLayout (): BufferLayout[] {

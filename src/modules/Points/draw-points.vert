@@ -315,7 +315,9 @@ void main() {
   float strokeWidth = animateStrokeWidths > 0.0
     ? mix(resolveStrokeWidth(sourceStrokeWidth), resolveStrokeWidth(targetStrokeWidth), transitionProgress)
     : resolveStrokeWidth(targetStrokeWidth);
-  strokeWidthPx = max(strokeWidth, 0.0) * ratio;
+  // Capped at STROKE_MAX_DEPTH of the shape's depth (shapeGeometry module): a small point keeps
+  // a narrower band and its fill, and the band never switches off as a point shrinks.
+  strokeWidthPx = min(max(strokeWidth, 0.0) * ratio, shapeSizeValue * 0.5 * shapeInradius(shape) * STROKE_MAX_DEPTH);
   strokeColor = vec4(0.0);
   if (strokeWidthPx > 0.0) {
     strokeColor = animateStrokeColors > 0.0

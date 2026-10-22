@@ -16,7 +16,7 @@ type StrokeResources = Record<typeof STROKE_BUFFERS[number], Buffer | undefined>
 const createScene = async (): Promise<{
   graph: Graph;
   device: Device;
-  pixelAt: (spaceSize: number, x: number) => number[];
+  pixelAt: (spaceSize: number, x: number, y?: number) => number[];
   destroy: () => void;
 }> => {
   const device = await luma.createDevice({
@@ -38,14 +38,14 @@ const createScene = async (): Promise<{
   await graph.ready
   const texture = device.createTexture({ format: 'rgba8unorm', width: 200, height: 200 })
   const framebuffer = device.createFramebuffer({ width: 200, height: 200, colorAttachments: [texture] })
-  const pixelAt = (spaceSize: number, x: number): number[] => {
+  const pixelAt = (spaceSize: number, x: number, y = 99): number[] => {
     graph.setViewTransform({ k: 1, x: 100 - (1000 + (200 - spaceSize) / 2), y: 100 - ((spaceSize - 1000) + (200 - spaceSize) / 2) }, [200, 200])
     const pass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0] })
     graph.drawToRenderPass(pass)
     pass.end()
     device.submit()
     const pixels = device.readPixelsToArrayWebGL(framebuffer) as Uint8Array
-    const offset = (99 * 200 + x) * 4
+    const offset = (y * 200 + x) * 4
     return Array.from(pixels.subarray(offset, offset + 4))
   }
   const destroy = (): void => {
@@ -103,16 +103,18 @@ describe.each(['spaceSize', 'enableSimulation'] as const)('stroke inputs pending
 })
 
 describe('stroke on small points', () => {
-  it('skips the stroke where no fill would remain, and keeps it where fill does', async () => {
+  it('narrows the band to half the point\'s depth, so fill always remains', async () => {
     const { graph, pixelAt, destroy } = await createScene()
     try {
       graph.setPointStrokeColors(new Float32Array([0, 0, 1, 1]))
-      // A 4 px point with a 2.5 px stroke: the bands from both edges meet before the centre
-      graph.setPointSizes(new Float32Array([4]))
-      graph.setPointStrokeWidths(new Float32Array([2.5]))
+      // An 8 px point asked for a 6 px stroke: the band is capped at 2 px (half the 4 px depth),
+      // so the centre keeps its fill and the band sits 1..3 px inside the edge
+      graph.setPointSizes(new Float32Array([8]))
+      graph.setPointStrokeWidths(new Float32Array([6]))
       graph.render()
       expect(pixelAt(2048, 100)).toEqual([255, 0, 0, 255])
-      // A 12 px point with a 2 px stroke: fill at the centre, stroke in the band
+      expect(pixelAt(2048, 102)).toEqual([0, 0, 255, 255])
+      // A 12 px point with a 2 px stroke fits as asked: fill at the centre, stroke in the band
       graph.setPointSizes(new Float32Array([12]))
       graph.setPointStrokeWidths(new Float32Array([2]))
       graph.render()
@@ -178,28 +180,28 @@ describe('stroke transitions', () => {
   })
 })
 
-describe('stroke cutoff on non-circular shapes', () => {
-  it('uses the shape\'s own depth, not the circle\'s half diameter', async () => {
+describe('stroke cap on non-circular shapes', () => {
+  it('caps the band at half each shape\'s own depth', async () => {
     const { graph, pixelAt, destroy } = await createScene()
     try {
       graph.setPointStrokeColors(new Float32Array([0, 0, 1, 1]))
+      // A 12 px square's centre is 4.8 px from its edge (half-size 0.8 of the radius): a 5.5 px
+      // stroke is capped at 2.4 px, leaving the centre its fill and a band 1.3 px inside the edge
       graph.setPointSizes(new Float32Array([12]))
-      // A 12 px square's centre is 4.8 px from its edge (half-size 0.8 of the radius):
-      // a 5.5 px stroke leaves no fill, so none is drawn...
       graph.setPointShapes(new Float32Array([PointShape.Square]))
       graph.setPointStrokeWidths(new Float32Array([5.5]))
       graph.render()
       expect(pixelAt(2048, 100)).toEqual([255, 0, 0, 255])
-      // ...while a 3 px stroke fits: fill at the centre, stroke 1.3 px inside the edge
+      expect(pixelAt(2048, 103)).toEqual([0, 0, 255, 255])
+      // A 20 px cross arm is 3 px from its centre line to its edge: a 3 px stroke is capped at
+      // 1.5 px, so the arm keeps its fill along the middle and takes the band along its sides
+      // (sampled on the horizontal arm, clear of the centre square where the arms overlap)
+      graph.setPointSizes(new Float32Array([20]))
+      graph.setPointShapes(new Float32Array([PointShape.Cross]))
       graph.setPointStrokeWidths(new Float32Array([3]))
       graph.render()
       expect(pixelAt(2048, 100)).toEqual([255, 0, 0, 255])
-      expect(pixelAt(2048, 103)).toEqual([0, 0, 255, 255])
-      // A 12 px cross arm is 1.8 px from its centre line to its edge: a 2 px stroke leaves no fill
-      graph.setPointShapes(new Float32Array([PointShape.Cross]))
-      graph.setPointStrokeWidths(new Float32Array([2]))
-      graph.render()
-      expect(pixelAt(2048, 100)).toEqual([255, 0, 0, 255])
+      expect(pixelAt(2048, 105, 102)).toEqual([0, 0, 255, 255])
     } finally {
       destroy()
     }

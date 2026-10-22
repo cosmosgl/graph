@@ -86,13 +86,15 @@ as the fill, so it anti-aliases exactly like the fill and costs nothing beyond a
   level, including with `scalePointsOnZoom`.
 - **Inset band.** The stroke occupies `d ∈ [-w, 0]`, so it never enlarges the point and the
   sprite needs no room for it.
-- **Small points are skipped.** The band runs in from every edge, so a point whose deepest
-  interior point is within the stroke width of its edge has no fill left; such a point is
-  drawn without a stroke rather than as a solid blob of stroke color. The depth is the
-  shape's inradius, a per-shape constant read off its distance function (a circle's centre
-  is a full radius in, so the cut is a diameter of twice the stroke width; a cross arm is
-  only 0.3 of a radius). Points just above that cut are still mostly stroke — the rule is a
-  floor, not a fade.
+- **Small points keep a narrower stroke.** The band runs in from every edge, so on a point
+  whose depth is near the stroke width it would swallow the fill. The width is capped at
+  half the shape's depth (its inradius: a circle's centre is a full radius in, a cross arm
+  only 0.3 of one; the constants live in the `shapeGeometry` shader module, shared with
+  the distance functions), once per point in the vertex stage, so the fragment pays nothing.
+  A point is never more than half stroke, and nothing switches on or off while zooming.
+  The first cut skipped the stroke on such points instead; in a clump where every point
+  wears a wide stroke, the plain small ones read as a different kind of point, as if picked
+  out, so the fade replaced the floor.
 - **Off by default, nothing changes.** The stroke is compiled into the point shaders only
   while some point can have one (`pointDefaultStrokeWidth > 0`, or per-point widths given):
   otherwise the draw carries no stroke attributes, varyings or fragment branch and allocates
@@ -110,8 +112,8 @@ width 0.75 px and a lightness step of 0.1 with `'auto'` shade. Two layouts, swit
 
 - **Size grid** — a static 48 × 24 field of all eight shapes with sizes growing left to right
   from sub-pixel to ~28 px, in exact CSS pixels (`scalePointsOnZoom` off for this layout, so
-  the ramp reads the same on any viewport). The left edge shows the "no room for fill →
-  no stroke" cut.
+  the ramp reads the same on any viewport). The left edge shows the band narrowing with
+  the point.
 - **Overlapping clusters** — 2,400 circles of mixed size seeded in eight clumps and run with
   weak repulsion, a strong cluster force and strong gravity, so they settle into dense piles
   of one color each, held close together and framed at twice the default fit. This is the
