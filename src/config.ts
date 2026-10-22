@@ -163,8 +163,10 @@ export interface GraphConfigInterface {
    * from its own lightness (light points darken, dark points lighten) so the step always has
    * room — a forced direction has none on a fill already at that end, where the stroke then
    * matches the fill. A color's alpha is its opacity over the fill, so a translucent stroke
-   * tints the band rather than fading it toward the background. Greyed-out points always get
-   * the derived shade of their greyed fill, so the stroke fades with the point.
+   * tints the band rather than fading it toward the background; the point's own alpha, from
+   * its color, `pointOpacity` or greyout, applies to the whole point, stroke included.
+   * Greyed-out points always get the derived shade of their greyed fill, so the stroke fades
+   * with the point.
    * Default value: `'auto'`
    */
   pointDefaultStrokeColor: PointStrokeShade | ColorString | [number, number, number, number];
