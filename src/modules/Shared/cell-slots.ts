@@ -41,9 +41,9 @@ export const getFinestGridSize = (pointsNumber: number): number =>
  * Graphs at or below each force's ALL_PAIRS_MAX_POINTS never reach this path at
  * all — they take the exact all-pairs pass instead, so the tiers start above it.
  *
- * The collision force shares the tiers: there a cell holding at most this many
- * points is resolved exactly, and a denser cell resolves against a fresh random
- * subset of its occupants every tick.
+ * The collision force shares the tiers: a hash bucket holding at most this
+ * many points is listed exhaustively; denser buckets supply a fresh random
+ * subset every pass. Distant world cells can share a bucket's slot budget.
  */
 export const getNearFieldSlotCount = (pointsNumber: number): number => {
   if (pointsNumber <= 16384) return 32

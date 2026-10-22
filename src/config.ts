@@ -549,9 +549,10 @@ export interface GraphConfigInterface {
    * deep overlaps can require multiple passes. Values up to `2` over-relax,
    * which settles jammed piles faster. At or below 4,096 points every
    * pair is tested; above that a spatial hash with depth-peeled neighbour slots
-   * takes over — still pairwise, exact while a cell holds at most 32 points
-   * (16 above 16k points, 8 above 65k), and sampled afresh every pass in a
-   * denser cell.
+   * takes over — still pairwise, exhaustive while each queried hash bucket
+   * holds at most 32 points (16 above 16,384 points, 8 above 65,536), and sampled
+   * afresh every pass in denser buckets. Distant cells can share a bucket's
+   * slot budget; candidates are checked against their world cell.
    * Default value: `0`
    */
   simulationCollision: number;
