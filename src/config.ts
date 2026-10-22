@@ -137,9 +137,9 @@ export interface GraphConfigInterface {
    * overlapping points. Used for every point that has no width of its own from
    * `setPointStrokeWidths` (a `NaN` there means "use this default"). The stroke is inset, so it
    * never enlarges the point, and its width stays constant while zooming even with
-   * `scalePointsOnZoom`. A point whose on-screen diameter is smaller than its stroke width is
-   * drawn without a stroke. Points with an image get the stroke on the shape only, underneath
-   * the image. `0` disables the stroke.
+   * `scalePointsOnZoom`. A point with no room for fill inside its stroke (on-screen diameter at
+   * most twice the stroke width) is drawn without one. Points with an image get the stroke on
+   * the shape only, underneath the image. `0` disables the stroke.
    * Default value: `0`
    */
   pointDefaultStrokeWidth: number;

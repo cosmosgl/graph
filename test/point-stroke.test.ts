@@ -97,3 +97,25 @@ describe.each(['spaceSize', 'enableSimulation'] as const)('stroke inputs pending
     }
   })
 })
+
+describe('stroke on small points', () => {
+  it('skips the stroke where no fill would remain, and keeps it where fill does', async () => {
+    const { graph, pixelAt, destroy } = await createScene()
+    try {
+      graph.setPointStrokeColors(new Float32Array([0, 0, 1, 1]))
+      // A 4 px point with a 2.5 px stroke: the bands from both edges meet before the centre
+      graph.setPointSizes(new Float32Array([4]))
+      graph.setPointStrokeWidths(new Float32Array([2.5]))
+      graph.render()
+      expect(pixelAt(2048, 100)).toEqual([255, 0, 0, 255])
+      // A 12 px point with a 2 px stroke: fill at the centre, stroke in the band
+      graph.setPointSizes(new Float32Array([12]))
+      graph.setPointStrokeWidths(new Float32Array([2]))
+      graph.render()
+      expect(pixelAt(2048, 100)).toEqual([255, 0, 0, 255])
+      expect(pixelAt(2048, 104)).toEqual([0, 0, 255, 255])
+    } finally {
+      destroy()
+    }
+  })
+})

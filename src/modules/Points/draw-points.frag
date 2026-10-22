@@ -261,10 +261,11 @@ void main() {
 
         // Edge stroke: an inset band [-strokeWidthPx, 0] along the edge in the per-point stroke
         // color (resolved in the vertex stage: explicit, or a lightness step from the fill).
-        // Inset, so the point never grows and the sprite needs no room for it. A shape narrower
-        // than its stroke would be nothing but stroke, so it gets none.
+        // Inset, so the point never grows and the sprite needs no room for it. The band runs in
+        // from every edge, so a shape whose radius is within the stroke width would be nothing
+        // but stroke: it gets none.
         vec3 shapeRgb = shapeColor.rgb;
-        if (strokeWidthPx > 0.0 && shapeDiameterPx >= strokeWidthPx) {
+        if (strokeWidthPx > 0.0 && shapeDiameterPx > 2.0 * strokeWidthPx) {
             float bandDistancePx = abs(edgeDistancePx + strokeWidthPx * 0.5) - strokeWidthPx * 0.5;
             float stroke = 1.0 - smoothstep(-halfRampPx, halfRampPx, bandDistancePx);
             shapeRgb = mix(shapeRgb, strokeColor.rgb, stroke * strokeColor.a);

@@ -86,9 +86,10 @@ as the fill, so it anti-aliases exactly like the fill and costs nothing beyond a
   level, including with `scalePointsOnZoom`.
 - **Inset band.** The stroke occupies `d ∈ [-w, 0]`, so it never enlarges the point and the
   sprite needs no room for it.
-- **Small points are skipped.** A point whose diameter is below the stroke width is drawn
-  without a stroke rather than as a solid blob of stroke color. Points just above that cut
-  are still mostly stroke — the rule is a floor, not a fade.
+- **Small points are skipped.** The band runs in from every edge, so a point whose radius
+  is within the stroke width has no fill left; such a point (diameter at most twice the
+  stroke width) is drawn without a stroke rather than as a solid blob of stroke color. Points
+  just above that cut are still mostly stroke — the rule is a floor, not a fade.
 - **Off by default, nothing changes.** With `pointDefaultStrokeWidth: 0` the band is never mixed
   in; the fill path is the unchanged edge ramp.
 
@@ -101,8 +102,8 @@ width 0.75 px and a lightness step of 0.1 with `'auto'` shade. Two layouts, swit
 
 - **Size grid** — a static 48 × 24 field of all eight shapes with sizes growing left to right
   from sub-pixel to ~28 px, in exact CSS pixels (`scalePointsOnZoom` off for this layout, so
-  the ramp reads the same on any viewport). The left edge shows the "narrower than the
-  stroke → no stroke" cut.
+  the ramp reads the same on any viewport). The left edge shows the "no room for fill →
+  no stroke" cut.
 - **Overlapping clusters** — 2,400 circles of mixed size seeded in eight clumps and run with
   weak repulsion, a strong cluster force and strong gravity, so they settle into dense piles
   of one color each, held close together and framed at twice the default fit. This is the

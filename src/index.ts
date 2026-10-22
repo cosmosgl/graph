@@ -489,8 +489,8 @@ export class Graph implements PositionTextureSource {
    * Sets per-point stroke widths, in CSS pixels.
    *
    * @param {Float32Array} pointStrokeWidths - One width per point, `[w1, w2, ...]`, aligned to the point index space.
-   * A `NaN` means "use `pointDefaultStrokeWidth`" for that point; `0` draws no stroke. A point whose on-screen
-   * diameter is smaller than its stroke width is drawn without a stroke.
+   * A `NaN` means "use `pointDefaultStrokeWidth`" for that point; `0` draws no stroke. A point with no room
+   * for fill inside its stroke (on-screen diameter at most twice the stroke width) is drawn without one.
    * Example: `new Float32Array([2, NaN, 0])` gives the first point a 2 px stroke, keeps the default on the second, and none on the third.
    * On the next `render()` the change animates like point sizes do (`transitionDuration`).
    */

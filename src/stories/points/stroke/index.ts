@@ -73,7 +73,7 @@ function fillColor (colors: Float32Array, i: number, rgb: [number, number, numbe
 
 /**
  * Static grid: all eight shapes, sizes growing left to right from sub-pixel to large, so the
- * "no stroke on points narrower than the stroke" rule is visible at the left edge. Sizes are
+ * "no stroke where no fill would remain" rule is visible at the left edge. Sizes are
  * exact CSS pixels (the grid runs with `scalePointsOnZoom` off), so the ramp reads the same on
  * any viewport.
  */
