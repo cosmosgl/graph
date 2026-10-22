@@ -205,3 +205,35 @@ describe('stroke cutoff on non-circular shapes', () => {
     }
   })
 })
+
+describe('stroke wanted only while a width can be positive', () => {
+  it('an all-NaN or all-zero widths array leaves the stroke compiled out, and queues no transition', async () => {
+    const { graph, pixelAt, destroy } = await createScene()
+    try {
+      const points = graph.simulation.points as unknown as StrokeResources
+      const transition = (graph as unknown as { transition: { isActive: boolean } }).transition
+      const hasStrokeAttributes = (): boolean => points.drawCommand!.bufferLayout.some(l => l.name === 'sourceStrokeColor')
+      // The story's "overrides off" shape: every width NaN (use the default), the default 0
+      graph.setPointStrokeWidths(new Float32Array([NaN]))
+      graph.setPointStrokeColors(new Float32Array([0, 0, 1, 1]))
+      graph.render()
+      expect(transition.isActive).toBe(false)
+      expect(pixelAt(2048, 109)).toEqual([255, 0, 0, 255])
+      expect(hasStrokeAttributes()).toBe(false)
+      expect(points.targetStrokeWidthBuffer).toBeUndefined()
+      // An explicit 0 is no stroke either
+      graph.setPointStrokeWidths(new Float32Array([0]))
+      graph.render()
+      expect(transition.isActive).toBe(false)
+      expect(pixelAt(2048, 109)).toEqual([255, 0, 0, 255])
+      expect(hasStrokeAttributes()).toBe(false)
+      // A positive width switches it on and starts the transition
+      graph.setPointStrokeWidths(new Float32Array([4]))
+      graph.render()
+      expect(pixelAt(2048, 109)).toEqual([0, 0, 255, 255])
+      expect(hasStrokeAttributes()).toBe(true)
+    } finally {
+      destroy()
+    }
+  })
+})

@@ -61,6 +61,8 @@ export class GraphData {
   public inputPointStrokeColors: Float32Array | undefined
   /** Raw per-point stroke widths from `setPointStrokeWidths` (CSS px, `NaN` = use `pointDefaultStrokeWidth`). */
   public inputPointStrokeWidths: Float32Array | undefined
+  /** Whether `inputPointStrokeWidths` holds a width above 0; scanned once where the array arrives. */
+  public hasPositiveStrokeWidth = false
   public inputPointShapes: Float32Array | undefined
   public inputImageData: ImageData[] | undefined
   public inputPointImageIndices: Float32Array | undefined
@@ -136,6 +138,15 @@ export class GraphData {
 
   public constructor (config: GraphConfigInterface) {
     this._config = config
+  }
+
+  /**
+   * Whether any point can have a stroke: the default width is positive, or a per-point width
+   * is. An array of `NaN` (use the default) or zeros asks for none, so the renderer leaves the
+   * stroke out of its shaders and allocates nothing for it.
+   */
+  public get hasPointStroke (): boolean {
+    return this._config.pointDefaultStrokeWidth > 0 || this.hasPositiveStrokeWidth
   }
 
   public get pointsNumber (): number | undefined {
