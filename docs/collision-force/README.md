@@ -10,16 +10,21 @@ range` (`58e2475`), and rebuilt as a constraint with pairwise contacts in
 `src/modules/ForceCollision/`; the engineering records are
 `history/2026/2026-06-13-collision-force.md` and `history/2026/2026-10-07-collision-constraint.md`.
 
-The force is driven by four config keys (interface in `src/config.ts`, defaults in
+The force is driven by five config keys (interface in `src/config.ts`, defaults in
 `src/variables.ts`):
 
 | Property | Meaning | Default |
 |---|---|---|
-| `simulationCollision` | Relaxation factor. `0` disables the force and allocates nothing; `1` projects each overlapping pair to contact per pass; up to `2` over-relaxes. | `0` |
+| `simulationCollision` | Relaxation factor. `0` disables the force; resources are allocated on first use; `1` projects each overlapping pair to contact per pass; up to `2` over-relaxes. | `0` |
 | `simulationCollisionRadius` | A fixed collision radius for every point. `0` or `undefined` derive it per point as `size / 2`. | `undefined` |
 | `simulationCollisionPadding` | Extra room added to every radius, in space units, so neighbours settle `2 × padding` apart instead of touching. | `0` |
 | `simulationCollisionIterations` | Collision passes per tick. More passes unwind a dense pile in fewer ticks, at a linear cost per pass. | `1` |
 | `simulationCollisionCooling` | How much the correction cools with alpha, as the power alpha is raised to: `0` never, `1` like the other forces. | `0` |
+
+GPU resources are allocated on the first collision pass. Setting `simulationCollision`
+to `0` stops future passes but retains those resources for reuse; disabling the
+simulation or destroying the graph releases them. A graph that never uses
+collision never allocates its collision resources.
 
 Throughout, **R** means a point's *effective radius*: the fixed radius or half its size, plus
 the padding.
