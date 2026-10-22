@@ -38,7 +38,6 @@ import { Graph } from '@cosmos.gl/graph'
 
 const div = document.querySelector('div')
 const config = {
-  spaceSize: 4096,
   simulationFriction: 0.1, // keeps the graph inert
   simulationGravity: 0, // disables the gravity force
   simulationRepulsion: 0.5, // increases repulsion between points

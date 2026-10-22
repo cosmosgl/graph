@@ -1019,7 +1019,8 @@ describe('positions are not bounded by the space', () => {
         graph.setConfigPartial({ spaceSize: 3 * limit })
         centreOfScreen(3 * limit)
       })
-      expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('spaceSize'))
+      // The deprecation notice is the only word about spaceSize: no halving, no precision warning
+      expect(warn.mock.calls.filter(([message]) => String(message).includes('spaceSize') && !String(message).includes('deprecated'))).toEqual([])
     } finally {
       warn.mockRestore()
     }
@@ -1037,10 +1038,36 @@ describe('positions are not bounded by the space', () => {
         const [x, y] = graph.spaceToScreenPosition([SPACE / 2, SPACE / 2])
         expect(x).toBeCloseTo(div.clientWidth / 2, 6)
         expect(y).toBeCloseTo(div.clientHeight / 2, 6)
-        // The largest one that does not warn
+        // The largest one that does not warn about precision
         warn.mockClear()
         graph.setConfigPartial({ spaceSize: 2 ** 21 })
-        expect(warn).not.toHaveBeenCalledWith(expect.stringContaining('spaceSize'))
+        // The deprecation notice is the only word about spaceSize: no halving, no precision warning
+        expect(warn.mock.calls.filter(([message]) => String(message).includes('spaceSize') && !String(message).includes('deprecated'))).toEqual([])
+      })
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it('warns that spaceSize is deprecated only when a config sets a non-default value', async () => {
+    // The key sets no size any more; it places the world origin. Only configs with a value
+    // other than the default have anything to change when it goes, so only they are told.
+    const warn = vi.spyOn(console, 'warn')
+    const deprecations = (): number =>
+      warn.mock.calls.filter(([message]) => String(message).includes('spaceSize') && String(message).includes('deprecated')).length
+    try {
+      // The default set explicitly, as the stories' helper does: nothing to say
+      await withCanvasGraph({ spaceSize: defaultConfigValues.spaceSize, enableSimulation: false }, new Float32Array([0, 0]), async (graph) => {
+        expect(deprecations()).toBe(0)
+        graph.setConfigPartial({ spaceSize: 2048 })
+        expect(deprecations()).toBe(1)
+        expect(warn).toHaveBeenLastCalledWith(expect.stringContaining('spaceSize (2048) is deprecated'))
+        // Back to the default: the origin moves, but there is nothing to deprecate
+        graph.setConfigPartial({ spaceSize: defaultConfigValues.spaceSize })
+        expect(deprecations()).toBe(1)
+      })
+      await withCanvasGraph({ spaceSize: 1000, enableSimulation: false }, new Float32Array([0, 0]), async () => {
+        expect(deprecations()).toBe(2)
       })
     } finally {
       warn.mockRestore()

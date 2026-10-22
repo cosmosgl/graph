@@ -464,8 +464,8 @@ came back.)
 
 ## The grid follows the data, not the space
 
-Before the grid followed the data, every level's cell was `adjustedSpaceSize / gridSize`
-(`spaceSize` as the engine adjusted it), counted from world zero. That made the grid's usable
+Before the grid followed the data, every level's cell was `spaceSize / gridSize` (the config
+value as the engine validated it), counted from world zero. That made the grid's usable
 resolution depend on something nobody chose: how much of the space the layout happened to cover.
 A layout spanning a fraction *f* of each axis lands in (*f*·R)² of the R² finest cells — an
 average of 0.25/*f*² points per cell instead of at most ⅓ over the data (0.38/*f*² at 100k
