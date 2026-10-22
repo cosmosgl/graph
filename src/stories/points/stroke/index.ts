@@ -1,13 +1,12 @@
-import { Graph, PointShape } from '@cosmos.gl/graph'
+import { Graph, PointShape, type PointStrokeShade } from '@cosmos.gl/graph'
 
-type StrokeShade = 'auto' | 'darken' | 'lighten'
 type Layout = 'grid' | 'clusters'
 
 interface ControlHandlers {
   onLayoutChange: (layout: Layout) => void;
   onWidthChange: (width: number) => void;
   onContrastChange: (contrast: number) => void;
-  onShadeChange: (shade: StrokeShade) => void;
+  onShadeChange: (shade: PointStrokeShade) => void;
   onOverridesChange: (on: boolean) => void;
   onBackgroundChange: (dark: boolean) => void;
 }
@@ -232,8 +231,8 @@ function buildControls (handlers: ControlHandlers): HTMLDivElement {
   panel.appendChild(slider('Contrast (OKLab ΔL)', 0, 0.4, 0.01, STROKE_CONTRAST, v => v.toFixed(2), handlers.onContrastChange))
 
   panel.appendChild(heading('Default color'))
-  const shades: [string, StrokeShade][] = [['Auto (per point lightness)', 'auto'], ['Darken', 'darken'], ['Lighten', 'lighten']]
-  radios<StrokeShade>('point-stroke-shade', shades, 'auto', handlers.onShadeChange)
+  const shades: [string, PointStrokeShade][] = [['Auto (per point lightness)', 'auto'], ['Darken', 'darken'], ['Lighten', 'lighten']]
+  radios<PointStrokeShade>('point-stroke-shade', shades, 'auto', handlers.onShadeChange)
 
   panel.appendChild(divider())
   const checkbox = (label: string, initial: boolean, onChange: (on: boolean) => void): HTMLLabelElement => {
