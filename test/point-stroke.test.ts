@@ -263,3 +263,43 @@ describe('stroke wanted from the effective widths', () => {
     }
   })
 })
+
+describe('stroke variant release after an exit transition', () => {
+  it('compiles the stroke out on the transition\'s final frame, with no frame to follow', async () => {
+    const div = document.createElement('div')
+    div.style.width = '200px'
+    div.style.height = '200px'
+    document.body.appendChild(div)
+    let endings = 0
+    const ended = (): boolean => endings >= 1
+    const graph = new Graph(div, {
+      spaceSize: 4096,
+      enableSimulation: false,
+      fitViewOnInit: false,
+      rescalePositions: false,
+      onTransitionEnd: (): void => { endings += 1 },
+    })
+    const wait = (ms: number): Promise<void> => new Promise(resolve => setTimeout(resolve, ms))
+    try {
+      graph.setPointPositions(new Float32Array([2000, 2000]))
+      graph.setPointStrokeWidths(new Float32Array([4]))
+      graph.render(undefined, 0)
+      await graph.ready
+      await wait(100)
+      const points = graph.simulation.points as unknown as StrokeResources
+      expect(points.targetStrokeWidthBuffer).toBeDefined()
+      // The stroke animates out over 200 ms; the loop then goes idle
+      graph.setPointStrokeWidths(new Float32Array([0]))
+      graph.render(undefined, 200)
+      for (let i = 0; i < 100 && !ended(); i += 1) await wait(30)
+      expect(ended()).toBe(true)
+      await wait(100)
+      // Nothing may linger once the transition has played: no buffers, no stroke attributes
+      expect(points.targetStrokeWidthBuffer).toBeUndefined()
+      expect(points.drawCommand!.bufferLayout.some(l => l.name === 'sourceStrokeColor')).toBe(false)
+    } finally {
+      graph.destroy()
+      div.remove()
+    }
+  })
+})

@@ -3364,8 +3364,13 @@ export class Points extends CoreModule implements PointTrackerHost {
    */
   private ensureStrokeVariant (): void {
     if (!this.drawCommand || this.isStrokeCompiled === this.isStrokeWanted) return
-    // A stroke on its way out keeps its shaders until the transition has played
-    if (!this.isStrokeWanted && (this.shouldAnimateStrokeWidths || this.shouldAnimateStrokeColors)) return
+    // A stroke on its way out keeps its shaders until the transition has played. Asked of the
+    // transition itself, not the per-frame animate flags: the frame reads those before it steps
+    // the transition, so on the final frame they still say "animating" while the cycle has
+    // ended — and with the loop then idle, no later frame would release the variant.
+    const strokeTransitionActive = this.transition?.isActiveFor(TransitionProperty.PointStrokeWidths) === true ||
+      this.transition?.isActiveFor(TransitionProperty.PointStrokeColors) === true
+    if (!this.isStrokeWanted && strokeTransitionActive) return
     this.drawCommand.destroy()
     this.drawCommand = undefined
     this.drawCoreCommand?.destroy()
