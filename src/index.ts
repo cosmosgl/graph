@@ -470,7 +470,8 @@ export class Graph implements PositionTextureSource {
    * @param {Float32Array} pointStrokeColors - RGBA per point in 0..1, `[r1, g1, b1, a1, r2, g2, b2, a2, ...]`,
    * aligned to the point index space. A `NaN` channel means "use `pointDefaultStrokeColor`" for that
    * point — so a few points can carry an explicit color while the rest keep the derived shade.
-   * Alpha is the stroke's opacity over the fill. Greyed-out points always get the derived shade of
+   * Alpha is the stroke's opacity over the fill; the point's own alpha applies to the whole point, stroke
+   * included. Greyed-out points always get the derived shade of
    * their greyed fill.
    * Example: `new Float32Array([1, 1, 1, 1, NaN, NaN, NaN, NaN])` strokes the first point white and leaves the second on the default.
    * On the next `render()` the change animates like point colors do (`transitionDuration`).
