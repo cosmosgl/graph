@@ -2004,6 +2004,8 @@ export class Points extends CoreModule implements PointTrackerHost {
     const { data, store } = this
     if (!this.targetColorBuffer) this.updateColor()
     if (!this.targetSizeBuffer) this.updateSize()
+    if (!this.targetStrokeColorBuffer) this.updateStrokeColor()
+    if (!this.targetStrokeWidthBuffer) this.updateStrokeWidth()
     if (!this.exitTexture) this.updateExit()
     if (!this.shapeBuffer) this.updateShape()
     if (!this.imageIndicesBuffer) this.updateImageIndices()
@@ -2023,7 +2025,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.drawPickingCommand ||= new Model(this.device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
-      modules: [pointSizeModule, exitRampModule, pickingColorModule],
+      modules: [pointSizeModule, exitRampModule, oklabModule, pickingColorModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber,
       // The render order, so the host picks the point the visible draw put on top
@@ -2038,6 +2040,10 @@ export class Points extends CoreModule implements PointTrackerHost {
         { name: 'shape', format: 'float32' },
         { name: 'imageIndex', format: 'float32' },
         { name: 'imageSize', format: 'float32' },
+        { name: 'sourceStrokeColor', format: 'float32x4' },
+        { name: 'targetStrokeColor', format: 'float32x4' },
+        { name: 'sourceStrokeWidth', format: 'float32' },
+        { name: 'targetStrokeWidth', format: 'float32' },
         { name: 'renderRank', format: 'float32' },
       ],
       defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
@@ -3756,6 +3762,10 @@ export class Points extends CoreModule implements PointTrackerHost {
       ...(this.shapeBuffer && { shape: this.shapeBuffer }),
       ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
       ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
+      ...(this.sourceStrokeColorBuffer && { sourceStrokeColor: this.sourceStrokeColorBuffer }),
+      ...(this.targetStrokeColorBuffer && { targetStrokeColor: this.targetStrokeColorBuffer }),
+      ...(this.sourceStrokeWidthBuffer && { sourceStrokeWidth: this.sourceStrokeWidthBuffer }),
+      ...(this.targetStrokeWidthBuffer && { targetStrokeWidth: this.targetStrokeWidthBuffer }),
       ...(this.renderRankBuffer && { renderRank: this.renderRankBuffer }),
     } as Record<string, Buffer>
   }
