@@ -391,13 +391,27 @@ const toValueArray = <In>(
 const steppedAt = new WeakMap<Graph, number>()
 
 /**
- * A present point's coordinate as the engine stores it: rounded to float32, an infinity
- * (also one the rounding makes) on the matching edge of the space — `toFiniteCoordinate` in
- * the engine's position-utils, which is not public.
+ * Unseeded points are drawn in the middle half of the space, around the world origin
+ * gravity pulls toward: these fractions of the engine's `spaceSize`. A default placement,
+ * not a bound; `_load` draws inside it and `getBounds` reports it before anything settles.
  */
-const toEngineCoordinate = (value: number, spaceSize: number): number => {
+const UNSEEDED_PLACEMENT: readonly [number, number] = [0.25, 0.75]
+
+/**
+ * The length `_viewTransform` projects to read deck's scale: any length long enough for the
+ * projected pixels to resolve it does, so it is not tied to the engine.
+ */
+const VIEW_PROBE_LENGTH = 4096
+
+/**
+ * A present point's coordinate as the engine stores it: rounded to float32, an infinity
+ * (also one the rounding makes) on the matching edge — `0` or `infiniteEdge`, the engine's
+ * `toFiniteCoordinate` in position-utils, which is not public. The edge is the space's
+ * width today; a bad-input rule, not a bound.
+ */
+const toEngineCoordinate = (value: number, infiniteEdge: number): number => {
   const rounded = Math.fround(value)
-  if (rounded === Infinity) return spaceSize
+  if (rounded === Infinity) return infiniteEdge
   if (rounded === -Infinity) return 0
   return rounded
 }
@@ -720,9 +734,11 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     } else {
       this._addInputPositions(box)
     }
-    // The engine's own value once there is a graph: valid even when the config's is not
-    const spaceSize = this.state?.graph?.simulation.store.adjustedSpaceSize ?? this._spaceSize()
-    return box.bounds() ?? [[0, 0, 0], [spaceSize, spaceSize, 0]]
+    // Nothing loaded yet: the space square, as a stand-in extent — the square centred on the
+    // world origin. The engine's own origin once there is a graph: valid even when the
+    // config's spaceSize is not
+    const [originX, originY] = this.state?.graph?.simulation.store.worldOrigin ?? [this._spaceSize() / 2, this._spaceSize() / 2]
+    return box.bounds() ?? [[0, 0, 0], [2 * originX, 2 * originY, 0]]
   }
 
   public finalizeState (context: LayerContext): void {
@@ -872,13 +888,17 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       } else unseeded = length > 0
     }
     if (unseeded) {
-      // _load's randomCoordinate: the middle half of the space
-      box.add(spaceSize * 0.25, spaceSize * 0.25)
-      box.add(spaceSize * 0.75, spaceSize * 0.75)
+      // _load's randomCoordinate draws inside this square
+      box.add(spaceSize * UNSEEDED_PLACEMENT[0], spaceSize * UNSEEDED_PLACEMENT[0])
+      box.add(spaceSize * UNSEEDED_PLACEMENT[1], spaceSize * UNSEEDED_PLACEMENT[1])
     }
   }
 
-  /** The graph's space size — authoritative for a provided graph too. */
+  /**
+   * The graph's `spaceSize` — authoritative for a provided graph too. The length the
+   * engine's placement rules are fractions of: the infinite-input edge, the unseeded
+   * square, and the stand-in extent before there is a graph. It sizes nothing.
+   */
   private _spaceSize (): number {
     return this.state?.graph?.config.spaceSize ?? this.props.config?.spaceSize ?? Graph.prototype.config?.spaceSize ?? 4096
   }
@@ -916,9 +936,10 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     graph: Graph,
     viewport: Viewport
   ): { k: number; x: number; y: number; originX: number; originY: number } | null {
-    // The engine's own values, not the config's: they are what cosmos draws with, and they
-    // stay valid when `config.spaceSize` is not (the engine falls back to a default)
-    const { adjustedSpaceSize: spaceSize, worldOrigin } = graph.simulation.store
+    // The engine's own origin, not the config's: it is what cosmos draws with, and it stays
+    // valid when `config.spaceSize` is not (the engine falls back to a default)
+    const { worldOrigin } = graph.simulation.store
+    const probeLength = VIEW_PROBE_LENGTH
     const modelMatrix = this.props.modelMatrix
     const toPixel = (sx: number, sy: number): [number, number] => {
       // Space → common (through modelMatrix, column-major, z = 0) → world → pixel.
@@ -931,9 +952,9 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       return [pixel[0] as number, pixel[1] as number]
     }
     const [originX, originY] = toPixel(0, 0)
-    const [eastX, eastY] = toPixel(spaceSize, 0)
-    const [northX, northY] = toPixel(0, spaceSize)
-    const k = (eastX - originX) / spaceSize
+    const [eastX, eastY] = toPixel(probeLength, 0)
+    const [northX, northY] = toPixel(0, probeLength)
+    const k = (eastX - originX) / probeLength
     const tolerance = 1e-3 * Math.max(1, Math.abs(eastX - originX))
     const rotated = Math.abs(eastY - originY) > tolerance || Math.abs(northX - originX) > tolerance
     const yDown = northY > originY
@@ -998,10 +1019,11 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     const firstLoad = !this.state.hasLoaded
     const spaceSize = this._spaceSize()
 
-    // Unseeded points land in the middle half of the space, around the world origin
-    // gravity pulls toward. They are drawn from the graph's own RNG, so a `randomSeed`
-    // reproduces the layout
-    const randomCoordinate = (): number => spaceSize * graph.simulation.store.getRandomFloat(0.25, 0.75)
+    // Unseeded points land in UNSEEDED_PLACEMENT, around the world origin gravity pulls
+    // toward. They are drawn from the graph's own RNG, so a `randomSeed` reproduces the
+    // layout
+    const randomCoordinate = (): number =>
+      spaceSize * graph.simulation.store.getRandomFloat(UNSEEDED_PLACEMENT[0], UNSEEDED_PLACEMENT[1])
 
     let pointCount: number
     let pointObjects: readonly PointDataT[] | null = null

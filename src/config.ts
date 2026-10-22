@@ -79,30 +79,14 @@ export interface GraphConfigInterface {
    */
   backgroundColor: string | [number, number, number, number];
   /**
-   * The size of the square, `[0, spaceSize]` on both axes, that sets where the
-   * world sits and the scale rescaled layouts start at. It bounds no position.
-   *
-   * - **The world origin** is its centre, `spaceSize / 2` on both axes: the
-   *   point at the centre of the screen under the initial (identity) view, and
-   *   the point gravity pulls toward. One world unit is one CSS pixel at zoom 1
-   *   whatever `spaceSize` is.
-   * - **Rescaling** (`rescalePositions`) is measured against it: input
-   *   positions are centred on the square and scaled to a size derived from it
-   *   and the point count. Input already wider than the square is left as is.
-   * - **No bound:** a layout extends beyond the square as far as its forces
-   *   take it — a large graph, or one with no gravity, simply grows past it.
-   *   A diverging configuration (a link spring far too stiff, say) is no
-   *   longer held on the square's edges either: its points fly off, at most
-   *   `spaceSize` per force per tick.
-   * - **Step lengths:** besides that per-step displacement ceiling, it sets the
-   *   bound on the many-body force's close-range kick, `2 · spaceSize` divided
-   *   by the many-body grid's finest size for the point count. Both are fixed
-   *   lengths: they do not follow the layout.
-   * - **Precision:** positions are float32, so a layout stays well resolved
-   *   out to coordinates of about ±1,000,000. A layout settles around the
-   *   world origin, so keep `spaceSize` at most 2,097,152 (2^21, an origin of
-   *   about 1e6); a larger value is used as given, with a console warning.
-   *
+   * @deprecated Goes away in the next major. It sets no size: positions are not bounded by
+   * it, and nothing is dimensioned by it. It places the world origin — the point the
+   * screen is centred on at the identity view, and gravity pulls toward — at
+   * `spaceSize / 2`, and a few internal lengths are still fractions of it (the initial
+   * rescale's targets, the per-step guard, the many-body kick span, where an infinite
+   * input coordinate lands). Leave it at the default: a non-default value logs a warning,
+   * and a layout saved around another origin will need shifting when the key goes.
+   * Positions are float32, so keep it at most 2,097,152 (2^21) either way.
    * Default value: `4096`
    */
   spaceSize: number;

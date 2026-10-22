@@ -78,14 +78,12 @@ export class Store {
   public hostHoveredPointIndex: number | undefined = undefined
   /** The link a host hovers through `Graph.setHostHoveredLink`; separate from the pointer's `hoveredLinkIndex`. */
   public hostHoveredLinkIndex: number | undefined = undefined
-  /** The `spaceSize` the engine uses: the config's, once `adjustSpaceSize` has validated it. */
-  public adjustedSpaceSize = defaultConfigValues.spaceSize
   /**
    * The world position at the centre of the screen under an identity view, and the point
    * gravity pulls toward. Mapping world space to the screen is a translation by this
    * origin, never a scale: one world unit is one CSS pixel at zoom 1 whatever `spaceSize`
-   * is. Only `adjustSpaceSize` sets it — to the centre of the space, `adjustedSpaceSize / 2`
-   * on both axes — and every world ↔ screen mapping reads it live from here: the shaders,
+   * is. Only `adjustSpaceSize` sets it — to the centre of the space, `spaceSize / 2` on
+   * both axes — and every world ↔ screen mapping reads it live from here: the shaders,
    * `scaleX`/`scaleY`, `Zoom.convertScreenToSpacePosition`, and hosts inverting
    * `Graph.setViewTransform`.
    */
@@ -115,7 +113,35 @@ export class Store {
   public isLinkHoveringEnabled = false
   private alphaTarget = 0
   private random = new Random()
+  /**
+   * The length the three values below — two step bounds and the infinite-input edge — are
+   * multiples of: 4,096 by default. Not a size — nothing is dimensioned by it. In 3.x it is
+   * the validated `spaceSize`, so they keep following the key for a config that sets one; in
+   * the next major, when the key goes, it becomes a constant and they freeze at their
+   * default values. The initial rescale's targets live with the rescale (Points).
+   */
+  private referenceLength = defaultConfigValues.spaceSize
   private _backgroundColor: [number, number, number, number] = [0, 0, 0, 0]
+
+  /**
+   * The per-force step guard: a displacement longer than this in one sub-step is shortened
+   * to it (update-position.frag). A divergence guard, never tuned — the width of the space,
+   * inherited from the position clamp it replaced. Not a bound on positions.
+   */
+  public get stepGuard (): number { return this.referenceLength }
+
+  /**
+   * The many-body force's close-range kick span; divided by the finest grid size for the
+   * point count, it is that force's per-tick kick bound (ForceManyBody's getMaxStep). A
+   * tuned length: twice the finest cell the grid had when it still covered the space.
+   */
+  public get kickSpan (): number { return 2 * this.referenceLength }
+
+  /**
+   * Where an infinite input coordinate lands: `0` for `-Infinity`, this for `+Infinity`
+   * (position-utils' toFiniteCoordinate). A bad-input rule, not a bound.
+   */
+  public get infiniteInputEdge (): number { return this.referenceLength }
 
   public get backgroundColor (): [number, number, number, number] {
     return this._backgroundColor
@@ -263,6 +289,16 @@ export class Store {
    * origin away from where the config put it.
    */
   public adjustSpaceSize (configSpaceSize: number): void {
+    // Deprecated key: say so only to those with something to change. The stories' helper
+    // and many hosts set the default explicitly, and they have nothing to edit.
+    if (configSpaceSize !== defaultConfigValues.spaceSize) {
+      console.warn(
+        `spaceSize (${configSpaceSize}) is deprecated and goes away in the next major. It bounds nothing: ` +
+        'it places the world origin, where gravity pulls, at spaceSize / 2, and scales the initial rescale ' +
+        `and a few step guards. Leave it at the default (${defaultConfigValues.spaceSize}); a layout saved ` +
+        'around another origin will need shifting when the key goes.'
+      )
+    }
     if (configSpaceSize <= 0 || !isFinite(configSpaceSize)) {
       console.error(`Invalid spaceSize value: ${configSpaceSize}. Using default value of ${defaultConfigValues.spaceSize}`)
       configSpaceSize = defaultConfigValues.spaceSize
@@ -285,7 +321,7 @@ export class Store {
       )
     }
 
-    this.adjustedSpaceSize = configSpaceSize
+    this.referenceLength = configSpaceSize
     // The world is centred on the middle of the space. The only place the origin is set,
     // so the only place to change if the two ever part.
     this.worldOrigin = [configSpaceSize / 2, configSpaceSize / 2]

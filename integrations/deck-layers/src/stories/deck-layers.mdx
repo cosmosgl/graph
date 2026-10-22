@@ -276,7 +276,7 @@ once.
 ```js
 import { MapView } from '@deck.gl/core'
 
-const SPACE = 4096 // the simulation's spaceSize
+const SPACE = 4096 // the layout's side: the engine's default spaceSize, which places the world origin at its centre
 const toLayout = ([lng, lat]) => [
   ((lng + 180) / 360) * SPACE,
   ((Math.PI + Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))) / (2 * Math.PI)) * SPACE,
@@ -286,7 +286,7 @@ new CosmosGraphLayer({
   // …
   getPointPosition: (p) => toLayout(p.lngLat),
   modelMatrix: [512 / SPACE, 0, 0, 0, 0, 512 / SPACE, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
-  config: { spaceSize: SPACE, simulationGravity: 0, simulationCenter: 0 },
+  config: { simulationGravity: 0, simulationCenter: 0 },
   onGraphCreated: (graph) => graph.setPinnedPoints(cityIndices), // these stay on their places
 })
 ```
