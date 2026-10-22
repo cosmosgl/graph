@@ -25,7 +25,7 @@ pointDefaultStrokeWidth: 0.5,     // example width in CSS px; 0 (the default) di
 pointDefaultStrokeColor: 'auto',  // 'auto' | 'darken' | 'lighten' | a color
 pointStrokeContrast: 0.1,         // OKLab lightness step for the derived rules
 
-graph.setPointStrokeColors(Float32Array)  // RGBA per point; NaN = use the default rule
+graph.setPointStrokeColors(Float32Array)  // RGBA per point; NaN = use the default
 graph.setPointStrokeWidths(Float32Array)  // CSS px per point; NaN = use the default width
 ```
 
@@ -33,7 +33,7 @@ The keys are named as *defaults* because they are: like every per-point channel,
 is a flat typed array aligned to the point index space with a config default behind it, and
 a `NaN` entry resolves to that default at read time (the repo's existing rule for colors and
 sizes). So a handful of points can carry an explicit stroke color or width while the rest
-stay on the derived shade, in one array. "Stroke" is kept as the name because it is the term
+stay on the default, in one array. "Stroke" is kept as the name because it is the term
 SVG, Canvas and d3 use for this band; the earlier `pointStrokeMode` / `pointStrokeIntensity`
 read as if the color were fixed by the engine, which `pointDefaultStrokeColor` taking a real
 color puts right.
@@ -56,8 +56,8 @@ the small absolute change on the bright fill further. Measured on the story: ~30
 contrast on the blue cluster, ~5% on the yellow — one visibly outlined, one not.
 
 The stroke color is now computed in **OKLab** (`src/modules/Shared/oklab-module.ts`, a luma
-`ShaderModule` in the same style as `conicParametricCurveModule`, attached to both point
-Models via `modules`):
+`ShaderModule` in the same style as `conicParametricCurveModule`, attached to the three
+point draw models via `modules` while the stroke is compiled in):
 
 - `pointStrokeContrast` is a step in OKLab `L`. OKLab is perceptually uniform in `L`, so the
   same step reads as the same contrast on every hue.
@@ -73,8 +73,8 @@ Models via `modules`):
   points get a matching greyed stroke for free.
 
 The module exports the sRGB ⇄ linear ⇄ OKLab conversions and the gamut mapping for any other
-shader that wants to reason about color perceptually. The width is still converted to device
-pixels on the CPU.
+shader that wants to reason about color perceptually. The width arrives in CSS px and the
+vertex shader scales it to device pixels.
 
 In `draw-points.frag` the stroke is a second coverage band read off the same signed distance
 as the fill, so it anti-aliases exactly like the fill and costs nothing beyond a `mix`:
@@ -94,9 +94,9 @@ as the fill, so it anti-aliases exactly like the fill and costs nothing beyond a
   A point is never more than half stroke, and nothing switches on or off while zooming.
   The first cut skipped the stroke on such points instead; in a clump where every point
   wears a wide stroke, the plain small ones read as a different kind of point, as if picked
-  out, so the fade replaced the floor.
+  out, so the cap replaced the floor.
 - **Off by default, nothing changes.** The stroke is compiled into the point shaders only
-  while some point can have one (`pointDefaultStrokeWidth > 0`, or per-point widths given):
+  while some point can have one (`pointDefaultStrokeWidth > 0`, or a positive per-point width):
   otherwise the draw carries no stroke attributes, varyings or fragment branch and allocates
   no stroke buffers, so a graph without strokes draws exactly as before. Measured at one
   million points on an Apple M3, carrying the stroke inputs unconditionally had cost about
@@ -129,6 +129,6 @@ gives another a 2 px stroke through the two setters while the rest stay on the d
 
 - Not a breaking change; `migration-notes.md` untouched. The default width is `0`, so
   nothing changes for existing users.
-- Cost of the OKLab path: two `pow` gamma curves, three cube roots, four `mat3` multiplies
-  and up to 8 gamut-mapping iterations per **point** per frame — negligible next to the
+- Cost of the OKLab path: two `pow` gamma curves, three cube roots, six `mat3` multiplies
+  and up to 8 gamut-mapping iterations (two `mat3` each) per **point** per frame — negligible next to the
   per-fragment work, which is unchanged.

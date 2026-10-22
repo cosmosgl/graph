@@ -170,7 +170,7 @@ function buildControls (handlers: ControlHandlers): HTMLDivElement {
  * point carries, drawn inside the edge in a shade of the point's own color (or white here); the
  * rings are selection marks — `outlinedPointIndices`, the hover ring, the focused point — drawn
  * outside the body in one uniform color. With highlighting on, greyed points keep a greyed
- * stroke while their outline ring is skipped.
+ * stroke and a dimmed outline ring.
  */
 export const strokeAndRings = (): { div: HTMLDivElement; graph: Graph } => {
   const div = document.createElement('div')

@@ -254,7 +254,7 @@ function buildControls (handlers: ControlHandlers): HTMLDivElement {
 /**
  * Per-point edge stroke: a thin band along the inside of every point, in a darker or
  * lighter shade of the point's own color by default, or an explicit color and width per
- * point. Two layouts: a static size grid, where the size ramp shows the small-point cutoff,
+ * point. Two layouts: a static size grid, where the size ramp shows the band narrowing with the point,
  * and a simulated set of overlapping clusters, where the stroke has to separate piled-up
  * neighbours of the same color. The overrides checkbox strokes one group white and gives
  * another a 2 px stroke through `setPointStrokeColors` / `setPointStrokeWidths`, leaving the

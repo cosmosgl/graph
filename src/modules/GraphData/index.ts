@@ -57,7 +57,7 @@ export class GraphData {
   public inputPointPositions: Float32Array | undefined
   public inputPointColors: Float32Array | undefined
   public inputPointSizes: Float32Array | undefined
-  /** Raw per-point stroke colors from `setPointStrokeColors` (RGBA, `NaN` = use the default rule). */
+  /** Raw per-point stroke colors from `setPointStrokeColors` (RGBA, `NaN` = use the default). */
   public inputPointStrokeColors: Float32Array | undefined
   /** Raw per-point stroke widths from `setPointStrokeWidths` (CSS px, `NaN` = use `pointDefaultStrokeWidth`). */
   public inputPointStrokeWidths: Float32Array | undefined
@@ -305,7 +305,7 @@ export class GraphData {
 
   /**
    * Per-point stroke colors. Like colors: no resolution here — the draw shader treats a
-   * `NaN` channel as "use the `pointDefaultStrokeColor` rule", and a missing or mismatched
+   * `NaN` channel as "use `pointDefaultStrokeColor`", and a missing or mismatched
    * input becomes an all-NaN array.
    */
   public updatePointStrokeColor (): void {

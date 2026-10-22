@@ -502,7 +502,6 @@ export class Points extends CoreModule implements PointTrackerHost {
     return false
   }
 
-  /** Drops every pick and tracked-positions copy in flight; the next read asks again. */
   /**
    * Whether any point can have a stroke (`GraphData.hasPointStroke`). Only then do the point
    * draw models carry the stroke attributes, varyings and fragment band (`POINT_STROKE`), and
@@ -513,6 +512,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     return this.data.hasPointStroke
   }
 
+  /** Drops every pick and tracked-positions copy in flight; the next read asks again. */
   public cancelPendingReadbacks (): void {
     this.discardPendingPick()
     for (const tracker of this.trackers) tracker.cancelReadback()
@@ -3354,10 +3354,6 @@ export class Points extends CoreModule implements PointTrackerHost {
   }
 
   /**
-   * Makes sure the GPU has current and previous position textures at the right size.
-   * This method only allocates; `updatePositions()` is responsible for putting data in them.
-   */
-  /**
    * Rebuilds the point draw models when the stroke was switched on or off since they were
    * compiled. Buffers are not owned by a Model, so only the models go; `initPrograms()` builds
    * them again with the current variant and binds the current buffers.
@@ -3442,6 +3438,10 @@ export class Points extends CoreModule implements PointTrackerHost {
     }
   }
 
+  /**
+   * Makes sure the GPU has current and previous position textures at the right size.
+   * This method only allocates; `updatePositions()` is responsible for putting data in them.
+   */
   private ensurePositionTextures (pointsTextureSize: number): void {
     if (!this.currentPositionTexture || this.currentPositionTexture.width !== pointsTextureSize || this.currentPositionTexture.height !== pointsTextureSize) {
       if (this.currentPositionTexture && !this.currentPositionTexture.destroyed) {
