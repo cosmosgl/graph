@@ -18,8 +18,9 @@ import { defaultConfigValues } from '@/graph/variables'
  * At or below this many points collision is exact in one full-screen pass that
  * tests every pair (`force-collision-allpairs.frag`). Above it, a spatial hash
  * with depth-peeled per-cell point slots takes over (`force-collision-slots.frag`):
- * pairwise too, exact while a cell holds at most `getNearFieldSlotCount` points,
- * and resolving against a fresh random subset of a denser cell every pass.
+ * pairwise too, exhaustive while each queried hash bucket holds at most
+ * `getNearFieldSlotCount` points, and sampling a fresh subset in denser buckets.
+ * Distant cells share the slot budget; candidates are checked by world cell.
  *
  * Same threshold as the many-body force. Around it the two paths cost about
  * the same: measured end to end on an Apple M3 Max, 2.7 ms per pass for the
@@ -55,8 +56,8 @@ const PEEL_TARGETS = 2
  *
  * Two paths, split at ALL_PAIRS_MAX_POINTS: exact all-pairs below, and above it
  * a uniform grid whose cell spans the contact range (so the 3×3 neighbourhood
- * is exhaustive) with K depth-peeled point slots per cell, built every pass
- * with the many-body force's peel shader.
+ * is exhaustive) with K depth-peeled point slots per hash bucket, built every
+ * pass with the many-body force's peel shader. Aliased cells share that budget.
  */
 export class ForceCollision extends CoreModule {
   private dataBounds: DataBounds | undefined

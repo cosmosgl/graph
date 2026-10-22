@@ -31,8 +31,8 @@ the padding.
 
 The force has two paths, split at **4,096 points** (`ALL_PAIRS_MAX_POINTS` in `index.ts`), the
 same threshold the many-body force uses. At or below it, `force-collision-allpairs.frag`
-tests every pair. Above it, `force-collision-slots.frag` tests every pair *within reach*: a
-uniform grid whose cell spans the contact range, with each cell's occupants listed by depth
+tests every pair. Above it, `force-collision-slots.frag` tests candidate pairs *within reach*:
+a uniform grid whose cell spans the contact range, with hash buckets populated by depth
 peeling so the force pass sees real neighbours, never a cell average. Both paths resolve a
 contact the same way, and both treat collision as a **constraint**: the correction is not
 scaled by the simulation's `alpha` (unless `simulationCollisionCooling` opts in), it is integrated without friction, and while collision is
@@ -128,22 +128,22 @@ maximum, and a spread into `Math.max` never throws on a 50k-element array). One 
 coarsens the grid for everybody; a fixed `simulationCollisionRadius` decouples the physics
 from the drawing when that matters.
 
-### Step 2 — list each cell's occupants by depth peeling
+### Step 2 — list each hash bucket's occupants by depth peeling
 
 This is the many-body force's near-field machinery, with a collision-specific hash mapping
 (`ForceManyBody/build-nearfield-slots.vert`, bound to the collision grid). Every pass, each
 point gets a fresh pseudo-random hash. K "depth peeling" draws then run over the grid: draw
-*k* selects, per cell, the point with the smallest hash *not yet selected by draws 0..k−1*
-(the GPU depth test does the per-cell minimum for free). After K draws, the K layers of a
-**slot array texture** (`sampler2DArray`, one layer per draw) hold, for every cell, either
+*k* selects, per hash bucket, the point with the smallest hash *not yet selected by draws 0..k−1*
+(the GPU depth test does the per-bucket minimum for free). After K draws, the K layers of a
+**slot array texture** (`sampler2DArray`, one layer per draw) hold, for every bucket, either
 all of its occupants or a uniform random K-subset of them — re-drawn from scratch every pass.
 
-**K follows the many-body tiers** (`getNearFieldSlotCount`): 32 slots up to 16k points, 16
-up to 65k, 8 above. A cell holding at most K points is listed in full and its contacts are
-resolved exactly. A denser cell shows each point a fresh random K of its neighbours per
-pass; every overlapping pair is reached sooner or later, and the per-pass cap keeps each step
-bounded meanwhile. Because the grid is sized to ¼ point per cell on average, a cell exceeds
-K only in a genuine pile — and a pile inflates past K per cell within a few passes.
+**K follows the many-body tiers** (`getNearFieldSlotCount`): 32 slots through 16,384 points,
+16 through 65,536, 8 above. A hash bucket holding at most K points is listed in full, so
+candidate lookup is exhaustive for that bucket. A denser bucket supplies a fresh random
+K-subset each pass, and the per-pass cap keeps each step bounded meanwhile. Occupancy
+includes distant cells that hash to the same bucket: even a sparse world cell can be
+sampled when aliases consume its slot budget.
 
 Each draw ping-pongs between two plain 2D targets (draw *k* must sample draw *k−1*'s output,
 and sampling one layer of a texture while rendering to another layer of the same texture is
