@@ -94,14 +94,27 @@ vec4 applyGreyoutToImage(vec4 imageColor, float isGreyedOutValue) {
     return vec4(finalColor, finalAlpha);
 }
 
+// Shape geometry in the sprite's -1..1 core, shared by the distance functions and by
+// shapeInradius() below, so the two cannot drift apart.
+const float SQUARE_HALF_SIZE = 0.8;
+const float TRIANGLE_HALF_EDGE = 0.9;
+const float DIAMOND_HALF_WIDTH = 0.8;
+const float DIAMOND_ASPECT = 1.2;        // > 1: taller than wide
+const float PENTAGON_APOTHEM = 0.726542528;
+const float HEXAGON_APOTHEM = 0.8;
+const float STAR_OUTER_RADIUS = 0.9;
+const float STAR_INNER_RATIO = 0.45;     // inner / outer radius
+const float CROSS_HALF_LENGTH = 0.8;
+const float CROSS_HALF_THICKNESS = 0.3;
+
 float squareDistance(vec2 p) {
-    vec2 d = abs(p) - vec2(0.8);
+    vec2 d = abs(p) - vec2(SQUARE_HALF_SIZE);
     return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
 }
 
 float triangleDistance(vec2 p) {
     const float k = sqrt(3.0);   // ≈1.732; slope of 60° lines for an equilateral triangle
-    const float r = 0.9;         // half the edge length; each edge is 2r
+    const float r = TRIANGLE_HALF_EDGE; // half the edge length; each edge is 2r
     p.x = abs(p.x) - r;          // fold the X axis and shift: the base corner is at the origin
     p.y += 0.55;                 // move the base (y = -0.55 in the core) to y = 0. The centred offset is
                                  // r/k = 0.52; 0.55 keeps the apex at 1.01 rather than 1.04
@@ -119,15 +132,13 @@ float triangleDistance(vec2 p) {
 }
 
 float diamondDistance(vec2 p) {
-    // aspect > 1  →  taller diamond
-    const float aspect = 1.2;
-    return abs(p.x) + abs(p.y) / aspect - 0.8;
+    return abs(p.x) + abs(p.y) / DIAMOND_ASPECT - DIAMOND_HALF_WIDTH;
 }
 
 float pentagonDistance(vec2 p) {
     // Regular pentagon signed-distance (Inigo Quilez)
     const vec3 k = vec3(0.809016994, 0.587785252, 0.726542528); // cos 36°, sin 36°, tan 36°
-    const float r = 0.726542528;                                // apothem: the flat edge is at y = r; equal to k.z by
+    const float r = PENTAGON_APOTHEM;                           // the flat edge is at y = r; equal to k.z by
                                                                 // coincidence of the chosen size, not by construction
     p.x = abs(p.x);
 
@@ -146,15 +157,15 @@ float hexagonDistance(vec2 p) {
     const vec3 k = vec3(-0.866025404, 0.5, 0.577350269);
     p = abs(p);
     p -= 2.0 * min(dot(k.xy, p), 0.0) * k.xy;
-    p -= vec2(clamp(p.x, -k.z * 0.8, k.z * 0.8), 0.8);
+    p -= vec2(clamp(p.x, -k.z * HEXAGON_APOTHEM, k.z * HEXAGON_APOTHEM), HEXAGON_APOTHEM);
     return length(p) * sign(p.y);
 }
 
 float starDistance(vec2 p) {
     // 5-point star signed-distance function (adapted from Inigo Quilez)
     // r  – outer radius, rf – inner/outer radius ratio
-    const float r  = 0.9;
-    const float rf = 0.45;
+    const float r  = STAR_OUTER_RADIUS;
+    const float rf = STAR_INNER_RATIO;
 
     // Pre-computed rotation vectors for the star arms (36° increments)
     const vec2 k1 = vec2(0.809016994, -0.587785252);
@@ -181,29 +192,29 @@ float starDistance(vec2 p) {
 float crossDistance(vec2 p) {
     // Signed distance function for a cross (union of two rectangles)
     // Adapted from Inigo Quilez (https://iquilezles.org/)
-    // Each arm has half-sizes 0.3 (thickness) and 0.8 (length)
+    // Each arm has half-sizes CROSS_HALF_THICKNESS and CROSS_HALF_LENGTH
     p = abs(p);
     if (p.y > p.x) p = p.yx;       // exploit symmetry
 
-    vec2 q = p - vec2(0.8, 0.3);   // subtract half-sizes (length, thickness)
+    vec2 q = p - vec2(CROSS_HALF_LENGTH, CROSS_HALF_THICKNESS); // subtract half-sizes (length, thickness)
 
     // Standard rectangle SDF, then take union of the two arms
     return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
 }
 
 // Depth of a shape's deepest interior point, as a fraction of the sprite radius: how far the
-// centre of the fill sits from the nearest edge, read off each distance function's constants
-// (a circle's centre is a full radius in; a cross arm is only 0.3 of one). The stroke cutoff
-// uses it: an inset band deeper than this would leave no fill at all.
+// centre of the fill sits from the nearest edge, from the geometry above (a circle's centre is
+// a full radius in; a cross arm is only its half-thickness). The stroke cutoff uses it: an
+// inset band deeper than this would leave no fill at all.
 float shapeInradius(float shape) {
-    if (shape == SQUARE) return 0.8;        // half-size
-    else if (shape == TRIANGLE) return 0.5196; // r / sqrt(3), r = 0.9
-    else if (shape == DIAMOND) return 0.6146;  // half-diagonals 0.8 and 0.96
-    else if (shape == PENTAGON) return 0.7265; // apothem
-    else if (shape == HEXAGON) return 0.8;     // apothem
-    else if (shape == STAR) return 0.405;      // inner radius, rf * r
-    else if (shape == CROSS) return 0.3;       // arm half-thickness
-    else return 1.0;                            // circle
+    if (shape == SQUARE) return SQUARE_HALF_SIZE;
+    else if (shape == TRIANGLE) return TRIANGLE_HALF_EDGE / sqrt(3.0);     // equilateral: inradius = edge / (2 sqrt 3)
+    else if (shape == DIAMOND) return DIAMOND_HALF_WIDTH * DIAMOND_ASPECT / sqrt(DIAMOND_ASPECT * DIAMOND_ASPECT + 1.0);
+    else if (shape == PENTAGON) return PENTAGON_APOTHEM;
+    else if (shape == HEXAGON) return HEXAGON_APOTHEM;
+    else if (shape == STAR) return STAR_OUTER_RADIUS * STAR_INNER_RATIO;   // the inner vertices
+    else if (shape == CROSS) return CROSS_HALF_THICKNESS;
+    else return 1.0;                                                        // circle
 }
 
 float getShapeDistance(vec2 p, float shape) {
