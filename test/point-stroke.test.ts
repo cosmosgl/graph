@@ -9,6 +9,7 @@ const STROKE_BUFFERS = ['sourceStrokeColorBuffer', 'targetStrokeColorBuffer', 's
 type StrokeResources = Record<typeof STROKE_BUFFERS[number], Buffer | undefined> & {
   previousStrokeColorData: Float32Array | undefined;
   previousStrokeWidthData: Float32Array | undefined;
+  drawCommand: { bufferLayout: { name: string }[] } | undefined;
 }
 
 /** An external device lets the tests draw exact pixels and detect resources surviving graph destruction. */
@@ -61,6 +62,9 @@ describe('point stroke resources', () => {
   it('releases stroke buffers and CPU snapshots without destroying the host device', async () => {
     const { graph, device, destroy } = await createScene()
     try {
+      // The buffers exist only once some point can have a stroke
+      graph.setPointStrokeWidths(new Float32Array([1]))
+      graph.render()
       const resources = graph.simulation.points as unknown as StrokeResources
       const buffers = STROKE_BUFFERS.map(key => resources[key])
       expect(buffers.every(buffer => buffer && !buffer.destroyed)).toBe(true)
@@ -114,6 +118,60 @@ describe('stroke on small points', () => {
       graph.render()
       expect(pixelAt(2048, 100)).toEqual([255, 0, 0, 255])
       expect(pixelAt(2048, 104)).toEqual([0, 0, 255, 255])
+    } finally {
+      destroy()
+    }
+  })
+})
+
+describe('stroke shader variant', () => {
+  it('compiles the stroke in only once a width asks for it, and out again when none is left', async () => {
+    const { graph, pixelAt, destroy } = await createScene()
+    try {
+      const points = graph.simulation.points as unknown as StrokeResources
+      const hasStrokeAttributes = (): boolean => points.drawCommand!.bufferLayout.some(l => l.name === 'sourceStrokeColor')
+      // Width 0 everywhere: no stroke attributes, no stroke buffers, the plain fill
+      expect(pixelAt(2048, 109)).toEqual([255, 0, 0, 255])
+      expect(hasStrokeAttributes()).toBe(false)
+      expect(points.targetStrokeColorBuffer).toBeUndefined()
+      // A color array alone does not switch the stroke on
+      graph.setPointStrokeColors(new Float32Array([0, 0, 1, 1]))
+      graph.render()
+      expect(pixelAt(2048, 109)).toEqual([255, 0, 0, 255])
+      expect(hasStrokeAttributes()).toBe(false)
+      // A default width does: the rebuilt models carry the attributes and the pending color
+      graph.setConfigPartial({ pointDefaultStrokeWidth: 4 })
+      graph.render()
+      expect(pixelAt(2048, 109)).toEqual([0, 0, 255, 255])
+      expect(hasStrokeAttributes()).toBe(true)
+      // Back to 0: compiled out again, buffers released, fill restored
+      graph.setConfigPartial({ pointDefaultStrokeWidth: 0 })
+      graph.render()
+      expect(pixelAt(2048, 109)).toEqual([255, 0, 0, 255])
+      expect(hasStrokeAttributes()).toBe(false)
+      expect(points.targetStrokeColorBuffer).toBeUndefined()
+    } finally {
+      destroy()
+    }
+  })
+})
+
+describe('stroke transitions', () => {
+  it('the first stroke change on a rendered graph animates from the default, not from itself', async () => {
+    const { graph, destroy } = await createScene()
+    try {
+      const points = graph.simulation.points as unknown as StrokeResources
+      // Rendered at width 0, so no stroke is compiled in; now a width and a color arrive together
+      graph.setPointStrokeWidths(new Float32Array([4]))
+      graph.setPointStrokeColors(new Float32Array([0, 0, 1, 1]))
+      graph.render()
+      // The queued transition mixes source → target: the source must still be the default
+      // the point was drawn with (NaN), or the stroke snaps in at full width and color
+      const floats = (bytes: Uint8Array): Float32Array => new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4)
+      const sourceWidth = floats(await points.sourceStrokeWidthBuffer!.readAsync())
+      const sourceColor = floats(await points.sourceStrokeColorBuffer!.readAsync())
+      expect(Number.isNaN(sourceWidth[0])).toBe(true)
+      expect(Array.from(sourceColor).every(Number.isNaN)).toBe(true)
     } finally {
       destroy()
     }

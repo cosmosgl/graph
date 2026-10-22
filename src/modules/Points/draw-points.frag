@@ -48,8 +48,10 @@ in vec4 imageAtlasUV;
 in float shapeSize;
 in float imageSizeVarying;
 in float overallSize;
+#ifdef POINT_STROKE
 in vec4 strokeColor;
 in float strokeWidthPx;
+#endif
 flat in float vPointIndex;
 
 out vec4 fragColor;
@@ -265,11 +267,13 @@ void main() {
         // from every edge, so a shape whose radius is within the stroke width would be nothing
         // but stroke: it gets none.
         vec3 shapeRgb = shapeColor.rgb;
+#ifdef POINT_STROKE
         if (strokeWidthPx > 0.0 && shapeDiameterPx > 2.0 * strokeWidthPx) {
             float bandDistancePx = abs(edgeDistancePx + strokeWidthPx * 0.5) - strokeWidthPx * 0.5;
             float stroke = 1.0 - smoothstep(-halfRampPx, halfRampPx, bandDistancePx);
             shapeRgb = mix(shapeRgb, strokeColor.rgb, stroke * strokeColor.a);
         }
+#endif
 
         finalShapeColor = vec4(shapeRgb, opacity);
     }
