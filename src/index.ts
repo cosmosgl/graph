@@ -481,8 +481,9 @@ export class Graph implements PositionTextureSource {
     this.isPointStrokeColorUpdateNeeded = true
     // Its own transition property: riding `PointColors` would start a fill transition
     // from the fill's source buffer, which holds the colors before the *last fill change*,
-    // not the current ones — the fills would replay an old transition.
-    this.transition.queue(TransitionProperty.PointStrokeColors)
+    // not the current ones — the fills would replay an old transition. Nothing to animate
+    // while no point can have a stroke.
+    if (this.graph.hasPointStroke) this.transition.queue(TransitionProperty.PointStrokeColors)
   }
 
   /**
@@ -498,9 +499,12 @@ export class Graph implements PositionTextureSource {
   public setPointStrokeWidths (pointStrokeWidths: Float32Array): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setPointStrokeWidths(pointStrokeWidths))) return
+    const hadStroke = this.graph.hasPointStroke
     this.graph.inputPointStrokeWidths = pointStrokeWidths
+    this.graph.hasPositiveStrokeWidth = pointStrokeWidths.some(width => width > 0)
     this.isPointStrokeWidthUpdateNeeded = true
-    this.transition.queue(TransitionProperty.PointStrokeWidths) // see setPointStrokeColors
+    // See setPointStrokeColors. A stroke that is going away animates out too.
+    if (hadStroke || this.graph.hasPointStroke) this.transition.queue(TransitionProperty.PointStrokeWidths)
   }
 
   /**

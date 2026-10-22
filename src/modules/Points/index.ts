@@ -503,14 +503,13 @@ export class Points extends CoreModule implements PointTrackerHost {
 
   /** Drops every pick and tracked-positions copy in flight; the next read asks again. */
   /**
-   * Whether any point can have a stroke: the default width is positive, or per-point widths
-   * were given (they may hold real widths whatever the default). Only then do the point draw
-   * models carry the stroke attributes, varyings and fragment band (`POINT_STROKE`), and only
-   * then are the stroke buffers allocated — a graph without strokes draws as if the feature
-   * did not exist.
+   * Whether any point can have a stroke (`GraphData.hasPointStroke`). Only then do the point
+   * draw models carry the stroke attributes, varyings and fragment band (`POINT_STROKE`), and
+   * only then are the stroke buffers allocated — a graph without strokes draws as if the
+   * feature did not exist.
    */
   private get isStrokeWanted (): boolean {
-    return this.config.pointDefaultStrokeWidth > 0 || this.data.inputPointStrokeWidths !== undefined
+    return this.data.hasPointStroke
   }
 
   public cancelPendingReadbacks (): void {
@@ -1558,7 +1557,9 @@ export class Points extends CoreModule implements PointTrackerHost {
 
   public updateStrokeColor (): void {
     const { store: { pointsTextureSize }, data } = this
-    if (!pointsTextureSize || !this.isStrokeWanted) return
+    // Compiled-out: nothing to upload to. Compiled-in but no longer wanted: the stroke is
+    // animating out, and the target holds the values it animates to.
+    if (!pointsTextureSize || (!this.isStrokeWanted && !this.isStrokeCompiled)) return
 
     // GraphData.updatePointStrokeColor() always populates pointStrokeColors before this runs
     const colorData = data.pointStrokeColors as Float32Array
@@ -1588,7 +1589,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
   public updateStrokeWidth (): void {
     const { store: { pointsTextureSize }, data } = this
-    if (!pointsTextureSize || !this.isStrokeWanted) return
+    if (!pointsTextureSize || (!this.isStrokeWanted && !this.isStrokeCompiled)) return // see updateStrokeColor
 
     // GraphData.updatePointStrokeWidth() always populates pointStrokeWidths before this runs
     const widthData = data.pointStrokeWidths as Float32Array
@@ -3362,6 +3363,8 @@ export class Points extends CoreModule implements PointTrackerHost {
    */
   private ensureStrokeVariant (): void {
     if (!this.drawCommand || this.isStrokeCompiled === this.isStrokeWanted) return
+    // A stroke on its way out keeps its shaders until the transition has played
+    if (!this.isStrokeWanted && (this.shouldAnimateStrokeWidths || this.shouldAnimateStrokeColors)) return
     this.drawCommand.destroy()
     this.drawCommand = undefined
     this.drawCoreCommand?.destroy()
@@ -3369,6 +3372,8 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.drawPickingCommand?.destroy()
     this.drawPickingCommand = undefined
     this.isOcclusionCullingActive = false
+    // The flag first: initPrograms() allocates the stroke buffers only for a stroke variant
+    this.isStrokeCompiled = this.isStrokeWanted
     if (!this.isStrokeWanted) this.destroyStrokeBuffers()
     this.initPrograms()
   }
