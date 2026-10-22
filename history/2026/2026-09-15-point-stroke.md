@@ -80,10 +80,19 @@ In `draw-points.frag` the stroke is a second coverage band read off the same sig
 as the fill, so it anti-aliases exactly like the fill and costs nothing beyond a `mix`:
 
 - **Pixel-space distance.** The edge ramp is already in device pixels since
-  `2026-09-10-edge-ramps.md` (radius for circles, the field divided by its per-pixel gradient
-  for polygons). The fill ramp and the stroke band are now both expressed on that one signed
-  distance, which is what makes a 0.5 px stroke *mean* 0.5 px at any point size and zoom
-  level, including with `scalePointsOnZoom`.
+  `2026-09-10-edge-ramps.md` (radius for circles, the field scaled to pixels for polygons).
+  The fill ramp and the stroke band are now both expressed on that one signed distance,
+  which is what makes a 0.5 px stroke *mean* 0.5 px at any point size and zoom level,
+  including with `scalePointsOnZoom`.
+- **Exact polygon distances, no derivative.** The polygon ramp used to scale the field by its
+  screen-space gradient from `dFdx`/`dFdy`. Each polygon field folds where the nearest edge
+  changes (a square's corner diagonals, a star's vertices, the cross's inner corners), and a
+  derivative taken across a fold comes out short: the distance reads deeper than it is. A one
+  pixel fill ramp never showed it, a wide band did — a dotted line of fill along every fold.
+  Every polygon field is now an exact Euclidean distance (the diamond moved from a Manhattan
+  field to a rhombus distance with the same outline), so the pixel distance is the field times
+  the core's radius in pixels: two derivatives, a length and a divide per fragment replaced by
+  one multiply.
 - **Inset band.** The stroke occupies `d ∈ [-w, 0]`, so it never enlarges the point and the
   sprite needs no room for it.
 - **Small points keep a narrower stroke.** The band runs in from every edge, so on a point

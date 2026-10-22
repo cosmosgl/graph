@@ -208,6 +208,33 @@ describe('stroke cap on non-circular shapes', () => {
   })
 })
 
+describe('stroke band at a polygon corner', () => {
+  it('keeps the band whole along the corner diagonal, where the distance field folds', async () => {
+    const { graph, pixelAt, destroy } = await createScene()
+    try {
+      // An 80 px square (half-size 32 px) with a 12 px stroke: the band is 20..32 px from the
+      // centre. Along each corner diagonal the field switches from one edge to the other, and a
+      // per-pixel gradient read across that fold once dropped pixels of the band back to fill
+      graph.setPointStrokeColors(new Float32Array([0, 0, 1, 1]))
+      graph.setPointSizes(new Float32Array([80]))
+      graph.setPointShapes(new Float32Array([PointShape.Square]))
+      graph.setPointStrokeWidths(new Float32Array([12]))
+      graph.render()
+      const offFill: string[] = []
+      for (const [sx, sy] of [[1, 1], [1, -1], [-1, 1], [-1, -1]] as const) {
+        for (let t = 22; t <= 30; t += 1) {
+          const pixel = pixelAt(2048, 100 + sx * t, 100 + sy * t)
+          if ((pixel[0] ?? 0) > 8 || (pixel[2] ?? 0) < 247) offFill.push(`(${sx * t}, ${sy * t}) = [${pixel[0]}, ${pixel[2]}]`)
+        }
+      }
+      expect(offFill).toEqual([])
+      expect(pixelAt(2048, 100)).toEqual([255, 0, 0, 255])
+    } finally {
+      destroy()
+    }
+  })
+})
+
 describe('stroke wanted only while a width can be positive', () => {
   it('an all-NaN or all-zero widths array leaves the stroke compiled out, and queues no transition', async () => {
     const { graph, pixelAt, destroy } = await createScene()
