@@ -239,3 +239,27 @@ describe('stroke wanted only while a width can be positive', () => {
     }
   })
 })
+
+describe('stroke wanted from the effective widths', () => {
+  it('a positive widths array that does not match the point count asks for no stroke, until it matches', async () => {
+    const { graph, pixelAt, destroy } = await createScene()
+    try {
+      const points = graph.simulation.points as unknown as StrokeResources
+      const hasStrokeAttributes = (): boolean => points.drawCommand!.bufferLayout.some(l => l.name === 'sourceStrokeColor')
+      graph.setPointStrokeColors(new Float32Array([0, 0, 1, 1, 0, 0, 1, 1]))
+      // Two widths for one point: dropped at resolve time, so no point can draw a stroke
+      graph.setPointStrokeWidths(new Float32Array([4, 4]))
+      graph.render()
+      expect(pixelAt(2048, 109)).toEqual([255, 0, 0, 255])
+      expect(hasStrokeAttributes()).toBe(false)
+      expect(points.targetStrokeWidthBuffer).toBeUndefined()
+      // A second point arrives and the same array now matches: the stroke compiles in
+      graph.setPointPositions(new Float32Array([1000, 1000, 1500, 1500]))
+      graph.render()
+      expect(pixelAt(2048, 109)).toEqual([0, 0, 255, 255])
+      expect(hasStrokeAttributes()).toBe(true)
+    } finally {
+      destroy()
+    }
+  })
+})

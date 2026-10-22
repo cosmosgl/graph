@@ -61,7 +61,11 @@ export class GraphData {
   public inputPointStrokeColors: Float32Array | undefined
   /** Raw per-point stroke widths from `setPointStrokeWidths` (CSS px, `NaN` = use `pointDefaultStrokeWidth`). */
   public inputPointStrokeWidths: Float32Array | undefined
-  /** Whether `inputPointStrokeWidths` holds a width above 0; scanned once where the array arrives. */
+  /**
+   * Whether a resolved stroke width is above 0. Scanned where the array arrives (so a setter can
+   * decide on a transition at once) and again on every resolve, from the widths actually in use:
+   * an array that does not match the point count resolves to all-`NaN` and asks for nothing.
+   */
   public hasPositiveStrokeWidth = false
   public inputPointShapes: Float32Array | undefined
   public inputImageData: ImageData[] | undefined
@@ -327,8 +331,10 @@ export class GraphData {
     }
     if (this.inputPointStrokeWidths === undefined || this.inputPointStrokeWidths.length !== this.pointsNumber) {
       this.pointStrokeWidths = new Float32Array(this.pointsNumber).fill(NaN)
+      this.hasPositiveStrokeWidth = false
     } else {
       this.pointStrokeWidths = this.inputPointStrokeWidths
+      this.hasPositiveStrokeWidth = this.pointStrokeWidths.some(width => width > 0)
     }
   }
 
