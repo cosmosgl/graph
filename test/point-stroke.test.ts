@@ -108,7 +108,7 @@ describe('stroke on small points', () => {
     try {
       graph.setPointStrokeColors(new Float32Array([0, 0, 1, 1]))
       // An 8 px point asked for a 6 px stroke: the band is capped at 2 px (half the 4 px depth),
-      // so the centre keeps its fill and the band sits 1..3 px inside the edge
+      // so the centre keeps its fill and the band sits 0..2 px inside the edge
       graph.setPointSizes(new Float32Array([8]))
       graph.setPointStrokeWidths(new Float32Array([6]))
       graph.render()
