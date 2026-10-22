@@ -27,20 +27,36 @@ layout(std140) uniform buildNearFieldSlotsUniforms {
   float levelGridSize;
   float hasPreviousSlot;
   float randomSeed;
+#ifdef COLLISION_SLOTS
+  float cellsPerUnit;
+  float rotationSeed;
+#endif
 } buildNearFieldSlots;
 
 #define pointsTextureSize buildNearFieldSlots.pointsTextureSize
 #define levelGridSize buildNearFieldSlots.levelGridSize
 #define hasPreviousSlot buildNearFieldSlots.hasPreviousSlot
 #define randomSeed buildNearFieldSlots.randomSeed
+#ifdef COLLISION_SLOTS
+#define collisionScale buildNearFieldSlots.cellsPerUnit
+#define rotationSeed buildNearFieldSlots.rotationSeed
+#endif
 #else
 uniform float pointsTextureSize;
 uniform float levelGridSize;
 uniform float hasPreviousSlot;
 uniform float randomSeed;
+#ifdef COLLISION_SLOTS
+uniform float collisionScale;
+uniform float rotationSeed;
+#endif
 #endif
 
+#ifdef COLLISION_SLOTS
+// @collision-grid
+#else
 // @grid-cell
+#endif
 
 in vec2 pointIndices;
 
@@ -82,7 +98,12 @@ void main() {
   hashValue = 0.001 + hashValue * 0.998;
 
   // The cell formula shared with the aggregation and force shaders (grid-cell.ts).
+#ifdef COLLISION_SLOTS
+  highp ivec2 worldCell = collisionCell(pointPosition.rg, vec2(0.0), collisionScale);
+  ivec2 cell = collisionTexel(worldCell, vec2(0.0), rotationSeed, int(levelGridSize));
+#else
   ivec2 cell = gridCell(pointPosition.rg, levelGridSize);
+#endif
 
   if (hasPreviousSlot > 0.5) {
     vec2 previous = texelFetch(previousSlot, cell, 0).rg;
