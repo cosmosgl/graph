@@ -86,10 +86,13 @@ as the fill, so it anti-aliases exactly like the fill and costs nothing beyond a
   level, including with `scalePointsOnZoom`.
 - **Inset band.** The stroke occupies `d ∈ [-w, 0]`, so it never enlarges the point and the
   sprite needs no room for it.
-- **Small points are skipped.** The band runs in from every edge, so a point whose radius
-  is within the stroke width has no fill left; such a point (diameter at most twice the
-  stroke width) is drawn without a stroke rather than as a solid blob of stroke color. Points
-  just above that cut are still mostly stroke — the rule is a floor, not a fade.
+- **Small points are skipped.** The band runs in from every edge, so a point whose deepest
+  interior point is within the stroke width of its edge has no fill left; such a point is
+  drawn without a stroke rather than as a solid blob of stroke color. The depth is the
+  shape's inradius, a per-shape constant read off its distance function (a circle's centre
+  is a full radius in, so the cut is a diameter of twice the stroke width; a cross arm is
+  only 0.3 of a radius). Points just above that cut are still mostly stroke — the rule is a
+  floor, not a fade.
 - **Off by default, nothing changes.** The stroke is compiled into the point shaders only
   while some point can have one (`pointDefaultStrokeWidth > 0`, or per-point widths given):
   otherwise the draw carries no stroke attributes, varyings or fragment branch and allocates

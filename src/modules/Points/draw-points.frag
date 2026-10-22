@@ -191,6 +191,21 @@ float crossDistance(vec2 p) {
     return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
 }
 
+// Depth of a shape's deepest interior point, as a fraction of the sprite radius: how far the
+// centre of the fill sits from the nearest edge, read off each distance function's constants
+// (a circle's centre is a full radius in; a cross arm is only 0.3 of one). The stroke cutoff
+// uses it: an inset band deeper than this would leave no fill at all.
+float shapeInradius(float shape) {
+    if (shape == SQUARE) return 0.8;        // half-size
+    else if (shape == TRIANGLE) return 0.5196; // r / sqrt(3), r = 0.9
+    else if (shape == DIAMOND) return 0.6146;  // half-diagonals 0.8 and 0.96
+    else if (shape == PENTAGON) return 0.7265; // apothem
+    else if (shape == HEXAGON) return 0.8;     // apothem
+    else if (shape == STAR) return 0.405;      // inner radius, rf * r
+    else if (shape == CROSS) return 0.3;       // arm half-thickness
+    else return 1.0;                            // circle
+}
+
 float getShapeDistance(vec2 p, float shape) {
     if (shape == SQUARE) return squareDistance(p);
     else if (shape == TRIANGLE) return triangleDistance(p);
@@ -264,11 +279,11 @@ void main() {
         // Edge stroke: an inset band [-strokeWidthPx, 0] along the edge in the per-point stroke
         // color (resolved in the vertex stage: explicit, or a lightness step from the fill).
         // Inset, so the point never grows and the sprite needs no room for it. The band runs in
-        // from every edge, so a shape whose radius is within the stroke width would be nothing
-        // but stroke: it gets none.
+        // from every edge, so a shape whose deepest point is within the stroke width of its edge
+        // would be nothing but stroke: it gets none.
         vec3 shapeRgb = shapeColor.rgb;
 #ifdef POINT_STROKE
-        if (strokeWidthPx > 0.0 && shapeDiameterPx > 2.0 * strokeWidthPx) {
+        if (strokeWidthPx > 0.0 && shapeDiameterPx * 0.5 * shapeInradius(pointShape) > strokeWidthPx) {
             float bandDistancePx = abs(edgeDistancePx + strokeWidthPx * 0.5) - strokeWidthPx * 0.5;
             float stroke = 1.0 - smoothstep(-halfRampPx, halfRampPx, bandDistancePx);
             shapeRgb = mix(shapeRgb, strokeColor.rgb, stroke * strokeColor.a);

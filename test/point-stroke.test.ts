@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { luma, type Buffer, type Device } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
 
-import { Graph } from '@cosmos.gl/graph'
+import { Graph, PointShape } from '@cosmos.gl/graph'
 
 const STROKE_BUFFERS = ['sourceStrokeColorBuffer', 'targetStrokeColorBuffer', 'sourceStrokeWidthBuffer', 'targetStrokeWidthBuffer'] as const
 
@@ -172,6 +172,34 @@ describe('stroke transitions', () => {
       const sourceColor = floats(await points.sourceStrokeColorBuffer!.readAsync())
       expect(Number.isNaN(sourceWidth[0])).toBe(true)
       expect(Array.from(sourceColor).every(Number.isNaN)).toBe(true)
+    } finally {
+      destroy()
+    }
+  })
+})
+
+describe('stroke cutoff on non-circular shapes', () => {
+  it('uses the shape\'s own depth, not the circle\'s half diameter', async () => {
+    const { graph, pixelAt, destroy } = await createScene()
+    try {
+      graph.setPointStrokeColors(new Float32Array([0, 0, 1, 1]))
+      graph.setPointSizes(new Float32Array([12]))
+      // A 12 px square's centre is 4.8 px from its edge (half-size 0.8 of the radius):
+      // a 5.5 px stroke leaves no fill, so none is drawn...
+      graph.setPointShapes(new Float32Array([PointShape.Square]))
+      graph.setPointStrokeWidths(new Float32Array([5.5]))
+      graph.render()
+      expect(pixelAt(2048, 100)).toEqual([255, 0, 0, 255])
+      // ...while a 3 px stroke fits: fill at the centre, stroke 1.3 px inside the edge
+      graph.setPointStrokeWidths(new Float32Array([3]))
+      graph.render()
+      expect(pixelAt(2048, 100)).toEqual([255, 0, 0, 255])
+      expect(pixelAt(2048, 103)).toEqual([0, 0, 255, 255])
+      // A 12 px cross arm is 1.8 px from its centre line to its edge: a 2 px stroke leaves no fill
+      graph.setPointShapes(new Float32Array([PointShape.Cross]))
+      graph.setPointStrokeWidths(new Float32Array([2]))
+      graph.render()
+      expect(pixelAt(2048, 100)).toEqual([255, 0, 0, 255])
     } finally {
       destroy()
     }
