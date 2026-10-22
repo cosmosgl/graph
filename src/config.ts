@@ -469,8 +469,8 @@ export interface GraphConfigInterface {
   simulationLinkSpring: number;
   /**
    * Minimum link distance. While `simulationCollision` is on, a link's rest
-   * length is never less than the two endpoints' combined collision radii
-   * (plus padding), so a spring can never pull a pair into overlap.
+   * length is never less than the sum of the two endpoints' effective collision
+   * radii, each including `simulationCollisionPadding`, so a spring cannot demand overlap.
    * Default value: `10`
    */
   simulationLinkDistance: number;
@@ -554,6 +554,8 @@ export interface GraphConfigInterface {
    * `1` suits sparse graphs; dense clusters with many links pulling inward
    * resolve noticeably better at `2`–`4`. Fractions are truncated; values
    * below `1`, `NaN` and `Infinity` run a single pass.
+   * Higher finite counts are supported, with cost proportional to the count;
+   * the typical `1`–`8` range is guidance, not an upper limit.
    * Default value: `1`
    */
   simulationCollisionIterations: number;
