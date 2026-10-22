@@ -831,7 +831,7 @@ export class Graph implements PositionTextureSource {
    *
    * @param {Float32Array} attractors - A Float32Array of attractor positions in the format [x1, y1, x2, y2, ..., xn, yn],
    * where `n` is the index of the point, in simulation space coordinates (same space as `setPointPositions`).
-   * `NaN` in either coordinate means that point has no attractor and is not affected by this force.
+   * A non-finite value (`NaN`, `±Infinity`) in either coordinate means that point has no attractor.
    * The array must hold exactly one pair per point; otherwise it is ignored.
    * Example: `new Float32Array([100, 100, NaN, NaN, 300, 250])` pulls point 0 toward (100, 100) and point 2 toward (300, 250); point 1 is free.
    */
@@ -846,7 +846,7 @@ export class Graph implements PositionTextureSource {
    *
    * Multiplies the pull of a point toward its attractor (see `setPointAttractors`),
    * so different points can be held with different firmness. Points without a coefficient
-   * (a missing array or a `NaN` entry) use `1`.
+   * (a missing array or a non-finite entry) use `1`.
    *
    * @param {Float32Array} attractorStrength - A Float32Array of force strength coefficients for each point in the format [coeff1, coeff2, ..., coeffn],
    * where `n` is the index of the point. The array must hold exactly one value per point; otherwise it is ignored.

@@ -35,7 +35,9 @@ graph.setConfig({ simulationAttraction: 0.3 })
 Both arrays follow the engine's channel contract: they must match the point count exactly
 (pairs for positions), otherwise the channel is treated as unset and the force does nothing —
 a length mismatch never reads another point's data. Neither array is edited; `NaN` is
-resolved at upload time into a per-point "has target" flag.
+resolved at upload time into a per-point "has target" flag. Non-finite target coordinates
+are treated as no target, and non-finite strengths fall back to `1`. An array
+with no finite targets skips the force pass entirely.
 
 ## How it runs
 

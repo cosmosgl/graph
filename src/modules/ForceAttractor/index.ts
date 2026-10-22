@@ -1,7 +1,6 @@
 import { Buffer, Texture, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule, BASE_PIPELINE_PARAMETERS } from '@/graph/modules/core-module'
-import { isNumber } from '@/graph/helper'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 
 import forceFrag from '@/graph/modules/ForceAttractor/force-attractor.frag?raw'
@@ -21,6 +20,7 @@ export class ForceAttractor extends CoreModule {
   private vertexCoordBuffer: Buffer | undefined
   private attractorTexture: Texture | undefined
   private previousPointsTextureSize: number | undefined
+  private hasTargets = false
   private uniformStore: UniformStore<{
     forceAttractorUniforms: {
       alpha: number;
@@ -30,26 +30,28 @@ export class ForceAttractor extends CoreModule {
 
   /** True when the current data gives at least one point an attractor, so `run()` has work to do. */
   public get isActive (): boolean {
-    return this.data.pointAttractors !== undefined
+    return this.data.pointAttractors !== undefined && this.hasTargets
   }
 
   public create (): void {
     const { device, store, data } = this
     const { pointsTextureSize } = store
     const { pointsNumber, pointAttractors, pointAttractorStrength } = data
+    this.hasTargets = false
     if (pointsNumber === undefined || !pointsTextureSize || pointAttractors === undefined) return
 
     const attractorState = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
     for (let i = 0; i < pointsNumber; ++i) {
       const x = pointAttractors[i * 2]
       const y = pointAttractors[i * 2 + 1]
-      // NaN (or a missing value) in either coordinate means "no attractor".
-      if (!isNumber(x) || !isNumber(y)) continue
+      // A missing or non-finite coordinate means "no attractor".
+      if (x === undefined || y === undefined || !Number.isFinite(x) || !Number.isFinite(y)) continue
       const strength = pointAttractorStrength?.[i]
-      attractorState[i * 4 + 0] = x as number
-      attractorState[i * 4 + 1] = y as number
-      attractorState[i * 4 + 2] = isNumber(strength) ? (strength as number) : 1
+      attractorState[i * 4 + 0] = x
+      attractorState[i * 4 + 1] = y
+      attractorState[i * 4 + 2] = strength !== undefined && Number.isFinite(strength) ? strength : 1
       attractorState[i * 4 + 3] = 1
+      this.hasTargets = true
     }
 
     const sizeChanged = this.previousPointsTextureSize !== pointsTextureSize
@@ -162,6 +164,7 @@ export class ForceAttractor extends CoreModule {
     }
     this.attractorTexture = undefined
     this.previousPointsTextureSize = undefined
+    this.hasTargets = false
 
     // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
     this.uniformStore?.destroy()

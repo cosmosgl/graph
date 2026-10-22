@@ -262,7 +262,7 @@ export const attractors = (): { graph: Graph; div: HTMLDivElement; destroy: () =
   gravityButton.addEventListener('click', () => {
     gravity = !gravity
     gravityButton.textContent = gravityLabel()
-    graph.setConfig({ simulationGravity: gravity ? gravityOn : 0 })
+    graph.setConfigPartial({ simulationGravity: gravity ? gravityOn : 0 })
     graph.start(1)
   })
   div.appendChild(gravityButton)

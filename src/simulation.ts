@@ -752,7 +752,10 @@ export class GraphSimulation implements PositionTextureSource {
       this.forceLinkOutgoing?.create(LinkDirection.OUTGOING)
     }
     if (this.isForceCenterUpdateNeeded) this.forceCenter?.create()
-    if (this.isForceAttractorUpdateNeeded) this.forceAttractor?.create()
+    if (this.isForceAttractorUpdateNeeded) {
+      this.data.updateAttractors()
+      this.forceAttractor?.create()
+    }
     if (this.isPointClusterUpdateNeeded) this.clusters?.create()
 
     this.isPointPositionsUpdateNeeded = false
