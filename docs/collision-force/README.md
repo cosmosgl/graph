@@ -15,7 +15,7 @@ The force is driven by five config keys (interface in `src/config.ts`, defaults 
 
 | Property | Meaning | Default |
 |---|---|---|
-| `simulationCollision` | Relaxation factor. `0` disables the force; resources are allocated on first use; `1` projects each overlapping pair to contact per pass; up to `2` over-relaxes. | `0` |
+| `simulationCollision` | Relaxation factor. `0` disables the force; resources are allocated on first use; `1` applies the full pairwise correction before each point's radius cap; deep overlaps can need multiple passes. Up to `2` over-relaxes. | `0` |
 | `simulationCollisionRadius` | A fixed collision radius for every point. `0` or `undefined` derive it per point as `size / 2`. | `undefined` |
 | `simulationCollisionPadding` | Extra room added to every radius, in space units, so neighbours settle `2 × padding` apart instead of touching. | `0` |
 | `simulationCollisionIterations` | Collision passes per tick. More passes unwind a dense pile in fewer ticks, at a linear cost per pass. | `1` |
@@ -64,13 +64,15 @@ contact = R_self + R_other
 if d < contact:
   push  = (contact − d) · R_other² / (R_self² + R_other²)   // the bigger disc yields less
   v    += push · (pos − otherPos) / d                       // along the line of centers
-v  *= strength                                              // 1 = full projection per pass
+v  *= strength                                              // 1 = full correction before the cap
 |v| ≤ R_self                                                // per-pass cap: one own radius
 ```
 
-A pair is resolved exactly in one pass: the two pushes sum to the overlap. A point in a pile
-sums many of them, and the cap turns that into a bounded step away from where the pile is
-densest, so a seeded pile inflates over a few passes instead of exploding. Coincident points
+For a noncoincident pair at strength 1, the two uncapped pushes sum to the overlap.
+The per-point radius cap can limit even an isolated pair's correction, so deep overlaps may
+need multiple passes. A point in a pile sums many corrections, and the cap turns that into
+a bounded step away from where the pile is densest, so a seeded pile inflates over a few
+passes instead of exploding. Coincident points
 (no direction) push along a per-point golden-angle direction — consecutive indices fan out in
 well-separated directions — so a stack disperses deterministically. An absent point is
 skipped through the exit texture (`exit.G`), the test every other pass uses, never by its
@@ -286,7 +288,7 @@ its own centroid near field hit the same wall, and the same shader now serves bo
 | neighbour search | quadtree, exact pairs, CPU | exact pairs ≤ 4,096 points; uniform grid with depth-peeled slots above, GPU |
 | per-tick cost | typically O(n log n) plus `iterations` sweeps | ≤ 4,096: one n² pass; above: K draws + one pass, O(n) — times `simulationCollisionIterations` |
 | response | linear in overlap, split between the pair by `r²` | the same `r²` split, capped at one own radius per pass |
-| overlap depth handled per pass | full | full for a pair; a pile's sum is capped, so it unwinds over passes |
+| overlap depth handled per pass | full | capped at one own radius, including isolated pairs; deep overlaps can need multiple passes |
 | coincident points | random jiggle | deterministic golden-angle fan-out by index |
 | `alpha` | ignored | ignored; integrated without friction too |
 | springs vs. contact | the app sets `linkDistance` to clear the radii | rest length floored at the contact distance while collision is on |
@@ -301,8 +303,8 @@ its own centroid near field hit the same wall, and the same shader now serves bo
 - **Iterations are the knob for dense piles.** A hub with a hundred leaves re-piles them
   every tick; two to four passes per tick let the pile unwind faster than it is rebuilt. The
   cost is linear in the count and the default of 1 is right for sparse graphs.
-- **Strength is a relaxation factor.** 1 projects each pair fully per pass, below 1
-  under-relaxes (the stress test's 0.25 settles gently), and 1.5–2 over-relaxes, which jammed
+- **Strength is a relaxation factor.** 1 applies the full pairwise correction before the
+  per-point radius cap; below 1 under-relaxes (the stress test's 0.25 settles gently), and 1.5–2 over-relaxes, which jammed
   piles under strong springs reward. Measured on the hub story's data with gravity 0.1 and
   one iteration, at 3,000 ticks: 1,072 overlapping pairs at strength 1, 823 at 1.5, 630 at 2.
   The story itself goes the other way — 75 under-relaxed passes at 0.75 — and resolves fully.
