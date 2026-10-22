@@ -72,16 +72,17 @@ const getShellRadius = (level: number, levels: number, precise: boolean): number
 /**
  * The per-tick bound on the close-range repulsion kick, for both paths: the
  * all-pairs pass (which also splits near from far pairs at it) and the grid
- * path's near-field pass. It is 2 × spaceSize / the finest grid size at this
- * point count, twice the finest cell the grid had when it covered the space: a
- * fixed length, deliberately not tied to the grid's actual cell. The grid
- * follows the data, and a cell-relative bound would tighten as a layout
- * contracts, throttling the kicks that break dense clumps apart exactly when
- * they are needed. One helper so both passes bound with the same value and the
- * dynamics stay continuous across ALL_PAIRS_MAX_POINTS.
+ * path's near-field pass. It is the kick span (Store.kickSpan, 2 × spaceSize)
+ * over the finest grid size at this point count — twice the finest cell the
+ * grid had when it covered the space: a fixed length, deliberately not tied to
+ * the grid's actual cell. The grid follows the data, and a cell-relative bound
+ * would tighten as a layout contracts, throttling the kicks that break dense
+ * clumps apart exactly when they are needed. One helper so both passes bound
+ * with the same value and the dynamics stay continuous across
+ * ALL_PAIRS_MAX_POINTS.
  */
-const getMaxStep = (adjustedSpaceSize: number, pointsNumber: number): number =>
-  2 * (adjustedSpaceSize / getFinestGridSize(pointsNumber))
+const getMaxStep = (kickSpan: number, pointsNumber: number): number =>
+  kickSpan / getFinestGridSize(pointsNumber)
 
 /**
  * The floor on the finest-level cell, in world units, applied to the fitted
@@ -623,7 +624,7 @@ export class ForceManyBody extends CoreModule {
     // Skip if point topology changed and create() wasn't called yet. Space size
     // is intentionally not guarded: grid allocation is point-count-based, the
     // grid's placement is recomputed from the data every tick (drawBounds), and
-    // the step bound reads the live adjustedSpaceSize.
+    // the kick bound reads the live store.kickSpan.
     if (
       this.store.pointsTextureSize !== this.previousPointsTextureSize ||
       this.data.pointsNumber !== this.previousPointsNumber
@@ -726,7 +727,7 @@ export class ForceManyBody extends CoreModule {
         repulsion: this.config.simulationRepulsion,
         // The grid path's near-field bound at this point count (getMaxStep),
         // also the shader's near/far split radius.
-        maxStep: getMaxStep(store.adjustedSpaceSize, data.pointsNumber),
+        maxStep: getMaxStep(store.kickSpan, data.pointsNumber),
       },
     })
 
@@ -942,7 +943,7 @@ export class ForceManyBody extends CoreModule {
           forceNearFieldUniforms: {
             pointsTextureSize: store.pointsTextureSize ?? 0,
             levelGridSize: target.gridSize,
-            maxStep: getMaxStep(store.adjustedSpaceSize, data.pointsNumber ?? 0),
+            maxStep: getMaxStep(store.kickSpan, data.pointsNumber ?? 0),
             alpha: store.alpha,
             repulsion: this.config.simulationRepulsion,
             slotCount: this.nearFieldSlots,

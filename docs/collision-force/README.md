@@ -221,7 +221,6 @@ that changes the inputs flips the flag back and the next collision tick rebuilds
 | point positions, sizes, or many-body data (`GraphSimulation.applyDataUpdates()`) | the size texture mirrors the point count and resolved sizes; the path and the slot tier follow the count |
 | `simulationCollisionRadius`, `simulationCollisionPadding` | the cell size is derived from `R_max` |
 | `pointDefaultSize` in derived-radius mode | `R_max` comes from sizes, and the default is one of them |
-| `spaceSize` | the grid divides `adjustedSpaceSize` |
 
 Changing `simulationCollision` or `simulationCollisionIterations` needs no rebuild — both are
 read every tick — so they can be animated freely, including strength to `0` and back.

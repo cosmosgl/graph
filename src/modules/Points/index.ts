@@ -570,7 +570,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       (this.transition?.duration ?? this.config.transitionDuration) > 0 &&
       !!this.currentPositionTexture
 
-    const targetState = buildPositionTextureData(data.pointPositions, pointsTextureSize, targetCount, store.adjustedSpaceSize)
+    const targetState = buildPositionTextureData(data.pointPositions, pointsTextureSize, targetCount, store.infiniteInputEdge)
 
     // Position transition: `interpolatePosition()` blends source → target each frame.
     // Target is always the new layout.
@@ -2204,9 +2204,9 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.updatePositionUniformStore.setUniforms({
       updatePositionUniforms: {
         friction: getFriction(friction),
-        // The width of the space: the displacement ceiling the old position
-        // clamp implied. A ceiling, not a stability bound (update-position.frag).
-        maxStep: this.store.adjustedSpaceSize,
+        // A ceiling on one sub-step's displacement, not a stability bound
+        // (update-position.frag); what it is and why, at Store.stepGuard.
+        maxStep: this.store.stepGuard,
       },
     })
 
@@ -2306,8 +2306,8 @@ export class Points extends CoreModule implements PointTrackerHost {
       // setPointPositions can), just non-finite — so that write is skipped. An
       // infinity, also one from the float32 rounding above, lands on the edge.
       if (Number.isNaN(texel[0]) || Number.isNaN(texel[1])) continue
-      texel[0] = toFiniteCoordinate(texel[0] as number, this.store.adjustedSpaceSize)
-      texel[1] = toFiniteCoordinate(texel[1] as number, this.store.adjustedSpaceSize)
+      texel[0] = toFiniteCoordinate(texel[0] as number, this.store.infiniteInputEdge)
+      texel[1] = toFiniteCoordinate(texel[1] as number, this.store.infiniteInputEdge)
       texel[2] = index // drag-point.frag matches the drag target on the blue channel
       for (const texture of textures) {
         texture.copyImageData({
@@ -3611,7 +3611,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         },
         defaultUniforms: {
           friction: getFriction(config.simulationFriction),
-          maxStep: store.adjustedSpaceSize,
+          maxStep: store.stepGuard,
         },
       },
     })
@@ -3646,6 +3646,21 @@ export class Points extends CoreModule implements PointTrackerHost {
 
     const points = this.data.pointPositions
     const pointsNumber = points.length / 2
+
+    // The rescale's rules, named. They are a point count and three lengths in world units
+    // that have always been fractions of the config's `spaceSize` — at the default 16,777
+    // points, 4,096, 410 and 4,915 units — and they centre the result on the world origin.
+    // The expressions are kept as they were so every layout is unchanged.
+    /** A layout already wider than this is used as given. */
+    const rescaleCutoff = spaceSize
+    /** Above this many points a layout is dense: spread out rather than gathered. */
+    const densePointCount = spaceSize * spaceSize * 0.001
+    /** The side a sparse layout is gathered to. */
+    const sparseTarget = spaceSize * 0.1
+    /** The side a dense layout is spread to: 1.2 × the space, or √n once that is larger. */
+    const denseTarget = spaceSize * Math.max(1.2, Math.sqrt(pointsNumber) / spaceSize)
+    /** The layout is centred on the world origin, where gravity pulls. */
+    const [centerX, centerY] = this.store.worldOrigin
     let minX = Infinity
     let maxX = -Infinity
     let minY = Infinity
@@ -3680,9 +3695,8 @@ export class Points extends CoreModule implements PointTrackerHost {
     // positions, making the points vanish. Center them in the space instead,
     // preserving any relative offsets.
     if (range === 0) {
-      const center = spaceSize / 2
-      this.scaleX = (x: number): number => x - minX + center
-      this.scaleY = (y: number): number => y - minY + center
+      this.scaleX = (x: number): number => x - minX + centerX
+      this.scaleY = (y: number): number => y - minY + centerY
       for (let i = 0; i < pointsNumber; i++) {
         if (isPointAbsent(points, i)) continue // leave absent points NaN
         this.data.pointPositions[i * 2] = this.scaleX(points[i * 2] as number)
@@ -3691,29 +3705,21 @@ export class Points extends CoreModule implements PointTrackerHost {
       return
     }
 
-    // Do not rescale if the range is greater than the space size (no need to)
-    if (range > spaceSize) {
+    if (range > rescaleCutoff) {
       this.scaleX = undefined
       this.scaleY = undefined
       return
     }
 
-    // Density threshold - points per pixel ratio (0.001 = 0.1%)
-    const densityThreshold = spaceSize * spaceSize * 0.001
-    // Calculate effective space size based on point density
-    const effectiveSpaceSize = pointsNumber > densityThreshold
-    // For dense datasets: scale up based on point count, minimum 120% of space
-      ? spaceSize * Math.max(1.2, Math.sqrt(pointsNumber) / spaceSize)
-    // For sparse datasets: use 10% of space to cluster points closer
-      : spaceSize * 0.1
+    const targetSide = pointsNumber > densePointCount ? denseTarget : sparseTarget
 
-    // Calculate uniform scale factor to fit data within effective space
-    const scaleFactor = effectiveSpaceSize / range
-    // Shift to center the scaled data within the full [0, spaceSize] space
-    const centerOffset = (spaceSize - effectiveSpaceSize) / 2
-    // Pad the shorter axis so both axes are centered within the square bounding box
-    const offsetX = ((range - w) / 2) * scaleFactor + centerOffset
-    const offsetY = ((range - h) / 2) * scaleFactor + centerOffset
+    // Calculate uniform scale factor to fit data within the target side
+    const scaleFactor = targetSide / range
+    // Shift to centre the scaled data on the world origin, and pad the shorter axis so
+    // both axes are centered within the square bounding box. `2 * centerX` is the
+    // space's side exactly, so the offset is the same double it has always been.
+    const offsetX = ((range - w) / 2) * scaleFactor + (2 * centerX - targetSide) / 2
+    const offsetY = ((range - h) / 2) * scaleFactor + (2 * centerY - targetSide) / 2
 
     this.scaleX = (x: number): number => (x - minX) * scaleFactor + offsetX
     this.scaleY = (y: number): number => (y - minY) * scaleFactor + offsetY

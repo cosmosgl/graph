@@ -95,7 +95,7 @@ export interface SimulationStepOptions {
  * directly:
  *
  * ```ts
- * const simulation = new GraphSimulation({ spaceSize: 4096 }, devicePromise)
+ * const simulation = new GraphSimulation({ simulationGravity: 0.5 }, devicePromise)
  * simulation.setPointPositions(positions)
  * simulation.setLinks(links)
  * simulation.applyData()
