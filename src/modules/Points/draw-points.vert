@@ -160,7 +160,6 @@ vec4 resolveStrokeColor(vec4 explicit, vec3 fill, float greyed) {
 float resolveStrokeWidth(float width) {
   return isnan(width) ? strokeDefaultWidth : width;
 }
-
 // The point's index, for the host picking pass
 flat out float vPointIndex;
 

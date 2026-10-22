@@ -290,7 +290,7 @@ export const pointStroke = (): { div: HTMLDivElement; graph: Graph } => {
     enableDrag: true,
   })
   let currentLayout: Layout = 'grid'
-  let currentGroups = new Uint8Array(0)
+  let currentGroups: Uint8Array = new Uint8Array(0)
   let overridesOn = false
 
   const applyOverrides = (): void => {
