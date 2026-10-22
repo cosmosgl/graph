@@ -522,8 +522,9 @@ export interface GraphConfigInterface {
    * is on, link rest lengths are floored at the contact distance (see
    * `simulationLinkDistance`).
    *
-   * `1` projects each overlapping pair to contact per pass; values up to `2`
-   * over-relax, which settles jammed piles faster. At or below 4,096 points every
+   * `1` applies the full pairwise correction before the per-point radius cap;
+   * deep overlaps can require multiple passes. Values up to `2` over-relax,
+   * which settles jammed piles faster. At or below 4,096 points every
    * pair is tested; above that a spatial hash with depth-peeled neighbour slots
    * takes over — still pairwise, exact while a cell holds at most 32 points
    * (16 above 16k points, 8 above 65k), and sampled afresh every pass in a
