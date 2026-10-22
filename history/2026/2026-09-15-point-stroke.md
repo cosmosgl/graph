@@ -90,8 +90,13 @@ as the fill, so it anti-aliases exactly like the fill and costs nothing beyond a
   is within the stroke width has no fill left; such a point (diameter at most twice the
   stroke width) is drawn without a stroke rather than as a solid blob of stroke color. Points
   just above that cut are still mostly stroke — the rule is a floor, not a fade.
-- **Off by default, nothing changes.** With `pointDefaultStrokeWidth: 0` the band is never mixed
-  in; the fill path is the unchanged edge ramp.
+- **Off by default, nothing changes.** The stroke is compiled into the point shaders only
+  while some point can have one (`pointDefaultStrokeWidth > 0`, or per-point widths given):
+  otherwise the draw carries no stroke attributes, varyings or fragment branch and allocates
+  no stroke buffers, so a graph without strokes draws exactly as before. Measured at one
+  million points on an Apple M3, carrying the stroke inputs unconditionally had cost about
+  15 % of the draw and 40 bytes per point with the stroke off. Switching the stroke on or off
+  rebuilds the three point draw models once.
 
 Images composite above the stroke, as they already did above the fill.
 

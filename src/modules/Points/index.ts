@@ -1,5 +1,6 @@
-import { Framebuffer, Buffer, Texture, UniformStore, RenderPass, type RenderPipelineParameters } from '@luma.gl/core'
+import { Framebuffer, Buffer, Texture, UniformStore, RenderPass, type RenderPipelineParameters, type BufferLayout } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
+import type { ShaderModule } from '@luma.gl/shadertools'
 // import { scaleLinear } from 'd3-scale'
 // import { extent } from 'd3-array'
 import { CoreModule, BASE_PIPELINE_PARAMETERS } from '@/graph/modules/core-module'
@@ -333,6 +334,8 @@ export class Points extends CoreModule implements PointTrackerHost {
   private shouldAnimatePointSizes = false
   private shouldAnimateStrokeColors = false
   private shouldAnimateStrokeWidths = false
+  /** Whether the point draw models were compiled with the stroke (`POINT_STROKE`); see `isStrokeWanted`. */
+  private isStrokeCompiled = false
   private shouldAnimatePointPositions = false
 
   // Uniform stores for scalar uniforms
@@ -499,6 +502,17 @@ export class Points extends CoreModule implements PointTrackerHost {
   }
 
   /** Drops every pick and tracked-positions copy in flight; the next read asks again. */
+  /**
+   * Whether any point can have a stroke: the default width is positive, or per-point widths
+   * were given (they may hold real widths whatever the default). Only then do the point draw
+   * models carry the stroke attributes, varyings and fragment band (`POINT_STROKE`), and only
+   * then are the stroke buffers allocated — a graph without strokes draws as if the feature
+   * did not exist.
+   */
+  private get isStrokeWanted (): boolean {
+    return this.config.pointDefaultStrokeWidth > 0 || this.data.inputPointStrokeWidths !== undefined
+  }
+
   public cancelPendingReadbacks (): void {
     this.discardPendingPick()
     for (const tracker of this.trackers) tracker.cancelReadback()
@@ -876,44 +890,17 @@ export class Points extends CoreModule implements PointTrackerHost {
       },
     })
 
+    if (!this.drawCommand) this.isStrokeCompiled = this.isStrokeWanted
     this.drawCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
-      modules: [pointSizeModule, exitRampModule, oklabModule, pickingColorModule],
+      modules: this.getDrawCommandModules(),
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       indexBuffer: this.pointRenderOrderBuffer ?? null,
-      attributes: {
-        ...(this.drawPointIndices && { pointIndices: this.drawPointIndices }),
-        ...(this.sourceSizeBuffer && { sourceSize: this.sourceSizeBuffer }),
-        ...(this.targetSizeBuffer && { targetSize: this.targetSizeBuffer }),
-        ...(this.sourceColorBuffer && { sourceColor: this.sourceColorBuffer }),
-        ...(this.targetColorBuffer && { targetColor: this.targetColorBuffer }),
-        ...(this.shapeBuffer && { shape: this.shapeBuffer }),
-        ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
-        ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
-        ...(this.sourceStrokeColorBuffer && { sourceStrokeColor: this.sourceStrokeColorBuffer }),
-        ...(this.targetStrokeColorBuffer && { targetStrokeColor: this.targetStrokeColorBuffer }),
-        ...(this.sourceStrokeWidthBuffer && { sourceStrokeWidth: this.sourceStrokeWidthBuffer }),
-        ...(this.targetStrokeWidthBuffer && { targetStrokeWidth: this.targetStrokeWidthBuffer }),
-        ...(this.renderRankBuffer && { renderRank: this.renderRankBuffer }),
-      },
-      bufferLayout: [
-        { name: 'pointIndices', format: 'float32x2' },
-        { name: 'sourceSize', format: 'float32' },
-        { name: 'targetSize', format: 'float32' },
-        { name: 'sourceColor', format: 'float32x4' },
-        { name: 'targetColor', format: 'float32x4' },
-        { name: 'shape', format: 'float32' },
-        { name: 'imageIndex', format: 'float32' },
-        { name: 'imageSize', format: 'float32' },
-        { name: 'sourceStrokeColor', format: 'float32x4' },
-        { name: 'targetStrokeColor', format: 'float32x4' },
-        { name: 'sourceStrokeWidth', format: 'float32' },
-        { name: 'targetStrokeWidth', format: 'float32' },
-        { name: 'renderRank', format: 'float32' },
-      ],
-      defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
+      attributes: this.getDrawCommandAttributes(),
+      bufferLayout: this.getDrawCommandBufferLayout(),
+      defines: this.getDrawCommandDefines(),
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
@@ -931,41 +918,13 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.drawCoreCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
-      modules: [pointSizeModule, exitRampModule, oklabModule, pickingColorModule],
+      modules: this.getDrawCommandModules(),
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       indexBuffer: this.reversedPointIndexBuffer ?? null,
-      attributes: {
-        ...(this.drawPointIndices && { pointIndices: this.drawPointIndices }),
-        ...(this.sourceSizeBuffer && { sourceSize: this.sourceSizeBuffer }),
-        ...(this.targetSizeBuffer && { targetSize: this.targetSizeBuffer }),
-        ...(this.sourceColorBuffer && { sourceColor: this.sourceColorBuffer }),
-        ...(this.targetColorBuffer && { targetColor: this.targetColorBuffer }),
-        ...(this.shapeBuffer && { shape: this.shapeBuffer }),
-        ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
-        ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
-        ...(this.sourceStrokeColorBuffer && { sourceStrokeColor: this.sourceStrokeColorBuffer }),
-        ...(this.targetStrokeColorBuffer && { targetStrokeColor: this.targetStrokeColorBuffer }),
-        ...(this.sourceStrokeWidthBuffer && { sourceStrokeWidth: this.sourceStrokeWidthBuffer }),
-        ...(this.targetStrokeWidthBuffer && { targetStrokeWidth: this.targetStrokeWidthBuffer }),
-        ...(this.renderRankBuffer && { renderRank: this.renderRankBuffer }),
-      },
-      bufferLayout: [
-        { name: 'pointIndices', format: 'float32x2' },
-        { name: 'sourceSize', format: 'float32' },
-        { name: 'targetSize', format: 'float32' },
-        { name: 'sourceColor', format: 'float32x4' },
-        { name: 'targetColor', format: 'float32x4' },
-        { name: 'shape', format: 'float32' },
-        { name: 'imageIndex', format: 'float32' },
-        { name: 'imageSize', format: 'float32' },
-        { name: 'sourceStrokeColor', format: 'float32x4' },
-        { name: 'targetStrokeColor', format: 'float32x4' },
-        { name: 'sourceStrokeWidth', format: 'float32' },
-        { name: 'targetStrokeWidth', format: 'float32' },
-        { name: 'renderRank', format: 'float32' },
-      ],
-      defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
+      attributes: this.getDrawCommandAttributes(),
+      bufferLayout: this.getDrawCommandBufferLayout(),
+      defines: this.getDrawCommandDefines(),
       bindings: {
         drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer('drawVertexUniforms'),
         drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer('drawFragmentUniforms'),
@@ -1599,7 +1558,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
   public updateStrokeColor (): void {
     const { store: { pointsTextureSize }, data } = this
-    if (!pointsTextureSize) return
+    if (!pointsTextureSize || !this.isStrokeWanted) return
 
     // GraphData.updatePointStrokeColor() always populates pointStrokeColors before this runs
     const colorData = data.pointStrokeColors as Float32Array
@@ -1608,13 +1567,17 @@ export class Points extends CoreModule implements PointTrackerHost {
       colorData,
       this.sourceStrokeColorBuffer,
       this.targetStrokeColorBuffer,
-      this.previousStrokeColorData,
+      // No snapshot: the stroke was just compiled in, and until now every point drew the
+      // default (NaN), so a queued transition starts from there instead of snapping
+      this.previousStrokeColorData ?? new Float32Array(colorData.length).fill(NaN),
       4
     )
     this.sourceStrokeColorBuffer = source
     this.targetStrokeColorBuffer = target
     this.previousStrokeColorData = previous
 
+    // Models compiled without the stroke have no such attributes; the rebuild binds the buffers
+    if (!this.isStrokeCompiled) return
     const attributes = {
       ...(this.sourceStrokeColorBuffer && { sourceStrokeColor: this.sourceStrokeColorBuffer }),
       ...(this.targetStrokeColorBuffer && { targetStrokeColor: this.targetStrokeColorBuffer }),
@@ -1625,7 +1588,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
   public updateStrokeWidth (): void {
     const { store: { pointsTextureSize }, data } = this
-    if (!pointsTextureSize) return
+    if (!pointsTextureSize || !this.isStrokeWanted) return
 
     // GraphData.updatePointStrokeWidth() always populates pointStrokeWidths before this runs
     const widthData = data.pointStrokeWidths as Float32Array
@@ -1634,13 +1597,14 @@ export class Points extends CoreModule implements PointTrackerHost {
       widthData,
       this.sourceStrokeWidthBuffer,
       this.targetStrokeWidthBuffer,
-      this.previousStrokeWidthData,
+      this.previousStrokeWidthData ?? new Float32Array(widthData.length).fill(NaN), // see updateStrokeColor
       1
     )
     this.sourceStrokeWidthBuffer = source
     this.targetStrokeWidthBuffer = target
     this.previousStrokeWidthData = previous
 
+    if (!this.isStrokeCompiled) return
     const attributes = {
       ...(this.sourceStrokeWidthBuffer && { sourceStrokeWidth: this.sourceStrokeWidthBuffer }),
       ...(this.targetStrokeWidthBuffer && { targetStrokeWidth: this.targetStrokeWidthBuffer }),
@@ -2002,6 +1966,7 @@ export class Points extends CoreModule implements PointTrackerHost {
    */
   public drawPicking (renderPass: RenderPass, alpha: number, indexOffset = 0): void {
     const { data, store } = this
+    this.ensureStrokeVariant()
     if (!this.targetColorBuffer) this.updateColor()
     if (!this.targetSizeBuffer) this.updateSize()
     if (!this.targetStrokeColorBuffer) this.updateStrokeColor()
@@ -2025,28 +1990,14 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.drawPickingCommand ||= new Model(this.device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
-      modules: [pointSizeModule, exitRampModule, oklabModule, pickingColorModule],
+      modules: this.getDrawCommandModules(),
       topology: 'point-list',
       vertexCount: data.pointsNumber,
       // The render order, so the host picks the point the visible draw put on top
       indexBuffer: this.pointRenderOrderBuffer ?? null,
       attributes: this.getDrawCommandAttributes(),
-      bufferLayout: [
-        { name: 'pointIndices', format: 'float32x2' },
-        { name: 'sourceSize', format: 'float32' },
-        { name: 'targetSize', format: 'float32' },
-        { name: 'sourceColor', format: 'float32x4' },
-        { name: 'targetColor', format: 'float32x4' },
-        { name: 'shape', format: 'float32' },
-        { name: 'imageIndex', format: 'float32' },
-        { name: 'imageSize', format: 'float32' },
-        { name: 'sourceStrokeColor', format: 'float32x4' },
-        { name: 'targetStrokeColor', format: 'float32x4' },
-        { name: 'sourceStrokeWidth', format: 'float32' },
-        { name: 'targetStrokeWidth', format: 'float32' },
-        { name: 'renderRank', format: 'float32' },
-      ],
-      defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
+      bufferLayout: this.getDrawCommandBufferLayout(),
+      defines: this.getDrawCommandDefines(),
       bindings: {
         drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer('drawVertexUniforms'),
         drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer('drawFragmentUniforms'),
@@ -2075,6 +2026,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
   public draw (renderPass: RenderPass): void {
     const { data, config, store } = this
+    this.ensureStrokeVariant()
     if (!this.targetColorBuffer) this.updateColor()
     if (!this.targetSizeBuffer) this.updateSize()
     if (!this.targetStrokeColorBuffer) this.updateStrokeColor()
@@ -2980,24 +2932,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     }
     this.targetColorBuffer = undefined
     this.previousColorData = undefined
-    if (this.sourceStrokeColorBuffer && !this.sourceStrokeColorBuffer.destroyed) {
-      this.sourceStrokeColorBuffer.destroy()
-    }
-    this.sourceStrokeColorBuffer = undefined
-    if (this.targetStrokeColorBuffer && !this.targetStrokeColorBuffer.destroyed) {
-      this.targetStrokeColorBuffer.destroy()
-    }
-    this.targetStrokeColorBuffer = undefined
-    this.previousStrokeColorData = undefined
-    if (this.sourceStrokeWidthBuffer && !this.sourceStrokeWidthBuffer.destroyed) {
-      this.sourceStrokeWidthBuffer.destroy()
-    }
-    this.sourceStrokeWidthBuffer = undefined
-    if (this.targetStrokeWidthBuffer && !this.targetStrokeWidthBuffer.destroyed) {
-      this.targetStrokeWidthBuffer.destroy()
-    }
-    this.targetStrokeWidthBuffer = undefined
-    this.previousStrokeWidthData = undefined
+    this.destroyStrokeBuffers()
     if (this.sourceSizeBuffer && !this.sourceSizeBuffer.destroyed) {
       this.sourceSizeBuffer.destroy()
     }
@@ -3420,6 +3355,67 @@ export class Points extends CoreModule implements PointTrackerHost {
    * Makes sure the GPU has current and previous position textures at the right size.
    * This method only allocates; `updatePositions()` is responsible for putting data in them.
    */
+  /**
+   * Rebuilds the point draw models when the stroke was switched on or off since they were
+   * compiled. Buffers are not owned by a Model, so only the models go; `initPrograms()` builds
+   * them again with the current variant and binds the current buffers.
+   */
+  private ensureStrokeVariant (): void {
+    if (!this.drawCommand || this.isStrokeCompiled === this.isStrokeWanted) return
+    this.drawCommand.destroy()
+    this.drawCommand = undefined
+    this.drawCoreCommand?.destroy()
+    this.drawCoreCommand = undefined
+    this.drawPickingCommand?.destroy()
+    this.drawPickingCommand = undefined
+    this.isOcclusionCullingActive = false
+    if (!this.isStrokeWanted) this.destroyStrokeBuffers()
+    this.initPrograms()
+  }
+
+  private destroyStrokeBuffers (): void {
+    for (const buffer of [this.sourceStrokeColorBuffer, this.targetStrokeColorBuffer, this.sourceStrokeWidthBuffer, this.targetStrokeWidthBuffer]) {
+      if (buffer && !buffer.destroyed) buffer.destroy()
+    }
+    this.sourceStrokeColorBuffer = undefined
+    this.targetStrokeColorBuffer = undefined
+    this.previousStrokeColorData = undefined
+    this.sourceStrokeWidthBuffer = undefined
+    this.targetStrokeWidthBuffer = undefined
+    this.previousStrokeWidthData = undefined
+  }
+
+  private getDrawCommandDefines (): Record<string, boolean> {
+    return { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES, ...(this.isStrokeCompiled && { POINT_STROKE: true }) }
+  }
+
+  private getDrawCommandModules (): ShaderModule[] {
+    return [pointSizeModule, exitRampModule, ...(this.isStrokeCompiled ? [oklabModule] : []), pickingColorModule]
+  }
+
+  private getDrawCommandBufferLayout (): BufferLayout[] {
+    const strokeLayout: BufferLayout[] = this.isStrokeCompiled
+      ? [
+        { name: 'sourceStrokeColor', format: 'float32x4' },
+        { name: 'targetStrokeColor', format: 'float32x4' },
+        { name: 'sourceStrokeWidth', format: 'float32' },
+        { name: 'targetStrokeWidth', format: 'float32' },
+      ]
+      : []
+    return [
+      { name: 'pointIndices', format: 'float32x2' },
+      { name: 'sourceSize', format: 'float32' },
+      { name: 'targetSize', format: 'float32' },
+      { name: 'sourceColor', format: 'float32x4' },
+      { name: 'targetColor', format: 'float32x4' },
+      { name: 'shape', format: 'float32' },
+      { name: 'imageIndex', format: 'float32' },
+      { name: 'imageSize', format: 'float32' },
+      ...strokeLayout,
+      { name: 'renderRank', format: 'float32' },
+    ]
+  }
+
   /**
    * Stroke defaults for the vertex shader. `strokeDefaultShade` is the derivation direction
    * (0 auto per point, -1 darken, 1 lighten) or 2 when `pointDefaultStrokeColor` is an explicit

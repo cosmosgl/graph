@@ -147,7 +147,8 @@ export interface GraphConfigInterface {
    * never enlarges the point, and its width stays constant while zooming even with
    * `scalePointsOnZoom`. A point with no room for fill inside its stroke (on-screen diameter at
    * most twice the stroke width) is drawn without one. Points with an image get the stroke on
-   * the shape only, underneath the image. `0` disables the stroke.
+   * the shape only, underneath the image. `0` disables the stroke; with no per-point widths
+   * either, the stroke costs nothing to draw.
    * Default value: `0`
    */
   pointDefaultStrokeWidth: number;

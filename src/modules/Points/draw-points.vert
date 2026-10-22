@@ -11,10 +11,12 @@ in vec4 targetColor;
 in float shape;
 in float imageIndex;
 in float imageSize;
+#ifdef POINT_STROKE
 in vec4 sourceStrokeColor;
 in vec4 targetStrokeColor;
 in float sourceStrokeWidth;
 in float targetStrokeWidth;
+#endif
 // Position of this point in the render order: 0 is drawn first (bottom)
 in float renderRank;
 
@@ -125,6 +127,10 @@ out vec4 imageAtlasUV;
 out float shapeSize;
 out float imageSizeVarying;
 out float overallSize;
+// The stroke is compiled in only while some point can have one (POINT_STROKE, see
+// Points.isStrokeWanted): without it the draw carries no stroke attributes, varyings or
+// per-fragment branch, so a graph that never strokes pays nothing for the feature.
+#ifdef POINT_STROKE
 out vec4 strokeColor;
 out float strokeWidthPx;
 
@@ -160,6 +166,7 @@ vec4 resolveStrokeColor(vec4 explicit, vec3 fill, float greyed) {
 float resolveStrokeWidth(float width) {
   return isnan(width) ? strokeDefaultWidth : width;
 }
+#endif
 // The point's index, for the host picking pass
 flat out float vPointIndex;
 
@@ -302,6 +309,7 @@ void main() {
     }
   }
 
+#ifdef POINT_STROKE
   // Stroke: the per-point channels have their own transition properties, so a stroke change
   // never restarts the fill's transition (whose source buffer holds older colors) and vice versa.
   float strokeWidth = animateStrokeWidths > 0.0
@@ -315,6 +323,7 @@ void main() {
             resolveStrokeColor(targetStrokeColor, shapeColor.rgb, isGreyedOut), transitionProgress)
       : resolveStrokeColor(targetStrokeColor, shapeColor.rgb, isGreyedOut);
   }
+#endif
 
   if (!hasImage) {
     imageAtlasUV = vec4(-1.0);
