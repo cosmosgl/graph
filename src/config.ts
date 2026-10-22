@@ -11,6 +11,14 @@ import { type TransitionEasing } from '@/graph/modules/Transition'
  */
 export type PointStrokeShade = 'auto' | 'darken' | 'lighten'
 
+/**
+ * Any color string, for a union with named rules. A plain `string` would absorb the rule
+ * literals and hide them from completions (TypeScript #29729); the intersection keeps them
+ * and still accepts every string. `Record<never, never>` rather than `{}`: the lint rule
+ * bans `{}`, and the literals survive `NonNullable` only with this spelling.
+ */
+type ColorString = string & Record<never, never>
+
 export interface GraphConfigInterface {
   /**
    * If set to `false`, the simulation will not run.
@@ -155,7 +163,7 @@ export interface GraphConfigInterface {
    * fades with the point.
    * Default value: `'auto'`
    */
-  pointDefaultStrokeColor: PointStrokeShade | string | [number, number, number, number];
+  pointDefaultStrokeColor: PointStrokeShade | ColorString | [number, number, number, number];
 
   /**
    * Size of the OKLab lightness step (`L`, 0..1) between a point's fill and its derived stroke
