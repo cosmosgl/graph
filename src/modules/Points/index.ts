@@ -3422,19 +3422,17 @@ export class Points extends CoreModule implements PointTrackerHost {
   }
 
   /**
-   * Stroke defaults for the vertex shader. `strokeDefaultShade` is the derivation direction
-   * (0 auto per point, -1 darken, 1 lighten) or 2 when `pointDefaultStrokeColor` is an explicit
-   * color, carried in `strokeDefaultColor` (parsed once per config change by the store). The
-   * default width stays in CSS px; the shader scales it by `ratio`.
+   * Stroke defaults for the vertex shader: the shade code and explicit color the store parsed
+   * once per config change (`Store.pointDefaultStrokeShade`), the contrast clamped to the
+   * lightness range, and the default width in CSS px — the shader scales it by `ratio`.
    */
   private getStrokeUniforms (): StrokeUniforms {
     const { config, store } = this
-    const explicit = store.pointDefaultStrokeRgba
     return {
       strokeContrast: Math.min(1, Math.max(0, config.pointStrokeContrast)),
-      strokeDefaultShade: explicit ? 2 : store.pointDefaultStrokeShade,
+      strokeDefaultShade: store.pointDefaultStrokeShade,
       strokeDefaultWidth: Math.max(0, config.pointDefaultStrokeWidth),
-      strokeDefaultColor: explicit ?? [0, 0, 0, 1],
+      strokeDefaultColor: store.pointDefaultStrokeRgba ?? [0, 0, 0, 1],
     }
   }
 

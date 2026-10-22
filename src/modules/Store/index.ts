@@ -82,9 +82,9 @@ export class Store {
   public focusedPointRingColor = [1, 1, 1, focusedPointRingOpacity]
   public outlinedPointRingColor = [1, 1, 1, 1]
   /**
-   * `pointDefaultStrokeColor`, parsed once per config change for the per-frame uniforms:
-   * a derivation rule as the shader's direction (0 auto, -1 darken, 1 lighten) with no color,
-   * or an explicit RGBA color.
+   * `pointDefaultStrokeColor`, parsed once per config change for the per-frame uniforms, as
+   * the shader's `strokeDefaultShade` code: a derivation rule as its direction (0 auto,
+   * -1 darken, 1 lighten), or 2 for an explicit color, carried in `pointDefaultStrokeRgba`.
    */
   public pointDefaultStrokeShade = 0
   public pointDefaultStrokeRgba: [number, number, number, number] | undefined = undefined
@@ -319,7 +319,7 @@ export class Store {
       this.pointDefaultStrokeShade = value === 'auto' ? 0 : value === 'darken' ? -1 : 1
       this.pointDefaultStrokeRgba = undefined
     } else {
-      this.pointDefaultStrokeShade = 0
+      this.pointDefaultStrokeShade = 2
       this.pointDefaultStrokeRgba = getRgbaColor(value)
     }
   }

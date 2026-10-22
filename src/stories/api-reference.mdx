@@ -176,7 +176,7 @@ The returned array contains the processed point sizes used for rendering, includ
 
 Sets per-point stroke colors — the thin band along the inside edge of each point, enabled by `pointDefaultStrokeWidth` or `setPointStrokeWidths`.
 
-* **`pointStrokeColors`** (Float32Array): RGBA per point in 0..1, `[r1, g1, b1, a1, r2, g2, b2, a2, ...]`, aligned to the point index space. A `NaN` channel means "use `pointDefaultStrokeColor`" for that point, so a few points can carry an explicit color while the rest keep the derived shade. Greyed-out points always get the derived shade of their greyed fill.
+* **`pointStrokeColors`** (Float32Array): RGBA per point in 0..1, `[r1, g1, b1, a1, r2, g2, b2, a2, ...]`, aligned to the point index space. A `NaN` channel means "use `pointDefaultStrokeColor`" for that point, so a few points can carry an explicit color while the rest keep the derived shade. Alpha is the stroke's opacity over the fill. Greyed-out points always get the derived shade of their greyed fill.
 
 On the next `render()` the change animates with `transitionDuration`, as point colors do.
 
