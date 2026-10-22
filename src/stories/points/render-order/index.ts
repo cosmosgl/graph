@@ -148,6 +148,10 @@ export const pointRenderOrder = (): { graph: Graph; div: HTMLDivElement; destroy
     enableSimulation: false,
     enableDrag: false,
     fitViewOnInit: true,
+    // A pale rim on every point keeps the stacking legible where same-colored points overlap
+    pointDefaultStrokeWidth: 1,
+    pointDefaultStrokeColor: 'lighten',
+    pointStrokeContrast: 0.15,
     renderHoveredPointRing: true,
     hoveredPointRingColor: '#ffffff',
     hoveredPointCursor: 'pointer',
