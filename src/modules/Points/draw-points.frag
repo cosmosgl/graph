@@ -95,7 +95,9 @@ vec4 applyGreyoutToImage(vec4 imageColor, float isGreyedOutValue) {
 }
 
 // The shapes' sizes (SQUARE_HALF_SIZE, …) come from the shapeGeometry module, shared with the
-// vertex stage, which caps the stroke by each shape's inradius.
+// vertex stage, which caps the stroke by each shape's inradius. Every function returns the exact
+// Euclidean distance to the shape's edge in core units (negative inside), so the edge ramp and
+// the stroke band can scale it to pixels by the core's size alone (see edgeDistancePx).
 float squareDistance(vec2 p) {
     vec2 d = abs(p) - vec2(SQUARE_HALF_SIZE);
     return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
@@ -121,7 +123,12 @@ float triangleDistance(vec2 p) {
 }
 
 float diamondDistance(vec2 p) {
-    return abs(p.x) + abs(p.y) / DIAMOND_ASPECT - DIAMOND_HALF_WIDTH;
+    // Rhombus signed-distance (Inigo Quilez): b holds the half-diagonals
+    const vec2 b = vec2(DIAMOND_HALF_WIDTH, DIAMOND_HALF_WIDTH * DIAMOND_ASPECT);
+    p = abs(p);
+    float h = clamp(((b.x - 2.0 * p.x) * b.x - (b.y - 2.0 * p.y) * b.y) / dot(b, b), -1.0, 1.0);
+    float d = length(p - 0.5 * b * vec2(1.0 - h, 1.0 + h));
+    return d * sign(p.x * b.y + p.y * b.x - b.x * b.y);
 }
 
 float pentagonDistance(vec2 p) {
@@ -250,12 +257,11 @@ void main() {
             float rPx = length(coreCoord) * coreDiameterPx * 0.5;
             edgeDistancePx = rPx - coreDiameterPx * 0.5;
         } else {
-            float shapeDistance = getShapeDistance(coreCoord, pointShape);
-            // Field units to pixels via the field's gradient per pixel: exact for a field that is
-            // linear across the ramp, as every polygon field is at its edge. All fragments of a
-            // sprite share pointShape, so the derivative is taken in coherent control flow.
-            float fieldPerPx = max(length(vec2(dFdx(shapeDistance), dFdy(shapeDistance))), 1e-6);
-            edgeDistancePx = shapeDistance / fieldPerPx;
+            // The field is a true distance in core units, and the core spans -1..1 over
+            // coreDiameterPx, so the pixel distance is the field times the core's radius. No
+            // screen-space derivative: one taken across a fold of the field (a corner diagonal,
+            // where the nearest edge changes) comes out short and would push band pixels to fill.
+            edgeDistancePx = getShapeDistance(coreCoord, pointShape) * coreDiameterPx * 0.5;
         }
         float opacity = 1.0 - smoothstep(-halfRampPx, halfRampPx, edgeDistancePx);
         shapeCoverage = opacity;
