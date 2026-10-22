@@ -94,19 +94,8 @@ vec4 applyGreyoutToImage(vec4 imageColor, float isGreyedOutValue) {
     return vec4(finalColor, finalAlpha);
 }
 
-// Shape geometry in the sprite's -1..1 core, shared by the distance functions and by
-// shapeInradius() below, so the two cannot drift apart.
-const float SQUARE_HALF_SIZE = 0.8;
-const float TRIANGLE_HALF_EDGE = 0.9;
-const float DIAMOND_HALF_WIDTH = 0.8;
-const float DIAMOND_ASPECT = 1.2;        // > 1: taller than wide
-const float PENTAGON_APOTHEM = 0.726542528;
-const float HEXAGON_APOTHEM = 0.8;
-const float STAR_OUTER_RADIUS = 0.9;
-const float STAR_INNER_RATIO = 0.45;     // inner / outer radius
-const float CROSS_HALF_LENGTH = 0.8;
-const float CROSS_HALF_THICKNESS = 0.3;
-
+// The shapes' sizes (SQUARE_HALF_SIZE, …) come from the shapeGeometry module, shared with the
+// vertex stage, which caps the stroke by each shape's inradius.
 float squareDistance(vec2 p) {
     vec2 d = abs(p) - vec2(SQUARE_HALF_SIZE);
     return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
@@ -202,21 +191,6 @@ float crossDistance(vec2 p) {
     return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
 }
 
-// Depth of a shape's deepest interior point, as a fraction of the sprite radius: how far the
-// centre of the fill sits from the nearest edge, from the geometry above (a circle's centre is
-// a full radius in; a cross arm is only its half-thickness). The stroke cutoff uses it: an
-// inset band deeper than this would leave no fill at all.
-float shapeInradius(float shape) {
-    if (shape == SQUARE) return SQUARE_HALF_SIZE;
-    else if (shape == TRIANGLE) return TRIANGLE_HALF_EDGE / sqrt(3.0);     // equilateral: inradius = edge / (2 sqrt 3)
-    else if (shape == DIAMOND) return DIAMOND_HALF_WIDTH * DIAMOND_ASPECT / sqrt(DIAMOND_ASPECT * DIAMOND_ASPECT + 1.0);
-    else if (shape == PENTAGON) return PENTAGON_APOTHEM;
-    else if (shape == HEXAGON) return HEXAGON_APOTHEM;
-    else if (shape == STAR) return STAR_OUTER_RADIUS * STAR_INNER_RATIO;   // the inner vertices
-    else if (shape == CROSS) return CROSS_HALF_THICKNESS;
-    else return 1.0;                                                        // circle
-}
-
 float getShapeDistance(vec2 p, float shape) {
     if (shape == SQUARE) return squareDistance(p);
     else if (shape == TRIANGLE) return triangleDistance(p);
@@ -289,12 +263,11 @@ void main() {
 
         // Edge stroke: an inset band [-strokeWidthPx, 0] along the edge in the per-point stroke
         // color (resolved in the vertex stage: explicit, or a lightness step from the fill).
-        // Inset, so the point never grows and the sprite needs no room for it. The band runs in
-        // from every edge, so a shape whose deepest point is within the stroke width of its edge
-        // would be nothing but stroke: it gets none.
+        // Inset, so the point never grows and the sprite needs no room for it. The width arrives
+        // already capped by the shape's depth (vertex stage), so fill always remains inside it.
         vec3 shapeRgb = shapeColor.rgb;
 #ifdef POINT_STROKE
-        if (strokeWidthPx > 0.0 && shapeDiameterPx * 0.5 * shapeInradius(pointShape) > strokeWidthPx) {
+        if (strokeWidthPx > 0.0) {
             float bandDistancePx = abs(edgeDistancePx + strokeWidthPx * 0.5) - strokeWidthPx * 0.5;
             float stroke = 1.0 - smoothstep(-halfRampPx, halfRampPx, bandDistancePx);
             shapeRgb = mix(shapeRgb, strokeColor.rgb, stroke * strokeColor.a);
