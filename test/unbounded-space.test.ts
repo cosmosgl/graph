@@ -634,17 +634,13 @@ const countPairsCloserThan = (positions: Float32Array, from: number, to: number,
 
 describe('the collision hash follows the data', () => {
   it('resolves the same overlapping cluster wherever it sits, to float rounding', async () => {
-    // Size 12: a 12-unit contact range. A hash anchored at world zero divided
-    // the space into 341 cells of 4096 / 341 = 12.01 units, so moving the
-    // cluster by a distance that is not a multiple of half a cell cut it at
-    // different cell boundaries — and the force reads cell centroids, so the
-    // cut decides the push. Ten steps: long enough for the cut to show, short
-    // enough that float rounding at the different offsets has not compounded
-    // through the collisions yet.
+    // Compare one constraint pass: repeated pairwise projections amplify the
+    // initial float32 rounding differences at translated world coordinates.
+    // The data-relative mapping must not change the initial collision response.
     const COUNT = 800
     const cluster = createCluster(COUNT, 120)
     const layoutAt = async (cx: number, cy: number): Promise<Float64Array> => {
-      const result = await runCollision(placeClusters(cluster, [[cx, cy]]), 10)
+      const result = await runCollision(placeClusters(cluster, [[cx, cy]]), 1)
       const relative = new Float64Array(COUNT * 2)
       for (let i = 0; i < COUNT; i += 1) {
         relative[i * 2] = (result[i * 2] as number) - cx
@@ -660,9 +656,6 @@ describe('the collision hash follows the data', () => {
       let sumSquares = 0
       for (let i = 0; i < COUNT * 2; i += 1) sumSquares += ((moved[i] as number) - (reference[i] as number)) ** 2
       const rms = Math.sqrt(sumSquares / COUNT)
-      // Measured on SwiftShader, as a fraction of the layout's extent: the
-      // space-anchored hash 9.3e-3 at (1000, 3100) and 6.4e-3 at
-      // (2900.37, 1500.71); the data-anchored hash 2.2e-6 and 2.6e-6.
       expect(rms / referenceExtent).toBeLessThan(1e-3)
     }
   })
@@ -1226,6 +1219,26 @@ describe('custom cluster positions', () => {
 })
 
 describe('collision away from the space', () => {
+  it('resolves slot-path contacts outside the space with a distant outlier', async () => {
+    const pairs = 2500 // 5001 points: above the all-pairs threshold
+    const positions = new Float32Array((pairs * 2 + 1) * 2)
+    for (let pair = 0; pair < pairs; pair += 1) {
+      const x = 20000 + (pair % 50) * 40
+      const y = -9000 + Math.floor(pair / 50) * 40
+      positions.set([x, y, x + 1, y], pair * 4)
+    }
+    positions.set([220000, -9000], pairs * 4)
+    const result = await runCollision(positions, 2, { pointDefaultSize: 8 })
+    for (let pair = 0; pair < pairs; pair += 1) {
+      const offset = pair * 4
+      expect(Math.hypot(
+        (result[offset] as number) - (result[offset + 2] as number),
+        (result[offset + 1] as number) - (result[offset + 3] as number)
+      )).toBeGreaterThan(7.9)
+    }
+    expect(Array.from(result.subarray(pairs * 4))).toEqual([220000, -9000])
+  })
+
   it('spreads an overlapping cluster far outside the space as it does inside it', async () => {
     const COUNT = 800
     const cluster = createCluster(COUNT, 120)

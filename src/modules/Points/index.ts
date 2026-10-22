@@ -94,6 +94,8 @@ const POINT_SHADER_DEFINES = {
  */
 function getFriction (friction: number): number {
   return Number.isFinite(friction) ? friction : defaultConfigValues.simulationFriction
+}
+
 /** Stroke defaults handed to the point vertex shader every frame (see `Points.getStrokeUniforms`). */
 interface StrokeUniforms {
   strokeContrast: number;
@@ -2201,12 +2203,10 @@ export class Points extends CoreModule implements PointTrackerHost {
 
     this.updatePositionUniformStore.setUniforms({
       updatePositionUniforms: {
-        friction: getFriction(this.config.simulationFriction),
+        friction: getFriction(friction),
         // The width of the space: the displacement ceiling the old position
         // clamp implied. A ceiling, not a stability bound (update-position.frag).
         maxStep: this.store.adjustedSpaceSize,
-        friction,
-        spaceSize: this.store.adjustedSpaceSize,
       },
     })
 

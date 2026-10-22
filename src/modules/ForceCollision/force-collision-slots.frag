@@ -35,35 +35,40 @@ uniform highp sampler2DArray slotsTexture;
 layout(std140) uniform forceCollisionSlotsUniforms {
   float pointsTextureSize;
   float gridSize;
-  float cellSize;
   float slotCount;
   float collisionStrength;
   float collisionRadius;
   float collisionPadding;
   float alpha;
   float collisionCooling; // 0: full strength at every alpha; 1: scaled by alpha like the other forces
+  float cellsPerUnit;
+  float rotationSeed;
 } forceCollisionSlots;
 
 #define pointsTextureSize forceCollisionSlots.pointsTextureSize
 #define gridSize forceCollisionSlots.gridSize
-#define cellSize forceCollisionSlots.cellSize
 #define slotCount forceCollisionSlots.slotCount
 #define collisionStrength forceCollisionSlots.collisionStrength
 #define collisionRadius forceCollisionSlots.collisionRadius
 #define collisionPadding forceCollisionSlots.collisionPadding
 #define alpha forceCollisionSlots.alpha
 #define collisionCooling forceCollisionSlots.collisionCooling
+#define cellsPerUnit forceCollisionSlots.cellsPerUnit
+#define rotationSeed forceCollisionSlots.rotationSeed
 #else
 uniform float pointsTextureSize;
 uniform float gridSize;
-uniform float cellSize;
 uniform float slotCount;
 uniform float collisionStrength;
 uniform float collisionRadius;
 uniform float collisionPadding;
 uniform float alpha;
 uniform float collisionCooling;
+uniform float cellsPerUnit;
+uniform float rotationSeed;
 #endif
+
+// @collision-grid
 
 out vec4 fragColor;
 
@@ -90,20 +95,20 @@ void main() {
 
   // Must match the cell formula of the peel pass exactly.
   int cells = int(gridSize);
-  ivec2 pointCell = clamp(ivec2(floor(position / cellSize)), ivec2(0), ivec2(cells - 1));
+  highp ivec2 pointCell = collisionCell(position, vec2(0.0), cellsPerUnit);
 
   vec2 correction = vec2(0.0);
   int slots = int(slotCount);
 
   for (int j = -1; j <= 1; j += 1) {
     for (int i = -1; i <= 1; i += 1) {
-      ivec2 cell = pointCell + ivec2(i, j);
-      if (any(lessThan(cell, ivec2(0))) || any(greaterThanEqual(cell, ivec2(cells)))) continue;
+      highp ivec2 cell = pointCell + ivec2(i, j);
+      ivec2 slotCell = collisionTexel(cell, vec2(0.0), rotationSeed, cells);
 
       // An exhausted cell peels empty slots (index -1) for the remaining
       // layers; empty layers can't be followed by occupied ones within a cell.
       for (int s = 0; s < slots; s += 1) {
-        float slotIndex = texelFetch(slotsTexture, ivec3(cell, s), 0).r;
+        float slotIndex = texelFetch(slotsTexture, ivec3(slotCell, s), 0).r;
         if (slotIndex < 0.0) break;
         // Exact `==` on a float-stored index holds for whole numbers below 2^24
         // — every realistic graph (a points texture bigger than 4096²).
@@ -112,6 +117,9 @@ void main() {
 
         ivec2 otherTexel = ivec2(other % size, other / size);
         vec2 otherPosition = texelFetch(positionsTexture, otherTexel, 0).rg;
+        // Hash aliases share the slot budget, but never create a phantom contact
+        // or count one neighbour twice when two scanned cells share a texel.
+        if (any(notEqual(collisionCell(otherPosition, vec2(0.0), cellsPerUnit), cell))) continue;
         vec2 distVector = position - otherPosition;
         float dist2 = dot(distVector, distVector);
 
