@@ -9,12 +9,12 @@ precision highp int;
 // every pair instead.
 //
 // The grid cell spans the contact range (≥ 2 × the largest radius), so every
-// point this one can touch is in the 3×3 block around its cell. Each cell's K
-// slots hold a uniform random K-subset of its occupants, re-drawn every pass
-// (build-nearfield-slots.vert): a cell with K or fewer points is listed in
-// full and resolved exactly; a denser cell resolves against a fresh sample
-// each pass, so every overlapping pair is reached sooner or later while the
-// cap below keeps each step bounded. No cell mean is ever used — a contact test
+// point this one can touch is in the 3×3 block around its cell. Each hash
+// bucket's K slots hold a uniform random K-subset of its occupants, re-drawn
+// every pass (build-nearfield-slots.vert). A bucket with K or fewer points is
+// listed in full; denser buckets supply a fresh sample. Distant cells share
+// this slot budget; the world-cell check below rejects aliased candidates.
+// The cap below keeps each step bounded. No cell mean is ever used — a contact test
 // against a mean cannot see a pair that overlaps while the mean sits out of
 // range, which is how the previous grid path stalled in dense piles.
 //
