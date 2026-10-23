@@ -10,8 +10,9 @@ import { createCosmos } from '../create-cosmos'
  * The points are chained by links in order (a closed loop for closed curves), and
  * their attractors are sampled along a parametric curve, so the attractor force
  * draws the shape and the links trace it. Every fifth point has no attractor
- * (`NaN`, drawn dimmer): it is placed only by its two chain links and settles
- * between its neighbours, which is what makes the constraint soft.
+ * (`NaN`, drawn dimmer): nothing pulls it to the curve, so with gravity off it settles
+ * midway between its chain neighbours, which is what makes the constraint soft, and with
+ * gravity on it sags toward the centre.
  *
  * Gravity pulls every point toward the centre of the space, so the attractors
  * have something to resist: with the default loose strength the figure settles
@@ -53,7 +54,7 @@ export const attractors = (): { graph: Graph; div: HTMLDivElement; destroy: () =
     closed: true,
     at: (t) => {
       const a = t * Math.PI * 2
-      // The classic heart curve spans x ∈ [-16, 16], y ∈ [-17, 13]; scale it to the radius.
+      // The classic heart curve spans x ∈ [-16, 16], y ∈ [-17, 12]; scale it to the radius.
       const x = 16 * Math.sin(a) ** 3
       const y = 13 * Math.cos(a) - 5 * Math.cos(2 * a) - 2 * Math.cos(3 * a) - Math.cos(4 * a)
       const s = radius / 17
@@ -89,7 +90,7 @@ export const attractors = (): { graph: Graph; div: HTMLDivElement; destroy: () =
       const k = Math.floor(u)
       const f = u - k
       const vertex = (n: number): [number, number] =>
-        polar(n % 2 === 0 ? radius : radius * 0.42, -Math.PI / 2 + (n / segments) * Math.PI * 2)
+        polar(n % 2 === 0 ? radius : radius * 0.42, Math.PI / 2 + (n / segments) * Math.PI * 2)
       const [x0, y0] = vertex(k)
       const [x1, y1] = vertex(k + 1)
       return [x0 + (x1 - x0) * f, y0 + (y1 - y0) * f]
@@ -119,7 +120,7 @@ export const attractors = (): { graph: Graph; div: HTMLDivElement; destroy: () =
     return links
   }
 
-  // Every fifth point is free: no attractor, placed by its chain links alone.
+  // Every fifth point is free: no attractor, so only the chain and gravity place it.
   const isFree = (i: number): boolean => i % 5 === 4
 
   const buildAttractors = (curve: Curve): Float32Array => {
@@ -177,9 +178,11 @@ export const attractors = (): { graph: Graph; div: HTMLDivElement; destroy: () =
     linkDefaultWidth: 1.5,
     curvedLinks: false,
     simulationAttraction: 0.6,
-    // The rest length matches the spacing of the attractors along the curve, with no
-    // randomness, so the chain neither pulls the figure taut nor bunches it up and the
-    // free points settle centred between their neighbours.
+    // The rest length matches the attractor spacing on the heart, star and infinity, with no
+    // randomness, so the chain neither pulls the figure taut nor bunches it up. The spiral, rose
+    // and Lissajous space their attractors two to three times wider, so there the chain runs
+    // taut. Either way a free point settles midway between its neighbours; gravity, when on, is
+    // what pulls it inward.
     simulationLinkSpring: 0.8,
     simulationLinkDistance: 20,
     simulationLinkDistRandomVariationRange: [1, 1],
