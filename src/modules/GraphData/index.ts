@@ -79,7 +79,7 @@ export class GraphData {
   public inputPointClusters: (number | undefined)[] | undefined
   public inputClusterPositions: (number | undefined)[] | undefined
   public inputClusterStrength: Float32Array | undefined
-  /** Raw per-point attractor positions from `setPointAttractors` (`[x0, y0, x1, y1, …]`; `NaN` = none). */
+  /** Raw per-point attractor positions from `setPointAttractors` (`[x0, y0, x1, y1, …]`; a non-finite coordinate = none). */
   public inputPointAttractors: Float32Array | undefined
   /** Raw per-point attractor strength coefficients from `setPointAttractorStrength`. */
   public inputPointAttractorStrength: Float32Array | undefined
@@ -126,8 +126,8 @@ export class GraphData {
 
   /**
    * Per-point attractor positions the attractor force uploads, `[x0, y0, x1, y1, …]`
-   * aligned to the point index space; `NaN` in either coordinate means the point has
-   * no attractor. `undefined` when the input is missing or does not match the
+   * aligned to the point index space; a non-finite coordinate (`NaN`, `±Infinity`) means the
+   * point has no attractor. `undefined` when the input is missing or does not match the
    * point count — the force then does nothing.
    */
   public pointAttractors: Float32Array | undefined

@@ -32,8 +32,8 @@ void main() {
   if (attractor.a > 0.5) {
     vec2 distVector = attractor.xy - pointPosition.xy;
     float dist = length(distVector);
-    // `dist > 0.0` is also false for NaN, so an absent (NaN-positioned) point
-    // contributes no velocity instead of poisoning the integrator.
+    // A point sitting on its target has no direction to normalize; the same test is
+    // false for a NaN position, which the integrator leaves untouched anyway.
     if (dist > 0.0) {
       float addV = alpha * dist * attractionCoefficient * attractor.b;
       velocity.rg += addV * normalize(distVector);
