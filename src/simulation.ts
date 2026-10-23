@@ -946,6 +946,19 @@ export class GraphSimulation implements PositionTextureSource {
     // `current` holds the latest positions — the draw pass, hover detection,
     // gatherTrackers and the next frame all read from `current`.
     if (shouldRunSimulation) {
+      // Collision GPU resources are allocated lazily on the first tick that
+      // needs them (or after a data change marked them stale), so a simulation
+      // that never enables collision never pays the grid/size-texture memory
+      // cost. They are built here, ahead of the forces, because the link force
+      // reads the collision size texture to keep spring rest lengths at or
+      // above the contact distance.
+      if (simulationCollision && !this.isForceCollisionReady) {
+        this.forceCollision?.create()
+        this.forceCollision?.initPrograms()
+        this.isForceCollisionReady = true
+      }
+      const collisionSizeTexture = simulationCollision ? this.forceCollision?.resolvedSizeTexture : undefined
+
       if (simulationGravity) {
         this.points?.swapFbo()
         this.forceGravity?.run()
@@ -964,10 +977,10 @@ export class GraphSimulation implements PositionTextureSource {
 
       if (this.store.linksTextureSize) {
         this.points?.swapFbo()
-        this.forceLinkIncoming?.run()
+        this.forceLinkIncoming?.run(collisionSizeTexture)
         this.points?.updatePosition()
         this.points?.swapFbo()
-        this.forceLinkOutgoing?.run()
+        this.forceLinkOutgoing?.run(collisionSizeTexture)
         this.points?.updatePosition()
       }
 
@@ -986,18 +999,22 @@ export class GraphSimulation implements PositionTextureSource {
       // Collision runs after the attraction forces (links, clusters, attractors) so it
       // corrects the overlap they introduce within the same tick, instead of
       // lagging one frame behind and oscillating against them.
+      //
+      // It is a constraint, not a force: each pass is a bounded position
+      // correction, integrated with friction 1 so it lands in full, and the
+      // shader does not scale it by alpha. Extra iterations repeat the whole
+      // grid-build + resolve pass on the freshest positions, so a dense pile
+      // unwinds in fewer ticks at a linear cost per pass.
       if (simulationCollision) {
-        // Lazily allocate the collision GPU resources on first use (or after a
-        // data change marked them stale), so a simulation that never enables
-        // collision never pays the grid/size-texture memory cost.
-        if (!this.isForceCollisionReady) {
-          this.forceCollision?.create()
-          this.forceCollision?.initPrograms()
-          this.isForceCollisionReady = true
+        // A non-finite count (NaN from an empty input, Infinity) runs one pass:
+        // Infinity would never return, and NaN would silently skip collision.
+        const requested = this.config.simulationCollisionIterations
+        const iterations = Number.isFinite(requested) ? Math.max(1, Math.floor(requested)) : 1
+        for (let i = 0; i < iterations; i++) {
+          this.points?.swapFbo()
+          this.forceCollision?.run()
+          this.points?.updatePosition(1)
         }
-        this.points?.swapFbo()
-        this.forceCollision?.run()
-        this.points?.updatePosition()
       }
 
       // Alpha decay and progress
