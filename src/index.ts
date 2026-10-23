@@ -826,7 +826,7 @@ export class Graph implements PositionTextureSource {
    * Every point is pulled toward its own attractor by the attractor force, on top of
    * the other simulation forces (links, repulsion, gravity, …) — a per-point layout constraint
    * rather than a fixed position. The pull grows linearly with the distance to the
-   * attractor and is scaled by `simulationAttraction` and the point's coefficient from
+   * attractor and is scaled by `simulationAttractor` and the point's coefficient from
    * `setPointAttractorStrength`.
    *
    * @param {Float32Array} attractors - A Float32Array of attractor positions in the format [x1, y1, x2, y2, ..., xn, yn],

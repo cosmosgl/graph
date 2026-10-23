@@ -9,14 +9,14 @@ uniform sampler2D attractorTexture;
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceAttractorUniforms {
   float alpha;
-  float attractionCoefficient;
+  float attractorCoefficient;
 } forceAttractor;
 
 #define alpha forceAttractor.alpha
-#define attractionCoefficient forceAttractor.attractionCoefficient
+#define attractorCoefficient forceAttractor.attractorCoefficient
 #else
 uniform float alpha;
-uniform float attractionCoefficient;
+uniform float attractorCoefficient;
 #endif
 
 out vec4 fragColor;
@@ -35,7 +35,7 @@ void main() {
     // A point sitting on its target has no direction to normalize; the same test is
     // false for a NaN position, which the integrator leaves untouched anyway.
     if (dist > 0.0) {
-      float addV = alpha * dist * attractionCoefficient * attractor.b;
+      float addV = alpha * dist * attractorCoefficient * attractor.b;
       velocity.rg += addV * normalize(distVector);
     }
   }

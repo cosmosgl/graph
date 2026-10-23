@@ -13,7 +13,7 @@ import updateVert from '@/graph/modules/Shared/quad.vert?raw'
  * Per point the engine uploads one texel `(targetX, targetY, strength, hasTarget)`:
  * a point whose attractor position is not finite gets `hasTarget = 0` and is left
  * alone by this pass. The pull is a linear spring, like the cluster force:
- * `alpha * distance * simulationAttraction * strength`.
+ * `alpha * distance * simulationAttractor * strength`.
  */
 export class ForceAttractor extends CoreModule {
   private runCommand: Model | undefined
@@ -24,7 +24,7 @@ export class ForceAttractor extends CoreModule {
   private uniformStore: UniformStore<{
     forceAttractorUniforms: {
       alpha: number;
-      attractionCoefficient: number;
+      attractorCoefficient: number;
     };
   }> | undefined
 
@@ -88,7 +88,7 @@ export class ForceAttractor extends CoreModule {
       forceAttractorUniforms: {
         uniformTypes: {
           alpha: 'f32',
-          attractionCoefficient: 'f32',
+          attractorCoefficient: 'f32',
         },
       },
     })
@@ -128,7 +128,7 @@ export class ForceAttractor extends CoreModule {
     this.uniformStore.setUniforms({
       forceAttractorUniforms: {
         alpha: store.alpha,
-        attractionCoefficient: this.config.simulationAttraction,
+        attractorCoefficient: this.config.simulationAttractor,
       },
     })
 

@@ -29,7 +29,7 @@ graph.setPointAttractors(new Float32Array([100, 100, NaN, NaN, 300, 250]))
 graph.setPointAttractorStrength(new Float32Array([1, 0.4, 0.3]))
 
 // Global coefficient (default 0.1), same scale as simulationCluster.
-graph.setConfigPartial({ simulationAttraction: 0.3 })
+graph.setConfigPartial({ simulationAttractor: 0.3 })
 ```
 
 Both arrays follow the engine's channel contract: they must match the point count exactly
@@ -51,7 +51,7 @@ data texture like the cluster force's coefficient texture:
   (`updateAttractors()` in `src/modules/GraphData/index.ts`). The texture is only reallocated
   when `pointsTextureSize` changes; otherwise the data is re-uploaded in place.
 - `force-attractor.frag` is a full-screen pass over the points texture. For a point with
-  `hasTarget = 1` it writes `alpha * dist * simulationAttraction * strength` along the
+  `hasTarget = 1` it writes `alpha * dist * simulationAttractor * strength` along the
   direction to the target — the same linear spring the cluster force uses, so the two
   coefficients are directly comparable. `hasTarget = 0` (and NaN positions, via `dist > 0`)
   write zero velocity.
@@ -83,5 +83,5 @@ never restarts a settled simulation; the gravity toggle is a config change, so i
 
 ## Docs
 
-`simulationAttraction` in the Configuration table; `setPointAttractors` and
+`simulationAttractor` in the Configuration table; `setPointAttractors` and
 `setPointAttractorStrength` in the API reference, after the cluster methods.

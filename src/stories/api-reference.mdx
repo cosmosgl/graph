@@ -498,7 +498,7 @@ This method sets the force strength coefficients for clustering points in the gr
 
 ### <a name="set_point_attractors" href="#set_point_attractors">#</a> graph.<b>setPointAttractors</b>(<i>attractors</i>)
 
-This method gives each point its own attractor. The attractor force pulls every point toward its attractor on top of the other simulation forces (links, repulsion, gravity, …), so it acts as a per-point layout constraint rather than a fixed position. The pull grows linearly with the distance to the attractor and is scaled by the `simulationAttraction` config value and the point's coefficient from `setPointAttractorStrength`.
+This method gives each point its own attractor. The attractor force pulls every point toward its attractor on top of the other simulation forces (links, repulsion, gravity, …), so it acts as a per-point layout constraint rather than a fixed position. The pull grows linearly with the distance to the attractor and is scaled by the `simulationAttractor` config value and the point's coefficient from `setPointAttractorStrength`.
 
 * **`attractors`** (Float32Array): An array of attractor positions in the format `[x1, y1, x2, y2, ..., xn, yn]`, where `n` is the index of the point, in simulation space after any position rescaling. `rescalePositions` transforms point positions only, not attractor targets. Set `rescalePositions: false` to supply point positions and attractors in the original data coordinate space. A non-finite value (`NaN`, `±Infinity`) in either coordinate means that point has no attractor and is not affected by this force. The array must hold exactly one pair per point; otherwise it is ignored.
 * **Example:**
