@@ -97,6 +97,51 @@ describe.each(['graph', 'simulation'] as const)('attractors through %s', kind =>
     }
   })
 
+  it('follows a new point count: a stale array asks for nothing, a matching one reallocates the texture', async () => {
+    const config = {
+      rescalePositions: false,
+      simulationGravity: 0,
+      simulationRepulsion: 0,
+      simulationLinkSpring: 0,
+      simulationAttraction: 0.5,
+      simulationFriction: 1,
+    }
+    const engine = kind === 'graph' ? new Graph(null, config) : new GraphSimulation(config)
+    const apply = (): void => {
+      if (engine instanceof Graph) engine.render()
+      else engine.applyData()
+    }
+    engine.setPointPositions(new Float32Array([1000, 1000]))
+    engine.setPointAttractors(new Float32Array([1200, 1000]))
+    apply()
+    await engine.ready
+    try {
+      const simulation = engine instanceof Graph ? engine.simulation : engine
+      const { forceAttractor } = simulation as unknown as { forceAttractor: { isActive: boolean; attractorTexture: { width: number } } }
+      expect(forceAttractor.isActive).toBe(true)
+      const firstTexture = forceAttractor.attractorTexture
+      // Five points on the same one-pair array: the channel is a length mismatch now, so no force
+      engine.setPointPositions(new Float32Array([1000, 1000, 2000, 2000, 3000, 3000, 4000, 4000, 500, 500]))
+      apply()
+      expect(forceAttractor.isActive).toBe(false)
+      engine.step()
+      expect(engine.getPointPositionsArray()[0]).toBe(1000)
+      // A matching array brings the force back on a texture sized for the new count
+      engine.setPointAttractors(new Float32Array([1200, 1000, NaN, NaN, NaN, NaN, NaN, NaN, NaN, NaN]))
+      apply()
+      expect(forceAttractor.isActive).toBe(true)
+      expect(forceAttractor.attractorTexture).not.toBe(firstTexture)
+      expect(forceAttractor.attractorTexture.width).toBeGreaterThan(firstTexture.width)
+      // Alpha has decayed a little over the earlier step, so the pull is just under 100
+      engine.step()
+      expect(engine.getPointPositionsArray()[0]).toBeGreaterThan(1090)
+      expect(engine.getPointPositionsArray()[0]).toBeLessThan(1100.5)
+      expect(engine.getPointPositionsArray()[2]).toBe(2000)
+    } finally {
+      engine.destroy()
+    }
+  })
+
   it.each(['spaceSize', 'enableSimulation'] as const)('applies attractors pending before %s changes', async change => {
     const config = {
       spaceSize: 2048,
