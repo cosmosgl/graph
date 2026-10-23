@@ -977,9 +977,13 @@ export class Graph implements PositionTextureSource {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.render(simulationAlpha, transitionDuration))) return
-    this.graph.update()
+    // Only the counts, for the empty check: update() resolves every channel once
+    this.graph.updatePoints()
+    this.graph.updateLinks()
     const { fitViewOnInit, fitViewDelay, fitViewPadding, fitViewDuration, fitViewByPointsInRect, fitViewByPointIndices, initialZoomLevel } = this.config
     if (!this.graph.pointsNumber && !this.graph.linksNumber) {
+      // Nothing to upload, so update() won't run: resolve here so the getters see the empty graph
+      this.graph.update()
       this.stopFrames()
       // Headless: the canvas belongs to the host — never clear or submit its device.
       if (!this._isHeadless) {
@@ -1838,8 +1842,7 @@ export class Graph implements PositionTextureSource {
     if (this.isPointShapeUpdateNeeded) this.points.updateShape()
     if (this.isPointImageIndicesUpdateNeeded) this.points.updateImageIndices()
     if (this.isPointImageSizesUpdateNeeded) this.points.updateImageSizes()
-    // Unconditional (a no-op unless the resolved order changed): a config change can run
-    // create() before render() resolves a pending order, so a flag would be spent too early.
+    // Unconditional: a no-op unless the resolved order or the point count changed
     this.points.updateRenderOrder()
 
     if (this.isLinksUpdateNeeded) this.lines.updatePointsBuffer()
@@ -2082,13 +2085,11 @@ export class Graph implements PositionTextureSource {
       this.transition.end(true)
       this.transition.dequeue(TransitionProperty.Positions)
       this.simulation.ensureSimulationModules()
-      this.points?.ensureSimulationResources()
       this.simulation.markForcesDirty()
-      // Rebuild simulation resources before binding programs to them.
-      this.create()
-      this.initPrograms()
+      // The rebuild: resolves pending inputs, sizes the textures, builds the
+      // simulation's resources and binds the programs, then reheats
+      this.update(1)
       this.store.simulationProgress = 0
-      this.store.alpha = 1
       this.store.isSimulationRunning = true
       this._shouldForceHoverDetection = true
       this.config.onSimulationStart?.()
@@ -2325,6 +2326,9 @@ export class Graph implements PositionTextureSource {
   * @param simulationAlpha - Optional alpha value to set. If not provided, keeps current alpha.
   */
   private update (simulationAlpha = this.store.alpha): void {
+    // Every rebuild comes through here, from render() or from a config change, so the
+    // pending inputs are resolved here, before the texture sizes and the uploads read them
+    this.graph.update()
     this.simulation.updateTextureSizes()
     this.create()
     this.initPrograms()
