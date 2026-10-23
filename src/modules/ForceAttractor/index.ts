@@ -11,7 +11,7 @@ import updateVert from '@/graph/modules/Shared/quad.vert?raw'
  * constraint that composes with the other forces instead of replacing them.
  *
  * Per point the engine uploads one texel `(targetX, targetY, strength, hasTarget)`:
- * a point whose attractor position holds `NaN` gets `hasTarget = 0` and is left
+ * a point whose attractor position is not finite gets `hasTarget = 0` and is left
  * alone by this pass. The pull is a linear spring, like the cluster force:
  * `alpha * distance * simulationAttraction * strength`.
  */
