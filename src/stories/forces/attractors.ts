@@ -177,7 +177,7 @@ export const attractors = (): { graph: Graph; div: HTMLDivElement; destroy: () =
     pointDefaultSize: 18,
     linkDefaultWidth: 1.5,
     curvedLinks: false,
-    simulationAttraction: 0.6,
+    simulationAttractor: 0.6,
     // The rest length matches the attractor spacing on the heart, star and infinity, with no
     // randomness, so the chain neither pulls the figure taut nor bunches it up. The spiral, rose
     // and Lissajous space their attractors two to three times wider, so there the chain runs

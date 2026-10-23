@@ -11,7 +11,7 @@ describe.each(['graph', 'simulation'] as const)('attractors through %s', kind =>
       simulationGravity: 0,
       simulationRepulsion: 0,
       simulationLinkSpring: 0,
-      simulationAttraction: 0.5,
+      simulationAttractor: 0.5,
       simulationFriction: 1,
     }
     const engine = kind === 'graph' ? new Graph(null, config) : new GraphSimulation(config)
@@ -54,7 +54,7 @@ describe.each(['graph', 'simulation'] as const)('attractors through %s', kind =>
       simulationGravity: 0,
       simulationRepulsion: 0,
       simulationLinkSpring: 0,
-      simulationAttraction: 0.5,
+      simulationAttractor: 0.5,
       simulationFriction: 1,
     }
     const engine = kind === 'graph' ? new Graph(null, config) : new GraphSimulation(config)
@@ -103,7 +103,7 @@ describe.each(['graph', 'simulation'] as const)('attractors through %s', kind =>
       simulationGravity: 0,
       simulationRepulsion: 0,
       simulationLinkSpring: 0,
-      simulationAttraction: 0.5,
+      simulationAttractor: 0.5,
       simulationFriction: 1,
     }
     const engine = kind === 'graph' ? new Graph(null, config) : new GraphSimulation(config)
@@ -150,7 +150,7 @@ describe.each(['graph', 'simulation'] as const)('attractors through %s', kind =>
       simulationGravity: 0,
       simulationRepulsion: 0,
       simulationLinkSpring: 0,
-      simulationAttraction: 0.5,
+      simulationAttractor: 0.5,
       simulationFriction: 1,
     }
     const engine = kind === 'graph' ? new Graph(null, config) : new GraphSimulation(config)

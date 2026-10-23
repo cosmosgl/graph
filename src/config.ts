@@ -508,7 +508,7 @@ export interface GraphConfigInterface {
    * an attractor; it does nothing when none are set.
    * Default value: `0.1`
    */
-  simulationAttraction: number;
+  simulationAttractor: number;
   /**
    * Collision force coefficient. When set to a value greater than 0,
    * points will push each other apart when they overlap.
@@ -922,7 +922,7 @@ export type GraphSimulationConfigInterface = Pick<GraphConfigInterface,
   | 'simulationLinkDistRandomVariationRange'
   | 'simulationFriction'
   | 'simulationCluster'
-  | 'simulationAttraction'
+  | 'simulationAttractor'
   | 'simulationCollision'
   | 'simulationCollisionRadius'
   | 'simulationCollisionPadding'
