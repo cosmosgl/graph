@@ -658,6 +658,7 @@ export class Graph implements PositionTextureSource {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setLinkColors(linkColors))) return
     this.graph.inputLinkColors = linkColors
+    this.graph.invalidateLinkColorCache()
     this.isLinkColorUpdateNeeded = true
     this.transition.queue(TransitionProperty.LinkColors)
   }
@@ -686,6 +687,7 @@ export class Graph implements PositionTextureSource {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setLinkWidths(linkWidths))) return
     this.graph.inputLinkWidths = linkWidths
+    this.graph.invalidateLinkWidthCache()
     this.isLinkWidthUpdateNeeded = true
     this.transition.queue(TransitionProperty.LinkWidths)
   }
