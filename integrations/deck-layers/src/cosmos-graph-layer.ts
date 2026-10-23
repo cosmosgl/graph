@@ -390,6 +390,54 @@ const toValueArray = <In>(
  */
 const steppedAt = new WeakMap<Graph, number>()
 
+/**
+ * Unseeded points are drawn in the middle half of the space, around the world origin
+ * gravity pulls toward: these fractions of the engine's `spaceSize`. A default placement,
+ * not a bound; `_load` draws inside it and `getBounds` reports it before anything settles.
+ */
+const UNSEEDED_PLACEMENT: readonly [number, number] = [0.25, 0.75]
+
+/**
+ * The length `_viewTransform` projects to read deck's scale: any length long enough for the
+ * projected pixels to resolve it does, so it is not tied to the engine.
+ */
+const VIEW_PROBE_LENGTH = 4096
+
+/**
+ * A present point's coordinate as the engine stores it: rounded to float32, an infinity
+ * (also one the rounding makes) on the matching edge — `0` or `infiniteEdge`, the engine's
+ * `toFiniteCoordinate` in position-utils, which is not public. The edge is the space's
+ * width today; a bad-input rule, not a bound.
+ */
+const toEngineCoordinate = (value: number, infiniteEdge: number): number => {
+  const rounded = Math.fround(value)
+  if (rounded === Infinity) return infiniteEdge
+  if (rounded === -Infinity) return 0
+  return rounded
+}
+
+/** A 2D bounding box grown one point at a time; non-finite points are left out. */
+class BoundsBox {
+  private minX = Infinity
+  private minY = Infinity
+  private maxX = -Infinity
+  private maxY = -Infinity
+
+  public add (x: number, y: number): void {
+    if (!Number.isFinite(x) || !Number.isFinite(y)) return
+    if (x < this.minX) this.minX = x
+    if (x > this.maxX) this.maxX = x
+    if (y < this.minY) this.minY = y
+    if (y > this.maxY) this.maxY = y
+  }
+
+  /** Layer.getBounds' shape, z = 0; `null` when no point was added. */
+  public bounds (): [number[], number[]] | null {
+    if (this.minX > this.maxX) return null
+    return [[this.minX, this.minY, 0], [this.maxX, this.maxY, 0]]
+  }
+}
+
 /** What the layer loaded when binary points carried no `initialPositions`: a seed of its own. */
 const SEEDED = Symbol('seeded')
 const NO_LINKS = new Float32Array(0)
@@ -653,10 +701,44 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     return true
   }
 
-  /** The whole simulation space, in space coordinates; lets deck's viewport helpers frame the graph. */
+  /**
+   * The box around the graph's points, `[[minX, minY, 0], [maxX, maxY, 0]]`, for an
+   * application to frame the layer with. In space coordinates, before `modelMatrix`: map it
+   * through `modelMatrix` (and, on a map, unproject it) before fitting a viewport to it.
+   * deck.gl's core does not call it, but its mask, collision-filter and terrain extensions
+   * do, every frame, on the layers they apply to.
+   *
+   * `spaceSize` bounds no position — a layout grows past its square as far as its forces
+   * take it — so the box is measured from the live positions, read back from the GPU. The
+   * read is synchronous: it waits for the GPU to finish the work queued before it and copies
+   * the whole position texture (16 bytes a point). Call it to frame a view, not every frame.
+   * Absent points (NaN) are left out.
+   *
+   * Until the graph holds positions (its device is still initializing), the box is that of
+   * the positions the layer is about to load: `initialPositions`, or `getPointPosition`
+   * over the point objects, plus the middle half of the space where unseeded points are
+   * placed — where the points will start, so a view can be framed before the first frame.
+   *
+   * When there is nothing to measure — no points yet, every point absent, or positions the
+   * graph rescales on load (`rescalePositions: true`), which it centres on the space — the
+   * box is the space's square, `[[0, 0, 0], [spaceSize, spaceSize, 0]]`: where the graph
+   * starts, and what this method returned before layouts could leave the square. It is
+   * never `null`; the declared type keeps deck's `Layer.getBounds` contract, so a subclass
+   * may still override it with deck's own signature.
+   */
   public getBounds (): [number[], number[]] | null {
-    const spaceSize = this._spaceSize()
-    return [[0, 0, 0], [spaceSize, spaceSize, 0]]
+    const box = new BoundsBox()
+    const positions = this.state?.graph?.getPointPositionsArray()
+    if (positions && positions.length > 0) {
+      for (let i = 0; i < positions.length; i += 2) box.add(positions[i] as number, positions[i + 1] as number)
+    } else {
+      this._addInputPositions(box)
+    }
+    // Nothing loaded yet: the space square, as a stand-in extent — the square centred on the
+    // world origin. The engine's own origin once there is a graph: valid even when the
+    // config's spaceSize is not
+    const [originX, originY] = this.state?.graph?.simulation.store.worldOrigin ?? [this._spaceSize() / 2, this._spaceSize() / 2]
+    return box.bounds() ?? [[0, 0, 0], [2 * originX, 2 * originY, 0]]
   }
 
   public finalizeState (context: LayerContext): void {
@@ -773,7 +855,50 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     this.state.holdsHover = false
   }
 
-  /** The graph's space size — authoritative for a provided graph too. */
+  /**
+   * Adds the positions the layer would load to `box` (see `getBounds`): the given ones,
+   * placed as the engine will place them, and the square unseeded points are drawn in.
+   * Nothing when they are rescaled on load.
+   */
+  private _addInputPositions (box: BoundsBox): void {
+    const { points, getPointPosition } = this.props
+    if (!points) return
+    // Loaded positions are space coordinates unless the graph's config asks to rescale them
+    if ((this.state?.graph?.config ?? this.props.config)?.rescalePositions === true) return
+    const spaceSize = this._spaceSize()
+    // The engine stores float32 and puts an infinite coordinate of a present point on the
+    // matching edge of the space (position-utils' toFiniteCoordinate); NaN marks it absent
+    const add = (x: number, y: number): void => {
+      if (Number.isNaN(x) || Number.isNaN(y)) return
+      box.add(toEngineCoordinate(x, spaceSize), toEngineCoordinate(y, spaceSize))
+    }
+    let unseeded = false
+    if (Array.isArray(points)) {
+      const pointArray = points as readonly PointDataT[]
+      for (let i = 0; i < pointArray.length; i += 1) {
+        const info: AccessorContext<PointDataT> = { index: i, data: pointArray, target: [] }
+        const position = getPointPosition ? resolveAccessor(getPointPosition, pointArray[i] as PointDataT, info) : null
+        if (position) add(position[0], position[1])
+        else unseeded = true
+      }
+    } else {
+      const { length, initialPositions } = points as { length: number; initialPositions?: Float32Array }
+      if (initialPositions) {
+        for (let i = 0; i < length; i += 1) add(initialPositions[i * 2] as number, initialPositions[i * 2 + 1] as number)
+      } else unseeded = length > 0
+    }
+    if (unseeded) {
+      // _load's randomCoordinate draws inside this square
+      box.add(spaceSize * UNSEEDED_PLACEMENT[0], spaceSize * UNSEEDED_PLACEMENT[0])
+      box.add(spaceSize * UNSEEDED_PLACEMENT[1], spaceSize * UNSEEDED_PLACEMENT[1])
+    }
+  }
+
+  /**
+   * The graph's `spaceSize` — authoritative for a provided graph too. The length the
+   * engine's placement rules are fractions of: the infinite-input edge, the unseeded
+   * square, and the stand-in extent before there is a graph. It sizes nothing.
+   */
   private _spaceSize (): number {
     return this.state?.graph?.config.spaceSize ?? this.props.config?.spaceSize ?? Graph.prototype.config?.spaceSize ?? 4096
   }
@@ -802,14 +927,19 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
    * unit) and a translation, per `setViewTransform`'s space → screen formula,
    * inverted. Three anchors through deck's projection — the space origin, its
    * x axis, its y axis — give the scale and tell whether the view is one cosmos
-   * can draw: unrotated, unpitched, y up. The space origin's pixel is returned
-   * too, for mapping the other way.
+   * can draw: unrotated, unpitched, y up. The translation then follows from where
+   * the space origin lands and the world origin cosmos centres its screen on, read
+   * from the engine (`spaceSize / 2` on both axes, after the engine's own space-size
+   * adjustment). The space origin's pixel is returned too, for mapping the other way.
    */
   private _viewTransform (
     graph: Graph,
     viewport: Viewport
   ): { k: number; x: number; y: number; originX: number; originY: number } | null {
-    const spaceSize = graph.config.spaceSize
+    // The engine's own origin, not the config's: it is what cosmos draws with, and it stays
+    // valid when `config.spaceSize` is not (the engine falls back to a default)
+    const { worldOrigin } = graph.simulation.store
+    const probeLength = VIEW_PROBE_LENGTH
     const modelMatrix = this.props.modelMatrix
     const toPixel = (sx: number, sy: number): [number, number] => {
       // Space → common (through modelMatrix, column-major, z = 0) → world → pixel.
@@ -822,9 +952,9 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       return [pixel[0] as number, pixel[1] as number]
     }
     const [originX, originY] = toPixel(0, 0)
-    const [eastX, eastY] = toPixel(spaceSize, 0)
-    const [northX, northY] = toPixel(0, spaceSize)
-    const k = (eastX - originX) / spaceSize
+    const [eastX, eastY] = toPixel(probeLength, 0)
+    const [northX, northY] = toPixel(0, probeLength)
+    const k = (eastX - originX) / probeLength
     const tolerance = 1e-3 * Math.max(1, Math.abs(eastX - originX))
     const rotated = Math.abs(eastY - originY) > tolerance || Math.abs(northX - originX) > tolerance
     const yDown = northY > originY
@@ -839,10 +969,14 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       return null
     }
     this.state.viewWarned = false
+    // setViewTransform's formula at the space origin (0, 0), solved for the translation:
+    // originX = k * (w / 2 - ox) + x, originY = k * (oy + h / 2) + y, with (ox, oy) the
+    // world origin cosmos centres the screen on
+    const [worldOriginX, worldOriginY] = worldOrigin
     return {
       k,
-      x: originX - (k * (viewport.width - spaceSize)) / 2,
-      y: originY - k * (spaceSize + (viewport.height - spaceSize) / 2),
+      x: originX - k * (viewport.width / 2 - worldOriginX),
+      y: originY - k * (worldOriginY + viewport.height / 2),
       originX,
       originY,
     }
@@ -885,9 +1019,11 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     const firstLoad = !this.state.hasLoaded
     const spaceSize = this._spaceSize()
 
-    // Unseeded points land in the middle half of the space, clear of the walls. They
-    // are drawn from the graph's own RNG, so a `randomSeed` reproduces the layout
-    const randomCoordinate = (): number => spaceSize * graph.simulation.store.getRandomFloat(0.25, 0.75)
+    // Unseeded points land in UNSEEDED_PLACEMENT, around the world origin gravity pulls
+    // toward. They are drawn from the graph's own RNG, so a `randomSeed` reproduces the
+    // layout
+    const randomCoordinate = (): number =>
+      spaceSize * graph.simulation.store.getRandomFloat(UNSEEDED_PLACEMENT[0], UNSEEDED_PLACEMENT[1])
 
     let pointCount: number
     let pointObjects: readonly PointDataT[] | null = null

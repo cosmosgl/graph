@@ -172,8 +172,11 @@ describe('drawing by the render order', () => {
       graph.render()
       await graph.ready
       graph.setPointRenderOrder([0])
-      // A new space size rebuilds the graph before render() resolves the new order
-      graph.setConfigPartial({ spaceSize: SPACE_SIZE * 2 })
+      // A new space size rebuilds the graph before render() resolves the new order.
+      // It also moves the world origin, by half the change: a small one keeps the
+      // stack in the 200-pixel view. (Doubling it once passed only because the
+      // engine halved a spaceSize at SwiftShader's 8192 texture limit back to 4096.)
+      graph.setConfigPartial({ spaceSize: SPACE_SIZE + 100 })
       graph.render()
       expect(topPoint(graph)).toBe(0)
     } finally {
@@ -208,7 +211,11 @@ describe('drawing by the render order', () => {
       return (pixels[(100 * 200 + 100) * 4] as number) - 1
     }
     try {
-      graph.setViewTransform({ k: 1, x: 100 - (1000 + (200 - SPACE_SIZE) / 2), y: 100 - ((SPACE_SIZE - 1000) + (200 - SPACE_SIZE) / 2) }, [200, 200])
+      // setViewTransform's formula, inverted for k = 1 and (1000, 1000) → (100, 100), with
+      // the world origin at the centre of the space
+      const ox = SPACE_SIZE / 2
+      const oy = SPACE_SIZE / 2
+      graph.setViewTransform({ k: 1, x: 100 - (1000 - ox + 200 / 2), y: 100 - (oy - 1000 + 200 / 2) }, [200, 200])
       expect(graph.spaceToScreenPosition([1000, 1000])).toEqual([100, 100])
 
       expect(pickedAtCentre()).toBe(3)

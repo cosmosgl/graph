@@ -12,7 +12,12 @@ export const defaultConfigValues = {
   transitionDuration: 800,
   transitionEasing: TransitionEasing.CubicInOut,
   backgroundColor: '#222222',
-  /** Setting to 4096 because larger values crash the graph on iOS. More info: https://github.com/cosmosgl/graph/issues/203 */
+  /**
+   * Places the world origin (`spaceSize / 2`) and the square rescaled layouts start in; it does
+   * not bound positions. 4096 since larger values crashed iOS
+   * (https://github.com/cosmosgl/graph/issues/203) — the many-body grid's finest level was then a
+   * `spaceSize`-wide texture, which no longer exists. Kept so existing graphs frame as they did.
+   */
   spaceSize: 4096,
 
   // Points
@@ -75,6 +80,7 @@ export const defaultConfigValues = {
   simulationCenter: 0,
   simulationRepulsion: 1.0,
   simulationRepulsionTheta: 1.15,
+  simulationRepulsionQuality: 'auto',
   simulationLinkSpring: 1,
   simulationLinkDistance: 10,
   simulationLinkDistRandomVariationRange: [1, 1.2],

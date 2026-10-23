@@ -31,8 +31,8 @@ the padding.
 
 The force has two paths, split at **4,096 points** (`ALL_PAIRS_MAX_POINTS` in `index.ts`), the
 same threshold the many-body force uses. At or below it, `force-collision-allpairs.frag`
-tests every pair. Above it, `force-collision-slots.frag` tests every pair *within reach*: a
-uniform grid whose cell spans the contact range, with each cell's occupants listed by depth
+tests every pair. Above it, `force-collision-slots.frag` tests candidate pairs *within reach*:
+a uniform grid whose cell spans the contact range, with hash buckets populated by depth
 peeling so the force pass sees real neighbours, never a cell average. Both paths resolve a
 contact the same way, and both treat collision as a **constraint**: the correction is not
 scaled by the simulation's `alpha` (unless `simulationCollisionCooling` opts in), it is integrated without friction, and while collision is
@@ -98,30 +98,29 @@ Iterations multiply it. No grid, no slot textures.
 
 ### Step 1 — size the cell to the contact range
 
-`create()` in `index.ts` sizes the grid from the physics first, then from the point count:
+`create()` in `index.ts` fixes the cell at the contact range and bounds the slot
+textures by point count:
 
 ```
-R_max = (fixed radius > 0 ? fixed radius : maxSize / 2) + padding   // largest R in the graph
-grid  = min(⌊spaceSize / max(2 · R_max, 8)⌋, finestGridSize(n))       // cells per axis
-cell  = spaceSize / grid
+R_max = (fixed radius > 0 ? fixed radius : maxSize / 2) + padding
+cell  = max(2 · R_max, 8)
+grid  = finestGridSize(n)       // power of two, at most 512 cells per axis
 ```
 
-The `2 · R_max` is the whole argument. Two points of the largest radius touch when their
-centers are `2R_max` apart, and the force shader scans only the 3×3 block around a point's
-own cell — one cell of separation in each axis. **If the cell is at least the contact range,
-the 3×3 scan is exhaustive**: no touching pair can sit in cells that are never compared.
-Flooring the count keeps the fitted cell at or above that range (ceiling would divide the
-space into cells slightly *smaller* than it, the bug the August fixes closed), and a large
-radius legitimately wants a coarse grid.
+The 3×3 scan is exhaustive because a cell spans at least the largest contact
+range. The cell never grows with the layout: its unbounded integer coordinates
+are counted from the current GPU data bounds and wrapped onto the slot grid
+with the rotated hash in `collision-grid.ts`. Both peeling and contact lookup
+use the same reciprocal cell size and integer hash. Bounds are recomputed after
+the attraction forces and on every collision iteration.
 
-`finestGridSize(n)` is the many-body force's finest grid for this point count, about `2·√n`
-cells per axis, a power of two, capped at 512 (`src/modules/Shared/cell-slots.ts`). It is
-the second bound for two reasons: it keeps the average occupancy near ¼ point per cell, so
-the slots of step 2 list most cells in full, and it bounds the slot textures — K layers of
-`grid²` texels — instead of letting a small radius push the grid to 512² however few points
-there are. With the default 4,096-unit space, 5,000 size-16 points with padding 1 get a
-227² grid of 18-unit cells: the contact bound (`2 · 9 = 18`) binds before the point-count
-bound (256). With padding 0 both bounds give a 256² grid of 16-unit cells.
+A hash texel can hold points from distant cells. Those points share its K-slot
+budget, but every candidate is checked against the queried world cell before
+contact resolution. Hash aliases therefore cost sampling opportunities; they
+never produce a cell-average force or count a contact twice. The point-count
+resolution and slot tiers retain the bounded texture budget of the pairwise
+implementation. The former cell-average hash used a fixed 1024² grid; its
+centroid-based accuracy measurements do not describe this combined slot path.
 
 **The size is a per-graph maximum.** In derived-radius mode, `create()` loops over every
 resolved point size (`getResolvedPointSize`, so a `NaN` "use the default" never poisons the
@@ -129,22 +128,22 @@ maximum, and a spread into `Math.max` never throws on a 50k-element array). One 
 coarsens the grid for everybody; a fixed `simulationCollisionRadius` decouples the physics
 from the drawing when that matters.
 
-### Step 2 — list each cell's occupants by depth peeling
+### Step 2 — list each hash bucket's occupants by depth peeling
 
-This is the many-body force's near-field machinery, reused as is
+This is the many-body force's near-field machinery, with a collision-specific hash mapping
 (`ForceManyBody/build-nearfield-slots.vert`, bound to the collision grid). Every pass, each
 point gets a fresh pseudo-random hash. K "depth peeling" draws then run over the grid: draw
-*k* selects, per cell, the point with the smallest hash *not yet selected by draws 0..k−1*
-(the GPU depth test does the per-cell minimum for free). After K draws, the K layers of a
-**slot array texture** (`sampler2DArray`, one layer per draw) hold, for every cell, either
+*k* selects, per hash bucket, the point with the smallest hash *not yet selected by draws 0..k−1*
+(the GPU depth test does the per-bucket minimum for free). After K draws, the K layers of a
+**slot array texture** (`sampler2DArray`, one layer per draw) hold, for every bucket, either
 all of its occupants or a uniform random K-subset of them — re-drawn from scratch every pass.
 
-**K follows the many-body tiers** (`getNearFieldSlotCount`): 32 slots up to 16k points, 16
-up to 65k, 8 above. A cell holding at most K points is listed in full and its contacts are
-resolved exactly. A denser cell shows each point a fresh random K of its neighbours per
-pass; every overlapping pair is reached sooner or later, and the per-pass cap keeps each step
-bounded meanwhile. Because the grid is sized to ¼ point per cell on average, a cell exceeds
-K only in a genuine pile — and a pile inflates past K per cell within a few passes.
+**K follows the many-body tiers** (`getNearFieldSlotCount`): 32 slots through 16,384 points,
+16 through 65,536, 8 above. A hash bucket holding at most K points is listed in full, so
+candidate lookup is exhaustive for that bucket. A denser bucket supplies a fresh random
+K-subset each pass, and the per-pass cap keeps each step bounded meanwhile. Occupancy
+includes distant cells that hash to the same bucket: even a sparse world cell can be
+sampled when aliases consume its slot budget.
 
 Each draw ping-pongs between two plain 2D targets (draw *k* must sample draw *k−1*'s output,
 and sampling one layer of a texture while rendering to another layer of the same texture is
@@ -216,7 +215,6 @@ that changes the inputs flips the flag back and the next collision tick rebuilds
 | point positions, sizes, or many-body data (`GraphSimulation.applyDataUpdates()`) | the size texture mirrors the point count and resolved sizes; the path and the slot tier follow the count |
 | `simulationCollisionRadius`, `simulationCollisionPadding` | the cell size is derived from `R_max` |
 | `pointDefaultSize` in derived-radius mode | `R_max` comes from sizes, and the default is one of them |
-| `spaceSize` | the grid divides `adjustedSpaceSize` |
 
 Changing `simulationCollision` or `simulationCollisionIterations` needs no rebuild — both are
 read every tick — so they can be animated freely, including strength to `0` and back.

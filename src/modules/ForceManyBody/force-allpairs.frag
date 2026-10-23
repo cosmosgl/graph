@@ -80,12 +80,13 @@ void main() {
   vec2 position = texelFetch(positionsTexture, pointTexel, 0).rg;
   vec4 random = texelFetch(randomValues, pointTexel, 0);
 
-  // Pairs are split at the grid path's near-field scale (maxStep = 2 × the
-  // finest cell size it would use at this point count): closer pairs
-  // correspond to its 3×3 near-field pass — jittered and bounded below, the
-  // way that pass bounds its own sum — farther pairs to its level passes,
-  // which it leaves unbounded. The same split keeps the dynamics continuous
-  // across the point-count threshold between the two paths.
+  // Pairs are split at maxStep (getMaxStep in index.ts): 2 × the finest cell
+  // of a layout spanning the space at this point count, the fixed length the
+  // grid path's near-field pass bounds its kick with. Closer pairs are treated
+  // the way that pass treats its sum — jittered and bounded below — farther
+  // pairs the way its level passes are, unbounded. Sharing that length keeps
+  // the dynamics continuous across the point-count threshold between the two
+  // paths.
   vec2 nearVelocity = vec2(0.0);
   vec2 farVelocity = vec2(0.0);
   float nearRadius2 = maxStep * maxStep;

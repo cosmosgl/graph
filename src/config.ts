@@ -19,6 +19,12 @@ export type PointStrokeShade = 'auto' | 'darken' | 'lighten'
  */
 type ColorString = string & Record<never, never>
 
+/**
+ * How far the many-body force keeps its far-field approximation from the point
+ * it acts on (`simulationRepulsionQuality`).
+ */
+export type RepulsionQuality = 'auto' | 'precise' | 'fast'
+
 export interface GraphConfigInterface {
   /**
    * If set to `false`, the simulation will not run.
@@ -73,8 +79,15 @@ export interface GraphConfigInterface {
    */
   backgroundColor: string | [number, number, number, number];
   /**
-   * Simulation space size.
-   * Default value: `4096` (larger values may crash on some devices, e.g. iOS; see https://github.com/cosmosgl/graph/issues/203).
+   * @deprecated Goes away in the next major. It sets no size: positions are not bounded by
+   * it, and nothing is dimensioned by it. It places the world origin — the point the
+   * screen is centred on at the identity view, and gravity pulls toward — at
+   * `spaceSize / 2`, and a few internal lengths are still fractions of it (the initial
+   * rescale's targets, the per-step guard, the many-body kick span, where an infinite
+   * input coordinate lands). Leave it at the default: a non-default value logs a warning,
+   * and a layout saved around another origin will need shifting when the key goes.
+   * Positions are float32, so keep it at most 2,097,152 (2^21) either way.
+   * Default value: `4096`
    */
   spaceSize: number;
 
@@ -463,6 +476,18 @@ export interface GraphConfigInterface {
    */
   simulationRepulsionTheta: number;
   /**
+   * How the many-body force sums distant points. Above 4,096 points the far field
+   * is a grid of cell centroids. `'precise'` keeps every centroid at least two
+   * cells away from the point it acts on; `'fast'` allows one. One cell away is
+   * accurate on evenly spread data, but on clustered data, while the simulation
+   * is hot, it shows as a shimmer that moves whole lines of points; two cells
+   * away removes it and costs about a third more per step above 25,000 points,
+   * nothing below. `'auto'` is `'precise'` up to 25,000 points and `'fast'` above.
+   * The shimmer scales with alpha, so a settled layout looks the same either way.
+   * Default value: `'auto'`
+   */
+  simulationRepulsionQuality: RepulsionQuality;
+  /**
    * Link spring force coefficient.
    * Default value: `1`
    */
@@ -526,9 +551,10 @@ export interface GraphConfigInterface {
    * deep overlaps can require multiple passes. Values up to `2` over-relax,
    * which settles jammed piles faster. At or below 4,096 points every
    * pair is tested; above that a spatial hash with depth-peeled neighbour slots
-   * takes over — still pairwise, exact while a cell holds at most 32 points
-   * (16 above 16k points, 8 above 65k), and sampled afresh every pass in a
-   * denser cell.
+   * takes over — still pairwise, exhaustive while each queried hash bucket
+   * holds at most 32 points (16 above 16,384 points, 8 above 65,536), and sampled
+   * afresh every pass in denser buckets. Distant cells can share a bucket's
+   * slot budget; candidates are checked against their world cell.
    * Default value: `0`
    */
   simulationCollision: number;
@@ -958,6 +984,7 @@ export type GraphSimulationConfigInterface = Pick<GraphConfigInterface,
   | 'simulationCenter'
   | 'simulationRepulsion'
   | 'simulationRepulsionTheta'
+  | 'simulationRepulsionQuality'
   | 'simulationLinkSpring'
   | 'simulationLinkDistance'
   | 'simulationLinkDistRandomVariationRange'

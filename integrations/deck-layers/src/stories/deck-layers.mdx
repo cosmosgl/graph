@@ -276,7 +276,7 @@ once.
 ```js
 import { MapView } from '@deck.gl/core'
 
-const SPACE = 4096 // the simulation's spaceSize
+const SPACE = 4096 // the layout's side: the engine's default spaceSize, which places the world origin at its centre
 const toLayout = ([lng, lat]) => [
   ((lng + 180) / 360) * SPACE,
   ((Math.PI + Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360))) / (2 * Math.PI)) * SPACE,
@@ -286,7 +286,7 @@ new CosmosGraphLayer({
   // …
   getPointPosition: (p) => toLayout(p.lngLat),
   modelMatrix: [512 / SPACE, 0, 0, 0, 0, 512 / SPACE, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
-  config: { spaceSize: SPACE, simulationGravity: 0, simulationCenter: 0 },
+  config: { simulationGravity: 0, simulationCenter: 0 },
   onGraphCreated: (graph) => graph.setPinnedPoints(cityIndices), // these stay on their places
 })
 ```
@@ -313,5 +313,10 @@ Try it: [Custom deck layers](../?path=/story/examples-integrations--custom-deck-
 - **WebGL 2 only**, and the layout is 2D under a flat, y-up view: `OrthographicView({ flipY: false })`,
   or a map at pitch 0 and bearing 0.
 - **Transitions** have no effect yet: a headless `Graph` applies a change at once.
+- **Framing**: the layout is not confined to `spaceSize` — a large graph grows past the space's
+  square — so frame the view with `layer.getBounds()`, the box of the live point positions (the
+  space's square until there are positions to measure). It reads them back from the GPU
+  synchronously: call it when you frame, not every frame. The box is in space coordinates — map
+  it through `modelMatrix` (and, on a map, unproject it) before fitting a viewport to it.
 - **The package README** has the full ownership table and the `PositionTextureSource` contract:
   [github.com/cosmosgl/graph/tree/main/integrations/deck-layers](https://github.com/cosmosgl/graph/tree/main/integrations/deck-layers).

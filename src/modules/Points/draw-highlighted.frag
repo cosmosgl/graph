@@ -11,7 +11,7 @@ layout(std140) uniform drawHighlightedUniforms {
   mat4 transformationMatrix;
   float pointsTextureSize;
   float sizeScale;
-  float spaceSize;
+  vec2 worldOrigin;
   vec2 screenSize;
   float scalePointsOnZoom;
   float pointIndex;

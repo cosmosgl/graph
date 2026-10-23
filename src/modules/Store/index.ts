@@ -1,4 +1,3 @@
-import { scaleLinear } from 'd3-scale'
 import { mat3 } from 'gl-matrix'
 import { Random } from 'random'
 import { getRgbaColor, rgbToBrightness } from '@/graph/helper'
@@ -7,6 +6,12 @@ import type { GraphConfigInterface } from '@/graph/config'
 
 export const ALPHA_MIN = 0.001
 export const MAX_POINT_SIZE = 64
+/**
+ * The largest `spaceSize` whose world origin, `spaceSize / 2` = 2^20 ≈ 1e6, stays within the
+ * range where float32 positions resolve the simulation finely (an ULP of at most 1/8 unit).
+ * Larger values are used as given, with a warning (`Store.adjustSpaceSize`).
+ */
+export const MAX_RESOLVED_SPACE_SIZE = 2 ** 21
 
 /**
  * While a non-blocking copy is on its way, the render loop holds its next frame and checks
@@ -73,7 +78,16 @@ export class Store {
   public hostHoveredPointIndex: number | undefined = undefined
   /** The link a host hovers through `Graph.setHostHoveredLink`; separate from the pointer's `hoveredLinkIndex`. */
   public hostHoveredLinkIndex: number | undefined = undefined
-  public adjustedSpaceSize = defaultConfigValues.spaceSize
+  /**
+   * The world position at the centre of the screen under an identity view, and the point
+   * gravity pulls toward. Mapping world space to the screen is a translation by this
+   * origin, never a scale: one world unit is one CSS pixel at zoom 1 whatever `spaceSize`
+   * is. Only `adjustSpaceSize` sets it — to the centre of the space, `spaceSize / 2` on
+   * both axes — and every world ↔ screen mapping reads it live from here: the shaders,
+   * `scaleX`/`scaleY`, `Zoom.convertScreenToSpacePosition`, and hosts inverting
+   * `Graph.setViewTransform`.
+   */
+  public worldOrigin: [number, number] = [defaultConfigValues.spaceSize / 2, defaultConfigValues.spaceSize / 2]
   public isSpaceKeyPressed = false
   public div: HTMLDivElement | undefined
   public webglMaxTextureSize = 16384 // Default fallback value
@@ -98,10 +112,36 @@ export class Store {
   // Whether link hovering is enabled based on configured event handlers
   public isLinkHoveringEnabled = false
   private alphaTarget = 0
-  private scalePointX = scaleLinear()
-  private scalePointY = scaleLinear()
   private random = new Random()
+  /**
+   * The length the three values below — two step bounds and the infinite-input edge — are
+   * multiples of: 4,096 by default. Not a size — nothing is dimensioned by it. In 3.x it is
+   * the validated `spaceSize`, so they keep following the key for a config that sets one; in
+   * the next major, when the key goes, it becomes a constant and they freeze at their
+   * default values. The initial rescale's targets live with the rescale (Points).
+   */
+  private referenceLength = defaultConfigValues.spaceSize
   private _backgroundColor: [number, number, number, number] = [0, 0, 0, 0]
+
+  /**
+   * The per-force step guard: a displacement longer than this in one sub-step is shortened
+   * to it (update-position.frag). A divergence guard, never tuned — the width of the space,
+   * inherited from the position clamp it replaced. Not a bound on positions.
+   */
+  public get stepGuard (): number { return this.referenceLength }
+
+  /**
+   * The many-body force's close-range kick span; divided by the finest grid size for the
+   * point count, it is that force's per-tick kick bound (ForceManyBody's getMaxStep). A
+   * tuned length: twice the finest cell the grid had when it still covered the space.
+   */
+  public get kickSpan (): number { return 2 * this.referenceLength }
+
+  /**
+   * Where an infinite input coordinate lands: `0` for `-Infinity`, this for `+Infinity`
+   * (position-utils' toFiniteCoordinate). A bad-input rule, not a bound.
+   */
+  public get infiniteInputEdge (): number { return this.referenceLength }
 
   public get backgroundColor (): [number, number, number, number] {
     return this._backgroundColor
@@ -236,34 +276,55 @@ export class Store {
   }
 
   /**
-   * If the config parameter `spaceSize` exceeds the limits of WebGL,
-   * it reduces the space size without changing the config parameter.
-   * Ensures `spaceSize` is always a positive number >= 2 (required for Math.log2).
+   * Resolves the configured `spaceSize` into the value the engine uses: the
+   * config's own, unless it is not a usable size — not a positive finite number
+   * (the default is used) or below 2 (2 is used). Sets the world origin from it.
+   *
+   * There is no device limit on it. One used to halve any `spaceSize` at or
+   * above the WebGL texture size limit, back when the many-body grid's finest
+   * level was a `spaceSize`-wide texture (issue #203: iOS crashed allocating
+   * it). The grid's resolution has followed the point count since, and its
+   * placement now follows the data, as the collision hash's does: nothing is
+   * dimensioned by `spaceSize` any more, so the halving only moved the world
+   * origin away from where the config put it.
    */
-  public adjustSpaceSize (configSpaceSize: number, webglMaxTextureSize: number): void {
+  public adjustSpaceSize (configSpaceSize: number): void {
+    // Deprecated key: say so only to those with something to change. The stories' helper
+    // and many hosts set the default explicitly, and they have nothing to edit.
+    if (configSpaceSize !== defaultConfigValues.spaceSize) {
+      console.warn(
+        `spaceSize (${configSpaceSize}) is deprecated and goes away in the next major. It bounds nothing: ` +
+        'it places the world origin, where gravity pulls, at spaceSize / 2, and scales the initial rescale ' +
+        `and a few step guards. Leave it at the default (${defaultConfigValues.spaceSize}); a layout saved ` +
+        'around another origin will need shifting when the key goes.'
+      )
+    }
     if (configSpaceSize <= 0 || !isFinite(configSpaceSize)) {
       console.error(`Invalid spaceSize value: ${configSpaceSize}. Using default value of ${defaultConfigValues.spaceSize}`)
       configSpaceSize = defaultConfigValues.spaceSize
     }
-    // Enforce minimum value of 2 (since we use Math.log2, minimum should be 2^1 = 2)
+    // The minimum the engine has always enforced: a config below it has always run at 2
     const minSpaceSize = 2
     if (configSpaceSize < minSpaceSize) {
       console.warn(`spaceSize (${configSpaceSize}) is too small. Using minimum value of ${minSpaceSize}`)
       configSpaceSize = minSpaceSize
     }
 
-    // Validate webglMaxTextureSize (values below minSpaceSize are invalid; clamp would exceed limit)
-    if (!Number.isFinite(webglMaxTextureSize) || webglMaxTextureSize <= 0 || webglMaxTextureSize < minSpaceSize) {
-      console.warn(`Invalid webglMaxTextureSize: ${webglMaxTextureSize}. Using configSpaceSize without WebGL limit adjustment.`)
-      this.adjustedSpaceSize = configSpaceSize
-      return
+    // Warned about, not reduced: positions are float32, and a layout settles around the
+    // world origin (gravity pulls toward it). Past an origin of about ±1e6 the gap between
+    // neighbouring float32 values nears the forces' 1-unit scale, and the layout coarsens
+    // or freezes onto that lattice.
+    if (configSpaceSize > MAX_RESOLVED_SPACE_SIZE) {
+      console.warn(
+        `spaceSize (${configSpaceSize}) puts the world origin at ${configSpaceSize / 2}, where float32 positions ` +
+        `are too coarse for the simulation; keep spaceSize at most ${MAX_RESOLVED_SPACE_SIZE}`
+      )
     }
 
-    // Handle WebGL limits - ensure result is still >= minSpaceSize
-    if (configSpaceSize >= webglMaxTextureSize) {
-      this.adjustedSpaceSize = Math.max(webglMaxTextureSize / 2, minSpaceSize)
-      console.warn(`The \`spaceSize\` has been reduced to ${this.adjustedSpaceSize} due to WebGL limits`)
-    } else this.adjustedSpaceSize = configSpaceSize
+    this.referenceLength = configSpaceSize
+    // The world is centred on the middle of the space. The only place the origin is set,
+    // so the only place to change if the two ever part.
+    this.worldOrigin = [configSpaceSize / 2, configSpaceSize / 2]
   }
 
   /**
@@ -274,22 +335,22 @@ export class Store {
   }
 
   public updateScreenSize (width: number, height: number): void {
-    const { adjustedSpaceSize } = this
     this.screenSize = [width, height]
-    this.scalePointX
-      .domain([0, adjustedSpaceSize])
-      .range([(width - adjustedSpaceSize) / 2, (width + adjustedSpaceSize) / 2])
-    this.scalePointY
-      .domain([adjustedSpaceSize, 0])
-      .range([(height - adjustedSpaceSize) / 2, (height + adjustedSpaceSize) / 2])
   }
 
+  /**
+   * World x to screen x before the zoom transform: a translation that puts `worldOrigin` at
+   * the centre of the screen, at slope 1 (one world unit is one CSS pixel). Computed from the
+   * live `worldOrigin` and `screenSize` — no cached copy to fall out of step when either
+   * changes — and exact for float32 positions and whole-pixel screen sizes.
+   */
   public scaleX (x: number): number {
-    return this.scalePointX(x)
+    return x - this.worldOrigin[0] + this.screenSize[0] / 2
   }
 
+  /** World y to screen y before the zoom transform, as `scaleX` but y flipped (world y up, screen y down). */
   public scaleY (y: number): number {
-    return this.scalePointY(y)
+    return this.worldOrigin[1] - y + this.screenSize[1] / 2
   }
 
   public setHoveredPointRingColor (color: string | [number, number, number, number]): void {
