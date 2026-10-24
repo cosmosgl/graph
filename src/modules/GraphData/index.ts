@@ -146,6 +146,20 @@ export class GraphData {
   /** Lazily parsed `pointDefaultColor` — see the `defaultRgba` getter. */
   private _defaultRgba: [number, number, number, number] | undefined
   private _inputLinks: Float32Array | undefined
+  private _linkColorCache: {
+    input: Float32Array | undefined;
+    count: number;
+    defaultRgba: [number, number, number, number];
+    output: Float32Array;
+  } | undefined
+
+  private _linkWidthCache: {
+    input: Float32Array | undefined;
+    count: number;
+    defaultWidth: number;
+    output: Float32Array;
+  } | undefined
+
   private _isLinkGroupingStale = true
   private _linkGroupingPointsNumber: number | undefined
   private _inputPointRenderOrder: ArrayLike<number> | undefined
@@ -225,6 +239,15 @@ export class GraphData {
   public set inputPointRenderOrder (order: ArrayLike<number> | undefined) {
     this._inputPointRenderOrder = order
     this._isPointRenderOrderStale = true
+  }
+
+  /** Invalidates resolved link channels after their caller-owned input is set again. */
+  public invalidateLinkColorCache (): void {
+    this._linkColorCache = undefined
+  }
+
+  public invalidateLinkWidthCache (): void {
+    this._linkWidthCache = undefined
   }
 
   public updatePoints (): void {
@@ -537,29 +560,46 @@ export class GraphData {
   public updateLinkColor (): void {
     if (this.linksNumber === undefined) {
       this.linkColors = undefined
+      this._linkColorCache = undefined
       return
     }
 
-    // Sets link colors to default values from config if the input is missing or does not match input links number.
+    const linksNumber = this.linksNumber
     const defaultRgba = getRgbaColor(this._config.linkDefaultColor)
-    if (this.inputLinkColors === undefined || this.inputLinkColors.length / 4 !== this.linksNumber) {
-      this.linkColors = new Float32Array(this.linksNumber * 4)
+    const input = this.inputLinkColors
+    const cached = this._linkColorCache
+    if (cached !== undefined && cached.input === input && cached.count === linksNumber &&
+      cached.defaultRgba.every((value, index) => value === defaultRgba[index])) {
+      this.linkColors = cached.output
+      return
+    }
 
-      for (let i = 0; i < this.linkColors.length / 4; i++) {
-        this.linkColors[i * 4] = defaultRgba[0]
-        this.linkColors[i * 4 + 1] = defaultRgba[1]
-        this.linkColors[i * 4 + 2] = defaultRgba[2]
-        this.linkColors[i * 4 + 3] = defaultRgba[3]
-      }
+    let colors: Float32Array
+    if (input === undefined || input.length / 4 !== linksNumber) {
+      colors = new Float32Array(linksNumber * 4)
+      for (let i = 0; i < linksNumber; i++) colors.set(defaultRgba, i * 4)
     } else {
-      this.linkColors = this.inputLinkColors
-      for (let i = 0; i < this.linkColors.length / 4; i++) {
-        if (!isNumber(this.linkColors[i * 4])) this.linkColors[i * 4] = defaultRgba[0]
-        if (!isNumber(this.linkColors[i * 4 + 1])) this.linkColors[i * 4 + 1] = defaultRgba[1]
-        if (!isNumber(this.linkColors[i * 4 + 2])) this.linkColors[i * 4 + 2] = defaultRgba[2]
-        if (!isNumber(this.linkColors[i * 4 + 3])) this.linkColors[i * 4 + 3] = defaultRgba[3]
+      let hasInvalidChannel = false
+      for (const channel of input) {
+        if (!isNumber(channel)) {
+          hasInvalidChannel = true
+          break
+        }
+      }
+
+      // Preserve caller-owned arrays. Only a channel that needs the configured
+      // fallback requires a resolved copy; cache it so render() does not allocate
+      // another full link buffer every frame.
+      colors = hasInvalidChannel ? new Float32Array(input) : input
+      if (hasInvalidChannel) {
+        for (const [index, channel] of colors.entries()) {
+          if (!isNumber(channel)) colors[index] = defaultRgba[index % 4] as number
+        }
       }
     }
+
+    this.linkColors = colors
+    this._linkColorCache = { input, count: linksNumber, defaultRgba, output: colors }
   }
 
   /**
@@ -568,21 +608,42 @@ export class GraphData {
   public updateLinkWidth (): void {
     if (this.linksNumber === undefined) {
       this.linkWidths = undefined
+      this._linkWidthCache = undefined
       return
     }
 
-    // Sets link widths to default values from config if the input is missing or does not match input links number.
+    const linksNumber = this.linksNumber
     const defaultWidth = this._config.linkDefaultWidth
-    if (this.inputLinkWidths === undefined || this.inputLinkWidths.length !== this.linksNumber) {
-      this.linkWidths = new Float32Array(this.linksNumber).fill(defaultWidth)
+    const input = this.inputLinkWidths
+    const cached = this._linkWidthCache
+    if (cached !== undefined && cached.input === input && cached.count === linksNumber && cached.defaultWidth === defaultWidth) {
+      this.linkWidths = cached.output
+      return
+    }
+
+    let widths: Float32Array
+    if (input === undefined || input.length !== linksNumber) {
+      widths = new Float32Array(linksNumber).fill(defaultWidth)
     } else {
-      this.linkWidths = this.inputLinkWidths
-      for (let i = 0; i < this.linkWidths.length; i++) {
-        if (!isNumber(this.linkWidths[i])) {
-          this.linkWidths[i] = defaultWidth
+      let hasInvalidWidth = false
+      for (const width of input) {
+        if (!isNumber(width)) {
+          hasInvalidWidth = true
+          break
+        }
+      }
+      // As with colors, keep NaN sentinels in the caller's array and reuse the
+      // resolved copy until its input, link count, or default changes.
+      widths = hasInvalidWidth ? new Float32Array(input) : input
+      if (hasInvalidWidth) {
+        for (const [index, width] of widths.entries()) {
+          if (!isNumber(width)) widths[index] = defaultWidth
         }
       }
     }
+
+    this.linkWidths = widths
+    this._linkWidthCache = { input, count: linksNumber, defaultWidth, output: widths }
   }
 
   /**
