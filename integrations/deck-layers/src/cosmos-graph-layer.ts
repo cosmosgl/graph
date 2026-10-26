@@ -510,6 +510,14 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     loadedPairs?: Float32Array | null;
     idToIndex?: Map<string | number, number> | null;
     keptLinks: readonly LinkDataT[] | null;
+    /**
+     * `getBounds`' measured box: the last one read back (`null` when nothing finite was
+     * there), the position texture version it was asked at, and whether a read is on its
+     * way. Unset until the first read lands.
+     */
+    measuredBounds?: [number[], number[]] | null;
+    measuredBoundsVersion?: number;
+    isMeasuringBounds?: boolean;
     /** The view was found unsupported and said so; said once. */
     viewWarned?: boolean;
     linksWarned?: boolean;
@@ -705,19 +713,23 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
    * The box around the graph's points, `[[minX, minY, 0], [maxX, maxY, 0]]`, for an
    * application to frame the layer with. In space coordinates, before `modelMatrix`: map it
    * through `modelMatrix` (and, on a map, unproject it) before fitting a viewport to it.
-   * deck.gl's core does not call it, but its mask, collision-filter and terrain extensions
-   * do, every frame, on the layers they apply to.
+   * deck.gl's core does not call it; its mask effect reads it from every mask layer and its
+   * collision-filter effect from every layer carrying that extension, each on every frame.
    *
    * `spaceSize` bounds no position — a layout grows past its square as far as its forces
    * take it — so the box is measured from the live positions, read back from the GPU. The
-   * read is synchronous: it waits for the GPU to finish the work queued before it and copies
-   * the whole position texture (16 bytes a point). Call it to frame a view, not every frame.
-   * Absent points (NaN) are left out.
+   * read never stalls: it is asynchronous, started by a call that finds the positions
+   * changed since the box was measured, one at a time, and the box it returns is the last
+   * one measured. While points move the box trails the drawn frame, by a frame or so, and a
+   * call made before the first read lands gets the input box below. When a read lands the
+   * layer asks for a redraw, so a consumer reading the box every frame has the new one on
+   * the next. A layer nobody asks reads nothing. Absent points (NaN) are left out.
    *
-   * Until the graph holds positions (its device is still initializing), the box is that of
-   * the positions the layer is about to load: `initialPositions`, or `getPointPosition`
-   * over the point objects, plus the middle half of the space where unseeded points are
-   * placed — where the points will start, so a view can be framed before the first frame.
+   * Until the graph holds positions (its device is still initializing) or the first read
+   * has landed, the box is that of the positions the layer is about to load or has loaded:
+   * `initialPositions`, or `getPointPosition` over the point objects, plus the middle half
+   * of the space where unseeded points are placed — where the points start, so a view can
+   * be framed before the first frame.
    *
    * When there is nothing to measure — no points yet, every point absent, or positions the
    * graph rescales on load (`rescalePositions: true`), which it centres on the space — the
@@ -727,18 +739,16 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
    * may still override it with deck's own signature.
    */
   public getBounds (): [number[], number[]] | null {
-    const box = new BoundsBox()
-    const positions = this.state?.graph?.getPointPositionsArray()
-    if (positions && positions.length > 0) {
-      for (let i = 0; i < positions.length; i += 2) box.add(positions[i] as number, positions[i + 1] as number)
-    } else {
-      this._addInputPositions(box)
+    const { state } = this
+    const graph = state?.graph
+    const positions = graph?.getPointPositionTexture()
+    if (graph && positions && positions.pointCount > 0) {
+      if (positions.version !== state.measuredBoundsVersion && !state.isMeasuringBounds) this._measureBounds(graph, positions.version)
+      if (state.measuredBounds !== undefined) return state.measuredBounds ?? this._spaceSquare()
     }
-    // Nothing loaded yet: the space square, as a stand-in extent — the square centred on the
-    // world origin. The engine's own origin once there is a graph: valid even when the
-    // config's spaceSize is not
-    const [originX, originY] = this.state?.graph?.simulation.store.worldOrigin ?? [this._spaceSize() / 2, this._spaceSize() / 2]
-    return box.bounds() ?? [[0, 0, 0], [2 * originX, 2 * originY, 0]]
+    const box = new BoundsBox()
+    this._addInputPositions(box)
+    return box.bounds() ?? this._spaceSquare()
   }
 
   public finalizeState (context: LayerContext): void {
@@ -853,6 +863,44 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     } else if (graph) graph.destroy()
     this.state.graph = undefined
     this.state.holdsHover = false
+    // Another graph's texture versions would not mean the same box
+    this.state.measuredBounds = undefined
+    this.state.measuredBoundsVersion = undefined
+    this.state.isMeasuringBounds = false
+  }
+
+  /**
+   * Starts one asynchronous read of the live positions and keeps its box for `getBounds`,
+   * stamped with the texture version the read was asked at. A read that lands after the
+   * layer let go of the graph is dropped; an empty result (nothing to read, or the point
+   * count changed under the copy) leaves the box as it was, and the next call asks again.
+   */
+  private _measureBounds (graph: Graph, version: number): void {
+    const { state } = this
+    state.isMeasuringBounds = true
+    graph.getPointPositionsAsync().then((positions) => {
+      if (state.graph !== graph) return
+      state.isMeasuringBounds = false
+      if (positions.length === 0) return
+      const box = new BoundsBox()
+      for (let i = 0; i < positions.length; i += 2) box.add(positions[i] as number, positions[i + 1] as number)
+      state.measuredBounds = box.bounds()
+      state.measuredBoundsVersion = version
+      // A consumer that reads the box every frame has the new one on the next
+      ;(this.getCurrentLayer() ?? this).setNeedsRedraw()
+    }, () => {
+      if (state.graph === graph) state.isMeasuringBounds = false
+    })
+  }
+
+  /**
+   * The space's square, the stand-in extent when there is nothing to measure (see
+   * `getBounds`): the square centred on the world origin. The engine's own origin once
+   * there is a graph: valid even when the config's spaceSize is not.
+   */
+  private _spaceSquare (): [number[], number[]] {
+    const [originX, originY] = this.state?.graph?.simulation.store.worldOrigin ?? [this._spaceSize() / 2, this._spaceSize() / 2]
+    return [[0, 0, 0], [2 * originX, 2 * originY, 0]]
   }
 
   /**
