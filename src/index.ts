@@ -1831,14 +1831,8 @@ export class Graph implements PositionTextureSource {
     }
 
     if (this.isPointColorUpdateNeeded) this.points.updateColor()
-    if (this.isPointStrokeColorUpdateNeeded) {
-      this.graph.updatePointStrokeColor()
-      this.points.updateStrokeColor()
-    }
-    if (this.isPointStrokeWidthUpdateNeeded) {
-      this.graph.updatePointStrokeWidth()
-      this.points.updateStrokeWidth()
-    }
+    if (this.isPointStrokeColorUpdateNeeded) this.points.updateStrokeColor()
+    if (this.isPointStrokeWidthUpdateNeeded) this.points.updateStrokeWidth()
     if (this.isPointShapeUpdateNeeded) this.points.updateShape()
     if (this.isPointImageIndicesUpdateNeeded) this.points.updateImageIndices()
     if (this.isPointImageSizesUpdateNeeded) this.points.updateImageSizes()
