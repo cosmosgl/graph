@@ -1191,6 +1191,46 @@ describe('CosmosGraphLayer', () => {
     }
   })
 
+  it('bounds the space the engine runs at: a provided graph\'s before it is ready, and the default for an invalid config', async () => {
+    const square = (size: number): number[][] => [[0, 0, 0], [size, size, 0]]
+    const { deck, container } = createDeckDevice()
+    // A device that never arrives: the graph stays before `ready` for the whole test
+    const provided = new Graph(null, { ...STATIC, spaceSize: 8192 }, new Promise<never>(() => {}))
+    try {
+      const layer = new CosmosGraphLayer({ id: 'graph', graph: provided })
+      deck.setProps({ layers: [layer] })
+      const live = (): CosmosGraphLayer | null => layer.getCurrentLayer() as CosmosGraphLayer | null
+      await waitUntil(() => Boolean(live()?.state?.graph), 'the layer to attach the graph')
+      // The configured space, not the default: resolved when the graph is made, not when its device is
+      expect(live()!.getBounds()).toEqual(square(8192))
+    } finally {
+      deck.finalize()
+      container.remove()
+      provided.destroy()
+    }
+
+    // An invalid spaceSize runs at the default; unseeded points are placed in its middle half
+    let graph: Graph | undefined
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const invalid = new CosmosGraphLayer({
+      id: 'invalid',
+      points: { length: 5 },
+      config: { ...STATIC, spaceSize: 0 },
+      onGraphCreated: (created): void => { graph = created },
+    })
+    const second = await createDeck([invalid])
+    try {
+      await waitUntil(() => Boolean(graph), 'the graph to be created')
+      const spaceSize = defaultConfigValues.spaceSize
+      expect((invalid.getCurrentLayer() as CosmosGraphLayer).getBounds())
+        .toEqual([[spaceSize * 0.25, spaceSize * 0.25, 0], [spaceSize * 0.75, spaceSize * 0.75, 0]])
+    } finally {
+      second.deck.finalize()
+      second.container.remove()
+      error.mockRestore()
+    }
+  })
+
   it('measures the bounds without a stall: one asynchronous read per change, none while unchanged', async () => {
     // deck's mask and collision-filter effects read getBounds every frame; a synchronous
     // readback there waits for the GPU to finish the frame's work before every frame

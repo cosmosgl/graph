@@ -83,7 +83,8 @@ export class Store {
    * gravity pulls toward. Mapping world space to the screen is a translation by this
    * origin, never a scale: one world unit is one CSS pixel at zoom 1 whatever `spaceSize`
    * is. Only `adjustSpaceSize` sets it — to the centre of the space, `spaceSize / 2` on
-   * both axes — and every world ↔ screen mapping reads it live from here: the shaders,
+   * both axes, from the simulation's construction on — and every world ↔ screen mapping
+   * reads it live from here: the shaders,
    * `scaleX`/`scaleY`, `Zoom.convertScreenToSpacePosition`, and hosts inverting
    * `Graph.setViewTransform`.
    */
@@ -116,32 +117,35 @@ export class Store {
   /**
    * The length the three values below — two step bounds and the infinite-input edge — are
    * multiples of: 4,096 by default. Not a size — nothing is dimensioned by it. In 3.x it is
-   * the validated `spaceSize`, so they keep following the key for a config that sets one; in
-   * the next major, when the key goes, it becomes a constant and they freeze at their
-   * default values. The initial rescale's targets live with the rescale (Points).
+   * the validated `spaceSize` (`adjustSpaceSize`), so they keep following the key for a
+   * config that sets one; in the next major, when the key goes, it becomes a constant and
+   * they freeze at their default values. The initial rescale's targets live with the
+   * rescale (Points). Hosts placing points before the graph is ready read it too.
    */
-  private referenceLength = defaultConfigValues.spaceSize
+  private _referenceLength = defaultConfigValues.spaceSize
   private _backgroundColor: [number, number, number, number] = [0, 0, 0, 0]
+
+  public get referenceLength (): number { return this._referenceLength }
 
   /**
    * The per-force step guard: a displacement longer than this in one sub-step is shortened
    * to it (update-position.frag). A divergence guard, never tuned — the width of the space,
    * inherited from the position clamp it replaced. Not a bound on positions.
    */
-  public get stepGuard (): number { return this.referenceLength }
+  public get stepGuard (): number { return this._referenceLength }
 
   /**
    * The many-body force's close-range kick span; divided by the finest grid size for the
    * point count, it is that force's per-tick kick bound (ForceManyBody's getMaxStep). A
    * tuned length: twice the finest cell the grid had when it still covered the space.
    */
-  public get kickSpan (): number { return 2 * this.referenceLength }
+  public get kickSpan (): number { return 2 * this._referenceLength }
 
   /**
    * Where an infinite input coordinate lands: `0` for `-Infinity`, this for `+Infinity`
    * (position-utils' toFiniteCoordinate). A bad-input rule, not a bound.
    */
-  public get infiniteInputEdge (): number { return this.referenceLength }
+  public get infiniteInputEdge (): number { return this._referenceLength }
 
   public get backgroundColor (): [number, number, number, number] {
     return this._backgroundColor
@@ -321,7 +325,7 @@ export class Store {
       )
     }
 
-    this.referenceLength = configSpaceSize
+    this._referenceLength = configSpaceSize
     // The world is centred on the middle of the space. The only place the origin is set,
     // so the only place to change if the two ever part.
     this.worldOrigin = [configSpaceSize / 2, configSpaceSize / 2]

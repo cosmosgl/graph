@@ -893,14 +893,10 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     })
   }
 
-  /**
-   * The space's square, the stand-in extent when there is nothing to measure (see
-   * `getBounds`): the square centred on the world origin. The engine's own origin once
-   * there is a graph: valid even when the config's spaceSize is not.
-   */
+  /** The space's square, the stand-in extent when there is nothing to measure (see `getBounds`). */
   private _spaceSquare (): [number[], number[]] {
-    const [originX, originY] = this.state?.graph?.simulation.store.worldOrigin ?? [this._spaceSize() / 2, this._spaceSize() / 2]
-    return [[0, 0, 0], [2 * originX, 2 * originY, 0]]
+    const spaceSize = this._spaceSize()
+    return [[0, 0, 0], [spaceSize, spaceSize, 0]]
   }
 
   /**
@@ -943,12 +939,14 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
   }
 
   /**
-   * The graph's `spaceSize` — authoritative for a provided graph too. The length the
-   * engine's placement rules are fractions of: the infinite-input edge, the unseeded
-   * square, and the stand-in extent before there is a graph. It sizes nothing.
+   * The length the engine's placement rules are fractions of: the infinite-input edge, the
+   * unseeded square, and the stand-in extent. The graph's own, validated, length once
+   * there is a graph — from its construction, so the default when its config's `spaceSize`
+   * is not a usable size, and authoritative for a provided graph — the config's before.
+   * It sizes nothing.
    */
   private _spaceSize (): number {
-    return this.state?.graph?.config.spaceSize ?? this.props.config?.spaceSize ?? Graph.prototype.config?.spaceSize ?? 4096
+    return this.state?.graph?.simulation.store.referenceLength ?? this.props.config?.spaceSize ?? Graph.prototype.config?.spaceSize ?? 4096
   }
 
   /**

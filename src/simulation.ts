@@ -190,6 +190,9 @@ export class GraphSimulation implements PositionTextureSource {
       if (config) applyConfig(this.config, config)
     }
     this.store = new Store()
+    // The world origin and the lengths that follow spaceSize are resolved here, not when
+    // the device arrives: nothing about them needs it, and a host reads them before then
+    this.store.adjustSpaceSize(this.config.spaceSize)
     this.data = new GraphData(this.config)
 
     if (devicePromise) {
@@ -214,7 +217,6 @@ export class GraphSimulation implements PositionTextureSource {
       }
       this._device = device
 
-      this.store.adjustSpaceSize(this.config.spaceSize)
       this.store.setWebGLMaxTextureSize(device.limits.maxTextureDimension2D)
       this.store.maxPointSize = getMaxPointSize(device, this.config.pixelRatio)
 
