@@ -79,6 +79,22 @@ const waitUntil = async (condition: () => boolean, what: string, maxFrames = 240
   throw new Error(`${what} did not happen within ${maxFrames} frames`)
 }
 
+/**
+ * `getBounds` once the layer has measured positions at least as new as the graph's current
+ * ones: the call starts the read, and the box is served from the frame it lands. A running
+ * simulation moves the version on every frame, so the box it serves trails by one.
+ */
+const measuredBounds = async (live: () => CosmosGraphLayer, graph: Graph): Promise<[number[], number[]] | null> => {
+  const since = graph.getPointPositionTexture()?.version ?? 0
+  let bounds = live().getBounds()
+  await waitUntil(() => {
+    bounds = live().getBounds()
+    const measured = live().state.measuredBoundsVersion
+    return measured !== undefined && measured >= since
+  }, 'the bounds read')
+  return bounds
+}
+
 // For CosmosGraphLayer tests: the layer creates and owns its own graph.
 // Resolves once deck finished its async device initialization.
 const createDeck = async (
@@ -1110,11 +1126,13 @@ describe('CosmosGraphLayer', () => {
     try {
       await waitUntil(() => loaded, 'the first load')
       const live = (): CosmosGraphLayer => layer.getCurrentLayer() as CosmosGraphLayer
-      // Read from the graph: the same box, the absent point still left out
+      // Until the first read lands, still the input box
       expect(live().getBounds()).toEqual(expected)
+      // Read from the graph: the same box, the absent point still left out
+      expect(await measuredBounds(live, graph!)).toEqual(expected)
       // and it follows the layout
       graph!.setPointPosition(1, 20000, 30000)
-      expect(live().getBounds()).toEqual([[-6000, -2500, 0], [20000, 30000, 0]])
+      expect(await measuredBounds(live, graph!)).toEqual([[-6000, -2500, 0], [20000, 30000, 0]])
     } finally {
       deck.finalize()
       container.remove()
@@ -1165,11 +1183,50 @@ describe('CosmosGraphLayer', () => {
       expect(live()!.getBounds()).toEqual([[0, 0, 0], [1000, 1000, 0]])
       provided.setPointPositions(new Float32Array([-300, 40, 2500, -90]))
       provided.render(0)
-      expect(live()!.getBounds()).toEqual([[-300, -90, 0], [2500, 40, 0]])
+      expect(await measuredBounds(() => live()!, provided)).toEqual([[-300, -90, 0], [2500, 40, 0]])
     } finally {
       deck.finalize()
       container.remove()
       provided.destroy()
+    }
+  })
+
+  it('measures the bounds without a stall: one asynchronous read per change, none while unchanged', async () => {
+    // deck's mask and collision-filter effects read getBounds every frame; a synchronous
+    // readback there waits for the GPU to finish the frame's work before every frame
+    let graph: Graph | undefined
+    let loaded = false
+    const layer = new CosmosGraphLayer({
+      id: 'graph',
+      points: { length: 2, initialPositions: new Float32Array([0, 0, 100, 50]) },
+      config: STATIC,
+      onGraphCreated: (created): void => { graph = created },
+      onGraphDataLoaded: (): void => { loaded = true },
+    })
+    const { deck, container } = await createDeck([layer])
+    try {
+      await waitUntil(() => loaded, 'the first load')
+      // Paused: a running simulation moves the positions every frame
+      graph!.pause()
+      const live = (): CosmosGraphLayer => layer.getCurrentLayer() as CosmosGraphLayer
+      const synchronous = vi.spyOn(graph!, 'getPointPositionsArray')
+      const asynchronous = vi.spyOn(graph!, 'getPointPositionsAsync')
+      // Many calls while one read is on its way: one read
+      for (let i = 0; i < 5; i += 1) live().getBounds()
+      expect(await measuredBounds(live, graph!)).toEqual([[0, 0, 0], [100, 50, 0]])
+      expect(asynchronous).toHaveBeenCalledTimes(1)
+      // Unchanged positions: served from the box, no read
+      await waitFrames(3)
+      for (let i = 0; i < 5; i += 1) live().getBounds()
+      expect(asynchronous).toHaveBeenCalledTimes(1)
+      // A change: one more
+      graph!.setPointPosition(0, -40, 0)
+      expect(await measuredBounds(live, graph!)).toEqual([[-40, 0, 0], [100, 50, 0]])
+      expect(asynchronous).toHaveBeenCalledTimes(2)
+      expect(synchronous).not.toHaveBeenCalled()
+    } finally {
+      deck.finalize()
+      container.remove()
     }
   })
 
