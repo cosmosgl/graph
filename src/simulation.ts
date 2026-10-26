@@ -322,7 +322,8 @@ export class GraphSimulation implements PositionTextureSource {
   /**
    * Sets the positions for the simulation points — flat `[x0, y0, x1, y1, …]`,
    * as in `Graph.setPointPositions` (see it for the NaN-absence contract).
-   * Takes effect on the next `applyData()`.
+   * Takes effect on the next `applyData()`, or on a config change that rebuilds
+   * (`spaceSize`, `enableSimulation`).
    */
   public setPointPositions (pointPositions: Float32Array, dontRescale?: boolean | undefined): void {
     if (this._isDestroyed) return
@@ -342,7 +343,8 @@ export class GraphSimulation implements PositionTextureSource {
   /**
    * Sets the sizes for the simulation points — the collision force derives point
    * radii from sizes when `simulationCollisionRadius` is unset.
-   * Takes effect on the next `applyData()`.
+   * Takes effect on the next `applyData()`, or on a config change that rebuilds
+   * (`spaceSize`, `enableSimulation`).
    */
   public setPointSizes (pointSizes: Float32Array): void {
     if (this._isDestroyed) return
@@ -353,7 +355,8 @@ export class GraphSimulation implements PositionTextureSource {
 
   /**
    * Sets the links — flat `[source0, target0, source1, target1, …]` of point
-   * indices, as in `Graph.setLinks`. Takes effect on the next `applyData()`.
+   * indices, as in `Graph.setLinks`. Takes effect on the next `applyData()`, or on a
+   * config change that rebuilds (`spaceSize`, `enableSimulation`).
    */
   public setLinks (links: Float32Array): void {
     if (this._isDestroyed) return

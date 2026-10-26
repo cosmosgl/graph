@@ -219,3 +219,72 @@ describe('a rebuild while the simulation runs', () => {
     }
   })
 })
+
+/**
+ * A rebuild outside render() must snap pending positions. In a graph with a canvas the
+ * default 800 ms transition is armed, so a config-change rebuild would otherwise upload the
+ * positions in animate mode and start nothing; a render(undefined, 0) afterwards then clears
+ * the queue without ever writing the new positions into the drawn textures.
+ */
+describe('a config change with positions pending, in a graph that animates', () => {
+  const wait = (ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms) })
+
+  const createScene = async (): Promise<{ graph: Graph; div: HTMLDivElement }> => {
+    const div = document.createElement('div')
+    div.style.width = '200px'
+    div.style.height = '200px'
+    document.body.appendChild(div)
+    // Not headless, transitionDuration left at its 800 ms default
+    const graph = new Graph(div, { spaceSize: 2048, enableSimulation: false, rescalePositions: false, fitViewOnInit: false })
+    graph.setPointPositions(new Float32Array([1000, 1000]))
+    graph.render(undefined, 0)
+    await graph.ready
+    await wait(50)
+    return { graph, div }
+  }
+
+  it('a moved point snaps at the spaceSize change and stays there through a snapping render', async () => {
+    const { graph, div } = await createScene()
+    try {
+      graph.setPointPositions(new Float32Array([1200, 1200]))
+      graph.setConfigPartial({ spaceSize: 4096 })
+      // Applied at the config change, without animation
+      expect(Array.from(graph.getPointPositionsArray())).toEqual([1200, 1200])
+      graph.render(undefined, 0)
+      await wait(50)
+      expect(Array.from(graph.getPointPositionsArray())).toEqual([1200, 1200])
+    } finally {
+      graph.destroy()
+      div.remove()
+    }
+  })
+
+  it('a moved point and an added point both land when the count changes', async () => {
+    const { graph, div } = await createScene()
+    try {
+      graph.setPointPositions(new Float32Array([1200, 1200, 1050, 1000]))
+      graph.setConfigPartial({ spaceSize: 4096 })
+      graph.render(undefined, 0)
+      await wait(50)
+      expect(Array.from(graph.getPointPositionsArray())).toEqual([1200, 1200, 1050, 1000])
+    } finally {
+      graph.destroy()
+      div.remove()
+    }
+  })
+
+  it('an animated render after the config change has nothing left to animate', async () => {
+    const { graph, div } = await createScene()
+    try {
+      graph.setPointPositions(new Float32Array([1200, 1200]))
+      graph.setConfigPartial({ spaceSize: 4096 })
+      graph.render()
+      await wait(50)
+      // Already at the target: no interpolation is in flight
+      expect(Array.from(graph.getPointPositionsArray())).toEqual([1200, 1200])
+    } finally {
+      graph.destroy()
+      div.remove()
+    }
+  })
+})
