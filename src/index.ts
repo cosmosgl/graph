@@ -2330,9 +2330,6 @@ export class Graph implements PositionTextureSource {
   * @param simulationAlpha - Optional alpha value to set. If not provided, keeps current alpha.
   */
   private update (simulationAlpha = this.store.alpha, { animate = false } = {}): void {
-    // Every rebuild comes through here, from render() or from a config change, so the
-    // pending inputs are resolved here, before the texture sizes and the uploads read them
-    this.graph.update()
     // Only render() starts a transition, so only render() may upload in animate mode. Any
     // other rebuild applies every pending channel at once: a running cycle ends (the same
     // interrupt start() gives a cycle that new data pre-empts, onTransitionEnd(true)
@@ -2340,11 +2337,16 @@ export class Graph implements PositionTextureSource {
     // positions straight into the drawn textures, and the other channels' targets show by
     // themselves, since the draw mixes with a progress of 1 while no cycle is active. A
     // queue entry left behind would make the next render() start it from progress 0 and
-    // rewind that channel to its old value.
+    // rewind that channel to its old value. This runs before the resolve below, so a
+    // setter called from onTransitionEnd is part of this rebuild: resolved, uploaded, and
+    // not animated — resolved first, its input would be skipped and its flag spent.
     if (!animate && this.transition.isPending) {
       this.transition.end(true)
       this.transition.dequeueAll()
     }
+    // Every rebuild comes through here, from render() or from a config change, so the
+    // pending inputs are resolved here, before the texture sizes and the uploads read them
+    this.graph.update()
     this.simulation.updateTextureSizes()
     this.create()
     this.initPrograms()

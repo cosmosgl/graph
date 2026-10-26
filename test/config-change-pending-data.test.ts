@@ -365,3 +365,51 @@ describe('a config change with another animated channel pending, in a graph that
     }
   })
 })
+
+/**
+ * A snapping rebuild interrupts a running transition before it uploads, and the
+ * onTransitionEnd callback may call a setter. That input must be part of the same rebuild:
+ * resolved, uploaded, and not animated.
+ */
+describe('a setter called from onTransitionEnd during a config-change rebuild', () => {
+  const wait = (ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms) })
+
+  it('positions set from the callback reach the GPU in that rebuild', async () => {
+    const div = document.createElement('div')
+    div.style.width = '200px'
+    div.style.height = '200px'
+    document.body.appendChild(div)
+    let interrupted = 0
+    const graph: Graph = new Graph(div, {
+      spaceSize: 2048,
+      enableSimulation: false,
+      rescalePositions: false,
+      fitViewOnInit: false,
+      onTransitionEnd: (wasInterrupted: boolean): void => {
+        if (!wasInterrupted) return
+        interrupted += 1
+        graph.setPointPositions(new Float32Array([1300, 1300]))
+      },
+    })
+    try {
+      graph.setPointPositions(new Float32Array([1000, 1000]))
+      graph.render(undefined, 0)
+      await graph.ready
+      await wait(50)
+      // A running color transition, so the rebuild has a cycle to interrupt
+      graph.setPointColors(new Float32Array([1, 0, 0, 1]))
+      graph.render()
+      await wait(100)
+      graph.setPointPositions(new Float32Array([1200, 1200]))
+      graph.setConfigPartial({ spaceSize: 4096 })
+      expect(interrupted).toBe(1)
+      expect(Array.from(graph.getPointPositionsArray())).toEqual([1300, 1300])
+      graph.render(undefined, 0)
+      await wait(50)
+      expect(Array.from(graph.getPointPositionsArray())).toEqual([1300, 1300])
+    } finally {
+      graph.destroy()
+      div.remove()
+    }
+  })
+})
