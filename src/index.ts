@@ -409,7 +409,9 @@ export class Graph implements PositionTextureSource {
    * @note A `NaN` channel resolves to the config default for a normal point, or to the exit default
    * (transparent) for an **absent** point (one whose position is `NaN`) — letting you control how a
    * removed point fades out (see `setPointPositions`).
-  */
+   * On the next `render()` the change animates (`transitionDuration`), or applies at once, without
+   * animation, on a config change that rebuilds (`spaceSize`, `enableSimulation`).
+   */
   public setPointColors (pointColors: Float32Array): void {
     if (this._isDestroyed) return
 
@@ -452,6 +454,8 @@ export class Graph implements PositionTextureSource {
    * @note A `NaN` size resolves to the config default for a normal point, or to the exit default (`0`)
    * for an **absent** point (one whose position is `NaN`) — letting you control how a removed point
    * fades out (see `setPointPositions`).
+   * On the next `render()` the change animates (`transitionDuration`), or applies at once, without
+   * animation, on a config change that rebuilds (`spaceSize`, `enableSimulation`).
    */
   public setPointSizes (pointSizes: Float32Array): void {
     if (this._isDestroyed) return
@@ -475,7 +479,8 @@ export class Graph implements PositionTextureSource {
    * included. Greyed-out points always get the derived shade of
    * their greyed fill.
    * Example: `new Float32Array([1, 1, 1, 1, NaN, NaN, NaN, NaN])` strokes the first point white and leaves the second on the default.
-   * On the next `render()` the change animates like point colors do (`transitionDuration`).
+   * On the next `render()` the change animates like point colors do (`transitionDuration`), or applies
+   * at once, without animation, on a config change that rebuilds (`spaceSize`, `enableSimulation`).
    */
   public setPointStrokeColors (pointStrokeColors: Float32Array): void {
     if (this._isDestroyed) return
@@ -496,7 +501,8 @@ export class Graph implements PositionTextureSource {
    * A `NaN` means "use `pointDefaultStrokeWidth`" for that point; `0` draws no stroke. On a point too small
    * for its stroke the band narrows to half the point's depth, so some fill always shows.
    * Example: `new Float32Array([2, NaN, 0])` gives the first point a 2 px stroke, keeps the default on the second, and none on the third.
-   * On the next `render()` the change animates like point sizes do (`transitionDuration`).
+   * On the next `render()` the change animates like point sizes do (`transitionDuration`), or applies
+   * at once, without animation, on a config change that rebuilds (`spaceSize`, `enableSimulation`).
    */
   public setPointStrokeWidths (pointStrokeWidths: Float32Array): void {
     if (this._isDestroyed) return
@@ -653,6 +659,8 @@ export class Graph implements PositionTextureSource {
    * Example: `new Float32Array([1, 0, 0, 1, 0, 1, 0, 1])` sets the first link to red and the second link to green.
    * An array whose length does not match the link count is ignored: every link draws
    * `config.linkDefaultColor`. Pass an empty array to go back to the default.
+   * On the next `render()` the change animates (`transitionDuration`), or applies at once, without
+   * animation, on a config change that rebuilds (`spaceSize`, `enableSimulation`).
    */
   public setLinkColors (linkColors: Float32Array): void {
     if (this._isDestroyed) return
@@ -681,6 +689,8 @@ export class Graph implements PositionTextureSource {
    * Example: `new Float32Array([1, 2, 3])` sets the first link to width 1, the second link to width 2, and the third link to width 3.
    * An array whose length does not match the link count is ignored: every link draws
    * `config.linkDefaultWidth`. Pass an empty array to go back to the default.
+   * On the next `render()` the change animates (`transitionDuration`), or applies at once, without
+   * animation, on a config change that rebuilds (`spaceSize`, `enableSimulation`).
    */
   public setLinkWidths (linkWidths: Float32Array): void {
     if (this._isDestroyed) return
@@ -2323,13 +2333,17 @@ export class Graph implements PositionTextureSource {
     // Every rebuild comes through here, from render() or from a config change, so the
     // pending inputs are resolved here, before the texture sizes and the uploads read them
     this.graph.update()
-    // Only render() starts a transition, so only render() may upload positions in animate
-    // mode (into the transition's endpoint textures, for the interpolation to move). Any
-    // other rebuild snaps: a running cycle ends, the queued position transition is dropped,
-    // and updatePositions() writes the resolved positions straight into the drawn textures.
-    if (!animate && this.transition.isPendingFor(TransitionProperty.Positions)) {
+    // Only render() starts a transition, so only render() may upload in animate mode. Any
+    // other rebuild applies every pending channel at once: a running cycle ends (the same
+    // interrupt start() gives a cycle that new data pre-empts, onTransitionEnd(true)
+    // included), the whole queue is dropped, updatePositions() writes the resolved
+    // positions straight into the drawn textures, and the other channels' targets show by
+    // themselves, since the draw mixes with a progress of 1 while no cycle is active. A
+    // queue entry left behind would make the next render() start it from progress 0 and
+    // rewind that channel to its old value.
+    if (!animate && this.transition.isPending) {
       this.transition.end(true)
-      this.transition.dequeue(TransitionProperty.Positions)
+      this.transition.dequeueAll()
     }
     this.simulation.updateTextureSizes()
     this.create()
