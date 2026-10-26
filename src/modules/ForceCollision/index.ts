@@ -29,7 +29,7 @@ import { defaultConfigValues } from '@/graph/variables'
  * the point count). The all-pairs side grows with n², so doubling the
  * threshold would roughly quadruple it.
  */
-const ALL_PAIRS_MAX_POINTS = 4096
+export const ALL_PAIRS_MAX_POINTS = 4096
 
 /** A depth-peeling render target ([point index, hash] per cell). */
 type SlotTarget = {
