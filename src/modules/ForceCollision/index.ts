@@ -44,10 +44,11 @@ const PEEL_TARGETS = 2
  * It is a constraint, not a force. Every overlapping pair is projected to
  * contact along the line of centers, split by r² so the smaller disc yields
  * (d3-force's forceCollide), scaled by `simulationCollision` and capped at one
- * own radius per pass. The correction is not scaled by alpha and the
- * simulation integrates it with friction 1, so overlap keeps resolving at full
- * strength while the layout cools; `simulationCollisionIterations` repeats the
- * pass per tick. While collision is on, the link force reads
+ * own radius per pass. The correction is not scaled by alpha (unless
+ * `simulationCollisionCooling` opts in) and the simulation integrates it with
+ * friction 1, so overlap keeps resolving at full strength while the layout
+ * cools; `simulationCollisionIterations` repeats the pass per tick. While
+ * collision is on, the link force reads
  * `resolvedSizeTexture` to floor each spring's rest length at the contact
  * distance, so the springs never demand overlap.
  *

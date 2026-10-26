@@ -1002,9 +1002,10 @@ export class GraphSimulation implements PositionTextureSource {
       //
       // It is a constraint, not a force: each pass is a bounded position
       // correction, integrated with friction 1 so it lands in full, and the
-      // shader does not scale it by alpha. Extra iterations repeat the whole
-      // grid-build + resolve pass on the freshest positions, so a dense pile
-      // unwinds in fewer ticks at a linear cost per pass.
+      // shader does not scale it by alpha unless `simulationCollisionCooling`
+      // opts in. Extra iterations repeat the whole grid-build + resolve pass on
+      // the freshest positions, so a dense pile unwinds in fewer ticks at a
+      // linear cost per pass.
       if (simulationCollision) {
         // A non-finite count (NaN from an empty input, Infinity) runs one pass:
         // Infinity would never return, and NaN would silently skip collision.

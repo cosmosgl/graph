@@ -6,9 +6,14 @@ costs. It was added in `feat(simulation): add spatial-hash point collision force
 made correct at every point size in `fix(force): cover the full collision range and unbias
 cell averages` (`ca4ee44`) and `fix(force): keep the fitted collision cell at the interaction
 range` (`58e2475`), and rebuilt as a constraint with pairwise contacts in
-`feat(force): collision is a constraint — unscaled by alpha, integrated without friction` (`fcd1137`) and the commits that follow it on that branch, through `feat(force): depth-peeled neighbour slots replace the cell-average grid above 4,096 points` (`0ce67c7`). The code lives in
+`feat(force): collision is a constraint — unscaled by alpha, integrated without friction` (`930d3a3`) and the commits that follow it on that branch, through `feat(force): depth-peeled neighbour slots replace the cell-average grid above 4,096 points` (`dbce291`). The code lives in
 `src/modules/ForceCollision/`; the engineering records are
 `history/2026/2026-06-13-collision-force.md` and `history/2026/2026-10-07-collision-constraint.md`.
+
+The same story as a standalone explainer — the four causes and their fixes, the contact rule and
+the two paths, each with a live demo, and the tick order — is
+[`collision-constraint.html`](./collision-constraint.html) (self-contained; open it locally in a
+browser — GitHub shows only its source).
 
 The force is driven by five config keys (interface in `src/config.ts`, defaults in
 `src/variables.ts`):
@@ -166,13 +171,13 @@ one integration — repeats on the positions the previous iteration just wrote.
 ## Where it sits in the tick
 
 `runSimulationStep()` in `src/simulation.ts` runs the forces in a fixed order — gravity,
-center, many-body, links (incoming then outgoing), clusters, **collision** — and each force is
+center, many-body, links (incoming then outgoing), clusters, attractors, **collision** — and each force is
 its own `swapFbo() → run() → updatePosition()` triple. There is no shared velocity sum: every
 force reads the positions the previous force just wrote, writes its own velocity texture, and
 the integrator applies it (`pos += v × friction`, clamped to the space) before the next force
 runs.
 
-Collision is deliberately **last**. Link springs and cluster attraction re-create overlap on
+Collision is deliberately **last**. Link springs, cluster attraction and attractors re-create overlap on
 every tick; running collision after them corrects that overlap within the same tick. Running it
 before them would leave the attraction's overlap standing until the next frame, and the two
 would settle into a standing oscillation.
@@ -290,7 +295,7 @@ its own centroid near field hit the same wall, and the same shader now serves bo
 | response | linear in overlap, split between the pair by `r²` | the same `r²` split, capped at one own radius per pass |
 | overlap depth handled per pass | full | capped at one own radius, including isolated pairs; deep overlaps can need multiple passes |
 | coincident points | random jiggle | deterministic golden-angle fan-out by index |
-| `alpha` | ignored | ignored; integrated without friction too |
+| `alpha` | ignored | ignored by default, `simulationCollisionCooling` opts back in; integrated without friction too |
 | springs vs. contact | the app sets `linkDistance` to clear the radii | rest length floored at the contact distance while collision is on |
 | dense cells | exact, slower | exact up to K per cell; a random K per pass above |
 

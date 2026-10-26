@@ -2,7 +2,7 @@
 
 # Collision as a constraint: pairwise contacts at every size, no alpha, radius-aware springs, iterations
 
-**Commits:** `feat(force): collision is a constraint — unscaled by alpha, integrated without friction` (`fcd1137`), `feat(force): link rest lengths floor at the contact distance while collision is on` (`b56261c`), `feat(force): simulationCollisionIterations — collision passes per tick` (`5c14446`), `feat(force): exact all-pairs collision at or below 4,096 points` (`8839b63`), `feat(force): depth-peeled neighbour slots replace the cell-average grid above 4,096 points` (`0ce67c7`), `feat(stories): collision vs hub springs — seven hubs re-piling their leaves against collision` (`c6b9a31`); docs: `docs(force): the collision design doc for the constraint-style, pairwise force` (this entry's own commit)
+**Commits:** `feat(force): collision is a constraint — unscaled by alpha, integrated without friction` (`930d3a3`), `feat(force): link rest lengths floor at the contact distance while collision is on` (`cbfbd4c`), `feat(force): simulationCollisionIterations — collision passes per tick` (`991f4d9`), `feat(force): exact all-pairs collision at or below 4,096 points` (`b518c9d`), `feat(force): depth-peeled neighbour slots replace the cell-average grid above 4,096 points` (`dbce291`), `feat(stories): collision vs hub springs — seven hubs re-piling their leaves against collision` (`19018a4`), `feat(force): simulationCollisionCooling — let the collision correction cool with alpha` (`c2657bd`); docs: `docs(force): the collision design doc for the constraint-style, pairwise force` (`e86e5af`, this entry's own commit), `docs(force): clarify collision limits and resource lifetime` (`7293e0a`), `docs(force): qualify collision correction before radius caps` (`e6dc151`)
 
 ## Why
 
@@ -29,9 +29,9 @@ takes an `iterations` count; the app is expected to set `linkDistance` to clear 
 ## What changed
 
 **Collision is a constraint, not a force.**
-- `force-collision-spatial.frag` and the new all-pairs shader apply `simulationCollision`
-  straight, with no `alpha` factor. The per-pass cap, which bound the push at the first tick
-  anyway, is what keeps full strength stable at every alpha.
+- Both collision shaders apply `simulationCollision` straight, with no `alpha` factor. The
+  per-pass cap, which bound the push at the first tick anyway, is what keeps full strength
+  stable at every alpha.
 - `Points.updatePosition(friction)` takes the friction per call; the collision loop in
   `runSimulationStep()` passes `1`, so the bounded correction lands in full.
 
@@ -51,7 +51,8 @@ dense hubs resolve noticeably better at 2–4.
 
 **Pairwise contacts at every size.** Both paths resolve an overlapping pair `d3`-style —
 projected to contact along the line of centers, split by `r²` so the smaller disc yields —
-then scale by `simulationCollision` (1 = full projection; up to 2 over-relaxes) and cap the
+then scale by `simulationCollision` (1 = the full pairwise correction before the per-point cap, so a
+deep overlap can still need several passes; up to 2 over-relaxes) and cap the
 per-pass step at one own radius so a seeded pile inflates instead of exploding. Coincident
 points fan out along a per-point golden-angle direction.
 - At or below 4,096 points (`ALL_PAIRS_MAX_POINTS`, the many-body force's threshold)
