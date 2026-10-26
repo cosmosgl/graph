@@ -144,6 +144,14 @@ export class Transition {
     this.pendingProperties.add(property)
   }
 
+  /**
+   * Drops every queued property. Unlike `abort()`, leaves the active cycle and the duration
+   * override alone — for a rebuild that applies pending data without a transition.
+   */
+  public dequeueAll (): void {
+    this.pendingProperties.clear()
+  }
+
   /** Removes a property from the pending queue without affecting the active cycle. */
   public dequeue (property: TransitionProperty): void {
     this.pendingProperties.delete(property)

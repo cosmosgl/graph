@@ -288,3 +288,80 @@ describe('a config change with positions pending, in a graph that animates', () 
     }
   })
 })
+
+/**
+ * The other animated channels upload into a source/target pair the draw shader mixes with a
+ * progress of 1 while no transition is active, so a config-change rebuild shows their new
+ * value at once. The queued transition must go too, or the next render() starts it from
+ * progress 0 and the channel rewinds to its old value and fades in a second time.
+ */
+describe('a config change with another animated channel pending, in a graph that animates', () => {
+  const wait = (ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms) })
+
+  const createScene = async (): Promise<{ graph: Graph; div: HTMLDivElement; starts: () => number }> => {
+    const div = document.createElement('div')
+    div.style.width = '200px'
+    div.style.height = '200px'
+    document.body.appendChild(div)
+    let started = 0
+    const graph = new Graph(div, {
+      spaceSize: 2048,
+      enableSimulation: false,
+      rescalePositions: false,
+      fitViewOnInit: false,
+      onTransitionStart: (): void => { started += 1 },
+    })
+    graph.setPointPositions(new Float32Array([1000, 1000]))
+    graph.render(undefined, 0)
+    await graph.ready
+    await wait(50)
+    return { graph, div, starts: () => started }
+  }
+
+  it('control: colors set then rendered animate once', async () => {
+    const { graph, div, starts } = await createScene()
+    try {
+      graph.setPointColors(new Float32Array([1, 0, 0, 1]))
+      graph.render()
+      await wait(50)
+      expect(starts()).toBe(1)
+    } finally {
+      graph.destroy()
+      div.remove()
+    }
+  })
+
+  it('colors set before a spaceSize change show at once and do not animate on the next render', async () => {
+    const { graph, div, starts } = await createScene()
+    try {
+      graph.setPointColors(new Float32Array([1, 0, 0, 1]))
+      graph.setConfigPartial({ spaceSize: 4096 })
+      graph.render()
+      await wait(50)
+      // Nothing left to start: the rebuild applied the colors without animation
+      expect(starts()).toBe(0)
+    } finally {
+      graph.destroy()
+      div.remove()
+    }
+  })
+
+  it('sizes and link widths set before a spaceSize change do not animate on the next render either', async () => {
+    const { graph, div, starts } = await createScene()
+    try {
+      graph.setPointPositions(new Float32Array([1000, 1000, 1050, 1000]))
+      graph.setLinks(new Float32Array([0, 1]))
+      graph.render(undefined, 0)
+      await wait(50)
+      graph.setPointSizes(new Float32Array([30, 30]))
+      graph.setLinkWidths(new Float32Array([4]))
+      graph.setConfigPartial({ spaceSize: 4096 })
+      graph.render()
+      await wait(50)
+      expect(starts()).toBe(0)
+    } finally {
+      graph.destroy()
+      div.remove()
+    }
+  })
+})
