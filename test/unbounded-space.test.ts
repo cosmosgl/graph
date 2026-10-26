@@ -746,40 +746,56 @@ describe('the collision hash follows the data', () => {
 })
 
 describe('the collision hash bins in both programs alike (collision-grid.ts)', () => {
-  it('moves no isolated point planted on a cell boundary, through the engine\'s own programs', async () => {
-    // The agreement below, end to end: build-grid.vert and
-    // force-collision-spatial.frag as the engine compiles them, uniform blocks
-    // and all. An isolated point feels no collision — unless the force pass
-    // puts it in another cell than the one the build pass binned it into: then
-    // it finds itself in a neighbouring texel, at distance zero, and is pushed
-    // off. Two corner points fix the data box (centre 2048, floored to the
-    // grid's 8192-unit width), so its origin is exactly -2048, and every other
-    // point sits within 3 ULPs of a half-cell boundary — a cell boundary on
-    // two of the four offset lattices — eight cells from its neighbours.
+  it('resolves every overlapping pair planted across a cell boundary, through the engine\'s own programs', async () => {
+    // The agreement below, end to end: build-nearfield-slots.vert and
+    // force-collision-slots.frag as the engine compiles them, uniform blocks
+    // and all. The contact pass skips its own index and checks every
+    // candidate's world cell, so a point the two programs bin differently is
+    // never pushed by itself — it is missed by its neighbours instead: listed
+    // under one cell by the peel, filed under another by the check. So the
+    // probe is overlap, not isolation. Two corner points fix the data box at
+    // (48, 48)–(4248, 4248): a 4,200-unit span, above the 2,048-unit floor of
+    // a 256-texel grid of 8-unit cells, so the origin is exactly 48. On every
+    // lattice site, eight cells from the next, two points 4 or 5.66 units
+    // apart — inside the 8-unit contact — each within 3 ULPs of a half-cell
+    // boundary; over 520 cells per axis, more than the grid's 256, so the
+    // cells reach their texels through the block rotation as well. Every one
+    // of them must move; the corners must not.
     const CELL = 8
-    const ORIGIN = 2048 - (CELL * COLLISION_GRID_SIZE) / 2
+    const ORIGIN = 48
     let seed = 7
     const random = (): number => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
     const bits = new Float32Array(1)
     const ulps = new Int32Array(bits.buffer)
-    const plant = (cell: number): number => {
-      bits[0] = ORIGIN + (2 * cell + Math.floor(random() * 5) - 2) * (CELL / 2)
+    /** The position at half-cell index `half` from the origin, moved by up to 3 ULPs either way. */
+    const plant = (half: number): number => {
+      bits[0] = ORIGIN + half * (CELL / 2)
       ulps[0] = (ulps[0] as number) + Math.floor(random() * 7) - 3
       return bits[0] as number
     }
-    const coordinates = [48, 48, 4048, 4048]
-    for (let cellX = 270; cellX <= 755; cellX += 8) {
-      for (let cellY = 270; cellY <= 755; cellY += 8) coordinates.push(plant(cellX), plant(cellY))
+    const coordinates = [48, 48, 4248, 4248]
+    for (let cellX = 10; cellX <= 522; cellX += 8) {
+      for (let cellY = 10; cellY <= 522; cellY += 8) {
+        const halfX = 2 * cellX + Math.floor(random() * 5) - 2
+        const halfY = 2 * cellY + Math.floor(random() * 5) - 2
+        // The partner one half cell over in x, and in y half the time
+        coordinates.push(plant(halfX), plant(halfY), plant(halfX + 1), plant(halfY + Math.floor(random() * 2)))
+      }
     }
+    // 65 × 65 pairs and the two corners: the slot path
+    const count = coordinates.length / 2
+    expect(count).toBeGreaterThan(ALL_PAIRS_MAX_POINTS)
     const positions = new Float32Array(coordinates)
     const result = await runCollision(positions, 1, { pointDefaultSize: CELL })
-    let moved = 0
-    for (let i = 0; i < positions.length; i += 1) if (result[i] !== positions[i]) moved += 1
-    // Measured, with the force pass alone scaling by 1.000001 more than the
-    // build pass: 1,528 of the 3,723 points moved, on Metal and SwiftShader
-    // alike. (Inside the space every cell lies in the origin's block, which
-    // the hash leaves unrotated: the rotation is pinned by the next test.)
-    expect(moved).toBe(0)
+    let still = 0
+    for (let i = 2; i < count; i += 1) {
+      if (result[i * 2] === positions[i * 2] && result[i * 2 + 1] === positions[i * 2 + 1]) still += 1
+    }
+    // Measured with the contact pass scaling by 1.000001 more than the peel,
+    // in its own cell and in the world-cell check alike: 3,292 of the 8,450
+    // points stayed, on SwiftShader.
+    expect(still).toBe(0)
+    expect(Array.from(result.subarray(0, 4))).toEqual([48, 48, 4248, 4248])
   })
 
   it('puts every position in the same cell and texel in the vertex and the fragment program', () => {
