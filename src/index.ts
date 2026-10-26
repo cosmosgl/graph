@@ -1021,8 +1021,8 @@ export class Graph implements PositionTextureSource {
     // so an animated transition would leave positions frozen at their source forever.
     this.transition.setDurationOverride(this._isHeadless ? 0 : transitionDuration)
 
-    // Update graph and start frames
-    this.update(simulationAlpha)
+    // Update graph and start frames; the one rebuild that may animate, since start() follows
+    this.update(simulationAlpha, { animate: true })
 
     // Position transitions must not compete with live force updates — pause the simulation
     // so physics and GPU interpolation don't fight over the same coordinates.
@@ -1813,7 +1813,8 @@ export class Graph implements PositionTextureSource {
    * (positions, colors, sizes, shapes, images, links, forces, clusters) and requests a redraw.
    * An internal stage of the render pipeline: it does not ingest new input arrays, so data
    * passed to `setPointPositions`, `setPointColors`, `setLinks`, etc. takes effect only on
-   * the next `render()`. To apply new data while keeping the current alpha, call
+   * the next `render()`, or at once and without animation on a config change that rebuilds
+   * (`spaceSize`, `enableSimulation`). To apply new data while keeping the current alpha, call
    * `render(undefined)` — or `render(undefined, 0)` to also snap instead of animating.
    */
   public create (): void {
@@ -2077,7 +2078,6 @@ export class Graph implements PositionTextureSource {
     if (this.config.enableSimulation) {
       // Avoids running simulation against mid-interpolation positions.
       this.transition.end(true)
-      this.transition.dequeue(TransitionProperty.Positions)
       this.simulation.ensureSimulationModules()
       this.simulation.markForcesDirty()
       // The rebuild: resolves pending inputs, sizes the textures, builds the
@@ -2319,10 +2319,18 @@ export class Graph implements PositionTextureSource {
   *
   * @param simulationAlpha - Optional alpha value to set. If not provided, keeps current alpha.
   */
-  private update (simulationAlpha = this.store.alpha): void {
+  private update (simulationAlpha = this.store.alpha, { animate = false } = {}): void {
     // Every rebuild comes through here, from render() or from a config change, so the
     // pending inputs are resolved here, before the texture sizes and the uploads read them
     this.graph.update()
+    // Only render() starts a transition, so only render() may upload positions in animate
+    // mode (into the transition's endpoint textures, for the interpolation to move). Any
+    // other rebuild snaps: a running cycle ends, the queued position transition is dropped,
+    // and updatePositions() writes the resolved positions straight into the drawn textures.
+    if (!animate && this.transition.isPendingFor(TransitionProperty.Positions)) {
+      this.transition.end(true)
+      this.transition.dequeue(TransitionProperty.Positions)
+    }
     this.simulation.updateTextureSizes()
     this.create()
     this.initPrograms()
