@@ -5,6 +5,7 @@ import { webgl2Adapter } from '@luma.gl/webgl'
 import { Graph, defaultConfigValues, type GraphConfig } from '@cosmos.gl/graph'
 import { DataBounds, getBucketGridSize, type DataBoundsRunOptions } from '@/graph/modules/Shared/data-bounds'
 import { COARSEST_GRID_SIZE } from '@/graph/modules/ForceManyBody'
+import { ALL_PAIRS_MAX_POINTS } from '@/graph/modules/ForceCollision'
 import { COLLISION_GRID_SIZE, COLLISION_ROTATIONS, collisionRotationSeed, withCollisionGrid } from '@/graph/modules/ForceCollision/collision-grid'
 
 /**
@@ -633,12 +634,21 @@ const countPairsCloserThan = (positions: Float32Array, from: number, to: number,
 }
 
 describe('the collision hash follows the data', () => {
+  // The hash runs above ALL_PAIRS_MAX_POINTS only; at or below it every pair is
+  // tested exactly. Every point set here is larger, so each test runs the peel,
+  // the slot array and the contact pass. At this count the hash is 256 texels
+  // per axis.
+  const COUNT = ALL_PAIRS_MAX_POINTS + 104
+  // The square 4,200 points scatter over for an overlapping cluster: the
+  // density of 800 points over 120 units, about four contact ranges of overlap
+  // at size 12.
+  const SIDE = 275
+
   it('resolves the same overlapping cluster wherever it sits, to float rounding', async () => {
     // Compare one constraint pass: repeated pairwise projections amplify the
     // initial float32 rounding differences at translated world coordinates.
     // The data-relative mapping must not change the initial collision response.
-    const COUNT = 800
-    const cluster = createCluster(COUNT, 120)
+    const cluster = createCluster(COUNT, SIDE)
     const layoutAt = async (cx: number, cy: number): Promise<Float64Array> => {
       const result = await runCollision(placeClusters(cluster, [[cx, cy]]), 1)
       const relative = new Float64Array(COUNT * 2)
@@ -656,80 +666,82 @@ describe('the collision hash follows the data', () => {
       let sumSquares = 0
       for (let i = 0; i < COUNT * 2; i += 1) sumSquares += ((moved[i] as number) - (reference[i] as number)) ** 2
       const rms = Math.sqrt(sumSquares / COUNT)
-      expect(rms / referenceExtent).toBeLessThan(1e-3)
+      // Measured on SwiftShader: 1.3e-6 and 1.9e-6 of the 287-unit extent
+      expect(rms / referenceExtent).toBeLessThan(1e-4)
     }
   })
 
   it('keeps the cell at the contact range for a large collision radius', async () => {
     // A 60-unit contact range: the cell is 60 units however small the cluster
-    // is. A cell fitted to the cluster instead — its extent / 512, a fraction
-    // of a unit — leaves the 3×3 scan reaching almost none of the overlapping
-    // points (measured: the cluster never spreads, every one of its 1962
-    // overlapping pairs is still there after the 400 steps).
-    const COUNT = 100
-    const result = await runCollision(placeClusters(createCluster(COUNT, 120), [[2048, 2048]]), 400, { simulationCollisionRadius: 30 })
-    // From 1962 overlapping pairs (of 4950), every contact is resolved by
-    // step 300 — with the space-anchored hash as with this one.
-    expect(countPairsCloserThan(result, 0, COUNT, 0.9 * 60)).toBe(0)
-    expect(extentOf(result)).toBeGreaterThan(600)
+    // is. A cell fitted to the cluster instead — its extent / 256, a few
+    // units — leaves the 3×3 scan reaching almost none of the overlapping
+    // points, and the cluster never spreads.
+    const side = 778 // the density of 100 points over 120 units
+    const start = placeClusters(createCluster(COUNT, side), [[2048, 2048]])
+    const before = countPairsCloserThan(start, 0, COUNT, 0.9 * 60)
+    const result = await runCollision(start, 100, { simulationCollisionRadius: 30 })
+    const after = countPairsCloserThan(result, 0, COUNT, 0.9 * 60)
+    // Measured on SwiftShader: 21,502 of 126,028 overlapping pairs left after
+    // 100 steps, the cluster 2,351 units wide from 778.
+    expect(after).toBeLessThan(before / 4)
+    expect(extentOf(result)).toBeGreaterThan(2000)
   })
 
   it('keeps the contact-range cell across a layout hundreds of contact ranges wide', async () => {
     // Three copies of a cluster across an 8000-unit space: a layout ~7600
-    // units wide, 633 contact ranges at size 12 — within the 1,020 the hash
-    // keeps in its unrotated middle block, so every copy bins as on a plain
-    // grid of 12-unit cells. The space-anchored hash, capped at 512 cells over
-    // the space, had 15.6-unit cells; a cell widened to fit 512 over the
-    // layout would be ~14.8. Either spreads every copy less. (A layout wide
-    // enough to share texels: the 200,000-unit outlier test below.)
-    const COUNT = 400
+    // units wide, 633 contact ranges at size 12 — more than the 256 texels of
+    // the hash, so the copies alias onto each other's texels and the block
+    // rotation is in play. Each copy must still bin on 12-unit cells and
+    // spread as the others do.
+    const perCopy = Math.ceil(COUNT / 3)
+    const side = 224 // the density of SIDE for COUNT
     const centres = [[300, 300], [4000, 4000], [7700, 7700]] as const
-    const result = await runCollision(placeClusters(createCluster(COUNT, 120), centres), 100, { spaceSize: 8000 })
-    const extents = centres.map((_, c) => extentOf(result.subarray(c * COUNT * 2, (c + 1) * COUNT * 2)))
-    // Measured on SwiftShader (from ~120): 188.0, 185.8 and 191.9; with the
-    // widened cell 171.5, 168.4 and 169.0; with the space-anchored hash 163.7,
-    // 166.5 and 161.5.
-    for (const extent of extents) expect(extent).toBeGreaterThan(180)
+    const result = await runCollision(placeClusters(createCluster(perCopy, side), centres), 100, { spaceSize: 8000 })
+    const extents = centres.map((_, c) => extentOf(result.subarray(c * perCopy * 2, (c + 1) * perCopy * 2)))
+    // Measured on SwiftShader (from 224): 376.0, 374.5 and 374.7
+    for (const extent of extents) expect(extent).toBeGreaterThan(350)
     expect(Math.max(...extents) / Math.min(...extents)).toBeLessThan(1.1)
   })
 
   it('spreads a stack of points from the first step, off the centre of the layout too', async () => {
-    // 200 points at one position, 2,050 units from the centre of the data box
-    // (one more point fixes it). All of them read the same texel, and its sum
-    // is rounded: the average of the other 199 lands a few hundredths of a
-    // unit off the stack — the same direction for every one of them, so a
-    // 0.001-unit coincidence test sent the stack off as a block instead of
-    // spreading it. Measured with that test: still one stack after the first
-    // step on Metal and SwiftShader, after ten on Metal. Within the sum's
-    // rounding error the points count as coincident and spread by index.
-    const COUNT = 200
-    const positions = new Float32Array(COUNT * 2 + 2)
-    for (let i = 0; i < COUNT; i += 1) positions.set([3000.37, 1000.37], i * 2)
-    positions.set([100, 3900], COUNT * 2)
+    // 200 points at one position, far from the centre of the data box. They
+    // share one cell and see the same slot occupants; each is pushed along its
+    // own index's direction, so the stack disperses from the first step. The
+    // rest of the points are a sparse lattice, 40 units apart at size 8, which
+    // lifts the count onto the slot path and must not move.
+    const STACK = 200
+    const lattice = COUNT - STACK - 1
+    const positions = new Float32Array(COUNT * 2)
+    for (let i = 0; i < STACK; i += 1) positions.set([3000.37, 1000.37], i * 2)
+    for (let i = 0; i < lattice; i += 1) positions.set([-30000 + (i % 80) * 40, -30000 + Math.floor(i / 80) * 40], (STACK + i) * 2)
+    positions.set([100, 3900], (COUNT - 1) * 2)
     const result = await runCollision(positions, 1, { pointDefaultSize: 8 })
-    const stack = result.subarray(0, COUNT * 2)
-    // Measured: 2.72 units wide after the step, every point apart
-    expect(extentOf(stack)).toBeGreaterThan(2)
-    const distinct = new Set(Array.from({ length: COUNT }, (_, i) => `${stack[i * 2]},${stack[i * 2 + 1]}`))
-    expect(distinct.size).toBe(COUNT)
+    const stack = result.subarray(0, STACK * 2)
+    // Measured: 8 units wide after the step — one radius each way, the
+    // per-pass cap — every point apart
+    expect(extentOf(stack)).toBeGreaterThan(6)
+    const distinct = new Set(Array.from({ length: STACK }, (_, i) => `${stack[i * 2]},${stack[i * 2 + 1]}`))
+    expect(distinct.size).toBe(STACK)
+    expect(Array.from(result.subarray(STACK * 2))).toEqual(Array.from(positions.subarray(STACK * 2)))
   })
 
   it('resolves a dense cluster the same with one point far away', async () => {
     // One point 7400 units from the cluster: a data box ~620 contact ranges
-    // wide. The cell stays the contact range (12) and that point lands on
-    // texels of its own. A cell sized to fit a fixed count over the box
+    // wide. The cell stays the contact range (12) and that point lands on a
+    // texel of its own. A cell sized to fit a fixed count over the box
     // weakens collision for the whole cluster.
-    const COUNT = 800
+    const cluster = placeClusters(createCluster(COUNT, SIDE), [[500, 500]])
     const positions = new Float32Array(COUNT * 2 + 2)
-    positions.set(placeClusters(createCluster(COUNT, 120), [[500, 500]]))
+    positions.set(cluster)
     positions.set([7900, 7900], COUNT * 2)
+    const alone = await runCollision(cluster, 100, { spaceSize: 8000 })
     const result = await runCollision(positions, 100, { spaceSize: 8000 })
-    // Measured on SwiftShader: extent 210.5 with 4026 overlapping pairs — the
-    // cluster alone gives 212.6 and 4070. A cell widened to fit 512 over the
-    // box (~14.8) gave 179.8 and 5639; the space-anchored hash (cell 15.6)
-    // 166.5 and 6872.
-    expect(extentOf(result.subarray(0, COUNT * 2))).toBeGreaterThan(195)
-    expect(countPairsCloserThan(result, 0, COUNT, 0.9 * 12)).toBeLessThan(4600)
+    // Measured on SwiftShader: extent 512.2 with 15,374 overlapping pairs
+    // (from 41,137) — the cluster alone gives 509.9 and 15,350.
+    const withOutlier = result.subarray(0, COUNT * 2)
+    expect(extentOf(withOutlier)).toBeGreaterThan(0.95 * extentOf(alone))
+    expect(countPairsCloserThan(result, 0, COUNT, 0.9 * 12)).toBeLessThan(1.05 * countPairsCloserThan(alone, 0, COUNT, 0.9 * 12))
+    expect(Array.from(result.subarray(COUNT * 2))).toEqual([7900, 7900])
   })
 })
 
