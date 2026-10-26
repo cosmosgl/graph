@@ -57,8 +57,9 @@ per-pass step at one own radius so a seeded pile inflates instead of exploding. 
 points fan out along a per-point golden-angle direction.
 - At or below 4,096 points (`ALL_PAIRS_MAX_POINTS`, the many-body force's threshold)
   `force-collision-allpairs.frag` tests every pair in one pass.
-- Above it, `force-collision-slots.frag` tests every pair within reach. The cell-average grid
-  is gone: the grid cell still spans the contact range (so the 3×3 scan is exhaustive) and is
+- Above it, `force-collision-slots.frag` tests the pairs within reach: every one while a cell
+  holds at most K points, a fresh random K of a denser cell's occupants per pass. The
+  cell-average grid is gone: the grid cell still spans the contact range (so the 3×3 scan is exhaustive) and is
   now also bounded by the many-body force's finest grid for the point count, and each cell's
   occupants are listed by the many-body force's depth-peeling shader
   (`build-nearfield-slots.vert`, reused as is) into K slots — 32 up to 16k points, 16 up to
@@ -138,8 +139,9 @@ walkthrough of both paths.
   like every other pass, with a regression test. A non-finite
   `simulationCollisionIterations` (`NaN` from an empty input, `Infinity`) now runs one pass
   instead of skipping collision or never returning.
-- Under sustained compression past the packing limit — the 50k-point stress story, where
-  gravity presses ~84 % area coverage (counting padding) into a disc — neither version can resolve. The new force
+- Under sustained compression past the packing limit — the 50k-point stress story (five passes
+  per tick), where gravity presses ~84 % area coverage (counting padding) into a disc — neither
+  version can resolve. The new force at one pass per tick
   leaves fewer deep overlaps (8,233 deeper than 10 % at tick 300 against 33,607) and halves
   the worst penetration, but spreads the rest into more shallow contacts (83,587 above 1 %
   against 54,195), and the shallow count keeps growing while gravity keeps pulling.

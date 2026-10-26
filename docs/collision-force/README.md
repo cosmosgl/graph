@@ -36,8 +36,9 @@ the padding.
 
 The force has two paths, split at **4,096 points** (`ALL_PAIRS_MAX_POINTS` in `index.ts`), the
 same threshold the many-body force uses. At or below it, `force-collision-allpairs.frag`
-tests every pair. Above it, `force-collision-slots.frag` tests every pair *within reach*: a
-uniform grid whose cell spans the contact range, with each cell's occupants listed by depth
+tests every pair. Above it, `force-collision-slots.frag` tests the pairs *within reach*, every one
+while a cell holds at most K points and a fresh random K of a denser cell's occupants per pass:
+a uniform grid whose cell spans the contact range, with each cell's occupants listed by depth
 peeling so the force pass sees real neighbours, never a cell average. Both paths resolve a
 contact the same way, and both treat collision as a **constraint**: the correction is not
 scaled by the simulation's `alpha` (unless `simulationCollisionCooling` opts in), it is integrated without friction, and while collision is
