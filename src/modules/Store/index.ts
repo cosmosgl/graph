@@ -293,16 +293,6 @@ export class Store {
    * config put it.
    */
   public adjustSpaceSize (configSpaceSize: number): void {
-    // Deprecated key: say so only to those with something to change. The stories' helper
-    // and many hosts set the default explicitly, and they have nothing to edit.
-    if (configSpaceSize !== defaultConfigValues.spaceSize) {
-      console.warn(
-        `spaceSize (${configSpaceSize}) is deprecated and goes away in the next major. It bounds nothing: ` +
-        'it places the world origin, where gravity pulls, at spaceSize / 2, and scales the initial rescale ' +
-        `and a few step guards. Leave it at the default (${defaultConfigValues.spaceSize}); a layout saved ` +
-        'around another origin will need shifting when the key goes.'
-      )
-    }
     if (configSpaceSize <= 0 || !isFinite(configSpaceSize)) {
       console.error(`Invalid spaceSize value: ${configSpaceSize}. Using default value of ${defaultConfigValues.spaceSize}`)
       configSpaceSize = defaultConfigValues.spaceSize
@@ -312,6 +302,18 @@ export class Store {
     if (configSpaceSize < minSpaceSize) {
       console.warn(`spaceSize (${configSpaceSize}) is too small. Using minimum value of ${minSpaceSize}`)
       configSpaceSize = minSpaceSize
+    }
+
+    // Deprecated key: say so only to those with something to change, and about the value the
+    // engine runs at. The stories' helper and many hosts set the default explicitly, and an
+    // unusable value has just been resolved to it: they have nothing to edit.
+    if (configSpaceSize !== defaultConfigValues.spaceSize) {
+      console.warn(
+        `spaceSize (${configSpaceSize}) is deprecated and goes away in the next major. It bounds nothing: ` +
+        'it places the world origin, where gravity pulls, at spaceSize / 2, and scales the initial rescale ' +
+        `and a few step guards. Leave it at the default (${defaultConfigValues.spaceSize}); a layout saved ` +
+        'around another origin will need shifting when the key goes.'
+      )
     }
 
     // Warned about, not reduced: positions are float32, and a layout settles around the

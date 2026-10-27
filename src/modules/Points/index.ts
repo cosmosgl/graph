@@ -3641,16 +3641,17 @@ export class Points extends CoreModule implements PointTrackerHost {
   }
 
   private rescaleInitialNodePositions (): void {
-    const { config: { spaceSize } } = this
-    if (!this.data.pointPositions || !spaceSize) return
+    if (!this.data.pointPositions) return
 
     const points = this.data.pointPositions
     const pointsNumber = points.length / 2
 
-    // The rescale's rules, named. They are a point count and three lengths in world units
-    // that have always been fractions of the config's `spaceSize` — at the default 16,777
-    // points, 4,096, 410 and 4,915 units — and they centre the result on the world origin.
-    // The expressions are kept as they were so every layout is unchanged.
+    // The rescale's rules, named. They are a point count and three lengths in world units,
+    // fractions of the resolved `spaceSize` (`Store.referenceLength`: the config's when it is
+    // a usable size, as every length that follows the key) — at the default 16,777 points,
+    // 4,096, 410 and 4,915 units — and they centre the result on the world origin, which the
+    // same resolution placed. The expressions are kept as they were so every layout is unchanged.
+    const spaceSize = this.store.referenceLength
     /** A layout already wider than this is used as given. */
     const rescaleCutoff = spaceSize
     /** Above this many points a layout is dense: spread out rather than gathered. */
@@ -3716,10 +3717,11 @@ export class Points extends CoreModule implements PointTrackerHost {
     // Calculate uniform scale factor to fit data within the target side
     const scaleFactor = targetSide / range
     // Shift to centre the scaled data on the world origin, and pad the shorter axis so
-    // both axes are centered within the square bounding box. `2 * centerX` is the
-    // space's side exactly, so the offset is the same double it has always been.
-    const offsetX = ((range - w) / 2) * scaleFactor + (2 * centerX - targetSide) / 2
-    const offsetY = ((range - h) / 2) * scaleFactor + (2 * centerY - targetSide) / 2
+    // both axes are centered within the square bounding box. The centring term is
+    // parenthesised: rounding commutes with doubling, so it is the same bits as the
+    // `(2 · centre − side) / 2` it replaced, and default layouts stay bit-identical.
+    const offsetX = ((range - w) / 2) * scaleFactor + (centerX - targetSide / 2)
+    const offsetY = ((range - h) / 2) * scaleFactor + (centerY - targetSide / 2)
 
     this.scaleX = (x: number): number => (x - minX) * scaleFactor + offsetX
     this.scaleY = (y: number): number => (y - minY) * scaleFactor + offsetY

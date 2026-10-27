@@ -1089,8 +1089,61 @@ describe('positions are not bounded by the space', () => {
       await withCanvasGraph({ spaceSize: 1000, enableSimulation: false }, new Float32Array([0, 0]), async () => {
         expect(deprecations()).toBe(2)
       })
+      // An unusable value is resolved first, and the notice is about the value the engine
+      // runs at: the default has nothing to deprecate, and a value below 2 runs as 2
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        await withCanvasGraph({ spaceSize: 0, enableSimulation: false }, new Float32Array([0, 0]), async () => {
+          expect(error).toHaveBeenCalledWith(expect.stringContaining('Invalid spaceSize value: 0'))
+          expect(deprecations()).toBe(2)
+        })
+      } finally {
+        error.mockRestore()
+      }
+      await withCanvasGraph({ spaceSize: 1, enableSimulation: false }, new Float32Array([0, 0]), async () => {
+        expect(deprecations()).toBe(3)
+        expect(warn).toHaveBeenLastCalledWith(expect.stringContaining('spaceSize (2) is deprecated'))
+      })
     } finally {
       warn.mockRestore()
+    }
+  })
+
+  it('rescales the initial positions by the resolved spaceSize — the default for an unusable value, 2 below it', async () => {
+    // The rescale's cutoff and targets are fractions of spaceSize and its centre is the world
+    // origin, so both must come from one resolution of the key: the engine's. An unusable
+    // value used to skip the rescale while the origin went to the default's centre
+    const silence = [vi.spyOn(console, 'warn').mockImplementation(() => {}), vi.spyOn(console, 'error').mockImplementation(() => {})]
+    try {
+      // withCanvasGraph uploads with the rescale skipped; this one lets it run
+      const rescaled = async (spaceSize: number): Promise<Float32Array> => {
+        const div = document.createElement('div')
+        document.body.appendChild(div)
+        const graph = new Graph(div, { fitViewOnInit: false, rescalePositions: true, enableSimulation: false, spaceSize })
+        try {
+          graph.setPointPositions(new Float32Array([0, 0, 1, 1]))
+          graph.render()
+          await graph.ready
+          return Float32Array.from(graph.getPointPositions())
+        } finally {
+          graph.destroy()
+          div.remove()
+        }
+      }
+      const byDefault = await rescaled(defaultConfigValues.spaceSize)
+      // The default's sparse rescale: a tenth of the space, centred on its middle
+      expect(byDefault[0]).toBeCloseTo(2048 - 204.8, 3)
+      expect(byDefault[2]).toBeCloseTo(2048 + 204.8, 3)
+      expect(Array.from(await rescaled(0))).toEqual(Array.from(byDefault))
+      // Resolved to 2: two points are more than the dense threshold 2² · 0.001, so the layout
+      // is spread to 1.2 × the space, 2.4 units, centred on the origin (1, 1)
+      const atMinimum = await rescaled(1)
+      expect(atMinimum[0]).toBeCloseTo(-0.2, 5)
+      expect(atMinimum[1]).toBeCloseTo(-0.2, 5)
+      expect(atMinimum[2]).toBeCloseTo(2.2, 5)
+      expect(atMinimum[3]).toBeCloseTo(2.2, 5)
+    } finally {
+      for (const spy of silence) spy.mockRestore()
     }
   })
 })
