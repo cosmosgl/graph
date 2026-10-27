@@ -115,18 +115,21 @@ grid  = finestGridSize(n)       // power of two, at most 512 cells per axis
 
 The 3×3 scan is exhaustive because a cell spans at least the largest contact
 range. The cell never grows with the layout: its unbounded integer coordinates
-are counted from the current GPU data bounds and wrapped onto the slot grid
-with the rotated hash in `collision-grid.ts`. Both peeling and contact lookup
-use the same reciprocal cell size and integer hash. Bounds are recomputed after
-the attraction forces and on every collision iteration.
+are counted from the world origin and wrapped onto the slot grid with the
+rotated hash in `collision-grid.ts`. Both peeling and contact lookup use the
+same anchor, reciprocal cell size and integer hash, so nothing about the layout
+is measured before a pass. Far from the origin the index's rounding grows with
+the distance, but stays below the position's own float32 resolution there: at
+a distance d it is d · 2⁻²⁴ / cell of a cell, and a float32 position cannot
+hold a contact finer than that.
 
 A hash texel can hold points from distant cells. Those points share its K-slot
 budget, but every candidate is checked against the queried world cell before
 contact resolution. Hash aliases therefore cost sampling opportunities; they
 never produce a cell-average force or count a contact twice. The point-count
 resolution and slot tiers retain the bounded texture budget of the pairwise
-implementation. The former cell-average hash used a fixed 1024² grid; its
-centroid-based accuracy measurements do not describe this combined slot path.
+implementation. The cell-average grid this replaced was sized by `spaceSize`;
+its accuracy measurements do not describe the slot path.
 
 **The size is a per-graph maximum.** In derived-radius mode, `create()` loops over every
 resolved point size (`getResolvedPointSize`, so a `NaN` "use the default" never poisons the
@@ -254,12 +257,12 @@ threshold the two cost about the same, which is where it sits. The many-body for
 peel of its own at the same tiers.
 
 **Memory.** Two peel targets of `grid² × 8 B` with a 32-bit depth attachment each, plus the
-slot array of `K × grid² × 8 B`. With small radii the grid follows the point count, so the
-total peaks between 16k and 65k points: about 18 MB up to 16k (256², 32 slots), about 40 MB
-from 16k to 65k (512², 16 slots) and about 23 MB above (512², 8 slots), plus 16 B per point
-of sizes. Larger radii coarsen the grid and shrink all of it. The cell-average grid it
-replaced held four 512² RGBA32F textures, 17 MB, at the default point size. None of it exists
-until the force first runs, and none of it on the all-pairs path.
+slot array of `K × grid² × 8 B`. The grid follows the point count, so the total peaks
+between 16k and 65k points: about 18 MB up to 16k (256², 32 slots), about 40 MB from 16k to
+65k (512², 16 slots) and about 23 MB above (512², 8 slots), plus 16 B per point of sizes.
+The radius sets the cell, not the texture budget. The cell-average grid it replaced held
+four 512² RGBA32F textures, 17 MB, at the default point size. None of it exists until the
+force first runs, and none of it on the all-pairs path.
 
 ## What sampling costs
 

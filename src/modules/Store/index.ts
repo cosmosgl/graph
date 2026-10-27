@@ -288,9 +288,9 @@ export class Store {
    * above the WebGL texture size limit, back when the many-body grid's finest
    * level was a `spaceSize`-wide texture (issue #203: iOS crashed allocating
    * it). The grid's resolution has followed the point count since, and its
-   * placement now follows the data, as the collision hash's does: nothing is
-   * dimensioned by `spaceSize` any more, so the halving only moved the world
-   * origin away from where the config put it.
+   * placement now follows the data: nothing is dimensioned by `spaceSize` any
+   * more, so the halving only moved the world origin away from where the
+   * config put it.
    */
   public adjustSpaceSize (configSpaceSize: number): void {
     // Deprecated key: say so only to those with something to change. The stories' helper
