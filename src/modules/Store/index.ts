@@ -317,9 +317,10 @@ export class Store {
     }
 
     // Warned about, not reduced: positions are float32, and a layout settles around the
-    // world origin (gravity pulls toward it). Past an origin of about ±1e6 the gap between
-    // neighbouring float32 values nears the forces' 1-unit scale, and the layout coarsens
-    // or freezes onto that lattice.
+    // world origin (gravity pulls toward it). From an origin of 2^20 ≈ 1e6 the gap between
+    // neighbouring float32 values is 1/8 unit, doubling at every further power of two until
+    // it is a whole unit, the forces' scale, at 2^23 ≈ 8.4e6: the layout coarsens or freezes
+    // onto that lattice.
     if (configSpaceSize > MAX_RESOLVED_SPACE_SIZE) {
       console.warn(
         `spaceSize (${configSpaceSize}) puts the world origin at ${configSpaceSize / 2}, where float32 positions ` +

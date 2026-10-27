@@ -14,9 +14,8 @@ export const defaultConfigValues = {
   backgroundColor: '#222222',
   /**
    * Places the world origin (`spaceSize / 2`) and the square rescaled layouts start in; it does
-   * not bound positions. 4096 since larger values crashed iOS
-   * (https://github.com/cosmosgl/graph/issues/203) — the many-body grid's finest level was then a
-   * `spaceSize`-wide texture, which no longer exists. Kept so existing graphs frame as they did.
+   * not bound positions. 4096 is the length the placement rules were tuned at, kept so
+   * existing graphs frame as they did.
    */
   spaceSize: 4096,
 

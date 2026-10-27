@@ -18,13 +18,15 @@ const SEED = 42
 const SPACE = 4096
 const TRAIL_WINDOW = 360 // ticks of path kept in the trajectory panel
 const FORMED_TICK = 180 // the layout has formed: fit the view once and pick the traced point
-// Mirrors the documented default of `simulationRepulsionQuality: 'auto'`, so a
-// pane can say which shell it runs; the engine does not expose the resolved value.
+// Mirrors the documented tiers of the many-body force, so a pane can say which
+// far field it runs; the engine does not expose the resolved value. Up to 4,096
+// points there is no far field: every pair is summed exactly, whatever the key.
+const ALL_PAIRS_UP_TO = 4_096
 const PRECISE_UP_TO = 25_000
 
-/** What `simulationRepulsionQuality` resolves to for a pane of n points. */
+/** What the many-body force runs for a pane of n points at the given quality. */
 const describeFarField = (quality: RepulsionQuality, n: number): string =>
-  (quality === 'auto' ? `auto · ${n <= PRECISE_UP_TO ? 'precise' : 'fast'}` : quality)
+  (n <= ALL_PAIRS_UP_TO ? 'all pairs' : quality === 'auto' ? `auto · ${n <= PRECISE_UP_TO ? 'precise' : 'fast'}` : quality)
 
 const TEXT = '#e0e0e0'
 const MUTED = '#9aa3ad'

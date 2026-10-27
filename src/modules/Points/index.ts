@@ -2187,8 +2187,9 @@ export class Points extends CoreModule implements PointTrackerHost {
   }
 
   /**
-   * Integrates the velocity texture into the positions: `pos += v × friction`,
-   * clamped to the space.
+   * Integrates the velocity texture into the positions: `pos += v × friction`.
+   * Positions are not bounded; one sub-step is — a non-finite step is dropped
+   * and a longer one shortened (update-position.frag).
    *
    * @param friction - The integrator's friction for this write. Defaults to the
    *   configured `simulationFriction`; the collision force passes `1` because its

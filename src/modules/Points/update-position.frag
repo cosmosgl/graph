@@ -74,11 +74,12 @@ void main() {
   }
 
   // A step longer than maxStep is shortened to maxStep, keeping its direction.
-  // maxStep is the width of the space: the displacement ceiling the position
-  // clamp this replaces implied, since neither coordinate of a point inside the
-  // space could move further than that in one sub-step. It is not a stability
-  // bound — a 4096-unit step contains nothing — only a ceiling on how far one
-  // runaway sub-step throws a point.
+  // maxStep is the width of the space: the per-axis ceiling the position clamp
+  // this replaces implied, since neither coordinate of a point inside the space
+  // could move further than that in one sub-step (a diagonal step of that size
+  // is √2 longer and is shortened here; no settling layout takes one). It is
+  // not a stability bound — a 4096-unit step contains nothing — only a ceiling
+  // on how far one runaway sub-step throws a point.
   //
   // The step is velocity × friction (at most 1). Its length is never more than
   // √2 times its largest component, so only a step whose largest component
