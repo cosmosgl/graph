@@ -482,7 +482,7 @@ export interface GraphConfigInterface {
    * accurate on evenly spread data, but on clustered data, while the simulation
    * is hot, it shows as a shimmer that moves whole lines of points; two cells
    * away removes it and costs about a third more per step above 25,000 points,
-   * nothing below. `'auto'` is `'precise'` up to 25,000 points and `'fast'` above.
+   * a few percent below. `'auto'` is `'precise'` up to 25,000 points and `'fast'` above.
    * The shimmer scales with alpha, so a settled layout looks the same either way.
    * Default value: `'auto'`
    */

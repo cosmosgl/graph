@@ -177,8 +177,8 @@ one integration — repeats on the positions the previous iteration just wrote.
 center, many-body, links (incoming then outgoing), clusters, attractors, **collision** — and each force is
 its own `swapFbo() → run() → updatePosition()` triple. There is no shared velocity sum: every
 force reads the positions the previous force just wrote, writes its own velocity texture, and
-the integrator applies it (`pos += v × friction`, clamped to the space) before the next force
-runs.
+the integrator applies it (`pos += v × friction`, with one sub-step's length bounded) before the
+next force runs.
 
 Collision is deliberately **last**. Link springs, cluster attraction and attractors re-create overlap on
 every tick; running collision after them corrects that overlap within the same tick. Running it
