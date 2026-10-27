@@ -30,6 +30,7 @@ layout(std140) uniform buildNearFieldSlotsUniforms {
 #ifdef COLLISION_SLOTS
   float cellsPerUnit;
   float rotationSeed;
+  vec2 collisionOrigin; // the world origin: where cells are counted from (collision-grid.ts)
 #endif
 } buildNearFieldSlots;
 
@@ -40,6 +41,7 @@ layout(std140) uniform buildNearFieldSlotsUniforms {
 #ifdef COLLISION_SLOTS
 #define collisionScale buildNearFieldSlots.cellsPerUnit
 #define rotationSeed buildNearFieldSlots.rotationSeed
+#define collisionOrigin buildNearFieldSlots.collisionOrigin
 #endif
 #else
 uniform float pointsTextureSize;
@@ -49,6 +51,7 @@ uniform float randomSeed;
 #ifdef COLLISION_SLOTS
 uniform float collisionScale;
 uniform float rotationSeed;
+uniform vec2 collisionOrigin;
 #endif
 #endif
 
@@ -99,8 +102,8 @@ void main() {
 
   // The cell formula shared with the aggregation and force shaders (grid-cell.ts).
 #ifdef COLLISION_SLOTS
-  highp ivec2 worldCell = collisionCell(pointPosition.rg, vec2(0.0), collisionScale);
-  ivec2 cell = collisionTexel(worldCell, vec2(0.0), rotationSeed, int(levelGridSize));
+  highp ivec2 worldCell = collisionCell(pointPosition.rg, collisionOrigin, collisionScale);
+  ivec2 cell = collisionTexel(worldCell, rotationSeed, int(levelGridSize));
 #else
   ivec2 cell = gridCell(pointPosition.rg, levelGridSize);
 #endif

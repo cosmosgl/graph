@@ -43,6 +43,7 @@ layout(std140) uniform forceCollisionSlotsUniforms {
   float collisionCooling; // 0: full strength at every alpha; 1: scaled by alpha like the other forces
   float cellsPerUnit;
   float rotationSeed;
+  vec2 collisionOrigin; // the world origin: where cells are counted from (collision-grid.ts)
 } forceCollisionSlots;
 
 #define pointsTextureSize forceCollisionSlots.pointsTextureSize
@@ -55,6 +56,7 @@ layout(std140) uniform forceCollisionSlotsUniforms {
 #define collisionCooling forceCollisionSlots.collisionCooling
 #define cellsPerUnit forceCollisionSlots.cellsPerUnit
 #define rotationSeed forceCollisionSlots.rotationSeed
+#define collisionOrigin forceCollisionSlots.collisionOrigin
 #else
 uniform float pointsTextureSize;
 uniform float gridSize;
@@ -66,6 +68,7 @@ uniform float alpha;
 uniform float collisionCooling;
 uniform float cellsPerUnit;
 uniform float rotationSeed;
+uniform vec2 collisionOrigin;
 #endif
 
 // @collision-grid
@@ -95,7 +98,7 @@ void main() {
 
   // Must match the cell formula of the peel pass exactly.
   int cells = int(gridSize);
-  highp ivec2 pointCell = collisionCell(position, vec2(0.0), cellsPerUnit);
+  highp ivec2 pointCell = collisionCell(position, collisionOrigin, cellsPerUnit);
 
   vec2 correction = vec2(0.0);
   int slots = int(slotCount);
@@ -103,7 +106,7 @@ void main() {
   for (int j = -1; j <= 1; j += 1) {
     for (int i = -1; i <= 1; i += 1) {
       highp ivec2 cell = pointCell + ivec2(i, j);
-      ivec2 slotCell = collisionTexel(cell, vec2(0.0), rotationSeed, cells);
+      ivec2 slotCell = collisionTexel(cell, rotationSeed, cells);
 
       // An exhausted cell peels empty slots (index -1) for the remaining
       // layers; empty layers can't be followed by occupied ones within a cell.
@@ -119,7 +122,7 @@ void main() {
         vec2 otherPosition = texelFetch(positionsTexture, otherTexel, 0).rg;
         // Hash aliases share the slot budget, but never create a phantom contact
         // or count one neighbour twice when two scanned cells share a texel.
-        if (any(notEqual(collisionCell(otherPosition, vec2(0.0), cellsPerUnit), cell))) continue;
+        if (any(notEqual(collisionCell(otherPosition, collisionOrigin, cellsPerUnit), cell))) continue;
         vec2 distVector = position - otherPosition;
         float dist2 = dot(distVector, distVector);
 

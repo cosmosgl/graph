@@ -160,10 +160,9 @@ export class GraphSimulation implements PositionTextureSource {
   private isForceAttractorUpdateNeeded = false
   private isPointClusterUpdateNeeded = false
 
-  // Whether the collision force's GPU resources (its fixed-size grid and data
-  // bounds; the size texture, index buffer and contact cell size that follow
-  // the points; its programs) are allocated and match the current data and
-  // config. Allocated lazily the first time collision runs, so a simulation
+  // Whether the collision force's GPU resources (its slot grid, size texture,
+  // index buffer and contact cell size, which follow the points; its programs)
+  // are allocated and match the current data and config. Allocated lazily the first time collision runs, so a simulation
   // that never enables it pays no memory cost.
   private isForceCollisionReady = false
 
@@ -749,10 +748,10 @@ export class GraphSimulation implements PositionTextureSource {
     if (this.isPointSizeUpdateNeeded) this.points.updateSize()
 
     if (this.isForceManyBodyUpdateNeeded) this.forceManyBody?.create()
-    // The collision force's size texture, index buffer and contact cell size
-    // follow point count and sizes (its grid does not: a fixed size). Mark
-    // them stale so they're rebuilt lazily the next time the collision force
-    // runs, rather than reallocating here while collision may be disabled.
+    // The collision force's slot grid, size texture, index buffer and contact
+    // cell size follow point count and sizes. Mark them stale so they're
+    // rebuilt lazily the next time the collision force runs, rather than
+    // reallocating here while collision may be disabled.
     if (this.isForceManyBodyUpdateNeeded || this.isPointSizeUpdateNeeded) this.isForceCollisionReady = false
     if (this.isForceLinkUpdateNeeded) {
       this.forceLinkIncoming?.create(LinkDirection.INCOMING)

@@ -7,7 +7,6 @@ import forceSlotsFrag from '@/graph/modules/ForceCollision/force-collision-slots
 import peelSlotsVert from '@/graph/modules/ForceManyBody/build-nearfield-slots.vert?raw'
 import peelSlotsFrag from '@/graph/modules/ForceManyBody/build-nearfield-slots.frag?raw'
 import { collisionRotationSeed, withCollisionGrid } from '@/graph/modules/ForceCollision/collision-grid'
-import { DataBounds } from '@/graph/modules/Shared/data-bounds'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import { getFinestGridSize, getNearFieldSlotCount } from '@/graph/modules/Shared/cell-slots'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
@@ -58,10 +57,11 @@ const PEEL_TARGETS = 2
  * Two paths, split at ALL_PAIRS_MAX_POINTS: exact all-pairs below, and above it
  * a uniform grid whose cell spans the contact range (so the 3×3 neighbourhood
  * is exhaustive) with K depth-peeled point slots per hash bucket, built every
- * pass with the many-body force's peel shader. Aliased cells share that budget.
+ * pass with the many-body force's peel shader. Cells are counted from the
+ * world origin and hashed onto the slot grid (collision-grid.ts), so nothing
+ * about the layout is measured first. Aliased cells share that budget.
  */
 export class ForceCollision extends CoreModule {
-  private dataBounds: DataBounds | undefined
   private tick = 0
   private sizeTexture: Texture | undefined
   private pointIndices: Buffer | undefined
@@ -94,6 +94,7 @@ export class ForceCollision extends CoreModule {
       randomSeed: number;
       cellsPerUnit: number;
       rotationSeed: number;
+      collisionOrigin: [number, number];
     };
   }> | undefined
 
@@ -109,6 +110,7 @@ export class ForceCollision extends CoreModule {
       collisionCooling: number;
       cellsPerUnit: number;
       rotationSeed: number;
+      collisionOrigin: [number, number];
     };
   }> | undefined
 
@@ -281,6 +283,7 @@ export class ForceCollision extends CoreModule {
           randomSeed: 'f32',
           cellsPerUnit: 'f32',
           rotationSeed: 'f32',
+          collisionOrigin: 'vec2<f32>',
         },
       },
     })
@@ -328,6 +331,7 @@ export class ForceCollision extends CoreModule {
           collisionCooling: 'f32',
           cellsPerUnit: 'f32',
           rotationSeed: 'f32',
+          collisionOrigin: 'vec2<f32>',
         },
       },
     })
@@ -384,8 +388,6 @@ export class ForceCollision extends CoreModule {
 
     // 2. Destroy Framebuffers (before the textures they reference) & their textures
     this.destroySlotTargets()
-    this.dataBounds?.destroy()
-    this.dataBounds = undefined
 
     // 3. Destroy remaining Textures
     if (this.sizeTexture && !this.sizeTexture.destroyed) this.sizeTexture.destroy()
@@ -460,16 +462,6 @@ export class ForceCollision extends CoreModule {
     if (!this.slotsArrayTexture || this.slotsArrayTexture.destroyed) return
     if (!this.gridSize || !this.slotCount) return
 
-    this.dataBounds ||= new DataBounds(device)
-    this.dataBounds.run({
-      positionsTexture: points.previousPositionTexture,
-      exitTexture: points.exitTexture,
-      pointsTextureSize: store.pointsTextureSize ?? 0,
-      pointsNumber: data.pointsNumber,
-      minExtent: this.cellSize * this.gridSize,
-    })
-    const dataBoundsTexture = this.dataBounds.texture
-    if (!dataBoundsTexture) return
     const cellsPerUnit = 1 / this.cellSize
     const rotationSeed = collisionRotationSeed(this.tick++)
     const randomSeed = store.getRandomFloat(0, 1)
@@ -490,12 +482,12 @@ export class ForceCollision extends CoreModule {
           randomSeed,
           cellsPerUnit,
           rotationSeed,
+          collisionOrigin: store.worldOrigin,
         },
       })
 
       this.peelCommand.setBindings({
         positionsTexture: points.previousPositionTexture,
-        dataBoundsTexture,
         exitTexture: points.exitTexture,
         // Pass 0 never samples previousSlot, but the binding must exist for the
         // draw to run — any texture that is not the render target works.
@@ -536,6 +528,7 @@ export class ForceCollision extends CoreModule {
         collisionCooling: config.simulationCollisionCooling ?? 0,
         cellsPerUnit,
         rotationSeed,
+        collisionOrigin: store.worldOrigin,
       },
     })
 
@@ -544,7 +537,6 @@ export class ForceCollision extends CoreModule {
       sizeTexture: this.sizeTexture,
       exitTexture: points.exitTexture,
       slotsTexture: this.slotsArrayTexture,
-      dataBoundsTexture,
     })
 
     const forcePass = device.beginRenderPass({
