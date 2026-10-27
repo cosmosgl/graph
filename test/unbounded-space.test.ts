@@ -6,7 +6,7 @@ import { Graph, defaultConfigValues, type GraphConfig } from '@cosmos.gl/graph'
 import { DataBounds, getBucketGridSize, type DataBoundsRunOptions } from '@/graph/modules/Shared/data-bounds'
 import { COARSEST_GRID_SIZE } from '@/graph/modules/ForceManyBody'
 import { ALL_PAIRS_MAX_POINTS } from '@/graph/modules/ForceCollision'
-import { COLLISION_GRID_SIZE, COLLISION_ROTATIONS, collisionRotationSeed, withCollisionGrid } from '@/graph/modules/ForceCollision/collision-grid'
+import { COLLISION_ROTATIONS, collisionRotationSeed, withCollisionGrid } from '@/graph/modules/ForceCollision/collision-grid'
 
 /**
  * `spaceSize` sets the initial framing and bounds no position: graph size, not a
@@ -633,7 +633,7 @@ const countPairsCloserThan = (positions: Float32Array, from: number, to: number,
   return pairs
 }
 
-describe('the collision hash follows the data', () => {
+describe('the collision hash counts cells from the world origin', () => {
   // The hash runs above ALL_PAIRS_MAX_POINTS only; at or below it every pair is
   // tested exactly. Every point set here is larger, so each test runs the peel,
   // the slot array and the contact pass. At this count the hash is 256 texels
@@ -647,7 +647,8 @@ describe('the collision hash follows the data', () => {
   it('resolves the same overlapping cluster wherever it sits, to float rounding', async () => {
     // Compare one constraint pass: repeated pairwise projections amplify the
     // initial float32 rounding differences at translated world coordinates.
-    // The data-relative mapping must not change the initial collision response.
+    // Cells counted from a fixed origin must not change the initial collision
+    // response wherever the cluster sits.
     const cluster = createCluster(COUNT, SIDE)
     const layoutAt = async (cx: number, cy: number): Promise<Float64Array> => {
       const result = await runCollision(placeClusters(cluster, [[cx, cy]]), 1)
@@ -726,10 +727,10 @@ describe('the collision hash follows the data', () => {
   })
 
   it('resolves a dense cluster the same with one point far away', async () => {
-    // One point 7400 units from the cluster: a data box ~620 contact ranges
-    // wide. The cell stays the contact range (12) and that point lands on a
-    // texel of its own. A cell sized to fit a fixed count over the box
-    // weakens collision for the whole cluster.
+    // One point 7400 units from the cluster. Nothing is measured from the
+    // layout: the cell stays the contact range (12) and that point hashes to
+    // a texel of its own. A cell sized to fit a fixed count over the layout's
+    // extent would weaken collision for the whole cluster.
     const cluster = placeClusters(createCluster(COUNT, SIDE), [[500, 500]])
     const positions = new Float32Array(COUNT * 2 + 2)
     positions.set(cluster)
@@ -753,16 +754,15 @@ describe('the collision hash bins in both programs alike (collision-grid.ts)', (
     // candidate's world cell, so a point the two programs bin differently is
     // never pushed by itself — it is missed by its neighbours instead: listed
     // under one cell by the peel, filed under another by the check. So the
-    // probe is overlap, not isolation. Two corner points fix the data box at
-    // (48, 48)–(4248, 4248): a 4,200-unit span, above the 2,048-unit floor of
-    // a 256-texel grid of 8-unit cells, so the origin is exactly 48. On every
-    // lattice site, eight cells from the next, two points 4 or 5.66 units
-    // apart — inside the 8-unit contact — each within 3 ULPs of a half-cell
-    // boundary; over 520 cells per axis, more than the grid's 256, so the
-    // cells reach their texels through the block rotation as well. Every one
-    // of them must move; the corners must not.
+    // probe is overlap, not isolation. Cells are counted from the world
+    // origin, 2048 at the space the run uses. On every lattice site, eight
+    // cells from the next, two points 4 or 5.66 units apart — inside the
+    // 8-unit contact — each within 3 ULPs of a half-cell boundary; over 520
+    // cells per axis, more than the grid's 256, so the cells reach their
+    // texels through the block rotation as well. Every one of them must
+    // move; two isolated points must not.
     const CELL = 8
-    const ORIGIN = 48
+    const ORIGIN = 2048
     let seed = 7
     const random = (): number => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
     const bits = new Float32Array(1)
@@ -773,7 +773,7 @@ describe('the collision hash bins in both programs alike (collision-grid.ts)', (
       ulps[0] = (ulps[0] as number) + Math.floor(random() * 7) - 3
       return bits[0] as number
     }
-    const coordinates = [48, 48, 4248, 4248]
+    const coordinates = [48, 48, 9048, 9048]
     for (let cellX = 10; cellX <= 522; cellX += 8) {
       for (let cellY = 10; cellY <= 522; cellY += 8) {
         const halfX = 2 * cellX + Math.floor(random() * 5) - 2
@@ -782,7 +782,7 @@ describe('the collision hash bins in both programs alike (collision-grid.ts)', (
         coordinates.push(plant(halfX), plant(halfY), plant(halfX + 1), plant(halfY + Math.floor(random() * 2)))
       }
     }
-    // 65 × 65 pairs and the two corners: the slot path
+    // 65 × 65 pairs and the two isolated points: the slot path
     const count = coordinates.length / 2
     expect(count).toBeGreaterThan(ALL_PAIRS_MAX_POINTS)
     const positions = new Float32Array(coordinates)
@@ -795,23 +795,22 @@ describe('the collision hash bins in both programs alike (collision-grid.ts)', (
     // in its own cell and in the world-cell check alike: 3,292 of the 8,450
     // points stayed, on SwiftShader.
     expect(still).toBe(0)
-    expect(Array.from(result.subarray(0, 4))).toEqual([48, 48, 4248, 4248])
+    expect(Array.from(result.subarray(0, 4))).toEqual([48, 48, 9048, 9048])
   })
 
   it('puts every position in the same cell and texel in the vertex and the fragment program', () => {
-    // The build pass (a vertex program) bins each point and the force pass (a
-    // fragment program) recomputes the cell of the point it shades: they must
-    // agree, or a point subtracts itself from a cell it is not in. Positions
-    // are planted within 2 ULPs of half-cell boundaries — where a division, or
-    // a shift fused into a multiply-add in one program only, would split them
-    // — over cells -1500..2600 from the data origin, five blocks of the
-    // 1024-texel grid per axis, on all four offset lattices. The texels are
-    // checked against the block rotation run in JavaScript, and in the
-    // fragment program for the cell diagonally before — the 3×3 scan's
-    // neighbour, often in another block.
+    // The peel pass (a vertex program) bins each point and the contact pass
+    // (a fragment program) recomputes the cell of the point it shades and of
+    // every candidate: they must agree, or a contact is missed. Positions are
+    // planted within 2 ULPs of cell boundaries — where a division, or a
+    // multiply-add fused in one program only, would split them — over cells
+    // -1500..2600 from the anchor, sixteen blocks of a 256-texel grid per
+    // axis. The texels are checked against the block rotation run in
+    // JavaScript, and in the fragment program for the cell diagonally before
+    // — the 3×3 scan's neighbour, often in another block.
     const SIZE = 64
     const COUNT = SIZE * SIZE
-    const GRID = COLLISION_GRID_SIZE
+    const GRID = 256
     const f = Math.fround
     const origin = [f(-20000.3), f(19000.7)] as const
     const cellSize = 12
@@ -846,7 +845,7 @@ describe('the collision hash bins in both programs alike (collision-grid.ts)', (
     const header = `#version 300 es
 precision highp float;
 uniform highp sampler2D positionsTexture;
-uniform vec2 gridOffset;
+uniform vec2 origin;
 uniform float cellsPerUnit;
 uniform float rotationSeed;
 // @collision-grid
@@ -856,8 +855,8 @@ uniform float rotationSeed;
 flat out vec4 binned;
 void main() {
   ivec2 texel = ivec2(gl_VertexID % ${SIZE}, gl_VertexID / ${SIZE});
-  highp ivec2 cell = collisionCell(texelFetch(positionsTexture, texel, 0).xy, gridOffset, cellsPerUnit);
-  binned = vec4(vec2(cell), vec2(collisionTexel(cell, gridOffset, rotationSeed)));
+  highp ivec2 cell = collisionCell(texelFetch(positionsTexture, texel, 0).xy, origin, cellsPerUnit);
+  binned = vec4(vec2(cell), vec2(collisionTexel(cell, rotationSeed, ${GRID})));
   gl_Position = vec4(2.0 * (vec2(texel) + 0.5) / ${SIZE}.0 - 1.0, 0.0, 1.0);
   gl_PointSize = 1.0;
 }`), '#version 300 es\nprecision highp float;\nflat in vec4 binned;\nout vec4 color;\nvoid main() { color = binned; }')
@@ -866,8 +865,8 @@ void main() {
     const fragmentBinning = compile('#version 300 es\nin vec2 corner;\nvoid main() { gl_Position = vec4(corner, 0.0, 1.0); }', withCollisionGrid(`${header}
 out vec4 color;
 void main() {
-  highp ivec2 cell = collisionCell(texelFetch(positionsTexture, ivec2(gl_FragCoord.xy), 0).xy, gridOffset, cellsPerUnit);
-  color = vec4(vec2(cell), vec2(collisionTexel(cell + ivec2(-1), gridOffset, rotationSeed)));
+  highp ivec2 cell = collisionCell(texelFetch(positionsTexture, ivec2(gl_FragCoord.xy), 0).xy, origin, cellsPerUnit);
+  color = vec4(vec2(cell), vec2(collisionTexel(cell + ivec2(-1), rotationSeed, ${GRID})));
 }`))
 
     let seed = 31
@@ -877,14 +876,13 @@ void main() {
     const positions = new Float32Array(COUNT * 4)
     for (let i = 0; i < COUNT; i += 1) {
       for (let axis = 0; axis < 2; axis += 1) {
-        const halfCell = Math.floor(random() * 8200) - 3000
-        bits[0] = (origin[axis] as number) + halfCell * (cellSize / 2)
+        const cell = Math.floor(random() * 4100) - 1500
+        bits[0] = (origin[axis] as number) + cell * cellSize
         ulps[0] = (ulps[0] as number) + Math.floor(random() * 5) - 2
         positions[i * 4 + axis] = bits[0] as number
       }
     }
     const positionsTexture = floatTexture(SIZE, SIZE, positions)
-    const boundsTexture = floatTexture(1, 1, new Float32Array([origin[0], origin[1], 1, 1]))
     const outputTexture = floatTexture(SIZE, SIZE, null)
     const framebuffer = gl.createFramebuffer()
     gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer)
@@ -894,15 +892,12 @@ void main() {
     gl.bindBuffer(gl.ARRAY_BUFFER, corners)
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW)
 
-    const run = (program: WebGLProgram, shift: readonly [number, number], draw: () => void): Float32Array => {
+    const run = (program: WebGLProgram, draw: () => void): Float32Array => {
       gl.useProgram(program)
       gl.activeTexture(gl.TEXTURE0)
       gl.bindTexture(gl.TEXTURE_2D, positionsTexture)
       gl.uniform1i(gl.getUniformLocation(program, 'positionsTexture'), 0)
-      gl.activeTexture(gl.TEXTURE1)
-      gl.bindTexture(gl.TEXTURE_2D, boundsTexture)
-      gl.uniform1i(gl.getUniformLocation(program, 'dataBoundsTexture'), 1)
-      gl.uniform2f(gl.getUniformLocation(program, 'gridOffset'), shift[0], shift[1])
+      gl.uniform2f(gl.getUniformLocation(program, 'origin'), origin[0], origin[1])
       gl.uniform1f(gl.getUniformLocation(program, 'cellsPerUnit'), cellsPerUnit)
       gl.uniform1f(gl.getUniformLocation(program, 'rotationSeed'), rotationSeed)
       gl.clearColor(0.5, 0.5, 0.5, 0.5)
@@ -913,55 +908,52 @@ void main() {
       return pixels
     }
 
-    // Strict float32: the half cell is floor((p - o) · (2 / cellSize)), a cell two half cells.
-    const expectedCell = (p: number, axis: number, shift: number): number =>
-      Math.floor((Math.floor(f(f(p - (origin[axis] as number)) * f(2 * cellsPerUnit))) + 2 * shift) / 2)
+    // Strict float32: the cell is floor((p - o) · (1 / cellSize)).
+    const expectedCell = (p: number, axis: number): number =>
+      Math.floor(f(f(p - (origin[axis] as number)) * cellsPerUnit))
     // A block's rotation, r(k) = a·k² + (b + seed)·k modulo the grid, in 32-bit
     // integer arithmetic as GLSL ES defines highp uint; each axis takes its
     // rotation from the block along the other one.
     const rotation = (block: number, [a, b]: readonly [number, number]): number =>
       (Math.imul(Math.imul(a, block), block) + Math.imul(b + rotationSeed, block)) & (GRID - 1)
-    const texelOf = (cellX: number, cellY: number, shift: readonly [number, number]): readonly [number, number] => {
-      const lattice = shift[0] * 2 + 2 * (shift[1] * 2)
-      const rotationX = rotation(Math.floor(cellY / GRID), COLLISION_ROTATIONS[lattice] as readonly [number, number])
-      const rotationY = rotation(Math.floor(cellX / GRID), COLLISION_ROTATIONS[3 - lattice] as readonly [number, number])
+    const texelOf = (cellX: number, cellY: number): readonly [number, number] => {
+      const rotationX = rotation(Math.floor(cellY / GRID), COLLISION_ROTATIONS[0])
+      const rotationY = rotation(Math.floor(cellX / GRID), COLLISION_ROTATIONS[1])
       return [(cellX + rotationX) & (GRID - 1), (cellY + rotationY) & (GRID - 1)]
     }
 
     try {
-      for (const shift of [[0, 0], [0.5, 0], [0, 0.5], [0.5, 0.5]] as const) {
-        const fromVertex = run(vertexBinning, shift, () => gl.drawArrays(gl.POINTS, 0, COUNT))
-        const fromFragment = run(fragmentBinning, shift, () => {
-          const location = gl.getAttribLocation(fragmentBinning, 'corner')
-          gl.enableVertexAttribArray(location)
-          gl.vertexAttribPointer(location, 2, gl.FLOAT, false, 0, 0)
-          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
-          gl.disableVertexAttribArray(location)
-        })
-        let disagreements = 0
-        let lowest = Infinity
-        let highest = -Infinity
-        let rotated = 0
-        for (let i = 0; i < COUNT; i += 1) {
-          const cell = [0, 1].map((axis) => expectedCell(positions[i * 4 + axis] as number, axis, shift[axis] as number)) as [number, number]
-          const texel = texelOf(cell[0], cell[1], shift)
-          const neighbour = texelOf(cell[0] - 1, cell[1] - 1, shift)
-          for (let axis = 0; axis < 2; axis += 1) {
-            lowest = Math.min(lowest, cell[axis] as number)
-            highest = Math.max(highest, cell[axis] as number)
-            if (fromVertex[i * 4 + axis] !== cell[axis] || fromFragment[i * 4 + axis] !== cell[axis]) disagreements += 1
-            if (fromVertex[i * 4 + 2 + axis] !== texel[axis] || fromFragment[i * 4 + 2 + axis] !== neighbour[axis]) disagreements += 1
-          }
-          const [blockX, blockY] = [Math.floor(cell[0] / GRID), Math.floor(cell[1] / GRID)]
-          if (blockX !== 0 || blockY !== 0) rotated += 1
+      const fromVertex = run(vertexBinning, () => gl.drawArrays(gl.POINTS, 0, COUNT))
+      const fromFragment = run(fragmentBinning, () => {
+        const location = gl.getAttribLocation(fragmentBinning, 'corner')
+        gl.enableVertexAttribArray(location)
+        gl.vertexAttribPointer(location, 2, gl.FLOAT, false, 0, 0)
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4)
+        gl.disableVertexAttribArray(location)
+      })
+      let disagreements = 0
+      let lowest = Infinity
+      let highest = -Infinity
+      let rotated = 0
+      for (let i = 0; i < COUNT; i += 1) {
+        const cell = [0, 1].map((axis) => expectedCell(positions[i * 4 + axis] as number, axis)) as [number, number]
+        const texel = texelOf(cell[0], cell[1])
+        const neighbour = texelOf(cell[0] - 1, cell[1] - 1)
+        for (let axis = 0; axis < 2; axis += 1) {
+          lowest = Math.min(lowest, cell[axis] as number)
+          highest = Math.max(highest, cell[axis] as number)
+          if (fromVertex[i * 4 + axis] !== cell[axis] || fromFragment[i * 4 + axis] !== cell[axis]) disagreements += 1
+          if (fromVertex[i * 4 + 2 + axis] !== texel[axis] || fromFragment[i * 4 + 2 + axis] !== neighbour[axis]) disagreements += 1
         }
-        expect(disagreements).toBe(0)
-        // Both ends of the grid were crossed, and most cells lie outside the
-        // origin's block, where their texels are rotated
-        expect(lowest).toBeLessThan(-1000)
-        expect(highest).toBeGreaterThan(2 * GRID)
-        expect(rotated).toBeGreaterThan(COUNT / 2)
+        const [blockX, blockY] = [Math.floor(cell[0] / GRID), Math.floor(cell[1] / GRID)]
+        if (blockX !== 0 || blockY !== 0) rotated += 1
       }
+      expect(disagreements).toBe(0)
+      // Both ends of the grid were crossed, and most cells lie outside the
+      // anchor's block, where their texels are rotated
+      expect(lowest).toBeLessThan(-1000)
+      expect(highest).toBeGreaterThan(2 * GRID)
+      expect(rotated).toBeGreaterThan(COUNT / 2)
     } finally {
       gl.getExtension('WEBGL_lose_context')?.loseContext()
     }
