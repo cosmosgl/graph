@@ -24,7 +24,7 @@ const GRAVITIES = [0, 0.25] as const
 const READOUT_INTERVAL_MS = 250
 const BLOB_SEED = 99
 const SIMULATION_SEED = 3
-const MAX_GRID_SIZE = 1024
+const MAX_GRID_SIZE = 512
 
 const BLOB_COLOR = [0.35, 0.55, 0.85, 0.7] as const
 const FAR_COLOR = [0.95, 0.22, 0.24, 1] as const
@@ -32,7 +32,7 @@ const FAR_COLOR = [0.95, 0.22, 0.24, 1] as const
 /**
  * Mirrors the engine's finest many-body grid size for a point count
  * (Shared/cell-slots.ts), which it does not expose: 2·√n rounded up to a power
- * of two, between 8 and 1024.
+ * of two, between 8 and 512.
  */
 const finestGridSize = (n: number): number =>
   Math.min(MAX_GRID_SIZE, Math.max(8, 2 ** Math.ceil(Math.log2(2 * Math.sqrt(n)))))

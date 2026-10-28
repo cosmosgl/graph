@@ -266,11 +266,15 @@ force first runs, and none of it on the all-pairs path.
 
 ## What sampling costs
 
-The slot path has exactly one approximation: a cell holding more than K points shows each
-neighbour a random K of them per pass. Three consequences:
+The slot path has exactly one approximation: a hash bucket holding more than K points shows
+each neighbour a random K of them per pass. Three consequences:
 
 - **Exactness has a density threshold, not a size threshold.** Any pair in reach is tested
-  whenever both cells are within K; only a genuine pile is sampled, and only while it is one.
+  whenever both cells' buckets are within K. A bucket is usually one cell, so what gets
+  sampled is a genuine pile, and only while it is one; it is also, now and then, a sparse cell
+  that shares its bucket with distant cells holding more than K together (the aliasing above),
+  which costs that cell sampling opportunities for as long as the rotation keeps them together —
+  one pass.
 - **A sampled pile converges stochastically.** Each pass resolves the sampled contacts in
   full and ignores the rest; the next pass draws others. Measured on 100-point piles seeded
   in a 20-unit disc (well above 32 per cell at the start), one iteration: 27 pairs deeper
