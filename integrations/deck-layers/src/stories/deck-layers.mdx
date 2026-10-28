@@ -314,9 +314,12 @@ Try it: [Custom deck layers](../?path=/story/examples-integrations--custom-deck-
   or a map at pitch 0 and bearing 0.
 - **Transitions** have no effect yet: a headless `Graph` applies a change at once.
 - **Framing**: the layout is not confined to `spaceSize` — a large graph grows past the space's
-  square — so frame the view with `layer.getBounds()`, the box of the live point positions (the
-  space's square until there are positions to measure). It reads them back from the GPU
-  synchronously: call it when you frame, not every frame. The box is in space coordinates — map
-  it through `modelMatrix` (and, on a map, unproject it) before fitting a viewport to it.
+  square — so frame the view with `layer.getBounds()`, the box of the live point positions. The
+  read never stalls: it is asynchronous, and the box returned is the last one measured, so it
+  trails the drawn frame by a frame or so, and it is safe to call every frame. Before the first
+  measurement lands the box is that of the input positions (the space's square when there is
+  nothing to measure), so an app that frames once should frame again on the next render, when
+  the layer asks for one. The box is in space coordinates — map it through `modelMatrix` (and,
+  on a map, unproject it) before fitting a viewport to it.
 - **The package README** has the full ownership table and the `PositionTextureSource` contract:
   [github.com/cosmosgl/graph/tree/main/integrations/deck-layers](https://github.com/cosmosgl/graph/tree/main/integrations/deck-layers).
