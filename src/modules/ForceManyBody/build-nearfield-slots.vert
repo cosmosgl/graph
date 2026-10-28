@@ -3,7 +3,7 @@ precision highp float;
 
 // One depth-peeling pass of a per-cell point-slot build. Shared by the
 // many-body near field and the collision force (ForceCollision/index.ts),
-// which bind their own grid size and cell size.
+// which bind their own grid size and splice in their own cell formula.
 //
 // A grid's near field needs actual point-to-point interactions (cell centroids
 // alone exert a purely radial force that flattens dense hubs into disks and

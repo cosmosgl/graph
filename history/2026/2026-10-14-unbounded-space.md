@@ -624,7 +624,7 @@ inconsistent with itself. What an app can now see:
 - **One far but finite point stretches the many-body box** and coarsens the grid for every
   point. With a 100k blob plus one point at 1e7, the blob settled at extent 1,201 instead of
   4,044 while the point stayed out there. Gravity brings such a point back at most
-  `spaceSize` per tick, and never does with gravity 0 or a pinned point. At 1e5 there is no
+  `spaceSize` per force sub-step, and never does with gravity 0 or a pinned point. At 1e5 there is no
   visible effect. Step time in those review runs also rose, from 6.8 ms to 42.8 ms (point
   at 1e6) and 72.1 ms (point at 1e7). Not investigated.
 - **The first-tick burst from a tight start blob** is about 10× larger than on `main`

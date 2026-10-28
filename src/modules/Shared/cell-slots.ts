@@ -14,9 +14,8 @@ export const MAX_GRID_SIZE = 512
 
 /**
  * Finest grid resolution per axis for a point count: ~2·√n, floored at 8²,
- * capped at MAX_GRID_SIZE. Shared by the pyramid allocation and the all-pairs
- * pass's per-tick velocity clamp, which must bound with the same cell size the
- * grid path would use at the same count.
+ * capped at MAX_GRID_SIZE. Shared by the pyramid allocation and the per-tick
+ * kick bound both many-body paths take from it (ForceManyBody's getMaxStep).
  */
 export const getFinestGridSize = (pointsNumber: number): number =>
   Math.min(MAX_GRID_SIZE, Math.max(8, Math.pow(2, Math.ceil(Math.log2(2 * Math.sqrt(pointsNumber))))))

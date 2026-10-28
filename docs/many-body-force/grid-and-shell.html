@@ -1002,7 +1002,7 @@ gl_PointSize = 1.0;                                     <span class="c">// one f
     <dt>Why it works</dt>
     <dd>The force jumps when a point crosses a cell boundary. The cells just outside its block swap between "one lump" and "refined", and the jump is the lump's error. That error falls as 1/d³ with distance. A 5 × 5 block moves the nearest lump from two cells away to three, which halves the jump. The grid's per-tick shift had been turning the jump into motion. The shift stays, and now has half as much to spread.</dd>
     <dt>What it costs</dt>
-    <dd>About a third more time per step from 50,000 points up. Two percent at 20,000, nothing below. Motion at rest fell from 0.0181 to 0.0082 point spacings per tick. <code>main</code> sits at 0.0137. That cost is why the shell later became a setting with a size-tiered default, <code>simulationRepulsionQuality</code>; the <a href="#afterword">afterword</a> has the numbers.</dd>
+    <dd>About a third more time per step from 50,000 points up. Two percent at 20,000, four at 16,000, nothing at 5,000 and below. Motion at rest fell from 0.0181 to 0.0082 point spacings per tick. <code>main</code> sits at 0.0137. That cost is why the shell later became a setting with a size-tiered default, <code>simulationRepulsionQuality</code>; the <a href="#afterword">afterword</a> has the numbers.</dd>
   </dl>
   <div class="prose">
   <p style="margin-bottom:4px"><b>Words used in this part</b></p>

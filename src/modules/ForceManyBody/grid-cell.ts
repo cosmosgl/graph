@@ -24,8 +24,8 @@
  * which only changes the exponent: level L+1's scale is exactly twice level
  * L's, so the scaled offset from the origin is exactly twice as large, and
  * floor(2q) ∈ {2·floor(q), 2·floor(q) + 1}: cell(L+1) = 2·cell(L) or
- * 2·cell(L) + 1 on each axis, the parent–child relation the 6×6 refinement in
- * force-level.frag relies on. The edge clamp preserves it — below the box both
+ * 2·cell(L) + 1 on each axis, the parent–child relation the child-block
+ * refinement in force-level.frag relies on. The edge clamp preserves it — below the box both
  * levels clamp to 0, above it to N − 1 and 2N − 1 = 2(N − 1) + 1.
  */
 

@@ -527,7 +527,7 @@ square and 0.15 % / 0.10 % on a disk. Beyond accuracy:
   10⁷ units settled at an extent of 1,201 instead of 4,044 while that point stayed out there
   (measured on the fixed grid from 4²): the rest of the layout shared a handful of cells, the
   over-occupied regime of the table above at its worst. Gravity brings such a point back — no
-  faster than `spaceSize` per tick, since each sub-step's length is bounded — and the grid
+  faster than `spaceSize` per force sub-step, since each sub-step's length is bounded — and the grid
   recovers with it; with no gravity, or with the point pinned, it never does. A point 10⁵ units
   away had no visible effect. The stretched box costs time too: over a 600-step run the same
   blob averaged 42.8 ms per step with the point starting at 10⁶ units (it came back partway

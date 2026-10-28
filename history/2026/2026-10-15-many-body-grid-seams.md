@@ -72,7 +72,8 @@ the quarter lines, the fix 0.986–1.005), so the cross needs a dense, large lay
   data and the jumps average into a continuous force. What is left is per-tick noise that
   alpha anneals, the same trade the Monte-Carlo near field already makes — small enough on
   uniform data, visible on clustered data until the shell below widened. The collision
-  force owns its own `DataBounds` and passes no shift.
+  force does not use `DataBounds`: its cells are counted from the world origin
+  (`collision-grid.ts`), so there is nothing to shift.
 - **Far-field centroids are used only from two cells away** (`c30843e`). Every level but
   the finest leaves a 5×5 block of cells (Chebyshev radius 2) to the next level instead
   of 3×3, and each level refines the block its parent left — `(4r+2)²` cells from
