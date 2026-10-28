@@ -391,6 +391,12 @@ const toValueArray = <In>(
 const steppedAt = new WeakMap<Graph, number>()
 
 /**
+ * Bounds reads on their way per graph, from every layer drawing it: while one is, no layer
+ * steps the graph, or the read would wait for the step (`getBounds`).
+ */
+const pendingBoundsReads = new WeakMap<Graph, number>()
+
+/**
  * Unseeded points are drawn in the middle half of the space, around the world origin
  * gravity pulls toward: these fractions of the engine's `spaceSize`. A default placement,
  * not a bound; `_load` draws inside it and `getBounds` reports it before anything settles.
@@ -887,11 +893,18 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     const { state } = this
     const serial = state.loadSerial
     state.isMeasuringBounds = true
+    pendingBoundsReads.set(graph, (pendingBoundsReads.get(graph) ?? 0) + 1)
+    const settled = (): void => { pendingBoundsReads.set(graph, Math.max(0, (pendingBoundsReads.get(graph) ?? 1) - 1)) }
     graph.getPointPositionsAsync().then((positions) => {
+      settled()
       if (state.graph !== graph) return
       state.isMeasuringBounds = false
-      // Another dataset has been loaded since: not its box
-      if (state.loadSerial !== serial) return
+      // Another dataset has been loaded since: not its box. The next frame starts a read of
+      // the dataset there now
+      if (state.loadSerial !== serial) {
+        ;(this.getCurrentLayer() ?? this).setNeedsRedraw()
+        return
+      }
       if (positions.length === 0) return
       const box = new BoundsBox()
       for (let i = 0; i < positions.length; i += 2) box.add(positions[i] as number, positions[i + 1] as number)
@@ -900,6 +913,7 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       // A consumer that reads the box every frame has the new one on the next
       ;(this.getCurrentLayer() ?? this).setNeedsRedraw()
     }, () => {
+      settled()
       if (state.graph === graph) state.isMeasuringBounds = false
     })
   }
@@ -1046,11 +1060,11 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
   }
 
   private _onTimelineTick (time: number): void {
-    const { graph, isReady, isMeasuringBounds } = this.state ?? {}
+    const { graph, isReady } = this.state ?? {}
     if (!graph || !isReady || !graph.isSimulationRunning) return
     // One step per frame per graph, however many layers draw it — and none while a bounds
-    // read is on its way, which would otherwise wait for the step (getBounds)
-    if (steppedAt.get(graph) !== time && !isMeasuringBounds) {
+    // read of any of them is on its way, which would otherwise wait for the step (getBounds)
+    if (steppedAt.get(graph) !== time && !pendingBoundsReads.get(graph)) {
       steppedAt.set(graph, time)
       graph.step()
     }
