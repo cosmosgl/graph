@@ -12,7 +12,7 @@ import type {
   UpdateParameters,
   Viewport,
 } from '@deck.gl/core'
-import { Graph } from '@cosmos.gl/graph'
+import { Graph, defaultConfigValues } from '@cosmos.gl/graph'
 import type { GraphConfig } from '@cosmos.gl/graph'
 
 /**
@@ -513,11 +513,14 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     /**
      * `getBounds`' measured box: the last one read back (`null` when nothing finite was
      * there), the position texture version it was asked at, and whether a read is on its
-     * way. Unset until the first read lands.
+     * way. Unset until the first read lands, and again when a new dataset is loaded. The
+     * serial counts the datasets loaded: a read of the previous one that lands after the
+     * next is dropped.
      */
     measuredBounds?: [number[], number[]] | null;
     measuredBoundsVersion?: number;
     isMeasuringBounds?: boolean;
+    loadSerial?: number;
     /** The view was found unsupported and said so; said once. */
     viewWarned?: boolean;
     linksWarned?: boolean;
@@ -718,12 +721,17 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
    *
    * `spaceSize` bounds no position — a layout grows past its square as far as its forces
    * take it — so the box is measured from the live positions, read back from the GPU. The
-   * read never stalls: it is asynchronous, started by a call that finds the positions
-   * changed since the box was measured, one at a time, and the box it returns is the last
-   * one measured. While points move the box trails the drawn frame, by a frame or so, and a
-   * call made before the first read lands gets the input box below. When a read lands the
-   * layer asks for a redraw, so a consumer reading the box every frame has the new one on
-   * the next. A layer nobody asks reads nothing. Absent points (NaN) are left out.
+   * read does not stall the frame: it is asynchronous, started by a call that finds the
+   * positions changed since the box was measured, one at a time, and the box it returns is
+   * the last one measured. While a read is on its way the layer holds the graph's step, as
+   * the engine's own render loop holds its frame for a copy: the read that completes a copy
+   * waits for every command queued before it, and a step queued behind the copy would be
+   * that wait. (A graph the application steps itself is not held.) While points move the
+   * box trails the drawn frame, by a frame or so, and a call made before the first read
+   * lands — or before the first read of a newly loaded dataset — gets the input box below.
+   * When a read lands the layer asks for a redraw, so a consumer reading the box every
+   * frame has the new one on the next. A layer nobody asks reads nothing. Absent points
+   * (NaN) are left out.
    *
    * Until the graph holds positions (its device is still initializing) or the first read
    * has landed, the box is that of the positions the layer is about to load or has loaded:
@@ -877,10 +885,13 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
    */
   private _measureBounds (graph: Graph, version: number): void {
     const { state } = this
+    const serial = state.loadSerial
     state.isMeasuringBounds = true
     graph.getPointPositionsAsync().then((positions) => {
       if (state.graph !== graph) return
       state.isMeasuringBounds = false
+      // Another dataset has been loaded since: not its box
+      if (state.loadSerial !== serial) return
       if (positions.length === 0) return
       const box = new BoundsBox()
       for (let i = 0; i < positions.length; i += 2) box.add(positions[i] as number, positions[i + 1] as number)
@@ -946,7 +957,13 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
    * It sizes nothing.
    */
   private _spaceSize (): number {
-    return this.state?.graph?.simulation.store.referenceLength ?? this.props.config?.spaceSize ?? Graph.prototype.config?.spaceSize ?? 4096
+    const engine = this.state?.graph?.simulation.store.referenceLength
+    if (engine !== undefined) return engine
+    // Before a graph exists, the config's, resolved as the engine will resolve it: the
+    // default unless it is a positive finite number, and at least 2
+    const configured = this.props.config?.spaceSize
+    if (configured === undefined || !Number.isFinite(configured) || configured <= 0) return defaultConfigValues.spaceSize
+    return Math.max(configured, 2)
   }
 
   /**
@@ -1029,10 +1046,11 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
   }
 
   private _onTimelineTick (time: number): void {
-    const { graph, isReady } = this.state ?? {}
+    const { graph, isReady, isMeasuringBounds } = this.state ?? {}
     if (!graph || !isReady || !graph.isSimulationRunning) return
-    // One step per frame per graph, however many layers draw it
-    if (steppedAt.get(graph) !== time) {
+    // One step per frame per graph, however many layers draw it — and none while a bounds
+    // read is on its way, which would otherwise wait for the step (getBounds)
+    if (steppedAt.get(graph) !== time && !isMeasuringBounds) {
       steppedAt.set(graph, time)
       graph.step()
     }
@@ -1175,7 +1193,14 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
     }
 
     // Positions are space coordinates by contract: not rescaled unless the graph's config asks
-    if (positions) graph.setPointPositions(positions, graph.config.rescalePositions === undefined ? true : undefined)
+    if (positions) {
+      graph.setPointPositions(positions, graph.config.rescalePositions === undefined ? true : undefined)
+      // The box measured from the previous dataset is not this one's: until its first read
+      // lands, getBounds serves the input box, and a read of the old positions is dropped
+      this.state.measuredBounds = undefined
+      this.state.measuredBoundsVersion = undefined
+      this.state.loadSerial = (this.state.loadSerial ?? 0) + 1
+    }
     if (pairs) graph.setLinks(pairs)
     // Styles: deck accessors and attributes, as cosmos's arrays. A channel the app gives
     // follows a reload (the count may have changed) and its own accessor; a channel it
