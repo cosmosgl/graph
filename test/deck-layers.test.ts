@@ -1121,6 +1121,11 @@ describe('CosmosGraphLayer', () => {
     const spaceSize = defaultConfigValues.spaceSize
     expect(new CosmosGraphLayer({ id: 'seeded', points: { length: 5 } }).getBounds())
       .toEqual([[spaceSize * 0.25, spaceSize * 0.25, 0], [spaceSize * 0.75, spaceSize * 0.75, 0]])
+    // A spaceSize the engine will not run at is resolved as the engine resolves it, before any graph exists
+    expect(new CosmosGraphLayer({ id: 'unusable', points: { length: 5 }, config: { spaceSize: 0 } }).getBounds())
+      .toEqual([[spaceSize * 0.25, spaceSize * 0.25, 0], [spaceSize * 0.75, spaceSize * 0.75, 0]])
+    expect(new CosmosGraphLayer({ id: 'tiny', points: { length: 5 }, config: { spaceSize: 1 } }).getBounds())
+      .toEqual([[0.5, 0.5, 0], [1.5, 1.5, 0]])
 
     const { deck, container } = await createDeck([layer])
     try {
@@ -1264,6 +1269,66 @@ describe('CosmosGraphLayer', () => {
       expect(await measuredBounds(live, graph!)).toEqual([[-40, 0, 0], [100, 50, 0]])
       expect(asynchronous).toHaveBeenCalledTimes(2)
       expect(synchronous).not.toHaveBeenCalled()
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('holds the graph\'s step while a bounds read is on its way', async () => {
+    // The read that completes a copy waits for every command queued before it: a step
+    // queued behind the copy would be that wait. The flag is raised by hand — on a fast GPU
+    // a real read lands before the next frame and holds nothing
+    let graph: Graph | undefined
+    let loaded = false
+    const layer = new CosmosGraphLayer({
+      id: 'graph',
+      points: { length: 2, initialPositions: new Float32Array([0, 0, 100, 50]) },
+      config: STATIC,
+      onGraphCreated: (created): void => { graph = created },
+      onGraphDataLoaded: (): void => { loaded = true },
+    })
+    const { deck, container } = await createDeck([layer])
+    try {
+      await waitUntil(() => loaded, 'the first load')
+      await waitUntil(() => Boolean(graph?.isSimulationRunning), 'the simulation to run')
+      const live = (): CosmosGraphLayer => layer.getCurrentLayer() as CosmosGraphLayer
+      const step = vi.spyOn(graph!, 'step')
+      await waitUntil(() => step.mock.calls.length > 0, 'a step')
+      live().state.isMeasuringBounds = true
+      const held = step.mock.calls.length
+      await waitFrames(4)
+      expect(step.mock.calls.length).toBe(held)
+      live().state.isMeasuringBounds = false
+      await waitUntil(() => step.mock.calls.length > held, 'stepping to resume')
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('serves a newly loaded dataset\'s input box until it is measured, never the previous dataset\'s box', async () => {
+    let graph: Graph | undefined
+    let loads = 0
+    const make = (positions: Float32Array): CosmosGraphLayer => new CosmosGraphLayer({
+      id: 'graph',
+      points: { length: 2, initialPositions: positions },
+      config: STATIC,
+      onGraphCreated: (created): void => { graph = created },
+      onGraphDataLoaded: (): void => { loads += 1 },
+    })
+    const layer = make(new Float32Array([0, 0, 100, 50]))
+    const { deck, container } = await createDeck([layer])
+    try {
+      await waitUntil(() => loads === 1, 'the first load')
+      graph!.pause()
+      const live = (): CosmosGraphLayer => layer.getCurrentLayer() as CosmosGraphLayer
+      expect(await measuredBounds(live, graph!)).toEqual([[0, 0, 0], [100, 50, 0]])
+      deck.setProps({ layers: [make(new Float32Array([5000, 5000, 5100, 5050]))] })
+      await waitUntil(() => loads === 2, 'the second load')
+      // Before the new positions are measured: their input box, not the old dataset's
+      expect(live().getBounds()).toEqual([[5000, 5000, 0], [5100, 5050, 0]])
+      expect(await measuredBounds(live, graph!)).toEqual([[5000, 5000, 0], [5100, 5050, 0]])
     } finally {
       deck.finalize()
       container.remove()
