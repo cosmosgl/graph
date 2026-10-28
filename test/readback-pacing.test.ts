@@ -99,6 +99,12 @@ const armTrackedReadback = async (graph: Graph): Promise<void> => {
   await untilReadbackPending(graph)
 }
 
+/** Resolves once more frames have run than `count`, or fails after a budget of polls. */
+const untilTicksAbove = async (running: RunningGraph, count: number, what: string): Promise<void> => {
+  for (let i = 0; i < 200 && running.ticks() <= count; i += 1) await wait(10)
+  expect(running.ticks(), what).toBeGreaterThan(count)
+}
+
 /** When the render loop began holding frames for the pending copy; 0 while it has not held one yet. */
 const holdStartedAt = (graph: Graph): number => (graph as unknown as { readbackWaitStartedAt: number }).readbackWaitStartedAt
 
@@ -236,12 +242,13 @@ describe('the render loop holds the next frame while a readback is pending', () 
       const held = running.ticks()
       await wait(300)
       expect(running.ticks()).toBe(held)
-      // Past the cap the pending copy is dropped, and with nobody reading, no new one is issued
+      // Past the cap the pending copy is dropped, and with nobody reading, no new one is issued.
+      // Frames are awaited by a budget rather than a fixed sleep: under load (every test
+      // file at once on a CI runner) a 150 ms window can pass without an animation frame
       await wait(READBACK_WAIT_CAP_MS)
+      await untilTicksAbove(running, held, 'the cap to release a frame')
       const resumed = running.ticks()
-      expect(resumed).toBeGreaterThan(held)
-      await wait(150)
-      expect(running.ticks()).toBeGreaterThan(resumed)
+      await untilTicksAbove(running, resumed, 'the loop to keep drawing')
     } finally {
       release()
       running.destroy()
