@@ -9,6 +9,7 @@ import { onDemandRendering } from './performance/on-demand-rendering'
 import { repulsionBenchmark } from './performance/repulsion-benchmark'
 import { steadyStateMotion } from './performance/steady-state-motion'
 import { spaceWall } from './performance/space-wall'
+import { farPoint } from './performance/far-point'
 
 import createCosmosRaw from './create-cosmos?raw'
 import generateMeshDataRaw from './generate-mesh-data?raw'
@@ -21,6 +22,7 @@ import repulsionBenchmarkRaw from './performance/repulsion-benchmark?raw'
 import steadyStateMotionRaw from './performance/steady-state-motion?raw'
 import countryBordersDataRaw from './performance/country-borders-data?raw'
 import spaceWallRaw from './performance/space-wall?raw'
+import farPointRaw from './performance/far-point?raw'
 
 // These exist to show a cost or a limit rather than a feature. Most run an FPS
 // monitor; several will be slow to start on weak hardware.
@@ -111,6 +113,17 @@ export const SpaceWall: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: spaceWallRaw },
+    ],
+  },
+}
+
+export const FarPoint: Story = {
+  ...createStory(farPoint),
+  name: 'Far Point vs the Grid',
+  tags: ['perf', 'advanced', 'interactive', 'large-data'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: farPointRaw },
     ],
   },
 }
