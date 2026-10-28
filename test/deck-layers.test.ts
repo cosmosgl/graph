@@ -1275,10 +1275,10 @@ describe('CosmosGraphLayer', () => {
     }
   })
 
-  it('holds the graph\'s step while a bounds read is on its way', async () => {
+  it('holds the graph\'s step while a bounds read is on its way, from every layer drawing it', async () => {
     // The read that completes a copy waits for every command queued before it: a step
-    // queued behind the copy would be that wait. The flag is raised by hand — on a fast GPU
-    // a real read lands before the next frame and holds nothing
+    // queued behind the copy would be that wait. The read is stubbed to stay on its way —
+    // on a fast GPU a real one lands before the next frame and holds nothing
     let graph: Graph | undefined
     let loaded = false
     const layer = new CosmosGraphLayer({
@@ -1292,15 +1292,22 @@ describe('CosmosGraphLayer', () => {
     try {
       await waitUntil(() => loaded, 'the first load')
       await waitUntil(() => Boolean(graph?.isSimulationRunning), 'the simulation to run')
+      // A second layer draws the same graph, and would step it on its own tick
+      const second = new CosmosGraphLayer({ id: 'second', graph: graph! })
+      deck.setProps({ layers: [layer, second] })
+      await waitUntil(() => Boolean((second.getCurrentLayer() as CosmosGraphLayer | null)?.isLoaded), 'the second layer')
       const live = (): CosmosGraphLayer => layer.getCurrentLayer() as CosmosGraphLayer
       const step = vi.spyOn(graph!, 'step')
+      let land!: (positions: Float32Array) => void
+      vi.spyOn(graph!, 'getPointPositionsAsync').mockImplementation(() => new Promise((resolve) => { land = resolve }))
       await waitUntil(() => step.mock.calls.length > 0, 'a step')
-      live().state.isMeasuringBounds = true
+      live().getBounds() // starts the read, which stays on its way
       const held = step.mock.calls.length
       await waitFrames(4)
       expect(step.mock.calls.length).toBe(held)
-      live().state.isMeasuringBounds = false
+      land(new Float32Array([0, 0, 100, 50]))
       await waitUntil(() => step.mock.calls.length > held, 'stepping to resume')
+      expect(live().getBounds()).toEqual([[0, 0, 0], [100, 50, 0]])
     } finally {
       deck.finalize()
       container.remove()
