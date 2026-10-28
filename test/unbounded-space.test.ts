@@ -1054,6 +1054,8 @@ describe('positions are not bounded by the space', () => {
       const SPACE = 2 ** 22
       await withCanvasGraph({ spaceSize: SPACE, enableSimulation: false }, new Float32Array([0, 0]), async (graph, div) => {
         expect(warn).toHaveBeenCalledWith(expect.stringContaining('spaceSize (4194304)'))
+        // The precision warning itself, not only the deprecation notice, which starts the same way
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('too coarse for the simulation'))
         graph.setViewTransform({ k: 1, x: 0, y: 0 })
         const [x, y] = graph.spaceToScreenPosition([SPACE / 2, SPACE / 2])
         expect(x).toBeCloseTo(div.clientWidth / 2, 6)
