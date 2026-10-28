@@ -118,7 +118,8 @@ const expectHeldThenResumed = async (running: RunningGraph, release: () => void,
   if (performance.now() - startedAt < READBACK_WAIT_CAP_MS) expect(after).toBe(before)
   release()
   await wait(100)
-  expect(running.ticks()).toBeGreaterThan(before)
+  // Against the count at release: a tick the cap let through before it is not a resume
+  expect(running.ticks()).toBeGreaterThan(after)
 }
 
 describe('the render loop holds the next frame while a readback is pending', () => {
