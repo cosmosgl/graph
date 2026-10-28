@@ -914,7 +914,10 @@ export class CosmosGraphLayer<PointDataT = unknown, LinkDataT = unknown> extends
       ;(this.getCurrentLayer() ?? this).setNeedsRedraw()
     }, () => {
       settled()
-      if (state.graph === graph) state.isMeasuringBounds = false
+      if (state.graph !== graph) return
+      state.isMeasuringBounds = false
+      // Nothing was measured: the next frame asks again
+      ;(this.getCurrentLayer() ?? this).setNeedsRedraw()
     })
   }
 

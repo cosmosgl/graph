@@ -1314,6 +1314,73 @@ describe('CosmosGraphLayer', () => {
     }
   })
 
+  it('measures a reloaded dataset once the read on its way at the reload settles, whether it lands or fails', async () => {
+    // The reload's frame finds a read on its way and starts none. That read is of the old
+    // dataset: dropped when it lands, or failed. Either way it must ask for a redraw, or a
+    // consumer that reads the box on frames — deck's mask effect — never has the new
+    // dataset measured on an idle graph
+    let graph: Graph | undefined
+    let loads = 0
+    const make = (positions: Float32Array): CosmosGraphLayer => new CosmosGraphLayer({
+      id: 'graph',
+      points: { length: 2, initialPositions: positions },
+      config: { ...STATIC, enableSimulation: false },
+      onGraphCreated: (created): void => { graph = created },
+      onGraphDataLoaded: (): void => { loads += 1 },
+    })
+    let layer = make(new Float32Array([0, 0, 100, 50]))
+    const { deck, container } = await createDeck([layer])
+    try {
+      await waitUntil(() => loads === 1, 'the first load')
+      const live = (): CosmosGraphLayer => layer.getCurrentLayer() as CosmosGraphLayer
+      const asynchronous = vi.spyOn(graph!, 'getPointPositionsAsync')
+      let land!: (positions: Float32Array) => void
+      let fail!: (error: Error) => void
+      const holdNextRead = (): void => {
+        asynchronous.mockImplementationOnce(() => new Promise((resolve, reject) => { land = resolve; fail = reject }))
+      }
+      // The box is read on frames only, as deck's effects read it
+      holdNextRead()
+      deck.setProps({ onAfterRender: (): void => { live().getBounds() } })
+      await waitUntil(() => asynchronous.mock.calls.length === 1, 'the first read to start')
+
+      const reload = async (far: number): Promise<void> => {
+        const reads = asynchronous.mock.calls.length
+        const loaded = loads
+        layer = make(new Float32Array([far, far, far + 100, far + 50]))
+        deck.setProps({ layers: [layer] })
+        await waitUntil(() => loads === loaded + 1, 'the reload')
+        // Idle: no read while the old one is on its way, and the input box meanwhile
+        await waitFrames(3)
+        expect(asynchronous).toHaveBeenCalledTimes(reads)
+        expect(live().getBounds()).toEqual([[far, far, 0], [far + 100, far + 50, 0]])
+      }
+      const measured = async (far: number): Promise<void> => {
+        const box = JSON.stringify([[far, far, 0], [far + 100, far + 50, 0]])
+        await waitUntil(() => JSON.stringify(live().state.measuredBounds) === box, 'the new dataset to be measured')
+      }
+
+      // The old read lands after the reload: dropped, and the new dataset's read starts on the next frame
+      await reload(5000)
+      land(new Float32Array([0, 0, 100, 50]))
+      await waitUntil(() => asynchronous.mock.calls.length === 2, 'a read of the new dataset')
+      await measured(5000)
+
+      // The old read fails after the reload: the same
+      holdNextRead()
+      graph!.setPointPosition(0, 5001, 5001)
+      deck.redraw('a frame')
+      await waitUntil(() => asynchronous.mock.calls.length === 3, 'a read to start')
+      await reload(9000)
+      fail(new Error('the copy was lost'))
+      await waitUntil(() => asynchronous.mock.calls.length === 4, 'a read of the new dataset')
+      await measured(9000)
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
   it('serves a newly loaded dataset\'s input box until it is measured, never the previous dataset\'s box', async () => {
     let graph: Graph | undefined
     let loads = 0
