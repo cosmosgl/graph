@@ -173,8 +173,9 @@ export class ForceCollision extends CoreModule {
       this.gridSize = 0
       this.cellSize = 0
     } else {
-      // Keep contact-sized cells at any world extent. The data-relative hash
-      // wraps them onto the same point-count-bounded slot textures as repulsion.
+      // Keep contact-sized cells at any world extent. The hash, counted from the
+      // world origin (collision-grid.ts), wraps them onto the same
+      // point-count-bounded slot textures as repulsion.
       this.gridSize = getFinestGridSize(data.pointsNumber)
       this.cellSize = Math.max(this.maxRadius * 2, 8)
       this.createSlotTargets()
