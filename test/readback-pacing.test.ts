@@ -99,11 +99,23 @@ const armTrackedReadback = async (graph: Graph): Promise<void> => {
   await untilReadbackPending(graph)
 }
 
-/** Asserts that no frame ran over `ms`, then that frames resume once `release()` lets the fence signal. */
+/** When the render loop began holding frames for the pending copy; 0 while it has not held one yet. */
+const holdStartedAt = (graph: Graph): number => (graph as unknown as { readbackWaitStartedAt: number }).readbackWaitStartedAt
+
+/**
+ * Asserts that no frame ran over `ms`, then that frames resume once `release()` lets the
+ * fence signal. The render loop gives a fence up after `READBACK_WAIT_CAP_MS` and runs the
+ * frame: under load (every test file at once on a CI runner) the first held frame can lie
+ * that far behind the end of the wait, and the frame that runs then is the cap's, not a
+ * failure of the hold — so the hold is asserted only while the cap has not passed. The
+ * start is taken before the wait: a frame that runs through a pending copy resets it.
+ */
 const expectHeldThenResumed = async (running: RunningGraph, release: () => void, ms = 150): Promise<void> => {
+  const startedAt = holdStartedAt(running.graph) || performance.now()
   const before = running.ticks()
   await wait(ms)
-  expect(running.ticks()).toBe(before)
+  const after = running.ticks()
+  if (performance.now() - startedAt < READBACK_WAIT_CAP_MS) expect(after).toBe(before)
   release()
   await wait(100)
   expect(running.ticks()).toBeGreaterThan(before)
