@@ -605,6 +605,14 @@ inconsistent with itself. What an app can now see:
   "fit layout" show that framing the space and framing the graph are no longer the same. On
   `main` it showed 300k points piled square against the border; it now shows them settling
   into a disk about 7,000 units across.
+- **Far Point vs the Grid** (`src/stories/performance/far-point.ts`, Storybook *Examples /
+  Performance*, tags `perf`, `advanced`, `interactive`, `large-data`): the one-far-point limit
+  from [Still open](#still-open), live. Two panes run the same seeded blob of 20k or 100k
+  points with the same forces; the right one adds one red point 1e5, 1e6 or 1e7 units away.
+  Each pane reads out the blob's extent, the finest cell the bounding box implies and how
+  many cells the blob spans. "fit blob" frames the blob in both panes, "fit view" every point,
+  which on the right is the box the grid is fitted to. With gravity 0.25 the point comes home
+  and the blob recovers; with gravity 0 it never does.
 
 ## Still open
 
