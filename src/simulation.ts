@@ -1,7 +1,7 @@
 import { Device, Framebuffer, luma, type Texture } from '@luma.gl/core'
 import { webgl2Adapter, WebGLStateTracker } from '@luma.gl/webgl'
 
-import { applyConfig, createDefaultConfig, GraphConfigInterface, type GraphSimulationConfig } from '@/graph/config'
+import { applyConfig, validateConfig, createDefaultConfig, GraphConfigInterface, type GraphSimulationConfig } from '@/graph/config'
 import { getMaxPointSize, readPixels, isPointAbsent } from '@/graph/helper'
 import { ForceAttractor } from '@/graph/modules/ForceAttractor'
 import { ForceCenter } from '@/graph/modules/ForceCenter'
@@ -80,6 +80,16 @@ export interface SimulationStepOptions {
   applyMouseRepulsion?: boolean;
   /** A host interaction (zooming with simulation-during-zoom off) suspends the forces. */
   blockedByInteraction?: boolean;
+  /**
+   * The step runs in a frame of `Graph`'s render loop on the graph's own device, which holds
+   * its next frame while a copy is on its way. Only such a step reads the near-field
+   * occupancy back: any other host — `renderOneFrame()`, a headless graph's `step()`, a
+   * deck.gl layer, a bare `GraphSimulation`, a graph given its device (the host may draw to
+   * it, and the graph cannot tell) — keeps submitting work behind the copy, and the collect
+   * waits for all of it. Any other step drops a reading in flight, which a later frame
+   * would collect behind its passes.
+   */
+  held?: boolean;
 }
 
 /**
@@ -274,19 +284,35 @@ export class GraphSimulation implements PositionTextureSource {
     return this.clusters?.hasPendingCentroidReadback ?? false
   }
 
+  /** Whether a many-body cell-occupancy copy is still to be collected. @internal */
+  public get hasPendingOccupancyReadback (): boolean {
+    return this.forceManyBody?.hasPendingOccupancyReadback ?? false
+  }
+
   /**
-   * Whether the GPU has yet to reach a copy in flight — a pick, tracked positions or cluster
-   * centroids. `Graph` holds its next frame while this is true, so the copy is collected with
-   * nothing queued ahead of it. @internal
+   * Whether the GPU has yet to reach a copy in flight — a pick, tracked positions, cluster
+   * centroids or the many-body cell occupancy. `Graph` holds its next frame while this is
+   * true, so the copy is collected with nothing queued ahead of it. @internal
    */
   public get isReadbackPending (): boolean {
-    return (this.points?.isReadbackPending ?? false) || (this.clusters?.isCentroidReadbackPending ?? false)
+    return (this.points?.isReadbackPending ?? false) || (this.clusters?.isCentroidReadbackPending ?? false) ||
+      (this.forceManyBody?.isOccupancyReadbackPending ?? false)
+  }
+
+  /**
+   * Restarts the many-body force's occupancy measurement, for a changed
+   * `simulationRepulsionSamples`: a reading taken before describes a layout that
+   * may have moved on while the count was fixed. @internal
+   */
+  public restartOccupancyMeasurement (): void {
+    this.forceManyBody?.restartOccupancyMeasurement()
   }
 
   /** Drops every copy in flight; each reader asks for another on its next read. @internal */
   public cancelPendingReadbacks (): void {
     this.points?.cancelPendingReadbacks()
     this.clusters?.cancelCentroidReadback()
+    this.forceManyBody?.cancelOccupancyReadback()
   }
 
   /**
@@ -298,10 +324,15 @@ export class GraphSimulation implements PositionTextureSource {
    */
   public setConfig (config: GraphSimulationConfig): void {
     if (this._isDestroyed) return
+    // Before the device gate: a bad value throws here, not from the queued call
+    validateConfig(config)
     if (this.ensureDevice(() => this.setConfig(config))) return
     const prevConfig = { ...this.config }
     applyConfig(this.config, config, true)
     this.applyEnableSimulationConfigChange(prevConfig)
+    if (prevConfig.simulationRepulsionSamples !== this.config.simulationRepulsionSamples) {
+      this.restartOccupancyMeasurement()
+    }
     if (prevConfig.pointDefaultSize !== this.config.pointDefaultSize) {
       this.data.updatePointSize()
       this.points?.updateSize()
@@ -671,23 +702,31 @@ export class GraphSimulation implements PositionTextureSource {
   }
 
   /**
-   * Collects the non-blocking copies that have landed — tracked positions and cluster
-   * centroids. `Graph` calls it first in a frame, before the frame queues GPU work.
-   * Without frames, the reads collect for themselves. @internal
+   * Collects the non-blocking copies that have landed — tracked positions, cluster
+   * centroids and the many-body cell occupancy. `Graph` calls it first in a frame, before
+   * the frame queues GPU work. Without frames, the reads collect for themselves, and no
+   * occupancy is measured (SimulationStepOptions.held).
+   * @param heldMs - Set for a held frame: how long `Graph` held it for an occupancy copy, 0
+   *   when it did not. Unset for a frame that does not hold, which drops an occupancy copy in
+   *   flight rather than collect it behind work queued ahead of it. @internal
    */
-  public collectReadbacks (): void {
+  public collectReadbacks (heldMs?: number): void {
     this.points?.resolveTrackedPositionsReadback()
     this.clusters?.resolveCentroidReadback()
+    if (heldMs === undefined) this.forceManyBody?.cancelOccupancyReadback()
+    else this.forceManyBody?.collectOccupancy(heldMs)
   }
 
   /**
-   * Issues the non-blocking copies reads asked for. `Graph` calls it last in a frame,
-   * after the frame's last position write, so a copy holds the newest positions.
-   * Without frames, the reads issue for themselves. @internal
+   * Issues the non-blocking copies reads asked for, and the occupancy copy of a
+   * measurement the step drew. `Graph` calls it last in a frame, after the frame's last
+   * position write, so a copy holds the newest positions. Without frames, the reads issue
+   * for themselves. @internal
    */
   public issueReadbacks (): void {
     this.points?.requestTrackedPositionsReadback()
     this.clusters?.requestCentroidReadback()
+    this.forceManyBody?.issueOccupancy()
   }
 
   /**
@@ -804,6 +843,8 @@ export class GraphSimulation implements PositionTextureSource {
    * @internal
    */
   public runSimulationStep (forceExecution = false, options?: SimulationStepOptions): boolean {
+    // A step outside a held frame queues work behind an occupancy copy in flight (SimulationStepOptions.held)
+    if (!options?.held) this.forceManyBody?.cancelOccupancyReadback()
     if (!this.config.enableSimulation) return false
     return this.withExternalDeviceState(() => this.runStepPasses(forceExecution, options))
   }
@@ -978,7 +1019,7 @@ export class GraphSimulation implements PositionTextureSource {
       }
 
       this.points?.swapFbo()
-      this.forceManyBody?.run()
+      this.forceManyBody?.run(options?.held === true)
       this.points?.updatePosition()
 
       if (this.store.linksTextureSize) {

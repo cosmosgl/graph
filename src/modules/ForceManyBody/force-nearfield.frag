@@ -141,7 +141,10 @@ void main() {
       // Horvitz–Thompson weighting: the sample is uniform among the cell's
       // other points (conditioned on whether the point itself was peeled),
       // so scaling by others/sampled gives E[force] = exact all-pairs sum.
-      // Exhaustively peeled cells (others == sampled) are exact.
+      // Exhaustively peeled cells (others == sampled) are exact. The
+      // conditioning needs a sampled other whenever the cell has one, which
+      // two or more slots guarantee (MIN_REPULSION_SAMPLES): a single slot can
+      // hold the point itself, and skipping that tick would bias the sum low.
       if (sampled > 0.0) velocity += (others / sampled) * pairSum;
     }
   }

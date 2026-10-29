@@ -5,7 +5,7 @@ import { D3ZoomEvent, zoomIdentity } from 'd3-zoom'
 import { D3DragEvent } from 'd3-drag'
 import { Device, Framebuffer, type RenderPass } from '@luma.gl/core'
 
-import { applyConfig, createDefaultConfig, resetConfigToDefaults, GraphConfigInterface, type GraphConfig } from '@/graph/config'
+import { applyConfig, validateConfig, createDefaultConfig, resetConfigToDefaults, GraphConfigInterface, type GraphConfig } from '@/graph/config'
 import { getRgbaColor, getMaxPointSize, readPixels, extractIndicesFromPixels, sanitizeHtml, isPointAbsent, generateRandomId } from '@/graph/helper'
 import { FPSMonitor } from '@/graph/modules/FPSMonitor'
 import { GraphData } from '@/graph/modules/GraphData'
@@ -328,6 +328,8 @@ export class Graph implements PositionTextureSource {
   public setConfig (config: GraphConfig): void {
     if (this._isDestroyed) return
 
+    // Before the device gate: a bad value throws here, not from the queued call
+    validateConfig(config)
     if (this.ensureDevice(() => this.setConfig(config))) return
     const prevConfig = { ...this.config }
     resetConfigToDefaults(this.config)
@@ -347,6 +349,7 @@ export class Graph implements PositionTextureSource {
   public setConfigPartial (config: GraphConfig): void {
     if (this._isDestroyed) return
 
+    validateConfig(config)
     if (this.ensureDevice(() => this.setConfigPartial(config))) return
     const prevConfig = { ...this.config }
     applyConfig(this.config, config, true)
@@ -1609,6 +1612,10 @@ export class Graph implements PositionTextureSource {
   /**
    * Run one step of the simulation manually.
    * Works even when the simulation is paused.
+   * A manual step never measures the near-field cell occupancy, and drops a
+   * measurement the render loop has in flight: calling it between every pair of
+   * the loop's frames keeps an unset `simulationRepulsionSamples` at what it
+   * last measured, or the point-count tiers.
    */
   public step (): void {
     if (this._isDestroyed) return
@@ -1754,7 +1761,10 @@ export class Graph implements PositionTextureSource {
    * (`enableRenderLoop: false`): call `renderOneFrame()` from the host's frame
    * callback. Performs the same per-frame work as the internal loop — screen-size
    * sync, transitions, hover detection, one simulation step (when the simulation
-   * is running), and the draw — including the simulation-end check.
+   * is running), and the draw — including the simulation-end check. One thing it
+   * leaves out: nothing holds the host's next frame for a GPU copy, so it never
+   * measures the near-field cell occupancy. An unset `simulationRepulsionSamples`
+   * keeps the count the render loop last measured, or runs the point-count tiers.
    * No-op on headless instances (they own no canvas to draw into).
    */
   public renderOneFrame (): void {
@@ -1938,6 +1948,9 @@ export class Graph implements PositionTextureSource {
    */
   private updateStateFromConfig (prevConfig: GraphConfigInterface): void {
     this.applyEnableSimulationConfigChange(prevConfig)
+    if (prevConfig.simulationRepulsionSamples !== this.config.simulationRepulsionSamples) {
+      this.simulation.restartOccupancyMeasurement()
+    }
 
     if (prevConfig.pointDefaultColor !== this.config.pointDefaultColor) {
       this.graph.updatePointColor()
@@ -2370,8 +2383,10 @@ export class Graph implements PositionTextureSource {
    *     Used by step() to allow manual stepping while the simulation is paused.
    *   - If false: Only runs if isSimulationRunning is true. Used during rendering
    *     to respect pause/unpause state.
+   * @param held - The step runs in a frame of the render loop, whose next frame waits for
+   *   the copies this one issues (SimulationStepOptions.held).
    */
-  private runSimulationStep (forceExecution = false): void {
+  private runSimulationStep (forceExecution = false, held = false): void {
     if (!this.config.enableSimulation) return
 
     // Right-click repulsion runs regardless of isSimulationRunning; a zoom
@@ -2380,7 +2395,7 @@ export class Graph implements PositionTextureSource {
     const enableSimulationDuringZoom = this.zoomInstance.shouldEnableSimulationDuringZoomOverride ?? this.config.enableSimulationDuringZoom
     const blockedByInteraction = this.zoomInstance.isRunning && !enableSimulationDuringZoom
 
-    const forcesRan = this.simulation.runSimulationStep(forceExecution, { applyMouseRepulsion, blockedByInteraction })
+    const forcesRan = this.simulation.runSimulationStep(forceExecution, { applyMouseRepulsion, blockedByInteraction, held })
 
     // The step moved the points — the picking buffers no longer match them
     if (forcesRan || applyMouseRepulsion) this.markPickingBuffersStale()
@@ -2431,8 +2446,11 @@ export class Graph implements PositionTextureSource {
   private runFrame (now: number): void {
     if (this._isDestroyed) return
 
-    // The simulation's copies (point pick, tracked positions, centroids) and the link pick,
-    // which lives on the renderer
+    // Whether this hold waits for an occupancy copy, read before the cap can drop it: only
+    // then is the hold an occupancy reading's cost
+    const isOccupancyInFlight = this.simulation.hasPendingOccupancyReadback
+    // The simulation's copies (point pick, tracked positions, centroids, many-body cell
+    // occupancy) and the link pick, which lives on the renderer
     if (this.simulation.isReadbackPending || this.lines?.isPickReadbackPending) {
       if (!this.readbackWaitStartedAt) this.readbackWaitStartedAt = now
       if (now - this.readbackWaitStartedAt < READBACK_WAIT_CAP_MS) {
@@ -2445,6 +2463,8 @@ export class Graph implements PositionTextureSource {
       this.simulation.cancelPendingReadbacks()
       this.lines?.discardPendingPick()
     }
+    // What the occupancy reading collected now cost: the whole hold, when one waited for it
+    const heldMs = this.readbackWaitStartedAt && isOccupancyInFlight ? now - this.readbackWaitStartedAt : 0
     this.readbackWaitStartedAt = 0
 
     // Check if simulation should end BEFORE rendering
@@ -2454,7 +2474,9 @@ export class Graph implements PositionTextureSource {
       this.end()
     }
 
-    this.renderFrame(now)
+    // Held only on a device the graph created: a host may draw to one it was given, and its
+    // work would queue behind the copy
+    this.renderFrame(now, this.simulation.ownsDevice ? heldMs : undefined)
 
     if (!this._isDestroyed && this.shouldKeepRendering()) {
       this.frame()
@@ -2501,7 +2523,9 @@ export class Graph implements PositionTextureSource {
     // Same for a non-blocking tracked-positions or cluster-centroid readback: the
     // one issued after the simulation's last step must still be collected, or an
     // overlay reading with `nonBlocking` would stay a tick behind the settled layout.
-    if (this.points?.hasPendingTrackedReadback || this.simulation.hasPendingCentroidReadback) return true
+    // An occupancy copy too, so its fence is not left open across an idle loop.
+    if (this.points?.hasPendingTrackedReadback || this.simulation.hasPendingCentroidReadback ||
+      this.simulation.hasPendingOccupancyReadback) return true
     return this.hasPendingHoverWork()
   }
 
@@ -2523,16 +2547,20 @@ export class Graph implements PositionTextureSource {
    * Renders a single frame. This does NOT schedule the next frame.
    * On an external device the frame runs under cosmos's GL state and hands the
    * host its own back afterwards.
+   * @param heldMs - Set for a frame of the render loop on the graph's own device, whose next
+   *   frame waits for the copies this one issues: how long it waited for an occupancy copy,
+   *   0 when it did not. Unset for a frame that does not hold (`renderOneFrame()`, a device the
+   *   host was given), which neither measures the occupancy nor collects a copy of it.
    */
-  private renderFrame (now?: number): void {
+  private renderFrame (now?: number, heldMs?: number): void {
     if (this._isDestroyed) return
     if (!this.store.pointsTextureSize) return
 
-    this.simulation.withExternalDeviceState(() => this.drawFrame(now))
+    this.simulation.withExternalDeviceState(() => this.drawFrame(now, heldMs))
   }
 
   /** The actual rendering logic of a frame. */
-  private drawFrame (now?: number): void {
+  private drawFrame (now?: number, heldMs?: number): void {
     const frameNow = now ?? performance.now()
     this.fpsMonitor?.begin()
     // Apply a screen-size change the observer flagged. Without a ResizeObserver
@@ -2543,8 +2571,9 @@ export class Graph implements PositionTextureSource {
       this.syncScreenSize()
     }
     // Collect before the frame queues GPU work: `getBufferSubData` waits behind
-    // whatever commands are already queued.
-    this.simulation.collectReadbacks()
+    // whatever commands are already queued. An occupancy copy only a held frame
+    // collects (SimulationStepOptions.held); any other drops it.
+    this.simulation.collectReadbacks(heldMs)
 
     const shouldInterpolatePositions = this.transition.isActiveFor(TransitionProperty.Positions)
     const shouldAnimatePointColors = this.transition.isActiveFor(TransitionProperty.PointColors)
@@ -2578,7 +2607,7 @@ export class Graph implements PositionTextureSource {
 
     // Run simulation step (respects isSimulationRunning)
     // When simulation ends, forces stop but rendering continues
-    this.runSimulationStep(false)
+    this.runSimulationStep(false, heldMs !== undefined)
 
     // Create a single render pass for drawing (points, lines, etc.)
     // Simulation will use separate render passes later
