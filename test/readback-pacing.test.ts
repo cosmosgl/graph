@@ -33,6 +33,20 @@ const RUNNING_CONFIG: GraphConfig = {
 /** Four points around the space center, none at equilibrium. */
 const POSITIONS = new Float32Array([1000, 1000, 3000, 1000, 1000, 3000, 3000, 3000])
 
+/**
+ * A 71 × 71 lattice, 5,041 points: past 4,096, so the many-body force runs its grid and the
+ * automatic sample count measures the cells every 30 steps, from the first.
+ */
+const GRID_POSITIONS = ((): Float32Array => {
+  const side = 71
+  const positions = new Float32Array(side * side * 2)
+  for (let i = 0; i < side * side; i += 1) {
+    positions[i * 2] = 1800 + (i % side) * 7
+    positions[i * 2 + 1] = 1800 + Math.floor(i / side) * 7
+  }
+  return positions
+})()
+
 const wait = (ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms) })
 
 /** Every fence reports "not yet" until `release()`. */
@@ -50,10 +64,10 @@ const untilReadbackPending = async (graph: Graph): Promise<void> => {
   const { points, lines, simulation } = graph as unknown as {
     points: { hasPendingPickReadback: boolean; hasPendingTrackedReadback: boolean };
     lines: { hasPendingPickReadback: boolean };
-    simulation: { hasPendingCentroidReadback: boolean };
+    simulation: { hasPendingCentroidReadback: boolean; hasPendingOccupancyReadback?: boolean };
   }
   const inFlight = (): boolean => points.hasPendingPickReadback || lines.hasPendingPickReadback ||
-    points.hasPendingTrackedReadback || simulation.hasPendingCentroidReadback
+    points.hasPendingTrackedReadback || simulation.hasPendingCentroidReadback || (simulation.hasPendingOccupancyReadback ?? false)
   for (let i = 0; i < 200 && !inFlight(); i += 1) await wait(10)
   expect(inFlight()).toBe(true)
 }
@@ -66,14 +80,14 @@ interface RunningGraph {
   destroy: () => void;
 }
 
-const createRunningGraph = async (config: GraphConfig = {}, links?: Float32Array): Promise<RunningGraph> => {
+const createRunningGraph = async (config: GraphConfig = {}, links?: Float32Array, positions: Float32Array = POSITIONS): Promise<RunningGraph> => {
   const div = document.createElement('div')
   div.style.width = '200px'
   div.style.height = '200px'
   document.body.appendChild(div)
   let ticks = 0
   const graph = new Graph(div, { ...RUNNING_CONFIG, ...config, onSimulationTick: (): void => { ticks += 1 } })
-  graph.setPointPositions(POSITIONS)
+  graph.setPointPositions(positions)
   if (links) graph.setLinks(links)
   graph.render()
   await graph.ready
@@ -151,6 +165,20 @@ describe('the render loop holds the next frame while a readback is pending', () 
       await wait(60)
       release = holdFences()
       running.graph.getClusterPositions({ nonBlocking: true })
+      await untilReadbackPending(running.graph)
+      await expectHeldThenResumed(running, release)
+    } finally {
+      release()
+      running.destroy()
+    }
+  })
+
+  it('a many-body cell-occupancy copy', async () => {
+    // Nobody reads anything: the automatic sample count measures the cells by itself, and
+    // its copy is held for like any other
+    const running = await createRunningGraph({}, undefined, GRID_POSITIONS)
+    const release = holdFences()
+    try {
       await untilReadbackPending(running.graph)
       await expectHeldThenResumed(running, release)
     } finally {

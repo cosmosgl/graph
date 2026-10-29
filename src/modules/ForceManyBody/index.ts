@@ -1,6 +1,7 @@
 import { Buffer, Framebuffer, Texture, TextureView, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { CoreModule, BASE_PIPELINE_PARAMETERS } from '@/graph/modules/core-module'
+import { MAX_REPULSION_SAMPLES, isRepulsionSampleCount } from '@/graph/config'
 
 import calculateLevelFrag from '@/graph/modules/ForceManyBody/calculate-level.frag?raw'
 import calculateLevelPreciseVert from '@/graph/modules/ForceManyBody/calculate-level.vert?raw'
@@ -9,7 +10,9 @@ import forceNearFieldFrag from '@/graph/modules/ForceManyBody/force-nearfield.fr
 import forceAllPairsFrag from '@/graph/modules/ForceManyBody/force-allpairs.frag?raw'
 import buildNearFieldSlotsVert from '@/graph/modules/ForceManyBody/build-nearfield-slots.vert?raw'
 import buildNearFieldSlotsFrag from '@/graph/modules/ForceManyBody/build-nearfield-slots.frag?raw'
+import occupancyFrag from '@/graph/modules/ForceManyBody/occupancy.frag?raw'
 import { withGridCell } from '@/graph/modules/ForceManyBody/grid-cell'
+import { PickingReadback } from '@/graph/modules/Points/picking-readback'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import { DataBounds } from '@/graph/modules/Shared/data-bounds'
 import { getFinestGridSize, getNearFieldSlotCount } from '@/graph/modules/Shared/cell-slots'
@@ -102,6 +105,98 @@ const getMaxStep = (kickSpan: number, pointsNumber: number): number =>
  * error 0.06% → 0.30% (measured before the shift's padding existed).
  */
 const MIN_FINEST_CELL_SIZE = 0.25
+
+/**
+ * The automatic near-field slot count, used when `simulationRepulsionSamples`
+ * is not set. A cell holding at most K points is sampled exhaustively — its
+ * near field is exact. Above it, a fresh random subset is drawn every tick and
+ * Horvitz–Thompson weighted; unbiased, but the per-tick re-drawing makes the
+ * force estimate noisy in proportion to occupancy/K, which shows as per-point
+ * shimmer wherever something keeps density up (link attraction into hubs,
+ * gravity, a cluster force) while alpha stays high.
+ *
+ * K is chosen from two measured quantities, and the smaller wins:
+ *
+ * - What the layout wants: the smallest power of two that samples the finest
+ *   cells of all but OCCUPANCY_MISS of the points whole (see occupancy.frag),
+ *   read back without blocking every OCCUPANCY_INTERVAL steps, never more often
+ *   than OCCUPANCY_HOLD_SHARE of the time spent holding frames for them allows.
+ *   Sized to the points, not the cells: a dense core of a few percent of the
+ *   points jitters visibly while the typical point's cell holds a handful. The
+ *   point count alone cannot see this: at the same count a clustered layout
+ *   fills its cells far beyond a scattered one.
+ * - What the size can afford: K × points, the peel work per tick, is held under
+ *   a budget measured where the frame leaves vsync on a laptop GPU, and the K
+ *   slot layers at the finest grid under a memory cap: the 32 MiB the size
+ *   tiers held at the 512² grid (16 slots), which fits up to 64 on a smaller
+ *   grid. Both limit how high K goes, never below MIN_AUTO_SLOTS: past 200,000
+ *   points the floor alone spends more than the budget, as the size tiers' 8 did.
+ *
+ * Both are clamped to [MIN_AUTO_SLOTS, MAX_AUTO_SLOTS]; the ceiling is the one a
+ * configured count is validated against (MAX_REPULSION_SAMPLES), so every count
+ * this force runs can be allocated. The slots live in one array-texture layer
+ * each, so a changed K is a reallocation, not a shader change. Graphs at or
+ * below ALL_PAIRS_MAX_POINTS never reach this path at all — they take the exact
+ * all-pairs pass instead.
+ */
+const MIN_AUTO_SLOTS = 8
+const MAX_AUTO_SLOTS = MAX_REPULSION_SAMPLES
+/**
+ * Point-samples per tick above which the automatic count does not rise. A ceiling on the
+ * count, not on the work: the count never goes below MIN_AUTO_SLOTS, which past 200,000
+ * points spends more than this, as the size tiers' 8 did.
+ */
+const NEAR_FIELD_BUDGET = 1.6e6
+/** Bytes the automatic choice may give the slot arrays: K layers of finest-grid rg32float texels. */
+const NEAR_FIELD_MEMORY_BUDGET = 32 * 1024 * 1024
+/** Simulation steps between occupancy measurements. */
+const OCCUPANCY_INTERVAL = 30
+/**
+ * Share of the time the readings may hold frames. A reading holds the next frame until the GPU
+ * has drained what was queued ahead of its copy: nothing where the GPU keeps up, a few hundred
+ * milliseconds on a GPU-bound loop. After a reading that held a frame for h ms, the next waits at
+ * least h / OCCUPANCY_HOLD_SHARE, however few steps that is.
+ */
+const OCCUPANCY_HOLD_SHARE = 0.01
+/**
+ * Share of the points the automatic count may leave in cells fuller than it, where they are
+ * sampled rather than listed and their force jitters from tick to tick.
+ */
+const OCCUPANCY_MISS = 0.01
+/**
+ * The occupancy pass, counting the points in cells fuller than MIN_AUTO_SLOTS, twice and four
+ * times it. The floor comes from the constant; the three thresholds, and getWantedSlotCount's
+ * three overflow sums with their doubling, assume the counts 8 to 64 run in four doublings.
+ */
+const OCCUPANCY_FRAG = occupancyFrag.replace('// @min-auto-slots', `#define MIN_AUTO_SLOTS ${MIN_AUTO_SLOTS}`)
+/** Blocks per axis the occupancy pass reduces the finest level into (its readback is this²). */
+const OCCUPANCY_BLOCKS = 16
+
+/** The power of two at or below `value`, clamped to [min, max]. */
+const floorPowerOfTwo = (value: number, min: number, max: number): number =>
+  Math.min(max, Math.max(min, Math.pow(2, Math.floor(Math.log2(value)))))
+
+/** The largest power-of-two slot count whose per-tick work and slot memory fit the budgets at this size. */
+const getAffordableSlotCount = (pointsNumber: number): number => {
+  const layerBytes = getFinestGridSize(pointsNumber) ** 2 * 8
+  const affordable = Math.min(NEAR_FIELD_BUDGET / Math.max(1, pointsNumber), NEAR_FIELD_MEMORY_BUDGET / layerBytes)
+  return floorPowerOfTwo(affordable, MIN_AUTO_SLOTS, MAX_AUTO_SLOTS)
+}
+
+/**
+ * The smallest power-of-two slot count, MIN_AUTO_SLOTS to MAX_AUTO_SLOTS, that leaves at most
+ * OCCUPANCY_MISS of the points in cells fuller than it. `overflow` holds the points in cells
+ * fuller than MIN_AUTO_SLOTS and each doubling below the ceiling (occupancy.frag).
+ * @internal Exported for the tests.
+ */
+export const getWantedSlotCount = (points: number, overflow: readonly number[]): number => {
+  let count = MIN_AUTO_SLOTS
+  for (const over of overflow) {
+    if (over <= OCCUPANCY_MISS * points) return count
+    count *= 2
+  }
+  return Math.min(count, MAX_AUTO_SLOTS)
+}
 
 /**
  * At or below this point count the whole force is computed exactly: one
@@ -277,6 +372,62 @@ export class ForceManyBody extends CoreModule {
   private previousPointsTextureSize: number | undefined
   private previousPointsNumber: number | undefined
 
+  /** Reduces the finest level's counts into OCCUPANCY_BLOCKS² block statistics (occupancy.frag). */
+  private occupancyCommand: Model | undefined
+  private occupancyTarget: { texture: Texture; fbo: Framebuffer } | undefined
+  private occupancyReadback: PickingReadback | undefined
+  /**
+   * A reduction is in the target and waits for its copy. A step in a frame of `Graph`'s
+   * render loop draws it (measureOccupancy); the copy is issued by `issueOccupancy()` at the
+   * frame's end and collected by `collectOccupancy()` before the next frame queues any pass,
+   * like the other non-blocking reads (GraphSimulation.collectReadbacks / issueReadbacks).
+   */
+  private isOccupancyIssueWanted = false
+  /**
+   * Grid-path steps of the render loop's frames that could measure (the count automatic,
+   * the size affording more than MIN_AUTO_SLOTS) since the measurement last restarted;
+   * schedules the measurements.
+   */
+  private occupancyTick = 0
+  /** The `occupancyTick` of the last reduction drawn, `undefined` until the first since a restart. */
+  private lastOccupancyTick: number | undefined
+  /**
+   * The `performance.now()` before which no measurement is drawn: the last reading's hold
+   * divided by OCCUPANCY_HOLD_SHARE, so the holds take about that share of the time however
+   * slow the GPU. A restart keeps it: a new point count or a toggled key on a loaded GPU
+   * waits like any other measurement.
+   */
+  private occupancyNotBefore = 0
+  /**
+   * The automatic slot count in force, `undefined` until the first measurement
+   * lands (the point count's size tier applies meanwhile, getNearFieldSlotCount, and
+   * throughout on a host that never measures). A change takes two consecutive
+   * measurements that agree, so a layout settling at a boundary does not
+   * reallocate the slot arrays every measurement; `proposedSlotCount` holds the
+   * one awaiting confirmation.
+   */
+  private autoSlotCount: number | undefined
+  private proposedSlotCount: number | undefined
+
+  private occupancyUniformStore: UniformStore<{
+    occupancyUniforms: {
+      levelTextureWidth: number;
+      levelTextureHeight: number;
+      blockWidth: number;
+      blockHeight: number;
+    };
+  }> | undefined
+
+  /** Whether the GPU has yet to reach the occupancy copy in flight. @internal */
+  public get isOccupancyReadbackPending (): boolean {
+    return this.occupancyReadback?.isPending ?? false
+  }
+
+  /** Whether an occupancy copy is in flight, landed or not, and still to be collected. @internal */
+  public get hasPendingOccupancyReadback (): boolean {
+    return this.occupancyReadback?.inFlight ?? false
+  }
+
   /** Small graphs skip the grid + Monte-Carlo machinery entirely (see ALL_PAIRS_MAX_POINTS). */
   private get usesAllPairs (): boolean {
     return (this.data.pointsNumber ?? 0) <= ALL_PAIRS_MAX_POINTS
@@ -295,9 +446,40 @@ export class ForceManyBody extends CoreModule {
     return (this.data.pointsNumber ?? 0) <= PRECISE_FAR_FIELD_MAX_POINTS
   }
 
+  /**
+   * Peeling passes per tick, i.e. layers across the slot arrays. The force
+   * pass loops over a slotCount uniform, so a changed value reallocates the
+   * arrays on the next tick. The configured count when there is one; otherwise
+   * the measured want, capped by what the size affords (see MIN_AUTO_SLOTS).
+   * Before the first measurement lands, the point count's size tier, which a
+   * host that steps the simulation itself runs throughout (see measureOccupancy).
+   * A value written to the config directly, past validateConfig, counts only if it
+   * is a valid count: anything else falls back to the automatic count, so it never
+   * reaches an allocation. A direct write is no setter: nothing restarts the
+   * measurement, which resumes from where it stood.
+   */
+  private get nearFieldSlotCount (): number {
+    const configured = this.config.simulationRepulsionSamples
+    if (isRepulsionSampleCount(configured)) return configured
+    const pointsNumber = this.data.pointsNumber ?? 0
+    return Math.min(this.autoSlotCount ?? getNearFieldSlotCount(pointsNumber), getAffordableSlotCount(pointsNumber))
+  }
+
+  private get usesAutoSlotCount (): boolean {
+    return !isRepulsionSampleCount(this.config.simulationRepulsionSamples)
+  }
+
   public create (): void {
     const { device, store } = this
     if (!store.pointsTextureSize) return
+
+    // A changed point count is a new layout, measured afresh on the next tick: a read in
+    // flight describes the previous points. A data apply of the same count (positions
+    // streamed in, forces marked dirty) keeps the measurement as it runs — the count in
+    // force, the proposal awaiting its second reading, the schedule and a read in flight
+    // (its buffer is not touched here). Restarting it on every apply would cancel each
+    // read before it landed, and an update every step would never be measured.
+    if (this.data.pointsNumber !== this.previousPointsNumber) this.restartOccupancyMeasurement()
 
     // (Re)allocate the grid pyramid + near-field slots for the current point
     // count (resizing levels and dropping any that the pyramid no longer needs).
@@ -375,6 +557,66 @@ export class ForceManyBody extends CoreModule {
 
     // Allocates its fixed-size targets on its first run, so an all-pairs graph never does.
     this.dataBounds ||= new DataBounds(device)
+
+    // Occupancy reduction (fullscreen quad over the block target; its readback
+    // drives the automatic slot count).
+    this.occupancyUniformStore ||= new UniformStore(device, {
+      occupancyUniforms: {
+        uniformTypes: {
+          // Order MUST match shader declaration order (std140 layout)
+          levelTextureWidth: 'f32',
+          levelTextureHeight: 'f32',
+          blockWidth: 'f32',
+          blockHeight: 'f32',
+        },
+        defaultUniforms: {
+          levelTextureWidth: 0,
+          levelTextureHeight: 0,
+          blockWidth: 0,
+          blockHeight: 0,
+        },
+      },
+    })
+
+    this.occupancyCommand ||= new Model(device, {
+      fs: OCCUPANCY_FRAG,
+      vs: updateVert,
+      topology: 'triangle-strip',
+      vertexCount: 4,
+      attributes: {
+        vertexCoord: this.forceVertexCoordBuffer,
+      },
+      bufferLayout: [
+        { name: 'vertexCoord', format: 'float32x2' },
+      ],
+      defines: {
+        USE_UNIFORM_BUFFERS: true,
+      },
+      bindings: {
+        occupancyUniforms: this.occupancyUniformStore.getManagedUniformBuffer('occupancyUniforms'),
+        // levelTexture is bound per measurement in measureOccupancy()
+      },
+      parameters: {
+        ...BASE_PIPELINE_PARAMETERS,
+        depthWriteEnabled: false,
+        depthCompare: 'always',
+      },
+    })
+
+    if (!this.occupancyTarget || this.occupancyTarget.texture.destroyed) {
+      const texture = device.createTexture({
+        width: OCCUPANCY_BLOCKS,
+        height: OCCUPANCY_BLOCKS,
+        format: 'rgba32float',
+        usage: Texture.SAMPLE | Texture.RENDER,
+      })
+      const fbo = device.createFramebuffer({
+        width: OCCUPANCY_BLOCKS,
+        height: OCCUPANCY_BLOCKS,
+        colorAttachments: [texture],
+      })
+      this.occupancyTarget = { texture, fbo }
+    }
 
     // Grid aggregation command (point list, additive blend)
     this.calculateLevelsUniformStore ||= new UniformStore(device, {
@@ -628,7 +870,8 @@ export class ForceManyBody extends CoreModule {
     })
   }
 
-  public run (): void {
+  /** @param isHeld - The step runs in a held frame (SimulationStepOptions.held), the only place it measures occupancy. */
+  public run (isHeld = false): void {
     // Skip if point topology changed and create() wasn't called yet. Space size
     // is intentionally not guarded: grid allocation is point-count-based, the
     // grid's placement is recomputed from the data every tick (drawBounds), and
@@ -646,9 +889,14 @@ export class ForceManyBody extends CoreModule {
       return
     }
 
+    // A changed slot count — a configuration change or an occupancy measurement
+    // collected before this step (collectOccupancy) — reallocates the slot arrays in
+    // place; the levels are untouched.
+    if (this.nearField && this.nearField.count !== this.nearFieldSlotCount) this.createLevels()
     // Nothing to do until the grid pyramid and near-field slots are allocated
     // (create() builds them; this guards a partial/failed allocation).
-    if (this.levelTargets.size === 0 || !this.nearField) return
+    const finest = this.levelTargets.get(this.levels - 1)
+    if (!finest || !this.nearField) return
 
     // Bounds first, once per tick: the passes below all index the grid they
     // define, and must index the same one — the aggregation and the forces
@@ -657,6 +905,7 @@ export class ForceManyBody extends CoreModule {
     this.drawBounds()
     if (!this.dataBounds?.texture) return
     this.drawLevels()
+    this.measureOccupancy(finest.texture, finest.gridSize, isHeld)
     this.drawNearFieldSlots()
     this.drawForces()
   }
@@ -677,6 +926,10 @@ export class ForceManyBody extends CoreModule {
     this.forceNearFieldCommand = undefined
     this.forceAllPairsCommand?.destroy()
     this.forceAllPairsCommand = undefined
+    this.occupancyCommand?.destroy()
+    this.occupancyCommand = undefined
+    this.occupancyReadback?.destroy()
+    this.occupancyReadback = undefined
 
     // 2. Destroy Framebuffers + 3. Textures (grid targets destroy their FBOs
     // before their textures internally)
@@ -685,6 +938,11 @@ export class ForceManyBody extends CoreModule {
     }
     this.randomValuesTexture = undefined
     this.destroyLevelTargets()
+    if (this.occupancyTarget) {
+      if (!this.occupancyTarget.fbo.destroyed) this.occupancyTarget.fbo.destroy()
+      if (!this.occupancyTarget.texture.destroyed) this.occupancyTarget.texture.destroy()
+      this.occupancyTarget = undefined
+    }
     // Self-contained (its own Models -> Framebuffers -> Textures -> UniformStores
     // -> Buffers); after the Models above, which bind its texture.
     this.dataBounds?.destroy()
@@ -701,6 +959,8 @@ export class ForceManyBody extends CoreModule {
     this.forceNearFieldUniformStore = undefined
     this.forceAllPairsUniformStore?.destroy()
     this.forceAllPairsUniformStore = undefined
+    this.occupancyUniformStore?.destroy()
+    this.occupancyUniformStore = undefined
 
     // 5. Destroy Buffers (passed via attributes - NOT owned by Models, must destroy manually)
     if (this.pointIndices && !this.pointIndices.destroyed) {
@@ -711,6 +971,134 @@ export class ForceManyBody extends CoreModule {
       this.forceVertexCoordBuffer.destroy()
     }
     this.forceVertexCoordBuffer = undefined
+  }
+
+  /**
+   * Starts the non-blocking copy of a reduction the step drew, behind a fence. Called
+   * after every pass of the frame is queued, so the copy and its fence
+   * close the queue. Nothing to do without a reduction waiting, or without WebGL.
+   * @internal
+   */
+  public issueOccupancy (): void {
+    if (!this.isOccupancyIssueWanted || this.occupancyReadback?.inFlight) return
+    this.isOccupancyIssueWanted = false
+    if (!this.occupancyTarget || this.occupancyTarget.fbo.destroyed) return
+    const gl = (this.device as unknown as { gl?: WebGL2RenderingContext }).gl
+    const handle = (this.occupancyTarget.fbo as unknown as { handle?: WebGLFramebuffer }).handle
+    if (!gl || !handle) return
+    this.occupancyReadback ||= new PickingReadback(gl, OCCUPANCY_BLOCKS * OCCUPANCY_BLOCKS * 4)
+    this.occupancyReadback.issue(handle, 0, 0, OCCUPANCY_BLOCKS, OCCUPANCY_BLOCKS)
+  }
+
+  /**
+   * Collects a finished occupancy read, if one has finished, and turns it into
+   * the automatic slot count: the smallest power of two that leaves at most
+   * OCCUPANCY_MISS of the points in finest cells fuller than it. The
+   * first measurement applies at once; later ones take two in a row that agree.
+   * The result is only a want — nearFieldSlotCount caps it by the size budget.
+   * From `heldMs`, how long `Graph` held this frame while an occupancy copy was in flight,
+   * sets the earliest time of the next measurement (occupancyNotBefore): the whole hold,
+   * also when another copy was pending too, the safe side. A hold for other copies alone
+   * reaches it as 0 and costs the measurement nothing.
+   * Called before a frame queues any pass: `getBufferSubData`
+   * waits for every command queued before it, fence or no fence. @internal
+   */
+  public collectOccupancy (heldMs = 0): void {
+    const blocks = this.occupancyReadback?.poll()
+    // A hold is charged whether the copy landed or the hold's cap dropped it
+    // (READBACK_WAIT_CAP_MS): a fence that never signals cannot freeze a frame every
+    // OCCUPANCY_INTERVAL steps
+    if (blocks || heldMs > 0) this.occupancyNotBefore = performance.now() + heldMs / OCCUPANCY_HOLD_SHARE
+    if (!blocks) return
+    // [points, points in cells of more than 8, more than 16, more than 32] per block
+    let points = 0
+    const overflow = [0, 0, 0]
+    for (let i = 0; i < OCCUPANCY_BLOCKS * OCCUPANCY_BLOCKS; i += 1) {
+      points += blocks[i * 4]!
+      for (let k = 0; k < overflow.length; k += 1) overflow[k] = overflow[k]! + blocks[i * 4 + 1 + k]!
+    }
+    // An empty level, or a read that came back without numbers, says nothing about the layout
+    if (!(points > 0) || !overflow.every(Number.isFinite)) return
+    const wanted = getWantedSlotCount(points, overflow)
+    if (this.autoSlotCount === undefined || wanted === this.proposedSlotCount) {
+      this.autoSlotCount = wanted
+      this.proposedSlotCount = undefined
+    } else if (wanted !== this.autoSlotCount) {
+      this.proposedSlotCount = wanted
+    } else {
+      this.proposedSlotCount = undefined
+    }
+  }
+
+  /** Drops the occupancy copy in flight; the next measurement takes its place. @internal */
+  public cancelOccupancyReadback (): void {
+    this.occupancyReadback?.cancel()
+  }
+
+  /**
+   * Forgets everything measured, for a layout the measurements may no longer describe:
+   * a changed point count, or a changed `simulationRepulsionSamples` (while a count is
+   * configured the layout moves on unmeasured, and no measurement is taken). The automatic
+   * count falls back to its size tier and measures on the next step the hold budget allows,
+   * which a restart keeps (occupancyNotBefore). @internal
+   */
+  public restartOccupancyMeasurement (): void {
+    this.occupancyReadback?.cancel()
+    this.isOccupancyIssueWanted = false
+    this.occupancyTick = 0
+    this.lastOccupancyTick = undefined
+    this.proposedSlotCount = undefined
+    this.autoSlotCount = undefined
+  }
+
+  /**
+   * While the slot count is automatic: on the first step and once OCCUPANCY_INTERVAL
+   * steps have passed since the last and the hold budget allows (occupancyNotBefore),
+   * reduces the finest level just aggregated into block statistics, for
+   * `issueOccupancy()` to copy once the step's passes are queued. Put off to a later step
+   * while a read is in flight, and skipped where the size affords only MIN_AUTO_SLOTS,
+   * which no measurement can change.
+   *
+   * Only a step in a held frame measures (SimulationStepOptions.held): a frame of
+   * `Graph`'s render loop on the graph's own device, which holds its next frame
+   * until the copy lands, so no frame of the graph or work of a host sharing the
+   * device is queued ahead of the collect — only the uploads of a data apply made
+   * between the frames, which keeps the reading in flight (create()). A host that drives the steps or
+   * frames itself keeps submitting work behind the copy, and `getBufferSubData`
+   * waits for everything queued before it, several frames on a GPU-bound loop.
+   * Any step or frame outside a held frame drops a reading in flight
+   * (GraphSimulation.runSimulationStep, Graph.drawFrame).
+   */
+  private measureOccupancy (levelTexture: Texture, gridSize: number, isHeld: boolean): void {
+    const { device } = this
+    if (!this.usesAutoSlotCount || !isHeld) return
+    if (getAffordableSlotCount(this.data.pointsNumber ?? 0) <= MIN_AUTO_SLOTS) return
+    const tick = this.occupancyTick
+    this.occupancyTick += 1
+    if (this.lastOccupancyTick !== undefined && tick - this.lastOccupancyTick < OCCUPANCY_INTERVAL) return
+    if (performance.now() < this.occupancyNotBefore) return
+    if (!this.occupancyCommand || !this.occupancyUniformStore) return
+    if (!this.occupancyTarget || this.occupancyTarget.fbo.destroyed || levelTexture.destroyed) return
+    if (this.occupancyReadback?.inFlight) return
+
+    const blockSize = Math.ceil(gridSize / OCCUPANCY_BLOCKS)
+    this.occupancyUniformStore.setUniforms({
+      occupancyUniforms: {
+        levelTextureWidth: gridSize,
+        levelTextureHeight: gridSize,
+        blockWidth: blockSize,
+        blockHeight: blockSize,
+      },
+    })
+    this.occupancyCommand.setBindings({ levelTexture })
+    const pass = device.beginRenderPass({
+      framebuffer: this.occupancyTarget.fbo,
+      clearColor: [0, 0, 0, 0],
+    })
+    this.occupancyCommand.draw(pass)
+    pass.end()
+    this.lastOccupancyTick = tick
+    this.isOccupancyIssueWanted = true
   }
 
   /**
@@ -1016,7 +1404,7 @@ export class ForceManyBody extends CoreModule {
    */
   private createNearFieldSlots (finest: LevelTarget): void {
     const { device } = this
-    const count = getNearFieldSlotCount(this.data.pointsNumber ?? 0)
+    const count = this.nearFieldSlotCount
     // These targets follow the finest level's grid, and that grid does change
     // size as the graph grows or shrinks (it snaps to powers of two) — and the
     // slot count changes with the point count too. If everything we already
@@ -1026,7 +1414,6 @@ export class ForceManyBody extends CoreModule {
       existing &&
       existing.gridSize === finest.gridSize &&
       existing.count === count &&
-      existing.fbos.length === count &&
       existing.fbos.every(fbo => !fbo.destroyed) &&
       existing.arrays.every(array => !array.destroyed) &&
       !existing.depth.destroyed
