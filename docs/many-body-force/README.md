@@ -227,7 +227,7 @@ about 2.3× the texel reads (coarsest level 55 → 39, each middle level 27 → 
 217 → 505 over seven levels); the aggregation and the near field are unchanged. In the
 **Performance → Repulsion Benchmark** story (Chrome, Apple Silicon) that is +2 % at 20k points
 and +33–38 % from 50k to 200k (4.33 → 5.87 ms, 7.14 → 9.83 ms, 13.88 → 18.48 ms per step); 2k
-points run the all-pairs path, 5k the grid with 32 near-field slots, and both are bound by
+points run the all-pairs path, 5k the grid with the 32 near-field slots of the time, and both are bound by
 their passes' fixed cost, so neither changes.
 
 That cost is why the shell is a setting, `simulationRepulsionQuality`: `'precise'` is the 5×5
@@ -238,9 +238,9 @@ costs +29 %, and a third from 40k up. What the 3×3 shell leaves is a hot-simula
 the clustered layout above it moves 0.023 spacings per tick with alpha held at 1 (0.009 with
 the 5×5 shell), and with the stock decay of 5,000 that falls to the 5×5 shell's held level by
 alpha ≈ 0.3, about 870 ticks in; a settled layout looks the same either way. The exact path and
-a 10k lattice measure the same under both shells, and a 100k uniform blob moves 0.001 spacings
+a 10k lattice (in the story at the time) measure the same under both shells, and a 100k uniform blob moves 0.001 spacings
 per tick under either (**Performance → Steady-State Motion**, whose far-field switch applies the
-setting to all four panes live and whose pane headers say which shell `'auto'` resolves to).
+setting to every pane live and whose pane headers say which shell `'auto'` resolves to).
 Small, but not continuous — next.
 
 ### Exactly once is not continuous: why the grid shifts every tick
@@ -305,20 +305,50 @@ computes an **unbiased estimate** instead:
 **Sampling (`build-nearfield-slots.vert`):** every tick, each point gets a fresh pseudo-random
 hash. K "depth peeling" passes then run over the finest grid; pass *k* selects, per cell,
 the point with the smallest hash *not yet selected by passes 0..k−1* (the GPU depth test does
-the per-cell minimum for free). After K passes, the K layers of a **slot array texture**
-(`sampler2DArray`, one layer per pass) hold a uniform random K-subset of each cell's points —
-re-drawn from scratch every tick.
+the per-cell minimum for free). After K passes, the K layers of two **slot array textures**
+(`sampler2DArray`, one layer per pass, even slots in one and odd slots in the other) hold a
+uniform random K-subset of each cell's points — re-drawn from scratch every tick.
 
-**K adapts to the graph size** (`getNearFieldSlotCount` in `index.ts`): 32 slots up to 16k
-points, 16 up to 65k, 8 above. Peeling is inherently sequential — one render pass per slot —
-so K is a direct trade between per-tick cost and sampling variance; big graphs keep the cheap
-estimator (per-point noise is sub-pixel at that scale), smaller ones buy more slots so that
-realistic hub-cell occupancies are covered exactly. Each pass ping-pongs between two plain 2D
-targets (pass *k* must sample pass *k−1*'s output, and sampling one layer of a texture while
-rendering to another layer of the same texture is a WebGL feedback loop) and its result is
-copied into its array layer.
+**K is the configuration or a measurement** (`nearFieldSlotCount` in `index.ts`).
+`simulationRepulsionSamples` fixes it, an integer from 2 to 64, and a change applies on the
+next tick. Unset, in `Graph`'s own render loop every 30 steps (less often on a busy GPU,
+below) a one-pass reduction (`occupancy.frag`) turns the finest
+level's per-cell counts into 16² block sums of the points and of the points in cells fuller
+than 8, 16 and 32, a fenced readback issued at the end of the frame brings them back at the
+start of the next, before any pass is queued, and the count the layout wants is the smallest of
+8, 16, 32 and 64 that leaves at most 1 % of the points in cells fuller than it: those are
+sampled rather than listed, and their force jitters from tick to tick. It is sized to the
+points, not the typical cell: on a 50k-point hyperbolic graph the typical point's cell holds
+about four, but 5 % of the points sit in a core of 9 to 17 a cell and jitter at 8 samples,
+still at 16. The size's budgets cap it: K × points, the
+peel work per tick, is held under 1.6M point-samples, and the K slot layers at the finest grid
+under 32 MiB, which holds K to 16 at the 512² grid as the size tiers did; both clamp to 8..64.
+They limit how high K goes, not the work below the floor: past 200,000 points 8 samples
+spend more than 1.6M, as the size tiers' 8 did.
+Until the first measurement lands K is the point count's size tier (32 up to 16,384 points,
+16 up to 65,536, 8 above, the collision force's tiers). A host that drives the steps or
+frames itself — a deck.gl layer, a headless graph's `step()`, `renderOneFrame()` with the
+render loop off, a bare `GraphSimulation`, a graph given its device, whether or not the host
+also draws to it, since the graph cannot tell — takes no reading, and keeps the tier or the count its render loop last measured: the
+render loop holds its next frame until the copy lands, a host's loop keeps submitting work
+behind it, and `getBufferSubData` waits for all of it (about three frames per reading on a
+GPU-bound deck.gl loop). Any step or frame outside a held one drops a reading in flight,
+and a change of `simulationRepulsionSamples` starts the measurement over. The held frame
+waits for the GPU to drain, which on a GPU-loaded loop is several frames, so a reading also
+waits a hundred times the last one's hold, however few steps that is: the holds take about
+1 % of the time (at 50k points a freeze of about 185 ms spaces the readings some 15 s
+apart: the hold counts from the first frame held back, so it is shorter than the freeze),
+and a restart keeps that wait. A hold is charged only when an occupancy copy was in flight. Above 100,000
+points the tick's budget pins K at 8 and nothing is measured. Peeling is
+inherently sequential — one render pass per slot — so K is a direct trade between per-tick
+cost and sampling variance, and the point count alone cannot see which side of it a layout is
+on: at the same count a clustered layout holds many times the points per finest cell of a
+scattered one. Pass *k* renders into layer *k* / 2 of array *k* % 2 and samples the other
+array (pass *k* must sample pass *k−1*'s output, and sampling one layer of a texture while
+rendering to another layer of the same texture is a WebGL feedback loop); one depth buffer
+serves every pass, and nothing is copied.
 
-![Peeling ping-pong into the slot array](h-pingpong-peel.svg)
+![Peeling ping-pong between the two slot arrays](h-pingpong-peel.svg)
 
 **The hash must be an integer hash.** The first version used the classic
 `fract(sin(index * 12.9898 + seed * 78.233) * 43758.5453)` one-liner, which is quietly broken at
@@ -423,15 +453,17 @@ Two changes closed it (2026-08-14):
 
 1. **Small graphs skip the estimator entirely** — the all-pairs path below. This is the case
    where sustained dense hubs are both most common and cheapest to compute exactly.
-2. **K became adaptive** (32/16/8 — see step 4). Mid-size graphs get 2–4× more samples, which
+2. **K became adaptive** (32/16/8 by point count — see step 4; since replaced by the measured
+   count described under *Sampling* above, which still starts from these tiers and keeps them
+   on hosts that never measure). Mid-size graphs get 2–4× more samples, which
    both extends the exactly-covered occupancy range and shrinks the residual variance
    (amplitude ∝ occupancy/K · 1/√K) — while the ≥ 65k tier keeps today's 8-slot cost
    unchanged.
 
 The **Performance → Steady-State Motion** story is the live check for this and for every
 force change since: four graphs that exercise the paths differently (the real graph that
-surfaced the shimmer on the exact path; a linked lattice with collision, a clustered layout
-under strong repulsion and a dense uniform blob on the grid path), each with alpha held at 1
+surfaced the shimmer on the exact path; a clustered layout under strong repulsion, a dense
+uniform blob and twelve discs held tight against repulsion on the grid path), each with alpha held at 1
 and a trajectory trace of one dense-cell point, and a far-field switch that applies
 `simulationRepulsionQuality` to all four live. It replaced a
 two-pane story that forced the pre-fix sampled
@@ -595,9 +627,10 @@ layout draws as a cross, and the shift turns them into noise around a continuous
 300k-point equilibrium with alpha held at 1 the layout moves 0.0023 point spacings per tick with
 it, 0.001 without; as alpha decays, both shrink with it.
 
-Cost side: the slot array texture plus two peel targets at the finest grid resolution (at the
-512² cap with K = 8 that is 10 × 512² × 2 floats = 20 MB of GPU memory; smaller graphs have
-more layers but a proportionally smaller grid) and the K peeling passes per tick — all already
+Cost side: the two slot arrays, K layers between them, plus one depth buffer at the finest grid
+resolution (at the 512² cap with K = 8 that is 8 × 512² × 2 floats + 512² × 4 bytes ≈ 18 MB of
+GPU memory; the memory cap holds an automatic K to 16 layers at the 512² grid, 32 MiB, and
+allows up to 64 on a smaller grid; a configured K is not capped) and the K peeling passes per tick — all already
 included in the benchmark numbers above — plus the data-bounds reduction: three small targets
 (64², 8² and one texel, ~65 KB; 128², 16² and one texel, ~260 KB above 262,144 points) and
 ~0.16 ms per tick (0.22 ms at a million points).

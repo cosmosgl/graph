@@ -24,10 +24,13 @@ precision highp int;
 uniform sampler2D positionsTexture;
 uniform sampler2D levelTexture;
 uniform sampler2D randomValues;
-// All near-field slots live in one array texture (one layer per depth-peeling
+// The near-field slots live in two array textures (one layer per depth-peeling
 // pass), so the slot count is a runtime uniform instead of a hard-wired list
-// of sampler2Ds. Float data — highp, the default sampler precision is lowp.
-uniform highp sampler2DArray slotsTexture;
+// of sampler2Ds: even slots in one array, odd slots in the other, slot s at
+// layer s / 2 (see NearFieldSlots in index.ts). Float data — highp, the
+// default sampler precision is lowp.
+uniform highp sampler2DArray slotsEven;
+uniform highp sampler2DArray slotsOdd;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceNearFieldUniforms {
@@ -129,7 +132,8 @@ void main() {
       // empty layers can't be followed by occupied ones within a cell.
       int slots = int(slotCount);
       for (int s = 0; s < slots; s += 1) {
-        vec2 slot = texelFetch(slotsTexture, ivec3(cell, s), 0).rg;
+        ivec3 layer = ivec3(cell, s >> 1);
+        vec2 slot = (s & 1) == 0 ? texelFetch(slotsEven, layer, 0).rg : texelFetch(slotsOdd, layer, 0).rg;
         if (slot.x < 0.0) break;
         pairSum += slotVelocity(slot, position, selfIndex, random.rg, sampled);
       }
@@ -137,7 +141,10 @@ void main() {
       // Horvitz–Thompson weighting: the sample is uniform among the cell's
       // other points (conditioned on whether the point itself was peeled),
       // so scaling by others/sampled gives E[force] = exact all-pairs sum.
-      // Exhaustively peeled cells (others == sampled) are exact.
+      // Exhaustively peeled cells (others == sampled) are exact. The
+      // conditioning needs a sampled other whenever the cell has one, which
+      // two or more slots guarantee (MIN_REPULSION_SAMPLES): a single slot can
+      // hold the point itself, and skipping that tick would bias the sum low.
       if (sampled > 0.0) velocity += (others / sampled) * pairSum;
     }
   }

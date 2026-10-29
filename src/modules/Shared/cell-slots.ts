@@ -1,9 +1,12 @@
 /**
- * Per-cell depth-peeled point slots: the grid sizing and slot tiers shared by
- * the many-body near field and the collision force. Both build the same
- * structure with `ForceManyBody/build-nearfield-slots.vert` — K peeling passes
- * that select, per cell, the not-yet-selected point with the smallest per-tick
- * hash — and read it as a `sampler2DArray` with one layer per pass.
+ * Per-cell depth-peeled point slots: the grid sizing the many-body near field
+ * and the collision force share, and the collision force's slot tiers. Both
+ * build the same structure with `ForceManyBody/build-nearfield-slots.vert` — K
+ * peeling passes that select, per cell, the not-yet-selected point with the
+ * smallest per-tick hash — and read it from array textures with one layer per
+ * pass. The collision force takes its K from the point count here. The
+ * many-body force measures its K from the cells in Graph's render loop
+ * (ForceManyBody) and takes these tiers wherever it has no measurement.
  */
 
 /**
@@ -21,28 +24,23 @@ export const getFinestGridSize = (pointsNumber: number): number =>
   Math.min(MAX_GRID_SIZE, Math.max(8, Math.pow(2, Math.ceil(Math.log2(2 * Math.sqrt(pointsNumber))))))
 
 /**
- * How many points per finest-level cell get exact pairwise repulsion each tick.
- * A cell holding at most this many points is sampled exhaustively — its near
- * field is exact. Above it, a fresh random subset is drawn every tick and
- * Horvitz–Thompson weighted; unbiased, but the per-tick re-drawing makes the
- * force estimate noisy in proportion to occupancy/slots. In layouts where
- * something keeps density up (link attraction into hubs, gravity) while alpha
- * stays high, that noise is visible as per-point shimmer.
+ * The collision force's slots per hash bucket for a point count. A bucket
+ * holding at most this many points is listed exhaustively; a denser bucket
+ * supplies a fresh random subset every pass, so every overlapping pair is
+ * reached sooner or later. Distant world cells can share a bucket's slot
+ * budget. The count scales down as the graph grows: the peel cost is slots ×
+ * points per pass, and at large counts a bucket holds few points anyway. The
+ * slots live in one array-texture layer each, so this is a plain runtime
+ * value — no shader changes needed to retune it. The many-body force's
+ * automatic near-field count runs it too, until its first occupancy
+ * measurement lands and throughout on a host that never measures (a headless
+ * graph, a graph without its render loop, a GraphSimulation): retuning these
+ * tiers changes that count too, within the many-body force's own time and
+ * memory caps, which bind first above 16,384 points (ForceManyBody's
+ * nearFieldSlotCount).
  *
- * So the slot count scales down as the graph grows: small graphs get enough
- * slots that realistic cell occupancies are covered exactly (the country-scale
- * graph that surfaced the jitter peaks around ~50 points per cell), while large
- * graphs keep the cheap 8-slot estimator — at that scale per-point noise is
- * sub-pixel and the peel cost (slots × points per tick) dominates instead.
- * The slots live in one sampler2DArray layer each, so this is a plain runtime
- * value — no shader changes needed to retune it.
- *
- * Graphs at or below each force's ALL_PAIRS_MAX_POINTS never reach this path at
- * all — they take the exact all-pairs pass instead, so the tiers start above it.
- *
- * The collision force shares the tiers: a hash bucket holding at most this
- * many points is listed exhaustively; denser buckets supply a fresh random
- * subset every pass. Distant world cells can share a bucket's slot budget.
+ * Graphs at or below ALL_PAIRS_MAX_POINTS never reach this path at all — they
+ * take the exact all-pairs pass instead, so the tiers start above it.
  */
 export const getNearFieldSlotCount = (pointsNumber: number): number => {
   if (pointsNumber <= 16384) return 32

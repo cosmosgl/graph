@@ -25,6 +25,25 @@ type ColorString = string & Record<never, never>
  */
 export type RepulsionQuality = 'auto' | 'precise' | 'fast'
 
+/**
+ * The most near-field samples per cell, configured or measured: a cost cap, one render pass
+ * over every point per tick each. At 64 each of the two slot arrays holds 32 layers, inside
+ * the 256 every WebGL 2 device guarantees; the memory of a configured count is not capped
+ * (64 samples at the 512² grid take about 128 MiB, where the automatic count keeps to 32 MiB).
+ */
+export const MAX_REPULSION_SAMPLES = 64
+
+/**
+ * The fewest near-field samples per cell a configured `simulationRepulsionSamples`
+ * may ask for. The near field's estimate scales the force of the sampled points by
+ * the cell's other points over the others sampled, conditioned on whether the point
+ * itself was among the slots (force-nearfield.frag). With a single slot a cell's one
+ * sample can be the point itself, leaving no other to scale, and the estimate falls
+ * short by one part in the cell's count; from two slots up a cell with another point
+ * always samples one, and the estimate is exact in expectation.
+ */
+export const MIN_REPULSION_SAMPLES = 2
+
 export interface GraphConfigInterface {
   /**
    * If set to `false`, the simulation will not run.
@@ -466,6 +485,23 @@ export interface GraphConfigInterface {
    * Default value: `1.0`
    */
   simulationRepulsion: number;
+  /**
+   * Near-field repulsion samples per grid cell, an integer from 2 to 64. A cell holding at
+   * most this many points is repelled exactly; a denser one is sampled anew every tick, which
+   * can show as shimmer. Each sample is one render pass over all points per tick and one layer
+   * of the slot textures.
+   *
+   * Leave it unset and `Graph`'s own render loop measures how full the cells are every 30
+   * steps and picks the smallest count that samples the cells of all but 1 % of the points
+   * whole: 8 to 64 up to 16,384 points, 8 or 16 up to 100,000, and 8 above, where nothing is
+   * measured. A measurement can hold a frame on a busy GPU, and the next then waits a hundred
+   * times that hold. Until the first lands, and where none is taken (a deck.gl layer or
+   * another host driving the frames, a graph given its device, `enableRenderLoop: false`, a
+   * `GraphSimulation`), the count is 32 up to 16,384 points, 16 up to 65,536 and 8 above.
+   * Has no effect on graphs of 4,096 points or fewer, which repel every pair exactly.
+   * Default value: `undefined`
+   */
+  simulationRepulsionSamples?: number;
   /**
    * @deprecated No longer used. The many-body force now repels close points
    * individually — a grid pyramid closed by an unbiased Monte-Carlo near field
@@ -983,6 +1019,7 @@ export type GraphSimulationConfigInterface = Pick<GraphConfigInterface,
   | 'simulationGravity'
   | 'simulationCenter'
   | 'simulationRepulsion'
+  | 'simulationRepulsionSamples'
   | 'simulationRepulsionTheta'
   | 'simulationRepulsionQuality'
   | 'simulationLinkSpring'
@@ -1035,6 +1072,28 @@ export function resetConfigToDefaults (target: GraphConfigInterface): void {
 }
 
 /**
+ * Whether `samples` is a near-field sample count a configuration may fix: an integer from
+ * MIN_REPULSION_SAMPLES to MAX_REPULSION_SAMPLES. The many-body force checks it again where
+ * it reads the count, since `config` is a public field a host can write past the setters.
+ */
+export const isRepulsionSampleCount = (samples: unknown): samples is number =>
+  typeof samples === 'number' && Number.isSafeInteger(samples) &&
+  samples >= MIN_REPULSION_SAMPLES && samples <= MAX_REPULSION_SAMPLES
+
+/**
+ * Throws for a value no configuration path may accept: `simulationRepulsionSamples`
+ * must be an integer from MIN_REPULSION_SAMPLES to MAX_REPULSION_SAMPLES. `applyConfig`
+ * calls it, and so do the setters before they queue their work for the device, so a
+ * bad value throws where it is passed rather than later, from the device's ready handler.
+ */
+export function validateConfig (source: GraphConfig): void {
+  const samples = source.simulationRepulsionSamples
+  if (samples !== undefined && !isRepulsionSampleCount(samples)) {
+    throw new RangeError(`simulationRepulsionSamples must be an integer from ${MIN_REPULSION_SAMPLES} to ${MAX_REPULSION_SAMPLES}`)
+  }
+}
+
+/**
  * Applies `source` values onto `target` in place, leaving absent keys unchanged.
  *
  * Mutates in place rather than returning a new object, because multiple modules
@@ -1054,6 +1113,7 @@ export function applyConfig (
   source: GraphConfig,
   useDefaultsForUndefined = false
 ): void {
+  validateConfig(source)
   const overrides: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(source)) {
     if (value !== undefined) { // skip explicit undefined; handled below if useDefaultsForUndefined
