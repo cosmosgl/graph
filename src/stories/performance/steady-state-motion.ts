@@ -7,10 +7,20 @@ import { COUNTRY_BORDER_LINKS } from './country-borders-data'
 // from its densest cell: a still point reads as a dot, drift as a smooth arc,
 // jitter as a tangle — the shape of the motion, which no number gives.
 //
-// The far-field switch applies `simulationRepulsionQuality` to all four panes
+// The far-field switch applies `simulationRepulsionQuality` to every pane
 // live: on `auto` the 22,500-point clusters run the precise shell and the 100k
 // blob the fast one, and each pane's header says which; forcing either shows
 // what the setting trades.
+//
+// The samples switch sets `simulationRepulsionSamples` on every pane the same
+// way: `auto` leaves it unset, so the engine measures how full the finest cells
+// are and picks the near-field count itself; a number fixes it. In the 25
+// clusters and the blob (the 163-point pane runs all pairs, where the key has
+// no effect) the finest cells hold at most a few points once settled, so every
+// count from 8 up samples them exhaustively and the switch changes only what a
+// tick costs. The held discs are the pane where it changes the motion: cluster
+// force and gravity keep their cells at about nine points, so at 8 samples the
+// traced point's trail tangles and from 16 up it is a dot.
 //
 // Run it before merging a force change. Public API only.
 
@@ -78,16 +88,6 @@ const countryBorders = (rng: () => number): Data => {
   return { positions, links }
 }
 
-/** An n × m lattice: every point linked to its right and lower neighbour. */
-const lattice = (n: number, m: number, rng: () => number): Data => {
-  const links: number[] = []
-  for (let i = 0; i < n * m; i += 1) {
-    if ((i + 1) % n !== 0) links.push(i, i + 1)
-    if (i + n < n * m) links.push(i, i + n)
-  }
-  return { positions: tightSquare(n * m, rng), links: new Float32Array(links) }
-}
-
 const clustered = (n: number, clusterCount: number, rng: () => number): Data => ({
   positions: tightSquare(n, rng),
   clusters: Array.from({ length: n }, (_, i) => i % clusterCount),
@@ -113,19 +113,16 @@ type Scenario = {
 }
 
 // The country-borders graph runs the exact all-pairs path; the other three run
-// the grid path: a linked lattice with collision, the Lasso Selection settings
-// (clustered data under strong repulsion, where the grid shift showed as
-// jitter) and a dense even blob, where a fixed grid drew a cross.
+// the grid path: the Lasso Selection settings (clustered data under strong
+// repulsion, where the grid shift showed as jitter), a dense even blob, where a
+// fixed grid drew a cross, and twelve discs held tight by cluster force and
+// gravity against repulsion, whose cells stay fuller than a small near-field
+// sample covers.
 const SCENARIOS: Scenario[] = [
   {
     title: '163 points · 642 links',
     data: countryBorders,
     config: { pointDefaultSize: 6, linkDefaultWidth: 1 },
-  },
-  {
-    title: '10,000 points · lattice · collision',
-    data: (rng) => lattice(100, 100, rng),
-    config: { pointDefaultSize: 3, linkDefaultWidth: 0.5, simulationCollision: 1 },
   },
   {
     title: '22,500 points · 25 clusters · repulsion 8',
@@ -137,6 +134,11 @@ const SCENARIOS: Scenario[] = [
     data: (rng) => blob(100_000, 200, rng),
     config: { pointDefaultSize: 1.5 },
   },
+  {
+    title: '12,000 points · 12 held discs · cluster 1 · gravity 2',
+    data: (rng) => clustered(12_000, 12, rng),
+    config: { pointDefaultSize: 3, simulationRepulsion: 1, simulationGravity: 2, simulationCluster: 1 },
+  },
 ]
 
 // ── One pane: a graph and its trajectory ────────────────────────────────────
@@ -146,10 +148,12 @@ type Pane = {
   graph: Graph;
   /** Applies the far-field setting live; the next step uses it. */
   setQuality: (quality: RepulsionQuality) => void;
+  /** Applies the near-field sample count live; `undefined` is the measured choice. */
+  setSamples: (samples: number | undefined) => void;
   destroy: () => void;
 }
 
-const createPane = (scenario: Scenario, quality: RepulsionQuality): Pane => {
+const createPane = (scenario: Scenario, quality: RepulsionQuality, samples: number | undefined): Pane => {
   const element = document.createElement('div')
   element.style.cssText = `position:relative;min-width:0;min-height:0;display:flex;flex-direction:column;overflow:hidden;border:1px solid ${LINE};`
 
@@ -311,6 +315,7 @@ const createPane = (scenario: Scenario, quality: RepulsionQuality): Pane => {
     // Stock decay would anneal any force noise away within a minute.
     simulationDecay: 1e12,
     simulationRepulsionQuality: quality,
+    simulationRepulsionSamples: samples,
     ...scenario.config,
     onSimulationTick: (): void => {
       tick += 1
@@ -340,6 +345,9 @@ const createPane = (scenario: Scenario, quality: RepulsionQuality): Pane => {
       graph.setConfigPartial({ simulationRepulsionQuality: next })
       farFieldTag.textContent = describeFarField(next, n)
     },
+    setSamples: (next: number | undefined): void => {
+      graph.setConfigPartial({ simulationRepulsionSamples: next })
+    },
     destroy: (): void => {
       destroyed = true
     },
@@ -361,7 +369,8 @@ export const steadyStateMotion = (): { graph: Graph; div: HTMLDivElement; destro
   outer.appendChild(grid)
 
   let quality: RepulsionQuality = 'auto'
-  const panes: Pane[] = SCENARIOS.map((scenario) => createPane(scenario, quality))
+  let samples: number | undefined
+  const panes: Pane[] = SCENARIOS.map((scenario) => createPane(scenario, quality, samples))
   for (const pane of panes) grid.appendChild(pane.element)
 
   // simulationRepulsionQuality as three buttons, applied to every pane without a restart
@@ -392,6 +401,36 @@ export const steadyStateMotion = (): { graph: Graph; div: HTMLDivElement; destro
   paint()
   farField.appendChild(segments)
   bar.appendChild(farField)
+
+  // simulationRepulsionSamples as five buttons, applied the same way; 'auto' is the measured count
+  const SAMPLE_OPTIONS = ['auto', 8, 16, 32, 64] as const
+  const nearField = document.createElement('div')
+  nearField.style.cssText = 'display:flex;gap:8px;align-items:center;'
+  nearField.append(document.createTextNode('samples'))
+  const sampleSegments = document.createElement('div')
+  sampleSegments.style.cssText = `display:inline-flex;border:1px solid ${LINE};border-radius:6px;overflow:hidden;`
+  const sampleButtons = SAMPLE_OPTIONS.map((option) => {
+    const button = document.createElement('button')
+    button.textContent = String(option)
+    button.style.cssText = 'font:inherit;padding:3px 10px;background:transparent;border:0;cursor:pointer;'
+    button.addEventListener('click', () => {
+      samples = option === 'auto' ? undefined : option
+      for (const pane of panes) pane.setSamples(samples)
+      paintSamples()
+    })
+    sampleSegments.appendChild(button)
+    return { option, button }
+  })
+  const paintSamples = (): void => {
+    for (const { option, button } of sampleButtons) {
+      const active = (option === 'auto' ? undefined : option) === samples
+      button.style.background = active ? LINE : 'transparent'
+      button.style.color = active ? TEXT : MUTED
+    }
+  }
+  paintSamples()
+  nearField.appendChild(sampleSegments)
+  bar.appendChild(nearField)
 
   return {
     // The story contract destroys this one; the other three are ours
