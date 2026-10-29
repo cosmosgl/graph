@@ -1571,7 +1571,7 @@ parentShellRadius: level === 0 ? 0 : getShellRadius(level - 1, this.levels),</co
   <div class="prose">
   <p>2,000 points run the all-pairs path. 5,000 runs the grid with 32 near-field slots, which is why it is slower than 20,000 with 16: the step follows the pass count, not the point count, until the GPU work overtakes it. The crossover is one machine's; a slower GPU with the same CPU moves it lower.</p>
   <h3>What the fast shell gives up, and when</h3>
-  <p>The Steady-State Motion story's four layouts under both shells, RMS displacement per tick in point spacings with alpha held at 1:</p>
+  <p>The four layouts the Steady-State Motion story had then, under both shells, RMS displacement per tick in point spacings with alpha held at 1:</p>
   </div>
   <table>
     <thead><tr><th>layout</th><th>3 × 3</th><th>5 × 5</th></tr></thead>
@@ -1587,7 +1587,7 @@ parentShellRadius: level === 0 ? 0 : getShellRadius(level - 1, this.levels),</co
   <h3>Tried and not taken</h3>
   <p>A rounded shell, the 5 × 5 minus its four corner cells, keeps every used centroid at least as far away as the axis-aligned cells the shell already keeps, still tiles exactly once, and cuts the far-field reads by 13 %. Measured over five interleaved rounds it saved 0.3, 0.34 and 0.59 ms at 50k, 100k and 200k points, 3 to 5 % of the step: the loop still walks the 10 × 10 block and skips the corner children by a branch. Not adopted.</p>
   <h3>Where to see it</h3>
-  <p>The <b>Performance → Steady-State Motion</b> story runs the four layouts above with alpha held at 1 and three buttons, auto, precise and fast, that apply the setting to all four live. Each pane's header says what the setting resolves to at its point count, so <code>'auto'</code> reads "precise" on the clusters and "fast" on the blob. The engineering record is <code>history/2026/2026-10-15-many-body-grid-seams.md</code>; the design walkthrough is <code>docs/many-body-force/README.md</code>, step 3.</p>
+  <p>The <b>Performance → Steady-State Motion</b> story runs the four layouts above (the lattice later gave its place to twelve held discs, with the near-field sample count) with alpha held at 1 and three buttons, auto, precise and fast, that apply the setting to every pane live. Each pane's header says what the setting resolves to at its point count, so <code>'auto'</code> reads "precise" on the clusters and "fast" on the blob. The engineering record is <code>history/2026/2026-10-15-many-body-grid-seams.md</code>; the design walkthrough is <code>docs/many-body-force/README.md</code>, step 3.</p>
   </div>
 </section>
 

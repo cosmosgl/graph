@@ -224,7 +224,7 @@ const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion fa
   b += txt(ex, ey + 210, 'A fresh random subset every tick: the', { size: 12.5, fill: C.sub })
   b += txt(ex, ey + 228, 'noise anneals with alpha while density', { size: 12.5, fill: C.sub })
   b += txt(ex, ey + 246, 'disperses. Sustained density is why K', { size: 12.5, fill: C.sub })
-  b += txt(ex, ey + 264, 'adapts (32/16/8) and ≤ 4k graphs go exact.', { size: 12.5, fill: C.sub })
+  b += txt(ex, ey + 264, 'follows measured occupancy and ≤ 4k graphs go exact.', { size: 12.5, fill: C.sub })
   fs.writeFileSync(path.join(OUT, 'c-depth-peeling.svg'), svgDoc(W, H, b))
 }
 
@@ -260,7 +260,7 @@ const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion fa
   for (const i of [1, 2, 3]) b += arrow(stageX[i] + sw / 2, busY, stageX[i] + sw / 2, midY + bh + 3, C.accent, 1.6, '5 4')
   b += txt(from + 10, busY + 18, 'the texel every pass bins with — one shared, division-free gridCell() (grid-cell.ts)', { size: 12, fill: C.accent })
   b += txt(20, 300, 'The integration step (velocity → positions) is shared with all other forces: it bounds a step’s length, not the position it lands on.', { size: 12.5, fill: C.sub })
-  b += txt(20, 322, 'Levels: 8², 16², … up to ≈ 2·√n per axis (capped 512²), all over the data box. Slot array: K = 32/16/8 layers × finest grid, [point index, hash] each.', { size: 12.5, fill: C.sub })
+  b += txt(20, 322, 'Levels: 8², 16², … up to ≈ 2·√n per axis (capped 512²), all over the data box. Slot arrays: K = 2…64 layers × finest grid, [point index, hash] each.', { size: 12.5, fill: C.sub })
   b += txt(20, 344, 'Graphs of ≤ 4,096 points skip all four stages: a single exact all-pairs pass writes the velocity texture directly.', { size: 12.5, fill: C.sub })
   fs.writeFileSync(path.join(OUT, 'd-gpu-pipeline.svg'), svgDoc(W, H, b))
 }
@@ -367,7 +367,7 @@ const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion fa
   b += `<rect x="556" y="60" width="160" height="56" fill="${C.coveredSoft[0]}" stroke="${C.frame}" rx="4"/>`
   b += txt(636, 84, 'depth-peel K slots', { size: 13, anchor: 'middle' })
   b += txt(636, 102, 'per finest cell', { size: 13, anchor: 'middle' })
-  b += `<text x="636" y="136" font-family="${MONO}" font-size="11" fill="${C.sub}" text-anchor="middle">K = 32 (≤16k) · 16 (≤65k) · 8 above</text>`
+  b += `<text x="636" y="136" font-family="${MONO}" font-size="11" fill="${C.sub}" text-anchor="middle">K = simulationRepulsionSamples, or measured: 8 … 64</text>`
   b += arrow(716, 88, 750, 88, C.text, 1.5)
   b += `<rect x="754" y="60" width="200" height="56" fill="#f6f8fb" stroke="${C.frame}" rx="4"/>`
   b += txt(854, 84, 'far field per level +', { size: 13, anchor: 'middle' })
@@ -389,38 +389,51 @@ const assert = (cond, msg) => { if (!cond) throw new Error(`diagram assertion fa
 }
 
 // ---------------------------------------------------------------- Diagram H
-// Peeling ping-pong: two plain 2D targets, each pass's result copied into its
-// layer of the slot array texture (rendering into a layer of a texture you are
-// sampling another layer of is a WebGL feedback loop).
+// Peeling ping-pong between two slot array textures: pass k renders into layer
+// k / 2 of array k % 2 and samples the other array (rendering into a layer of a
+// texture you are sampling another layer of is a WebGL feedback loop). No copy.
 {
   const W = 980; const H = 430
   const MONO = 'ui-monospace, SFMono-Regular, Menlo, monospace'
   let b = ''
-  b += txt(20, 34, 'Peeling ping-pong: two plain 2D targets, copied into array layers', { size: 16, weight: '600' })
+  b += txt(20, 34, 'Peeling ping-pong: two slot array textures, each pass rendered into its own layer', { size: 16, weight: '600' })
   const cols = [
-    { x: 100, label: 'pass 0', l1: 'writes target A', l2: 'smallest hash / cell', soft: C.coveredSoft[0] },
-    { x: 320, label: 'pass 1', l1: 'reads A · writes B', l2: 'next-smallest hash', soft: C.coveredSoft[1] },
-    { x: 540, label: 'pass 2', l1: 'reads B · writes A', l2: 'next-smallest hash', soft: C.coveredSoft[0] },
-    { x: 760, label: 'pass 3 … K−1', l1: 'reads A · writes B', l2: '… alternating', soft: C.coveredSoft[1] },
+    { x: 100, label: 'pass 0', l1: 'writes even · layer 0', l2: 'smallest hash / cell', soft: C.coveredSoft[0] },
+    { x: 320, label: 'pass 1', l1: 'reads even 0 · writes odd 0', l2: 'next-smallest hash', soft: C.coveredSoft[1] },
+    { x: 540, label: 'pass 2', l1: 'reads odd 0 · writes even 1', l2: 'next-smallest hash', soft: C.coveredSoft[0] },
+    { x: 760, label: 'pass 3 … K−1', l1: 'reads even 1 · writes odd 1', l2: '… alternating', soft: C.coveredSoft[1] },
   ]
   cols.forEach((col, k) => {
     b += txt(col.x + 80, 96, col.label, { size: 13, fill: C.sub, anchor: 'middle' })
     b += `<rect x="${col.x}" y="110" width="160" height="64" fill="${col.soft}" stroke="${C.frame}" rx="4"/>`
-    b += txt(col.x + 80, 136, col.l1, { size: 13, anchor: 'middle' })
+    b += txt(col.x + 80, 136, col.l1, { size: 12, anchor: 'middle' })
     b += txt(col.x + 80, 156, col.l2, { size: 12, fill: C.sub, anchor: 'middle' })
     if (k < cols.length - 1) {
       b += arrow(col.x + 160, 142, col.x + 216, 142, C.text, 1.5)
       b += txt(col.x + 188, 130, 'winner', { size: 11, fill: C.sub, anchor: 'middle' })
     }
-    b += arrow(col.x + 80, 174, col.x + 80, 266, C.covered[2], 2)
-    b += `<rect x="${col.x}" y="270" width="160" height="48" fill="${C.coveredSoft[2]}" stroke="${C.covered[2]}" rx="4"/>`
-    b += txt(col.x + 80, 298, k < 3 ? `layer ${k}` : 'layer 3 … K−1', { size: 13, anchor: 'middle' })
   })
-  b += `<text x="510" y="226" font-family="${MONO}" font-size="11" fill="#b97a1e" text-anchor="middle">copyTextureToTexture</text>`
-  b += `<line x1="90" y1="330" x2="930" y2="330" stroke="${C.frame}" stroke-width="1"/>`
-  b += `<text x="510" y="352" font-family="${MONO}" font-size="12" fill="${C.text}" text-anchor="middle">slotsTexture : sampler2DArray — the force pass loops s = 0 … slotCount−1</text>`
-  b += txt(20, 390, 'Why not render into layer k directly? Pass k must sample pass k−1\'s output — and sampling one layer of a texture while', { size: 13 })
-  b += txt(20, 410, 'rendering to another layer of the same texture is a WebGL feedback loop. So passes render to plain 2D targets instead.', { size: 13 })
+  // The two arrays: even slots in one, odd slots in the other, slot k at layer k / 2
+  const arrays = [
+    { y: 230, label: 'slotsEven : sampler2DArray', layers: ['layer 0 = slot 0', 'layer 1 = slot 2', '…'], xs: [100, 540, 760] },
+    { y: 300, label: 'slotsOdd : sampler2DArray', layers: ['layer 0 = slot 1', 'layer 1 = slot 3', '…'], xs: [320, 760, 900] },
+  ]
+  arrays.forEach((array) => {
+    b += `<rect x="90" y="${array.y}" width="840" height="48" fill="none" stroke="${C.covered[2]}" stroke-dasharray="4 3" rx="4"/>`
+    b += `<text x="96" y="${array.y - 6}" font-family="${MONO}" font-size="11" fill="${C.covered[2]}">${array.label}</text>`
+    array.layers.forEach((label, i) => {
+      const x = array.xs[i]
+      const width = i < 2 ? 160 : 20
+      b += `<rect x="${x}" y="${array.y + 8}" width="${width}" height="32" fill="${C.coveredSoft[2]}" stroke="${C.covered[2]}" rx="3"/>`
+      b += txt(x + width / 2, array.y + 29, label, { size: 12, anchor: 'middle' })
+    })
+  })
+  b += arrow(180, 174, 180, 236, C.covered[2], 2)
+  b += arrow(400, 174, 400, 306, C.covered[2], 2)
+  b += arrow(620, 174, 620, 236, C.covered[2], 2)
+  b += arrow(840, 174, 840, 306, C.covered[2], 2)
+  b += txt(20, 390, 'Pass k must sample pass k−1\'s output, and sampling one layer of a texture while rendering to another layer of the same', { size: 13 })
+  b += txt(20, 410, 'texture is a WebGL feedback loop. Alternating between two arrays keeps every pass off the texture it reads — no copy, one shared depth buffer.', { size: 13 })
   fs.writeFileSync(path.join(OUT, 'h-pingpong-peel.svg'), svgDoc(W, H, b))
 }
 

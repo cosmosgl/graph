@@ -147,7 +147,7 @@ point gets a fresh pseudo-random hash. K "depth peeling" draws then run over the
 **slot array texture** (`sampler2DArray`, one layer per draw) hold, for every bucket, either
 all of its occupants or a uniform random K-subset of them — re-drawn from scratch every pass.
 
-**K follows the many-body tiers** (`getNearFieldSlotCount`): 32 slots through 16,384 points,
+**K is tiered by point count** (`getNearFieldSlotCount`; the many-body force measures its count from cell occupancy in `Graph`'s render loop and runs these tiers wherever it has no measurement): 32 slots through 16,384 points,
 16 through 65,536, 8 above. A hash bucket holding at most K points is listed in full, so
 candidate lookup is exhaustive for that bucket. A denser bucket supplies a fresh random
 K-subset each pass, and the per-pass cap keeps each step bounded meanwhile. Occupancy
