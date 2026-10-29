@@ -54,8 +54,8 @@ const untilReadbackPending = async (graph: Graph): Promise<void> => {
   }
   const inFlight = (): boolean => points.hasPendingPickReadback || lines.hasPendingPickReadback ||
     points.hasPendingTrackedReadback || simulation.hasPendingCentroidReadback
-  for (let i = 0; i < 200 && !inFlight(); i += 1) await wait(10)
-  expect(inFlight()).toBe(true)
+  for (let i = 0; i < 500 && !inFlight(); i += 1) await wait(10)
+  expect(inFlight(), 'a copy to be in flight').toBe(true)
 }
 
 interface RunningGraph {
@@ -86,17 +86,26 @@ const createRunningGraph = async (config: GraphConfig = {}, links?: Float32Array
   }
 }
 
+/** Resolves once more frames have run than `count`, or fails after a budget of polls. */
+const untilTicksAbove = async (running: RunningGraph, count: number, what: string): Promise<void> => {
+  for (let i = 0; i < 200 && running.ticks() <= count; i += 1) await wait(10)
+  expect(running.ticks(), what).toBeGreaterThan(count)
+}
+
 /**
- * Leaves a tracked-positions copy pending: the first read caches, the frames move
- * the points, the second read is behind and asks a frame for a copy, and that
- * frame's end issues it behind a held fence.
+ * Leaves a tracked-positions copy pending: the first read caches, a frame moves the
+ * points, the second read is behind and asks a frame for a copy, and that frame's end
+ * issues it behind a held fence. The frame between the reads is awaited, not slept
+ * for: with no frame in between the second read is current and asks for nothing, and
+ * after more than READBACK_COLD_STEPS it reads cold, waiting instead of asking.
  */
-const armTrackedReadback = async (graph: Graph): Promise<void> => {
-  graph.trackPointPositionsByIndices([0])
-  graph.getTrackedPointPositionsMap({ nonBlocking: true })
-  await wait(60)
-  graph.getTrackedPointPositionsMap({ nonBlocking: true })
-  await untilReadbackPending(graph)
+const armTrackedReadback = async (running: RunningGraph): Promise<void> => {
+  running.graph.trackPointPositionsByIndices([0])
+  const before = running.ticks()
+  running.graph.getTrackedPointPositionsMap({ nonBlocking: true })
+  await untilTicksAbove(running, before, 'a frame between the reads')
+  running.graph.getTrackedPointPositionsMap({ nonBlocking: true })
+  await untilReadbackPending(running.graph)
 }
 
 /** When the render loop began holding frames for the pending copy; 0 while it has not held one yet. */
@@ -128,8 +137,9 @@ describe('the render loop holds the next frame while a readback is pending', () 
     let release = (): void => {}
     try {
       running.graph.trackPointPositionsByIndices([0])
+      const before = running.ticks()
       running.graph.getTrackedPointPositionsMap({ nonBlocking: true })
-      await wait(60)
+      await untilTicksAbove(running, before, 'a frame between the reads')
       release = holdFences()
       running.graph.getTrackedPointPositionsMap({ nonBlocking: true })
       await untilReadbackPending(running.graph)
@@ -147,8 +157,9 @@ describe('the render loop holds the next frame while a readback is pending', () 
       running.graph.setPointClusters([0, 0, 1, 1])
       running.graph.render()
       await running.graph.ready
+      const before = running.ticks()
       running.graph.getClusterPositions({ nonBlocking: true })
-      await wait(60)
+      await untilTicksAbove(running, before, 'a frame between the reads')
       release = holdFences()
       running.graph.getClusterPositions({ nonBlocking: true })
       await untilReadbackPending(running.graph)
@@ -232,16 +243,17 @@ describe('the render loop holds the next frame while a readback is pending', () 
     const running = await createRunningGraph()
     const release = holdFences()
     try {
-      await armTrackedReadback(running.graph)
+      await armTrackedReadback(running)
       const held = running.ticks()
       await wait(300)
       expect(running.ticks()).toBe(held)
-      // Past the cap the pending copy is dropped, and with nobody reading, no new one is issued
+      // Past the cap the pending copy is dropped, and with nobody reading, no new one is issued.
+      // Frames are awaited by a budget rather than a fixed sleep: under load (every test
+      // file at once on a CI runner) a 150 ms window can pass without an animation frame
       await wait(READBACK_WAIT_CAP_MS)
+      await untilTicksAbove(running, held, 'the cap to release a frame')
       const resumed = running.ticks()
-      expect(resumed).toBeGreaterThan(held)
-      await wait(150)
-      expect(running.ticks()).toBeGreaterThan(resumed)
+      await untilTicksAbove(running, resumed, 'the loop to keep drawing')
     } finally {
       release()
       running.destroy()
@@ -259,7 +271,7 @@ describe('the hold ends with the loop', () => {
     const release = holdFences()
     const raf = vi.spyOn(window, 'requestAnimationFrame')
     try {
-      await armTrackedReadback(running.graph)
+      await armTrackedReadback(running)
       running.destroy()
       raf.mockClear()
       release()
@@ -275,7 +287,7 @@ describe('the hold ends with the loop', () => {
     const running = await createRunningGraph()
     const release = holdFences()
     try {
-      await armTrackedReadback(running.graph)
+      await armTrackedReadback(running)
       running.graph.setConfigPartial({ enableRenderLoop: false })
       release()
       await wait(100)
