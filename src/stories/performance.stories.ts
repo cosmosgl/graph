@@ -8,6 +8,7 @@ import { pointOcclusionCulling } from './performance/point-occlusion-culling'
 import { onDemandRendering } from './performance/on-demand-rendering'
 import { repulsionBenchmark } from './performance/repulsion-benchmark'
 import { steadyStateMotion } from './performance/steady-state-motion'
+import { sampleCountUnderLoad } from './performance/sample-count-under-load'
 import { spaceWall } from './performance/space-wall'
 import { farPoint } from './performance/far-point'
 
@@ -20,6 +21,7 @@ import pointOcclusionCullingRaw from './performance/point-occlusion-culling?raw'
 import onDemandRenderingRaw from './performance/on-demand-rendering?raw'
 import repulsionBenchmarkRaw from './performance/repulsion-benchmark?raw'
 import steadyStateMotionRaw from './performance/steady-state-motion?raw'
+import sampleCountUnderLoadRaw from './performance/sample-count-under-load?raw'
 import countryBordersDataRaw from './performance/country-borders-data?raw'
 import spaceWallRaw from './performance/space-wall?raw'
 import farPointRaw from './performance/far-point?raw'
@@ -102,6 +104,18 @@ export const SteadyStateMotion: Story = {
     sourceCode: [
       { name: 'Story', code: steadyStateMotionRaw },
       { name: 'Data', code: countryBordersDataRaw },
+    ],
+  },
+}
+
+export const SampleCountUnderLoad: Story = {
+  ...createStory(sampleCountUnderLoad),
+  name: 'Sample Count Under Load',
+  tags: ['perf', 'advanced', 'interactive', 'large-data'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: sampleCountUnderLoadRaw },
+      { name: 'Generator', code: hyperbolicUtilsRaw },
     ],
   },
 }
