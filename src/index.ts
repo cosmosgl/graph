@@ -333,6 +333,8 @@ export class Graph implements PositionTextureSource {
     resetConfigToDefaults(this.config)
     applyConfig(this.config, config)
     this.preserveInitOnlyFields(prevConfig)
+    this.graph.invalidateLinkDefaultColor()
+    if (this.lines) this.lines.isLinkIndexBufferStale = true
     this.updateStateFromConfig(prevConfig)
   }
 
@@ -351,6 +353,10 @@ export class Graph implements PositionTextureSource {
     const prevConfig = { ...this.config }
     applyConfig(this.config, config, true)
     this.preserveInitOnlyFields(prevConfig)
+    if ('linkDefaultColor' in config) {
+      this.graph.invalidateLinkDefaultColor()
+      if (this.lines) this.lines.isLinkIndexBufferStale = true
+    }
     this.updateStateFromConfig(prevConfig)
   }
 

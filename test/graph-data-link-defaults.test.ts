@@ -54,6 +54,13 @@ describe('resolving link defaults', () => {
       const green = pixel()
       expect(green[0]).toBe(0)
       expect(green[1]).toBeGreaterThan(0)
+      const tuple: [number, number, number, number] = [1, 0, 0, 1]
+      graph.setConfigPartial({ linkDefaultColor: tuple })
+      expect(Array.from(graph.getLinkColors())).toEqual([1, 0, 0, 1])
+      tuple[0] = 0
+      tuple[2] = 1
+      graph.setConfigPartial({ linkDefaultColor: tuple })
+      expect(Array.from(graph.getLinkColors())).toEqual([0, 0, 1, 1])
       expect(Number.isNaN(colors[0])).toBe(true)
       expect(Number.isNaN(widths[0])).toBe(true)
       widths[0] = 6
