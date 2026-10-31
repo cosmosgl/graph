@@ -117,6 +117,8 @@ export class Lines extends CoreModule {
       animateWidths: number;
       animatePositions: number;
       pointDefaultColor: [number, number, number, number];
+      linkDefaultColor: [number, number, number, number];
+      linkDefaultWidth: number;
       linkColorInterpolateFromEndpoints: number;
       linkBlending: number;
       pixelRatio: number;
@@ -212,6 +214,8 @@ export class Lines extends CoreModule {
           animateWidths: 'f32',
           animatePositions: 'f32',
           pointDefaultColor: 'vec4<f32>',
+          linkDefaultColor: 'vec4<f32>',
+          linkDefaultWidth: 'f32',
           linkColorInterpolateFromEndpoints: 'f32',
           linkBlending: 'f32',
           pixelRatio: 'f32',
@@ -243,6 +247,8 @@ export class Lines extends CoreModule {
           animateWidths: 0,
           animatePositions: 0,
           pointDefaultColor: ensureVec4(getRgbaColor(config.pointDefaultColor), [0, 0, 0, 1]),
+          linkDefaultColor: ensureVec4(this.data.linkDefaultRgba, [0, 0, 0, 1]),
+          linkDefaultWidth: config.linkDefaultWidth,
           linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
           linkBlending: config.linkBlending ? 1 : 0,
           pixelRatio: config.pixelRatio,
@@ -901,6 +907,8 @@ export class Lines extends CoreModule {
         animateWidths: this.shouldAnimateLinkWidths ? 1 : 0,
         animatePositions: this.shouldAnimatePositions ? 1 : 0,
         pointDefaultColor: ensureVec4(this.data.defaultRgba, [0, 0, 0, 1]),
+        linkDefaultColor: ensureVec4(this.data.linkDefaultRgba, [0, 0, 0, 1]),
+        linkDefaultWidth: config.linkDefaultWidth,
         linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
         // Mirrors the visible mode (not this pipeline's own blend state, which is
         // always off): greyed links hidden by unblended rendering must also be
@@ -1007,9 +1015,10 @@ export class Lines extends CoreModule {
    * default-filled on ingest, so the target needs no resolve.
    */
   public getAnimatedWidth (index: number, progress: number): number {
-    const width = this.data.linkWidths?.[index] ?? this.config.linkDefaultWidth
-    const source = this.sourceWidthData?.[index]
-    return source === undefined ? width : source + (width - source) * progress
+    const width = this.data.getResolvedLinkWidth(index)
+    const rawSource = this.sourceWidthData?.[index]
+    const source = rawSource === undefined || Number.isNaN(rawSource) ? this.config.linkDefaultWidth : rawSource
+    return rawSource === undefined ? width : source + (width - source) * progress
   }
 
   public setTransitionProgress (progress: number, animateColors = false, animateWidths = false, animatePositions = false): void {
@@ -1270,6 +1279,8 @@ export class Lines extends CoreModule {
         animatePositions: this.shouldAnimatePositions ? 1 : 0,
         // Cached parse — draw() runs per frame, so no color-string parsing here.
         pointDefaultColor: ensureVec4(this.data.defaultRgba, [0, 0, 0, 1]),
+        linkDefaultColor: ensureVec4(this.data.linkDefaultRgba, [0, 0, 0, 1]),
+        linkDefaultWidth: config.linkDefaultWidth,
         linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
         linkBlending: config.linkBlending ? 1 : 0,
         pixelRatio: config.pixelRatio,

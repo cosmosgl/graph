@@ -146,6 +146,8 @@ export class GraphData {
   /** Lazily parsed `pointDefaultColor` — see the `defaultRgba` getter. */
   private _defaultRgba: [number, number, number, number] | undefined
   private _inputLinks: Float32Array | undefined
+  private _linkDefaultRgba: [number, number, number, number] | undefined
+
   private _isLinkGroupingStale = true
   private _linkGroupingPointsNumber: number | undefined
   private _inputPointRenderOrder: ArrayLike<number> | undefined
@@ -217,6 +219,11 @@ export class GraphData {
     return this._inputPointRenderOrder
   }
 
+  public get linkDefaultRgba (): [number, number, number, number] {
+    this._linkDefaultRgba ??= [...getRgbaColor(this._config.linkDefaultColor)]
+    return this._linkDefaultRgba
+  }
+
   public set inputLinks (links: Float32Array | undefined) {
     this._inputLinks = links
     this._isLinkGroupingStale = true
@@ -225,6 +232,20 @@ export class GraphData {
   public set inputPointRenderOrder (order: ArrayLike<number> | undefined) {
     this._inputPointRenderOrder = order
     this._isPointRenderOrderStale = true
+  }
+
+  public invalidateLinkDefaultColor (): void {
+    this._linkDefaultRgba = undefined
+  }
+
+  public getResolvedLinkColorChannel (index: number, channel: number): number {
+    const raw = this.linkColors?.[index * 4 + channel]
+    return isNumber(raw) ? raw as number : this.linkDefaultRgba[channel] as number
+  }
+
+  public getResolvedLinkWidth (index: number): number {
+    const raw = this.linkWidths?.[index]
+    return isNumber(raw) ? raw as number : this._config.linkDefaultWidth
   }
 
   public updatePoints (): void {
@@ -539,50 +560,20 @@ export class GraphData {
       this.linkColors = undefined
       return
     }
-
-    // Sets link colors to default values from config if the input is missing or does not match input links number.
-    const defaultRgba = getRgbaColor(this._config.linkDefaultColor)
-    if (this.inputLinkColors === undefined || this.inputLinkColors.length / 4 !== this.linksNumber) {
-      this.linkColors = new Float32Array(this.linksNumber * 4)
-
-      for (let i = 0; i < this.linkColors.length / 4; i++) {
-        this.linkColors[i * 4] = defaultRgba[0]
-        this.linkColors[i * 4 + 1] = defaultRgba[1]
-        this.linkColors[i * 4 + 2] = defaultRgba[2]
-        this.linkColors[i * 4 + 3] = defaultRgba[3]
-      }
-    } else {
-      this.linkColors = this.inputLinkColors
-      for (let i = 0; i < this.linkColors.length / 4; i++) {
-        if (!isNumber(this.linkColors[i * 4])) this.linkColors[i * 4] = defaultRgba[0]
-        if (!isNumber(this.linkColors[i * 4 + 1])) this.linkColors[i * 4 + 1] = defaultRgba[1]
-        if (!isNumber(this.linkColors[i * 4 + 2])) this.linkColors[i * 4 + 2] = defaultRgba[2]
-        if (!isNumber(this.linkColors[i * 4 + 3])) this.linkColors[i * 4 + 3] = defaultRgba[3]
-      }
-    }
+    this.linkColors = this.inputLinkColors?.length === this.linksNumber * 4
+      ? this.inputLinkColors
+      : new Float32Array(this.linksNumber * 4).fill(NaN)
   }
 
-  /**
-   * Updates the link width based on the input data or default config value.
-   */
+  /** Updates raw link widths; NaN values resolve when read. */
   public updateLinkWidth (): void {
     if (this.linksNumber === undefined) {
       this.linkWidths = undefined
       return
     }
-
-    // Sets link widths to default values from config if the input is missing or does not match input links number.
-    const defaultWidth = this._config.linkDefaultWidth
-    if (this.inputLinkWidths === undefined || this.inputLinkWidths.length !== this.linksNumber) {
-      this.linkWidths = new Float32Array(this.linksNumber).fill(defaultWidth)
-    } else {
-      this.linkWidths = this.inputLinkWidths
-      for (let i = 0; i < this.linkWidths.length; i++) {
-        if (!isNumber(this.linkWidths[i])) {
-          this.linkWidths[i] = defaultWidth
-        }
-      }
-    }
+    this.linkWidths = this.inputLinkWidths?.length === this.linksNumber
+      ? this.inputLinkWidths
+      : new Float32Array(this.linksNumber).fill(NaN)
   }
 
   /**
