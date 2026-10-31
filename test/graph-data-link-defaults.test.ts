@@ -61,6 +61,7 @@ describe('resolving link defaults', () => {
       tuple[2] = 1
       graph.setConfigPartial({ linkDefaultColor: tuple })
       expect(Array.from(graph.getLinkColors())).toEqual([0, 0, 1, 1])
+      expect(pixel()[2]).toBeGreaterThan(0)
       expect(Number.isNaN(colors[0])).toBe(true)
       expect(Number.isNaN(widths[0])).toBe(true)
       widths[0] = 6
