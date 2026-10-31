@@ -658,7 +658,6 @@ export class Graph implements PositionTextureSource {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setLinkColors(linkColors))) return
     this.graph.inputLinkColors = linkColors
-    this.graph.invalidateLinkColorCache()
     this.isLinkColorUpdateNeeded = true
     this.transition.queue(TransitionProperty.LinkColors)
   }
@@ -671,7 +670,11 @@ export class Graph implements PositionTextureSource {
    */
   public getLinkColors (): Float32Array {
     if (this._isDestroyed) return new Float32Array()
-    return this.graph.linkColors ?? new Float32Array()
+    const colors = this.graph.linkColors
+    if (!colors) return new Float32Array()
+    const resolved = new Float32Array(colors.length)
+    for (let i = 0; i < colors.length; i++) resolved[i] = this.graph.getResolvedLinkColorChannel(Math.floor(i / 4), i % 4)
+    return resolved
   }
 
   /**
@@ -687,7 +690,6 @@ export class Graph implements PositionTextureSource {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setLinkWidths(linkWidths))) return
     this.graph.inputLinkWidths = linkWidths
-    this.graph.invalidateLinkWidthCache()
     this.isLinkWidthUpdateNeeded = true
     this.transition.queue(TransitionProperty.LinkWidths)
   }
@@ -701,7 +703,9 @@ export class Graph implements PositionTextureSource {
    */
   public getLinkWidths (): Float32Array {
     if (this._isDestroyed) return new Float32Array()
-    return this.graph.linkWidths ?? new Float32Array()
+    const widths = this.graph.linkWidths
+    if (!widths) return new Float32Array()
+    return Float32Array.from(widths, (_, index) => this.graph.getResolvedLinkWidth(index))
   }
 
   /**
@@ -716,7 +720,7 @@ export class Graph implements PositionTextureSource {
     if (width === undefined) return undefined
     return this.lines && this.transition.isActiveFor(TransitionProperty.LinkWidths)
       ? this.lines.getAnimatedWidth(index, this.transition.progress)
-      : width
+      : this.graph.getResolvedLinkWidth(index)
   }
 
   /**
@@ -1898,12 +1902,11 @@ export class Graph implements PositionTextureSource {
       this.points?.updateShape()
     }
     if (prevConfig.linkDefaultColor !== this.config.linkDefaultColor) {
-      this.graph.updateLinkColor()
-      this.lines?.updateColor()
+      this.graph.invalidateLinkDefaultColor()
+      if (this.lines) this.lines.isLinkIndexBufferStale = true
     }
     if (prevConfig.linkDefaultWidth !== this.config.linkDefaultWidth) {
-      this.graph.updateLinkWidth()
-      this.lines?.updateWidth()
+      if (this.lines) this.lines.isLinkIndexBufferStale = true
     }
     if (prevConfig.linkDefaultArrows !== this.config.linkDefaultArrows) {
       this.graph.updateArrows()

@@ -45,6 +45,8 @@ layout(std140) uniform drawLineUniforms {
   float animateWidths;
   float animatePositions;
   vec4 pointDefaultColor;
+  vec4 linkDefaultColor;
+  float linkDefaultWidth;
   float linkColorInterpolateFromEndpoints;
   float linkBlending;
   float pixelRatio;
@@ -76,6 +78,8 @@ layout(std140) uniform drawLineUniforms {
 #define animateWidths drawLine.animateWidths
 #define animatePositions drawLine.animatePositions
 #define pointDefaultColor drawLine.pointDefaultColor
+#define linkDefaultColor drawLine.linkDefaultColor
+#define linkDefaultWidth drawLine.linkDefaultWidth
 #define linkColorInterpolateFromEndpoints drawLine.linkColorInterpolateFromEndpoints
 #define linkBlending drawLine.linkBlending
 #define pixelRatio drawLine.pixelRatio
@@ -107,6 +111,8 @@ uniform float animateColors;
 uniform float animateWidths;
 uniform float animatePositions;
 uniform vec4 pointDefaultColor;
+uniform vec4 linkDefaultColor;
+uniform float linkDefaultWidth;
 uniform float linkColorInterpolateFromEndpoints;
 uniform float linkBlending;
 uniform float pixelRatio;
@@ -244,11 +250,11 @@ void main() {
   vLinkDashSpan = linkDist * dashUnitScale;
 
   float lineWidthBase = animateWidths > 0.0
-    ? mix(sourceWidth, targetWidth, transitionProgress)
-    : targetWidth;
+    ? mix(isnan(sourceWidth) ? linkDefaultWidth : sourceWidth, isnan(targetWidth) ? linkDefaultWidth : targetWidth, transitionProgress)
+    : (isnan(targetWidth) ? linkDefaultWidth : targetWidth);
   vec4 lineColor = animateColors > 0.0
-    ? mix(sourceColor, targetColor, transitionProgress)
-    : targetColor;
+    ? mix(mix(sourceColor, linkDefaultColor, isnan(sourceColor)), mix(targetColor, linkDefaultColor, isnan(targetColor)), transitionProgress)
+    : mix(targetColor, linkDefaultColor, isnan(targetColor));
   
   // Calculate line width using the width scale
   float linkWidth = lineWidthBase * widthScale;
