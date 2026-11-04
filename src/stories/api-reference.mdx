@@ -339,7 +339,7 @@ The resulting graph will have a total of 3 links: one between points 0 and 1, an
 
 This method sets the colors for the graph links.
 
-* **`linkColors`** (Float32Array): A Float32Array representing the colors of links in the format `[r1, g1, b1, a1, r2, g2, b2, a2, ..., rN, gN, bN, aN]`, where each color is in RGBA format. Each set of four values (`r`, `g`, `b`, `a`) represents the color of a single link. Here's a breakdown:
+* **`linkColors`** (Float32Array): A Float32Array representing the colors of links in the format `[r1, g1, b1, a1, r2, g2, b2, a2, ..., rN, gN, bN, aN]`, where each color is in RGBA format. Each set of four values (`r`, `g`, `b`, `a`) represents the color of a single link. A `NaN` channel uses the matching channel of `linkDefaultColor`. The graph keeps this array as provided and does not replace its `NaN` values. Here's a breakdown:
 
     * **`r`**: Red value (0.0-1.0)
     * **`g`**: Green value (0.0-1.0)
@@ -364,17 +364,17 @@ On the next `render()`, link colors animate from their previous values to the ne
 
 ### <a name="get_link_colors" href="#get_link_colors">#</a> graph.<b>getLinkColors</b>()
 
-This method retrieves the current colors of the graph links that were previously set using `setLinkColors`.
+This method retrieves the resolved target colors of the graph links. It returns a new snapshot: `NaN` channels from the array passed to `setLinkColors` are replaced with the matching channels of `linkDefaultColor`, without modifying the caller's array.
 
-**Returns:** A Float32Array representing the colors of links in the format `[r1, g1, b1, a1, r2, g2, b2, a2, ..., rN, gN, bN, aN]`, where each color is in RGBA format. Each set of four values (`r`, `g`, `b`, `a`) represents the color of a single link. Returns an empty Float32Array if no link colors are set.
+**Returns:** A Float32Array representing the colors of links in the format `[r1, g1, b1, a1, r2, g2, b2, a2, ..., rN, gN, bN, aN]`, where each color is in RGBA format. Each set of four values (`r`, `g`, `b`, `a`) represents the color of a single link. Returns an empty Float32Array if there are no links.
 
-The returned array contains the processed link colors used for rendering, including any default values that were applied during processing.
+The returned array contains the resolved link colors used for rendering, including current default values. While colors transition, it contains the target colors.
 
 ### <a name="set_link_widths" href="#set_link_widths">#</a> graph.<b>setLinkWidths</b>(<i>linkWidths</i>)
 
 This method sets the widths for the graph links.
 
-* **`linkWidths`** (Float32Array): A Float32Array representing the widths of links in the format `[width1, width2, ..., widthN]`, where each `width` value corresponds to the width of the link at the same index in the graph's data. The lengths of the widths array should match the number of links in the graph. Each width is usually a numerical value representing the thickness of the link.
+* **`linkWidths`** (Float32Array): A Float32Array representing the widths of links in the format `[width1, width2, ..., widthN]`, where each `width` value corresponds to the width of the link at the same index in the graph's data. The length of the widths array should match the number of links in the graph. A `NaN` entry uses `linkDefaultWidth`. The graph keeps this array as provided and does not replace its `NaN` values.
 
 **Example:**
 ```javascript
@@ -388,11 +388,11 @@ On the next `render()`, link widths animate from their previous values to the ne
 
 ### <a name="get_link_widths" href="#get_link_widths">#</a> graph.<b>getLinkWidths</b>()
 
-This method retrieves the current widths of the graph links that were previously set using `setLinkWidths`.
+This method retrieves the resolved target widths of the graph links. It returns a new snapshot: `NaN` entries from the array passed to `setLinkWidths` are replaced with `linkDefaultWidth`, without modifying the caller's array.
 
-**Returns:** A Float32Array representing the widths of links in the format `[width1, width2, ..., widthN]`, where each `width` value corresponds to the width of the link at the same index in the graph's data. Returns an empty Float32Array if no link widths are set.
+**Returns:** A Float32Array representing the widths of links in the format `[width1, width2, ..., widthN]`, where each `width` value corresponds to the width of the link at the same index in the graph's data. Returns an empty Float32Array if there are no links.
 
-The returned array contains the processed link widths used for rendering, including any default values that were applied during processing. While link widths transition, it holds the target widths; `getLinkWidthByIndex` moves with the animation.
+The returned array contains the resolved link widths used for rendering, including the current default value. While link widths transition, it holds the target widths; `getLinkWidthByIndex` moves with the animation.
 
 ### <a name="get_link_width_by_index" href="#get_link_width_by_index">#</a> graph.<b>getLinkWidthByIndex</b>(<i>index</i>)
 

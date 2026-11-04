@@ -685,10 +685,14 @@ export class Graph implements PositionTextureSource {
   }
 
   /**
-   * Gets the current colors of the graph links.
+   * Gets the resolved target colors of the graph links.
+   *
+   * Returns a new snapshot. `NaN` channels in the array passed to `setLinkColors`
+   * are replaced with the matching channels of `config.linkDefaultColor`; neither
+   * the snapshot nor default resolution modifies the caller's array.
    *
    * @returns {Float32Array} A Float32Array representing the colors of links in the format [r1, g1, b1, a1, r2, g2, b2, a2, ..., rn, gn, bn, an],
-   * where each color is in RGBA format. Returns an empty Float32Array if no link colors are set.
+   * where each color is in RGBA format. Returns an empty Float32Array if there are no links.
    */
   public getLinkColors (): Float32Array {
     if (this._isDestroyed) return new Float32Array()
@@ -721,11 +725,15 @@ export class Graph implements PositionTextureSource {
   }
 
   /**
-   * Gets the current widths of the graph links.
+   * Gets the resolved target widths of the graph links.
+   *
+   * Returns a new snapshot. `NaN` entries in the array passed to `setLinkWidths`
+   * are replaced with `config.linkDefaultWidth`; neither the snapshot nor default
+   * resolution modifies the caller's array.
    * While link widths transition, these are the targets; `getLinkWidthByIndex` moves with them.
    *
    * @returns {Float32Array} A Float32Array representing the widths of links in the format [width1, width2, ..., widthn],
-   * where `n` is the index of the link. Returns an empty Float32Array if no link widths are set.
+   * where `n` is the index of the link. Returns an empty Float32Array if there are no links.
    */
   public getLinkWidths (): Float32Array {
     if (this._isDestroyed) return new Float32Array()
