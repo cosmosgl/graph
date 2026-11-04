@@ -1,6 +1,6 @@
 # Touch input on phones and tablets
 
-**Commits:** 534f062f
+**PR:** [#228](https://github.com/cosmosgl/graph/pull/228)
 
 ## Why
 

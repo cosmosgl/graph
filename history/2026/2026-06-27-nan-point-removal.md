@@ -1,7 +1,6 @@
 # `NaN` positions for stable-identity point removal and addition
 
-**Commits:** 70b8427c, 022440e8, 912d5e75, 77a079c0, d5637656, f5fe5dd3, 70acfa97, 46276caf,
-eb2ce4a4, 00086f8d, d8eeecc8, 622224f2, 1c00abea, ec5524ce
+**PR:** [#234](https://github.com/cosmosgl/graph/pull/234)
 
 ## Why
 
