@@ -1028,6 +1028,7 @@ export class Graph implements PositionTextureSource {
     if (!this.graph.pointsNumber && !this.graph.linksNumber) {
       // Nothing to upload, so update() won't run: resolve here so the getters see the empty graph
       this.graph.update()
+      this.points?.resetSampledReadback()
       this.stopFrames()
       // Headless: the canvas belongs to the host — never clear or submit its device.
       if (!this._isHeadless) {
@@ -1507,22 +1508,28 @@ export class Graph implements PositionTextureSource {
    * For the points that are currently visible on the screen, get a sample of point indices with their coordinates.
    * The resulting number of points will depend on the `pointSamplingDistance` configuration property,
    * and the sampled points will be evenly distributed.
+   * @param options Pass `{ nonBlocking: true }` for the latest completed sample, which may
+   * reflect an earlier view. Returns an empty result until the first copy completes.
    * @returns A Map object where keys are the index of the points and values are their corresponding X and Y coordinates in the [number, number] format.
    */
-  public getSampledPointPositionsMap (): Map<number, [number, number]> {
-    if (this._isDestroyed || !this.points) return new Map()
-    return this.points.getSampledPointPositionsMap()
+  public getSampledPointPositionsMap (options?: PositionsReadOptions): Map<number, [number, number]> {
+    const points = this.points
+    if (this._isDestroyed || !points) return new Map()
+    return this.simulation.withExternalDeviceState(() => points.getSampledPointPositionsMap(options?.nonBlocking))
   }
 
   /**
    * For the points that are currently visible on the screen, get a sample of point indices and positions.
    * The resulting number of points will depend on the `pointSamplingDistance` configuration property,
    * and the sampled points will be evenly distributed.
+   * @param options Pass `{ nonBlocking: true }` for the latest completed sample, which may
+   * reflect an earlier view. Returns an empty result until the first copy completes.
    * @returns An object containing arrays of point indices and positions.
    */
-  public getSampledPoints (): { indices: number[]; positions: number[] } {
-    if (this._isDestroyed || !this.points) return { indices: [], positions: [] }
-    return this.points.getSampledPoints()
+  public getSampledPoints (options?: PositionsReadOptions): { indices: number[]; positions: number[] } {
+    const points = this.points
+    if (this._isDestroyed || !points) return { indices: [], positions: [] }
+    return this.simulation.withExternalDeviceState(() => points.getSampledPoints(options?.nonBlocking))
   }
 
   /**
@@ -1692,7 +1699,12 @@ export class Graph implements PositionTextureSource {
   public setViewTransform (transform: { k: number; x: number; y: number }, screenSize?: [number, number]): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setViewTransform(transform, screenSize))) return
-    if (screenSize) this.store.updateScreenSize(screenSize[0], screenSize[1])
+    if (screenSize) {
+      const [width, height] = screenSize
+      const [previousWidth, previousHeight] = this.store.screenSize
+      this.store.updateScreenSize(width, height)
+      if (width !== previousWidth || height !== previousHeight) this.points?.updateSampledPointsGrid()
+    }
     this.zoomInstance.applyEventTransform(zoomIdentity.translate(transform.x, transform.y).scale(transform.k))
     // The view moved under the points — picking buffers rasterized for the old
     // view no longer match (same invalidation the zoom handler relies on).
@@ -2543,11 +2555,12 @@ export class Graph implements PositionTextureSource {
     // would stay occupied, blocking the next pick until something else wakes
     // the loop).
     if (this.points?.hasPendingPickReadback || this.lines?.hasPendingPickReadback) return true
-    // Same for a non-blocking tracked-positions or cluster-centroid readback: the
+    // Same for a non-blocking tracked, sampled or cluster-centroid readback: the
     // one issued after the simulation's last step must still be collected, or an
     // overlay reading with `nonBlocking` would stay a tick behind the settled layout.
     // An occupancy copy too, so its fence is not left open across an idle loop.
-    if (this.points?.hasPendingTrackedReadback || this.simulation.hasPendingCentroidReadback ||
+    if (this.points?.hasPendingTrackedReadback || this.points?.hasPendingSampledReadback ||
+      this.simulation.hasPendingCentroidReadback ||
       this.simulation.hasPendingOccupancyReadback) return true
     return this.hasPendingHoverWork()
   }

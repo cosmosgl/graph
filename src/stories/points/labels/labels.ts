@@ -11,11 +11,9 @@ export class CosmosLabels {
     this.pointIndexToLabel = pointIndexToLabel
   }
 
-  public update (graph: Graph): void {
-    // Get coordinates of the tracked nodes
-    const trackedNodesPositions = graph.getTrackedPointPositionsMap()
+  public update (graph: Graph, pointPositions: ReadonlyMap<number, [number, number]>): void {
     let index = 0
-    trackedNodesPositions.forEach((positions, pointIndex) => {
+    pointPositions.forEach((positions, pointIndex) => {
       // Convert coordinates to the screen space
       const screenPosition = graph.spaceToScreenPosition([
         positions?.[0] ?? 0,
@@ -38,6 +36,8 @@ export class CosmosLabels {
 
       index += 1
     })
+
+    this.labels.length = index
 
     // Pass labels configuration to the renderer and draw them
     this.labelRenderer.setLabels(this.labels)

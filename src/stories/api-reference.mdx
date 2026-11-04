@@ -714,7 +714,7 @@ The positions are returned in the same order as the indices provided to [**track
 
 * An array of numbers representing the X and Y coordinates of tracked points in the format `[x1, y1, x2, y2, ..., xn, yn]`, where each pair corresponds to a tracked point in the order they were specified for tracking. Returns an empty array if no points are being tracked.
 
-### <a name="get_sampled_point_positions_map" href="#get_sampled_point_positions_map">#</a> graph.<b>getSampledPointPositionsMap</b>()
+### <a name="get_sampled_point_positions_map" href="#get_sampled_point_positions_map">#</a> graph.<b>getSampledPointPositionsMap</b>([options])
 
 This method provides a sampling of point positions from the currently visible points on the screen. It returns a `Map` containing a sample of point indices and their corresponding X and Y coordinates for the points that are currently visible on the screen.
 
@@ -724,7 +724,18 @@ The number of sampled points is determined by the `pointSamplingDistance` [confi
 
 The sample aims to distribute points evenly across the visible area.
 
-### <a name="get_sampled_points" href="#get_sampled_points">#</a> graph.<b>getSampledPoints</b>()
+Both sampled point methods synchronously read the current sample by default. For an overlay updated during pan or zoom, poll either method with `{ nonBlocking: true }` to get the latest completed sample. It may describe an earlier view or layout. The result is empty until the first copy completes and after a point-data replacement or sampling grid reallocation until a new copy completes. Both methods share the same copy. Poll on later animation frames to get the result, including when the graph has settled or you drive its frames yourself.
+
+```ts
+// In the overlay's animation frame, project the latest available sample.
+const sample = graph.getSampledPointPositionsMap({ nonBlocking: true })
+for (const [index, position] of sample) {
+  const [x, y] = graph.spaceToScreenPosition(position)
+  drawLabel(index, x, y)
+}
+```
+
+### <a name="get_sampled_points" href="#get_sampled_points">#</a> graph.<b>getSampledPoints</b>([options])
 
 This method provides an optimized way to retrieve both point indices and positions for sampled points that are currently visible on the screen. Unlike `getSampledPointPositionsMap`, this method returns the data as arrays rather than a Map.
 
