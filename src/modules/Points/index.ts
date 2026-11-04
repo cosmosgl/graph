@@ -290,6 +290,11 @@ export class Points extends CoreModule implements PointTrackerHost {
   private findPointsInRectCommand: Model | undefined
   private findPointsInPolygonCommand: Model | undefined
   private fillPickingBufferCommand: Model | undefined
+  private sampledReadback: PickingReadback | undefined
+  private sampledReadbackKey: string | undefined
+  private isSampledReadbackWanted = false
+  private sampledCache: { key: string; pixels: Float32Array } | undefined
+  private sampledOrderVersion = 0
   private fillSampledPointsFboCommand: Model | undefined
   private trackPointsCommand: Model | undefined
   // Vertex buffers for quad rendering (Model doesn't destroy them automatically)
@@ -507,9 +512,13 @@ export class Points extends CoreModule implements PointTrackerHost {
     return false
   }
 
-  /** Whether the GPU has yet to reach a pick or tracked-positions copy in flight. */
+  public get hasPendingSampledReadback (): boolean {
+    return this.isSampledReadbackWanted || (this.sampledReadback?.inFlight ?? false)
+  }
+
+  /** Whether the GPU has yet to reach a point readback in flight. */
   public get isReadbackPending (): boolean {
-    if (this.pickingReadback?.isPending) return true
+    if (this.pickingReadback?.isPending || this.sampledReadback?.isPending) return true
     for (const tracker of this.trackers) if (tracker.isReadbackPending) return true
     return false
   }
@@ -524,13 +533,16 @@ export class Points extends CoreModule implements PointTrackerHost {
     return this.data.hasPointStroke
   }
 
-  /** Drops every pick and tracked-positions copy in flight; the next read asks again. */
+  /** Drops point readbacks in flight; the next read asks again. */
   public cancelPendingReadbacks (): void {
     this.discardPendingPick()
+    this.sampledReadback?.cancel()
+    this.isSampledReadbackWanted = false
     for (const tracker of this.trackers) tracker.cancelReadback()
   }
 
   public updatePositions (): boolean {
+    this.resetSampledReadback()
     const { device, store, data, config: { rescalePositions, enableSimulation } } = this
 
     const { pointsTextureSize } = store
@@ -1787,6 +1799,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.drawPickingCommand?.setIndexBuffer(orderBuffer)
     this.fillPickingBufferCommand?.setIndexBuffer(orderBuffer)
     this.fillSampledPointsFboCommand?.setIndexBuffer(orderBuffer)
+    this.sampledOrderVersion++
     // Unbound from every model above before it goes
     if (!order && previousOrderBuffer && !previousOrderBuffer.destroyed) previousOrderBuffer.destroy()
 
@@ -1882,6 +1895,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     if (w === 0 || h === 0) return
 
     if (!this.sampledPointsFbo || this.sampledPointsFbo.width !== w || this.sampledPointsFbo.height !== h) {
+      this.resetSampledReadback()
       if (this.sampledPointsFbo && !this.sampledPointsFbo.destroyed) {
         this.sampledPointsFbo.destroy()
       }
@@ -2699,106 +2713,60 @@ export class Points extends CoreModule implements PointTrackerHost {
     for (const tracker of this.trackers) tracker.resolveReadback()
   }
 
-  public getSampledPointPositionsMap (): Map<number, [number, number]> {
+  public getSampledPointPositionsMap (nonBlocking = false): Map<number, [number, number]> {
     const positions = new Map<number, [number, number]>()
-    if (!this.sampledPointsFbo || this.sampledPointsFbo.destroyed) return positions
-
-    // Fill sampled points FBO
-    if (this.fillSampledPointsFboCommand && this.fillSampledPointsUniformStore && this.sampledPointsFbo) {
-      if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return positions
-      if (!this.exitTexture) this.updateExit()
-      if (!this.exitTexture || this.exitTexture.destroyed) return positions
-      // Update vertex count dynamically
-      this.fillSampledPointsFboCommand.setVertexCount(this.data.pointsNumber ?? 0)
-
-      this.fillSampledPointsUniformStore.setUniforms({
-        fillSampledPointsUniforms: {
-          pointsTextureSize: this.store.pointsTextureSize ?? 0,
-          transformationMatrix: this.store.transformationMatrix4x4,
-          worldOrigin: this.store.worldOrigin,
-          screenSize: ensureVec2(this.store.screenSize, [0, 0]),
-        },
-      })
-
-      // Update texture bindings dynamically
-      this.fillSampledPointsFboCommand.setBindings({
-        positionsTexture: this.currentPositionTexture,
-        exitTexture: this.exitTexture,
-      })
-
-      const fillPass = this.device.beginRenderPass({
-        framebuffer: this.sampledPointsFbo,
-        clearColor: [0, 0, 0, 0],
-      })
-      this.fillSampledPointsFboCommand.draw(fillPass)
-      fillPass.end()
-    }
-
-    const pixels = readPixels(this.device, this.sampledPointsFbo as Framebuffer)
-    for (let i = 0; i < pixels.length / 4; i++) {
-      const index = pixels[i * 4]
-      const isNotEmpty = !!pixels[i * 4 + 1]
-      const x = pixels[i * 4 + 2]
-      const y = pixels[i * 4 + 3]
-
-      if (isNotEmpty && index !== undefined && x !== undefined && y !== undefined) {
-        positions.set(index, [x, y])
-      }
+    const pixels = this.readSampledPoints(nonBlocking)
+    if (!pixels) return positions
+    for (let i = 0; i < pixels.length; i += 4) {
+      if (pixels[i + 1]) positions.set(pixels[i]!, [pixels[i + 2]!, pixels[i + 3]!])
     }
     return positions
   }
 
-  public getSampledPoints (): { indices: number[]; positions: number[] } {
+  public getSampledPoints (nonBlocking = false): { indices: number[]; positions: number[] } {
     const indices: number[] = []
     const positions: number[] = []
-    if (!this.sampledPointsFbo || this.sampledPointsFbo.destroyed) return { indices, positions }
-
-    // Fill sampled points FBO
-    if (this.fillSampledPointsFboCommand && this.fillSampledPointsUniformStore && this.sampledPointsFbo) {
-      if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return { indices, positions }
-      if (!this.exitTexture) this.updateExit()
-      if (!this.exitTexture || this.exitTexture.destroyed) return { indices, positions }
-      // Update vertex count dynamically
-      this.fillSampledPointsFboCommand.setVertexCount(this.data.pointsNumber ?? 0)
-
-      this.fillSampledPointsUniformStore.setUniforms({
-        fillSampledPointsUniforms: {
-          pointsTextureSize: this.store.pointsTextureSize ?? 0,
-          transformationMatrix: this.store.transformationMatrix4x4,
-          worldOrigin: this.store.worldOrigin,
-          screenSize: ensureVec2(this.store.screenSize, [0, 0]),
-        },
-      })
-
-      // Update texture bindings dynamically
-      this.fillSampledPointsFboCommand.setBindings({
-        positionsTexture: this.currentPositionTexture,
-        exitTexture: this.exitTexture,
-      })
-
-      const fillPass = this.device.beginRenderPass({
-        framebuffer: this.sampledPointsFbo,
-        clearColor: [0, 0, 0, 0],
-      })
-      this.fillSampledPointsFboCommand.draw(fillPass)
-      fillPass.end()
-    }
-
-    const pixels = readPixels(this.device, this.sampledPointsFbo as Framebuffer)
-
-    for (let i = 0; i < pixels.length / 4; i++) {
-      const index = pixels[i * 4]
-      const isNotEmpty = !!pixels[i * 4 + 1]
-      const x = pixels[i * 4 + 2]
-      const y = pixels[i * 4 + 3]
-
-      if (isNotEmpty && index !== undefined && x !== undefined && y !== undefined) {
-        indices.push(index)
-        positions.push(x, y)
+    const pixels = this.readSampledPoints(nonBlocking)
+    if (pixels) {
+      for (let i = 0; i < pixels.length; i += 4) {
+        if (!pixels[i + 1]) continue
+        indices.push(pixels[i]!)
+        positions.push(pixels[i + 2]!, pixels[i + 3]!)
       }
     }
-
     return { indices, positions }
+  }
+
+  public requestSampledReadback (): void {
+    if (!this.isSampledReadbackWanted || this.sampledReadback?.inFlight) return
+    this.isSampledReadbackWanted = false
+    const target = this.sampledPointsFbo
+    const gl = (this.device as unknown as { gl?: WebGL2RenderingContext }).gl
+    const handle = (target as unknown as { handle?: WebGLFramebuffer } | undefined)?.handle
+    if (!target || target.destroyed || !gl || !handle || !this.data.pointsNumber) return
+
+    const key = this.sampledPointsKey()
+    if (this.sampledCache?.key === key || !this.drawSampledPoints(target)) return
+
+    const { width, height } = target
+    this.sampledReadback ||= new PickingReadback(gl, width * height * 4)
+    if (this.sampledReadback.issue(handle, 0, 0, width, height)) this.sampledReadbackKey = key
+  }
+
+  public resolveSampledReadback (): void {
+    const pixels = this.sampledReadback?.poll()
+    if (pixels && this.sampledReadbackKey !== undefined) {
+      // The readback overwrites the array only on a successful poll. Public getters decode it into fresh results.
+      this.sampledCache = { key: this.sampledReadbackKey, pixels }
+    }
+  }
+
+  public resetSampledReadback (): void {
+    this.sampledReadback?.destroy()
+    this.sampledReadback = undefined
+    this.sampledReadbackKey = undefined
+    this.isSampledReadbackWanted = false
+    this.sampledCache = undefined
   }
 
   /**
@@ -2806,6 +2774,7 @@ export class Points extends CoreModule implements PointTrackerHost {
    * Models -> Framebuffers -> Textures -> UniformStores -> Buffers.
    */
   public destroy (): void {
+    this.resetSampledReadback()
     // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
     this.drawCommand?.destroy()
     this.drawPickingCommand?.destroy()
@@ -3265,6 +3234,56 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.currentPositionFbo = tempFbo
     this.areClusterCentroidsUpToDate = false
     this.positionVersion++
+  }
+
+  private readSampledPoints (nonBlocking: boolean): Float32Array | undefined {
+    const target = this.sampledPointsFbo
+    if (!this.data.pointsNumber || !target || target.destroyed) return undefined
+    if (!nonBlocking) return this.drawSampledPoints(target) ? readPixels(this.device, target) : undefined
+
+    this.resolveSampledReadback()
+    const key = this.sampledPointsKey()
+    const newestKey = this.sampledReadback?.inFlight ? this.sampledReadbackKey : this.sampledCache?.key
+    this.isSampledReadbackWanted = newestKey !== key
+    if (this.isSampledReadbackWanted && !this.requestTick?.()) this.requestSampledReadback()
+    return this.sampledCache?.pixels
+  }
+
+  /** The sample depends on the view as well as on the world-space positions. */
+  private sampledPointsKey (): string {
+    const { screenSize, worldOrigin, transform } = this.store
+    return [this.positionVersion, this.pointListVersion, this.sampledOrderVersion,
+      ...screenSize, ...worldOrigin, ...transform].join(',')
+  }
+
+  private drawSampledPoints (target: Framebuffer): boolean {
+    const command = this.fillSampledPointsFboCommand
+    const uniforms = this.fillSampledPointsUniformStore
+    if (!command || !uniforms || !this.currentPositionTexture || this.currentPositionTexture.destroyed) return false
+    if (!this.exitTexture) this.updateExit()
+    if (!this.exitTexture || this.exitTexture.destroyed) return false
+
+    command.setVertexCount(this.data.pointsNumber ?? 0)
+    uniforms.setUniforms({
+      fillSampledPointsUniforms: {
+        pointsTextureSize: this.store.pointsTextureSize ?? 0,
+        transformationMatrix: this.store.transformationMatrix4x4,
+        worldOrigin: this.store.worldOrigin,
+        screenSize: ensureVec2(this.store.screenSize, [0, 0]),
+      },
+    })
+    command.setBindings({
+      positionsTexture: this.currentPositionTexture,
+      exitTexture: this.exitTexture,
+    })
+
+    const pass = this.device.beginRenderPass({
+      framebuffer: target,
+      clearColor: [0, 0, 0, 0],
+    })
+    command.draw(pass)
+    pass.end()
+    return true
   }
 
   /**

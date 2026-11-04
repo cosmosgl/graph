@@ -84,7 +84,7 @@ export const RenderOrder: Story = {
 }
 
 export const PointLabels: Story = {
-  name: 'Point Labels (tracking)',
+  name: 'Point Labels (tracking and sampling)',
   tags: ['labels'],
   loaders: [
     async (): Promise<{ data: { performances: [] } }> => {

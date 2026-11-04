@@ -93,6 +93,21 @@ describe('headless lifecycle', () => {
 })
 
 describe('position snapshots', () => {
+  it('samples points after a headless host sets its viewport', async () => {
+    const graph = await createHeadlessGraph(
+      { spaceSize: 4096, enableSimulation: false, rescalePositions: false },
+      new Float32Array([2048, 2048])
+    )
+    try {
+      graph.setViewTransform({ k: 1, x: 0, y: 0 }, [200, 200])
+      const options = { nonBlocking: true }
+      expect(graph.getSampledPoints(options).indices).toEqual([])
+      await vi.waitFor(() => expect(graph.getSampledPoints(options)).toEqual({ indices: [0], positions: [2048, 2048] }))
+    } finally {
+      graph.destroy()
+    }
+  })
+
   it('getPointPositionsArray matches getPointPositions and reuses a provided destination', async () => {
     const graph = await createHeadlessGraph()
     try {
