@@ -44,7 +44,7 @@ const LIGHT_BACKGROUND = '#f4f4f6'
 const SPACE_SIZE = 4096
 
 const STROKE_WIDTH = 0.75
-const STROKE_CONTRAST = 0.1
+const STROKE_CONTRAST = 0.03
 
 // fitView's scale is proportional to (1 - 2 * padding): the default 0.1 fills 80% of the
 // viewport, so -0.4 fills 160% — twice as close, still centred. The piles are the subject of

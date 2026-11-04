@@ -209,7 +209,7 @@ export interface GraphConfigInterface {
    * a clear outline, `0.05` as a hint. Hue is preserved; chroma is reduced only where the
    * shifted color would leave the sRGB gamut. Applies to the `'auto'`, `'darken'` and
    * `'lighten'` rules of `pointDefaultStrokeColor`; explicit colors are used as given.
-   * Default value: `0.1`
+   * Default value: `0.03`
    */
   pointStrokeContrast: number;
 

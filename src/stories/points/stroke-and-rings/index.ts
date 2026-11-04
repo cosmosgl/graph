@@ -189,7 +189,7 @@ export const strokeAndRings = (): { div: HTMLDivElement; graph: Graph } => {
     fitViewOnInit: false,
     pointDefaultStrokeWidth: 1,
     pointDefaultStrokeColor: 'auto',
-    pointStrokeContrast: 0.1,
+    pointStrokeContrast: 0.03,
     renderHoveredPointRing: true,
     hoveredPointRingColor: '#ffffff',
     focusedPointIndex: FOCUSED_INDEX,

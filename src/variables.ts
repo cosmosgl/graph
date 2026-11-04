@@ -29,7 +29,7 @@ export const defaultConfigValues = {
   pointSizeScale: 1,
   pointDefaultStrokeWidth: 0,
   pointDefaultStrokeColor: 'auto',
-  pointStrokeContrast: 0.1,
+  pointStrokeContrast: 0.03,
   pointOcclusionCulling: true,
   scalePointsOnZoom: false,
 
