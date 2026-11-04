@@ -1,6 +1,6 @@
 # Non-blocking sampled point positions
 
-**Commits:** `feat(points): add non-blocking sampled point reads` (`a813ce82`, [#290](https://github.com/cosmosgl/graph/pull/290))
+**PR:** [#290](https://github.com/cosmosgl/graph/pull/290)
 
 Refreshing visible labels during a pan can stall on a synchronous GPU read.
 The sample is tied to the screen grid, so camera motion can change the selected
