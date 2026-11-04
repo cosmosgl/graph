@@ -298,8 +298,8 @@ export interface GraphConfigInterface {
   renderLinks: boolean;
 
   /**
-   * The default color to use for links when no link colors are provided,
-   * or if the color value in the array is `undefined` or `null`.
+   * The default color to use for links when no matching link-color array is provided,
+   * or for each `NaN` channel in that array.
    * This can be either a hex color string (e.g., '#666666') or an array of RGBA values
    * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 1.
    * Default value: '#666666'
@@ -343,7 +343,8 @@ export interface GraphConfigInterface {
    */
   focusedLinkWidthIncrease: number;
   /**
-   * The default width value to use for links when no link widths are provided or if the width value in the array is `undefined` or `null`.
+   * The default width value to use for links when no matching link-width array is provided,
+   * or for a `NaN` entry in that array.
    * Default value: `1`
   */
   linkDefaultWidth: number;

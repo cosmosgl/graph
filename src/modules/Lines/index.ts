@@ -1011,8 +1011,9 @@ export class Lines extends CoreModule {
 
   /**
    * A link's width as `draw-curve-line.vert` mixes it at `progress` of a width
-   * transition, for consumers outside the GPU (`getLinkWidthByIndex`). Widths are
-   * default-filled on ingest, so the target needs no resolve.
+   * transition, for consumers outside the GPU (`getLinkWidthByIndex`). Raw source
+   * and target widths may both hold NaN ("use the default"), so resolve each before
+   * mixing, just as the draw shader does.
    */
   public getAnimatedWidth (index: number, progress: number): number {
     const width = this.data.getResolvedLinkWidth(index)
