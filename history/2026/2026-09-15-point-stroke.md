@@ -1,7 +1,7 @@
 # Per-point edge stroke in a shade of the point's own color
 
 **Date:** 2026-09-15
-**Commits:** `feat(points): per-point edge stroke in a shade of the point's own color` ([#267](https://github.com/cosmosgl/graph/pull/267))
+**PR:** [#267](https://github.com/cosmosgl/graph/pull/267)
 
 ## Why
 

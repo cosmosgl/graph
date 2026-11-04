@@ -10,7 +10,7 @@ If the **why** argument starts with `--update` or `-u`, follow **Update mode**. 
 2. Run `git show --stat` on the relevant commit(s) to see what changed.
 3. Ask for the **why** if it wasn't provided — do not skip or guess.
 4. Draft the entry (see [Writing rules](#writing-rules) below). Use today's date for the filename.
-5. Prefer writing the entry after the feature commits and keeping the entry in a separate history-only commit. For a combined commit, cite the feature subject with “this commit”. Use the rules below to handle hashes that may change.
+5. Add the verified PR link when available. Use the citation rules below if the PR has yet to be opened.
 6. Create the year directory if needed (`history/YYYY/`), then write the file to `history/YYYY/YYYY-MM-DD-topic.md`.
 7. Show the saved file path and content. Ask the user to review before committing.
 
@@ -19,15 +19,14 @@ If the **why** argument starts with `--update` or `-u`, follow **Update mode**. 
 Use when recent commits extend or correct a topic that already has an entry — do not create a new file, do not ask for a "why".
 
 1. Locate the latest entry: `ls history/*/` and pick the file with the most recent `YYYY-MM-DD-…` filename.
-2. Run `git log --oneline -15`. The commits to add are everything since the **Commits** line in that entry. If the entry's hashes don't exist (squashed during merge), use the new commits that touch the same area.
+2. Identify the new changes in git and check the PRs already cited in the entry.
 3. Run `git show --stat` on the new commit(s).
 4. Read the existing entry in full.
 5. Update the entry in place:
-   - Append the new commit hashes to the **Commits** line (replace stale/squashed hashes if needed). **Skip commits that only touch `history/`**.
+   - Add links to verified PRs that changed the behavior. Cite each PR once and skip history-only changes.
    - Revise sections affected by the new commits so the doc reflects current state — not an addendum tacked on the end.
    - Keep the original filename and date — the file represents the topic, not the latest commit.
-   - For an ambiguous commit reference, keep the verified subject or PR link until the hash can be confirmed.
-6. Show the file path and a summary of what changed (which sections, which commits added). Ask the user to review before committing.
+6. Show the file path and a summary of what changed (which sections and PR references changed). Ask the user to review before committing.
 
 ## Writing rules
 
@@ -48,9 +47,9 @@ Use when recent commits extend or correct a topic that already has an entry — 
 ### Ground rules
 
 - Read 1–2 recent entries under `history/` before writing — the corpus is the real source of truth on tone and detail level.
-- Cite the commit subject and verified hash. Include the PR link when available so readers can find the change if its hash changes. If the hash is uncertain, cite the subject and any known PR link.
-- When the entry and feature share a commit, use a relative reference such as `` **Commits:** `feat(points): sample visible points` (this commit) ``.
-- After a squash merge, rebase, or other rewrite, check affected citations against the target branch. Confirm matches by subject and diff, and use the resulting squash commit or PR link if several commits became one. Preserve hashes that identify a specific historical branch or benchmark baseline. If references need updating, prepare a focused follow-up PR for those corrections.
+- Use a verified GitHub PR link as the default citation, for example `**PR:** [#290](https://github.com/cosmosgl/graph/pull/290)`. Use `**PRs:**` for multiple changes and add brief labels when they help identify each PR's role.
+- If the PR has yet to be opened, use the verified change subject and add the link to the same PR once its URL is available. Omit the citation when there is no verified reference.
+- Use a verified commit hash when the exact revision matters, such as a benchmark baseline, the commit that introduced a regression, or a backport target. Keep existing references that serve that purpose.
 - Output **only** the markdown content ready to save.
 
 ---

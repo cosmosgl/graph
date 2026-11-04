@@ -1,6 +1,8 @@
 # Non-blocking position reads (tracked points, cluster centroids), and point trackers
 
-**Commits:** tracked points, PR #273: `perf(points): reuse tracked positions while the simulation runs` (`faccaac`), `perf(points): read tracked positions without blocking` (`1ccecf4`), `docs(points): say that the first non-blocking read still waits` (`fd0f835`); clusters, PR #276: `perf(clusters): reuse the centroid cache while the simulation runs` (`b9888e5`), `perf(clusters): read cluster positions without blocking` (`9a2771a`); review follow-up, same PR: `fix(clusters): drop the up-to-date claim when a centroid readback ends without pixels` (`f430602`), `fix(points): re-issue a tracked readback that ended without pixels` (`1b000a0`); trackers, PR #257: `feat(points): point trackers — follow chosen points through a handle, on a simulation as on a graph` (`e6187ee0`); frame pacing and cold reads, branch `perf/readback-frame-pacing`: `feat(points, lines, clusters): report a copy in flight as pending until its fence signals` (`a38819cb`), `perf(render): hold the next frame while a copy is pending — one frame in flight` (`48cc7c88`), `fix(points, clusters): a non-blocking read after a pause waits like a first read — an overlay resumes in place` (`6fd5983c`)
+**PRs:** [#273](https://github.com/cosmosgl/graph/pull/273) (tracked point reads), [#276](https://github.com/cosmosgl/graph/pull/276) (cluster centroid reads), [#257](https://github.com/cosmosgl/graph/pull/257) (point trackers)
+
+**Frame pacing and cold reads:** `perf/readback-frame-pacing`: `feat(points, lines, clusters): report a copy in flight as pending until its fence signals` (`a38819cb`), `perf(render): hold the next frame while a copy is pending — one frame in flight` (`48cc7c88`), `fix(points, clusters): a non-blocking read after a pause waits like a first read — an overlay resumes in place` (`6fd5983c`)
 
 ## Why
 

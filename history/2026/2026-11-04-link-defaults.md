@@ -1,7 +1,7 @@
 # Link defaults resolve at read time
 
 **Date:** 2026-11-04
-**Commits:** `fix(links): resolve NaN defaults at read time — caller arrays are never edited` (`91ca076c`)
+**PR:** [#286](https://github.com/cosmosgl/graph/pull/286)
 
 **Why:** Link color and width ingest replaced `NaN` sentinels inside caller-owned arrays.
 Later default changes therefore stopped reaching those links, and rendering mutated

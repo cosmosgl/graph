@@ -23,7 +23,7 @@ Length is up to you. Often a screen, longer when the change deserves it.
 ```markdown
 # Short title
 
-**Commits:** `feat(area): describe the change` (`abc1234`)
+**PR:** [#290](https://github.com/cosmosgl/graph/pull/290)
 
 ## Why
 One or two sentences on the problem or goal.
