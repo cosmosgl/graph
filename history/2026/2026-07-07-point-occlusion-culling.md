@@ -1,8 +1,7 @@
-<!-- suggested path: history/2026/2026-07-07-point-occlusion-culling.md -->
 # Depth-based point occlusion culling
 
 **Date:** 2026-07-07
-**Commits:** `Depth-based occlusion culling for overlapping opaque points` (`889dfa6`); rebase + follow-ups: `fix(points): adapt occlusion-culling core pass to current main` (`baaecda`), `refactor(points): simplify pointOcclusionCulling to a plain boolean` (`cbbcd9d`)
+**Commits:** `Depth-based occlusion culling for overlapping opaque points` (`29b54a20`); rebase + follow-ups: `fix(points): adapt occlusion-culling core pass to current main` (`e127b0de`), `refactor(points): simplify pointOcclusionCulling to a plain boolean` (`00f59cda`)
 **PR:** [#238](https://github.com/cosmosgl/graph/pull/238)
 
 ## Why

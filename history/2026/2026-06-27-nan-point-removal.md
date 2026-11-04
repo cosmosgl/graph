@@ -1,9 +1,6 @@
-<!-- suggested path: history/2026/2026-06-27-nan-point-removal.md -->
-
 # `NaN` positions for stable-identity point removal and addition
 
-**Commits:** 9931bd8, 3985df6, e0a2a0b, f1768c1, 9575554, 12e8219, 04e5a64, 2b754a9,
-607df91, ae2d44e, 83e069f, 31f3289, 2488f26, 6b8e6a6
+**PR:** [#234](https://github.com/cosmosgl/graph/pull/234)
 
 ## Why
 

@@ -1,9 +1,7 @@
-<!-- suggested path: history/2026/2026-08-14-nearfield-jitter.md -->
-
 # Near-field sampling jitter: exact small-graph path + adaptive slot count
 
 **Date:** 2026-08-14
-**Commits:** `feat(stories): country-borders story reproducing near-field sampling jitter` (`776d15a`), `fix(force): exact all-pairs repulsion below 4k points; adaptive near-field sampling above` (`ea88026`), `feat(stories): replace the jitter repro with a fixed-vs-before comparison — both paths visible at HEAD` (`2fe05a6`)
+**Commits:** `feat(stories): country-borders story reproducing near-field sampling jitter` (`93ffc9e1`), `fix(force): exact all-pairs repulsion below 4k points; adaptive near-field sampling above` (`2474861b`), `feat(stories): replace the jitter repro with a fixed-vs-before comparison — both paths visible at HEAD` (`5d5f2760`)
 
 ## Why
 

@@ -1,8 +1,6 @@
-<!-- suggested path: history/2026/2026-10-07-host-picking.md -->
-
 # Host picking: cosmos.gl draws picking colors for a host's pick pass
 
-**Commits:** `feat(points, links): a picking mode for a host's pick pass — drawToRenderPass draws index colors` (`ed15163`), `feat(deck-layers): deck picking, auto-highlight and drag through cosmos's picking mode` (`65a5c9e`), `fix(deck-layers): autoHighlight hovers through the graph's host hover — the app's focus is never written` (`b9babaf`)
+**Commits:** `feat(points, links): a picking mode for a host's pick pass — drawToRenderPass draws index colors` (`d3ffa888`), `feat(deck-layers): deck picking, auto-highlight and drag through cosmos's picking mode` (`73b0bd52`), `fix(deck-layers): autoHighlight hovers through the graph's host hover — the app's focus is never written` (`bbc254da`)
 
 ## Why
 

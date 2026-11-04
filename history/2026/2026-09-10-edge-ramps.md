@@ -1,8 +1,7 @@
-<!-- suggested path: history/2026/2026-09-10-edge-ramps.md -->
 # Edge ramps: one device pixel, centred on the edge
 
 **Date:** 2026-09-10
-**Commits:** `fix(points): close the triangle field's segment at the apex — the ramp holds on every edge` (`48f887f`), `fix(points): clamp the pentagon field to the true half side` (`16a66da`), `fix(points): composite the outline ring over a transparent body` (`7a6d9c7`), `perf(points, links): centre a one-device-pixel edge ramp on every edge` (`ad201be`), `refactor(points): one size rule for draw, ring, picking and selection` (`d855646`), `fix(points): pad the selection rectangle in CSS px — the footprint is the drawn point` (`1df6d42`), `feat(stories): edge anti-aliasing check at 0.5×, 1×, 2×, in a Rendering section` (`94a8e2b`)
+**Commits:** `fix(points): close the triangle field's segment at the apex — the ramp holds on every edge` (`4d0efc16`), `fix(points): clamp the pentagon field to the true half side` (`a15bf03c`), `fix(points): composite the outline ring over a transparent body` (`15fbea9f`), `perf(points, links): centre a one-device-pixel edge ramp on every edge` (`51e546f7`), `refactor(points): one size rule for draw, ring, picking and selection` (`8881be4b`), `fix(points): pad the selection rectangle in CSS px — the footprint is the drawn point` (`c92fa40f`), `feat(stories): edge anti-aliasing check at 0.5×, 1×, 2×, in a Rendering section` (`a502d34b`)
 **PR:** [#262](https://github.com/cosmosgl/graph/pull/262)
 
 ## Why

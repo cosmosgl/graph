@@ -1,8 +1,7 @@
-<!-- suggested path: history/2026/2026-09-10-attractor-force.md -->
 # Attractor force
 
 **Date:** 2026-09-10
-**Commits:** `feat(force): add the attractor force — a per-point soft position constraint`, `fix(force): validate attractors and preserve pending targets` ([#270](https://github.com/cosmosgl/graph/pull/270))
+**PR:** [#270](https://github.com/cosmosgl/graph/pull/270)
 
 ## Why
 

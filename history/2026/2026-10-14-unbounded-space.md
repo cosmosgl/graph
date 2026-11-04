@@ -1,9 +1,7 @@
-<!-- suggested path: history/2026/2026-10-14-unbounded-space.md -->
-
 # Unbounded space: `spaceSize` places the world instead of walling it in
 
 **Date:** 2026-10-14
-**Commits:** `feat(stories): add Space Size Wall — measure where spaceSize stops the layout` (`c2f9f43`), `refactor(store): name the world origin the view has always been centred on` (`02883ea`), `fix(zoom): lower the zoom-out floor that silently cut large fits short` (`e572df5`), `feat(force): the many-body grid follows the data, not the space` (`94a354a`), `fix(force): anchor the collision hash to the data — it was inert outside the space` (`4f04e3e`), `feat(points): remove the position clamp — spaceSize no longer confines a layout` (`fd67d37`), `docs: the force and embedding docs describe an unbounded space` (`8e413fc`), `refactor(space): name what spaceSize still sets, and deprecate the key` (`3a0dae6`), `test(force): the collision hash tests run above the all-pairs threshold — they were testing the exact path` (`797eddf`), `test(force): probe the collision programs' binning agreement with overlapping pairs — an isolated point cannot see it` (`e8d24d4`), `fix(deck-layers): getBounds measures the layout without a stall — deck reads it every frame` (`f7ad83f`), `fix(store): resolve spaceSize when the simulation is made — a host read the default origin until the device arrived` (`ce52f82`), `refactor(force): count collision cells from the world origin — the bounds it reduced were read for one number` (`3315ffc`), `docs(force): the collision README counts cells from the world origin` (`87655aa`), `fix(space): the initial rescale and the deprecation notice follow the resolved spaceSize, not the key` (`04c4eb1`), `docs: the step bound, the resolved spaceSize and the all-pairs tier are described as they run` (`d8e0bb6`)
+**Commits:** `feat(stories): add Space Size Wall — measure where spaceSize stops the layout` (`7cfe7206`), `refactor(store): name the world origin the view has always been centred on` (`f6b1e108`), `fix(zoom): lower the zoom-out floor that silently cut large fits short` (`eda44683`), `feat(force): the many-body grid follows the data, not the space` (`142d5ea2`), `fix(force): anchor the collision hash to the data — it was inert outside the space` (`5c6ed235`), `feat(points): remove the position clamp — spaceSize no longer confines a layout` (`43e652b9`), `docs: the force and embedding docs describe an unbounded space` (`09cb5b3a`), `refactor(space): name what spaceSize still sets, and deprecate the key` (`809baf23`), `test(force): the collision hash tests run above the all-pairs threshold — they were testing the exact path` (`36ffbd37`), `test(force): probe the collision programs' binning agreement with overlapping pairs — an isolated point cannot see it` (`649b3b3c`), `fix(deck-layers): getBounds measures the layout without a stall — deck reads it every frame` (`ac4c14a5`), `fix(store): resolve spaceSize when the simulation is made — a host read the default origin until the device arrived` (`d691c62e`), `refactor(force): count collision cells from the world origin — the bounds it reduced were read for one number` (`eb631502`), `docs(force): the collision README counts cells from the world origin` (`cb7f903f`), `fix(space): the initial rescale and the deprecation notice follow the resolved spaceSize, not the key` (`8ef4a024`), `docs: the step bound, the resolved spaceSize and the all-pairs tier are described as they run` (`2a795769`)
 
 ## Why
 
@@ -28,7 +26,7 @@ exactly as before. (One at or above it ran at half that limit and now runs as co
 see [what an app may now observe](#not-breaking--what-an-app-may-now-observe).) It no
 longer bounds any position. The change is **non-breaking**.
 
-A week later the key was marked `@deprecated` (`3a0dae6`): once nothing is sized by it,
+A week later the key was marked `@deprecated` (`809baf23`): once nothing is sized by it,
 what is left is a world origin and a few tuned lengths that happened to be written as
 multiples of it, and the next major can retire the key and put the origin at (0, 0). See
 [the key, deprecated](#the-key-deprecated).
@@ -61,22 +59,22 @@ so that removing the clamp would take two lines (S = `spaceSize`):
 
 | Job | Before | Now | Commit |
 |---|---|---|---|
-| Centring offset for the view | each draw/pick shader computed `(2p/S − 1)·(S/screen)`, which is `(2p − S)/screen`; `Store`'s d3 scales were a slope-1 translation | `Store.worldOrigin`, `[S/2, S/2]`, set only in `adjustSpaceSize` | `02883ea` |
-| Many-body grid placement | every level's cell was `S / gridSize`, counted from world zero | every level divides the live data's bounding square, reduced on the GPU each tick (since the seam fix, padded by one coarsest cell and shifted at random every tick) | `94a354a` |
-| Collision grid placement | `floor(p / cell)` from world zero, over a grid covering `[0, S]` | contact-range cells counted from the world origin, unbounded, folded onto a rotated spatial hash sized by the point count | `4f04e3e`, `3315ffc` |
-| Bound on positions | clamp to `[0, S]` after every sub-step | none | `fd67d37` |
-| Divergence guard (undocumented) | the clamp was the only thing that contained a blown-up force | a non-finite step is dropped; a step longer than S is shortened to S | `fd67d37` |
+| Centring offset for the view | each draw/pick shader computed `(2p/S − 1)·(S/screen)`, which is `(2p − S)/screen`; `Store`'s d3 scales were a slope-1 translation | `Store.worldOrigin`, `[S/2, S/2]`, set only in `adjustSpaceSize` | `f6b1e108` |
+| Many-body grid placement | every level's cell was `S / gridSize`, counted from world zero | every level divides the live data's bounding square, reduced on the GPU each tick (since the seam fix, padded by one coarsest cell and shifted at random every tick) | `142d5ea2` |
+| Collision grid placement | `floor(p / cell)` from world zero, over a grid covering `[0, S]` | contact-range cells counted from the world origin, unbounded, folded onto a rotated spatial hash sized by the point count | `5c6ed235`, `eb631502` |
+| Bound on positions | clamp to `[0, S]` after every sub-step | none | `43e652b9` |
+| Divergence guard (undocumented) | the clamp was the only thing that contained a blown-up force | a non-finite step is dropped; a step longer than S is shortened to S | `43e652b9` |
 
-Every commit before `fd67d37` keeps the clamp and stands on its own. Framing and settled
-extents don't change until the clamp goes. The numerics change earlier: `94a354a` changes
-the many-body force of every graph above 4,096 points, and `4f04e3e` the collision force
+Every commit before `43e652b9` keeps the clamp and stands on its own. Framing and settled
+extents don't change until the clamp goes. The numerics change earlier: `142d5ea2` changes
+the many-body force of every graph above 4,096 points, and `5c6ed235` the collision force
 when it is on. Neither is bit-identical to the commit before it; both settle equivalently.
 
 ### The view: a world origin
 
 In the render path `spaceSize` was never a scale. The shader formula reduces to a
 translation, and one world unit has always been one CSS pixel at zoom 1. So the view
-needed a rename, not a redesign. `02883ea` gives the offset its own name so the remaining
+needed a rename, not a redesign. `f6b1e108` gives the offset its own name so the remaining
 uses of `spaceSize` are visibly the bound:
 
 - The eight NDC shaders (plus `draw-highlighted.frag`, which declares the same block) take
@@ -100,7 +98,7 @@ axis, floored at 8 and capped at 512). Its *placement* was still fixed to `[0, s
 A layout covering a fraction `f` of each axis lands in `(f·R)²` cells. As `f` shrinks, the
 near field's sampling slots saturate, and gravity shrinks every layout for the whole run.
 Points outside the space were binned into edge cells, which was harmless only while the
-clamp kept them inside. `94a354a`:
+clamp kept them inside. `142d5ea2`:
 
 - **`Shared/data-bounds.ts` (`DataBounds`)** reduces positions to their bounding box in
   three GPU passes: 64×64 partial boxes, then 8×8, then a single rgba32float texel
@@ -130,7 +128,7 @@ With the clamp gone, every point outside the space would land in an edge cell of
 collision grid, which was laid over `[0, S]`. The force compared a point with the centroids
 of neighbouring cells and only fired when `dist < combinedRadius`; a cell holding a whole
 cluster reported its own average and never fired, so the force stopped working entirely,
-and nothing on screen showed it. `4f04e3e` replaced the finite grid with a spatial hash:
+and nothing on screen showed it. `5c6ed235` replaced the finite grid with a spatial hash:
 
 - The cell is the contact range floored at 8 units, `max(2r, 8)`, and is never refitted
   to the layout, however large the layout gets.
@@ -145,14 +143,14 @@ and nothing on screen showed it. `4f04e3e` replaced the finite grid with a spati
   centre for the precision of the sums.
 
 The slot path stacked on top of it (`fix(force): stack unbounded space on pairwise
-collision constraints`, `603af81`) keeps the contact-range cell, the unbounded index and the
+collision constraints`, `96dabcd7`) keeps the contact-range cell, the unbounded index and the
 rotated hash, but lists real points per texel by depth peeling instead of accumulating, and
 checks every candidate against the queried world cell before a pair is resolved, so aliases
 cost sampling slots and never a phantom push. That left the box with one reader, the
 origin: its extent fed a function no shader called, and the reduction ran once per
 collision iteration over the texture the many-body force had just reduced.
 
-`3315ffc` counts cells from the world origin, `Store.worldOrigin`, bound as a uniform in
+`eb631502` counts cells from the world origin, `Store.worldOrigin`, bound as a uniform in
 both collision programs, and deletes the collision force's reducer, bounds texture, extent
 floor, `collisionLocal` and the four offset lattices. The cell formula is one subtraction,
 one multiplication and one floor, the same bits in both programs. Far from the origin the
@@ -165,7 +163,7 @@ iteration, at 20,000 or 100,000 points, the difference is within the run-to-run 
 
 ### The clamp becomes a step bound
 
-`fd67d37` deletes the clamp. The replacement bounds the *length* of a sub-step, not the
+`43e652b9` deletes the clamp. The replacement bounds the *length* of a sub-step, not the
 position a point lands on:
 
 - **A non-finite velocity is dropped**, and the point does not move that sub-step. A NaN
@@ -192,7 +190,7 @@ position a point lands on:
   that limit, and has dropped its `webglMaxTextureSize` parameter. `setWebGLMaxTextureSize`
   stays, because the atlas uses it. Nothing is sized by `spaceSize` any more: the many-body
   grid's resolution has followed the point count since #240, and the collision grid (sized
-  from `spaceSize` and capped at 512² until `4f04e3e`) is a hash sized by the point count. Above
+  from `spaceSize` and capped at 512² until `5c6ed235`) is a hash sized by the point count. Above
   2^21 the engine logs a warning but uses the value as given (see
   [the float32 ceiling](#the-float32-ceiling)). What this moves for a configuration that
   used to be cut is listed under
@@ -203,8 +201,8 @@ position a point lands on:
 - `config.ts` and `variables.ts` now describe what `spaceSize` actually does. It places the
   world origin, which is the screen centre at the initial view and gravity's attractor. It
   is the square `rescalePositions` measures against. It sets the per-sub-step displacement
-  ceiling and the many-body kick bound. It bounds no position. (Since `3a0dae6` the JSDoc
-  is an `@deprecated` paragraph saying the same in fewer words; `d8e0bb6` trims the
+  ceiling and the many-body kick bound. It bounds no position. (Since `809baf23` the JSDoc
+  is an `@deprecated` paragraph saying the same in fewer words; `2a795769` trims the
   configuration page's cell to the same rule, states the default without its texture-size
   history, and corrects the texts that still said the integrator clamps to the space, that
   the precise shell costs nothing below 25,000 points — a few percent, measured — and the
@@ -216,7 +214,7 @@ position a point lands on:
 
 ### The zoom floor
 
-`e572df5` lowers `scaleExtent` from `[0.001, Infinity]` to `[1e-6, Infinity]`. At slope 1,
+`eda44683` lowers `scaleExtent` from `[0.001, Infinity]` to `[1e-6, Infinity]`. At slope 1,
 fitting a span `W` into width `w` at padding `p` needs a scale of `w(1 − 2p)/W`. On a
 1000px viewport that drops below 0.001 above roughly 800k units, and `fitView` then came up
 short with no error. The clamp kept anyone from reaching that limit, and removing the clamp
@@ -233,7 +231,7 @@ everywhere.
 
 With the wall gone, `spaceSize` still reached the engine through one validated copy,
 `Store.adjustedSpaceSize`, and five things were derived from it under a name that
-promised a size. `3a0dae6` is step one of the retirement proposed on the PR (comment
+promised a size. `809baf23` is step one of the retirement proposed on the PR (comment
 6311708386): name each job, deprecate the key, change no layout. Step two — the origin at
 (0, 0), the key removed, a migration shift of `spaceSize / 2` — is a breaking change and
 waits for a major.
@@ -244,9 +242,9 @@ waits for a major.
 | The per-sub-step displacement ceiling | `Store.stepGuard`, 4,096 at the default | frozen at 4,096 |
 | The many-body kick span, divided by the finest grid size for the point count | `Store.kickSpan`, 8,192 at the default | frozen at 8,192 |
 | Where an infinite input coordinate lands | `Store.infiniteInputEdge`, 4,096 at the default | the origin, or absent with a warning |
-| The initial rescale's cutoff, density threshold and two target sides | named inside the rescale (`rescaleCutoff`, `densePointCount`, `sparseTarget`, `denseTarget`), fractions of `Store.referenceLength` since `04c4eb1` (of the raw key until then), centred on `store.worldOrigin` | constants, until a retune derives the start size from the point count |
+| The initial rescale's cutoff, density threshold and two target sides | named inside the rescale (`rescaleCutoff`, `densePointCount`, `sparseTarget`, `denseTarget`), fractions of `Store.referenceLength` since `8ef4a024` (of the raw key until then), centred on `store.worldOrigin` | constants, until a retune derives the start size from the point count |
 
-The three lengths sit behind `Store.referenceLength` (public since `ce52f82`): the validated `spaceSize`
+The three lengths sit behind `Store.referenceLength` (public since `d691c62e`): the validated `spaceSize`
 in 3.x, so a config that sets the key behaves as it did, and a constant in the major, when
 they freeze together. Nothing outside the Store can ask for a "space size" any more; the
 deck.gl layer reads the origin, probes deck's scale with a local constant (deck's Mercator
@@ -256,7 +254,7 @@ keeps the config key only for its unseeded placement square.
 A non-default value logs one warning per graph and per change, worded as the JSDoc is:
 the key bounds nothing, it places the origin and scales the initial rescale and a few
 step bounds, leave it at the default. The default set explicitly, as the stories' helper
-does, says nothing. Since `04c4eb1` the notice follows validation and names the value the
+does, says nothing. Since `8ef4a024` the notice follows validation and names the value the
 engine runs at: an unusable value (0, negative, non-finite) is resolved to the default by
 its own console error and is not deprecated at all, and a value below 2 is deprecated as
 2. Before, it fired first and named the configured value — "spaceSize (0) is deprecated …
@@ -355,9 +353,9 @@ all. The clamp collapses it into the corner of the space (extent 3.9, about 155k
 overlapping pairs). Inside the space, `main` matches the first row (245.7). One point
 200,000 units away no longer changes how a cluster resolves.
 
-The table is the centroid hash's (`4f04e3e`), at 800 points — a count the slot path serves
+The table is the centroid hash's (`5c6ed235`), at 800 points — a count the slot path serves
 with the exact all-pairs shader. The slot path's own figures, at 4,200 points on SwiftShader
-(`797eddf`): the same cluster, one pass after a move to (1000, 3100) or (2900.37, 1500.71),
+(`36ffbd37`): the same cluster, one pass after a move to (1000, 3100) or (2900.37, 1500.71),
 differs from its layout at the centre by 1.3e-6 and 1.9e-6 of its extent; three copies
 across 8,000 units, more cells than the hash has texels, spread to 376.0, 374.5 and 374.7
 from 224; with one point 7,400 units away a cluster spreads to 512.2 with 15,374
@@ -380,20 +378,20 @@ The 300k extent by step: 50: 6,664 · 100: 6,973 · 150: 7,007 · 200: 7,011, th
 
 ### What did not change
 
-- `02883ea`: positions after 300–500 steps are bit-identical to `main` across six force
+- `f6b1e108`: positions after 300–500 steps are bit-identical to `main` across six force
   mixes, and so are every rect, polygon, hover and sampled pick and every space↔screen
   conversion. Static renders are bit-identical under exact IEEE arithmetic (SwiftShader,
   which CI runs). On Metal, 48–119 of 800,000 link anti-aliasing pixels per view differ by
   one level, because the compiler re-associates the new translation differently. At a
   non-power-of-two `spaceSize` the old form rounded twice and the new one rounds once, so
   edges can move by less than a pixel there.
-- `e572df5`: positions, picks, conversions and renders are identical to the previous commit.
-- `94a354a`: the all-pairs path, renders and picks are bit-identical. Grid-path layouts
+- `eda44683`: positions, picks, conversions and renders are identical to the previous commit.
+- `142d5ea2`: the all-pairs path, renders and picks are bit-identical. Grid-path layouts
   settle where they did (100k at 4,044, 10k at 1,272), except that one starting from a very
   tight blob can settle into a different arrangement (see [Still open](#still-open)).
-- `4f04e3e`: only the collision scenario changes. Every other simulation, render and pick
+- `5c6ed235`: only the collision scenario changes. Every other simulation, render and pick
   is bit-identical.
-- `fd67d37`: against the previous commit, the only scenarios that change are the two that
+- `43e652b9`: against the previous commit, the only scenarios that change are the two that
   touched the border: a grid-path layout without gravity (0..4,096 becomes
   −2,089..6,188) and a start outside the space. A sweep of 16 stories: 13 are bit-identical
   and Space Size Wall changes only its readout text. Labels and lasso selection start from a
@@ -445,7 +443,7 @@ on measurement:
   than the alias-free span it resolves more slowly: Gaussian cluster fields 9,000–30,000
   units wide keep 10–71% more overlapping pairs than an unshared 4096² grid after 600
   steps. Nothing ends worse than it started. These figures are the centroid hash's
-  (`4f04e3e`); the slot path keeps the contact-range cell and the rotated hash, and its own
+  (`5c6ed235`); the slot path keeps the contact-range cell and the rotated hash, and its own
   figures are under [Collision outside the space](#collision-outside-the-space).
 - **The step bound is not the plan's `if (!(speed <= maxStep))`.** The finiteness test
   reads exponent bits. ANGLE's Metal backend compiles with fast math, which may assume
@@ -512,12 +510,12 @@ inconsistent with itself. What an app can now see:
   outside it.
 - The deck.gl layer's `getBounds()` returns the box of the live point positions (the input
   positions before the first load), and the space's square only when there is nothing to
-  measure. Since `f7ad83f` the read never stalls: the box is served from a cache and
+  measure. Since `ac4c14a5` the read never stalls: the box is served from a cache and
   refreshed by one asynchronous read at a time when the positions changed since it was
   measured, and the layer asks for a redraw when the read lands, so deck's mask and
   collision-filter effects can read it every frame. While points move it trails the drawn
   frame by about one; before the first read lands the call returns the input box.
-- Since `ce52f82` the world origin, the step guard and the infinite-input edge are resolved
+- Since `d691c62e` the world origin, the step guard and the infinite-input edge are resolved
   when the graph is constructed, not when its device arrives, and `Store.referenceLength`
   exposes the validated length. `spaceToScreenPosition` and the deck layer's `getBounds()`
   give the configured origin before `ready`, where they gave the default's; the layer
@@ -543,11 +541,11 @@ inconsistent with itself. What an app can now see:
   orders its clusters differently.
 - A custom cluster position with a negative coordinate is now honoured instead of falling
   back to the cluster's centre of mass.
-- Since `3a0dae6`, a config that sets `spaceSize` to anything but 4096 logs one
+- Since `809baf23`, a config that sets `spaceSize` to anything but 4096 logs one
   deprecation warning per graph and per change. TypeScript marks the key `@deprecated`.
   Nothing else changes for such a config, with two already-warned corners: a rescale under
   an invalid (≤ 0, non-finite) or sub-minimum (< 2) `spaceSize` follows the value the
-  engine runs at. Since `04c4eb1` that is the whole rescale, not only its centre: an
+  engine runs at. Since `8ef4a024` that is the whole rescale, not only its centre: an
   invalid value used to skip the rescale (points stayed as given, at the raw scale, while
   the origin went to (2048, 2048)) and now rescales exactly as the default does; a value
   below 2 rescales as 2, centred on (1, 1). The deprecation notice for an invalid value is
@@ -562,12 +560,12 @@ inconsistent with itself. What an app can now see:
   - the data box: squared, floored, single point, all absent
   - the same blob laid out alike, to float rounding, wherever it sits, and a coincident
     stack spreading
-  - the collision hash, at 4,200 points so the slot path runs (`797eddf`; at 100–1,200
+  - the collision hash, at 4,200 points so the slot path runs (`36ffbd37`; at 100–1,200
     points these tests had run the exact all-pairs shader): same result at any offset,
     contact-range cell, three copies wider than the hash, a cluster far outside the space,
     and one point 7,400 or 200,000 units away
   - both collision programs binning alike, probed with 8,450 points planted on cell
-    boundaries as overlapping pairs that must all be pushed apart (`e8d24d4`). An isolated
+    boundaries as overlapping pairs that must all be pushed apart (`649b3b3c`). An isolated
     point cannot see a disagreement on the slot path — a mis-binned point is skipped by
     index and missed by its neighbours, never pushed by itself — and the probe fails with
     3,292 points left standing when the contact pass scales by 1.000001 more than the peel
@@ -580,14 +578,14 @@ inconsistent with itself. What an app can now see:
   fallback, that it reads asynchronously, once per change and never through the synchronous
   read, and that a provided graph's own `spaceSize` is reported before its device arrives. `test/host-embedding.test.ts` checks that space → screen stays an exact
   translation by the live origin through a `spaceSize` change.
-- `3a0dae6` adds a deprecation test: the default set explicitly at construction is silent,
+- `809baf23` adds a deprecation test: the default set explicitly at construction is silent,
   a switch to 2048 warns once, a switch back to the default is silent, and a graph built
   with 1000 warns at construction. The two existing no-warning assertions ignore the
   deprecation line. The rescale's centring term is written `centre − side / 2`,
   parenthesised: rounding commutes with doubling, so it is the same bits as the
   `(2·centre − side) / 2` it replaced, and default layouts stay bit-identical (unparenthesised
   it would add to the padding term first, which differs in one double in eight). 189 tests.
-- `04c4eb1` adds two tests, both failing before it: a graph at `spaceSize: 0` rescales to
+- `8ef4a024` adds two tests, both failing before it: a graph at `spaceSize: 0` rescales to
   the same positions as one at the default (it stayed unscaled), and one at 1 as at 2; the
   notice stays silent for 0 next to its error, and names 2 for 1.
 - Large-scale numbers (100k–1M) come from the real-GPU harness and are reported here, not
@@ -628,7 +626,7 @@ inconsistent with itself. What an app can now see:
   visible effect. Step time in those review runs also rose, from 6.8 ms to 42.8 ms (point
   at 1e6) and 72.1 ms (point at 1e7). Not investigated.
 - **The first-tick burst from a tight start blob** is about 10× larger than on `main`
-  since `94a354a`. The coarse space-anchored cells used to put a whole 41-unit blob into
+  since `142d5ea2`. The coarse space-anchored cells used to put a whole 41-unit blob into
   the near field, whose per-tick kick is bounded. Layouts settle to a similar extent, but
   stories that start 10k or more points from such a blob (Radial Mesh, Worm, Actions,
   Lasso Selection) settle into a different fold or arrangement than on `main`: per-point

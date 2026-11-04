@@ -1,7 +1,7 @@
 # Link styles: dashed, dotted, and gradient links
 
 **Date:** 2026-07-08
-**Commits:** `b42d045`, `3ab2596`, `53e6062` (feature); `c9ef089`, `fbb88d2`, `d142444`, `7fe5aed`, `ece719d`, `0ab6c16` (post-review hardening)
+**PR:** [#242](https://github.com/cosmosgl/graph/pull/242)
 
 ## Why
 

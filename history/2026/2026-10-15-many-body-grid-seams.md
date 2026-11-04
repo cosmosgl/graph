@@ -1,9 +1,7 @@
-<!-- suggested path: history/2026/2026-10-15-many-body-grid-seams.md -->
-
 # Many-body grid seams: the grid shifts every tick, the pyramid starts at 8², and far-field centroids keep two cells away below 25k points
 
 **Date:** 2026-10-15
-**Commits:** `perf(force): start the many-body pyramid at 8² — the 4² level was its slowest pass` (`49f83d9`), `fix(force): shift the many-body grid every tick — fixed cell boundaries drew a cross` (`e29bb10`), `docs(force): the many-body grid shifts every tick and starts at 8²` (`6c35257`), `fix(force): use far-field centroids only from two cells away — clustered layouts jittered` (`c30843e`), `feat(force): choose the far-field shell by point count — simulationRepulsionQuality forces it` (`e53aea7`), `feat(stories): the motion check switches the far field live, and loses its readouts` (`1c4b884`)
+**Commits:** `perf(force): start the many-body pyramid at 8² — the 4² level was its slowest pass` (`9a86d9cf`), `fix(force): shift the many-body grid every tick — fixed cell boundaries drew a cross` (`87127b2c`), `docs(force): the many-body grid shifts every tick and starts at 8²` (`cca3f006`), `fix(force): use far-field centroids only from two cells away — clustered layouts jittered` (`fa25aed5`), `feat(force): choose the far-field shell by point count — simulationRepulsionQuality forces it` (`0b0bcbe0`), `feat(stories): the motion check switches the far field live, and loses its readouts` (`ef39345b`)
 
 ## Why
 
@@ -61,7 +59,7 @@ the quarter lines, the fix 0.986–1.005), so the cross needs a dense, large lay
 
 ## What changed
 
-- **The grid shifts every tick** (`e29bb10`). `DataBounds.run()` takes an optional
+- **The grid shifts every tick** (`87127b2c`). `DataBounds.run()` takes an optional
   `originShift: { cellsPerAxis, offset }`. The final reduction pass pads the fitted square
   by one cell of the consumer's coarsest grid (a cell of `extent / (cellsPerAxis − 1)`) and
   slides its origin back by `offset` of that cell. The padding equals the slide's range, so
@@ -74,7 +72,7 @@ the quarter lines, the fix 0.986–1.005), so the cross needs a dense, large lay
   uniform data, visible on clustered data until the shell below widened. The collision
   force does not use `DataBounds`: its cells are counted from the world origin
   (`collision-grid.ts`), so there is nothing to shift.
-- **Far-field centroids are used only from two cells away** (`c30843e`). Every level but
+- **Far-field centroids are used only from two cells away** (`fa25aed5`). Every level but
   the finest leaves a 5×5 block of cells (Chebyshev radius 2) to the next level instead
   of 3×3, and each level refines the block its parent left — `(4r+2)²` cells from
   `(cell/2)·2 − 2r` — minus its own. A centroid's error falls with the square of its
@@ -85,14 +83,14 @@ the quarter lines, the fix 0.986–1.005), so the cross needs a dense, large lay
   a level's own radius and its parent's as uniforms, so one loop shape serves every level. A
   level's block fits inside the one it refines whenever r(L+1) ≤ 2·r(L), and every cell is
   still charged to exactly one pass.
-- **The wide shell is the default only up to 25,000 points** (`e53aea7`). It costs a third
+- **The wide shell is the default only up to 25,000 points** (`0b0bcbe0`). It costs a third
   of a step above that and nothing below (measured below), and what it fixes is a
   hot-simulation effect that a settled layout does not show. `simulationRepulsionQuality`
   names the choice: `'precise'` is the 5×5 shell, `'fast'` the 3×3, and the default `'auto'`
   is precise up to `PRECISE_FAR_FIELD_MAX_POINTS` (25,000) and fast above. The radius was
   already a per-level uniform, so the shader did not change; the setting is read every tick
   and applies to the next step through `setConfigPartial`.
-- **The pyramid starts at 8², not 4²** (`49f83d9`). `COARSEST_GRID_SIZE` names the
+- **The pyramid starts at 8², not 4²** (`9a86d9cf`). `COARSEST_GRID_SIZE` names the
   coarsest level; the finest level is unchanged. Two reasons:
   - The shift pads by one *coarsest* cell. From 4², that is a third of the box, which
     coarsens every level's cells by 4/3. Measured that way, the 100k-point disk error rose
@@ -111,7 +109,7 @@ the quarter lines, the fix 0.986–1.005), so the cross needs a dense, large lay
 ## Cost and accuracy
 
 The tables in this section were measured with the 3×3 shell on every level, before
-`c30843e`; the wider shell's own numbers follow them. All paired and interleaved in one page,
+`fa25aed5`; the wider shell's own numbers follow them. All paired and interleaved in one page,
 median of 11 rounds, blob start, gravity 0.25:
 
 | step time | 5k | 20k | 100k | 300k |
@@ -153,7 +151,7 @@ square and 0.093% → 0.098% on the 100k disk. Other effects:
   at three places still passes at float rounding, and on the real GPU two placements of a
   20k-point blob end 0.0006% of the extent apart (0.0009% before), nudged ones 0.0004%.
 
-### The wider shell (`c30843e`) and its threshold (`e53aea7`)
+### The wider shell (`fa25aed5`) and its threshold (`0b0bcbe0`)
 
 Far-field texel reads per point over seven levels go 217 → 505 for an interior point
 (coarsest level 55 → 39, each middle level 27 → 75, finest 27 → 91; averaged over a uniform
@@ -183,7 +181,7 @@ kept):
 | | motion |
 |---|---|
 | `main` | 0.0137 |
-| 3×3 shell with the shift (`08b58ed`) | 0.0181 |
+| 3×3 shell with the shift (`2b202321`) | 0.0181 |
 | 5×5 shell on every level but the finest | 0.0082 |
 | radius 2 on the coarsest level only / two / four coarsest levels | 0.0100 / 0.0101 / 0.0090 |
 
@@ -196,7 +194,7 @@ measured; by construction it can only have fallen, since more cells are refined 
 else moved.
 
 The same metric on the four scenarios of the Steady-State Motion story, read from the
-readouts it had at `e40a649` (RMS per tick in point spacings over 60 ticks):
+readouts it had at `a1373f3b` (RMS per tick in point spacings over 60 ticks):
 
 | alpha held at 1 | 3×3 | 5×5 |
 |---|---|---|
@@ -262,11 +260,11 @@ less than the margin did: square 0.066% and disk 0.098% for the 20-tick mean, 0.
 - The seam, accuracy and timing numbers above come from a real-GPU headless harness
   (Playwright, ANGLE Metal) comparing self-contained bundles of `main`, the commit before
   this change, and this change.
-- The wider shell (`c30843e`): the 160 browser tests pass; `gen-diagrams.cjs` recomputes the
+- The wider shell (`fa25aed5`): the 160 browser tests pass; `gen-diagrams.cjs` recomputes the
   pyramid and seam figures with the shaders' coverage rule and asserts that a boundary
   crossing now swaps ten cells; checked by eye in Storybook that Lasso Selection no longer
   jitters and that no cross appears there or in Space Size Wall at 300k.
-- The threshold and key (`e53aea7`): two browser tests on a 25-cluster layout in
+- The threshold and key (`0b0bcbe0`): two browser tests on a 25-cluster layout in
   `test/unbounded-space.test.ts` pin the tiering through the public API alone — `'auto'`
   equals `'precise'` at 5,000 points and `'fast'` at 26,000, bit for bit; the two shells lay
   out differently; a switch on a running graph changes the steps that follow. Both fail
@@ -275,7 +273,7 @@ less than the margin did: square 0.066% and disk 0.098% for the 20-tick mean, 0.
 ## Example
 
 `src/stories/performance/steady-state-motion.ts`, **Performance → Steady-State Motion**
-(`1c4b884`): four layouts with alpha held at 1 — the country graph on the exact path, a
+(`ef39345b`): four layouts with alpha held at 1 — the country graph on the exact path, a
 linked lattice with collision, the Lasso clusters under repulsion 8, a 100k blob — each
 tracing one point from its densest cell, with three buttons that apply
 `simulationRepulsionQuality` to all four live. Each pane's header says what the setting

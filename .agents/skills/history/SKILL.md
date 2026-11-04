@@ -6,4 +6,6 @@ allowed-tools: Bash(git *) Bash(date *) Bash(mkdir *) Bash(ls *) Read Glob Edit 
 
 Read `history/PROMPT.md` and follow its instructions.
 
+Use verified PR links as the default citations. See the guide for entries drafted before a PR exists and for references to exact revisions.
+
 The **why** for this invocation: `$ARGUMENTS`

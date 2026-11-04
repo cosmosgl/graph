@@ -1,8 +1,6 @@
-<!-- suggested path: history/2026/2026-09-24-links-by-point.md -->
-
 # Links grouped by point in typed arrays
 
-**Commits:** `perf(data): group links by point in typed arrays — rebuilt only when the links change` (`36b92d5`)
+**Commits:** `perf(data): group links by point in typed arrays — rebuilt only when the links change` (`cbfef102`)
 
 ## Why
 

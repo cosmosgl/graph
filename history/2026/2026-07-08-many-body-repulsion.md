@@ -1,9 +1,7 @@
-<!-- suggested path: history/2026/2026-07-08-many-body-repulsion.md -->
-
 # Many-body repulsion: grid + Monte-Carlo near field
 
 **Date:** 2026-07-08
-**Commits:** `Precise Monte-Carlo near field force` (`3c78989`), `Add Repulsion Benchmark story` (`0c4d9d9`), `docs(force): explain grid-based many-body repulsion` (`7a612c6`); hardening: `fix(force): exclude absent points from near-field slots` (`24ed690`), `fix(force): replace sin-based hash with lowbias32 in near-field sampling` (`58ededd`), `fix(force): changing spaceSize disabled many-body and reused stale velocity` (`eeef329`), `refactor(force): drop dead grid-level branch and fix many-body comments` (`edba6b2`), `fix(stories): stop the repulsion benchmark when its story unmounts` (`5c5c0a2`), `fix(force): 16-bit peel depth buffer quantized the 24-bit sampling hash` (`1f69a26`), `fix(docs): diagram generator could not run under the repo's ESM package` (`babbe27`)
+**Commits:** `Precise Monte-Carlo near field force` (`651f7a7b`), `Add Repulsion Benchmark story` (`04c90e22`), `docs(force): explain grid-based many-body repulsion` (`a1f380ce`); hardening: `fix(force): exclude absent points from near-field slots` (`830db5ea`), `fix(force): replace sin-based hash with lowbias32 in near-field sampling` (`60c7bf71`), `fix(force): changing spaceSize disabled many-body and reused stale velocity` (`131e9fec`), `refactor(force): drop dead grid-level branch and fix many-body comments` (`07dc2da9`), `fix(stories): stop the repulsion benchmark when its story unmounts` (`7091219a`), `fix(force): 16-bit peel depth buffer quantized the 24-bit sampling hash` (`e061f2c3`), `fix(docs): diagram generator could not run under the repo's ESM package` (`f768faf3`)
 
 ## Why
 

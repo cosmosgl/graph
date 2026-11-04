@@ -1,9 +1,7 @@
-<!-- suggested path: history/2026/2026-10-21-point-stroke-force-stack.md -->
-
 # Point strokes and force changes in one PR stack
 
 **Date:** 2026-10-21
-**Commits:** `fix(force): stack unbounded space on pairwise collision constraints` (`603af81`) — the stack's four merge commits were folded into it when the stack was rebased linear; final integration in [#282](https://github.com/cosmosgl/graph/pull/282).
+**Commits:** `fix(force): stack unbounded space on pairwise collision constraints` (`96dabcd7`) — the stack's four merge commits were folded into it when the stack was rebased linear; final integration in [#282](https://github.com/cosmosgl/graph/pull/282).
 
 The five branches were developed against different versions of `main`. Stacking
 #267 → #270 → #280 → #281 → #282 needs their behavior to compose, rather than

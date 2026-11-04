@@ -1,8 +1,6 @@
-<!-- suggested path: history/2026/2026-06-03-touch-input.md -->
-
 # Touch input on phones and tablets
 
-**Commits:** c4b93e1
+**PR:** [#228](https://github.com/cosmosgl/graph/pull/228)
 
 ## Why
 

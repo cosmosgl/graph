@@ -1,8 +1,15 @@
 # Spatial-hash collision force
 
 **Date:** 2026-06-13
-**Commits:** `6cb1b48`, `566bcba`, `6e41a8a`, `ad860ec`, `8284883`, `9c852f7`, `94dcfd3`,
-`ca4ee44`, `58e2475`
+**Commits:** `feat(simulation): add spatial-hash point collision force` (`68492a9`),
+`docs: document the collision force` (`a773bbc`),
+`feat(stories): add Collision experiment story` (`9604e8d`),
+`feat(stories): Move Clustering stories under Forces` (`cdde698c`),
+`fix(simulation): address CodeRabbit review on collision force` (`46fb726`),
+`feat(stories): add 50K-node collision stress test` (`3a85312`),
+`refactor(simulation): remove unused collision spaceSize uniform and optimize run` (`f8ebb54`),
+`fix(force): cover the full collision range and unbias cell averages` (`ca4ee44`),
+`fix(force): keep the fitted collision cell at the interaction range` (`58e2475`)
 
 ## Why
 
@@ -109,10 +116,10 @@ add a config/data path that affects collision sizing, add an invalidation there 
 - **Border clamping** — the force pass clamps a point's own cell coords to the grid
   bounds, matching `build-grid.vert`. Without it, a point that drifts >1 cell outside the
   space sees an all-out-of-bounds neighborhood and loses collision response near edges
-  (fixed in `8284883`).
+  (fixed in `46fb726`).
 - **Large-graph safety** — max point size is computed by **looping** over `data.pointSizes`,
   not `Math.max(...Array.from(...))`; spreading a 50K+ typed array as call args throws a
-  `RangeError` before collision even initializes (fixed in `8284883`).
+  `RangeError` before collision even initializes (fixed in `46fb726`).
 
 ## Tuning guidance
 
@@ -134,7 +141,7 @@ add a config/data path that affects collision sizing, add an invalidation there 
   framed up front, so start-up isn't misread as drift. A new *Examples/Forces* group was
   introduced and the existing Clustering stories moved under it (*Examples/Forces/Clustering*).
 - **Collision Stress Test** (`src/stories/forces/collision-stress-test.ts`, *Examples/Forces*,
-  commit `9c852f7`): 50,000 points seeded with heavy overlap in a dense disc, repulsion off,
+  commit `3a85312`): 50,000 points seeded with heavy overlap in a dense disc, repulsion off,
   gentle gravity to keep them packed so collision keeps working, `showFPSMonitor: true` to
   read the cost under load. Use this to gauge collision performance at scale.
 - Docs: `simulationCollision` / `simulationCollisionRadius` / `simulationCollisionPadding`

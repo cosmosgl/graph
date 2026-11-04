@@ -1,11 +1,9 @@
-<!-- suggested path: history/2026/2026-07-30-data-texture-addressing.md -->
-
 # Addressing data textures by texel index
 
 **Commits:** `fix(shaders): read data textures by texel index, never by coordinate`
-(`c440ce4`), `fix(points): tracked points follow the point, not a baked texel`
-(`3f3a3b8`), `fix(points): close the lasso with integer modulo` (`d7a5225`),
-`fix(force): declare highp int for near-field point indices` (`71206e2`)
+(`85743f50`), `fix(points): tracked points follow the point, not a baked texel`
+(`c36d3b0c`), `fix(points): close the lasso with integer modulo` (`b2dbb9ad`),
+`fix(force): declare highp int for near-field point indices` (`d0edabe7`)
 
 ## Why
 
@@ -96,7 +94,7 @@ local of the same name). That one now asks the texture.
   re-baked them when the point count changed. A stale index used to clamp and
   report *some* real point's position; after this sweep it read out of range and
   reported `(0, 0)`, so a tracked set landed at the origin and read like a layout
-  bug. `3f3a3b8` closes it with this entry's own rule rather than the re-bake
+  bug. `c36d3b0c` closes it with this entry's own rule rather than the re-bake
   that was owed: the table stores the raw point index, and `track-positions.frag`
   derives the texel at read time from `textureSize(positionsTexture, 0)` —
   legitimate there, since the shader samples that texture. With no baked mapping
@@ -143,7 +141,7 @@ hardware was exercised.
   32 767 is only safe where the driver widens mediump (desktop/ANGLE does; the
   spec does not promise it). `track-positions.frag` and `force-nearfield.frag` —
   the shaders that hold raw indices — now declare `precision highp int;`
-  (`71206e2`); SwiftShader, Chrome's fallback renderer, reports mediump int as
+  (`d0edabe7`); SwiftShader, Chrome's fallback renderer, reports mediump int as
   exactly 16 bits, so the gap is real on reachable stacks. Bounded ints (texel
   coordinates, grid cells) keep the default, and sampler precision — `lowp` by
   default, the same spec posture — was deliberately left alone: no reachable
@@ -157,6 +155,6 @@ hardware was exercised.
   held one live instance: `find-points-in-polygon.frag` wrapped its last edge
   with float `mod`, and at 33 path vertices closed the lasso onto a zero-filled
   padding texel — four outsiders selected, the enclosed point dropped
-  (`d7a5225`).
+  (`b2dbb9ad`).
 - `npm run build` exits 0 even when TypeScript errors are printed, so a green
   build is not a type check — `npx tsc --noEmit` is.
