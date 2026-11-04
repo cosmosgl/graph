@@ -1,16 +1,58 @@
-body {
-  font-family: "Nunito Sans", -apple-system, ".SFNSText-Regular", "San Francisco", BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
-  margin: 0px;
-}
-
-.app {
-  position: absolute;
-  width: 100%;
-  height: 100%;
-  color: white;
-}
-
-.graph {
+.point-labels-story {
+  position: relative;
   width: 100%;
   height: 100vh;
+  color: #fff;
+  font-family: "Nunito Sans", -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+}
+
+.point-labels-graph {
+  width: 100%;
+  height: 100%;
+}
+
+.point-label-options {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  max-width: calc(100% - 32px);
+  overflow: hidden;
+  border-radius: 5px;
+  background: #29313a;
+  font: 12px Helvetica, Arial, sans-serif;
+}
+
+.point-label-options label {
+  position: relative;
+  cursor: pointer;
+}
+
+.point-label-options input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.point-label-options span {
+  display: block;
+  padding: 6px 9px;
+  color: #c5c8d0;
+}
+
+.point-label-options label:hover span {
+  background: #2e333b;
+}
+
+.point-label-options input:checked + span {
+  background: #3d4554;
+  color: #fff;
+}
+
+.point-label-options input:focus-visible + span {
+  outline: 2px solid #a4caff;
+  outline-offset: -2px;
 }

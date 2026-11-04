@@ -55,10 +55,9 @@ export interface PositionsReadOptions {
    * GPU has finished the previous one. A host that drives frames itself (`enableRenderLoop:
    * false`, a headless graph, a standalone simulation) may queue frames ahead of the copy, and
    * the positions then trail by a frame or more.
-   * The first read, and the first after the tracked points or the clusters change, still
-   * waits: there is nothing earlier to return. So does a read after more than a few simulation
-   * steps without one, whose cache predates the pause — an overlay that resumes appears in
-   * place.
+   * For tracked positions and cluster centroids, a cold cache still requires a synchronous
+   * read. This includes the first read, cluster membership changes, and reads after several
+   * unread simulation steps. Sampled point reads return an empty result until a copy completes.
    */
   nonBlocking?: boolean;
 }
@@ -712,6 +711,7 @@ export class GraphSimulation implements PositionTextureSource {
    */
   public collectReadbacks (heldMs?: number): void {
     this.points?.resolveTrackedPositionsReadback()
+    this.points?.resolveSampledReadback()
     this.clusters?.resolveCentroidReadback()
     if (heldMs === undefined) this.forceManyBody?.cancelOccupancyReadback()
     else this.forceManyBody?.collectOccupancy(heldMs)
@@ -725,6 +725,7 @@ export class GraphSimulation implements PositionTextureSource {
    */
   public issueReadbacks (): void {
     this.points?.requestTrackedPositionsReadback()
+    this.points?.requestSampledReadback()
     this.clusters?.requestCentroidReadback()
     this.forceManyBody?.issueOccupancy()
   }

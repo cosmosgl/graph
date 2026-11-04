@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { luma } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
 
@@ -89,12 +89,12 @@ const CONFIG: GraphConfig = {
 const stackedPositions = (pointsNumber: number): Float32Array =>
   new Float32Array(pointsNumber * 2).fill(SPACE_SIZE / 2)
 
-const createCanvasGraph = (): { graph: Graph; destroy: () => void } => {
+const createCanvasGraph = (config: GraphConfig = {}): { graph: Graph; destroy: () => void } => {
   const div = document.createElement('div')
   div.style.width = '200px'
   div.style.height = '200px'
   document.body.appendChild(div)
-  const graph = new Graph(div, CONFIG)
+  const graph = new Graph(div, { ...CONFIG, ...config })
   return { graph, destroy: (): void => { graph.destroy(); div.remove() } }
 }
 
@@ -103,6 +103,38 @@ const topPoint = (graph: Graph): number | undefined => {
   expect(indices).toHaveLength(1)
   return indices[0]
 }
+
+describe('non-blocking point samples', () => {
+  it.each([true, false])('updates both sample formats after a camera move (render loop %s)', async (enableRenderLoop) => {
+    const { graph, destroy } = createCanvasGraph({ enableRenderLoop })
+    try {
+      graph.setPointPositions(stackedPositions(4))
+      graph.render()
+      await graph.ready
+
+      const options = { nonBlocking: true }
+      expect(graph.getSampledPoints(options).indices).toEqual([])
+      await vi.waitFor(() => expect([...graph.getSampledPointPositionsMap(options).keys()]).toEqual([3]))
+      const sample = graph.getSampledPoints(options)
+      expect(sample).toEqual({ indices: [3], positions: [SPACE_SIZE / 2, SPACE_SIZE / 2] })
+      sample.indices.length = 0
+      expect(graph.getSampledPoints(options).indices).toEqual([3])
+
+      graph.setViewTransform({ k: 1, x: 300, y: 0 })
+      expect(graph.getSampledPoints(options).indices).toEqual([3])
+      await vi.waitFor(() => expect(graph.getSampledPoints(options).indices).toEqual([]))
+
+      graph.setViewTransform({ k: 1, x: 0, y: 0 })
+      expect(topPoint(graph)).toBe(3)
+      await vi.waitFor(() => expect(graph.getSampledPoints(options).indices).toEqual([3]))
+      graph.setPointPositions(new Float32Array())
+      graph.render()
+      expect(graph.getSampledPoints(options).indices).toEqual([])
+    } finally {
+      destroy()
+    }
+  })
+})
 
 describe('drawing by the render order', () => {
   it('draws the highest index on top when no order is set', async () => {
