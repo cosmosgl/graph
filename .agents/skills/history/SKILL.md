@@ -6,4 +6,6 @@ allowed-tools: Bash(git *) Bash(date *) Bash(mkdir *) Bash(ls *) Read Glob Edit 
 
 Read `history/PROMPT.md` and follow its instructions.
 
+Prefer a history-only commit after the feature commit. For a combined commit, cite the feature subject with “this commit”. After a merge or rebase rewrites cited hashes, verify their replacements and prepare a focused follow-up PR.
+
 The **why** for this invocation: `$ARGUMENTS`

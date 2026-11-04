@@ -1,36 +1,34 @@
-<!-- suggested path: history/2026/2026-09-07-deck-layers.md -->
-
 # @cosmos.gl/deck-layers: the deck-side package, and the pnpm workspace that hosts it
 
-**Commits:** `build: convert the repo to a pnpm workspace` (`b5c4a79`),
+**Commits:** `build: convert the repo to a pnpm workspace` (`bd7c5080`),
 `build: drop engines.pnpm and stop persisting CI checkout credentials`
-(`b2ce8a9`), `feat(deck-layers): scaffold @cosmos.gl/deck-layers and port the
-prototype layers` (`cea3e30`), `fix(deck-layers): keep blend/depth state on
-layer props` (`2bd7252`), `feat(deck-layers): rebuild CosmosPointsLayer on
-deck's shader modules` (`93736b6`), `test(deck-layers): harden the picking
-tests` (`2bb23c9`), `feat(deck-layers): rebuild CosmosLinksLayer on deck's
-shader modules` (`9ae9c14`), `feat(deck-layers): CosmosGraphLayer — the
-composite that owns its simulation` (`38c8a86`), `fix(simulation): reset host
-GL state before sparse-write tracking draws` (`8fc0288`),
-`feat(deck-layers): drag-to-pin on CosmosGraphLayer` (`72f4cd6`),
+(`6c467072`), `feat(deck-layers): scaffold @cosmos.gl/deck-layers and port the
+prototype layers` (`065441c1`), `fix(deck-layers): keep blend/depth state on
+layer props` (`de92e0f1`), `feat(deck-layers): rebuild CosmosPointsLayer on
+deck's shader modules` (`e20af0b3`), `test(deck-layers): harden the picking
+tests` (`e48b4b9b`), `feat(deck-layers): rebuild CosmosLinksLayer on deck's
+shader modules` (`5ecd682a`), `feat(deck-layers): CosmosGraphLayer — the
+composite that owns its simulation` (`7ab69612`), `fix(simulation): reset host
+GL state before sparse-write tracking draws` (`185e0098`),
+`feat(deck-layers): drag-to-pin on CosmosGraphLayer` (`1ee49412`),
 `feat(stories): move the deck.gl stories into the package and focus the set on
-CosmosGraphLayer` (`ef15b78`), `fix(deck-layers): highlight only the hovered
-sublayer` (`bcbb61b`), `build: lockstep release wiring and the CI test leg`
-(`29f7d17`), `feat(deck-layers): transitions forwarding, binary styling
-channels, partial position seeding` (`18d4dc5`), `feat(stories): four showcase
-stories — scale, composition, live updates, control` (`a36e794`),
-`fix(deck-layers): drop links whose endpoint is not a point` (`242c521`),
+CosmosGraphLayer` (`10f058e6`), `fix(deck-layers): highlight only the hovered
+sublayer` (`9825489c`), `build: lockstep release wiring and the CI test leg`
+(`0cff4a71`), `feat(deck-layers): transitions forwarding, binary styling
+channels, partial position seeding` (`47b30eb8`), `feat(stories): four showcase
+stories — scale, composition, live updates, control` (`cb1b8758`),
+`fix(deck-layers): drop links whose endpoint is not a point` (`dec0ab8d`),
 `fix(deck-layers): collapse zero-size points before the edge-padding divide`
-(`ebc9ebb`), `fix(deck-layers): re-ingest links when getPointId changes`
-(`7786c6e`), `docs(stories): an Integrations folder with the deck.gl layers
-guide` (`6c64dc5`), `build(deps): pin the luma.gl and deck.gl peer ranges to
-the 9.3 line` (`bbab52b`), `refactor(deck-layers): CosmosGraphLayer is the
-only export` (`709e646`), ``feat(deck-layers): a layer without `points` draws
-the simulation as loaded`` (`3b817b5`), `feat(deck-layers): binary links take
-styling channels` (`cf3fdb6`), `feat(stories): your own simulations`
-(`c068334`), `feat(stories): three deck.gl stories` (`f054461`),
+(`7dd5e877`), `fix(deck-layers): re-ingest links when getPointId changes`
+(`87601192`), `docs(stories): an Integrations folder with the deck.gl layers
+guide` (`6795dfb3`), `build(deps): pin the luma.gl and deck.gl peer ranges to
+the 9.3 line` (`c98338cc`), `refactor(deck-layers): CosmosGraphLayer is the
+only export` (`968392e7`), ``feat(deck-layers): a layer without `points` draws
+the simulation as loaded`` (`22323167`), `feat(deck-layers): binary links take
+styling channels` (`df7da05a`), `feat(stories): your own simulations`
+(`5eccf295`), `feat(stories): three deck.gl stories` (`2a8fec5b`),
 `feat(stories): a graph on a map — the layer in deck.gl's map view, the layout
-in the map's space` (`ca9d341`)
+in the map's space` (`940c3818`)
 
 ## Why
 
@@ -196,7 +194,7 @@ Four correctness rules came out of running the layers for real, each encoded
 as a fix plus a regression test:
 
 - **Pipeline state lives on `defaultProps.parameters`, never only at `Model`
-  creation** (`2bd7252`): deck resets every model's parameters from
+  creation** (`de92e0f1`): deck resets every model's parameters from
   `layer.props.parameters` before each draw and luma replaces rather than
   merges, so construction-time blend/depth state survives exactly one frame.
   The default must also be declared with the base layer's descriptor shape
@@ -204,21 +202,21 @@ as a fix plus a regression test:
   new-but-equal `parameters` object from the caller would read as a prop
   change every render.
 - **A composite whose sublayers have separate index spaces must route
-  `autoHighlight` itself** (`bcbb61b`): deck forwards one highlight color to
+  `autoHighlight` itself** (`9825489c`): deck forwards one highlight color to
   every sublayer, and point *N* and link *N* encode the same picking color —
   hovering one tinted the other. The composite now highlights only the
   sublayer the hover came from and clears the rest.
 - **Every raster entry point on a shared device resets the host's ambient GL
-  state** (`8fc0288`): the sparse-write path (`setPointPositionsByIndices` →
+  state** (`185e0098`): the sparse-write path (`setPointPositionsByIndices` →
   `trackPoints()`) drew without the guard the simulation step already had —
   and a settled layout is exactly when users drag. This closed the sparse-write
   half of open item 2 of the host-embedding review; the tracking draw now
   resets the state itself, which closes the rest (see
   [non-blocking position reads](2026-09-28-nonblocking-position-reads.md)).
-  The CI test leg (`29f7d17`) closed item 3, and the async snapshot fence
+  The CI test leg (`0cff4a71`) closed item 3, and the async snapshot fence
   (item 1) landed after, in `fix(points): fence the async position read`
-  (`af35256`).
-- **A zero size hides a point by rule, not by luck** (`ebc9ebb`): a size of 0
+  (`06bc1595`).
+- **A zero size hides a point by rule, not by luck** (`7dd5e877`): a size of 0
   made the quad expansion divide by zero, and GPUs happen to drop the
   resulting vertex. A non-positive size now collapses the quad before the
   divide, the same way an absent point's does.

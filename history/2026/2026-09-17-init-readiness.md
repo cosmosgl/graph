@@ -1,8 +1,6 @@
-<!-- suggested path: history/2026/2026-09-17-init-readiness.md -->
-
 # Init readiness: flag set before the modules existed
 
-**Commits:** `fix(init): flag the graph ready only once its modules exist` (`bc5ca5c`)
+**Commits:** `fix(init): flag the graph ready only once its modules exist` (`c8e2f7f4`)
 
 ## Why
 

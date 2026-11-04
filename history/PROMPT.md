@@ -10,7 +10,7 @@ If the **why** argument starts with `--update` or `-u`, follow **Update mode**. 
 2. Run `git show --stat` on the relevant commit(s) to see what changed.
 3. Ask for the **why** if it wasn't provided — do not skip or guess.
 4. Draft the entry (see [Writing rules](#writing-rules) below). Use today's date for the filename.
-5. If any commit hashes are uncertain or not yet merged, leave them as `<!-- TODO -->`.
+5. Prefer writing the entry after the feature commits and keeping the entry in a separate history-only commit. For a combined commit, cite the feature subject with “this commit”. Use the rules below to handle hashes that may change.
 6. Create the year directory if needed (`history/YYYY/`), then write the file to `history/YYYY/YYYY-MM-DD-topic.md`.
 7. Show the saved file path and content. Ask the user to review before committing.
 
@@ -26,7 +26,7 @@ Use when recent commits extend or correct a topic that already has an entry — 
    - Append the new commit hashes to the **Commits** line (replace stale/squashed hashes if needed). **Skip commits that only touch `history/`**.
    - Revise sections affected by the new commits so the doc reflects current state — not an addendum tacked on the end.
    - Keep the original filename and date — the file represents the topic, not the latest commit.
-   - Anything ambiguous: leave a `<!-- TODO: ... -->` rather than guessing.
+   - For an ambiguous commit reference, keep the verified subject or PR link until the hash can be confirmed.
 6. Show the file path and a summary of what changed (which sections, which commits added). Ask the user to review before committing.
 
 ## Writing rules
@@ -34,7 +34,6 @@ Use when recent commits extend or correct a topic that already has an entry — 
 ### How it usually looks
 
 - **Filename:** `history/YYYY/YYYY-MM-DD-topic.md` — `topic` names an area of the codebase or a feature, not an action (`gpu-transitions`, `points-rendering`, not `fix-issue-42`). Same-day extras: `-02`, `-03`, ...
-- **First line:** `<!-- suggested path: history/YYYY/YYYY-MM-DD-topic.md -->`
 - **Length:** fit the change — a few lines for a small fix, longer when the change deserves it.
 - **Tone:** plain language for a teammate who was not present.
 - **Structure:** flexible. Bold inline labels (`**Why:**`, `**Notes:**`) work for small entries; `## h2` sections work better for larger ones.
@@ -49,13 +48,9 @@ Use when recent commits extend or correct a topic that already has an entry — 
 ### Ground rules
 
 - Read 1–2 recent entries under `history/` before writing — the corpus is the real source of truth on tone and detail level.
-- **Cite commits as subject + hash**, e.g. `` `feat(links): add dashed link styles` (`b42d045`) `` — this repo
-  rebase/squash-merges, which rewrites hashes, so the subject line is the durable identifier
-  (recoverable via `git log --grep`); the hash is a convenience that may go stale. When updating an
-  entry whose hashes no longer exist, match commits by subject and refresh the hashes if convenient —
-  never treat a stale hash as a reason to drop the citation.
-- Don't invent facts. If something's missing or unclear, add `<!-- TODO: ... -->` instead of guessing.
-- Writing before merge? Leave the commit hash as `<!-- TODO -->` and fill it in after.
+- Cite the commit subject and verified hash. Include the PR link when available so readers can find the change if its hash changes. If the hash is uncertain, cite the subject and any known PR link.
+- When the entry and feature share a commit, use a relative reference such as `` **Commits:** `feat(points): sample visible points` (this commit) ``.
+- After a squash merge, rebase, or other rewrite, check affected citations against the target branch. Confirm matches by subject and diff, and use the resulting squash commit or PR link if several commits became one. Preserve hashes that identify a specific historical branch or benchmark baseline. If references need updating, prepare a focused follow-up PR for those corrections.
 - Output **only** the markdown content ready to save.
 
 ---

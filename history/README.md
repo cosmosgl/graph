@@ -21,11 +21,9 @@ Length is up to you. Often a screen, longer when the change deserves it.
 **Skeleton:**
 
 ```markdown
-<!-- suggested path: history/YYYY/YYYY-MM-DD-topic.md -->
-
 # Short title
 
-**Commits:** abc1234
+**Commits:** `feat(area): describe the change` (`abc1234`)
 
 ## Why
 One or two sentences on the problem or goal.

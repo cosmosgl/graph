@@ -1,8 +1,7 @@
-<!-- suggested path: history/2026/2026-07-07-on-demand-rendering.md -->
 # On-demand rendering
 
 **Date:** 2026-07-07
-**Commits:** `On-demand rendering` (`403e0ba`); post-review: `refactor(render): observer-driven screen-size sync; rename resizeCanvas to syncScreenSize` (`a2ab764`), `fix(render): keep the loop running when ResizeObserver is unavailable` (`13e11e6`)
+**Commits:** `On-demand rendering` (`1e11dcc8`); post-review: `refactor(render): observer-driven screen-size sync; rename resizeCanvas to syncScreenSize` (`7d05baee`), `fix(render): keep the loop running when ResizeObserver is unavailable` (`74c816f0`)
 
 ## Why
 

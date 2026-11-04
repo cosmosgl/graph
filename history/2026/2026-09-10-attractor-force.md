@@ -1,4 +1,3 @@
-<!-- suggested path: history/2026/2026-09-10-attractor-force.md -->
 # Attractor force
 
 **Date:** 2026-09-10

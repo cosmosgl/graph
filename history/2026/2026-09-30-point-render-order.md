@@ -1,8 +1,6 @@
-<!-- suggested path: history/2026/2026-09-30-point-render-order.md -->
-
 # Point render order
 
-**Commits:** `feat(points): set the point render order without reordering the data` (`5d16e38`), `fix(points): apply a pending render order even when a config change runs create() first` (`adb19b9`), `chore(points): test how a render order resolves and draws — and rewrap its JSDoc note` (`b69e398`); rebase follow-ups: `fix(points): the host picking pass draws by the render order — a host picks the point on top` (`7e558f5`), `fix(points): the host picking pass layers highlighted over greyed — a host picks the point it sees` (`704fde4`)
+**Commits:** `feat(points): set the point render order without reordering the data` (`c7580b63`), `fix(points): apply a pending render order even when a config change runs create() first` (`1e37f3d4`), `chore(points): test how a render order resolves and draws — and rewrap its JSDoc note` (`16bb94b5`); rebase follow-ups: `fix(points): the host picking pass draws by the render order — a host picks the point on top` (`7d64510e`), `fix(points): the host picking pass layers highlighted over greyed — a host picks the point it sees` (`8023f628`)
 
 ## Why
 

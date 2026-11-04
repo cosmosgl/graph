@@ -1,5 +1,3 @@
-<!-- suggested path: history/2026/2026-09-15-point-stroke.md -->
-
 # Per-point edge stroke in a shade of the point's own color
 
 **Date:** 2026-09-15

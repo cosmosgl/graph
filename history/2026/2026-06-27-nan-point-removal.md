@@ -1,9 +1,7 @@
-<!-- suggested path: history/2026/2026-06-27-nan-point-removal.md -->
-
 # `NaN` positions for stable-identity point removal and addition
 
-**Commits:** 9931bd8, 3985df6, e0a2a0b, f1768c1, 9575554, 12e8219, 04e5a64, 2b754a9,
-607df91, ae2d44e, 83e069f, 31f3289, 2488f26, 6b8e6a6
+**Commits:** 70b8427c, 022440e8, 912d5e75, 77a079c0, d5637656, f5fe5dd3, 70acfa97, 46276caf,
+eb2ce4a4, 00086f8d, d8eeecc8, 622224f2, 1c00abea, ec5524ce
 
 ## Why
 

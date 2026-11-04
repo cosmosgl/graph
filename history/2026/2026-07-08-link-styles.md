@@ -1,7 +1,7 @@
 # Link styles: dashed, dotted, and gradient links
 
 **Date:** 2026-07-08
-**Commits:** `b42d045`, `3ab2596`, `53e6062` (feature); `c9ef089`, `fbb88d2`, `d142444`, `7fe5aed`, `ece719d`, `0ab6c16` (post-review hardening)
+**Commits:** `f5206073`, `4a23d92b`, `b486d089` (feature); `1ee648ec`, `cd4138bc`, `3d0e09e5`, `9c319fe0`, `026c1d4b`, `76908cae` (post-review hardening)
 
 ## Why
 

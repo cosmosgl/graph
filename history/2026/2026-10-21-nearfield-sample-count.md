@@ -1,9 +1,7 @@
-<!-- suggested path: history/2026/2026-10-21-nearfield-sample-count.md -->
-
 # Near-field sample count: measured from cell occupancy, fixed by `simulationRepulsionSamples`, peeled straight into two slot arrays
 
 **Date:** 2026-10-21
-**Commits:** `perf(force): peel near-field slots straight into their array layers — no copy per pass` (`3700475`), `feat(force): the near-field sample count is measured from cell occupancy in Graph's render loop, or fixed by simulationRepulsionSamples` (`efeca24`), `docs(force): the many-body and collision docs describe the measured sample count, the two slot arrays and their budgets` (`374666e`), `feat(stories): the steady-state motion check picks the near-field sample count — twelve held discs show where it matters` (`c378f49`), `feat(stories): the sample count under load — a hyperbolic graph with its frame times` (`d5b0486`)
+**Commits:** `perf(force): peel near-field slots straight into their array layers — no copy per pass` (`59cb571a`), `feat(force): the near-field sample count is measured from cell occupancy in Graph's render loop, or fixed by simulationRepulsionSamples` (`10f2f1e8`), `docs(force): the many-body and collision docs describe the measured sample count, the two slot arrays and their budgets` (`ee855d53`), `feat(stories): the steady-state motion check picks the near-field sample count — twelve held discs show where it matters` (`9463169a`), `feat(stories): the sample count under load — a hyperbolic graph with its frame times` (`f0fd13f3`)
 
 ## Why
 

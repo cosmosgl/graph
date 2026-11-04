@@ -1,11 +1,9 @@
-<!-- suggested path: history/2026/2026-10-07-deck-layers-cosmos-rendering.md -->
-
 # `CosmosGraphLayer` draws with cosmos.gl's renderer
 
-**Commits:** `feat(graph): expose the simulation and the curve shader module for host embeddings` (`289c226`), `feat(deck-layers): CosmosGraphLayer draws with cosmos.gl's renderer — the sublayers become the Custom deck layers story` (`0559292`), `fix(deck-layers): link ribbons extrude along the on-screen tangent — square to the curve on a pitched map` (`ff17a44`), `fix(stories): a trip the trickle just started runs at least one round trip — not ended on the frame it began` (`8ffaa0e`), `refactor(stories): the custom deck layers are the story's own — straight links in their own shader, plain names, a positionSource prop` (`a632c4e`), `fix(deck-layers): a style accessor left out sends nothing — the config's default keys draw` (`c05c10c`)
+**Commits:** `feat(graph): expose the simulation and the curve shader module for host embeddings` (`4e7782f8`), `feat(deck-layers): CosmosGraphLayer draws with cosmos.gl's renderer — the sublayers become the Custom deck layers story` (`a3d4907d`), `fix(deck-layers): link ribbons extrude along the on-screen tangent — square to the curve on a pitched map` (`9dd68853`), `fix(stories): a trip the trickle just started runs at least one round trip — not ended on the frame it began` (`fe4453a1`), `refactor(stories): the custom deck layers are the story's own — straight links in their own shader, plain names, a positionSource prop` (`57990683`), `fix(deck-layers): a style accessor left out sends nothing — the config's default keys draw` (`d05e85ad`)
 
-`a632c4e` replaces the curve parts of two earlier commits: the curve shader module `289c226`
-exported was withdrawn before release, and the curved ribbons `ff17a44` fixed became straight
+`57990683` replaces the curve parts of two earlier commits: the curve shader module `4e7782f8`
+exported was withdrawn before release, and the curved ribbons `9dd68853` fixed became straight
 links, which keep its divide by `w`.
 
 ## Why
