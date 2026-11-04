@@ -16,7 +16,7 @@ Creates a new Graph instance for visualizing network graphs.
 import { Graph } from '@cosmos.gl/graph'
 
 const div = document.querySelector('div')
-const graph = new Graph(div, { spaceSize: 4096 })
+const graph = new Graph(div, { simulationGravity: 0.5 })
 ```
 
 #### <a name="custom-device" href="#custom-device">#</a> Using a Custom Device
@@ -107,6 +107,8 @@ graph.setPointPositions(positions);
 
 By default an absent point fades to nothing (size and opacity → 0). To customize the exit look, pass per-point values via `setPointSizes` / `setPointColors` (e.g. recolor while fading); a `NaN` entry in those arrays means "use the exit default" for an absent point. This works with the simulation on or off — a `NaN` position is excluded from the force layout rather than corrupting it. Adding a point is the mirror (`NaN → real`, fades in). cosmos.gl does not auto-compact away the gaps — drop them yourself when convenient and snap the renumber with [`render(undefined, 0)`](#render). See the **Examples / Beginners → Add & Remove Points** story.
 
+**Positions are not bounded by `spaceSize`, but they are finite.** A layout may extend beyond the `[0, spaceSize]` square as far as its forces take it. A coordinate of `±Infinity` is placed on the matching edge of that square (`0` or `spaceSize`); the input array itself is left as it is.
+
 **Example:**
 ```javascript
 graph.setPointPositions(new Float32Array([1, 2, 3, 4, 5, 6]));
@@ -171,6 +173,36 @@ This method retrieves the current sizes of the graph points that were previously
 **Returns:** A Float32Array representing the sizes of points in the format `[size1, size2, ..., sizeN]`, where each `size` value corresponds to the size of the point at the same index in the graph's data. Returns an empty Float32Array if no point sizes are set.
 
 The returned array contains the processed point sizes used for rendering, including any default values that were applied during processing. While point sizes transition, it holds the target sizes; `getPointRadiusByIndex` moves with the animation.
+
+### <a name="set_point_stroke_colors" href="#set_point_stroke_colors">#</a> graph.<b>setPointStrokeColors</b>(<i>pointStrokeColors</i>)
+
+Sets per-point stroke colors — the thin band along the inside edge of each point, enabled by `pointDefaultStrokeWidth` or `setPointStrokeWidths`.
+
+* **`pointStrokeColors`** (Float32Array): RGBA per point in 0..1, `[r1, g1, b1, a1, r2, g2, b2, a2, ...]`, aligned to the point index space. A `NaN` channel means "use `pointDefaultStrokeColor`" for that point, so a few points can carry an explicit color while the rest follow the default, be it a color or a derived shade. Alpha is the stroke's opacity over the fill; the point's own alpha applies to the whole point, stroke included. Greyed-out points always get the derived shade of their greyed fill.
+
+On the next `render()` the change animates with `transitionDuration`, as point colors do.
+
+**Example:**
+```javascript
+// First point stroked white, second on the default
+graph.setPointStrokeColors(new Float32Array([1, 1, 1, 1, NaN, NaN, NaN, NaN]));
+graph.render();
+```
+
+### <a name="set_point_stroke_widths" href="#set_point_stroke_widths">#</a> graph.<b>setPointStrokeWidths</b>(<i>pointStrokeWidths</i>)
+
+Sets per-point stroke widths, in CSS pixels.
+
+* **`pointStrokeWidths`** (Float32Array): One width per point, `[w1, w2, ...]`, aligned to the point index space. A `NaN` means "use `pointDefaultStrokeWidth`" for that point; `0` draws no stroke. On a point too small for its stroke the band narrows to half the point's depth, so some fill always shows.
+
+On the next `render()` the change animates with `transitionDuration`, as point sizes do.
+
+**Example:**
+```javascript
+// 2 px on the first point, the default on the second, none on the third
+graph.setPointStrokeWidths(new Float32Array([2, NaN, 0]));
+graph.render();
+```
 
 ### <a name="set_point_shapes" href="#set_point_shapes">#</a> graph.<b>setPointShapes</b>(<i>pointShapes</i>)
 
@@ -252,6 +284,37 @@ This method sets the sizes for the point images in the graph.
 
 Each size value in the array specifies the size of a point image using the same order as the points in the graph data. The sizes are applied to images that have been set using `setImageData()` and referenced via `setPointImageIndices()`.
 
+### <a name="set_point_render_order" href="#set_point_render_order">#</a> graph.<b>setPointRenderOrder</b>(<i>order</i>)
+
+This method sets the order in which points are drawn, from back to front. By default points are drawn in index order, so a point with a higher index is drawn on top of the points before it.
+
+* **`order`** (`ArrayLike<number> | null`): Point indices from back to front, as a `number[]` or any typed array (for example a `Uint32Array`). A point listed later is drawn on top of the points listed before it.
+  * **Partial lists**: The list may name only some points. Those are drawn on top in the listed order, and every point left out is drawn underneath them in index order, so `[7]` brings point 7 to the front.
+  * **Repeated and invalid indices**: An index listed more than once takes its last position. Values that aren't point indices (negative, fractional, `NaN`, or beyond the point count) are ignored.
+  * **Reset**: Pass `null` or `[]` to restore index order.
+
+Only the drawing order changes: point indices, the simulation, and every other per-point array keep their meaning, so there is no need to reorder your data to change what is on top. Hover and click picking, and a host's pick pass (`drawToRenderPass` with `picking`), follow the render order, so the point on top is the one they report. While `highlightedPointIndices` is set, highlighted points are still drawn (and picked) above greyed-out ones, and the order applies within each group. Label sampling (`getSampledPoints`) follows the render order only and gives highlighted points no priority.
+
+The order is kept across `setPointPositions` calls and resolved against the current point count, so an index beyond it is ignored while it is out of range. The change takes effect on the next `render()` call and does not animate.
+
+**Example:**
+```javascript
+// Bring point 7 to the front; the rest keep index order underneath it
+graph.setPointRenderOrder([7])
+graph.render()
+
+// Draw small points on top of big ones: sort the indices by size, biggest first
+const order = Array.from(sizes.keys()).sort((a, b) => sizes[b] - sizes[a])
+graph.setPointRenderOrder(order)
+graph.render()
+
+// Back to index order
+graph.setPointRenderOrder(null)
+graph.render()
+```
+
+**See example:** [Render Order](../?path=/story/examples-points--render-order) switches between partial and full orders and brings clicked points to the front.
+
 ### <a name="set_links" href="#set_links">#</a> graph.<b>setLinks</b>(<i>links</i>)
 
 This method sets the links (connections) between points in a cosmos.gl graph.
@@ -276,7 +339,7 @@ The resulting graph will have a total of 3 links: one between points 0 and 1, an
 
 This method sets the colors for the graph links.
 
-* **`linkColors`** (Float32Array): A Float32Array representing the colors of links in the format `[r1, g1, b1, a1, r2, g2, b2, a2, ..., rN, gN, bN, aN]`, where each color is in RGBA format. Each set of four values (`r`, `g`, `b`, `a`) represents the color of a single link. Here's a breakdown:
+* **`linkColors`** (Float32Array): A Float32Array representing the colors of links in the format `[r1, g1, b1, a1, r2, g2, b2, a2, ..., rN, gN, bN, aN]`, where each color is in RGBA format. Each set of four values (`r`, `g`, `b`, `a`) represents the color of a single link. A `NaN` channel uses the matching channel of `linkDefaultColor`. The graph keeps this array as provided and does not replace its `NaN` values. Here's a breakdown:
 
     * **`r`**: Red value (0.0-1.0)
     * **`g`**: Green value (0.0-1.0)
@@ -301,17 +364,17 @@ On the next `render()`, link colors animate from their previous values to the ne
 
 ### <a name="get_link_colors" href="#get_link_colors">#</a> graph.<b>getLinkColors</b>()
 
-This method retrieves the current colors of the graph links that were previously set using `setLinkColors`.
+This method retrieves the resolved target colors of the graph links. It returns a new snapshot: `NaN` channels from the array passed to `setLinkColors` are replaced with the matching channels of `linkDefaultColor`, without modifying the caller's array.
 
-**Returns:** A Float32Array representing the colors of links in the format `[r1, g1, b1, a1, r2, g2, b2, a2, ..., rN, gN, bN, aN]`, where each color is in RGBA format. Each set of four values (`r`, `g`, `b`, `a`) represents the color of a single link. Returns an empty Float32Array if no link colors are set.
+**Returns:** A Float32Array representing the colors of links in the format `[r1, g1, b1, a1, r2, g2, b2, a2, ..., rN, gN, bN, aN]`, where each color is in RGBA format. Each set of four values (`r`, `g`, `b`, `a`) represents the color of a single link. Returns an empty Float32Array if there are no links.
 
-The returned array contains the processed link colors used for rendering, including any default values that were applied during processing.
+The returned array contains the resolved link colors used for rendering, including current default values. While colors transition, it contains the target colors.
 
 ### <a name="set_link_widths" href="#set_link_widths">#</a> graph.<b>setLinkWidths</b>(<i>linkWidths</i>)
 
 This method sets the widths for the graph links.
 
-* **`linkWidths`** (Float32Array): A Float32Array representing the widths of links in the format `[width1, width2, ..., widthN]`, where each `width` value corresponds to the width of the link at the same index in the graph's data. The lengths of the widths array should match the number of links in the graph. Each width is usually a numerical value representing the thickness of the link.
+* **`linkWidths`** (Float32Array): A Float32Array representing the widths of links in the format `[width1, width2, ..., widthN]`, where each `width` value corresponds to the width of the link at the same index in the graph's data. The length of the widths array should match the number of links in the graph. A `NaN` entry uses `linkDefaultWidth`. The graph keeps this array as provided and does not replace its `NaN` values.
 
 **Example:**
 ```javascript
@@ -325,11 +388,11 @@ On the next `render()`, link widths animate from their previous values to the ne
 
 ### <a name="get_link_widths" href="#get_link_widths">#</a> graph.<b>getLinkWidths</b>()
 
-This method retrieves the current widths of the graph links that were previously set using `setLinkWidths`.
+This method retrieves the resolved target widths of the graph links. It returns a new snapshot: `NaN` entries from the array passed to `setLinkWidths` are replaced with `linkDefaultWidth`, without modifying the caller's array.
 
-**Returns:** A Float32Array representing the widths of links in the format `[width1, width2, ..., widthN]`, where each `width` value corresponds to the width of the link at the same index in the graph's data. Returns an empty Float32Array if no link widths are set.
+**Returns:** A Float32Array representing the widths of links in the format `[width1, width2, ..., widthN]`, where each `width` value corresponds to the width of the link at the same index in the graph's data. Returns an empty Float32Array if there are no links.
 
-The returned array contains the processed link widths used for rendering, including any default values that were applied during processing. While link widths transition, it holds the target widths; `getLinkWidthByIndex` moves with the animation.
+The returned array contains the resolved link widths used for rendering, including the current default value. While link widths transition, it holds the target widths; `getLinkWidthByIndex` moves with the animation.
 
 ### <a name="get_link_width_by_index" href="#get_link_width_by_index">#</a> graph.<b>getLinkWidthByIndex</b>(<i>index</i>)
 
@@ -417,7 +480,7 @@ This method sets the point clusters for the graph.
 
 This method sets the positions of the point clusters for the graph.
 
-* **`clusterPositions`** (Array of `(number | undefined)`): An array where every two elements represent the x and y coordinates for a cluster position. `undefined` means the cluster's position is not defined and will use centermass positioning instead.
+* **`clusterPositions`** (Array of `(number | undefined)`): An array where every two elements represent the x and y coordinates for a cluster position. `undefined` means the cluster's position is not defined and will use centermass positioning instead. So does a non-finite coordinate (`NaN`, `±Infinity`); any finite one is a position, negative ones included.
 * **Example:**
   ```javascript
   graph.setClusterPositions([10, 20, 30, 40, undefined, undefined]);
@@ -434,6 +497,28 @@ This method sets the force strength coefficients for clustering points in the gr
   graph.setPointClusterStrength(new Float32Array([1, 0.4, 0.3]));
   ```
   This example sets the force coefficient for point 0 to 1, point 1 to 0.4, and point 2 to 0.3.
+
+### <a name="set_point_attractors" href="#set_point_attractors">#</a> graph.<b>setPointAttractors</b>(<i>attractors</i>)
+
+This method gives each point its own attractor. The attractor force pulls every point toward its attractor on top of the other simulation forces (links, repulsion, gravity, …), so it acts as a per-point layout constraint rather than a fixed position. The pull grows linearly with the distance to the attractor and is scaled by the `simulationAttractor` config value and the point's coefficient from `setPointAttractorStrength`.
+
+* **`attractors`** (Float32Array): An array of attractor positions in the format `[x1, y1, x2, y2, ..., xn, yn]`, where `n` is the index of the point, in simulation space after any position rescaling. `rescalePositions` transforms point positions only, not attractor targets. Set `rescalePositions: false` to supply point positions and attractors in the original data coordinate space. A non-finite value (`NaN`, `±Infinity`) in either coordinate means that point has no attractor and is not affected by this force. The array must hold exactly one pair per point; otherwise it is ignored.
+* **Example:**
+  ```javascript
+  graph.setPointAttractors(new Float32Array([100, 100, NaN, NaN, 300, 250]));
+  ```
+  This example pulls point 0 toward (100, 100) and point 2 toward (300, 250); point 1 has no attractor and moves freely.
+
+### <a name="set_point_attractor_strength" href="#set_point_attractor_strength">#</a> graph.<b>setPointAttractorStrength</b>(<i>attractorStrength</i>)
+
+This method sets a per-point coefficient for the attractor force, so different points can be held to their attractors with different firmness. Points without a coefficient (no array set, or a non-finite entry) use `1`.
+
+* **`attractorStrength`** (Float32Array): An array of force strength coefficients in the format `[coeff1, coeff2, ..., coeffn]`, where `n` is the index of the point. The array must hold exactly one value per point; otherwise it is ignored.
+* **Example:**
+  ```javascript
+  graph.setPointAttractorStrength(new Float32Array([1, 0.4, 0.3]));
+  ```
+  This example sets the coefficient for point 0 to 1, point 1 to 0.4, and point 2 to 0.3.
 
 ### <a name="set_pinned_points" href="#set_pinned_points">#</a> graph.<b>setPinnedPoints</b>(<i>pinnedIndices</i>)
 
@@ -460,7 +545,7 @@ The `render` method applies pending data changes and renders the graph. It does 
   - If `undefined`: Keeps current alpha value.
 * **`transitionDuration`** (Number, optional): Duration in milliseconds for any transition this render starts (from setters called before it), for this call only. `0` snaps (no animation); a positive value animates for that long; `undefined` falls back to `config.transitionDuration`. To snap without changing the alpha, call `graph.render(undefined, 0)`.
 
-**Transitions:** If any setter (`setPointPositions`, `setPointColors`, `setPointSizes`, `setLinkColors`, `setLinkWidths`) has queued changes and the effective duration is `> 0`, `render()` starts an animated transition. The per-call `transitionDuration` applies to the whole update — every setter you called before this `render()` — and wins even while another transition is still playing. When the simulation is running, only **position** transitions auto-pause it (and `onSimulationPause` fires), and the simulation stays paused afterwards until `unpause()` is called. The first render after initialization always snaps position changes — there is no prior state to animate from. See [Transitions](../?path=/docs/configuration--docs#transitions) in the configuration docs.
+**Transitions:** If any setter (`setPointPositions`, `setPointColors`, `setPointSizes`, `setPointStrokeColors`, `setPointStrokeWidths`, `setLinkColors`, `setLinkWidths`) has queued changes and the effective duration is `> 0`, `render()` starts an animated transition. The per-call `transitionDuration` applies to the whole update — every setter you called before this `render()` — and wins even while another transition is still playing. When the simulation is running, only **position** transitions auto-pause it (and `onSimulationPause` fires), and the simulation stays paused afterwards until `unpause()` is called. The first render after initialization always snaps position changes — there is no prior state to animate from. See [Transitions](../?path=/docs/configuration--docs#transitions) in the configuration docs.
 
 Passing `0` is the usual way to **compact** a graph that uses `NaN`-position removal: drop the absent slots and renumber without re-animating, so the surviving points (already at their coordinates) show no movement.
 
@@ -613,7 +698,7 @@ To retrieve the current positions of the tracked points, use the [**getTrackedPo
 
 This method retrieves the current positions of points that are being tracked. This method is particularly useful for monitoring the changing coordinates of specific points over time during the simulation. Using this method in conjunction with the [**trackPointPositionsByIndices**](#track_point_positions_by_indices) method allows for dynamic tracking and retrieval of point positions.
 
-Reading positions back from the GPU blocks until the GPU finishes its queued work. Pass `{ nonBlocking: true }` to get the latest positions it has already handed back instead: while points move they trail the drawn frame by a frame or more, which suits overlays redrawn on every simulation tick. The first read after tracking starts or changes still waits, since there are no earlier positions to return. A non-blocking read can be behind on coordinates, never on which points exist: a removed point leaves the map at once, and a point that has just appeared is added once its position has been read.
+Reading positions back from the GPU blocks until the GPU finishes its queued work. Pass `{ nonBlocking: true }` to get the latest positions it has already handed back instead: while points move they trail the drawn frame, which suits overlays redrawn on every simulation tick. Under the graph's own render loop they trail by one frame: while such a read's copy is on its way, the loop holds its next frame until the GPU has finished the previous one, so the copy never waits behind queued frames. A host that drives frames itself (`enableRenderLoop: false`, a headless graph) may queue frames ahead of the copy, and the positions then trail by a frame or more. The first read after tracking starts or changes still waits, since there are no earlier positions to return, and so does a read after more than a few simulation steps without one, whose cache predates the pause: an overlay that resumes appears in place. A non-blocking read can be behind on coordinates, never on which points exist: a removed point leaves the map at once, and a point that has just appeared is added once its position has been read.
 
 **Returns:**
 
@@ -629,7 +714,7 @@ The positions are returned in the same order as the indices provided to [**track
 
 * An array of numbers representing the X and Y coordinates of tracked points in the format `[x1, y1, x2, y2, ..., xn, yn]`, where each pair corresponds to a tracked point in the order they were specified for tracking. Returns an empty array if no points are being tracked.
 
-### <a name="get_sampled_point_positions_map" href="#get_sampled_point_positions_map">#</a> graph.<b>getSampledPointPositionsMap</b>()
+### <a name="get_sampled_point_positions_map" href="#get_sampled_point_positions_map">#</a> graph.<b>getSampledPointPositionsMap</b>([options])
 
 This method provides a sampling of point positions from the currently visible points on the screen. It returns a `Map` containing a sample of point indices and their corresponding X and Y coordinates for the points that are currently visible on the screen.
 
@@ -639,7 +724,18 @@ The number of sampled points is determined by the `pointSamplingDistance` [confi
 
 The sample aims to distribute points evenly across the visible area.
 
-### <a name="get_sampled_points" href="#get_sampled_points">#</a> graph.<b>getSampledPoints</b>()
+Both sampled point methods synchronously read the current sample by default. For an overlay updated during pan or zoom, poll either method with `{ nonBlocking: true }` to get the latest completed sample. It may describe an earlier view or layout. The result is empty until the first copy completes and after a point-data replacement or sampling grid reallocation until a new copy completes. Both methods share the same copy. Poll on later animation frames to get the result, including when the graph has settled or you drive its frames yourself.
+
+```ts
+// In the overlay's animation frame, project the latest available sample.
+const sample = graph.getSampledPointPositionsMap({ nonBlocking: true })
+for (const [index, position] of sample) {
+  const [x, y] = graph.spaceToScreenPosition(position)
+  drawLabel(index, x, y)
+}
+```
+
+### <a name="get_sampled_points" href="#get_sampled_points">#</a> graph.<b>getSampledPoints</b>([options])
 
 This method provides an optimized way to retrieve both point indices and positions for sampled points that are currently visible on the screen. Unlike `getSampledPointPositionsMap`, this method returns the data as arrays rather than a Map.
 
@@ -740,11 +836,13 @@ This method converts a flat array of point positions into an array of tuple pair
 
 This method retrieves the current X and Y coordinates of all points in the graph as an array of numbers. The returned array is in the same order as the point positions were added to the graph.
 
+Positions are not confined to `[0, spaceSize]`: a layout that outgrows the space, or starts outside it, reads back with coordinates beyond it, negative ones included.
+
 ### <a name="get_cluster_positions" href="#get_cluster_positions">#</a> graph.<b>getClusterPositions</b>()
 
 This method returns an array of cluster positions, where each pair of elements represents the x and y coordinates of a cluster.
 
-Reading positions back from the GPU blocks until the GPU finishes its queued work. Pass `{ nonBlocking: true }` to get the latest centroids it has already handed back instead: while points move they trail the drawn frame by a frame or more, which suits cluster labels redrawn on every simulation tick. The first read, and the first after the clusters change, still waits, since there are no earlier positions to return.
+Reading positions back from the GPU blocks until the GPU finishes its queued work. Pass `{ nonBlocking: true }` to get the latest centroids it has already handed back instead: while points move they trail the drawn frame, which suits cluster labels redrawn on every simulation tick. Under the graph's own render loop they trail by one frame: while such a read's copy is on its way, the loop holds its next frame until the GPU has finished the previous one, so the copy never waits behind queued frames. A host that drives frames itself (`enableRenderLoop: false`, a headless graph) may queue frames ahead of the copy, and the positions then trail by a frame or more. The first read, and the first after the clusters change, still waits, since there are no earlier positions to return, and so does a read after more than a few simulation steps without one, whose cache predates the pause: cluster labels that resume appear in place.
 
 ### <a name="ready" href="#ready">#</a> graph.<b>ready</b>
 

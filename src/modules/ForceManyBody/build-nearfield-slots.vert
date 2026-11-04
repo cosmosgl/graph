@@ -1,42 +1,79 @@
 #version 300 es
 precision highp float;
 
-// One depth-peeling pass of the near-field point-slot build.
+// One depth-peeling pass of a per-cell point-slot build. Shared by the
+// many-body near field and the collision force (ForceCollision/index.ts),
+// which bind their own grid size, splice in their own cell formula, and hand
+// the previous pass over in their own kind of target (COLLISION_SLOTS).
 //
-// The precise grid's near field needs actual point-to-point forces (cell
-// centroids alone exert a purely radial force that flattens dense hubs into
-// disks and spikes). Each peeling pass selects, per finest-level cell, the
-// not-yet-peeled point with the smallest per-tick random hash: the depth test
-// keeps the smallest `hashValue` among eligible points, and eligibility excludes
-// points already captured by the previous slot (hash <= previous slot's hash).
-// Running K passes yields a uniform random K-subset per cell, re-randomized
-// every tick via `randomSeed`; force-nearfield.frag turns it into an unbiased
-// estimate of the cell's exact all-pairs repulsion (Monte-Carlo P3M).
+// A grid's near field needs actual point-to-point interactions (cell centroids
+// alone exert a purely radial force that flattens dense hubs into disks and
+// spikes, and a contact test against a centroid cannot see a pair that overlaps
+// while the cell mean sits out of range). Each peeling pass selects, per cell,
+// the not-yet-peeled point with the smallest per-tick random hash: the depth
+// test keeps the smallest `hashValue` among eligible points, and eligibility
+// excludes points already captured by the previous slot (hash <= previous
+// slot's hash). Running K passes yields a uniform random K-subset per cell,
+// re-randomized every tick via `randomSeed`; force-nearfield.frag turns it into
+// an unbiased estimate of the cell's exact all-pairs repulsion (Monte-Carlo
+// P3M), and force-collision-slots.frag resolves contacts against it directly.
 
 uniform sampler2D positionsTexture;
+#ifdef COLLISION_SLOTS
+// The collision force peels into a pair of 2D targets and copies each pass into
+// its layer of the array it reads (ForceCollision/index.ts): pass k−1's target.
 uniform sampler2D previousSlot;
+#else
+// The slot array holding pass k−1 (the other one of the two, see NearFieldSlots
+// in index.ts); previousLayer is its layer. Float data — highp.
+uniform highp sampler2DArray previousSlot;
+#endif
 uniform sampler2D exitTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform buildNearFieldSlotsUniforms {
   float pointsTextureSize;
   float levelGridSize;
-  float cellSize;
   float hasPreviousSlot;
   float randomSeed;
+#ifdef COLLISION_SLOTS
+  float cellsPerUnit;
+  float rotationSeed;
+  vec2 collisionOrigin; // the world origin: where cells are counted from (collision-grid.ts)
+#else
+  float previousLayer;
+#endif
 } buildNearFieldSlots;
 
 #define pointsTextureSize buildNearFieldSlots.pointsTextureSize
 #define levelGridSize buildNearFieldSlots.levelGridSize
-#define cellSize buildNearFieldSlots.cellSize
 #define hasPreviousSlot buildNearFieldSlots.hasPreviousSlot
 #define randomSeed buildNearFieldSlots.randomSeed
+#ifdef COLLISION_SLOTS
+#define collisionScale buildNearFieldSlots.cellsPerUnit
+#define rotationSeed buildNearFieldSlots.rotationSeed
+#define collisionOrigin buildNearFieldSlots.collisionOrigin
+#else
+#define previousLayer buildNearFieldSlots.previousLayer
+#endif
 #else
 uniform float pointsTextureSize;
 uniform float levelGridSize;
-uniform float cellSize;
 uniform float hasPreviousSlot;
 uniform float randomSeed;
+#ifdef COLLISION_SLOTS
+uniform float collisionScale;
+uniform float rotationSeed;
+uniform vec2 collisionOrigin;
+#else
+uniform float previousLayer;
+#endif
+#endif
+
+#ifdef COLLISION_SLOTS
+// @collision-grid
+#else
+// @grid-cell
 #endif
 
 in vec2 pointIndices;
@@ -78,12 +115,20 @@ void main() {
   float hashValue = (float(h >> 8u) + 0.5) / 16777216.0;
   hashValue = 0.001 + hashValue * 0.998;
 
-  // Must match the cell formula of the aggregation and force shaders exactly.
-  int gridSize = int(levelGridSize);
-  ivec2 cell = clamp(ivec2(floor(pointPosition.rg / cellSize)), ivec2(0), ivec2(gridSize - 1));
+  // The cell formula shared with the aggregation and force shaders (grid-cell.ts).
+#ifdef COLLISION_SLOTS
+  highp ivec2 worldCell = collisionCell(pointPosition.rg, collisionOrigin, collisionScale);
+  ivec2 cell = collisionTexel(worldCell, rotationSeed, int(levelGridSize));
+#else
+  ivec2 cell = gridCell(pointPosition.rg, levelGridSize);
+#endif
 
   if (hasPreviousSlot > 0.5) {
+#ifdef COLLISION_SLOTS
     vec2 previous = texelFetch(previousSlot, cell, 0).rg;
+#else
+    vec2 previous = texelFetch(previousSlot, ivec3(cell, int(previousLayer)), 0).rg;
+#endif
     // Eligible only if the previous slot captured a point with a smaller hash.
     // An empty previous slot (index -1) means the cell is exhausted — otherwise
     // this pass would re-capture already-peeled points and double-count them.

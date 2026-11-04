@@ -9,7 +9,15 @@ export class Zoom {
   public readonly config: GraphConfigInterface
   public eventTransform = zoomIdentity
   public behavior = zoom<HTMLCanvasElement, undefined>()
-    .scaleExtent([0.001, Infinity])
+    // The zoom-out floor bounds the largest span a view can frame: at slope 1 (one world
+    // unit is one CSS pixel at zoom 1), fitting span W into width w at padding p needs
+    // w(1 − 2p)/W. A floor of 0.001 silently cut fits short above ~800k units on a 1000px
+    // viewport; 1e-6 frames ~8e8 units, far past where float32 positions stop resolving
+    // a layout (~1e6 units), so the floor is never what limits a fit. It is d3-zoom's
+    // only extent, so it bounds every zoom: wheel, pinch, double-click, setZoomLevel and
+    // initialZoomLevel reach it too (a separate gesture floor would snap a deeper fit
+    // back up to it on the next wheel event).
+    .scaleExtent([1e-6, Infinity])
     .filter((event: MouseEvent | WheelEvent | TouchEvent): boolean => {
       // With zooming disabled only `wheel.zoom` used to be detached, leaving
       // double-click and pinch zoom active. Panning must keep working, so
@@ -171,16 +179,20 @@ export class Zoom {
       .scale(scale)
   }
 
+  /**
+   * Inverse of `convertSpaceToScreenPosition`: undoes the zoom transform, then the slope-1
+   * translation `Store.scaleX`/`scaleY` make around `worldOrigin` — offsets from the world
+   * position at the screen's top-left corner, y flipped.
+   */
   public convertScreenToSpacePosition (screenPosition: [number, number]): [number, number] {
-    const { eventTransform: { x, y, k }, store: { screenSize } } = this
+    const { eventTransform: { x, y, k }, store: { screenSize, worldOrigin } } = this
     const w = screenSize[0]
     const h = screenSize[1]
     const invertedX = (screenPosition[0] - x) / k
     const invertedY = (screenPosition[1] - y) / k
-    const spacePosition = [invertedX, (h - invertedY)] as [number, number]
-    spacePosition[0] -= (w - this.store.adjustedSpaceSize) / 2
-    spacePosition[1] -= (h - this.store.adjustedSpaceSize) / 2
-    return spacePosition
+    const left = worldOrigin[0] - w / 2
+    const top = worldOrigin[1] + h / 2
+    return [left + invertedX, top - invertedY]
   }
 
   public convertSpaceToScreenPosition (spacePosition: [number, number]): [number, number] {

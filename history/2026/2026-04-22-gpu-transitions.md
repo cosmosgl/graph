@@ -1,8 +1,6 @@
-<!-- suggested path: history/2026/2026-04-22-gpu-transitions.md -->
-
 # GPU transitions for positions and attributes
 
-**Commits:** c5fd30e, 75b1a15, 74e0567, b775c4c, 45a12f4, 579801d, 5006eea, fed8dcd, 6256b66, cd32f59
+**PR:** [#228](https://github.com/cosmosgl/graph/pull/228)
 
 ## Why
 

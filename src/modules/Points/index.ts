@@ -1,5 +1,6 @@
-import { Framebuffer, Buffer, Texture, UniformStore, RenderPass, type RenderPipelineParameters } from '@luma.gl/core'
+import { Framebuffer, Buffer, Texture, UniformStore, RenderPass, type RenderPipelineParameters, type BufferLayout } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
+import type { ShaderModule } from '@luma.gl/shadertools'
 // import { scaleLinear } from 'd3-scale'
 // import { extent } from 'd3-array'
 import { CoreModule, BASE_PIPELINE_PARAMETERS } from '@/graph/modules/core-module'
@@ -7,6 +8,8 @@ import type { Mat4Array, Hovered } from '@/graph/modules/Store'
 import { defaultConfigValues, EXIT_DEFAULT_SIZE, EXIT_DEFAULT_COLOR_CHANNEL, EDGE_RAMP_PX, POINT_RING_SCALE } from '@/graph/variables'
 import drawPointsFrag from '@/graph/modules/Points/draw-points.frag?raw'
 import drawPointsVert from '@/graph/modules/Points/draw-points.vert?raw'
+import { oklabModule } from '@/graph/modules/Shared/oklab-module'
+import { shapeGeometryModule } from '@/graph/modules/Shared/shape-geometry-module'
 import findPointsInRectFrag from '@/graph/modules/Points/find-points-in-rect.frag?raw'
 import findPointsInPolygonFrag from '@/graph/modules/Points/find-points-in-polygon.frag?raw'
 import drawHighlightedFrag from '@/graph/modules/Points/draw-highlighted.frag?raw'
@@ -20,7 +23,7 @@ import fillGridWithSampledPointsFrag from '@/graph/modules/Points/fill-sampled-p
 import fillGridWithSampledPointsVert from '@/graph/modules/Points/fill-sampled-points.vert?raw'
 import updatePositionFrag from '@/graph/modules/Points/update-position.frag?raw'
 import interpolatePositionFrag from '@/graph/modules/Points/interpolate-position.frag?raw'
-import { createIndexesForBuffer, updateAttributeBuffers } from '@/graph/modules/Shared/buffer'
+import { createIndexesForBuffer, updateAttributeBuffer, updateAttributeBuffers } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import trackPositionsFrag from '@/graph/modules/Points/track-positions.frag?raw'
 import dragPointFrag from '@/graph/modules/Points/drag-point.frag?raw'
@@ -28,7 +31,7 @@ import updateVert from '@/graph/modules/Shared/quad.vert?raw'
 import { readPixels, isPointAbsent, getRgbaColor } from '@/graph/helper'
 import { ensureVec2, ensureVec4, glslFloatLiteral } from '@/graph/modules/Shared/uniform-utils'
 import { createAtlasDataFromImageData } from '@/graph/modules/Points/atlas-utils'
-import { buildPositionTextureData, buildSourcePositionTextureData } from '@/graph/modules/Points/position-utils'
+import { buildPositionTextureData, buildSourcePositionTextureData, toFiniteCoordinate } from '@/graph/modules/Points/position-utils'
 import { PickingReadback } from '@/graph/modules/Points/picking-readback'
 import { PointTrackerImpl, type PointTrackerHost } from '@/graph/modules/Points/point-tracker'
 import { PICKING_RESOLUTION_SCALE, PICKING_WINDOW_SIZE } from '@/graph/modules/Points/picking-constants'
@@ -53,7 +56,7 @@ const DEFAULT_DRAW_PARAMETERS: RenderPipelineParameters = {
 
 /**
  * Occlusion-culling pass A: fully opaque point interiors drawn front-to-back
- * (reversed index order) so early-z rejects fragments hidden behind nearer points.
+ * (reversed render order) so early-z rejects fragments hidden behind nearer points.
  */
 const CORE_PASS_PARAMETERS: RenderPipelineParameters = {
   ...BASE_PIPELINE_PARAMETERS,
@@ -81,6 +84,25 @@ const POINT_SHADER_DEFINES = {
   EDGE_RAMP_PX: glslFloatLiteral(EDGE_RAMP_PX),
   POINT_RING_SCALE: glslFloatLiteral(POINT_RING_SCALE),
 } as unknown as Record<string, boolean>
+
+/**
+ * `simulationFriction` as update-position.frag receives it: a non-finite value runs at the
+ * default. The shader keeps positions finite by dropping a non-finite velocity, which it reads
+ * from a texture; friction is applied after that test, and a NaN or infinite friction makes
+ * every step non-finite (even a resting point's: `0 × Infinity` is NaN), so it would turn
+ * every position non-finite for good.
+ */
+function getFriction (friction: number): number {
+  return Number.isFinite(friction) ? friction : defaultConfigValues.simulationFriction
+}
+
+/** Stroke defaults handed to the point vertex shader every frame (see `Points.getStrokeUniforms`). */
+interface StrokeUniforms {
+  strokeContrast: number;
+  strokeDefaultShade: number;
+  strokeDefaultWidth: number;
+  strokeDefaultColor: [number, number, number, number];
+}
 
 export class Points extends CoreModule implements PointTrackerHost {
   public transition: Transition | undefined
@@ -142,6 +164,12 @@ export class Points extends CoreModule implements PointTrackerHost {
    * its cache, or its copy in flight, describes another point list.
    */
   public pointListVersion = 0
+  /**
+   * Goes up on every simulation step that ran, on any host. A reader compares it to the
+   * step of its last read to learn that it paused while points moved: its cache then
+   * predates the pause.
+   */
+  public stepVersion = 0
   /**
    * Set by `Graph`: asks for a frame that will issue a non-blocking copy, and tells whether
    * one is coming. Unset on a standalone simulation, where the read issues the copy itself.
@@ -211,6 +239,12 @@ export class Points extends CoreModule implements PointTrackerHost {
   private previousColorData: Float32Array | undefined
   private sourceSizeBuffer: Buffer | undefined
   private targetSizeBuffer: Buffer | undefined
+  private sourceStrokeColorBuffer: Buffer | undefined
+  private targetStrokeColorBuffer: Buffer | undefined
+  private previousStrokeColorData: Float32Array | undefined
+  private sourceStrokeWidthBuffer: Buffer | undefined
+  private targetStrokeWidthBuffer: Buffer | undefined
+  private previousStrokeWidthData: Float32Array | undefined
   private previousSizeData: Float32Array | undefined
   /**
    * CPU copy of `sourceSizeBuffer`. The hover/focus ring is a single quad, so its
@@ -256,6 +290,11 @@ export class Points extends CoreModule implements PointTrackerHost {
   private findPointsInRectCommand: Model | undefined
   private findPointsInPolygonCommand: Model | undefined
   private fillPickingBufferCommand: Model | undefined
+  private sampledReadback: PickingReadback | undefined
+  private sampledReadbackKey: string | undefined
+  private isSampledReadbackWanted = false
+  private sampledCache: { key: string; pixels: Float32Array } | undefined
+  private sampledOrderVersion = 0
   private fillSampledPointsFboCommand: Model | undefined
   private trackPointsCommand: Model | undefined
   // Vertex buffers for quad rendering (Model doesn't destroy them automatically)
@@ -283,8 +322,26 @@ export class Points extends CoreModule implements PointTrackerHost {
   private polygonPathTexture: Texture | undefined
   private polygonPathLength = 0
   private drawPointIndices: Buffer | undefined
-  /** Uint32 element indices `[N-1 … 0]` for the front-to-back core pass. */
+  /**
+   * Uint32 element indices holding `GraphData.pointRenderOrder` (back to front), bound to
+   * every pass that paints in draw order: the point draw, the host picking pass, the
+   * picking fill and the label-sampling fill. Exists only while a custom order is set; without one those
+   * passes draw unindexed, in index order.
+   */
+  private pointRenderOrderBuffer: Buffer | undefined
+  /**
+   * Uint32 element indices for the front-to-back core pass: the render order reversed
+   * (`[N-1 … 0]` in index order).
+   */
   private reversedPointIndexBuffer: Buffer | undefined
+  /**
+   * Float per point: its position in the render order (its index in index order).
+   * The draw shader turns it into depth, so the core and fringe passes agree on
+   * which point is on top.
+   */
+  private renderRankBuffer: Buffer | undefined
+  /** The `GraphData.pointRenderOrder` the order buffers were last built from. */
+  private appliedRenderOrder: Uint32Array | undefined
   /** Cached pass-B parameter state; parameters only switch on an actual mode change. */
   private isOcclusionCullingActive = false
   private hoveredPointIndices: Buffer | undefined
@@ -292,13 +349,18 @@ export class Points extends CoreModule implements PointTrackerHost {
   private transitionProgress = 1
   private shouldAnimatePointColors = false
   private shouldAnimatePointSizes = false
+  private shouldAnimateStrokeColors = false
+  private shouldAnimateStrokeWidths = false
+  /** Whether the point draw models were compiled with the stroke (`POINT_STROKE`); see `isStrokeWanted`. */
+  private isStrokeCompiled = false
   private shouldAnimatePointPositions = false
 
   // Uniform stores for scalar uniforms
   private updatePositionUniformStore: UniformStore<{
     updatePositionUniforms: {
       friction: number;
-      spaceSize: number;
+      /** The longest step one sub-step may take (see update-position.frag). */
+      maxStep: number;
     };
   }> | undefined
 
@@ -321,7 +383,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       sizeScale: number;
       pointsTextureSize: number;
       transformationMatrix: Mat4Array;
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       greyoutColor: [number, number, number, number];
       backgroundColor: [number, number, number, number];
@@ -340,6 +402,12 @@ export class Points extends CoreModule implements PointTrackerHost {
       pointDefaultColor: [number, number, number, number];
       pointDefaultSize: number;
       pointsNumber: number;
+      strokeContrast: number;
+      strokeDefaultShade: number;
+      strokeDefaultWidth: number;
+      strokeDefaultColor: [number, number, number, number];
+      animateStrokeColors: number;
+      animateStrokeWidths: number;
     };
     drawFragmentUniforms: {
       greyoutOpacity: number;
@@ -356,7 +424,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
   private findPointsInRectUniformStore: UniformStore<{
     findPointsInRectUniforms: {
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       sizeScale: number;
       transformationMatrix: Mat4Array;
@@ -370,7 +438,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
   private findPointsInPolygonUniformStore: UniformStore<{
     findPointsInPolygonUniforms: {
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       transformationMatrix: Mat4Array;
       polygonPathLength: number;
@@ -383,7 +451,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       sizeScale: number;
       pointsTextureSize: number;
       transformationMatrix: Mat4Array;
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       scalePointsOnZoom: number;
       pickingPixelRatio: number;
@@ -400,7 +468,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     fillSampledPointsUniforms: {
       pointsTextureSize: number;
       transformationMatrix: Mat4Array;
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
     };
   }> | undefined
@@ -417,7 +485,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       sizeScale: number;
       pointsTextureSize: number;
       transformationMatrix: Mat4Array;
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       scalePointsOnZoom: number; // f32 in shader, not boolean
       maxPointSize: number;
@@ -444,7 +512,37 @@ export class Points extends CoreModule implements PointTrackerHost {
     return false
   }
 
+  public get hasPendingSampledReadback (): boolean {
+    return this.isSampledReadbackWanted || (this.sampledReadback?.inFlight ?? false)
+  }
+
+  /** Whether the GPU has yet to reach a point readback in flight. */
+  public get isReadbackPending (): boolean {
+    if (this.pickingReadback?.isPending || this.sampledReadback?.isPending) return true
+    for (const tracker of this.trackers) if (tracker.isReadbackPending) return true
+    return false
+  }
+
+  /**
+   * Whether any point can have a stroke (`GraphData.hasPointStroke`). Only then do the point
+   * draw models carry the stroke attributes, varyings and fragment band (`POINT_STROKE`), and
+   * only then are the stroke buffers allocated — a graph without strokes draws as if the
+   * feature did not exist.
+   */
+  private get isStrokeWanted (): boolean {
+    return this.data.hasPointStroke
+  }
+
+  /** Drops point readbacks in flight; the next read asks again. */
+  public cancelPendingReadbacks (): void {
+    this.discardPendingPick()
+    this.sampledReadback?.cancel()
+    this.isSampledReadbackWanted = false
+    for (const tracker of this.trackers) tracker.cancelReadback()
+  }
+
   public updatePositions (): boolean {
+    this.resetSampledReadback()
     const { device, store, data, config: { rescalePositions, enableSimulation } } = this
 
     const { pointsTextureSize } = store
@@ -484,7 +582,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       (this.transition?.duration ?? this.config.transitionDuration) > 0 &&
       !!this.currentPositionTexture
 
-    const targetState = buildPositionTextureData(data.pointPositions, pointsTextureSize, targetCount)
+    const targetState = buildPositionTextureData(data.pointPositions, pointsTextureSize, targetCount, store.infiniteInputEdge)
 
     // Position transition: `interpolatePosition()` blends source → target each frame.
     // Target is always the new layout.
@@ -544,7 +642,6 @@ export class Points extends CoreModule implements PointTrackerHost {
     }
     this.areClusterCentroidsUpToDate = false
     this.markPositionsChanged()
-    if (this.config.enableSimulation) this.ensureSimulationResources()
 
     // Create searchTexture and framebuffer
     if (!this.searchTexture || this.searchTexture.width !== pointsTextureSize || this.searchTexture.height !== pointsTextureSize) {
@@ -613,7 +710,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         pointIndices: this.drawPointIndices,
       })
     }
-    this.updateReversedPointIndexBuffer()
+    this.updateRenderOrder()
 
     if (!this.hoveredPointIndices || this.hoveredPointIndices.byteLength !== requiredByteLength) {
       if (this.hoveredPointIndices && !this.hoveredPointIndices.destroyed) {
@@ -664,9 +761,12 @@ export class Points extends CoreModule implements PointTrackerHost {
     // Ensure buffers exist before Model creation (Model needs attributes at creation time)
     if (!this.targetColorBuffer) this.updateColor()
     if (!this.targetSizeBuffer) this.updateSize()
+    if (!this.targetStrokeColorBuffer) this.updateStrokeColor()
+    if (!this.targetStrokeWidthBuffer) this.updateStrokeWidth()
     if (!this.shapeBuffer) this.updateShape()
     if (!this.imageIndicesBuffer) this.updateImageIndices()
     if (!this.imageSizesBuffer) this.updateImageSizes()
+    if (!this.renderRankBuffer) this.updateRenderOrder()
     if (!this.pointStatusTexture) this.updatePointStatus()
     if (config.enableSimulation) this.ensureUpdatePositionProgram()
 
@@ -722,7 +822,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           transformationMatrix: 'mat4x4<f32>',
           pointsTextureSize: 'f32',
           sizeScale: 'f32',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           greyoutColor: 'vec4<f32>',
           backgroundColor: 'vec4<f32>',
@@ -741,6 +841,12 @@ export class Points extends CoreModule implements PointTrackerHost {
           pointDefaultColor: 'vec4<f32>',
           pointDefaultSize: 'f32',
           pointsNumber: 'f32',
+          strokeContrast: 'f32',
+          strokeDefaultShade: 'f32',
+          strokeDefaultWidth: 'f32',
+          strokeDefaultColor: 'vec4<f32>',
+          animateStrokeColors: 'f32',
+          animateStrokeWidths: 'f32',
         },
         defaultUniforms: {
           // Order MUST match uniformTypes and shader declaration
@@ -756,7 +862,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           })(),
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           greyoutColor: ensureVec4(store.greyoutPointColor, [0, 0, 0, 1]),
           backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
@@ -775,6 +881,9 @@ export class Points extends CoreModule implements PointTrackerHost {
           pointDefaultColor: ensureVec4(getRgbaColor(config.pointDefaultColor), [0, 0, 0, 1]),
           pointDefaultSize: config.pointDefaultSize,
           pointsNumber: data.pointsNumber ?? 0,
+          ...this.getStrokeUniforms(),
+          animateStrokeColors: 0,
+          animateStrokeWidths: 0,
         },
       },
       drawFragmentUniforms: {
@@ -804,33 +913,17 @@ export class Points extends CoreModule implements PointTrackerHost {
       },
     })
 
+    if (!this.drawCommand) this.isStrokeCompiled = this.isStrokeWanted
     this.drawCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
-      modules: [pointSizeModule, exitRampModule, pickingColorModule],
+      modules: this.getDrawCommandModules(),
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
-      attributes: {
-        ...(this.drawPointIndices && { pointIndices: this.drawPointIndices }),
-        ...(this.sourceSizeBuffer && { sourceSize: this.sourceSizeBuffer }),
-        ...(this.targetSizeBuffer && { targetSize: this.targetSizeBuffer }),
-        ...(this.sourceColorBuffer && { sourceColor: this.sourceColorBuffer }),
-        ...(this.targetColorBuffer && { targetColor: this.targetColorBuffer }),
-        ...(this.shapeBuffer && { shape: this.shapeBuffer }),
-        ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
-        ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
-      },
-      bufferLayout: [
-        { name: 'pointIndices', format: 'float32x2' },
-        { name: 'sourceSize', format: 'float32' },
-        { name: 'targetSize', format: 'float32' },
-        { name: 'sourceColor', format: 'float32x4' },
-        { name: 'targetColor', format: 'float32x4' },
-        { name: 'shape', format: 'float32' },
-        { name: 'imageIndex', format: 'float32' },
-        { name: 'imageSize', format: 'float32' },
-      ],
-      defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
+      indexBuffer: this.pointRenderOrderBuffer ?? null,
+      attributes: this.getDrawCommandAttributes(),
+      bufferLayout: this.getDrawCommandBufferLayout(),
+      defines: this.getDrawCommandDefines(),
       bindings: {
         // Create uniform buffer binding
         // Update it later by calling uniformStore.setUniforms()
@@ -845,35 +938,16 @@ export class Points extends CoreModule implements PointTrackerHost {
     // buffers as drawCommand (PipelineFactory reuses the cached GL program),
     // but draws front-to-back via the reversed index buffer with depth writes
     // and no blending. draw() decides each frame whether to use it.
-    this.updateReversedPointIndexBuffer()
     this.drawCoreCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
-      modules: [pointSizeModule, exitRampModule, pickingColorModule],
+      modules: this.getDrawCommandModules(),
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
       indexBuffer: this.reversedPointIndexBuffer ?? null,
-      attributes: {
-        ...(this.drawPointIndices && { pointIndices: this.drawPointIndices }),
-        ...(this.sourceSizeBuffer && { sourceSize: this.sourceSizeBuffer }),
-        ...(this.targetSizeBuffer && { targetSize: this.targetSizeBuffer }),
-        ...(this.sourceColorBuffer && { sourceColor: this.sourceColorBuffer }),
-        ...(this.targetColorBuffer && { targetColor: this.targetColorBuffer }),
-        ...(this.shapeBuffer && { shape: this.shapeBuffer }),
-        ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
-        ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
-      },
-      bufferLayout: [
-        { name: 'pointIndices', format: 'float32x2' },
-        { name: 'sourceSize', format: 'float32' },
-        { name: 'targetSize', format: 'float32' },
-        { name: 'sourceColor', format: 'float32x4' },
-        { name: 'targetColor', format: 'float32x4' },
-        { name: 'shape', format: 'float32' },
-        { name: 'imageIndex', format: 'float32' },
-        { name: 'imageSize', format: 'float32' },
-      ],
-      defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
+      attributes: this.getDrawCommandAttributes(),
+      bufferLayout: this.getDrawCommandBufferLayout(),
+      defines: this.getDrawCommandDefines(),
       bindings: {
         drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer('drawVertexUniforms'),
         drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer('drawFragmentUniforms'),
@@ -893,7 +967,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
           sizeScale: 'f32',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           ratio: 'f32',
           transformationMatrix: 'mat4x4<f32>',
@@ -904,7 +978,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         },
         defaultUniforms: {
           sizeScale: config.pointSizeScale,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           ratio: config.pixelRatio,
           transformationMatrix: store.transformationMatrix4x4,
@@ -950,13 +1024,13 @@ export class Points extends CoreModule implements PointTrackerHost {
       findPointsInPolygonUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           transformationMatrix: 'mat4x4<f32>',
           polygonPathLength: 'f32',
         },
         defaultUniforms: {
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           transformationMatrix: store.transformationMatrix4x4,
           polygonPathLength: this.polygonPathLength,
@@ -995,7 +1069,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           // Order MUST match shader declaration order (std140 layout)
           pointsTextureSize: 'f32',
           sizeScale: 'f32',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           ratio: 'f32',
           pickingPixelRatio: 'f32',
@@ -1011,7 +1085,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         defaultUniforms: {
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           ratio: config.pixelRatio,
           pickingPixelRatio: PICKING_RESOLUTION_SCALE,
@@ -1033,6 +1107,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       modules: [pointSizeModule],
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
+      indexBuffer: this.pointRenderOrderBuffer ?? null,
       attributes: {
         ...(this.hoveredPointIndices && { pointIndices: this.hoveredPointIndices }),
         ...(this.targetSizeBuffer && { size: this.targetSizeBuffer }),
@@ -1064,13 +1139,13 @@ export class Points extends CoreModule implements PointTrackerHost {
           // Order MUST match shader declaration order (std140 layout)
           pointsTextureSize: 'f32',
           transformationMatrix: 'mat4x4<f32>',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
         },
         defaultUniforms: {
           pointsTextureSize: store.pointsTextureSize ?? 0,
           transformationMatrix: store.transformationMatrix4x4,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
         },
       },
@@ -1081,6 +1156,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       vs: fillGridWithSampledPointsVert,
       topology: 'point-list',
       vertexCount: data.pointsNumber ?? 0,
+      indexBuffer: this.pointRenderOrderBuffer ?? null,
       attributes: {
         ...(this.sampledPointIndices && { pointIndices: this.sampledPointIndices }),
       },
@@ -1114,7 +1190,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           transformationMatrix: 'mat4x4<f32>',
           pointsTextureSize: 'f32',
           sizeScale: 'f32',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           scalePointsOnZoom: 'f32',
           pointIndex: 'f32',
@@ -1140,7 +1216,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           transformationMatrix: store.transformationMatrix4x4,
           pointsTextureSize: store.pointsTextureSize ?? 0,
           sizeScale: config.pointSizeScale,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0,
           pointIndex: -1,
@@ -1503,6 +1579,65 @@ export class Points extends CoreModule implements PointTrackerHost {
     }
   }
 
+  public updateStrokeColor (): void {
+    const { store: { pointsTextureSize }, data } = this
+    // Compiled-out: nothing to upload to. Compiled-in but no longer wanted: the stroke is
+    // animating out, and the target holds the values it animates to.
+    if (!pointsTextureSize || (!this.isStrokeWanted && !this.isStrokeCompiled)) return
+
+    // GraphData.updatePointStrokeColor() always populates pointStrokeColors before this runs
+    const colorData = data.pointStrokeColors as Float32Array
+    const { source, target, previous } = updateAttributeBuffers(
+      this.device,
+      colorData,
+      this.sourceStrokeColorBuffer,
+      this.targetStrokeColorBuffer,
+      // No snapshot: the stroke was just compiled in, and until now every point drew the
+      // default (NaN), so a queued transition starts from there instead of snapping
+      this.previousStrokeColorData ?? new Float32Array(colorData.length).fill(NaN),
+      4
+    )
+    this.sourceStrokeColorBuffer = source
+    this.targetStrokeColorBuffer = target
+    this.previousStrokeColorData = previous
+
+    // Models compiled without the stroke have no such attributes; the rebuild binds the buffers
+    if (!this.isStrokeCompiled) return
+    const attributes = {
+      ...(this.sourceStrokeColorBuffer && { sourceStrokeColor: this.sourceStrokeColorBuffer }),
+      ...(this.targetStrokeColorBuffer && { targetStrokeColor: this.targetStrokeColorBuffer }),
+    }
+    this.drawCommand?.setAttributes(attributes)
+    this.drawCoreCommand?.setAttributes(attributes)
+  }
+
+  public updateStrokeWidth (): void {
+    const { store: { pointsTextureSize }, data } = this
+    if (!pointsTextureSize || (!this.isStrokeWanted && !this.isStrokeCompiled)) return // see updateStrokeColor
+
+    // GraphData.updatePointStrokeWidth() always populates pointStrokeWidths before this runs
+    const widthData = data.pointStrokeWidths as Float32Array
+    const { source, target, previous } = updateAttributeBuffers(
+      this.device,
+      widthData,
+      this.sourceStrokeWidthBuffer,
+      this.targetStrokeWidthBuffer,
+      this.previousStrokeWidthData ?? new Float32Array(widthData.length).fill(NaN), // see updateStrokeColor
+      1
+    )
+    this.sourceStrokeWidthBuffer = source
+    this.targetStrokeWidthBuffer = target
+    this.previousStrokeWidthData = previous
+
+    if (!this.isStrokeCompiled) return
+    const attributes = {
+      ...(this.sourceStrokeWidthBuffer && { sourceStrokeWidth: this.sourceStrokeWidthBuffer }),
+      ...(this.targetStrokeWidthBuffer && { targetStrokeWidth: this.targetStrokeWidthBuffer }),
+    }
+    this.drawCommand?.setAttributes(attributes)
+    this.drawCoreCommand?.setAttributes(attributes)
+  }
+
   public updateShape (): void {
     const { device, data } = this
     if (data.pointsNumber === undefined || data.pointShapes === undefined) return
@@ -1607,6 +1742,72 @@ export class Points extends CoreModule implements PointTrackerHost {
   }
 
   /**
+   * (Re)builds the buffers that carry the point draw order — `GraphData.pointRenderOrder`,
+   * or index order when it is unset:
+   * - `pointRenderOrderBuffer`, the order back to front, bound to the point draw (the
+   *   standard, fringe and both highlight passes), the host picking pass, the picking fill
+   *   and the label-sampling fill, so each paints points in that order. It exists only while a custom order is set;
+   *   without one those passes draw unindexed, as they did before render order existed.
+   * - `reversedPointIndexBuffer`, the order front to back, for the occlusion core pass.
+   * - `renderRankBuffer`, each point's position in the order. The draw shader turns it into
+   *   depth, so the depth-tested core and fringe passes agree on which point is on top.
+   * Runs from `updatePositions()` (the point count may have changed) and from every
+   * `Graph.create()`; a no-op unless the point count or the resolved order changed.
+   */
+  public updateRenderOrder (): void {
+    const { device, data } = this
+    const pointsNumber = data.pointsNumber ?? 0
+    if (pointsNumber === 0) return
+    const requiredByteLength = pointsNumber * 4
+    // GraphData resolves the order against the current point count. Guard anyway: an
+    // indexed draw reads exactly `pointsNumber` elements, so any other length breaks it.
+    const order = data.pointRenderOrder?.length === pointsNumber ? data.pointRenderOrder : undefined
+    if (
+      order === this.appliedRenderOrder &&
+      this.renderRankBuffer?.byteLength === requiredByteLength &&
+      this.reversedPointIndexBuffer?.byteLength === requiredByteLength
+    ) return
+    this.appliedRenderOrder = order
+
+    const renderRanks = new Float32Array(pointsNumber)
+    const reversedOrder = new Uint32Array(pointsNumber)
+    if (order) {
+      for (let rank = 0; rank < pointsNumber; rank++) {
+        const index = order[rank] as number
+        renderRanks[index] = rank
+        reversedOrder[pointsNumber - 1 - rank] = index
+      }
+    } else {
+      for (let i = 0; i < pointsNumber; i++) {
+        renderRanks[i] = i
+        reversedOrder[i] = pointsNumber - 1 - i
+      }
+    }
+
+    this.renderRankBuffer = updateAttributeBuffer(device, this.renderRankBuffer, renderRanks)
+    this.drawCommand?.setAttributes({ renderRank: this.renderRankBuffer })
+    this.drawCoreCommand?.setAttributes({ renderRank: this.renderRankBuffer })
+
+    this.reversedPointIndexBuffer = this.writeIndexBuffer(this.reversedPointIndexBuffer, reversedOrder)
+    this.drawCoreCommand?.setIndexBuffer(this.reversedPointIndexBuffer)
+
+    const previousOrderBuffer = this.pointRenderOrderBuffer
+    this.pointRenderOrderBuffer = order ? this.writeIndexBuffer(previousOrderBuffer, order) : undefined
+    // `null` returns a model to unindexed drawing
+    const orderBuffer = this.pointRenderOrderBuffer ?? null
+    this.drawCommand?.setIndexBuffer(orderBuffer)
+    this.drawPickingCommand?.setIndexBuffer(orderBuffer)
+    this.fillPickingBufferCommand?.setIndexBuffer(orderBuffer)
+    this.fillSampledPointsFboCommand?.setIndexBuffer(orderBuffer)
+    this.sampledOrderVersion++
+    // Unbound from every model above before it goes
+    if (!order && previousOrderBuffer && !previousOrderBuffer.destroyed) previousOrderBuffer.destroy()
+
+    // Each picking-buffer pixel holds the point written there last, so the order decides it
+    this.isPickingBufferStale = true
+  }
+
+  /**
    * Builds the image atlas from `data.inputImageData`. Returns `false` when the list cannot be
    * packed (every image has zero width or height); the atlas, `imageCount` and the textures then
    * stay as they were, so the caller must not keep the new list either.
@@ -1694,6 +1895,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     if (w === 0 || h === 0) return
 
     if (!this.sampledPointsFbo || this.sampledPointsFbo.width !== w || this.sampledPointsFbo.height !== h) {
+      this.resetSampledReadback()
       if (this.sampledPointsFbo && !this.sampledPointsFbo.destroyed) {
         this.sampledPointsFbo.destroy()
       }
@@ -1771,10 +1973,15 @@ export class Points extends CoreModule implements PointTrackerHost {
     return from + (size - from) * progress
   }
 
-  public setTransitionProgress (progress: number, animateColors = false, animateSizes = false, animatePositions = false): void {
+  public setTransitionProgress (
+    progress: number, animateColors = false, animateSizes = false, animatePositions = false,
+    animateStrokeColors = false, animateStrokeWidths = false
+  ): void {
     this.transitionProgress = progress
     this.shouldAnimatePointColors = animateColors
     this.shouldAnimatePointSizes = animateSizes
+    this.shouldAnimateStrokeColors = animateStrokeColors
+    this.shouldAnimateStrokeWidths = animateStrokeWidths
     this.shouldAnimatePointPositions = animatePositions
   }
 
@@ -1786,8 +1993,11 @@ export class Points extends CoreModule implements PointTrackerHost {
    */
   public drawPicking (renderPass: RenderPass, alpha: number, indexOffset = 0): void {
     const { data, store } = this
+    this.ensureStrokeVariant()
     if (!this.targetColorBuffer) this.updateColor()
     if (!this.targetSizeBuffer) this.updateSize()
+    if (!this.targetStrokeColorBuffer) this.updateStrokeColor()
+    if (!this.targetStrokeWidthBuffer) this.updateStrokeWidth()
     if (!this.exitTexture) this.updateExit()
     if (!this.shapeBuffer) this.updateShape()
     if (!this.imageIndicesBuffer) this.updateImageIndices()
@@ -1807,21 +2017,14 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.drawPickingCommand ||= new Model(this.device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
-      modules: [pointSizeModule, exitRampModule, pickingColorModule],
+      modules: this.getDrawCommandModules(),
       topology: 'point-list',
       vertexCount: data.pointsNumber,
+      // The render order, so the host picks the point the visible draw put on top
+      indexBuffer: this.pointRenderOrderBuffer ?? null,
       attributes: this.getDrawCommandAttributes(),
-      bufferLayout: [
-        { name: 'pointIndices', format: 'float32x2' },
-        { name: 'sourceSize', format: 'float32' },
-        { name: 'targetSize', format: 'float32' },
-        { name: 'sourceColor', format: 'float32x4' },
-        { name: 'targetColor', format: 'float32x4' },
-        { name: 'shape', format: 'float32' },
-        { name: 'imageIndex', format: 'float32' },
-        { name: 'imageSize', format: 'float32' },
-      ],
-      defines: { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES },
+      bufferLayout: this.getDrawCommandBufferLayout(),
+      defines: this.getDrawCommandDefines(),
       bindings: {
         drawVertexUniforms: this.drawUniformStore.getManagedUniformBuffer('drawVertexUniforms'),
         drawFragmentUniforms: this.drawUniformStore.getManagedUniformBuffer('drawFragmentUniforms'),
@@ -1832,22 +2035,34 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.drawPickingCommand.setVertexCount(data.pointsNumber)
 
     const { vertex, fragment } = this.getDrawUniforms()
-    this.drawUniformStore.setUniforms({
-      drawVertexUniforms: { ...vertex, skipHighlighted: 0, skipGreyed: 0 },
-      drawFragmentUniforms: { ...fragment, renderMode: 3, pickingAlpha: alpha, pickingIndexOffset: indexOffset },
-    })
+    const pickingFragment = { ...fragment, renderMode: 3, pickingAlpha: alpha, pickingIndexOffset: indexOffset }
     this.drawPickingCommand.setBindings(this.getDrawTextureBindings())
-    this.drawPickingCommand.draw(renderPass)
+    // The visible draw's layering: greyed points first, highlighted on top, so the host
+    // picks the point it sees
+    const layers = this.config.highlightedPointIndices !== undefined
+      ? [{ skipHighlighted: 1, skipGreyed: 0 }, { skipHighlighted: 0, skipGreyed: 1 }]
+      : [{ skipHighlighted: 0, skipGreyed: 0 }]
+    for (const skips of layers) {
+      this.drawUniformStore.setUniforms({
+        drawVertexUniforms: { ...vertex, ...skips },
+        drawFragmentUniforms: pickingFragment,
+      })
+      this.drawPickingCommand.draw(renderPass)
+    }
   }
 
   public draw (renderPass: RenderPass): void {
     const { data, config, store } = this
+    this.ensureStrokeVariant()
     if (!this.targetColorBuffer) this.updateColor()
     if (!this.targetSizeBuffer) this.updateSize()
+    if (!this.targetStrokeColorBuffer) this.updateStrokeColor()
+    if (!this.targetStrokeWidthBuffer) this.updateStrokeWidth()
     if (!this.exitTexture) this.updateExit()
     if (!this.shapeBuffer) this.updateShape()
     if (!this.imageIndicesBuffer) this.updateImageIndices()
     if (!this.imageSizesBuffer) this.updateImageSizes()
+    if (!this.renderRankBuffer) this.updateRenderOrder()
 
     if (!this.drawCommand || !this.drawUniformStore) return
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return
@@ -1880,7 +2095,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     // Occlusion culling skips fragments hidden under opaque points via depth
     // testing. Applies only while points are effectively opaque; `false`
     // disables it entirely. Highlighting always falls back — its layered
-    // greyed/highlighted draw relies on paint order, not index order.
+    // greyed/highlighted draw relies on paint order, not render-rank depth.
     const useOcclusionCulling =
       config.pointOcclusionCulling &&
       config.pointOpacity >= 1 &&
@@ -1896,7 +2111,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     }
 
     if (useOcclusionCulling && this.drawCoreCommand) {
-      // Pass A: opaque cores, front-to-back (reversed indices), depth write,
+      // Pass A: opaque cores, front-to-back (reversed render order), depth write,
       // no blending. Early-z rejects fragments hidden behind nearer cores.
       this.drawUniformStore.setUniforms({
         drawVertexUniforms: {
@@ -1985,7 +2200,16 @@ export class Points extends CoreModule implements PointTrackerHost {
     if (store.focusedPoint) this.drawPointRing(renderPass, store.focusedPoint.index, store.focusedPointRingColor)
   }
 
-  public updatePosition (): void {
+  /**
+   * Integrates the velocity texture into the positions: `pos += v × friction`.
+   * Positions are not bounded; one sub-step is — a non-finite step is dropped
+   * and a longer one shortened (update-position.frag).
+   *
+   * @param friction - The integrator's friction for this write. Defaults to the
+   *   configured `simulationFriction`; the collision force passes `1` because its
+   *   output is a position correction that must land in full, not a force to damp.
+   */
+  public updatePosition (friction: number = this.config.simulationFriction): void {
     if (!this.updatePositionCommand || !this.updatePositionUniformStore || !this.currentPositionFbo || this.currentPositionFbo.destroyed) return
     if (!this.previousPositionTexture || this.previousPositionTexture.destroyed) return
     if (!this.velocityTexture || this.velocityTexture.destroyed) return
@@ -1994,8 +2218,10 @@ export class Points extends CoreModule implements PointTrackerHost {
 
     this.updatePositionUniformStore.setUniforms({
       updatePositionUniforms: {
-        friction: this.config.simulationFriction,
-        spaceSize: this.store.adjustedSpaceSize,
+        friction: getFriction(friction),
+        // A ceiling on one sub-step's displacement, not a stability bound
+        // (update-position.frag); what it is and why, at Store.stepGuard.
+        maxStep: this.store.stepGuard,
       },
     })
 
@@ -2064,7 +2290,10 @@ export class Points extends CoreModule implements PointTrackerHost {
    * when it rebuilds both textures.
    *
    * Absent points (NaN input position) are skipped — a sparse write must not
-   * resurrect a removed point. Out-of-range indices are skipped too.
+   * resurrect a removed point. Out-of-range indices are skipped too, and so are
+   * NaN targets: a sparse write cannot remove a point either. An infinite
+   * coordinate lands on the edge of the space, as in a full upload
+   * (`toFiniteCoordinate`).
    */
   public setPointPositionsByIndices (indices: ArrayLike<number>, positions: ArrayLike<number>): void {
     const { store: { pointsTextureSize }, data } = this
@@ -2087,6 +2316,13 @@ export class Points extends CoreModule implements PointTrackerHost {
       if (data.pointPositions && isPointAbsent(data.pointPositions, index)) continue
       texel[0] = positions[i * 2] as number
       texel[1] = positions[i * 2 + 1] as number
+      // Same contract as a full upload: a present position on the GPU is finite.
+      // NaN is not a position — it would not make the point absent (only
+      // setPointPositions can), just non-finite — so that write is skipped. An
+      // infinity, also one from the float32 rounding above, lands on the edge.
+      if (Number.isNaN(texel[0]) || Number.isNaN(texel[1])) continue
+      texel[0] = toFiniteCoordinate(texel[0] as number, this.store.infiniteInputEdge)
+      texel[1] = toFiniteCoordinate(texel[1] as number, this.store.infiniteInputEdge)
       texel[2] = index // drag-point.frag matches the drag target on the blue channel
       for (const texture of textures) {
         texture.copyImageData({
@@ -2192,7 +2428,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
     this.findPointsInRectUniformStore.setUniforms({
       findPointsInRectUniforms: {
-        spaceSize: this.store.adjustedSpaceSize,
+        worldOrigin: this.store.worldOrigin,
         screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         sizeScale: this.config.pointSizeScale,
         transformationMatrix: this.store.transformationMatrix4x4,
@@ -2228,7 +2464,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
     this.findPointsInPolygonUniformStore.setUniforms({
       findPointsInPolygonUniforms: {
-        spaceSize: this.store.adjustedSpaceSize,
+        worldOrigin: this.store.worldOrigin,
         screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         transformationMatrix: this.store.transformationMatrix4x4,
         polygonPathLength: this.polygonPathLength,
@@ -2334,7 +2570,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       sizeScale: this.config.pointSizeScale,
       pointsTextureSize: this.store.pointsTextureSize ?? 0,
       transformationMatrix: this.store.transformationMatrix4x4,
-      spaceSize: this.store.adjustedSpaceSize,
+      worldOrigin: this.store.worldOrigin,
       screenSize,
       scalePointsOnZoom: this.config.scalePointsOnZoom ? 1 : 0,
       // Sprite sizes are computed in CSS px and rasterized into the smaller buffer
@@ -2477,106 +2713,60 @@ export class Points extends CoreModule implements PointTrackerHost {
     for (const tracker of this.trackers) tracker.resolveReadback()
   }
 
-  public getSampledPointPositionsMap (): Map<number, [number, number]> {
+  public getSampledPointPositionsMap (nonBlocking = false): Map<number, [number, number]> {
     const positions = new Map<number, [number, number]>()
-    if (!this.sampledPointsFbo || this.sampledPointsFbo.destroyed) return positions
-
-    // Fill sampled points FBO
-    if (this.fillSampledPointsFboCommand && this.fillSampledPointsUniformStore && this.sampledPointsFbo) {
-      if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return positions
-      if (!this.exitTexture) this.updateExit()
-      if (!this.exitTexture || this.exitTexture.destroyed) return positions
-      // Update vertex count dynamically
-      this.fillSampledPointsFboCommand.setVertexCount(this.data.pointsNumber ?? 0)
-
-      this.fillSampledPointsUniformStore.setUniforms({
-        fillSampledPointsUniforms: {
-          pointsTextureSize: this.store.pointsTextureSize ?? 0,
-          transformationMatrix: this.store.transformationMatrix4x4,
-          spaceSize: this.store.adjustedSpaceSize,
-          screenSize: ensureVec2(this.store.screenSize, [0, 0]),
-        },
-      })
-
-      // Update texture bindings dynamically
-      this.fillSampledPointsFboCommand.setBindings({
-        positionsTexture: this.currentPositionTexture,
-        exitTexture: this.exitTexture,
-      })
-
-      const fillPass = this.device.beginRenderPass({
-        framebuffer: this.sampledPointsFbo,
-        clearColor: [0, 0, 0, 0],
-      })
-      this.fillSampledPointsFboCommand.draw(fillPass)
-      fillPass.end()
-    }
-
-    const pixels = readPixels(this.device, this.sampledPointsFbo as Framebuffer)
-    for (let i = 0; i < pixels.length / 4; i++) {
-      const index = pixels[i * 4]
-      const isNotEmpty = !!pixels[i * 4 + 1]
-      const x = pixels[i * 4 + 2]
-      const y = pixels[i * 4 + 3]
-
-      if (isNotEmpty && index !== undefined && x !== undefined && y !== undefined) {
-        positions.set(index, [x, y])
-      }
+    const pixels = this.readSampledPoints(nonBlocking)
+    if (!pixels) return positions
+    for (let i = 0; i < pixels.length; i += 4) {
+      if (pixels[i + 1]) positions.set(pixels[i]!, [pixels[i + 2]!, pixels[i + 3]!])
     }
     return positions
   }
 
-  public getSampledPoints (): { indices: number[]; positions: number[] } {
+  public getSampledPoints (nonBlocking = false): { indices: number[]; positions: number[] } {
     const indices: number[] = []
     const positions: number[] = []
-    if (!this.sampledPointsFbo || this.sampledPointsFbo.destroyed) return { indices, positions }
-
-    // Fill sampled points FBO
-    if (this.fillSampledPointsFboCommand && this.fillSampledPointsUniformStore && this.sampledPointsFbo) {
-      if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return { indices, positions }
-      if (!this.exitTexture) this.updateExit()
-      if (!this.exitTexture || this.exitTexture.destroyed) return { indices, positions }
-      // Update vertex count dynamically
-      this.fillSampledPointsFboCommand.setVertexCount(this.data.pointsNumber ?? 0)
-
-      this.fillSampledPointsUniformStore.setUniforms({
-        fillSampledPointsUniforms: {
-          pointsTextureSize: this.store.pointsTextureSize ?? 0,
-          transformationMatrix: this.store.transformationMatrix4x4,
-          spaceSize: this.store.adjustedSpaceSize,
-          screenSize: ensureVec2(this.store.screenSize, [0, 0]),
-        },
-      })
-
-      // Update texture bindings dynamically
-      this.fillSampledPointsFboCommand.setBindings({
-        positionsTexture: this.currentPositionTexture,
-        exitTexture: this.exitTexture,
-      })
-
-      const fillPass = this.device.beginRenderPass({
-        framebuffer: this.sampledPointsFbo,
-        clearColor: [0, 0, 0, 0],
-      })
-      this.fillSampledPointsFboCommand.draw(fillPass)
-      fillPass.end()
-    }
-
-    const pixels = readPixels(this.device, this.sampledPointsFbo as Framebuffer)
-
-    for (let i = 0; i < pixels.length / 4; i++) {
-      const index = pixels[i * 4]
-      const isNotEmpty = !!pixels[i * 4 + 1]
-      const x = pixels[i * 4 + 2]
-      const y = pixels[i * 4 + 3]
-
-      if (isNotEmpty && index !== undefined && x !== undefined && y !== undefined) {
-        indices.push(index)
-        positions.push(x, y)
+    const pixels = this.readSampledPoints(nonBlocking)
+    if (pixels) {
+      for (let i = 0; i < pixels.length; i += 4) {
+        if (!pixels[i + 1]) continue
+        indices.push(pixels[i]!)
+        positions.push(pixels[i + 2]!, pixels[i + 3]!)
       }
     }
-
     return { indices, positions }
+  }
+
+  public requestSampledReadback (): void {
+    if (!this.isSampledReadbackWanted || this.sampledReadback?.inFlight) return
+    this.isSampledReadbackWanted = false
+    const target = this.sampledPointsFbo
+    const gl = (this.device as unknown as { gl?: WebGL2RenderingContext }).gl
+    const handle = (target as unknown as { handle?: WebGLFramebuffer } | undefined)?.handle
+    if (!target || target.destroyed || !gl || !handle || !this.data.pointsNumber) return
+
+    const key = this.sampledPointsKey()
+    if (this.sampledCache?.key === key || !this.drawSampledPoints(target)) return
+
+    const { width, height } = target
+    this.sampledReadback ||= new PickingReadback(gl, width * height * 4)
+    if (this.sampledReadback.issue(handle, 0, 0, width, height)) this.sampledReadbackKey = key
+  }
+
+  public resolveSampledReadback (): void {
+    const pixels = this.sampledReadback?.poll()
+    if (pixels && this.sampledReadbackKey !== undefined) {
+      // The readback overwrites the array only on a successful poll. Public getters decode it into fresh results.
+      this.sampledCache = { key: this.sampledReadbackKey, pixels }
+    }
+  }
+
+  public resetSampledReadback (): void {
+    this.sampledReadback?.destroy()
+    this.sampledReadback = undefined
+    this.sampledReadbackKey = undefined
+    this.isSampledReadbackWanted = false
+    this.sampledCache = undefined
   }
 
   /**
@@ -2584,6 +2774,7 @@ export class Points extends CoreModule implements PointTrackerHost {
    * Models -> Framebuffers -> Textures -> UniformStores -> Buffers.
    */
   public destroy (): void {
+    this.resetSampledReadback()
     // 1. Destroy Models FIRST (they destroy _gpuGeometry if exists, and _uniformStore)
     this.drawCommand?.destroy()
     this.drawPickingCommand?.destroy()
@@ -2744,6 +2935,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     }
     this.targetColorBuffer = undefined
     this.previousColorData = undefined
+    this.destroyStrokeBuffers()
     if (this.sourceSizeBuffer && !this.sourceSizeBuffer.destroyed) {
       this.sourceSizeBuffer.destroy()
     }
@@ -2775,6 +2967,15 @@ export class Points extends CoreModule implements PointTrackerHost {
       this.reversedPointIndexBuffer.destroy()
     }
     this.reversedPointIndexBuffer = undefined
+    if (this.pointRenderOrderBuffer && !this.pointRenderOrderBuffer.destroyed) {
+      this.pointRenderOrderBuffer.destroy()
+    }
+    this.pointRenderOrderBuffer = undefined
+    if (this.renderRankBuffer && !this.renderRankBuffer.destroyed) {
+      this.renderRankBuffer.destroy()
+    }
+    this.renderRankBuffer = undefined
+    this.appliedRenderOrder = undefined
     if (this.hoveredPointIndices && !this.hoveredPointIndices.destroyed) {
       this.hoveredPointIndices.destroy()
     }
@@ -2818,40 +3019,33 @@ export class Points extends CoreModule implements PointTrackerHost {
     if (!pointsTextureSize) return
     this.ensureUpdatePositionProgram()
 
-    const velocityData = new Float32Array(pointsTextureSize * pointsTextureSize * 4).fill(0)
-    if (!this.velocityTexture || this.velocityTexture.width !== pointsTextureSize || this.velocityTexture.height !== pointsTextureSize) {
-      if (this.velocityFbo && !this.velocityFbo.destroyed) {
-        this.velocityFbo.destroy()
-      }
-      if (this.velocityTexture && !this.velocityTexture.destroyed) {
-        this.velocityTexture.destroy()
-      }
-      this.velocityTexture = device.createTexture({
-        width: pointsTextureSize,
-        height: pointsTextureSize,
-        format: 'rgba32float',
-      })
-      this.velocityTexture.copyImageData({
-        data: velocityData,
-        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
-      })
-      this.velocityFbo = device.createFramebuffer({
-        width: pointsTextureSize,
-        height: pointsTextureSize,
-        colorAttachments: [this.velocityTexture],
-      })
-    } else {
-      this.velocityTexture.copyImageData({
-        data: velocityData,
-        bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
-        mipLevel: 0,
-        x: 0,
-        y: 0,
-      })
+    // The velocity texture is per-pass scratch: every force pass clears it before
+    // writing, and the position update consumes it in the same pass. So it only has
+    // to exist at the current size; its contents never need resetting.
+    if (this.velocityTexture && this.velocityTexture.width === pointsTextureSize && this.velocityTexture.height === pointsTextureSize) return
+    if (this.velocityFbo && !this.velocityFbo.destroyed) {
+      this.velocityFbo.destroy()
     }
+    if (this.velocityTexture && !this.velocityTexture.destroyed) {
+      this.velocityTexture.destroy()
+    }
+    this.velocityTexture = device.createTexture({
+      width: pointsTextureSize,
+      height: pointsTextureSize,
+      format: 'rgba32float',
+    })
+    this.velocityTexture.copyImageData({
+      data: new Float32Array(pointsTextureSize * pointsTextureSize * 4),
+      bytesPerRow: getBytesPerRow('rgba32float', pointsTextureSize),
+      mipLevel: 0,
+      x: 0,
+      y: 0,
+    })
+    this.velocityFbo = device.createFramebuffer({
+      width: pointsTextureSize,
+      height: pointsTextureSize,
+      colorAttachments: [this.velocityTexture],
+    })
   }
 
   public createTransitionResources (): void {
@@ -3042,6 +3236,56 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.positionVersion++
   }
 
+  private readSampledPoints (nonBlocking: boolean): Float32Array | undefined {
+    const target = this.sampledPointsFbo
+    if (!this.data.pointsNumber || !target || target.destroyed) return undefined
+    if (!nonBlocking) return this.drawSampledPoints(target) ? readPixels(this.device, target) : undefined
+
+    this.resolveSampledReadback()
+    const key = this.sampledPointsKey()
+    const newestKey = this.sampledReadback?.inFlight ? this.sampledReadbackKey : this.sampledCache?.key
+    this.isSampledReadbackWanted = newestKey !== key
+    if (this.isSampledReadbackWanted && !this.requestTick?.()) this.requestSampledReadback()
+    return this.sampledCache?.pixels
+  }
+
+  /** The sample depends on the view as well as on the world-space positions. */
+  private sampledPointsKey (): string {
+    const { screenSize, worldOrigin, transform } = this.store
+    return [this.positionVersion, this.pointListVersion, this.sampledOrderVersion,
+      ...screenSize, ...worldOrigin, ...transform].join(',')
+  }
+
+  private drawSampledPoints (target: Framebuffer): boolean {
+    const command = this.fillSampledPointsFboCommand
+    const uniforms = this.fillSampledPointsUniformStore
+    if (!command || !uniforms || !this.currentPositionTexture || this.currentPositionTexture.destroyed) return false
+    if (!this.exitTexture) this.updateExit()
+    if (!this.exitTexture || this.exitTexture.destroyed) return false
+
+    command.setVertexCount(this.data.pointsNumber ?? 0)
+    uniforms.setUniforms({
+      fillSampledPointsUniforms: {
+        pointsTextureSize: this.store.pointsTextureSize ?? 0,
+        transformationMatrix: this.store.transformationMatrix4x4,
+        worldOrigin: this.store.worldOrigin,
+        screenSize: ensureVec2(this.store.screenSize, [0, 0]),
+      },
+    })
+    command.setBindings({
+      positionsTexture: this.currentPositionTexture,
+      exitTexture: this.exitTexture,
+    })
+
+    const pass = this.device.beginRenderPass({
+      framebuffer: target,
+      clearColor: [0, 0, 0, 0],
+    })
+    command.draw(pass)
+    pass.end()
+    return true
+  }
+
   /**
    * A footprint changed — sizes, image sizes, image indices or the image set — so the
    * picking buffer and the rect-selection texture both rebuild on their next read.
@@ -3108,7 +3352,7 @@ export class Points extends CoreModule implements PointTrackerHost {
         transformationMatrix: store.transformationMatrix4x4,
         pointsTextureSize: store.pointsTextureSize ?? 0,
         sizeScale: config.pointSizeScale,
-        spaceSize: store.adjustedSpaceSize,
+        worldOrigin: store.worldOrigin,
         screenSize: ensureVec2(store.screenSize, [0, 0]),
         scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0,
         pointIndex: index,
@@ -3150,6 +3394,91 @@ export class Points extends CoreModule implements PointTrackerHost {
       sourceSize: this.sourceSizeData?.[index] ?? targetSize,
       targetSize,
       imageSize: data.pointDrawsImage(index) ? data.pointImageSizes?.[index] ?? 0 : 0,
+    }
+  }
+
+  /**
+   * Rebuilds the point draw models when the stroke was switched on or off since they were
+   * compiled. Buffers are not owned by a Model, so only the models go; `initPrograms()` builds
+   * them again with the current variant and binds the current buffers.
+   */
+  private ensureStrokeVariant (): void {
+    if (!this.drawCommand || this.isStrokeCompiled === this.isStrokeWanted) return
+    // A stroke on its way out keeps its shaders until the transition has played. Asked of the
+    // transition itself, not the per-frame animate flags: the frame reads those before it steps
+    // the transition, so on the final frame they still say "animating" while the cycle has
+    // ended — and with the loop then idle, no later frame would release the variant.
+    const strokeTransitionActive = this.transition?.isActiveFor(TransitionProperty.PointStrokeWidths) === true ||
+      this.transition?.isActiveFor(TransitionProperty.PointStrokeColors) === true
+    if (!this.isStrokeWanted && strokeTransitionActive) return
+    this.drawCommand.destroy()
+    this.drawCommand = undefined
+    this.drawCoreCommand?.destroy()
+    this.drawCoreCommand = undefined
+    this.drawPickingCommand?.destroy()
+    this.drawPickingCommand = undefined
+    this.isOcclusionCullingActive = false
+    // The flag first: initPrograms() allocates the stroke buffers only for a stroke variant
+    this.isStrokeCompiled = this.isStrokeWanted
+    if (!this.isStrokeWanted) this.destroyStrokeBuffers()
+    this.initPrograms()
+  }
+
+  private destroyStrokeBuffers (): void {
+    for (const buffer of [this.sourceStrokeColorBuffer, this.targetStrokeColorBuffer, this.sourceStrokeWidthBuffer, this.targetStrokeWidthBuffer]) {
+      if (buffer && !buffer.destroyed) buffer.destroy()
+    }
+    this.sourceStrokeColorBuffer = undefined
+    this.targetStrokeColorBuffer = undefined
+    this.previousStrokeColorData = undefined
+    this.sourceStrokeWidthBuffer = undefined
+    this.targetStrokeWidthBuffer = undefined
+    this.previousStrokeWidthData = undefined
+  }
+
+  private getDrawCommandDefines (): Record<string, boolean> {
+    return { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES, ...(this.isStrokeCompiled && { POINT_STROKE: true }) }
+  }
+
+  private getDrawCommandModules (): ShaderModule[] {
+    return [shapeGeometryModule, pointSizeModule, exitRampModule, ...(this.isStrokeCompiled ? [oklabModule] : []), pickingColorModule]
+  }
+
+  private getDrawCommandBufferLayout (): BufferLayout[] {
+    const strokeLayout: BufferLayout[] = this.isStrokeCompiled
+      ? [
+        { name: 'sourceStrokeColor', format: 'float32x4' },
+        { name: 'targetStrokeColor', format: 'float32x4' },
+        { name: 'sourceStrokeWidth', format: 'float32' },
+        { name: 'targetStrokeWidth', format: 'float32' },
+      ]
+      : []
+    return [
+      { name: 'pointIndices', format: 'float32x2' },
+      { name: 'sourceSize', format: 'float32' },
+      { name: 'targetSize', format: 'float32' },
+      { name: 'sourceColor', format: 'float32x4' },
+      { name: 'targetColor', format: 'float32x4' },
+      { name: 'shape', format: 'float32' },
+      { name: 'imageIndex', format: 'float32' },
+      { name: 'imageSize', format: 'float32' },
+      ...strokeLayout,
+      { name: 'renderRank', format: 'float32' },
+    ]
+  }
+
+  /**
+   * Stroke defaults for the vertex shader: the shade code and explicit color the store parsed
+   * once per config change (`Store.pointDefaultStrokeShade`), the contrast clamped to the
+   * lightness range, and the default width in CSS px — the shader scales it by `ratio`.
+   */
+  private getStrokeUniforms (): StrokeUniforms {
+    const { config, store } = this
+    return {
+      strokeContrast: Math.min(1, Math.max(0, config.pointStrokeContrast)),
+      strokeDefaultShade: store.pointDefaultStrokeShade,
+      strokeDefaultWidth: Math.max(0, config.pointDefaultStrokeWidth),
+      strokeDefaultColor: store.pointDefaultStrokeRgba ?? [0, 0, 0, 1],
     }
   }
 
@@ -3298,11 +3627,11 @@ export class Points extends CoreModule implements PointTrackerHost {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
           friction: 'f32',
-          spaceSize: 'f32',
+          maxStep: 'f32',
         },
         defaultUniforms: {
-          friction: config.simulationFriction,
-          spaceSize: store.adjustedSpaceSize,
+          friction: getFriction(config.simulationFriction),
+          maxStep: store.stepGuard,
         },
       },
     })
@@ -3332,11 +3661,27 @@ export class Points extends CoreModule implements PointTrackerHost {
   }
 
   private rescaleInitialNodePositions (): void {
-    const { config: { spaceSize } } = this
-    if (!this.data.pointPositions || !spaceSize) return
+    if (!this.data.pointPositions) return
 
     const points = this.data.pointPositions
     const pointsNumber = points.length / 2
+
+    // The rescale's rules, named. They are a point count and three lengths in world units,
+    // fractions of the resolved `spaceSize` (`Store.referenceLength`: the config's when it is
+    // a usable size, as every length that follows the key) — at the default 16,777 points,
+    // 4,096, 410 and 4,915 units — and they centre the result on the world origin, which the
+    // same resolution placed. The expressions are kept as they were so every layout is unchanged.
+    const spaceSize = this.store.referenceLength
+    /** A layout already wider than this is used as given. */
+    const rescaleCutoff = spaceSize
+    /** Above this many points a layout is dense: spread out rather than gathered. */
+    const densePointCount = spaceSize * spaceSize * 0.001
+    /** The side a sparse layout is gathered to. */
+    const sparseTarget = spaceSize * 0.1
+    /** The side a dense layout is spread to: 1.2 × the space, or √n once that is larger. */
+    const denseTarget = spaceSize * Math.max(1.2, Math.sqrt(pointsNumber) / spaceSize)
+    /** The layout is centred on the world origin, where gravity pulls. */
+    const [centerX, centerY] = this.store.worldOrigin
     let minX = Infinity
     let maxX = -Infinity
     let minY = Infinity
@@ -3371,9 +3716,8 @@ export class Points extends CoreModule implements PointTrackerHost {
     // positions, making the points vanish. Center them in the space instead,
     // preserving any relative offsets.
     if (range === 0) {
-      const center = spaceSize / 2
-      this.scaleX = (x: number): number => x - minX + center
-      this.scaleY = (y: number): number => y - minY + center
+      this.scaleX = (x: number): number => x - minX + centerX
+      this.scaleY = (y: number): number => y - minY + centerY
       for (let i = 0; i < pointsNumber; i++) {
         if (isPointAbsent(points, i)) continue // leave absent points NaN
         this.data.pointPositions[i * 2] = this.scaleX(points[i * 2] as number)
@@ -3382,29 +3726,22 @@ export class Points extends CoreModule implements PointTrackerHost {
       return
     }
 
-    // Do not rescale if the range is greater than the space size (no need to)
-    if (range > spaceSize) {
+    if (range > rescaleCutoff) {
       this.scaleX = undefined
       this.scaleY = undefined
       return
     }
 
-    // Density threshold - points per pixel ratio (0.001 = 0.1%)
-    const densityThreshold = spaceSize * spaceSize * 0.001
-    // Calculate effective space size based on point density
-    const effectiveSpaceSize = pointsNumber > densityThreshold
-    // For dense datasets: scale up based on point count, minimum 120% of space
-      ? spaceSize * Math.max(1.2, Math.sqrt(pointsNumber) / spaceSize)
-    // For sparse datasets: use 10% of space to cluster points closer
-      : spaceSize * 0.1
+    const targetSide = pointsNumber > densePointCount ? denseTarget : sparseTarget
 
-    // Calculate uniform scale factor to fit data within effective space
-    const scaleFactor = effectiveSpaceSize / range
-    // Shift to center the scaled data within the full [0, spaceSize] space
-    const centerOffset = (spaceSize - effectiveSpaceSize) / 2
-    // Pad the shorter axis so both axes are centered within the square bounding box
-    const offsetX = ((range - w) / 2) * scaleFactor + centerOffset
-    const offsetY = ((range - h) / 2) * scaleFactor + centerOffset
+    // Calculate uniform scale factor to fit data within the target side
+    const scaleFactor = targetSide / range
+    // Shift to centre the scaled data on the world origin, and pad the shorter axis so
+    // both axes are centered within the square bounding box. The centring term is
+    // parenthesised: rounding commutes with doubling, so it is the same bits as the
+    // `(2 · centre − side) / 2` it replaced, and default layouts stay bit-identical.
+    const offsetX = ((range - w) / 2) * scaleFactor + (centerX - targetSide / 2)
+    const offsetY = ((range - h) / 2) * scaleFactor + (centerY - targetSide / 2)
 
     this.scaleX = (x: number): number => (x - minX) * scaleFactor + offsetX
     this.scaleY = (y: number): number => (y - minY) * scaleFactor + offsetY
@@ -3418,28 +3755,17 @@ export class Points extends CoreModule implements PointTrackerHost {
   }
 
   /**
-   * (Re)builds the uint32 element index buffer `[N-1 … 0]` that lets the
-   * occlusion-culling core pass draw the shared attribute buffers in reversed
-   * (front-to-back) order. Content depends only on the point count, so the
-   * buffer is rebuilt only when `pointsNumber` changes.
+   * Creates, resizes, or rewrites a uint32 element index buffer so it holds exactly
+   * `data`. A rewrite keeps the buffer, so models already holding it see the new
+   * contents; a new buffer must be passed to each model's `setIndexBuffer`.
    */
-  private updateReversedPointIndexBuffer (): void {
-    const { device, data } = this
-    const pointsNumber = data.pointsNumber ?? 0
-    if (pointsNumber === 0) return
-    const requiredByteLength = pointsNumber * 4
-    if (this.reversedPointIndexBuffer?.byteLength === requiredByteLength) return
-
-    const reversedIndexData = new Uint32Array(pointsNumber)
-    for (let i = 0; i < pointsNumber; i++) reversedIndexData[i] = pointsNumber - 1 - i
-    if (this.reversedPointIndexBuffer && !this.reversedPointIndexBuffer.destroyed) {
-      this.reversedPointIndexBuffer.destroy()
+  private writeIndexBuffer (buffer: Buffer | undefined, data: Uint32Array): Buffer {
+    if (!buffer || buffer.destroyed || buffer.byteLength !== data.byteLength) {
+      if (buffer && !buffer.destroyed) buffer.destroy()
+      return this.device.createBuffer({ data, usage: Buffer.INDEX | Buffer.COPY_DST })
     }
-    this.reversedPointIndexBuffer = device.createBuffer({
-      data: reversedIndexData,
-      usage: Buffer.INDEX | Buffer.COPY_DST,
-    })
-    this.drawCoreCommand?.setIndexBuffer(this.reversedPointIndexBuffer)
+    buffer.write(data)
+    return buffer
   }
 
   /** The uniforms every points draw shares — the visible passes and the host picking pass. */
@@ -3453,7 +3779,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       transformationMatrix: store.transformationMatrix4x4,
       pointsTextureSize: store.pointsTextureSize ?? 0,
       sizeScale: config.pointSizeScale,
-      spaceSize: store.adjustedSpaceSize,
+      worldOrigin: store.worldOrigin,
       screenSize: ensureVec2(store.screenSize, [0, 0]),
       greyoutColor: ensureVec4(store.greyoutPointColor, [-1, -1, -1, -1]),
       backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
@@ -3471,6 +3797,9 @@ export class Points extends CoreModule implements PointTrackerHost {
       pointDefaultColor: ensureVec4(data.defaultRgba, [0, 0, 0, 1]),
       pointDefaultSize: config.pointDefaultSize,
       pointsNumber: data.pointsNumber,
+      ...this.getStrokeUniforms(),
+      animateStrokeColors: this.shouldAnimateStrokeColors ? 1 : 0,
+      animateStrokeWidths: this.shouldAnimateStrokeWidths ? 1 : 0,
     }
     const fragment = {
       // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
@@ -3508,6 +3837,11 @@ export class Points extends CoreModule implements PointTrackerHost {
       ...(this.shapeBuffer && { shape: this.shapeBuffer }),
       ...(this.imageIndicesBuffer && { imageIndex: this.imageIndicesBuffer }),
       ...(this.imageSizesBuffer && { imageSize: this.imageSizesBuffer }),
+      ...(this.sourceStrokeColorBuffer && { sourceStrokeColor: this.sourceStrokeColorBuffer }),
+      ...(this.targetStrokeColorBuffer && { targetStrokeColor: this.targetStrokeColorBuffer }),
+      ...(this.sourceStrokeWidthBuffer && { sourceStrokeWidth: this.sourceStrokeWidthBuffer }),
+      ...(this.targetStrokeWidthBuffer && { targetStrokeWidth: this.targetStrokeWidthBuffer }),
+      ...(this.renderRankBuffer && { renderRank: this.renderRankBuffer }),
     } as Record<string, Buffer>
   }
 }

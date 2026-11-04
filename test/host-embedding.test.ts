@@ -93,6 +93,21 @@ describe('headless lifecycle', () => {
 })
 
 describe('position snapshots', () => {
+  it('samples points after a headless host sets its viewport', async () => {
+    const graph = await createHeadlessGraph(
+      { spaceSize: 4096, enableSimulation: false, rescalePositions: false },
+      new Float32Array([2048, 2048])
+    )
+    try {
+      graph.setViewTransform({ k: 1, x: 0, y: 0 }, [200, 200])
+      const options = { nonBlocking: true }
+      expect(graph.getSampledPoints(options).indices).toEqual([])
+      await vi.waitFor(() => expect(graph.getSampledPoints(options)).toEqual({ indices: [0], positions: [2048, 2048] }))
+    } finally {
+      graph.destroy()
+    }
+  })
+
   it('getPointPositionsArray matches getPointPositions and reuses a provided destination', async () => {
     const graph = await createHeadlessGraph()
     try {
@@ -278,13 +293,41 @@ describe('host view injection', () => {
       const y = 20
       const w = 800
       const h = 600
-      const S = 4096
+      // The world origin: the centre of the default 4096 space
+      const ox = 4096 / 2
+      const oy = 4096 / 2
       graph.setViewTransform({ k, x, y }, [w, h])
 
       const [screenX, screenY] = graph.spaceToScreenPosition([100, 100])
-      expect(screenX).toBeCloseTo(k * (100 + (w - S) / 2) + x, 3)
-      expect(screenY).toBeCloseTo(k * ((S - 100) + (h - S) / 2) + y, 3)
+      expect(screenX).toBeCloseTo(k * (100 - ox + w / 2) + x, 3)
+      expect(screenY).toBeCloseTo(k * (oy - 100 + h / 2) + y, 3)
       expect(graph.getZoomLevel()).toBe(k)
+    } finally {
+      graph.destroy()
+    }
+  })
+
+  it('space → screen is an exact translation by the live world origin, through a spaceSize change', async () => {
+    const graph = await createHeadlessGraph()
+    try {
+      const k = 1.5
+      const x = 10
+      const y = 20
+      const w = 800
+      const h = 600
+      graph.setViewTransform({ k, x, y }, [w, h])
+      // Whole space units land on exact screen values: the map is a plain translation with
+      // nothing to round (an interpolating screen-wide scale would round 1393 in both axes)
+      expect(graph.spaceToScreenPosition([1393, 1393])).toEqual([k * (1393 - 2048 + w / 2) + x, k * (2048 - 1393 + h / 2) + y])
+
+      // A headless graph has no canvas to re-measure, and the host keeps its view — but the
+      // new origin must reach space → screen as it reaches screen → space and the shaders
+      // (spaceSize is used as given: origin 3000)
+      graph.setConfigPartial({ spaceSize: 6000 })
+      expect(graph.spaceToScreenPosition([3500, 2000])).toEqual([k * (3500 - 3000 + w / 2) + x, k * (3000 - 2000 + h / 2) + y])
+      const [backX, backY] = graph.spaceToScreenPosition(graph.screenToSpacePosition([0, 0]))
+      expect(backX).toBeCloseTo(0, 6)
+      expect(backY).toBeCloseTo(0, 6)
     } finally {
       graph.destroy()
     }
@@ -403,9 +446,11 @@ describe('host picking', () => {
     const target = device.createTexture({ format: 'rgba8unorm', width: 200, height: 200 })
     const framebuffer = device.createFramebuffer({ width: 200, height: 200, colorAttachments: [target] })
     try {
-      // setViewTransform's formula, inverted for k = 1 and (1000, 1000) → (100, 100)
-      const S = 4096
-      graph.setViewTransform({ k: 1, x: 100 - (1000 + (200 - S) / 2), y: 100 - ((S - 1000) + (200 - S) / 2) }, [200, 200])
+      // setViewTransform's formula, inverted for k = 1 and (1000, 1000) → (100, 100), with
+      // the world origin at the centre of the default 4096 space
+      const ox = 4096 / 2
+      const oy = 4096 / 2
+      graph.setViewTransform({ k: 1, x: 100 - (1000 - ox + 200 / 2), y: 100 - (oy - 1000 + 200 / 2) }, [200, 200])
       expect(graph.spaceToScreenPosition([1000, 1000])).toEqual([100, 100])
 
       const renderPass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0] })
@@ -475,8 +520,10 @@ describe('host hover', () => {
       return count
     }
     try {
-      const S = 4096
-      graph.setViewTransform({ k: 1, x: 100 - (1000 + (200 - S) / 2), y: 100 - ((S - 1000) + (200 - S) / 2) }, [200, 200])
+      // (1000, 1000) on screen at (100, 100), with the world origin at the centre of the default 4096 space
+      const ox = 4096 / 2
+      const oy = 4096 / 2
+      graph.setViewTransform({ k: 1, x: 100 - (1000 - ox + 200 / 2), y: 100 - (oy - 1000 + 200 / 2) }, [200, 200])
       const plain = draw()
 
       graph.setHostHoveredPoint(0)
@@ -530,8 +577,9 @@ describe('host hover', () => {
     try {
       // One pixel per space unit, with the space origin on screen at (40, 160): a ring
       // read from outside the data would land there
-      const S = 4096
-      graph.setViewTransform({ k: 1, x: 40 - (200 - S) / 2, y: 160 - S - (200 - S) / 2 }, [200, 200])
+      const ox = 4096 / 2
+      const oy = 4096 / 2
+      graph.setViewTransform({ k: 1, x: 40 - (200 / 2 - ox), y: 160 - (oy + 200 / 2) }, [200, 200])
       graph.setHostHoveredPoint(1)
 
       // The data shrinks to one point; the host has not hovered again yet
@@ -741,5 +789,64 @@ describe('sparse writes during a position transition', () => {
       expect(await transitionEnded()).toBe(false)
       expect(pointAt(graph, 0)).toEqual([1500, 1000])
     })
+  })
+})
+
+/**
+ * A point removed with an animated same-count setPointPositions keeps its last
+ * finite position on the GPU after the fade (the transition freezes an exiting
+ * point at its source), while the exit texture marks it absent at once. Every
+ * pass that reads another point's data must skip it through exit.G, never
+ * through a NaN position — the collision force included.
+ */
+describe('collision skips removed points', () => {
+  const wait = (ms: number): Promise<void> => new Promise((resolve) => { setTimeout(resolve, ms) })
+
+  it('a removed point does not push the live points that overlap where it was', async () => {
+    const div = document.createElement('div')
+    div.style.width = '200px'
+    div.style.height = '200px'
+    document.body.appendChild(div)
+    const endings: boolean[] = []
+    const graph = new Graph(div, {
+      spaceSize: 4096,
+      fitViewOnInit: false,
+      rescalePositions: false,
+      // Collision is the only force: nothing else can move point 0.
+      simulationGravity: 0,
+      simulationCenter: 0,
+      simulationRepulsion: 0,
+      simulationLinkSpring: 0,
+      simulationCollision: 1,
+      simulationCollisionPadding: 1,
+      simulationDecay: 100000,
+      onTransitionEnd: (interrupted: boolean): void => { endings.push(interrupted) },
+    })
+    try {
+      // Point 1 starts clear of point 0 (contact distance 22).
+      graph.setPointPositions(new Float32Array([2000, 2000, 2030, 2000, 3000, 3000]))
+      graph.setPointSizes(new Float32Array([20, 20, 20]))
+      graph.render()
+      await graph.ready
+      await wait(100)
+      graph.pause()
+      // Overlap point 1 with point 0 while paused, then remove it with a fade.
+      graph.setPointPosition(1, 2010, 2000)
+      graph.setPointPositions(new Float32Array([2000, 2000, NaN, NaN, 3000, 3000]))
+      // Wait for this fade to complete; earlier transitions may end (interrupted) first.
+      const from = endings.length
+      graph.render(undefined, 200)
+      for (let i = 0; i < 100 && !endings.slice(from).includes(false); i += 1) await wait(30)
+      expect(endings.slice(from)).toContain(false)
+
+      const before = graph.getPointPositions()
+      for (let i = 0; i < 20; i += 1) graph.step()
+      const after = graph.getPointPositions()
+      const moved = Math.hypot((after[0] as number) - (before[0] as number), (after[1] as number) - (before[1] as number))
+      expect(moved).toBeLessThan(0.01)
+    } finally {
+      graph.destroy()
+      div.remove()
+    }
   })
 })

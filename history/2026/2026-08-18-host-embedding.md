@@ -1,23 +1,21 @@
-<!-- suggested path: history/2026/2026-08-18-host-embedding.md -->
-
 # Host embedding: headless mode, external scheduling, GPU position sharing
 
 **Commits:** `feat(graph): headless mode and external frame scheduling`
-(`8598b4b`), `feat(points): expose GPU positions — texture handle, non-stalling
-snapshots, sparse writes, per-point pinning` (`3387937`), `feat(graph): render
+(`09dd7fbb`), `feat(points): expose GPU positions — texture handle, non-stalling
+snapshots, sparse writes, per-point pinning` (`1f15a528`), `feat(graph): render
 into a host pass with a host camera — drawToRenderPass and setViewTransform`
-(`6db7229`), `fix(graph): reset ambient GL state before passes on an external
-device` (`25c246b`), `feat(stories): deck.gl integration examples`
-(`b4211b0`), `build(deps): make luma.gl a peer dependency` (`119688f`),
-`feat(simulation): extract GraphSimulation` (`c8fa3f6`), `feat(stories): run
-the zero-copy story on GraphSimulation` (`0fda0ef`), `feat(api): rename
-setPointPinned to setPinnedPoint` (`765154b`), `feat(api): sanitize the pinned
-set and add isPointPinned` (`f11b9b5`), `test: host-embedding unit tests on
-real WebGL 2` (`c658e2f`), `fix(points): fence the async position read`
-(`af35256`), `fix(simulation): defer stop() until the device is ready`
-(`2ac47d0`), `fix(points): the async snapshot detects a point-count change
-mid-flight` (`e51befe`), `fix(points): a sparse write holds through a position
-transition` (`9b3e9d8`)
+(`fdced269`), `fix(graph): reset ambient GL state before passes on an external
+device` (`4052f9a0`), `feat(stories): deck.gl integration examples`
+(`a8650bd6`), `build(deps): make luma.gl a peer dependency` (`12707322`),
+`feat(simulation): extract GraphSimulation` (`1e5bd1bf`), `feat(stories): run
+the zero-copy story on GraphSimulation` (`6226c4b5`), `feat(api): rename
+setPointPinned to setPinnedPoint` (`4deae0f8`), `feat(api): sanitize the pinned
+set and add isPointPinned` (`012df3df`), `test: host-embedding unit tests on
+real WebGL 2` (`ad2c5f7c`), `fix(points): fence the async position read`
+(`06bc1595`), `fix(simulation): defer stop() until the device is ready`
+(`ec69cc93`), `fix(points): the async snapshot detects a point-count change
+mid-flight` (`5e1da98d`), `fix(points): a sparse write holds through a position
+transition` (`bd8f972f`)
 
 ## Why
 
@@ -150,8 +148,8 @@ behavior byte-identical.
 The draws that run between steps were found later, one consumer at a time,
 and reset the state the same way: the tracking draw after a sparse write
 (`fix(simulation): reset host GL state before sparse-write tracking draws`,
-`8fc0288`), then a tracker's gather wherever it is reached from and a cluster
-read's own pass (`feat(points): point trackers`, `58f4afe`; see
+`185e0098`), then a tracker's gather wherever it is reached from and a cluster
+read's own pass (`feat(points): point trackers`, `e6187ee0`; see
 [non-blocking position reads](2026-09-28-nonblocking-position-reads.md)).
 
 Verified on a shared deck.gl device: 100 steps interleaved with deck redraws

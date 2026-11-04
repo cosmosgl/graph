@@ -57,6 +57,16 @@ export class GraphData {
   public inputPointPositions: Float32Array | undefined
   public inputPointColors: Float32Array | undefined
   public inputPointSizes: Float32Array | undefined
+  /** Raw per-point stroke colors from `setPointStrokeColors` (RGBA, `NaN` = use the default). */
+  public inputPointStrokeColors: Float32Array | undefined
+  /** Raw per-point stroke widths from `setPointStrokeWidths` (CSS px, `NaN` = use `pointDefaultStrokeWidth`). */
+  public inputPointStrokeWidths: Float32Array | undefined
+  /**
+   * Whether a resolved stroke width is above 0. Scanned where the array arrives (so a setter can
+   * decide on a transition at once) and again on every resolve, from the widths actually in use:
+   * an array that does not match the point count resolves to all-`NaN` and asks for nothing.
+   */
+  public hasPositiveStrokeWidth = false
   public inputPointShapes: Float32Array | undefined
   public inputImageData: ImageData[] | undefined
   public inputPointImageIndices: Float32Array | undefined
@@ -69,6 +79,10 @@ export class GraphData {
   public inputPointClusters: (number | undefined)[] | undefined
   public inputClusterPositions: (number | undefined)[] | undefined
   public inputClusterStrength: Float32Array | undefined
+  /** Raw per-point attractor positions from `setPointAttractors` (`[x0, y0, x1, y1, …]`; a non-finite coordinate = none). */
+  public inputPointAttractors: Float32Array | undefined
+  /** Raw per-point attractor strength coefficients from `setPointAttractorStrength`. */
+  public inputPointAttractorStrength: Float32Array | undefined
   public inputPinnedPoints: number[] | undefined
 
   public pointPositions: Float32Array | undefined
@@ -86,9 +100,16 @@ export class GraphData {
   public targetPointsNumber = 0
   public pointColors: Float32Array | undefined
   public pointSizes: Float32Array | undefined
+  public pointStrokeColors: Float32Array | undefined
+  public pointStrokeWidths: Float32Array | undefined
   public pointShapes: Float32Array | undefined
   public pointImageIndices: Float32Array | undefined
   public pointImageSizes: Float32Array | undefined
+  /**
+   * Resolved `setPointRenderOrder` draw order: every point index exactly once, back to
+   * front (the last entry is drawn on top). `undefined` when points draw in index order.
+   */
+  public pointRenderOrder: Uint32Array | undefined
 
   public links: Float32Array | undefined
   public linkColors: Float32Array | undefined
@@ -103,6 +124,16 @@ export class GraphData {
   public clusterPositions: (number | undefined)[] | undefined
   public clusterStrength: Float32Array | undefined
 
+  /**
+   * Per-point attractor positions the attractor force uploads, `[x0, y0, x1, y1, …]`
+   * aligned to the point index space; a non-finite coordinate (`NaN`, `±Infinity`) means the
+   * point has no attractor. `undefined` when the input is missing or does not match the
+   * point count — the force then does nothing.
+   */
+  public pointAttractors: Float32Array | undefined
+  /** Per-point attractor strength coefficients (`undefined` = every point uses `1`). */
+  public pointAttractorStrength: Float32Array | undefined
+
   /** Links grouped by source point; `neighbors` holds each link's target. */
   public linksBySource: LinksByPoint | undefined
   /** Links grouped by target point; `neighbors` holds each link's source. */
@@ -115,13 +146,27 @@ export class GraphData {
   /** Lazily parsed `pointDefaultColor` — see the `defaultRgba` getter. */
   private _defaultRgba: [number, number, number, number] | undefined
   private _inputLinks: Float32Array | undefined
+  private _linkDefaultRgba: [number, number, number, number] | undefined
+
   private _isLinkGroupingStale = true
   private _linkGroupingPointsNumber: number | undefined
+  private _inputPointRenderOrder: ArrayLike<number> | undefined
+  private _isPointRenderOrderStale = true
+  private _pointRenderOrderPointsNumber: number | undefined
   private _sourceIndexToTargetIndices: PointPairs | undefined
   private _targetIndexToSourceIndices: PointPairs | undefined
 
   public constructor (config: GraphConfigInterface) {
     this._config = config
+  }
+
+  /**
+   * Whether any point can have a stroke: the default width is positive, or a per-point width
+   * is. An array of `NaN` (use the default) or zeros asks for none, so the renderer leaves the
+   * stroke out of its shaders and allocates nothing for it.
+   */
+  public get hasPointStroke (): boolean {
+    return this._config.pointDefaultStrokeWidth > 0 || this.hasPositiveStrokeWidth
   }
 
   public get pointsNumber (): number | undefined {
@@ -166,9 +211,41 @@ export class GraphData {
     return this._inputLinks
   }
 
+  /**
+   * Raw draw order from `setPointRenderOrder`. Assigning, even the same array again,
+   * re-resolves `pointRenderOrder` on the next `update()`.
+   */
+  public get inputPointRenderOrder (): ArrayLike<number> | undefined {
+    return this._inputPointRenderOrder
+  }
+
+  public get linkDefaultRgba (): [number, number, number, number] {
+    this._linkDefaultRgba ??= [...getRgbaColor(this._config.linkDefaultColor)]
+    return this._linkDefaultRgba
+  }
+
   public set inputLinks (links: Float32Array | undefined) {
     this._inputLinks = links
     this._isLinkGroupingStale = true
+  }
+
+  public set inputPointRenderOrder (order: ArrayLike<number> | undefined) {
+    this._inputPointRenderOrder = order
+    this._isPointRenderOrderStale = true
+  }
+
+  public invalidateLinkDefaultColor (): void {
+    this._linkDefaultRgba = undefined
+  }
+
+  public getResolvedLinkColorChannel (index: number, channel: number): number {
+    const raw = this.linkColors?.[index * 4 + channel]
+    return isNumber(raw) ? raw as number : this.linkDefaultRgba[channel] as number
+  }
+
+  public getResolvedLinkWidth (index: number): number {
+    const raw = this.linkWidths?.[index]
+    return isNumber(raw) ? raw as number : this._config.linkDefaultWidth
   }
 
   public updatePoints (): void {
@@ -262,6 +339,41 @@ export class GraphData {
   }
 
   /**
+   * Per-point stroke colors. Like colors: no resolution here — the draw shader treats a
+   * `NaN` channel as "use `pointDefaultStrokeColor`", and a missing or mismatched
+   * input becomes an all-NaN array.
+   */
+  public updatePointStrokeColor (): void {
+    if (this.pointsNumber === undefined) {
+      this.pointStrokeColors = undefined
+      return
+    }
+    if (this.inputPointStrokeColors === undefined || this.inputPointStrokeColors.length / 4 !== this.pointsNumber) {
+      this.pointStrokeColors = new Float32Array(this.pointsNumber * 4).fill(NaN)
+    } else {
+      this.pointStrokeColors = this.inputPointStrokeColors
+    }
+  }
+
+  /**
+   * Per-point stroke widths. Like sizes: no resolution here — the draw shader treats `NaN`
+   * as "use `pointDefaultStrokeWidth`", and a missing or mismatched input becomes all-NaN.
+   */
+  public updatePointStrokeWidth (): void {
+    if (this.pointsNumber === undefined) {
+      this.pointStrokeWidths = undefined
+      return
+    }
+    if (this.inputPointStrokeWidths === undefined || this.inputPointStrokeWidths.length !== this.pointsNumber) {
+      this.pointStrokeWidths = new Float32Array(this.pointsNumber).fill(NaN)
+      this.hasPositiveStrokeWidth = false
+    } else {
+      this.pointStrokeWidths = this.inputPointStrokeWidths
+      this.hasPositiveStrokeWidth = this.pointStrokeWidths.some(width => width > 0)
+    }
+  }
+
+  /**
    * Updates the point shapes based on the input data or default config value.
    * Images are rendered above shapes.
    */
@@ -348,6 +460,54 @@ export class GraphData {
   }
 
   /**
+   * Resolves `inputPointRenderOrder` into `pointRenderOrder`, a full back-to-front
+   * permutation of the point indices. The input may list only some points: those are
+   * drawn on top in the listed order, and every unlisted point goes underneath them in
+   * index order. An index listed more than once takes its last position; entries that
+   * aren't point indices are ignored. An order that resolves to plain index order leaves
+   * `pointRenderOrder` undefined, so rendering takes the unindexed path.
+   * The O(n) rebuild runs only when the input is reassigned or the point count changes.
+   */
+  public updatePointRenderOrder (): void {
+    if (!this._isPointRenderOrderStale && this._pointRenderOrderPointsNumber === this.pointsNumber) return
+    this._isPointRenderOrderStale = false
+    this._pointRenderOrderPointsNumber = this.pointsNumber
+
+    const pointsNumber = this.pointsNumber ?? 0
+    const input = this._inputPointRenderOrder
+    if (!input || input.length === 0 || pointsNumber === 0) {
+      this.pointRenderOrder = undefined
+      return
+    }
+
+    const order = new Uint32Array(pointsNumber)
+    const isListed = new Uint8Array(pointsNumber)
+    // Walk the input from its end so a repeated index keeps its last (topmost)
+    // position; listed points fill the order from the top down.
+    let top = pointsNumber
+    for (let k = input.length - 1; k >= 0; k--) {
+      const index = input[k]
+      if (!this.isPointIndex(index) || isListed[index]) continue
+      isListed[index] = 1
+      order[--top] = index
+    }
+    // Unlisted points fill the rest from the bottom, in index order.
+    let bottom = 0
+    for (let i = 0; i < pointsNumber && bottom < top; i++) {
+      if (!isListed[i]) order[bottom++] = i
+    }
+
+    let isIndexOrder = true
+    for (let k = 0; k < pointsNumber; k++) {
+      if (order[k] !== k) {
+        isIndexOrder = false
+        break
+      }
+    }
+    this.pointRenderOrder = isIndexOrder ? undefined : order
+  }
+
+  /**
    * Whether a point draws an atlas image: an image index in range of the images
    * set. Only then does its image size count toward its footprint — the size slot
    * of a point without an image still holds a value (the point size by default),
@@ -400,50 +560,20 @@ export class GraphData {
       this.linkColors = undefined
       return
     }
-
-    // Sets link colors to default values from config if the input is missing or does not match input links number.
-    const defaultRgba = getRgbaColor(this._config.linkDefaultColor)
-    if (this.inputLinkColors === undefined || this.inputLinkColors.length / 4 !== this.linksNumber) {
-      this.linkColors = new Float32Array(this.linksNumber * 4)
-
-      for (let i = 0; i < this.linkColors.length / 4; i++) {
-        this.linkColors[i * 4] = defaultRgba[0]
-        this.linkColors[i * 4 + 1] = defaultRgba[1]
-        this.linkColors[i * 4 + 2] = defaultRgba[2]
-        this.linkColors[i * 4 + 3] = defaultRgba[3]
-      }
-    } else {
-      this.linkColors = this.inputLinkColors
-      for (let i = 0; i < this.linkColors.length / 4; i++) {
-        if (!isNumber(this.linkColors[i * 4])) this.linkColors[i * 4] = defaultRgba[0]
-        if (!isNumber(this.linkColors[i * 4 + 1])) this.linkColors[i * 4 + 1] = defaultRgba[1]
-        if (!isNumber(this.linkColors[i * 4 + 2])) this.linkColors[i * 4 + 2] = defaultRgba[2]
-        if (!isNumber(this.linkColors[i * 4 + 3])) this.linkColors[i * 4 + 3] = defaultRgba[3]
-      }
-    }
+    this.linkColors = this.inputLinkColors?.length === this.linksNumber * 4
+      ? this.inputLinkColors
+      : new Float32Array(this.linksNumber * 4).fill(NaN)
   }
 
-  /**
-   * Updates the link width based on the input data or default config value.
-   */
+  /** Updates raw link widths; NaN values resolve when read. */
   public updateLinkWidth (): void {
     if (this.linksNumber === undefined) {
       this.linkWidths = undefined
       return
     }
-
-    // Sets link widths to default values from config if the input is missing or does not match input links number.
-    const defaultWidth = this._config.linkDefaultWidth
-    if (this.inputLinkWidths === undefined || this.inputLinkWidths.length !== this.linksNumber) {
-      this.linkWidths = new Float32Array(this.linksNumber).fill(defaultWidth)
-    } else {
-      this.linkWidths = this.inputLinkWidths
-      for (let i = 0; i < this.linkWidths.length; i++) {
-        if (!isNumber(this.linkWidths[i])) {
-          this.linkWidths[i] = defaultWidth
-        }
-      }
-    }
+    this.linkWidths = this.inputLinkWidths?.length === this.linksNumber
+      ? this.inputLinkWidths
+      : new Float32Array(this.linksNumber).fill(NaN)
   }
 
   /**
@@ -531,13 +661,39 @@ export class GraphData {
     }
   }
 
+  /**
+   * Updates the per-point attractors and strengths from the input data.
+   * Like the other channels, a mismatched length disables the channel instead of
+   * reading another point's data; the caller's arrays are never edited.
+   */
+  public updateAttractors (): void {
+    if (this.pointsNumber === undefined) {
+      this.pointAttractors = undefined
+      this.pointAttractorStrength = undefined
+      return
+    }
+    if (this.inputPointAttractors === undefined || this.inputPointAttractors.length !== this.pointsNumber * 2) {
+      this.pointAttractors = undefined
+    } else {
+      this.pointAttractors = this.inputPointAttractors
+    }
+    if (this.inputPointAttractorStrength === undefined || this.inputPointAttractorStrength.length !== this.pointsNumber) {
+      this.pointAttractorStrength = undefined
+    } else {
+      this.pointAttractorStrength = this.inputPointAttractorStrength
+    }
+  }
+
   public update (): void {
     this.updatePoints()
     this.updatePointColor()
     this.updatePointSize()
+    this.updatePointStrokeColor()
+    this.updatePointStrokeWidth()
     this.updatePointShape()
     this.updatePointImageIndices()
     this.updatePointImageSizes()
+    this.updatePointRenderOrder()
 
     this.updateLinks()
     this.updateLinkColor()
@@ -547,6 +703,7 @@ export class GraphData {
     this.updateLinkStrength()
 
     this.updateClusters()
+    this.updateAttractors()
 
     if (this._isLinkGroupingStale || this._linkGroupingPointsNumber !== this.pointsNumber) {
       this._groupLinksByPoint()

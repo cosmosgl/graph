@@ -13,6 +13,8 @@ export enum TransitionProperty {
   Positions = 'positions',
   PointColors = 'pointColors',
   PointSizes = 'pointSizes',
+  PointStrokeColors = 'pointStrokeColors',
+  PointStrokeWidths = 'pointStrokeWidths',
   LinkColors = 'linkColors',
   LinkWidths = 'linkWidths',
 }
@@ -140,6 +142,14 @@ export class Transition {
   /** Queues a property for the next transition cycle. */
   public queue (property: TransitionProperty): void {
     this.pendingProperties.add(property)
+  }
+
+  /**
+   * Drops every queued property. Unlike `abort()`, leaves the active cycle and the duration
+   * override alone — for a rebuild that applies pending data without a transition.
+   */
+  public dequeueAll (): void {
+    this.pendingProperties.clear()
   }
 
   /** Removes a property from the pending queue without affecting the active cycle. */

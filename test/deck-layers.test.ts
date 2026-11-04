@@ -79,6 +79,22 @@ const waitUntil = async (condition: () => boolean, what: string, maxFrames = 240
   throw new Error(`${what} did not happen within ${maxFrames} frames`)
 }
 
+/**
+ * `getBounds` once the layer has measured positions at least as new as the graph's current
+ * ones: the call starts the read, and the box is served from the frame it lands. A running
+ * simulation moves the version on every frame, so the box it serves trails by one.
+ */
+const measuredBounds = async (live: () => CosmosGraphLayer, graph: Graph): Promise<[number[], number[]] | null> => {
+  const since = graph.getPointPositionTexture()?.version ?? 0
+  let bounds = live().getBounds()
+  await waitUntil(() => {
+    bounds = live().getBounds()
+    const measured = live().state.measuredBoundsVersion
+    return measured !== undefined && measured >= since
+  }, 'the bounds read')
+  return bounds
+}
+
 // For CosmosGraphLayer tests: the layer creates and owns its own graph.
 // Resolves once deck finished its async device initialization.
 const createDeck = async (
@@ -201,6 +217,40 @@ describe('CosmosGraphLayer', () => {
         expect(sy).toBeCloseTo(dy, 2)
       }
     } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('follows the space the engine uses, not the raw config: an invalid spaceSize still draws under deck\'s view', async () => {
+    // The engine replaces a spaceSize of 0 with its default; the layer must place cosmos's
+    // view by that, the world origin cosmos actually centres its screen on
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    let graph: Graph | undefined
+    let loaded = false
+    const { deck, container } = await createDeck([
+      new CosmosGraphLayer({
+        id: 'graph',
+        points: { length: 3, initialPositions: POSITIONS },
+        config: { ...STATIC, spaceSize: 0 },
+        onGraphCreated: (created): void => { graph = created },
+        onGraphDataLoaded: (): void => { loaded = true },
+      }),
+    ])
+    try {
+      await waitUntil(() => loaded, 'the first load')
+      await waitFrames(5)
+      expect(warn.mock.calls.some(([message]) => String(message).includes('flipY'))).toBe(false)
+      for (const [x, y] of [[1000, 1000], [1050, 1000], [1000, 1030]]) {
+        const [sx, sy] = graph!.spaceToScreenPosition([x as number, y as number])
+        const [dx, dy] = deckPixel(deck, [x as number, y as number, 0])
+        expect(sx).toBeCloseTo(dx, 3)
+        expect(sy).toBeCloseTo(dy, 3)
+      }
+    } finally {
+      error.mockRestore()
+      warn.mockRestore()
       deck.finalize()
       container.remove()
     }
@@ -1052,6 +1102,313 @@ describe('CosmosGraphLayer', () => {
     }
   })
 
+  it('bounds the layout it holds, not the space: the live positions, and before the first load the input', async () => {
+    // Outside the space on every side, plus an absent point
+    const positions = new Float32Array([-6000, 500, 1000, 1000, 9000, -2500, NaN, NaN])
+    const expected = [[-6000, -2500, 0], [9000, 1000, 0]]
+    let graph: Graph | undefined
+    let loaded = false
+    const layer = new CosmosGraphLayer({
+      id: 'graph',
+      points: { length: 4, initialPositions: positions },
+      config: STATIC,
+      onGraphCreated: (created): void => { graph = created },
+      onGraphDataLoaded: (): void => { loaded = true },
+    })
+    // Before deck has initialized it: the box of the positions it is about to load
+    expect(layer.getBounds()).toEqual(expected)
+    // Unseeded points start in the middle half of the space
+    const spaceSize = defaultConfigValues.spaceSize
+    expect(new CosmosGraphLayer({ id: 'seeded', points: { length: 5 } }).getBounds())
+      .toEqual([[spaceSize * 0.25, spaceSize * 0.25, 0], [spaceSize * 0.75, spaceSize * 0.75, 0]])
+    // A spaceSize the engine will not run at is resolved as the engine resolves it, before any graph exists
+    expect(new CosmosGraphLayer({ id: 'unusable', points: { length: 5 }, config: { spaceSize: 0 } }).getBounds())
+      .toEqual([[spaceSize * 0.25, spaceSize * 0.25, 0], [spaceSize * 0.75, spaceSize * 0.75, 0]])
+    expect(new CosmosGraphLayer({ id: 'tiny', points: { length: 5 }, config: { spaceSize: 1 } }).getBounds())
+      .toEqual([[0.5, 0.5, 0], [1.5, 1.5, 0]])
+
+    const { deck, container } = await createDeck([layer])
+    try {
+      await waitUntil(() => loaded, 'the first load')
+      const live = (): CosmosGraphLayer => layer.getCurrentLayer() as CosmosGraphLayer
+      // Until the first read lands, still the input box
+      expect(live().getBounds()).toEqual(expected)
+      // Read from the graph: the same box, the absent point still left out
+      expect(await measuredBounds(live, graph!)).toEqual(expected)
+      // and it follows the layout
+      graph!.setPointPosition(1, 20000, 30000)
+      expect(await measuredBounds(live, graph!)).toEqual([[-6000, -2500, 0], [20000, 30000, 0]])
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('bounds the space\'s square when there is nothing to measure, and places input as the engine will', () => {
+    const square = (size: number): number[][] => [[0, 0, 0], [size, size, 0]]
+    const spaceSize = defaultConfigValues.spaceSize
+    // No points yet, every point absent, or positions the graph rescales on load: the square
+    // the graph starts in — what getBounds always returned before layouts could leave it
+    expect(new CosmosGraphLayer({ id: 'empty' }).getBounds()).toEqual(square(spaceSize))
+    expect(new CosmosGraphLayer({ id: 'absent', points: { length: 2, initialPositions: new Float32Array([NaN, NaN, NaN, 5]) } }).getBounds())
+      .toEqual(square(spaceSize))
+    expect(new CosmosGraphLayer({
+      id: 'rescaled',
+      points: { length: 2, initialPositions: new Float32Array([-6000, 0, 9000, 0]) },
+      config: { rescalePositions: true, spaceSize: 1000 },
+    }).getBounds()).toEqual(square(1000))
+    // Object points through getPointPosition: an infinite coordinate lands on the matching
+    // edge of the space, NaN leaves the point out, and a missing position is seeded in the
+    // middle half
+    const objects = [{ p: [-6000, 500] }, { p: [Infinity, -Infinity] }, { p: [NaN, 7] }, { p: [1e39, 300] }]
+    expect(new CosmosGraphLayer<{ p: number[] }>({
+      id: 'objects',
+      points: objects,
+      getPointPosition: (d): [number, number] => d.p as [number, number],
+      config: { spaceSize: 1000 },
+    }).getBounds()).toEqual([[-6000, 0, 0], [1000, 500, 0]])
+    expect(new CosmosGraphLayer<{ p: number[] | null }>({
+      id: 'unseeded objects',
+      points: [{ p: [100, 100] }, { p: null }],
+      getPointPosition: (d): [number, number] | null => d.p as [number, number] | null,
+      config: { spaceSize: 1000 },
+    }).getBounds()).toEqual([[100, 100, 0], [750, 750, 0]])
+  })
+
+  it('bounds a provided graph by its live positions, and by its own space before it holds any', async () => {
+    const { deck, container, devicePromise } = createDeckDevice()
+    const provided = new Graph(null, { ...STATIC, spaceSize: 1000 }, devicePromise)
+    try {
+      await provided.ready
+      const layer = new CosmosGraphLayer({ id: 'graph', graph: provided })
+      deck.setProps({ layers: [layer] })
+      const live = (): CosmosGraphLayer | null => layer.getCurrentLayer() as CosmosGraphLayer | null
+      await waitUntil(() => Boolean(live()?.isLoaded), 'the layer to attach the graph')
+      // The graph's spaceSize, not the default's
+      expect(live()!.getBounds()).toEqual([[0, 0, 0], [1000, 1000, 0]])
+      provided.setPointPositions(new Float32Array([-300, 40, 2500, -90]))
+      provided.render(0)
+      expect(await measuredBounds(() => live()!, provided)).toEqual([[-300, -90, 0], [2500, 40, 0]])
+    } finally {
+      deck.finalize()
+      container.remove()
+      provided.destroy()
+    }
+  })
+
+  it('bounds the space the engine runs at: a provided graph\'s before it is ready, and the default for an invalid config', async () => {
+    const square = (size: number): number[][] => [[0, 0, 0], [size, size, 0]]
+    const { deck, container } = createDeckDevice()
+    // A device that never arrives: the graph stays before `ready` for the whole test
+    const provided = new Graph(null, { ...STATIC, spaceSize: 8192 }, new Promise<never>(() => {}))
+    try {
+      const layer = new CosmosGraphLayer({ id: 'graph', graph: provided })
+      deck.setProps({ layers: [layer] })
+      const live = (): CosmosGraphLayer | null => layer.getCurrentLayer() as CosmosGraphLayer | null
+      await waitUntil(() => Boolean(live()?.state?.graph), 'the layer to attach the graph')
+      // The configured space, not the default: resolved when the graph is made, not when its device is
+      expect(live()!.getBounds()).toEqual(square(8192))
+    } finally {
+      deck.finalize()
+      container.remove()
+      provided.destroy()
+    }
+
+    // An invalid spaceSize runs at the default; unseeded points are placed in its middle half
+    let graph: Graph | undefined
+    const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const invalid = new CosmosGraphLayer({
+      id: 'invalid',
+      points: { length: 5 },
+      config: { ...STATIC, spaceSize: 0 },
+      onGraphCreated: (created): void => { graph = created },
+    })
+    const second = await createDeck([invalid])
+    try {
+      await waitUntil(() => Boolean(graph), 'the graph to be created')
+      const spaceSize = defaultConfigValues.spaceSize
+      expect((invalid.getCurrentLayer() as CosmosGraphLayer).getBounds())
+        .toEqual([[spaceSize * 0.25, spaceSize * 0.25, 0], [spaceSize * 0.75, spaceSize * 0.75, 0]])
+    } finally {
+      second.deck.finalize()
+      second.container.remove()
+      error.mockRestore()
+    }
+  })
+
+  it('measures the bounds without a stall: one asynchronous read per change, none while unchanged', async () => {
+    // deck's mask and collision-filter effects read getBounds every frame; a synchronous
+    // readback there waits for the GPU to finish the frame's work before every frame
+    let graph: Graph | undefined
+    let loaded = false
+    const layer = new CosmosGraphLayer({
+      id: 'graph',
+      points: { length: 2, initialPositions: new Float32Array([0, 0, 100, 50]) },
+      config: STATIC,
+      onGraphCreated: (created): void => { graph = created },
+      onGraphDataLoaded: (): void => { loaded = true },
+    })
+    const { deck, container } = await createDeck([layer])
+    try {
+      await waitUntil(() => loaded, 'the first load')
+      // Paused: a running simulation moves the positions every frame
+      graph!.pause()
+      const live = (): CosmosGraphLayer => layer.getCurrentLayer() as CosmosGraphLayer
+      const synchronous = vi.spyOn(graph!, 'getPointPositionsArray')
+      const asynchronous = vi.spyOn(graph!, 'getPointPositionsAsync')
+      // Many calls while one read is on its way: one read
+      for (let i = 0; i < 5; i += 1) live().getBounds()
+      expect(await measuredBounds(live, graph!)).toEqual([[0, 0, 0], [100, 50, 0]])
+      expect(asynchronous).toHaveBeenCalledTimes(1)
+      // Unchanged positions: served from the box, no read
+      await waitFrames(3)
+      for (let i = 0; i < 5; i += 1) live().getBounds()
+      expect(asynchronous).toHaveBeenCalledTimes(1)
+      // A change: one more
+      graph!.setPointPosition(0, -40, 0)
+      expect(await measuredBounds(live, graph!)).toEqual([[-40, 0, 0], [100, 50, 0]])
+      expect(asynchronous).toHaveBeenCalledTimes(2)
+      expect(synchronous).not.toHaveBeenCalled()
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('holds the graph\'s step while a bounds read is on its way, from every layer drawing it', async () => {
+    // The read that completes a copy waits for every command queued before it: a step
+    // queued behind the copy would be that wait. The read is stubbed to stay on its way —
+    // on a fast GPU a real one lands before the next frame and holds nothing
+    let graph: Graph | undefined
+    let loaded = false
+    const layer = new CosmosGraphLayer({
+      id: 'graph',
+      points: { length: 2, initialPositions: new Float32Array([0, 0, 100, 50]) },
+      config: STATIC,
+      onGraphCreated: (created): void => { graph = created },
+      onGraphDataLoaded: (): void => { loaded = true },
+    })
+    const { deck, container } = await createDeck([layer])
+    try {
+      await waitUntil(() => loaded, 'the first load')
+      await waitUntil(() => Boolean(graph?.isSimulationRunning), 'the simulation to run')
+      // A second layer draws the same graph, and would step it on its own tick
+      const second = new CosmosGraphLayer({ id: 'second', graph: graph! })
+      deck.setProps({ layers: [layer, second] })
+      await waitUntil(() => Boolean((second.getCurrentLayer() as CosmosGraphLayer | null)?.isLoaded), 'the second layer')
+      const live = (): CosmosGraphLayer => layer.getCurrentLayer() as CosmosGraphLayer
+      const step = vi.spyOn(graph!, 'step')
+      let land!: (positions: Float32Array) => void
+      vi.spyOn(graph!, 'getPointPositionsAsync').mockImplementation(() => new Promise((resolve) => { land = resolve }))
+      await waitUntil(() => step.mock.calls.length > 0, 'a step')
+      live().getBounds() // starts the read, which stays on its way
+      const held = step.mock.calls.length
+      await waitFrames(4)
+      expect(step.mock.calls.length).toBe(held)
+      land(new Float32Array([0, 0, 100, 50]))
+      await waitUntil(() => step.mock.calls.length > held, 'stepping to resume')
+      expect(live().getBounds()).toEqual([[0, 0, 0], [100, 50, 0]])
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('measures a reloaded dataset once the read on its way at the reload settles, whether it lands or fails', async () => {
+    // The reload's frame finds a read on its way and starts none. That read is of the old
+    // dataset: dropped when it lands, or failed. Either way it must ask for a redraw, or a
+    // consumer that reads the box on frames — deck's mask effect — never has the new
+    // dataset measured on an idle graph
+    let graph: Graph | undefined
+    let loads = 0
+    const make = (positions: Float32Array): CosmosGraphLayer => new CosmosGraphLayer({
+      id: 'graph',
+      points: { length: 2, initialPositions: positions },
+      config: { ...STATIC, enableSimulation: false },
+      onGraphCreated: (created): void => { graph = created },
+      onGraphDataLoaded: (): void => { loads += 1 },
+    })
+    let layer = make(new Float32Array([0, 0, 100, 50]))
+    const { deck, container } = await createDeck([layer])
+    try {
+      await waitUntil(() => loads === 1, 'the first load')
+      const live = (): CosmosGraphLayer => layer.getCurrentLayer() as CosmosGraphLayer
+      const asynchronous = vi.spyOn(graph!, 'getPointPositionsAsync')
+      let land!: (positions: Float32Array) => void
+      let fail!: (error: Error) => void
+      const holdNextRead = (): void => {
+        asynchronous.mockImplementationOnce(() => new Promise((resolve, reject) => { land = resolve; fail = reject }))
+      }
+      // The box is read on frames only, as deck's effects read it
+      holdNextRead()
+      deck.setProps({ onAfterRender: (): void => { live().getBounds() } })
+      await waitUntil(() => asynchronous.mock.calls.length === 1, 'the first read to start')
+
+      const reload = async (far: number): Promise<void> => {
+        const reads = asynchronous.mock.calls.length
+        const loaded = loads
+        layer = make(new Float32Array([far, far, far + 100, far + 50]))
+        deck.setProps({ layers: [layer] })
+        await waitUntil(() => loads === loaded + 1, 'the reload')
+        // Idle: no read while the old one is on its way, and the input box meanwhile
+        await waitFrames(3)
+        expect(asynchronous).toHaveBeenCalledTimes(reads)
+        expect(live().getBounds()).toEqual([[far, far, 0], [far + 100, far + 50, 0]])
+      }
+      const measured = async (far: number): Promise<void> => {
+        const box = JSON.stringify([[far, far, 0], [far + 100, far + 50, 0]])
+        await waitUntil(() => JSON.stringify(live().state.measuredBounds) === box, 'the new dataset to be measured')
+      }
+
+      // The old read lands after the reload: dropped, and the new dataset's read starts on the next frame
+      await reload(5000)
+      land(new Float32Array([0, 0, 100, 50]))
+      await waitUntil(() => asynchronous.mock.calls.length === 2, 'a read of the new dataset')
+      await measured(5000)
+
+      // The old read fails after the reload: the same
+      holdNextRead()
+      graph!.setPointPosition(0, 5001, 5001)
+      deck.redraw('a frame')
+      await waitUntil(() => asynchronous.mock.calls.length === 3, 'a read to start')
+      await reload(9000)
+      fail(new Error('the copy was lost'))
+      await waitUntil(() => asynchronous.mock.calls.length === 4, 'a read of the new dataset')
+      await measured(9000)
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
+  it('serves a newly loaded dataset\'s input box until it is measured, never the previous dataset\'s box', async () => {
+    let graph: Graph | undefined
+    let loads = 0
+    const make = (positions: Float32Array): CosmosGraphLayer => new CosmosGraphLayer({
+      id: 'graph',
+      points: { length: 2, initialPositions: positions },
+      config: STATIC,
+      onGraphCreated: (created): void => { graph = created },
+      onGraphDataLoaded: (): void => { loads += 1 },
+    })
+    const layer = make(new Float32Array([0, 0, 100, 50]))
+    const { deck, container } = await createDeck([layer])
+    try {
+      await waitUntil(() => loads === 1, 'the first load')
+      graph!.pause()
+      const live = (): CosmosGraphLayer => layer.getCurrentLayer() as CosmosGraphLayer
+      expect(await measuredBounds(live, graph!)).toEqual([[0, 0, 0], [100, 50, 0]])
+      deck.setProps({ layers: [make(new Float32Array([5000, 5000, 5100, 5050]))] })
+      await waitUntil(() => loads === 2, 'the second load')
+      // Before the new positions are measured: their input box, not the old dataset's
+      expect(live().getBounds()).toEqual([[5000, 5000, 0], [5100, 5050, 0]])
+      expect(await measuredBounds(live, graph!)).toEqual([[5000, 5000, 0], [5100, 5050, 0]])
+    } finally {
+      deck.finalize()
+      container.remove()
+    }
+  })
+
   it('seeds unpositioned points from the graph\'s RNG, so randomSeed reproduces the layout', async () => {
     const layouts: number[][] = []
     const graphLayer = (): CosmosGraphLayer => new CosmosGraphLayer({
@@ -1069,7 +1426,7 @@ describe('CosmosGraphLayer', () => {
       deck.setProps({ layers: [graphLayer()] })
       await waitUntil(() => layouts.length === 2, 'the second load')
       expect(layouts[1]).toEqual(layouts[0])
-      // Still in the middle half of the space, clear of the walls
+      // In the middle half of the space, around the world origin
       const spaceSize = defaultConfigValues.spaceSize
       for (const coordinate of layouts[0] as number[]) {
         expect(coordinate).toBeGreaterThanOrEqual(spaceSize * 0.25)

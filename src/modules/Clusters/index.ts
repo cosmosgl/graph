@@ -7,6 +7,7 @@ import calculateCentermassVert from '@/graph/modules/Clusters/calculate-centerma
 import forceFrag from '@/graph/modules/Clusters/force-cluster.frag?raw'
 import { readPixels } from '@/graph/helper'
 import { PickingReadback } from '@/graph/modules/Points/picking-readback'
+import { READBACK_COLD_STEPS } from '@/graph/modules/Store'
 import { createIndexesForBuffer } from '@/graph/modules/Shared/buffer'
 import { getBytesPerRow } from '@/graph/modules/Shared/texture-utils'
 import updateVert from '@/graph/modules/Shared/quad.vert?raw'
@@ -42,6 +43,8 @@ export class Clusters extends CoreModule {
    * clears it, so readbacks stop when the reads do.
    */
   private isCentroidReadbackWanted = false
+  /** The points module's step at the last centroid read, any mode. A read many steps later finds a cold cache. */
+  private lastCentroidReadStep = -1
   private applyForcesVertexCoordBuffer: Buffer | undefined
 
   // Track previous sizes to detect changes
@@ -68,9 +71,21 @@ export class Clusters extends CoreModule {
     return this.centroidReadback?.inFlight ?? false
   }
 
+  /** Whether the GPU has yet to reach the centroid copy in flight. */
+  public get isCentroidReadbackPending (): boolean {
+    return this.centroidReadback?.isPending ?? false
+  }
+
   /** Whether a non-blocking read is waiting on a readback that no frame has issued yet. */
   public get needsCentroidReadback (): boolean {
     return this.isCentroidReadbackWanted && this.points?.areClusterCentroidsUpToDate === false
+  }
+
+  /** Drops the centroid copy in flight; the next read recomputes or asks again. */
+  public cancelCentroidReadback (): void {
+    if (!this.centroidReadback?.inFlight) return
+    this.centroidReadback.cancel()
+    if (this.points) this.points.areClusterCentroidsUpToDate = false
   }
 
   public create (): void {
@@ -101,12 +116,20 @@ export class Clusters extends CoreModule {
     const clustersTextureDataSize = this.clustersTextureSize * this.clustersTextureSize * 4
 
     const clusterState = new Float32Array(pointsTextureDataSize)
-    const clusterPositions = new Float32Array(clustersTextureDataSize).fill(-1)
+    // Per cluster: [x, y, hasPosition, 0]. Whether a cluster has a custom position is its own
+    // channel, not a sign: positions are not bounded, so a negative coordinate is a place
+    // like any other. Without both coordinates, as finite numbers, the cluster is pulled to
+    // its centre of mass (force-cluster.frag).
+    const clusterPositions = new Float32Array(clustersTextureDataSize)
     const clusterForceCoefficient = new Float32Array(pointsTextureDataSize).fill(1)
     if (data.clusterPositions) {
       for (let cluster = 0; cluster < this.clusterCount; ++cluster) {
-        clusterPositions[cluster * 4 + 0] = data.clusterPositions[cluster * 2 + 0] ?? -1
-        clusterPositions[cluster * 4 + 1] = data.clusterPositions[cluster * 2 + 1] ?? -1
+        const x = data.clusterPositions[cluster * 2 + 0]
+        const y = data.clusterPositions[cluster * 2 + 1]
+        if (!Number.isFinite(x) || !Number.isFinite(y)) continue
+        clusterPositions[cluster * 4 + 0] = x as number
+        clusterPositions[cluster * 4 + 1] = y as number
+        clusterPositions[cluster * 4 + 2] = 1
       }
     }
 
@@ -432,11 +455,18 @@ export class Clusters extends CoreModule {
    * Do not mutate the returned array; it may be the internal cache.
    */
   public getCentroidPositions (nonBlocking = false): Readonly<number[]> {
+    // Nobody asked while the points moved on: the cache predates the pause. Such a read
+    // waits like a first read, so cluster labels that resume appear in place. Recorded
+    // before the up-to-date return, so a reader who kept asking while nothing moved stays warm.
+    const step = this.points?.stepVersion ?? 0
+    const isCold = step - this.lastCentroidReadStep > READBACK_COLD_STEPS
+    this.lastCentroidReadStep = step
+
     if (this.points?.areClusterCentroidsUpToDate && this.cachedCentroidPositions && !this.hasPendingCentroidReadback) {
       return this.cachedCentroidPositions
     }
 
-    if (nonBlocking && this.cachedCentroidPositions) {
+    if (nonBlocking && this.cachedCentroidPositions && !isCold) {
       this.isCentroidReadbackWanted = true
       return this.cachedCentroidPositions
     }

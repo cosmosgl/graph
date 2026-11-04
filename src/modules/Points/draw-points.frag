@@ -48,6 +48,10 @@ in vec4 imageAtlasUV;
 in float shapeSize;
 in float imageSizeVarying;
 in float overallSize;
+#ifdef POINT_STROKE
+in vec4 strokeColor;
+in float strokeWidthPx;
+#endif
 flat in float vPointIndex;
 
 out vec4 fragColor;
@@ -90,14 +94,18 @@ vec4 applyGreyoutToImage(vec4 imageColor, float isGreyedOutValue) {
     return vec4(finalColor, finalAlpha);
 }
 
+// The shapes' sizes (SQUARE_HALF_SIZE, …) come from the shapeGeometry module, shared with the
+// vertex stage, which caps the stroke by each shape's inradius. Every function returns the exact
+// Euclidean distance to the shape's edge in core units (negative inside), so the edge ramp and
+// the stroke band can scale it to pixels by the core's size alone (see edgeDistancePx).
 float squareDistance(vec2 p) {
-    vec2 d = abs(p) - vec2(0.8);
+    vec2 d = abs(p) - vec2(SQUARE_HALF_SIZE);
     return length(max(d, 0.0)) + min(max(d.x, d.y), 0.0);
 }
 
 float triangleDistance(vec2 p) {
     const float k = sqrt(3.0);   // ≈1.732; slope of 60° lines for an equilateral triangle
-    const float r = 0.9;         // half the edge length; each edge is 2r
+    const float r = TRIANGLE_HALF_EDGE; // half the edge length; each edge is 2r
     p.x = abs(p.x) - r;          // fold the X axis and shift: the base corner is at the origin
     p.y += 0.55;                 // move the base (y = -0.55 in the core) to y = 0. The centred offset is
                                  // r/k = 0.52; 0.55 keeps the apex at 1.01 rather than 1.04
@@ -115,15 +123,18 @@ float triangleDistance(vec2 p) {
 }
 
 float diamondDistance(vec2 p) {
-    // aspect > 1  →  taller diamond
-    const float aspect = 1.2;
-    return abs(p.x) + abs(p.y) / aspect - 0.8;
+    // Rhombus signed-distance (Inigo Quilez): b holds the half-diagonals
+    const vec2 b = vec2(DIAMOND_HALF_WIDTH, DIAMOND_HALF_WIDTH * DIAMOND_ASPECT);
+    p = abs(p);
+    float h = clamp(((b.x - 2.0 * p.x) * b.x - (b.y - 2.0 * p.y) * b.y) / dot(b, b), -1.0, 1.0);
+    float d = length(p - 0.5 * b * vec2(1.0 - h, 1.0 + h));
+    return d * sign(p.x * b.y + p.y * b.x - b.x * b.y);
 }
 
 float pentagonDistance(vec2 p) {
     // Regular pentagon signed-distance (Inigo Quilez)
     const vec3 k = vec3(0.809016994, 0.587785252, 0.726542528); // cos 36°, sin 36°, tan 36°
-    const float r = 0.726542528;                                // apothem: the flat edge is at y = r; equal to k.z by
+    const float r = PENTAGON_APOTHEM;                           // the flat edge is at y = r; equal to k.z by
                                                                 // coincidence of the chosen size, not by construction
     p.x = abs(p.x);
 
@@ -142,15 +153,15 @@ float hexagonDistance(vec2 p) {
     const vec3 k = vec3(-0.866025404, 0.5, 0.577350269);
     p = abs(p);
     p -= 2.0 * min(dot(k.xy, p), 0.0) * k.xy;
-    p -= vec2(clamp(p.x, -k.z * 0.8, k.z * 0.8), 0.8);
+    p -= vec2(clamp(p.x, -k.z * HEXAGON_APOTHEM, k.z * HEXAGON_APOTHEM), HEXAGON_APOTHEM);
     return length(p) * sign(p.y);
 }
 
 float starDistance(vec2 p) {
     // 5-point star signed-distance function (adapted from Inigo Quilez)
     // r  – outer radius, rf – inner/outer radius ratio
-    const float r  = 0.9;
-    const float rf = 0.45;
+    const float r  = STAR_OUTER_RADIUS;
+    const float rf = STAR_INNER_RATIO;
 
     // Pre-computed rotation vectors for the star arms (36° increments)
     const vec2 k1 = vec2(0.809016994, -0.587785252);
@@ -177,11 +188,11 @@ float starDistance(vec2 p) {
 float crossDistance(vec2 p) {
     // Signed distance function for a cross (union of two rectangles)
     // Adapted from Inigo Quilez (https://iquilezles.org/)
-    // Each arm has half-sizes 0.3 (thickness) and 0.8 (length)
+    // Each arm has half-sizes CROSS_HALF_THICKNESS and CROSS_HALF_LENGTH
     p = abs(p);
     if (p.y > p.x) p = p.yx;       // exploit symmetry
 
-    vec2 q = p - vec2(0.8, 0.3);   // subtract half-sizes (length, thickness)
+    vec2 q = p - vec2(CROSS_HALF_LENGTH, CROSS_HALF_THICKNESS); // subtract half-sizes (length, thickness)
 
     // Standard rectangle SDF, then take union of the two arms
     return length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
@@ -238,23 +249,38 @@ void main() {
         vec2 coreCoord = shapeCoord * (shapeDiameterPx / coreDiameterPx); // -1..1 across the core
         float halfRampPx = EDGE_RAMP_PX * 0.5;
 
-        float opacity;
+        // Signed distance to the edge in device pixels (negative inside). The fill ramp and the
+        // stroke band below are both read off it, so they anti-alias identically.
+        float edgeDistancePx;
         if (pointShape == CIRCLE) {
             // Along the radius: a ramp in r² skews coverage outward on small discs.
             float rPx = length(coreCoord) * coreDiameterPx * 0.5;
-            opacity = 1.0 - smoothstep(coreDiameterPx * 0.5 - halfRampPx, coreDiameterPx * 0.5 + halfRampPx, rPx);
+            edgeDistancePx = rPx - coreDiameterPx * 0.5;
         } else {
-            float shapeDistance = getShapeDistance(coreCoord, pointShape);
-            // Half a ramp in field units, via the field's gradient per pixel: exact for a field that
-            // is linear across the ramp, as every polygon field is at its edge. All fragments of a
-            // sprite share pointShape, so the derivative is taken in coherent control flow.
-            float shapeHalfRamp = max(halfRampPx * length(vec2(dFdx(shapeDistance), dFdy(shapeDistance))), 1e-6);
-            opacity = 1.0 - smoothstep(-shapeHalfRamp, shapeHalfRamp, shapeDistance);
+            // The field is a true distance in core units, and the core spans -1..1 over
+            // coreDiameterPx, so the pixel distance is the field times the core's radius. No
+            // screen-space derivative: one taken across a fold of the field (a corner diagonal,
+            // where the nearest edge changes) comes out short and would push band pixels to fill.
+            edgeDistancePx = getShapeDistance(coreCoord, pointShape) * coreDiameterPx * 0.5;
         }
+        float opacity = 1.0 - smoothstep(-halfRampPx, halfRampPx, edgeDistancePx);
         shapeCoverage = opacity;
         opacity *= smallAlpha * shapeColor.a;
 
-        finalShapeColor = vec4(shapeColor.rgb, opacity);
+        // Edge stroke: an inset band [-strokeWidthPx, 0] along the edge in the per-point stroke
+        // color (resolved in the vertex stage: explicit, or a lightness step from the fill).
+        // Inset, so the point never grows and the sprite needs no room for it. The width arrives
+        // already capped by the shape's depth (vertex stage), so fill always remains inside it.
+        vec3 shapeRgb = shapeColor.rgb;
+#ifdef POINT_STROKE
+        if (strokeWidthPx > 0.0) {
+            float bandDistancePx = abs(edgeDistancePx + strokeWidthPx * 0.5) - strokeWidthPx * 0.5;
+            float stroke = 1.0 - smoothstep(-halfRampPx, halfRampPx, bandDistancePx);
+            shapeRgb = mix(shapeRgb, strokeColor.rgb, stroke * strokeColor.a);
+        }
+#endif
+
+        finalShapeColor = vec4(shapeRgb, opacity);
     }
 
     // Handle image rendering with centering logic

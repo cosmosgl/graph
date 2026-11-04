@@ -1,0 +1,730 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Collision as a constraint — the cosmos.gl collision force</title>
+<!-- Self-contained companion page to README.md: no scripts or fonts are fetched; the three
+     diagrams are inline SVG and the demos inline JavaScript. -->
+<style>
+/* Layout: one reading column (~68ch) with figures allowed to run wider (up to 920px); code and tables scroll in their own box. */
+:root {
+  --bg: #f4f6f7;
+  --surface: #ffffff;
+  --surface-2: #eaeef0;
+  --fg: #1a2027;
+  --muted: #5b6672;
+  --line: #d5dbe0;
+  --accent: #0d7a70;       /* after: the constraint, the pairwise path */
+  --accent-soft: rgba(13, 122, 112, 0.14);
+  --warn: #b4560a;         /* before: overlap, the old grid */
+  --warn-soft: rgba(180, 86, 10, 0.16);
+  --code-bg: #f0f3f5;
+  --kw: #7a3e9d;
+  --str: #0b6e4f;
+  --num: #a44a1a;
+  --cmt: #6b7680;
+  --font-body: -apple-system, BlinkMacSystemFont, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1418; --surface: #171d23; --surface-2: #1f272e; --fg: #e4e9ed; --muted: #97a3ad;
+    --line: #2b353e; --accent: #34c7b7; --accent-soft: rgba(52, 199, 183, 0.16);
+    --warn: #f0a04b; --warn-soft: rgba(240, 160, 75, 0.18); --code-bg: #121920;
+    --kw: #c792ea; --str: #7fd1b9; --num: #f0a04b; --cmt: #7d8a95; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1418; --surface: #171d23; --surface-2: #1f272e; --fg: #e4e9ed; --muted: #97a3ad;
+  --line: #2b353e; --accent: #34c7b7; --accent-soft: rgba(52, 199, 183, 0.16);
+  --warn: #f0a04b; --warn-soft: rgba(240, 160, 75, 0.18); --code-bg: #121920;
+  --kw: #c792ea; --str: #7fd1b9; --num: #f0a04b; --cmt: #7d8a95; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 16px; line-height: 1.55;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 0 64px;
+}
+.wrap { max-width: 920px; margin: 0 auto; }
+.prose { max-width: 68ch; }
+h1, h2, h3 { text-wrap: balance; line-height: 1.2; font-weight: 600; margin: 0; }
+h1 { font-size: clamp(30px, 5vw, 44px); letter-spacing: -0.01em; }
+h2 { font-size: 24px; margin-top: 56px; padding-top: 20px; border-top: 1px solid var(--line); }
+h3 { font-size: 18px; margin-top: 28px; }
+p { margin: 12px 0; }
+a { color: var(--accent); }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+header { padding-top: 40px; display: grid; gap: 14px; }
+.lede { font-size: 19px; color: var(--fg); max-width: 62ch; }
+code { font-family: var(--font-mono); font-size: 0.92em; background: var(--surface-2); padding: 1px 5px; border-radius: 3px; }
+pre { margin: 14px 0; background: var(--code-bg); border: 1px solid var(--line); border-radius: 6px; padding: 14px 16px; overflow-x: auto; font-size: 13px; line-height: 1.5; }
+pre code { background: none; padding: 0; font-size: 13px; }
+.src { display: block; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); margin-top: -8px; margin-bottom: 14px; }
+figure { margin: 22px 0; }
+figure svg { max-width: 100%; height: auto; display: block; }
+figcaption { font-size: 14px; color: var(--muted); margin-top: 8px; max-width: 68ch; }
+.tag { display: inline-block; font-family: var(--font-mono); font-size: 11px; padding: 2px 7px; border-radius: 3px; letter-spacing: 0.04em; text-transform: uppercase; }
+.tag.before { background: var(--warn-soft); color: var(--warn); }
+.tag.after { background: var(--accent-soft); color: var(--accent); }
+.causes { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; margin-top: 18px; }
+.cause { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 18px 20px; min-width: 0; display: grid; gap: 8px; align-content: start; }
+.cause h3 { margin-top: 0; font-size: 17px; }
+.cause p { margin: 0; font-size: 15px; }
+.cause pre { margin: 6px 0 0; font-size: 12.5px; }
+.cause .src { margin: 0; }
+.rule { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+@media (max-width: 640px) { .rule { grid-template-columns: 1fr; } }
+table { border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; width: 100%; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font-weight: 500; color: var(--muted); font-size: 13px; }
+td:first-child, th:first-child { padding-left: 0; }
+.tbl { overflow-x: auto; margin: 14px 0; }
+.num { text-align: right; }
+/* Interactive panels */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 16px; margin: 20px 0; }
+.panel-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 16px; margin-bottom: 10px; }
+.panel-head h3 { margin: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: center; font-size: 14px; margin: 10px 0; }
+.controls label { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+.controls input[type="range"] { width: 110px; accent-color: var(--accent); }
+.controls input[type="checkbox"] { accent-color: var(--accent); }
+.controls select { font: inherit; font-size: 14px; color: var(--fg); background: var(--surface-2); border: 1px solid var(--line); border-radius: 4px; padding: 3px 6px; }
+button { font: inherit; font-size: 14px; color: var(--fg); background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px; padding: 6px 12px; cursor: pointer; }
+button:hover { border-color: var(--muted); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+button.before-btn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+button.after-btn { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+.readout { display: flex; flex-wrap: wrap; gap: 6px 22px; font-family: var(--font-mono); font-size: 13px; color: var(--muted); margin-top: 8px; }
+.readout b { color: var(--fg); font-weight: 500; }
+.readout .bad { color: var(--warn); }
+.readout .good { color: var(--accent); }
+canvas { width: 100%; max-width: 100%; height: auto; display: block; background: var(--surface-2); border-radius: 6px; }
+.pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-family: var(--font-mono); background: var(--surface-2); color: var(--muted); }
+.note { border-left: 3px solid var(--accent); padding: 4px 14px; color: var(--fg); background: var(--accent-soft); border-radius: 0 6px 6px 0; margin: 16px 0; font-size: 15px; }
+.note.warn { border-color: var(--warn); background: var(--warn-soft); }
+ul { padding-left: 20px; } li { margin: 4px 0; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+@media (max-width: 700px) { .two { grid-template-columns: 1fr; } }
+.two > * { min-width: 0; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+<header>
+  <div class="eyebrow">cosmos.gl · the collision force · <a href="https://github.com/cosmosgl/graph/pull/280">PR #280</a></div>
+  <h1>Collision as a constraint: pairwise contacts at every size</h1>
+  <p class="lede">With collision on, a dense cluster whose links pull inward never resolved: the leaves of a hub stayed inside each other for as long as the simulation ran. The force is now a <strong>constraint that outlives alpha</strong>, the springs can no longer ask for overlap, a tick can run several passes, and every path resolves <strong>real pairs</strong> instead of cell averages, at every graph size.</p>
+</header>
+
+<section>
+<h2>The symptom</h2>
+<div class="prose">
+<p>The story that exposed it: seven hubs of size 30, each wired to 60–140 leaves of size 6–16 seeded in a 20-unit disc on top of the hub. Springs at full strength ask for 5 units. Collision is on. On <code>main</code> every cluster collapses into a blob with the leaves stacked on the hub, and stays that way.</p>
+</div>
+<div class="prose">
+<p>Measured on that data with every other force off, the old force plateaued at <strong>1,836 overlapping pairs</strong> from tick 2,000 to tick 10,000. Stuck, not slow. Four separate things caused it, and only the first two were tuning. The demo below reproduces the fight at small scale; the renders of the real story are in the pull request.</p>
+</div>
+</section>
+
+<section>
+<h2>Try the mechanism</h2>
+<div class="prose">
+<p>One hub, pinned, with 70 leaves springing toward it. Springs and collision are the only forces, the same fight the story shows. Switch between the old rules and the new ones at their defaults (one pass, strength 1), or flip each rule on its own and watch the overlapping-pair count.</p>
+</div>
+<div class="panel">
+  <div class="panel-head">
+    <h3>Hub springs vs collision</h3>
+    <div>
+      <button id="presetBefore" class="before-btn">old rules</button>
+      <button id="presetAfter" class="after-btn">new rules (defaults)</button>
+      <button id="restart">Restart</button>
+      <button id="pause">Pause</button>
+    </div>
+  </div>
+  <canvas id="sim" width="880" height="440" aria-label="Live simulation of leaves springing toward a hub while collision pushes them apart"></canvas>
+  <div class="readout">
+    <span>tick <b id="rTick">0</b></span>
+    <span>alpha <b id="rAlpha">1.000</b></span>
+    <span>overlapping pairs <b id="rPairs">0</b></span>
+    <span>deep (&gt; 10 %) <b id="rDeep">0</b></span>
+    <span id="rMode"></span>
+  </div>
+  <div class="controls">
+    <label><input type="checkbox" id="cCool"> cool collision with alpha</label>
+    <label><input type="checkbox" id="cFriction"> apply friction to collision</label>
+    <label><input type="checkbox" id="cFloor"> floor rest length at contact</label>
+    <label>contact model
+      <select id="cModel"><option value="mean">cell average</option><option value="pair">pairwise</option></select>
+    </label>
+    <label>iterations <input type="range" id="cIter" min="1" max="8" value="1"> <span id="vIter">1</span></label>
+    <label>strength <input type="range" id="cStrength" min="0.25" max="2" step="0.25" value="1"> <span id="vStrength">1</span></label>
+  </div>
+  <p style="font-size:13px;color:var(--muted);margin:6px 0 0">The cell-average model here is a small-scale stand-in for the deleted grid shader: a point is pushed only when it overlaps the <em>mean</em> of a neighbouring cell's occupants, with the old tenth-of-a-radius cap. Pairwise is the new rule verbatim: project to contact, split by r², cap at one radius. What to expect from this seeded run: the old rules end near 1,900 overlapping pairs, most of them deep; the new rules at their defaults end with a few dozen shallow pairs and at most one deep, because the run is short; 2 passes leave about 20 and 4 passes about 5, none deep. Alpha decays by the engine's rule, ALPHA_MIN<sup>1/decay</sup> per tick, with decay 450 so a run takes about eight seconds (the hub story uses 5,000); the run ends at 0.001.</p>
+</div>
+</section>
+
+<section>
+<h2>Four causes, four fixes</h2>
+<div class="causes">
+
+<div class="cause">
+  <span class="eyebrow">1 · the push cooled with alpha</span>
+  <h3>Collision is a constraint, not a force</h3>
+  <p><span class="tag before">before</span> The correction was multiplied by alpha like every other force. Alpha decays exponentially, so roughly the last two thirds of a run sit below a tenth of full strength. Whatever overlap the springs made while hot froze in.</p>
+  <p><span class="tag after">after</span> No alpha factor in the shader, and the integrator applies the correction with friction 1 so it lands in full. <code>simulationCollisionCooling</code> (default 0) is the way back: 1 multiplies by alpha again.</p>
+<pre><code class="language-glsl">// Optional cooling: alpha^cooling, 1 at cooling 0 (the branch avoids pow(0, 0)).
+float cooling = collisionCooling &gt; 0.0 ? pow(max(alpha, 0.0), collisionCooling) : 1.0;
+correction *= collisionStrength * cooling;</code></pre>
+  <span class="src">src/modules/ForceCollision/force-collision-allpairs.frag</span>
+<pre><code class="language-typescript">public updatePosition (friction: number = this.config.simulationFriction): void</code></pre>
+  <span class="src">src/modules/Points/index.ts — the collision loop passes 1</span>
+</div>
+
+<div class="cause">
+  <span class="eyebrow">2 · the springs demanded overlap</span>
+  <h3>Rest lengths floor at the contact distance</h3>
+  <p><span class="tag before">before</span> A link rest length shorter than the two radii pulls the pair into overlap every tick. Spring and collision settle wherever they balance, a guaranteed partial overlap by construction. The docs told users to set the link distance clear of the radii.</p>
+  <p><span class="tag after">after</span> While collision is on, the link shader reads the collision module's resolved-size texture and lifts each spring's rest length to <em>R<sub>self</sub> + R<sub>other</sub></em>, each radius including padding. A short <code>simulationLinkDistance</code> now means "as close as contact allows".</p>
+<pre><code class="language-glsl">if (useCollisionRadii &gt; 0.5) {
+  float otherSize = texelFetch(sizeTexture, connectedTexel, 0).r;
+  float otherRadius = (collisionRadius &gt; 0.0 ? collisionRadius : otherSize * 0.5) + collisionPadding;
+  randomMinLinkDist = max(randomMinLinkDist, selfRadius + otherRadius);
+}</code></pre>
+  <span class="src">src/modules/ForceLink/force-spring.ts</span>
+</div>
+
+<div class="cause">
+  <span class="eyebrow">3 · one pass per tick could not keep up</span>
+  <h3><code>simulationCollisionIterations</code></h3>
+  <p><span class="tag before">before</span> A hundred springs re-pile a hub every tick. One bounded correction cannot undo that, so the pile only ever got a little looser.</p>
+  <p><span class="tag after">after</span> The whole pass (grid build or all-pairs sweep, then integration) repeats that many times per tick on the freshest positions, like d3's <code>forceCollide.iterations</code>. Cost is linear in the count. NaN and Infinity fall back to one pass.</p>
+<pre><code class="language-typescript">if (simulationCollision) {
+  const requested = this.config.simulationCollisionIterations
+  const iterations = Number.isFinite(requested) ? Math.max(1, Math.floor(requested)) : 1
+  for (let i = 0; i &lt; iterations; i++) {
+    this.points?.swapFbo()
+    this.forceCollision?.run()
+    this.points?.updatePosition(1)
+  }
+}</code></pre>
+  <span class="src">src/simulation.ts · runStepPasses()</span>
+</div>
+
+<div class="cause">
+  <span class="eyebrow">4 · the cell-average model stalls</span>
+  <h3>Pairwise contacts at every size</h3>
+  <p><span class="tag before">before</span> The grid pushed a point away from each neighbouring cell's <em>mean</em>. A point got no push unless it overlapped a mean, so two points could sit inside each other while every mean was out of range. Near-coincident points saw the same field and never parted.</p>
+  <p><span class="tag after">after</span> Every overlapping pair is resolved directly. At or below 4,096 points one pass tests every pair. Above it, each grid cell lists up to K real occupants by depth peeling, and the force pass resolves against those. No cell mean anywhere.</p>
+<pre><code class="language-glsl">// Project the pair to contact; the bigger disc yields less (d3's r² split).
+float otherRadius2 = otherRadius * otherRadius;
+float overlap = contact - dist;
+correction += direction * (overlap * otherRadius2 / (selfRadius2 + otherRadius2));</code></pre>
+  <span class="src">both collision shaders, identical by contract</span>
+</div>
+
+</div>
+</section>
+
+<section>
+<h2>The contact rule</h2>
+<div class="prose">
+<p>Both paths resolve a pair the same way, lifted from <code>d3-force</code>. Project the pair to contact along the line between the centers, and split the overlap by r² so the smaller disc yields. Then scale by <code>simulationCollision</code>, where 1 is the full projection and up to 2 over-relaxes. Drag the sliders to see who moves how far.</p>
+</div>
+<div class="panel rule">
+  <div>
+    <svg id="ruleSvg" viewBox="0 0 400 220" role="img" aria-label="Two overlapping discs with arrows showing each disc's share of the correction, split by radius squared"></svg>
+  </div>
+  <div>
+    <div class="controls" style="flex-direction:column;align-items:flex-start;gap:10px">
+      <label>radius A <input type="range" id="rA" min="6" max="40" value="28"> <span id="vA">28</span></label>
+      <label>radius B <input type="range" id="rB" min="6" max="40" value="12"> <span id="vB">12</span></label>
+      <label>center distance <input type="range" id="rD" min="0" max="80" value="24"> <span id="vD">24</span></label>
+    </div>
+    <div class="readout" style="flex-direction:column;gap:4px">
+      <span>contact = R<sub>A</sub> + R<sub>B</sub> = <b id="oContact"></b></span>
+      <span>overlap = contact − d = <b id="oOverlap"></b></span>
+      <span>A moves overlap · R<sub>B</sub>² / (R<sub>A</sub>² + R<sub>B</sub>²) = <b id="oA"></b></span>
+      <span>B moves overlap · R<sub>A</sub>² / (R<sub>A</sub>² + R<sub>B</sub>²) = <b id="oB"></b></span>
+      <span id="oCap"></span>
+    </div>
+  </div>
+</div>
+<div class="prose">
+<p><strong>The per-pass cap.</strong> A point deep in a pile sums many overlapping pairs into one large vector. Each point's summed correction is capped at its own radius per pass. The cap keeps the direction, away from where the pile is densest, and bounds the step, so a pile inflates over a few passes instead of exploding and bouncing back. This is why strength 1 does not always reach contact in one pass: a coincident pair with radii 1 and 100 has a 101-unit gap to close, the r² split hands almost all of it to the small disc, and the cap lets the small disc move one unit per pass, so it takes on the order of a hundred passes.</p>
+<p><strong>Coincident points.</strong> Two points at the same position have no separation direction. Each pushes along a per-point golden-angle direction (index × 2.39996 rad), so consecutive indices fan out and a stack disperses deterministically rather than by random jiggle.</p>
+</div>
+<pre><code class="language-glsl">float maxStep = selfRadius;
+float speed = length(correction);
+if (speed &gt; maxStep) correction *= maxStep / speed;</code></pre>
+<span class="src">the cap, at the end of both collision shaders</span>
+</section>
+
+<section>
+<h2>Two paths, split at 4,096 points</h2>
+<figure>
+<svg viewBox="0 0 900 330" role="img" aria-label="Before: positions feed four offset grids of cell means and the force reacts to means. After: at or below 4,096 points one all-pairs pass; above, K depth-peel passes list real occupants per cell and the force resolves against them.">
+  <defs>
+    <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker>
+  </defs>
+  <g fill="none" stroke="currentColor" stroke-width="1.2" font-family="system-ui, sans-serif" font-size="12">
+    <!-- before lane -->
+    <text x="20" y="28" fill="var(--warn)" stroke="none" font-weight="600" font-size="13">BEFORE · one path at every size</text>
+    <rect x="20" y="42" width="120" height="44" rx="5"/><text x="80" y="68" text-anchor="middle" fill="currentColor" stroke="none">positions</text>
+    <line x1="140" y1="64" x2="200" y2="64" marker-end="url(#arr)"/><text x="170" y="56" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">4 draws</text>
+    <rect x="200" y="42" width="200" height="44" rx="5" stroke="var(--warn)"/><text x="300" y="60" text-anchor="middle" fill="currentColor" stroke="none">4 offset grids</text><text x="300" y="76" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">mean position + mean radius per cell</text>
+    <line x1="400" y1="64" x2="460" y2="64" marker-end="url(#arr)"/><text x="430" y="56" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">reads</text>
+    <rect x="460" y="42" width="220" height="44" rx="5" stroke="var(--warn)"/><text x="570" y="60" text-anchor="middle" fill="currentColor" stroke="none">push away from each cell mean</text><text x="570" y="76" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">× alpha · cap 0.1 R · friction</text>
+    <line x1="680" y1="64" x2="740" y2="64" marker-end="url(#arr)"/>
+    <rect x="740" y="42" width="140" height="44" rx="5"/><text x="810" y="68" text-anchor="middle" fill="currentColor" stroke="none">velocity → pos</text>
+    <text x="570" y="106" text-anchor="middle" fill="var(--warn)" stroke="none" font-size="11">no push unless you overlap a mean: pairs inside each other stall</text>
+
+    <!-- after lanes -->
+    <text x="20" y="150" fill="var(--accent)" stroke="none" font-weight="600" font-size="13">AFTER · two paths, same contact rule</text>
+    <rect x="20" y="194" width="120" height="44" rx="5"/><text x="80" y="220" text-anchor="middle" fill="currentColor" stroke="none">positions</text>
+    <!-- split -->
+    <line x1="140" y1="216" x2="200" y2="180" marker-end="url(#arr)"/><text x="178" y="170" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">≤ 4,096 points</text>
+    <line x1="140" y1="216" x2="200" y2="280" marker-end="url(#arr)"/><text x="178" y="302" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">&gt; 4,096 points</text>
+    <!-- all pairs -->
+    <rect x="200" y="158" width="200" height="44" rx="5" stroke="var(--accent)"/><text x="300" y="176" text-anchor="middle" fill="currentColor" stroke="none">all-pairs pass</text><text x="300" y="192" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">one fragment per point loops over all n</text>
+    <line x1="400" y1="180" x2="460" y2="200" marker-end="url(#arr)"/>
+    <!-- slots -->
+    <rect x="200" y="258" width="200" height="44" rx="5" stroke="var(--accent)"/><text x="300" y="276" text-anchor="middle" fill="currentColor" stroke="none">K depth-peel passes</text><text x="300" y="292" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">[index, hash] per cell, one layer per pass</text>
+    <line x1="400" y1="280" x2="460" y2="256" marker-end="url(#arr)"/><text x="432" y="252" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">reads 3×3 cells</text>
+    <!-- contact rule -->
+    <rect x="460" y="206" width="220" height="48" rx="5" stroke="var(--accent)" stroke-width="1.8"/><text x="570" y="226" text-anchor="middle" fill="currentColor" stroke="none">resolve real pairs</text><text x="570" y="243" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">r² split · cap 1 R · no alpha</text>
+    <line x1="680" y1="230" x2="740" y2="230" marker-end="url(#arr)"/>
+    <rect x="740" y="208" width="140" height="44" rx="5"/><text x="810" y="228" text-anchor="middle" fill="currentColor" stroke="none">pos += v × 1</text><text x="810" y="244" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">× iterations</text>
+    <text x="570" y="282" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">peel shader shared with the many-body near field</text>
+  </g>
+</svg>
+<figcaption>The old path reacted to cell means and could not see a pair that overlapped while every mean was out of range. Both new paths resolve real neighbours with one contact rule, and the correction is integrated in full, as many times per tick as asked.</figcaption>
+</figure>
+
+<div class="two">
+<div>
+<h3>At or below 4,096 points: exact</h3>
+<p>One full-screen pass, one fragment per point, looping over every other point. A cheap reject on position alone comes first: no pair can touch beyond <em>R<sub>self</sub> + R<sub>max</sub></em>, where <em>R<sub>max</sub></em> is the largest effective radius in the graph, computed once on the CPU when the resources are built. Absent points are skipped through the exit texture, never by their position, because a point removed with an animated update keeps its last finite position on the GPU.</p>
+<pre><code class="language-glsl">for (int i = 0; i &lt; count; i += 1) {
+  if (i == selfIndex) continue;
+  ivec2 texel = ivec2(i % size, i / size);
+  vec2 otherPosition = texelFetch(positionsTexture, texel, 0).rg;
+  vec2 distVector = position - otherPosition;
+  float dist2 = dot(distVector, distVector);
+  // `!(dist2 &lt; bound)` rejects a NaN position too
+  if (!(dist2 &lt; rejectDistance2)) continue;
+  if (texelFetch(exitTexture, texel, 0).g &gt; 0.5) continue;
+  float otherRadius = effectiveRadius(texelFetch(sizeTexture, texel, 0).r);
+  float contact = selfRadius + otherRadius;
+  if (dist2 &gt;= contact * contact) continue;
+  …
+}</code></pre>
+<span class="src">force-collision-allpairs.frag</span>
+</div>
+<div>
+<h3>Above 4,096 points: depth-peeled slots</h3>
+<p>The grid stays, with a cell that spans the full contact range (at least 2 × <em>R<sub>max</sub></em>) so the 3×3 block around a point is exhaustive, and no finer than the many-body force's finest grid (about 2√n per axis), which keeps average occupancy near a quarter point per cell. Each cell lists up to K real occupants. The force pass walks its nine cells' slots and stops at the first empty one, since an exhausted cell peels empty slots for its remaining layers.</p>
+<pre><code class="language-glsl">for (int s = 0; s &lt; slots; s += 1) {
+  float slotIndex = texelFetch(slotsTexture, ivec3(cell, s), 0).r;
+  if (slotIndex &lt; 0.0) break;
+  int other = int(slotIndex);
+  if (other == selfIndex) continue;
+  …same contact rule…
+}</code></pre>
+<span class="src">force-collision-slots.frag</span>
+<pre><code class="language-typescript">export const getNearFieldSlotCount = (pointsNumber: number): number =&gt; {
+  if (pointsNumber &lt;= 16384) return 32
+  if (pointsNumber &lt;= 65536) return 16
+  return 8
+}</code></pre>
+<span class="src">src/modules/Shared/cell-slots.ts — tiers shared with the many-body force</span>
+</div>
+</div>
+
+<h3>How depth peeling lists a cell</h3>
+<div class="prose">
+<p>Each peel pass draws every point as one vertex into its grid cell. The depth test keeps the point with the smallest per-tick random hash, and a point is eligible only if its hash is larger than the hash the previous pass captured for that cell. K passes therefore yield a uniform random K-subset per cell, re-seeded every pass. A cell with K or fewer points is listed in full and resolved exactly. A denser cell shows each point a fresh random K of its neighbours per pass, so every overlapping pair is reached sooner or later. Step through it:</p>
+</div>
+<div class="panel">
+  <div class="panel-head">
+    <h3>Depth peel, K = 3</h3>
+    <div>
+      <button id="peelStep" class="primary">Peel pass 1</button>
+      <button id="peelReseed">Reseed hashes</button>
+      <button id="peelReset">Reset</button>
+    </div>
+  </div>
+  <svg id="peelSvg" viewBox="0 0 800 330" role="img" aria-label="A 3 by 3 grid of cells with points labelled by hash; each peel pass captures the smallest eligible hash per cell"></svg>
+  <div class="readout" id="peelReadout"></div>
+</div>
+</section>
+
+<section>
+<h2>Where it sits in the tick</h2>
+<figure>
+<svg viewBox="0 0 900 250" role="img" aria-label="The simulation tick: gravity, center, many-body, links in, links out, clusters, attractors, then collision repeated per iteration. Collision resources are built first so the link passes can read the size texture.">
+  <defs><marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" fill="currentColor"/></marker></defs>
+  <g fill="none" stroke="currentColor" stroke-width="1.2" font-family="system-ui, sans-serif" font-size="12">
+    <rect x="20" y="20" width="250" height="40" rx="5" stroke="var(--accent)" stroke-dasharray="4 3"/>
+    <text x="145" y="37" text-anchor="middle" fill="currentColor" stroke="none">build collision resources (lazy)</text>
+    <text x="145" y="52" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">grid or nothing · resolved-size texture</text>
+    <!-- size texture arrow to links -->
+    <path d="M270 40 H 470 V 96" marker-end="url(#arr2)" stroke="var(--accent)"/>
+    <text x="370" y="34" text-anchor="middle" fill="var(--accent)" stroke="none" font-size="11">size texture: radii for the rest-length floor</text>
+
+    <g id="row">
+      <rect x="20" y="100" width="84" height="40" rx="5"/><text x="62" y="124" text-anchor="middle" fill="currentColor" stroke="none">gravity</text>
+      <line x1="104" y1="120" x2="124" y2="120" marker-end="url(#arr2)"/>
+      <rect x="124" y="100" width="84" height="40" rx="5"/><text x="166" y="124" text-anchor="middle" fill="currentColor" stroke="none">center</text>
+      <line x1="208" y1="120" x2="228" y2="120" marker-end="url(#arr2)"/>
+      <rect x="228" y="100" width="96" height="40" rx="5"/><text x="276" y="124" text-anchor="middle" fill="currentColor" stroke="none">many-body</text>
+      <line x1="324" y1="120" x2="344" y2="120" marker-end="url(#arr2)"/>
+      <rect x="344" y="100" width="76" height="40" rx="5" stroke="var(--accent)"/><text x="382" y="124" text-anchor="middle" fill="currentColor" stroke="none">links in</text>
+      <line x1="420" y1="120" x2="440" y2="120" marker-end="url(#arr2)"/>
+      <rect x="440" y="100" width="84" height="40" rx="5" stroke="var(--accent)"/><text x="482" y="124" text-anchor="middle" fill="currentColor" stroke="none">links out</text>
+      <line x1="524" y1="120" x2="544" y2="120" marker-end="url(#arr2)"/>
+      <rect x="544" y="100" width="80" height="40" rx="5"/><text x="584" y="124" text-anchor="middle" fill="currentColor" stroke="none">clusters</text>
+      <line x1="624" y1="120" x2="644" y2="120" marker-end="url(#arr2)"/>
+      <rect x="644" y="100" width="90" height="40" rx="5"/><text x="689" y="124" text-anchor="middle" fill="currentColor" stroke="none">attractors</text>
+      <line x1="734" y1="120" x2="754" y2="120" marker-end="url(#arr2)"/>
+      <rect x="754" y="94" width="126" height="52" rx="5" stroke="var(--accent)" stroke-width="2"/>
+      <text x="817" y="114" text-anchor="middle" fill="currentColor" stroke="none">collision</text>
+      <text x="817" y="131" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">× iterations</text>
+    </g>
+    <text x="62" y="162" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">each box:</text>
+    <text x="62" y="176" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">swap → run → pos += v × friction</text>
+    <text x="817" y="168" text-anchor="middle" fill="var(--accent)" stroke="none" font-size="11">pos += v × 1</text>
+    <text x="817" y="183" text-anchor="middle" fill="var(--accent)" stroke="none" font-size="11">no alpha, cooling opt-in</text>
+    <text x="433" y="168" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">alpha-scaled; the attraction forces re-create overlap every tick</text>
+    <path d="M 440 190 H 754" marker-end="url(#arr2)" stroke="var(--muted)" stroke-dasharray="3 3"/>
+    <text x="597" y="212" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">collision runs last so it corrects that overlap within the same tick, not one frame behind</text>
+    <text x="450" y="240" text-anchor="middle" fill="var(--muted)" stroke="none" font-size="11">alpha decays after the last pass; the loop still ends at ALPHA_MIN, so an overlap still unwinding then stays until the layout is next woken</text>
+  </g>
+</svg>
+<figcaption>There is no shared velocity sum: every force reads the positions the previous force just wrote. The collision resources are now built before the forces, because the link passes read the resolved-size texture.</figcaption>
+</figure>
+<pre><code class="language-typescript">if (simulationCollision &amp;&amp; !this.isForceCollisionReady) {
+  this.forceCollision?.create()
+  this.forceCollision?.initPrograms()
+  this.isForceCollisionReady = true
+}
+const collisionSizeTexture = simulationCollision ? this.forceCollision?.resolvedSizeTexture : undefined
+…
+this.forceLinkIncoming?.run(collisionSizeTexture)
+this.points?.updatePosition()
+this.points?.swapFbo()
+this.forceLinkOutgoing?.run(collisionSizeTexture)
+this.points?.updatePosition()</code></pre>
+<span class="src">src/simulation.ts · runStepPasses()</span>
+</section>
+
+
+<section>
+<h2>What stays approximate</h2>
+<div class="prose">
+<p>Above 4,096 points, a cell holding more than K points is sampled, a fresh random K per pass, so a jammed region converges stochastically. The grid is sized to a quarter point per cell on average, so only a genuine pile is ever sampled, and a pile inflates past K per cell within a few passes.</p>
+<p>Under sustained compression past the packing limit, neither version can resolve. In the 50k stress story gravity presses about 84 % area coverage into a disc. The new force halves the worst penetration and starts with far fewer deep overlaps, but spreads the rest into more shallow contacts, and the shallow count keeps growing while gravity keeps pulling.</p>
+</div>
+</section>
+
+
+
+<section>
+<p style="font-size:14px;color:var(--muted);margin-top:48px;padding-top:20px;border-top:1px solid var(--line)">The design doc next to this page, <a href="./README.md">README.md</a>, carries the full walkthrough, the configuration keys and the measurements; the change itself is <a href="https://github.com/cosmosgl/graph/pull/280">PR #280</a>. Code lives in <code>src/modules/ForceCollision/</code>.</p>
+</section>
+</div>
+
+<script>
+(function () {
+
+  var css = getComputedStyle(document.documentElement)
+  function tok (name) { return css.getPropertyValue(name).trim() }
+  var reduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+  /* ---------------- Hub springs vs collision ---------------- */
+  var canvas = document.getElementById('sim')
+  var ctx = canvas.getContext('2d')
+  var W = canvas.width, H = canvas.height
+  var N = 70, HUB_R = 22, PAD = 1, LINK_DIST = 5, SPRING = 1, FRICTION = 0.85, DECAY = 450
+  var hub = { x: W / 2, y: H / 2, r: HUB_R }
+  var pts = [], tick = 0, alpha = 1, running = true, seed = 1
+  var cfg = { cool: true, friction: true, floor: false, model: 'mean', iter: 1, strength: 1 }
+
+  function rand () { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
+  function reset () {
+    seed = 7; pts = []; tick = 0; alpha = 1
+    for (var i = 0; i < N; i++) {
+      var a = rand() * Math.PI * 2, d = Math.sqrt(rand()) * 14
+      pts.push({ x: hub.x + Math.cos(a) * d, y: hub.y + Math.sin(a) * d, r: 4 + rand() * 7, i: i })
+    }
+  }
+  function springs () {
+    for (var k = 0; k < pts.length; k++) {
+      var p = pts[k]
+      var rest = LINK_DIST
+      if (cfg.floor) rest = Math.max(rest, p.r + PAD + hub.r + PAD)
+      var dx = hub.x - p.x, dy = hub.y - p.y
+      var l = Math.sqrt(dx * dx + dy * dy)
+      l = Math.max(l, rest * 0.99)
+      l = (l - rest) / l * SPRING * alpha
+      p.x += dx * l * FRICTION; p.y += dy * l * FRICTION
+    }
+  }
+  function effR (p) { return p.r + PAD }
+  function all () { return pts.concat([hub]) }
+  function collidePairwise () {
+    var A = all(), n = A.length, cx = new Float64Array(n), cy = new Float64Array(n)
+    for (var i = 0; i < n; i++) {
+      for (var j = i + 1; j < n; j++) {
+        var a = A[i], b = A[j], ra = effR(a), rb = effR(b), contact = ra + rb
+        var dx = a.x - b.x, dy = a.y - b.y, d2 = dx * dx + dy * dy
+        if (d2 >= contact * contact) continue
+        var d = Math.sqrt(d2), ux, uy
+        if (d > 1e-4) { ux = dx / d; uy = dy / d } else { var ang = i * 2.399963; ux = Math.cos(ang); uy = Math.sin(ang); d = 0 }
+        var overlap = contact - d, ra2 = ra * ra, rb2 = rb * rb
+        var sa = overlap * rb2 / (ra2 + rb2), sb = overlap * ra2 / (ra2 + rb2)
+        cx[i] += ux * sa; cy[i] += uy * sa
+        cx[j] -= ux * sb; cy[j] -= uy * sb
+      }
+    }
+    applyCorrection(A, cx, cy, 1)
+  }
+  function collideMean () {
+    // Stand-in for the deleted grid shader: cells of 2·Rmax, push away from each neighbouring cell's mean occupant.
+    var A = all(), n = A.length, maxR = 0
+    for (var i = 0; i < n; i++) maxR = Math.max(maxR, effR(A[i]))
+    var cell = 2 * maxR, cols = Math.ceil(W / cell) + 1, rows = Math.ceil(H / cell) + 1
+    var sumX = new Float64Array(cols * rows), sumY = new Float64Array(cols * rows), sumR = new Float64Array(cols * rows), cnt = new Int32Array(cols * rows)
+    var cellOf = new Int32Array(n)
+    for (var k = 0; k < n; k++) {
+      var p = A[k], cxI = Math.min(cols - 1, Math.max(0, Math.floor(p.x / cell))), cyI = Math.min(rows - 1, Math.max(0, Math.floor(p.y / cell)))
+      var id = cyI * cols + cxI; cellOf[k] = id
+      sumX[id] += p.x; sumY[id] += p.y; sumR[id] += effR(p); cnt[id] += 1
+    }
+    var cx = new Float64Array(n), cy = new Float64Array(n)
+    for (var k2 = 0; k2 < n; k2++) {
+      var q = A[k2], own = cellOf[k2], ox = own % cols, oy = Math.floor(own / cols)
+      for (var j = -1; j <= 1; j++) for (var i2 = -1; i2 <= 1; i2++) {
+        var gx = ox + i2, gy = oy + j
+        if (gx < 0 || gy < 0 || gx >= cols || gy >= rows) continue
+        var g = gy * cols + gx, c = cnt[g], sx = sumX[g], sy = sumY[g], sr = sumR[g]
+        if (g === own) { c -= 1; sx -= q.x; sy -= q.y; sr -= effR(q) }
+        if (c <= 0) continue
+        var mx = sx / c, my = sy / c, mr = sr / c
+        var dx = q.x - mx, dy = q.y - my, d = Math.sqrt(dx * dx + dy * dy), contact = effR(q) + mr
+        if (d >= contact) continue
+        var ux, uy
+        if (d > 1e-4) { ux = dx / d; uy = dy / d } else { var ang = k2 * 2.399963; ux = Math.cos(ang); uy = Math.sin(ang) }
+        var push = (contact - d) * 0.5
+        cx[k2] += ux * push; cy[k2] += uy * push
+      }
+    }
+    applyCorrection(A, cx, cy, 0.4) // the old shader capped at a tenth of a radius per offset grid, four grids
+  }
+  function applyCorrection (A, cx, cy, capFactor) {
+    var scale = cfg.strength * (cfg.cool ? alpha : 1)
+    var integ = cfg.friction ? FRICTION : 1
+    for (var i = 0; i < A.length; i++) {
+      var p = A[i]; if (p === hub) continue
+      var vx = cx[i] * scale, vy = cy[i] * scale, sp = Math.sqrt(vx * vx + vy * vy), cap = effR(p) * capFactor
+      if (sp > cap) { vx *= cap / sp; vy *= cap / sp }
+      p.x += vx * integ; p.y += vy * integ
+    }
+  }
+  function countOverlaps () {
+    var A = all(), n = 0, deep = 0
+    for (var i = 0; i < A.length; i++) for (var j = i + 1; j < A.length; j++) {
+      var contact = effR(A[i]) + effR(A[j]), dx = A[i].x - A[j].x, dy = A[i].y - A[j].y, d = Math.sqrt(dx * dx + dy * dy)
+      var pen = (contact - d) / contact
+      if (pen > 0.01) n++
+      if (pen > 0.10) deep++
+    }
+    return [n, deep]
+  }
+  function step () {
+    if (alpha < 0.001) return
+    springs()
+    for (var k = 0; k < cfg.iter; k++) { if (cfg.model === 'pair') collidePairwise(); else collideMean() }
+    alpha *= Math.pow(0.001, 1 / DECAY) // the engine's rule: ALPHA_MIN^(1/decay)
+    tick++
+  }
+  function draw () {
+    var fg = tok('--fg'), muted = tok('--muted'), accent = tok('--accent'), warn = tok('--warn'), surf = tok('--surface-2')
+    ctx.clearRect(0, 0, W, H)
+    ctx.fillStyle = surf; ctx.fillRect(0, 0, W, H)
+    var A = all(), over = new Uint8Array(A.length)
+    for (var i = 0; i < A.length; i++) for (var j = i + 1; j < A.length; j++) {
+      var contact = effR(A[i]) + effR(A[j]), dx = A[i].x - A[j].x, dy = A[i].y - A[j].y
+      if (dx * dx + dy * dy < (contact * 0.99) * (contact * 0.99)) { over[i] = 1; over[j] = 1 }
+    }
+    ctx.lineWidth = 0.6; ctx.strokeStyle = muted; ctx.globalAlpha = 0.25
+    for (var k = 0; k < pts.length; k++) { ctx.beginPath(); ctx.moveTo(hub.x, hub.y); ctx.lineTo(pts[k].x, pts[k].y); ctx.stroke() }
+    ctx.globalAlpha = 1
+    for (var m = 0; m < A.length; m++) {
+      var p = A[m]
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2)
+      ctx.fillStyle = over[m] ? warn : accent; ctx.globalAlpha = 0.55; ctx.fill(); ctx.globalAlpha = 1
+      ctx.strokeStyle = fg; ctx.lineWidth = 0.8; ctx.stroke()
+    }
+    var c = countOverlaps()
+    document.getElementById('rTick').textContent = tick
+    document.getElementById('rAlpha').textContent = alpha.toFixed(3)
+    var rp = document.getElementById('rPairs'); rp.textContent = c[0]; rp.className = c[0] ? 'bad' : 'good'
+    var rd = document.getElementById('rDeep'); rd.textContent = c[1]; rd.className = c[1] ? 'bad' : 'good'
+    document.getElementById('rMode').textContent = alpha < 0.001 ? 'simulation ended (alpha < 0.001)' : (running ? '' : 'paused')
+  }
+  function loop () { if (running) { step(); draw() } requestAnimationFrame(loop) }
+
+  function syncControls () {
+    document.getElementById('cCool').checked = cfg.cool
+    document.getElementById('cFriction').checked = cfg.friction
+    document.getElementById('cFloor').checked = cfg.floor
+    document.getElementById('cModel').value = cfg.model
+    document.getElementById('cIter').value = cfg.iter; document.getElementById('vIter').textContent = cfg.iter
+    document.getElementById('cStrength').value = cfg.strength; document.getElementById('vStrength').textContent = cfg.strength
+  }
+  function readControls () {
+    cfg.cool = document.getElementById('cCool').checked
+    cfg.friction = document.getElementById('cFriction').checked
+    cfg.floor = document.getElementById('cFloor').checked
+    cfg.model = document.getElementById('cModel').value
+    cfg.iter = parseInt(document.getElementById('cIter').value, 10); document.getElementById('vIter').textContent = cfg.iter
+    cfg.strength = parseFloat(document.getElementById('cStrength').value); document.getElementById('vStrength').textContent = cfg.strength
+  }
+  ;['cCool', 'cFriction', 'cFloor', 'cModel', 'cIter', 'cStrength'].forEach(function (id) { document.getElementById(id).addEventListener('input', readControls) })
+  document.getElementById('presetBefore').addEventListener('click', function () { cfg = { cool: true, friction: true, floor: false, model: 'mean', iter: 1, strength: 1 }; syncControls(); reset(); running = true; document.getElementById('pause').textContent = 'Pause' })
+  document.getElementById('presetAfter').addEventListener('click', function () { cfg = { cool: false, friction: false, floor: true, model: 'pair', iter: 1, strength: 1 }; syncControls(); reset(); running = true; document.getElementById('pause').textContent = 'Pause' })
+  document.getElementById('restart').addEventListener('click', function () { reset(); running = true; document.getElementById('pause').textContent = 'Pause' })
+  document.getElementById('pause').addEventListener('click', function () { running = !running; this.textContent = running ? 'Pause' : 'Resume'; draw() })
+  syncControls(); reset(); draw()
+  if (reduced) { for (var s = 0; s < 400; s++) step(); draw(); running = false; document.getElementById('pause').textContent = 'Resume' }
+  requestAnimationFrame(loop)
+
+  /* ---------------- Contact rule ---------------- */
+  var ruleSvg = document.getElementById('ruleSvg')
+  function svgEl (name, attrs) { var e = document.createElementNS('http://www.w3.org/2000/svg', name); for (var k in attrs) e.setAttribute(k, attrs[k]); return e }
+  function drawRule () {
+    var ra = +document.getElementById('rA').value, rb = +document.getElementById('rB').value, d = +document.getElementById('rD').value
+    document.getElementById('vA').textContent = ra; document.getElementById('vB').textContent = rb; document.getElementById('vD').textContent = d
+    var contact = ra + rb, overlap = Math.max(0, contact - d)
+    var sa = overlap * rb * rb / (ra * ra + rb * rb), sb = overlap * ra * ra / (ra * ra + rb * rb)
+    document.getElementById('oContact').textContent = contact
+    document.getElementById('oOverlap').textContent = overlap.toFixed(1)
+    document.getElementById('oA').textContent = sa.toFixed(1) + (sa > ra ? ' → capped at ' + ra : '')
+    document.getElementById('oB').textContent = sb.toFixed(1) + (sb > rb ? ' → capped at ' + rb : '')
+    document.getElementById('oCap').textContent = overlap === 0 ? 'no overlap: no correction' : (sa > ra || sb > rb ? 'a share above the point\'s own radius is capped; the rest waits for the next pass' : 'both shares land in full this pass')
+    while (ruleSvg.firstChild) ruleSvg.removeChild(ruleSvg.firstChild)
+    var s = 2.2, cx0 = 200, cy0 = 110, ax = cx0 - d * s / 2, bx = cx0 + d * s / 2
+    var accent = tok('--accent'), warn = tok('--warn'), fg = tok('--fg'), muted = tok('--muted')
+    var defs = svgEl('defs', {}); var mk = svgEl('marker', { id: 'ruleArr', viewBox: '0 0 10 10', refX: '9', refY: '5', markerWidth: '7', markerHeight: '7', orient: 'auto' }); mk.appendChild(svgEl('path', { d: 'M0 0 L10 5 L0 10 z', fill: fg })); defs.appendChild(mk); ruleSvg.appendChild(defs)
+    ruleSvg.appendChild(svgEl('circle', { cx: ax, cy: cy0, r: ra * s, fill: overlap ? warn : accent, 'fill-opacity': '0.25', stroke: fg, 'stroke-width': '1' }))
+    ruleSvg.appendChild(svgEl('circle', { cx: bx, cy: cy0, r: rb * s, fill: overlap ? warn : accent, 'fill-opacity': '0.25', stroke: fg, 'stroke-width': '1' }))
+    function label (x, y, t, anchor, color) { var e = svgEl('text', { x: x, y: y, 'text-anchor': anchor || 'middle', 'font-size': '12', 'font-family': 'system-ui, sans-serif', fill: color || fg }); e.textContent = t; ruleSvg.appendChild(e) }
+    label(ax, cy0 + 4, 'A', 'middle'); label(bx, cy0 + 4, 'B', 'middle')
+    if (overlap > 0) {
+      var la = Math.min(sa, ra) * s, lb = Math.min(sb, rb) * s
+      if (la > 2) ruleSvg.appendChild(svgEl('line', { x1: ax, y1: cy0 - ra * s - 14, x2: ax - la, y2: cy0 - ra * s - 14, stroke: fg, 'stroke-width': '2', 'marker-end': 'url(#ruleArr)' }))
+      if (lb > 2) ruleSvg.appendChild(svgEl('line', { x1: bx, y1: cy0 + rb * s + 14, x2: bx + lb, y2: cy0 + rb * s + 14, stroke: fg, 'stroke-width': '2', 'marker-end': 'url(#ruleArr)' }))
+      label(ax - la / 2, cy0 - ra * s - 20, 'A: ' + Math.min(sa, ra).toFixed(1), 'middle', muted)
+      label(bx + lb / 2, cy0 + rb * s + 30, 'B: ' + Math.min(sb, rb).toFixed(1), 'middle', muted)
+    }
+    ruleSvg.appendChild(svgEl('line', { x1: ax, y1: cy0 + 100, x2: bx, y2: cy0 + 100, stroke: muted, 'stroke-width': '1' }))
+    label(cx0, cy0 + 96, 'd = ' + d, 'middle', muted)
+  }
+  ;['rA', 'rB', 'rD'].forEach(function (id) { document.getElementById(id).addEventListener('input', drawRule) })
+  drawRule()
+
+  /* ---------------- Depth peel stepper ---------------- */
+  var peelSvg = document.getElementById('peelSvg'), K = 3, GRID = 3, CELL = 100, OX = 20, OY = 20
+  var peelPts = [], pass = 0, pseed = 11
+  function prand () { pseed = (pseed * 1664525 + 1013904223) >>> 0; return pseed / 4294967296 }
+  function peelInit () {
+    pseed = 11; peelPts = []; pass = 0
+    var per = [2, 1, 5, 0, 3, 2, 6, 1, 2] // occupancy per cell; two cells exceed K
+    for (var c = 0; c < 9; c++) {
+      var gx = c % 3, gy = Math.floor(c / 3)
+      for (var i = 0; i < per[c]; i++) peelPts.push({ cell: c, x: OX + gx * CELL + 14 + prand() * (CELL - 28), y: OY + gy * CELL + 14 + prand() * (CELL - 28), hash: 0, slot: -1 })
+    }
+    reseed()
+  }
+  function reseed () {
+    // Distinct hashes: the peel rejects hash <= previous, so a tie would never be peeled.
+    // The real build uses a 24-bit integer hash, where ties are rare; here the pool is 10–99.
+    pass = 0
+    var pool = []; for (var v = 10; v < 100; v++) pool.push(v)
+    for (var k = pool.length - 1; k > 0; k--) { var j = Math.floor(prand() * (k + 1)); var t = pool[k]; pool[k] = pool[j]; pool[j] = t }
+    for (var i = 0; i < peelPts.length; i++) { peelPts[i].hash = pool[i]; peelPts[i].slot = -1 }
+    peelDraw()
+  }
+  function peelPass () {
+    if (pass >= K) return
+    for (var c = 0; c < 9; c++) {
+      var prevHash = -1, prevEmpty = false
+      if (pass > 0) {
+        var prev = peelPts.filter(function (p) { return p.cell === c && p.slot === pass - 1 })
+        if (prev.length === 0) prevEmpty = true; else prevHash = prev[0].hash
+      }
+      if (prevEmpty) continue
+      var best = null
+      for (var i = 0; i < peelPts.length; i++) {
+        var p = peelPts[i]
+        if (p.cell !== c || p.slot >= 0 || p.hash <= prevHash) continue
+        if (!best || p.hash < best.hash) best = p
+      }
+      if (best) best.slot = pass
+    }
+    pass++
+    peelDraw()
+  }
+  function peelDraw () {
+    while (peelSvg.firstChild) peelSvg.removeChild(peelSvg.firstChild)
+    var fg = tok('--fg'), muted = tok('--muted'), accent = tok('--accent'), warn = tok('--warn'), line = tok('--line')
+    var slotColors = [accent, '#5b8def', '#b36bd4']
+    for (var gy = 0; gy < 3; gy++) for (var gx = 0; gx < 3; gx++) peelSvg.appendChild(svgEl('rect', { x: OX + gx * CELL, y: OY + gy * CELL, width: CELL, height: CELL, fill: 'none', stroke: line, 'stroke-width': '1' }))
+    for (var i = 0; i < peelPts.length; i++) {
+      var p = peelPts[i], captured = p.slot >= 0
+      peelSvg.appendChild(svgEl('circle', { cx: p.x, cy: p.y, r: 9, fill: captured ? slotColors[p.slot] : 'none', 'fill-opacity': captured ? '0.9' : '1', stroke: captured ? slotColors[p.slot] : muted, 'stroke-width': '1.2' }))
+      var t = svgEl('text', { x: p.x, y: p.y + 4, 'text-anchor': 'middle', 'font-size': '10', 'font-family': 'ui-monospace, monospace', fill: captured ? '#fff' : fg }); t.textContent = p.hash; peelSvg.appendChild(t)
+    }
+    // legend + per-cell status on the right
+    var lx = 350
+    function text (x, y, s, color, size) { var e = svgEl('text', { x: x, y: y, 'font-size': size || 12, 'font-family': 'system-ui, sans-serif', fill: color || fg }); e.textContent = s; peelSvg.appendChild(e) }
+    text(lx, 36, 'Each disc shows its per-tick hash. A pass captures,', muted, 11)
+    text(lx, 51, 'per cell, the smallest hash larger than the previous', muted, 11)
+    text(lx, 66, 'slot\'s hash; an empty slot ends the cell.', muted, 11)
+    for (var s = 0; s < K; s++) {
+      peelSvg.appendChild(svgEl('circle', { cx: lx + 8, cy: 92 + s * 20, r: 7, fill: slotColors[s] }))
+      text(lx + 22, 96 + s * 20, 'slot ' + (s + 1) + (s < pass ? '' : ' (not yet peeled)'), s < pass ? fg : muted)
+    }
+    var full = 0, sampled = 0
+    for (var c = 0; c < 9; c++) {
+      var n = peelPts.filter(function (p) { return p.cell === c }).length
+      if (n > K) sampled++; else full++
+    }
+    text(lx, 176, 'cells with ≤ K points: ' + full + ' → listed in full, resolved exactly', fg, 11)
+    text(lx, 194, 'cells with > K points: ' + sampled + ' → a random K of their occupants', warn, 11)
+    text(lx, 212, 'this pass; reseed to draw a different K next pass.', warn, 11)
+    if (pass >= K) {
+      var left = peelPts.filter(function (p) { return p.slot < 0 }).length
+      text(lx, 244, left + ' points unlisted after K passes, all in the dense cells.', fg, 11)
+      text(lx, 262, 'Those pairs are reached on a later pass with new hashes.', fg, 11)
+    }
+    document.getElementById('peelStep').textContent = pass >= K ? 'All K slots peeled' : 'Peel pass ' + (pass + 1)
+    document.getElementById('peelStep').disabled = pass >= K
+    document.getElementById('peelReadout').textContent = 'pass ' + pass + ' of ' + K + ' · ' + peelPts.length + ' points in 9 cells'
+  }
+  document.getElementById('peelStep').addEventListener('click', peelPass)
+  document.getElementById('peelReseed').addEventListener('click', reseed)
+  document.getElementById('peelReset').addEventListener('click', peelInit)
+  peelInit()
+
+
+  if (window.matchMedia) { var mq = window.matchMedia('(prefers-color-scheme: dark)'); if (mq.addEventListener) mq.addEventListener('change', function () { css = getComputedStyle(document.documentElement); drawRule(); peelDraw(); draw() }) }
+})()
+</script>
+</body>
+</html>

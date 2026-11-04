@@ -6,6 +6,44 @@ import { defaultConfigValues } from '@/graph/variables'
 import { PointShape, LinkStyle } from '@/graph/modules/GraphData'
 import { type TransitionEasing } from '@/graph/modules/Transition'
 
+/**
+ * Rules for deriving a point's stroke color from its own fill (see `pointDefaultStrokeColor`).
+ */
+export type PointStrokeShade = 'auto' | 'darken' | 'lighten'
+
+/**
+ * Any color string, for a union with named rules. A plain `string` would absorb the rule
+ * literals and hide them from completions (TypeScript #29729); the intersection keeps them
+ * and still accepts every string. `Record<never, never>` rather than `{}`: the lint rule
+ * bans `{}`, and the literals survive `NonNullable` only with this spelling.
+ */
+type ColorString = string & Record<never, never>
+
+/**
+ * How far the many-body force keeps its far-field approximation from the point
+ * it acts on (`simulationRepulsionQuality`).
+ */
+export type RepulsionQuality = 'auto' | 'precise' | 'fast'
+
+/**
+ * The most near-field samples per cell, configured or measured: a cost cap, one render pass
+ * over every point per tick each. At 64 each of the two slot arrays holds 32 layers, inside
+ * the 256 every WebGL 2 device guarantees; the memory of a configured count is not capped
+ * (64 samples at the 512² grid take about 128 MiB, where the automatic count keeps to 32 MiB).
+ */
+export const MAX_REPULSION_SAMPLES = 64
+
+/**
+ * The fewest near-field samples per cell a configured `simulationRepulsionSamples`
+ * may ask for. The near field's estimate scales the force of the sampled points by
+ * the cell's other points over the others sampled, conditioned on whether the point
+ * itself was among the slots (force-nearfield.frag). With a single slot a cell's one
+ * sample can be the point itself, leaving no other to scale, and the estimate falls
+ * short by one part in the cell's count; from two slots up a cell with another point
+ * always samples one, and the estimate is exact in expectation.
+ */
+export const MIN_REPULSION_SAMPLES = 2
+
 export interface GraphConfigInterface {
   /**
    * If set to `false`, the simulation will not run.
@@ -60,8 +98,15 @@ export interface GraphConfigInterface {
    */
   backgroundColor: string | [number, number, number, number];
   /**
-   * Simulation space size.
-   * Default value: `4096` (larger values may crash on some devices, e.g. iOS; see https://github.com/cosmosgl/graph/issues/203).
+   * @deprecated Goes away in the next major. It sets no size: positions are not bounded by
+   * it, and nothing is dimensioned by it. It places the world origin — the point the
+   * screen is centred on at the identity view, and gravity pulls toward — at
+   * `spaceSize / 2`, and a few internal lengths are still fractions of it (the initial
+   * rescale's targets, the per-step guard, the many-body kick span, where an infinite
+   * input coordinate lands). Leave it at the default: a non-default value logs a warning,
+   * and a layout saved around another origin will need shifting when the key goes.
+   * Positions are float32, so keep it at most 2,097,152 (2^21) either way.
+   * Default value: `4096`
    */
   spaceSize: number;
 
@@ -127,6 +172,48 @@ export interface GraphConfigInterface {
   pointSizeScale: number;
 
   /**
+   * Default width, in CSS pixels, of the stroke drawn along the inside edge of a point: a thin
+   * band in a shade of the point's own color (see `pointDefaultStrokeColor`) that separates
+   * overlapping points. Used for every point that has no width of its own from
+   * `setPointStrokeWidths` (a `NaN` there means "use this default"). The stroke is inset, so it
+   * never enlarges the point, and its width stays constant while zooming even with
+   * `scalePointsOnZoom`. On a point too small for its stroke the band narrows to half the
+   * point's depth, so some fill always shows (a 4 px circle asked for 3 px gets a 1 px band)
+   * and nothing switches off as points shrink. Points with an image get the stroke on
+   * the shape only, underneath the image. `0` disables the stroke; with no per-point widths
+   * either, the stroke costs nothing to draw.
+   * Default value: `0`
+   */
+  pointDefaultStrokeWidth: number;
+
+  /**
+   * Default stroke color, used for every point that has no color of its own from
+   * `setPointStrokeColors` (a `NaN` channel there means "use this default"). Either a color —
+   * a hex string (e.g. `'#ffffff'`) or RGBA values in 0..1 — used as is, or a rule that derives
+   * the color from the point's own fill by a step of `pointStrokeContrast` in OKLab lightness:
+   * `'darken'` and `'lighten'` apply that direction to every point, `'auto'` decides per point
+   * from its own lightness (light points darken, dark points lighten) so the step always has
+   * room — a forced direction has none on a fill already at that end, where the stroke then
+   * matches the fill. A color's alpha is its opacity over the fill, so a translucent stroke
+   * tints the band rather than fading it toward the background; the point's own alpha, from
+   * its color, `pointOpacity` or greyout, applies to the whole point, stroke included.
+   * Greyed-out points always get the derived shade of their greyed fill, so the stroke fades
+   * with the point.
+   * Default value: `'auto'`
+   */
+  pointDefaultStrokeColor: PointStrokeShade | ColorString | [number, number, number, number];
+
+  /**
+   * Size of the OKLab lightness step (`L`, 0..1) between a point's fill and its derived stroke
+   * color. The step is perceptual, so every hue gets an equally visible stroke: `0.1` reads as
+   * a clear outline, `0.05` as a hint. Hue is preserved; chroma is reduced only where the
+   * shifted color would leave the sRGB gamut. Applies to the `'auto'`, `'darken'` and
+   * `'lighten'` rules of `pointDefaultStrokeColor`; explicit colors are used as given.
+   * Default value: `0.03`
+   */
+  pointStrokeContrast: number;
+
+  /**
    * Depth-based occlusion culling: skips shading and blending of point
    * fragments hidden underneath other opaque points. Greatly improves
    * performance when many large opaque points overlap; rendering output stays
@@ -190,6 +277,9 @@ export interface GraphConfigInterface {
    * Array of point indices to draw an outline ring around. The outline ring is a circle
    * rendered around the point regardless of the point's shape. When a point is both
    * outlined and greyed out (not highlighted), the ring color is dimmed to match.
+   * This is a selection mark drawn *outside* the body in one uniform color; for an edge color
+   * every point carries, in its own shade or a per-point color, see `pointDefaultStrokeColor`
+   * and `setPointStrokeColors`.
    * Default value: `undefined`
    */
   outlinedPointIndices?: number[];
@@ -208,8 +298,8 @@ export interface GraphConfigInterface {
   renderLinks: boolean;
 
   /**
-   * The default color to use for links when no link colors are provided,
-   * or if the color value in the array is `undefined` or `null`.
+   * The default color to use for links when no matching link-color array is provided,
+   * or for each `NaN` channel in that array.
    * This can be either a hex color string (e.g., '#666666') or an array of RGBA values
    * in the format `[red, green, blue, alpha]` where each value is a number between 0 and 1.
    * Default value: '#666666'
@@ -253,7 +343,8 @@ export interface GraphConfigInterface {
    */
   focusedLinkWidthIncrease: number;
   /**
-   * The default width value to use for links when no link widths are provided or if the width value in the array is `undefined` or `null`.
+   * The default width value to use for links when no matching link-width array is provided,
+   * or for a `NaN` entry in that array.
    * Default value: `1`
   */
   linkDefaultWidth: number;
@@ -396,6 +487,23 @@ export interface GraphConfigInterface {
    */
   simulationRepulsion: number;
   /**
+   * Near-field repulsion samples per grid cell, an integer from 2 to 64. A cell holding at
+   * most this many points is repelled exactly; a denser one is sampled anew every tick, which
+   * can show as shimmer. Each sample is one render pass over all points per tick and one layer
+   * of the slot textures.
+   *
+   * Leave it unset and `Graph`'s own render loop measures how full the cells are every 30
+   * steps and picks the smallest count that samples the cells of all but 1 % of the points
+   * whole: 8 to 64 up to 16,384 points, 8 or 16 up to 100,000, and 8 above, where nothing is
+   * measured. A measurement can hold a frame on a busy GPU, and the next then waits a hundred
+   * times that hold. Until the first lands, and where none is taken (a deck.gl layer or
+   * another host driving the frames, a graph given its device, `enableRenderLoop: false`, a
+   * `GraphSimulation`), the count is 32 up to 16,384 points, 16 up to 65,536 and 8 above.
+   * Has no effect on graphs of 4,096 points or fewer, which repel every pair exactly.
+   * Default value: `undefined`
+   */
+  simulationRepulsionSamples?: number;
+  /**
    * @deprecated No longer used. The many-body force now repels close points
    * individually — a grid pyramid closed by an unbiased Monte-Carlo near field
    * that stays exact while cells are sparse and only approximates once a cell
@@ -405,12 +513,26 @@ export interface GraphConfigInterface {
    */
   simulationRepulsionTheta: number;
   /**
+   * How the many-body force sums distant points. Above 4,096 points the far field
+   * is a grid of cell centroids. `'precise'` keeps every centroid at least two
+   * cells away from the point it acts on; `'fast'` allows one. One cell away is
+   * accurate on evenly spread data, but on clustered data, while the simulation
+   * is hot, it shows as a shimmer that moves whole lines of points; two cells
+   * away removes it and costs about a third more per step above 25,000 points,
+   * a few percent below. `'auto'` is `'precise'` up to 25,000 points and `'fast'` above.
+   * The shimmer scales with alpha, so a settled layout looks the same either way.
+   * Default value: `'auto'`
+   */
+  simulationRepulsionQuality: RepulsionQuality;
+  /**
    * Link spring force coefficient.
    * Default value: `1`
    */
   simulationLinkSpring: number;
   /**
-   * Minimum link distance.
+   * Minimum link distance. While `simulationCollision` is on, a link's rest
+   * length is never less than the sum of the two endpoints' effective collision
+   * radii, each including `simulationCollisionPadding`, so a spring cannot demand overlap.
    * Default value: `10`
    */
   simulationLinkDistance: number;
@@ -444,9 +566,32 @@ export interface GraphConfigInterface {
    */
   simulationCluster: number;
   /**
+   * Attractor force coefficient. Scales the pull of every point toward its
+   * own attractor (set with `setPointAttractors`, per-point weights
+   * with `setPointAttractorStrength`). The force only runs for points that have
+   * an attractor; it does nothing when none are set.
+   * Default value: `0.1`
+   */
+  simulationAttractor: number;
+  /**
    * Collision force coefficient. When set to a value greater than 0,
    * points will push each other apart when they overlap.
-   * Uses a spatial-hash grid, so it scales better than naive O(n²) collision.
+   *
+   * Unlike the other forces, collision is a constraint: its correction is not
+   * scaled by the simulation's alpha (unless `simulationCollisionCooling` says
+   * so) and is integrated without friction, so overlap keeps resolving at full
+   * strength while the layout cools. While it
+   * is on, link rest lengths are floored at the contact distance (see
+   * `simulationLinkDistance`).
+   *
+   * `1` applies the full pairwise correction before the per-point radius cap;
+   * deep overlaps can require multiple passes. Values up to `2` over-relax,
+   * which settles jammed piles faster. At or below 4,096 points every
+   * pair is tested; above that a spatial hash with depth-peeled neighbour slots
+   * takes over — still pairwise, exhaustive while each queried hash bucket
+   * holds at most 32 points (16 above 16,384 points, 8 above 65,536), and sampled
+   * afresh every pass in denser buckets. Distant cells can share a bucket's
+   * slot budget; candidates are checked against their world cell.
    * Default value: `0`
    */
   simulationCollision: number;
@@ -464,6 +609,31 @@ export interface GraphConfigInterface {
    * Default value: `0`
    */
   simulationCollisionPadding: number;
+  /**
+   * Collision passes per simulation tick. Each pass re-runs the collision on
+   * the latest positions — every pair at or below 4,096 points, a fresh
+   * spatial-hash build above — and applies one bounded correction, so more
+   * passes unwind a dense pile in fewer ticks, with the cost linear in the
+   * number of passes.
+   * `1` suits sparse graphs; dense clusters with many links pulling inward
+   * resolve noticeably better at `2`–`4`. Fractions are truncated; values
+   * below `1`, `NaN` and `Infinity` run a single pass.
+   * Higher finite counts are supported, with cost proportional to the count;
+   * the typical `1`–`8` range is guidance, not an upper limit.
+   * Default value: `1`
+   */
+  simulationCollisionIterations: number;
+  /**
+   * How much the collision correction cools with the simulation's alpha, as the
+   * power alpha is raised to. `0` keeps collision at full strength until the
+   * simulation ends — overlap goes on resolving after every other force has
+   * faded. `1` scales it by alpha like the other forces, so a layout that is
+   * still being compressed (gravity past the packing limit, for instance) stops
+   * jittering as it cools, at the price of overlap that remains when alpha is
+   * low. Values between take alpha to that power: `0.5` cools half as fast.
+   * Default value: `0`
+   */
+  simulationCollisionCooling: number;
 
   /**
    * Callback function that will be called when the simulation starts.
@@ -850,15 +1020,20 @@ export type GraphSimulationConfigInterface = Pick<GraphConfigInterface,
   | 'simulationGravity'
   | 'simulationCenter'
   | 'simulationRepulsion'
+  | 'simulationRepulsionSamples'
   | 'simulationRepulsionTheta'
+  | 'simulationRepulsionQuality'
   | 'simulationLinkSpring'
   | 'simulationLinkDistance'
   | 'simulationLinkDistRandomVariationRange'
   | 'simulationFriction'
   | 'simulationCluster'
+  | 'simulationAttractor'
   | 'simulationCollision'
   | 'simulationCollisionRadius'
   | 'simulationCollisionPadding'
+  | 'simulationCollisionIterations'
+  | 'simulationCollisionCooling'
   | 'randomSeed'
   | 'rescalePositions'
   | 'onSimulationStart'
@@ -898,6 +1073,28 @@ export function resetConfigToDefaults (target: GraphConfigInterface): void {
 }
 
 /**
+ * Whether `samples` is a near-field sample count a configuration may fix: an integer from
+ * MIN_REPULSION_SAMPLES to MAX_REPULSION_SAMPLES. The many-body force checks it again where
+ * it reads the count, since `config` is a public field a host can write past the setters.
+ */
+export const isRepulsionSampleCount = (samples: unknown): samples is number =>
+  typeof samples === 'number' && Number.isSafeInteger(samples) &&
+  samples >= MIN_REPULSION_SAMPLES && samples <= MAX_REPULSION_SAMPLES
+
+/**
+ * Throws for a value no configuration path may accept: `simulationRepulsionSamples`
+ * must be an integer from MIN_REPULSION_SAMPLES to MAX_REPULSION_SAMPLES. `applyConfig`
+ * calls it, and so do the setters before they queue their work for the device, so a
+ * bad value throws where it is passed rather than later, from the device's ready handler.
+ */
+export function validateConfig (source: GraphConfig): void {
+  const samples = source.simulationRepulsionSamples
+  if (samples !== undefined && !isRepulsionSampleCount(samples)) {
+    throw new RangeError(`simulationRepulsionSamples must be an integer from ${MIN_REPULSION_SAMPLES} to ${MAX_REPULSION_SAMPLES}`)
+  }
+}
+
+/**
  * Applies `source` values onto `target` in place, leaving absent keys unchanged.
  *
  * Mutates in place rather than returning a new object, because multiple modules
@@ -917,6 +1114,7 @@ export function applyConfig (
   source: GraphConfig,
   useDefaultsForUndefined = false
 ): void {
+  validateConfig(source)
   const overrides: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(source)) {
     if (value !== undefined) { // skip explicit undefined; handled below if useDefaultsForUndefined

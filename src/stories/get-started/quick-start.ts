@@ -6,7 +6,6 @@ export const quickStart = (): { graph: Graph; div: HTMLDivElement; destroy?: () 
   div.style.width = '100%'
 
   const config: GraphConfig = {
-    spaceSize: 4096,
     backgroundColor: '#2d313a',
     pointDefaultColor: '#F069B4',
     scalePointsOnZoom: true,

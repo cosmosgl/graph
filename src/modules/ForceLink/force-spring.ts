@@ -8,6 +8,9 @@ uniform sampler2D linkInfoTexture; // Texture storing first link indices and amo
 uniform sampler2D linkIndicesTexture;
 uniform sampler2D linkPropertiesTexture; // Texture storing link bias and strength
 uniform sampler2D linkRandomDistanceTexture;
+// Resolved point sizes (r channel), laid out like the positions texture. Only
+// read while useCollisionRadii is set; otherwise a placeholder is bound.
+uniform sampler2D sizeTexture;
 
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform forceLinkUniforms {
@@ -16,6 +19,9 @@ layout(std140) uniform forceLinkUniforms {
   vec2 linkDistRandomVariationRange;
   float linksTextureSize;
   float alpha;
+  float collisionRadius;   // > 0: one fixed radius for every point; 0: size / 2
+  float collisionPadding;
+  float useCollisionRadii; // 1 while collision is on: rest length >= contact distance
 } forceLink;
 
 #define linkSpring forceLink.linkSpring
@@ -23,12 +29,18 @@ layout(std140) uniform forceLinkUniforms {
 #define linkDistRandomVariationRange forceLink.linkDistRandomVariationRange
 #define linksTextureSize forceLink.linksTextureSize
 #define alpha forceLink.alpha
+#define collisionRadius forceLink.collisionRadius
+#define collisionPadding forceLink.collisionPadding
+#define useCollisionRadii forceLink.useCollisionRadii
 #else
 uniform float linkSpring;
 uniform float linkDistance;
 uniform vec2 linkDistRandomVariationRange;
 uniform float linksTextureSize;
 uniform float alpha;
+uniform float collisionRadius;
+uniform float collisionPadding;
+uniform float useCollisionRadii;
 #endif
 
 out vec4 fragColor;
@@ -40,6 +52,13 @@ void main() {
 
   vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
   vec4 velocity = vec4(0.0);
+
+  // This point's collision radius, for the rest-length floor below.
+  float selfRadius = 0.0;
+  if (useCollisionRadii > 0.5) {
+    float selfSize = texelFetch(sizeTexture, pointTexel, 0).r;
+    selfRadius = (collisionRadius > 0.0 ? collisionRadius : selfSize * 0.5) + collisionPadding;
+  }
 
   vec4 linkInfo = texelFetch(linkInfoTexture, pointTexel, 0);
   float iCount = linkInfo.r;
@@ -71,6 +90,18 @@ void main() {
         vec4 connectedExit = texelFetch(exitTexture, connectedTexel, 0);
         if (connectedExit.g > 0.5) {
           continue;
+        }
+
+        // While collision is on, a spring must never ask for less than the
+        // contact distance: a rest length inside the two radii pulls the pair
+        // into overlap every tick, and the two forces settle wherever they
+        // balance — a guaranteed partial overlap. Lifting the rest length to the
+        // contact distance removes the fight instead of relying on collision to
+        // win it; collision then only cleans up transients.
+        if (useCollisionRadii > 0.5) {
+          float otherSize = texelFetch(sizeTexture, connectedTexel, 0).r;
+          float otherRadius = (collisionRadius > 0.0 ? collisionRadius : otherSize * 0.5) + collisionPadding;
+          randomMinLinkDist = max(randomMinLinkDist, selfRadius + otherRadius);
         }
 
         vec4 connectedPointPosition = texelFetch(positionsTexture, connectedTexel, 0);

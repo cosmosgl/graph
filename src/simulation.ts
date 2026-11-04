@@ -1,8 +1,9 @@
 import { Device, Framebuffer, luma, type Texture } from '@luma.gl/core'
 import { webgl2Adapter, WebGLStateTracker } from '@luma.gl/webgl'
 
-import { applyConfig, createDefaultConfig, GraphConfigInterface, type GraphSimulationConfig } from '@/graph/config'
+import { applyConfig, validateConfig, createDefaultConfig, GraphConfigInterface, type GraphSimulationConfig } from '@/graph/config'
 import { getMaxPointSize, readPixels, isPointAbsent } from '@/graph/helper'
+import { ForceAttractor } from '@/graph/modules/ForceAttractor'
 import { ForceCenter } from '@/graph/modules/ForceCenter'
 import { ForceCollision } from '@/graph/modules/ForceCollision'
 import { ForceGravity } from '@/graph/modules/ForceGravity'
@@ -49,9 +50,14 @@ export interface PointPositionTexture {
 export interface PositionsReadOptions {
   /**
    * Return the latest positions the GPU has already handed back instead of waiting for it to
-   * catch up. While points move, they trail the drawn frame by a frame or more.
-   * The first read, and the first after the tracked points or the clusters change, still
-   * waits: there is nothing earlier to return.
+   * catch up. While points move, they trail the drawn frame. Under a `Graph`'s own render
+   * loop that is one frame: while a copy is on its way, the loop holds its next frame until the
+   * GPU has finished the previous one. A host that drives frames itself (`enableRenderLoop:
+   * false`, a headless graph, a standalone simulation) may queue frames ahead of the copy, and
+   * the positions then trail by a frame or more.
+   * For tracked positions and cluster centroids, a cold cache still requires a synchronous
+   * read. This includes the first read, cluster membership changes, and reads after several
+   * unread simulation steps. Sampled point reads return an empty result until a copy completes.
    */
   nonBlocking?: boolean;
 }
@@ -73,6 +79,16 @@ export interface SimulationStepOptions {
   applyMouseRepulsion?: boolean;
   /** A host interaction (zooming with simulation-during-zoom off) suspends the forces. */
   blockedByInteraction?: boolean;
+  /**
+   * The step runs in a frame of `Graph`'s render loop on the graph's own device, which holds
+   * its next frame while a copy is on its way. Only such a step reads the near-field
+   * occupancy back: any other host — `renderOneFrame()`, a headless graph's `step()`, a
+   * deck.gl layer, a bare `GraphSimulation`, a graph given its device (the host may draw to
+   * it, and the graph cannot tell) — keeps submitting work behind the copy, and the collect
+   * waits for all of it. Any other step drops a reading in flight, which a later frame
+   * would collect behind its passes.
+   */
+  held?: boolean;
 }
 
 /**
@@ -88,7 +104,7 @@ export interface SimulationStepOptions {
  * directly:
  *
  * ```ts
- * const simulation = new GraphSimulation({ spaceSize: 4096 }, devicePromise)
+ * const simulation = new GraphSimulation({ simulationGravity: 0.5 }, devicePromise)
  * simulation.setPointPositions(positions)
  * simulation.setLinks(links)
  * simulation.applyData()
@@ -142,6 +158,7 @@ export class GraphSimulation implements PositionTextureSource {
   private forceLinkIncoming: ForceLink | undefined
   private forceLinkOutgoing: ForceLink | undefined
   private forceCollision: ForceCollision | undefined
+  private forceAttractor: ForceAttractor | undefined
   private clusters: Clusters | undefined
 
   private isPointPositionsUpdateNeeded = false
@@ -149,11 +166,13 @@ export class GraphSimulation implements PositionTextureSource {
   private isForceManyBodyUpdateNeeded = false
   private isForceLinkUpdateNeeded = false
   private isForceCenterUpdateNeeded = false
+  private isForceAttractorUpdateNeeded = false
   private isPointClusterUpdateNeeded = false
 
-  // Whether the collision force's GPU resources (grid/size textures, programs)
-  // are allocated and match the current data. Allocated lazily the first time
-  // collision runs, so a simulation that never enables it pays no memory cost.
+  // Whether the collision force's GPU resources (its slot grid, size texture,
+  // index buffer and contact cell size, which follow the points; its programs)
+  // are allocated and match the current data and config. Allocated lazily the first time collision runs, so a simulation
+  // that never enables it pays no memory cost.
   private isForceCollisionReady = false
 
   private _isDestroyed = false
@@ -179,6 +198,9 @@ export class GraphSimulation implements PositionTextureSource {
       if (config) applyConfig(this.config, config)
     }
     this.store = new Store()
+    // The world origin and the lengths that follow spaceSize are resolved here, not when
+    // the device arrives: nothing about them needs it, and a host reads them before then
+    this.store.adjustSpaceSize(this.config.spaceSize)
     this.data = new GraphData(this.config)
 
     if (devicePromise) {
@@ -203,7 +225,6 @@ export class GraphSimulation implements PositionTextureSource {
       }
       this._device = device
 
-      this.store.adjustSpaceSize(this.config.spaceSize, device.limits.maxTextureDimension2D)
       this.store.setWebGLMaxTextureSize(device.limits.maxTextureDimension2D)
       this.store.maxPointSize = getMaxPointSize(device, this.config.pixelRatio)
 
@@ -262,6 +283,37 @@ export class GraphSimulation implements PositionTextureSource {
     return this.clusters?.hasPendingCentroidReadback ?? false
   }
 
+  /** Whether a many-body cell-occupancy copy is still to be collected. @internal */
+  public get hasPendingOccupancyReadback (): boolean {
+    return this.forceManyBody?.hasPendingOccupancyReadback ?? false
+  }
+
+  /**
+   * Whether the GPU has yet to reach a copy in flight — a pick, tracked positions, cluster
+   * centroids or the many-body cell occupancy. `Graph` holds its next frame while this is
+   * true, so the copy is collected with nothing queued ahead of it. @internal
+   */
+  public get isReadbackPending (): boolean {
+    return (this.points?.isReadbackPending ?? false) || (this.clusters?.isCentroidReadbackPending ?? false) ||
+      (this.forceManyBody?.isOccupancyReadbackPending ?? false)
+  }
+
+  /**
+   * Restarts the many-body force's occupancy measurement, for a changed
+   * `simulationRepulsionSamples`: a reading taken before describes a layout that
+   * may have moved on while the count was fixed. @internal
+   */
+  public restartOccupancyMeasurement (): void {
+    this.forceManyBody?.restartOccupancyMeasurement()
+  }
+
+  /** Drops every copy in flight; each reader asks for another on its next read. @internal */
+  public cancelPendingReadbacks (): void {
+    this.points?.cancelPendingReadbacks()
+    this.clusters?.cancelCentroidReadback()
+    this.forceManyBody?.cancelOccupancyReadback()
+  }
+
   /**
    * Partially updates the simulation configuration. Only the provided properties
    * change; all other properties retain their current values.
@@ -271,10 +323,15 @@ export class GraphSimulation implements PositionTextureSource {
    */
   public setConfig (config: GraphSimulationConfig): void {
     if (this._isDestroyed) return
+    // Before the device gate: a bad value throws here, not from the queued call
+    validateConfig(config)
     if (this.ensureDevice(() => this.setConfig(config))) return
     const prevConfig = { ...this.config }
     applyConfig(this.config, config, true)
     this.applyEnableSimulationConfigChange(prevConfig)
+    if (prevConfig.simulationRepulsionSamples !== this.config.simulationRepulsionSamples) {
+      this.restartOccupancyMeasurement()
+    }
     if (prevConfig.pointDefaultSize !== this.config.pointDefaultSize) {
       this.data.updatePointSize()
       this.points?.updateSize()
@@ -288,9 +345,7 @@ export class GraphSimulation implements PositionTextureSource {
       this.isForceCollisionReady = false
     }
     if (prevConfig.spaceSize !== this.config.spaceSize) {
-      this.store.adjustSpaceSize(this.config.spaceSize, this._device?.limits.maxTextureDimension2D ?? 4096)
-      // Collision grid dimensions depend on adjustedSpaceSize
-      this.isForceCollisionReady = false
+      this.store.adjustSpaceSize(this.config.spaceSize)
       this.update(this.store.isSimulationRunning ? this.store.alpha : 0)
     }
   }
@@ -298,7 +353,8 @@ export class GraphSimulation implements PositionTextureSource {
   /**
    * Sets the positions for the simulation points — flat `[x0, y0, x1, y1, …]`,
    * as in `Graph.setPointPositions` (see it for the NaN-absence contract).
-   * Takes effect on the next `applyData()`.
+   * Takes effect on the next `applyData()`, or on a config change that rebuilds
+   * (`spaceSize`, `enableSimulation`).
    */
   public setPointPositions (pointPositions: Float32Array, dontRescale?: boolean | undefined): void {
     if (this._isDestroyed) return
@@ -312,12 +368,14 @@ export class GraphSimulation implements PositionTextureSource {
     this.isForceManyBodyUpdateNeeded = true
     this.isForceLinkUpdateNeeded = true
     this.isForceCenterUpdateNeeded = true
+    this.isForceAttractorUpdateNeeded = true
   }
 
   /**
    * Sets the sizes for the simulation points — the collision force derives point
    * radii from sizes when `simulationCollisionRadius` is unset.
-   * Takes effect on the next `applyData()`.
+   * Takes effect on the next `applyData()`, or on a config change that rebuilds
+   * (`spaceSize`, `enableSimulation`).
    */
   public setPointSizes (pointSizes: Float32Array): void {
     if (this._isDestroyed) return
@@ -328,7 +386,8 @@ export class GraphSimulation implements PositionTextureSource {
 
   /**
    * Sets the links — flat `[source0, target0, source1, target1, …]` of point
-   * indices, as in `Graph.setLinks`. Takes effect on the next `applyData()`.
+   * indices, as in `Graph.setLinks`. Takes effect on the next `applyData()`, or on a
+   * config change that rebuilds (`spaceSize`, `enableSimulation`).
    */
   public setLinks (links: Float32Array): void {
     if (this._isDestroyed) return
@@ -367,6 +426,22 @@ export class GraphSimulation implements PositionTextureSource {
     if (this.ensureDevice(() => this.setPointClusterStrength(clusterStrength))) return
     this.data.inputClusterStrength = clusterStrength
     this.isPointClusterUpdateNeeded = true
+  }
+
+  /** Sets per-point attractor positions, as in `Graph.setPointAttractors`. */
+  public setPointAttractors (attractors: Float32Array): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointAttractors(attractors))) return
+    this.data.inputPointAttractors = attractors
+    this.isForceAttractorUpdateNeeded = true
+  }
+
+  /** Sets per-point attractor coefficients, as in `Graph.setPointAttractorStrength`. */
+  public setPointAttractorStrength (attractorStrength: Float32Array): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointAttractorStrength(attractorStrength))) return
+    this.data.inputPointAttractorStrength = attractorStrength
+    this.isForceAttractorUpdateNeeded = true
   }
 
   /**
@@ -454,7 +529,6 @@ export class GraphSimulation implements PositionTextureSource {
   public applyData (simulationAlpha?: number): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.applyData(simulationAlpha))) return
-    this.data.update()
     this.update(simulationAlpha)
   }
 
@@ -627,23 +701,33 @@ export class GraphSimulation implements PositionTextureSource {
   }
 
   /**
-   * Collects the non-blocking copies that have landed — tracked positions and cluster
-   * centroids. `Graph` calls it first in a frame, before the frame queues GPU work.
-   * Without frames, the reads collect for themselves. @internal
+   * Collects the non-blocking copies that have landed — tracked positions, cluster
+   * centroids and the many-body cell occupancy. `Graph` calls it first in a frame, before
+   * the frame queues GPU work. Without frames, the reads collect for themselves, and no
+   * occupancy is measured (SimulationStepOptions.held).
+   * @param heldMs - Set for a held frame: how long `Graph` held it for an occupancy copy, 0
+   *   when it did not. Unset for a frame that does not hold, which drops an occupancy copy in
+   *   flight rather than collect it behind work queued ahead of it. @internal
    */
-  public collectReadbacks (): void {
+  public collectReadbacks (heldMs?: number): void {
     this.points?.resolveTrackedPositionsReadback()
+    this.points?.resolveSampledReadback()
     this.clusters?.resolveCentroidReadback()
+    if (heldMs === undefined) this.forceManyBody?.cancelOccupancyReadback()
+    else this.forceManyBody?.collectOccupancy(heldMs)
   }
 
   /**
-   * Issues the non-blocking copies reads asked for. `Graph` calls it last in a frame,
-   * after the frame's last position write, so a copy holds the newest positions.
-   * Without frames, the reads issue for themselves. @internal
+   * Issues the non-blocking copies reads asked for, and the occupancy copy of a
+   * measurement the step drew. `Graph` calls it last in a frame, after the frame's last
+   * position write, so a copy holds the newest positions. Without frames, the reads issue
+   * for themselves. @internal
    */
   public issueReadbacks (): void {
     this.points?.requestTrackedPositionsReadback()
+    this.points?.requestSampledReadback()
     this.clusters?.requestCentroidReadback()
+    this.forceManyBody?.issueOccupancy()
   }
 
   /**
@@ -698,19 +782,26 @@ export class GraphSimulation implements PositionTextureSource {
     const positionsUpdated = this.isPointPositionsUpdateNeeded
     if (!this.points) return { positionsUpdated: false }
 
+    // The simulation's textures exist at the current sizes before the programs bind to them
+    if (this.config.enableSimulation) this.points.ensureSimulationResources()
     if (this.isPointPositionsUpdateNeeded) this.points.updatePositions()
     if (this.isPointSizeUpdateNeeded) this.points.updateSize()
 
     if (this.isForceManyBodyUpdateNeeded) this.forceManyBody?.create()
-    // Collision grid/size textures depend on point count and sizes. Mark them
-    // stale so they're rebuilt lazily the next time the collision force runs,
-    // rather than reallocating here while collision may be disabled.
+    // The collision force's slot grid, size texture, index buffer and contact
+    // cell size follow point count and sizes. Mark them stale so they're
+    // rebuilt lazily the next time the collision force runs, rather than
+    // reallocating here while collision may be disabled.
     if (this.isForceManyBodyUpdateNeeded || this.isPointSizeUpdateNeeded) this.isForceCollisionReady = false
     if (this.isForceLinkUpdateNeeded) {
       this.forceLinkIncoming?.create(LinkDirection.INCOMING)
       this.forceLinkOutgoing?.create(LinkDirection.OUTGOING)
     }
     if (this.isForceCenterUpdateNeeded) this.forceCenter?.create()
+    if (this.isForceAttractorUpdateNeeded) {
+      this.data.updateAttractors()
+      this.forceAttractor?.create()
+    }
     if (this.isPointClusterUpdateNeeded) this.clusters?.create()
 
     this.isPointPositionsUpdateNeeded = false
@@ -718,6 +809,7 @@ export class GraphSimulation implements PositionTextureSource {
     this.isForceManyBodyUpdateNeeded = false
     this.isForceLinkUpdateNeeded = false
     this.isForceCenterUpdateNeeded = false
+    this.isForceAttractorUpdateNeeded = false
     this.isPointClusterUpdateNeeded = false
 
     return { positionsUpdated }
@@ -736,6 +828,7 @@ export class GraphSimulation implements PositionTextureSource {
     this.forceLinkIncoming?.initPrograms()
     this.forceLinkOutgoing?.initPrograms()
     this.forceMouse?.initPrograms()
+    this.forceAttractor?.initPrograms()
     // ForceCollision programs are built lazily on first use (see runSimulationStep)
     this.clusters.initPrograms()
   }
@@ -751,6 +844,8 @@ export class GraphSimulation implements PositionTextureSource {
    * @internal
    */
   public runSimulationStep (forceExecution = false, options?: SimulationStepOptions): boolean {
+    // A step outside a held frame queues work behind an occupancy copy in flight (SimulationStepOptions.held)
+    if (!options?.held) this.forceManyBody?.cancelOccupancyReadback()
     if (!this.config.enableSimulation) return false
     return this.withExternalDeviceState(() => this.runStepPasses(forceExecution, options))
   }
@@ -833,6 +928,7 @@ export class GraphSimulation implements PositionTextureSource {
     this.forceLinkOutgoing ||= new ForceLink(this._device, this.config, this.store, this.data, this.points)
     this.forceMouse ||= new ForceMouse(this._device, this.config, this.store, this.data, this.points)
     this.forceCollision ||= new ForceCollision(this._device, this.config, this.store, this.data, this.points)
+    this.forceAttractor ||= new ForceAttractor(this._device, this.config, this.store, this.data, this.points)
   }
 
   /**
@@ -855,6 +951,8 @@ export class GraphSimulation implements PositionTextureSource {
     this.forceMouse = undefined
     this.forceCollision?.destroy()
     this.forceCollision = undefined
+    this.forceAttractor?.destroy()
+    this.forceAttractor = undefined
     // Force lazy re-allocation if collision is re-enabled on a new instance.
     this.isForceCollisionReady = false
     this.points?.destroySimulationResources()
@@ -865,6 +963,7 @@ export class GraphSimulation implements PositionTextureSource {
     this.isForceManyBodyUpdateNeeded = true
     this.isForceLinkUpdateNeeded = true
     this.isForceCenterUpdateNeeded = true
+    this.isForceAttractorUpdateNeeded = true
   }
 
   /** Invalidates the lazily built collision-force resources. @internal */
@@ -895,6 +994,19 @@ export class GraphSimulation implements PositionTextureSource {
     // `current` holds the latest positions — the draw pass, hover detection,
     // gatherTrackers and the next frame all read from `current`.
     if (shouldRunSimulation) {
+      // Collision GPU resources are allocated lazily on the first tick that
+      // needs them (or after a data change marked them stale), so a simulation
+      // that never enables collision never pays the grid/size-texture memory
+      // cost. They are built here, ahead of the forces, because the link force
+      // reads the collision size texture to keep spring rest lengths at or
+      // above the contact distance.
+      if (simulationCollision && !this.isForceCollisionReady) {
+        this.forceCollision?.create()
+        this.forceCollision?.initPrograms()
+        this.isForceCollisionReady = true
+      }
+      const collisionSizeTexture = simulationCollision ? this.forceCollision?.resolvedSizeTexture : undefined
+
       if (simulationGravity) {
         this.points?.swapFbo()
         this.forceGravity?.run()
@@ -908,15 +1020,15 @@ export class GraphSimulation implements PositionTextureSource {
       }
 
       this.points?.swapFbo()
-      this.forceManyBody?.run()
+      this.forceManyBody?.run(options?.held === true)
       this.points?.updatePosition()
 
       if (this.store.linksTextureSize) {
         this.points?.swapFbo()
-        this.forceLinkIncoming?.run()
+        this.forceLinkIncoming?.run(collisionSizeTexture)
         this.points?.updatePosition()
         this.points?.swapFbo()
-        this.forceLinkOutgoing?.run()
+        this.forceLinkOutgoing?.run(collisionSizeTexture)
         this.points?.updatePosition()
       }
 
@@ -926,21 +1038,32 @@ export class GraphSimulation implements PositionTextureSource {
         this.points?.updatePosition()
       }
 
-      // Collision runs after the attraction forces (links, clusters) so it
+      if (this.forceAttractor?.isActive) {
+        this.points?.swapFbo()
+        this.forceAttractor.run()
+        this.points?.updatePosition()
+      }
+
+      // Collision runs after the attraction forces (links, clusters, attractors) so it
       // corrects the overlap they introduce within the same tick, instead of
       // lagging one frame behind and oscillating against them.
+      //
+      // It is a constraint, not a force: each pass is a bounded position
+      // correction, integrated with friction 1 so it lands in full, and the
+      // shader does not scale it by alpha unless `simulationCollisionCooling`
+      // opts in. Extra iterations repeat the whole grid-build + resolve pass on
+      // the freshest positions, so a dense pile unwinds in fewer ticks at a
+      // linear cost per pass.
       if (simulationCollision) {
-        // Lazily allocate the collision GPU resources on first use (or after a
-        // data change marked them stale), so a simulation that never enables
-        // collision never pays the grid/size-texture memory cost.
-        if (!this.isForceCollisionReady) {
-          this.forceCollision?.create()
-          this.forceCollision?.initPrograms()
-          this.isForceCollisionReady = true
+        // A non-finite count (NaN from an empty input, Infinity) runs one pass:
+        // Infinity would never return, and NaN would silently skip collision.
+        const requested = this.config.simulationCollisionIterations
+        const iterations = Number.isFinite(requested) ? Math.max(1, Math.floor(requested)) : 1
+        for (let i = 0; i < iterations; i++) {
+          this.points?.swapFbo()
+          this.forceCollision?.run()
+          this.points?.updatePosition(1)
         }
-        this.points?.swapFbo()
-        this.forceCollision?.run()
-        this.points?.updatePosition()
       }
 
       // Alpha decay and progress
@@ -949,6 +1072,7 @@ export class GraphSimulation implements PositionTextureSource {
         this.store.alpha = Math.max(this.store.alpha, 0.1)
       }
       this.store.simulationProgress = Math.sqrt(Math.min(1, ALPHA_MIN / this.store.alpha))
+      if (this.points) this.points.stepVersion += 1
 
       this.config.onSimulationTick?.(
         this.store.alpha,
@@ -973,13 +1097,11 @@ export class GraphSimulation implements PositionTextureSource {
 
     if (this.config.enableSimulation) {
       this.ensureSimulationModules()
-      this.points?.ensureSimulationResources()
       this.markForcesDirty()
-      // Rebuild simulation resources before binding programs to them.
-      this.applyDataUpdates()
-      this.initPrograms()
+      // The rebuild: resolves pending inputs, sizes the textures, builds the
+      // simulation's resources and binds the programs, then reheats
+      this.update(1)
       this.store.simulationProgress = 0
-      this.store.alpha = 1
       this.store.isSimulationRunning = true
       this.config.onSimulationStart?.()
       return
@@ -998,6 +1120,9 @@ export class GraphSimulation implements PositionTextureSource {
    * @param simulationAlpha - Optional alpha value to set. If not provided, keeps current alpha.
    */
   private update (simulationAlpha = this.store.alpha): void {
+    // Every rebuild comes through here, from applyData() or from a config change, so the
+    // pending inputs are resolved here, before the texture sizes and the uploads read them
+    this.data.update()
     this.updateTextureSizes()
     this.applyDataUpdates()
     this.initPrograms()

@@ -22,7 +22,7 @@ layout(std140) uniform drawLineUniforms {
   mat4 transformationMatrix;
   float widthScale;
   float linkArrowsSizeScale;
-  float spaceSize;
+  vec2 worldOrigin;
   vec2 screenSize;
   vec2 linkVisibilityDistanceRange;
   float linkVisibilityMinTransparency;
@@ -45,6 +45,8 @@ layout(std140) uniform drawLineUniforms {
   float animateWidths;
   float animatePositions;
   vec4 pointDefaultColor;
+  vec4 linkDefaultColor;
+  float linkDefaultWidth;
   float linkColorInterpolateFromEndpoints;
   float linkBlending;
   float pixelRatio;
@@ -53,7 +55,7 @@ layout(std140) uniform drawLineUniforms {
 #define transformationMatrix drawLine.transformationMatrix
 #define widthScale drawLine.widthScale
 #define linkArrowsSizeScale drawLine.linkArrowsSizeScale
-#define spaceSize drawLine.spaceSize
+#define worldOrigin drawLine.worldOrigin
 #define screenSize drawLine.screenSize
 #define linkVisibilityDistanceRange drawLine.linkVisibilityDistanceRange
 #define linkVisibilityMinTransparency drawLine.linkVisibilityMinTransparency
@@ -76,6 +78,8 @@ layout(std140) uniform drawLineUniforms {
 #define animateWidths drawLine.animateWidths
 #define animatePositions drawLine.animatePositions
 #define pointDefaultColor drawLine.pointDefaultColor
+#define linkDefaultColor drawLine.linkDefaultColor
+#define linkDefaultWidth drawLine.linkDefaultWidth
 #define linkColorInterpolateFromEndpoints drawLine.linkColorInterpolateFromEndpoints
 #define linkBlending drawLine.linkBlending
 #define pixelRatio drawLine.pixelRatio
@@ -83,7 +87,7 @@ layout(std140) uniform drawLineUniforms {
 uniform mat3 transformationMatrix;
 uniform float widthScale;
 uniform float linkArrowsSizeScale;
-uniform float spaceSize;
+uniform vec2 worldOrigin;
 uniform vec2 screenSize;
 uniform vec2 linkVisibilityDistanceRange;
 uniform float linkVisibilityMinTransparency;
@@ -107,6 +111,8 @@ uniform float animateColors;
 uniform float animateWidths;
 uniform float animatePositions;
 uniform vec4 pointDefaultColor;
+uniform vec4 linkDefaultColor;
+uniform float linkDefaultWidth;
 uniform float linkColorInterpolateFromEndpoints;
 uniform float linkBlending;
 uniform float pixelRatio;
@@ -243,12 +249,16 @@ void main() {
   float dashUnitScale = scaleLinksOnZoom > 0.0 ? 1.0 : transformationMatrix[0][0];
   vLinkDashSpan = linkDist * dashUnitScale;
 
+  // Defaults stay live during a data transition, matching point fill, size, and stroke
+  // channels: a config change applies immediately rather than becoming part of the queued
+  // data transition. Capturing only the source default here would still let a NaN target
+  // move, and would make links disagree with points.
   float lineWidthBase = animateWidths > 0.0
-    ? mix(sourceWidth, targetWidth, transitionProgress)
-    : targetWidth;
+    ? mix(isnan(sourceWidth) ? linkDefaultWidth : sourceWidth, isnan(targetWidth) ? linkDefaultWidth : targetWidth, transitionProgress)
+    : (isnan(targetWidth) ? linkDefaultWidth : targetWidth);
   vec4 lineColor = animateColors > 0.0
-    ? mix(sourceColor, targetColor, transitionProgress)
-    : targetColor;
+    ? mix(mix(sourceColor, linkDefaultColor, isnan(sourceColor)), mix(targetColor, linkDefaultColor, isnan(targetColor)), transitionProgress)
+    : mix(targetColor, linkDefaultColor, isnan(targetColor));
   
   // Calculate line width using the width scale
   float linkWidth = lineWidthBase * widthScale;
@@ -378,9 +388,8 @@ void main() {
   
   pointCurr += yBasisCurved * linkWidthPx * position.y;
   
-  // Transform to clip space coordinates
-  vec2 p = 2.0 * pointCurr / spaceSize - 1.0;
-  p *= spaceSize / screenSize;
+  // World space to normalized device coordinates (worldOrigin at the screen centre)
+  vec2 p = (pointCurr - worldOrigin) * (2.0 / screenSize);
   
   #ifdef USE_UNIFORM_BUFFERS
   mat3 transformMat3 = mat3(transformationMatrix);

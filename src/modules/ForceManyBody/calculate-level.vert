@@ -2,8 +2,9 @@
 precision highp float;
 
 // Aggregates each point into its grid cell. A level is a plain 2D grid of
-// `levelGridSize` cells per axis rendered one texel per cell; additive blending
-// accumulates [sum(x), sum(y), count, 0] per cell via calculate-level.frag.
+// `levelGridSize` cells per axis over this tick's data bounds, rendered one
+// texel per cell; additive blending accumulates [sum(x), sum(y), count, 0] per
+// cell via calculate-level.frag.
 
 uniform sampler2D positionsTexture;
 uniform sampler2D exitTexture;
@@ -11,15 +12,14 @@ uniform sampler2D exitTexture;
 #ifdef USE_UNIFORM_BUFFERS
 layout(std140) uniform calculateLevelsPreciseUniforms {
   float levelGridSize;
-  float cellSize;
 } calculateLevelsPrecise;
 
 #define levelGridSize calculateLevelsPrecise.levelGridSize
-#define cellSize calculateLevelsPrecise.cellSize
 #else
 uniform float levelGridSize;
-uniform float cellSize;
 #endif
+
+// @grid-cell
 
 in vec2 pointIndices;
 
@@ -42,10 +42,10 @@ void main() {
   vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
   vColor = vec4(pointPosition.rg, 1.0, 0.0);
 
-  // The clamp must match the force shaders exactly, or boundary points fall out
-  // of the level decomposition's exactly-once coverage.
-  int gridSize = int(levelGridSize);
-  ivec2 cell = clamp(ivec2(floor(pointPosition.rg / cellSize)), ivec2(0), ivec2(gridSize - 1));
+  // The shared cell formula (grid-cell.ts): the force shaders must bin every
+  // point exactly as the aggregation does, or it falls out of the level
+  // decomposition's exactly-once coverage.
+  ivec2 cell = gridCell(pointPosition.rg, levelGridSize);
 
   vec2 levelPosition = 2.0 * (vec2(cell) + 0.5) / levelGridSize - 1.0;
   gl_Position = vec4(levelPosition, 0.0, 1.0);

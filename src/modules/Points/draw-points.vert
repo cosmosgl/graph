@@ -11,6 +11,14 @@ in vec4 targetColor;
 in float shape;
 in float imageIndex;
 in float imageSize;
+#ifdef POINT_STROKE
+in vec4 sourceStrokeColor;
+in vec4 targetStrokeColor;
+in float sourceStrokeWidth;
+in float targetStrokeWidth;
+#endif
+// Position of this point in the render order: 0 is drawn first (bottom)
+in float renderRank;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D pointStatus;
@@ -23,7 +31,7 @@ layout(std140) uniform drawVertexUniforms {
   mat4 transformationMatrix;
   float pointsTextureSize;
   float sizeScale;
-  float spaceSize;
+  vec2 worldOrigin;
   vec2 screenSize;
   vec4 greyoutColor;
   vec4 backgroundColor;
@@ -42,13 +50,19 @@ layout(std140) uniform drawVertexUniforms {
   vec4 pointDefaultColor;
   float pointDefaultSize;
   float pointsNumber;
+  float strokeContrast;
+  float strokeDefaultShade;
+  float strokeDefaultWidth;
+  vec4 strokeDefaultColor;
+  float animateStrokeColors;
+  float animateStrokeWidths;
 } drawVertex;
 
 #define ratio drawVertex.ratio
 #define transformationMatrix drawVertex.transformationMatrix
 #define pointsTextureSize drawVertex.pointsTextureSize
 #define sizeScale drawVertex.sizeScale
-#define spaceSize drawVertex.spaceSize
+#define worldOrigin drawVertex.worldOrigin
 #define screenSize drawVertex.screenSize
 #define greyoutColor drawVertex.greyoutColor
 #define backgroundColor drawVertex.backgroundColor
@@ -67,12 +81,18 @@ layout(std140) uniform drawVertexUniforms {
 #define pointDefaultColor drawVertex.pointDefaultColor
 #define pointDefaultSize drawVertex.pointDefaultSize
 #define pointsNumber drawVertex.pointsNumber
+#define strokeContrast drawVertex.strokeContrast
+#define strokeDefaultShade drawVertex.strokeDefaultShade
+#define strokeDefaultWidth drawVertex.strokeDefaultWidth
+#define strokeDefaultColor drawVertex.strokeDefaultColor
+#define animateStrokeColors drawVertex.animateStrokeColors
+#define animateStrokeWidths drawVertex.animateStrokeWidths
 #else
 uniform float ratio;
 uniform mat3 transformationMatrix;
 uniform float pointsTextureSize;
 uniform float sizeScale;
-uniform float spaceSize;
+uniform vec2 worldOrigin;
 uniform vec2 screenSize;
 uniform vec4 greyoutColor;
 uniform vec4 backgroundColor;
@@ -91,6 +111,12 @@ uniform float animatePositions;
 uniform vec4 pointDefaultColor;
 uniform float pointDefaultSize;
 uniform float pointsNumber;
+uniform float strokeContrast;
+uniform float strokeDefaultShade;
+uniform float strokeDefaultWidth;
+uniform vec4 strokeDefaultColor;
+uniform float animateStrokeColors;
+uniform float animateStrokeWidths;
 #endif
 
 out float pointShape;
@@ -101,6 +127,46 @@ out vec4 imageAtlasUV;
 out float shapeSize;
 out float imageSizeVarying;
 out float overallSize;
+// The stroke is compiled in only while some point can have one (POINT_STROKE, see
+// Points.isStrokeWanted): without it the draw carries no stroke attributes, varyings or
+// per-fragment branch, so a graph that never strokes pays nothing for the feature.
+#ifdef POINT_STROKE
+out vec4 strokeColor;
+out float strokeWidthPx;
+
+// Points lighter than this OKLab lightness get a darker stroke in 'auto' mode, darker ones a
+// lighter stroke. 0.6 is roughly sRGB mid-grey, so saturated blues lighten and yellows darken.
+const float STROKE_AUTO_LIGHTNESS_THRESHOLD = 0.6;
+
+// Derived stroke color: a constant perceptual step in OKLab lightness from the fill (oklab
+// module), chroma reduced only if the shifted color leaves the sRGB gamut so the hue survives.
+// `direction` is -1 darken, 1 lighten, 0 decide from the fill's own lightness.
+vec3 shadeStrokeColor(vec3 fill, float direction) {
+  vec3 lab = srgbToOklab(fill);
+  if (direction == 0.0) direction = lab.x > STROKE_AUTO_LIGHTNESS_THRESHOLD ? -1.0 : 1.0;
+  lab.x += direction * strokeContrast;
+  return oklabToSrgb(oklabClampChroma(lab));
+}
+
+// Per-point stroke color. An explicit per-point color (no NaN channel) wins; otherwise the
+// default: an explicit default color (shade 2), or a shade derived from the fill. A greyed-out
+// point always gets the derived shade of its greyed fill, so the stroke fades with the point
+// instead of staying a bright rim. Per point in the vertex stage: the color depends on nothing
+// the fragment knows.
+vec4 resolveStrokeColor(vec4 explicit, vec3 fill, float greyed) {
+  if (greyed <= 0.0) {
+    if (!any(isnan(explicit))) return explicit;
+    if (strokeDefaultShade > 1.5) return strokeDefaultColor;
+  }
+  float direction = strokeDefaultShade > 1.5 ? 0.0 : strokeDefaultShade;
+  return vec4(shadeStrokeColor(fill, direction), 1.0);
+}
+
+// Per-point stroke width in CSS px; NaN = the config default.
+float resolveStrokeWidth(float width) {
+  return isnan(width) ? strokeDefaultWidth : width;
+}
+#endif
 // The point's index, for the host picking pass
 flat out float vPointIndex;
 
@@ -159,13 +225,10 @@ void main() {
   vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
   vec2 point = pointPosition.rg;
 
-  // Transform point position to normalized device coordinates
-  // Convert from space coordinates [0, spaceSize] to normalized [-1, 1]
-  vec2 normalizedPosition = 2.0 * point / spaceSize - 1.0;
-
-  // Apply aspect ratio correction - this is needed to map the square space to the rectangular screen
-  // The transformation matrix handles zoom/pan, but we need this to handle aspect ratio
-  normalizedPosition *= spaceSize / screenSize;
+  // World space to normalized device coordinates: worldOrigin lands at the centre of
+  // the screen and one world unit spans one CSS pixel at zoom 1, whatever the space
+  // size. The transformation matrix applies zoom and pan on top.
+  vec2 normalizedPosition = (point - worldOrigin) * (2.0 / screenSize);
 
   #ifdef USE_UNIFORM_BUFFERS
   mat3 transformMat3 = mat3(transformationMatrix);
@@ -173,11 +236,11 @@ void main() {
   #else
   vec3 finalPosition = transformationMatrix * vec3(normalizedPosition, 1);
   #endif
-  // Depth encodes stacking order: higher point index = drawn on top = nearer
-  // (smaller z). Harmless when depth testing is off (depthCompare 'always').
-  float linearIndex = pointIndices.y * pointsTextureSize + pointIndices.x;
-  vPointIndex = linearIndex;
-  float depthZ = 1.0 - 2.0 * (linearIndex + 0.5) / max(pointsNumber, 1.0);
+  vPointIndex = pointIndices.y * pointsTextureSize + pointIndices.x;
+  // Depth encodes stacking order: later in the render order = drawn on top = nearer
+  // (smaller z). The rank equals the point index unless setPointRenderOrder is used.
+  // Harmless when depth testing is off (depthCompare 'always').
+  float depthZ = 1.0 - 2.0 * (renderRank + 0.5) / max(pointsNumber, 1.0);
   gl_Position = vec4(finalPosition.rg, depthZ, 1.0);
 
   // Resolve NaN channels against the animated exit ramp before mixing — default
@@ -242,6 +305,24 @@ void main() {
       }
     }
   }
+
+#ifdef POINT_STROKE
+  // Stroke: the per-point channels have their own transition properties, so a stroke change
+  // never restarts the fill's transition (whose source buffer holds older colors) and vice versa.
+  float strokeWidth = animateStrokeWidths > 0.0
+    ? mix(resolveStrokeWidth(sourceStrokeWidth), resolveStrokeWidth(targetStrokeWidth), transitionProgress)
+    : resolveStrokeWidth(targetStrokeWidth);
+  // Capped at STROKE_MAX_DEPTH of the shape's depth (shapeGeometry module): a small point keeps
+  // a narrower band and its fill, and the band never switches off as a point shrinks.
+  strokeWidthPx = min(max(strokeWidth, 0.0) * ratio, shapeSizeValue * 0.5 * shapeInradius(shape) * STROKE_MAX_DEPTH);
+  strokeColor = vec4(0.0);
+  if (strokeWidthPx > 0.0) {
+    strokeColor = animateStrokeColors > 0.0
+      ? mix(resolveStrokeColor(sourceStrokeColor, shapeColor.rgb, isGreyedOut),
+            resolveStrokeColor(targetStrokeColor, shapeColor.rgb, isGreyedOut), transitionProgress)
+      : resolveStrokeColor(targetStrokeColor, shapeColor.rgb, isGreyedOut);
+  }
+#endif
 
   if (!hasImage) {
     imageAtlasUV = vec4(-1.0);

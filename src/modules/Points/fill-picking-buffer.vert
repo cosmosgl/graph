@@ -26,7 +26,7 @@ uniform sampler2D exitTexture;
 layout(std140) uniform fillPickingBufferUniforms {
   float pointsTextureSize;
   float sizeScale;
-  float spaceSize;
+  vec2 worldOrigin;
   vec2 screenSize;
   float ratio;
   float pickingPixelRatio;
@@ -42,7 +42,7 @@ layout(std140) uniform fillPickingBufferUniforms {
 
 #define pointsTextureSize fillPickingBuffer.pointsTextureSize
 #define sizeScale fillPickingBuffer.sizeScale
-#define spaceSize fillPickingBuffer.spaceSize
+#define worldOrigin fillPickingBuffer.worldOrigin
 #define screenSize fillPickingBuffer.screenSize
 #define ratio fillPickingBuffer.ratio
 #define pickingPixelRatio fillPickingBuffer.pickingPixelRatio
@@ -57,7 +57,7 @@ layout(std140) uniform fillPickingBufferUniforms {
 #else
 uniform float pointsTextureSize;
 uniform float sizeScale;
-uniform float spaceSize;
+uniform vec2 worldOrigin;
 uniform vec2 screenSize;
 uniform float ratio;
 uniform float pickingPixelRatio;
@@ -105,8 +105,8 @@ void main() {
   vec4 pointPosition = texelFetch(positionsTexture, pointTexel, 0);
   vec2 point = pointPosition.rg;
 
-  vec2 normalizedPosition = 2.0 * point / spaceSize - 1.0;
-  normalizedPosition *= spaceSize / screenSize;
+  // World space to normalized device coordinates (worldOrigin at the screen centre)
+  vec2 normalizedPosition = (point - worldOrigin) * (2.0 / screenSize);
 
   #ifdef USE_UNIFORM_BUFFERS
   mat3 transformMat3 = mat3(transformationMatrix);

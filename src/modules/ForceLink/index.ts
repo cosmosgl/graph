@@ -29,6 +29,9 @@ export class ForceLink extends CoreModule {
       linkDistRandomVariationRange: [number, number];
       linksTextureSize: number;
       alpha: number;
+      collisionRadius: number;
+      collisionPadding: number;
+      useCollisionRadii: number;
     };
   }> | undefined
 
@@ -71,7 +74,9 @@ export class ForceLink extends CoreModule {
           const bias = degreeSum !== 0 ? degree / degreeSum : 0.5
           const minDegree = Math.min(degree, connectedDegree)
           // Strength must reach the texture finite and non-negative — Math.sqrt emits
-          // NaN otherwise, and the position clamp downstream lands the point at (0, 0).
+          // NaN otherwise, which turns the link pull on both of its points NaN — and
+          // update-position drops a non-finite step, so neither would ever move by
+          // any of its links.
           let strength = data.linkStrength?.[initialLinkIndex]
           if (strength === undefined || !Number.isFinite(strength) || strength < 0) {
             strength = 1 / Math.max(minDegree, 1) // max() prevents division by zero
@@ -191,6 +196,9 @@ export class ForceLink extends CoreModule {
           linkDistRandomVariationRange: 'vec2<f32>',
           linksTextureSize: 'f32',
           alpha: 'f32',
+          collisionRadius: 'f32',
+          collisionPadding: 'f32',
+          useCollisionRadii: 'f32',
         },
       },
     })
@@ -219,8 +227,15 @@ export class ForceLink extends CoreModule {
     })
   }
 
-  public run (): void {
-    const { device, store, points } = this
+  /**
+   * Runs one spring pass into the velocity texture.
+   *
+   * @param collisionSizeTexture - The collision force's resolved-size texture.
+   *   When given (collision is on), each spring's rest length is floored at the
+   *   two endpoints' contact distance so the spring never demands overlap.
+   */
+  public run (collisionSizeTexture?: Texture): void {
+    const { device, store, points, config } = this
     if (!points) return
     if (!this.runCommand || !this.uniformStore) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
@@ -236,13 +251,19 @@ export class ForceLink extends CoreModule {
       return
     }
 
+    const useCollisionRadii = (config.simulationCollision ?? 0) > 0 &&
+      collisionSizeTexture !== undefined && !collisionSizeTexture.destroyed
+
     this.uniformStore.setUniforms({
       forceLinkUniforms: {
-        linkSpring: this.config.simulationLinkSpring,
-        linkDistance: this.config.simulationLinkDistance,
-        linkDistRandomVariationRange: ensureVec2(this.config.simulationLinkDistRandomVariationRange, [0, 0]),
+        linkSpring: config.simulationLinkSpring,
+        linkDistance: config.simulationLinkDistance,
+        linkDistRandomVariationRange: ensureVec2(config.simulationLinkDistRandomVariationRange, [0, 0]),
         linksTextureSize: store.linksTextureSize,
         alpha: store.alpha,
+        collisionRadius: config.simulationCollisionRadius ?? 0,
+        collisionPadding: config.simulationCollisionPadding ?? 0,
+        useCollisionRadii: useCollisionRadii ? 1 : 0,
       },
     })
 
@@ -253,6 +274,9 @@ export class ForceLink extends CoreModule {
       linkIndicesTexture: this.indicesTexture,
       linkPropertiesTexture: this.biasAndStrengthTexture,
       linkRandomDistanceTexture: this.randomDistanceTexture,
+      // A sampler must be bound even when the shader never reads it; the
+      // positions texture stands in while collision is off.
+      sizeTexture: useCollisionRadii ? collisionSizeTexture : points.previousPositionTexture,
     })
 
     const pass = device.beginRenderPass({

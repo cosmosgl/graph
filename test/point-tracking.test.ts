@@ -33,6 +33,11 @@ const createHeadlessGraph = async (positions: Float32Array = POSITIONS): Promise
 
 /** Lets the GPU pass a fence between steps. */
 const tick = (): Promise<void> => new Promise((resolve) => { setTimeout(resolve, 20) })
+// How long a poll waits for a non-blocking copy to land: a generous 20 s of ticks. The
+// suite's files run in parallel in one SwiftShader process, so a fence can sit behind
+// another file's burst of steps for seconds; the mechanism under test is that the copy
+// lands at all, not how soon. A loop that finds what it waits for leaves at once.
+const MAX_POLLS = 1000
 
 describe('tracked point positions through Graph', () => {
   it('reports the tracked points at their current positions', async () => {
@@ -286,7 +291,7 @@ describe('non-blocking reads without a render frame', () => {
       simulation.step()
       const first = [...tracker.positions({ nonBlocking: true }).get(0) as [number, number]]
       let latest = first
-      for (let i = 0; i < 60 && latest[0] === first[0]; i += 1) {
+      for (let i = 0; i < MAX_POLLS && latest[0] === first[0]; i += 1) {
         simulation.step()
         await tick()
         latest = [...tracker.positions({ nonBlocking: true }).get(0) as [number, number]]
@@ -312,7 +317,7 @@ describe('non-blocking reads without a render frame', () => {
       // No more steps: the copy issued by the last one must still arrive through reads alone
       const settled = simulation.getPointPositionsArray()
       let latest = tracker.positions({ nonBlocking: true }).get(0)
-      for (let i = 0; i < 60 && latest?.[0] !== settled[0]; i += 1) {
+      for (let i = 0; i < MAX_POLLS && latest?.[0] !== settled[0]; i += 1) {
         await tick()
         latest = tracker.positions({ nonBlocking: true }).get(0)
       }
@@ -330,7 +335,7 @@ describe('non-blocking reads without a render frame', () => {
       // The first read has nothing earlier to return, so it waits
       const first = [...graph.getTrackedPointPositionsMap({ nonBlocking: true }).get(0) as [number, number]]
       let latest = first
-      for (let i = 0; i < 60 && latest[0] === first[0]; i += 1) {
+      for (let i = 0; i < MAX_POLLS && latest[0] === first[0]; i += 1) {
         graph.step()
         await tick()
         latest = [...graph.getTrackedPointPositionsMap({ nonBlocking: true }).get(0) as [number, number]]
@@ -352,7 +357,7 @@ describe('non-blocking reads without a render frame', () => {
       const first = [...simulation.getClusterPositions({ nonBlocking: true })]
       expect(first).toHaveLength(4)
       let latest = first
-      for (let i = 0; i < 60 && latest[1] === first[1]; i += 1) {
+      for (let i = 0; i < MAX_POLLS && latest[1] === first[1]; i += 1) {
         simulation.step()
         await tick()
         latest = [...simulation.getClusterPositions({ nonBlocking: true })]
@@ -377,7 +382,7 @@ describe('non-blocking reads while the set or the data changes', () => {
       const snapshot = simulation.getPointPositionsArray()
       let tracked = tracker.positions({ nonBlocking: true })
       expect([...tracked.keys()]).toEqual([2, 3])
-      for (let i = 0; i < 60 && tracked.get(2)?.[0] !== snapshot[4]; i += 1) {
+      for (let i = 0; i < MAX_POLLS && tracked.get(2)?.[0] !== snapshot[4]; i += 1) {
         await tick()
         tracked = tracker.positions({ nonBlocking: true })
       }
@@ -422,7 +427,7 @@ describe('non-blocking reads when the point list changes', () => {
   ): Promise<ReadonlyMap<number, [number, number]>> => {
     let tracked = read()
     check(tracked)
-    for (let i = 0; i < 60 && !isDone(tracked); i += 1) {
+    for (let i = 0; i < MAX_POLLS && !isDone(tracked); i += 1) {
       await tick()
       tracked = read()
       check(tracked)
@@ -515,7 +520,7 @@ describe('non-blocking reads when the point list changes', () => {
       // An application that sends every frame its own layout: same points, new coordinates.
       // A copy in flight is still a copy of this point list.
       let latest = read().get(1)
-      for (let i = 1; i <= 60 && latest?.[0] === 3000; i += 1) {
+      for (let i = 1; i <= MAX_POLLS && latest?.[0] === 3000; i += 1) {
         const moved = new Float32Array(POSITIONS)
         moved[2] = 3000 + i
         simulation.setPointPositions(moved)
@@ -553,7 +558,7 @@ describe('non-blocking reads on a graph that owns a canvas', () => {
     let latest = graph.getTrackedPointPositionsMap({ nonBlocking: true }).get(0)
     // The read returns what it has: the move arrives with a later one
     expect(latest).toEqual([start[0], start[1]])
-    for (let i = 0; i < 100 && latest?.[0] !== 2222; i += 1) {
+    for (let i = 0; i < MAX_POLLS && latest?.[0] !== 2222; i += 1) {
       await tick()
       latest = graph.getTrackedPointPositionsMap({ nonBlocking: true }).get(0)
     }

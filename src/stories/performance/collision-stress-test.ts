@@ -43,6 +43,7 @@ export const collisionStressTest = (): { graph: Graph; div: HTMLDivElement } => 
     pointColors,
     simulationCollision: 0.25,
     simulationCollisionPadding: 1,
+    simulationCollisionIterations: 5,
     simulationCollisionRadius: undefined, // derive collision radius from point sizes
     // Isolate the collision force: no repulsion, a gentle gravity that keeps the
     // points packed so collision has to keep resolving overlap every tick.

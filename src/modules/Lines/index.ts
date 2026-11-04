@@ -80,7 +80,7 @@ export class Lines extends CoreModule {
   private fillSampledLinksUniformStore: UniformStore<{
     fillSampledLinksUniforms: {
       transformationMatrix: Mat4Array;
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       curvedWeight: number;
       curvedLinkControlPointDistance: number;
@@ -94,7 +94,7 @@ export class Lines extends CoreModule {
       transformationMatrix: Mat4Array;
       widthScale: number;
       linkArrowsSizeScale: number;
-      spaceSize: number;
+      worldOrigin: [number, number];
       screenSize: [number, number];
       linkVisibilityDistanceRange: [number, number];
       linkVisibilityMinTransparency: number;
@@ -117,6 +117,8 @@ export class Lines extends CoreModule {
       animateWidths: number;
       animatePositions: number;
       pointDefaultColor: [number, number, number, number];
+      linkDefaultColor: [number, number, number, number];
+      linkDefaultWidth: number;
       linkColorInterpolateFromEndpoints: number;
       linkBlending: number;
       pixelRatio: number;
@@ -140,6 +142,11 @@ export class Lines extends CoreModule {
   /** Whether an issued async pick is still awaiting its GPU readback. */
   public get hasPendingPickReadback (): boolean {
     return this.pickingReadback?.inFlight ?? false
+  }
+
+  /** Whether the GPU has yet to reach the link pick in flight. */
+  public get isPickReadbackPending (): boolean {
+    return this.pickingReadback?.isPending ?? false
   }
 
   public initPrograms (): void {
@@ -184,7 +191,7 @@ export class Lines extends CoreModule {
           transformationMatrix: 'mat4x4<f32>',
           widthScale: 'f32',
           linkArrowsSizeScale: 'f32',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           linkVisibilityDistanceRange: 'vec2<f32>',
           linkVisibilityMinTransparency: 'f32',
@@ -207,6 +214,8 @@ export class Lines extends CoreModule {
           animateWidths: 'f32',
           animatePositions: 'f32',
           pointDefaultColor: 'vec4<f32>',
+          linkDefaultColor: 'vec4<f32>',
+          linkDefaultWidth: 'f32',
           linkColorInterpolateFromEndpoints: 'f32',
           linkBlending: 'f32',
           pixelRatio: 'f32',
@@ -215,7 +224,7 @@ export class Lines extends CoreModule {
           transformationMatrix: store.transformationMatrix4x4,
           widthScale: config.linkWidthScale,
           linkArrowsSizeScale: config.linkArrowsSizeScale,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           linkVisibilityDistanceRange: ensureVec2(config.linkVisibilityDistanceRange, [0, 0]),
           linkVisibilityMinTransparency: config.linkVisibilityMinTransparency,
@@ -238,6 +247,8 @@ export class Lines extends CoreModule {
           animateWidths: 0,
           animatePositions: 0,
           pointDefaultColor: ensureVec4(getRgbaColor(config.pointDefaultColor), [0, 0, 0, 1]),
+          linkDefaultColor: ensureVec4(this.data.linkDefaultRgba, [0, 0, 0, 1]),
+          linkDefaultWidth: config.linkDefaultWidth,
           linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
           linkBlending: config.linkBlending ? 1 : 0,
           pixelRatio: config.pixelRatio,
@@ -278,7 +289,7 @@ export class Lines extends CoreModule {
       fillSampledLinksUniforms: {
         uniformTypes: {
           transformationMatrix: 'mat4x4<f32>',
-          spaceSize: 'f32',
+          worldOrigin: 'vec2<f32>',
           screenSize: 'vec2<f32>',
           curvedWeight: 'f32',
           curvedLinkControlPointDistance: 'f32',
@@ -286,7 +297,7 @@ export class Lines extends CoreModule {
         },
         defaultUniforms: {
           transformationMatrix: store.transformationMatrix4x4,
-          spaceSize: store.adjustedSpaceSize,
+          worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           curvedWeight: config.curvedLinkWeight,
           curvedLinkControlPointDistance: config.curvedLinkControlPointDistance,
@@ -756,7 +767,7 @@ export class Lines extends CoreModule {
       this.fillSampledLinksUniformStore.setUniforms({
         fillSampledLinksUniforms: {
           transformationMatrix: this.store.transformationMatrix4x4,
-          spaceSize: this.store.adjustedSpaceSize,
+          worldOrigin: this.store.worldOrigin,
           screenSize: ensureVec2(this.store.screenSize, [0, 0]),
           curvedWeight: this.config.curvedLinkWeight,
           curvedLinkControlPointDistance: this.config.curvedLinkControlPointDistance,
@@ -804,7 +815,7 @@ export class Lines extends CoreModule {
       this.fillSampledLinksUniformStore.setUniforms({
         fillSampledLinksUniforms: {
           transformationMatrix: this.store.transformationMatrix4x4,
-          spaceSize: this.store.adjustedSpaceSize,
+          worldOrigin: this.store.worldOrigin,
           screenSize: ensureVec2(this.store.screenSize, [0, 0]),
           curvedWeight: this.config.curvedLinkWeight,
           curvedLinkControlPointDistance: this.config.curvedLinkControlPointDistance,
@@ -873,7 +884,7 @@ export class Lines extends CoreModule {
         transformationMatrix: store.transformationMatrix4x4,
         widthScale: config.linkWidthScale,
         linkArrowsSizeScale: config.linkArrowsSizeScale,
-        spaceSize: store.adjustedSpaceSize,
+        worldOrigin: store.worldOrigin,
         screenSize: ensureVec2(store.screenSize, [0, 0]),
         linkVisibilityDistanceRange: ensureVec2(config.linkVisibilityDistanceRange, [0, 0]),
         linkVisibilityMinTransparency: config.linkVisibilityMinTransparency,
@@ -896,6 +907,8 @@ export class Lines extends CoreModule {
         animateWidths: this.shouldAnimateLinkWidths ? 1 : 0,
         animatePositions: this.shouldAnimatePositions ? 1 : 0,
         pointDefaultColor: ensureVec4(this.data.defaultRgba, [0, 0, 0, 1]),
+        linkDefaultColor: ensureVec4(this.data.linkDefaultRgba, [0, 0, 0, 1]),
+        linkDefaultWidth: config.linkDefaultWidth,
         linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
         // Mirrors the visible mode (not this pipeline's own blend state, which is
         // always off): greyed links hidden by unblended rendering must also be
@@ -998,13 +1011,15 @@ export class Lines extends CoreModule {
 
   /**
    * A link's width as `draw-curve-line.vert` mixes it at `progress` of a width
-   * transition, for consumers outside the GPU (`getLinkWidthByIndex`). Widths are
-   * default-filled on ingest, so the target needs no resolve.
+   * transition, for consumers outside the GPU (`getLinkWidthByIndex`). Raw source
+   * and target widths may both hold NaN ("use the default"), so resolve each before
+   * mixing, just as the draw shader does.
    */
   public getAnimatedWidth (index: number, progress: number): number {
-    const width = this.data.linkWidths?.[index] ?? this.config.linkDefaultWidth
-    const source = this.sourceWidthData?.[index]
-    return source === undefined ? width : source + (width - source) * progress
+    const width = this.data.getResolvedLinkWidth(index)
+    const rawSource = this.sourceWidthData?.[index]
+    const source = rawSource === undefined || Number.isNaN(rawSource) ? this.config.linkDefaultWidth : rawSource
+    return rawSource === undefined ? width : source + (width - source) * progress
   }
 
   public setTransitionProgress (progress: number, animateColors = false, animateWidths = false, animatePositions = false): void {
@@ -1241,7 +1256,7 @@ export class Lines extends CoreModule {
         transformationMatrix: store.transformationMatrix4x4,
         widthScale: config.linkWidthScale,
         linkArrowsSizeScale: config.linkArrowsSizeScale,
-        spaceSize: store.adjustedSpaceSize,
+        worldOrigin: store.worldOrigin,
         screenSize: ensureVec2(store.screenSize, [0, 0]),
         linkVisibilityDistanceRange: ensureVec2(config.linkVisibilityDistanceRange, [0, 0]),
         linkVisibilityMinTransparency: config.linkVisibilityMinTransparency,
@@ -1265,6 +1280,8 @@ export class Lines extends CoreModule {
         animatePositions: this.shouldAnimatePositions ? 1 : 0,
         // Cached parse — draw() runs per frame, so no color-string parsing here.
         pointDefaultColor: ensureVec4(this.data.defaultRgba, [0, 0, 0, 1]),
+        linkDefaultColor: ensureVec4(this.data.linkDefaultRgba, [0, 0, 0, 1]),
+        linkDefaultWidth: config.linkDefaultWidth,
         linkColorInterpolateFromEndpoints: config.linkColorInterpolateFromEndpoints ? 1 : 0,
         linkBlending: config.linkBlending ? 1 : 0,
         pixelRatio: config.pixelRatio,

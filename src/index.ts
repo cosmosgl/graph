@@ -5,14 +5,16 @@ import { D3ZoomEvent, zoomIdentity } from 'd3-zoom'
 import { D3DragEvent } from 'd3-drag'
 import { Device, Framebuffer, type RenderPass } from '@luma.gl/core'
 
-import { applyConfig, createDefaultConfig, resetConfigToDefaults, GraphConfigInterface, type GraphConfig } from '@/graph/config'
+import { applyConfig, validateConfig, createDefaultConfig, resetConfigToDefaults, GraphConfigInterface, type GraphConfig } from '@/graph/config'
 import { getRgbaColor, getMaxPointSize, readPixels, extractIndicesFromPixels, sanitizeHtml, isPointAbsent, generateRandomId } from '@/graph/helper'
 import { FPSMonitor } from '@/graph/modules/FPSMonitor'
 import { GraphData } from '@/graph/modules/GraphData'
 import { Lines } from '@/graph/modules/Lines'
 import { Points } from '@/graph/modules/Points'
 import { numberArraysEqual } from '@/graph/modules/Points/picking-utils'
-import { Store, ALPHA_MIN, MAX_HOVER_DETECTION_DELAY, MIN_MOUSE_MOVEMENT_THRESHOLD, type Hovered } from '@/graph/modules/Store'
+import {
+  Store, ALPHA_MIN, MAX_HOVER_DETECTION_DELAY, MIN_MOUSE_MOVEMENT_THRESHOLD, READBACK_WAIT_POLL_MS, READBACK_WAIT_CAP_MS, type Hovered,
+} from '@/graph/modules/Store'
 import { Transition, TransitionProperty } from '@/graph/modules/Transition'
 import { Zoom } from '@/graph/modules/Zoom'
 import { Drag } from '@/graph/modules/Drag'
@@ -51,6 +53,10 @@ export class Graph implements PositionTextureSource {
   private canvasD3Selection: Selection<HTMLCanvasElement, undefined, null, undefined> | undefined
   private device: Device | undefined
   private requestAnimationFrameId = 0
+  /** The timer re-checking a pending copy's fence; `frame()` treats it as a frame scheduled. */
+  private readbackWaitTimeoutId = 0
+  /** When the hold for a pending copy began; 0 while no frame is held. */
+  private readbackWaitStartedAt = 0
   /**
    * Detects canvas element resizes:
    * resize → `_shouldSyncScreenSize` + `requestRender()` → `syncScreenSize()` next frame.
@@ -134,6 +140,8 @@ export class Graph implements PositionTextureSource {
   // Render-side update flags; the simulation tracks its own (positions, sizes,
   // forces, clusters) and applies them in applyDataUpdates().
   private isPointColorUpdateNeeded = false
+  private isPointStrokeColorUpdateNeeded = false
+  private isPointStrokeWidthUpdateNeeded = false
   private isPointShapeUpdateNeeded = false
   private isPointImageIndicesUpdateNeeded = false
   private isLinksUpdateNeeded = false
@@ -259,6 +267,7 @@ export class Graph implements PositionTextureSource {
       }
       this.store.setGreyoutPointColor(this.config.pointGreyoutColor)
       this.store.setOutlinedPointRingColor(this.config.outlinedPointRingColor)
+      this.store.setPointDefaultStrokeColor(this.config.pointDefaultStrokeColor)
       this.store.setHighlightedPointSet(this.config.highlightedPointIndices)
       this.store.setOutlinedPointSet(this.config.outlinedPointIndices)
       this.store.setHoveredLinkColor(this.config.hoveredLinkColor)
@@ -319,11 +328,15 @@ export class Graph implements PositionTextureSource {
   public setConfig (config: GraphConfig): void {
     if (this._isDestroyed) return
 
+    // Before the device gate: a bad value throws here, not from the queued call
+    validateConfig(config)
     if (this.ensureDevice(() => this.setConfig(config))) return
     const prevConfig = { ...this.config }
     resetConfigToDefaults(this.config)
     applyConfig(this.config, config)
     this.preserveInitOnlyFields(prevConfig)
+    this.graph.invalidateLinkDefaultColor()
+    if (this.lines) this.lines.isLinkIndexBufferStale = true
     this.updateStateFromConfig(prevConfig)
   }
 
@@ -338,10 +351,15 @@ export class Graph implements PositionTextureSource {
   public setConfigPartial (config: GraphConfig): void {
     if (this._isDestroyed) return
 
+    validateConfig(config)
     if (this.ensureDevice(() => this.setConfigPartial(config))) return
     const prevConfig = { ...this.config }
     applyConfig(this.config, config, true)
     this.preserveInitOnlyFields(prevConfig)
+    if ('linkDefaultColor' in config) {
+      this.graph.invalidateLinkDefaultColor()
+      if (this.lines) this.lines.isLinkIndexBufferStale = true
+    }
     this.updateStateFromConfig(prevConfig)
   }
 
@@ -363,6 +381,9 @@ export class Graph implements PositionTextureSource {
    * Absent points are excluded from the force layout, so this is safe with the simulation on or off.
    * cosmos.gl does not auto-compact the gaps — drop them yourself and snap the renumber with
    * `render(undefined, 0)`.
+   * @note Positions are not bounded by `spaceSize`, but they are finite: a coordinate of
+   * `±Infinity` is placed on the matching edge of the `[0, spaceSize]` square (`0` or
+   * `spaceSize`). The input array itself is left as it is.
    */
   public setPointPositions (pointPositions: Float32Array, dontRescale?: boolean | undefined): void {
     if (this._isDestroyed) return
@@ -382,6 +403,8 @@ export class Graph implements PositionTextureSource {
     this.isLinksUpdateNeeded = true
     // Point related textures depend on point positions length, so we need to update them
     this.isPointColorUpdateNeeded = true
+    this.isPointStrokeColorUpdateNeeded = true
+    this.isPointStrokeWidthUpdateNeeded = true
     this.isPointShapeUpdateNeeded = true
     this.isPointImageIndicesUpdateNeeded = true
     this.isPointImageSizesUpdateNeeded = true
@@ -398,7 +421,9 @@ export class Graph implements PositionTextureSource {
    * @note A `NaN` channel resolves to the config default for a normal point, or to the exit default
    * (transparent) for an **absent** point (one whose position is `NaN`) — letting you control how a
    * removed point fades out (see `setPointPositions`).
-  */
+   * On the next `render()` the change animates (`transitionDuration`), or applies at once, without
+   * animation, on a config change that rebuilds (`spaceSize`, `enableSimulation`).
+   */
   public setPointColors (pointColors: Float32Array): void {
     if (this._isDestroyed) return
 
@@ -441,6 +466,8 @@ export class Graph implements PositionTextureSource {
    * @note A `NaN` size resolves to the config default for a normal point, or to the exit default (`0`)
    * for an **absent** point (one whose position is `NaN`) — letting you control how a removed point
    * fades out (see `setPointPositions`).
+   * On the next `render()` the change animates (`transitionDuration`), or applies at once, without
+   * animation, on a config change that rebuilds (`spaceSize`, `enableSimulation`).
    */
   public setPointSizes (pointSizes: Float32Array): void {
     if (this._isDestroyed) return
@@ -450,6 +477,54 @@ export class Graph implements PositionTextureSource {
     // Image sizes default to a copy of point sizes, so they follow this change.
     this.isPointImageSizesUpdateNeeded = true
     this.transition.queue(TransitionProperty.PointSizes)
+  }
+
+  /**
+   * Sets per-point stroke colors — the thin band along the inside edge of each point
+   * (see `pointDefaultStrokeWidth`).
+   *
+   * @param {Float32Array} pointStrokeColors - RGBA per point in 0..1, `[r1, g1, b1, a1, r2, g2, b2, a2, ...]`,
+   * aligned to the point index space. A `NaN` channel means "use `pointDefaultStrokeColor`" for that
+   * point — so a few points can carry an explicit color while the rest follow the default, be it a color
+   * or a derived shade.
+   * Alpha is the stroke's opacity over the fill; the point's own alpha applies to the whole point, stroke
+   * included. Greyed-out points always get the derived shade of
+   * their greyed fill.
+   * Example: `new Float32Array([1, 1, 1, 1, NaN, NaN, NaN, NaN])` strokes the first point white and leaves the second on the default.
+   * On the next `render()` the change animates like point colors do (`transitionDuration`), or applies
+   * at once, without animation, on a config change that rebuilds (`spaceSize`, `enableSimulation`).
+   */
+  public setPointStrokeColors (pointStrokeColors: Float32Array): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointStrokeColors(pointStrokeColors))) return
+    this.graph.inputPointStrokeColors = pointStrokeColors
+    this.isPointStrokeColorUpdateNeeded = true
+    // Its own transition property: riding `PointColors` would start a fill transition
+    // from the fill's source buffer, which holds the colors before the *last fill change*,
+    // not the current ones — the fills would replay an old transition. Nothing to animate
+    // while no point can have a stroke.
+    if (this.graph.hasPointStroke) this.transition.queue(TransitionProperty.PointStrokeColors)
+  }
+
+  /**
+   * Sets per-point stroke widths, in CSS pixels.
+   *
+   * @param {Float32Array} pointStrokeWidths - One width per point, `[w1, w2, ...]`, aligned to the point index space.
+   * A `NaN` means "use `pointDefaultStrokeWidth`" for that point; `0` draws no stroke. On a point too small
+   * for its stroke the band narrows to half the point's depth, so some fill always shows.
+   * Example: `new Float32Array([2, NaN, 0])` gives the first point a 2 px stroke, keeps the default on the second, and none on the third.
+   * On the next `render()` the change animates like point sizes do (`transitionDuration`), or applies
+   * at once, without animation, on a config change that rebuilds (`spaceSize`, `enableSimulation`).
+   */
+  public setPointStrokeWidths (pointStrokeWidths: Float32Array): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointStrokeWidths(pointStrokeWidths))) return
+    const hadStroke = this.graph.hasPointStroke
+    this.graph.inputPointStrokeWidths = pointStrokeWidths
+    this.graph.hasPositiveStrokeWidth = pointStrokeWidths.some(width => width > 0)
+    this.isPointStrokeWidthUpdateNeeded = true
+    // See setPointStrokeColors. A stroke that is going away animates out too.
+    if (hadStroke || this.graph.hasPointStroke) this.transition.queue(TransitionProperty.PointStrokeWidths)
   }
 
   /**
@@ -520,6 +595,34 @@ export class Graph implements PositionTextureSource {
   }
 
   /**
+   * Sets the order in which points are drawn, from back to front: a point listed later is
+   * drawn on top of the points listed before it. By default points draw in index order,
+   * so a higher index is drawn on top.
+   *
+   * @param {ArrayLike<number> | null} order - Point indices from back to front, as a `number[]`
+   * or any typed array (e.g. a `Uint32Array`). The list may name only some points: they are
+   * drawn on top in the listed order, and every point left out is drawn underneath them in
+   * index order. An index listed more than once takes its last position; values that aren't
+   * point indices are ignored. Pass `null` or `[]` to restore index order.
+   * Example: `graph.setPointRenderOrder([7])` brings point 7 to the front and leaves the rest in
+   * index order; `graph.setPointRenderOrder([7, 2])` draws point 2 on top and point 7 just below it.
+   * @note Only the drawing order changes: point indices, the simulation and every other
+   * per-point array keep their meaning. Hover and click picking, and a host's pick pass
+   * (`drawToRenderPass` with `picking`), follow the render order, so the
+   * point on top is the one they report. While `highlightedPointIndices` is set, highlighted points
+   * still draw (and pick) above greyed-out ones; the order applies within each group. Label sampling
+   * (`getSampledPoints`) follows the render order only and gives highlighted points no priority.
+   * The order is kept across `setPointPositions` calls and re-resolved against the current
+   * point count: an index beyond it is ignored while it is out of range. The change takes
+   * effect on the next `render()` call and does not animate.
+   */
+  public setPointRenderOrder (order: ArrayLike<number> | null): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointRenderOrder(order))) return
+    this.graph.inputPointRenderOrder = order ?? undefined
+  }
+
+  /**
    * Gets the current sizes of the graph points, with `NaN` sizes
    * resolved to the config default (or the exit default for an absent point).
    * While point sizes transition, these are the targets; `getPointRadiusByIndex` moves with them.
@@ -566,8 +669,12 @@ export class Graph implements PositionTextureSource {
    * @param {Float32Array} linkColors - A Float32Array representing the colors of links in the format [r1, g1, b1, a1, r2, g2, b2, a2, ..., rn, gn, bn, an],
    * where each color is in RGBA format.
    * Example: `new Float32Array([1, 0, 0, 1, 0, 1, 0, 1])` sets the first link to red and the second link to green.
+   * A `NaN` channel uses the matching channel of `config.linkDefaultColor`; the input array is
+   * retained verbatim and is never filled or otherwise edited by the graph.
    * An array whose length does not match the link count is ignored: every link draws
    * `config.linkDefaultColor`. Pass an empty array to go back to the default.
+   * On the next `render()` the change animates (`transitionDuration`), or applies at once, without
+   * animation, on a config change that rebuilds (`spaceSize`, `enableSimulation`).
    */
   public setLinkColors (linkColors: Float32Array): void {
     if (this._isDestroyed) return
@@ -578,14 +685,22 @@ export class Graph implements PositionTextureSource {
   }
 
   /**
-   * Gets the current colors of the graph links.
+   * Gets the resolved target colors of the graph links.
+   *
+   * Returns a new snapshot. `NaN` channels in the array passed to `setLinkColors`
+   * are replaced with the matching channels of `config.linkDefaultColor`; neither
+   * the snapshot nor default resolution modifies the caller's array.
    *
    * @returns {Float32Array} A Float32Array representing the colors of links in the format [r1, g1, b1, a1, r2, g2, b2, a2, ..., rn, gn, bn, an],
-   * where each color is in RGBA format. Returns an empty Float32Array if no link colors are set.
+   * where each color is in RGBA format. Returns an empty Float32Array if there are no links.
    */
   public getLinkColors (): Float32Array {
     if (this._isDestroyed) return new Float32Array()
-    return this.graph.linkColors ?? new Float32Array()
+    const colors = this.graph.linkColors
+    if (!colors) return new Float32Array()
+    const resolved = new Float32Array(colors.length)
+    for (let i = 0; i < colors.length; i++) resolved[i] = this.graph.getResolvedLinkColorChannel(Math.floor(i / 4), i % 4)
+    return resolved
   }
 
   /**
@@ -594,8 +709,12 @@ export class Graph implements PositionTextureSource {
    * @param {Float32Array} linkWidths - A Float32Array representing the widths of links in the format [width1, width2, ..., widthn],
    * where `n` is the index of the link.
    * Example: `new Float32Array([1, 2, 3])` sets the first link to width 1, the second link to width 2, and the third link to width 3.
+   * A `NaN` width uses `config.linkDefaultWidth`; the input array is retained verbatim and is
+   * never filled or otherwise edited by the graph.
    * An array whose length does not match the link count is ignored: every link draws
    * `config.linkDefaultWidth`. Pass an empty array to go back to the default.
+   * On the next `render()` the change animates (`transitionDuration`), or applies at once, without
+   * animation, on a config change that rebuilds (`spaceSize`, `enableSimulation`).
    */
   public setLinkWidths (linkWidths: Float32Array): void {
     if (this._isDestroyed) return
@@ -606,15 +725,21 @@ export class Graph implements PositionTextureSource {
   }
 
   /**
-   * Gets the current widths of the graph links.
+   * Gets the resolved target widths of the graph links.
+   *
+   * Returns a new snapshot. `NaN` entries in the array passed to `setLinkWidths`
+   * are replaced with `config.linkDefaultWidth`; neither the snapshot nor default
+   * resolution modifies the caller's array.
    * While link widths transition, these are the targets; `getLinkWidthByIndex` moves with them.
    *
    * @returns {Float32Array} A Float32Array representing the widths of links in the format [width1, width2, ..., widthn],
-   * where `n` is the index of the link. Returns an empty Float32Array if no link widths are set.
+   * where `n` is the index of the link. Returns an empty Float32Array if there are no links.
    */
   public getLinkWidths (): Float32Array {
     if (this._isDestroyed) return new Float32Array()
-    return this.graph.linkWidths ?? new Float32Array()
+    const widths = this.graph.linkWidths
+    if (!widths) return new Float32Array()
+    return Float32Array.from(widths, (_, index) => this.graph.getResolvedLinkWidth(index))
   }
 
   /**
@@ -629,7 +754,7 @@ export class Graph implements PositionTextureSource {
     if (width === undefined) return undefined
     return this.lines && this.transition.isActiveFor(TransitionProperty.LinkWidths)
       ? this.lines.getAnimatedWidth(index, this.transition.progress)
-      : width
+      : this.graph.getResolvedLinkWidth(index)
   }
 
   /**
@@ -709,6 +834,7 @@ export class Graph implements PositionTextureSource {
    * @param {(number | undefined)[]} clusterPositions - Array of cluster positions.
    *   - Every two elements represent the x and y coordinates for a cluster position.
    *   - `undefined` means the cluster's position is not defined and will use centermass positioning instead.
+   *     So does a non-finite coordinate (`NaN`, `±Infinity`); any finite one is a position, negative ones included.
    * @example
    *   `[10, 20, 30, 40, undefined, undefined]` places the first cluster at (10, 20) and the second at (30, 40);
    * the third cluster will be positioned at its centermass automatically.
@@ -733,6 +859,46 @@ export class Graph implements PositionTextureSource {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setPointClusterStrength(clusterStrength))) return
     this.simulation.setPointClusterStrength(clusterStrength)
+  }
+
+  /**
+   * Sets an attractor for each point in the graph.
+   *
+   * Every point is pulled toward its own attractor by the attractor force, on top of
+   * the other simulation forces (links, repulsion, gravity, …) — a per-point layout constraint
+   * rather than a fixed position. The pull grows linearly with the distance to the
+   * attractor and is scaled by `simulationAttractor` and the point's coefficient from
+   * `setPointAttractorStrength`.
+   *
+   * @param {Float32Array} attractors - A Float32Array of attractor positions in the format [x1, y1, x2, y2, ..., xn, yn],
+   * where `n` is the index of the point, in simulation space after any position rescaling.
+   * `rescalePositions` transforms point positions only, not attractor targets. Set `rescalePositions: false`
+   * to supply point positions and attractors in the original data coordinate space.
+   * A non-finite value (`NaN`, `±Infinity`) in either coordinate means that point has no attractor.
+   * The array must hold exactly one pair per point; otherwise it is ignored.
+   * Example: `new Float32Array([100, 100, NaN, NaN, 300, 250])` pulls point 0 toward (100, 100) and point 2 toward (300, 250); point 1 is free.
+   */
+  public setPointAttractors (attractors: Float32Array): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointAttractors(attractors))) return
+    this.simulation.setPointAttractors(attractors)
+  }
+
+  /**
+   * Sets the attractor force strength coefficient for each point in the graph.
+   *
+   * Multiplies the pull of a point toward its attractor (see `setPointAttractors`),
+   * so different points can be held with different firmness. Points without a coefficient
+   * (a missing array or a non-finite entry) use `1`.
+   *
+   * @param {Float32Array} attractorStrength - A Float32Array of force strength coefficients for each point in the format [coeff1, coeff2, ..., coeffn],
+   * where `n` is the index of the point. The array must hold exactly one value per point; otherwise it is ignored.
+   * Example: `new Float32Array([1, 0.4, 0.3])` sets the coefficient for point 0 to 1, point 1 to 0.4, and point 2 to 0.3.
+   */
+  public setPointAttractorStrength (attractorStrength: Float32Array): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointAttractorStrength(attractorStrength))) return
+    this.simulation.setPointAttractorStrength(attractorStrength)
   }
 
   /**
@@ -809,6 +975,9 @@ export class Graph implements PositionTextureSource {
    * @param y - New Y coordinate, in space coordinates.
    * @note An **absent** point (NaN position — see `setPointPositions`) is not a valid
    * target: the call is a no-op. No-op before the first `render()` call as well.
+   * @note A `NaN` coordinate is ignored too — this call cannot remove a point — and
+   * `±Infinity` is placed on the matching edge of the `[0, spaceSize]` square, as in
+   * `setPointPositions`.
    */
   public setPointPosition (index: number, x: number, y: number): void {
     this.setPointPositionsByIndices([index], [x, y])
@@ -852,9 +1021,14 @@ export class Graph implements PositionTextureSource {
     if (this._isDestroyed) return
 
     if (this.ensureDevice(() => this.render(simulationAlpha, transitionDuration))) return
-    this.graph.update()
+    // Only the counts, for the empty check: update() resolves every channel once
+    this.graph.updatePoints()
+    this.graph.updateLinks()
     const { fitViewOnInit, fitViewDelay, fitViewPadding, fitViewDuration, fitViewByPointsInRect, fitViewByPointIndices, initialZoomLevel } = this.config
     if (!this.graph.pointsNumber && !this.graph.linksNumber) {
+      // Nothing to upload, so update() won't run: resolve here so the getters see the empty graph
+      this.graph.update()
+      this.points?.resetSampledReadback()
       this.stopFrames()
       // Headless: the canvas belongs to the host — never clear or submit its device.
       if (!this._isHeadless) {
@@ -892,8 +1066,8 @@ export class Graph implements PositionTextureSource {
     // so an animated transition would leave positions frozen at their source forever.
     this.transition.setDurationOverride(this._isHeadless ? 0 : transitionDuration)
 
-    // Update graph and start frames
-    this.update(simulationAlpha)
+    // Update graph and start frames; the one rebuild that may animate, since start() follows
+    this.update(simulationAlpha, { animate: true })
 
     // Position transitions must not compete with live force updates — pause the simulation
     // so physics and GPU interpolation don't fight over the same coordinates.
@@ -1334,22 +1508,28 @@ export class Graph implements PositionTextureSource {
    * For the points that are currently visible on the screen, get a sample of point indices with their coordinates.
    * The resulting number of points will depend on the `pointSamplingDistance` configuration property,
    * and the sampled points will be evenly distributed.
+   * @param options Pass `{ nonBlocking: true }` for the latest completed sample, which may
+   * reflect an earlier view. Returns an empty result until the first copy completes.
    * @returns A Map object where keys are the index of the points and values are their corresponding X and Y coordinates in the [number, number] format.
    */
-  public getSampledPointPositionsMap (): Map<number, [number, number]> {
-    if (this._isDestroyed || !this.points) return new Map()
-    return this.points.getSampledPointPositionsMap()
+  public getSampledPointPositionsMap (options?: PositionsReadOptions): Map<number, [number, number]> {
+    const points = this.points
+    if (this._isDestroyed || !points) return new Map()
+    return this.simulation.withExternalDeviceState(() => points.getSampledPointPositionsMap(options?.nonBlocking))
   }
 
   /**
    * For the points that are currently visible on the screen, get a sample of point indices and positions.
    * The resulting number of points will depend on the `pointSamplingDistance` configuration property,
    * and the sampled points will be evenly distributed.
+   * @param options Pass `{ nonBlocking: true }` for the latest completed sample, which may
+   * reflect an earlier view. Returns an empty result until the first copy completes.
    * @returns An object containing arrays of point indices and positions.
    */
-  public getSampledPoints (): { indices: number[]; positions: number[] } {
-    if (this._isDestroyed || !this.points) return { indices: [], positions: [] }
-    return this.points.getSampledPoints()
+  public getSampledPoints (options?: PositionsReadOptions): { indices: number[]; positions: number[] } {
+    const points = this.points
+    if (this._isDestroyed || !points) return { indices: [], positions: [] }
+    return this.simulation.withExternalDeviceState(() => points.getSampledPoints(options?.nonBlocking))
   }
 
   /**
@@ -1463,6 +1643,10 @@ export class Graph implements PositionTextureSource {
   /**
    * Run one step of the simulation manually.
    * Works even when the simulation is paused.
+   * A manual step never measures the near-field cell occupancy, and drops a
+   * measurement the render loop has in flight: calling it between every pair of
+   * the loop's frames keeps an unset `simulationRepulsionSamples` at what it
+   * last measured, or the point-count tiers.
    */
   public step (): void {
     if (this._isDestroyed) return
@@ -1493,14 +1677,18 @@ export class Graph implements PositionTextureSource {
    * gesture would: the shader projection matrix, picking, point-radius zoom
    * scaling, and the space↔screen conversion methods.
    *
-   * The transform follows the d3-zoom convention. With `S = spaceSize` (adjusted),
-   * `[w, h] = screenSize` in CSS pixels, a point at space position
-   * `(spaceX, spaceY)` lands on screen (y down) at:
+   * The transform follows the d3-zoom convention. With `[ox, oy]` the world
+   * origin — the centre of the `spaceSize` square, `ox = oy = S / 2`, where `S` is the
+   * `spaceSize` the engine runs at: the configured one, except the default when that is
+   * not a positive finite number, and 2 when it is below 2 — and `[w, h] = screenSize`
+   * in CSS pixels, a point at space position `(spaceX, spaceY)` lands on screen
+   * (y down) at:
    * ```
-   * screenX = k * (spaceX + (w - S) / 2) + x
-   * screenY = k * ((S - spaceY) + (h - S) / 2) + y
+   * screenX = k * (spaceX - ox + w / 2) + x
+   * screenY = k * (oy - spaceY + h / 2) + y
    * ```
-   * (cosmos space y points up; screen y points down.)
+   * At the identity transform the world origin sits at the centre of the screen and
+   * one space unit is one CSS pixel. (cosmos space y points up; screen y points down.)
    *
    * @param transform - View transform: `k` scale (screen pixels per space unit),
    *   `x`/`y` translation in screen pixels.
@@ -1511,7 +1699,12 @@ export class Graph implements PositionTextureSource {
   public setViewTransform (transform: { k: number; x: number; y: number }, screenSize?: [number, number]): void {
     if (this._isDestroyed) return
     if (this.ensureDevice(() => this.setViewTransform(transform, screenSize))) return
-    if (screenSize) this.store.updateScreenSize(screenSize[0], screenSize[1])
+    if (screenSize) {
+      const [width, height] = screenSize
+      const [previousWidth, previousHeight] = this.store.screenSize
+      this.store.updateScreenSize(width, height)
+      if (width !== previousWidth || height !== previousHeight) this.points?.updateSampledPointsGrid()
+    }
     this.zoomInstance.applyEventTransform(zoomIdentity.translate(transform.x, transform.y).scale(transform.k))
     // The view moved under the points — picking buffers rasterized for the old
     // view no longer match (same invalidation the zoom handler relies on).
@@ -1604,7 +1797,10 @@ export class Graph implements PositionTextureSource {
    * (`enableRenderLoop: false`): call `renderOneFrame()` from the host's frame
    * callback. Performs the same per-frame work as the internal loop — screen-size
    * sync, transitions, hover detection, one simulation step (when the simulation
-   * is running), and the draw — including the simulation-end check.
+   * is running), and the draw — including the simulation-end check. One thing it
+   * leaves out: nothing holds the host's next frame for a GPU copy, so it never
+   * measures the near-field cell occupancy. An unset `simulationRepulsionSamples`
+   * keeps the count the render loop last measured, or runs the point-count tiers.
    * No-op on headless instances (they own no canvas to draw into).
    */
   public renderOneFrame (): void {
@@ -1684,7 +1880,8 @@ export class Graph implements PositionTextureSource {
    * (positions, colors, sizes, shapes, images, links, forces, clusters) and requests a redraw.
    * An internal stage of the render pipeline: it does not ingest new input arrays, so data
    * passed to `setPointPositions`, `setPointColors`, `setLinks`, etc. takes effect only on
-   * the next `render()`. To apply new data while keeping the current alpha, call
+   * the next `render()`, or at once and without animation on a config change that rebuilds
+   * (`spaceSize`, `enableSimulation`). To apply new data while keeping the current alpha, call
    * `render(undefined)` — or `render(undefined, 0)` to also snap instead of animating.
    */
   public create (): void {
@@ -1702,9 +1899,13 @@ export class Graph implements PositionTextureSource {
     }
 
     if (this.isPointColorUpdateNeeded) this.points.updateColor()
+    if (this.isPointStrokeColorUpdateNeeded) this.points.updateStrokeColor()
+    if (this.isPointStrokeWidthUpdateNeeded) this.points.updateStrokeWidth()
     if (this.isPointShapeUpdateNeeded) this.points.updateShape()
     if (this.isPointImageIndicesUpdateNeeded) this.points.updateImageIndices()
     if (this.isPointImageSizesUpdateNeeded) this.points.updateImageSizes()
+    // Unconditional: a no-op unless the resolved order or the point count changed
+    this.points.updateRenderOrder()
 
     if (this.isLinksUpdateNeeded) this.lines.updatePointsBuffer()
     if (this.isLinkColorUpdateNeeded) this.lines.updateColor()
@@ -1713,6 +1914,8 @@ export class Graph implements PositionTextureSource {
     if (this.isLinkStyleUpdateNeeded) this.lines.updateStyle()
 
     this.isPointColorUpdateNeeded = false
+    this.isPointStrokeColorUpdateNeeded = false
+    this.isPointStrokeWidthUpdateNeeded = false
     this.isPointShapeUpdateNeeded = false
     this.isPointImageIndicesUpdateNeeded = false
     this.isPointImageSizesUpdateNeeded = false
@@ -1781,6 +1984,9 @@ export class Graph implements PositionTextureSource {
    */
   private updateStateFromConfig (prevConfig: GraphConfigInterface): void {
     this.applyEnableSimulationConfigChange(prevConfig)
+    if (prevConfig.simulationRepulsionSamples !== this.config.simulationRepulsionSamples) {
+      this.simulation.restartOccupancyMeasurement()
+    }
 
     if (prevConfig.pointDefaultColor !== this.config.pointDefaultColor) {
       this.graph.updatePointColor()
@@ -1798,12 +2004,11 @@ export class Graph implements PositionTextureSource {
       this.points?.updateShape()
     }
     if (prevConfig.linkDefaultColor !== this.config.linkDefaultColor) {
-      this.graph.updateLinkColor()
-      this.lines?.updateColor()
+      this.graph.invalidateLinkDefaultColor()
+      if (this.lines) this.lines.isLinkIndexBufferStale = true
     }
     if (prevConfig.linkDefaultWidth !== this.config.linkDefaultWidth) {
-      this.graph.updateLinkWidth()
-      this.lines?.updateWidth()
+      if (this.lines) this.lines.isLinkIndexBufferStale = true
     }
     if (prevConfig.linkDefaultArrows !== this.config.linkDefaultArrows) {
       this.graph.updateArrows()
@@ -1847,6 +2052,9 @@ export class Graph implements PositionTextureSource {
     if (prevConfig.outlinedPointRingColor !== this.config.outlinedPointRingColor) {
       this.store.setOutlinedPointRingColor(this.config.outlinedPointRingColor)
     }
+    if (prevConfig.pointDefaultStrokeColor !== this.config.pointDefaultStrokeColor) {
+      this.store.setPointDefaultStrokeColor(this.config.pointDefaultStrokeColor)
+    }
     if (prevConfig.highlightedPointIndices !== this.config.highlightedPointIndices) {
       this.store.setHighlightedPointSet(this.config.highlightedPointIndices)
     }
@@ -1861,10 +2069,10 @@ export class Graph implements PositionTextureSource {
       this.lines?.updateLinkStatus()
     }
     // The collision grid's cell size is derived from the collision radius and
-    // padding, so a change to either requires rebuilding the grid textures.
-    // In derived-radius mode (radius 0/undefined) the radius — and the size
-    // texture — come from point sizes, so a pointDefaultSize change must also
-    // invalidate the collision resources.
+    // padding, so a change to either must recompute it before the next
+    // collision pass. In derived-radius mode (radius 0/undefined) the radius —
+    // and the size texture — come from point sizes, so a pointDefaultSize
+    // change must also invalidate the collision resources.
     if (prevConfig.simulationCollisionRadius !== this.config.simulationCollisionRadius ||
         prevConfig.simulationCollisionPadding !== this.config.simulationCollisionPadding ||
         ((this.config.simulationCollisionRadius === undefined || this.config.simulationCollisionRadius === 0) &&
@@ -1881,10 +2089,7 @@ export class Graph implements PositionTextureSource {
       }
     }
     if (prevConfig.spaceSize !== this.config.spaceSize) {
-      this.store.adjustSpaceSize(this.config.spaceSize, this.device?.limits.maxTextureDimension2D ?? 4096)
-      // Collision grid dimensions depend on adjustedSpaceSize, so rebuild them
-      // lazily before the next collision pass.
-      this.simulation.invalidateCollisionResources()
+      this.store.adjustSpaceSize(this.config.spaceSize)
       this.syncScreenSize(true)
       this.update(this.store.isSimulationRunning ? this.store.alpha : 0)
     }
@@ -1939,15 +2144,12 @@ export class Graph implements PositionTextureSource {
     if (this.config.enableSimulation) {
       // Avoids running simulation against mid-interpolation positions.
       this.transition.end(true)
-      this.transition.dequeue(TransitionProperty.Positions)
       this.simulation.ensureSimulationModules()
-      this.points?.ensureSimulationResources()
       this.simulation.markForcesDirty()
-      // Rebuild simulation resources before binding programs to them.
-      this.create()
-      this.initPrograms()
+      // The rebuild: resolves pending inputs, sizes the textures, builds the
+      // simulation's resources and binds the programs, then reheats
+      this.update(1)
       this.store.simulationProgress = 0
-      this.store.alpha = 1
       this.store.isSimulationRunning = true
       this._shouldForceHoverDetection = true
       this.config.onSimulationStart?.()
@@ -2183,7 +2385,24 @@ export class Graph implements PositionTextureSource {
   *
   * @param simulationAlpha - Optional alpha value to set. If not provided, keeps current alpha.
   */
-  private update (simulationAlpha = this.store.alpha): void {
+  private update (simulationAlpha = this.store.alpha, { animate = false } = {}): void {
+    // Only render() starts a transition, so only render() may upload in animate mode. Any
+    // other rebuild applies every pending channel at once: a running cycle ends (the same
+    // interrupt start() gives a cycle that new data pre-empts, onTransitionEnd(true)
+    // included), the whole queue is dropped, updatePositions() writes the resolved
+    // positions straight into the drawn textures, and the other channels' targets show by
+    // themselves, since the draw mixes with a progress of 1 while no cycle is active. A
+    // queue entry left behind would make the next render() start it from progress 0 and
+    // rewind that channel to its old value. This runs before the resolve below, so a
+    // setter called from onTransitionEnd is part of this rebuild: resolved, uploaded, and
+    // not animated — resolved first, its input would be skipped and its flag spent.
+    if (!animate && this.transition.isPending) {
+      this.transition.end(true)
+      this.transition.dequeueAll()
+    }
+    // Every rebuild comes through here, from render() or from a config change, so the
+    // pending inputs are resolved here, before the texture sizes and the uploads read them
+    this.graph.update()
     this.simulation.updateTextureSizes()
     this.create()
     this.initPrograms()
@@ -2199,8 +2418,10 @@ export class Graph implements PositionTextureSource {
    *     Used by step() to allow manual stepping while the simulation is paused.
    *   - If false: Only runs if isSimulationRunning is true. Used during rendering
    *     to respect pause/unpause state.
+   * @param held - The step runs in a frame of the render loop, whose next frame waits for
+   *   the copies this one issues (SimulationStepOptions.held).
    */
-  private runSimulationStep (forceExecution = false): void {
+  private runSimulationStep (forceExecution = false, held = false): void {
     if (!this.config.enableSimulation) return
 
     // Right-click repulsion runs regardless of isSimulationRunning; a zoom
@@ -2209,7 +2430,7 @@ export class Graph implements PositionTextureSource {
     const enableSimulationDuringZoom = this.zoomInstance.shouldEnableSimulationDuringZoomOverride ?? this.config.enableSimulationDuringZoom
     const blockedByInteraction = this.zoomInstance.isRunning && !enableSimulationDuringZoom
 
-    const forcesRan = this.simulation.runSimulationStep(forceExecution, { applyMouseRepulsion, blockedByInteraction })
+    const forcesRan = this.simulation.runSimulationStep(forceExecution, { applyMouseRepulsion, blockedByInteraction, held })
 
     // The step moved the points — the picking buffers no longer match them
     if (forcesRan || applyMouseRepulsion) this.markPickingBuffersStale()
@@ -2231,7 +2452,8 @@ export class Graph implements PositionTextureSource {
     // Headless instances have nothing to draw; with `enableRenderLoop: false` the
     // host schedules frames instead (`step()` / `renderOneFrame()`).
     if (this._isHeadless || !this.config.enableRenderLoop) return
-    if (this.requestAnimationFrameId) return // frame already scheduled
+    // A frame already scheduled, or held for a pending copy — the held frame runs the request
+    if (this.requestAnimationFrameId || this.readbackWaitTimeoutId) return
     // Nothing renderable: before the first render(), or after render() cleared
     // the data. Without this guard a later pointermove would resurrect drawing
     // of stale GPU buffers (empty-data render() stops frames but doesn't clear
@@ -2240,20 +2462,60 @@ export class Graph implements PositionTextureSource {
 
     this.requestAnimationFrameId = window.requestAnimationFrame((now) => {
       this.requestAnimationFrameId = 0
-
-      // Check if simulation should end BEFORE rendering
-      // This prevents one extra simulation step after alpha decays below ALPHA_MIN
-      const { store: { alpha, isSimulationRunning } } = this
-      if (alpha < ALPHA_MIN && isSimulationRunning) {
-        this.end()
-      }
-
-      this.renderFrame(now)
-
-      if (!this._isDestroyed && this.shouldKeepRendering()) {
-        this.frame()
-      }
+      this.runFrame(now)
     })
+  }
+
+  /**
+   * Runs the frame `frame()` scheduled, unless a non-blocking copy is still on its way.
+   *
+   * A frame end issues the copies non-blocking reads asked for, behind a fence, and the next
+   * frame start collects them. Chrome's `getBufferSubData` waits for the GPU process to run
+   * every command queued before it, and a GPU-bound loop queues several frames ahead, so a
+   * copy collected behind those frames stalls the main thread for all of them and holds
+   * positions as many frames old. Holding the next frame until the fence signals keeps one
+   * frame in flight: the copy is collected with nothing queued ahead of it, one frame behind
+   * the drawn points. The timer catches the fence sooner than the next animation frame would.
+   * A fence that never signals is given up on after `READBACK_WAIT_CAP_MS`.
+   */
+  private runFrame (now: number): void {
+    if (this._isDestroyed) return
+
+    // Whether this hold waits for an occupancy copy, read before the cap can drop it: only
+    // then is the hold an occupancy reading's cost
+    const isOccupancyInFlight = this.simulation.hasPendingOccupancyReadback
+    // The simulation's copies (point pick, tracked positions, centroids, many-body cell
+    // occupancy) and the link pick, which lives on the renderer
+    if (this.simulation.isReadbackPending || this.lines?.isPickReadbackPending) {
+      if (!this.readbackWaitStartedAt) this.readbackWaitStartedAt = now
+      if (now - this.readbackWaitStartedAt < READBACK_WAIT_CAP_MS) {
+        this.readbackWaitTimeoutId = window.setTimeout(() => {
+          this.readbackWaitTimeoutId = 0
+          this.runFrame(performance.now())
+        }, READBACK_WAIT_POLL_MS)
+        return
+      }
+      this.simulation.cancelPendingReadbacks()
+      this.lines?.discardPendingPick()
+    }
+    // What the occupancy reading collected now cost: the whole hold, when one waited for it
+    const heldMs = this.readbackWaitStartedAt && isOccupancyInFlight ? now - this.readbackWaitStartedAt : 0
+    this.readbackWaitStartedAt = 0
+
+    // Check if simulation should end BEFORE rendering
+    // This prevents one extra simulation step after alpha decays below ALPHA_MIN
+    const { store: { alpha, isSimulationRunning } } = this
+    if (alpha < ALPHA_MIN && isSimulationRunning) {
+      this.end()
+    }
+
+    // Held only on a device the graph created: a host may draw to one it was given, and its
+    // work would queue behind the copy
+    this.renderFrame(now, this.simulation.ownsDevice ? heldMs : undefined)
+
+    if (!this._isDestroyed && this.shouldKeepRendering()) {
+      this.frame()
+    }
   }
 
   /**
@@ -2293,10 +2555,13 @@ export class Graph implements PositionTextureSource {
     // would stay occupied, blocking the next pick until something else wakes
     // the loop).
     if (this.points?.hasPendingPickReadback || this.lines?.hasPendingPickReadback) return true
-    // Same for a non-blocking tracked-positions or cluster-centroid readback: the
+    // Same for a non-blocking tracked, sampled or cluster-centroid readback: the
     // one issued after the simulation's last step must still be collected, or an
     // overlay reading with `nonBlocking` would stay a tick behind the settled layout.
-    if (this.points?.hasPendingTrackedReadback || this.simulation.hasPendingCentroidReadback) return true
+    // An occupancy copy too, so its fence is not left open across an idle loop.
+    if (this.points?.hasPendingTrackedReadback || this.points?.hasPendingSampledReadback ||
+      this.simulation.hasPendingCentroidReadback ||
+      this.simulation.hasPendingOccupancyReadback) return true
     return this.hasPendingHoverWork()
   }
 
@@ -2318,16 +2583,20 @@ export class Graph implements PositionTextureSource {
    * Renders a single frame. This does NOT schedule the next frame.
    * On an external device the frame runs under cosmos's GL state and hands the
    * host its own back afterwards.
+   * @param heldMs - Set for a frame of the render loop on the graph's own device, whose next
+   *   frame waits for the copies this one issues: how long it waited for an occupancy copy,
+   *   0 when it did not. Unset for a frame that does not hold (`renderOneFrame()`, a device the
+   *   host was given), which neither measures the occupancy nor collects a copy of it.
    */
-  private renderFrame (now?: number): void {
+  private renderFrame (now?: number, heldMs?: number): void {
     if (this._isDestroyed) return
     if (!this.store.pointsTextureSize) return
 
-    this.simulation.withExternalDeviceState(() => this.drawFrame(now))
+    this.simulation.withExternalDeviceState(() => this.drawFrame(now, heldMs))
   }
 
   /** The actual rendering logic of a frame. */
-  private drawFrame (now?: number): void {
+  private drawFrame (now?: number, heldMs?: number): void {
     const frameNow = now ?? performance.now()
     this.fpsMonitor?.begin()
     // Apply a screen-size change the observer flagged. Without a ResizeObserver
@@ -2338,12 +2607,15 @@ export class Graph implements PositionTextureSource {
       this.syncScreenSize()
     }
     // Collect before the frame queues GPU work: `getBufferSubData` waits behind
-    // whatever commands are already queued.
-    this.simulation.collectReadbacks()
+    // whatever commands are already queued. An occupancy copy only a held frame
+    // collects (SimulationStepOptions.held); any other drops it.
+    this.simulation.collectReadbacks(heldMs)
 
     const shouldInterpolatePositions = this.transition.isActiveFor(TransitionProperty.Positions)
     const shouldAnimatePointColors = this.transition.isActiveFor(TransitionProperty.PointColors)
     const shouldAnimatePointSizes = this.transition.isActiveFor(TransitionProperty.PointSizes)
+    const shouldAnimateStrokeColors = this.transition.isActiveFor(TransitionProperty.PointStrokeColors)
+    const shouldAnimateStrokeWidths = this.transition.isActiveFor(TransitionProperty.PointStrokeWidths)
     const shouldAnimateLinkColors = this.transition.isActiveFor(TransitionProperty.LinkColors)
     const shouldAnimateLinkWidths = this.transition.isActiveFor(TransitionProperty.LinkWidths)
     if (this.transition.isActive) {
@@ -2356,7 +2628,10 @@ export class Graph implements PositionTextureSource {
       }
     }
 
-    this.points?.setTransitionProgress(this.transition.progress, shouldAnimatePointColors, shouldAnimatePointSizes, shouldInterpolatePositions)
+    this.points?.setTransitionProgress(
+      this.transition.progress, shouldAnimatePointColors, shouldAnimatePointSizes, shouldInterpolatePositions,
+      shouldAnimateStrokeColors, shouldAnimateStrokeWidths
+    )
     this.lines?.setTransitionProgress(this.transition.progress, shouldAnimateLinkColors, shouldAnimateLinkWidths, shouldInterpolatePositions)
 
     if (!this.dragInstance.isActive) {
@@ -2368,7 +2643,7 @@ export class Graph implements PositionTextureSource {
 
     // Run simulation step (respects isSimulationRunning)
     // When simulation ends, forces stop but rendering continues
-    this.runSimulationStep(false)
+    this.runSimulationStep(false, heldMs !== undefined)
 
     // Create a single render pass for drawing (points, lines, etc.)
     // Simulation will use separate render passes later
@@ -2413,6 +2688,11 @@ export class Graph implements PositionTextureSource {
       window.cancelAnimationFrame(this.requestAnimationFrameId)
       this.requestAnimationFrameId = 0 // Reset to 0
     }
+    if (this.readbackWaitTimeoutId) {
+      window.clearTimeout(this.readbackWaitTimeoutId)
+      this.readbackWaitTimeoutId = 0
+    }
+    this.readbackWaitStartedAt = 0
   }
 
   /**
@@ -2522,7 +2802,7 @@ export class Graph implements PositionTextureSource {
    * to luma.gl's autoResize.
    *
    * Skips the work when the CSS size is unchanged. Pass `force` when state must
-   * be rebuilt at the same size (e.g. `spaceSize` remaps the world).
+   * be rebuilt at the same size (e.g. a new `spaceSize` moves the world origin).
    */
   private syncScreenSize (force = false): void {
     // Headless: no canvas, no screen — every view-dependent quantity stays inert.
@@ -2806,7 +3086,7 @@ export class Graph implements PositionTextureSource {
   }
 }
 
-export type { GraphConfig, GraphSimulationConfig, GraphSimulationConfigInterface } from './config'
+export type { GraphConfig, GraphSimulationConfig, GraphSimulationConfigInterface, PointStrokeShade, RepulsionQuality } from './config'
 export { GraphSimulation } from './simulation'
 export type { PointPositionTexture, PositionTextureSource } from './simulation'
 export type { PositionsReadOptions } from './simulation'
