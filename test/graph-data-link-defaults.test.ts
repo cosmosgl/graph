@@ -1,7 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { luma } from '@luma.gl/core'
 import { webgl2Adapter } from '@luma.gl/webgl'
-import { Graph } from '@cosmos.gl/graph'
+import { Graph, TransitionEasing } from '@cosmos.gl/graph'
 
 describe('resolving link defaults', () => {
   it('preserves caller NaNs and resolves updated defaults in getters and rendering', async () => {
@@ -73,6 +73,91 @@ describe('resolving link defaults', () => {
       expect(Array.from(graph.getLinkWidths())).toEqual([6])
     } finally {
       graph.destroy()
+      framebuffer.destroy()
+      texture.destroy()
+      device.canvasContext?.destroy()
+      device.destroy()
+    }
+  })
+
+  it('resolves NaN on both sides of an active color and width transition', async () => {
+    const canvas = document.createElement('canvas')
+    const device = await luma.createDevice({
+      type: 'webgl',
+      adapters: [webgl2Adapter],
+      createCanvasContext: { canvas },
+    })
+    const container = document.createElement('div')
+    container.style.width = '200px'
+    container.style.height = '200px'
+    document.body.appendChild(container)
+    const graph = new Graph(container, {
+      pixelRatio: 1,
+      enableSimulation: false,
+      enableRenderLoop: false,
+      fitViewOnInit: false,
+      rescalePositions: false,
+      pointDefaultSize: 0,
+      linkDefaultColor: '#ff0000',
+      linkDefaultWidth: 8,
+      scaleLinksOnZoom: false,
+      linkOpacity: 1,
+      transitionEasing: TransitionEasing.Linear,
+    }, Promise.resolve(device))
+    const texture = device.createTexture({ format: 'rgba8unorm', width: 200, height: 200 })
+    const framebuffer = device.createFramebuffer({ width: 200, height: 200, colorAttachments: [texture] })
+    let now: ReturnType<typeof vi.spyOn> | undefined
+    try {
+      graph.setPointPositions(new Float32Array([1948, 2048, 2148, 2048]))
+      graph.setLinks(new Float32Array([0, 1]))
+      graph.setLinkColors(new Float32Array([NaN, NaN, NaN, NaN]))
+      graph.setLinkWidths(new Float32Array([NaN]))
+      graph.render(undefined, 0)
+      await graph.ready
+      graph.setViewTransform({ k: 1, x: 0, y: 0 }, [200, 200])
+
+      const pixel = (): number[] => {
+        const pass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0] })
+        graph.drawToRenderPass(pass)
+        pass.end()
+        device.submit()
+        const pixels = device.readPixelsToArrayWebGL(framebuffer) as Uint8Array
+        return Array.from(pixels.subarray((100 * 200 + 100) * 4, (100 * 200 + 100) * 4 + 4))
+      }
+      const expectPurple = (rgba: number[]): void => {
+        expect(rgba[0]).toBeGreaterThan(0)
+        expect(rgba[1]).toBe(0)
+        expect(rgba[2]).toBeGreaterThan(0)
+        expect(Math.abs((rgba[0] as number) - (rgba[2] as number))).toBeLessThanOrEqual(1)
+        expect(rgba[3]).toBeGreaterThan(0)
+      }
+
+      // Default source -> explicit target. Freeze the host-driven transition exactly halfway.
+      now = vi.spyOn(performance, 'now').mockReturnValue(1000)
+      graph.setLinkColors(new Float32Array([0, 0, 1, 1]))
+      graph.setLinkWidths(new Float32Array([4]))
+      graph.render(undefined, 1000)
+      now.mockReturnValue(1500)
+      graph.renderOneFrame()
+      expect(graph.getLinkWidthByIndex(0)).toBe(6)
+      expectPurple(pixel())
+
+      // Finish at the explicit values, then run the reverse direction halfway.
+      now.mockReturnValue(2000)
+      graph.renderOneFrame()
+      expect(graph.getLinkWidthByIndex(0)).toBe(4)
+      graph.setLinkColors(new Float32Array([NaN, NaN, NaN, NaN]))
+      graph.setLinkWidths(new Float32Array([NaN]))
+      now.mockReturnValue(3000)
+      graph.render(undefined, 1000)
+      now.mockReturnValue(3500)
+      graph.renderOneFrame()
+      expect(graph.getLinkWidthByIndex(0)).toBe(6)
+      expectPurple(pixel())
+    } finally {
+      now?.mockRestore()
+      graph.destroy()
+      container.remove()
       framebuffer.destroy()
       texture.destroy()
       device.canvasContext?.destroy()
