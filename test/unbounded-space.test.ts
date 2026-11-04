@@ -726,22 +726,22 @@ describe('the collision hash counts cells from the world origin', () => {
     expect(Array.from(result.subarray(STACK * 2))).toEqual(Array.from(positions.subarray(STACK * 2)))
   })
 
-  it('resolves a dense cluster the same with one point far away', async () => {
+  it('leaves a dense cluster unchanged with one point far away', async () => {
     // One point 7400 units from the cluster. Nothing is measured from the
     // layout: the cell stays the contact range (12) and that point hashes to
     // a texel of its own. A cell sized to fit a fixed count over the layout's
-    // extent would weaken collision for the whole cluster.
+    // extent would change the cluster's collision response. Twenty-five
+    // successive rotation seeds cover changing hash aliases without waiting
+    // for the layouts to converge.
     const cluster = placeClusters(createCluster(COUNT, SIDE), [[500, 500]])
     const positions = new Float32Array(COUNT * 2 + 2)
     positions.set(cluster)
     positions.set([7900, 7900], COUNT * 2)
-    const alone = await runCollision(cluster, 100, { spaceSize: 8000 })
-    const result = await runCollision(positions, 100, { spaceSize: 8000 })
-    // Measured on SwiftShader: extent 512.2 with 15,374 overlapping pairs
-    // (from 41,137) — the cluster alone gives 509.9 and 15,350.
+    const alone = await runCollision(cluster, 25, { spaceSize: 8000 })
+    const result = await runCollision(positions, 25, { spaceSize: 8000 })
     const withOutlier = result.subarray(0, COUNT * 2)
-    expect(extentOf(withOutlier)).toBeGreaterThan(0.95 * extentOf(alone))
-    expect(countPairsCloserThan(result, 0, COUNT, 0.9 * 12)).toBeLessThan(1.05 * countPairsCloserThan(alone, 0, COUNT, 0.9 * 12))
+    const changedCoordinate = withOutlier.findIndex((value, index) => value !== alone[index])
+    expect(changedCoordinate, 'the outlier changed a cluster coordinate').toBe(-1)
     expect(Array.from(result.subarray(COUNT * 2))).toEqual([7900, 7900])
   })
 })

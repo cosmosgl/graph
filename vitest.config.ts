@@ -18,6 +18,12 @@ export default defineConfig({
     include: ['test/**/*.test.ts'],
     // Device init and shader compilation on SwiftShader are slow
     testTimeout: 30000,
+    // Browser workers are pages sharing one Chromium process. In CI every
+    // WebGL context uses CPU-backed SwiftShader, so parallel files compete for
+    // the same runner cores and make otherwise deterministic GPU tests cross
+    // their timeout. Keep local development parallel; give CI one full-speed
+    // browser page.
+    maxWorkers: process.env['CI'] ? 1 : undefined,
     browser: {
       enabled: true,
       headless: true,
