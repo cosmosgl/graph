@@ -10,7 +10,7 @@ Same day again? Use `-02`, `-03`, etc.
 **Topic slugs** name an area of the codebase or a feature, not an action — `gpu-transitions`, `points-rendering`, `simulation-cleanup` rather than `fix-issue-42` or `add-stuff`.
 
 **Useful content:**
-- commit hash(es) — `<!-- TODO -->` is fine if you write before merge
+- a verified PR link, or the change subject if the PR has yet to open. Cite a commit hash when the exact revision matters.
 - why the change happened
 - notes worth keeping (tradeoffs, migration, caveats)
 - a small matrix or table when behavior gets tangled
