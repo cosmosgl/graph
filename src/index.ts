@@ -335,6 +335,8 @@ export class Graph implements PositionTextureSource {
     resetConfigToDefaults(this.config)
     applyConfig(this.config, config)
     this.preserveInitOnlyFields(prevConfig)
+    this.graph.invalidateLinkDefaultColor()
+    if (this.lines) this.lines.isLinkIndexBufferStale = true
     this.updateStateFromConfig(prevConfig)
   }
 
@@ -354,6 +356,10 @@ export class Graph implements PositionTextureSource {
     const prevConfig = { ...this.config }
     applyConfig(this.config, config, true)
     this.preserveInitOnlyFields(prevConfig)
+    if ('linkDefaultColor' in config) {
+      this.graph.invalidateLinkDefaultColor()
+      if (this.lines) this.lines.isLinkIndexBufferStale = true
+    }
     this.updateStateFromConfig(prevConfig)
   }
 
@@ -663,6 +669,8 @@ export class Graph implements PositionTextureSource {
    * @param {Float32Array} linkColors - A Float32Array representing the colors of links in the format [r1, g1, b1, a1, r2, g2, b2, a2, ..., rn, gn, bn, an],
    * where each color is in RGBA format.
    * Example: `new Float32Array([1, 0, 0, 1, 0, 1, 0, 1])` sets the first link to red and the second link to green.
+   * A `NaN` channel uses the matching channel of `config.linkDefaultColor`; the input array is
+   * retained verbatim and is never filled or otherwise edited by the graph.
    * An array whose length does not match the link count is ignored: every link draws
    * `config.linkDefaultColor`. Pass an empty array to go back to the default.
    * On the next `render()` the change animates (`transitionDuration`), or applies at once, without
@@ -684,7 +692,11 @@ export class Graph implements PositionTextureSource {
    */
   public getLinkColors (): Float32Array {
     if (this._isDestroyed) return new Float32Array()
-    return this.graph.linkColors ?? new Float32Array()
+    const colors = this.graph.linkColors
+    if (!colors) return new Float32Array()
+    const resolved = new Float32Array(colors.length)
+    for (let i = 0; i < colors.length; i++) resolved[i] = this.graph.getResolvedLinkColorChannel(Math.floor(i / 4), i % 4)
+    return resolved
   }
 
   /**
@@ -693,6 +705,8 @@ export class Graph implements PositionTextureSource {
    * @param {Float32Array} linkWidths - A Float32Array representing the widths of links in the format [width1, width2, ..., widthn],
    * where `n` is the index of the link.
    * Example: `new Float32Array([1, 2, 3])` sets the first link to width 1, the second link to width 2, and the third link to width 3.
+   * A `NaN` width uses `config.linkDefaultWidth`; the input array is retained verbatim and is
+   * never filled or otherwise edited by the graph.
    * An array whose length does not match the link count is ignored: every link draws
    * `config.linkDefaultWidth`. Pass an empty array to go back to the default.
    * On the next `render()` the change animates (`transitionDuration`), or applies at once, without
@@ -715,7 +729,9 @@ export class Graph implements PositionTextureSource {
    */
   public getLinkWidths (): Float32Array {
     if (this._isDestroyed) return new Float32Array()
-    return this.graph.linkWidths ?? new Float32Array()
+    const widths = this.graph.linkWidths
+    if (!widths) return new Float32Array()
+    return Float32Array.from(widths, (_, index) => this.graph.getResolvedLinkWidth(index))
   }
 
   /**
@@ -730,7 +746,7 @@ export class Graph implements PositionTextureSource {
     if (width === undefined) return undefined
     return this.lines && this.transition.isActiveFor(TransitionProperty.LinkWidths)
       ? this.lines.getAnimatedWidth(index, this.transition.progress)
-      : width
+      : this.graph.getResolvedLinkWidth(index)
   }
 
   /**
@@ -1968,12 +1984,11 @@ export class Graph implements PositionTextureSource {
       this.points?.updateShape()
     }
     if (prevConfig.linkDefaultColor !== this.config.linkDefaultColor) {
-      this.graph.updateLinkColor()
-      this.lines?.updateColor()
+      this.graph.invalidateLinkDefaultColor()
+      if (this.lines) this.lines.isLinkIndexBufferStale = true
     }
     if (prevConfig.linkDefaultWidth !== this.config.linkDefaultWidth) {
-      this.graph.updateLinkWidth()
-      this.lines?.updateWidth()
+      if (this.lines) this.lines.isLinkIndexBufferStale = true
     }
     if (prevConfig.linkDefaultArrows !== this.config.linkDefaultArrows) {
       this.graph.updateArrows()
