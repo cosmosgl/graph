@@ -1,12 +1,10 @@
 import { luma } from '@luma.gl/core'
 import { webgl2Adapter, type WebGLDevice } from '@luma.gl/webgl'
-import type { BackendResult, CenterMassBackend } from './backend'
-import {
-  WEBGL_CENTER_FRAGMENT,
-  WEBGL_CENTER_VERTEX,
-  WEBGL_DRAW_FRAGMENT,
-  WEBGL_DRAW_VERTEX,
-} from './shaders'
+import type { BackendResult, CenterMassBackend } from '../backend'
+import centerFragment from './shaders/center.frag.glsl?raw'
+import centerVertex from './shaders/center.vert.glsl?raw'
+import drawFragment from './shaders/draw.frag.glsl?raw'
+import drawVertex from './shaders/draw.vert.glsl?raw'
 
 function createShader (gl: WebGL2RenderingContext, type: number, source: string): WebGLShader {
   const shader = gl.createShader(type)
@@ -75,8 +73,8 @@ export async function createWebGLCenterMass (
     throw new Error('EXT_float_blend is required for RGBA32F additive blending')
   }
 
-  const centerProgram = createProgram(gl, WEBGL_CENTER_VERTEX, WEBGL_CENTER_FRAGMENT)
-  const drawProgram = createProgram(gl, WEBGL_DRAW_VERTEX, WEBGL_DRAW_FRAGMENT)
+  const centerProgram = createProgram(gl, centerVertex, centerFragment)
+  const drawProgram = createProgram(gl, drawVertex, drawFragment)
   const positionBuffer = gl.createBuffer()
   const centerBuffer = gl.createBuffer()
   const centerTexture = gl.createTexture()

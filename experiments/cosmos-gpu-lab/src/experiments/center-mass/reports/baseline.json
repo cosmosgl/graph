@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "experiment": "center-mass",
+  "title": "Initial correctness smoke run",
+  "recordedAt": "2026-11-05",
+  "status": "Illustrative local smoke result — not a benchmark",
+  "commit": "b5119b6",
+  "environment": {
+    "browser": "Chromium development session",
+    "host": "Local macOS workstation",
+    "luma.gl": "10.0.0-alpha.4",
+    "WebGPU profile": "core"
+  },
+  "parameters": {
+    "points": 8192,
+    "point format": "float32x2",
+    "workgroup size": 256,
+    "WebGPU reduction passes": 2,
+    "readback": "every tick"
+  },
+  "results": [
+    {
+      "backend": "WebGL additive blend",
+      "values": {
+        "error vs CPU": "2.124e-9",
+        "representative warm tick": "~4.2 ms"
+      }
+    },
+    {
+      "backend": "WebGPU compute reduction",
+      "values": {
+        "error vs CPU": "3.252e-10",
+        "representative warm tick": "~0.9 ms"
+      }
+    }
+  ],
+  "notes": [
+    "Both backends consumed the same deterministic point snapshot on every tick.",
+    "The observed backend center delta was approximately 2.260e-9.",
+    "Displayed time includes upload, GPU execution, synchronization, readback and drawing.",
+    "The first tick includes pipeline and driver warm-up and should not be compared.",
+    "A repeatable benchmark needs warm-up, many samples, isolated backends and timestamp queries when available."
+  ]
+}
