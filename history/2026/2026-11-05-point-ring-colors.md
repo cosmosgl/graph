@@ -1,6 +1,7 @@
 # Outer-ring colors: automatic shades and per-point overrides
 
 **Date:** 2026-11-05
+**PR:** [#297](https://github.com/cosmosgl/graph/pull/297)
 
 ## Why
 
