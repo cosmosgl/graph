@@ -119,7 +119,7 @@ export async function createWebGLCenterMass (
     gl.bindFramebuffer(gl.FRAMEBUFFER, null)
     gl.viewport(0, 0, canvas.width, canvas.height)
     gl.disable(gl.BLEND)
-    gl.clearColor(0.025, 0.035, 0.055, 1)
+    gl.clearColor(0.09, 0.1, 0.12, 1)
     gl.clear(gl.COLOR_BUFFER_BIT)
 
     gl.useProgram(drawProgram)
