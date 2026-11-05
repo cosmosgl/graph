@@ -3,8 +3,9 @@ import type {
   ExperimentInstance,
   ExperimentPage,
 } from '../runtime/experiment'
+import vocabularySource from '../docs/vocabulary.md?raw'
 import { experiments, findExperiment } from './registry'
-import { experimentHref, readRoute } from './router'
+import { experimentHref, readRoute, vocabularyHref } from './router'
 
 function requiredElement<T extends HTMLElement> (host: ParentNode, selector: string): T {
   const element = host.querySelector<T>(selector)
@@ -12,7 +13,11 @@ function requiredElement<T extends HTMLElement> (host: ParentNode, selector: str
   return element
 }
 
-function renderNavigation (host: HTMLElement, activeId?: string): void {
+function renderNavigation (
+  host: HTMLElement,
+  activeId?: string,
+  activeReference?: 'vocabulary'
+): void {
   host.replaceChildren()
   const label = document.createElement('p')
   label.className = 'nav-label'
@@ -27,6 +32,19 @@ function renderNavigation (host: HTMLElement, activeId?: string): void {
     link.innerHTML = `<span>${experiment.title}</span><small>${experiment.tags[0] ?? 'experiment'}</small>`
     host.append(link)
   }
+
+  const referenceLabel = document.createElement('p')
+  referenceLabel.className = 'nav-label nav-label-reference'
+  referenceLabel.textContent = 'Reference'
+  host.append(referenceLabel)
+
+  const vocabulary = document.createElement('a')
+  vocabulary.href = vocabularyHref()
+  vocabulary.className = 'experiment-link reference-link'
+  vocabulary.classList.toggle('active', activeReference === 'vocabulary')
+  vocabulary.innerHTML = '<span>WebGPU vocabulary</span><small>guide</small>'
+  if (activeReference === 'vocabulary') vocabulary.setAttribute('aria-current', 'page')
+  host.append(vocabulary)
 }
 
 function renderHome (host: HTMLElement): void {
@@ -40,6 +58,14 @@ function renderHome (host: HTMLElement): void {
       </p>
     </section>
     <section class="experiment-grid" aria-label="Available experiments"></section>
+    <a class="reference-card" href="${vocabularyHref()}">
+      <span class="card-index">REFERENCE</span>
+      <span>
+        <strong>WebGPU vocabulary</strong>
+        <small>Core concepts, execution model, resources and Cosmos compute terms</small>
+      </span>
+      <span aria-hidden="true">→</span>
+    </a>
   `
   const grid = requiredElement<HTMLElement>(host, '.experiment-grid')
   for (const experiment of experiments) {
@@ -54,6 +80,25 @@ function renderHome (host: HTMLElement): void {
     `
     grid.append(link)
   }
+}
+
+function renderVocabularyFrame (host: HTMLElement): HTMLElement {
+  host.innerHTML = `
+    <header class="experiment-header reference-header">
+      <div>
+        <p class="eyebrow">Lab reference · WebGPU</p>
+        <h1>Vocabulary</h1>
+        <p>
+          A shared language for WebGPU resources, commands, shaders and the parallel
+          data structures used by Cosmos.
+        </p>
+      </div>
+    </header>
+    <section class="experiment-stage reference-stage">
+      <div class="loading">Loading vocabulary…</div>
+    </section>
+  `
+  return requiredElement<HTMLElement>(host, '.reference-stage')
 }
 
 function createTab (label: string, href: string, active: boolean): HTMLAnchorElement {
@@ -145,10 +190,27 @@ export function createAppShell (root: HTMLElement): void {
     const version = renderVersion
     destroyActive()
     const route = readRoute()
-    renderNavigation(navigation, route.kind === 'experiment' ? route.experimentId : undefined)
+    renderNavigation(
+      navigation,
+      route.kind === 'experiment' ? route.experimentId : undefined,
+      route.kind === 'vocabulary' ? 'vocabulary' : undefined
+    )
 
     if (route.kind === 'home') {
       renderHome(workspace)
+      return
+    }
+
+    if (route.kind === 'vocabulary') {
+      const stage = renderVocabularyFrame(workspace)
+      try {
+        const renderer = await import('./markdown')
+        if (version !== renderVersion) return
+        await renderer.renderMarkdown(stage, vocabularySource)
+      } catch (error) {
+        if (version !== renderVersion) return
+        renderFailure(stage, error)
+      }
       return
     }
 
