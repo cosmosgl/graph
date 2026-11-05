@@ -1,0 +1,11 @@
+export type PointRenderData = {
+  positions: Float32Array;
+  colors: Float32Array;
+  count: number;
+}
+
+export type PointRenderBackend = {
+  setData: (data: PointRenderData) => void;
+  render: (diameter: number) => void;
+  destroy: () => void;
+}
