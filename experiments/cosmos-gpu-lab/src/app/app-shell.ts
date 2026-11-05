@@ -176,10 +176,11 @@ function renderMissing (host: HTMLElement, id: string): void {
     <section class="empty-state">
       <p class="eyebrow">Not found</p>
       <h1>Unknown experiment</h1>
-      <p>No experiment is registered as <code>${id}</code>.</p>
+      <p>No experiment is registered as <code data-missing-id></code>.</p>
       <a class="button-link" href="#/">Return to the lab</a>
     </section>
   `
+  requiredElement<HTMLElement>(host, '[data-missing-id]').textContent = id
 }
 
 function renderFailure (host: HTMLElement, error: unknown): void {
