@@ -1,4 +1,5 @@
 import MarkdownIt from 'markdown-it'
+import { highlightWgsl } from './syntax-highlight'
 import { linkVocabularyTerms } from './vocabulary'
 
 type MarkdownOptions = {
@@ -57,8 +58,12 @@ export async function renderMarkdown (
   const defaultFence = markdown.renderer.rules.fence
   markdown.renderer.rules.fence = (tokens, index, options, environment, renderer): string => {
     const token = tokens[index]
-    if (token.info.trim() === 'mermaid') {
+    const language = token.info.trim().toLocaleLowerCase()
+    if (language === 'mermaid') {
       return `<div class="mermaid-source">${markdown.utils.escapeHtml(token.content)}</div>`
+    }
+    if (language === 'wgsl') {
+      return `<pre class="code-block code-block-wgsl" data-language="WGSL"><code>${highlightWgsl(token.content)}</code></pre>`
     }
     return defaultFence?.(tokens, index, options, environment, renderer) ??
       renderer.renderToken(tokens, index, options)
