@@ -4,7 +4,7 @@ import { webgl2Adapter } from '@luma.gl/webgl'
 import { Graph } from '@cosmos.gl/graph'
 
 /** An external device lets the tests draw exact pixels and detect resources surviving graph destruction. */
-const createScene = async (ringColors?: Float32Array): Promise<{
+const createScene = async (ringColors?: Float32Array, animated = false): Promise<{
   graph: Graph;
   device: Device;
   pixelAt: (spaceSize: number, x: number, y?: number, picking?: boolean) => number[];
@@ -15,10 +15,17 @@ const createScene = async (ringColors?: Float32Array): Promise<{
     adapters: [webgl2Adapter],
     createCanvasContext: { canvas: document.createElement('canvas') },
   })
-  const graph = new Graph(null, {
+  const div = animated ? document.createElement('div') : null
+  if (div) {
+    div.style.cssText = 'width:200px;height:200px'
+    document.body.appendChild(div)
+  }
+  const graph = new Graph(div, {
     spaceSize: 2048,
     pixelRatio: 1,
     enableSimulation: false,
+    enableRenderLoop: false,
+    fitViewOnInit: false,
     rescalePositions: false,
     scalePointsOnZoom: false,
     pointDefaultSize: 24,
@@ -48,6 +55,7 @@ const createScene = async (ringColors?: Float32Array): Promise<{
     texture.destroy()
     device.canvasContext?.destroy()
     device.destroy()
+    div?.remove()
   }
   return { graph, device, pixelAt, destroy }
 }
@@ -57,6 +65,83 @@ const expectColor = (actual: number[], expected: number[]): void => {
 }
 
 describe('outer ring colors', () => {
+  it('keeps pending ring colors unapplied through a stroke shader rebuild until render', async () => {
+    const { graph, pixelAt, destroy } = await createScene()
+    try {
+      graph.setPointRingColors(new Float32Array([0, 0, 1, 1]))
+      graph.setConfigPartial({ pointDefaultStrokeWidth: 1 })
+      expectColor(pixelAt(2048, 114), [255, 255, 255, 255])
+      graph.render()
+      expectColor(pixelAt(2048, 114), [0, 0, 255, 255])
+    } finally { destroy() }
+  })
+
+  it('releases ring colors when the graph becomes empty and recreates them when points return', async () => {
+    const { graph, pixelAt, destroy } = await createScene(new Float32Array([0, 0, 1, 1]))
+    try {
+      const resources = graph.simulation.points as unknown as { ringColorBuffer: Buffer | undefined }
+      const buffer = resources.ringColorBuffer
+      expect(buffer).toBeDefined()
+      graph.setPointPositions(new Float32Array(0))
+      graph.render()
+      expect(buffer?.destroyed).toBe(true)
+      expect(resources.ringColorBuffer).toBeUndefined()
+      graph.setPointPositions(new Float32Array([1000, 1000]))
+      graph.render()
+      expectColor(pixelAt(2048, 114), [0, 0, 255, 255])
+      expect(resources.ringColorBuffer).not.toBe(buffer)
+    } finally { destroy() }
+  })
+
+  it('uses the default for non-finite contrast and clamps finite contrast', async () => {
+    const { graph, pixelAt, destroy } = await createScene()
+    try {
+      graph.setConfigPartial({ outlinedPointRingColor: 'auto', outlinedPointRingContrast: 0.1 })
+      const fallback = pixelAt(2048, 114)
+      for (const contrast of [NaN, Infinity, -Infinity]) {
+        graph.setConfigPartial({ outlinedPointRingContrast: contrast })
+        expectColor(pixelAt(2048, 114), fallback)
+      }
+      graph.setConfigPartial({ outlinedPointRingContrast: 0 })
+      const zero = pixelAt(2048, 114)
+      graph.setConfigPartial({ outlinedPointRingContrast: -1 })
+      expectColor(pixelAt(2048, 114), zero)
+      graph.setConfigPartial({ outlinedPointRingContrast: 1 })
+      const one = pixelAt(2048, 114)
+      graph.setConfigPartial({ outlinedPointRingContrast: 2 })
+      expectColor(pixelAt(2048, 114), one)
+    } finally { destroy() }
+  })
+
+  it('shades rings from the interpolated fill during a color transition', async () => {
+    const scene = await createScene(undefined, true)
+    const reference = await createScene()
+    let clock: ReturnType<typeof vi.spyOn> | undefined
+    try {
+      scene.graph.setConfigPartial({ outlinedPointRingColor: 'auto', transitionEasing: 'linear' })
+      clock = vi.spyOn(performance, 'now').mockReturnValue(0)
+      scene.graph.setPointColors(new Float32Array([0, 0, 1, 1]))
+      scene.graph.render(undefined, 10000)
+      clock.mockReturnValue(5000)
+      scene.graph.renderOneFrame()
+      const midRing = scene.pixelAt(2048, 114)
+      expectColor(scene.pixelAt(2048, 100), [128, 0, 128, 255])
+      clock.mockRestore()
+      clock = undefined
+      reference.graph.setConfigPartial({ outlinedPointRingColor: 'auto' })
+      reference.graph.setPointColors(new Float32Array([0.5, 0, 0.5, 1]))
+      reference.graph.render()
+      expectColor(midRing, reference.pixelAt(2048, 114))
+      reference.graph.setPointColors(new Float32Array([0, 0, 1, 1]))
+      reference.graph.render()
+      expect(midRing).not.toEqual(reference.pixelAt(2048, 114))
+    } finally {
+      clock?.mockRestore()
+      scene.destroy()
+      reference.destroy()
+    }
+  })
+
   it('uploads ring colors only once when positions and colors change together', async () => {
     const { graph, pixelAt, destroy } = await createScene(new Float32Array([0, 0, 1, 1]))
     try {
@@ -209,15 +294,22 @@ describe('outer ring colors', () => {
       graph.setPointRingColors(new Float32Array([0, 0, 1, 1]))
       graph.setConfigPartial({ spaceSize: 4096 })
       expectColor(pixelAt(4096, 114), [0, 0, 255, 255])
-      graph.setPointPositions(new Float32Array([1000, 1000, 1100, 1000]))
+      graph.setPointPositions(new Float32Array([1000, 1000, 1060, 1000]))
       graph.render()
+      graph.setConfigPartial({ outlinedPointIndices: [0, 1] })
       expectColor(pixelAt(4096, 114), [255, 255, 255, 255])
+      expectColor(pixelAt(4096, 174), [255, 255, 255, 255])
       const resources = graph.simulation.points as unknown as { ringColorBuffer: Buffer | undefined }
       expect(resources.ringColorBuffer).toBeUndefined()
-      graph.setPointRingColors(new Float32Array([0, 1, 0, 1, NaN, NaN, NaN, NaN]))
+      graph.setPointRingColors(new Float32Array([0, 1, 0, 1, 0, 0, 1, 1]))
       graph.render()
       expectColor(pixelAt(4096, 114), [0, 255, 0, 255])
       expect(resources.ringColorBuffer?.byteLength).toBe(32)
+      expectColor(pixelAt(4096, 174), [0, 0, 255, 255])
+      graph.setPointRingColors(new Float32Array([0, 1, 0, 1, NaN, 0, 1, 1]))
+      graph.render()
+      expectColor(pixelAt(4096, 114), [0, 255, 0, 255])
+      expectColor(pixelAt(4096, 174), [255, 255, 255, 255])
       graph.setPointPositions(new Float32Array([1000, 1000]))
       graph.render()
       expectColor(pixelAt(4096, 114), [255, 255, 255, 255])

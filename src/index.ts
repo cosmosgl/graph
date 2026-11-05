@@ -1042,6 +1042,7 @@ export class Graph implements PositionTextureSource {
     if (!this.graph.pointsNumber && !this.graph.linksNumber) {
       // Nothing to upload, so update() won't run: resolve here so the getters see the empty graph
       this.graph.update()
+      this.points?.updateRingColor()
       this.points?.resetSampledReadback()
       this.stopFrames()
       // Headless: the canvas belongs to the host — never clear or submit its device.

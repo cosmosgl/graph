@@ -295,7 +295,10 @@ export interface GraphConfigInterface {
    */
   outlinedPointRingColor: PointStrokeShade | ColorString | [number, number, number, number];
 
-  /** OKLab lightness step for automatic outline ring colors. Default: `0.1`. */
+  /**
+   * OKLab lightness step for automatic outline ring colors, clamped to 0..1.
+   * Non-finite values use the default. Default: `0.1`.
+   */
   outlinedPointRingContrast: number;
 
   /**
