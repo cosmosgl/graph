@@ -634,6 +634,25 @@ button:disabled {
   text-underline-offset: 3px;
 }
 
+.prose .vocabulary-term-link {
+  color: inherit;
+  text-decoration-color: #8fc7b58c;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 1px;
+}
+
+.prose .vocabulary-term-link:hover {
+  color: #a9d8c9;
+  text-decoration-style: solid;
+}
+
+.prose h3.vocabulary-target {
+  margin-left: -12px;
+  padding-left: 10px;
+  border-left: 2px solid #8fc7b5;
+  color: #f3f4f4;
+}
+
 .prose code,
 .empty-state code {
   padding: 2px 5px;

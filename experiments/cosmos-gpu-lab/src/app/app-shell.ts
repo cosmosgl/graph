@@ -6,6 +6,7 @@ import type {
 import vocabularySource from '../docs/vocabulary.md?raw'
 import { experiments, findExperiment } from './registry'
 import { experimentHref, readRoute, vocabularyHref } from './router'
+import { indexVocabularyTerms } from './vocabulary'
 
 function requiredElement<T extends HTMLElement> (host: ParentNode, selector: string): T {
   const element = host.querySelector<T>(selector)
@@ -206,7 +207,15 @@ export function createAppShell (root: HTMLElement): void {
       try {
         const renderer = await import('./markdown')
         if (version !== renderVersion) return
-        await renderer.renderMarkdown(stage, vocabularySource)
+        await renderer.renderMarkdown(stage, vocabularySource, {}, false)
+        indexVocabularyTerms(stage)
+        if (route.termId) {
+          const target = document.getElementById(route.termId)
+          if (target && stage.contains(target)) {
+            target.classList.add('vocabulary-target')
+            target.scrollIntoView({ block: 'start' })
+          }
+        }
       } catch (error) {
         if (version !== renderVersion) return
         renderFailure(stage, error)

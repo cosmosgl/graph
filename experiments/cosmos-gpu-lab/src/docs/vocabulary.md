@@ -228,6 +228,23 @@ annotations, entry points and stricter validation than GLSL.
 
 A container for WGSL source parsed by the device. Pipelines select one or more named entry points from a module.
 
+### Compute shader
+
+A shader stage launched explicitly as a grid of workgroups. It reads and writes buffers or storage textures without
+rasterizing geometry. Compute shaders are the WebGPU replacement for many full-screen fragment passes currently used by
+Cosmos simulation.
+
+### Vertex shader
+
+The render stage that produces clip-space vertex positions and optional values for interpolation. It can consume vertex
+buffers, built-in indices, uniforms and read-only storage buffers.
+
+### Fragment shader
+
+The render stage that computes color or other attachment outputs for rasterized fragments. A fragment shader runs only
+after primitives have been assembled and rasterized; unlike a compute shader, its invocation grid is not dispatched
+directly by the application.
+
 ### Entry point
 
 A shader function marked `@compute`, `@vertex` or `@fragment`. One module can contain several entry points.

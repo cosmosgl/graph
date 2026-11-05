@@ -1,4 +1,5 @@
 import MarkdownIt from 'markdown-it'
+import { linkVocabularyTerms } from './vocabulary'
 
 let diagramId = 0
 let mermaidInitialized = false
@@ -39,7 +40,8 @@ async function renderDiagrams (host: HTMLElement): Promise<void> {
 export async function renderMarkdown (
   host: HTMLElement,
   source: string,
-  assets: Record<string, string> = {}
+  assets: Record<string, string> = {},
+  linkTerms = true
 ): Promise<void> {
   const markdown = new MarkdownIt({
     html: false,
@@ -70,5 +72,6 @@ export async function renderMarkdown (
   }
 
   host.innerHTML = `<article class="prose">${markdown.render(source)}</article>`
+  if (linkTerms) linkVocabularyTerms(host)
   await renderDiagrams(host)
 }
