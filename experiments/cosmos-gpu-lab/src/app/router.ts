@@ -1,5 +1,6 @@
 export type AppRoute =
   | { kind: 'home' }
+  | { kind: 'vocabulary' }
   | { kind: 'experiment'; experimentId: string; pageId?: string }
 
 export function readRoute (): AppRoute {
@@ -9,6 +10,7 @@ export function readRoute (): AppRoute {
     .filter(Boolean)
 
   if (segments.length === 0) return { kind: 'home' }
+  if (segments[0] === 'vocabulary') return { kind: 'vocabulary' }
 
   return {
     kind: 'experiment',
@@ -17,6 +19,10 @@ export function readRoute (): AppRoute {
       ? decodeURIComponent(segments[2])
       : undefined,
   }
+}
+
+export function vocabularyHref (): string {
+  return '#/vocabulary'
 }
 
 export function experimentHref (experimentId: string, pageId?: string): string {

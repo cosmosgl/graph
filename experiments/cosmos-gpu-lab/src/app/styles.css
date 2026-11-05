@@ -101,6 +101,10 @@ a {
   margin: 0 8px 10px;
 }
 
+.nav-label-reference {
+  margin-top: 26px;
+}
+
 .experiment-link {
   display: flex;
   align-items: center;
@@ -205,6 +209,43 @@ h1 {
   transform: translateY(-2px);
 }
 
+.reference-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18px;
+  margin-top: 14px;
+  padding: 18px 20px;
+  border: 1px solid #414853;
+  border-radius: 7px;
+  color: #c8cbd0;
+  background: #292e36;
+  text-decoration: none;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.reference-card:hover {
+  border-color: #69727f;
+  background: #30353d;
+}
+
+.reference-card strong,
+.reference-card small {
+  display: block;
+}
+
+.reference-card strong {
+  color: #e6e7e9;
+  font-size: 14px;
+  font-weight: 520;
+}
+
+.reference-card small {
+  margin-top: 3px;
+  color: #9fa4ad;
+  font-size: 11px;
+}
+
 .card-index {
   color: #8fc7b5;
   font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -277,6 +318,14 @@ h1 {
 
 .experiment-stage {
   padding-top: 28px;
+}
+
+.reference-header {
+  border-bottom: 1px solid #414751;
+}
+
+.reference-stage {
+  padding-top: 38px;
 }
 
 .loading {
