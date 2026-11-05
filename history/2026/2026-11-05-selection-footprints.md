@@ -78,6 +78,13 @@ image-index removal and complete scans of 2,048- and 2,051-vertex paths.
 Story checks cover drag/zoom previews, preset and resize zoom continuity,
 resized point placement, caption clearing and moving degenerate rectangles.
 
+The comparisons below show untouched main on the left and overlap selection
+on the right, using the same demo layout and outline. Blue points are selected.
+
+![Freehand lasso edge overlap before and after](assets/2026-11-05-selection-footprints/lasso-edge-overlap.png)
+
+![Rectangle corner overlap before and after](assets/2026-11-05-selection-footprints/rectangle-corner.png)
+
 ## Performance evidence
 
 A temporary harness measured synchronous public queries, including uploads,
