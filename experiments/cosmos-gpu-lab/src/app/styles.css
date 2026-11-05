@@ -769,6 +769,7 @@ button:disabled {
 
 .prose pre,
 .empty-state pre {
+  position: relative;
   overflow-x: auto;
   padding: 16px;
   border: 1px solid #414751;
@@ -779,6 +780,60 @@ button:disabled {
 .prose pre code {
   padding: 0;
   background: none;
+}
+
+.prose .code-block {
+  padding: 38px 18px 18px;
+  tab-size: 2;
+}
+
+.prose .code-block::before {
+  position: absolute;
+  top: 11px;
+  right: 14px;
+  color: #818893;
+  content: attr(data-language);
+  font: 9px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.12em;
+}
+
+.prose .code-block code {
+  color: #d4d7dc;
+  font-size: 12px;
+  line-height: 1.62;
+}
+
+.syntax-attribute {
+  color: #d5bd83;
+}
+
+.syntax-keyword {
+  color: #c7a7d8;
+}
+
+.syntax-type {
+  color: #89c7ce;
+}
+
+.syntax-function {
+  color: #91b7da;
+}
+
+.syntax-number {
+  color: #dba47f;
+}
+
+.syntax-string {
+  color: #a8c98c;
+}
+
+.syntax-comment {
+  color: #7f8791;
+  font-style: italic;
+}
+
+.syntax-operator {
+  color: #b9bdc5;
 }
 
 .prose table {
