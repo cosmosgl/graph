@@ -169,8 +169,9 @@ function buildControls (handlers: ControlHandlers): HTMLDivElement {
  * The inset stroke and the selection rings side by side. The stroke is a rendering style every
  * point carries, drawn inside the edge in a shade of the point's own color (or white here); the
  * rings are selection marks — `outlinedPointIndices`, the hover ring, the focused point — drawn
- * outside the body in one uniform color. With highlighting on, greyed points keep a greyed
- * stroke and a dimmed outline ring.
+ * outside the body. This example uses a shared outline color; outer rings also support
+ * fill-derived shades and per-point colors. Hover and focus have their own configured colors.
+ * With highlighting on, greyed points keep a greyed stroke and a dimmed outline ring.
  */
 export const strokeAndRings = (): { div: HTMLDivElement; graph: Graph } => {
   const div = document.createElement('div')

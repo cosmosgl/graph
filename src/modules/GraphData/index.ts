@@ -56,6 +56,8 @@ const toPointPairs = (linksByPoint: LinksByPoint | undefined): PointPairs | unde
 export class GraphData {
   public inputPointPositions: Float32Array | undefined
   public inputPointColors: Float32Array | undefined
+  /** Raw per-point outer-ring RGBA; any NaN channel uses the configured ring color for the point. */
+  public inputPointRingColors: Float32Array | undefined
   public inputPointSizes: Float32Array | undefined
   /** Raw per-point stroke colors from `setPointStrokeColors` (RGBA, `NaN` = use the default). */
   public inputPointStrokeColors: Float32Array | undefined

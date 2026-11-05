@@ -174,6 +174,21 @@ This method retrieves the current sizes of the graph points that were previously
 
 The returned array contains the processed point sizes used for rendering, including any default values that were applied during processing. While point sizes transition, it holds the target sizes; `getPointRadiusByIndex` moves with the animation.
 
+### <a name="set_point_ring_colors" href="#set_point_ring_colors">#</a> graph.<b>setPointRingColors</b>(<i>colors</i>)
+
+Sets outer-ring colors for points listed in `outlinedPointIndices`.
+
+* **`colors`** (Float32Array): RGBA per point in 0..1, `[r1, g1, b1, a1, r2, g2, b2, a2, ...]`, aligned to the point index space. Any `NaN` channel uses `outlinedPointRingColor` for that entire point, including its `auto`, `darken`, or `lighten` rule. An array whose length differs from four times the point count uses the default everywhere; pass an empty array to clear per-point colors.
+
+Call `render()` to apply. Ring-color updates apply immediately without a transition; automatic colors follow animated point fills.
+
+**Example:**
+```javascript
+graph.setConfigPartial({ outlinedPointIndices: [0, 1], outlinedPointRingColor: 'auto' });
+graph.setPointRingColors(new Float32Array([1, 0, 0, 1, NaN, NaN, NaN, NaN]));
+graph.render(); // first ring red; second derived from its point's fill
+```
+
 ### <a name="set_point_stroke_colors" href="#set_point_stroke_colors">#</a> graph.<b>setPointStrokeColors</b>(<i>pointStrokeColors</i>)
 
 Sets per-point stroke colors — the thin band along the inside edge of each point, enabled by `pointDefaultStrokeWidth` or `setPointStrokeWidths`.
