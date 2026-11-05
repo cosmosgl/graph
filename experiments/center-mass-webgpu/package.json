@@ -1,0 +1,22 @@
+{
+  "name": "@cosmos.gl/experiment-center-mass-webgpu",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@luma.gl/core": "10.0.0-alpha.4",
+    "@luma.gl/engine": "10.0.0-alpha.4",
+    "@luma.gl/shadertools": "10.0.0-alpha.4",
+    "@luma.gl/webgl": "10.0.0-alpha.4",
+    "@luma.gl/webgpu": "10.0.0-alpha.4"
+  },
+  "devDependencies": {
+    "typescript": "7.0.2",
+    "vite": "catalog:"
+  }
+}
