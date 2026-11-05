@@ -1347,28 +1347,45 @@ export class Graph implements PositionTextureSource {
   }
 
   /**
-   * Find point indices inside a rectangular area.
+   * Find point indices whose selection footprints touch a rectangular area.
+   * Uses resolved target sizes throughout size transitions, with the current zoom,
+   * pixel-size floor and hardware size cap. Outline rings are excluded.
+   * Circles and squares use their shape geometry; other shapes and images use a circle.
+   * Shape None retains a circular selection footprint even without an image.
    *
    * **Important:** This method is synchronous and must only be called when the graph is ready.
    * Ensure `await graph.ready` has resolved (or use the result inside `graph.ready.then(...)`) before
    * calling. If called before initialization completes, returns an empty array.
    *
-   * @param rect - Array of two corner points `[[left, top], [right, bottom]]`.
+   * @param rect - Two opposite corners, typically `[[left, top], [right, bottom]]`.
+   * Reversed coordinates are normalized automatically.
    * The coordinates should be from 0 to the width/height of the canvas.
-   * @returns Array of point indices inside the rectangle.
+   * @returns Array of point indices whose selection footprints touch or overlap the rectangle.
    */
   public findPointsInRect (rect: [[number, number], [number, number]]): number[] {
     if (this._isDestroyed) return []
     if (!this.isReady || !this.device || !this.points) return []
 
+    const [[x0, y0], [x1, y1]] = rect
+    const left = Math.min(x0, x1)
+    const right = Math.max(x0, x1)
+    const top = Math.min(y0, y1)
+    const bottom = Math.max(y0, y1)
     const h = this.store.screenSize[1]
-    this.store.searchArea = [[rect[0][0], (h - rect[1][1])], [rect[1][0], (h - rect[0][1])]]
+    // Order bounds before the Y flip: the shader's clamp requires min <= max.
+    this.store.searchArea = [[left, h - bottom], [right, h - top]]
     if (!this.points.findPointsInRect()) return []
     return extractIndicesFromPixels(readPixels(this.device, this.points.searchFbo as Framebuffer), this.graph.pointsNumber)
   }
 
   /**
-   * Find point indices inside a polygon area.
+   * Find point indices whose selection footprints touch a polygon area.
+   * Degenerate paths with at least three vertices select footprints touching their segments,
+   * including a single location when all vertices coincide.
+   * Uses resolved target sizes throughout size transitions, with the current zoom,
+   * pixel-size floor and hardware size cap. Outline rings are excluded.
+   * Circles and squares use their shape geometry; other shapes and images use a circle.
+   * Shape None retains a circular selection footprint even without an image.
    *
    * **Important:** This method is synchronous and must only be called when the graph is ready.
    * Ensure `await graph.ready` has resolved (or use the result inside `graph.ready.then(...)`) before
@@ -1376,7 +1393,7 @@ export class Graph implements PositionTextureSource {
    *
    * @param polygonPath - Array of points `[[x1, y1], [x2, y2], ..., [xn, yn]]` that defines the polygon.
    * The coordinates should be from 0 to the width/height of the canvas.
-   * @returns Array of point indices inside the polygon.
+   * @returns Array of point indices whose selection footprints touch or overlap the polygon.
    */
   public findPointsInPolygon (polygonPath: [number, number][]): number[] {
     if (this._isDestroyed) return []

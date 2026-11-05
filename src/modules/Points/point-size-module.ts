@@ -2,9 +2,9 @@ import type { ShaderModule } from '@luma.gl/shadertools'
 import pointSizeGlsl from '@/graph/modules/Points/point-size.glsl?raw'
 
 /**
- * Shared GLSL for a point's on-screen size. Used by draw-points.vert, draw-highlighted.vert,
- * fill-picking-buffer.vert and find-points-in-rect.frag, so the drawn sprite, its ring, its
- * pickable footprint and its selection footprint agree.
+ * Shared size scaling, zoom and hardware-cap calculation for draw-points.vert,
+ * draw-highlighted.vert, fill-picking-buffer.vert and the area-selection shaders.
+ * Callers apply pixel-size floors and shape or ring geometry separately.
  */
 export const pointSizeModule: ShaderModule = {
   name: 'pointSize',
