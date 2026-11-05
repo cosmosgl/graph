@@ -635,15 +635,120 @@ button:disabled {
 }
 
 .prose .vocabulary-term-link {
+  display: inline;
+  margin: 0;
+  padding: 0;
+  border: 0;
   color: inherit;
+  background: none;
+  font: inherit;
+  line-height: inherit;
+  text-align: inherit;
+  cursor: help;
+  text-decoration-line: underline;
   text-decoration-color: #8fc7b58c;
   text-decoration-style: dotted;
   text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
 }
 
-.prose .vocabulary-term-link:hover {
+.prose .vocabulary-term-link:hover,
+.prose .vocabulary-term-link:focus-visible,
+.prose .vocabulary-term-link[aria-expanded="true"] {
   color: #a9d8c9;
   text-decoration-style: solid;
+}
+
+.prose .vocabulary-term-link:focus-visible {
+  border-radius: 2px;
+  outline: 2px solid #8fc7b5;
+  outline-offset: 3px;
+}
+
+.glossary-popover {
+  position: fixed;
+  z-index: 30;
+  display: block;
+  width: min(340px, calc(100vw - 24px));
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
+  padding: 15px 16px 13px;
+  border: 1px solid #535b66;
+  border-radius: 7px;
+  color: #cfd2d7;
+  background: #292e36;
+  box-shadow: 0 16px 38px #080a0d66, 0 2px 7px #080a0d80;
+  font-size: 13px;
+  line-height: 1.55;
+  text-align: left;
+}
+
+.glossary-popover::before {
+  position: absolute;
+  top: 0;
+  left: var(--glossary-anchor-x);
+  width: 9px;
+  height: 9px;
+  border-top: 1px solid #535b66;
+  border-left: 1px solid #535b66;
+  background: #292e36;
+  content: '';
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.glossary-popover.place-above::before {
+  top: auto;
+  bottom: 0;
+  transform: translate(-50%, 50%) rotate(225deg);
+}
+
+.glossary-popover-title,
+.glossary-popover-summary,
+.glossary-popover-footer {
+  display: block;
+}
+
+.glossary-popover-title {
+  margin-bottom: 5px;
+  color: #f0f1f2;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.glossary-popover-summary {
+  color: #c2c6cc;
+}
+
+.glossary-popover-footer {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 11px;
+  padding-top: 10px;
+  border-top: 1px solid #414751;
+}
+
+.glossary-popover a {
+  color: #9bd0bf;
+  font-weight: 520;
+  text-decoration: none;
+}
+
+.glossary-popover a:hover,
+.glossary-popover a:focus-visible {
+  color: #b4e0d2;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.glossary-popover-hint {
+  flex: none;
+  color: #898f98;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
 }
 
 .prose h3.vocabulary-target {
