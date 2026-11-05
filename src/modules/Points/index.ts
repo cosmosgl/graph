@@ -16,6 +16,7 @@ import drawHighlightedFrag from '@/graph/modules/Points/draw-highlighted.frag?ra
 import drawHighlightedVert from '@/graph/modules/Points/draw-highlighted.vert?raw'
 import fillPickingBufferFrag from '@/graph/modules/Points/fill-picking-buffer.frag?raw'
 import fillPickingBufferVert from '@/graph/modules/Points/fill-picking-buffer.vert?raw'
+import { PointShape } from '@/graph/modules/GraphData'
 import { pointSizeModule } from '@/graph/modules/Points/point-size-module'
 import { exitRampModule } from '@/graph/modules/Points/exit-ramp-module'
 import { pickingColorModule } from '@/graph/modules/Shared/picking-color-module'
@@ -312,15 +313,17 @@ export class Points extends CoreModule implements PointTrackerHost {
   private issuedPickingWindow: PickingWindow | undefined
   private pinnedStatusTexture: Texture | undefined
   /**
-   * Per-point footprint (`GraphData.getResolvedPointFootprint`), read by the
-   * rect-selection shader. Rebuilt lazily by `findPointsInRect` when
-   * `isSizeTextureStale` — any size, image-size, image-index or image-set update
-   * can change a footprint, and most graphs never rect-select.
+   * Target footprint size (R, from `GraphData.getResolvedPointFootprint`) and
+   * square flag (G), shared by rectangle and polygon selection. Rebuilt lazily
+   * by either query when `isSizeTextureStale`. Size, shape, image-size,
+   * image-index and image-set updates can change the selection footprint.
    */
   private sizeTexture: Texture | undefined
   private isSizeTextureStale = true
   private polygonPathTexture: Texture | undefined
   private polygonPathLength = 0
+  private polygonBounds0: [number, number] = [0, 0]
+  private polygonBounds1: [number, number] = [0, 0]
   private drawPointIndices: Buffer | undefined
   /**
    * Uint32 element indices holding `GraphData.pointRenderOrder` (back to front), bound to
@@ -442,6 +445,12 @@ export class Points extends CoreModule implements PointTrackerHost {
       screenSize: [number, number];
       transformationMatrix: Mat4Array;
       polygonPathLength: number;
+      sizeScale: number;
+      ratio: number;
+      scalePointsOnZoom: number;
+      maxPointSize: number;
+      polygonBounds0: [number, number];
+      polygonBounds1: [number, number];
     };
   }> | undefined
 
@@ -993,7 +1002,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.findPointsInRectCommand ||= new Model(device, {
       fs: findPointsInRectFrag,
       vs: updateVert,
-      modules: [pointSizeModule],
+      modules: [pointSizeModule, shapeGeometryModule],
       topology: 'triangle-strip',
       vertexCount: 4,
       attributes: {
@@ -1028,12 +1037,24 @@ export class Points extends CoreModule implements PointTrackerHost {
           screenSize: 'vec2<f32>',
           transformationMatrix: 'mat4x4<f32>',
           polygonPathLength: 'f32',
+          sizeScale: 'f32',
+          ratio: 'f32',
+          scalePointsOnZoom: 'f32',
+          maxPointSize: 'f32',
+          polygonBounds0: 'vec2<f32>',
+          polygonBounds1: 'vec2<f32>',
         },
         defaultUniforms: {
           worldOrigin: store.worldOrigin,
           screenSize: ensureVec2(store.screenSize, [0, 0]),
           transformationMatrix: store.transformationMatrix4x4,
           polygonPathLength: this.polygonPathLength,
+          sizeScale: config.pointSizeScale,
+          ratio: config.pixelRatio,
+          scalePointsOnZoom: config.scalePointsOnZoom ? 1 : 0,
+          maxPointSize: store.maxPointSize,
+          polygonBounds0: this.polygonBounds0,
+          polygonBounds1: this.polygonBounds1,
         },
       },
     })
@@ -1041,6 +1062,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.findPointsInPolygonCommand ||= new Model(device, {
       fs: findPointsInPolygonFrag,
       vs: updateVert,
+      modules: [pointSizeModule, shapeGeometryModule],
       topology: 'triangle-strip',
       vertexCount: 4,
       attributes: {
@@ -1639,6 +1661,7 @@ export class Points extends CoreModule implements PointTrackerHost {
   }
 
   public updateShape (): void {
+    this.isSizeTextureStale = true
     const { device, data } = this
     if (data.pointsNumber === undefined || data.pointShapes === undefined) return
 
@@ -2458,6 +2481,8 @@ export class Points extends CoreModule implements PointTrackerHost {
   public findPointsInPolygon (): boolean {
     if (!this.findPointsInPolygonCommand || !this.findPointsInPolygonUniformStore || !this.searchFbo || this.searchFbo.destroyed) return false
     if (!this.currentPositionTexture || this.currentPositionTexture.destroyed) return false
+    if (this.isSizeTextureStale) this.updateSizeTexture()
+    if (!this.sizeTexture || this.sizeTexture.destroyed) return false
     if (!this.polygonPathTexture || this.polygonPathTexture.destroyed) return false
     if (!this.exitTexture) this.updateExit()
     if (!this.exitTexture || this.exitTexture.destroyed) return false
@@ -2468,12 +2493,19 @@ export class Points extends CoreModule implements PointTrackerHost {
         screenSize: ensureVec2(this.store.screenSize, [0, 0]),
         transformationMatrix: this.store.transformationMatrix4x4,
         polygonPathLength: this.polygonPathLength,
+        sizeScale: this.config.pointSizeScale,
+        ratio: this.config.pixelRatio,
+        scalePointsOnZoom: this.config.scalePointsOnZoom ? 1 : 0,
+        maxPointSize: this.store.maxPointSize,
+        polygonBounds0: this.polygonBounds0,
+        polygonBounds1: this.polygonBounds1,
       },
     })
 
     // Update texture bindings dynamically
     this.findPointsInPolygonCommand.setBindings({
       positionsTexture: this.currentPositionTexture,
+      pointSize: this.sizeTexture,
       polygonPathTexture: this.polygonPathTexture,
       exitTexture: this.exitTexture,
     })
@@ -2502,14 +2534,31 @@ export class Points extends CoreModule implements PointTrackerHost {
     const textureSize = Math.ceil(Math.sqrt(polygonPath.length))
     const textureData = new Float32Array(textureSize * textureSize * 4)
 
-    // Fill texture with polygon path points
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+    // Calculate bounds during the existing upload pass. Use the float32 values
+    // the shader reads, so rounding cannot make the rejection box too small.
     for (const [i, point] of polygonPath.entries()) {
       const [x, y] = point
       textureData[i * 4] = x
       textureData[i * 4 + 1] = y
-      textureData[i * 4 + 2] = 0 // unused
-      textureData[i * 4 + 3] = 0 // unused
+      // Pack each segment's endpoints together for one shader texture read.
+      // Keeping endpoints avoids rounding from reconstructing one as start + delta.
+      const [nextX, nextY] = polygonPath[(i + 1) % polygonPath.length]!
+      textureData[i * 4 + 2] = nextX
+      textureData[i * 4 + 3] = nextY
+      const storedX = textureData[i * 4] as number
+      const storedY = textureData[i * 4 + 1] as number
+      minX = Math.min(minX, storedX)
+      minY = Math.min(minY, storedY)
+      maxX = Math.max(maxX, storedX)
+      maxY = Math.max(maxY, storedY)
     }
+
+    this.polygonBounds0 = [minX, minY]
+    this.polygonBounds1 = [maxX, maxY]
 
     if (!this.polygonPathTexture || this.polygonPathTexture.width !== textureSize || this.polygonPathTexture.height !== textureSize) {
       if (this.polygonPathTexture && !this.polygonPathTexture.destroyed) {
@@ -3288,7 +3337,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
   /**
    * A footprint changed — sizes, image sizes, image indices or the image set — so the
-   * picking buffer and the rect-selection texture both rebuild on their next read.
+   * picking buffer and the shared area-selection texture rebuild on their next read.
    */
   private markFootprintsStale (): void {
     this.isPickingBufferStale = true
@@ -3296,10 +3345,10 @@ export class Points extends CoreModule implements PointTrackerHost {
   }
 
   /**
-   * Rebuilds `sizeTexture` from the current footprints. Called by `findPointsInRect`
-   * when `isSizeTextureStale`, never eagerly: sizes, image sizes, image indices and
-   * the image set arrive as separate updates, and rebuilding on each would upload
-   * the texture several times per data change.
+   * Rebuilds `sizeTexture` from target footprints and shape flags. Called by
+   * either area query when `isSizeTextureStale`. Sizes, shapes, image sizes,
+   * image indices and the image set arrive separately, so rebuilding lazily
+   * avoids uploading the texture several times per data change.
    */
   private updateSizeTexture (): void {
     const { device, store: { pointsTextureSize }, data } = this
@@ -3308,6 +3357,9 @@ export class Points extends CoreModule implements PointTrackerHost {
     const footprints = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
     for (let i = 0; i < data.pointsNumber; i++) {
       footprints[i * 4] = data.getResolvedPointFootprint(i)
+      // Images retain the circular approximation. Untextured squares use
+      // their rendered bounds, sharing SQUARE_HALF_SIZE with the draw.
+      footprints[i * 4 + 1] = !data.pointDrawsImage(i) && data.pointShapes?.[i] === PointShape.Square ? 1 : 0
     }
 
     if (!this.sizeTexture || this.sizeTexture.width !== pointsTextureSize || this.sizeTexture.height !== pointsTextureSize) {

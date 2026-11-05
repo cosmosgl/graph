@@ -1,0 +1,90 @@
+.selection-edges {
+  position: relative;
+  height: 100vh;
+  min-height: 420px;
+  overflow: hidden;
+  background: #2d313a;
+  color: #d6dbe6;
+  font: 12px "Nunito Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+.selection-edges .selection-canvas,
+.selection-edges svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.selection-edges svg {
+  z-index: 1;
+  touch-action: none;
+  user-select: none;
+  cursor: crosshair;
+}
+.selection-edges .selection-panel {
+  position: absolute;
+  z-index: 2;
+  top: 16px;
+  left: 16px;
+  right: 16px;
+  max-width: 600px;
+  padding: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  background: rgba(20, 24, 34, 0.94);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.selection-edges .selection-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.selection-edges .selection-group {
+  display: flex;
+  gap: 4px;
+}
+.selection-edges button {
+  border: 1px solid transparent;
+  border-radius: 5px;
+  padding: 6px 9px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #aab3c5;
+  font: inherit;
+  cursor: pointer;
+}
+.selection-edges button:hover {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.13);
+}
+.selection-edges button[aria-pressed="true"] {
+  color: #9ec5ff;
+  background: rgba(158, 197, 255, 0.12);
+  border-color: rgba(158, 197, 255, 0.4);
+}
+.selection-edges .selection-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-top: 10px;
+  margin-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+.selection-edges .selection-footer {
+  position: absolute;
+  z-index: 2;
+  bottom: 16px;
+  left: 16px;
+  right: 16px;
+  pointer-events: none;
+  line-height: 1.6;
+}
+.selection-edges .selection-hint {
+  color: #aab3c5;
+}
+.selection-edges .selection-result {
+  color: #9ec5ff;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.selection-edges .selection-caption {
+  color: #d6dbe6;
+}

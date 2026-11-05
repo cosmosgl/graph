@@ -43,8 +43,8 @@ uniform float maxPointSize;
 
 out vec4 fragColor;
 
-// The drawn size (draw-points.vert), so the selection footprint is the rendered point: a shape
-// under a device pixel is drawn as one. In CSS px, the units of the rectangle and screenSize.
+// Base selection diameter with the draw shader's one-device-pixel floor.
+// Uses target sizes, excludes outline rings, and returns CSS pixels like rect0/rect1.
 float pointSizeF(float size) {
   return max(pointSizePx(size, ratio, transformationMatrix[0][0], scalePointsOnZoom, maxPointSize), 1.0) / ratio;
 }
@@ -77,14 +77,16 @@ void main() {
     return;
   }
 
-  float left = 2.0 * (rect0.x - 0.5 * pointSizeF(size)) / screenSize.x - 1.0;
-  float right = 2.0 * (rect1.x + 0.5 * pointSizeF(size)) / screenSize.x - 1.0;
-  float top =  2.0 * (rect0.y - 0.5 * pointSizeF(size)) / screenSize.y - 1.0;
-  float bottom =  2.0 * (rect1.y + 0.5 * pointSizeF(size)) / screenSize.y - 1.0;
+  vec2 screenPos = (final.xy + 1.0) * screenSize / 2.0;
+  vec2 closest = clamp(screenPos, rect0, rect1);
+  vec2 delta = screenPos - closest;
+  float radius = 0.5 * pointSizeF(size);
 
   fragColor = vec4(0.0, 0.0, pointPosition.r, pointPosition.g);
-  if (final.x >= left && final.x <= right && final.y >= top && final.y <= bottom) {
+  bool overlaps = pSize.g > 0.5
+    ? all(lessThanEqual(abs(delta), vec2(radius * SQUARE_HALF_SIZE)))
+    : dot(delta, delta) <= radius * radius;
+  if (overlaps) {
     fragColor.r = 1.0;
   }
 }
-

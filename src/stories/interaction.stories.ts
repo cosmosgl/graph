@@ -5,6 +5,7 @@ import { CosmosStoryProps } from './create-cosmos'
 import { contextMenu } from './interaction/context-menu'
 import { exploreConnections } from './interaction/explore-connections'
 import { polygonSelection } from './interaction/lasso-selection'
+import { areaSelection } from './interaction/area-selection'
 import { pinnedPoints } from './interaction/pinned-points'
 
 import createCosmosRaw from './create-cosmos?raw'
@@ -19,6 +20,8 @@ import exploreConnectionsCssRaw from './interaction/explore-connections/style.cs
 import lassoSelectionStoryRaw from './interaction/lasso-selection/index?raw'
 import lassoSelectionPolygonRaw from './interaction/lasso-selection/polygon?raw'
 import lassoSelectionCssRaw from './interaction/lasso-selection/style.css?raw'
+import areaSelectionRaw from './interaction/area-selection/index?raw'
+import areaSelectionCssRaw from './interaction/area-selection/style.css?raw'
 import pinnedPointsStoryRaw from './interaction/pinned-points/index?raw'
 import pinnedPointsDataGenRaw from './interaction/pinned-points/data-gen?raw'
 
@@ -50,6 +53,18 @@ export const LassoSelection: Story = {
       { name: 'create-cosmos', code: createCosmosRaw },
       { name: 'generate-mesh-data', code: generateMeshDataRaw },
       { name: 'style.css', code: lassoSelectionCssRaw },
+    ],
+  },
+}
+
+export const AreaSelection: Story = {
+  ...createStory(areaSelection),
+  name: 'Area Selection',
+  tags: ['interactive'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: areaSelectionRaw },
+      { name: 'style.css', code: areaSelectionCssRaw },
     ],
   },
 }
