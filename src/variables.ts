@@ -42,6 +42,7 @@ export const defaultConfigValues = {
   highlightedPointIndices: undefined,
   outlinedPointIndices: undefined,
   outlinedPointRingColor: 'white',
+  outlinedPointRingContrast: 0.1,
 
   // Links
   renderLinks: true,

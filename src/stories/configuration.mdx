@@ -37,7 +37,8 @@ All configuration properties are optional. When creating a graph or calling `set
 | focusedPointIndex | Set focus on a point by index. A ring will be rendered around the focused point. When set to `undefined`, no point is focused. | `undefined` |
 | highlightedPointIndices | Array of point indices to highlight. Non-highlighted points are greyed out. `[]` greys out all points. Set to `undefined` to clear highlighting. | `undefined` |
 | outlinedPointIndices | Array of point indices to render with an outline ring. Independent of highlighting. | `undefined` |
-| outlinedPointRingColor | Color of the outline ring. Hex string or RGBA array. | `white` |
+| outlinedPointRingColor | Default outer-ring color: hex/RGBA or `auto`, `darken`, `lighten` derived per point from its fill. Explicit `setPointRingColors` values override it; any NaN channel falls back to this default. | `white` |
+| outlinedPointRingContrast | OKLab lightness step for derived ring colors. | `0.1` |
 | renderLinks | Turns link rendering on / off | `true` |
 | linkDefaultColor | The default color to use for links when no matching link-color array is provided, or for each `NaN` channel in the `Float32Array`. The caller's array is retained verbatim. This can be either a hex color string (e.g., '#666666') or an array of RGBA values in the format `[red, green, blue, alpha]` where each value is a number between 0 and 1 | `#666666` |
 | linkOpacity | Universal opacity value applied to all links. This value multiplies with individual link alpha values (if set via setLinkColors). Useful for dynamically controlling opacity of all links without updating individual RGBA arrays. | `1.0` |
@@ -156,6 +157,8 @@ By default, changes made through the following setters are animated on the next 
 - `setPointStrokeWidths`
 - `setLinkColors`
 - `setLinkWidths`
+
+`setPointRingColors` applies outer-ring colors on the next `render()` without animation. Automatic ring shades follow the current fill color while the fill animates.
 
 A single transition cycle tracks every animated property in one shared timeline, driven by `transitionDuration` (default `800` ms) and `transitionEasing` (default `TransitionEasing.CubicInOut`). Set `transitionDuration: 0` to disable animations and snap to the new state instead.
 

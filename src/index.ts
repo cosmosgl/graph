@@ -141,6 +141,7 @@ export class Graph implements PositionTextureSource {
   // forces, clusters) and applies them in applyDataUpdates().
   private isPointColorUpdateNeeded = false
   private isPointStrokeColorUpdateNeeded = false
+  private isPointRingColorUpdateNeeded = false
   private isPointStrokeWidthUpdateNeeded = false
   private isPointShapeUpdateNeeded = false
   private isPointImageIndicesUpdateNeeded = false
@@ -477,6 +478,19 @@ export class Graph implements PositionTextureSource {
     // Image sizes default to a copy of point sizes, so they follow this change.
     this.isPointImageSizesUpdateNeeded = true
     this.transition.queue(TransitionProperty.PointSizes)
+  }
+
+  /**
+   * Sets outer-ring colors: RGBA in 0..1, four values per point, aligned with positions.
+   * Any NaN channel falls back to outlinedPointRingColor for that entire point.
+   * Rings appear only for outlinedPointIndices. Call render() to apply; ring colors apply immediately without a transition.
+   * An array whose length differs from four times the point count uses the default everywhere.
+   */
+  public setPointRingColors (colors: Float32Array): void {
+    if (this._isDestroyed) return
+    if (this.ensureDevice(() => this.setPointRingColors(colors))) return
+    this.graph.inputPointRingColors = colors
+    this.isPointRingColorUpdateNeeded = true
   }
 
   /**
@@ -1898,6 +1912,8 @@ export class Graph implements PositionTextureSource {
       this.lines.isLinkIndexBufferStale = true
     }
 
+    // Reconcile this render-only channel once, after positions establish the point count.
+    if (this.isPointRingColorUpdateNeeded || positionsUpdated) this.points.updateRingColor()
     if (this.isPointColorUpdateNeeded) this.points.updateColor()
     if (this.isPointStrokeColorUpdateNeeded) this.points.updateStrokeColor()
     if (this.isPointStrokeWidthUpdateNeeded) this.points.updateStrokeWidth()
@@ -1913,6 +1929,7 @@ export class Graph implements PositionTextureSource {
     if (this.isLinkArrowUpdateNeeded) this.lines.updateArrow()
     if (this.isLinkStyleUpdateNeeded) this.lines.updateStyle()
 
+    this.isPointRingColorUpdateNeeded = false
     this.isPointColorUpdateNeeded = false
     this.isPointStrokeColorUpdateNeeded = false
     this.isPointStrokeWidthUpdateNeeded = false
