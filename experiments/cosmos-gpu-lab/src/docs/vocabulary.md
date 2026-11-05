@@ -332,6 +332,8 @@ a useful error or rebuild on a newly requested device.
 Combines many values into fewer values using an associative operation: sum, minimum, maximum or bounding box. A large
 reduction writes one partial per workgroup, then recursively reduces partials until one result remains.
 
+[Read the complete parallel-reduction deep dive →](#/concepts/reduction)
+
 ```mermaid
 flowchart LR
   A[1,000,000 points] --> B[3,907 partials]
