@@ -1,5 +1,7 @@
 # Consistent overlap selection
 
+**PR:** [#296](https://github.com/cosmosgl/graph/pull/296)
+
 Rectangle selection included points whose centres lay outside its outline,
 while the lasso selected by centre alone. Both tools now select a point when
 its selection footprint touches or overlaps the area. This makes large
