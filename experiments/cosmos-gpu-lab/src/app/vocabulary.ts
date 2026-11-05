@@ -1,3 +1,5 @@
+import { conceptHref } from './router'
+
 type VocabularyTerm = {
   id: string;
   heading: string;
@@ -123,10 +125,14 @@ function canLinkTextNode (node: Text): boolean {
 }
 
 export function vocabularyTermHref (termId: string): string {
+  if (termId === 'reduction') return conceptHref('reduction')
   return `#/vocabulary/${encodeURIComponent(termId)}`
 }
 
-export function linkVocabularyTerms (host: HTMLElement): void {
+export function linkVocabularyTerms (
+  host: HTMLElement,
+  excludedTerms = new Set<string>()
+): void {
   const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT)
   const nodes: Text[] = []
   let current = walker.nextNode()
@@ -135,7 +141,7 @@ export function linkVocabularyTerms (host: HTMLElement): void {
     current = walker.nextNode()
   }
 
-  const linkedTerms = new Set<string>()
+  const linkedTerms = new Set(excludedTerms)
   for (const node of nodes) {
     const text = node.data
     const fragment = document.createDocumentFragment()
