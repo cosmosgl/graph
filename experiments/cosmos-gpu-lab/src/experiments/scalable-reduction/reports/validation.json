@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "experiment": "scalable-reduction",
+  "title": "Implementation validation",
+  "recordedAt": "2026-11-05",
+  "status": "Local browser validation completed — exploratory, not portable benchmark data",
+  "commit": "working tree after 579310f",
+  "environment": {
+    "browser": "Chromium development session",
+    "host": "Local macOS workstation",
+    "luma.gl": "10.0.0-alpha.4",
+    "WebGPU profile": "core"
+  },
+  "parameters": {
+    "workgroup size": 256,
+    "maximum rendered sample": 500000,
+    "largest preset": 10000000,
+    "position generation": "GPU resident"
+  },
+  "results": [
+    {
+      "backend": "8,192 points",
+      "values": {
+        "hierarchy": "8,192 → 32 → 1",
+        "error vs CPU": "4.341e-9",
+        "visible readback tick": "3.7 ms"
+      }
+    },
+    {
+      "backend": "65,536 points",
+      "values": {
+        "hierarchy": "65,536 → 256 → 1",
+        "error vs CPU": "6.124e-9",
+        "visible readback tick": "5.0 ms"
+      }
+    },
+    {
+      "backend": "1,000,000 points",
+      "values": {
+        "hierarchy": "1,000,000 → 3,907 → 16 → 1",
+        "error vs CPU": "5.499e-9 after one tick",
+        "visible readback tick": "9.7 ms",
+        "bounded benchmark": "0.67 ms average × 20"
+      }
+    },
+    {
+      "backend": "10,000,000 points",
+      "values": {
+        "hierarchy": "10,000,000 → 39,063 → 153 → 1",
+        "error vs CPU": "CPU reference skipped",
+        "visible readback tick": "34.5 ms",
+        "bounded benchmark": "2.62 ms average × 5"
+      }
+    }
+  ],
+  "notes": [
+    "All four presets initialized, reduced, rendered and returned finite centers in the local Chromium session.",
+    "One-million and ten-million no-readback ticks kept the center GPU-resident and rendered it directly from storage.",
+    "The ten-million preset used a 76.3 MB position buffer and 1.2 MB of ping-pong partial storage.",
+    "Benchmark values are device-specific and must not be treated as universal performance claims."
+  ]
+}
