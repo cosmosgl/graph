@@ -1,6 +1,11 @@
 import MarkdownIt from 'markdown-it'
 import { linkVocabularyTerms } from './vocabulary'
 
+type MarkdownOptions = {
+  linkTerms?: boolean;
+  excludedTermIds?: string[];
+}
+
 let diagramId = 0
 let mermaidInitialized = false
 
@@ -41,7 +46,7 @@ export async function renderMarkdown (
   host: HTMLElement,
   source: string,
   assets: Record<string, string> = {},
-  linkTerms = true
+  options: MarkdownOptions = {}
 ): Promise<void> {
   const markdown = new MarkdownIt({
     html: false,
@@ -72,6 +77,8 @@ export async function renderMarkdown (
   }
 
   host.innerHTML = `<article class="prose">${markdown.render(source)}</article>`
-  if (linkTerms) linkVocabularyTerms(host)
+  if (options.linkTerms !== false) {
+    linkVocabularyTerms(host, new Set(options.excludedTermIds))
+  }
   await renderDiagrams(host)
 }

@@ -4,8 +4,9 @@ import type {
   ExperimentPage,
 } from '../runtime/experiment'
 import vocabularySource from '../docs/vocabulary.md?raw'
+import reductionSource from '../docs/reduction.md?raw'
 import { experiments, findExperiment } from './registry'
-import { experimentHref, readRoute, vocabularyHref } from './router'
+import { conceptHref, experimentHref, readRoute, vocabularyHref } from './router'
 import { indexVocabularyTerms } from './vocabulary'
 
 function requiredElement<T extends HTMLElement> (host: ParentNode, selector: string): T {
@@ -17,7 +18,7 @@ function requiredElement<T extends HTMLElement> (host: ParentNode, selector: str
 function renderNavigation (
   host: HTMLElement,
   activeId?: string,
-  activeReference?: 'vocabulary'
+  activeReference?: 'vocabulary' | 'reduction'
 ): void {
   host.replaceChildren()
   const label = document.createElement('p')
@@ -46,6 +47,14 @@ function renderNavigation (
   vocabulary.innerHTML = '<span>WebGPU vocabulary</span><small>guide</small>'
   if (activeReference === 'vocabulary') vocabulary.setAttribute('aria-current', 'page')
   host.append(vocabulary)
+
+  const reduction = document.createElement('a')
+  reduction.href = conceptHref('reduction')
+  reduction.className = 'experiment-link reference-link'
+  reduction.classList.toggle('active', activeReference === 'reduction')
+  reduction.innerHTML = '<span>Parallel reduction</span><small>concept</small>'
+  if (activeReference === 'reduction') reduction.setAttribute('aria-current', 'page')
+  host.append(reduction)
 }
 
 function renderHome (host: HTMLElement): void {
@@ -64,6 +73,14 @@ function renderHome (host: HTMLElement): void {
       <span>
         <strong>WebGPU vocabulary</strong>
         <small>Core concepts, execution model, resources and Cosmos compute terms</small>
+      </span>
+      <span aria-hidden="true">→</span>
+    </a>
+    <a class="reference-card" href="${conceptHref('reduction')}">
+      <span class="card-index">CONCEPT</span>
+      <span>
+        <strong>Parallel reduction</strong>
+        <small>From algebra and workgroup trees to a production Cosmos compute primitive</small>
       </span>
       <span aria-hidden="true">→</span>
     </a>
@@ -97,6 +114,25 @@ function renderVocabularyFrame (host: HTMLElement): HTMLElement {
     </header>
     <section class="experiment-stage reference-stage">
       <div class="loading">Loading vocabulary…</div>
+    </section>
+  `
+  return requiredElement<HTMLElement>(host, '.reference-stage')
+}
+
+function renderReductionFrame (host: HTMLElement): HTMLElement {
+  host.innerHTML = `
+    <header class="experiment-header reference-header">
+      <div>
+        <p class="eyebrow">Concept deep dive · Parallel compute</p>
+        <h1>Parallel reduction</h1>
+        <p>
+          How millions of independent values become one trustworthy result through
+          local trees, partial buffers and recursively scheduled compute passes.
+        </p>
+      </div>
+    </header>
+    <section class="experiment-stage reference-stage">
+      <div class="loading">Loading reduction research…</div>
     </section>
   `
   return requiredElement<HTMLElement>(host, '.reference-stage')
@@ -194,7 +230,11 @@ export function createAppShell (root: HTMLElement): void {
     renderNavigation(
       navigation,
       route.kind === 'experiment' ? route.experimentId : undefined,
-      route.kind === 'vocabulary' ? 'vocabulary' : undefined
+      route.kind === 'vocabulary'
+        ? 'vocabulary'
+        : route.kind === 'concept' && route.conceptId === 'reduction'
+          ? 'reduction'
+          : undefined
     )
 
     if (route.kind === 'home') {
@@ -207,7 +247,7 @@ export function createAppShell (root: HTMLElement): void {
       try {
         const renderer = await import('./markdown')
         if (version !== renderVersion) return
-        await renderer.renderMarkdown(stage, vocabularySource, {}, false)
+        await renderer.renderMarkdown(stage, vocabularySource, {}, { linkTerms: false })
         indexVocabularyTerms(stage)
         if (route.termId) {
           const target = document.getElementById(route.termId)
@@ -216,6 +256,25 @@ export function createAppShell (root: HTMLElement): void {
             target.scrollIntoView({ block: 'start' })
           }
         }
+      } catch (error) {
+        if (version !== renderVersion) return
+        renderFailure(stage, error)
+      }
+      return
+    }
+
+    if (route.kind === 'concept') {
+      if (route.conceptId !== 'reduction') {
+        renderMissing(workspace, `concepts/${route.conceptId}`)
+        return
+      }
+      const stage = renderReductionFrame(workspace)
+      try {
+        const renderer = await import('./markdown')
+        if (version !== renderVersion) return
+        await renderer.renderMarkdown(stage, reductionSource, {}, {
+          excludedTermIds: ['reduction'],
+        })
       } catch (error) {
         if (version !== renderVersion) return
         renderFailure(stage, error)
