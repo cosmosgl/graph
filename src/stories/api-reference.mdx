@@ -620,23 +620,25 @@ Sets the zoom transform so that the given point positions fit in the viewport, w
 
 ### <a name="find_points_in_rect" href="#find_points_in_rect">#</a> graph.<b>findPointsInRect</b>(<i>rect</i>)
 
-Find points within a rectangular area defined by two corner points `[[left, top], [right, bottom]]`. The coordinates are in screen pixel coordinates.
+Find points whose selection footprints overlap a rectangular area defined by two opposite corners, typically `[[left, top], [right, bottom]]`. Reversed coordinates are normalized automatically. The coordinates are in screen pixel coordinates. Selection footprints use resolved target sizes throughout size transitions and exclude outline rings, as described for `findPointsInPolygon` below.
 
 **Must be called when the graph is ready** (e.g. after `await graph.ready` or inside `graph.ready.then(...)`). If called before initialization completes, returns an empty array.
 
-* **`rect`** (Array): An array containing two coordinate arrays in the format `[[left, top], [right, bottom]]`.
+* **`rect`** (Array): Two opposite corners, typically `[[left, top], [right, bottom]]`. Reversed coordinates are normalized automatically.
 
-**Returns:** A `number[]` of point indices inside the rectangular area.
+**Returns:** A `number[]` of point indices whose selection footprints touch or overlap the rectangular area.
 
 ### <a name="find_points_in_polygon" href="#find_points_in_polygon">#</a> graph.<b>findPointsInPolygon</b>(<i>polygonPath</i>)
 
-Find points within a polygon area defined by an array of coordinate points.
+Find points whose selection footprints overlap a polygon area defined by an array of coordinate points.
+
+Both area queries use resolved target sizes with the current zoom, pixel-size floor, and hardware size cap. During size transitions, selection uses the target size throughout the animation. Outline rings are excluded from the selection footprint. Circles and squares use their shape geometry; other shapes and images use a circular approximation. A footprint touching an edge counts as selected, and points with a zero target footprint are excluded. `PointShape.None` retains a circular selection footprint even without an image; these queries do not filter points by rendered visibility.
 
 **Must be called when the graph is ready** (e.g. after `await graph.ready` or inside `graph.ready.then(...)`). If called before initialization completes, returns an empty array.
 
-* **`polygonPath`** (Array): An array of coordinate points in the format `[[x1, y1], [x2, y2], ..., [xN, yN]]`. The coordinates are in screen pixel coordinates. The polygon requires at least 3 points.
+* **`polygonPath`** (Array): An array of coordinate points in the format `[[x1, y1], [x2, y2], ..., [xN, yN]]`. The coordinates are in screen pixel coordinates. The polygon requires at least 3 points. Degenerate paths are accepted: collinear vertices select footprints touching their segments, and coincident vertices select footprints touching that location.
 
-**Returns:** A `number[]` of point indices inside the polygon area.
+**Returns:** A `number[]` of point indices whose selection footprints touch or overlap the polygon area.
 
 ### <a name="get_neighboring_point_indices" href="#get_neighboring_point_indices">#</a> graph.<b>getNeighboringPointIndices</b>(<i>pointIndices</i>)
 

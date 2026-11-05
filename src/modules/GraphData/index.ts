@@ -521,7 +521,7 @@ export class GraphData {
   /**
    * The sprite's footprint: the resolved point size, or the image size when the
    * point draws an image and that is larger — the draw shader's `max(shape, image)`
-   * for consumers outside the GPU (the rect-selection texture, `getPointRadiusByIndex`).
+   * for the shared area-selection texture and CPU consumers (`getPointRadiusByIndex`).
    * The ring shader applies the same rule on the GPU, to the mixed size; a caller
    * mid-transition passes that mixed size as `shapeSize`.
    */
