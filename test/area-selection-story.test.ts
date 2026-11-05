@@ -117,3 +117,33 @@ it.each([
     story.div.remove()
   }
 })
+
+it('draws a noncollinear freehand lasso rather than its bounding rectangle', async () => {
+  const story = areaSelection()
+  story.div.style.cssText = 'width:640px;height:440px'
+  document.body.appendChild(story.div)
+  try {
+    await story.graph.ready
+    await new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))
+    story.div.querySelector<HTMLButtonElement>('[data-preset="edge"]')!.click()
+    story.div.querySelector<HTMLButtonElement>('[data-tool="Lasso"]')!.click()
+    const overlay = story.div.querySelector('svg')!
+    vi.spyOn(overlay, 'setPointerCapture').mockImplementation(() => {})
+    const bounds = overlay.getBoundingClientRect()
+    const pointer = (type: string, x: number, y: number): PointerEvent => new PointerEvent(type, {
+      pointerId: 1, button: 0, clientX: bounds.left + x, clientY: bounds.top + y, bubbles: true,
+    })
+    overlay.dispatchEvent(pointer('pointerdown', 200, 180))
+    overlay.dispatchEvent(pointer('pointermove', 450, 180))
+    overlay.dispatchEvent(pointer('pointerup', 450, 280))
+    expect(overlay.querySelector('.selection-outline')!.getAttribute('d')).toBe('M 200 180 L 450 180 L 450 280 Z')
+    // The circle is inside the bounds, but its entire footprint misses the diagonal.
+    expect(story.graph.findPointsInRect([[200, 180], [450, 280]])).toEqual([0, 1])
+    expect(story.div.querySelector('[role="status"]')!.textContent).toBe('Selected: Square')
+  } finally {
+    vi.restoreAllMocks()
+    story.destroy()
+    story.graph.destroy()
+    story.div.remove()
+  }
+})

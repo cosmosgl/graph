@@ -25,13 +25,19 @@ describe('selection footprints', () => {
     graph.render()
     try {
       await graph.ready
-      expect(graph.maxPointSize).toBeGreaterThanOrEqual(40)
+      // Keep the two sizes distinct below the device cap at both zoom levels.
+      const smallSize = Math.min(20, graph.maxPointSize / 4)
+      graph.setPointSizes(new Float32Array([smallSize, smallSize * 2, 0]))
+      graph.render(undefined, 0)
       for (const zoom of [1, 2]) {
         graph.setViewTransform({ k: zoom, x: 100 * (1 - zoom), y: 100 * (1 - zoom) }, [200, 200])
         graph.renderOneFrame()
         const [x, y] = graph.spaceToScreenPosition([2048, 2048])
-        const radius = graph.spaceToScreenRadius(10)
-        expect(radius).toBeCloseTo(scalePointsOnZoom ? 10 * zoom : 10)
+        const radius = graph.spaceToScreenRadius(smallSize / 2)
+        const zoomFactor = scalePointsOnZoom ? zoom : 1
+        const expectedRadius = Math.min(Math.max(smallSize * zoomFactor, 1 / pixelRatio), graph.maxPointSize) / 2
+        const largerRadius = Math.min(Math.max(smallSize * 2 * zoomFactor, 1 / pixelRatio), graph.maxPointSize) / 2
+        expect(radius).toBeCloseTo(expectedRadius)
         const query = (left: number, top: number, right: number, bottom: number, expected: number[]): void => {
           // The public API accepts either diagonal in either drag direction.
           expect(graph.findPointsInRect([[left, top], [right, bottom]])).toEqual(expected)
@@ -44,7 +50,8 @@ describe('selection footprints', () => {
         // Centre outside, footprint overlapping a straight edge.
         query(x + radius * 0.8, y - 2, x + radius * 0.9, y + 2, [0, 1])
         // Rectangle corner inside the circle's bounding box, outside the circle.
-        query(x + radius * 0.8, y + radius * 0.8, x + radius * 0.9, y + radius * 0.9, [1])
+        query(x + radius * 0.8, y + radius * 0.8, x + radius * 0.9, y + radius * 0.9,
+          largerRadius >= radius * 0.8 * Math.SQRT2 ? [1] : [])
         // Entire selection enclosed by the point.
         query(x - 1, y - 1, x + 1, y + 1, [0, 1])
         query(x + radius * 2.5, y - 2, x + radius * 3, y + 2, [])
@@ -123,6 +130,38 @@ describe('selection footprints', () => {
         const bottom = y + 1
         expect(graph.findPointsInRect([[left, top], [right, bottom]])).toEqual(expected)
         expect(graph.findPointsInPolygon([[left, top], [right, top], [right, bottom], [left, bottom]])).toEqual(expected)
+      }
+    } finally {
+      graph.destroy()
+      div.remove()
+    }
+  })
+  it.each([1, 2])('keeps the device-pixel floor at pixel ratio %s', async pixelRatio => {
+    const div = document.createElement('div')
+    div.style.cssText = 'width:200px;height:200px'
+    document.body.appendChild(div)
+    const graph = new Graph(div, {
+      pixelRatio,
+      spaceSize: 4096,
+      enableSimulation: false,
+      enableRenderLoop: false,
+      fitViewOnInit: false,
+      rescalePositions: false,
+    })
+    graph.setPointPositions(new Float32Array([2048, 2048, 2048, 2048]))
+    graph.setPointSizes(new Float32Array([0.1, 0.1]))
+    graph.setPointShapes(new Float32Array([PointShape.Circle, PointShape.Square]))
+    graph.render()
+    try {
+      await graph.ready
+      graph.setViewTransform({ k: 1, x: 0, y: 0 }, [200, 200])
+      graph.renderOneFrame()
+      const [x, y] = graph.spaceToScreenPosition([2048, 2048])
+      // A one-device-pixel core has circle radius 0.5 and square half-width 0.4.
+      for (const [deviceDistance, expected] of [[0.35, [0, 1]], [0.45, [0]], [0.6, []]] as const) {
+        const spot: [number, number] = [x + deviceDistance / pixelRatio, y]
+        expect(graph.findPointsInRect([spot, spot])).toEqual(expected)
+        expect(graph.findPointsInPolygon([spot, spot, spot])).toEqual(expected)
       }
     } finally {
       graph.destroy()
@@ -225,7 +264,7 @@ describe('selection footprints', () => {
       graph.renderOneFrame()
       const corners: [number, number][] = [[20, 20], [180, 20], [180, 180], [20, 180]]
       expect(graph.findPointsInPolygon(corners)).toEqual([0])
-      for (const repeats of [2045, 2048]) {
+      for (const repeats of [2045, 2048, 32768]) {
         // All edges needed for containment follow a long repeated prefix.
         const path: [number, number][] = [
           ...Array.from({ length: repeats }, (): [number, number] => [20, 20]), ...corners.slice(1),

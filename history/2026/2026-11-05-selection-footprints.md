@@ -22,7 +22,8 @@ direction without passing reversed bounds to GLSL `clamp`.
 Lasso overlap combines even-odd centre containment with circle-segment or
 square-segment intersection. Repeated vertices are valid zero-length edges.
 The scan checks the complete path rather than silently stopping at 2,048
-edges. Paths still require at least three vertices, but may be degenerate:
+edges. Explicit high-precision integers keep long path lengths and loop
+counters from overflowing on GPUs with 16-bit mediump integers. Paths still require at least three vertices, but may be degenerate:
 collinear paths select footprints touching their segments, and coincident
 vertices select footprints touching that location. This extends the former
 centre-only polygon behavior and matches overlap selection for zero-area
@@ -76,8 +77,10 @@ edges and corners, containment, repeated vertices, zero-size points,
 degenerate paths, asymmetric and concave lassos, both winding directions,
 zoom-scaled sizing, device pixel ratios and the hardware size cap. They also
 cover shape-only updates, the circular footprint of textured squares,
-image-index removal and complete scans of 2,048- and 2,051-vertex paths.
-Story checks cover drag/zoom previews, preset and resize zoom continuity,
+image-index removal, sub-pixel footprints at both pixel ratios, and complete
+scans through 32,771 vertices. Size expectations account for the reported
+hardware cap instead of requiring a minimum point size from the device.
+Story checks cover noncollinear freehand outlines, drag/zoom previews, preset and resize zoom continuity,
 resized point placement, caption clearing and moving degenerate rectangles.
 
 The comparisons below show untouched main on the left and overlap selection
