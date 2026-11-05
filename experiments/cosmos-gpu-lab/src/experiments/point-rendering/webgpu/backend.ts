@@ -1,6 +1,6 @@
 import { luma } from '@luma.gl/core'
 import { webgpuAdapter, type WebGPUDevice } from '@luma.gl/webgpu'
-import type { PointRenderBackend, PointRenderData } from '../backend'
+import type { PointRenderBackend, PointRenderData, PointRenderMeasurement } from '../backend'
 import { MAX_POINT_COUNT } from '../point-data'
 import shaderSource from './shaders/circle.wgsl?raw'
 
@@ -11,7 +11,8 @@ const BUFFER_USAGE = {
 } as const
 
 export async function createWebGPUPointRenderer (
-  canvas: HTMLCanvasElement
+  canvas: HTMLCanvasElement,
+  capacity: number = MAX_POINT_COUNT
 ): Promise<PointRenderBackend> {
   const lumaDevice = await luma.createDevice({
     id: 'point-rendering-webgpu',
@@ -37,12 +38,12 @@ export async function createWebGPUPointRenderer (
 
   const positionBuffer = device.createBuffer({
     label: 'point positions',
-    size: MAX_POINT_COUNT * 2 * Float32Array.BYTES_PER_ELEMENT,
+    size: capacity * 2 * Float32Array.BYTES_PER_ELEMENT,
     usage: BUFFER_USAGE.COPY_DST | BUFFER_USAGE.STORAGE,
   })
   const colorBuffer = device.createBuffer({
     label: 'point colors',
-    size: MAX_POINT_COUNT * 4 * Float32Array.BYTES_PER_ELEMENT,
+    size: capacity * 4 * Float32Array.BYTES_PER_ELEMENT,
     usage: BUFFER_USAGE.COPY_DST | BUFFER_USAGE.STORAGE,
   })
   const uniformBuffer = device.createBuffer({
@@ -87,6 +88,30 @@ export async function createWebGPUPointRenderer (
   })
   let count = 0
 
+  const draw = (diameter: number, iterations = 1): void => {
+    device.queue.writeBuffer(
+      uniformBuffer,
+      0,
+      new Float32Array([diameter, canvas.width, canvas.height, 0])
+    )
+    const encoder = device.createCommandEncoder({ label: 'render circle points' })
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [{
+        view: context.getCurrentTexture().createView(),
+        clearValue: { r: 0.075, g: 0.087, b: 0.105, a: 1 },
+        loadOp: 'clear',
+        storeOp: 'store',
+      }],
+    })
+    pass.setPipeline(pipeline)
+    pass.setBindGroup(0, bindings)
+    for (let iteration = 0; iteration < iterations; iteration += 1) {
+      pass.draw(6, count)
+    }
+    pass.end()
+    device.queue.submit([encoder.finish()])
+  }
+
   return {
     setData (data: PointRenderData): void {
       count = data.count
@@ -106,25 +131,17 @@ export async function createWebGPUPointRenderer (
       )
     },
     render (diameter: number): void {
-      device.queue.writeBuffer(
-        uniformBuffer,
-        0,
-        new Float32Array([diameter, canvas.width, canvas.height, 0])
-      )
-      const encoder = device.createCommandEncoder({ label: 'render circle points' })
-      const pass = encoder.beginRenderPass({
-        colorAttachments: [{
-          view: context.getCurrentTexture().createView(),
-          clearValue: { r: 0.075, g: 0.087, b: 0.105, a: 1 },
-          loadOp: 'clear',
-          storeOp: 'store',
-        }],
-      })
-      pass.setPipeline(pipeline)
-      pass.setBindGroup(0, bindings)
-      pass.draw(6, count)
-      pass.end()
-      device.queue.submit([encoder.finish()])
+      draw(diameter)
+    },
+    async measure (diameter: number, iterations = 1): Promise<PointRenderMeasurement> {
+      const started = performance.now()
+      draw(diameter, iterations)
+      const submitted = performance.now()
+      await device.queue.onSubmittedWorkDone()
+      return {
+        submitMilliseconds: submitted - started,
+        completionMilliseconds: performance.now() - started,
+      }
     },
     destroy (): void {
       uniformBuffer.destroy()

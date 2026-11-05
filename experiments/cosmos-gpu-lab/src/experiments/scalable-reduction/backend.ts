@@ -33,6 +33,7 @@ export type ReductionRunResult = {
 
 export type ReductionBenchmark = {
   iterations: number;
+  submitMilliseconds: number;
   totalMilliseconds: number;
   averageMilliseconds: number;
 }
@@ -387,10 +388,12 @@ export async function createScalableReductionBackend (
       }
       computePass.end()
       device.queue.submit([encoder.finish()])
+      const submitted = performance.now()
       await device.queue.onSubmittedWorkDone()
       const totalMilliseconds = performance.now() - started
       return {
         iterations,
+        submitMilliseconds: submitted - started,
         totalMilliseconds,
         averageMilliseconds: totalMilliseconds / iterations,
       }

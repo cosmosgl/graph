@@ -19,6 +19,15 @@ function coordinate (value: number): number {
   return Math.fround(Math.fround(normalized * 1.8) - 0.9)
 }
 
+export function createInitialPositions (pointCount: number): Float32Array {
+  const positions = new Float32Array(pointCount * 2)
+  for (let index = 0; index < pointCount; index += 1) {
+    positions[index * 2] = coordinate(index * 2 + 0x9e3779b9)
+    positions[index * 2 + 1] = coordinate(index * 2 + 1 + 0x9e3779b9)
+  }
+  return positions
+}
+
 export function calculateInitialCpuCenter (pointCount: number): ReductionCenter | undefined {
   if (pointCount > CPU_REFERENCE_LIMIT) return undefined
   let x = 0
