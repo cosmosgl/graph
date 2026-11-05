@@ -1,12 +1,10 @@
 import { luma } from '@luma.gl/core'
 import { webgpuAdapter, type WebGPUDevice } from '@luma.gl/webgpu'
-import type { BackendResult, CenterMassBackend } from './backend'
-import {
-  WEBGPU_DRAW,
-  WEBGPU_DRAW_CENTER,
-  WEBGPU_REDUCE_PARTIALS,
-  WEBGPU_REDUCE_POINTS,
-} from './shaders'
+import type { BackendResult, CenterMassBackend } from '../backend'
+import drawCenterShader from './shaders/draw-center.wgsl?raw'
+import drawShader from './shaders/draw.wgsl?raw'
+import reducePartialsShader from './shaders/reduce-partials.wgsl?raw'
+import reducePointsShader from './shaders/reduce-points.wgsl?raw'
 
 const WORKGROUP_SIZE = 256
 const BUFFER_USAGE = {
@@ -94,7 +92,7 @@ export async function createWebGPUCenterMass (
     label: 'reduce points',
     layout: 'auto',
     compute: {
-      module: device.createShaderModule({ code: WEBGPU_REDUCE_POINTS }),
+      module: device.createShaderModule({ code: reducePointsShader }),
       entryPoint: 'main',
     },
   })
@@ -102,7 +100,7 @@ export async function createWebGPUCenterMass (
     label: 'reduce partials',
     layout: 'auto',
     compute: {
-      module: device.createShaderModule({ code: WEBGPU_REDUCE_PARTIALS }),
+      module: device.createShaderModule({ code: reducePartialsShader }),
       entryPoint: 'main',
     },
   })
@@ -125,7 +123,7 @@ export async function createWebGPUCenterMass (
     ],
   })
 
-  const drawModule = device.createShaderModule({ code: WEBGPU_DRAW })
+  const drawModule = device.createShaderModule({ code: drawShader })
   const drawPipeline = device.createRenderPipeline({
     label: 'draw points',
     layout: 'auto',
@@ -145,7 +143,7 @@ export async function createWebGPUCenterMass (
     primitive: { topology: 'point-list' },
   })
 
-  const centerModule = device.createShaderModule({ code: WEBGPU_DRAW_CENTER })
+  const centerModule = device.createShaderModule({ code: drawCenterShader })
   const centerPipeline = device.createRenderPipeline({
     label: 'draw center',
     layout: 'auto',
