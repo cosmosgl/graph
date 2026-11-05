@@ -1,4 +1,5 @@
 import MarkdownIt from 'markdown-it'
+import DOMPurify from 'dompurify'
 import { highlightGlsl, highlightWgsl } from './syntax-highlight'
 import { linkVocabularyTerms } from './vocabulary'
 
@@ -17,6 +18,9 @@ async function renderDiagrams (host: HTMLElement): Promise<void> {
       startOnLoad: false,
       securityLevel: 'strict',
       theme: 'dark',
+      flowchart: {
+        htmlLabels: false,
+      },
       themeVariables: {
         background: '#292e36',
         primaryColor: '#373d47',
@@ -34,7 +38,11 @@ async function renderDiagrams (host: HTMLElement): Promise<void> {
       diagramId += 1
       const result = await mermaid.render(id, diagram.textContent ?? '')
       diagram.className = 'mermaid-diagram'
-      diagram.innerHTML = result.svg
+      const sanitizedSvg = DOMPurify.sanitize(result.svg, {
+        RETURN_DOM_FRAGMENT: true,
+        USE_PROFILES: { svg: true, svgFilters: true },
+      })
+      diagram.replaceChildren(sanitizedSvg)
       result.bindFunctions?.(diagram)
     } catch (error) {
       diagram.className = 'diagram-error'
