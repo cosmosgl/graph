@@ -96,6 +96,7 @@ export class Store {
   public hoveredPointRingColor = [1, 1, 1, hoveredPointRingOpacity]
   public focusedPointRingColor = [1, 1, 1, focusedPointRingOpacity]
   public outlinedPointRingColor = [1, 1, 1, 1]
+  public outlinedPointRingShade = 2
   /**
    * `pointDefaultStrokeColor`, parsed once per config change for the per-frame uniforms, as
    * the shader's `strokeDefaultShade` code: a derivation rule as its direction (0 auto,
@@ -375,6 +376,8 @@ export class Store {
   }
 
   public setOutlinedPointRingColor (color: string | [number, number, number, number]): void {
+    this.outlinedPointRingShade = color === 'auto' ? 0 : color === 'darken' ? -1 : color === 'lighten' ? 1 : 2
+    if (this.outlinedPointRingShade !== 2) return
     const convertedRgba = getRgbaColor(color)
     this.outlinedPointRingColor[0] = convertedRgba[0]
     this.outlinedPointRingColor[1] = convertedRgba[1]

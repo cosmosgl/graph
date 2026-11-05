@@ -7,7 +7,7 @@ import { PointShape, LinkStyle } from '@/graph/modules/GraphData'
 import { type TransitionEasing } from '@/graph/modules/Transition'
 
 /**
- * Rules for deriving a point's stroke color from its own fill (see `pointDefaultStrokeColor`).
+ * Rules for deriving a point's stroke or outer-ring color from its own fill.
  */
 export type PointStrokeShade = 'auto' | 'darken' | 'lighten'
 
@@ -277,19 +277,29 @@ export interface GraphConfigInterface {
    * Array of point indices to draw an outline ring around. The outline ring is a circle
    * rendered around the point regardless of the point's shape. When a point is both
    * outlined and greyed out (not highlighted), the ring color is dimmed to match.
-   * This is a selection mark drawn *outside* the body in one uniform color; for an edge color
-   * every point carries, in its own shade or a per-point color, see `pointDefaultStrokeColor`
+   * This is a selection mark drawn *outside* the body. Its color comes from
+   * `outlinedPointRingColor` or per-point overrides from `setPointRingColors`.
+   * For a stroke along the inside edge of each point's shape, see `pointDefaultStrokeColor`
    * and `setPointStrokeColors`.
    * Default value: `undefined`
    */
   outlinedPointIndices?: number[];
 
   /**
-   * Color of the outline ring drawn around outlined points.
+   * Default outline ring color, or auto/darken/lighten derived from each point’s fill.
+   * Per-point colors from setPointRingColors override this; any NaN channel uses this default.
+   * Derived colors use the original fill, then greyout dims the resolved ring RGB.
+   * Ring alpha is independent of `pointOpacity` and `pointGreyoutOpacity`.
    * Can be either a hex color string (e.g., '#b3b3b3') or an array of RGBA values.
    * Default value: `'white'`
    */
-  outlinedPointRingColor: string | [number, number, number, number];
+  outlinedPointRingColor: PointStrokeShade | ColorString | [number, number, number, number];
+
+  /**
+   * OKLab lightness step for automatic outline ring colors, clamped to 0..1.
+   * Non-finite values use the default. Default: `0.1`.
+   */
+  outlinedPointRingContrast: number;
 
   /**
    * Turns link rendering on / off.

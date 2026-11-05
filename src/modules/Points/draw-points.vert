@@ -19,6 +19,10 @@ in float targetStrokeWidth;
 #endif
 // Position of this point in the render order: 0 is drawn first (bottom)
 in float renderRank;
+#ifdef POINT_RING_COLORS
+in vec4 pointRingColor;
+#endif
+out vec4 resolvedRingColor;
 
 uniform sampler2D positionsTexture;
 uniform sampler2D pointStatus;
@@ -56,6 +60,9 @@ layout(std140) uniform drawVertexUniforms {
   vec4 strokeDefaultColor;
   float animateStrokeColors;
   float animateStrokeWidths;
+  vec4 ringDefaultColor;
+  float ringDefaultShade;
+  float ringContrast;
 } drawVertex;
 
 #define ratio drawVertex.ratio
@@ -87,6 +94,9 @@ layout(std140) uniform drawVertexUniforms {
 #define strokeDefaultColor drawVertex.strokeDefaultColor
 #define animateStrokeColors drawVertex.animateStrokeColors
 #define animateStrokeWidths drawVertex.animateStrokeWidths
+#define ringDefaultColor drawVertex.ringDefaultColor
+#define ringDefaultShade drawVertex.ringDefaultShade
+#define ringContrast drawVertex.ringContrast
 #else
 uniform float ratio;
 uniform mat3 transformationMatrix;
@@ -117,6 +127,9 @@ uniform float strokeDefaultWidth;
 uniform vec4 strokeDefaultColor;
 uniform float animateStrokeColors;
 uniform float animateStrokeWidths;
+uniform vec4 ringDefaultColor;
+uniform float ringDefaultShade;
+uniform float ringContrast;
 #endif
 
 out float pointShape;
@@ -127,26 +140,24 @@ out vec4 imageAtlasUV;
 out float shapeSize;
 out float imageSizeVarying;
 out float overallSize;
+// Fills above this OKLab lightness darken in auto mode; darker fills lighten.
+const float AUTO_LIGHTNESS_THRESHOLD = 0.6;
+
+// A perceptual lightness step that preserves hue by reducing out-of-gamut chroma.
+// Direction: -1 darken, 1 lighten, 0 choose from the fill. The gamut helper clamps lightness.
+vec3 shadeColor(vec3 fill, float direction, float contrast) {
+  vec3 lab = srgbToOklab(fill);
+  if (direction == 0.0) direction = lab.x > AUTO_LIGHTNESS_THRESHOLD ? -1.0 : 1.0;
+  lab.x += direction * contrast;
+  return oklabToSrgb(oklabClampChroma(lab));
+}
+
 // The stroke is compiled in only while some point can have one (POINT_STROKE, see
 // Points.isStrokeWanted): without it the draw carries no stroke attributes, varyings or
 // per-fragment branch, so a graph that never strokes pays nothing for the feature.
 #ifdef POINT_STROKE
 out vec4 strokeColor;
 out float strokeWidthPx;
-
-// Points lighter than this OKLab lightness get a darker stroke in 'auto' mode, darker ones a
-// lighter stroke. 0.6 is roughly sRGB mid-grey, so saturated blues lighten and yellows darken.
-const float STROKE_AUTO_LIGHTNESS_THRESHOLD = 0.6;
-
-// Derived stroke color: a constant perceptual step in OKLab lightness from the fill (oklab
-// module), chroma reduced only if the shifted color leaves the sRGB gamut so the hue survives.
-// `direction` is -1 darken, 1 lighten, 0 decide from the fill's own lightness.
-vec3 shadeStrokeColor(vec3 fill, float direction) {
-  vec3 lab = srgbToOklab(fill);
-  if (direction == 0.0) direction = lab.x > STROKE_AUTO_LIGHTNESS_THRESHOLD ? -1.0 : 1.0;
-  lab.x += direction * strokeContrast;
-  return oklabToSrgb(oklabClampChroma(lab));
-}
 
 // Per-point stroke color. An explicit per-point color (no NaN channel) wins; otherwise the
 // default: an explicit default color (shade 2), or a shade derived from the fill. A greyed-out
@@ -159,7 +170,7 @@ vec4 resolveStrokeColor(vec4 explicit, vec3 fill, float greyed) {
     if (strokeDefaultShade > 1.5) return strokeDefaultColor;
   }
   float direction = strokeDefaultShade > 1.5 ? 0.0 : strokeDefaultShade;
-  return vec4(shadeStrokeColor(fill, direction), 1.0);
+  return vec4(shadeColor(fill, direction, strokeContrast), 1.0);
 }
 
 // Per-point stroke width in CSS px; NaN = the config default.
@@ -289,6 +300,17 @@ void main() {
 
   shapeColor = pointColor;
   pointShape = shape;
+
+  resolvedRingColor = ringDefaultColor;
+  if (isOutlined > 0.0) {
+#ifdef POINT_RING_COLORS
+    if (!any(isnan(pointRingColor))) resolvedRingColor = pointRingColor;
+    else
+#endif
+    if (ringDefaultShade != 2.0) {
+      resolvedRingColor = vec4(shadeColor(pointColor.rgb, ringDefaultShade, ringContrast), 1.0);
+    }
+  }
 
   // Adjust color of greyed-out points
   if (isGreyedOut > 0.0) {

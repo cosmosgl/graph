@@ -4,6 +4,7 @@ import { createStory, Story } from '@/graph/stories/create-story'
 import { CosmosStoryProps } from './create-cosmos'
 import { allShapes } from './points/shapes'
 import { pointStroke } from './points/stroke'
+import { ringColors } from './points/ring-colors'
 import { strokeAndRings } from './points/stroke-and-rings'
 import { imageExample } from './points/images'
 import { pointRenderOrder } from './points/render-order'
@@ -12,6 +13,7 @@ import { moscowMetroStations } from './points/position-rescaling'
 
 import shapesStoryRaw from './points/shapes/index?raw'
 import strokeStoryRaw from './points/stroke/index?raw'
+import ringColorsStoryRaw from './points/ring-colors/index?raw'
 import strokeAndRingsStoryRaw from './points/stroke-and-rings/index?raw'
 import imagesStoryRaw from './points/images/index?raw'
 import renderOrderStoryRaw from './points/render-order/index?raw'
@@ -57,6 +59,17 @@ export const StrokeAndRings: Story = {
   parameters: {
     sourceCode: [
       { name: 'Story', code: strokeAndRingsStoryRaw },
+    ],
+  },
+}
+
+export const RingColors: Story = {
+  ...createStory(ringColors),
+  name: 'Outer Ring Colors',
+  tags: ['interactive'],
+  parameters: {
+    sourceCode: [
+      { name: 'Story', code: ringColorsStoryRaw },
     ],
   },
 }

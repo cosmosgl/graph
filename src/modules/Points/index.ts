@@ -104,6 +104,57 @@ interface StrokeUniforms {
   strokeDefaultColor: [number, number, number, number];
 }
 
+/** Point draw uniform values shared by the store, defaults, and per-frame updates. */
+type DrawUniforms = {
+  drawVertexUniforms: {
+    ratio: number;
+    sizeScale: number;
+    pointsTextureSize: number;
+    transformationMatrix: Mat4Array;
+    worldOrigin: [number, number];
+    screenSize: [number, number];
+    greyoutColor: [number, number, number, number];
+    backgroundColor: [number, number, number, number];
+    scalePointsOnZoom: number;
+    maxPointSize: number;
+    isDarkenGreyout: number;
+    skipHighlighted: number;
+    skipGreyed: number;
+    hasImages: number;
+    imageCount: number;
+    imageAtlasCoordsTextureSize: number;
+    transitionProgress: number;
+    animateColors: number;
+    animateSizes: number;
+    animatePositions: number;
+    pointDefaultColor: [number, number, number, number];
+    pointDefaultSize: number;
+    pointsNumber: number;
+    strokeContrast: number;
+    strokeDefaultShade: number;
+    strokeDefaultWidth: number;
+    strokeDefaultColor: [number, number, number, number];
+    animateStrokeColors: number;
+    animateStrokeWidths: number;
+    ringDefaultColor: [number, number, number, number];
+    ringDefaultShade: number;
+    ringContrast: number;
+  };
+  drawFragmentUniforms: {
+    greyoutOpacity: number;
+    pointOpacity: number;
+    isDarkenGreyout: number;
+    backgroundColor: [number, number, number, number];
+    outlineWidth: number;
+    renderMode: number;
+    pickingAlpha: number;
+    pickingIndexOffset: number;
+  };
+}
+
+type DrawVertexValues = Omit<DrawUniforms['drawVertexUniforms'], 'skipHighlighted' | 'skipGreyed'>
+type DrawFragmentValues = Omit<DrawUniforms['drawFragmentUniforms'], 'pickingAlpha' | 'pickingIndexOffset'>
+
 export class Points extends CoreModule implements PointTrackerHost {
   public transition: Transition | undefined
   public currentPositionFbo: Framebuffer | undefined
@@ -234,6 +285,7 @@ export class Points extends CoreModule implements PointTrackerHost {
    * data upload); set by `Clusters`.
    */
   public areClusterCentroidsUpToDate = false
+  private ringColorBuffer: Buffer | undefined
   private sourceColorBuffer: Buffer | undefined
   private targetColorBuffer: Buffer | undefined
   private previousColorData: Float32Array | undefined
@@ -353,6 +405,7 @@ export class Points extends CoreModule implements PointTrackerHost {
   private shouldAnimateStrokeWidths = false
   /** Whether the point draw models were compiled with the stroke (`POINT_STROKE`); see `isStrokeWanted`. */
   private isStrokeCompiled = false
+  private isRingColorCompiled = false
   private shouldAnimatePointPositions = false
 
   // Uniform stores for scalar uniforms
@@ -377,50 +430,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     };
   }> | undefined
 
-  private drawUniformStore: UniformStore<{
-    drawVertexUniforms: {
-      ratio: number;
-      sizeScale: number;
-      pointsTextureSize: number;
-      transformationMatrix: Mat4Array;
-      worldOrigin: [number, number];
-      screenSize: [number, number];
-      greyoutColor: [number, number, number, number];
-      backgroundColor: [number, number, number, number];
-      scalePointsOnZoom: number;
-      maxPointSize: number;
-      isDarkenGreyout: number;
-      skipHighlighted: number;
-      skipGreyed: number;
-      hasImages: number;
-      imageCount: number;
-      imageAtlasCoordsTextureSize: number;
-      transitionProgress: number;
-      animateColors: number;
-      animateSizes: number;
-      animatePositions: number;
-      pointDefaultColor: [number, number, number, number];
-      pointDefaultSize: number;
-      pointsNumber: number;
-      strokeContrast: number;
-      strokeDefaultShade: number;
-      strokeDefaultWidth: number;
-      strokeDefaultColor: [number, number, number, number];
-      animateStrokeColors: number;
-      animateStrokeWidths: number;
-    };
-    drawFragmentUniforms: {
-      greyoutOpacity: number;
-      pointOpacity: number;
-      isDarkenGreyout: number;
-      backgroundColor: [number, number, number, number];
-      outlineColor: [number, number, number, number];
-      outlineWidth: number;
-      renderMode: number;
-      pickingAlpha: number;
-      pickingIndexOffset: number;
-    };
-  }> | undefined
+  private drawUniformStore: UniformStore<DrawUniforms> | undefined
 
   private findPointsInRectUniformStore: UniformStore<{
     findPointsInRectUniforms: {
@@ -531,6 +541,13 @@ export class Points extends CoreModule implements PointTrackerHost {
    */
   private get isStrokeWanted (): boolean {
     return this.data.hasPointStroke
+  }
+
+  /** Keep an outgoing stroke's inputs until its transition ends, including across ring variant rebuilds. */
+  private get isStrokeVariantWanted (): boolean {
+    const transitioning = this.transition?.isActiveFor(TransitionProperty.PointStrokeWidths) === true ||
+      this.transition?.isActiveFor(TransitionProperty.PointStrokeColors) === true
+    return this.isStrokeWanted || (this.isStrokeCompiled && transitioning)
   }
 
   /** Drops point readbacks in flight; the next read asks again. */
@@ -814,7 +831,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     })
 
     // Create UniformStore for draw uniforms
-    this.drawUniformStore ||= new UniformStore(device, {
+    this.drawUniformStore ||= new UniformStore<DrawUniforms>(device, {
       drawVertexUniforms: {
         uniformTypes: {
           // Order MUST match shader declaration order (std140 layout)
@@ -847,6 +864,9 @@ export class Points extends CoreModule implements PointTrackerHost {
           strokeDefaultColor: 'vec4<f32>',
           animateStrokeColors: 'f32',
           animateStrokeWidths: 'f32',
+          ringDefaultColor: 'vec4<f32>',
+          ringDefaultShade: 'f32',
+          ringContrast: 'f32',
         },
         defaultUniforms: {
           // Order MUST match uniformTypes and shader declaration
@@ -882,6 +902,7 @@ export class Points extends CoreModule implements PointTrackerHost {
           pointDefaultSize: config.pointDefaultSize,
           pointsNumber: data.pointsNumber ?? 0,
           ...this.getStrokeUniforms(),
+          ...this.getRingUniforms(),
           animateStrokeColors: 0,
           animateStrokeWidths: 0,
         },
@@ -892,7 +913,6 @@ export class Points extends CoreModule implements PointTrackerHost {
           pointOpacity: 'f32',
           isDarkenGreyout: 'f32',
           backgroundColor: 'vec4<f32>',
-          outlineColor: 'vec4<f32>',
           outlineWidth: 'f32',
           renderMode: 'f32',
           pickingAlpha: 'f32',
@@ -906,14 +926,16 @@ export class Points extends CoreModule implements PointTrackerHost {
           pointOpacity: config.pointOpacity,
           isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
           backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
-          outlineColor: ensureVec4(store.outlinedPointRingColor, [1, 1, 1, 1]),
           outlineWidth: 0.9,
           renderMode: 0,
         },
       },
     })
 
-    if (!this.drawCommand) this.isStrokeCompiled = this.isStrokeWanted
+    if (!this.drawCommand) {
+      this.isStrokeCompiled = this.isStrokeVariantWanted
+      this.isRingColorCompiled = !!this.ringColorBuffer
+    }
     this.drawCommand ||= new Model(device, {
       fs: drawPointsFrag,
       vs: drawPointsVert,
@@ -1579,6 +1601,33 @@ export class Points extends CoreModule implements PointTrackerHost {
     }
   }
 
+  public updateRingColor (): void {
+    const count = this.data.pointsNumber
+    const colors = this.data.inputPointRingColors
+    // Config-only rings use uniforms: no per-point buffer or attribute is needed.
+    // A mismatched channel falls back everywhere, just like an omitted channel.
+    if (!count || colors?.length !== count * 4) {
+      if (this.ringColorBuffer && !this.ringColorBuffer.destroyed) {
+        this.ringColorBuffer.destroy()
+      }
+      this.ringColorBuffer = undefined
+      return
+    }
+    if (!this.ringColorBuffer || this.ringColorBuffer.destroyed || this.ringColorBuffer.byteLength !== colors.byteLength) {
+      if (this.ringColorBuffer && !this.ringColorBuffer.destroyed) {
+        this.ringColorBuffer.destroy()
+      }
+      this.ringColorBuffer = this.device.createBuffer({
+        data: colors,
+        usage: Buffer.VERTEX | Buffer.COPY_DST,
+      })
+    } else this.ringColorBuffer.write(colors)
+    if (!this.isRingColorCompiled) return // The variant rebuild binds this new channel.
+    const attributes = { pointRingColor: this.ringColorBuffer }
+    this.drawCommand?.setAttributes(attributes)
+    this.drawCoreCommand?.setAttributes(attributes)
+  }
+
   public updateStrokeColor (): void {
     const { store: { pointsTextureSize }, data } = this
     // Compiled-out: nothing to upload to. Compiled-in but no longer wanted: the stroke is
@@ -1993,7 +2042,7 @@ export class Points extends CoreModule implements PointTrackerHost {
    */
   public drawPicking (renderPass: RenderPass, alpha: number, indexOffset = 0): void {
     const { data, store } = this
-    this.ensureStrokeVariant()
+    this.ensureDrawVariant()
     if (!this.targetColorBuffer) this.updateColor()
     if (!this.targetSizeBuffer) this.updateSize()
     if (!this.targetStrokeColorBuffer) this.updateStrokeColor()
@@ -2053,7 +2102,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
   public draw (renderPass: RenderPass): void {
     const { data, config, store } = this
-    this.ensureStrokeVariant()
+    this.ensureDrawVariant()
     if (!this.targetColorBuffer) this.updateColor()
     if (!this.targetSizeBuffer) this.updateSize()
     if (!this.targetStrokeColorBuffer) this.updateStrokeColor()
@@ -2936,6 +2985,10 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.targetColorBuffer = undefined
     this.previousColorData = undefined
     this.destroyStrokeBuffers()
+    if (this.ringColorBuffer && !this.ringColorBuffer.destroyed) {
+      this.ringColorBuffer.destroy()
+    }
+    this.ringColorBuffer = undefined
     if (this.sourceSizeBuffer && !this.sourceSizeBuffer.destroyed) {
       this.sourceSizeBuffer.destroy()
     }
@@ -3398,19 +3451,14 @@ export class Points extends CoreModule implements PointTrackerHost {
   }
 
   /**
-   * Rebuilds the point draw models when the stroke was switched on or off since they were
-   * compiled. Buffers are not owned by a Model, so only the models go; `initPrograms()` builds
-   * them again with the current variant and binds the current buffers.
+   * Rebuilds the point draw models when stroke or per-point ring inputs change variants.
+   * Buffers are not owned by a Model, so only the models go; initPrograms binds the current buffers.
    */
-  private ensureStrokeVariant (): void {
-    if (!this.drawCommand || this.isStrokeCompiled === this.isStrokeWanted) return
-    // A stroke on its way out keeps its shaders until the transition has played. Asked of the
-    // transition itself, not the per-frame animate flags: the frame reads those before it steps
-    // the transition, so on the final frame they still say "animating" while the cycle has
-    // ended — and with the loop then idle, no later frame would release the variant.
-    const strokeTransitionActive = this.transition?.isActiveFor(TransitionProperty.PointStrokeWidths) === true ||
-      this.transition?.isActiveFor(TransitionProperty.PointStrokeColors) === true
-    if (!this.isStrokeWanted && strokeTransitionActive) return
+  private ensureDrawVariant (): void {
+    if (!this.drawCommand) return
+    const strokeWanted = this.isStrokeVariantWanted
+    const ringColorWanted = !!this.ringColorBuffer
+    if (this.isStrokeCompiled === strokeWanted && this.isRingColorCompiled === ringColorWanted) return
     this.drawCommand.destroy()
     this.drawCommand = undefined
     this.drawCoreCommand?.destroy()
@@ -3419,8 +3467,9 @@ export class Points extends CoreModule implements PointTrackerHost {
     this.drawPickingCommand = undefined
     this.isOcclusionCullingActive = false
     // The flag first: initPrograms() allocates the stroke buffers only for a stroke variant
-    this.isStrokeCompiled = this.isStrokeWanted
-    if (!this.isStrokeWanted) this.destroyStrokeBuffers()
+    this.isStrokeCompiled = strokeWanted
+    this.isRingColorCompiled = ringColorWanted
+    if (!strokeWanted) this.destroyStrokeBuffers()
     this.initPrograms()
   }
 
@@ -3437,11 +3486,16 @@ export class Points extends CoreModule implements PointTrackerHost {
   }
 
   private getDrawCommandDefines (): Record<string, boolean> {
-    return { USE_UNIFORM_BUFFERS: true, ...POINT_SHADER_DEFINES, ...(this.isStrokeCompiled && { POINT_STROKE: true }) }
+    return {
+      USE_UNIFORM_BUFFERS: true,
+      ...POINT_SHADER_DEFINES,
+      ...(this.isStrokeCompiled && { POINT_STROKE: true }),
+      ...(this.isRingColorCompiled && { POINT_RING_COLORS: true }),
+    }
   }
 
   private getDrawCommandModules (): ShaderModule[] {
-    return [shapeGeometryModule, pointSizeModule, exitRampModule, ...(this.isStrokeCompiled ? [oklabModule] : []), pickingColorModule]
+    return [shapeGeometryModule, pointSizeModule, exitRampModule, oklabModule, pickingColorModule]
   }
 
   private getDrawCommandBufferLayout (): BufferLayout[] {
@@ -3463,8 +3517,19 @@ export class Points extends CoreModule implements PointTrackerHost {
       { name: 'imageIndex', format: 'float32' },
       { name: 'imageSize', format: 'float32' },
       ...strokeLayout,
+      ...(this.isRingColorCompiled ? [{ name: 'pointRingColor', format: 'float32x4' } as BufferLayout] : []),
       { name: 'renderRank', format: 'float32' },
     ]
+  }
+
+  private getRingUniforms (): Pick<DrawUniforms['drawVertexUniforms'], 'ringDefaultColor' | 'ringDefaultShade' | 'ringContrast'> {
+    return {
+      ringDefaultColor: ensureVec4(this.store.outlinedPointRingColor, [1, 1, 1, 1]),
+      ringDefaultShade: this.store.outlinedPointRingShade,
+      ringContrast: Number.isFinite(this.config.outlinedPointRingContrast)
+        ? Math.min(1, Math.max(0, this.config.outlinedPointRingContrast))
+        : defaultConfigValues.outlinedPointRingContrast,
+    }
   }
 
   /**
@@ -3770,11 +3835,11 @@ export class Points extends CoreModule implements PointTrackerHost {
 
   /** The uniforms every points draw shares — the visible passes and the host picking pass. */
   private getDrawUniforms (): {
-    vertex: Record<string, unknown>;
-    fragment: Record<string, unknown>;
+    vertex: DrawVertexValues;
+    fragment: DrawFragmentValues;
     } {
     const { data, config, store } = this
-    const vertex = {
+    const vertex: DrawVertexValues = {
       ratio: config.pixelRatio,
       transformationMatrix: store.transformationMatrix4x4,
       pointsTextureSize: store.pointsTextureSize ?? 0,
@@ -3796,18 +3861,18 @@ export class Points extends CoreModule implements PointTrackerHost {
       // Cached parse — draw() runs per frame, so no color-string parsing here.
       pointDefaultColor: ensureVec4(data.defaultRgba, [0, 0, 0, 1]),
       pointDefaultSize: config.pointDefaultSize,
-      pointsNumber: data.pointsNumber,
+      pointsNumber: data.pointsNumber ?? 0,
       ...this.getStrokeUniforms(),
+      ...this.getRingUniforms(),
       animateStrokeColors: this.shouldAnimateStrokeColors ? 1 : 0,
       animateStrokeWidths: this.shouldAnimateStrokeWidths ? 1 : 0,
     }
-    const fragment = {
+    const fragment: DrawFragmentValues = {
       // -1 is a sentinel value for the shader: when greyoutOpacity is -1, the shader skips opacity override (i.e. "not set")
       greyoutOpacity: config.pointGreyoutOpacity ?? -1,
       pointOpacity: config.pointOpacity,
       isDarkenGreyout: (store.isDarkenGreyout ?? false) ? 1 : 0, // Convert boolean to float
       backgroundColor: ensureVec4(store.backgroundColor, [0, 0, 0, 1]),
-      outlineColor: ensureVec4(store.outlinedPointRingColor, [1, 1, 1, 1]),
       outlineWidth: 0.9,
       renderMode: 0,
     }
@@ -3841,6 +3906,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       ...(this.targetStrokeColorBuffer && { targetStrokeColor: this.targetStrokeColorBuffer }),
       ...(this.sourceStrokeWidthBuffer && { sourceStrokeWidth: this.sourceStrokeWidthBuffer }),
       ...(this.targetStrokeWidthBuffer && { targetStrokeWidth: this.targetStrokeWidthBuffer }),
+      ...(this.ringColorBuffer && { pointRingColor: this.ringColorBuffer }),
       ...(this.renderRankBuffer && { renderRank: this.renderRankBuffer }),
     } as Record<string, Buffer>
   }

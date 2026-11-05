@@ -11,7 +11,6 @@ layout(std140) uniform drawFragmentUniforms {
   float pointOpacity;
   float isDarkenGreyout;
   vec4 backgroundColor;
-  vec4 outlineColor;
   float outlineWidth;
   float renderMode;
   float pickingAlpha;
@@ -22,7 +21,6 @@ layout(std140) uniform drawFragmentUniforms {
 #define pointOpacity drawFragment.pointOpacity
 #define isDarkenGreyout drawFragment.isDarkenGreyout
 #define backgroundColor drawFragment.backgroundColor
-#define outlineColor drawFragment.outlineColor
 #define outlineWidth drawFragment.outlineWidth
 #define renderMode drawFragment.renderMode
 #define pickingAlpha drawFragment.pickingAlpha
@@ -32,7 +30,6 @@ uniform float greyoutOpacity;
 uniform float pointOpacity;
 uniform float isDarkenGreyout;
 uniform vec4 backgroundColor;
-uniform vec4 outlineColor;
 uniform float outlineWidth;
 uniform float renderMode;
 uniform float pickingAlpha;
@@ -40,6 +37,7 @@ uniform float pickingIndexOffset;
 #endif
 
 
+in vec4 resolvedRingColor;
 in float pointShape;
 in float isGreyedOut;
 in float isOutlined;
@@ -354,7 +352,7 @@ void main() {
         float ringAlpha = 1.0 - smoothstep(-EDGE_RAMP_PX * 0.5, EDGE_RAMP_PX * 0.5, abs(rPx - ringCentrePx) - ringHalfCorePx);
 
         // Grey out the ring color when the point is greyed
-        vec3 ringColor = outlineColor.rgb;
+        vec3 ringColor = resolvedRingColor.rgb;
         if (isGreyedOut > 0.0) {
             float blendFactor = 0.65;
             if (isDarkenGreyout > 0.0) {
@@ -364,7 +362,7 @@ void main() {
             }
         }
 
-        float ringOpacity = ringAlpha * outlineColor.a;
+        float ringOpacity = ringAlpha * resolvedRingColor.a;
         // Source-over of the ring onto the fragment. A plain mix would tint the ring with a
         // transparent body's colour, and the blend would then apply the ring's alpha twice.
         float outAlpha = ringOpacity + fragColor.a * (1.0 - ringOpacity);
