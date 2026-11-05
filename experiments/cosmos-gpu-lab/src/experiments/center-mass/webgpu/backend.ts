@@ -171,7 +171,7 @@ export async function createWebGPUCenterMass (
     const renderPass = encoder.beginRenderPass({
       colorAttachments: [{
         view: context.getCurrentTexture().createView(),
-        clearValue: { r: 0.025, g: 0.035, b: 0.055, a: 1 },
+        clearValue: { r: 0.09, g: 0.1, b: 0.12, a: 1 },
         loadOp: 'clear',
         storeOp: 'store',
       }],

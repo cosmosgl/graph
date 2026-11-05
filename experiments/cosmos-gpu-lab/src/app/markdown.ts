@@ -11,10 +11,10 @@ async function renderDiagrams (host: HTMLElement): Promise<void> {
       securityLevel: 'strict',
       theme: 'dark',
       themeVariables: {
-        background: '#111722',
-        primaryColor: '#1b2535',
-        primaryTextColor: '#eef3fa',
-        lineColor: '#8090aa',
+        background: '#292e36',
+        primaryColor: '#373d47',
+        primaryTextColor: '#e3e4e7',
+        lineColor: '#9da3ad',
       },
     })
     mermaidInitialized = true
