@@ -17,8 +17,9 @@ states independently of that hue.
 `outlinedPointRingColor` keeps its white default and also accepts `auto`, `darken`,
 and `lighten`, using the existing OKLab color utilities. Auto chooses the direction
 from each point's fill lightness, as strokes do. `outlinedPointRingContrast`
-controls the lightness step (default `0.1`). The shade is computed once per outlined
-point in the vertex shader and follows animated fill colors.
+controls the lightness step (default `0.1`); non-finite values use the default.
+The shade is computed once per outlined point in the vertex shader and follows
+animated fill colors.
 
 `setPointRingColors(Float32Array)` supplies RGBA in 0..1, aligned to point indices.
 An explicit color overrides the configured color or rule; any NaN channel falls
@@ -45,10 +46,14 @@ one GPU buffer, rather than the source/target pair animated channels need. It co
 16 bytes per point only when a matching per-point array is supplied; config-only
 colors carry no ring-color buffer or vertex attribute. Changing whether the
 channel exists rebuilds the point draw models once, preserving an outgoing stroke
-transition. Existing draw passes, ring geometry and the white default are retained.
+transition. Ingestion stays in the render/update path: shader rebuilds do not
+apply pending colors early, and clearing all points releases the color buffer.
+Existing draw passes, ring geometry and the white default are retained.
 This is additive; no migration is required.
 
 ## Example and validation
+
+**Path:** `src/stories/points/ring-colors/index.ts`
 
 **Examples/Points → Outer Ring Colors** uses a seeded 720-point scatter in six
 color groups. Placement accounts for both point bodies and outer rings, leaving
@@ -58,7 +63,9 @@ background and Fit view. Style changes preserve the camera; the source is in
 Storybook's Source Code panel.
 
 Browser tests cover fallback and explicit colors, automatic shading, allocation
-and release, config rebuilds and interaction with stroke transitions. Software
+and release (including an empty graph), deferred ingestion through shader
+rebuilds, distinct colors and fallback on multiple points, interpolated fill
+shading, invalid contrast, and interaction with stroke transitions. Software
 rendering checks at 100,000, 500,000 and 1,000,000 points found white-ring median
 changes between -2.3% and +2.7% against baseline
 `93c3c9d77a64cac8f747a4be0c2683259f41e721`. Auto added 0.2–1.3% relative to white

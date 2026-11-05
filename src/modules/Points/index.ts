@@ -776,7 +776,6 @@ export class Points extends CoreModule implements PointTrackerHost {
       this.createAtlas()
     }
     // Ensure buffers exist before Model creation (Model needs attributes at creation time)
-    if (!this.ringColorBuffer) this.updateRingColor()
     if (!this.targetColorBuffer) this.updateColor()
     if (!this.targetSizeBuffer) this.updateSize()
     if (!this.targetStrokeColorBuffer) this.updateStrokeColor()
@@ -3527,7 +3526,9 @@ export class Points extends CoreModule implements PointTrackerHost {
     return {
       ringDefaultColor: ensureVec4(this.store.outlinedPointRingColor, [1, 1, 1, 1]),
       ringDefaultShade: this.store.outlinedPointRingShade,
-      ringContrast: Math.min(1, Math.max(0, this.config.outlinedPointRingContrast)),
+      ringContrast: Number.isFinite(this.config.outlinedPointRingContrast)
+        ? Math.min(1, Math.max(0, this.config.outlinedPointRingContrast))
+        : defaultConfigValues.outlinedPointRingContrast,
     }
   }
 
