@@ -1,6 +1,6 @@
 import { luma } from '@luma.gl/core'
 import { webgl2Adapter, type WebGLDevice } from '@luma.gl/webgl'
-import type { PointRenderBackend, PointRenderData } from '../backend'
+import type { PointRenderBackend, PointRenderData, PointRenderMeasurement } from '../backend'
 import fragmentShader from './shaders/circle.frag.glsl?raw'
 import vertexShader from './shaders/circle.vert.glsl?raw'
 
@@ -75,7 +75,24 @@ export async function createWebGLPointRenderer (
   gl.vertexAttribPointer(1, 4, gl.FLOAT, false, 0, 0)
 
   const diameterLocation = gl.getUniformLocation(program, 'pointDiameter')
+  const completionPixel = new Uint8Array(4)
   let count = 0
+
+  const draw = (diameter: number, clear = true): void => {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+    gl.viewport(0, 0, canvas.width, canvas.height)
+    if (clear) {
+      gl.clearColor(0.075, 0.087, 0.105, 1)
+      gl.clear(gl.COLOR_BUFFER_BIT)
+    }
+    gl.enable(gl.BLEND)
+    gl.blendEquation(gl.FUNC_ADD)
+    gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
+    gl.useProgram(program)
+    gl.uniform1f(diameterLocation, diameter)
+    gl.bindVertexArray(vertexArray)
+    gl.drawArrays(gl.POINTS, 0, count)
+  }
 
   return {
     setData (data: PointRenderData): void {
@@ -86,17 +103,20 @@ export async function createWebGLPointRenderer (
       gl.bufferData(gl.ARRAY_BUFFER, data.colors, gl.DYNAMIC_DRAW)
     },
     render (diameter: number): void {
-      gl.bindFramebuffer(gl.FRAMEBUFFER, null)
-      gl.viewport(0, 0, canvas.width, canvas.height)
-      gl.clearColor(0.075, 0.087, 0.105, 1)
-      gl.clear(gl.COLOR_BUFFER_BIT)
-      gl.enable(gl.BLEND)
-      gl.blendEquation(gl.FUNC_ADD)
-      gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA)
-      gl.useProgram(program)
-      gl.uniform1f(diameterLocation, diameter)
-      gl.bindVertexArray(vertexArray)
-      gl.drawArrays(gl.POINTS, 0, count)
+      draw(diameter)
+    },
+    async measure (diameter: number, iterations = 1): Promise<PointRenderMeasurement> {
+      const started = performance.now()
+      for (let iteration = 0; iteration < iterations; iteration += 1) {
+        draw(diameter, iteration === 0)
+      }
+      const submitted = performance.now()
+      gl.finish()
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, completionPixel)
+      return {
+        submitMilliseconds: submitted - started,
+        completionMilliseconds: performance.now() - started,
+      }
     },
     destroy (): void {
       gl.deleteBuffer(colorBuffer)
