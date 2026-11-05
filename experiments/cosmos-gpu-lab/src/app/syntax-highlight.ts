@@ -8,16 +8,27 @@ type TokenKind =
   | 'string'
   | 'type'
 
-const keywords = new Set([
+const wgslKeywords = new Set([
   'alias', 'break', 'case', 'const', 'const_assert', 'continue', 'continuing',
   'default', 'diagnostic', 'discard', 'else', 'enable', 'false', 'fn', 'for',
   'if', 'let', 'loop', 'override', 'requires', 'return', 'struct', 'switch',
   'true', 'var', 'while',
 ])
 
-const types = new Set([
+const wgslTypes = new Set([
   'array', 'atomic', 'bool', 'f16', 'f32', 'i32', 'ptr', 'sampler',
   'sampler_comparison', 'u32',
+])
+
+const glslKeywords = new Set([
+  'break', 'case', 'const', 'continue', 'default', 'discard', 'do', 'else',
+  'false', 'for', 'highp', 'if', 'in', 'inout', 'layout', 'lowp', 'mediump',
+  'out', 'precision', 'return', 'struct', 'switch', 'true', 'uniform', 'void',
+  'while',
+])
+
+const glslTypes = new Set([
+  'bool', 'float', 'int', 'uint', 'sampler2D', 'sampler2DArray', 'samplerCube',
 ])
 
 const numberPattern =
@@ -43,9 +54,14 @@ function isIdentifierPart (character: string | undefined): boolean {
   return character !== undefined && /[A-Za-z0-9_]/.test(character)
 }
 
-function isType (identifier: string): boolean {
-  return types.has(identifier) ||
+function isWgslType (identifier: string): boolean {
+  return wgslTypes.has(identifier) ||
     /^(?:vec[234](?:[fiuh])?|mat[234]x[234](?:[fh])?|texture_[A-Za-z0-9_]+)$/.test(identifier)
+}
+
+function isGlslType (identifier: string): boolean {
+  return glslTypes.has(identifier) ||
+    /^(?:[biu]?vec[234]|mat[234](?:x[234])?)$/.test(identifier)
 }
 
 function nextNonWhitespace (source: string, index: number): string | undefined {
@@ -77,7 +93,7 @@ function readBlockComment (source: string, start: number): number {
   return index
 }
 
-export function highlightWgsl (source: string): string {
+function highlightShader (source: string, language: 'wgsl' | 'glsl'): string {
   let output = ''
   let index = 0
 
@@ -104,7 +120,19 @@ export function highlightWgsl (source: string): string {
       continue
     }
 
-    if (source[index] === '@' && isIdentifierStart(source[index + 1])) {
+    if (language === 'glsl' && source[index] === '#') {
+      const end = source.indexOf('\n', index)
+      const next = end < 0 ? source.length : end
+      output += token('attribute', source.slice(index, next))
+      index = next
+      continue
+    }
+
+    if (
+      language === 'wgsl' &&
+      source[index] === '@' &&
+      isIdentifierStart(source[index + 1])
+    ) {
       let end = index + 2
       while (isIdentifierPart(source[end])) end += 1
       output += token('attribute', source.slice(index, end))
@@ -123,8 +151,14 @@ export function highlightWgsl (source: string): string {
       let end = index + 1
       while (isIdentifierPart(source[end])) end += 1
       const identifier = source.slice(index, end)
-      if (keywords.has(identifier)) output += token('keyword', identifier)
-      else if (isType(identifier)) output += token('type', identifier)
+      const isKeyword = language === 'wgsl'
+        ? wgslKeywords.has(identifier)
+        : glslKeywords.has(identifier)
+      const identifierIsType = language === 'wgsl'
+        ? isWgslType(identifier)
+        : isGlslType(identifier)
+      if (isKeyword) output += token('keyword', identifier)
+      else if (identifierIsType) output += token('type', identifier)
       else if (nextNonWhitespace(source, end) === '(') output += token('function', identifier)
       else output += escapeHtml(identifier)
       index = end
@@ -143,4 +177,12 @@ export function highlightWgsl (source: string): string {
   }
 
   return output
+}
+
+export function highlightWgsl (source: string): string {
+  return highlightShader(source, 'wgsl')
+}
+
+export function highlightGlsl (source: string): string {
+  return highlightShader(source, 'glsl')
 }

@@ -1,5 +1,5 @@
 import MarkdownIt from 'markdown-it'
-import { highlightWgsl } from './syntax-highlight'
+import { highlightGlsl, highlightWgsl } from './syntax-highlight'
 import { linkVocabularyTerms } from './vocabulary'
 
 type MarkdownOptions = {
@@ -64,6 +64,9 @@ export async function renderMarkdown (
     }
     if (language === 'wgsl') {
       return `<pre class="code-block code-block-wgsl" data-language="WGSL"><code>${highlightWgsl(token.content)}</code></pre>`
+    }
+    if (language === 'glsl') {
+      return `<pre class="code-block code-block-glsl" data-language="GLSL"><code>${highlightGlsl(token.content)}</code></pre>`
     }
     return defaultFence?.(tokens, index, options, environment, renderer) ??
       renderer.renderToken(tokens, index, options)

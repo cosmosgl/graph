@@ -530,6 +530,36 @@ button:disabled {
   margin-left: auto;
 }
 
+.point-toolbar .range-control {
+  min-width: min(260px, 100%);
+}
+
+.range-control output {
+  margin-left: 4px;
+  color: #e3e5e8;
+  font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.range-control input[type="range"] {
+  width: 100%;
+  accent-color: #8fc7b5;
+}
+
+.point-render-panels canvas {
+  image-rendering: auto;
+}
+
+.canvas-error {
+  min-height: 42px;
+  margin: -1px 0 0;
+  padding: 11px 12px;
+  border: 1px solid #6c3939;
+  color: #ff9b94;
+  background: #221316;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
 .scale-status {
   display: flex;
   justify-content: space-between;
