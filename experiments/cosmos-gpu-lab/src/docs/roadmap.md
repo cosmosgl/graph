@@ -43,7 +43,7 @@ implementation and comparison. These are evidence levels, not a percentage of th
 | Circle point rendering | **Demonstrated:** matched WebGL sprites and WebGPU instanced circles | Complete shapes, strokes, images, transitions and render-order behavior |
 | Spatial indexing | **Demonstrated:** count/scan/scatter with variable cell occupancy | Establish production bounds, capacity, update and memory policies |
 | Local interaction and integration | **Partial:** CPU-validated local forces feeding GPU rendering | Preserve actual Cosmos integration and collision semantics |
-| Global many-body force | **Unproven:** local-neighborhood work provides useful building blocks | Preserve long-range interactions, approximation quality and convergence |
+| Global many-body force | **Partial:** [exact all-pairs](#/many-body) compares production GLSL, direct/tiled WGSL and CPU | Validate hierarchical far-field and sampled near-field behavior above 4,096 points, approximation quality and convergence |
 | Link forces and graph topology | **Partial:** ordered Cosmos spring passes validated against production GLSL and CPU; stable directional CSR and replacement | Long-term trajectories, state-preserving updates and composition with other forces; native execution limits |
 | Complete rendering and interaction | **Partial:** circles and minimal straight links read GPU-resident state | Full point/link styling, picking, hover, drag, selection, tracking and overlays |
 | luma resource and execution APIs | **Partial:** all isolated experiments use luma resources, models/kernels, passes, fences and timestamps | Host ownership, device loss, reusable scheduling and complete-engine integration |
@@ -95,6 +95,20 @@ building blocks relevant to near-field interactions and collision search.
 contributions and cannot replace that force without changing the model. Graph adjacency is also different
 from spatial proximity: link forces still need topology data such as CSR. Variable-size collision requires
 its own coverage and correctness checks.
+
+### Global repulsion: the exact path has a checked baseline
+
+The [many-body experiment](#/many-body) compares the production all-pairs GLSL with direct and shared-memory tiled
+WGSL and a float32 CPU reference. It preserves source order, near/far accumulation, coincidence samples, near-force
+clamping, absence, pinning and the production integration pass. Both WGSL variants passed isolated native Apple M3
+checks, including 4,096 points. [Validation conditions and limits](#/many-body/docs/results).
+
+**Meaning for Cosmos:** the exact force can run through luma compute without floating-point atomics. Shared-memory
+tiling can reuse source loads while keeping the per-target addition order; its speed benefit remains unmeasured.
+
+**Limit:** independent coincident trajectories drift despite passing same-input one-step checks. Longer layout quality,
+force composition and the production approximation used above 4,096 points remain unvalidated. This exact baseline
+provides a reference for that next comparison; local-neighborhood repulsion cannot substitute for it.
 
 ### Weighted springs: Cosmos semantics can run through luma compute
 
@@ -208,7 +222,8 @@ supports ordinary simulation and rendering without routine full-position CPU cop
 
 ### Milestone 2 — Demonstrate Cosmos-equivalent graph simulation
 
-Extend the validated weighted-link path with global many-body behavior, then compose center, gravity, attractors,
+Extend the checked exact many-body path to production approximate global behavior, combine it with weighted links,
+then compose center, gravity, attractors,
 mouse interaction, collision and integration. Preserve intended force order, damping/cooling, pinning and
 coordinate behavior. If an approximation changes the layout model, define and evaluate that change explicitly.
 
@@ -256,7 +271,7 @@ performance and memory meet the target budgets; supported devices are tested; an
 | --- | --- | --- |
 | Extend | Weighted-link compute-to-render path through luma | Can its demonstrated resource contract handle shared ownership, device loss and live updates? |
 | Extend | Weighted springs at larger sizes and over longer trajectories | Can ordered hub gathers and state-preserving topology updates meet the engine budget? |
-| First | Global many-body force comparison | Can we retain layout quality and make long-range forces affordable? |
+| First | Extend [exact global repulsion](#/many-body) to the production hierarchical / sampled path | Can we retain layout quality and make long-range forces affordable above 4,096 points? |
 | Alongside simulation | Links, richer points and picking from shared GPU state | Can Cosmos render and interact correctly without transferring all positions back? |
 | Then | Combined engine workload on multiple native GPUs | Is the whole migration practical for the intended users and graph sizes? |
 | Supporting optimization | Occupancy-dependent traversal and spatial locality | Which implementation choices improve complete frames once semantics are correct? |
