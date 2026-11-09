@@ -1825,3 +1825,11 @@ button[data-action="play"][aria-pressed="true"] {
   .learning-stages button { padding: 8px 4px; font-size: 12px; }
   .learning-render-explanation .learning-field { flex-direction: row; align-items: center; justify-content: space-between; }
 }
+
+.many-body-panels { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.many-body-status { padding: 12px 0; color: var(--accent-hover); font-size: 13px; }
+.many-body-results { margin: 20px 0; overflow-x: auto; }
+.many-body-results table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.many-body-results caption { padding: 0 0 12px; text-align: left; color: #afb3bb; }
+.many-body-results th, .many-body-results td { padding: 10px; border-bottom: 1px solid var(--control-border); text-align: left; }
+@media (max-width: 1100px) { .many-body-panels { grid-template-columns: 1fr; } }
