@@ -102,15 +102,21 @@ does not impose one universal rendering or simulation API.
 
 ### Where luma.gl fits
 
-We currently use luma.gl to create devices, then access native WebGL/WebGPU handles for most
-GPU operations. The lab's luma packages are pinned to the coherent `10.0.0-alpha.4` family.
+All experiment GPU work goes through the pinned luma `10.0.0-alpha.4` family:
 
-- `WebGLDevice.handle` exposes the underlying `WebGL2RenderingContext`.
-- `WebGPUDevice.handle` exposes the underlying `GPUDevice`.
+- `Model` and `UniformStore` implement WebGL shaders, attributes and uniforms.
+- `Kernel` and `RenderKernel` implement WebGPU compute and drawing with explicit binding layouts.
+- luma buffers, textures, framebuffers and canvas contexts own resources; passes and command encoders schedule work.
+- luma readback methods, fences and `QuerySet` provide validation, completion and timestamps.
 
-This keeps the compared algorithms explicit. It also means the current experiments do not
-validate a complete implementation through luma's higher-level resource APIs or
-`GPUCommandGraph`. Those abstractions can be investigated in dedicated experiments.
+The boundary includes diagnostics and browser tests: no underlying device handles, native GPU objects
+or native command calls. Small shared helpers in `src/gpu/` remove repeated setup; shader algorithms
+and experiment-specific ownership stay local. `typecheck` also checks this boundary. CPU heatmaps and
+image assertions may use Canvas 2D.
+
+This tests luma integration for the isolated experiments. `GPUCommandGraph`, host-owned devices,
+complete-engine lifecycle and production migration remain separate work. Historical performance
+captures predate this API migration and should not be pooled with new measurements.
 
 ## 4. Each experiment answers a migration question
 

@@ -22,13 +22,9 @@ inside the experiment package.
 
 ## luma.gl boundary
 
-Both devices are created through luma.gl v10 adapters. The experiment then accesses the backend handle deliberately:
-
-- `WebGLDevice.handle` gives the underlying `WebGL2RenderingContext`.
-- `WebGPUDevice.handle` gives the underlying `GPUDevice`.
-
-This keeps the compared algorithms visible and avoids hiding either path behind a higher-level helper. Future
-experiments can instead test the portable luma resource and command APIs directly.
+Both devices and all GPU operations use luma.gl v10 APIs. WebGL uses `Model`, vertex buffers,
+`UniformStore` and a 1×1 float framebuffer; WebGPU uses `Kernel` reductions and `RenderKernel`
+drawing. The CPU reads results through luma buffer/texture readback. No native handles are used.
 
 ## Buffers
 
@@ -36,10 +32,10 @@ The WebGPU path allocates:
 
 | Resource | Contents | Usage |
 | --- | --- | --- |
-| Position buffer | `8192 × vec2f` | storage, vertex, copy destination |
+| Position buffer | `8192 × vec2f` | storage, copy destination |
 | Partial buffer | `32 × vec4f` | storage |
 | Result buffer | `1 × vec4f` | storage, copy source |
-| Readback buffer | `1 × vec4f` | map read, copy destination |
+| Readback staging | managed by luma `Buffer.readAsync` | transient readback |
 | Parameter buffers | counts and padding | uniform, copy destination |
 | Center uniforms | center and pixel size | uniform, copy destination |
 

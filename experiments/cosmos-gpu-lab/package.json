@@ -8,7 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test:gpu": "vitest run --config vitest.config.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "node scripts/check-luma-api.mjs && tsc --noEmit"
   },
   "dependencies": {
     "@luma.gl/core": "10.0.0-alpha.4",

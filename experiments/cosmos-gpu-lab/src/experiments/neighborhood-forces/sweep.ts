@@ -1,3 +1,4 @@
+import type { Device } from '@luma.gl/core'
 import { createCpuGridReference } from '../spatial-grid/reference'
 import { createNeighborhoodBackend, type Method, type Timing } from './backend'
 import { BRUTE_LIMIT, createPositions, DEFAULT_PARAMETERS, type Validation } from './reference'
@@ -58,7 +59,7 @@ export function methodOrder (entry: SweepCase): Method[] {
 }
 
 export async function runSweep (
-  device: GPUDevice,
+  device: Device,
   plan: SweepCase[],
   cancelled: () => boolean,
   onRow: (row: SweepRow, completed: number, total: number) => void

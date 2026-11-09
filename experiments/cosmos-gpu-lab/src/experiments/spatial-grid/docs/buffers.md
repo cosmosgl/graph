@@ -43,3 +43,10 @@ mostly affects the comparatively small cell arrays; point count dominates memory
 The same physical storage is interpreted as atomic integers in count/scatter shaders and ordinary
 integers in scan/copy stages. A higher-level luma graph should describe those views and usages
 explicitly so it can validate hazards and schedule the copy between compute passes.
+
+## luma ownership
+
+The grid borrows luma `Device` and `Buffer` objects. Its own buffers and `Kernel` objects are destroyed
+without destroying the borrowed positions or device. `encodeBuild` records into the caller's luma
+command encoder. A clear kernel resets counts before counting; the pinned alpha has no encoder-level
+buffer-clear API. The scan, cursor copy and scatter remain GPU-resident across repeated builds.

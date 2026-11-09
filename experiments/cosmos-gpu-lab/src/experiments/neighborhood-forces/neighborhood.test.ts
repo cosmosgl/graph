@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { waitForGpu } from '../../gpu/luma'
+import { deviceForTest } from '../../gpu/test-device'
 import { createSpatialGridResources } from '../spatial-grid/resources'
 import { createNeighborhoodBackend } from './backend'
 import {
@@ -33,14 +35,9 @@ describe('neighborhood WebGPU pipelines', () => {
     [1025, 'uniform', 0.16, 64],
   ] as Array<[number, Distribution, number, number]>) {
     it(`matches the CPU for ${count} ${distribution} points, radius ${radius}, grid ${gridSize}`, async context => {
-      const adapter = await navigator.gpu?.requestAdapter()
-      if (!adapter) {
-        if (import.meta.env.REQUIRE_WEBGPU) throw new Error('WebGPU adapter required by test:gpu')
-        context.skip(); return
-      }
-      const device = await adapter.requestDevice()
       const errors: string[] = []
-      device.addEventListener('uncapturederror', event => errors.push(event.error.message))
+      const device = await deviceForTest(false, errors)
+      if (!device) { context.skip(); return }
       try {
         let baselineCandidates: number | undefined
         for (const [method, accumulation] of [['brute', 'blocked'], ['grid', 'blocked'], ['grid', 'chunked']] as const) {
@@ -66,32 +63,28 @@ describe('neighborhood WebGPU pipelines', () => {
   }
 
   it('keeps borrowed positions and device alive and builds both ping-pong inputs', async context => {
-    const adapter = await navigator.gpu?.requestAdapter()
-    if (!adapter) {
-      if (import.meta.env.REQUIRE_WEBGPU) throw new Error('WebGPU adapter required by test:gpu')
-      context.skip(); return
-    }
-    const device = await adapter.requestDevice()
+    const errors: string[] = []
+    const device = await deviceForTest(false, errors)
+    if (!device) { context.skip(); return }
     const data = new Float32Array([-1, -1, 1, 1, 0, 0])
-    const positions = [0, 1].map(() => device.createBuffer({ size: data.byteLength, usage: 128 | 8 | 4 }))
-    device.pushErrorScope('validation')
+    const positions = [0, 1].map(() => device.createBuffer({ byteLength: data.byteLength, usage: 128 | 8 | 4 }))
     try {
-      device.queue.writeBuffer(positions[0], 0, data)
-      device.queue.writeBuffer(positions[1], 0, new Float32Array([-1, -1, -1, -1, -1, -1]))
+      positions[0].write(data)
+      positions[1].write(new Float32Array([-1, -1, -1, -1, -1, -1]))
       const grid = createSpatialGridResources(device, positions, data.length / 2, 16)
       for (let index = 0; index < 2; index += 1) {
         const encoder = device.createCommandEncoder()
         grid.encodeBuild(encoder, index)
-        device.queue.submit([encoder.finish()])
+        device.submit(encoder.finish())
         const result = await grid.readback()
         expect(result.counts[0]).toBe(index === 0 ? 1 : 3)
         expect(result.offsets[256]).toBe(3)
         expect(Array.from(result.pointIndices).sort()).toEqual([0, 1, 2])
       }
       grid.destroy()
-      device.queue.writeBuffer(positions[0], 0, data)
-      await device.queue.onSubmittedWorkDone()
-      expect(await device.popErrorScope()).toBeNull()
+      positions[0].write(data)
+      await waitForGpu(device)
+      expect(errors).toEqual([])
     } finally {
       positions.forEach(position => position.destroy())
       device.destroy()

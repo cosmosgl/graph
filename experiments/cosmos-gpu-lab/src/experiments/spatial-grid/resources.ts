@@ -1,3 +1,7 @@
+import { Buffer, type Device, type CommandEncoder, type Bindings, type ComputePassProps } from '@luma.gl/core'
+import { Kernel } from '@luma.gl/engine'
+import { bindingLayout, upload, waitForGpu } from '../../gpu/luma'
+import clearShader from './shaders/clear.wgsl?raw'
 import addBlockOffsetsShader from './shaders/add-block-offsets.wgsl?raw'
 import countShader from './shaders/count.wgsl?raw'
 import scanShader from './shaders/scan.wgsl?raw'
@@ -5,89 +9,35 @@ import scatterShader from './shaders/scatter.wgsl?raw'
 import writeSentinelShader from './shaders/write-sentinel.wgsl?raw'
 
 const WORKGROUP_SIZE = 256
-const MAP_MODE_READ = 0x0001
-const BUFFER_USAGE = {
-  MAP_READ: 0x0001,
-  COPY_SRC: 0x0004,
-  COPY_DST: 0x0008,
-  UNIFORM: 0x0040,
-  STORAGE: 0x0080,
-} as const
-
-export type GridBenchmark = {
-  iterations: number;
-  submitMilliseconds: number;
-  totalMilliseconds: number;
-  averageMilliseconds: number;
-}
-
-export type GridReadback = {
-  counts: Uint32Array;
-  offsets: Uint32Array;
-  pointIndices: Uint32Array;
-}
-
+export type GridTimestamps = Pick<ComputePassProps, 'timestampQuerySet' | 'beginTimestampIndex' | 'endTimestampIndex'>
+export type GridBenchmark = { iterations: number; submitMilliseconds: number; totalMilliseconds: number; averageMilliseconds: number }
+export type GridReadback = { counts: Uint32Array; offsets: Uint32Array; pointIndices: Uint32Array }
 export type SpatialGridBackend = {
-  readonly cellOffsets: GPUBuffer;
-  readonly pointIndices: GPUBuffer;
-  encodeBuild: (encoder: GPUCommandEncoder, positionIndex?: number, timestamps?: GPUComputePassTimestampWrites) => void;
+  readonly cellOffsets: Buffer;
+  readonly pointIndices: Buffer;
   readonly pointCount: number;
   readonly gridSize: number;
   readonly cellCount: number;
   readonly scanHierarchy: number[];
   readonly positionBytes: number;
   readonly gridBytes: number;
-  build: () => Promise<number>;
-  benchmark: (iterations: number) => Promise<GridBenchmark>;
-  readback: () => Promise<GridReadback>;
-  destroy: () => void;
+  encodeBuild(encoder: CommandEncoder, positionIndex?: number, timestamps?: GridTimestamps): void;
+  build(): Promise<number>;
+  benchmark(iterations: number): Promise<GridBenchmark>;
+  readback(): Promise<GridReadback>;
+  destroy(): void;
 }
-
-type ScanLevel = {
-  count: number;
-  blockCount: number;
-  offsets: GPUBuffer;
-  blockSums: GPUBuffer;
-  parameters: GPUBuffer;
-  scanBindings: GPUBindGroup;
-  addBindings?: GPUBindGroup;
-}
-
-function createParameterBuffer (
-  device: GPUDevice,
-  values: Uint32Array,
-  label: string
-): GPUBuffer {
-  const buffer = device.createBuffer({
-    label,
-    size: 16,
-    usage: BUFFER_USAGE.COPY_DST | BUFFER_USAGE.UNIFORM,
-  })
-  device.queue.writeBuffer(buffer, 0, values)
-  return buffer
-}
-
-function alignedStorageSize (bytes: number): number {
-  return Math.max(4, Math.ceil(bytes / 4) * 4)
-}
-
+type ScanLevel = { count: number; blockCount: number; offsets: Buffer; blockSums: Buffer; parameters: Buffer; bindings: Bindings }
 export function formatGridBytes (bytes: number): string {
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`
-  return `${(bytes / 1024).toFixed(1)} KB`
+  return bytes >= 1024 ** 2 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${(bytes / 1024).toFixed(1)} KB`
 }
-
-/** Owns the index only; the caller owns the device and all position buffers. */
-export function createSpatialGridResources (
-  device: GPUDevice,
-  positionBuffers: GPUBuffer[],
-  pointCount: number,
-  gridSize: number
-): SpatialGridBackend {
+/** Owns the index only; the caller owns the luma device and all position buffers. */
+export function createSpatialGridResources (device: Device, positionBuffers: Buffer[], pointCount: number, gridSize: number): SpatialGridBackend {
   if (!Number.isSafeInteger(pointCount) || pointCount < 0 || !Number.isSafeInteger(gridSize) || gridSize < 1 ||
     !Number.isSafeInteger(gridSize * gridSize) || positionBuffers.length === 0) {
     throw new Error('Invalid spatial grid dimensions or position buffers')
   }
-  if (positionBuffers.some(buffer => buffer.size < Math.max(4, pointCount * 8) || !(buffer.usage & BUFFER_USAGE.STORAGE))) {
+  if (positionBuffers.some(buffer => buffer.byteLength < Math.max(4, pointCount * 8) || !(buffer.usage & Buffer.STORAGE))) {
     throw new Error('Borrowed position buffers must have storage usage and space for every point')
   }
   const cellCount = gridSize * gridSize
@@ -116,194 +66,104 @@ export function createSpatialGridResources (
     throw new Error('The grid scan exceeds the dispatch limit')
   }
 
-  const cellCounts = device.createBuffer({
-    label: 'grid cell counts',
-    size: alignedStorageSize(cellBytes),
-    usage: BUFFER_USAGE.COPY_SRC | BUFFER_USAGE.COPY_DST | BUFFER_USAGE.STORAGE,
-  })
-  const cursors = device.createBuffer({
-    label: 'grid scatter cursors',
-    size: alignedStorageSize(cellBytes),
-    usage: BUFFER_USAGE.COPY_DST | BUFFER_USAGE.STORAGE,
-  })
-  const pointIndices = device.createBuffer({
-    label: 'cell-grouped point indices',
-    size: alignedStorageSize(pointIndexBytes),
-    usage: BUFFER_USAGE.COPY_SRC | BUFFER_USAGE.STORAGE,
-  })
-  const gridParameters = createParameterBuffer(
-    device,
-    new Uint32Array([pointCount, gridSize, cellCount, 0]),
-    'spatial grid parameters'
-  )
-  const countPipeline = device.createComputePipeline({
-    label: 'count points per cell',
-    layout: 'auto',
-    compute: { module: device.createShaderModule({ code: countShader }), entryPoint: 'main' },
-  })
-  const scanPipeline = device.createComputePipeline({
-    label: 'exclusive block scan',
-    layout: 'auto',
-    compute: { module: device.createShaderModule({ code: scanShader }), entryPoint: 'main' },
-  })
-  const addPipeline = device.createComputePipeline({
-    label: 'propagate scanned block offsets',
-    layout: 'auto',
-    compute: {
-      module: device.createShaderModule({ code: addBlockOffsetsShader }),
-      entryPoint: 'main',
+  const buffers: Buffer[] = []
+  const storage = (byteLength: number): Buffer => {
+    const buffer = device.createBuffer({ byteLength: Math.max(4, byteLength), usage: Buffer.STORAGE | Buffer.COPY_SRC | Buffer.COPY_DST })
+    buffers.push(buffer); return buffer
+  }
+  const parameter = (values: number[]): Buffer => {
+    const buffer = upload(device, new Uint32Array(values), Buffer.UNIFORM); buffers.push(buffer); return buffer
+  }
+  const cellCounts = storage(cellBytes); const cursors = storage(cellBytes); const pointIndices = storage(pointIndexBytes)
+  const parameters = parameter([pointCount, gridSize, cellCount, 0])
+  const clear = new Kernel(device, { source: clearShader, shaderLayout: { bindings: bindingLayout([['counts', 'storage']]) } })
+  const count = new Kernel(device, {
+    source: countShader,
+    shaderLayout: {
+      bindings: bindingLayout([
+        ['positions', 'read-only-storage'], ['cellCounts', 'storage'], ['parameters', 'uniform'],
+      ]),
     },
   })
-  const scatterPipeline = device.createComputePipeline({
-    label: 'scatter point indices by cell',
-    layout: 'auto',
-    compute: { module: device.createShaderModule({ code: scatterShader }), entryPoint: 'main' },
-  })
-  const sentinelPipeline = device.createComputePipeline({
-    label: 'write CSR sentinel',
-    layout: 'auto',
-    compute: {
-      module: device.createShaderModule({ code: writeSentinelShader }),
-      entryPoint: 'main',
+  const scan = new Kernel(device, {
+    source: scanShader,
+    shaderLayout: {
+      bindings: bindingLayout([
+        ['inputValues', 'read-only-storage'], ['outputOffsets', 'storage'], ['blockSums', 'storage'], ['parameters', 'uniform'],
+      ]),
     },
   })
-
-  const countBindings = positionBuffers.map(buffer => device.createBindGroup({
-    label: 'grid count bindings',
-    layout: countPipeline.getBindGroupLayout(0),
-    entries: [
-      { binding: 0, resource: { buffer } },
-      { binding: 1, resource: { buffer: cellCounts } },
-      { binding: 2, resource: { buffer: gridParameters } },
-    ],
-  }))
-
-  const scanLevels: ScanLevel[] = []
-  let inputBuffer = cellCounts
-  let levelCount = cellCount
-  while (true) {
+  const add = new Kernel(device, {
+    source: addBlockOffsetsShader,
+    shaderLayout: {
+      bindings: bindingLayout([
+        ['offsets', 'storage'], ['blockOffsets', 'read-only-storage'], ['parameters', 'uniform'],
+      ]),
+    },
+  })
+  const sentinel = new Kernel(device, {
+    source: writeSentinelShader,
+    shaderLayout: {
+      bindings: bindingLayout([
+        ['offsets', 'storage'], ['parameters', 'uniform'],
+      ]),
+    },
+  })
+  const scatter = new Kernel(device, {
+    source: scatterShader,
+    shaderLayout: {
+      bindings: bindingLayout([
+        ['positions', 'read-only-storage'], ['cursors', 'storage'], ['pointIndices', 'storage'], ['parameters', 'uniform'],
+      ]),
+    },
+  })
+  const levels: ScanLevel[] = []
+  let input = cellCounts; let levelCount = cellCount
+  do {
     const blockCount = Math.ceil(levelCount / WORKGROUP_SIZE)
-    const offsets = device.createBuffer({
-      label: `scan level ${scanLevels.length} offsets`,
-      size: alignedStorageSize(
-        (levelCount + (scanLevels.length === 0 ? 1 : 0)) * Uint32Array.BYTES_PER_ELEMENT
-      ),
-      usage: BUFFER_USAGE.COPY_SRC | BUFFER_USAGE.STORAGE,
+    const offsets = storage((levelCount + (levels.length ? 0 : 1)) * 4)
+    const blockSums = storage(blockCount * 4); const params = parameter([levelCount, 0, 0, 0])
+    levels.push({
+      count: levelCount,
+      blockCount,
+      offsets,
+      blockSums,
+      parameters: params,
+      bindings: { inputValues: input, outputOffsets: offsets, blockSums, parameters: params },
     })
-    const blockSums = device.createBuffer({
-      label: `scan level ${scanLevels.length} block sums`,
-      size: alignedStorageSize(blockCount * Uint32Array.BYTES_PER_ELEMENT),
-      usage: BUFFER_USAGE.STORAGE,
-    })
-    const parameters = createParameterBuffer(
-      device,
-      new Uint32Array([levelCount, 0, 0, 0]),
-      `scan level ${scanLevels.length} parameters`
-    )
-    const scanBindings = device.createBindGroup({
-      label: `scan level ${scanLevels.length} bindings`,
-      layout: scanPipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: { buffer: inputBuffer } },
-        { binding: 1, resource: { buffer: offsets } },
-        { binding: 2, resource: { buffer: blockSums } },
-        { binding: 3, resource: { buffer: parameters } },
-      ],
-    })
-    scanLevels.push({ count: levelCount, blockCount, offsets, blockSums, parameters, scanBindings })
-    if (blockCount === 1) break
-    inputBuffer = blockSums
-    levelCount = blockCount
-  }
-
-  for (let level = 0; level < scanLevels.length - 1; level += 1) {
-    const current = scanLevels[level]
-    current.addBindings = device.createBindGroup({
-      label: `scan level ${level} propagation bindings`,
-      layout: addPipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: { buffer: current.offsets } },
-        { binding: 1, resource: { buffer: scanLevels[level + 1].offsets } },
-        { binding: 2, resource: { buffer: current.parameters } },
-      ],
-    })
-  }
-
-  const cellOffsets = scanLevels[0].offsets
-  const sentinelBindings = device.createBindGroup({
-    label: 'CSR sentinel bindings',
-    layout: sentinelPipeline.getBindGroupLayout(0),
-    entries: [
-      { binding: 0, resource: { buffer: cellOffsets } },
-      { binding: 1, resource: { buffer: gridParameters } },
-    ],
-  })
-  const scatterBindings = positionBuffers.map(buffer => device.createBindGroup({
-    label: 'grid scatter bindings',
-    layout: scatterPipeline.getBindGroupLayout(0),
-    entries: [
-      { binding: 0, resource: { buffer } },
-      { binding: 1, resource: { buffer: cursors } },
-      { binding: 2, resource: { buffer: pointIndices } },
-      { binding: 3, resource: { buffer: gridParameters } },
-    ],
-  }))
-
+    input = blockSums; levelCount = blockCount
+  } while (levelCount > 1)
+  const cellOffsets = levels[0].offsets
   let destroyed = false
-  const encodeBuild = (encoder: GPUCommandEncoder, positionIndex = 0, timestamps?: GPUComputePassTimestampWrites): void => {
-    if (destroyed) throw new Error('The spatial grid backend has been destroyed')
-    if (!countBindings[positionIndex]) throw new Error('Unknown grid position buffer')
-    encoder.clearBuffer(cellCounts)
-    const preparationPass = encoder.beginComputePass({
-      label: 'count and scan grid',
-      timestampWrites: timestamps?.beginningOfPassWriteIndex === undefined
-        ? undefined
-        : {
-          querySet: timestamps.querySet, beginningOfPassWriteIndex: timestamps.beginningOfPassWriteIndex,
-        },
-    })
-    preparationPass.setPipeline(countPipeline)
-    preparationPass.setBindGroup(0, countBindings[positionIndex])
-    preparationPass.dispatchWorkgroups(pointWorkgroups)
-    preparationPass.setPipeline(scanPipeline)
-    for (const level of scanLevels) {
-      preparationPass.setBindGroup(0, level.scanBindings)
-      preparationPass.dispatchWorkgroups(level.blockCount)
+  const check = (): void => { if (destroyed || device.isLost) throw new Error('Spatial grid device unavailable') }
+  const encodeBuild = (encoder: CommandEncoder, positionIndex = 0, timestamps?: GridTimestamps): void => {
+    check(); const positions = positionBuffers[positionIndex]
+    if (!positions) throw new Error('Unknown grid position buffer')
+    // luma alpha has no encoder.clearBuffer; a small GPU clear keeps batched builds resident.
+    // As in the original harness, clearing is outside the measured count/scan/scatter interval.
+    const clearPass = encoder.beginComputePass()
+    clear.dispatch(clearPass, { x: Math.ceil(cellCount / WORKGROUP_SIZE), bindings: { counts: cellCounts } }); clearPass.end()
+    const prepare = encoder.beginComputePass(timestamps?.beginTimestampIndex === undefined
+      ? {}
+      : { timestampQuerySet: timestamps.timestampQuerySet, beginTimestampIndex: timestamps.beginTimestampIndex })
+    if (pointWorkgroups) count.dispatch(prepare, { x: pointWorkgroups, bindings: { positions, cellCounts, parameters } })
+    for (const level of levels) scan.dispatch(prepare, { x: level.blockCount, bindings: level.bindings })
+    for (let i = levels.length - 2; i >= 0; i--) {
+      add.dispatch(prepare, {
+        x: Math.ceil(levels[i].count / WORKGROUP_SIZE),
+        bindings: { offsets: levels[i].offsets, blockOffsets: levels[i + 1].offsets, parameters: levels[i].parameters },
+      })
     }
-    preparationPass.setPipeline(addPipeline)
-    for (let level = scanLevels.length - 2; level >= 0; level -= 1) {
-      const current = scanLevels[level]
-      if (!current.addBindings) continue
-      preparationPass.setBindGroup(0, current.addBindings)
-      preparationPass.dispatchWorkgroups(Math.ceil(current.count / WORKGROUP_SIZE))
-    }
-    preparationPass.setPipeline(sentinelPipeline)
-    preparationPass.setBindGroup(0, sentinelBindings)
-    preparationPass.dispatchWorkgroups(1)
-    preparationPass.end()
-
-    encoder.copyBufferToBuffer(cellOffsets, 0, cursors, 0, cellBytes)
-    const scatterPass = encoder.beginComputePass({
-      label: 'scatter points into grid cells',
-      timestampWrites: timestamps?.endOfPassWriteIndex === undefined
-        ? undefined
-        : {
-          querySet: timestamps.querySet, endOfPassWriteIndex: timestamps.endOfPassWriteIndex,
-        },
-    })
-    scatterPass.setPipeline(scatterPipeline)
-    scatterPass.setBindGroup(0, scatterBindings[positionIndex])
-    scatterPass.dispatchWorkgroups(pointWorkgroups)
+    sentinel.dispatch(prepare, { x: 1, bindings: { offsets: cellOffsets, parameters } }); prepare.end()
+    encoder.copyBufferToBuffer({ sourceBuffer: cellOffsets, destinationBuffer: cursors, size: cellBytes })
+    const scatterPass = encoder.beginComputePass(timestamps?.endTimestampIndex === undefined
+      ? {}
+      : { timestampQuerySet: timestamps.timestampQuerySet, endTimestampIndex: timestamps.endTimestampIndex })
+    if (pointWorkgroups) scatter.dispatch(scatterPass, { x: pointWorkgroups, bindings: { positions, cursors, pointIndices, parameters } })
     scatterPass.end()
   }
-
-  const gridBytes = cellBytes * 2 + offsetBytes + pointIndexBytes + scanLevels.reduce(
-    (total, level, index) => total +
-      level.blockCount * Uint32Array.BYTES_PER_ELEMENT +
-      (index === 0 ? 0 : level.count * Uint32Array.BYTES_PER_ELEMENT),
-    0
-  )
-
+  const gridBytes = cellBytes * 2 + offsetBytes + pointIndexBytes + levels.reduce(
+    (total, level, i) => total + level.blockCount * 4 + (i ? level.count * 4 : 0), 0)
   return {
     cellOffsets,
     pointIndices,
@@ -311,85 +171,37 @@ export function createSpatialGridResources (
     pointCount,
     gridSize,
     cellCount,
-    scanHierarchy: scanLevels.map(level => level.count).concat(1),
     positionBytes,
     gridBytes,
+    scanHierarchy: levels.map(level => level.count).concat(1),
     async build (): Promise<number> {
-      if (destroyed) throw new Error('The spatial grid backend has been destroyed')
-      const started = performance.now()
-      const encoder = device.createCommandEncoder({ label: 'build spatial grid' })
-      encodeBuild(encoder)
-      device.queue.submit([encoder.finish()])
-      await device.queue.onSubmittedWorkDone()
-      return performance.now() - started
+      check(); const start = performance.now(); const encoder = device.createCommandEncoder()
+      encodeBuild(encoder); device.submit(encoder.finish()); await waitForGpu(device)
+      return performance.now() - start
     },
     async benchmark (iterations: number): Promise<GridBenchmark> {
-      if (destroyed) throw new Error('The spatial grid backend has been destroyed')
-      const started = performance.now()
-      const encoder = device.createCommandEncoder({ label: `${iterations} spatial grid builds` })
-      for (let iteration = 0; iteration < iterations; iteration += 1) encodeBuild(encoder)
-      device.queue.submit([encoder.finish()])
-      const submitted = performance.now()
-      await device.queue.onSubmittedWorkDone()
-      const totalMilliseconds = performance.now() - started
-      return {
-        iterations,
-        submitMilliseconds: submitted - started,
-        totalMilliseconds,
-        averageMilliseconds: totalMilliseconds / iterations,
-      }
+      check(); const start = performance.now(); const encoder = device.createCommandEncoder()
+      for (let i = 0; i < iterations; i++) encodeBuild(encoder)
+      device.submit(encoder.finish()); const submitted = performance.now(); await waitForGpu(device)
+      const totalMilliseconds = performance.now() - start
+      return { iterations, submitMilliseconds: submitted - start, totalMilliseconds, averageMilliseconds: totalMilliseconds / iterations }
     },
     async readback (): Promise<GridReadback> {
-      if (destroyed) throw new Error('The spatial grid backend has been destroyed')
-      const countsReadback = device.createBuffer({
-        label: 'grid count readback',
-        size: alignedStorageSize(cellBytes),
-        usage: BUFFER_USAGE.COPY_DST | BUFFER_USAGE.MAP_READ,
-      })
-      const offsetsReadback = device.createBuffer({
-        label: 'grid offset readback',
-        size: alignedStorageSize(offsetBytes),
-        usage: BUFFER_USAGE.COPY_DST | BUFFER_USAGE.MAP_READ,
-      })
-      const indicesReadback = device.createBuffer({
-        label: 'grid index readback',
-        size: alignedStorageSize(pointIndexBytes),
-        usage: BUFFER_USAGE.COPY_DST | BUFFER_USAGE.MAP_READ,
-      })
-      const encoder = device.createCommandEncoder({ label: 'read spatial grid' })
-      encoder.copyBufferToBuffer(cellCounts, 0, countsReadback, 0, cellBytes)
-      encoder.copyBufferToBuffer(cellOffsets, 0, offsetsReadback, 0, offsetBytes)
-      encoder.copyBufferToBuffer(pointIndices, 0, indicesReadback, 0, pointIndexBytes)
-      device.queue.submit([encoder.finish()])
-      try {
-        await Promise.all([
-          countsReadback.mapAsync(MAP_MODE_READ),
-          offsetsReadback.mapAsync(MAP_MODE_READ),
-          indicesReadback.mapAsync(MAP_MODE_READ),
-        ])
-        return {
-          counts: new Uint32Array(countsReadback.getMappedRange()).slice(),
-          offsets: new Uint32Array(offsetsReadback.getMappedRange()).slice(),
-          pointIndices: new Uint32Array(indicesReadback.getMappedRange()).slice(),
-        }
-      } finally {
-        countsReadback.destroy()
-        offsetsReadback.destroy()
-        indicesReadback.destroy()
+      check()
+      const read = async (buffer: Buffer, bytes: number): Promise<Uint32Array> => {
+        if (!bytes) return new Uint32Array()
+        const data = await buffer.readAsync(0, bytes)
+        return new Uint32Array(data.buffer, data.byteOffset, bytes / 4).slice()
       }
+      const [counts, offsets, indices] = await Promise.all([
+        read(cellCounts, cellBytes), read(cellOffsets, offsetBytes), read(pointIndices, pointIndexBytes),
+      ])
+      return { counts, offsets, pointIndices: indices }
     },
     destroy (): void {
       if (destroyed) return
       destroyed = true
-      for (const level of scanLevels) {
-        level.parameters.destroy()
-        level.blockSums.destroy()
-        level.offsets.destroy()
-      }
-      gridParameters.destroy()
-      pointIndices.destroy()
-      cursors.destroy()
-      cellCounts.destroy()
+      for (const resource of [clear, count, scan, add, sentinel, scatter, ...buffers]) resource.destroy()
     },
   }
 }

@@ -32,25 +32,6 @@ export function median (values: number[]): number {
 export function gpuMedian (samples: Measurement[]): number | null {
   return samples.length && samples.every(s => s.gpuMs !== null) ? median(samples.map(s => s.gpuMs!)) : null
 }
-export async function waitForWebGLFence (gl: WebGL2RenderingContext, timeoutMs = 5000): Promise<void> {
-  if (gl.isContextLost()) throw new Error('WebGL context lost before fence')
-  const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0)
-  if (!sync) throw new Error('WebGL fence creation failed')
-  const deadline = performance.now() + timeoutMs
-  try {
-    gl.flush()
-    for (;;) {
-      // Newly created WebGL syncs cannot signal until control returns to the browser event loop.
-      await new Promise(resolve => setTimeout(resolve, 0))
-      if (gl.isContextLost()) throw new Error('WebGL context lost while waiting for fence')
-      const result = gl.clientWaitSync(sync, 0, 0)
-      if (result === gl.ALREADY_SIGNALED || result === gl.CONDITION_SATISFIED) return
-      if (result === gl.WAIT_FAILED) throw new Error('WebGL fence wait failed')
-      if (performance.now() > deadline) throw new Error('WebGL fence timeout; completion is unknown')
-    }
-  } finally { gl.deleteSync(sync) }
-}
-
 // The pinned luma QuerySet reports disjoint results by rejection. Bound its polling lifetime;
 // cancellation/destruction must never turn an unfinished query into a valid zero-duration sample.
 export async function readLumaTimer (

@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { deviceForTest } from '../../gpu/test-device'
 import { buildTopology, createFixture, FIXTURES, PARAMETERS } from './data'
 import { compare, referenceTick } from './reference'
 import { createWebGLBackend } from './webgl'
@@ -51,7 +52,9 @@ for (const [name, create] of [['WebGL', createWebGLBackend], ['WebGPU', createWe
   describe(`${name} Cosmos spring comparison`, () => {
     for (const fixture of FIXTURES) {
       it(`${fixture}: matches both forces and substeps, reset and topology replacement`, async context => {
-        if (name === 'WebGPU' && !(await navigator.gpu?.requestAdapter())) {
+        const probe = name === 'WebGPU' ? await deviceForTest() : undefined
+        probe?.destroy()
+        if (name === 'WebGPU' && !probe) {
           if (import.meta.env.REQUIRE_WEBGPU) throw new Error('WebGPU required')
           context.skip(); return
         }
@@ -85,7 +88,9 @@ for (const [name, create] of [['WebGL', createWebGLBackend], ['WebGPU', createWe
       })
     }
     it('handles no links, same-device capacity growth, and finite oversized spring steps', async context => {
-      if (name === 'WebGPU' && !(await navigator.gpu?.requestAdapter())) {
+      const probe = name === 'WebGPU' ? await deviceForTest() : undefined
+      probe?.destroy()
+      if (name === 'WebGPU' && !probe) {
         if (import.meta.env.REQUIRE_WEBGPU) throw new Error('WebGPU required')
         context.skip(); return
       }

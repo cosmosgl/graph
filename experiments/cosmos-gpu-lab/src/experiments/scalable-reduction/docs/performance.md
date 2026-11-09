@@ -11,7 +11,7 @@ latency; it does **not** measure completed GPU execution.
 ## Bounded benchmark
 
 The Benchmark button records several reduction hierarchies into one command buffer, submits once, and waits for
-`queue.onSubmittedWorkDone()`:
+a luma fence:
 
 - 100 iterations below one million points
 - 20 iterations at one million points

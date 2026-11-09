@@ -43,7 +43,7 @@ implementation and comparison. These are evidence levels, not a percentage of th
 | Global many-body force | **Unproven:** local-neighborhood work provides useful building blocks | Preserve long-range interactions, approximation quality and convergence |
 | Link forces and graph topology | **Partial:** ordered Cosmos spring passes validated against production GLSL and CPU; stable directional CSR and replacement | Long-term trajectories, state-preserving updates and composition with other forces; native execution limits |
 | Complete rendering and interaction | **Partial:** circles and minimal straight links read GPU-resident state | Full point/link styling, picking, hover, drag, selection, tracking and overlays |
-| luma resource and execution APIs | **Partial:** weighted springs use luma buffers, Kernel, RenderKernel, passes and timestamps | Host ownership, device loss, reusable scheduling and complete-engine integration |
+| luma resource and execution APIs | **Partial:** all isolated experiments use luma resources, models/kernels, passes, fences and timestamps | Host ownership, device loss, reusable scheduling and complete-engine integration |
 | Public API and embedded use | **Unproven:** production contracts have not been ported | Dynamic updates, lifecycle, exposed position resources and deck integration |
 | Hardware/browser portability | **Partial:** native Apple measurements and software-WebGPU regressions | Native validation across the intended support matrix |
 
@@ -157,11 +157,13 @@ against WebGL on representative graphs. [Timing methodology](#/performance-lab/d
 The production engine declares luma `~9.3.0` peers. The experiments use a pinned `10.0.0-alpha.4` package family.
 That is an experimental dependency choice, not an approved production version.
 
-Most earlier experiments create luma devices and use native handles for GPU operations. The weighted-link
-experiment now exercises luma buffers, `Kernel`, `RenderKernel`, compute/render passes, readback and optional
-`QuerySet` timestamps on the pinned alpha. Simulation and drawing share resident position buffers.
+All experiments now use luma resource and execution APIs, including `Model`, `UniformStore`,
+`Kernel`, `RenderKernel`, passes, readback, fences and optional `QuerySet` timestamps. Diagnostics and
+tests follow the same boundary. Simulation and drawing share resident position buffers where required.
+The grid uses a small clear kernel because this alpha has no command-encoder buffer-clear API.
 
-This establishes a direct luma integration path for the isolated spring workload. It does not yet establish
+This establishes direct luma integration paths for the isolated workloads. Historical native-API timings
+need new measurements after this migration. It does not yet establish
 that the resource, shader and scheduling APIs cover Cosmos's complete needs, especially host-owned devices,
 device loss, incremental updates and reusable command plans.
 

@@ -323,7 +323,7 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
   el('[data-action="stop"]').addEventListener('click', () => { stop = true; status.textContent = 'Stopping after current GPU operation…' })
   el('[data-action="export"]').addEventListener('click', () => {
     if (!capture) return
-    const url = URL.createObjectURL(new Blob([JSON.stringify(capture, null, 2)], { type: 'application/json' }))
+    const url = URL.createObjectURL(new Blob([JSON.stringify({ ...capture, gpuApi: 'luma-resources-v1' }, null, 2)], { type: 'application/json' }))
     const a = document.createElement('a'); a.href = url; a.download = 'weighted-links-capture.json'; a.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   })

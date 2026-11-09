@@ -7,7 +7,7 @@ import { playwright } from '@vitest/browser-playwright'
 export default defineConfig({
   define: { 'import.meta.env.REQUIRE_WEBGPU': true },
   test: {
-    include: ['src/experiments/neighborhood-forces/**/*.test.ts', 'src/experiments/weighted-links/**/*.test.ts'],
+    include: ['src/gpu/**/*.test.ts', 'src/experiments/neighborhood-forces/**/*.test.ts', 'src/experiments/weighted-links/**/*.test.ts'],
     testTimeout: 60000,
     maxWorkers: 1,
     browser: {

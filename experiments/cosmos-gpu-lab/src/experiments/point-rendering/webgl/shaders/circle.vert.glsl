@@ -2,7 +2,7 @@
 layout(location = 0) in vec2 position;
 layout(location = 1) in vec4 color;
 
-uniform float pointDiameter;
+layout(std140) uniform pointUniforms { float pointDiameter; };
 
 out vec4 pointColor;
 

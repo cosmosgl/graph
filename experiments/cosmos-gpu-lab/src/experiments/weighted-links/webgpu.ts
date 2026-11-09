@@ -1,6 +1,7 @@
 import { Buffer, luma, type BindingDeclaration } from '@luma.gl/core'
 import { Kernel, RenderKernel } from '@luma.gl/engine'
 import { webgpuAdapter, type WebGPUDevice } from '@luma.gl/webgpu'
+import { waitForGpu } from '../../gpu/luma'
 import type { LinkBackend, Measurement, Stage, SetupSubmission } from './backend'
 import type { GraphInput, Parameters, Topology } from './data'
 import type { Snapshot } from './reference'
@@ -40,17 +41,17 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
 }`
 
 export async function createWebGPUBackend (canvas: HTMLCanvasElement): Promise<LinkBackend> {
+  let failure: string | undefined
   const device = await luma.createDevice({
     type: 'webgpu',
     adapters: [webgpuAdapter],
     waitForPageLoad: false,
     optionalFeatures: ['timestamp-query'],
+    onError: error => { failure = `WebGPU validation error: ${error.message}` },
     featureLevel: 'core',
     createCanvasContext: { canvas, autoResize: false, useDevicePixels: false, alphaMode: 'opaque' },
   }) as WebGPUDevice
-  let failure: string | undefined
   device.lost.then(info => { if (info.reason !== 'destroyed') failure = `WebGPU device lost: ${info.message}` })
-  device.handle.addEventListener('uncapturederror', event => { failure = `WebGPU validation error: ${event.error.message}` })
   const assertHealthy = (): void => { if (failure) throw new Error(failure) }
   const owned: Array<{ destroy(): void }> = []
   try {
@@ -163,7 +164,7 @@ export async function createWebGPUBackend (canvas: HTMLCanvasElement): Promise<L
         ]), Buffer.UNIFORM)
         return { setupSubmitMs: performance.now() - started, uploadCallMs }
       },
-      async synchronize (): Promise<void> { assertHealthy(); await device.handle.queue.onSubmittedWorkDone(); assertHealthy() },
+      async synchronize (): Promise<void> { assertHealthy(); await waitForGpu(device); assertHealthy() },
       reset (): void { positions.forEach(buffer => buffer.write(graph.points)) },
       step (render = true): void { assertHealthy(); encodeTick(render); device.submit() },
       render (): void { assertHealthy(); encodeRender(); device.submit() },

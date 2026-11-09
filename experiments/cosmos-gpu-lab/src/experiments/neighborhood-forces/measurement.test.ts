@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { deviceForTest } from '../../gpu/test-device'
 import { createNeighborhoodBackend } from './backend'
 import { createPrecisionPlan } from './precision-comparison'
 import { chooseBatchSize, decodeTimestamps } from './gpu-timer'
@@ -62,15 +63,10 @@ describe('measurement and sweep contracts', () => {
 describe('WebGPU measurements', () => {
   for (const timestamps of [false, true]) {
     it(`measures compute, multi-pass grid and rendering with timestamps ${timestamps ? 'enabled' : 'disabled'}`, async context => {
-      const adapter = await navigator.gpu?.requestAdapter()
-      if (!adapter) {
-        if (import.meta.env.REQUIRE_WEBGPU) throw new Error('WebGPU required for this test')
-        context.skip(); return
-      }
-      if (timestamps && !adapter.features.has('timestamp-query')) { context.skip(); return }
-      const device = await adapter.requestDevice({ requiredFeatures: timestamps ? ['timestamp-query'] : [] })
       const errors: string[] = []
-      device.addEventListener('uncapturederror', event => errors.push(event.error.message))
+      const device = await deviceForTest(timestamps, errors)
+      if (!device) { context.skip(); return }
+      if (timestamps && !device.features.has('timestamp-query')) { device.destroy(); context.skip(); return }
       try {
         for (const method of ['brute', 'grid'] as const) {
           const canvas = document.createElement('canvas')
@@ -110,12 +106,8 @@ describe('WebGPU measurements', () => {
   }
 
   it('retains completed sweep rows when cancelled between methods', async context => {
-    const adapter = await navigator.gpu?.requestAdapter()
-    if (!adapter) {
-      if (import.meta.env.REQUIRE_WEBGPU) throw new Error('WebGPU required')
-      context.skip(); return
-    }
-    const device = await adapter.requestDevice()
+    const device = await deviceForTest()
+    if (!device) { context.skip(); return }
     try {
       let cancelled = false
       const results = await runSweep(device, createSweepPlan('quick', 1, 42), () => cancelled,
@@ -130,12 +122,8 @@ describe('WebGPU measurements', () => {
   })
 
   it('records the all-pairs limit as a skip and validates a dense grid-only case', async context => {
-    const adapter = await navigator.gpu?.requestAdapter()
-    if (!adapter) {
-      if (import.meta.env.REQUIRE_WEBGPU) throw new Error('WebGPU required')
-      context.skip(); return
-    }
-    const device = await adapter.requestDevice()
+    const device = await deviceForTest()
+    if (!device) { context.skip(); return }
     try {
       const results = await runSweep(device,
         [{ count: 4097, density: 16, radius: 0.16, gridSize: 64, repetition: 0 }], () => false, () => {})
