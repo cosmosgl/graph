@@ -41,9 +41,9 @@ implementation and comparison. These are evidence levels, not a percentage of th
 | Spatial indexing | **Demonstrated:** count/scan/scatter with variable cell occupancy | Establish production bounds, capacity, update and memory policies |
 | Local interaction and integration | **Partial:** CPU-validated local forces feeding GPU rendering | Preserve actual Cosmos integration and collision semantics |
 | Global many-body force | **Unproven:** local-neighborhood work provides useful building blocks | Preserve long-range interactions, approximation quality and convergence |
-| Link forces and graph topology | **Unproven:** no Cosmos-equivalent WebGPU spring pipeline yet | Weighted links, degree bias, rest lengths, topology changes and hub-heavy graphs |
-| Complete rendering and interaction | **Unproven:** circles establish only the first rendering path | Links, picking, hover, drag, selection, tracking and overlays |
-| luma resource and execution APIs | **Partial:** devices created through luma; most GPU work uses native handles | Validate the intended luma abstractions and exact dependency set |
+| Link forces and graph topology | **Partial:** ordered Cosmos spring passes validated against production GLSL and CPU; stable directional CSR and replacement | Long-term trajectories, state-preserving updates and composition with other forces; native execution limits |
+| Complete rendering and interaction | **Partial:** circles and minimal straight links read GPU-resident state | Full point/link styling, picking, hover, drag, selection, tracking and overlays |
+| luma resource and execution APIs | **Partial:** weighted springs use luma buffers, Kernel, RenderKernel, passes and timestamps | Host ownership, device loss, reusable scheduling and complete-engine integration |
 | Public API and embedded use | **Unproven:** production contracts have not been ported | Dynamic updates, lifecycle, exposed position resources and deck integration |
 | Hardware/browser portability | **Partial:** native Apple measurements and software-WebGPU regressions | Native validation across the intended support matrix |
 
@@ -73,6 +73,7 @@ circle approach with explicit geometry. Positions can be read from GPU storage, 
 drawing to share data.
 
 **Meaning for Cosmos:** there is a working foundation for a WebGPU point renderer.
+The [weighted-link demo](#/weighted-links) also draws minimal straight links directly from simulated positions.
 
 **Limit:** circles do not prove parity for shapes, strokes, images, highlighting, ordering, animation,
 links or picking. Those features need matched visual and interaction tests, including overlap, zoom and
@@ -91,6 +92,37 @@ building blocks relevant to near-field interactions and collision search.
 contributions and cannot replace that force without changing the model. Graph adjacency is also different
 from spatial proximity: link forces still need topology data such as CSR. Variable-size collision requires
 its own coverage and correctness checks.
+
+### Weighted springs: Cosmos semantics can run through luma compute
+
+The [weighted-link comparison](#/weighted-links) uses the production Cosmos spring and integration GLSL
+as its WebGL baseline. WebGPU reproduces the two ordered directional passes with stable CSR adjacency;
+each direction integrates before the next starts. It covers degree bias, square-rooted weights, directional
+rest-distance samples, duplicates, self-loops, pinning, absent neighbors and the collision rest-length floor.
+
+**Meaning for Cosmos:** a graph-specific force can run through luma `Kernel` and storage buffers, with
+`RenderKernel` drawing points and links from the resulting positions. Floating-point atomics are not needed.
+The CPU reference and GPU regressions check both forces and both position substeps, including connectivity
+replacement and resource growth. Earlier native Apple checks cover short hub-heavy trajectories in the
+raw prototype. The corrected luma baseline passed native 100k-star snapshots at ticks 1 and 10,
+but lost its context at tick 18 in standalone Chrome on the M3.
+
+**Limit:** preserving Cosmos's adjacency-order dependence leaves each hub's gather serial. CSR is built on
+the CPU when links change, and replacement explicitly resets the demo. Incremental updates, long-term
+convergence, complete force composition and performance across devices remain unproven. The
+[historical topology sweep](#/weighted-links/docs/performance) used an incorrect WebGL baseline:
+both directional programs used the maximum total degree, unlike production Cosmos. Its apparent
+speedups cannot support a migration decision. The baseline now uses luma `Model` and `UniformStore`
+with independent directional bounds, alongside WebGPU `Kernel` and `RenderKernel`.
+New native timing comparisons remain necessary. The corrected 100k-star failure occurred without
+rendering or GPU queries, during the completion-fence wait; its GPU cause remains unresolved. This is
+a lab execution limit, not proof that the complete production Cosmos engine has the same failure.
+The [native investigation summary](#/weighted-links/docs/context-loss) preserves the historical
+production v9 comparison: both sample sets passed in v9, while the v10 WebGL baseline had mixed
+results, including an invalid-operation error and a Metal execution failure/context loss. Sample source
+alone did not explain the failures. The temporary production debug tools have been removed and this
+investigation is parked. Native v10 WebGL stability remains unresolved; failed runs cannot support
+performance claims. This is not evidence of a WebGPU failure. The lab retains its CPU correctness checks.
 
 ### Numerical precision: manageable, but part of the migration contract
 
@@ -125,9 +157,13 @@ against WebGL on representative graphs. [Timing methodology](#/performance-lab/d
 The production engine declares luma `~9.3.0` peers. The experiments use a pinned `10.0.0-alpha.4` package family.
 That is an experimental dependency choice, not an approved production version.
 
-The experiments use luma to create devices and then access native WebGL/WebGPU handles for most operations.
-They establish that the algorithms work on WebGPU, but do not yet establish that the intended luma resource,
-shader and scheduling APIs cover Cosmos's complete needs.
+Most earlier experiments create luma devices and use native handles for GPU operations. The weighted-link
+experiment now exercises luma buffers, `Kernel`, `RenderKernel`, compute/render passes, readback and optional
+`QuerySet` timestamps on the pinned alpha. Simulation and drawing share resident position buffers.
+
+This establishes a direct luma integration path for the isolated spring workload. It does not yet establish
+that the resource, shader and scheduling APIs cover Cosmos's complete needs, especially host-owned devices,
+device loss, incremental updates and reusable command plans.
 
 | Decision still required | Demonstration needed |
 | --- | --- |
@@ -169,7 +205,7 @@ supports ordinary simulation and rendering without routine full-position CPU cop
 
 ### Milestone 2 — Demonstrate Cosmos-equivalent graph simulation
 
-Implement weighted link forces and global many-body behavior, then compose center, gravity, attractors,
+Extend the validated weighted-link path with global many-body behavior, then compose center, gravity, attractors,
 mouse interaction, collision and integration. Preserve intended force order, damping/cooling, pinning and
 coordinate behavior. If an approximation changes the layout model, define and evaluate that change explicitly.
 
@@ -215,8 +251,8 @@ performance and memory meet the target budgets; supported devices are tested; an
 
 | Priority | Experiment | Migration question it resolves |
 | --- | --- | --- |
-| First | Representative compute-to-render path through the chosen luma APIs | Can we build the engine on this luma version and resource model? |
-| First | Topology CSR and Cosmos-equivalent weighted link forces | Can we simulate graph connectivity, including hubs and updates? |
+| Extend | Weighted-link compute-to-render path through luma | Can its demonstrated resource contract handle shared ownership, device loss and live updates? |
+| Extend | Weighted springs at larger sizes and over longer trajectories | Can ordered hub gathers and state-preserving topology updates meet the engine budget? |
 | First | Global many-body force comparison | Can we retain layout quality and make long-range forces affordable? |
 | Alongside simulation | Links, richer points and picking from shared GPU state | Can Cosmos render and interact correctly without transferring all positions back? |
 | Then | Combined engine workload on multiple native GPUs | Is the whole migration practical for the intended users and graph sizes? |
