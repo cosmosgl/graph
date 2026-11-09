@@ -6,7 +6,7 @@ import type {
 import vocabularySource from '../docs/vocabulary.md?raw'
 import reductionSource from '../docs/reduction.md?raw'
 import { experiments, findExperiment } from './registry'
-import { architectureHref, conceptHref, experimentHref, readRoute, roadmapHref, vocabularyHref } from './router'
+import { architectureHref, conceptHref, experimentHref, featureInventoryHref, readRoute, roadmapHref, vocabularyHref } from './router'
 import { indexVocabularyTerms } from './vocabulary'
 
 function requiredElement<T extends HTMLElement> (host: ParentNode, selector: string): T {
@@ -18,7 +18,7 @@ function requiredElement<T extends HTMLElement> (host: ParentNode, selector: str
 function renderNavigation (
   host: HTMLElement,
   activeId?: string,
-  activeReference?: 'vocabulary' | 'reduction' | 'architecture' | 'roadmap'
+  activeReference?: 'vocabulary' | 'reduction' | 'architecture' | 'roadmap' | 'feature-inventory'
 ): void {
   host.replaceChildren()
   const label = document.createElement('p')
@@ -47,6 +47,14 @@ function renderNavigation (
   roadmap.innerHTML = '<span>WebGPU migration</span><small>roadmap</small>'
   if (activeReference === 'roadmap') roadmap.setAttribute('aria-current', 'page')
   host.append(roadmap)
+
+  const inventory = document.createElement('a')
+  inventory.href = featureInventoryHref()
+  inventory.className = 'experiment-link reference-link'
+  inventory.classList.toggle('active', activeReference === 'feature-inventory')
+  inventory.innerHTML = '<span>Cosmos feature coverage</span><small>inventory</small>'
+  if (activeReference === 'feature-inventory') inventory.setAttribute('aria-current', 'page')
+  host.append(inventory)
 
   const architecture = document.createElement('a')
   architecture.href = architectureHref()
@@ -93,6 +101,14 @@ function renderHome (host: HTMLElement): void {
       <span aria-hidden="true">→</span>
     </a>
     <section class="experiment-grid" aria-label="Available experiments"></section>
+    <a class="reference-card" href="${featureInventoryHref()}">
+      <span class="card-index">COVERAGE</span>
+      <span>
+        <strong>Cosmos feature coverage</strong>
+        <small>Forces and rendering: how WebGL works, what experiments cover and what WebGPU still needs to prove</small>
+      </span>
+      <span aria-hidden="true">→</span>
+    </a>
     <a class="reference-card" href="${architectureHref()}">
       <span class="card-index">REFERENCE</span>
       <span>
@@ -180,6 +196,22 @@ function renderArchitectureFrame (host: HTMLElement): HTMLElement {
     </header>
     <section class="experiment-stage reference-stage">
       <div class="loading">Loading architecture guide…</div>
+    </section>
+  `
+  return requiredElement<HTMLElement>(host, '.reference-stage')
+}
+
+function renderFeatureInventoryFrame (host: HTMLElement): HTMLElement {
+  host.innerHTML = `
+    <header class="experiment-header reference-header">
+      <div>
+        <p class="eyebrow">Cosmos → WebGPU · Feature inventory</p>
+        <h1>Cosmos feature coverage</h1>
+        <p>The production WebGL behavior, the evidence in our experiments and the remaining WebGPU validation.</p>
+      </div>
+    </header>
+    <section class="experiment-stage reference-stage">
+      <div class="loading">Loading feature inventory…</div>
     </section>
   `
   return requiredElement<HTMLElement>(host, '.reference-stage')
@@ -301,7 +333,7 @@ export function createAppShell (root: HTMLElement): void {
         ? 'vocabulary'
         : route.kind === 'concept' && route.conceptId === 'reduction'
           ? 'reduction'
-          : route.kind === 'architecture' || route.kind === 'roadmap' ? route.kind : undefined
+          : route.kind === 'architecture' || route.kind === 'roadmap' || route.kind === 'feature-inventory' ? route.kind : undefined
     )
 
     if (route.kind === 'home') {
@@ -309,11 +341,15 @@ export function createAppShell (root: HTMLElement): void {
       return
     }
 
-    if (route.kind === 'architecture' || route.kind === 'roadmap') {
-      const stage = route.kind === 'roadmap' ? renderRoadmapFrame(workspace) : renderArchitectureFrame(workspace)
+    if (route.kind === 'architecture' || route.kind === 'roadmap' || route.kind === 'feature-inventory') {
+      const stage = route.kind === 'roadmap'
+        ? renderRoadmapFrame(workspace)
+        : route.kind === 'feature-inventory' ? renderFeatureInventoryFrame(workspace) : renderArchitectureFrame(workspace)
       try {
         const [source, renderer] = await Promise.all([
-          route.kind === 'roadmap' ? import('../docs/roadmap.md?raw') : import('../docs/architecture.md?raw'),
+          route.kind === 'roadmap'
+            ? import('../docs/roadmap.md?raw')
+            : route.kind === 'feature-inventory' ? import('../docs/feature-inventory.md?raw') : import('../docs/architecture.md?raw'),
           import('./markdown'),
         ])
         if (version !== renderVersion) return

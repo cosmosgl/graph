@@ -2,6 +2,7 @@ export type AppRoute =
   | { kind: 'home' }
   | { kind: 'architecture' }
   | { kind: 'roadmap' }
+  | { kind: 'feature-inventory' }
   | { kind: 'vocabulary'; termId?: string }
   | { kind: 'concept'; conceptId: string }
   | { kind: 'experiment'; experimentId: string; pageId?: string }
@@ -14,6 +15,7 @@ export function readRoute (): AppRoute {
 
   if (segments.length === 0) return { kind: 'home' }
   if (segments[0] === 'roadmap') return { kind: 'roadmap' }
+  if (segments[0] === 'feature-inventory') return { kind: 'feature-inventory' }
   if (segments[0] === 'architecture') return { kind: 'architecture' }
   if (segments[0] === 'vocabulary') {
     return {
@@ -53,4 +55,8 @@ export function experimentHref (experimentId: string, pageId?: string): string {
 
 export function roadmapHref (): string {
   return '#/roadmap'
+}
+
+export function featureInventoryHref (): string {
+  return '#/feature-inventory'
 }
