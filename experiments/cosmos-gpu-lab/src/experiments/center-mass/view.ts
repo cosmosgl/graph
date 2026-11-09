@@ -44,7 +44,7 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
           <p>The same ${POINT_COUNT.toLocaleString()} moving points are sent to both backends.</p>
         </div>
         <div class="controls">
-          <button data-action="step" type="button" disabled>Step</button>
+          <button class="button-primary" data-action="step" type="button" disabled>Step</button>
           <button data-action="play" type="button" disabled>Play</button>
           <button data-action="reset" type="button" disabled>Reset</button>
         </div>
@@ -191,6 +191,8 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
   playButton.addEventListener('click', () => {
     isPlaying = !isPlaying
     playButton.textContent = isPlaying ? 'Pause' : 'Play'
+    playButton.setAttribute('aria-pressed', String(isPlaying))
+    if (isPlaying) element<HTMLElement>(host, '.center-mass-demo').scrollIntoView({ block: 'start' })
     schedulePlay()
   })
   resetButton.addEventListener('click', () => {

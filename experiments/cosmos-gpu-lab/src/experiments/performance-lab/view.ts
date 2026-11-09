@@ -140,7 +140,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
           </select>
         </label>
         <div class="controls">
-          <button data-action="run" type="button">Run benchmark</button>
+          <button class="button-primary" data-action="run" type="button">Run benchmark</button>
           <button data-action="export" type="button" disabled>Export JSON</button>
         </div>
       </div>

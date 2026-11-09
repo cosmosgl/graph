@@ -83,6 +83,7 @@ function renderHome (host: HTMLElement): void {
         and move from luma WebGL to luma WebGPU.
       </p>
     </section>
+    <div class="home-sections">
     <a class="reference-card" href="${roadmapHref()}">
       <span class="card-index">THE JOURNEY</span>
       <span>
@@ -116,6 +117,7 @@ function renderHome (host: HTMLElement): void {
       </span>
       <span aria-hidden="true">→</span>
     </a>
+    </div>
   `
   const grid = requiredElement<HTMLElement>(host, '.experiment-grid')
   for (const experiment of experiments) {

@@ -60,7 +60,7 @@ export async function createScalableReductionExperiment (
           <span>Read center back to CPU</span>
         </label>
         <div class="controls">
-          <button data-action="step" type="button" disabled>Step</button>
+          <button class="button-primary" data-action="step" type="button" disabled>Step</button>
           <button data-action="play" type="button" disabled>Play</button>
           <button data-action="reset" type="button" disabled>Reset</button>
           <button data-action="benchmark" type="button" disabled>Benchmark</button>
@@ -177,6 +177,7 @@ export async function createScalableReductionExperiment (
           statusOutput.textContent = error instanceof Error ? error.message : String(error)
           isPlaying = false
           playButton.textContent = 'Play'
+          playButton.setAttribute('aria-pressed', 'false')
         })
     }, 100)
   }
@@ -186,6 +187,7 @@ export async function createScalableReductionExperiment (
     const configurationRevision = revision
     isPlaying = false
     playButton.textContent = 'Play'
+    playButton.setAttribute('aria-pressed', 'false')
     window.clearTimeout(playTimer)
     backend?.destroy()
     backend = undefined
@@ -241,6 +243,8 @@ export async function createScalableReductionExperiment (
   playButton.addEventListener('click', () => {
     isPlaying = !isPlaying
     playButton.textContent = isPlaying ? 'Pause' : 'Play'
+    playButton.setAttribute('aria-pressed', String(isPlaying))
+    if (isPlaying) element<HTMLElement>(host, '.scalable-demo').scrollIntoView({ block: 'start' })
     schedulePlay()
   })
   resetButton.addEventListener('click', () => {
