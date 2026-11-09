@@ -71,7 +71,7 @@ the distribution stays identical across methods. Playback does swap them on ever
 ## Export and next measurements
 
 JSON exports contain preset parameters, browser metadata, validation details, raw submission and
-completion samples, and GPU timestamp pairs with summaries. Add physical GPU, power state and the tested commit when sharing
+completion samples, and GPU timestamp pairs with summaries. Add physical GPU, power state and the tested implementation variant when sharing
 a report; browser metadata alone does not identify hardware reliably.
 
 The [parameter sweep](#/neighborhood-forces/docs/sweep) varies count, density, radius and cell size with

@@ -4,6 +4,9 @@ A Vite application for focused, documented experiments supporting the Cosmos Web
 experiment owns its demo, shaders, technical documentation, diagrams, Markdown findings and GPU-resource
 lifecycle.
 
+Follow the **WebGPU migration** roadmap (`#/roadmap`) for Cosmos migration readiness, demonstrated capabilities,
+remaining gaps and the evidence needed for a production switch.
+
 ## Run
 
 From the repository root:
@@ -30,7 +33,7 @@ An experiment should contain:
 
 ## Recording findings
 
-Commit the knowledge: what was tested, why, the environment and code revision when known, a small results table,
+Commit the knowledge: what was tested, why, the environment and implementation variant, a small results table,
 limitations, and the exact controls or commands needed to reproduce the comparison. Timings vary across machines;
 they are local observations, not expected values for every GPU.
 

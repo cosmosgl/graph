@@ -18,7 +18,7 @@ reproduction steps to collect your own results with the lab’s JSON export. Raw
 2. Open [Neighborhood forces → Demo](#/neighborhood-forces). In **Repeatable parameter sweep**,
    choose **Large**, **2 repetitions**, and order seed **20261109**.
 3. Keep the tab visible, run the sweep, and choose **Export sweep JSON**.
-4. Repeat with seed **20261110**. Record your GPU, browser, power state and code revision alongside
+4. Repeat with seed **20261110**. Record your GPU, browser, power state and implementation variant alongside
    the exports. Compare matching validated configurations; do not time failed rows or count skips as passes.
 
 The normal sweep now uses the precision-fixed baseline, so this repeats the workload and measurement

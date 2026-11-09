@@ -4,7 +4,7 @@ All four presets initialized, reduced, rendered and returned finite centers in a
 session. The hierarchy scales to ten million GPU-resident points; this was exploratory validation,
 not portable benchmark data.
 
-Recorded on **5 November 2026**, in the working tree after `579310f`, on macOS with luma.gl
+Recorded on **5 November 2026**, on macOS with luma.gl
 `10.0.0-alpha.4` and the WebGPU core profile. The exact GPU and browser version were not recorded.
 Workgroups contained 256 invocations, positions were generated on the GPU, and rendering sampled
 at most 500,000 points.
@@ -33,7 +33,7 @@ and cannot be compared directly with the visible readback tick. See [Performance
    center and CPU error where available.
 4. At one million and ten million points, disable readback and step again to check GPU-resident rendering.
 5. Run **Benchmark** for the bounded reduction average. Record the preset, readback mode, browser,
-   GPU and code revision; numbers will vary by machine and load.
+   GPU and implementation variant; numbers will vary by machine and load.
 
 For JSON-exportable reduction comparisons, use [Performance Lab](#/performance-lab). Its workload
 and timing methodology differ, so do not treat it as a replay of these exact measurements.

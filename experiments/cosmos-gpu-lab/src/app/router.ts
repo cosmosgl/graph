@@ -1,6 +1,7 @@
 export type AppRoute =
   | { kind: 'home' }
   | { kind: 'architecture' }
+  | { kind: 'roadmap' }
   | { kind: 'vocabulary'; termId?: string }
   | { kind: 'concept'; conceptId: string }
   | { kind: 'experiment'; experimentId: string; pageId?: string }
@@ -12,6 +13,7 @@ export function readRoute (): AppRoute {
     .filter(Boolean)
 
   if (segments.length === 0) return { kind: 'home' }
+  if (segments[0] === 'roadmap') return { kind: 'roadmap' }
   if (segments[0] === 'architecture') return { kind: 'architecture' }
   if (segments[0] === 'vocabulary') {
     return {
@@ -47,4 +49,8 @@ export function conceptHref (conceptId: string): string {
 export function experimentHref (experimentId: string, pageId?: string): string {
   const root = `#/${encodeURIComponent(experimentId)}`
   return pageId ? `${root}/docs/${encodeURIComponent(pageId)}` : root
+}
+
+export function roadmapHref (): string {
+  return '#/roadmap'
 }

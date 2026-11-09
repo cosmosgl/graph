@@ -6,7 +6,7 @@ import type {
 import vocabularySource from '../docs/vocabulary.md?raw'
 import reductionSource from '../docs/reduction.md?raw'
 import { experiments, findExperiment } from './registry'
-import { architectureHref, conceptHref, experimentHref, readRoute, vocabularyHref } from './router'
+import { architectureHref, conceptHref, experimentHref, readRoute, roadmapHref, vocabularyHref } from './router'
 import { indexVocabularyTerms } from './vocabulary'
 
 function requiredElement<T extends HTMLElement> (host: ParentNode, selector: string): T {
@@ -18,7 +18,7 @@ function requiredElement<T extends HTMLElement> (host: ParentNode, selector: str
 function renderNavigation (
   host: HTMLElement,
   activeId?: string,
-  activeReference?: 'vocabulary' | 'reduction' | 'architecture'
+  activeReference?: 'vocabulary' | 'reduction' | 'architecture' | 'roadmap'
 ): void {
   host.replaceChildren()
   const label = document.createElement('p')
@@ -39,6 +39,14 @@ function renderNavigation (
   referenceLabel.className = 'nav-label nav-label-reference'
   referenceLabel.textContent = 'Reference'
   host.append(referenceLabel)
+
+  const roadmap = document.createElement('a')
+  roadmap.href = roadmapHref()
+  roadmap.className = 'experiment-link reference-link'
+  roadmap.classList.toggle('active', activeReference === 'roadmap')
+  roadmap.innerHTML = '<span>WebGPU migration</span><small>roadmap</small>'
+  if (activeReference === 'roadmap') roadmap.setAttribute('aria-current', 'page')
+  host.append(roadmap)
 
   const architecture = document.createElement('a')
   architecture.href = architectureHref()
@@ -71,10 +79,18 @@ function renderHome (host: HTMLElement): void {
       <p class="eyebrow">Migration research workspace</p>
       <h1>Cosmos GPU Lab</h1>
       <p>
-        Focused, reproducible experiments for moving Cosmos from WebGL rendering passes
-        to WebGPU compute and rendering.
+        Experiments that assess whether Cosmos can preserve its behavior, meet performance goals
+        and move from luma WebGL to luma WebGPU.
       </p>
     </section>
+    <a class="reference-card" href="${roadmapHref()}">
+      <span class="card-index">THE JOURNEY</span>
+      <span>
+        <strong>Cosmos → WebGPU</strong>
+        <small>Migration readiness: what is demonstrated, what is missing and what would justify switching</small>
+      </span>
+      <span aria-hidden="true">→</span>
+    </a>
     <section class="experiment-grid" aria-label="Available experiments"></section>
     <a class="reference-card" href="${architectureHref()}">
       <span class="card-index">REFERENCE</span>
@@ -130,6 +146,22 @@ function renderVocabularyFrame (host: HTMLElement): HTMLElement {
     </header>
     <section class="experiment-stage reference-stage">
       <div class="loading">Loading vocabulary…</div>
+    </section>
+  `
+  return requiredElement<HTMLElement>(host, '.reference-stage')
+}
+
+function renderRoadmapFrame (host: HTMLElement): HTMLElement {
+  host.innerHTML = `
+    <header class="experiment-header reference-header">
+      <div>
+        <p class="eyebrow">Migration journey · Cosmos readiness</p>
+        <h1>Cosmos → WebGPU</h1>
+        <p>How realistic is the migration, how ready is Cosmos, and what evidence do we still need?</p>
+      </div>
+    </header>
+    <section class="experiment-stage reference-stage">
+      <div class="loading">Loading migration roadmap…</div>
     </section>
   `
   return requiredElement<HTMLElement>(host, '.reference-stage')
@@ -267,7 +299,7 @@ export function createAppShell (root: HTMLElement): void {
         ? 'vocabulary'
         : route.kind === 'concept' && route.conceptId === 'reduction'
           ? 'reduction'
-          : route.kind === 'architecture' ? 'architecture' : undefined
+          : route.kind === 'architecture' || route.kind === 'roadmap' ? route.kind : undefined
     )
 
     if (route.kind === 'home') {
@@ -275,11 +307,11 @@ export function createAppShell (root: HTMLElement): void {
       return
     }
 
-    if (route.kind === 'architecture') {
-      const stage = renderArchitectureFrame(workspace)
+    if (route.kind === 'architecture' || route.kind === 'roadmap') {
+      const stage = route.kind === 'roadmap' ? renderRoadmapFrame(workspace) : renderArchitectureFrame(workspace)
       try {
         const [source, renderer] = await Promise.all([
-          import('../docs/architecture.md?raw'),
+          route.kind === 'roadmap' ? import('../docs/roadmap.md?raw') : import('../docs/architecture.md?raw'),
           import('./markdown'),
         ])
         if (version !== renderVersion) return
