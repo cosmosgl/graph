@@ -5,8 +5,7 @@ forces. At 1,024 uniform points, the grid reduced candidate checks from 1,023 to
 This records the initial implementation; the later [precision findings](#/neighborhood-forces/docs/precision)
 and [precision cost comparison](#/neighborhood-forces/docs/precision-cost) cover the corrected dense-case kernels.
 
-Recorded on **9 November 2026**, in revision `4a1e1f5` plus the uncommitted neighborhood-force
-implementation, using Chrome 156 on macOS. The session exposed eight logical processors and used
+Recorded on **9 November 2026**, using the initial neighborhood-force implementation in Chrome 156 on macOS. The session exposed eight logical processors and used
 480×480 canvases at device pixel ratio 2. GPU identity and power state were not captured.
 
 Parameters: **1,024 points**, uniform distribution, **32×32 grid**, radius **0.08**, strength **0.12**,
@@ -41,5 +40,5 @@ historical timing results and their limitations.
 6. Run `pnpm --filter @cosmos.gl/gpu-lab test:gpu` for the automated CPU/WebGPU regressions.
    This requires a WebGPU adapter and uses Chromium's software adapter; its timings are not hardware benchmarks.
 
-Record your GPU, browser, code revision and power conditions when comparing results. Raw JSON and
+Record your GPU, browser, implementation variant and power conditions when comparing results. Raw JSON and
 ZIP captures are not stored in Git; this page preserves the findings and method.

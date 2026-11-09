@@ -72,6 +72,7 @@ export const vocabularyTerms: VocabularyTerm[] = [
   { id: 'double-buffering', heading: 'Double buffering', aliases: ['double buffering', 'double-buffered'] },
   { id: 'resource-hazard', heading: 'Resource hazard', aliases: ['resource hazards', 'resource hazard'] },
   { id: 'device-loss', heading: 'Device loss', aliases: ['device loss', 'device.lost'] },
+  { id: 'ulp', heading: 'ULP (Unit in the Last Place)', aliases: ['unit in the last place', 'one-ULP', 'one ULP', 'ULPs', 'ULP'] },
   { id: 'reduction', heading: 'Reduction', aliases: ['reductions', 'reduction'] },
   { id: 'scan', heading: 'Scan / prefix sum', aliases: ['prefix sums', 'prefix sum', 'scans', 'scan'] },
   { id: 'scatter', heading: 'Scatter', aliases: ['scatters', 'scatter'] },

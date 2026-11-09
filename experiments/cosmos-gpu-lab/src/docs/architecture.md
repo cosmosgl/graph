@@ -1,3 +1,5 @@
+For the full migration journey and remaining production work, see the [WebGPU migration roadmap](#/roadmap).
+
 The lab is a **modular research app**: one shared interface hosts independent GPU experiments,
 their explanations and their results. It lives in the private workspace package
 `experiments/cosmos-gpu-lab`, with Vite, TypeScript and plain DOM UI code.
@@ -144,7 +146,7 @@ The shared renderer provides:
 Markdown is rendered with raw HTML disabled. Mermaid SVG goes through DOMPurify before being
 inserted as a DOM fragment; this preserves its HTML labels while filtering executable content.
 
-Commit concise Markdown findings with the environment, workload, code revision when known,
+Commit concise Markdown findings with the environment, workload, implementation variant,
 methodology and a small results table. Machine-specific numbers are observations, not portable
 performance expectations. Performance Lab and Neighborhood forces export raw measurements and
 summaries as JSON for local analysis. Keep those captures outside Git; `captures/` in the lab is

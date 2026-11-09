@@ -325,6 +325,45 @@ defines synchronization for ordered commands, but the algorithm must still avoid
 The logical device becomes unusable. Robust applications observe `device.lost`, release dependent state and either show
 a useful error or rebuild on a newly requested device.
 
+## Numerical precision
+
+### ULP (Unit in the Last Place)
+
+ULP means **Unit in the Last Place**: the spacing between neighboring representable floating-point numbers
+near a value. A **one-ULP difference** is one representable step apart. Even this tiny difference can change
+whether a point passes a strict distance cutoff.
+
+Floating-point numbers have limited precision. Not every real number fits, so calculations round to a
+representable value. The spacing depends on the format (such as float32) and magnitude; it is not a fixed
+absolute error everywhere. A ULP is a measure of spacing, not permission to ignore a numerical difference.
+
+**Cosmos meaning:** in our dense neighborhood-force experiment, the CPU reference and GPU calculated
+slightly different squared distances for a pair almost exactly on the interaction-radius boundary:
+
+| Quantity | Float32 value | Result of `distance² < radius²` |
+| --- | ---: | --- |
+| CPU reference squared distance | 0.025599997490644455 | Inside — counted as a neighbor |
+| GPU fused squared distance | 0.025599999353289604 | Equal to cutoff — excluded |
+| Squared radius | 0.025599999353289604 | The cutoff |
+
+The two distance values are adjacent float32 numbers. Their difference is **2⁻²⁹**, about
+**0.00000000186** — one ULP at this magnitude.
+
+```text
+CPU squared distance              GPU squared distance = squared radius
+0.025599997490644455               0.025599999353289604
+                    one float32 step →
+inside                            excluded by the strict < comparison
+```
+
+The CPU reference rounds each squared component before adding them. The GPU's fused evaluation can
+round differently. Here, that changed the exact neighbor count even though the force contribution was tiny.
+The fix preserves the reference rounding near the boundary; it does **not** increase the radius or relax
+the acceptance tolerance. This is a captured example, not a claim that CPU and GPU results always differ.
+
+See [Fixing dense-case precision](#/neighborhood-forces/docs/precision) for the diagnosis and implementation,
+and [Precision cost](#/neighborhood-forces/docs/precision-cost) for the performance tradeoffs.
+
 ## Parallel primitives used by Cosmos
 
 ### Reduction
