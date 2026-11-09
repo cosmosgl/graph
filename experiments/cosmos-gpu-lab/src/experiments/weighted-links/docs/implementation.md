@@ -34,7 +34,7 @@ source of truth; newer online documentation may describe different exports.
 The WebGPU path uses `device.createBuffer`, `Kernel`, `RenderKernel`, luma compute/render passes,
 `device.submit`, `Buffer.readAsync` and optional `QuerySet` timestamps. Explicit shader layouts map binding
 names to slots. Buffer usages declare storage, copy and uniform roles; readback is diagnostic only.
-Native queue completion is used only to separate submitted work from completed work in measurements.
+Luma fences separate submitted work from completed work in measurements.
 No native compute or render pipelines are created by the experiment.
 
 One invocation owns one point's result. It walks that point's adjacency serially, so no floating-point
@@ -60,10 +60,11 @@ Two pinned-version details matter: framebuffers need explicit width/height for t
 and a managed uniform buffer must exist before `setUniforms` uploads values. Regression tests check
 complete textures, both integration substeps, replacement and reset so a partial render cannot pass.
 
-Native access is restricted to diagnostics: context/error checks, the optional completion fence, and
-canvas image readback. The pinned luma framebuffer readback helper requires a color attachment and
-cannot read the default canvas framebuffer; `webgl-readback.ts` isolates that fallback. Simulation
-texture readback uses luma `Texture.readDataSyncWebGL`. These reads stay outside GPU timing queries.
+Diagnostics also use luma APIs. Context loss is checked with `Device.isLost` and error callbacks;
+completion uses a luma fence. Image comparisons draw into an explicit RGBA8 framebuffer and use
+luma readback, since this alpha cannot read the default canvas framebuffer through its helper.
+Simulation texture readback uses `Texture.readDataSyncWebGL`. Reads stay outside GPU timing queries.
+The diagnostic error surface now comes from luma; it does not poll native WebGL error codes.
 
 Exports identify this baseline as `luma-model-directional-v1` and record per-case directional bounds.
 Earlier raw-WebGL captures used a total-degree bound for both passes and must not be pooled with it.

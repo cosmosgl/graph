@@ -1,3 +1,5 @@
+import type { Device } from '@luma.gl/core'
+import type { GridTimestamps } from '../spatial-grid/resources'
 export const BATCH_POLICY = { targetMilliseconds: 4, maximumOperations: 64 } as const
 
 export function chooseBatchSize (gpuMilliseconds: number | null, wallMilliseconds: number): number {
@@ -24,33 +26,19 @@ export function decodeTimestamps (start: bigint, end: bigint): TimestampSample {
   }
 }
 
-export function createGpuTimer (device: GPUDevice): {
-  writes: (edge?: 'start' | 'end') => GPUComputePassTimestampWrites;
+export function createGpuTimer (device: Device): {
+  writes: (edge?: 'start' | 'end') => GridTimestamps;
   read: () => Promise<TimestampSample>;
   destroy: () => void;
 } | undefined {
   if (!device.features.has('timestamp-query')) return undefined
-  const querySet = device.createQuerySet({ type: 'timestamp', count: 2 })
-  const resolve = device.createBuffer({ size: 16, usage: 0x0200 | 0x0004 })
-  const readback = device.createBuffer({ size: 16, usage: 0x0008 | 0x0001 })
+  const query = device.createQuerySet({ type: 'timestamp', count: 2 })
   return {
-    writes: edge => ({
-      querySet,
-      beginningOfPassWriteIndex: edge === 'end' ? undefined : 0,
-      endOfPassWriteIndex: edge === 'start' ? undefined : 1,
-    }),
+    writes: edge => ({ timestampQuerySet: query, beginTimestampIndex: edge === 'end' ? undefined : 0, endTimestampIndex: edge === 'start' ? undefined : 1 }),
     async read (): Promise<TimestampSample> {
-      // Resolve in a separate submission, after the wall-time sample has ended.
-      const encoder = device.createCommandEncoder()
-      encoder.resolveQuerySet(querySet, 0, 2, resolve, 0)
-      encoder.copyBufferToBuffer(resolve, 0, readback, 0, 16)
-      device.queue.submit([encoder.finish()])
-      try {
-        await readback.mapAsync(1)
-        const values = new BigUint64Array(readback.getMappedRange())
-        return decodeTimestamps(values[0], values[1])
-      } finally { readback.unmap() }
+      const values = await query.readResults({ firstQuery: 0, queryCount: 2 })
+      return decodeTimestamps(values[0], values[1])
     },
-    destroy (): void { querySet.destroy(); resolve.destroy(); readback.destroy() },
+    destroy (): void { query.destroy() },
   }
 }

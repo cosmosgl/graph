@@ -2,10 +2,12 @@ struct VertexOutput {
   @builtin(position) position: vec4f,
 }
 
+@group(0) @binding(0) var<storage, read> positions: array<vec2f>;
+
 @vertex
-fn vertexMain(@location(0) position: vec2f) -> VertexOutput {
+fn vertexMain(@builtin(vertex_index) index: u32) -> VertexOutput {
   var output: VertexOutput;
-  output.position = vec4f(position, 0.0, 1.0);
+  output.position = vec4f(positions[index], 0.0, 1.0);
   return output;
 }
 

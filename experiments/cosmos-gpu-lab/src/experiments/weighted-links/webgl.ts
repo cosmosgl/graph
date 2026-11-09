@@ -4,11 +4,11 @@ import { webgl2Adapter, type WebGLDevice } from '@luma.gl/webgl'
 import { forceFrag } from '../../../../../src/modules/ForceLink/force-spring'
 import quad from '../../../../../src/modules/Shared/quad.vert?raw'
 import integrateSource from '../../../../../src/modules/Points/update-position.frag?raw'
+import { waitForGpu } from '../../gpu/luma'
 import type { LinkBackend, Measurement, Stage, SetupSubmission, WebGLCheckpoint } from './backend'
 import type { GraphInput, Parameters, Topology } from './data'
 import type { Snapshot } from './reference'
-import { readCanvasPixels } from './webgl-readback'
-import { normalizeMeasurement, TIMING_POLICY, waitForWebGLFence, readLumaTimer } from './timing'
+import { normalizeMeasurement, TIMING_POLICY, readLumaTimer } from './timing'
 
 const pipelineParameters = {
   blend: false,
@@ -60,19 +60,19 @@ export async function createWebGLBackend (
   synchronization: () => 'pixel' | 'fence' = (): 'pixel' | 'fence' => 'pixel',
   onCheckpoint?: (checkpoint: WebGLCheckpoint) => void
 ): Promise<LinkBackend> {
+  let failure: string | undefined
   const device = await luma.createDevice({
     type: 'webgl',
+    onError: error => { failure = error.message },
     adapters: [webgl2Adapter],
     waitForPageLoad: false,
     createCanvasContext: { canvas, autoResize: false, useDevicePixels: false },
     webgl: { antialias: false, alpha: false, depth: false, stencil: false },
   }) as WebGLDevice
-  // Native access is limited to context/error diagnostics and the optional completion fence.
-  const gl = device.handle
   let phase = 'creating resources'; let lossMessage = ''; let sequence = 0
   const checkpoint = (label: string): void => {
     phase = label
-    onCheckpoint?.({ sequence: ++sequence, atMs: performance.now(), phase, contextLost: gl.isContextLost() })
+    onCheckpoint?.({ sequence: ++sequence, atMs: performance.now(), phase, contextLost: device.isLost })
   }
   const contextLost = (event: Event): void => {
     lossMessage = (event as WebGLContextEvent).statusMessage || 'no browser status message'
@@ -80,13 +80,11 @@ export async function createWebGLBackend (
   }
   canvas.addEventListener('webglcontextlost', contextLost)
   const assertHealthy = (): void => {
-    if (gl.isContextLost()) throw new Error(`WebGL context lost during ${phase}${lossMessage ? `: ${lossMessage}` : ''}`)
+    if (device.isLost) throw new Error(`WebGL context lost during ${phase}${lossMessage ? `: ${lossMessage}` : ''}`)
   }
-  // Only check at untimed boundaries: invalid readbacks must not masquerade as numerical failures.
   const checkError = (): void => {
     assertHealthy()
-    const error = gl.getError()
-    if (error !== gl.NO_ERROR) throw new Error(`WebGL error 0x${error.toString(16)} during ${phase}`)
+    if (failure) throw new Error(`luma WebGL error during ${phase}: ${failure}`)
   }
   const hasTimer = device.features.has('timestamp-query')
   if (!device.isTextureFormatRenderable('rgba32float')) { device.destroy(); throw new Error('RGBA32F render targets unavailable') }
@@ -133,7 +131,6 @@ export async function createWebGLBackend (
     const bytes = target.readDataSyncWebGL(onePixel ? { width: 1, height: 1 } : {})
     return bytes instanceof ArrayBuffer ? new Float32Array(bytes) : new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4)
   }
-  const readCanvas = (onePixel = false): Uint8Array => readCanvasPixels(device, onePixel ? 1 : canvas.width, onePixel ? 1 : canvas.height)
   const encodeForce = (side: number, begin = false, end = false): void => {
     const model = springs[side]
     model.setBindings({ positionsTexture: positions[side], exitTexture: exit, sizeTexture: sizes, ...directionTextures[side] })
@@ -145,8 +142,8 @@ export async function createWebGLBackend (
     })
     try { model.draw(pass) } finally { pass.end() }
   }
-  const draw = (positionIndex = 0, mode = 'both', verticesPerDraw = Infinity, begin = false, end = false): void => {
-    const pass = device.beginRenderPass({ clearColor: [0.075, 0.087, 0.105, 1], clearDepth: false, ...timestamps(begin, end) })
+  const draw = (positionIndex = 0, mode = 'both', verticesPerDraw = Infinity, begin = false, end = false, framebuffer?: Framebuffer): void => {
+    const pass = device.beginRenderPass({ framebuffer, clearColor: [0.075, 0.087, 0.105, 1], clearDepth: false, ...timestamps(begin, end) })
     const drawRange = (model: Model, count: number, isLink: number): void => {
       renderUniforms.setUniforms({ renderUniforms: { pointSize, linkSize, isLink } })
       model.setBindings({ positions: positions[positionIndex], links })
@@ -306,7 +303,7 @@ export async function createWebGLBackend (
     async synchronize (): Promise<void> {
       checkpoint(`before completion wait (${synchronization()})`)
       checkError()
-      if (synchronization() === 'fence') await waitForWebGLFence(gl)
+      if (synchronization() === 'fence') await waitForGpu(device)
       else {
         readTexture(positions[0], true)
         await new Promise(resolve => setTimeout(resolve, 0))
@@ -340,38 +337,43 @@ export async function createWebGLBackend (
       return data.slice(0, graph.points.length)
     },
     async diagnoseRender (progress, rows, cancelled): Promise<void> {
-      const boundedImages = new Map<string, Uint8Array>()
-      for (const verticesPerDraw of [4096, Infinity]) {
-        for (const mode of ['points', 'links', 'both']) {
-          if (cancelled()) return
-          phase = `render-only ${mode}, ${verticesPerDraw} vertices/draw`
-          progress(phase)
-          await new Promise(resolve => setTimeout(resolve, 0))
-          checkError()
-          const start = performance.now()
-          draw(0, mode, verticesPerDraw)
-          device.submit()
-          const pixels = readCanvas()
-          const completionMs = performance.now() - start
-          await new Promise(resolve => setTimeout(resolve, 0))
-          checkError()
-          let checksum = 2166136261; let coloredPixels = 0
-          for (let i = 0; i < pixels.length; i += 4) {
-            if (pixels[i] > 40) coloredPixels++
-            for (let c = 0; c < 4; c++) checksum = Math.imul(checksum ^ pixels[i + c], 16777619) >>> 0
+      // Explicit texture target keeps diagnostic image readback within luma's supported API.
+      const image = device.createTexture({ width: canvas.width, height: canvas.height, format: 'rgba8unorm', usage: Texture.RENDER | Texture.COPY_SRC })
+      const target = device.createFramebuffer({ width: canvas.width, height: canvas.height, colorAttachments: [image] })
+      try {
+        const boundedImages = new Map<string, Uint8Array>()
+        for (const verticesPerDraw of [4096, Infinity]) {
+          for (const mode of ['points', 'links', 'both']) {
+            if (cancelled()) return
+            phase = `render-only ${mode}, ${verticesPerDraw} vertices/draw`
+            progress(phase)
+            await new Promise(resolve => setTimeout(resolve, 0))
+            checkError()
+            const start = performance.now()
+            draw(0, mode, verticesPerDraw, false, false, target)
+            device.submit()
+            const pixels = device.readPixelsToArrayWebGL(target) as Uint8Array
+            const completionMs = performance.now() - start
+            await new Promise(resolve => setTimeout(resolve, 0))
+            checkError()
+            let checksum = 2166136261; let coloredPixels = 0
+            for (let i = 0; i < pixels.length; i += 4) {
+              if (pixels[i] > 40) coloredPixels++
+              for (let c = 0; c < 4; c++) checksum = Math.imul(checksum ^ pixels[i + c], 16777619) >>> 0
+            }
+            if (Number.isFinite(verticesPerDraw)) boundedImages.set(mode, pixels)
+            const matchesBounded = pixels.every((value, index) => value === boundedImages.get(mode)![index])
+            rows.push({
+              mode,
+              verticesPerDraw: Number.isFinite(verticesPerDraw) ? verticesPerDraw : 0,
+              completionMs,
+              checksum,
+              coloredPixels,
+              matchesBounded,
+            })
           }
-          if (Number.isFinite(verticesPerDraw)) boundedImages.set(mode, pixels)
-          const matchesBounded = pixels.every((value, index) => value === boundedImages.get(mode)![index])
-          rows.push({
-            mode,
-            verticesPerDraw: Number.isFinite(verticesPerDraw) ? verticesPerDraw : 0,
-            completionMs,
-            checksum,
-            coloredPixels,
-            matchesBounded,
-          })
         }
-      }
+      } finally { target.destroy(); image.destroy() }
     },
     async read (frozen = false): Promise<Snapshot> {
       checkpoint('before full snapshot readback')
@@ -410,7 +412,7 @@ export async function createWebGLBackend (
         device.submit()
         const submitted = performance.now()
         // Completion readback remains outside the timestamp interval.
-        if (stage === 'tick' || stage === 'render') readCanvas(true)
+        if (stage === 'tick' || stage === 'render') await waitForGpu(device)
         else readTexture(stage === 'force' ? forces[1] : positions[2], true)
         const complete = performance.now(); checkError()
         const result = activeTimer ? await readLumaTimer(activeTimer) : { milliseconds: null, status: 'unavailable' as const }

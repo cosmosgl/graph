@@ -32,18 +32,17 @@ Every sample exposes two measurements:
 | Metric | Begins | Ends |
 | --- | --- | --- |
 | CPU submit | before command encoding / WebGL calls | immediately after submit / draw calls |
-| Synchronized completion | same start | after `queue.onSubmittedWorkDone()` / `gl.finish()` |
+| Synchronized completion | same start | after a luma fence signals |
 
 The completion metric includes JavaScript encoding, driver/API overhead, GPU queue latency and GPU
 execution. It intentionally forces synchronization so both APIs have a portable completion point.
 It is **not** equivalent to a hardware timestamp query and should not be presented as pure shader
 duration.
 
-After `gl.finish()`, each WebGL batch reads one pixel from its target. This makes the batch output
-observable so a driver cannot discard overwritten rendering as dead work. The fixed readback cost is
-amortized across the batch but remains part of WebGL completion time; WebGPU uses
-`queue.onSubmittedWorkDone()` without a readback. Treat this as a practical browser baseline, not a
-perfectly symmetric hardware measurement.
+Both backends now use luma fences for completion. Validation readback is separate from the timed
+sample. Earlier captures included an extra WebGL pixel read and native synchronization; they describe
+a different implementation and should not be pooled with current measurements. JSON exports identify
+the current GPU API path as `luma-resources-v1`.
 
 ## Sampling
 

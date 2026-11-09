@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { deviceForTest } from '../../gpu/test-device'
 import { forceFrag } from '../../../../../src/modules/ForceLink/force-spring'
 import { buildTopology, createFixture, PARAMETERS } from './data'
 import { createSweepGraph, createSweepPlan, measureStages, runSweep, validateTrajectory, type SweepRow } from './sweep'
@@ -143,7 +144,9 @@ it('WebGL: 100k-star single and bounded draw calls produce identical nonempty im
 
 for (const [name, create] of [['WebGL', createWebGLBackend], ['WebGPU', createWebGPUBackend]] as const) {
   it(`${name}: batched stages keep input frozen and retain correct final outputs`, async context => {
-    if (name === 'WebGPU' && !(await navigator.gpu?.requestAdapter())) {
+    const probe = name === 'WebGPU' ? await deviceForTest() : undefined
+    probe?.destroy()
+    if (name === 'WebGPU' && !probe) {
       if (import.meta.env.REQUIRE_WEBGPU) throw new Error('WebGPU required')
       context.skip(); return
     }
@@ -169,7 +172,12 @@ for (const [name, create] of [['WebGL', createWebGLBackend], ['WebGPU', createWe
 }
 
 for (const [name, create] of [['WebGL', createWebGLBackend], ['WebGPU', createWebGPUBackend]] as const) {
-  it(`${name}: isolated pass readbacks validate every output before the next pass`, async () => {
+  it(`${name}: isolated pass readbacks validate every output before the next pass`, async context => {
+    if (name === 'WebGPU') {
+      const probe = await deviceForTest()
+      if (!probe) { context.skip(); return }
+      probe.destroy()
+    }
     const canvas = document.createElement('canvas'); canvas.width = 480; canvas.height = 340
     const backend = await create(canvas, () => true)
     try {
@@ -215,33 +223,24 @@ it('WebGL: fence synchronization preserves the complete 100k-star trajectory', a
   } finally { backend.destroy() }
 })
 
-it('fences yield before polling, reject failure/timeout/context loss, and always release the sync', async () => {
-  const { waitForWebGLFence } = await import('./timing')
-  let deleted = 0; let polls = 0; let flushed = false
-  const gl = {
-    SYNC_GPU_COMMANDS_COMPLETE: 1,
-    ALREADY_SIGNALED: 2,
-    CONDITION_SATISFIED: 3,
-    WAIT_FAILED: 4,
-    TIMEOUT_EXPIRED: 5,
-    fenceSync: () => ({}),
-    flush: () => { flushed = true },
-    isContextLost: () => false,
-    clientWaitSync: (_sync: unknown, flags: number, timeout: number) => {
-      expect(flushed).toBe(true); expect(flags).toBe(0); expect(timeout).toBe(0); polls++; return polls < 2 ? 5 : 3
-    },
-    deleteSync: () => { deleted++ },
-  } as unknown as WebGL2RenderingContext
-  const pending = waitForWebGLFence(gl)
-  expect(polls).toBe(0)
-  await pending; expect(polls).toBe(2); expect(deleted).toBe(1)
-  gl.clientWaitSync = (): number => 4
-  await expect(waitForWebGLFence(gl)).rejects.toThrow('wait failed')
-  gl.clientWaitSync = (): number => 5
-  await expect(waitForWebGLFence(gl, -1)).rejects.toThrow('timeout')
-  gl.flush = (): void => { gl.isContextLost = (): boolean => true }
-  await expect(waitForWebGLFence(gl)).rejects.toThrow('context lost')
-  expect(deleted).toBe(4)
+it('luma completion waits reject timeout or loss and release their fence', async () => {
+  const { waitForGpu } = await import('../../gpu/luma')
+  let destroyed = 0
+  let signal: Promise<void> = Promise.resolve()
+  const device = {
+    isLost: false,
+    lost: new Promise(() => {}),
+    submit: () => {},
+    createFence: () => ({ signaled: signal, destroy: (): void => { destroyed++ } }),
+  } as unknown as import('@luma.gl/core').Device
+  await waitForGpu(device)
+  signal = Promise.reject(new Error('GPU execution failed'))
+  await expect(waitForGpu(device)).rejects.toThrow('execution failed')
+  signal = new Promise(() => {})
+  await expect(waitForGpu(device, 1)).rejects.toThrow('timeout')
+  const lostDevice = { ...device, lost: Promise.resolve({ reason: 'unknown', message: 'lost' }) } as import('@luma.gl/core').Device
+  await expect(waitForGpu(lostDevice)).rejects.toThrow('device lost')
+  expect(destroyed).toBe(4)
 })
 
 it('retains completed trajectory snapshots when a later tick loses its device', async () => {

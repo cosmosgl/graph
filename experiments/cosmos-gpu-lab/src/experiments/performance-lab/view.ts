@@ -545,7 +545,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
   })
   exportButton.addEventListener('click', () => {
     if (!lastReport) return
-    const blob = new Blob([JSON.stringify(lastReport, null, 2)], { type: 'application/json' })
+    const blob = new Blob([JSON.stringify({ ...lastReport, gpuApi: 'luma-resources-v1' }, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
     link.href = url

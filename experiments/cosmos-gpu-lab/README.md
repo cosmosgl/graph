@@ -29,7 +29,16 @@ An experiment should contain:
 - Markdown explaining the algorithm, implementation, correctness and limitations.
 - Diagrams as Mermaid blocks or source-controlled SVG files.
 - Concise Markdown findings with measurement conditions, limitations and reproduction steps.
-- Backend-local shaders and resources.
+- Backend-local shaders and resources, accessed through luma.gl APIs only.
+
+Use `Model` / `UniformStore` for GLSL, `Kernel` / `RenderKernel` for WGSL, and luma resources,
+passes, fences, readback and query sets. Do not access native device handles or create native GPU
+objects, including in diagnostics and tests. Shared helpers live in `src/gpu/`. `typecheck` runs a
+source boundary check as well as TypeScript. Canvas 2D remains appropriate for CPU visualizations.
+
+The current implementation uses the pinned luma `10.0.0-alpha.4` APIs throughout. Historical native-API
+measurements remain observations of that earlier implementation; rerun benchmarks before comparing
+current performance. New JSON exports identify the GPU API implementation.
 
 ## Recording findings
 
@@ -59,7 +68,7 @@ Reference pages cover the lab architecture, WebGPU vocabulary and parallel reduc
 pnpm --filter @cosmos.gl/gpu-lab test:gpu
 ```
 
-This runs the neighborhood-force, shared-grid and weighted-link tests in Chromium with its software WebGPU
+This runs rendering, reductions, neighborhood-force, shared-grid and weighted-link tests in Chromium with its software WebGPU
 adapter enabled. It fails if no adapter is available. The normal repository test run skips GPU
 cases when WebGPU is unavailable. The root test configuration uses separate engine and lab projects so
 Vite does not resolve the lab's luma v10 imports through the engine's v9 dependency cache. Software-adapter

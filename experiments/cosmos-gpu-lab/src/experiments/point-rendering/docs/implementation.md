@@ -28,7 +28,7 @@ antialiasing ramp rather than a hard, jagged discard.
 
 ## WebGPU instanced quad
 
-The WebGPU draw is `draw(6, pointCount)`. `vertex_index` chooses one of six compile-time quad
+The luma `RenderKernel.draw` uses `vertexCount: 6` and `instanceCount: pointCount`. `vertex_index` chooses one of six compile-time quad
 corners while `instance_index` chooses the point:
 
 ```wgsl
@@ -61,6 +61,7 @@ derivative details.
 
 ## Resource lifetime
 
-The buffers and pipelines are created once. Changing point diameter updates only a 16-byte WebGPU
-uniform buffer or one WebGL uniform. Regenerating or changing point count uploads the shared typed
-arrays; it does not recreate either pipeline.
+WebGL uses `Model`, vertex buffers and a `UniformStore` uniform block. WebGPU uses `RenderKernel`,
+storage buffers and a uniform buffer. Changing diameter updates uniforms only. WebGL replaces its
+vertex buffers when data changes; WebGPU writes into capacity-checked buffers. Both retain their
+pipelines. Completion measurements use luma fences. No native handles or GPU commands are used.

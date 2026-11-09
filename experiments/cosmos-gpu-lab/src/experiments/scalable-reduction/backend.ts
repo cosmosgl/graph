@@ -1,5 +1,6 @@
-import { luma } from '@luma.gl/core'
-import { webgpuAdapter, type WebGPUDevice } from '@luma.gl/webgpu'
+import { Buffer, type ComputePass, type Bindings } from '@luma.gl/core'
+import { Kernel } from '@luma.gl/engine'
+import { bindingLayout, createDevice, createStorageRenderer, readFloats, upload, waitForGpu } from '../../gpu/luma'
 import drawCenterShader from './shaders/draw-center.wgsl?raw'
 import drawPointsShader from './shaders/draw-points.wgsl?raw'
 import initializeShader from './shaders/initialize.wgsl?raw'
@@ -9,15 +10,6 @@ import rotateShader from './shaders/rotate.wgsl?raw'
 
 export const WORKGROUP_SIZE = 256
 export const MAX_RENDERED_POINTS = 500_000
-
-const BUFFER_USAGE = {
-  MAP_READ: 0x0001,
-  COPY_SRC: 0x0004,
-  COPY_DST: 0x0008,
-  UNIFORM: 0x0040,
-  STORAGE: 0x0080,
-} as const
-const MAP_MODE_READ = 0x0001
 
 export type ReductionCenter = {
   x: number;
@@ -49,367 +41,112 @@ export type ScalableReductionBackend = {
   destroy: () => void;
 }
 
-type ReductionStage = {
-  inputCount: number;
-  outputCount: number;
-  pipeline: GPUComputePipeline;
-  bindings: GPUBindGroup;
-}
-
-function createCountBuffer (device: GPUDevice, count: number, label: string): GPUBuffer {
-  const buffer = device.createBuffer({
-    label,
-    size: 16,
-    usage: BUFFER_USAGE.COPY_DST | BUFFER_USAGE.UNIFORM,
-  })
-  device.queue.writeBuffer(buffer, 0, new Uint32Array([count, 0, 0, 0]))
-  return buffer
-}
+type ReductionStage = { outputCount: number; kernel: Kernel; bindings: Bindings }
 
 export function formatBytes (bytes: number): string {
-  if (bytes >= 1024 ** 2) return `${(bytes / 1024 ** 2).toFixed(1)} MB`
-  return `${(bytes / 1024).toFixed(1)} KB`
+  return bytes >= 1024 ** 2 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${(bytes / 1024).toFixed(1)} KB`
 }
 
-export async function createScalableReductionBackend (
-  canvas: HTMLCanvasElement,
-  pointCount: number
-): Promise<ScalableReductionBackend> {
-  const lumaDevice = await luma.createDevice({
-    id: `scalable-reduction-${pointCount}`,
-    type: 'webgpu',
-    adapters: [webgpuAdapter],
-    waitForPageLoad: false,
-    featureLevel: 'core',
-    createCanvasContext: {
-      canvas,
-      autoResize: false,
-      useDevicePixels: false,
-      alphaMode: 'opaque',
-    },
-  }) as WebGPUDevice
-
-  const device = lumaDevice.handle
-  const context = lumaDevice.canvasContext?.handle
-  const format = lumaDevice.canvasContext?.colorFormat
-  if (!context || !format) {
-    lumaDevice.destroy()
-    throw new Error('luma.gl did not create a WebGPU canvas context')
+export async function createScalableReductionBackend (canvas: HTMLCanvasElement, pointCount: number): Promise<ScalableReductionBackend> {
+  const device = await createDevice('webgpu', canvas)
+  const positionBytes = pointCount * 8; const firstPartialCount = Math.ceil(pointCount / WORKGROUP_SIZE)
+  const partialBytes = Math.max(16, firstPartialCount * 16)
+  if (positionBytes > device.limits.maxStorageBufferBindingSize || positionBytes > device.limits.maxBufferSize ||
+    firstPartialCount > device.limits.maxComputeWorkgroupsPerDimension) {
+    device.destroy(); throw new Error('Point count exceeds this device’s buffer or dispatch limits')
   }
-
-  const positionBytes = pointCount * 2 * Float32Array.BYTES_PER_ELEMENT
-  const firstPartialCount = Math.ceil(pointCount / WORKGROUP_SIZE)
-  const partialBytes = Math.max(16, firstPartialCount * 4 * Float32Array.BYTES_PER_ELEMENT)
-  const maximumStorageBinding = Number(device.limits.maxStorageBufferBindingSize)
-  const maximumBufferSize = Number(device.limits.maxBufferSize)
-  const maximumDispatch = Number(device.limits.maxComputeWorkgroupsPerDimension)
-  if (positionBytes > maximumStorageBinding || positionBytes > maximumBufferSize) {
-    lumaDevice.destroy()
-    throw new Error(
-      `${formatBytes(positionBytes)} position buffer exceeds this device's storage-buffer limit`
-    )
-  }
-  if (firstPartialCount > maximumDispatch) {
-    lumaDevice.destroy()
-    throw new Error(
-      `${firstPartialCount.toLocaleString()} workgroups exceed this device's one-dimensional dispatch limit`
-    )
-  }
-
-  const positionBuffer = device.createBuffer({
-    label: 'resident positions',
-    size: positionBytes,
-    usage: BUFFER_USAGE.STORAGE,
-  })
-  const partialBufferA = device.createBuffer({
-    label: 'reduction partials A',
-    size: partialBytes,
-    usage: BUFFER_USAGE.STORAGE | BUFFER_USAGE.COPY_SRC,
-  })
-  const partialBufferB = device.createBuffer({
-    label: 'reduction partials B',
-    size: partialBytes,
-    usage: BUFFER_USAGE.STORAGE | BUFFER_USAGE.COPY_SRC,
-  })
-  const readbackBuffer = device.createBuffer({
-    label: 'optional center readback',
-    size: 16,
-    usage: BUFFER_USAGE.COPY_DST | BUFFER_USAGE.MAP_READ,
-  })
-  const pointParameters = createCountBuffer(device, pointCount, 'point count')
+  const positions = device.createBuffer({ byteLength: positionBytes, usage: Buffer.STORAGE })
+  const partials = [0, 1].map(() => device.createBuffer({ byteLength: partialBytes, usage: Buffer.STORAGE | Buffer.COPY_SRC }))
+  const parameters = upload(device, new Uint32Array([pointCount, 0, 0, 0]), Buffer.UNIFORM)
   const renderedPointCount = Math.min(pointCount, MAX_RENDERED_POINTS)
-  const renderStride = Math.max(1, Math.floor(pointCount / renderedPointCount))
-  const drawParameters = device.createBuffer({
-    label: 'sampled point rendering parameters',
-    size: 16,
-    usage: BUFFER_USAGE.COPY_DST | BUFFER_USAGE.UNIFORM,
-  })
-  device.queue.writeBuffer(
-    drawParameters,
-    0,
-    new Uint32Array([pointCount, renderStride, 0, 0])
-  )
-  const centerParameters = device.createBuffer({
-    label: 'center marker parameters',
-    size: 16,
-    usage: BUFFER_USAGE.COPY_DST | BUFFER_USAGE.UNIFORM,
-  })
-  device.queue.writeBuffer(
-    centerParameters,
-    0,
-    new Float32Array([2 / canvas.width, 2 / canvas.height, 0, 0])
-  )
-
-  const initializePipeline = device.createComputePipeline({
-    label: 'initialize resident positions',
-    layout: 'auto',
-    compute: {
-      module: device.createShaderModule({ code: initializeShader }),
-      entryPoint: 'main',
+  const stride = Math.max(1, Math.floor(pointCount / renderedPointCount))
+  const drawParameters = upload(device, new Uint32Array([pointCount, stride, 0, 0]), Buffer.UNIFORM)
+  const centerParameters = upload(device, new Float32Array([2 / canvas.width, 2 / canvas.height, 0, 0]), Buffer.UNIFORM)
+  const updateLayout = bindingLayout([['positions', 'storage'], ['parameters', 'uniform']])
+  const initialize = new Kernel(device, { source: initializeShader, shaderLayout: { bindings: updateLayout } })
+  const rotate = new Kernel(device, { source: rotateShader, shaderLayout: { bindings: updateLayout } })
+  const reducePoints = new Kernel(device, {
+    source: reducePointsShader,
+    shaderLayout: {
+      bindings: bindingLayout([
+        ['positions', 'read-only-storage'], ['outputValues', 'storage'], ['parameters', 'uniform'],
+      ]),
     },
   })
-  const rotatePipeline = device.createComputePipeline({
-    label: 'advance resident positions',
-    layout: 'auto',
-    compute: {
-      module: device.createShaderModule({ code: rotateShader }),
-      entryPoint: 'main',
+  const reducePartials = new Kernel(device, {
+    source: reducePartialsShader,
+    shaderLayout: {
+      bindings: bindingLayout([
+        ['inputValues', 'read-only-storage'], ['outputValues', 'storage'], ['parameters', 'uniform'],
+      ]),
     },
   })
-  const pointReductionPipeline = device.createComputePipeline({
-    label: 'reduce positions',
-    layout: 'auto',
-    compute: {
-      module: device.createShaderModule({ code: reducePointsShader }),
-      entryPoint: 'main',
-    },
-  })
-  const partialReductionPipeline = device.createComputePipeline({
-    label: 'reduce partial sums',
-    layout: 'auto',
-    compute: {
-      module: device.createShaderModule({ code: reducePartialsShader }),
-      entryPoint: 'main',
-    },
-  })
-
-  const initializeBindings = device.createBindGroup({
-    label: 'position initialization bindings',
-    layout: initializePipeline.getBindGroupLayout(0),
-    entries: [
-      { binding: 0, resource: { buffer: positionBuffer } },
-      { binding: 1, resource: { buffer: pointParameters } },
-    ],
-  })
-  const rotateBindings = device.createBindGroup({
-    label: 'position advance bindings',
-    layout: rotatePipeline.getBindGroupLayout(0),
-    entries: [
-      { binding: 0, resource: { buffer: positionBuffer } },
-      { binding: 1, resource: { buffer: pointParameters } },
-    ],
-  })
-
-  const stageParameterBuffers: GPUBuffer[] = []
-  const reductionStages: ReductionStage[] = []
-  let inputCount = pointCount
-  let outputCount = firstPartialCount
-  let outputBuffer = partialBufferA
-  const firstStageParameters = createCountBuffer(device, inputCount, 'reduction level 0 count')
-  stageParameterBuffers.push(firstStageParameters)
-  reductionStages.push({
-    inputCount,
-    outputCount,
-    pipeline: pointReductionPipeline,
-    bindings: device.createBindGroup({
-      label: 'position reduction bindings',
-      layout: pointReductionPipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: { buffer: positionBuffer } },
-        { binding: 1, resource: { buffer: outputBuffer } },
-        { binding: 2, resource: { buffer: firstStageParameters } },
-      ],
-    }),
-  })
-
-  while (outputCount > 1) {
-    inputCount = outputCount
-    outputCount = Math.ceil(inputCount / WORKGROUP_SIZE)
-    const inputBuffer = outputBuffer
-    outputBuffer = inputBuffer === partialBufferA ? partialBufferB : partialBufferA
-    const parameters = createCountBuffer(
-      device,
-      inputCount,
-      `reduction level ${reductionStages.length} count`
-    )
-    stageParameterBuffers.push(parameters)
-    reductionStages.push({
-      inputCount,
+  const parameterBuffers: Buffer[] = []
+  const stages: ReductionStage[] = []
+  let input = positions; let count = pointCount; let output = partials[0]
+  do {
+    output = stages.length % 2 ? partials[1] : partials[0]
+    const params = upload(device, new Uint32Array([count, 0, 0, 0]), Buffer.UNIFORM); parameterBuffers.push(params)
+    const outputCount = Math.ceil(count / WORKGROUP_SIZE)
+    stages.push({
       outputCount,
-      pipeline: partialReductionPipeline,
-      bindings: device.createBindGroup({
-        label: `partial reduction level ${reductionStages.length}`,
-        layout: partialReductionPipeline.getBindGroupLayout(0),
-        entries: [
-          { binding: 0, resource: { buffer: inputBuffer } },
-          { binding: 1, resource: { buffer: outputBuffer } },
-          { binding: 2, resource: { buffer: parameters } },
-        ],
-      }),
+      kernel: stages.length ? reducePartials : reducePoints,
+      bindings: { [stages.length ? 'inputValues' : 'positions']: input, outputValues: output, parameters: params },
     })
+    count = outputCount; input = output
+  } while (count > 1)
+  const final = output
+  const points = createStorageRenderer(device, drawPointsShader, 'point-list', bindingLayout([
+    ['positions', 'read-only-storage'], ['parameters', 'uniform'],
+  ]))
+  const marker = createStorageRenderer(device, drawCenterShader, 'triangle-list', bindingLayout([
+    ['result', 'read-only-storage'], ['parameters', 'uniform'],
+  ]))
+  let initialized = false; let destroyed = false
+  const check = (): void => { if (destroyed || device.isLost) throw new Error('Reduction device unavailable') }
+  const reduce = (pass: ComputePass): void => {
+    for (const stage of stages) stage.kernel.dispatch(pass, { x: stage.outputCount, bindings: stage.bindings })
   }
-  const finalBuffer = outputBuffer
-
-  const drawPointModule = device.createShaderModule({ code: drawPointsShader })
-  const drawPointPipeline = device.createRenderPipeline({
-    label: 'draw sampled resident points',
-    layout: 'auto',
-    vertex: { module: drawPointModule, entryPoint: 'vertexMain' },
-    fragment: {
-      module: drawPointModule,
-      entryPoint: 'fragmentMain',
-      targets: [{ format }],
-    },
-    primitive: { topology: 'point-list' },
-  })
-  const drawPointBindings = device.createBindGroup({
-    label: 'sampled point drawing bindings',
-    layout: drawPointPipeline.getBindGroupLayout(0),
-    entries: [
-      { binding: 0, resource: { buffer: positionBuffer } },
-      { binding: 1, resource: { buffer: drawParameters } },
-    ],
-  })
-
-  const drawCenterModule = device.createShaderModule({ code: drawCenterShader })
-  const drawCenterPipeline = device.createRenderPipeline({
-    label: 'draw GPU-resident center',
-    layout: 'auto',
-    vertex: { module: drawCenterModule, entryPoint: 'vertexMain' },
-    fragment: {
-      module: drawCenterModule,
-      entryPoint: 'fragmentMain',
-      targets: [{ format }],
-    },
-    primitive: { topology: 'triangle-list' },
-  })
-  const drawCenterBindings = device.createBindGroup({
-    label: 'GPU-resident center drawing bindings',
-    layout: drawCenterPipeline.getBindGroupLayout(0),
-    entries: [
-      { binding: 0, resource: { buffer: finalBuffer } },
-      { binding: 1, resource: { buffer: centerParameters } },
-    ],
-  })
-
-  let initialized = false
-  let destroyed = false
-
-  const encodeReduction = (pass: GPUComputePassEncoder): void => {
-    for (const stage of reductionStages) {
-      pass.setPipeline(stage.pipeline)
-      pass.setBindGroup(0, stage.bindings)
-      pass.dispatchWorkgroups(stage.outputCount)
-    }
-  }
-
   return {
     pointCount,
     renderedPointCount,
-    reductionCounts: [pointCount, ...reductionStages.map(stage => stage.outputCount)],
     positionBytes,
     partialBytes: partialBytes * 2,
+    reductionCounts: [pointCount, ...stages.map(s => s.outputCount)],
     async run (advance: boolean, readback: boolean): Promise<ReductionRunResult> {
-      if (destroyed) throw new Error('The scalable reduction backend has been destroyed')
-      const started = performance.now()
-      const encoder = device.createCommandEncoder({ label: 'scalable center-mass tick' })
-      const computePass = encoder.beginComputePass()
-
-      if (!initialized) {
-        computePass.setPipeline(initializePipeline)
-        computePass.setBindGroup(0, initializeBindings)
-        computePass.dispatchWorkgroups(firstPartialCount)
+      check(); const start = performance.now()
+      const compute = device.beginComputePass()
+      if (!initialized || advance) {
+        (initialized ? rotate : initialize).dispatch(compute, { x: firstPartialCount, bindings: { positions, parameters } })
         initialized = true
-      } else if (advance) {
-        computePass.setPipeline(rotatePipeline)
-        computePass.setBindGroup(0, rotateBindings)
-        computePass.dispatchWorkgroups(firstPartialCount)
       }
-
-      encodeReduction(computePass)
-      computePass.end()
-      if (readback) encoder.copyBufferToBuffer(finalBuffer, 0, readbackBuffer, 0, 16)
-
-      const renderPass = encoder.beginRenderPass({
-        colorAttachments: [{
-          view: context.getCurrentTexture().createView(),
-          clearValue: { r: 0.09, g: 0.1, b: 0.12, a: 1 },
-          loadOp: 'clear',
-          storeOp: 'store',
-        }],
-      })
-      renderPass.setPipeline(drawPointPipeline)
-      renderPass.setBindGroup(0, drawPointBindings)
-      renderPass.draw(renderedPointCount)
-      renderPass.setPipeline(drawCenterPipeline)
-      renderPass.setBindGroup(0, drawCenterBindings)
-      renderPass.draw(6)
-      renderPass.end()
-      device.queue.submit([encoder.finish()])
-
-      if (!readback) {
-        return {
-          elapsedMilliseconds: performance.now() - started,
-          timingKind: 'submit',
-        }
-      }
-
-      await readbackBuffer.mapAsync(MAP_MODE_READ)
-      const values = new Float32Array(readbackBuffer.getMappedRange()).slice()
-      readbackBuffer.unmap()
+      reduce(compute); compute.end()
+      const pass = device.beginRenderPass({ clearColor: [0.09, 0.1, 0.12, 1], clearDepth: false })
+      points.kernel.draw(pass, { vertexArray: points.vertexArray, vertexCount: renderedPointCount, bindings: { positions, parameters: drawParameters } })
+      marker.kernel.draw(pass, { vertexArray: marker.vertexArray, vertexCount: 6, bindings: { result: final, parameters: centerParameters } })
+      pass.end(); device.submit()
+      if (!readback) return { elapsedMilliseconds: performance.now() - start, timingKind: 'submit' }
+      const values = await readFloats(final, 16)
       return {
-        center: {
-          x: values[0] / values[2],
-          y: values[1] / values[2],
-          count: values[2],
-        },
-        elapsedMilliseconds: performance.now() - started,
+        center: { x: values[0] / values[2], y: values[1] / values[2], count: values[2] },
+        elapsedMilliseconds: performance.now() - start,
         timingKind: 'readback',
       }
     },
     async benchmark (iterations: number): Promise<ReductionBenchmark> {
-      if (destroyed) throw new Error('The scalable reduction backend has been destroyed')
-      if (!initialized) throw new Error('Run one visible tick before benchmarking')
-      const started = performance.now()
-      const encoder = device.createCommandEncoder({ label: `${iterations} reduction benchmark iterations` })
-      const computePass = encoder.beginComputePass()
-      for (let iteration = 0; iteration < iterations; iteration += 1) {
-        encodeReduction(computePass)
-      }
-      computePass.end()
-      device.queue.submit([encoder.finish()])
-      const submitted = performance.now()
-      await device.queue.onSubmittedWorkDone()
-      const totalMilliseconds = performance.now() - started
-      return {
-        iterations,
-        submitMilliseconds: submitted - started,
-        totalMilliseconds,
-        averageMilliseconds: totalMilliseconds / iterations,
-      }
+      check(); if (!initialized) throw new Error('Run one visible tick before benchmarking')
+      const start = performance.now(); const pass = device.beginComputePass()
+      for (let i = 0; i < iterations; i++) reduce(pass)
+      pass.end(); device.submit(); const submitted = performance.now()
+      await waitForGpu(device); const totalMilliseconds = performance.now() - start
+      return { iterations, submitMilliseconds: submitted - start, totalMilliseconds, averageMilliseconds: totalMilliseconds / iterations }
     },
     destroy (): void {
       if (destroyed) return
       destroyed = true
-      centerParameters.destroy()
-      drawParameters.destroy()
-      for (const buffer of stageParameterBuffers) buffer.destroy()
-      pointParameters.destroy()
-      readbackBuffer.destroy()
-      partialBufferB.destroy()
-      partialBufferA.destroy()
-      positionBuffer.destroy()
-      lumaDevice.destroy()
+      for (const resource of [points, marker, initialize, rotate, reducePoints, reducePartials, positions,
+        ...partials, parameters, drawParameters, centerParameters, ...parameterBuffers]) resource.destroy()
+      device.destroy()
     },
   }
 }

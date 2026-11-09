@@ -1,4 +1,7 @@
-import { createSpatialGridResources, type SpatialGridBackend } from '../spatial-grid/resources'
+import { Buffer, type Device, type CommandEncoder, type Bindings, type CanvasContext } from '@luma.gl/core'
+import { Kernel } from '@luma.gl/engine'
+import { ALPHA_BLEND, bindingLayout, createStorageRenderer, readFloats, waitForGpu } from '../../gpu/luma'
+import { createSpatialGridResources, type SpatialGridBackend, type GridTimestamps } from '../spatial-grid/resources'
 import circleShader from '../point-rendering/webgpu/shaders/circle.wgsl?raw'
 import { summarizeSamples, type SampleSummary } from '../performance-lab/backend'
 import { BRUTE_LIMIT, MAX_POINTS, validateStep, type ForceParameters, type Validation } from './reference'
@@ -8,9 +11,6 @@ import chunkedShader from './shaders/forces-chunked.wgsl?raw'
 import { diagnoseContributions } from './precision'
 import integrateShader from './shaders/integrate.wgsl?raw'
 import { chooseBatchSize, createGpuTimer, type TimestampSample } from './gpu-timer'
-
-const BUFFER_USAGE = { MAP_READ: 1, COPY_SRC: 4, COPY_DST: 8, UNIFORM: 64, STORAGE: 128 } as const
-const MAP_MODE = { READ: 1 } as const
 
 export type Accumulation = 'blocked' | 'serial' | 'chunked'
 
@@ -33,7 +33,7 @@ export type Timing = {
 }
 
 export async function createNeighborhoodBackend (
-  device: GPUDevice,
+  device: Device,
   initialPositions: Float32Array,
   parameters: ForceParameters,
   gridSize: number,
@@ -55,9 +55,9 @@ export async function createNeighborhoodBackend (
     count * 16 > device.limits.maxBufferSize || Math.ceil(count / 128) > device.limits.maxComputeWorkgroupsPerDimension) {
     throw new Error('This preset exceeds the device buffer or dispatch limits')
   }
-  const owned: GPUBuffer[] = []
+  const owned: Array<{ destroy(): void }> = []
   let grid: SpatialGridBackend | undefined
-  let context: GPUCanvasContext | null = null
+  let context: CanvasContext | undefined
   let destroyed = false
   let timer: ReturnType<typeof createGpuTimer>
   const destroy = (): void => {
@@ -65,84 +65,76 @@ export async function createNeighborhoodBackend (
     destroyed = true
     grid?.destroy()
     timer?.destroy()
-    for (const buffer of owned) buffer.destroy()
-    context?.unconfigure()
+    for (const resource of owned.reverse()) resource.destroy()
+    context?.destroy()
   }
-  const buffer = (label: string, size: number, usage: number): GPUBuffer => {
-    const resource = device.createBuffer({ label: `${method} ${label}`, size, usage })
+  const buffer = (label: string, size: number, usage: number): Buffer => {
+    const resource = device.createBuffer({ id: `${method} ${label}`, byteLength: size, usage })
     owned.push(resource)
     return resource
   }
-  const storage = (label: string, size: number): GPUBuffer => buffer(label, size,
-    BUFFER_USAGE.STORAGE | BUFFER_USAGE.COPY_SRC | BUFFER_USAGE.COPY_DST)
-  const bindings = (pipeline: GPUComputePipeline | GPURenderPipeline, buffers: GPUBuffer[]): GPUBindGroup =>
-    device.createBindGroup({
-      layout: pipeline.getBindGroupLayout(0),
-      entries: buffers.map((resource, binding) => ({ binding, resource: { buffer: resource } })),
-    })
-  device.pushErrorScope('validation')
-  let scopeOpen = true
+  const storage = (label: string, size: number): Buffer => buffer(label, size,
+    Buffer.STORAGE | Buffer.COPY_SRC | Buffer.COPY_DST)
   try {
     const positions = [storage('positions A', count * 8), storage('positions B', count * 8)]
     const velocities = [storage('velocities A', count * 8), storage('velocities B', count * 8)]
     const forces = storage('forces, neighbor and candidate counts', count * 16)
-    const uniforms = buffer('parameters', 32, BUFFER_USAGE.UNIFORM | BUFFER_USAGE.COPY_DST)
+    const uniforms = buffer('parameters', 32, Buffer.UNIFORM | Buffer.COPY_DST)
     const parameterData = new ArrayBuffer(32)
     new Uint32Array(parameterData).set([count, gridSize])
     new Float32Array(parameterData).set([
       parameters.radius, parameters.strength, parameters.dt, parameters.damping,
     ], 2)
-    device.queue.writeBuffer(uniforms, 0, parameterData)
+    uniforms.write(new Uint8Array(parameterData))
 
     if (method === 'grid') {
       grid = createSpatialGridResources(device, positions, count, gridSize)
     }
-    const forcePipeline = await device.createComputePipelineAsync({
-      label: `${method} neighborhood force`,
-      layout: 'auto',
-      compute: { module: device.createShaderModule({ code: shader }), entryPoint: method },
+    const forceLayout = bindingLayout([
+      ['positions', 'read-only-storage'], ['forces', 'storage'], ['params', 'uniform'],
+      ...(grid ? [['offsets', 'read-only-storage'], ['indices', 'read-only-storage']] as Array<[string, 'read-only-storage']> : []),
+    ])
+    const forcePipeline = await Kernel.createAsync(device, { source: shader, entryPoint: method, shaderLayout: { bindings: forceLayout } })
+    owned.push(forcePipeline)
+    const integrationPipeline = await Kernel.createAsync(device, {
+      source: integrateShader,
+      shaderLayout: {
+        bindings: bindingLayout([
+          ['positions', 'read-only-storage'], ['velocities', 'read-only-storage'], ['forces', 'read-only-storage'],
+          ['nextPositions', 'storage'], ['nextVelocities', 'storage'], ['params', 'uniform'],
+        ]),
+      },
     })
-    const integrationPipeline = await device.createComputePipelineAsync({
-      label: 'damped integration',
-      layout: 'auto',
-      compute: { module: device.createShaderModule({ code: integrateShader }), entryPoint: 'main' },
-    })
-    const forceBindings = positions.map(position => bindings(forcePipeline,
-      [position, forces, uniforms, ...(grid ? [grid.cellOffsets, grid.pointIndices] : [])]))
-    const integrationBindings = positions.map((position, index) => bindings(integrationPipeline,
-      [position, velocities[index], forces, positions[1 - index], velocities[1 - index], uniforms]))
-
-    let renderPipeline: GPURenderPipeline | undefined
-    let renderBindings: GPUBindGroup[] = []
+    owned.push(integrationPipeline)
+    const forceBindings: Bindings[] = positions.map(position => ({
+      positions: position,
+      forces,
+      params: uniforms,
+      ...(grid ? { offsets: grid.cellOffsets, indices: grid.pointIndices } : {}),
+    }))
+    const integrationBindings = positions.map((position, i) => ({
+      positions: position,
+      velocities: velocities[i],
+      forces,
+      nextPositions: positions[1 - i],
+      nextVelocities: velocities[1 - i],
+      params: uniforms,
+    }))
+    let renderer: ReturnType<typeof createStorageRenderer> | undefined
+    let renderBindings: Bindings[] = []
     if (canvas) {
-      context = canvas.getContext('webgpu') as unknown as GPUCanvasContext | null
-      if (!context) throw new Error('WebGPU canvas is unavailable')
-      const format = navigator.gpu.getPreferredCanvasFormat()
-      context.configure({ device, format, alphaMode: 'opaque' })
+      context = device.createCanvasContext({ canvas, autoResize: false, useDevicePixels: false, alphaMode: 'opaque' })
       const colors = storage('circle colors', count * 16)
       const colorData = new Float32Array(count * 4)
-      for (let i = 0; i < count; i += 1) colorData.set([0.56, 0.78, 0.71, 0.8], i * 4)
-      device.queue.writeBuffer(colors, 0, colorData)
-      const renderUniforms = buffer('circle uniforms', 16, BUFFER_USAGE.UNIFORM | BUFFER_USAGE.COPY_DST)
-      device.queue.writeBuffer(renderUniforms, 0, new Float32Array([count > 4096 ? 2 : 4, canvas.width, canvas.height, 0]))
-      const module = device.createShaderModule({ code: circleShader })
-      renderPipeline = await device.createRenderPipelineAsync({
-        layout: 'auto',
-        vertex: { module, entryPoint: 'vertexMain' },
-        fragment: {
-          module,
-          entryPoint: 'fragmentMain',
-          targets: [{
-            format,
-            blend: {
-              color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha' },
-              alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha' },
-            },
-          }],
-        },
-        primitive: { topology: 'triangle-list' },
-      })
-      renderBindings = positions.map(position => bindings(renderPipeline!, [position, colors, renderUniforms]))
+      for (let i = 0; i < count; i++) colorData.set([0.56, 0.78, 0.71, 0.8], i * 4)
+      colors.write(colorData)
+      const renderUniforms = buffer('circle uniforms', 16, Buffer.UNIFORM | Buffer.COPY_DST)
+      renderUniforms.write(new Float32Array([count > 4096 ? 2 : 4, canvas.width, canvas.height, 0]))
+      renderer = createStorageRenderer(device, circleShader, 'triangle-list', bindingLayout([
+        ['positions', 'read-only-storage'], ['colors', 'read-only-storage'], ['uniforms', 'uniform'],
+      ]), ALPHA_BLEND, context)
+      owned.push(renderer)
+      renderBindings = positions.map(position => ({ positions: position, colors, uniforms: renderUniforms }))
     }
     let active = 0
     let ticks = 0
@@ -152,39 +144,28 @@ export async function createNeighborhoodBackend (
       if (destroyed) throw new Error('Experiment has been destroyed')
       if (failure) throw new Error(failure)
     }
-    const compute = (
-      encoder: GPUCommandEncoder, pipeline: GPUComputePipeline, group: GPUBindGroup,
-      timestampWrites?: GPUComputePassTimestampWrites
-    ): void => {
-      const pass = encoder.beginComputePass({ timestampWrites })
-      pass.setPipeline(pipeline)
-      pass.setBindGroup(0, group)
-      pass.dispatchWorkgroups(Math.ceil(count / 128))
-      pass.end()
+    const compute = (encoder: CommandEncoder, kernel: Kernel, bindings: Bindings, timestamps?: GridTimestamps): void => {
+      const pass = encoder.beginComputePass(timestamps)
+      kernel.dispatch(pass, { x: Math.ceil(count / 128), bindings }); pass.end()
     }
-    const draw = (encoder: GPUCommandEncoder, index: number, timestampWrites?: GPURenderPassTimestampWrites): void => {
-      if (!context || !renderPipeline) return
+    const draw = (encoder: CommandEncoder, index: number, timestamps?: GridTimestamps): void => {
+      if (!context || !renderer) return
       const pass = encoder.beginRenderPass({
-        timestampWrites,
-        colorAttachments: [{
-          view: context.getCurrentTexture().createView(),
-          clearValue: { r: 0.075, g: 0.087, b: 0.105, a: 1 },
-          loadOp: 'clear',
-          storeOp: 'store',
-        }],
+        framebuffer: context.getCurrentFramebuffer(),
+        clearColor: [0.075, 0.087, 0.105, 1],
+        clearDepth: false,
+        ...timestamps,
       })
-      pass.setPipeline(renderPipeline)
-      pass.setBindGroup(0, renderBindings[index])
-      pass.draw(6, count)
+      renderer.kernel.draw(pass, { vertexArray: renderer.vertexArray, vertexCount: 6, instanceCount: count, bindings: renderBindings[index] })
       pass.end()
     }
-    const encode = (encoder: GPUCommandEncoder, stage: Stage, timestamps?: GPUComputePassTimestampWrites): void => {
-      const edge = (which: 'start' | 'end'): GPUComputePassTimestampWrites | undefined => {
-        const index = which === 'start' ? timestamps?.beginningOfPassWriteIndex : timestamps?.endOfPassWriteIndex
+    const encode = (encoder: CommandEncoder, stage: Stage, timestamps?: GridTimestamps): void => {
+      const edge = (which: 'start' | 'end'): GridTimestamps | undefined => {
+        const index = which === 'start' ? timestamps?.beginTimestampIndex : timestamps?.endTimestampIndex
         if (index === undefined || !timestamps) return undefined
         return which === 'start'
-          ? { querySet: timestamps.querySet, beginningOfPassWriteIndex: index }
-          : { querySet: timestamps.querySet, endOfPassWriteIndex: index }
+          ? { timestampQuerySet: timestamps.timestampQuerySet, beginTimestampIndex: index }
+          : { timestampQuerySet: timestamps.timestampQuerySet, endTimestampIndex: index }
       }
       if (stage === 'grid' || stage === 'tick') {
         grid?.encodeBuild(encoder, active, stage === 'grid' ? timestamps : edge('start'))
@@ -207,33 +188,17 @@ export async function createNeighborhoodBackend (
       check()
       active = 0
       ticks = 0
-      for (const position of positions) device.queue.writeBuffer(position, 0, initialPositions as Float32Array<ArrayBuffer>)
+      for (const position of positions) position.write(initialPositions)
       const encoder = device.createCommandEncoder()
-      for (const velocity of velocities) encoder.clearBuffer(velocity)
-      encoder.clearBuffer(forces)
+      for (const velocity of velocities) velocity.write(new Float32Array(count * 2))
+      forces.write(new Float32Array(count * 4))
       draw(encoder, active)
-      device.queue.submit([encoder.finish()])
+      device.submit(encoder.finish())
     }
-    const read = async (buffers: GPUBuffer[]): Promise<Float32Array[]> => {
-      check()
-      const staging = buffers.map(resource => device.createBuffer({
-        size: resource.size, usage: BUFFER_USAGE.COPY_DST | BUFFER_USAGE.MAP_READ,
-      }))
-      try {
-        const encoder = device.createCommandEncoder()
-        buffers.forEach((resource, index) => encoder.copyBufferToBuffer(resource, 0, staging[index], 0, resource.size))
-        device.queue.submit([encoder.finish()])
-        await Promise.all(staging.map(resource => resource.mapAsync(MAP_MODE.READ)))
-        check()
-        return staging.map(resource => new Float32Array(resource.getMappedRange()).slice())
-      } finally {
-        for (const resource of staging) resource.destroy()
-      }
+    const read = async (buffers: Buffer[]): Promise<Float32Array[]> => {
+      check(); const data = await Promise.all(buffers.map(resource => readFloats(resource))); check(); return data
     }
     reset()
-    const initializationError = await device.popErrorScope()
-    scopeOpen = false
-    if (initializationError) throw new Error(initializationError.message)
     return {
       method,
       get ticks (): number { return ticks },
@@ -242,10 +207,10 @@ export async function createNeighborhoodBackend (
         check()
         const encoder = device.createCommandEncoder()
         encode(encoder, 'tick')
-        device.queue.submit([encoder.finish()])
+        device.submit(encoder.finish())
         active = 1 - active
         ticks += 1
-        await device.queue.onSubmittedWorkDone()
+        await waitForGpu(device)
         check()
       },
       async validate (diagnose = false, sampleCount = 128): Promise<Validation> {
@@ -254,36 +219,34 @@ export async function createNeighborhoodBackend (
         grid?.encodeBuild(encoder, active)
         compute(encoder, forcePipeline, forceBindings[active])
         compute(encoder, integrationPipeline, integrationBindings[active])
-        device.queue.submit([encoder.finish()])
+        device.submit(encoder.finish())
         const data = await read([positions[active], velocities[active], forces, positions[1 - active], velocities[1 - active]])
         const validation = validateStep(data[0], data[1], data[2], data[3], data[4], parameters, sampleCount)
         if (diagnose && grid && validation.worstForce) {
-          const output = device.createBuffer({ size: count * 16, usage: BUFFER_USAGE.STORAGE | BUFFER_USAGE.COPY_SRC })
-          const params = device.createBuffer({ size: 32, usage: BUFFER_USAGE.UNIFORM | BUFFER_USAGE.COPY_DST })
+          const output = device.createBuffer({ byteLength: count * 16, usage: Buffer.STORAGE | Buffer.COPY_SRC })
+          const params = device.createBuffer({ byteLength: 32, usage: Buffer.UNIFORM | Buffer.COPY_DST })
+          let captureKernel: Kernel | undefined
           try {
-            const diagnosticParameters = parameterData.slice(0)
-            new Uint32Array(diagnosticParameters)[6] = validation.worstForce.index
-            device.queue.writeBuffer(params, 0, diagnosticParameters)
-            const pipeline = await device.createComputePipelineAsync({
-              layout: 'auto',
-              compute: {
-                module: device.createShaderModule({ code: shader }),
-                entryPoint: 'captureContributions',
+            const data = parameterData.slice(0); new Uint32Array(data)[6] = validation.worstForce.index
+            params.write(new Uint8Array(data))
+            captureKernel = await Kernel.createAsync(device, {
+              source: shader,
+              entryPoint: 'captureContributions',
+              shaderLayout: {
+                bindings: [
+                  { name: 'positions', type: 'read-only-storage', location: 0, group: 0 },
+                  { name: 'params', type: 'uniform', location: 2, group: 0 },
+                  { name: 'indices', type: 'read-only-storage', location: 4, group: 0 },
+                  { name: 'capturedContributions', type: 'storage', location: 5, group: 0 },
+                ],
               },
             })
-            const group = device.createBindGroup({
-              layout: pipeline.getBindGroupLayout(0),
-              entries: [
-                { binding: 0, resource: { buffer: positions[active] } }, { binding: 2, resource: { buffer: params } },
-                { binding: 4, resource: { buffer: grid.pointIndices } }, { binding: 5, resource: { buffer: output } },
-              ],
-            })
             const capture = device.createCommandEncoder()
-            compute(capture, pipeline, group)
-            device.queue.submit([capture.finish()])
+            compute(capture, captureKernel, { positions: positions[active], params, indices: grid.pointIndices, capturedContributions: output })
+            device.submit(capture.finish())
             const [contributions] = await read([output])
             validation.accumulationDiagnostic = diagnoseContributions(contributions, parameters.strength, validation.worstForce)
-          } finally { output.destroy(); params.destroy() }
+          } finally { captureKernel?.destroy(); output.destroy(); params.destroy() }
         }
         return validation
       },
@@ -296,8 +259,8 @@ export async function createNeighborhoodBackend (
         timer ??= createGpuTimer(device)
         const prepare = device.createCommandEncoder()
         encode(prepare, 'tick')
-        device.queue.submit([prepare.finish()])
-        await device.queue.onSubmittedWorkDone()
+        device.submit(prepare.finish())
+        await waitForGpu(device)
         const results: Timing[] = []
         const stages: Stage[] = [...(grid ? ['grid' as const] : []), 'force', 'integration',
           ...(canvas ? ['render' as const] : []), 'tick']
@@ -319,9 +282,9 @@ export async function createNeighborhoodBackend (
                   : operation === batchSize - 1 ? timer?.writes('end') : undefined
               encode(encoder, stage, writes)
             }
-            device.queue.submit([encoder.finish()])
+            device.submit(encoder.finish())
             const submit = performance.now() - started
-            await device.queue.onSubmittedWorkDone()
+            await waitForGpu(device)
             const completion = performance.now() - started
             const timestamp = await timer?.read() ?? null
             check()
@@ -367,7 +330,6 @@ export async function createNeighborhoodBackend (
       destroy,
     }
   } catch (error) {
-    if (scopeOpen) await device.popErrorScope()
     destroy()
     throw error
   }

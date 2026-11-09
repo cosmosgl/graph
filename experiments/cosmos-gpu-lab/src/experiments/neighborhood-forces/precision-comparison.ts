@@ -1,3 +1,4 @@
+import type { Device } from '@luma.gl/core'
 import { createNeighborhoodBackend, type Timing } from './backend'
 import { createPositions, DEFAULT_PARAMETERS, type Validation } from './reference'
 
@@ -29,7 +30,7 @@ export type PrecisionRow = ReturnType<typeof createPrecisionPlan>[number] & {
 }
 
 export async function runPrecisionComparison (
-  device: GPUDevice,
+  device: Device,
   cancelled: () => boolean,
   onProgress: (message: string) => void,
   rows: PrecisionRow[]

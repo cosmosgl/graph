@@ -100,8 +100,9 @@ Raw batch durations, batch size, normalized durations and timer status are expor
 validation, reset/preparation, query readback and completion synchronization; they can still include idle
 gaps, scheduling effects and backend overhead between GPU passes. They are not pure shader instruction time.
 
-WebGL completion includes a one-texel/pixel read after the query ends; WebGPU waits for queue completion.
-Those wall-time synchronization mechanisms differ, so use valid GPU intervals for direct GPU comparisons.
+WebGL force/integration completion includes a luma one-texel read after the query ends; rendering and
+complete ticks use a luma fence, as WebGPU does. Wall-time mechanisms differ, so use valid GPU intervals
+for direct GPU comparisons.
 `gl.finish()` alone previously produced near-zero completion readings and is not the completion gate.
 
 Stop preserves completed stages/cases. A device/context error stops the run and exposes **Restart devices**;

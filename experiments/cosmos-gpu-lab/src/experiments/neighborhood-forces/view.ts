@@ -194,20 +194,18 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
         waitForPageLoad: false,
         featureLevel: 'core',
         optionalFeatures: ['timestamp-query'],
+        onError: error => { if (current === revision) fail(error) },
       }) as WebGPUDevice
       if (destroyed || current !== revision) { nextDevice.destroy(); return }
       device = nextDevice
-      element<HTMLElement>(host, '[data-output="gpu-timing"]').textContent = device.handle.features.has('timestamp-query')
+      element<HTMLElement>(host, '[data-output="gpu-timing"]').textContent = device.features.has('timestamp-query')
         ? 'GPU timestamps enabled · calibrated batches report GPU and wall milliseconds per operation separately.'
         : 'GPU timestamps unavailable on this device · browser wall-time measurements remain available.'
-      device.handle.addEventListener('uncapturederror', event => {
-        if (current === revision) fail(event.error)
-      })
       const initial = createPositions(options.count, options.distribution, options.density)
       const methods = options.count <= BRUTE_LIMIT ? ['brute', 'grid'] as const : ['grid'] as const
       element<HTMLCanvasElement>(host, '[data-canvas="brute"]').hidden = options.count > BRUTE_LIMIT
       for (const method of methods) {
-        const backend = await createNeighborhoodBackend(device.handle, initial,
+        const backend = await createNeighborhoodBackend(device, initial,
           { ...DEFAULT_PARAMETERS, radius: options.radius }, options.gridSize, method,
           element<HTMLCanvasElement>(host, `[data-canvas="${method}"]`), method === 'grid' ? options.accumulation : 'blocked')
         if (destroyed || current !== revision) { backend.destroy(); return }
@@ -324,7 +322,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
         environment: {
           adapter: { ...device.info },
           userAgent: navigator.userAgent,
-          timestampQuery: device.handle.features.has('timestamp-query'),
+          timestampQuery: device.features.has('timestamp-query'),
           hardwareConcurrency: navigator.hardwareConcurrency,
         },
         rows,
@@ -334,7 +332,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
       cancelSweep = false
       controls()
       try {
-        await runPrecisionComparison(device.handle, () => destroyed || cancelSweep || document.hidden,
+        await runPrecisionComparison(device, () => destroyed || cancelSweep || document.hidden,
           message => { if (!destroyed) status.textContent = message }, rows)
         output.status = rows.length !== 72
           ? 'cancelled'
@@ -371,7 +369,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
             if (destroyed) return
             status.textContent = `Dense precision: repetition ${repetition + 1}/4, grid ${gridSize}, ${accumulation}…`
             await new Promise<void>(resolve => window.setTimeout(resolve, 0))
-            const backend = await createNeighborhoodBackend(device.handle, createPositions(65536, 'uniform', 16),
+            const backend = await createNeighborhoodBackend(device, createPositions(65536, 'uniform', 16),
               { ...DEFAULT_PARAMETERS, radius: 0.16 }, gridSize, 'grid', undefined, accumulation)
             try {
               const validation = await backend.validate(true, 1024)
@@ -450,7 +448,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
           hardwareConcurrency: navigator.hardwareConcurrency,
           canvas: '480x480',
           devicePixelRatio: window.devicePixelRatio,
-          timestampQuery: device?.handle.features.has('timestamp-query') ?? false,
+          timestampQuery: device?.features.has('timestamp-query') ?? false,
           adapter: device ? { ...device.info } : null,
         },
         validations,
@@ -461,7 +459,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
   }
   exportButton.onclick = (): void => {
     if (!report) return
-    const url = URL.createObjectURL(new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' }))
+    const url = URL.createObjectURL(new Blob([JSON.stringify({ ...report, gpuApi: 'luma-resources-v1' }, null, 2)], { type: 'application/json' }))
     const link = document.createElement('a')
     link.href = url
     link.download = 'experiment' in report && report.experiment === 'precision-cost'
@@ -514,7 +512,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
         environment: {
           userAgent: navigator.userAgent,
           adapter: { ...device.info },
-          timestampQuery: device.handle.features.has('timestamp-query'),
+          timestampQuery: device.features.has('timestamp-query'),
           hardwareConcurrency: navigator.hardwareConcurrency,
         },
         methodology: 'Frozen-input calibrated batches; per-operation summaries; raw whole-batch timestamps; ' +
@@ -530,7 +528,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
       sweepStatus.textContent = 'Running sweep. Keep this tab visible for comparable wall-time measurements.'
       controls()
       try {
-        await runSweep(device.handle, plan, () => cancelSweep || destroyed || document.hidden,
+        await runSweep(device, plan, () => cancelSweep || destroyed || document.hidden,
           (row, completed, total) => {
             rows.push(row)
             if (destroyed) return
@@ -573,7 +571,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
   }
   element<HTMLButtonElement>(host, '[data-action="export-sweep"]').onclick = (): void => {
     if (!sweepReport) return
-    const url = URL.createObjectURL(new Blob([JSON.stringify(sweepReport, null, 2)], { type: 'application/json' }))
+    const url = URL.createObjectURL(new Blob([JSON.stringify({ ...sweepReport, gpuApi: 'luma-resources-v1' }, null, 2)], { type: 'application/json' }))
     const link = document.createElement('a')
     link.href = url
     link.download = 'neighborhood-forces-sweep.json'
