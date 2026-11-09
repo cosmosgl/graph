@@ -19,7 +19,7 @@ function requiredElement<T extends HTMLElement> (host: ParentNode, selector: str
 function renderNavigation (
   host: HTMLElement,
   activeId?: string,
-  activeReference?: 'vocabulary' | 'reduction' | 'architecture' | 'roadmap' | 'feature-inventory'
+  activeReference?: 'learn' | 'vocabulary' | 'reduction' | 'architecture' | 'roadmap' | 'feature-inventory'
 ): void {
   host.replaceChildren()
   const label = document.createElement('p')
@@ -40,6 +40,14 @@ function renderNavigation (
   referenceLabel.className = 'nav-label nav-label-reference'
   referenceLabel.textContent = 'Reference'
   host.append(referenceLabel)
+
+  const learn = document.createElement('a')
+  learn.href = '#/learn'
+  learn.className = 'experiment-link reference-link'
+  learn.classList.toggle('active', activeReference === 'learn')
+  learn.innerHTML = '<span>How WebGPU works</span><small>learn</small>'
+  if (activeReference === 'learn') learn.setAttribute('aria-current', 'page')
+  host.append(learn)
 
   const roadmap = document.createElement('a')
   roadmap.href = roadmapHref()
@@ -98,6 +106,14 @@ function renderHome (host: HTMLElement): void {
       <span>
         <strong>Cosmos → WebGPU</strong>
         <small>Migration readiness: what is demonstrated, what is missing and what would justify switching</small>
+      </span>
+      <span aria-hidden="true">→</span>
+    </a>
+    <a class="reference-card" href="#/learn">
+      <span class="card-index">START HERE</span>
+      <span>
+        <strong>How WebGPU works</strong>
+        <small>Learn the vocabulary through small interactive examples, from point data to pixels</small>
       </span>
       <span aria-hidden="true">→</span>
     </a>
@@ -334,11 +350,37 @@ export function createAppShell (root: HTMLElement): void {
         ? 'vocabulary'
         : route.kind === 'concept' && route.conceptId === 'reduction'
           ? 'reduction'
-          : route.kind === 'architecture' || route.kind === 'roadmap' || route.kind === 'feature-inventory' ? route.kind : undefined
+          : route.kind === 'learn' || route.kind === 'architecture' || route.kind === 'roadmap' || route.kind === 'feature-inventory' ? route.kind : undefined
     )
 
     if (route.kind === 'home') {
       renderHome(workspace)
+      return
+    }
+
+    if (route.kind === 'learn') {
+      workspace.innerHTML = `
+        <header class="experiment-header reference-header">
+          <div>
+            <p class="eyebrow">Learn · From point data to pixels</p>
+            <h1>How WebGPU works</h1>
+            <p>A guided introduction through one Cosmos simulation tick. Read, try, then explore the real experiments.</p>
+          </div>
+        </header>
+        <section class="experiment-stage reference-stage"><div class="loading">Loading guide…</div></section>
+      `
+      const stage = requiredElement<HTMLElement>(workspace, '.reference-stage')
+      try {
+        const [source, renderer, examples] = await Promise.all([
+          import('../docs/learn-webgpu.md?raw'), import('./markdown'), import('./learning-examples'),
+        ])
+        if (version !== renderVersion) return
+        await renderer.renderMarkdown(stage, source.default, {}, { examples: examples.learningExamples })
+        examples.addLearningContents(stage, route.sectionId)
+      } catch (error) {
+        if (version !== renderVersion) return
+        renderFailure(stage, error)
+      }
       return
     }
 

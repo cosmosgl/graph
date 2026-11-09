@@ -1,6 +1,7 @@
 export type AppRoute =
   | { kind: 'home' }
   | { kind: 'architecture' }
+  | { kind: 'learn'; sectionId?: string }
   | { kind: 'roadmap' }
   | { kind: 'feature-inventory' }
   | { kind: 'vocabulary'; termId?: string }
@@ -14,6 +15,7 @@ export function readRoute (): AppRoute {
     .filter(Boolean)
 
   if (segments.length === 0) return { kind: 'home' }
+  if (segments[0] === 'learn') return { kind: 'learn', sectionId: segments[1] }
   if (segments[0] === 'roadmap') return { kind: 'roadmap' }
   if (segments[0] === 'feature-inventory') return { kind: 'feature-inventory' }
   if (segments[0] === 'architecture') return { kind: 'architecture' }

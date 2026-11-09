@@ -61,6 +61,26 @@ fixtures needed to reproduce correctness bugs belong with tests, separately from
 - `weighted-links`: Cosmos directional springs, stable topology CSR and luma compute-to-render integration.
 
 Reference pages cover the lab architecture, WebGPU vocabulary and parallel reduction.
+Start with **How WebGPU works** (`#/learn`) for a guided introduction with five interactive teaching models.
+These use DOM/SVG and JavaScript, require no GPU and make no performance claims.
+
+## Interactive documentation
+
+The learning guide lives in `src/docs/learn-webgpu.md`; its small interactive examples live in
+`src/app/learning-examples.ts`. An `example` fence contains a registered example name, such as
+`invocations` or `pingPong`. The page passes an explicit example registry to the Markdown renderer;
+unregistered fences remain ordinary code blocks. Markdown HTML stays disabled.
+
+Keep explanations in Markdown and behavior in the example module. Models use local DOM listeners,
+without timers or global listeners, so removing the page releases them. Add explicit lifecycle cleanup
+before introducing animations, observers or GPU resources. Chapter links support direct opening
+(`#/learn/8`); in-page chapter jumps preserve example state.
+
+Run the documentation interaction checks with:
+
+```sh
+pnpm exec vitest run --project gpu-lab src/app/learning-examples.test.ts src/app/flow.test.ts
+```
 
 ## GPU regression checks
 

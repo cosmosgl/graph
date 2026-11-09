@@ -1,5 +1,7 @@
 # WebGPU concepts and terms
 
+New to WebGPU? Start with [How WebGPU works](#/learn), a guided introduction with interactive examples.
+
 WebGPU is an explicit GPU API. JavaScript describes resources and commands; the browser validates them and submits
 finished command buffers to a GPU queue. Most objects are intentionally separated by role, which makes the API more
 verbose than WebGL but also makes data flow and synchronization much easier to reason about.
