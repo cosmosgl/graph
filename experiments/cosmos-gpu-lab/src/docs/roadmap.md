@@ -10,6 +10,9 @@ The purpose of this lab is to answer that question with runnable evidence. This 
 evidence means for Cosmos and which demonstrations would justify the next migration step.
 Assessment reviewed **9 November 2026**; the production engine remains WebGL.
 
+For the complete force and rendering checklist, see [Cosmos feature coverage](#/feature-inventory):
+how each feature works in WebGL, what experiments already cover and what still needs WebGPU validation.
+
 ## 1. What would make the migration worthwhile?
 
 The target is a full WebGPU implementation of Cosmos with simulation and rendering sharing GPU-resident state.
