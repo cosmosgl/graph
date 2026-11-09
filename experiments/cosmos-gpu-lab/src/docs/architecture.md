@@ -1,0 +1,192 @@
+The lab is a **modular research app**: one shared interface hosts independent GPU experiments,
+their explanations and their results. It lives in the private workspace package
+`experiments/cosmos-gpu-lab`, with Vite, TypeScript and plain DOM UI code.
+
+```mermaid
+flowchart TD
+    Shell["App shell: navigation and routes"]
+    Registry["Experiment registry"]
+    Demo["Experiment demo: controls and coordination"]
+    Docs["Documentation and reports"]
+    GL["WebGL backend + GLSL"]
+    GPU["WebGPU backend + WGSL"]
+
+    Shell --> Registry
+    Registry --> Demo
+    Registry --> Docs
+    Demo --> GL
+    Demo --> GPU
+    Docs --> Reference["Shared vocabulary and concept guides"]
+```
+
+## 1. The shell manages navigation and lifecycle
+
+The shell provides the sidebar, experiment tabs, loading states and errors. Hash routes let us
+link directly to a demo, documentation page or vocabulary term without server rewrite rules:
+
+```text
+#/architecture
+#/point-rendering
+#/center-mass/docs/algorithm
+#/vocabulary/invocation
+#/concepts/reduction
+```
+
+Only the selected demo is instantiated. When you navigate away, the shell calls its `destroy()`
+method to stop its activity and release GPU resources. It also guards against asynchronous
+initialization finishing after you have already switched pages: a stale instance is destroyed
+instead of becoming the active experiment.
+
+The shell lives in `src/app/app-shell.ts`; route parsing lives in `src/app/router.ts`.
+
+## 2. Each experiment is a self-contained module
+
+An experiment typically has this structure; the exact backend organization varies:
+
+```text
+src/experiments/<experiment>/
+  experiment.ts       Registration and documentation pages
+  view.ts             Controls, canvases, execution, displayed results
+  backend.ts          GPU implementation or shared backend contract
+  reference.ts        CPU reference, when needed
+  shaders/            WGSL or GLSL
+  docs/               Technical explanations
+  reports/            Saved JSON results, when available
+```
+
+WebGL/WebGPU comparisons can have separate `webgl/` and `webgpu/` directories with their own
+backend implementations and shader files. Vite imports shader files as strings using `?raw`.
+
+The common contract in `src/runtime/experiment.ts` is intentionally small:
+
+```typescript
+type ExperimentDefinition = {
+  id: string;
+  title: string;
+  summary: string;
+  tags: string[];
+  create: (host: HTMLElement) => Promise<ExperimentInstance>;
+  pages: ExperimentPage[];
+}
+
+type ExperimentInstance = {
+  destroy: () => void;
+}
+```
+
+Vite automatically discovers `src/experiments/*/experiment.ts` through `import.meta.glob`.
+Lightweight manifests load at startup; demo implementations and experiment documentation load
+on demand. The registry checks for duplicate experiment and page identifiers and requires
+each experiment to have documentation.
+
+## 3. Experiments coordinate comparisons; backends own GPU work
+
+The original [center-mass experiment](#/center-mass) generates one shared point state and sends
+the same positions to both backends each tick. A CPU reference provides a correctness baseline.
+
+```mermaid
+flowchart TD
+    Positions["Shared positions for tick N"]
+    Positions --> GL["WebGL: blend into a 1 × 1 texture"]
+    Positions --> GPU["WebGPU: reduce through partial buffers"]
+    Positions --> CPU["CPU reference"]
+    GL --> Compare["Compare centers and display errors and timings"]
+    GPU --> Compare
+    CPU --> Compare
+```
+
+The view owns the controls and comparison logic. Each backend owns its buffers, pipelines,
+shaders and device resources. Backend interfaces are specific to the experiment; the shell
+does not impose one universal rendering or simulation API.
+
+### Where luma.gl fits
+
+We currently use luma.gl to create devices, then access native WebGL/WebGPU handles for most
+GPU operations. The lab's luma packages are pinned to the coherent `10.0.0-alpha.4` family.
+
+- `WebGLDevice.handle` exposes the underlying `WebGL2RenderingContext`.
+- `WebGPUDevice.handle` exposes the underlying `GPUDevice`.
+
+This keeps the compared algorithms explicit. It also means the current experiments do not
+validate a complete implementation through luma's higher-level resource APIs or
+`GPUCommandGraph`. Those abstractions can be investigated in dedicated experiments.
+
+## 4. Each experiment answers a migration question
+
+| Experiment | What it investigates |
+| --- | --- |
+| [Global center of mass](#/center-mass) | Tick-by-tick correctness of WebGL blending versus WebGPU reduction |
+| [Scalable reduction](#/scalable-reduction) | Millions of GPU-resident points, hierarchical reduction and optional readback |
+| [Point rendering](#/point-rendering) | WebGL point sprites versus WebGPU instanced quads for circles |
+| [Performance lab](#/performance-lab) | Controlled rendering and center-mass benchmarks using existing implementations |
+| [Spatial grid](#/spatial-grid) | Count → prefix scan → scatter, producing cell ranges and grouped point indices |
+
+Scalable reduction initializes and moves positions on the GPU, and rendering reads the same
+storage buffer. This lets us study an architecture for larger simulations without uploading
+every point from JavaScript on every tick. Its center marker reads the reduction result
+directly, so it remains visible with CPU readback disabled.
+
+The spatial grid builds a neighborhood index; it does not calculate forces yet. Its buffers
+are intended to become inputs to a later force-computation experiment.
+
+## 5. Documentation is part of each experiment
+
+Markdown pages sit beside the implementation, alongside SVG diagrams and saved JSON reports.
+The shared renderer provides:
+
+- GLSL and WGSL syntax highlighting.
+- Mermaid diagrams, sanitized while preserving labels.
+- Links and quick vocabulary previews.
+- Shared concept explanations, such as [parallel reduction](#/concepts/reduction).
+
+Markdown is rendered with raw HTML disabled. Mermaid SVG goes through DOMPurify before being
+inserted as a DOM fragment; this preserves its HTML labels while filtering executable content.
+
+Experiment pages can be Markdown or structured reports. The report contract records the
+environment, parameters, commit, results and limitations. The performance experiment also
+exports its raw measurements and summaries as JSON, with browser and workload metadata.
+Exporting a report does not automatically save or commit it to the repository.
+
+## 6. Correctness and performance have separate workflows
+
+Interactive demos make behavior inspectable through shared inputs, CPU references and
+experiment-specific validation. Benchmarks use warm-ups, repeated batches, matched inputs
+and p50/p95 summaries, with setup outside the sampled work.
+
+We distinguish **CPU submission time** from **time until GPU completion**. These are
+browser-level measurements; we do not currently measure pure GPU execution with timestamp
+queries. The WebGL completion measurement also includes an amortized pixel readback, while
+WebGPU waits for queue completion. See the [benchmark methodology](#/performance-lab/docs/methodology)
+for the precise boundaries and comparison limits.
+
+The current “simulation” benchmark measures center-mass reduction, not the entire Cosmos
+force simulation. Interactive validation and saved reports also do not imply that every GPU
+algorithm is covered by an automated regression test. Browser tests currently cover the shared
+diagram sanitizer and visible Mermaid labels as part of the repository's Vitest suite.
+
+## 7. Adding an experiment and evolving the architecture
+
+1. Create `src/experiments/<id>/experiment.ts` and export a definition using `defineExperiment`.
+2. Keep the manifest lightweight: dynamically import the demo from `create(host)`.
+3. Implement the demo and backend ownership, including explicit `destroy()` cleanup.
+4. Add documentation explaining the algorithm, correctness, performance and limitations.
+5. Add CPU references, validation and recorded reports as appropriate to the question being tested.
+
+The registry discovers the experiment automatically and the shell creates its navigation and
+documentation tabs. No central experiment list needs updating.
+
+Most GPU ownership and scheduling remain local to each experiment. As several experiments
+begin sharing the same operations, we can extract proven primitives—reduction, scan, grid
+construction and rendering—into reusable modules. This is a direction for future work;
+the lab does not yet have a shared GPU scheduler or a complete force-simulation engine.
+
+## Run the lab
+
+From the repository root:
+
+```sh
+pnpm install
+pnpm --filter @cosmos.gl/gpu-lab dev
+```
+
+Open the local URL printed by Vite and choose **Reference → Lab architecture** to return here.
