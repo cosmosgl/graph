@@ -49,6 +49,7 @@ fixtures needed to reproduce correctness bugs belong with tests, separately from
 - `performance-lab`: matched rendering and reduction benchmarks.
 - `spatial-grid`: count, scan and scatter into a CSR-style spatial index.
 - `neighborhood-forces`: tiled all-pairs versus grid-based local repulsion, integration and rendering.
+- `weighted-links`: Cosmos directional springs, stable topology CSR and luma compute-to-render integration.
 
 Reference pages cover the lab architecture, WebGPU vocabulary and parallel reduction.
 
@@ -58,9 +59,11 @@ Reference pages cover the lab architecture, WebGPU vocabulary and parallel reduc
 pnpm --filter @cosmos.gl/gpu-lab test:gpu
 ```
 
-This runs the neighborhood-force and shared-grid tests in Chromium with its software WebGPU
+This runs the neighborhood-force, shared-grid and weighted-link tests in Chromium with its software WebGPU
 adapter enabled. It fails if no adapter is available. The normal repository test run skips GPU
-cases when WebGPU is unavailable. Software-adapter timings are not hardware benchmarks.
+cases when WebGPU is unavailable. The root test configuration uses separate engine and lab projects so
+Vite does not resolve the lab's luma v10 imports through the engine's v9 dependency cache. Software-adapter
+timings are not hardware benchmarks.
 
 ## Original comparison
 
