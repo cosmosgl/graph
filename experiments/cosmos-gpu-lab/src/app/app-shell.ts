@@ -6,7 +6,7 @@ import type {
 import vocabularySource from '../docs/vocabulary.md?raw'
 import reductionSource from '../docs/reduction.md?raw'
 import { experiments, findExperiment } from './registry'
-import { conceptHref, experimentHref, readRoute, vocabularyHref } from './router'
+import { architectureHref, conceptHref, experimentHref, readRoute, vocabularyHref } from './router'
 import { indexVocabularyTerms } from './vocabulary'
 
 function requiredElement<T extends HTMLElement> (host: ParentNode, selector: string): T {
@@ -18,7 +18,7 @@ function requiredElement<T extends HTMLElement> (host: ParentNode, selector: str
 function renderNavigation (
   host: HTMLElement,
   activeId?: string,
-  activeReference?: 'vocabulary' | 'reduction'
+  activeReference?: 'vocabulary' | 'reduction' | 'architecture'
 ): void {
   host.replaceChildren()
   const label = document.createElement('p')
@@ -39,6 +39,14 @@ function renderNavigation (
   referenceLabel.className = 'nav-label nav-label-reference'
   referenceLabel.textContent = 'Reference'
   host.append(referenceLabel)
+
+  const architecture = document.createElement('a')
+  architecture.href = architectureHref()
+  architecture.className = 'experiment-link reference-link'
+  architecture.classList.toggle('active', activeReference === 'architecture')
+  architecture.innerHTML = '<span>Lab architecture</span><small>guide</small>'
+  if (activeReference === 'architecture') architecture.setAttribute('aria-current', 'page')
+  host.append(architecture)
 
   const vocabulary = document.createElement('a')
   vocabulary.href = vocabularyHref()
@@ -68,6 +76,14 @@ function renderHome (host: HTMLElement): void {
       </p>
     </section>
     <section class="experiment-grid" aria-label="Available experiments"></section>
+    <a class="reference-card" href="${architectureHref()}">
+      <span class="card-index">REFERENCE</span>
+      <span>
+        <strong>Lab architecture</strong>
+        <small>How the shell, experiments, GPU backends and documentation fit together</small>
+      </span>
+      <span aria-hidden="true">→</span>
+    </a>
     <a class="reference-card" href="${vocabularyHref()}">
       <span class="card-index">REFERENCE</span>
       <span>
@@ -114,6 +130,22 @@ function renderVocabularyFrame (host: HTMLElement): HTMLElement {
     </header>
     <section class="experiment-stage reference-stage">
       <div class="loading">Loading vocabulary…</div>
+    </section>
+  `
+  return requiredElement<HTMLElement>(host, '.reference-stage')
+}
+
+function renderArchitectureFrame (host: HTMLElement): HTMLElement {
+  host.innerHTML = `
+    <header class="experiment-header reference-header">
+      <div>
+        <p class="eyebrow">Lab reference · Architecture</p>
+        <h1>Lab architecture</h1>
+        <p>One shared interface for independent GPU experiments, explanations and results.</p>
+      </div>
+    </header>
+    <section class="experiment-stage reference-stage">
+      <div class="loading">Loading architecture guide…</div>
     </section>
   `
   return requiredElement<HTMLElement>(host, '.reference-stage')
@@ -235,11 +267,27 @@ export function createAppShell (root: HTMLElement): void {
         ? 'vocabulary'
         : route.kind === 'concept' && route.conceptId === 'reduction'
           ? 'reduction'
-          : undefined
+          : route.kind === 'architecture' ? 'architecture' : undefined
     )
 
     if (route.kind === 'home') {
       renderHome(workspace)
+      return
+    }
+
+    if (route.kind === 'architecture') {
+      const stage = renderArchitectureFrame(workspace)
+      try {
+        const [source, renderer] = await Promise.all([
+          import('../docs/architecture.md?raw'),
+          import('./markdown'),
+        ])
+        if (version !== renderVersion) return
+        await renderer.renderMarkdown(stage, source.default)
+      } catch (error) {
+        if (version !== renderVersion) return
+        renderFailure(stage, error)
+      }
       return
     }
 
