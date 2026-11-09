@@ -23,7 +23,12 @@ canvas and input size. It is intended for migration decisions, not for producing
 - Several reductions are batched per sample; reported times are normalized per reduction. WebGL
   clears once and additively accumulates every draw in the batch, while WebGPU records every
   reduction into one compute pass, so intermediate work remains observable to the next operation.
-- One readback after measurement checks each result against the same CPU reference.
+- The WebGL batch stores `iterations × pointCount` contributions. Dividing its accumulated
+  position sums by that accumulated count yields the center; this workload measures repeated
+  contributions, not independent clear-and-reduce operations. Regression tests read the batch
+  attachment directly to check its count, sums and reset between batches.
+- After measurement, `readCenter()` runs a fresh single reduction and reads it for comparison
+  with the CPU reference. This separate check does not validate the measured batch output.
 
 ## Timing boundaries
 

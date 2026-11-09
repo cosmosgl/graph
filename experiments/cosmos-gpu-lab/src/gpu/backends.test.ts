@@ -4,6 +4,8 @@ import { createWebGPUCenterMass } from '../experiments/center-mass/webgpu/backen
 import { createWebGLPointRenderer } from '../experiments/point-rendering/webgl/backend'
 import { createWebGPUPointRenderer } from '../experiments/point-rendering/webgpu/backend'
 import { createWebGLSimulationBenchmark } from '../experiments/performance-lab/webgl-simulation'
+import { createBlendReduction } from '../experiments/center-mass/webgl/reduction'
+import { createDevice } from './luma'
 import { deviceForTest } from './test-device'
 
 for (const create of [createWebGLCenterMass, createWebGPUCenterMass]) {
@@ -42,13 +44,33 @@ for (const create of [createWebGLPointRenderer, createWebGPUPointRenderer]) {
     } finally { backend.destroy(); canvas.remove() }
   })
 }
-it('WebGL performance reduction retains one-count validation after batched draws', async () => {
+it('WebGL performance readCenter recomputes a single reduction after a batch', async () => {
   const backend = await createWebGLSimulationBenchmark(document.createElement('canvas'), 513)
   try {
     expect((await backend.readCenter()).count).toBe(513)
     expect((await backend.benchmark(3)).averageMilliseconds).toBeGreaterThanOrEqual(0)
     expect((await backend.readCenter()).count).toBe(513)
   } finally { backend.destroy() }
+})
+
+it('WebGL clear-once reduction accumulates every draw and resets for the next batch', async () => {
+  const device = await createDevice('webgl', document.createElement('canvas'))
+  const count = 513
+  const reduction = createBlendReduction(device, count)
+  try {
+    // Exact binary fractions make the accumulated sums independently checkable.
+    reduction.positions.write(Float32Array.from({ length: count * 2 }, (_, i) => i % 2 ? 0.125 : -0.25))
+    for (const iterations of [3, 2, 1]) {
+      reduction.encode(iterations); device.submit()
+      // Read the existing attachment: readCenter would overwrite it with a fresh reduction.
+      const values = reduction.read()
+      expect(values[2]).toBe(iterations * count)
+      expect(values[0]).toBe(-0.25 * iterations * count)
+      expect(values[1]).toBe(0.125 * iterations * count)
+      expect(values[0] / values[2]).toBe(-0.25)
+      expect(values[1] / values[2]).toBe(0.125)
+    }
+  } finally { reduction.destroy(); device.destroy() }
 })
 
 it('hierarchical reduction preserves the center through three levels and GPU rotation', async context => {

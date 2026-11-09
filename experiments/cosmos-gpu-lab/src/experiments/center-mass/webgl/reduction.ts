@@ -33,6 +33,7 @@ export function createBlendReduction (device: Device, count: number): {
   return {
     positions,
     encode (iterations = 1): void {
+      // Benchmark a batch of contributions: clear once, then accumulate count * iterations.
       const pass = device.beginRenderPass({ framebuffer, clearColor: [0, 0, 0, 0], clearDepth: false })
       for (let i = 0; i < iterations; i++) model.draw(pass)
       pass.end()
