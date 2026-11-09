@@ -5,17 +5,13 @@
 The experiment owns one WebGL device and one WebGPU device. Navigating away calls `destroy()` on the experiment, which
 stops its timer and destroys every backend-owned GPU resource.
 
-```mermaid
-flowchart TD
-  S[Lab shell] --> E[Center-mass instance]
-  E --> T[Tick coordinator]
-  E --> GL[WebGL backend]
-  E --> GPU[WebGPU backend]
-  GL --> GLC[Canvas and WebGL resources]
-  GPU --> GPUC[Canvas and WebGPU resources]
-  E -->|destroy| GL
-  E -->|destroy| GPU
-```
+- Lab shell — creates and destroys the center-mass instance
+  - Center-mass instance — owns its coordinator and destroys both backends
+    - Tick coordinator
+    - WebGL backend
+      - Canvas and WebGL resources
+    - WebGPU backend
+      - Canvas and WebGPU resources
 
 The lab shell knows only how to create and destroy an experiment. Controls, point state and backend comparison remain
 inside the experiment package.

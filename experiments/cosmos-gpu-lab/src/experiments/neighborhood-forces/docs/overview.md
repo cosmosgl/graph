@@ -5,15 +5,12 @@ tiled all-pairs traversal and spatial-grid neighbor traversal. It connects the e
 [grid builder](#/spatial-grid) to force calculation, integration and
 [circle rendering](#/point-rendering).
 
-```mermaid
-flowchart TD
-    P["Positions at tick N"] --> G["Count → scan → scatter"]
-    G --> F["Grid neighbor forces"]
-    P --> B["Tiled all-pairs forces"]
-    F --> I["Integrate into separate output buffers"]
-    B --> I
-    I --> R["Render circles directly from GPU positions"]
-    R --> N["Swap buffers for tick N + 1"]
+```flow
+Positions at tick N
+Spatial grid · Count → scan → scatter → grid neighbor forces | Tiled all-pairs · Reference neighbor forces
+Integrate · Each method writes its own separate output buffers
+Render circles · Read GPU positions directly
+Swap buffers · Ready for tick N + 1
 ```
 
 Both simulations start with identical deterministic positions, zero velocities, the same force

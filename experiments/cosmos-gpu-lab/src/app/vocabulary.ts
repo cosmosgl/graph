@@ -355,7 +355,7 @@ function canLinkTextNode (node: Text): boolean {
   return Boolean(
     parent &&
     node.data.trim() &&
-    !parent.closest('a, code, pre, h1, h2, h3, svg, .mermaid-source, .mermaid-diagram, .diagram-error')
+    !parent.closest('a, code, pre, h1, h2, h3, svg')
   )
 }
 

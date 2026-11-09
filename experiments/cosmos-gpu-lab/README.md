@@ -27,7 +27,7 @@ An experiment should contain:
 
 - An interactive demo with explicit `destroy()` cleanup.
 - Markdown explaining the algorithm, implementation, correctness and limitations.
-- Diagrams as Mermaid blocks or source-controlled SVG files.
+- Sequences as `flow` fences, ownership as nested lists, and source-controlled SVG figures where shape matters.
 - Concise Markdown findings with measurement conditions, limitations and reproduction steps.
 - Backend-local shaders and resources, accessed through luma.gl APIs only.
 
@@ -83,3 +83,33 @@ timings are not hardware benchmarks.
 
 The luma.gl dependencies are pinned to the coherent `10.0.0-alpha.4` family because newer prerelease package versions
 were not published in lockstep when the experiment was created.
+
+## Documentation flows
+
+Use a `flow` fence for ordered steps. Each nonempty line is one step; ` · ` separates
+its name from optional detail. Labels are plain text (no inline HTML or Markdown).
+Vocabulary previews work just as they do in prose.
+
+```flow
+Pass 0 · points → A
+Pass 1 · A → B
+Pass 2 · B → A
+Submit · One command buffer; the result stays in A
+```
+
+Use ` | ` between sibling paths on one line. A row before them is the shared input;
+a row after them is the join. Omit the last row if the paths end independently.
+These columns express relationships, not a promise of concurrent GPU execution.
+Keep dependencies explicit in the labels; use a real graph if the relationships
+cannot be expressed faithfully this way.
+
+```flow
+Shared positions for tick N
+WebGL · Blend into a texture | WebGPU · Reduce partial buffers | CPU · Reference center
+Compare centers · Errors and timings
+```
+
+`flow row` lays short sequences horizontally on wide screens and vertically on
+small screens. Use ordinary nested Markdown lists for ownership, and an SVG with
+an accessible description when geometry teaches something (such as the reduction
+tree). Keep SVG figures source-controlled and provide descriptive alternative text.

@@ -64,12 +64,12 @@ adds group totals. At the experiment's 65,536-point maximum, each serial chain i
 apart from tail handling. The all-pairs path sums its 128-point tiles in two blocks of 64; its 4,096-point
 limit similarly bounds the total number of block sums.
 
-```mermaid
-flowchart LR
-  A["Pair contributions"] --> B["Blocks of 64"]
-  B --> C["Groups of 16 blocks"]
-  C --> D["Sum group totals"]
-  D --> E["Apply strength once"]
+```flow
+Pair contributions
+Blocks of 64
+Groups of 16 blocks
+Sum group totals
+Apply strength once
 ```
 
 This changes the grouping of additions, not which neighbors contribute. Neighbor and candidate counts

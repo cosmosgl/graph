@@ -16,14 +16,9 @@ Only the primitive expansion changes.
 | Local circle coordinate | `gl_PointCoord` | varying emitted by the vertex shader |
 | Edge | fragment-shader distance + `fwidth` | same mathematical coverage rule |
 
-```mermaid
-flowchart LR
-  data["Shared positions + colors"] --> gl["WebGL point-list\n1 vertex / point"]
-  data --> gpu["WebGPU instances\n6 vertices / point"]
-  gl --> glf["gl_PointCoord\nfragment circle"]
-  gpu --> gpuf["quad-local varying\nfragment circle"]
-  glf --> left["WebGL canvas"]
-  gpuf --> right["WebGPU canvas"]
+```flow
+Shared positions + colors
+WebGL · Point-list: 1 vertex per point → gl_PointCoord fragment circle → WebGL canvas | WebGPU · Instances: 6 vertices per point → quad-local varying fragment circle → WebGPU canvas
 ```
 
 ## Why the geometry must change

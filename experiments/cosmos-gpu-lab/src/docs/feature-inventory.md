@@ -41,17 +41,17 @@ around it. Collision is a positional constraint: its correction uses friction 1 
 Each enabled force sees the positions produced by the preceding force. Combining all forces into one sum
 and integrating once would change Cosmos's current behavior.
 
-```mermaid
-flowchart TD
-  A["Optional mouse repulsion + integrate"] --> B["Gravity + integrate"]
-  B --> C["Center + integrate"]
-  C --> D["Many-body repulsion + integrate"]
-  D --> E["Incoming springs + integrate"]
-  E --> F["Outgoing springs + integrate"]
-  F --> G["Cluster attraction + integrate"]
-  G --> H["Per-point attractors + integrate"]
-  H --> I["Collision + integrate; repeat configured iterations"]
-  I --> J["Cool simulation"]
+```flow
+Optional mouse repulsion · integrate
+Gravity · integrate
+Center · integrate
+Many-body repulsion · integrate
+Incoming springs · integrate
+Outgoing springs · integrate
+Cluster attraction · integrate
+Per-point attractors · integrate
+Collision · integrate; repeat configured iterations
+Cool simulation
 ```
 
 Mouse repulsion has its own execution gate; the regular force sequence runs only when simulation is requested.

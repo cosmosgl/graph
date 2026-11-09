@@ -5,6 +5,7 @@ import type {
 } from '../runtime/experiment'
 import vocabularySource from '../docs/vocabulary.md?raw'
 import reductionSource from '../docs/reduction.md?raw'
+import reductionTreeUrl from '../docs/diagrams/reduction-tree.svg?url'
 import { experiments, findExperiment } from './registry'
 import { architectureHref, conceptHref, experimentHref, featureInventoryHref, readRoute, roadmapHref, vocabularyHref } from './router'
 import { indexVocabularyTerms } from './vocabulary'
@@ -391,7 +392,8 @@ export function createAppShell (root: HTMLElement): void {
       try {
         const renderer = await import('./markdown')
         if (version !== renderVersion) return
-        await renderer.renderMarkdown(stage, reductionSource, {}, {
+        const assets = Object.fromEntries([['diagrams/reduction-tree.svg', reductionTreeUrl]])
+        await renderer.renderMarkdown(stage, reductionSource, assets, {
           excludedTermIds: ['reduction'],
         })
       } catch (error) {

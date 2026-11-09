@@ -2,17 +2,12 @@
   <title id="title">Center-of-mass reduction pipelines</title>
   <desc id="desc">The WebGL path blends every point into a one pixel texture. The WebGPU path reduces points into partial sums and then one result.</desc>
   <style>
-    text { fill: #e2e3e6; font: 15px system-ui, sans-serif; }
+    text { fill: #e2e3e6; font: 15px Inter, ui-sans-serif, system-ui, sans-serif; }
     .label { fill: #a7abb3; font-size: 12px; letter-spacing: .08em; }
-    .box { fill: #343a43; stroke: #69717d; stroke-width: 1.5; rx: 8; }
-    .accent { fill: #33413f; stroke: #9fb5d5; }
-    .arrow { fill: none; stroke: #999fa9; stroke-width: 2; marker-end: url(#arrow); }
+    .box { fill: none; stroke: none; }
+    .accent { stroke: #9fb5d5; stroke-width: 1; rx: 3; }
+    .arrow { fill: none; stroke: #999fa9; stroke-width: 1; }
   </style>
-  <defs>
-    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-      <path d="M 0 0 L 10 5 L 0 10 z" fill="#999fa9"/>
-    </marker>
-  </defs>
   <text class="label" x="30" y="35">WEBGL — FIXED-FUNCTION BLENDING</text>
   <rect class="box" x="30" y="55" width="210" height="70"/>
   <text x="55" y="86">8,192 point vertices</text>

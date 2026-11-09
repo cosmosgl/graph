@@ -6,17 +6,14 @@ verbose than WebGL but also makes data flow and synchronization much easier to r
 
 This page uses **Cosmos meaning** callouts to connect general WebGPU terms to graph simulation and rendering.
 
-```mermaid
-flowchart LR
-  A[GPUAdapter] --> D[GPUDevice]
-  D --> R[Buffers and textures]
-  D --> P[Pipelines and bind groups]
-  D --> E[Command encoder]
-  R --> E
-  P --> E
-  E --> C[Command buffer]
-  C --> Q[GPUQueue]
-  Q --> G[GPU execution]
+```flow
+GPUAdapter · Select the GPU implementation
+GPUDevice · Create resources and record work
+Buffers and textures · Data used by commands | Pipelines and bind groups · How commands process and access that data
+Command encoder · Record commands using those resources and pipelines
+Command buffer · Finish recording
+GPUQueue · Submit the command buffer
+GPU execution
 ```
 
 ## Device and API objects
@@ -142,13 +139,10 @@ what may be bound, not the concrete resources.
 An immutable set of concrete resources matching a bind group layout. Bind groups are designed to be prepared ahead of
 time and reused across many dispatches or draws.
 
-```mermaid
-flowchart LR
-  W[WGSL declarations] --> L[Bind group layout]
-  L --> B[Bind group]
-  X[Position buffer] --> B
-  Y[Parameter buffer] --> B
-  B --> P[Compute or render pass]
+```flow
+WGSL declarations → bind group layout · Binding contract | Position buffer · Data resource | Parameter buffer · Data resource
+Bind group · Bind resources according to the layout
+Compute or render pass · Use the bound resources
 ```
 
 ### Pipeline layout (`GPUPipelineLayout`)
@@ -373,11 +367,11 @@ reduction writes one partial per workgroup, then recursively reduces partials un
 
 [Read the complete parallel-reduction deep dive →](#/concepts/reduction)
 
-```mermaid
-flowchart LR
-  A[1,000,000 points] --> B[3,907 partials]
-  B --> C[16 partials]
-  C --> D[1 center sum]
+```flow row
+1,000,000 points
+3,907 partials
+16 partials
+1 center sum
 ```
 
 ### Scan / prefix sum

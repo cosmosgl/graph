@@ -11,11 +11,11 @@ many-body, collision resolution, transitions and interaction are outside this ex
 Cosmos groups links by source and by target. The source-side pass is called `INCOMING` internally;
 the target-side pass is called `OUTGOING`. Both retain original input order within each point's list.
 
-```mermaid
-flowchart LR
-  A["P0: initial positions"] --> B["Source-side gather<br/>Integrate → P1"]
-  B --> C["Target-side gather<br/>Integrate → P2"]
-  C --> D["Draw points and links<br/>directly from P2"]
+```flow
+P0 · Initial positions
+Source-side gather · Integrate → P1
+Target-side gather · Integrate → P2
+Draw points and links · Read P2 directly
 ```
 
 Each point starts its directional displacement at zero. For each adjacent link, the spring sees

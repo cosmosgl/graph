@@ -16,9 +16,7 @@
     "@luma.gl/shadertools": "10.0.0-alpha.4",
     "@luma.gl/webgl": "10.0.0-alpha.4",
     "@luma.gl/webgpu": "10.0.0-alpha.4",
-    "dompurify": "^3.4.17",
-    "markdown-it": "14.3.3",
-    "mermaid": "11.12.1"
+    "markdown-it": "14.3.3"
   },
   "devDependencies": {
     "@types/markdown-it": "14.1.2",

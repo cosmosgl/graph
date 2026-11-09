@@ -15,15 +15,11 @@ levels until only one value remains.
 
 ## GPU-resident flow
 
-```mermaid
-flowchart LR
-  G[Generate positions] --> P[Resident position buffer]
-  P --> A[Advance positions]
-  A --> R[Recursive reduction]
-  R --> C[Resident center]
-  P --> D[Sampled point rendering]
-  C --> D
-  C -. optional 16-byte copy .-> CPU[CPU inspection]
+```flow
+Generate positions · Initialize the resident position buffer on the GPU
+Advance positions · Update the resident position buffer
+Recursive reduction · Read positions → resident center
+Sampled point rendering · Read both the position buffer and center buffer directly | Optional CPU inspection · Copy only the 16-byte center result
 ```
 
 The point array is never uploaded from JavaScript. Compute shaders initialize and advance it. The same storage buffer
