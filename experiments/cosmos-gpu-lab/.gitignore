@@ -1,0 +1,4 @@
+# Local measurement exports; commit findings and reproduction steps in docs instead.
+/captures/
+/src/experiments/*/reports/*.json
+/src/experiments/*/reports/*.zip
