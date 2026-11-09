@@ -4,22 +4,13 @@ The lab is a **modular research app**: one shared interface hosts independent GP
 their explanations and their results. It lives in the private workspace package
 `experiments/cosmos-gpu-lab`, with Vite, TypeScript and plain DOM UI code.
 
-```mermaid
-flowchart TD
-    Shell["App shell: navigation and routes"]
-    Registry["Experiment registry"]
-    Demo["Experiment demo: controls and coordination"]
-    Docs["Documentation and reports"]
-    GL["WebGL backend + GLSL"]
-    GPU["WebGPU backend + WGSL"]
-
-    Shell --> Registry
-    Registry --> Demo
-    Registry --> Docs
-    Demo --> GL
-    Demo --> GPU
-    Docs --> Reference["Shared vocabulary and concept guides"]
-```
+- App shell — navigation and routes
+  - Experiment registry
+    - Experiment demo — controls and coordination
+      - WebGL backend + GLSL
+      - WebGPU backend + WGSL
+    - Documentation and reports
+      - Shared vocabulary and concept guides
 
 ## 1. The shell manages navigation and lifecycle
 
@@ -85,15 +76,10 @@ each experiment to have documentation.
 The original [center-mass experiment](#/center-mass) generates one shared point state and sends
 the same positions to both backends each tick. A CPU reference provides a correctness baseline.
 
-```mermaid
-flowchart TD
-    Positions["Shared positions for tick N"]
-    Positions --> GL["WebGL: blend into a 1 × 1 texture"]
-    Positions --> GPU["WebGPU: reduce through partial buffers"]
-    Positions --> CPU["CPU reference"]
-    GL --> Compare["Compare centers and display errors and timings"]
-    GPU --> Compare
-    CPU --> Compare
+```flow
+Shared positions for tick N
+WebGL · Blend into a 1 × 1 texture | WebGPU · Reduce through partial buffers | CPU · Reference center
+Compare centers · Display errors and timings
 ```
 
 The view owns the controls and comparison logic. Each backend owns its buffers, pipelines,
@@ -145,12 +131,13 @@ measurement conditions, limitations and reproduction steps.
 The shared renderer provides:
 
 - GLSL and WGSL syntax highlighting.
-- Mermaid diagrams, sanitized while preserving labels.
+- Plain-text flow fences for sequences and fork/join comparisons; SVG figures where geometry matters.
 - Links and quick vocabulary previews.
 - Shared concept explanations, such as [parallel reduction](#/concepts/reduction).
 
-Markdown is rendered with raw HTML disabled. Mermaid SVG goes through DOMPurify before being
-inserted as a DOM fragment; this preserves its HTML labels while filtering executable content.
+Markdown is rendered with raw HTML disabled. Flow labels are escaped text in semantic lists, so
+quick vocabulary definitions work inside the steps. Source-controlled SVG figures are loaded as
+images, with alternative text describing their meaning.
 
 Commit concise Markdown findings with the environment, workload, implementation variant,
 methodology and a small results table. Machine-specific numbers are observations, not portable
@@ -173,8 +160,8 @@ for the precise boundaries and comparison limits.
 
 The current “simulation” benchmark measures center-mass reduction, not the entire Cosmos
 force simulation. Interactive validation and documented findings also do not imply that every GPU
-algorithm is covered by an automated regression test. Browser tests cover the shared diagram
-sanitizer and visible Mermaid labels as part of the repository's Vitest suite. Neighborhood forces
+algorithm is covered by an automated regression test. Browser tests cover flow-label escaping and keyboard-accessible vocabulary previews as part
+of the repository's Vitest suite. Neighborhood forces
 adds CPU and WebGPU regression cases, including borrowed grid buffers; its dedicated `test:gpu`
 command requires a WebGPU adapter.
 

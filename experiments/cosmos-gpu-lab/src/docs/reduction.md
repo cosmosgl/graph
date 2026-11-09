@@ -53,23 +53,9 @@ It performs `n − 1` combines and has a dependency depth of `O(n)`. A balanced 
 does the same `O(n)` total work but has `O(log n)` depth when enough processors are
 available:
 
-```mermaid
-flowchart BT
-  x0["x0"] --> a0["⊕"]
-  x1["x1"] --> a0
-  x2["x2"] --> a1["⊕"]
-  x3["x3"] --> a1
-  x4["x4"] --> a2["⊕"]
-  x5["x5"] --> a2
-  x6["x6"] --> a3["⊕"]
-  x7["x7"] --> a3
-  a0 --> b0["⊕"]
-  a1 --> b0
-  a2 --> b1["⊕"]
-  a3 --> b1
-  b0 --> result["⊕ → result"]
-  b1 --> result
-```
+![Balanced reduction tree: eight inputs combine in pairs, then two groups, then one result. Seven combines across three levels.](diagrams/reduction-tree.svg)
+
+*Eight inputs, seven combines, three dependency levels. Each ⊕ combines its two children.*
 
 The two standard measures are:
 
@@ -90,12 +76,12 @@ resident at the same time.
 Therefore a workgroup must finish independently and write one partial result. Ending
 the dispatch creates the boundary needed before a later dispatch reads those partials.
 
-```mermaid
-flowchart LR
-  input["N input accumulators"] --> p0["Pass 0\nceil(N / fan-in) partials"]
-  p0 --> p1["Pass 1\nfewer partials"]
-  p1 --> pn["Pass k\n1 final accumulator"]
-  pn --> consume["Simulation/render consumes it\nor optional readback"]
+```flow
+N input accumulators
+Pass 0 · ceil(N / fan-in) partials
+Pass 1 · Fewer partials
+Repeat until pass k · One final accumulator
+Consume result · Simulation or rendering; optional readback
 ```
 
 If a workgroup has `W` invocations and each invocation consumes `E` elements, the
@@ -186,17 +172,11 @@ The implementation needs two small partial buffers, conventionally called A and 
 Pass 0 writes A, pass 1 reads A and writes B, pass 2 reads B and writes A, and so on.
 The input point buffer itself is never overwritten.
 
-```mermaid
-sequenceDiagram
-  participant CPU as CPU encoder
-  participant P as Point buffer
-  participant A as Partial A
-  participant B as Partial B
-  CPU->>A: dispatch pass 0 (P → A)
-  CPU->>B: dispatch pass 1 (A → B)
-  CPU->>A: dispatch pass 2 (B → A)
-  CPU->>CPU: submit one command buffer
-  Note over A: final value remains GPU-resident
+```flow
+Pass 0 · points → A
+Pass 1 · A → B
+Pass 2 · B → A
+Submit · One command buffer; the result stays GPU-resident in A
 ```
 
 The passes can be encoded into one command buffer and submitted together. WebGPU

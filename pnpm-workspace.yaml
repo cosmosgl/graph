@@ -30,8 +30,6 @@ catalog:
 # their own compatible security releases.
 overrides:
   'fast-uri@>=3.1.3 <3.1.9': 3.1.9
-  # Mermaid's parser pins an older lodash-es with a template code-injection advisory.
-  'lodash-es@>=4.0.0 <4.18.0': 4.18.1
 
 # pnpm 10 blocks dependency lifecycle scripts by default; esbuild (vite's
 # platform binary) is the only dependency in the tree that needs one.

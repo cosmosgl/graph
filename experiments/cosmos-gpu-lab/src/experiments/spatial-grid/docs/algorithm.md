@@ -15,16 +15,14 @@ cellOffsets = [0, 3, 3, 7, 9]
 The range for cell 2 is therefore `pointIndices[3..7)`. Empty cells are natural: cell 1 has the
 zero-length range `[3..3)`.
 
-```mermaid
-flowchart LR
-  P[positions] --> C[atomic count]
-  C --> N[cellCounts]
-  N --> S[hierarchical exclusive scan]
-  S --> O[cellOffsets]
-  O --> K[copy offsets to cursors]
-  P --> X[atomic scatter]
-  K --> X
-  X --> I[pointIndices grouped by cell]
+```flow
+Positions
+Atomic count · Read positions → cellCounts
+Hierarchical exclusive scan · cellCounts → cellOffsets
+Prepare scatter inputs
+Positions · Read the same positions again | Cursors · Copy cellOffsets into mutable cursors
+Atomic scatter · Positions determine the cell; atomicAdd on its cursor allocates a destination
+pointIndices · Grouped by cell; cellOffsets retains immutable cell ranges
 ```
 
 ## 1. Count

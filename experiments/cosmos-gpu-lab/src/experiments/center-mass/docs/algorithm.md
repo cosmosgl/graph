@@ -2,17 +2,12 @@
 
 ## Shared tick
 
-```mermaid
-flowchart LR
-  A[Deterministic point state] --> B[Advance one tick]
-  B --> C[Immutable tick snapshot]
-  C --> D[CPU f64 reference]
-  C --> E[WebGL upload]
-  C --> F[WebGPU upload]
-  E --> G[RGBA32F blend]
-  F --> H[Compute reduction]
-  G --> I[Readback and compare]
-  H --> I
+```flow
+Deterministic point state
+Advance one tick
+Immutable tick snapshot · Shared input for all three paths
+CPU · f64 reference | WebGL · Upload → RGBA32F blend → readback | WebGPU · Upload → compute reduction → readback
+Compare centers · GPU results against the CPU reference
 ```
 
 The coordinator never advances between backend executions. Each backend therefore observes the same `Float32Array`
@@ -42,12 +37,12 @@ The final pixel contains `(sumX, sumY, count, 0)`. This path requires both `EXT_
 
 WebGPU uses two compute dispatches with workgroups of 256 invocations.
 
-```mermaid
-flowchart LR
-  P[8192 positions] -->|32 workgroups| W[Workgroup memory]
-  W -->|tree reduction| S[32 vec4 partials]
-  S -->|1 workgroup| R[1 vec4 result]
-  R --> C[Center]
+```flow
+8,192 positions
+32 workgroups · Reduce 256 positions each in workgroup memory
+32 vec4 partials
+1 workgroup · Tree reduction of the partials
+1 vec4 result · Divide sums by count to obtain the center
 ```
 
 Each invocation loads one position as `(x, y, 1, 0)`. Values are reduced in workgroup memory using a binary tree:

@@ -16,20 +16,20 @@ until `outputCount` reaches one.
 
 ## One million points
 
-```mermaid
-flowchart LR
-  A[1,000,000 vec2 positions] -->|3,907 workgroups| B[3,907 vec4 partials]
-  B -->|16 workgroups| C[16 vec4 partials]
-  C -->|1 workgroup| D[1 vec4 result]
+```flow
+1,000,000 vec2 positions
+3,907 vec4 partials · 3,907 workgroups
+16 vec4 partials · 16 workgroups
+1 vec4 result · 1 workgroup
 ```
 
 ## Ten million points
 
-```mermaid
-flowchart LR
-  A[10,000,000 positions] -->|39,063 groups| B[39,063 partials]
-  B -->|153 groups| C[153 partials]
-  C -->|1 group| D[1 result]
+```flow
+10,000,000 positions
+39,063 partials · 39,063 workgroups
+153 partials · 153 workgroups
+1 result · 1 workgroup
 ```
 
 Only the first pass reads `vec2f` positions. Later passes read and write `vec4f` partials. Two buffers alternate roles

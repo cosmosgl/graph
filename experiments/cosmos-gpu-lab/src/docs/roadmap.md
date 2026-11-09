@@ -189,14 +189,12 @@ version; documentation for a newer release is not evidence that the pinned alpha
 
 ## 5. The journey from feasible primitives to a ready library
 
-```mermaid
-flowchart TD
-  A["Primitive feasibility: demonstrated in experiments"] --> B["luma integration: validate resource and execution contracts"]
-  B --> C["Cosmos simulation: global forces, links and stable layouts"]
-  B --> D["Cosmos renderer: visuals, picking and interaction"]
-  C --> E["Complete library: API, updates and host integration"]
-  D --> E
-  E --> F["Production readiness: correctness, budgets and supported devices"]
+```flow
+Primitive feasibility · Demonstrated in experiments
+luma integration · Validate resource and execution contracts
+Cosmos simulation · Global forces, links and stable layouts | Cosmos renderer · Visuals, picking and interaction
+Complete library · API, updates and host integration
+Production readiness · Correctness, budgets and supported devices
 ```
 
 ### Milestone 1 — Prove the luma integration path
