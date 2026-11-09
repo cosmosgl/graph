@@ -1,4 +1,5 @@
 import MarkdownIt from 'markdown-it'
+import { sanitizeDiagram } from './sanitize-diagram'
 import { highlightGlsl, highlightWgsl } from './syntax-highlight'
 import { linkVocabularyTerms } from './vocabulary'
 
@@ -34,10 +35,7 @@ async function renderDiagrams (host: HTMLElement): Promise<void> {
       diagramId += 1
       const result = await mermaid.render(id, diagram.textContent ?? '')
       diagram.className = 'mermaid-diagram'
-      // Mermaid's strict renderer sanitizes this SVG with DOMPurify, including
-      // the XHTML integration points that carry its visible labels. A second
-      // SVG-only sanitization pass removes those labels.
-      diagram.innerHTML = result.svg // lgtm[js/xss-through-dom]
+      diagram.replaceChildren(sanitizeDiagram(result.svg))
       result.bindFunctions?.(diagram)
     } catch (error) {
       diagram.className = 'diagram-error'

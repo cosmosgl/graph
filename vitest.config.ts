@@ -15,7 +15,7 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['test/**/*.test.ts'],
+    include: ['test/**/*.test.ts', 'experiments/cosmos-gpu-lab/src/**/*.test.ts'],
     // Device init and shader compilation on SwiftShader are slow
     testTimeout: 30000,
     // Browser workers are pages sharing one Chromium process. In CI every
