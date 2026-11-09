@@ -50,8 +50,7 @@ src/experiments/<experiment>/
   backend.ts          GPU implementation or shared backend contract
   reference.ts        CPU reference, when needed
   shaders/            WGSL or GLSL
-  docs/               Technical explanations
-  reports/            Saved JSON results, when available
+  docs/               Technical explanations, findings and reproduction steps
 ```
 
 WebGL/WebGPU comparisons can have separate `webgl/` and `webgpu/` directories with their own
@@ -120,18 +119,21 @@ validate a complete implementation through luma's higher-level resource APIs or
 | [Point rendering](#/point-rendering) | WebGL point sprites versus WebGPU instanced quads for circles |
 | [Performance lab](#/performance-lab) | Controlled rendering and center-mass benchmarks using existing implementations |
 | [Spatial grid](#/spatial-grid) | Count → prefix scan → scatter, producing cell ranges and grouped point indices |
+| [Neighborhood forces](#/neighborhood-forces) | Grid-based local repulsion versus tiled all-pairs, integration and GPU-resident circle rendering |
 
 Scalable reduction initializes and moves positions on the GPU, and rendering reads the same
 storage buffer. This lets us study an architecture for larger simulations without uploading
 every point from JavaScript on every tick. Its center marker reads the reduction result
 directly, so it remains visible with CPU readback disabled.
 
-The spatial grid builds a neighborhood index; it does not calculate forces yet. Its buffers
-are intended to become inputs to a later force-computation experiment.
+The spatial-grid experiment builds a neighborhood index. Neighborhood forces reuses that builder
+with borrowed position buffers and a shared device, then consumes its cell ranges and point indices
+to calculate local repulsion. It does not yet implement the global many-body force.
 
 ## 5. Documentation is part of each experiment
 
-Markdown pages sit beside the implementation, alongside SVG diagrams and saved JSON reports.
+Markdown pages sit beside the implementation and SVG diagrams. Results pages summarize findings,
+measurement conditions, limitations and reproduction steps.
 The shared renderer provides:
 
 - GLSL and WGSL syntax highlighting.
@@ -142,10 +144,11 @@ The shared renderer provides:
 Markdown is rendered with raw HTML disabled. Mermaid SVG goes through DOMPurify before being
 inserted as a DOM fragment; this preserves its HTML labels while filtering executable content.
 
-Experiment pages can be Markdown or structured reports. The report contract records the
-environment, parameters, commit, results and limitations. The performance experiment also
-exports its raw measurements and summaries as JSON, with browser and workload metadata.
-Exporting a report does not automatically save or commit it to the repository.
+Commit concise Markdown findings with the environment, workload, code revision when known,
+methodology and a small results table. Machine-specific numbers are observations, not portable
+performance expectations. Performance Lab and Neighborhood forces export raw measurements and
+summaries as JSON for local analysis. Keep those captures outside Git; `captures/` in the lab is
+ignored for this purpose. Preserve small regression fixtures only when needed to reproduce a bug.
 
 ## 6. Correctness and performance have separate workflows
 
@@ -154,15 +157,18 @@ experiment-specific validation. Benchmarks use warm-ups, repeated batches, match
 and p50/p95 summaries, with setup outside the sampled work.
 
 We distinguish **CPU submission time** from **time until GPU completion**. These are
-browser-level measurements; we do not currently measure pure GPU execution with timestamp
-queries. The WebGL completion measurement also includes an amortized pixel readback, while
+browser-level measurements. Neighborhood forces additionally measures GPU pass intervals with
+optional timestamp queries, keeping those results separate from wall time. Its repeatable sweep
+varies count, density, radius and cell size. The WebGL completion measurement in Performance Lab includes an amortized pixel readback, while
 WebGPU waits for queue completion. See the [benchmark methodology](#/performance-lab/docs/methodology)
 for the precise boundaries and comparison limits.
 
 The current “simulation” benchmark measures center-mass reduction, not the entire Cosmos
-force simulation. Interactive validation and saved reports also do not imply that every GPU
-algorithm is covered by an automated regression test. Browser tests currently cover the shared
-diagram sanitizer and visible Mermaid labels as part of the repository's Vitest suite.
+force simulation. Interactive validation and documented findings also do not imply that every GPU
+algorithm is covered by an automated regression test. Browser tests cover the shared diagram
+sanitizer and visible Mermaid labels as part of the repository's Vitest suite. Neighborhood forces
+adds CPU and WebGPU regression cases, including borrowed grid buffers; its dedicated `test:gpu`
+command requires a WebGPU adapter.
 
 ## 7. Adding an experiment and evolving the architecture
 
@@ -170,7 +176,7 @@ diagram sanitizer and visible Mermaid labels as part of the repository's Vitest 
 2. Keep the manifest lightweight: dynamically import the demo from `create(host)`.
 3. Implement the demo and backend ownership, including explicit `destroy()` cleanup.
 4. Add documentation explaining the algorithm, correctness, performance and limitations.
-5. Add CPU references, validation and recorded reports as appropriate to the question being tested.
+5. Add CPU references and validation, then document findings and reproduction steps in Markdown.
 
 The registry discovers the experiment automatically and the shell creates its navigation and
 documentation tabs. No central experiment list needs updating.

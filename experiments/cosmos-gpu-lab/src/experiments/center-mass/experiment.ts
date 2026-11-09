@@ -1,4 +1,4 @@
-import type { ExperimentInstance, ExperimentReport } from '../../runtime/experiment'
+import type { ExperimentInstance } from '../../runtime/experiment'
 import { defineExperiment } from '../../runtime/experiment'
 import reductionDiagramUrl from './diagrams/reduction-pipeline.svg?url'
 
@@ -42,11 +42,10 @@ export const experiment = defineExperiment({
       load: async (): Promise<string> => (await import('./docs/correctness.md?raw')).default,
     },
     {
-      kind: 'report',
+      kind: 'markdown',
       id: 'results',
       title: 'Results',
-      load: async (): Promise<ExperimentReport> =>
-        (await import('./reports/baseline.json')).default as ExperimentReport,
+      load: async (): Promise<string> => (await import('./docs/results.md?raw')).default,
     },
     {
       kind: 'markdown',

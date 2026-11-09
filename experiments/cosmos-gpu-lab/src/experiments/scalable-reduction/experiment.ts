@@ -1,4 +1,4 @@
-import type { ExperimentInstance, ExperimentReport } from '../../runtime/experiment'
+import type { ExperimentInstance } from '../../runtime/experiment'
 import { defineExperiment } from '../../runtime/experiment'
 
 export const experiment = defineExperiment({
@@ -30,11 +30,10 @@ export const experiment = defineExperiment({
       load: async (): Promise<string> => (await import('./docs/implementation.md?raw')).default,
     },
     {
-      kind: 'report',
+      kind: 'markdown',
       id: 'results',
       title: 'Results',
-      load: async (): Promise<ExperimentReport> =>
-        (await import('./reports/validation.json')).default as ExperimentReport,
+      load: async (): Promise<string> => (await import('./docs/results.md?raw')).default,
     },
     {
       kind: 'markdown',
