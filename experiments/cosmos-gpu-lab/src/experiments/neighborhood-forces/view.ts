@@ -16,6 +16,8 @@ function element<T extends HTMLElement> (host: ParentNode, selector: string): T 
 export async function createNeighborhoodExperiment (host: HTMLElement): Promise<ExperimentInstance> {
   host.innerHTML = `
     <section class="neighborhood-demo">
+      <details class="demo-settings">
+        <summary>Simulation settings <span data-output="settings-summary">1,024 points · Uniform · radius 0.08</span></summary>
       <div class="scale-toolbar">
         <label><span>Points</span><select data-control="count">
           <option>256</option><option selected>1024</option><option>4096</option>
@@ -41,19 +43,38 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
           <option value="chunked">Chunked · fewer inner-loop checks</option>
         </select></label>
       </div>
-      <div class="demo-toolbar">
+      </details>
+      <div class="simulation-preview">
+      <div class="demo-toolbar playback-toolbar">
         <div class="controls">
-          <button data-action="step">Step</button><button data-action="play">Play</button>
+          <button class="button-primary" data-action="step">Step</button><button data-action="play">Play</button>
           <button data-action="reset">Reset</button><button data-action="validate">Validate next step</button>
+        </div>
+        <span class="tick-counter">Tick <strong data-output="tick">0</strong></span>
+      </div>
+      <div class="scale-status" role="status"><span data-output="status">Creating WebGPU resources…</span></div>
+      <div class="backend-panels">
+        <section class="backend-panel"><h2>Tiled all-pairs</h2>
+          <p class="demo-note">WebGPU · reference path · up to 4,096 points</p>
+          <canvas data-canvas="brute" width="480" height="480" aria-label="All-pairs simulation"></canvas>
+          <p data-validation="brute">Not validated</p>
+        </section>
+        <section class="backend-panel"><h2>Spatial grid</h2>
+          <p class="demo-note">WebGPU · count, scan, scatter + neighbor traversal</p>
+          <canvas data-canvas="grid" width="480" height="480" aria-label="Grid simulation"></canvas>
+          <p data-validation="grid">Not validated</p>
+        </section>
+      </div>
+      </div>
+      <p class="demo-note">Local repulsion within a fixed radius · identical inputs and circle rendering ·
+        damping and reflecting walls · no per-tick CPU readback. This is not the global many-body force.</p>
+      <details class="advanced-controls">
+        <summary>Measurements and technical details</summary>
+        <div class="controls">
           <button data-action="precision">Check dense precision</button>
           <button data-action="precision-cost">Compare precision cost</button>
           <button data-action="benchmark">Benchmark</button><button data-action="export" disabled>Export JSON</button>
         </div>
-        <span>Tick <strong data-output="tick">0</strong></span>
-      </div>
-      <p class="demo-note">Local repulsion within a fixed radius · identical inputs and circle rendering ·
-        damping and reflecting walls · no per-tick CPU readback. This is not the global many-body force.</p>
-      <div class="scale-status" role="status"><span data-output="status">Creating WebGPU resources…</span></div>
       <p class="demo-note" data-output="gpu-timing">Checking GPU timestamp support…</p>
       <p class="demo-note">Check dense precision compares the original and fixed shaders at 65,536 points,
         16× density and radius 0.16 across all three grids. It takes about a minute and leaves the demo settings unchanged.</p>
@@ -61,19 +82,8 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
         Keep this tab visible; use Cancel sweep to stop and export partial results.</p>
       <div class="grid-pipeline"><span>positions</span><b>→</b><span>grid</span><b>→</b>
         <span>local forces</span><b>→</b><span>integration</span><b>→</b><span>circles</span></div>
-      <div class="backend-panels">
-        <section class="backend-panel"><h2>Tiled all-pairs</h2>
-          <p>WebGPU · reference path · up to 4,096 points</p>
-          <canvas data-canvas="brute" width="480" height="480" aria-label="All-pairs simulation"></canvas>
-          <p data-validation="brute">Not validated</p>
-        </section>
-        <section class="backend-panel"><h2>Spatial grid</h2>
-          <p>WebGPU · count, scan, scatter + neighbor traversal</p>
-          <canvas data-canvas="grid" width="480" height="480" aria-label="Grid simulation"></canvas>
-          <p data-validation="grid">Not validated</p>
-        </section>
-      </div>
       <p class="demo-note" data-output="search"></p>
+      </details>
       <section data-output="timings" aria-live="polite"></section>
       <section class="neighborhood-sweep">
         <h2>Repeatable parameter sweep</h2>
@@ -139,6 +149,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
     }
     play.disabled = (busy && !playing) || backends.length === 0
     play.textContent = playing ? 'Pause' : 'Play'
+    play.setAttribute('aria-pressed', String(playing))
     exportButton.disabled = busy || playing || !report
     element<HTMLButtonElement>(host, '[data-action="cancel-sweep"]').disabled = !sweeping || cancelSweep
     element<HTMLButtonElement>(host, '[data-action="export-sweep"]').disabled = !sweepReport
@@ -181,6 +192,10 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
     }
     clearResults()
     tick.textContent = '0'
+    const distribution = element<HTMLSelectElement>(host, '[data-control="distribution"]')
+    element<HTMLElement>(host, '[data-output="settings-summary"]').textContent =
+      `${options.count.toLocaleString()} points · ${distribution.selectedOptions[0].text} · radius ${options.radius} · ` +
+      `${options.density}× density · ${options.gridSize}×${options.gridSize} grid`
     status.textContent = 'Creating WebGPU pipelines…'
     const reach = Math.ceil(options.radius * options.gridSize / 2)
     element<HTMLElement>(host, '[data-output="search"]').textContent =
@@ -272,6 +287,8 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
       return
     }
     if (busy || backends.length === 0) return
+    element<HTMLDetailsElement>(host, '.demo-settings').open = false
+    element<HTMLElement>(host, '.simulation-preview').scrollIntoView({ block: 'start' })
     playing = true
     status.textContent = 'Running fixed 1/60-second simulation steps. Both methods advance one tick together.'
     controls()

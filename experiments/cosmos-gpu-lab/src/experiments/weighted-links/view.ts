@@ -20,9 +20,6 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
   const diagnostic = new URLSearchParams(window.location.search).get('linkDiagnostic')
   if (diagnostic === 'WebGL' || diagnostic === 'WebGPU') return await createPassDiagnostic(host, diagnostic)
   host.innerHTML = `
-    <p class="demo-note">Isolate simulation passes with one active device:
-      <a href="?linkDiagnostic=WebGL#/weighted-links">WebGL only</a> ·
-      <a href="?linkDiagnostic=WebGPU#/weighted-links">WebGPU only</a>.</p>
     <section class="scale-toolbar">
       <label>Graph <select data-control="fixture">
         ${FIXTURES.map(name => `<option ${name === 'star' ? 'selected' : ''}>${name}</option>`).join('')}
@@ -31,17 +28,18 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
         ${[32, 128, 512, 2048].map(n => `<option ${n === 128 ? 'selected' : ''}>${n}</option>`).join('')}
       </select></label>
       <label class="checkbox-control"><input type="checkbox" data-control="collision"> Collision rest-length floor</label>
+    </section>
+    <div class="demo-toolbar">
       <div class="controls">
-        <button data-action="step">Step + validate</button><button data-action="ten">10 validated ticks</button>
+        <button class="button-primary" data-action="step">Step + validate</button><button data-action="ten">10 validated ticks</button>
         <button data-action="reset">Reset</button><button data-action="topology">Replace links + reset</button>
         <button data-action="benchmark">Measure stages</button>
-        <button data-action="diagnose-render">Check WebGL rendering only</button>
-        <button data-action="check-star">Check 100k star (Cosmos bounds)</button>
-        <button data-action="sweep-small">Sweep 1k–10k</button><button data-action="sweep-large">Sweep 1k–100k</button>
         <button data-action="stop" disabled>Stop</button><button data-action="restart" hidden>Restart devices</button>
         <button data-action="export" disabled>Export JSON</button>
       </div>
-    </section>
+    </div>
+    <details class="advanced-controls">
+      <summary>Sweeps and WebGL diagnostics</summary>
     <section class="scale-toolbar">
       <label>Sweep backend <select data-control="sweep-backend"><option>Both</option><option>WebGL</option><option>WebGPU</option></select></label>
       <label>Sweep topology <select data-control="sweep-shape">
@@ -54,6 +52,15 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
         <option value="original">Cosmos directional bounds</option><option value="early-exit">Stop at point degree</option>
       </select></label>
     </section>
+      <div class="controls">
+        <button data-action="sweep-small">Sweep 1k–10k</button><button data-action="sweep-large">Sweep 1k–100k</button>
+        <button data-action="diagnose-render">Check WebGL rendering only</button>
+        <button data-action="check-star">Check 100k star (Cosmos bounds)</button>
+      </div>
+      <p class="demo-note">Isolate simulation passes with one active device:
+        <a href="?linkDiagnostic=WebGL#/weighted-links">WebGL only</a> ·
+        <a href="?linkDiagnostic=WebGPU#/weighted-links">WebGPU only</a>.</p>
+    </details>
     <section class="summary" aria-live="polite">
       <span>Tick <strong data-output="tick">0</strong></span><span data-output="graph"></span><span data-output="topology"></span>
     </section>

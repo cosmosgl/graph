@@ -5,7 +5,7 @@
     text { fill: #e2e3e6; font: 15px system-ui, sans-serif; }
     .label { fill: #a7abb3; font-size: 12px; letter-spacing: .08em; }
     .box { fill: #343a43; stroke: #69717d; stroke-width: 1.5; rx: 8; }
-    .accent { fill: #33413f; stroke: #8fc7b5; }
+    .accent { fill: #33413f; stroke: #9fb5d5; }
     .arrow { fill: none; stroke: #999fa9; stroke-width: 2; marker-end: url(#arrow); }
   </style>
   <defs>

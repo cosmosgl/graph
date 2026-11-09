@@ -150,7 +150,7 @@ export async function createSpatialGridExperiment (
           </select>
         </label>
         <div class="controls">
-          <button data-action="build" type="button" disabled>Build + validate</button>
+          <button class="button-primary" data-action="build" type="button" disabled>Build + validate</button>
           <button data-action="benchmark" type="button" disabled>Benchmark</button>
         </div>
       </div>
