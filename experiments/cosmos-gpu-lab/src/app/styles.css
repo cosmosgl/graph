@@ -1116,6 +1116,67 @@ button:disabled {
   height: auto;
 }
 
+.neighborhood-demo .backend-panel canvas {
+  display: block;
+  width: 100%;
+  height: auto;
+  aspect-ratio: 1;
+}
+
+.neighborhood-demo .backend-panel canvas[hidden] {
+  display: none;
+}
+
+.neighborhood-demo [data-validation] {
+  padding: 12px;
+  color: #c5c7cc;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.neighborhood-demo .controls {
+  flex-wrap: wrap;
+}
+
+.neighborhood-timings {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.neighborhood-sweep {
+  margin-top: 40px;
+  padding-top: 24px;
+  border-top: 1px solid #414751;
+}
+
+.neighborhood-sweep .benchmark-table-wrap {
+  max-height: 480px;
+  overflow: auto;
+}
+
+.neighborhood-sweep progress {
+  width: 100%;
+  margin: 8px 0 18px;
+  accent-color: #8fc7b5;
+}
+
+.neighborhood-sweep input {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #515865;
+  border-radius: 4px;
+  background: #373d47;
+  color: #e3e4e7;
+}
+
+.neighborhood-timings th,
+.neighborhood-timings td {
+  padding: 10px;
+  border-bottom: 1px solid #414751;
+  text-align: left;
+}
+
 .diagram-error {
   padding: 14px;
   border: 1px solid #6c3939;
