@@ -6,6 +6,7 @@ import { linkVocabularyTerms } from './vocabulary'
 type MarkdownOptions = {
   linkTerms?: boolean;
   excludedTermIds?: string[];
+  examples?: Record<string, (host: HTMLElement) => void>;
 }
 
 export async function renderMarkdown (
@@ -21,9 +22,14 @@ export async function renderMarkdown (
   })
 
   const defaultFence = markdown.renderer.rules.fence
+  const examples = options.examples ?? {}
   markdown.renderer.rules.fence = (tokens, index, options, environment, renderer): string => {
     const token = tokens[index]
     const language = token.info.trim().toLocaleLowerCase()
+    const exampleId = token.content.trim()
+    if (language === 'example' && Object.hasOwn(examples, exampleId)) {
+      return `<div data-doc-example="${markdown.utils.escapeHtml(exampleId)}"></div>`
+    }
     if (language === 'flow' || language === 'flow row') {
       return renderFlow(token.content, language === 'flow row', markdown.utils.escapeHtml)
     }
@@ -54,5 +60,8 @@ export async function renderMarkdown (
   host.innerHTML = `<article class="prose">${markdown.render(source)}</article>`
   if (options.linkTerms !== false) {
     linkVocabularyTerms(host, new Set(options.excludedTermIds))
+  }
+  for (const element of host.querySelectorAll<HTMLElement>('[data-doc-example]')) {
+    examples[element.dataset.docExample!](element)
   }
 }

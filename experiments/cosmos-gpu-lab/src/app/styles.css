@@ -557,6 +557,7 @@ input:disabled {
 }
 
 .scale-toolbar select,
+.learning-field select,
 .scale-toolbar input[type="number"] {
   height: 36px;
   min-width: 132px;
@@ -572,7 +573,8 @@ input:disabled {
   font-variant-numeric: tabular-nums;
 }
 
-.scale-toolbar select {
+.scale-toolbar select,
+.learning-field select {
   appearance: none;
   padding-right: 34px;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='m3 4.5 3 3 3-3' fill='none' stroke='%239fa9b8' stroke-width='1.25' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
@@ -582,11 +584,13 @@ input:disabled {
 }
 
 .scale-toolbar select:hover:not(:disabled),
+.learning-field select:hover:not(:disabled),
 .scale-toolbar input[type="number"]:hover:not(:disabled) {
   border-color: #ffffff35;
 }
 
-.scale-toolbar option {
+.scale-toolbar option,
+.learning-field option {
   color: #dedfe2;
   background: #292e36;
 }
@@ -1658,4 +1662,166 @@ button[data-action="play"][aria-pressed="true"] {
   *, *::before, *::after {
     transition: none !important;
   }
+}
+
+/* Teaching models sit in the reading flow; they do not create GPU devices. */
+.learning-example {
+  margin: 24px 0;
+  padding: 20px 0;
+  border-top: 1px solid var(--control-border);
+  border-bottom: 1px solid var(--control-border);
+}
+
+.learning-example > strong { color: #ececef; }
+.prose .learning-hint { margin: 6px 0 18px; color: #a4a8b0; font-size: 13px; }
+.learning-example .controls { margin-bottom: 16px; gap: 10px; }
+.learning-field { display: flex; flex-direction: column; gap: 6px; color: #afb3bb; font-size: 12px; }
+.learning-field select { min-width: 80px; max-width: 100%; padding: 8px 28px 8px 10px; }
+.learning-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 16px; }
+.learning-label { display: block; margin-bottom: 8px; color: #afb3bb; font-size: 12px; }
+.learning-cells { display: flex; flex-wrap: wrap; gap: 5px; }
+.learning-buffer { margin-top: 16px; }
+.learning-cell { min-width: 32px; padding: 5px 9px; background: #ffffff05; text-align: center; font-variant-numeric: tabular-nums; }
+.learning-cell.is-selected { color: #ececef; background: var(--accent-surface); box-shadow: inset 0 -2px var(--accent); }
+.learning-example button[aria-pressed="true"] { border-color: var(--accent); color: #ececef; background: var(--accent-surface); }
+.learning-example button.is-idle { border-style: dashed; border-color: #767d89; color: #a4a8b0; }
+.prose .learning-status { margin: 18px 0 12px; min-height: 3.5em; color: var(--accent-hover); }
+.learning-reduction .learning-buffer { text-align: center; }
+.learning-reduction .learning-cells {
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  gap: 4px;
+  max-width: 480px;
+  margin: 0 auto;
+}
+.learning-reduction .learning-cell {
+  min-width: 0;
+  width: 28px;
+  padding: 5px 0;
+  justify-self: center;
+}
+.learning-picture { width: 100%; max-width: 240px; margin: 0 auto; }
+.learning-picture svg { display: block; width: 100%; height: auto; }
+.learning-axis { stroke: #ffffff12; stroke-width: 1; fill: none; }
+.learning-outline { stroke: #767d89; stroke-dasharray: 3 4; fill: none; }
+.learning-triangles { stroke: var(--accent); stroke-width: 1; fill: var(--accent-surface); }
+.learning-disc, .learning-vertex { fill: var(--accent); }
+.learning-center { fill: #ececef; }
+
+@media (max-width: 480px) {
+  .learning-example .controls { align-items: stretch; }
+  .learning-example button { white-space: normal; text-align: left; }
+  .learning-example .learning-cells button { min-width: 36px; }
+}
+
+.learning-example button:not(.vocabulary-term-link),
+.learning-field select {
+  min-height: 44px;
+}
+
+.learning-group .learning-cells {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  max-width: 208px;
+}
+
+.learning-example .learning-stages {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 4px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--control-border);
+}
+
+.learning-stages button {
+  white-space: normal;
+  text-align: center;
+}
+
+.learning-render-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 24px;
+  padding: 12px 0;
+}
+
+.learning-render-explanation .learning-field {
+  align-items: flex-start;
+}
+
+.prose .learning-render-explanation .learning-status {
+  min-height: 0;
+  margin-bottom: 0;
+}
+
+.learning-contents {
+  margin: 28px 0;
+  border-top: 1px solid var(--control-border);
+  border-bottom: 1px solid var(--control-border);
+}
+
+.learning-contents summary {
+  padding: 14px 0;
+  color: var(--accent-hover);
+  cursor: pointer;
+}
+
+.learning-contents nav {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 4px 24px;
+  padding-bottom: 16px;
+}
+
+.learning-contents a {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.learning-contents a:hover,
+.learning-back:hover {
+  text-decoration: underline;
+}
+
+.learning-chapter {
+  display: flex;
+  align-items: baseline;
+  gap: 8px 20px;
+  margin: 42px 0 14px;
+}
+
+.prose .learning-chapter h2 {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+
+.learning-back {
+  flex: none;
+  padding: 10px 0;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+.prose [id^="learn-"],
+.learning-contents summary {
+  scroll-margin-top: 24px;
+}
+
+@media (max-width: 600px) {
+  .learning-contents nav { grid-template-columns: 1fr; }
+  .learning-chapter { flex-wrap: wrap; }
+  .prose .learning-chapter h2 { flex-basis: 100%; }
+  .learning-back { padding: 4px 0 10px; }
+}
+
+@media (max-width: 420px) {
+  .learning-render-preview { grid-template-columns: 1fr; gap: 16px; }
+  .learning-picture { max-width: 176px; }
+  .learning-stages button { padding: 8px 4px; font-size: 12px; }
+  .learning-render-explanation .learning-field { flex-direction: row; align-items: center; justify-content: space-between; }
 }
