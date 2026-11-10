@@ -23,6 +23,13 @@ for (const fixture of ['uniform', 'clusters', 'edge-cases'] as const) {
     try {
       inline.step(); const snapshot = await inline.read()
       const result = await compareCentroidPass(input, input.points, PARAMETERS, frame, snapshot)
+      if (fixture === 'clusters') {
+        expect(result.corrected.contributions?.replay.valid).toBe(true)
+        expect(result.corrected.contributions?.rows.some(row => row.grid === 128)).toBe(true)
+        expect(result.materialized.extraStorageBytes - result.corrected.extraStorageBytes).toBe(8192 * 6 * 100 * 8)
+        expect(result.materialized.extraDispatches).toBe(2)
+      }
+      expect(result.materialized.storedPassed, JSON.stringify(result.materialized)).toBe(true)
       expect(result.corrected.centroids).toMatchObject({ differingComponents: 0, maxUlp: 0, maxError: 0 })
       expect(result.corrected.division).toMatchObject({ cases: 131080, mismatches: 0, firstFailure: null })
       expect(result.corrected.replay.valid, JSON.stringify(result.corrected.replay)).toBe(true)

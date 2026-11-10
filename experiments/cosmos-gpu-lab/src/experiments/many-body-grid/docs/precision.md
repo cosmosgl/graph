@@ -1,5 +1,8 @@
 ## Where the dense mismatch begins
 
+This page describes the original path. The follow-up [far-field precision experiment](#/many-body-grid/docs/far-field)
+now passes the checked dense cases with refined arithmetic and stored contributions, without changing the CPU budget.
+
 The dense fixture's first tolerance failures occur in **cumulative far-field force after the 64×64 grid level** on Apple M3.
 The sampled near force, jitter and clamp pass their checks. Both GPUs show nearly the same failure pattern. This narrows
 the investigation to centroid force evaluation and accumulation; it does not establish full CPU parity or a shader fix.
