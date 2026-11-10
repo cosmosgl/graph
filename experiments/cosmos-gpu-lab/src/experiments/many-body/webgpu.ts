@@ -3,6 +3,7 @@ import { Kernel } from '@luma.gl/engine'
 import { bindingLayout, createDevice, createStorageRenderer, readFloats, upload, waitForGpu } from '../../gpu/luma'
 import type { Backend } from './backend'
 import type { Snapshot } from './reference'
+import { measureBatch, timestamps, type TimestampWrites } from './timing'
 import { nearLimit, validateInput, type Input, type Parameters, type Variant } from './data'
 import forceSource from './force.wgsl?raw'
 import integrationSource from './integrate.wgsl?raw'
@@ -27,7 +28,7 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
 export async function createWebGPU (canvas: HTMLCanvasElement, input: Input, p: Parameters, variant: Variant): Promise<Backend> {
   validateInput(input, p)
   let failure: string | undefined
-  const device = await createDevice('webgpu', canvas, false, error => { failure = error.message })
+  const device = await createDevice('webgpu', canvas, true, error => { failure = error.message })
   const owned: Array<{ destroy(): void }> = []
   const own = <T extends { destroy(): void }>(resource: T): T => { owned.push(resource); return resource }
   const healthy = (): void => { if (failure || device.isLost) throw new Error(failure ?? 'WebGPU device lost') }
@@ -59,6 +60,21 @@ export async function createWebGPU (canvas: HTMLCanvasElement, input: Input, p: 
     }))
     const renderer = own(createStorageRenderer(device, renderSource, 'triangle-list', bindingLayout([['positions', 'read-only-storage'], ['view', 'uniform']])))
     let current = 0; let destroyed = false
+    const encodeForce = (forceTimes: TimestampWrites = {}): void => {
+      const forcePass = device.beginComputePass(forceTimes)
+      try {
+        force.dispatch(forcePass, { x: Math.ceil(count / 64), bindings: { positions: positions[current], samples, params, forces } })
+      } finally { forcePass.end() }
+    }
+    const encodeIntegration = (integrationTimes: TimestampWrites = {}): void => {
+      const integratePass = device.beginComputePass(integrationTimes)
+      try {
+        integrate.dispatch(integratePass, {
+          x: Math.ceil(count / 64),
+          bindings: { positions: positions[current], forces, params, output: positions[1 - current] },
+        })
+      } finally { integratePass.end() }
+    }
     await waitForGpu(device); healthy()
     return {
       name: `WebGPU ${variant}`,
@@ -71,18 +87,22 @@ export async function createWebGPU (canvas: HTMLCanvasElement, input: Input, p: 
       step (): void {
         healthy()
         if (!count) return
-        const forcePass = device.beginComputePass()
-        try {
-          force.dispatch(forcePass, { x: Math.ceil(count / 64), bindings: { positions: positions[current], samples, params, forces } })
-        } finally { forcePass.end() }
-        const integratePass = device.beginComputePass()
-        try {
-          integrate.dispatch(integratePass, {
-            x: Math.ceil(count / 64),
-            bindings: { positions: positions[current], forces, params, output: positions[1 - current] },
-          })
-        } finally { integratePass.end() }
+        encodeForce(); encodeIntegration()
         current = 1 - current; device.submit()
+      },
+      async measure (stage, operations): ReturnType<Backend['measure']> {
+        healthy()
+        if (!count) throw new Error('Cannot benchmark empty input')
+        const timing = await measureBatch(device, operations, (query, first, last) => {
+          encodeForce(timestamps(query, first, last && stage === 'force'))
+          if (stage === 'step') encodeIntegration(timestamps(query, false, last))
+        })
+        healthy()
+        const snapshot = {
+          forces: await readFloats(forces, input.points.byteLength),
+          positions: await readFloats(positions[stage === 'step' ? 1 - current : current], input.points.byteLength),
+        }
+        healthy(); return { timing, snapshot }
       },
       async read (): Promise<Snapshot> {
         healthy()

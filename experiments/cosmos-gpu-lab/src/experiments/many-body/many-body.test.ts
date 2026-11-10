@@ -71,6 +71,37 @@ for (const [name, create] of factories) {
         } finally { backend.destroy(); canvas.remove() }
       })
     }
+    it('times repeated frozen inputs, checks actual batch outputs and preserves evolving state', async context => {
+      if (name.startsWith('WebGPU')) {
+        const probe = await deviceForTest(true); probe?.destroy()
+        if (!probe) { context.skip(); return }
+      }
+      const canvas = document.createElement('canvas'); canvas.width = 480; canvas.height = 340
+      const input = createFixture('clusters', 65)
+      const backend = await create(canvas, input, PARAMETERS)
+      try {
+        backend.step()
+        const before = await backend.read()
+        const expected = referenceTick(input, before.positions, PARAMETERS)
+        for (const stage of ['force', 'step'] as const) {
+          const { timing, snapshot } = await backend.measure(stage, 3)
+          expect(timing.operations).toBe(3)
+          expect(timing.batchCompletionMs).toBeGreaterThanOrEqual(timing.batchSubmitMs)
+          if (timing.timerStatus === 'valid') {
+            expect(timing.batchGpuMs).not.toBeNull()
+            expect(timing.batchGpuMs!).toBeGreaterThanOrEqual(0)
+          } else expect(timing.batchGpuMs).toBeNull()
+          const expectedBatch = { forces: expected.forces, positions: stage === 'force' ? before.positions : expected.positions }
+          expect(compare(snapshot, expectedBatch)).toMatchObject({ valid: true })
+          expect(Array.from((await backend.read()).positions)).toEqual(Array.from(before.positions))
+        }
+        backend.step()
+        expect(compare(await backend.read(), expected)).toMatchObject({ valid: true })
+        await expect(backend.measure('force', 0)).rejects.toThrow('Batch')
+        await expect(backend.measure('force', 65)).rejects.toThrow('Batch')
+      } finally { backend.destroy() }
+    })
+
     it('enforces the production integration guard and matches a canonical evolved input', async context => {
       if (name.startsWith('WebGPU')) {
         const probe = await deviceForTest(); probe?.destroy()

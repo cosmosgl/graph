@@ -6,6 +6,7 @@ export const experiment = defineExperiment({
   tags: ['simulation', 'repulsion', 'WebGL', 'WebGPU'],
   create: async host => (await import('./view')).createManyBodyExperiment(host),
   pages: [
+    { kind: 'markdown', id: 'timing', title: 'Timing', load: async (): Promise<string> => (await import('./docs/timing.md?raw')).default },
     { kind: 'markdown', id: 'overview', title: 'Force contract', load: async (): Promise<string> => (await import('./docs/overview.md?raw')).default },
     { kind: 'markdown', id: 'research', title: 'Implementation choices', load: async (): Promise<string> => (await import('./docs/research.md?raw')).default },
     { kind: 'markdown', id: 'results', title: 'Validation and findings', load: async (): Promise<string> => (await import('./docs/results.md?raw')).default },

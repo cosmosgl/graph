@@ -18,7 +18,7 @@ This reuses source loads while retaining each target's accumulation order. It do
 
 [NVIDIA's N-body chapter](https://developer.nvidia.com/gpugems/gpugems3/part-v-physics-simulation/chapter-31-fast-n-body-simulation-cuda)
 explains cooperative source tiling and its memory-reuse motivation. We adopt that organization, not its gravitational
-force formula, historical hardware tuning or performance claims. Whether tiling helps this Cosmos workload still needs matched measurements.
+force formula, historical hardware tuning or performance claims. The [matched M3 measurements](#/many-body/docs/timing) show where tiling helped and where direct gather remained faster.
 
 ```flow
 Load · One source record per invocation into a 64-record tile

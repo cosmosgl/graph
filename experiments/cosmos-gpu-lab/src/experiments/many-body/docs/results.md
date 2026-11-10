@@ -1,6 +1,6 @@
 ## Initial validation
 
-The required-WebGPU Chromium suite passed **28 tests** across the CPU reference, production GLSL, both WGSL loops
+The required-WebGPU Chromium suite passed **36 tests** across the CPU reference, production GLSL, both WGSL loops
 and UI verdict handling using the software adapter. These are correctness checks, not native-GPU performance results.
 
 The fixtures cover a pair, deterministic uniform cloud, dense clusters, coincident points, pinning, NaN/finite absent
@@ -41,8 +41,8 @@ one-step checks. At tick 10, maximum position drift from the independent CPU tra
 lanes; WebGPU/WebGL position drift was **1.30e−4**. These are measured drift values, not a layout-quality acceptance rule.
 
 No context loss was observed in these runs. This is evidence for the isolated exact force on one native GPU, not a
-cross-browser stability guarantee or proof that the earlier weighted-link issue is resolved. No GPU timing comparison
-was performed, so these results do not establish whether tiling is faster.
+cross-browser stability guarantee or proof that the earlier weighted-link issue is resolved. These correctness runs do not establish whether tiling is faster. The separate
+[batched timing findings](#/many-body/docs/timing) record the subsequent matched native measurements.
 
 ## Acceptance rule
 
@@ -82,7 +82,7 @@ CPU reference calculation, GPU work, readback and drawing submission; it is not 
 ## Still to establish
 
 - Native coverage beyond this Apple M3 browser, including the 4,096-point boundary and longer runs.
-- Stable timing comparisons of direct and tiled loops at matched inputs, without readback/reference work inside the timed region.
+- Broader timing coverage beyond the [initial M3 sweeps](#/many-body/docs/timing), plus evolving workloads and rendering.
 - A justified trajectory-quality budget and longer combined-force runs.
 - Production hierarchical far-field and sampled near-field parity above the all-pairs threshold.
 - Composition with weighted links, center/gravity, cooling and remaining forces.
