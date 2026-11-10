@@ -1,4 +1,4 @@
-import { Buffer } from '@luma.gl/core'
+import { Buffer, type Device } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
 import { bindingLayout, createDevice, createStorageRenderer, readFloats, upload, waitForGpu } from '../../gpu/luma'
 import type { Backend } from './backend'
@@ -25,8 +25,13 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
   return vec4(input.color,1.);
 }`
 
-export async function createWebGPU (canvas: HTMLCanvasElement, input: Input, p: Parameters, variant: Variant): Promise<Backend> {
-  validateInput(input, p)
+export type WebGPUForceFactory = (resources: {
+  device: Device; positions: Buffer[]; samples: Buffer; forces: Buffer; count: number;
+}) => Promise<{ encode(source: number): void; destroy(): void }>
+export async function createWebGPU (
+  canvas: HTMLCanvasElement, input: Input, p: Parameters, variant: Variant, customForce?: WebGPUForceFactory
+): Promise<Backend> {
+  validateInput(input, p, customForce ? 16384 : 4096)
   let failure: string | undefined
   const device = await createDevice('webgpu', canvas, true, error => { failure = error.message })
   const owned: Array<{ destroy(): void }> = []
@@ -60,7 +65,9 @@ export async function createWebGPU (canvas: HTMLCanvasElement, input: Input, p: 
     }))
     const renderer = own(createStorageRenderer(device, renderSource, 'triangle-list', bindingLayout([['positions', 'read-only-storage'], ['view', 'uniform']])))
     let current = 0; let destroyed = false
+    const extension = customForce ? own(await customForce({ device, positions, samples, forces, count })) : undefined
     const encodeForce = (forceTimes: TimestampWrites = {}): void => {
+      if (extension) { extension.encode(current); return }
       const forcePass = device.beginComputePass(forceTimes)
       try {
         force.dispatch(forcePass, { x: Math.ceil(count / 64), bindings: { positions: positions[current], samples, params, forces } })
@@ -92,6 +99,7 @@ export async function createWebGPU (canvas: HTMLCanvasElement, input: Input, p: 
       },
       async measure (stage, operations): ReturnType<Backend['measure']> {
         healthy()
+        if (extension) throw new Error('Custom force timing is not implemented')
         if (!count) throw new Error('Cannot benchmark empty input')
         const timing = await measureBatch(device, operations, (query, first, last) => {
           encodeForce(timestamps(query, first, last && stage === 'force'))

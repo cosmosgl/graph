@@ -1,4 +1,4 @@
-import { Texture, UniformStore, type Buffer } from '@luma.gl/core'
+import { Texture, UniformStore, type Buffer, type Device, type Framebuffer } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import quadSource from '../../../../../src/modules/Shared/quad.vert?raw'
 import forceSource from '../../../../../src/modules/ForceManyBody/force-allpairs.frag?raw'
@@ -28,8 +28,11 @@ precision highp float;
 in vec3 color; out vec4 fragColor;
 void main() { if (length(gl_PointCoord * 2. - 1.) > 1.) discard; fragColor = vec4(color,1.); }`
 
-export async function createWebGL (canvas: HTMLCanvasElement, input: Input, p: Parameters): Promise<Backend> {
-  validateInput(input, p)
+export type WebGLForceFactory = (resources: {
+  device: Device; positions: Texture[]; random: Texture; exit: Texture; target: Framebuffer; count: number; size: number;
+}) => { encode(source: number): void; destroy(): void }
+export async function createWebGL (canvas: HTMLCanvasElement, input: Input, p: Parameters, customForce?: WebGLForceFactory): Promise<Backend> {
+  validateInput(input, p, customForce ? 16384 : 4096)
   let failure: string | undefined
   const device = await createDevice('webgl', canvas, true, error => { failure = error.message })
   const owned: Array<{ destroy(): void }> = []
@@ -109,7 +112,9 @@ export async function createWebGL (canvas: HTMLCanvasElement, input: Input, p: P
       return floats.slice(0, input.points.length)
     }
     let current = 0; let destroyed = false
+    const extension = customForce ? own(customForce({ device, positions, random, exit, target: targets[2], count, size })) : undefined
     const encodeForce = (forceTimes: TimestampWrites = {}): void => {
+      if (extension) { extension.encode(current); return }
       force.setBindings({ positionsTexture: positions[current], randomValues: random, exitTexture: exit })
       const forcePass = device.beginRenderPass({ ...forceTimes, framebuffer: targets[2], clearColor: [0, 0, 0, 0], clearDepth: false })
       try { force.draw(forcePass) } finally { forcePass.end() }
@@ -136,6 +141,7 @@ export async function createWebGL (canvas: HTMLCanvasElement, input: Input, p: P
       },
       async measure (stage, operations): ReturnType<Backend['measure']> {
         healthy()
+        if (extension) throw new Error('Custom force timing is not implemented')
         if (!count) throw new Error('Cannot benchmark empty input')
         const timing = await measureBatch(device, operations, (query, first, last) => {
           encodeForce(timestamps(query, first, last && stage === 'force'))
