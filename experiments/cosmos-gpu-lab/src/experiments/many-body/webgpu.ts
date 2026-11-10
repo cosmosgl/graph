@@ -27,13 +27,14 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
 
 export type WebGPUForceFactory = (resources: {
   device: Device; positions: Buffer[]; samples: Buffer; forces: Buffer; count: number;
-}) => Promise<{ encode(source: number): void; destroy(): void }>
+}) => Promise<{ prepare?(): void; encode(source: number, timing: TimestampWrites): void; destroy(): void }>
 export async function createWebGPU (
   canvas: HTMLCanvasElement, input: Input, p: Parameters, variant: Variant, customForce?: WebGPUForceFactory
 ): Promise<Backend> {
   validateInput(input, p, customForce ? 16384 : 4096)
   let failure: string | undefined
   const device = await createDevice('webgpu', canvas, true, error => { failure = error.message })
+  device.lost.then(info => { failure = `WebGPU device lost: ${info.reason} · ${info.message}` })
   const owned: Array<{ destroy(): void }> = []
   const own = <T extends { destroy(): void }>(resource: T): T => { owned.push(resource); return resource }
   const healthy = (): void => { if (failure || device.isLost) throw new Error(failure ?? 'WebGPU device lost') }
@@ -67,7 +68,7 @@ export async function createWebGPU (
     let current = 0; let destroyed = false
     const extension = customForce ? own(await customForce({ device, positions, samples, forces, count })) : undefined
     const encodeForce = (forceTimes: TimestampWrites = {}): void => {
-      if (extension) { extension.encode(current); return }
+      if (extension) { extension.encode(current, forceTimes); return }
       const forcePass = device.beginComputePass(forceTimes)
       try {
         force.dispatch(forcePass, { x: Math.ceil(count / 64), bindings: { positions: positions[current], samples, params, forces } })
@@ -94,17 +95,18 @@ export async function createWebGPU (
       step (): void {
         healthy()
         if (!count) return
+        extension?.prepare?.()
         encodeForce(); encodeIntegration()
         current = 1 - current; device.submit()
       },
       async measure (stage, operations): ReturnType<Backend['measure']> {
         healthy()
-        if (extension) throw new Error('Custom force timing is not implemented')
+        extension?.prepare?.()
         if (!count) throw new Error('Cannot benchmark empty input')
         const timing = await measureBatch(device, operations, (query, first, last) => {
           encodeForce(timestamps(query, first, last && stage === 'force'))
           if (stage === 'step') encodeIntegration(timestamps(query, false, last))
-        })
+        }).catch(error => { healthy(); throw error })
         healthy()
         const snapshot = {
           forces: await readFloats(forces, input.points.byteLength),

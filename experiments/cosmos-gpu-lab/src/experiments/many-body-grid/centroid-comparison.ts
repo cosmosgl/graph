@@ -2,8 +2,9 @@ import type { Input, Parameters } from '../many-body/data'
 import { compareArray, type Snapshot } from '../many-body/reference'
 import { compareContributions, type ContributionReport } from './contributions'
 import type { DivisionCheck } from './division-check'
+import { farResources } from './far-resources'
 import { createGridWebGPU } from './webgpu'
-import { layout, buildReference, type Frame } from './data'
+import { buildReference, type Frame } from './data'
 import { comparePresent, gridReference } from './reference'
 import { compareStructure } from './validation'
 import { centroidReference, centroidRounding } from './centroids'
@@ -23,7 +24,7 @@ export type CentroidEvaluation = {
   storedPassed: boolean; extraStorageBytes: number; extraDispatches: number; device: string;
 }
 async function evaluateCentroidPass (
-  input: Input, points: Float32Array, p: Parameters, frame: Frame, inline: Snapshot, mode: 'stored' | 'corrected' | 'materialized' | 'refined'
+  input: Input, points: Float32Array, p: Parameters, frame: Frame, inline: Snapshot, mode: 'stored' | 'corrected' | 'materialized' | 'refined' | 'streamed'
 ): Promise<CentroidEvaluation> {
   const expectedStructure = buildReference(points, frame)
   const expected = gridReference(input, points, p, frame, expectedStructure)
@@ -62,14 +63,15 @@ async function evaluateCentroidPass (
       stages,
       storedPassed: stored.valid && structural.valid && replayCheck.valid && centroidCheck.valid && (!contributions || contributions.replay.valid) &&
         (mode === 'stored' || (division?.mismatches === 0 && centroidRounding(centers, centroidReference(structure)).differingComponents === 0)),
-      extraStorageBytes: centers.byteLength + (mode === 'materialized' ? points.length / 4 * layout(points.length / 4).sizes.length * 100 * 8 : 0),
-      extraDispatches: mode === 'materialized' ? 2 : 1,
+      ...farResources(points.length / 4, mode),
       device: backend.info,
     }
   } finally { backend.destroy() }
 }
 
-export type CentroidComparison = CentroidEvaluation & { corrected: CentroidEvaluation; materialized: CentroidEvaluation; refined: CentroidEvaluation }
+export type CentroidComparison = CentroidEvaluation & {
+  corrected: CentroidEvaluation; materialized: CentroidEvaluation; refined: CentroidEvaluation; streamed: CentroidEvaluation;
+}
 export async function compareCentroidPass (
   input: Input, points: Float32Array, p: Parameters, frame: Frame, inline: Snapshot
 ): Promise<CentroidComparison> {
@@ -77,5 +79,6 @@ export async function compareCentroidPass (
   const corrected = await evaluateCentroidPass(input, points, p, frame, inline, 'corrected')
   const materialized = await evaluateCentroidPass(input, points, p, frame, inline, 'materialized')
   const refined = await evaluateCentroidPass(input, points, p, frame, inline, 'refined')
-  return { ...stored, corrected, materialized, refined }
+  const streamed = await evaluateCentroidPass(input, points, p, frame, inline, 'streamed')
+  return { ...stored, corrected, materialized, refined, streamed }
 }

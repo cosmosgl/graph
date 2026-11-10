@@ -5,7 +5,7 @@ import { bindingLayout, readFloats, upload } from '../../gpu/luma'
 import { nearLimit, type Input, type Parameters } from '../many-body/data'
 import { contributionShader } from './contributions'
 import { verifyCountDivision } from './division-check'
-import { refinedFarShader, materializedFarShader } from './far-shader'
+import { streamedFarShader, refinedFarShader, materializedFarShader } from './far-shader'
 import { storedCentroidShader, type CentroidMode } from './centroids'
 import { gpuTraceShader, stageNames } from './trace'
 import { layout, type Frame, type Structure } from './data'
@@ -15,6 +15,8 @@ export async function createGridWebGPU (
   canvas: HTMLCanvasElement, input: Input, p: Parameters, initial: Frame, centroidMode: CentroidMode = 'inline'
 ): Promise<GridBackend> {
   let sourceShader = centroidMode !== 'inline' ? storedCentroidShader(shader, centroidMode !== 'stored') : shader
+  const streamed = centroidMode === 'streamed'
+  if (streamed) sourceShader = streamedFarShader(sourceShader)
   if (centroidMode === 'refined') sourceShader = refinedFarShader(sourceShader)
   if (centroidMode === 'materialized') sourceShader = materializedFarShader(sourceShader)
   let readContributions: GridBackend['readContributions']
@@ -30,7 +32,9 @@ export async function createGridWebGPU (
       const l = layout(count)
       if (centroidMode !== 'inline' && centroidMode !== 'stored') verifyDivision = (): ReturnType<typeof verifyCountDivision> => verifyCountDivision(device)
       const storage = (bytes: number): Buffer => own(device.createBuffer({ byteLength: Math.max(16, bytes), usage: Buffer.STORAGE | Buffer.COPY_SRC }))
-      const farContributions = centroidMode === 'materialized' ? storage(count * l.sizes.length * 100 * 8) : undefined
+      const farContributions = centroidMode === 'materialized' || streamed ? storage(count * (streamed ? 1 : l.sizes.length) * 100 * 8) : undefined
+      const farSums = streamed ? storage(count * l.sizes.length * 8) : undefined
+      const levelQueries = streamed ? l.sizes.map((_, level) => own(upload(device, new Uint32Array([level, 0, 0, 0]), Buffer.UNIFORM))) : []
       const heads = storage(l.cells * 4); const links = storage(l.sizes.length * count * 4)
       const aggregates = storage(l.cells * 16); const slots = storage(l.finest ** 2 * frame.slots * 8)
       const centroids = centroidMode !== 'inline' ? storage(l.cells * 16) : undefined
@@ -43,9 +47,14 @@ export async function createGridWebGPU (
       ])
       if (centroids) bindings.push({ name: 'centroids', location: 11, type: 'storage', group: 0 })
       if (farContributions) bindings.push({ name: 'farContributions', location: 12, type: 'storage', group: 0 })
+      if (streamed) {
+        bindings.push(
+          { name: 'farLevel', location: 13, type: 'uniform', group: 0 },
+          { name: 'farSums', location: 14, type: 'storage', group: 0 })
+      }
       const forceNames = [
         'positions', 'samples', 'aggregates', 'slots', 'forces', 'levels', 'params', 'box',
-        ...(centroids ? ['centroids'] : []), ...(farContributions ? ['farContributions'] : []),
+        ...(centroids ? ['centroids'] : []), ...(farContributions && !streamed ? ['farContributions'] : []), ...(streamed ? ['farSums'] : []),
       ].filter(name => !farContributions || name !== 'aggregates')
       const used = [
         ['heads', 'params'],
@@ -53,12 +62,16 @@ export async function createGridWebGPU (
         ['positions', 'heads', 'links', 'aggregates', 'levels', 'params', 'box'],
         ['heads', 'links', 'slots', 'levels', 'params'],
         ...(centroids ? [['aggregates', 'params', 'centroids']] : []),
-        ...(farContributions ? [['positions', 'aggregates', 'levels', 'params', 'box', 'centroids', 'farContributions']] : []),
+        ...(farContributions
+          ? [['positions', 'aggregates', 'levels', 'params', 'box', 'centroids', 'farContributions',
+            ...(streamed ? ['farLevel'] : [])]]
+          : []),
+        ...(streamed ? [['positions', 'levels', 'params', 'box', 'centroids', 'farContributions', 'farLevel', 'farSums']] : []),
         forceNames,
       ]
       const kernels: Kernel[] = []
       const entryPoints = ['clear', 'linkPoints', 'aggregate', 'selectSlots',
-        ...(centroids ? ['centroidMain'] : []), ...(farContributions ? ['farMain'] : []), 'forceMain']
+        ...(centroids ? ['centroidMain'] : []), ...(farContributions ? ['farMain'] : []), ...(streamed ? ['accumulateMain'] : []), 'forceMain']
       for (const entryPoint of entryPoints) {
         kernels.push(own(await Kernel.createAsync(device, {
           id: `grid-${entryPoint}`,
@@ -98,7 +111,8 @@ export async function createGridWebGPU (
                 box,
                 trace,
                 ...(centroids ? { centroids } : {}),
-                ...(farContributions ? { farContributions } : {}),
+                ...(farContributions && !streamed ? { farContributions } : {}),
+                ...(farSums ? { farSums } : {}),
               },
             })
           } finally { pass.end() }
@@ -154,17 +168,24 @@ export async function createGridWebGPU (
       }
       readStructure = async (): Promise<Structure> => ({ aggregates: await readFloats(aggregates), slots: await readFloats(slots) })
       return {
-        encode (source): void {
-          lastSource = source
+        prepare (): void {
           params.write(new Float32Array([count, l.finest, l.sizes.length, frame.slots, p.alpha, p.repulsion, nearLimit(count, p),
             frame.precise ? 1 : 0, frame.seed, l.cells, 0, 0]))
           box.write(frame.bounds)
-          const sizes = [l.cells, count, l.cells, l.finest ** 2, ...(centroids ? [l.cells] : []), ...(farContributions ? [count] : []), count]
-          for (const [i, kernel] of kernels.entries()) {
-            if (!sizes[i]) continue
-            const pass = device.beginComputePass()
-            try {
-              kernel.dispatch(pass, {
+        },
+        encode (source, timing): void {
+          lastSource = source
+          const sizes = [l.cells, count, l.cells, l.finest ** 2,
+            ...(centroids ? [l.cells] : []), ...(farContributions ? [count] : []), ...(streamed ? [count] : []), count]
+          const dispatches = kernels.flatMap<{ i: number; farLevel?: Buffer }>((_, i) => {
+            if (streamed && entryPoints[i] === 'accumulateMain') return []
+            if (streamed && entryPoints[i] === 'farMain') return levelQueries.flatMap(farLevel => [{ i, farLevel }, { i: i + 1, farLevel }])
+            return [{ i, farLevel: undefined }]
+          }).filter(d => sizes[d.i] > 0)
+          const pass = device.beginComputePass(timing)
+          try {
+            for (const { i, farLevel } of dispatches) {
+              kernels[i].dispatch(pass, {
                 x: Math.ceil(sizes[i] / 64),
                 bindings: Object.fromEntries(Object.entries({
                   positions: positions[source],
@@ -179,10 +200,11 @@ export async function createGridWebGPU (
                   box,
                   ...(centroids ? { centroids } : {}),
                   ...(farContributions ? { farContributions } : {}),
+                  ...(streamed ? { farLevel, farSums } : {}),
                 }).filter(([name]) => used[i].includes(name))),
               })
-            } finally { pass.end() }
-          }
+            }
+          } finally { pass.end() }
         },
         destroy (): void { owned.reverse().forEach(resource => resource.destroy()) },
       }

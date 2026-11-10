@@ -1,6 +1,7 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import type { Snapshot } from '../many-body/reference'
 import type { Input, Parameters } from '../many-body/data'
+import { runPrecisionSweep } from './benchmark'
 import { compareCentroidPass } from './centroid-comparison'
 import { createTrace, type Trace } from './trace'
 import { createGridWebGL } from './webgl'
@@ -9,6 +10,7 @@ import { createGridExperiment } from './view'
 import { buildReference, type Frame, type Structure } from './data'
 import { gridReference } from './reference'
 import type { GridBackend } from './backend'
+vi.mock('./benchmark', () => ({ runPrecisionSweep: vi.fn(), MODE_LABELS: { streamed: 'Streamed contributions' } }))
 vi.mock('./centroid-comparison', () => ({ compareCentroidPass: vi.fn() }))
 vi.mock('./webgl', () => ({ createGridWebGL: vi.fn() }))
 vi.mock('./webgpu', () => ({ createGridWebGPU: vi.fn() }))
@@ -140,6 +142,7 @@ it('keeps a failed centroid variant distinct from a passing inline baseline and 
     ...candidate,
     materialized: { ...candidate, stored: output, storedPassed: true },
     refined: candidate,
+    streamed: candidate,
     corrected: {
       ...candidate,
       centroids: { differingComponents: 0, maxUlp: 0, maxError: 0 },
@@ -162,5 +165,44 @@ it('keeps a failed centroid variant distinct from a passing inline baseline and 
     expect(row.centroidComparison.materialized.storedPassed).toBe(true)
     expect(row.centroidComparison.corrected.centroids.differingComponents).toBe(0)
     expect(row.centroidComparison.corrected.storedPassed).toBe(false)
+  } finally { url.mockRestore(); click.mockRestore() }
+})
+
+it('exports partial timing evidence and the failure reason even without a simulation tick', async () => {
+  vi.mocked(runPrecisionSweep).mockImplementation(async ({ rows }) => {
+    const check = { valid: true, failures: 0, maxError: 0, worstIndex: -1 }
+    rows.push({
+      fixture: 'clusters',
+      count: 8192,
+      stage: 'step',
+      mode: 'streamed',
+      device: 'test device',
+      frame: { bounds: [-1, -1, 1, 1], seed: 0, slots: 8, precise: true },
+      operations: 4,
+      samples: [{ operations: 4, batchGpuMs: 20, batchSubmitMs: 1, batchCompletionMs: 25, timerStatus: 'valid' }],
+      validation: [{ valid: true, forces: check, positions: check }],
+      structure: { valid: true, aggregates: check, slotMismatches: 0, maxHashError: 0 },
+      centroidDifferences: 0,
+      extraStorageBytes: 8344576,
+      extraDispatches: 13,
+      summary: null,
+    })
+    throw new Error('Test device lost during next batch')
+  })
+  const page = await mount()
+  page.querySelector<HTMLButtonElement>('[data-action="benchmark"]')!.click(); await ready(page)
+  expect(page.querySelector('[data-output="status"]')!.textContent).toContain('Test device lost')
+  expect(page.querySelector('[data-output="timing"]')!.textContent).toContain('1/7 samples')
+  expect(page.querySelector<HTMLButtonElement>('[data-action="export"]')!.disabled).toBe(false)
+  let captured: Blob | undefined
+  const url = vi.spyOn(URL, 'createObjectURL').mockImplementation(blob => { captured = blob as Blob; return 'blob:test' })
+  const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  try {
+    page.querySelector<HTMLButtonElement>('[data-action="export"]')!.click()
+    const result = JSON.parse(await captured!.text())
+    expect(result.rows).toHaveLength(0)
+    expect(result.precisionTimings[0].samples).toHaveLength(1)
+    expect(result.precisionTimings[0].summary).toBeNull()
+    expect(result.precisionTimingError).toContain('Test device lost')
   } finally { url.mockRestore(); click.mockRestore() }
 })

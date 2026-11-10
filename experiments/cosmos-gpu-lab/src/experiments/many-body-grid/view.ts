@@ -2,6 +2,7 @@ import type { ExperimentInstance } from '../../runtime/experiment'
 import { createFixture, PARAMETERS, type Fixture } from '../many-body/data'
 import { fitView, type View } from '../many-body/backend'
 import { compareArray, TOLERANCE, type Snapshot } from '../many-body/reference'
+import { runPrecisionSweep, MODE_LABELS, type PrecisionTimingRow } from './benchmark'
 import { compareCentroidPass } from './centroid-comparison'
 import { diagnose } from './diagnostic'
 import { buildReference, frameFor, layout } from './data'
@@ -39,7 +40,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     </div>
     <div class="demo-toolbar playback-toolbar"><div class="controls"><button data-action="step" class="button-primary">Step + validate</button>
       <button data-action="centroids">Compare centroid pass</button><button data-action="trace">Trace next tick</button>
-      <button data-action="three">3 validated ticks</button>
+      <button data-action="three">3 validated ticks</button><button data-action="benchmark">Benchmark precision</button>
       <button data-action="stop" disabled>Stop</button>
       <button data-action="reset">Reset / retry devices</button><button data-action="export" disabled>Export JSON</button>
       </div><span class="tick-counter">Tick <strong data-output="tick">0</strong></span></div>
@@ -55,8 +56,12 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     <div class="many-body-results" data-output="approximation"></div>
     <div class="many-body-results precision-trace" data-output="centroids"></div>
     <div class="many-body-results precision-trace" data-output="trace"></div>
+    <section class="many-body-results precision-trace" data-output="timing" aria-label="Precision performance comparison">
+      <p class="demo-note">Benchmark precision compares inline, stored and streamed contributions at 8,192 and 16,384 points,
+        uniform and clustered. Batched GPU timestamps cover grid construction + force, and complete steps. Rendering is excluded.
+        Stop keeps partial results; Export JSON includes timings and validation.</p></section>
     <p class="demo-note">Port checks use every present target and every cell/slot. Approximation error uses up to 64 evenly spaced target indices,
-      each evaluated against every source. This is a diagnostic subset, not a whole-layout accuracy guarantee or a GPU timing benchmark.</p>
+      each evaluated against every source. Approximation-error rows are a diagnostic subset, not a whole-layout accuracy guarantee.</p>
   `
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
   const fixture = el<HTMLSelectElement>('[data-control="fixture"]'); const count = el<HTMLSelectElement>('[data-control="count"]')
@@ -66,10 +71,12 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
   let input = createFixture('uniform', 8192); let cpu = input.points; let tick = 0; let busy = false; let stopped = false; let destroyed = false
   const lanes: Array<{ name: string; backend: GridBackend; positions: Float32Array }> = []
   const errors: Record<string, string> = {}; const rows: Array<Record<string, unknown>> = []
+  const timingRows: PrecisionTimingRow[] = []
+  let timingError: string | undefined
   const controls = (): void => {
     host.querySelectorAll<HTMLButtonElement | HTMLSelectElement>('button,select').forEach(c => { c.disabled = busy })
     el<HTMLButtonElement>('[data-action="stop"]').disabled = !busy
-    el<HTMLButtonElement>('[data-action="export"]').disabled = busy || !rows.length
+    el<HTMLButtonElement>('[data-action="export"]').disabled = busy || (!rows.length && !timingRows.length)
     count.disabled = busy || ['edge-cases', 'boundary'].includes(fixture.value)
   }
   const cleanup = (): void => { lanes.splice(0).forEach(l => l.backend.destroy()) }
@@ -219,6 +226,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
         const candidates = [
           { label: 'Stored', result: c }, { label: 'Corrected division', result: c.corrected },
           { label: 'Refined far arithmetic', result: c.refined }, { label: 'Refined + stored contributions', result: c.materialized },
+          { label: 'Streamed contributions', result: c.streamed },
         ]
         const comparisonRows = [{ label: 'Inline', check: c.inline }, ...candidates.map(v => ({ label: v.label, check: v.result.stored }))]
           .map(({ label, check }) => `<tr><td>${label}</td><td>${check.forces.failures} / ${num(check.forces.maxError)}</td>
@@ -242,7 +250,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
                 Differences here are exact-value differences, not tolerance failures.</p></details>`
     : ''}
             <p class="demo-note">Extra working storage: ${(r.extraStorageBytes / 1048576).toFixed(2)} MiB ·
-              ${r.extraDispatches} extra dispatch${r.extraDispatches === 1 ? '' : 'es'} per tick. GPU cost unmeasured.</p>
+              ${r.extraDispatches} extra dispatch${r.extraDispatches === 1 ? '' : 'es'} per tick. See Benchmark precision for measured cost.</p>
             <details><summary>${label} · inspect force stages</summary>
               <table><thead><tr><th>Stage</th><th>Failures</th><th>Max error</th><th>Worst budget ratio</th><th>Point / axis</th></tr></thead>
                 <tbody>${r.stages.map(s => `<tr><td>${s.stage}</td><td>${s.check.failures}</td><td>${num(s.check.maxError)}</td>
@@ -285,7 +293,8 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     status.textContent = `${comparingCentroids ? 'Inline baseline: ' : ''}${verdict} · tick ${tick}. ${comparingCentroids
       ? `Stored centroid variant: ${centroidError ? 'unavailable' : centroidComparison?.storedPassed ? 'Passed' : 'Mismatch'}; ` +
         `corrected division: ${centroidError ? 'unavailable' : centroidComparison?.corrected.storedPassed ? 'Passed' : 'Mismatch'}; ` +
-        `refined + stored contributions: ${centroidError ? 'unavailable' : centroidComparison?.materialized.storedPassed ? 'Passed' : 'Mismatch'}.`
+        `refined + stored contributions: ${centroidError ? 'unavailable' : centroidComparison?.materialized.storedPassed ? 'Passed' : 'Mismatch'}; ` +
+        `streamed: ${centroidError ? 'unavailable' : centroidComparison?.streamed.storedPassed ? 'Passed' : 'Mismatch'}.`
       : 'Approximation error is reported separately.'}`
     return passed
   }
@@ -306,6 +315,49 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       if (stopped && !destroyed) status.textContent = `Stopped at tick ${tick}; completed results can be exported.`
     })
   })
+  const renderTiming = (): void => {
+    const num = (n: number | null | undefined): string => n === null || n === undefined ? 'unavailable' : n.toFixed(3)
+    el('[data-output="timing"]').innerHTML = `<h3>Precision performance</h3>
+      <p class="demo-note">GPU milliseconds per repeated fixed-input operation: seven samples after two warmups, common batch per case,
+        rotating variant order. Readback, validation, uploads and rendering are outside the GPU interval.
+        Inline is a control; a CPU mismatch disqualifies it as a precision replacement. Stop retains partial rows.</p>
+      <table><thead><tr><th>Workload</th><th>Variant</th><th>GPU ms · median [range]</th><th>CPU check</th><th>Extra MiB</th></tr></thead>
+      <tbody>${timingRows.map(r => {
+    const valid = r.validation.length && r.validation.every(v => v.valid) && r.structure?.valid &&
+      (r.mode === 'inline' || r.centroidDifferences === 0)
+    const range = r.summary?.gpuRange
+    return `<tr><td>${r.fixture} · ${r.count} · ${r.stage === 'force' ? 'grid + force' : 'step'}</td>
+          <td>${MODE_LABELS[r.mode]}</td><td>${r.summary ? num(r.summary.gpuMs) : `${r.samples.length}/7 samples`}
+          ${range ? `[${num(range[0])}–${num(range[1])}]` : ''}</td>
+          <td>${r.validation.length ? valid ? 'Pass' : 'FAIL' : 'pending'}</td><td>${(r.extraStorageBytes / 1048576).toFixed(2)}</td></tr>`
+  }).join('')}</tbody></table>
+      <p class="demo-note">The fixed sweep uses eight samples per cell and precise quality, independent of the demo controls.
+        “Unavailable” means no valid GPU timer; CPU completion measurements remain separate in JSON.
+        Figures include the diagnostic dense-cell builder. They are not isolated far-force timings or independent trajectories.</p>`
+  }
+  el('[data-action="benchmark"]').addEventListener('click', () => {
+    task(async () => {
+      timingRows.length = 0; timingError = undefined; renderTiming()
+      const panel = el('[data-output="timing"]')
+      panel.style.scrollMarginTop = `${el('.playback-toolbar').offsetHeight + 16}px`
+      panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      try {
+        await runPrecisionSweep({
+          rows: timingRows,
+          cancelled: () => stopped || destroyed,
+          progress: message => { if (!destroyed) { status.textContent = message; renderTiming() } },
+        })
+        if (!destroyed) {
+          status.textContent = stopped
+            ? 'Benchmark stopped; partial results can be exported.'
+            : 'Precision benchmark complete; validation is shown beside each timing.'
+        }
+      } catch (error) {
+        timingError = error instanceof Error ? error.message : String(error)
+        throw error
+      } finally { if (!destroyed) renderTiming() }
+    })
+  })
   el('[data-action="stop"]').addEventListener('click', () => { stopped = true })
   el('[data-action="reset"]').addEventListener('click', () => { task(setup) })
   el('[data-action="export"]').addEventListener('click', () => {
@@ -320,6 +372,8 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       tolerance: TOLERANCE,
       devices: Object.fromEntries(lanes.map(l => [l.name, l.backend.info])),
       rows,
+      precisionTimings: timingRows,
+      precisionTimingError: timingError,
       errors,
     }
     const serialized = JSON.stringify(capture, (_key, value) => typeof value === 'number' && !Number.isFinite(value) ? String(value) : value, 2)

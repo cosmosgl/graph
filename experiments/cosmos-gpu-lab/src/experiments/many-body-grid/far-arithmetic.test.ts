@@ -49,43 +49,64 @@ it('rounds squared significands exactly across every normal-result exponent, bot
   } finally { owned.reverse().forEach(r => r.destroy()); device.destroy() }
 })
 
-for (const count of [8192, 16384]) {
-  it(`${count} dense points: refined stored contributions pass three CPU-anchored ticks at the original tolerance`, async () => {
-    const input = createFixture('clusters', count)
-    let points = input.points
-    const backend = await createGridWebGPU(document.createElement('canvas'), input, PARAMETERS, frameFor(points, 0), 'materialized')
-    try {
-      for (let tick = 0; tick < 3; tick++) {
-        const frame = frameFor(points, tick)
-        backend.setPositions(points); backend.setFrame(frame); backend.step()
-        const actual = await backend.read(); const structure = await backend.readStructure()
-        expect(compareStructure(structure, buildReference(points, frame)).valid).toBe(true)
-        expect(centroidRounding(await backend.readCentroids!(), centroidReference(structure)).differingComponents).toBe(0)
-        const expectedTrace = createTrace(count)
-        const expected = gridReference(input, points, PARAMETERS, frame, buildReference(points, frame), expectedTrace)
-        const result = comparePresent(actual, expected, points)
-        expect(result.valid, JSON.stringify({ tick, result })).toBe(true)
-        const trace = await backend.diagnose!()
-        expect(comparePresent({ ...actual, forces: trace.forces }, actual, points).valid).toBe(true)
-        const stages = traceChecks(trace.trace, expectedTrace, points)
-        expect(stages.every(stage => stage.check.valid), JSON.stringify({ tick, stages })).toBe(true)
-        points = expected.positions
-      }
-    } finally { backend.destroy() }
-  })
-}
-for (const fixture of ['uniform', 'coincident', 'boundary', 'edge-cases'] as const) {
-  for (const precise of [true, false]) {
-    it(`${fixture}, precise=${precise}: preserves the original force law and absent/pinned points`, async () => {
-      const input = createFixture(fixture, 65)
-      const frame = frameFor(input.points, 0, 8, precise)
-      const backend = await createGridWebGPU(document.createElement('canvas'), input, PARAMETERS, frame, 'materialized')
+for (const mode of ['materialized', 'streamed'] as const) {
+  for (const count of [8192, 16384]) {
+    it(`${mode}, ${count} dense points: refined stored contributions pass three CPU-anchored ticks at the original tolerance`, async () => {
+      const input = createFixture('clusters', count)
+      let points = input.points
+      const backend = await createGridWebGPU(document.createElement('canvas'), input, PARAMETERS, frameFor(points, 0), mode)
       try {
-        backend.step()
-        const expected = gridReference(input, input.points, PARAMETERS, frame, buildReference(input.points, frame))
-        const result = comparePresent(await backend.read(), expected, input.points)
-        expect(result.valid, JSON.stringify(result)).toBe(true)
+        for (let tick = 0; tick < 3; tick++) {
+          const frame = frameFor(points, tick)
+          backend.setPositions(points); backend.setFrame(frame); backend.step()
+          const actual = await backend.read(); const structure = await backend.readStructure()
+          expect(compareStructure(structure, buildReference(points, frame)).valid).toBe(true)
+          expect(centroidRounding(await backend.readCentroids!(), centroidReference(structure)).differingComponents).toBe(0)
+          const expectedTrace = createTrace(count)
+          const expected = gridReference(input, points, PARAMETERS, frame, buildReference(points, frame), expectedTrace)
+          const result = comparePresent(actual, expected, points)
+          expect(result.valid, JSON.stringify({ tick, result })).toBe(true)
+          const trace = await backend.diagnose!()
+          expect(comparePresent({ ...actual, forces: trace.forces }, actual, points).valid).toBe(true)
+          const stages = traceChecks(trace.trace, expectedTrace, points)
+          expect(stages.every(stage => stage.check.valid), JSON.stringify({ tick, stages })).toBe(true)
+          points = expected.positions
+        }
       } finally { backend.destroy() }
     })
   }
+  for (const fixture of ['uniform', 'coincident', 'boundary', 'edge-cases'] as const) {
+    for (const precise of [true, false]) {
+      it(`${mode}, ${fixture}, precise=${precise}: preserves the original force law and absent/pinned points`, async () => {
+        const input = createFixture(fixture, 65)
+        const frame = frameFor(input.points, 0, 8, precise)
+        const backend = await createGridWebGPU(document.createElement('canvas'), input, PARAMETERS, frame, mode)
+        try {
+          backend.step()
+          const expected = gridReference(input, input.points, PARAMETERS, frame, buildReference(input.points, frame))
+          const result = comparePresent(await backend.read(), expected, input.points)
+          expect(result.valid, JSON.stringify(result)).toBe(true)
+        } finally { backend.destroy() }
+      })
+    }
+  }
+}
+
+for (const mode of ['inline', 'materialized', 'streamed'] as const) {
+  it(`${mode}: timestamps span batched grid work without advancing the source positions`, async () => {
+    const input = createFixture('uniform', 65); const frame = frameFor(input.points, 0)
+    const backend = await createGridWebGPU(document.createElement('canvas'), input, PARAMETERS, frame, mode)
+    const expected = gridReference(input, input.points, PARAMETERS, frame, buildReference(input.points, frame))
+    try {
+      for (const stage of ['force', 'step'] as const) {
+        const result = await backend.measure(stage, 4)
+        expect(comparePresent(result.snapshot, stage === 'force' ? { ...expected, positions: input.points } : expected, input.points).valid).toBe(true)
+        expect(['valid', 'unavailable']).toContain(result.timing.timerStatus)
+        expect(result.timing.batchGpuMs === null || result.timing.batchGpuMs >= 0).toBe(true)
+        expect((await backend.read()).positions).toEqual(input.points)
+      }
+      backend.step()
+      expect(comparePresent(await backend.read(), expected, input.points).valid).toBe(true)
+    } finally { backend.destroy() }
+  })
 }
