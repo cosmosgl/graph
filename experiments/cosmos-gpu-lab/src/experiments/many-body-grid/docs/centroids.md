@@ -1,5 +1,8 @@
 ## Does a separate centroid pass fix dense precision?
 
+The follow-up [far-field correction](#/many-body-grid/docs/far-field) now passes both checked dense sizes by refining
+force arithmetic and storing contributions before accumulation. The division-only findings below remain unchanged.
+
 **The ordinary separate pass does not fix it on the checked Apple M3 cases.** Storing centroids prevents the centroid division from being fused with the later
 position subtraction, but it does not make GPU division match the CPU reference. At 8,192 clustered points, the stored
 variant has more failing force and position components than the inline baseline. At 16,384 it has slightly fewer,
@@ -7,7 +10,7 @@ but still fails. The tolerance is unchanged. A targeted integer-count division c
 but still leaves a few dense force/position failures; see the correction results below.
 
 Open the [demo](#/many-body-grid), choose clusters, 8,192 points, eight samples and precise quality. Reset, then click
-**Compare centroid pass**. The table compares three WebGPU executions on identical input positions, bounds, seed and
+**Compare centroid pass**. The table includes the three centroid variants plus two far-field variants on identical input positions, bounds, seed and
 sample budget. The canvases keep the inline baseline; the stored variant is a separate temporary backend used for
 validation. No alternative replaces the production WebGL comparison or the original CPU oracle.
 
@@ -136,15 +139,14 @@ and bit loop have **not been timed**. It remains an opt-in candidate, not the de
 ## Decision and reproduction
 
 Keep inline evaluation as the default and retain the separate pass as an opt-in diagnostic. Do not promote it as a
-precision fix or relax the tolerance. The next focused investigation should compare individual cell contributions after corrected division,
-then verify any further arithmetic correction against the original reference, production behavior
-and GPU cost. A generic extra pass is not enough.
+precision fix or relax the tolerance. The [per-cell investigation](#/many-body-grid/docs/far-field) now isolates downstream rounding and demonstrates a passing candidate.
+Its extra memory and GPU time still need evaluation. A generic extra pass alone is not enough.
 
 ```sh
 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/many-body-grid/centroids.test.ts
 ```
 
-**Export JSON** includes all three verdicts, centroid rounding statistics, stage summaries, the same-centroid CPU check and
+**Export JSON** includes all five verdicts, centroid rounding statistics, stage summaries, the same-centroid CPU check and
 resource counts. The row's ordinary `passed` verdict still refers to the displayed inline comparison; the candidate has
 its own `centroidComparison.storedPassed`. The corrected result is stored separately under
 `centroidComparison.corrected`, including its division corpus and unchanged force verdict. An unavailable candidate is reported separately. Keep machine captures local;

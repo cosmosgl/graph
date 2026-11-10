@@ -43,7 +43,7 @@ implementation and comparison. These are evidence levels, not a percentage of th
 | Circle point rendering | **Demonstrated:** matched WebGL sprites and WebGPU instanced circles | Complete shapes, strokes, images, transitions and render-order behavior |
 | Spatial indexing | **Demonstrated:** count/scan/scatter with variable cell occupancy | Establish production bounds, capacity, update and memory policies |
 | Local interaction and integration | **Partial:** CPU-validated local forces feeding GPU rendering | Preserve actual Cosmos integration and collision semantics |
-| Global many-body force | **Partial:** [exact](#/many-body) and [hierarchical](#/many-body-grid) comparisons use production GLSL, WGSL and CPU | Resolve dense CPU-reference precision; validate GPU bounds, adaptive sampling, scale and convergence |
+| Global many-body force | **Partial:** [exact](#/many-body) and [hierarchical](#/many-body-grid) comparisons use production GLSL, WGSL and CPU | Measure the passing precision candidate’s cost; validate GPU bounds, adaptive sampling, scale and convergence |
 | Link forces and graph topology | **Partial:** ordered Cosmos spring passes validated against production GLSL and CPU; stable directional CSR and replacement | Long-term trajectories, state-preserving updates and composition with other forces; native execution limits |
 | Complete rendering and interaction | **Partial:** circles and minimal straight links read GPU-resident state | Full point/link styling, picking, hover, drag, selection, tracking and overlays |
 | luma resource and execution APIs | **Partial:** all isolated experiments use luma resources, models/kernels, passes, fences and timestamps | Host ownership, device loss, reusable scheduling and complete-engine integration |
@@ -115,7 +115,10 @@ the app keeps that mismatch visible. [Stage tracing](#/many-body-grid/docs/preci
 to the far field after the 64×64 level; centroid evaluation order explains much, but not all, of the discrepancy.
 [Storing centroids separately](#/many-body-grid/docs/centroids) does not resolve the dense mismatch; GPU division
 rounding remains a major contributor. A targeted integer-count divider now reproduces the checked centroid bits exactly,
-but leaves a few dense force/position failures under the original budget. [Detailed findings](#/many-body-grid/docs/results).
+but leaves a few dense force/position failures under the original budget. A further
+[far-field candidate](#/many-body-grid/docs/far-field) now passes both dense counts over three CPU-anchored M3 ticks,
+with refined arithmetic and stored contributions. Its 38.83 / 76.33 MiB additional memory and unmeasured GPU time keep
+it a correctness demonstration, not a production replacement. [Detailed findings](#/many-body-grid/docs/results).
 
 **New migration question:** the exact radius split and grid near-field partition can produce substantially different
 capped forces in dense data. Matching the WebGL implementation is necessary, but is not enough to establish layout
@@ -282,7 +285,7 @@ performance and memory meet the target budgets; supported devices are tested; an
 | --- | --- | --- |
 | Extend | Weighted-link compute-to-render path through luma | Can its demonstrated resource contract handle shared ownership, device loss and live updates? |
 | Extend | Weighted springs at larger sizes and over longer trajectories | Can ordered hub gathers and state-preserving topology updates meet the engine budget? |
-| First | Resolve [hierarchical repulsion](#/many-body-grid/docs/results) precision and compare combined-force convergence | Can we preserve production behavior and quality across the exact-to-grid transition? |
+| First | Measure [hierarchical repulsion](#/many-body-grid/docs/far-field) precision cost and compare combined-force convergence | Can we preserve production behavior and quality across the exact-to-grid transition? |
 | Then | GPU bounds, adaptive samples and parallel hierarchy construction | Can the same approximation scale without CPU synchronization or serial dense-cell work? |
 | Alongside simulation | Links, richer points and picking from shared GPU state | Can Cosmos render and interact correctly without transferring all positions back? |
 | Then | Combined engine workload on multiple native GPUs | Is the whole migration practical for the intended users and graph sizes? |

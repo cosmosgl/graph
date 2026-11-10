@@ -138,6 +138,8 @@ it('keeps a failed centroid variant distinct from a passing inline baseline and 
   }
   vi.mocked(compareCentroidPass).mockResolvedValue({
     ...candidate,
+    materialized: { ...candidate, stored: output, storedPassed: true },
+    refined: candidate,
     corrected: {
       ...candidate,
       centroids: { differingComponents: 0, maxUlp: 0, maxError: 0 },
@@ -157,6 +159,7 @@ it('keeps a failed centroid variant distinct from a passing inline baseline and 
     expect(row.passed).toBe(true)
     expect(row.centroidComparison.storedPassed).toBe(false)
     expect(row.centroidComparison.stored.forces.failures).toBe(2)
+    expect(row.centroidComparison.materialized.storedPassed).toBe(true)
     expect(row.centroidComparison.corrected.centroids.differingComponents).toBe(0)
     expect(row.centroidComparison.corrected.storedPassed).toBe(false)
   } finally { url.mockRestore(); click.mockRestore() }

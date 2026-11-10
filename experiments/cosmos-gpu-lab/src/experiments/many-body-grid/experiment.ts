@@ -6,6 +6,7 @@ export const experiment = defineExperiment({
   tags: ['simulation', 'repulsion', 'WebGL', 'WebGPU'],
   create: async host => (await import('./view')).createGridExperiment(host),
   pages: [
+    { kind: 'markdown', id: 'far-field', title: 'Far-field precision', load: async (): Promise<string> => (await import('./docs/far-field.md?raw')).default },
     {
       kind: 'markdown',
       id: 'centroids',
