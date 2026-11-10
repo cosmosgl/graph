@@ -120,7 +120,10 @@ but leaves a few dense force/position failures under the original budget. A furt
 with refined arithmetic and stored contributions. A [streamed variant](#/many-body-grid/docs/precision-cost) reduces
 extra memory from 38.83 / 76.33 MiB to 7.96 / 14.58 MiB. Two native M3 sweeps show comparable complete-step GPU
 time between corrected variants, with unchanged validation. Both still cost more than the failing inline control;
-independent trajectories and scalable construction remain necessary before considering production adoption. [Detailed findings](#/many-body-grid/docs/results).
+[Independent trajectories](#/repulsion-trajectories/docs/findings) now pass all corrected local checks over 20 native
+M3 ticks at both dense sizes, with identical full-buffer and streamed outputs. A coincident fixture nevertheless
+accumulates substantial CPU-path drift while local checks pass. Combined-force convergence, longer runs and scalable
+construction remain necessary before considering production adoption. [Detailed findings](#/many-body-grid/docs/results).
 
 **New migration question:** the exact radius split and grid near-field partition can produce substantially different
 capped forces in dense data. Matching the WebGL implementation is necessary, but is not enough to establish layout
@@ -287,7 +290,7 @@ performance and memory meet the target budgets; supported devices are tested; an
 | --- | --- | --- |
 | Extend | Weighted-link compute-to-render path through luma | Can its demonstrated resource contract handle shared ownership, device loss and live updates? |
 | Extend | Weighted springs at larger sizes and over longer trajectories | Can ordered hub gathers and state-preserving topology updates meet the engine budget? |
-| First | Validate [hierarchical repulsion](#/many-body-grid/docs/precision-cost) in independent trajectories and compare combined-force convergence | Can we preserve production behavior and quality across the exact-to-grid transition? |
+| First | Build combined-force convergence checks after the [independent repulsion trajectories](#/repulsion-trajectories/docs/findings) | Can we preserve production behavior and quality across the exact-to-grid transition? |
 | Then | GPU bounds, adaptive samples and parallel hierarchy construction | Can the same approximation scale without CPU synchronization or serial dense-cell work? |
 | Alongside simulation | Links, richer points and picking from shared GPU state | Can Cosmos render and interact correctly without transferring all positions back? |
 | Then | Combined engine workload on multiple native GPUs | Is the whole migration practical for the intended users and graph sizes? |

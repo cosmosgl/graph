@@ -1840,3 +1840,7 @@ button[data-action="play"][aria-pressed="true"] {
 .precision-trace summary { padding: 12px 0; cursor: pointer; font-size: 14px; }
 .precision-trace h3 { margin: 24px 0 12px; font-size: 16px; font-weight: 500; }
 .precision-trace details details { margin: 12px 0 24px; }
+
+.trajectory-panels canvas { max-height: 220px; object-fit: contain; }
+.trajectory-chart { max-width: 840px; margin-block: 2rem; }
+.trajectory-chart svg { display: block; width: 100%; color: #a8aeb8; }
