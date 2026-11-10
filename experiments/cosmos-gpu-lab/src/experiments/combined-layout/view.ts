@@ -10,12 +10,17 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     Each backend evolves independently. The alpha = 1 probe tests whether a cooled layout still moves when forces regain full strength.</p>
     <div class="scale-toolbar">
       <label>Graph <select data-control="fixture">${['chain', 'star', 'communities', 'pinned'].map(f => `<option>${f}</option>`).join('')}</select></label>
-      <label>Points <select data-control="count"><option>32</option><option selected>128</option><option>512</option></select></label>
+      <label>Points <select data-control="count"><option>32</option><option selected>128</option><option>512</option><option>2048</option></select></label>
       <label>Cooling schedule <select data-control="decay"><option value="100">100 ticks</option><option value="300">300 ticks</option></select></label>
+      <label>Validation <select data-control="checkpoint"><option value="10">Every 10 ticks + first / final</option>
+        <option value="1">Every tick · diagnostic</option></select></label>
     </div>
+    <p class="demo-note">Checkpoint mode checks all four stages and the whole tick at selected ticks only. Other ticks are unvalidated.
+      CPU continues independently; bounds and final metrics still require readback. All force tolerances stay unchanged.</p>
     <div class="demo-toolbar playback-toolbar"><div class="controls"><button data-action="step">Step + validate</button>
       <button data-action="run" class="button-primary">Run cooling schedule</button><button data-action="stop" disabled>Stop</button>
       <button data-action="probe">Probe at α = 1</button>
+      <button data-action="replay" disabled>Replay first failures</button>
       <button data-action="reset">Reset / retry</button><button data-action="export" disabled>Export JSON</button></div>
       <span class="tick-counter">Tick <strong data-output="tick">0</strong> · α <strong data-output="alpha">1</strong></span></div>
     <p data-output="status" class="many-body-status" role="status">Preparing combined simulation…</p>
@@ -24,8 +29,9 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       <canvas data-canvas="${name}" width="480" height="340" aria-label="${LABELS[name]} combined layout"></canvas>
       <p class="demo-note" data-info="${name}"></p></article>`).join('')}</section>
     <p class="demo-note">Shared camera; blue free points, orange pinned. GPU points and links use resident positions.
-      Every sub-step is read back for validation. This is a correctness and layout study, not an FPS benchmark.</p>
+      Checkpoint sub-steps are read back for validation. This is a correctness and layout study, not an FPS benchmark.</p>
     <div data-output="results" class="many-body-results"></div><div data-output="probe" class="many-body-results"></div>
+    <div data-output="captures" class="many-body-results"></div><div data-output="replay" class="many-body-results"></div>
     <div data-output="chart" class="trajectory-chart"></div>`
   const el = <T extends HTMLElement>(q: string): T => host.querySelector<T>(q)!
   const control = (name: string): HTMLSelectElement => el(`[data-control="${name}"]`)
@@ -36,14 +42,17 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     host.querySelectorAll<HTMLButtonElement | HTMLSelectElement>('button,select').forEach(c => { c.disabled = busy })
     el<HTMLButtonElement>('[data-action="stop"]').disabled = !busy
     el<HTMLButtonElement>('[data-action="export"]').disabled = busy || (!session?.rows.length && !probe)
+    el<HTMLButtonElement>('[data-action="replay"]').disabled = busy || !session || !Object.keys(session.captures).length
     el<HTMLButtonElement>('[data-action="run"]').disabled = busy || !session || session.rows.length >= session.settings.decay
   }
-  const checksTable = (row: Row): string => `<details><summary>Inspect stage and whole-tick checks</summary>
+  const checksTable = (row: Row): string => !row.checked
+    ? '<p class="demo-note">This tick was not validated.</p>'
+    : `<details><summary>Inspect stage and whole-tick checks</summary>
     <table><thead><tr><th>Backend / stage</th><th>Force failures</th><th>Position failures</th><th>Structure / centroids</th></tr></thead><tbody>
     ${row.results.map(r => `${r.stages.map(s => `<tr><td>${LABELS[r.name]} · ${s.stage}</td><td>${s.forces.failures}</td>
       <td>${s.positions.failures}</td>
       <td>${s.structure ? `${s.structure.valid ? 'Pass' : 'FAIL'} / ${s.centroidDifferences ?? 'not stored'}` : '—'}</td></tr>`).join('')
-  }<tr><td>${LABELS[r.name]} · full tick from own starting positions</td><td>—</td><td>${r.wholeTick.failures}</td><td>—</td></tr>`).join('')}
+  }<tr><td>${LABELS[r.name]} · full tick from own starting positions</td><td>—</td><td>${r.wholeTick?.failures ?? '—'}</td><td>—</td></tr>`).join('')}
     </tbody></table></details>`
   const render = (): void => {
     if (!session || destroyed) return
@@ -69,10 +78,12 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       ctx.fillStyle = cpu[i + 2] > 0.5 ? '#ffb866' : '#9fb5d5'; ctx.beginPath(); ctx.arc(...xy(i), 2.5, 0, Math.PI * 2); ctx.fill()
     }
     for (const name of BACKENDS) {
-      const failures = session.rows.filter(r => r.results.some(c => c.name === name && !c.valid)).length
+      const failures = session.rows.filter(r => r.results.some(c => c.name === name && c.valid === false)).length
       el(`[data-state="${name}"]`).textContent = session.errors[name]
         ? 'Unavailable / stopped'
-        : failures ? `${failures} failed ticks` : row ? 'Checks pass' : 'Ready'
+        : failures
+          ? `${failures} failed checkpoint${failures === 1 ? '' : 's'}`
+          : row ? `${session.rows.filter(r => r.results.some(c => c.name === name && c.valid === true)).length} checkpoints pass` : 'Ready'
       el(`[data-info="${name}"]`).textContent = session.errors[name] ?? session.lanes.find(l => l.name === name)?.backend.info ?? ''
     }
     el('[data-state="CPU"]').textContent = 'Independent reference'
@@ -83,11 +94,13 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
         name: LABELS[r.name],
         m: r.metrics,
         drift: num(r.drift.rms),
-        failed: session!.rows.filter(row => row.results.some(c => c.name === r.name && !c.valid)).length,
+        failed: session!.rows.filter(row => row.results.some(c => c.name === r.name && c.valid === false)).length,
       }))
       summary.push({ name: 'CPU', m: row.cpu, drift: '0', failed: 0 })
-      el('[data-output="results"]').innerHTML = `<table><caption>Tick ${row.tick} · used α = ${num(row.alpha)}</caption>
-        <thead><tr><th>Path</th><th>RMS motion</th><th>Link-length error</th><th>RMS radius</th><th>RMS drift vs CPU</th><th>Failed ticks</th></tr></thead>
+      el('[data-output="results"]').innerHTML = `<table><caption>Tick ${row.tick} · used α = ${num(row.alpha)}
+        · ${row.checked ? 'validated checkpoint' : 'not validated'}</caption>
+        <thead><tr><th>Path</th><th>RMS motion</th><th>Link-length error</th><th>RMS radius</th>
+          <th>RMS drift vs CPU</th><th>Failed checkpoints</th></tr></thead>
         <tbody>${summary.map(r => `<tr><td>${r.name}</td><td>${num(r.m.motion.rms)}</td><td>${num(r.m.linkError)}</td>
           <td>${num(r.m.shape.radius)}</td><td>${r.drift}</td><td>${r.failed}</td></tr>`).join('')}</tbody></table>
         <p class="demo-note">Link-length error = RMS((edge length − 10) / 10). Repulsion and gravity compete with springs;
@@ -100,6 +113,32 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       ${probe.results.map(r => `<tr><td>${LABELS[r.name]}</td><td>${num(r.metrics.motion.rms)} / ${num(r.metrics.motion.max)}</td>
         <td>${r.valid ? 'Pass' : 'FAIL'}</td></tr>`).join('')}
       <tr><td>CPU</td><td>${num(probe.cpu.motion.rms)} / ${num(probe.cpu.motion.max)}</td><td>Reference</td></tr></tbody></table>${checksTable(probe)}`
+      : ''
+    const failed = session.rows.flatMap(row => row.results.filter(r => r.valid === false).map(r => ({ tick: row.tick, r })))
+    el('[data-output="captures"]').innerHTML = Object.keys(session.captures).length
+      ? `<h3>First captured failures</h3>
+      <p class="demo-note">These checked ticks failed the original budget. Intermediate unchecked ticks may also fail.
+        Replay preserves the current layout; export includes the captured inputs and outputs.</p>
+      <table><thead><tr><th>Capture</th><th>Tick</th><th>α</th><th>Failed stages (force / position components)</th>
+        <th>Whole-tick position failures</th></tr></thead><tbody>
+      ${Object.entries(session.captures).map(([key, c]) => `<tr><td>${key}</td><td>${c.tick}</td><td>${num(c.alpha)}</td>
+        <td>${c.checks.stages.filter(s => !s.valid).map(s => `${s.stage}: ${s.forces.failures} / ${s.positions.failures}` +
+          `${s.structure && !s.structure.valid ? ' · structure FAIL' : ''}${s.centroidDifferences ? ' · centroid FAIL' : ''}`).join('; ') || 'None'}</td>
+        <td>${c.checks.wholeTick?.failures ?? '—'}</td></tr>`).join('')}</tbody></table>
+      <details><summary>All failed checkpoints (${failed.length} backend results)</summary>
+      <table><thead><tr><th>Tick</th><th>Backend</th><th>Failed stages (force / position)</th><th>Whole-tick failures</th></tr></thead><tbody>
+      ${failed.map(({ tick, r }) => `<tr><td>${tick}</td><td>${LABELS[r.name]}</td>
+        <td>${r.stages.filter(s => !s.valid).map(s => `${s.stage}: ${s.forces.failures} / ${s.positions.failures}` +
+          `${s.structure && !s.structure.valid ? ' · structure FAIL' : ''}${s.centroidDifferences ? ' · centroid FAIL' : ''}`).join('; ') || 'None'}</td>
+        <td>${r.wholeTick?.failures ?? '—'}</td></tr>`).join('')}</tbody></table></details>`
+      : ''
+    el('[data-output="replay"]').innerHTML = session.replays.length
+      ? `<h3>Failure replay</h3>
+      <p class="demo-note">First captured failure per backend (and probe). Replayed with the original positions, alpha and tick seed.
+        Reproduced requires identical check results and bit-identical final positions; it does not make a failing tick pass.</p>
+      <table><thead><tr><th>Capture</th><th>Tick</th><th>Outcome</th><th>Changed output components</th><th>Restored</th></tr></thead><tbody>
+      ${session.replays.map(r => `<tr><td>${r.key}</td><td>${r.tick}</td><td>${r.error ? 'Replay error' : r.reproduced ? 'Reproduced' : 'Not reproduced'}</td>
+        <td>${r.differingComponents ?? '—'}</td><td>${r.restored ? 'Yes' : 'NO'}</td></tr>`).join('')}</tbody></table>`
       : ''
     if (!row) { el('[data-output="chart"]').replaceChildren(); return }
     const charts = [
@@ -130,6 +169,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       fixture: control('fixture').value as Fixture,
       count: Number(control('count').value),
       decay: Number(control('decay').value),
+      checkpointEvery: Number(control('checkpoint').value),
     }, canvas)
     if (destroyed) { next.destroy(); return }
     session = next; render()
@@ -142,7 +182,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       if (!destroyed) status.textContent = error instanceof Error ? error.message : String(error)
     } finally { busy = false; if (!destroyed) controls() }
   }
-  const run = async (ticks: number): Promise<void> => {
+  const run = async (ticks: number, forceCheck = false): Promise<void> => {
     if (!session) return
     probe = undefined
     const panels = el('.backend-panels'); panels.style.scrollMarginTop = `${el('.playback-toolbar').offsetHeight + 16}px`
@@ -150,20 +190,22 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     for (let i = 0; i < ticks; i++) {
       if (destroyed || stopped) break
       status.textContent = `Checking tick ${session.rows.length + 1} / ${session.settings.decay}…`
-      await session.step(); if (destroyed) return
+      await session.step(forceCheck); if (destroyed) return
       render(); await new Promise(resolve => setTimeout(resolve, 0))
     }
     if (!destroyed) {
       status.textContent = `${stopped ? 'Stopped' : 'Finished'} at tick ${session.rows.length}; α = ${num(session.alpha())}. ` +
       `${Object.keys(session.errors).length ? 'Partial comparison. ' : ''}` +
-      `${session.rows.some(r => r.results.some(c => !c.valid))
-        ? 'Check failures remain recorded. '
-        : session.rows.some(r => r.results.length) ? 'Completed checks pass. ' : 'No GPU checks completed. '}` +
+      `${session.rows.some(r => r.results.some(c => c.valid === false))
+        ? 'Checkpoint failures remain recorded. '
+        : session.rows.some(r => r.results.some(c => c.valid === true))
+          ? 'Completed checkpoints pass. Only ticks marked validated were checked. '
+          : 'No GPU checks completed. '}` +
       'Use the α = 1 probe to distinguish cooling from force balance.'
     }
   }
   host.querySelectorAll('select').forEach(c => c.addEventListener('change', () => { task(setup) }))
-  el('[data-action="step"]').addEventListener('click', () => { task(async () => { await run(1) }) })
+  el('[data-action="step"]').addEventListener('click', () => { task(async () => { await run(1, true) }) })
   el('[data-action="run"]').addEventListener('click', () => {
     task(async () => { if (session) await run(Math.max(0, session.settings.decay - session.rows.length)) })
   })
@@ -180,10 +222,22 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       el('[data-output="probe"]').scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
   })
+  el('[data-action="replay"]').addEventListener('click', () => {
+    task(async () => {
+      if (!session) return
+      status.textContent = 'Replaying captured failures with full validation…'
+      const reports = await session.replayFailures()
+      if (destroyed) return
+      render(); status.textContent = reports.every(r => r.restored)
+        ? `Replayed ${reports.length} captures; ${reports.filter(r => r.reproduced).length} reproduced. Original layout and cooling restored.`
+        : 'Replay incomplete; see backend errors and export details.'
+      el('[data-output="replay"]').scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  })
   el('[data-action="export"]').addEventListener('click', () => {
     if (!session) return
     const json = JSON.stringify({
-      schemaVersion: 1,
+      schemaVersion: 2,
       experiment: 'combined-layout',
       recordedAt: new Date().toISOString(),
       browser: navigator.userAgent,
@@ -195,6 +249,8 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       errors: session.errors,
       firstFailures: session.firstFailures,
       firstTickFailures: session.firstTickFailures,
+      captures: session.captures,
+      replays: session.replays,
       devices: Object.fromEntries(session.lanes.map(l => [l.name, l.backend.info])),
     }, (_key, value) => ArrayBuffer.isView(value)
       ? Array.from(value as Float32Array)

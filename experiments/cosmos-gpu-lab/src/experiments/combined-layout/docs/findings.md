@@ -35,7 +35,7 @@ formula and the original spring order. Strict comparison makes numerical differe
 
 ## Correctness and convergence are separate
 
-Each GPU stage is compared against CPU arithmetic from its own preceding positions. Repulsion also checks its
+At a validated checkpoint, each GPU stage is compared against CPU arithmetic from its own preceding positions. Repulsion also checks its
 hierarchy, selected sample identities and corrected centroids. The original force budgets remain unchanged:
 `2e−5 + 3e−5 × |reference|` for gravity/repulsion and `2e−6 + 2e−5 × |reference|` for springs. A separate full-tick
 position check starts the CPU from the GPU's beginning-of-tick positions, so stage-by-stage checks cannot hide
@@ -53,9 +53,13 @@ not an infinitesimal force residual: sequential integrations and spring predicti
 probe motion is bounded evidence about one full-strength tick, not proof of physical equilibrium, a global optimum
 or long-term stability.
 
-Every sub-step is read back to validate and to build that path's CPU bounds. Position updates and rendering remain
+Validated checkpoints read every sub-step; intervening ticks read post-gravity bounds and final metrics only. Position updates and rendering remain
 on the GPU through luma APIs; CPU bounds/readback overhead makes this unsuitable as a frame-rate benchmark.
 GPU points and links draw from resident positions. The CPU panel uses Canvas 2D and the same camera.
+
+The default now checks first, every tenth and final ticks. **Every tick · diagnostic** retains full validation.
+See [Checkpoints and larger graphs](#/combined-layout/docs/checkpoints) for failure replay, the 512/2,048-point sweep,
+and the remaining spring-position mismatches. The 128-point evidence below used full validation on every tick.
 
 ## Native Apple M3 findings
 
@@ -83,7 +87,7 @@ and alpha-1 probe motion, but does not improve the communities' probe motion; th
 More cooling ticks are therefore not a universal quality improvement. Small final cooled motion alone is not enough
 to call either layout settled at full strength.
 
-**What remains open:** larger graphs, default-length cooling, the exact-to-grid transition, dense/coincident starts,
+**What remains open:** larger graphs with full parity, default-length cooling, the exact-to-grid transition, dense/coincident starts,
 other GPUs, additional forces and performance without validation readbacks. Small fixtures intentionally force the
 hierarchical algorithm; these are not production-default execution paths at 128 points.
 
