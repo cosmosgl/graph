@@ -43,7 +43,7 @@ implementation and comparison. These are evidence levels, not a percentage of th
 | Circle point rendering | **Demonstrated:** matched WebGL sprites and WebGPU instanced circles | Complete shapes, strokes, images, transitions and render-order behavior |
 | Spatial indexing | **Demonstrated:** count/scan/scatter with variable cell occupancy | Establish production bounds, capacity, update and memory policies |
 | Local interaction and integration | **Partial:** CPU-validated local forces feeding GPU rendering | Preserve actual Cosmos integration and collision semantics |
-| Global many-body force | **Partial:** [exact all-pairs](#/many-body) compares production GLSL, direct/tiled WGSL and CPU | Validate hierarchical far-field and sampled near-field behavior above 4,096 points, approximation quality and convergence |
+| Global many-body force | **Partial:** [exact](#/many-body) and [hierarchical](#/many-body-grid) comparisons use production GLSL, WGSL and CPU | Resolve dense CPU-reference precision; validate GPU bounds, adaptive sampling, scale and convergence |
 | Link forces and graph topology | **Partial:** ordered Cosmos spring passes validated against production GLSL and CPU; stable directional CSR and replacement | Long-term trajectories, state-preserving updates and composition with other forces; native execution limits |
 | Complete rendering and interaction | **Partial:** circles and minimal straight links read GPU-resident state | Full point/link styling, picking, hover, drag, selection, tracking and overlays |
 | luma resource and execution APIs | **Partial:** all isolated experiments use luma resources, models/kernels, passes, fences and timestamps | Host ownership, device loss, reusable scheduling and complete-engine integration |
@@ -108,8 +108,14 @@ tiling can reuse source loads while keeping the per-target addition order. [Batc
 favor WebGPU over the WebGL baseline at 4,096 points, but show no universal winner between direct and tiled WGSL.
 
 **Limit:** independent coincident trajectories drift despite passing same-input one-step checks. Longer layout quality,
-force composition and the production approximation used above 4,096 points remain unvalidated. This exact baseline
-provides a reference for that next comparison; local-neighborhood repulsion cannot substitute for it.
+force composition and cross-device behavior remain open. The [hierarchical experiment](#/many-body-grid) now checks
+production's approximate path with shared CPU bounds and explicit sample counts. Native M3 uniform checks pass at
+8,192 and 16,384 points. A dense fixture matches WebGL through WebGPU but fails the full CPU-reference budget;
+the app keeps that mismatch visible. [Detailed findings](#/many-body-grid/docs/results).
+
+**New migration question:** the exact radius split and grid near-field partition can produce substantially different
+capped forces in dense data. Matching the WebGL implementation is necessary, but is not enough to establish layout
+quality. GPU bounds, adaptive sample counts, scalable construction and combined-force convergence still need evidence.
 
 ### Weighted springs: Cosmos semantics can run through luma compute
 
@@ -223,7 +229,7 @@ supports ordinary simulation and rendering without routine full-position CPU cop
 
 ### Milestone 2 — Demonstrate Cosmos-equivalent graph simulation
 
-Extend the checked exact many-body path to production approximate global behavior, combine it with weighted links,
+Finish validating the hierarchical many-body path, combine it with weighted links,
 then compose center, gravity, attractors,
 mouse interaction, collision and integration. Preserve intended force order, damping/cooling, pinning and
 coordinate behavior. If an approximation changes the layout model, define and evaluate that change explicitly.
@@ -272,7 +278,8 @@ performance and memory meet the target budgets; supported devices are tested; an
 | --- | --- | --- |
 | Extend | Weighted-link compute-to-render path through luma | Can its demonstrated resource contract handle shared ownership, device loss and live updates? |
 | Extend | Weighted springs at larger sizes and over longer trajectories | Can ordered hub gathers and state-preserving topology updates meet the engine budget? |
-| First | Extend [exact global repulsion](#/many-body) to the production hierarchical / sampled path | Can we retain layout quality and make long-range forces affordable above 4,096 points? |
+| First | Resolve [hierarchical repulsion](#/many-body-grid/docs/results) precision and compare combined-force convergence | Can we preserve production behavior and quality across the exact-to-grid transition? |
+| Then | GPU bounds, adaptive samples and parallel hierarchy construction | Can the same approximation scale without CPU synchronization or serial dense-cell work? |
 | Alongside simulation | Links, richer points and picking from shared GPU state | Can Cosmos render and interact correctly without transferring all positions back? |
 | Then | Combined engine workload on multiple native GPUs | Is the whole migration practical for the intended users and graph sizes? |
 | Supporting optimization | Occupancy-dependent traversal and spatial locality | Which implementation choices improve complete frames once semantics are correct? |

@@ -13,9 +13,11 @@ export type Input = {
 export function nearLimit (count: number, params: Parameters): number {
   return Math.fround(2 * params.referenceLength / getFinestGridSize(count))
 }
-export function validateInput (input: Input, p: Parameters): void {
+export function validateInput (input: Input, p: Parameters, maximumPoints = 4096): void {
   const count = input.points.length / 4
-  if (!Number.isInteger(count) || count > 4096 || input.samples.length !== count * 2) throw new Error('Expected 0–4096 points and one sample pair per point')
+  if (!Number.isInteger(count) || count > maximumPoints || input.samples.length !== count * 2) {
+    throw new Error(`Expected 0–${maximumPoints} points and one sample pair per point`)
+  }
   if (![p.alpha, p.repulsion, p.friction, p.referenceLength].every(Number.isFinite) ||
     p.alpha < 0 || p.repulsion < 0 || Math.abs(p.friction) > 1 || p.referenceLength <= 0) throw new Error('Invalid force parameters')
   for (let i = 0; i < count; i++) {
