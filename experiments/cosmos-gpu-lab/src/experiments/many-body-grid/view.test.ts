@@ -121,7 +121,7 @@ it('exports diagnostic summaries with the normal verdict, without raw trace arra
 it('keeps a failed centroid variant distinct from a passing inline baseline and exports both verdicts', async () => {
   const check = { valid: true, failures: 0, maxError: 0, worstIndex: -1 }
   const output = { forces: check, positions: check, valid: true }
-  vi.mocked(compareCentroidPass).mockResolvedValue({
+  const candidate = {
     inline: output,
     stored: { ...output, valid: false, forces: { ...check, valid: false, failures: 2, maxError: 0.001 } },
     sameCentroids: output,
@@ -135,6 +135,14 @@ it('keeps a failed centroid variant distinct from a passing inline baseline and 
     extraStorageBytes: 1024,
     extraDispatches: 1,
     device: 'test device',
+  }
+  vi.mocked(compareCentroidPass).mockResolvedValue({
+    ...candidate,
+    corrected: {
+      ...candidate,
+      centroids: { differingComponents: 0, maxUlp: 0, maxError: 0 },
+      division: { cases: 131080, mismatches: 0, firstFailure: null },
+    },
   })
   const page = await mount()
   page.querySelector<HTMLButtonElement>('[data-action="centroids"]')!.click(); await ready(page)
@@ -149,5 +157,7 @@ it('keeps a failed centroid variant distinct from a passing inline baseline and 
     expect(row.passed).toBe(true)
     expect(row.centroidComparison.storedPassed).toBe(false)
     expect(row.centroidComparison.stored.forces.failures).toBe(2)
+    expect(row.centroidComparison.corrected.centroids.differingComponents).toBe(0)
+    expect(row.centroidComparison.corrected.storedPassed).toBe(false)
   } finally { url.mockRestore(); click.mockRestore() }
 })
