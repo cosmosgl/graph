@@ -1,9 +1,17 @@
 import { createFixture as pointsFixture, type Input, type Parameters as RepulsionParameters } from '../many-body/data'
 import type { GraphInput, Parameters as SpringParameters } from '../weighted-links/data'
+export const PRECISION_MODES = ['baseline', 'force', 'integration', 'both'] as const
+export type SpringPrecision = typeof PRECISION_MODES[number]
+export const PRECISION_LABELS: Record<SpringPrecision, string> = {
+  baseline: 'Native f32 · baseline',
+  force: 'Rounded spring force',
+  integration: 'Rounded spring integration',
+  both: 'Rounded force + integration',
+}
 export const STAGES = ['gravity', 'repulsion', 'incoming', 'outgoing'] as const
 export type Stage = typeof STAGES[number]
 export type Fixture = 'chain' | 'star' | 'communities' | 'pinned'
-export type Settings = { fixture: Fixture; count: number; decay: number; checkpointEvery?: number }
+export type Settings = { fixture: Fixture; count: number; decay: number; checkpointEvery?: number; springPrecision?: SpringPrecision }
 export const ALPHA_MIN = 0.001
 export const GRAVITY = 0.25
 export const REPULSION: RepulsionParameters = { alpha: 1, repulsion: 1, friction: 0.85, referenceLength: 4096 }
@@ -27,6 +35,7 @@ export function isCheckpoint (tick: number, settings: Settings): boolean {
 export function createGraph (settings: Settings): { graph: GraphInput; input: Input } {
   if (!Number.isInteger(settings.count) || settings.count < 4 || settings.count > 2048 ||
     !Number.isInteger(settings.decay) || settings.decay < 1 || settings.decay > 1000) throw new Error('Invalid combined experiment settings')
+  if (!PRECISION_MODES.includes(settings.springPrecision ?? 'baseline')) throw new Error('Invalid spring precision mode')
   const interval = settings.checkpointEvery ?? 1
   if (!Number.isInteger(interval) || interval < 1 || interval > settings.decay) throw new Error('Invalid checkpoint interval')
   const input = pointsFixture('uniform', settings.count)

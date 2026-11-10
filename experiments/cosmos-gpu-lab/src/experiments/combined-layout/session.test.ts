@@ -8,6 +8,7 @@ import { createCombinedSession } from './session'
 import { createOracle } from './reference'
 import { createCombinedView } from './view'
 import { cool } from './data'
+import { compareSpringPrecision } from './spring-study'
 vi.mock('./webgl', () => ({ createCombinedWebGL: vi.fn() }))
 vi.mock('./webgpu', () => ({ createCombinedWebGPU: vi.fn() }))
 let destroyed = 0
@@ -153,5 +154,39 @@ it('stops a path when replay cannot restore its original positions', async () =>
     expect(reports[1].restored).toBe(false); expect(s.errors.webgpu).toContain('restore failed')
     spy.mockRestore()
     expect((await s.step()).complete).toBe(false)
+  } finally { s.destroy() }
+})
+
+it('compares all spring modes on frozen captures without changing the live session', async () => {
+  setup()
+  const s = await createCombinedSession({ fixture: 'chain', count: 8, decay: 100 }, () => document.createElement('canvas'))
+  try {
+    await s.step()
+    const points = s.lanes.map(l => l.positions.slice()); const cpu = s.cpu().slice(); const alpha = s.alpha()
+    const history = JSON.stringify(s.rows); const captures = JSON.stringify(s.firstFailures)
+    const rows = await compareSpringPrecision(s)
+    expect(rows).toHaveLength(8)
+    expect(rows.every(r => !r.error && r.forces && r.positions)).toBe(true)
+    expect(vi.mocked(createCombinedWebGPU).mock.calls.slice(-4).map(call => call[3])).toEqual(['baseline', 'force', 'integration', 'both'])
+    expect(s.lanes.map(l => l.positions)).toEqual(points); expect(s.cpu()).toEqual(cpu)
+    expect(s.alpha()).toBe(alpha); expect(JSON.stringify(s.rows)).toBe(history); expect(JSON.stringify(s.firstFailures)).toBe(captures)
+    expect(destroyed).toBe(4)
+    expect(await compareSpringPrecision(s, () => true)).toEqual([])
+    expect(destroyed).toBe(4)
+  } finally { s.destroy() }
+  expect(destroyed).toBe(6)
+})
+it('records comparison setup errors without losing successful modes', async () => {
+  setup()
+  const s = await createCombinedSession({ fixture: 'chain', count: 8, decay: 100 }, () => document.createElement('canvas'))
+  try {
+    await s.step()
+    vi.mocked(createCombinedWebGPU).mockRejectedValueOnce(new Error('Test precision pipeline failure'))
+    const rows = await compareSpringPrecision(s)
+    expect(rows).toHaveLength(8)
+    expect(rows.filter(r => r.error)).toHaveLength(2)
+    expect(rows.filter(r => r.error).every(r => r.mode === 'baseline')).toBe(true)
+    expect(destroyed).toBe(3)
+    expect(s.errors).toEqual({})
   } finally { s.destroy() }
 })

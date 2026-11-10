@@ -2,10 +2,12 @@ import { defineConfig } from 'vitest/config'
 import { playwright } from '@vitest/browser-playwright'
 
 // Explicit opt-in for GPU regression tests; fail if no adapter can be created.
-// These flags allow Chromium's software WebGPU adapter on machines without hardware access.
+// Default: software Chromium. LAB_NATIVE_GPU=1 uses installed Chrome without forcing an adapter.
+// Full integer-arithmetic shaders currently fail compilation on SwiftShader; those tests opt into native mode.
 // eslint-disable-next-line import/no-default-export
 export default defineConfig({
-  define: { 'import.meta.env.REQUIRE_WEBGPU': true },
+  optimizeDeps: { include: ['@luma.gl/shadertools'] },
+  define: { 'import.meta.env.REQUIRE_WEBGPU': true, 'import.meta.env.LAB_NATIVE_GPU': process.env.LAB_NATIVE_GPU === '1' },
   test: {
     include: [
       'src/gpu/**/*.test.ts',
@@ -22,7 +24,8 @@ export default defineConfig({
       enabled: true,
       headless: true,
       screenshotFailures: false,
-      provider: playwright({ launchOptions: { args: ['--enable-unsafe-webgpu', '--use-angle=swiftshader'] } }),
+      provider: playwright({ launchOptions: { ...(process.env.LAB_NATIVE_GPU === '1' ? { channel: 'chrome', args: ['--enable-unsafe-webgpu'] }
+        : { args: ['--enable-unsafe-webgpu', '--use-angle=swiftshader'] }) } }),
       instances: [{ browser: 'chromium' }],
     },
   },

@@ -45,7 +45,9 @@ export async function createCombinedSession (settings: Settings, canvas: (name: 
   const captures: Record<string, Capture> = {}; const replays: Replay[] = []; const lanes: Lane[] = []
   for (const name of BACKENDS) {
     try {
-      const backend = await (name === 'webgl' ? createCombinedWebGL : createCombinedWebGPU)(canvas(name), graph, input)
+      const backend = name === 'webgl'
+        ? await createCombinedWebGL(canvas(name), graph, input)
+        : await createCombinedWebGPU(canvas(name), graph, input, settings.springPrecision)
       lanes.push({ name, backend, positions: input.points })
     } catch (error) { errors[name] = error instanceof Error ? error.message : String(error) }
   }

@@ -15,5 +15,10 @@ export const experiment = defineExperiment({
     id: 'checkpoints',
     title: 'Larger graphs',
     load: async (): Promise<string> => (await import('./docs/checkpoints.md?raw')).default,
+  }, {
+    kind: 'markdown',
+    id: 'spring-precision',
+    title: 'Spring precision',
+    load: async (): Promise<string> => (await import('./docs/spring-precision.md?raw')).default,
   }],
 })

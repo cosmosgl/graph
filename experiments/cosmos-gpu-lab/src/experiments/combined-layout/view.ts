@@ -2,7 +2,8 @@ import type { ExperimentInstance } from '../../runtime/experiment'
 import { fitView } from '../many-body/backend'
 import { TOLERANCE as repulsionTolerance } from '../many-body/reference'
 import { TOLERANCE as springTolerance } from '../weighted-links/reference'
-import { GRAVITY, REPULSION, SPRINGS, type Fixture } from './data'
+import { compareSpringPrecision, type SpringStudyRow } from './spring-study'
+import { PRECISION_MODES, PRECISION_LABELS, GRAVITY, REPULSION, SPRINGS, type Fixture, type SpringPrecision } from './data'
 import { BACKENDS, LABELS, createCombinedSession, type CombinedSession, type Name, type Row } from './session'
 const num = (v: number): string => Number.isFinite(v) ? v.toExponential(2) : 'non-finite'
 export async function createCombinedView (host: HTMLElement): Promise<ExperimentInstance> {
@@ -14,13 +15,18 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       <label>Cooling schedule <select data-control="decay"><option value="100">100 ticks</option><option value="300">300 ticks</option></select></label>
       <label>Validation <select data-control="checkpoint"><option value="10">Every 10 ticks + first / final</option>
         <option value="1">Every tick · diagnostic</option></select></label>
+      <label>WebGPU spring arithmetic <select data-control="precision">${PRECISION_MODES.map(mode =>
+    `<option value="${mode}">${PRECISION_LABELS[mode]}</option>`).join('')}</select></label>
     </div>
+    <p class="demo-note">Precision candidates use luma's integer-controlled arithmetic for selected spring operations.
+      Production WebGL, gravity, repulsion and CPU arithmetic stay unchanged. Native f32 remains the baseline.</p>
     <p class="demo-note">Checkpoint mode checks all four stages and the whole tick at selected ticks only. Other ticks are unvalidated.
       CPU continues independently; bounds and final metrics still require readback. All force tolerances stay unchanged.</p>
     <div class="demo-toolbar playback-toolbar"><div class="controls"><button data-action="step">Step + validate</button>
       <button data-action="run" class="button-primary">Run cooling schedule</button><button data-action="stop" disabled>Stop</button>
       <button data-action="probe">Probe at α = 1</button>
       <button data-action="replay" disabled>Replay first failures</button>
+      <button data-action="precision-study" disabled>Compare spring rounding</button>
       <button data-action="reset">Reset / retry</button><button data-action="export" disabled>Export JSON</button></div>
       <span class="tick-counter">Tick <strong data-output="tick">0</strong> · α <strong data-output="alpha">1</strong></span></div>
     <p data-output="status" class="many-body-status" role="status">Preparing combined simulation…</p>
@@ -32,16 +38,19 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       Checkpoint sub-steps are read back for validation. This is a correctness and layout study, not an FPS benchmark.</p>
     <div data-output="results" class="many-body-results"></div><div data-output="probe" class="many-body-results"></div>
     <div data-output="captures" class="many-body-results"></div><div data-output="replay" class="many-body-results"></div>
-    <div data-output="chart" class="trajectory-chart"></div>`
+    <div data-output="precision-study" class="many-body-results"></div><div data-output="chart" class="trajectory-chart"></div>`
   const el = <T extends HTMLElement>(q: string): T => host.querySelector<T>(q)!
   const control = (name: string): HTMLSelectElement => el(`[data-control="${name}"]`)
   const canvas = (name: Name | 'CPU'): HTMLCanvasElement => el(`[data-canvas="${name}"]`)
   let session: CombinedSession | undefined; let probe: Row | undefined; let busy = false; let stopped = false; let destroyed = false
+  let precisionStudy: SpringStudyRow[] = []
   const status = el('[data-output="status"]')
   const controls = (): void => {
     host.querySelectorAll<HTMLButtonElement | HTMLSelectElement>('button,select').forEach(c => { c.disabled = busy })
     el<HTMLButtonElement>('[data-action="stop"]').disabled = !busy
     el<HTMLButtonElement>('[data-action="export"]').disabled = busy || (!session?.rows.length && !probe)
+    el<HTMLButtonElement>('[data-action="precision-study"]').disabled = busy || !session ||
+      !Object.keys(session.firstFailures).some(k => k.endsWith('-incoming') || k.endsWith('-outgoing'))
     el<HTMLButtonElement>('[data-action="replay"]').disabled = busy || !session || !Object.keys(session.captures).length
     el<HTMLButtonElement>('[data-action="run"]').disabled = busy || !session || session.rows.length >= session.settings.decay
   }
@@ -140,6 +149,15 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       ${session.replays.map(r => `<tr><td>${r.key}</td><td>${r.tick}</td><td>${r.error ? 'Replay error' : r.reproduced ? 'Reproduced' : 'Not reproduced'}</td>
         <td>${r.differingComponents ?? '—'}</td><td>${r.restored ? 'Yes' : 'NO'}</td></tr>`).join('')}</tbody></table>`
       : ''
+    el('[data-output="precision-study"]').innerHTML = precisionStudy.length
+      ? `<h3>Frozen spring-input comparison</h3>
+      <p class="demo-note">All four WebGPU modes use the same captured stage inputs and CPU expectations.
+        Separate devices leave the current layout unchanged. This isolates arithmetic; it is not a trajectory or timing result.</p>
+      <table><thead><tr><th>Mode</th><th>Capture / tick</th><th>Force failures</th><th>Position failures</th><th>Max position error</th></tr></thead><tbody>
+      ${precisionStudy.map(r => `<tr><td>${PRECISION_LABELS[r.mode]}</td><td>${r.capture} / ${r.tick}</td>
+        <td>${r.error ? 'Error (see export)' : r.forces?.failures}</td><td>${r.positions?.failures ?? '—'}</td>
+        <td>${r.positions ? num(r.positions.maxError) : '—'}</td></tr>`).join('')}</tbody></table>`
+      : ''
     if (!row) { el('[data-output="chart"]').replaceChildren(); return }
     const charts = [
       { title: 'RMS motion per tick', get: (m: Row['cpu']) => m.motion.rms },
@@ -163,13 +181,14 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     }).join('')}<p>${[...BACKENDS, 'CPU' as const].map(n => `<span style="color:${colors[n]}">${LABELS[n]}</span>`).join(' · ')}</p>`
   }
   const setup = async (): Promise<void> => {
-    session?.destroy(); session = undefined; probe = undefined; status.textContent = 'Preparing combined simulation…'
+    session?.destroy(); session = undefined; probe = undefined; precisionStudy = []; status.textContent = 'Preparing combined simulation…'
     for (const name of BACKENDS) { const old = canvas(name); old.replaceWith(old.cloneNode()) }
     const next = await createCombinedSession({
       fixture: control('fixture').value as Fixture,
       count: Number(control('count').value),
       decay: Number(control('decay').value),
       checkpointEvery: Number(control('checkpoint').value),
+      springPrecision: control('precision').value as SpringPrecision,
     }, canvas)
     if (destroyed) { next.destroy(); return }
     session = next; render()
@@ -234,6 +253,18 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       el('[data-output="replay"]').scrollIntoView({ behavior: 'smooth', block: 'center' })
     })
   })
+  el('[data-action="precision-study"]').addEventListener('click', () => {
+    task(async () => {
+      if (!session) return
+      status.textContent = 'Comparing four WebGPU arithmetic modes on captured spring inputs…'
+      precisionStudy = await compareSpringPrecision(session, () => stopped || destroyed)
+      if (destroyed) return
+      render(); status.textContent = precisionStudy.some(r => r.error)
+        ? 'Precision comparison incomplete; inspect export errors.'
+        : `${stopped ? 'Precision comparison stopped' : 'Precision comparison finished'}. Current layout and cooling unchanged.`
+      el('[data-output="precision-study"]').scrollIntoView({ behavior: 'smooth', block: 'center' })
+    })
+  })
   el('[data-action="export"]').addEventListener('click', () => {
     if (!session) return
     const json = JSON.stringify({
@@ -251,6 +282,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       firstTickFailures: session.firstTickFailures,
       captures: session.captures,
       replays: session.replays,
+      precisionStudy,
       devices: Object.fromEntries(session.lanes.map(l => [l.name, l.backend.info])),
     }, (_key, value) => ArrayBuffer.isView(value)
       ? Array.from(value as Float32Array)
