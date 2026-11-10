@@ -10,5 +10,10 @@ export const experiment = defineExperiment({
     id: 'findings',
     title: 'Method and findings',
     load: async (): Promise<string> => (await import('./docs/findings.md?raw')).default,
+  }, {
+    kind: 'markdown',
+    id: 'checkpoints',
+    title: 'Larger graphs',
+    load: async (): Promise<string> => (await import('./docs/checkpoints.md?raw')).default,
   }],
 })

@@ -82,12 +82,76 @@ it('exports a cancelled partial run and probe without losing failure evidence', 
     button('probe').click()
     await vi.waitFor(() => expect(button('step').disabled).toBe(false))
     expect(host.querySelector('[data-output="tick"]')!.textContent).toBe('1')
+    button('replay').click()
+    await vi.waitFor(() => expect(button('step').disabled).toBe(false))
+    expect(host.querySelector('[data-output="replay"]')!.textContent).toContain('Reproduced')
     button('export').click()
     const report = JSON.parse(await captured!.text())
+    expect(report.replays.length).toBeGreaterThan(0); expect(report.captures.webgpu.tick).toBe(1)
     expect(report.rows).toHaveLength(1); expect(report.probe.alpha).toBe(1)
     expect(report.firstTickFailures.webgpu.tick).toBe(1)
     expect(Array.isArray(report.firstFailures['webgpu-outgoing'].input)).toBe(true)
     button('reset').click(); await vi.waitFor(() => expect(button('step').disabled).toBe(false))
     expect(button('export').disabled).toBe(true)
   } finally { app.destroy(); host.remove(); url.mockRestore(); click.mockRestore() }
+})
+it('checks first, interval and final ticks without treating unchecked ticks as passing', async () => {
+  setup()
+  const s = await createCombinedSession({ fixture: 'chain', count: 8, decay: 12, checkpointEvery: 5 }, () => document.createElement('canvas'))
+  const read = vi.spyOn(s.lanes[0].backend, 'read'); const structure = vi.spyOn(s.lanes[0].backend, 'readStructure')
+  try {
+    for (let i = 0; i < 12; i++) await s.step()
+    expect(s.rows.filter(r => r.checked).map(r => r.tick)).toEqual([1, 5, 10, 12])
+    expect(read).toHaveBeenCalledTimes(4 * 4 + 8 * 2)
+    expect(structure).toHaveBeenCalledTimes(4)
+    for (const row of s.rows.filter(r => !r.checked)) {
+      expect(row.complete).toBe(true)
+      for (const r of row.results) {
+        expect(r.stages).toEqual([]); expect(r.valid).toBeUndefined(); expect(r.wholeTick).toBeUndefined()
+      }
+    }
+  } finally { read.mockRestore(); structure.mockRestore(); s.destroy() }
+})
+it('replays the original failing checkpoint without mutating trajectory, cooling or captures', async () => {
+  setup()
+  const s = await createCombinedSession({ fixture: 'chain', count: 8, decay: 12, checkpointEvery: 5 }, () => document.createElement('canvas'))
+  try {
+    for (let i = 0; i < 3; i++) await s.step()
+    const original = JSON.stringify({ rows: s.rows, captures: s.captures, cpu: s.cpu(), alpha: s.alpha() })
+    const positions = s.lanes.map(l => l.positions.slice())
+    const reports = await s.replayFailures()
+    expect(reports).toHaveLength(2)
+    expect(reports.every(r => r.reproduced && r.restored && r.differingComponents === 0 && r.sameChecks)).toBe(true)
+    expect(JSON.stringify({ rows: s.rows, captures: s.captures, cpu: s.cpu(), alpha: s.alpha() })).toBe(original)
+    for (const [i, lane] of s.lanes.entries()) expect((await lane.backend.read()).positions).toEqual(positions[i])
+    await s.step(true); expect(s.rows.at(-1)!.tick).toBe(4); expect(s.rows.at(-1)!.checked).toBe(true)
+  } finally { s.destroy() }
+})
+it('reports a non-reproducing failure and restores state even if replay execution throws', async () => {
+  setup()
+  const s = await createCombinedSession({ fixture: 'chain', count: 8, decay: 12 }, () => document.createElement('canvas'))
+  try {
+    await s.step()
+    const before = s.lanes.map(l => l.positions.slice())
+    s.captures.webgl.actual[0] += 1
+    const step = vi.spyOn(s.lanes[1].backend, 'stepStage').mockImplementationOnce(() => { throw new Error('Replay failed') })
+    const reports = await s.replayFailures()
+    expect(reports[0].reproduced).toBe(false); expect(reports[0].differingComponents).toBe(1)
+    expect(reports[1].error).toContain('Replay failed'); expect(reports.every(r => r.restored)).toBe(true)
+    for (const [i, lane] of s.lanes.entries()) expect((await lane.backend.read()).positions).toEqual(before[i])
+    step.mockRestore()
+  } finally { s.destroy() }
+})
+it('stops a path when replay cannot restore its original positions', async () => {
+  setup()
+  const s = await createCombinedSession({ fixture: 'chain', count: 8, decay: 12 }, () => document.createElement('canvas'))
+  try {
+    await s.step()
+    const backend = s.lanes[1].backend; const set = backend.setPositions.bind(backend)
+    const spy = vi.spyOn(backend, 'setPositions').mockImplementationOnce(set).mockImplementationOnce(() => { throw new Error('Restore failed') })
+    const reports = await s.replayFailures()
+    expect(reports[1].restored).toBe(false); expect(s.errors.webgpu).toContain('restore failed')
+    spy.mockRestore()
+    expect((await s.step()).complete).toBe(false)
+  } finally { s.destroy() }
 })

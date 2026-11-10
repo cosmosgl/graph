@@ -39,3 +39,22 @@ for (const fixture of ['chain', 'star', 'communities', 'pinned'] as const) {
     } finally { s.destroy() }
   })
 }
+it('checkpoint execution preserves the fully checked trajectory and restores GPU state after replay', async () => {
+  const run = async (checkpointEvery: number): Promise<Float32Array[][]> => {
+    const s = await createCombinedSession({ fixture: 'communities', count: 32, decay: 5, checkpointEvery }, () => document.createElement('canvas'))
+    const samples: Float32Array[][] = []
+    try {
+      expect(s.errors).toEqual({})
+      for (let i = 0; i < 5; i++) {
+        const row = await s.step(); expect(row.complete).toBe(true)
+        samples.push([...s.lanes.map(l => l.positions.slice()), s.cpu().slice()])
+      }
+      const reports = await s.replayFailures()
+      expect(reports.every(r => r.restored && r.reproduced)).toBe(true)
+      for (const [i, lane] of s.lanes.entries()) expect((await lane.backend.read()).positions).toEqual(samples[4][i])
+      expect(s.rows).toHaveLength(5)
+      return samples
+    } finally { s.destroy() }
+  }
+  expect(await run(3)).toEqual(await run(1))
+})

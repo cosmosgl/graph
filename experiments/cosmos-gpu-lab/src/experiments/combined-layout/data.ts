@@ -3,7 +3,7 @@ import type { GraphInput, Parameters as SpringParameters } from '../weighted-lin
 export const STAGES = ['gravity', 'repulsion', 'incoming', 'outgoing'] as const
 export type Stage = typeof STAGES[number]
 export type Fixture = 'chain' | 'star' | 'communities' | 'pinned'
-export type Settings = { fixture: Fixture; count: number; decay: number }
+export type Settings = { fixture: Fixture; count: number; decay: number; checkpointEvery?: number }
 export const ALPHA_MIN = 0.001
 export const GRAVITY = 0.25
 export const REPULSION: RepulsionParameters = { alpha: 1, repulsion: 1, friction: 0.85, referenceLength: 4096 }
@@ -21,9 +21,14 @@ export const SPRINGS: SpringParameters = {
 export function cool (alpha: number, decay: number): number {
   return alpha + (0 - alpha) * (1 - Math.pow(ALPHA_MIN, 1 / decay))
 }
+export function isCheckpoint (tick: number, settings: Settings): boolean {
+  return tick === 1 || tick === settings.decay || tick % (settings.checkpointEvery ?? 1) === 0
+}
 export function createGraph (settings: Settings): { graph: GraphInput; input: Input } {
-  if (!Number.isInteger(settings.count) || settings.count < 4 || settings.count > 512 ||
+  if (!Number.isInteger(settings.count) || settings.count < 4 || settings.count > 2048 ||
     !Number.isInteger(settings.decay) || settings.decay < 1 || settings.decay > 1000) throw new Error('Invalid combined experiment settings')
+  const interval = settings.checkpointEvery ?? 1
+  if (!Number.isInteger(interval) || interval < 1 || interval > settings.decay) throw new Error('Invalid checkpoint interval')
   const input = pointsFixture('uniform', settings.count)
   const edges: number[] = []; const add = (a: number, b: number): void => { edges.push(a, b) }
   for (let i = 1; i < settings.count; i++) {
