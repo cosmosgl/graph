@@ -1,7 +1,7 @@
-import { Buffer, type Device } from '@luma.gl/core'
+import { Buffer, type Device, type RenderPass } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
 import { bindingLayout, createDevice, createStorageRenderer, readFloats, upload, waitForGpu } from '../../gpu/luma'
-import type { Backend } from './backend'
+import type { Backend, View } from './backend'
 import type { Snapshot } from './reference'
 import { measureBatch, timestamps, type TimestampWrites } from './timing'
 import { nearLimit, validateInput, type Input, type Parameters, type Variant } from './data'
@@ -27,7 +27,10 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
 
 export type WebGPUForceFactory = (resources: {
   device: Device; positions: Buffer[]; samples: Buffer; forces: Buffer; count: number;
-}) => Promise<{ prepare?(): void; encode(source: number, timing: TimestampWrites): void; destroy(): void }>
+}) => Promise<{
+  prepare?(): void; encode(source: number, timing: TimestampWrites): void;
+  render?(source: number, view: View, pass: RenderPass): void; destroy(): void;
+}>
 export async function createWebGPU (
   canvas: HTMLCanvasElement, input: Input, p: Parameters, variant: Variant, customForce?: WebGPUForceFactory
 ): Promise<Backend> {
@@ -126,6 +129,7 @@ export async function createWebGPU (
         const pass = device.beginRenderPass({ clearColor: [0.075, 0.087, 0.105, 1], clearDepth: false })
         try {
           if (count) {
+            extension?.render?.(current, view, pass)
             renderer.kernel.draw(pass, {
               vertexArray: renderer.vertexArray,
               vertexCount: 6,

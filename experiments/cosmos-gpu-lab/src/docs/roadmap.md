@@ -122,12 +122,28 @@ extra memory from 38.83 / 76.33 MiB to 7.96 / 14.58 MiB. Two native M3 sweeps sh
 time between corrected variants, with unchanged validation. Both still cost more than the failing inline control;
 [Independent trajectories](#/repulsion-trajectories/docs/findings) now pass all corrected local checks over 20 native
 M3 ticks at both dense sizes, with identical full-buffer and streamed outputs. A coincident fixture nevertheless
-accumulates substantial CPU-path drift while local checks pass. Combined-force convergence, longer runs and scalable
+accumulates substantial CPU-path drift while local checks pass. Larger combined-force runs and scalable
 construction remain necessary before considering production adoption. [Detailed findings](#/many-body-grid/docs/results).
 
 **New migration question:** the exact radius split and grid near-field partition can produce substantially different
 capped forces in dense data. Matching the WebGL implementation is necessary, but is not enough to establish layout
-quality. GPU bounds, adaptive sample counts, scalable construction and combined-force convergence still need evidence.
+quality. GPU bounds, adaptive sample counts and scalable construction still need evidence.
+
+### Combined forces: bounded convergence evidence
+
+[Combined layout convergence](#/combined-layout/docs/findings) runs gravity, hierarchical repulsion and both spring
+passes in production order, integrating after each force and cooling after the tick. Every backend continues from
+its own resident positions. Stage checks and an additional whole-tick CPU check distinguish local correctness from
+independent-path drift; a non-destructive alpha-1 probe distinguishes cooled stillness from full-strength tick stability.
+
+Native M3 chain and community runs at 128 points passed every check for both 100- and 300-tick schedules, including
+the probes. WebGL, WebGPU and CPU agreed closely. Slower cooling improved the chain's probe motion, but not the
+communities': there is no universal quality gain from extending the schedule. Software Chromium has a visible
+production-WebGL gravity mismatch that did not reproduce in these native runs.
+
+**Limit:** hierarchical repulsion is forced at these small counts. Production's exact-to-grid transition, larger and
+dense graphs, default-length cooling, other GPUs and additional forces remain unvalidated in composition. These
+readback-heavy checks establish bounded behavior, not a frame-rate or production-readiness claim.
 
 ### Weighted springs: Cosmos semantics can run through luma compute
 
@@ -290,7 +306,7 @@ performance and memory meet the target budgets; supported devices are tested; an
 | --- | --- | --- |
 | Extend | Weighted-link compute-to-render path through luma | Can its demonstrated resource contract handle shared ownership, device loss and live updates? |
 | Extend | Weighted springs at larger sizes and over longer trajectories | Can ordered hub gathers and state-preserving topology updates meet the engine budget? |
-| First | Build combined-force convergence checks after the [independent repulsion trajectories](#/repulsion-trajectories/docs/findings) | Can we preserve production behavior and quality across the exact-to-grid transition? |
+| First | Extend [combined-force convergence](#/combined-layout/docs/findings) to larger graphs and production-length cooling | Can we preserve production behavior and quality across the exact-to-grid transition? |
 | Then | GPU bounds, adaptive samples and parallel hierarchy construction | Can the same approximation scale without CPU synchronization or serial dense-cell work? |
 | Alongside simulation | Links, richer points and picking from shared GPU state | Can Cosmos render and interact correctly without transferring all positions back? |
 | Then | Combined engine workload on multiple native GPUs | Is the whole migration practical for the intended users and graph sizes? |

@@ -1,10 +1,10 @@
-import { Texture, UniformStore, type Buffer, type Device, type Framebuffer } from '@luma.gl/core'
+import { Texture, UniformStore, type Buffer, type Device, type Framebuffer, type RenderPass } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import quadSource from '../../../../../src/modules/Shared/quad.vert?raw'
 import forceSource from '../../../../../src/modules/ForceManyBody/force-allpairs.frag?raw'
 import integrationSource from '../../../../../src/modules/Points/update-position.frag?raw'
 import { createDevice } from '../../gpu/luma'
-import type { Backend } from './backend'
+import type { Backend, View } from './backend'
 import type { Snapshot } from './reference'
 import { measureBatch, timestamps, type TimestampWrites } from './timing'
 import { nearLimit, validateInput, type Input, type Parameters } from './data'
@@ -30,7 +30,7 @@ void main() { if (length(gl_PointCoord * 2. - 1.) > 1.) discard; fragColor = vec
 
 export type WebGLForceFactory = (resources: {
   device: Device; positions: Texture[]; random: Texture; exit: Texture; target: Framebuffer; count: number; size: number;
-}) => { encode(source: number): void; destroy(): void }
+}) => { encode(source: number): void; render?(source: number, view: View, pass: RenderPass): void; destroy(): void }
 export async function createWebGL (canvas: HTMLCanvasElement, input: Input, p: Parameters, customForce?: WebGLForceFactory): Promise<Backend> {
   validateInput(input, p, customForce ? 16384 : 4096)
   let failure: string | undefined
@@ -161,7 +161,7 @@ export async function createWebGL (canvas: HTMLCanvasElement, input: Input, p: P
       render (view): void {
         healthy(); drawUniforms.setUniforms({ drawUniforms: { view, size } }); draw.setBindings({ positions: positions[current] })
         const pass = device.beginRenderPass({ clearColor: [0.075, 0.087, 0.105, 1], clearDepth: false })
-        try { if (count) draw.draw(pass) } finally { pass.end() }
+        try { if (count) { extension?.render?.(current, view, pass); draw.draw(pass) } } finally { pass.end() }
         device.submit()
       },
       destroy (): void {

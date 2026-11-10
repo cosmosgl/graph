@@ -8,7 +8,7 @@ import nearFrag from '../../../../../src/modules/ForceManyBody/force-nearfield.f
 import slotsVert from '../../../../../src/modules/ForceManyBody/build-nearfield-slots.vert?raw'
 import slotsFrag from '../../../../../src/modules/ForceManyBody/build-nearfield-slots.frag?raw'
 import quadVert from '../../../../../src/modules/Shared/quad.vert?raw'
-import { createWebGL } from '../many-body/webgl'
+import { createWebGL, type WebGLForceFactory } from '../many-body/webgl'
 import { nearLimit, type Input, type Parameters } from '../many-body/data'
 import { nearTraceShader, type Trace } from './trace'
 import { layout, type Frame, type Structure } from './data'
@@ -29,11 +29,14 @@ const floats = (texture: Texture, z = 0): Float32Array => {
   const bytes = texture.readDataSyncWebGL({ z, depthOrArrayLayers: 1 })
   return bytes instanceof ArrayBuffer ? new Float32Array(bytes) : new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4)
 }
-export async function createGridWebGL (canvas: HTMLCanvasElement, input: Input, p: Parameters, initial: Frame): Promise<GridBackend> {
+export async function createGridWebGL (
+  canvas: HTMLCanvasElement, input: Input, p: Parameters, initial: Frame,
+  wrapForce: (factory: WebGLForceFactory) => WebGLForceFactory = (factory): WebGLForceFactory => factory
+): Promise<GridBackend> {
   let frame = initial
   let diagnose: NonNullable<GridBackend['diagnose']>
   let readStructure: () => Promise<Structure> = async () => { throw new Error('Grid not initialized') }
-  const base = await createWebGL(canvas, input, p, ({ device, positions, random, exit, target, count, size }) => {
+  const base = await createWebGL(canvas, input, p, wrapForce(({ device, positions, random, exit, target, count, size }) => {
     const owned: Array<{ destroy(): void }> = []
     const own = <T extends { destroy(): void }>(v: T): T => { owned.push(v); return v }
     try {
@@ -188,7 +191,7 @@ export async function createGridWebGL (canvas: HTMLCanvasElement, input: Input, 
         destroy (): void { owned.reverse().forEach(resource => resource.destroy()) },
       }
     } catch (error) { owned.reverse().forEach(resource => resource.destroy()); throw error }
-  })
+  }))
   return {
     ...base,
     name: 'WebGL grid',

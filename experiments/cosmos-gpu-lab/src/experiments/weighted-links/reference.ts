@@ -17,7 +17,7 @@ export function createReferenceIndex (graph: GraphInput): {
   return { degrees, byPoint }
 }
 export function referenceTick (
-  graph: GraphInput, input: Float32Array, p: Parameters, index = createReferenceIndex(graph)
+  graph: GraphInput, input: Float32Array, p: Parameters, index = createReferenceIndex(graph), firstSide: 0 | 1 = 0
 ): Snapshot {
   const n = input.length / 4
   const { degrees, byPoint } = index
@@ -56,7 +56,7 @@ export function referenceTick (
     }
     return { force, output }
   }
-  const a = direction(input, 0); const b = direction(a.output, 1)
+  const a = direction(input, firstSide); const b = direction(a.output, 1 - firstSide)
   return { firstForce: a.force, intermediate: a.output, secondForce: b.force, positions: b.output }
 }
 export const TOLERANCE = { absolute: 2e-6, relative: 2e-5 }
