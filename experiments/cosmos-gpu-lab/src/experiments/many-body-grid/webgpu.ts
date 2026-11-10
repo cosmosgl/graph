@@ -1,6 +1,6 @@
 import { Buffer } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
-import { createWebGPU } from '../many-body/webgpu'
+import { createWebGPU, type WebGPUForceFactory } from '../many-body/webgpu'
 import { bindingLayout, readFloats, upload } from '../../gpu/luma'
 import { nearLimit, type Input, type Parameters } from '../many-body/data'
 import { contributionShader } from './contributions'
@@ -12,7 +12,8 @@ import { layout, type Frame, type Structure } from './data'
 import type { GridBackend } from './backend'
 import shader from './grid.wgsl?raw'
 export async function createGridWebGPU (
-  canvas: HTMLCanvasElement, input: Input, p: Parameters, initial: Frame, centroidMode: CentroidMode = 'inline'
+  canvas: HTMLCanvasElement, input: Input, p: Parameters, initial: Frame, centroidMode: CentroidMode = 'inline',
+  wrapForce: (factory: WebGPUForceFactory) => WebGPUForceFactory = (factory): WebGPUForceFactory => factory
 ): Promise<GridBackend> {
   let sourceShader = centroidMode !== 'inline' ? storedCentroidShader(shader, centroidMode !== 'stored') : shader
   const streamed = centroidMode === 'streamed'
@@ -25,7 +26,7 @@ export async function createGridWebGPU (
   let frame = initial
   let diagnose: NonNullable<GridBackend['diagnose']>
   let readStructure: () => Promise<Structure> = async () => { throw new Error('Grid not initialized') }
-  const base = await createWebGPU(canvas, input, p, 'direct', async ({ device, positions, samples, forces, count }) => {
+  const base = await createWebGPU(canvas, input, p, 'direct', wrapForce(async ({ device, positions, samples, forces, count }) => {
     const owned: Array<{ destroy(): void }> = []
     const own = <T extends { destroy(): void }>(v: T): T => { owned.push(v); return v }
     try {
@@ -209,7 +210,7 @@ export async function createGridWebGPU (
         destroy (): void { owned.reverse().forEach(resource => resource.destroy()) },
       }
     } catch (error) { owned.reverse().forEach(resource => resource.destroy()); throw error }
-  })
+  }))
   return {
     ...base,
     name: `WebGPU grid (${centroidMode} centroids)`,

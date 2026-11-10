@@ -35,7 +35,7 @@ function setup (missing = false): void {
       destroy: destroyed,
     } satisfies GridBackend
   }
-  vi.mocked(createGridWebGL).mockImplementation(make)
+  vi.mocked(createGridWebGL).mockImplementation((canvas, input, p, frame) => make(canvas, input, p, frame))
   vi.mocked(createGridWebGPU).mockImplementation(make)
 }
 afterEach(() => { vi.clearAllMocks(); seen.length = 0 })

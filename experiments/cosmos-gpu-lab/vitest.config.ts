@@ -14,6 +14,7 @@ export default defineConfig({
       'src/experiments/many-body/**/*.test.ts',
       'src/experiments/many-body-grid/**/*.test.ts',
       'src/experiments/repulsion-trajectories/**/*.test.ts',
+      'src/experiments/combined-layout/**/*.test.ts',
     ],
     testTimeout: 60000,
     maxWorkers: 1,
