@@ -7,8 +7,9 @@ import { buildTopology } from '../weighted-links/data'
 import springSource from '../weighted-links/force.wgsl?raw'
 import { createGridWebGPU } from '../many-body-grid/webgpu'
 import { frameFor } from '../many-body-grid/data'
-import { GRAVITY, REPULSION, SPRINGS, type Stage } from './data'
+import { GRAVITY, REPULSION, SPRINGS, type SpringPrecision, type Stage } from './data'
 import type { CombinedBackend } from './backend'
+import { createRoundedKernel, roundedSpringSource, roundedIntegrationSource } from './spring-precision'
 const gravitySource = `
 @group(0) @binding(0) var<storage, read> positions: array<vec4<f32>>;
 @group(0) @binding(1) var<uniform> params: vec4<f32>;
@@ -27,7 +28,9 @@ const linkSource = `
 }
 @fragment fn fragmentMain() -> @location(0) vec4<f32> { return vec4(0.27,0.32,0.4,1.); }
 `
-export async function createCombinedWebGPU (canvas: HTMLCanvasElement, graph: GraphInput, input: Input): Promise<CombinedBackend> {
+export async function createCombinedWebGPU (
+  canvas: HTMLCanvasElement, graph: GraphInput, input: Input, precision: SpringPrecision = 'baseline'
+): Promise<CombinedBackend> {
   let stage: Stage = 'gravity'; const p = { ...REPULSION }; const topology = buildTopology(graph)
   const base = await createGridWebGPU(canvas, input, p, frameFor(input.points, 0), 'streamed', gridFactory => async resources => {
     const { device, positions, forces, count } = resources
@@ -56,16 +59,33 @@ export async function createCombinedWebGPU (canvas: HTMLCanvasElement, graph: Gr
           ]),
         },
       }))
-      const spring = own(await Kernel.createAsync(device, {
-        source: springSource,
-        shaderLayout: {
-          bindings: bindingLayout([
-            ['positions', 'read-only-storage'], ['offsets', 'read-only-storage'], ['edges', 'read-only-storage'],
-            ['sizes', 'read-only-storage'], ['params', 'uniform'], ['forces', 'storage'],
-          ]),
-        },
-      }))
+      const springBindings = bindingLayout([
+        ['positions', 'read-only-storage'], ['offsets', 'read-only-storage'], ['edges', 'read-only-storage'],
+        ['sizes', 'read-only-storage'], ['params', 'uniform'], ['forces', 'storage'],
+      ])
+      const spring = own(precision === 'force' || precision === 'both'
+        ? await createRoundedKernel(device, roundedSpringSource(), springBindings)
+        : await Kernel.createAsync(device, { source: springSource, shaderLayout: { bindings: springBindings } }))
+      const integrationParams = own(upload(device, new Float32Array([count, 0, 0, 0, p.friction, p.referenceLength, 0, 0]), Buffer.UNIFORM))
+      const integration = precision === 'integration' || precision === 'both'
+        ? own(await createRoundedKernel(device, roundedIntegrationSource(), bindingLayout([
+          ['positions', 'read-only-storage'], ['forces', 'read-only-storage'], ['params', 'uniform'], ['output', 'storage'],
+        ])))
+        : undefined
       return {
+        integrate (source, timing): boolean {
+          if (!integration || (stage !== 'incoming' && stage !== 'outgoing')) return false
+          const pass = device.beginComputePass(timing)
+          try {
+            integration.dispatch(pass, {
+              x: Math.ceil(count / 64),
+              bindings: {
+                positions: positions[source], forces, params: integrationParams, output: positions[1 - source],
+              },
+            })
+          } finally { pass.end() }
+          return true
+        },
         render (source, view, pass): void {
           viewBuffer.write(new Float32Array(view))
           lines.kernel.draw(pass, {

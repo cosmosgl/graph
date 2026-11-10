@@ -145,7 +145,12 @@ A [checkpoint sweep at 512 and 2,048 points](#/combined-layout/docs/checkpoints)
 star graphs at both schedules. All 512-point cases and 2,048-point chains pass their scheduled checks. The larger
 communities and stars expose spring-position mismatches on both backends; ten first-failure captures replay exactly.
 A near-cancellation example shows a one-ULP spring-force difference exceeding the tighter final-position budget.
-Those failures remain visible and unresolved; unchecked ticks are not counted as passing.
+The baseline failures remain visible. A selectable [spring precision candidate](#/combined-layout/docs/spring-precision)
+uses luma's integer-controlled arithmetic to reproduce stepwise float32 rounding. Rounding both the spring force
+and its integration passes all scheduled WebGPU checks and full-strength probes in the four previously failing
+2,048-point runs, without changing the budget. Frozen captures show that integration-only rounding is insufficient.
+The arithmetic cost and cross-device behavior remain unmeasured; native f32 remains the default. Unchecked ticks
+are not counted as passing.
 
 **Limit:** hierarchical repulsion is forced at these small counts. Production's exact-to-grid transition, larger and
 dense graphs, default-length cooling, other GPUs and additional forces remain unvalidated in composition. These
@@ -312,7 +317,7 @@ performance and memory meet the target budgets; supported devices are tested; an
 | --- | --- | --- |
 | Extend | Weighted-link compute-to-render path through luma | Can its demonstrated resource contract handle shared ownership, device loss and live updates? |
 | Extend | Weighted springs at larger sizes and over longer trajectories | Can ordered hub gathers and state-preserving topology updates meet the engine budget? |
-| First | Resolve [combined spring-position failures](#/combined-layout/docs/checkpoints), then extend size and cooling coverage | Can we preserve production behavior and quality across the exact-to-grid transition? |
+| First | Measure and narrow the [spring precision correction](#/combined-layout/docs/spring-precision), then extend size and cooling coverage | Can strict agreement remain affordable across the exact-to-grid transition? |
 | Then | GPU bounds, adaptive samples and parallel hierarchy construction | Can the same approximation scale without CPU synchronization or serial dense-cell work? |
 | Alongside simulation | Links, richer points and picking from shared GPU state | Can Cosmos render and interact correctly without transferring all positions back? |
 | Then | Combined engine workload on multiple native GPUs | Is the whole migration practical for the intended users and graph sizes? |

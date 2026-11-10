@@ -29,7 +29,8 @@ export type WebGPUForceFactory = (resources: {
   device: Device; positions: Buffer[]; samples: Buffer; forces: Buffer; count: number;
 }) => Promise<{
   prepare?(): void; encode(source: number, timing: TimestampWrites): void;
-  render?(source: number, view: View, pass: RenderPass): void; destroy(): void;
+  render?(source: number, view: View, pass: RenderPass): void;
+  integrate?(source: number, timing: TimestampWrites): boolean; destroy(): void;
 }>
 export async function createWebGPU (
   canvas: HTMLCanvasElement, input: Input, p: Parameters, variant: Variant, customForce?: WebGPUForceFactory
@@ -78,6 +79,7 @@ export async function createWebGPU (
       } finally { forcePass.end() }
     }
     const encodeIntegration = (integrationTimes: TimestampWrites = {}): void => {
+      if (extension?.integrate?.(current, integrationTimes)) return
       const integratePass = device.beginComputePass(integrationTimes)
       try {
         integrate.dispatch(integratePass, {
