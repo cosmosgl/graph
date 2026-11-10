@@ -130,6 +130,7 @@ it under `centroidComparison.streamed`. Use this to inspect arithmetic independe
 
 The precision correction no longer needs six full contribution buffers. That makes it a more useful experimental
 candidate, but the remaining scratch allocation still grows with point count and the lab caps this experiment at
-16,384 points. Both corrected paths cost more than inline in these measurements. Next, validate independent
-trajectories and combined-force behavior, then replace diagnostic construction with a scalable hierarchy builder.
+16,384 points. Both corrected paths cost more than inline in these measurements. The follow-up [independent trajectory experiment](#/repulsion-trajectories/docs/findings) now checks 20 evolving
+ticks, including both dense sizes on M3. Combined-force behavior and replacing diagnostic construction with a scalable
+hierarchy builder remain open.
 Broader device evidence is needed before choosing a production precision policy.
