@@ -70,8 +70,8 @@ The correction has three parts:
    The original softening rule is retained: below unit squared distance, the magnitude denominator uses another square
    root. These floating-point refinements are verified candidates, not a WGSL guarantee of correctly rounded roots or
    division on every implementation. `fma` itself has implementation latitude.
-3. **Store contributions before adding them.** A compute pass writes the completed x/y force for each far cell. A
-   later pass accumulates those float32 values in the original order. This prevents contraction across the
+3. **Store contributions before adding them.** A compute dispatch writes the completed x/y force for each far cell. A
+   later dispatch accumulates those float32 values in the original order. This prevents contraction across the
    contribution/accumulation boundary. The near-field code and CPU oracle are unchanged.
 
 Neither changing `normalize` to explicit division nor storing ordinary contributions was sufficient in the initial
@@ -118,11 +118,12 @@ pipelines within WebGPU's minimum eight-storage-buffer limit.
 | 16,384 | 75.00 MiB | 1.33 MiB | **76.33 MiB** | 2 |
 
 These are additional working buffers versus the inline path, not total device memory. Diagnostic readback buffers
-are temporary and excluded. GPU time has **not** been measured. This deliberately simple storage layout is capped by
+are temporary and excluded. These are the original full-buffer costs; the follow-up
+[precision cost comparison](#/many-body-grid/docs/precision-cost) measures GPU time and reduces extra storage by about 80%. This deliberately simple storage layout is capped by
 this experiment's 16,384-point limit and is not a million-point design.
 
-Keep this as an opt-in correctness reference. The next useful comparison is batched GPU timing and a lower-memory
-way to preserve the required rounding boundaries. Validate more native vendors and longer independent trajectories
+Keep this as an opt-in correctness reference. The streamed candidate now preserves these rounding boundaries
+using one level of scratch storage. Validate more native vendors and longer independent trajectories
 before promoting a replacement. The experiment does not change production Cosmos or claim that its original GLSL
 force now meets the dense CPU budget.
 
@@ -134,7 +135,7 @@ pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/many-body-grid/far-ari
 ```
 
 Open **Hierarchical global repulsion**, choose **clusters**, **8,192** or **16,384**, **8 samples**, **Precise**,
-then **Compare centroid pass**. The comparison advances one CPU-anchored tick and displays all five variants. Reset
+then **Compare centroid pass**. The comparison advances one CPU-anchored tick and displays all six variants. Reset
 before comparing a first-tick capture; repeat the action twice for ticks 2 and 3.
 
 Expand **128×128 contributions** under corrected division to inspect the first failing level; expand the refined

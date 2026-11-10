@@ -10,7 +10,7 @@ but still fails. The tolerance is unchanged. A targeted integer-count division c
 but still leaves a few dense force/position failures; see the correction results below.
 
 Open the [demo](#/many-body-grid), choose clusters, 8,192 points, eight samples and precise quality. Reset, then click
-**Compare centroid pass**. The table includes the three centroid variants plus two far-field variants on identical input positions, bounds, seed and
+**Compare centroid pass**. The table includes the three centroid variants plus three far-field variants on identical input positions, bounds, seed and
 sample budget. The canvases keep the inline baseline; the stored variant is a separate temporary backend used for
 validation. No alternative replaces the production WebGL comparison or the original CPU oracle.
 
@@ -146,7 +146,7 @@ Its extra memory and GPU time still need evaluation. A generic extra pass alone 
 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/many-body-grid/centroids.test.ts
 ```
 
-**Export JSON** includes all five verdicts, centroid rounding statistics, stage summaries, the same-centroid CPU check and
+**Export JSON** includes all six verdicts, centroid rounding statistics, stage summaries, the same-centroid CPU check and
 resource counts. The row's ordinary `passed` verdict still refers to the displayed inline comparison; the candidate has
 its own `centroidComparison.storedPassed`. The corrected result is stored separately under
 `centroidComparison.corrected`, including its division corpus and unchanged force verdict. An unavailable candidate is reported separately. Keep machine captures local;

@@ -17,7 +17,8 @@ export function nearTraceShader (source: string, stage: 'raw' | 'jitter'): strin
 }
 export function gpuTraceShader (source: string): string {
   let s = `${source}\n@group(0) @binding(10) var<storage, read_write> trace: array<vec4<f32>>;\n`
-  s = replaceOnce(s, '    far += velocity;', '    far += velocity;\n    trace[level * u32(params.count) + targetIndex] = vec4(far, 0., 0.);')
+  const far = source.includes('fn accumulateMain(') ? '    far = farSums[level * u32(params.count) + targetIndex];' : '    far += velocity;'
+  s = replaceOnce(s, far, `${far}\n    trace[level * u32(params.count) + targetIndex] = vec4(far, 0., 0.);`)
   s = replaceOnce(s, '  near += near * randomDir;', `  let base = u32(params.levelCount) * u32(params.count) + targetIndex;
   trace[base] = vec4(near, 0., 0.);
   near += near * randomDir;
