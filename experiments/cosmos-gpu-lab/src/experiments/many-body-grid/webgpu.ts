@@ -3,6 +3,7 @@ import { Kernel } from '@luma.gl/engine'
 import { createWebGPU } from '../many-body/webgpu'
 import { bindingLayout, readFloats, upload } from '../../gpu/luma'
 import { nearLimit, type Input, type Parameters } from '../many-body/data'
+import { verifyCountDivision } from './division-check'
 import { storedCentroidShader, type CentroidMode } from './centroids'
 import { gpuTraceShader, stageNames } from './trace'
 import { layout, type Frame, type Structure } from './data'
@@ -11,7 +12,8 @@ import shader from './grid.wgsl?raw'
 export async function createGridWebGPU (
   canvas: HTMLCanvasElement, input: Input, p: Parameters, initial: Frame, centroidMode: CentroidMode = 'inline'
 ): Promise<GridBackend> {
-  const sourceShader = centroidMode === 'stored' ? storedCentroidShader(shader) : shader
+  const sourceShader = centroidMode !== 'inline' ? storedCentroidShader(shader, centroidMode === 'corrected') : shader
+  let verifyDivision: GridBackend['verifyDivision']
   let readCentroids: (() => Promise<Float32Array>) | undefined
   let frame = initial
   let diagnose: NonNullable<GridBackend['diagnose']>
@@ -21,10 +23,11 @@ export async function createGridWebGPU (
     const own = <T extends { destroy(): void }>(v: T): T => { owned.push(v); return v }
     try {
       const l = layout(count)
+      if (centroidMode === 'corrected') verifyDivision = (): ReturnType<typeof verifyCountDivision> => verifyCountDivision(device)
       const storage = (bytes: number): Buffer => own(device.createBuffer({ byteLength: Math.max(16, bytes), usage: Buffer.STORAGE | Buffer.COPY_SRC }))
       const heads = storage(l.cells * 4); const links = storage(l.sizes.length * count * 4)
       const aggregates = storage(l.cells * 16); const slots = storage(l.finest ** 2 * frame.slots * 8)
-      const centroids = centroidMode === 'stored' ? storage(l.cells * 16) : undefined
+      const centroids = centroidMode !== 'inline' ? storage(l.cells * 16) : undefined
       if (centroids) readCentroids = (): Promise<Float32Array> => readFloats(centroids)
       const levels = own(upload(device, new Uint32Array(l.sizes.flatMap((n, i) => [n, l.offsets[i], 0, 0]))))
       const params = own(upload(device, new Float32Array(12), Buffer.UNIFORM)); const box = own(upload(device, frame.bounds, Buffer.UNIFORM))
@@ -132,6 +135,7 @@ export async function createGridWebGPU (
     ...base,
     name: `WebGPU grid (${centroidMode} centroids)`,
     readCentroids,
+    verifyDivision,
     diagnose: () => diagnose(),
     readStructure: () => readStructure(),
     setFrame (next): void {

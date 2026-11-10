@@ -216,26 +216,27 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       const target = el('[data-output="centroids"]')
       if (centroidComparison) {
         const c = centroidComparison
-        const comparisonRows = [{ label: 'Inline', check: c.inline }, { label: 'Stored', check: c.stored }].map(({ label, check }) =>
-          `<tr><td>${label}</td><td>${check.forces.failures} / ${num(check.forces.maxError)}</td>
-          <td>${check.positions.failures} / ${num(check.positions.maxError)}</td></tr>`).join('')
+        const candidates = [{ label: 'Stored', result: c }, { label: 'Corrected division', result: c.corrected }]
+        const comparisonRows = [{ label: 'Inline', check: c.inline }, ...candidates.map(v => ({ label: v.label, check: v.result.stored }))]
+          .map(({ label, check }) => `<tr><td>${label}</td><td>${check.forces.failures} / ${num(check.forces.maxError)}</td>
+            <td>${check.positions.failures} / ${num(check.positions.maxError)}</td></tr>`).join('')
         target.innerHTML = `<details open><summary>Centroid pass comparison · tick ${tick}</summary>
           <p class="demo-note">Same input, bounds, samples and unchanged CPU reference. Only WebGPU centroid evaluation differs.</p>
           <table><thead><tr><th>WebGPU variant</th><th>Force failures / max error</th><th>Position failures / max error</th></tr></thead>
           <tbody>${comparisonRows}</tbody></table>
-          <p class="demo-note">Stored variant: ${c.storedPassed ? 'Pass' : 'Mismatch'}.
-            Structure ${c.structural.valid ? 'Pass' : 'FAIL'} · centroid budget ${c.centroidCheck.valid ? 'Pass' : 'FAIL'} ·
-            diagnostic replay ${c.replay.valid ? 'Pass' : 'FAIL'}.
-            Stored vs inline: ${c.versusInline.forces.failures} force / ${c.versusInline.positions.failures} position failures.
-            ${c.centroids.differingComponents} centroid components differ from CPU division; max ${c.centroids.maxUlp} ULP.
-            CPU using GPU-stored centroids: ${c.sameCentroids.forces.failures} force / ${c.sameCentroids.positions.failures} position failures
-            (diagnostic only; the original reference stays the gate).
-            Extra storage: ${(c.extraStorageBytes / 1048576).toFixed(2)} MiB; one extra dispatch. GPU cost has not been measured.</p>
-          <table><caption>Stored variant · stage checks using its own aggregates</caption>
-            <thead><tr><th>Stage</th><th>Failures</th><th>Max error</th><th>Worst budget ratio</th></tr></thead>
-            <tbody>${c.stages.map(s => `<tr><td>${s.stage}</td><td>${s.check.failures}</td><td>${num(s.check.maxError)}</td>
-              <td>${s.worst ? num(s.worst.ratio) : '—'}</td></tr>`).join('')}</tbody></table>
-          <p class="demo-note">The canvases above keep the inline baseline. This readback-heavy comparison is not a timing benchmark.</p></details>`
+          ${candidates.map(({ label, result: r }) => `<h3>${label}: ${r.storedPassed ? 'Pass' : 'Mismatch'}</h3>
+            <p class="demo-note">Structure ${r.structural.valid ? 'Pass' : 'FAIL'} · centroid budget ${r.centroidCheck.valid ? 'Pass' : 'FAIL'} ·
+              replay ${r.replay.valid ? 'Pass' : 'FAIL'}. ${r.centroids.differingComponents} centroid components differ from CPU division;
+              max ${r.centroids.maxUlp} ULP. CPU using GPU centroids: ${r.sameCentroids.forces.failures} force /
+              ${r.sameCentroids.positions.failures} position failures (diagnostic only).</p>
+            ${r.division ? `<p class="demo-note">Division corpus: ${r.division.cases} cases, ${r.division.mismatches} bit-pattern mismatches.</p>` : ''}
+            <details><summary>${label} · inspect force stages</summary>
+              <table><thead><tr><th>Stage</th><th>Failures</th><th>Max error</th><th>Worst budget ratio</th><th>Point / axis</th></tr></thead>
+                <tbody>${r.stages.map(s => `<tr><td>${s.stage}</td><td>${s.check.failures}</td><td>${num(s.check.maxError)}</td>
+                  <td>${s.worst ? num(s.worst.ratio) : '—'}</td><td>${s.worst ? `${s.worst.point} / ${s.worst.axis}` : '—'}</td></tr>`).join('')}
+              </tbody></table></details>`).join('')}
+          <p class="demo-note">Each stored variant adds ${(c.extraStorageBytes / 1048576).toFixed(2)} MiB and one dispatch.
+            GPU cost is unmeasured. The canvases above keep the inline baseline; corrected division remains an opt-in candidate.</p></details>`
       } else { target.textContent = `Centroid comparison unavailable: ${centroidError}` }
       target.style.scrollMarginTop = `${el('.playback-toolbar').offsetHeight + 16}px`
       target.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -269,7 +270,8 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     el('[data-status="CPU"]').textContent = 'Computed'
     const verdict = passed ? 'Passed' : checks.length < 2 ? 'Partial comparison' : 'Mismatch'
     status.textContent = `${comparingCentroids ? 'Inline baseline: ' : ''}${verdict} · tick ${tick}. ${comparingCentroids
-      ? `Stored centroid variant: ${centroidError ? 'unavailable' : centroidComparison?.storedPassed ? 'Passed' : 'Mismatch'}.`
+      ? `Stored centroid variant: ${centroidError ? 'unavailable' : centroidComparison?.storedPassed ? 'Passed' : 'Mismatch'}; ` +
+        `corrected division: ${centroidError ? 'unavailable' : centroidComparison?.corrected.storedPassed ? 'Passed' : 'Mismatch'}.`
       : 'Approximation error is reported separately.'}`
     return passed
   }

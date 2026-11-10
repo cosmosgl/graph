@@ -49,8 +49,9 @@ level. Near-force accumulation, jitter and clamping pass. Diagnostic changes to 
 but not all, final-force failures. The original CPU reference remains the gate; these hypotheses do not establish a fix.
 
 The [stored centroid variant](#/many-body-grid/docs/centroids) does not fix the dense failures without changing the
-budget. It isolates a storage boundary, but centroid division still differs from CPU rounding on the M3. Inline remains
-the default; the comparison and its negative result stay available in the lab.
+budget. It isolates a storage boundary, but centroid division still differs from CPU rounding on the M3. A targeted integer-count correction eliminates the checked centroid-bit differences, but leaves 2 force / 2 position
+failures at 8,192 dense points and 5 / 1 at 16,384 on the M3. Inline remains the default; all three variants and their
+original-tolerance verdicts stay available in the lab.
 
 ### Automated coverage
 

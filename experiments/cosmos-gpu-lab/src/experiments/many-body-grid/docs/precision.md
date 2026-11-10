@@ -97,7 +97,8 @@ Kahan-style correction is not, by itself, a verified precision fix.
 The [separate centroid pass comparison](#/many-body-grid/docs/centroids) now tests the storage-boundary hypothesis.
 It does not fix the dense mismatch: GPU-stored centroid values can still differ from CPU division by one ULP, and the
 8,192-point dense case gets worse. Feeding those same stored values into the CPU model removes most, but not all,
-failures. Keep the strict full comparison as the guard and next probe individual cell contributions and division rounding.
+failures. The targeted integer-count correction now matches centroid bits exactly but leaves 2 force / 2 position failures at
+8,192 dense points on the M3. Keep the strict comparison as the guard and next probe the remaining individual force contributions.
 
 Only after the arithmetic contract is understood should this experiment claim dense CPU parity or proceed to a combined
 layout-quality claim. The exact-radius versus grid-partition difference remains a separate convergence question.

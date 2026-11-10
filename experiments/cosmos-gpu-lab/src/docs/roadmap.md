@@ -114,7 +114,8 @@ production's approximate path with shared CPU bounds and explicit sample counts.
 the app keeps that mismatch visible. [Stage tracing](#/many-body-grid/docs/precision) narrows the first tolerance failures
 to the far field after the 64×64 level; centroid evaluation order explains much, but not all, of the discrepancy.
 [Storing centroids separately](#/many-body-grid/docs/centroids) does not resolve the dense mismatch; GPU division
-rounding remains a major contributor. [Detailed findings](#/many-body-grid/docs/results).
+rounding remains a major contributor. A targeted integer-count divider now reproduces the checked centroid bits exactly,
+but leaves a few dense force/position failures under the original budget. [Detailed findings](#/many-body-grid/docs/results).
 
 **New migration question:** the exact radius split and grid near-field partition can produce substantially different
 capped forces in dense data. Matching the WebGL implementation is necessary, but is not enough to establish layout
