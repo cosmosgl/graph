@@ -111,7 +111,10 @@ favor WebGPU over the WebGL baseline at 4,096 points, but show no universal winn
 force composition and cross-device behavior remain open. The [hierarchical experiment](#/many-body-grid) now checks
 production's approximate path with shared CPU bounds and explicit sample counts. Native M3 uniform checks pass at
 8,192 and 16,384 points. A dense fixture matches WebGL through WebGPU but fails the full CPU-reference budget;
-the app keeps that mismatch visible. [Detailed findings](#/many-body-grid/docs/results).
+the app keeps that mismatch visible. [Stage tracing](#/many-body-grid/docs/precision) narrows the first tolerance failures
+to the far field after the 64×64 level; centroid evaluation order explains much, but not all, of the discrepancy.
+[Storing centroids separately](#/many-body-grid/docs/centroids) does not resolve the dense mismatch; GPU division
+rounding remains a major contributor. [Detailed findings](#/many-body-grid/docs/results).
 
 **New migration question:** the exact radius split and grid near-field partition can produce substantially different
 capped forces in dense data. Matching the WebGL implementation is necessary, but is not enough to establish layout

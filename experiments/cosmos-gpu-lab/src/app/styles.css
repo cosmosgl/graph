@@ -1836,3 +1836,7 @@ button[data-action="play"][aria-pressed="true"] {
 .many-body-benchmark { margin-top: 40px; padding-top: 24px; border-top: 1px solid #3a404a; }
 .many-body-benchmark .controls { margin-block: 16px; }
 .many-body-benchmark table { min-width: 760px; }
+
+.precision-trace summary { padding: 12px 0; cursor: pointer; font-size: 14px; }
+.precision-trace h3 { margin: 24px 0 12px; font-size: 16px; font-weight: 500; }
+.precision-trace details details { margin: 12px 0 24px; }
