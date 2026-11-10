@@ -10,6 +10,7 @@ import slotsFrag from '../../../../../src/modules/ForceManyBody/build-nearfield-
 import quadVert from '../../../../../src/modules/Shared/quad.vert?raw'
 import { createWebGL } from '../many-body/webgl'
 import { nearLimit, type Input, type Parameters } from '../many-body/data'
+import { nearTraceShader, type Trace } from './trace'
 import { layout, type Frame, type Structure } from './data'
 import type { GridBackend } from './backend'
 
@@ -30,6 +31,7 @@ const floats = (texture: Texture, z = 0): Float32Array => {
 }
 export async function createGridWebGL (canvas: HTMLCanvasElement, input: Input, p: Parameters, initial: Frame): Promise<GridBackend> {
   let frame = initial
+  let diagnose: NonNullable<GridBackend['diagnose']>
   let readStructure: () => Promise<Structure> = async () => { throw new Error('Grid not initialized') }
   const base = await createWebGL(canvas, input, p, ({ device, positions, random, exit, target, count, size }) => {
     const owned: Array<{ destroy(): void }> = []
@@ -84,6 +86,59 @@ export async function createGridWebGL (canvas: HTMLCanvasElement, input: Input, 
         ['pointsTextureSize', 'levelGridSize', 'maxStep', 'alpha', 'repulsion', 'slotCount'], quadVert, withGridCell(nearFrag), false)
       const peel = model('buildNearFieldSlotsUniforms',
         ['pointsTextureSize', 'levelGridSize', 'hasPreviousSlot', 'randomSeed', 'previousLayer'], withGridCell(slotsVert), slotsFrag, true, true)
+      const configureLevel = (i: number, n: number): void => {
+        level.uniforms.setUniforms({
+          forceLevelPreciseUniforms: {
+            levelGridSize: n,
+            isFirstLevel: i === 0 ? 1 : 0,
+            alpha: p.alpha,
+            repulsion: p.repulsion,
+            shellRadius: frame.precise && i < l.sizes.length - 1 ? 2 : 1,
+            parentShellRadius: i === 0 ? 0 : frame.precise ? 2 : 1,
+          },
+        })
+      }
+      let lastSource = -1
+      diagnose = async (): ReturnType<NonNullable<GridBackend['diagnose']>> => {
+        if (lastSource < 0) throw new Error('Step before diagnosing')
+        const temporary: Array<{ destroy(): void }> = []
+        const keep = <T extends { destroy(): void }>(r: T): T => { temporary.push(r); return r }
+        try {
+          const scratch = keep(device.createTexture({ width: size, height: size, format: 'rgba32float', usage: Texture.RENDER | Texture.COPY_SRC }))
+          const framebuffer = keep(device.createFramebuffer({ width: size, height: size, colorAttachments: [scratch] }))
+          const common = { positionsTexture: positions[lastSource], dataBoundsTexture: bounds }
+          const trace: Trace = {}
+          const draw = (m: Model, clear: boolean): Float32Array => {
+            const pass = device.beginRenderPass({ framebuffer, clearColor: clear ? [0, 0, 0, 0] : false, clearDepth: false })
+            try { m.draw(pass) } finally { pass.end() }
+            return floats(scratch).slice(0, count * 4)
+          }
+          for (const [i, n] of l.sizes.entries()) {
+            configureLevel(i, n)
+            level.model.setBindings({ ...common, levelTexture: levels[i] })
+            trace[`far ${n}`] = draw(level.model, i === 0)
+          }
+          const nearBindings = { ...common, levelTexture: levels[levels.length - 1], randomValues: random, slotsEven: arrays[0], slotsOdd: arrays[1] }
+          near.model.setBindings(nearBindings)
+          const forces = draw(near.model, false)
+          for (const stage of ['raw', 'jitter'] as const) {
+            const m = keep(new Model(device, {
+              vs: quadVert,
+              fs: withGridCell(nearTraceShader(nearFrag, stage)),
+              defines: { USE_UNIFORM_BUFFERS: true },
+              topology: 'triangle-strip',
+              vertexCount: 4,
+              attributes: { vertexCoord: quad },
+              bufferLayout: [{ name: 'vertexCoord', format: 'float32x2' }],
+              bindings: { ...nearBindings, forceNearFieldUniforms: near.uniforms.getManagedUniformBuffer('forceNearFieldUniforms') },
+              parameters: { ...additive, blend: false },
+            }))
+            trace[`near ${stage}`] = draw(m, true)
+          }
+          trace['near clamped'] = draw(near.model, true)
+          return { trace, forces }
+        } finally { temporary.reverse().forEach(r => r.destroy()) }
+      }
       readStructure = async (): Promise<Structure> => {
         const aggregates = new Float32Array(l.cells * 4)
         levels.forEach((t, i) => aggregates.set(floats(t), l.offsets[i] * 4))
@@ -96,6 +151,7 @@ export async function createGridWebGL (canvas: HTMLCanvasElement, input: Input, 
       }
       return {
         encode (source): void {
+          lastSource = source
           bounds.copyImageData({ data: frame.bounds, bytesPerRow: 16 })
           const common = { positionsTexture: positions[source], dataBoundsTexture: bounds }
           for (const [i, n] of l.sizes.entries()) {
@@ -117,16 +173,7 @@ export async function createGridWebGL (canvas: HTMLCanvasElement, input: Input, 
           const pass = device.beginRenderPass({ framebuffer: target, clearColor: [0, 0, 0, 0], clearDepth: false })
           try {
             for (const [i, n] of l.sizes.entries()) {
-              level.uniforms.setUniforms({
-                forceLevelPreciseUniforms: {
-                  levelGridSize: n,
-                  isFirstLevel: i === 0 ? 1 : 0,
-                  alpha: p.alpha,
-                  repulsion: p.repulsion,
-                  shellRadius: frame.precise && i < l.sizes.length - 1 ? 2 : 1,
-                  parentShellRadius: i === 0 ? 0 : frame.precise ? 2 : 1,
-                },
-              })
+              configureLevel(i, n)
               level.model.setBindings({ ...common, levelTexture: levels[i] }); level.model.draw(pass)
             }
             near.uniforms.setUniforms({
@@ -145,6 +192,7 @@ export async function createGridWebGL (canvas: HTMLCanvasElement, input: Input, 
   return {
     ...base,
     name: 'WebGL grid',
+    diagnose: () => diagnose(),
     readStructure: () => readStructure(),
     setFrame (next): void {
       if (next.slots !== initial.slots) throw new Error('Recreate the backend to change slot count')

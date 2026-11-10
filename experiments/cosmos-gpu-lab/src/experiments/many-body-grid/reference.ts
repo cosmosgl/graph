@@ -1,21 +1,29 @@
 import type { Input, Parameters } from '../many-body/data'
 import { nearLimit } from '../many-body/data'
 import { compare, type Snapshot } from '../many-body/reference'
+import type { Trace } from './trace'
 import { cellOf, layout, type Frame, type Structure } from './data'
 const f = Math.fround
 type Vec = [number, number]
-function pair (dx: number, dy: number, rx: number, ry: number, mass: number, p: Parameters): Vec {
+function pair (dx: number, dy: number, rx: number, ry: number, mass: number, p: Parameters, inverseRoot = false): Vec {
   dx = f(dx); dy = f(dy)
   let l = f(f(dx * dx) + f(dy * dy))
   if (l <= 0) { dx = rx; dy = ry; l = f(f(dx * dx) + f(dy * dy)) }
   if (l <= 0) return [0, 0]
-  const direction = f(Math.sqrt(l)); if (l < 1) l = f(Math.sqrt(l))
-  const magnitude = f(f(f(f(p.alpha) * f(p.repulsion)) * mass) / f(Math.sqrt(l)))
+  const direction = f(Math.sqrt(l)); const inverseDirection = f(1 / Math.sqrt(l))
+  if (l < 1) l = f(Math.sqrt(l))
+  const strength = f(f(f(p.alpha) * f(p.repulsion)) * mass)
+  if (inverseRoot) {
+    const magnitude = f(strength * f(1 / Math.sqrt(l)))
+    return [f(magnitude * f(dx * inverseDirection)), f(magnitude * f(dy * inverseDirection))]
+  }
+  const magnitude = f(strength / f(Math.sqrt(l)))
   return [f(magnitude * f(dx / direction)), f(magnitude * f(dy / direction))]
 }
 function add (a: Vec, b: Vec): Vec { return [f(a[0] + b[0]), f(a[1] + b[1])] }
-function finishNear (near: Vec, rx: number, ry: number, limit: number): Vec {
+function finishNear (near: Vec, rx: number, ry: number, limit: number, jitter?: (v: Vec) => void): Vec {
   near = [f(near[0] + f(near[0] * rx)), f(near[1] + f(near[1] * ry))]
+  jitter?.(near)
   const speed = f(Math.sqrt(f(f(near[0] * near[0]) + f(near[1] * near[1]))))
   if (speed > limit) { const scale = f(limit / speed); near = [f(near[0] * scale), f(near[1] * scale)] }
   return near
@@ -33,7 +41,18 @@ export function integrate (points: Float32Array, forces: Float32Array, p: Parame
   }
   return output
 }
-export function gridReference (input: Input, points: Float32Array, p: Parameters, frame: Frame, structure: Structure): Snapshot {
+export type CentroidArithmetic = 'rounded' | 'reciprocal' | 'fused-reciprocal' | 'fused-reciprocal-rsqrt'
+// Alternative evaluation orders are hypotheses, never the default oracle.
+function centroidDelta (position: number, sum: number, mass: number, arithmetic: CentroidArithmetic): number {
+  if (arithmetic.startsWith('fused-reciprocal')) return f(position - sum * f(1 / mass))
+  const center = arithmetic === 'reciprocal' ? f(sum * f(1 / mass)) : f(sum / mass)
+  return f(position - center)
+}
+export function gridReference (
+  input: Input, points: Float32Array, p: Parameters, frame: Frame, structure: Structure, trace?: Trace,
+  arithmetic: CentroidArithmetic = 'rounded', storedCentroids?: Float32Array
+): Snapshot {
+  if (storedCentroids && storedCentroids.length !== structure.aggregates.length) throw new Error('Centroid layout mismatch')
   const count = points.length / 4; const l = layout(count); const cells = l.finest ** 2
   const forces = new Float32Array(points.length)
   for (let target = 0; target < count; target++) {
@@ -54,10 +73,13 @@ export function gridReference (input: Input, points: Float32Array, p: Parameters
           if (xx < 0 || yy < 0 || xx >= n || yy >= n || Math.max(Math.abs(xx - cx), Math.abs(yy - cy)) <= shell) continue
           const a = (l.offsets[level] + yy * n + xx) * 4; const mass = structure.aggregates[a + 2]
           if (!mass) continue
-          velocity = add(velocity, pair(f(x - f(structure.aggregates[a] / mass)), f(y - f(structure.aggregates[a + 1] / mass)), 0, 0, mass, p))
+          const dx = storedCentroids ? f(x - storedCentroids[a]) : centroidDelta(x, structure.aggregates[a], mass, arithmetic)
+          const dy = storedCentroids ? f(y - storedCentroids[a + 1]) : centroidDelta(y, structure.aggregates[a + 1], mass, arithmetic)
+          velocity = add(velocity, pair(dx, dy, 0, 0, mass, p, arithmetic === 'fused-reciprocal-rsqrt'))
         }
       }
       far = add(far, velocity)
+      trace?.[`far ${n}`].set(far, offset)
     }
     const c = cellOf(x, y, l.finest, frame.bounds); const cx = c % l.finest; const cy = Math.floor(c / l.finest)
     const rx = input.samples[target * 2]; const ry = input.samples[target * 2 + 1]
@@ -80,7 +102,10 @@ export function gridReference (input: Input, points: Float32Array, p: Parameters
         if (sampled) { const weight = f(others / sampled); near = add(near, [f(weight * sum[0]), f(weight * sum[1])]) }
       }
     }
-    const force = add(far, finishNear(near, rx, ry, nearLimit(count, p)))
+    trace?.['near raw'].set(near, offset)
+    const clamped = finishNear(near, rx, ry, nearLimit(count, p), v => trace?.['near jitter'].set(v, offset))
+    trace?.['near clamped'].set(clamped, offset)
+    const force = add(far, clamped)
     forces.set(force, offset)
   }
   return { forces, positions: integrate(points, forces, p) }

@@ -2,6 +2,8 @@ import type { ExperimentInstance } from '../../runtime/experiment'
 import { createFixture, PARAMETERS, type Fixture } from '../many-body/data'
 import { fitView, type View } from '../many-body/backend'
 import { compareArray, TOLERANCE, type Snapshot } from '../many-body/reference'
+import { compareCentroidPass } from './centroid-comparison'
+import { diagnose } from './diagnostic'
 import { buildReference, frameFor, layout } from './data'
 import { gridReference, comparePresent, approximationError, integrate } from './reference'
 import { compareStructure } from './validation'
@@ -36,7 +38,9 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
         <option value="balanced">Balanced · 3×3 shell</option></select></label>
     </div>
     <div class="demo-toolbar playback-toolbar"><div class="controls"><button data-action="step" class="button-primary">Step + validate</button>
-      <button data-action="three">3 validated ticks</button><button data-action="stop" disabled>Stop</button>
+      <button data-action="centroids">Compare centroid pass</button><button data-action="trace">Trace next tick</button>
+      <button data-action="three">3 validated ticks</button>
+      <button data-action="stop" disabled>Stop</button>
       <button data-action="reset">Reset / retry devices</button><button data-action="export" disabled>Export JSON</button>
       </div><span class="tick-counter">Tick <strong data-output="tick">0</strong></span></div>
     <p class="many-body-status" data-output="status" role="status">Preparing backends…</p>
@@ -49,6 +53,8 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       GPU panels draw resident positions. Force-only motion expands the layout; springs, gravity and cooling are disabled.</p>
     <div class="many-body-results" data-output="results"></div>
     <div class="many-body-results" data-output="approximation"></div>
+    <div class="many-body-results precision-trace" data-output="centroids"></div>
+    <div class="many-body-results precision-trace" data-output="trace"></div>
     <p class="demo-note">Port checks use every present target and every cell/slot. Approximation error uses up to 64 evenly spaced target indices,
       each evaluated against every source. This is a diagnostic subset, not a whole-layout accuracy guarantee or a GPU timing benchmark.</p>
   `
@@ -85,6 +91,8 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     input = createFixture(fixture.value as Fixture, Number(count.value)); cpu = input.points
     count.value = String(cpu.length / 4)
     const frame = frameFor(cpu, 0, Number(slots.value), quality.value === 'precise')
+    el('[data-output="centroids"]').replaceChildren()
+    el('[data-output="trace"]').replaceChildren()
     el('[data-output="tick"]').textContent = '0'; el('[data-output="results"]').replaceChildren(); el('[data-output="approximation"]').replaceChildren()
     const l = layout(cpu.length / 4)
     el('[data-output="grid"]').textContent = `${cpu.length / 4} points · ${l.sizes.join(' → ')} cells per axis · ${frame.slots} slots/cell · ` +
@@ -112,7 +120,10 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       ? 'Ready. Step to validate independently built grids and forces.'
       : 'Partial comparison: a GPU backend is unavailable.'
   }
-  const step = async (): Promise<boolean> => {
+  const step = async (tracing = false, comparingCentroids = false): Promise<boolean> => {
+    el('[data-output="centroids"]').replaceChildren()
+    el('[data-output="trace"]').replaceChildren()
+    const diagnostics: Array<{ name: string; report: Awaited<ReturnType<typeof diagnose>> }> = []
     status.textContent = `Validating tick ${tick + 1}…`
     await new Promise(resolve => setTimeout(resolve, 0))
     const previous = cpu; const frame = frameFor(previous, tick, Number(slots.value), quality.value === 'precise')
@@ -137,8 +148,10 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
           integration: compareArray(actual.positions, integrate(previous, actual.forces, PARAMETERS), previous),
           local: comparePresent(actual, gridReference(input, previous, PARAMETERS, frame, actualStructure), previous),
         }
+        const report = tracing ? await diagnose(lane.backend, actual, input, previous, PARAMETERS, frame, actualStructure) : null
+        if (report) diagnostics.push({ name: lane.name, report })
         checks.push(check); snapshots[lane.name] = actual; lane.positions = actual.positions
-        const valid = check.structure.valid && check.output.valid && check.local.valid && check.integration.valid
+        const valid = check.structure.valid && check.output.valid && check.local.valid && check.integration.valid && (!report || report.replay.valid)
         el(`[data-status="${lane.name}"]`).textContent = valid ? 'Passed' : 'Mismatch'
       } catch (error) {
         errors[lane.name] = error instanceof Error ? error.message : String(error)
@@ -146,10 +159,21 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       }
     }
     if (destroyed) return false
+    let centroidComparison: Awaited<ReturnType<typeof compareCentroidPass>> | undefined
+    let centroidError: string | undefined
+    if (comparingCentroids) {
+      status.textContent = `Comparing stored centroids at tick ${tick + 1}…`
+      try {
+        if (!snapshots.WebGPU) throw new Error('Inline WebGPU result unavailable')
+        centroidComparison = await compareCentroidPass(input, previous, PARAMETERS, frame, snapshots.WebGPU)
+      } catch (error) { centroidError = error instanceof Error ? error.message : String(error) }
+      if (destroyed) return false
+    }
     const approximation = approximationError(input, previous, expected.forces, PARAMETERS, frame)
     const cross = snapshots.WebGL && snapshots.WebGPU ? comparePresent(snapshots.WebGPU, snapshots.WebGL, previous) : null
     cpu = expected.positions; render()
-    const passed = Boolean(cross?.valid) && checks.length === 2 && Object.keys(errors).length === 0 &&
+    const replayValid = diagnostics.every(d => d.report.replay.valid)
+    const passed = replayValid && Boolean(cross?.valid) && checks.length === 2 && Object.keys(errors).length === 0 &&
       checks.every(c => c.structure.valid && c.output.valid && c.local.valid && c.integration.valid)
     tick++; el('[data-output="tick"]').textContent = String(tick)
     rows.push({
@@ -161,6 +185,9 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       checks,
       cross,
       approximation,
+      diagnostics,
+      centroidComparison,
+      centroidError,
       passed,
       errors: { ...errors },
     })
@@ -185,9 +212,65 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       <thead><tr><th>Reference</th><th>Error</th></tr></thead><tbody>
       <tr><td>Production exact radius split</td><td>${num(approximation.versusProductionExactPercent)}%</td></tr>
       <tr><td>Exact pairs with the same grid near/far partition</td><td>${num(approximation.versusExactGridPartitionPercent)}%</td></tr></tbody></table>`
+    if (comparingCentroids) {
+      const target = el('[data-output="centroids"]')
+      if (centroidComparison) {
+        const c = centroidComparison
+        const comparisonRows = [{ label: 'Inline', check: c.inline }, { label: 'Stored', check: c.stored }].map(({ label, check }) =>
+          `<tr><td>${label}</td><td>${check.forces.failures} / ${num(check.forces.maxError)}</td>
+          <td>${check.positions.failures} / ${num(check.positions.maxError)}</td></tr>`).join('')
+        target.innerHTML = `<details open><summary>Centroid pass comparison · tick ${tick}</summary>
+          <p class="demo-note">Same input, bounds, samples and unchanged CPU reference. Only WebGPU centroid evaluation differs.</p>
+          <table><thead><tr><th>WebGPU variant</th><th>Force failures / max error</th><th>Position failures / max error</th></tr></thead>
+          <tbody>${comparisonRows}</tbody></table>
+          <p class="demo-note">Stored variant: ${c.storedPassed ? 'Pass' : 'Mismatch'}.
+            Structure ${c.structural.valid ? 'Pass' : 'FAIL'} · centroid budget ${c.centroidCheck.valid ? 'Pass' : 'FAIL'} ·
+            diagnostic replay ${c.replay.valid ? 'Pass' : 'FAIL'}.
+            Stored vs inline: ${c.versusInline.forces.failures} force / ${c.versusInline.positions.failures} position failures.
+            ${c.centroids.differingComponents} centroid components differ from CPU division; max ${c.centroids.maxUlp} ULP.
+            CPU using GPU-stored centroids: ${c.sameCentroids.forces.failures} force / ${c.sameCentroids.positions.failures} position failures
+            (diagnostic only; the original reference stays the gate).
+            Extra storage: ${(c.extraStorageBytes / 1048576).toFixed(2)} MiB; one extra dispatch. GPU cost has not been measured.</p>
+          <table><caption>Stored variant · stage checks using its own aggregates</caption>
+            <thead><tr><th>Stage</th><th>Failures</th><th>Max error</th><th>Worst budget ratio</th></tr></thead>
+            <tbody>${c.stages.map(s => `<tr><td>${s.stage}</td><td>${s.check.failures}</td><td>${num(s.check.maxError)}</td>
+              <td>${s.worst ? num(s.worst.ratio) : '—'}</td></tr>`).join('')}</tbody></table>
+          <p class="demo-note">The canvases above keep the inline baseline. This readback-heavy comparison is not a timing benchmark.</p></details>`
+      } else { target.textContent = `Centroid comparison unavailable: ${centroidError}` }
+      target.style.scrollMarginTop = `${el('.playback-toolbar').offsetHeight + 16}px`
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
+    if (tracing) {
+      const labels = new Map([
+        ['reciprocal', 'Rounded reciprocal'],
+        ['fused-reciprocal', 'Fused centroid delta'],
+        ['fused-reciprocal-rsqrt', 'Fused delta + inverse roots'],
+      ])
+      el('[data-output="trace"]').innerHTML = `<details open><summary>Precision trace · tick ${tick}</summary>
+        <p class="demo-note">CPU uses each backend’s own cell aggregates and selected neighbors. Far rows are cumulative after each level.
+        Ratio is error / unchanged component budget; above 1 fails. Replay checks the instrumented force against normal execution.</p>
+        ${diagnostics.map(d => `<h3>${d.name} · replay ${d.report.replay.valid ? 'Pass' : 'FAIL — trace is not representative'}</h3>
+          <table><thead><tr><th>Stage</th><th>Failures</th><th>Max error</th><th>Worst budget ratio</th><th>Target / axis</th></tr></thead>
+          <tbody>${d.report.stages.map(s => `<tr><td>${s.stage}</td><td>${s.check.failures}</td><td>${num(s.check.maxError)}</td>
+            <td>${s.worst ? num(s.worst.ratio) : '—'}</td><td>${s.worst ? `${s.worst.point} / ${s.worst.axis}` : '—'}</td></tr>`).join('')}</tbody></table>
+          <p class="demo-note">Alternative CPU arithmetic (diagnostic only):
+          ${d.report.hypotheses.map(h => `${labels.get(h.arithmetic)}: ` +
+            `${h.output.forces.failures} force / ${h.output.positions.failures} position failures`).join('; ')}.
+          These alternatives do not replace the baseline or change its verdict.</p>
+          <details><summary>Follow worst final-force component: point ${d.report.target?.point} / ${d.report.target?.axis}</summary>
+            <table><thead><tr><th>Stage</th><th>GPU value</th><th>CPU value</th><th>Absolute error</th></tr></thead>
+            <tbody>${d.report.target?.stages.map(s => `<tr><td>${s.stage}</td><td>${s.actual.toPrecision(9)}</td>
+              <td>${s.expected.toPrecision(9)}</td><td>${num(s.error)}</td></tr>`).join('') ?? ''}</tbody></table></details>`).join('')}
+        </details>`
+      el('[data-output="trace"] summary').focus({ preventScroll: true })
+      el('[data-output="trace"]').style.scrollMarginTop = `${el('.playback-toolbar').offsetHeight + 16}px`
+      el('[data-output="trace"]').scrollIntoView({ behavior: 'smooth', block: 'start' })
+    }
     el('[data-status="CPU"]').textContent = 'Computed'
     const verdict = passed ? 'Passed' : checks.length < 2 ? 'Partial comparison' : 'Mismatch'
-    status.textContent = `${verdict} · tick ${tick}. Approximation error is reported separately.`
+    status.textContent = `${comparingCentroids ? 'Inline baseline: ' : ''}${verdict} · tick ${tick}. ${comparingCentroids
+      ? `Stored centroid variant: ${centroidError ? 'unavailable' : centroidComparison?.storedPassed ? 'Passed' : 'Mismatch'}.`
+      : 'Approximation error is reported separately.'}`
     return passed
   }
   const task = async (work: () => Promise<void>): Promise<void> => {
@@ -198,6 +281,8 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     } finally { busy = false; if (!destroyed) controls() }
   }
   for (const control of [fixture, count, slots, quality]) control.addEventListener('change', () => { task(setup) })
+  el('[data-action="centroids"]').addEventListener('click', () => { task(async () => { await step(false, true) }) })
+  el('[data-action="trace"]').addEventListener('click', () => { task(async () => { await step(true) }) })
   el('[data-action="step"]').addEventListener('click', () => { task(async () => { await step() }) })
   el('[data-action="three"]').addEventListener('click', () => {
     task(async () => {

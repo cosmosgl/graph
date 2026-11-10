@@ -42,6 +42,16 @@ This is a material model difference at the exact-to-grid transition, not simply 
 It calls for convergence and force-composition tests before choosing migration defaults. These subset metrics cannot
 establish worst-case error or layout quality.
 
+### Stage-by-stage precision investigation
+
+The [precision trace](#/many-body-grid/docs/precision) locates the first M3 tolerance failures after the 64×64 far-field
+level. Near-force accumulation, jitter and clamping pass. Diagnostic changes to CPU centroid evaluation remove most,
+but not all, final-force failures. The original CPU reference remains the gate; these hypotheses do not establish a fix.
+
+The [stored centroid variant](#/many-body-grid/docs/centroids) does not fix the dense failures without changing the
+budget. It isolates a storage boundary, but centroid division still differs from CPU rounding on the M3. Inline remains
+the default; the comparison and its negative result stay available in the lab.
+
 ### Automated coverage
 
 Browser tests check both backends on uniform, clustered, coincident, absent/pinned and boundary fixtures over three
