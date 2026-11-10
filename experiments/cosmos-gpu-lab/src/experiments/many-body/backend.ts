@@ -1,10 +1,12 @@
 import type { Snapshot } from './reference'
+import type { Measurement, Stage } from './timing'
 export type View = [number, number, number, number]
 export type Backend = {
   name: string;
   info: string;
   setPositions(positions: Float32Array): void;
   step(): void;
+  measure(stage: Stage, operations: number): Promise<{ timing: Measurement; snapshot: Snapshot }>;
   read(): Promise<Snapshot>;
   render(view: View): void;
   destroy(): void;

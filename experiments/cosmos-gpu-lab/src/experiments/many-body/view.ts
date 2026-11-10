@@ -4,6 +4,8 @@ import { createFixture, FIXTURES, nearLimit, PARAMETERS, type Fixture, type Vari
 import { compare, referenceTick, TOLERANCE, type Snapshot } from './reference'
 import { createWebGL } from './webgl'
 import { createWebGPU } from './webgpu'
+import { runSweep, type BenchmarkRow } from './benchmark'
+import { TIMING_POLICY } from './timing'
 
 function drawCpu (canvas: HTMLCanvasElement, positions: Float32Array, view: View): void {
   const ctx = canvas.getContext('2d')!
@@ -54,6 +56,22 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
       <p class="demo-note">Every validation tick reads back forces and positions. This is a correctness comparison, not a GPU performance benchmark.
       Reported elapsed time includes CPU calculation, GPU work, readback and drawing submission. An unavailable or failed backend never counts as a pass.</p>
     </details>
+    <section class="many-body-benchmark">
+      <h2>Batched timing</h2>
+      <p class="demo-note">Compare WebGL, direct WebGPU and tiled WebGPU at 128, 512, 1,024, 2,048 and 4,096 points.
+        Time the force alone and force + integration on fixed inputs. Rendering, uploads and correctness checks are outside GPU timing.
+        This sweep uses separate devices and leaves the demo above unchanged.</p>
+      <div class="scale-toolbar"><label>Timing fixture <select data-control="timing-fixture">
+        <option value="uniform">Uniform</option><option value="clusters">Dense clusters</option><option value="both">Both distributions</option>
+      </select></label></div>
+      <div class="controls"><button data-action="benchmark">Run timing sweep</button>
+        <button data-action="benchmark-stop" disabled>Stop sweep</button><button data-action="benchmark-export" disabled>Export timing JSON</button></div>
+      <p class="many-body-status" data-output="benchmark-status" role="status">
+        Ready. Seven measured batches per backend and workload, 4–64 operations per batch after calibration and warmup.</p>
+      <p class="demo-note">Keep this tab visible. GPU time is per operation; completion time also includes submission and fence waiting.
+        Unavailable or invalid GPU timers remain unavailable. <a href="#/many-body/docs/timing">Method and findings</a>.</p>
+      <div class="many-body-results" data-output="benchmark-results"></div>
+    </section>
   `
   const el = <T extends HTMLElement>(selector: string): T => {
     const found = host.querySelector<T>(selector)
@@ -71,6 +89,9 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
   type Lane = { key: 'WebGL' | 'WebGPU'; backend: Backend; previous: Float32Array; failed: boolean }
   const lanes: Lane[] = []
   const rows: Array<Record<string, unknown>> = []
+  const benchmarkRows: BenchmarkRow[] = []
+  let benchmarkOutcome = 'not run'
+  let benchmarkAt = ''
   const errors: Record<string, string> = {}
   const info: Record<string, string> = {}
   const canvas = (name: string): HTMLCanvasElement => el(`[data-canvas="${name}"]`)
@@ -78,6 +99,8 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
     host.querySelectorAll<HTMLButtonElement | HTMLSelectElement>('button,select').forEach(control => { control.disabled = running })
     el<HTMLButtonElement>('[data-action="stop"]').disabled = !running
     el<HTMLButtonElement>('[data-action="export"]').disabled = running || (rows.length === 0 && Object.keys(errors).length === 0)
+    el<HTMLButtonElement>('[data-action="benchmark-stop"]').disabled = !running || benchmarkOutcome !== 'running'
+    el<HTMLButtonElement>('[data-action="benchmark-export"]').disabled = running || !benchmarkRows.length
     count.disabled = running || ['pair', 'edge-cases', 'boundary'].includes(fixture.value)
   }
   const cleanup = (): void => { lanes.splice(0).forEach(lane => lane.backend.destroy()) }
@@ -227,6 +250,64 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
       typeof value === 'number' && !Number.isFinite(value) ? String(value) : value, 2)
     const url = URL.createObjectURL(new Blob([serialized], { type: 'application/json' }))
     const link = document.createElement('a'); link.href = url; link.download = 'cosmos-many-body.json'; link.click(); URL.revokeObjectURL(url)
+  })
+  const timingStatus = el<HTMLElement>('[data-output="benchmark-status"]')
+  const showTiming = (): void => {
+    const ms = (n: number | null | undefined): string => n === null || n === undefined ? '—' : n === 0 ? '0 (timer resolution)' : n.toFixed(4)
+    el('[data-output="benchmark-results"]').innerHTML = benchmarkRows.length
+      ? `<table>
+      <caption>Milliseconds per operation · GPU median and range across seven batches</caption>
+      <thead><tr><th>Fixture / points</th><th>Work</th><th>Backend</th><th>Batch</th><th>GPU median [min–max]</th>
+        <th>Completion</th><th>Samples / checks</th></tr></thead><tbody>
+      ${benchmarkRows.map(row => `<tr><td>${row.fixture} / ${row.count.toLocaleString()}</td>
+        <td>${row.stage === 'force' ? 'Force' : 'Force + integrate'}</td><td>${row.backend}</td><td>${row.operations}</td>
+        <td>${ms(row.summary?.gpuMs)}${row.summary?.gpuRange ? ` [${ms(row.summary.gpuRange[0])}–${ms(row.summary.gpuRange[1])}]` : ''}</td>
+        <td>${ms(row.summary?.completionMs)}</td><td>${row.samples.length}/7 · ${
+  row.validation.some(check => !check.valid) ? 'FAILED' : row.summary ? 'Passed' : 'Incomplete'}${
+  row.summary?.gpuMs === null ? ` · timer ${[...new Set(row.samples.map(sample => sample.timerStatus))].join(', ')}` : ''}</td></tr>`).join('')}
+      </tbody></table>`
+      : ''
+  }
+  el('[data-action="benchmark"]').addEventListener('click', () => {
+    task(async () => {
+      benchmarkRows.length = 0; benchmarkOutcome = 'running'; benchmarkAt = new Date().toISOString(); controls(true); showTiming()
+      const selection = el<HTMLSelectElement>('[data-control="timing-fixture"]').value
+      const fixtures: Fixture[] = selection === 'both' ? ['uniform', 'clusters'] : [selection as Fixture]
+      status.textContent = 'Timing sweep running below. The demo is paused and its state is preserved.'
+      try {
+        await runSweep({
+          fixtures,
+          rows: benchmarkRows,
+          cancelled: () => stopped || destroyed,
+          progress: message => { if (!destroyed) { timingStatus.textContent = message; showTiming() } },
+        })
+        benchmarkOutcome = stopped || destroyed ? 'stopped' : 'complete'
+      } catch (error) { benchmarkOutcome = `failed: ${error instanceof Error ? error.message : String(error)}` }
+      if (!destroyed) {
+        showTiming()
+        timingStatus.textContent = `Sweep ${benchmarkOutcome}. ${benchmarkRows.filter(row => row.summary).length}/${benchmarkRows.length} rows complete. ` +
+          'Completed samples can be exported.'
+        status.textContent = `Timing sweep ${benchmarkOutcome}. Demo remains at tick ${tick}.`
+      }
+    })
+  })
+  el('[data-action="benchmark-stop"]').addEventListener('click', () => { stopped = true })
+  el('[data-action="benchmark-export"]').addEventListener('click', () => {
+    const capture = {
+      schemaVersion: 1,
+      experiment: 'many-body-timing',
+      recordedAt: benchmarkAt,
+      browser: navigator.userAgent,
+      outcome: benchmarkOutcome,
+      policy: TIMING_POLICY,
+      parameters: PARAMETERS,
+      tolerance: TOLERANCE,
+      rows: benchmarkRows,
+    }
+    const serialized = JSON.stringify(capture, (_key, value) =>
+      typeof value === 'number' && !Number.isFinite(value) ? String(value) : value, 2)
+    const url = URL.createObjectURL(new Blob([serialized], { type: 'application/json' }))
+    const link = document.createElement('a'); link.href = url; link.download = 'cosmos-many-body-timing.json'; link.click(); URL.revokeObjectURL(url)
   })
   await task(setup)
   return { destroy (): void { destroyed = true; stopped = true; cleanup() } }

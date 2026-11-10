@@ -23,6 +23,7 @@ function fake (input: Input, p: Parameters, bad = false): Backend {
       current = snapshot.positions
     },
     async read (): Promise<Snapshot> { return snapshot },
+    async measure (): Promise<never> { throw new Error('Not used in this UI test') },
     render (): void {},
     destroy: vi.fn(),
   }

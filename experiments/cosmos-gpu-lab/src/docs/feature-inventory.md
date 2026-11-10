@@ -119,7 +119,7 @@ reads both endpoint positions and constructs a ribbon along a straight or curved
 | [Circle rendering](#/point-rendering) | Basic circle geometry, colors and blending on both backends | Complete point styling and interaction |
 | [Spatial grid](#/spatial-grid) | Count/scan/scatter and exhaustive grid validation against CPU | Production collision or global many-body behavior |
 | [Neighborhood forces](#/neighborhood-forces) | Local force traversal, numerical precision, integration and resident circle drawing | Cosmos's global repulsion, collision constraint or production integration semantics |
-| [Global many-body](#/many-body) | Exact all-pairs force and production integration, with same-input correctness separated from independent trajectory drift | Approximate global force above 4,096 points, timing advantage, long-term layout quality or composition |
+| [Global many-body](#/many-body) | Exact all-pairs force and production integration, with same-input correctness separated from independent trajectory drift | Approximate global force above 4,096 points, cross-device performance, long-term layout quality or composition |
 | [Weighted links](#/weighted-links) | Ordered spring semantics, directional CSR, integration and minimal point/link drawing | Full force composition, renderer parity or native stability/performance across devices |
 | [Performance lab](#/performance-lab) | Repeatable isolated rendering/reduction timing methodology | A complete-engine speedup or validation of missing features |
 

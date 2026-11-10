@@ -58,7 +58,8 @@ fixtures needed to reproduce correctness bugs belong with tests, separately from
 - `performance-lab`: matched rendering and reduction benchmarks.
 - `spatial-grid`: count, scan and scatter into a CSR-style spatial index.
 - `neighborhood-forces`: tiled all-pairs versus grid-based local repulsion, integration and rendering.
-- `many-body`: exact global repulsion using production GLSL, direct/tiled WGSL and an independent CPU reference.
+- `many-body`: exact global repulsion using production GLSL, direct/tiled WGSL and an independent CPU reference,
+  with batched fixed-input force/integration timing across point counts.
 - `weighted-links`: Cosmos directional springs, stable topology CSR and luma compute-to-render integration.
 
 Reference pages cover the lab architecture, WebGPU vocabulary and parallel reduction.

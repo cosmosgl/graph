@@ -6,6 +6,7 @@ import integrationSource from '../../../../../src/modules/Points/update-position
 import { createDevice } from '../../gpu/luma'
 import type { Backend } from './backend'
 import type { Snapshot } from './reference'
+import { measureBatch, timestamps, type TimestampWrites } from './timing'
 import { nearLimit, validateInput, type Input, type Parameters } from './data'
 
 const parameters = { blend: false, depthWriteEnabled: false, depthCompare: 'always', cullMode: 'none' } as const
@@ -30,7 +31,7 @@ void main() { if (length(gl_PointCoord * 2. - 1.) > 1.) discard; fragColor = vec
 export async function createWebGL (canvas: HTMLCanvasElement, input: Input, p: Parameters): Promise<Backend> {
   validateInput(input, p)
   let failure: string | undefined
-  const device = await createDevice('webgl', canvas, false, error => { failure = error.message })
+  const device = await createDevice('webgl', canvas, true, error => { failure = error.message })
   const owned: Array<{ destroy(): void }> = []
   const own = <T extends { destroy(): void }>(resource: T): T => { owned.push(resource); return resource }
   const healthy = (): void => { if (failure || device.isLost) throw new Error(failure ?? 'WebGL context lost') }
@@ -108,6 +109,16 @@ export async function createWebGL (canvas: HTMLCanvasElement, input: Input, p: P
       return floats.slice(0, input.points.length)
     }
     let current = 0; let destroyed = false
+    const encodeForce = (forceTimes: TimestampWrites = {}): void => {
+      force.setBindings({ positionsTexture: positions[current], randomValues: random, exitTexture: exit })
+      const forcePass = device.beginRenderPass({ ...forceTimes, framebuffer: targets[2], clearColor: [0, 0, 0, 0], clearDepth: false })
+      try { force.draw(forcePass) } finally { forcePass.end() }
+    }
+    const encodeIntegration = (integrationTimes: TimestampWrites = {}): void => {
+      integrate.setBindings({ positionsTexture: positions[current], velocity: forces, pinnedStatusTexture: pinned, exitTexture: exit })
+      const pass = device.beginRenderPass({ ...integrationTimes, framebuffer: targets[1 - current], clearColor: [0, 0, 0, 0], clearDepth: false })
+      try { integrate.draw(pass) } finally { pass.end() }
+    }
     healthy()
     return {
       name: 'WebGL',
@@ -120,13 +131,20 @@ export async function createWebGL (canvas: HTMLCanvasElement, input: Input, p: P
       step (): void {
         healthy()
         if (!count) return
-        force.setBindings({ positionsTexture: positions[current], randomValues: random, exitTexture: exit })
-        const forcePass = device.beginRenderPass({ framebuffer: targets[2], clearColor: [0, 0, 0, 0], clearDepth: false })
-        try { force.draw(forcePass) } finally { forcePass.end() }
-        integrate.setBindings({ positionsTexture: positions[current], velocity: forces, pinnedStatusTexture: pinned, exitTexture: exit })
-        const pass = device.beginRenderPass({ framebuffer: targets[1 - current], clearColor: [0, 0, 0, 0], clearDepth: false })
-        try { integrate.draw(pass) } finally { pass.end() }
+        encodeForce(); encodeIntegration()
         current = 1 - current; device.submit(); healthy()
+      },
+      async measure (stage, operations): ReturnType<Backend['measure']> {
+        healthy()
+        if (!count) throw new Error('Cannot benchmark empty input')
+        const timing = await measureBatch(device, operations, (query, first, last) => {
+          encodeForce(timestamps(query, first, last && stage === 'force'))
+          if (stage === 'step') encodeIntegration(timestamps(query, false, last))
+        })
+        healthy()
+        const snapshot = { forces: read(forces), positions: read(positions[stage === 'step' ? 1 - current : current]) }
+        await new Promise(resolve => setTimeout(resolve, 0)); healthy()
+        return { timing, snapshot }
       },
       async read (): Promise<Snapshot> {
         healthy()

@@ -104,7 +104,8 @@ clamping, absence, pinning and the production integration pass. Both WGSL varian
 checks, including 4,096 points. [Validation conditions and limits](#/many-body/docs/results).
 
 **Meaning for Cosmos:** the exact force can run through luma compute without floating-point atomics. Shared-memory
-tiling can reuse source loads while keeping the per-target addition order; its speed benefit remains unmeasured.
+tiling can reuse source loads while keeping the per-target addition order. [Batched M3 measurements](#/many-body/docs/timing)
+favor WebGPU over the WebGL baseline at 4,096 points, but show no universal winner between direct and tiled WGSL.
 
 **Limit:** independent coincident trajectories drift despite passing same-input one-step checks. Longer layout quality,
 force composition and the production approximation used above 4,096 points remain unvalidated. This exact baseline
