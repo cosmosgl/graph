@@ -44,7 +44,7 @@ implementation and comparison. These are evidence levels, not a percentage of th
 | Spatial indexing | **Demonstrated:** count/scan/scatter with variable cell occupancy | Establish production bounds, capacity, update and memory policies |
 | Local interaction and integration | **Partial:** CPU-validated local forces feeding GPU rendering | Preserve actual Cosmos integration and collision semantics |
 | Global many-body force | **Partial:** exact/hierarchical forces and resident composition have bounded checks through 8,192 points | Exact-to-grid switching, adaptive sampling, scalable construction, production defaults, wider quality and cross-device cost |
-| Link forces and graph topology | **Partial:** ordered springs, directional CSR, resident composition and state-preserving replacement | Default-length trajectories, broader parameters, hub cost and remaining force composition |
+| Link forces and graph topology | **Partial:** ordered springs, directional CSR, resident composition and state-preserving replacement | Default-length trajectories, broader parameters, large multi-hub cost and remaining force composition |
 | Complete rendering and interaction | **Partial:** circles and minimal straight links read GPU-resident state | Full point/link styling, picking, hover, drag, selection, tracking and overlays |
 | luma resource and execution APIs | **Partial:** all isolated experiments use luma resources, models/kernels, passes, fences and timestamps | Host ownership, device loss, reusable scheduling and complete-engine integration |
 | Public API and embedded use | **Unproven:** production contracts have not been ported | Dynamic updates, lifecycle, exposed position resources and deck integration |
@@ -106,11 +106,14 @@ across six runs with the unchanged tolerance. Frozen inputs do not reproduce a c
 penalty. The star's first spring pass dominates; aggregation, far-field work and strict gravity dominate chain
 and communities. Profiled passes are diagnostic and are measured separately from the ordinary frame path.
 
-The [ordered hub experiment](#/hub-springs/docs/findings) now adds unpinned controls and a fixed-size degree sweep.
-Cooperative prefetch preserves every spring correction in CSR order and passes 2,240 frozen-frame checks with
-the unchanged tolerance. On M3, the full 8,192-point star improves normal-frame GPU time by about 13–18% unpinned
-and 9–15% pinned across local runs; hoisting alone shows no gain. Low-degree results are mixed, including
-regressions. The candidate stays opt-in while trajectory validation and a measured degree threshold remain open.
+The [ordered hub follow-up](#/hub-springs/docs/acceptance) adds independent resident trajectories, tighter
+original spring-stage CPU checks and GPU-batched normal-frame timing. All 12 selected-cutoff trajectory cases
+pass through 8,192 points and 100/300 ticks, including 264 checkpoints/probes. Threshold controls support a provisional
+1,024-neighbor cutoff on M3: degree 256 has no convincing gain, degree 1,024 improves about 3%, and larger hubs
+improve about 10–13% at that cutoff. Final-star geometry comparisons improve about 11–14% at both full and
+cooled strengths. All 4,608 captured timing frames pass unchanged checks. The plain-direction fallback avoids
+applying the candidate where no hubs qualify. These are bounded single-device results; production defaults,
+large multi-hub graphs and portability remain open. The candidate stays opt-in.
 
 ## 3. What the experiments tell us about Cosmos
 
@@ -445,8 +448,8 @@ performance and memory meet the target budgets; supported devices are tested; an
 | Extend | Weighted springs at larger sizes and over longer trajectories | Can ordered hub gathers and state-preserving topology updates meet the engine budget? |
 | Demonstrated in a bounded slice | [Resident tick, timing and state-preserving updates](#/resident-layout/docs/timing-updates) | GPU bounds and composed forces avoid routine readback; measured cost and update semantics now have native evidence |
 | Demonstrated in a bounded slice | [Controlled GPU stage profiling](#/gpu-stage-profile/docs/method) | Frozen replays isolate stage costs and normal/profile timing; no consistent large retained-buffer penalty was reproduced |
-| Demonstrated in a bounded slice | [Ordered hub springs](#/hub-springs/docs/findings) | Prefetch improves full-star frozen normal frames with unchanged checks; lower-degree cases are mixed and the candidate stays opt-in |
-| Next bounded performance step | Hub trajectory/threshold acceptance and grid aggregation | Does the hub gain survive evolving layouts, and can hierarchy build cost fall without changing existing checks? |
+| Demonstrated in a bounded slice | [Ordered hub springs](#/hub-springs/docs/acceptance) | GPU-batched controls identify a provisional M3 cutoff and repeat gains on final geometry; the candidate stays opt-in |
+| Next bounded performance step | Grid aggregation | Can hierarchy construction cost fall without changing force order or existing checks? |
 | Next simulation contract | Production defaults and exact/grid switching | Do 5,000-decay runs, randomized spring lengths and automatic sampling preserve the existing checks? |
 | Next scaling step | Adaptive samples and parallel hierarchy construction | Can the same approximation scale without serial dense-cell work? |
 | Demonstrated in a bounded slice | [Point-count changes and buffer cleanup](#/point-capacity/docs/findings) | Surviving records transfer on the GPU; same devices and count-dependent footprints survive repeated cycles |

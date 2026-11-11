@@ -2,6 +2,7 @@ import { createDevice } from '../../gpu/luma'
 import { BufferLedger } from '../../gpu/resource-scope'
 import { fitView } from '../many-body/backend'
 import { compare, compareArray, TOLERANCE, type Snapshot } from '../many-body/reference'
+import { compareArray as springCompare, TOLERANCE as SPRING_TOLERANCE } from '../weighted-links/reference'
 import type { Measurement } from '../many-body/timing'
 import { createCombinedWebGPU } from './webgpu'
 import type { CombinedBackend } from './backend'
@@ -13,23 +14,27 @@ import { profileCheck, profileOrder, fingerprint, type ProfileTrial } from './co
 import { STAGES, SPRINGS, REPULSION, GRAVITY } from './data'
 import type { StageTiming } from './stage-timing'
 export const HUB_POLICY = { warmups: 2, samples: 8, frames: 4 } as const
-export type HubPolicy = { warmups: number; samples: number; frames: number }
-export type HubCase = { count: number; degree: number; pinned: boolean; optimization: Exclude<SpringOptimization, 'baseline'> }
-type Frame = { timing: Measurement; stages?: StageTiming[]; check: ReturnType<typeof profileCheck> }
+export const HUB_NORMAL_POLICY = { warmups: 4, samples: 12, frames: 4, diagnostics: false, batched: true } as const
+export type HubPolicy = { warmups: number; samples: number; frames: number; diagnostics?: boolean; batched?: boolean }
+export type HubCapture = { positions: Float32Array; alpha: number; tick: number }
+export type HubCase = {
+  count: number; degree: number; pinned: boolean; optimization: Exclude<SpringOptimization, 'baseline'>; threshold?: number; repeat?: number;
+}
+type Frame = { timing?: Measurement; gpuMs?: number | null; stages?: StageTiming[]; check: ReturnType<typeof profileCheck> }
 export type HubTrial = ProfileTrial & { frames: Frame[] }
 export type HubRow = HubCase & {
-  trials: HubTrial[]; valid: boolean; fingerprint?: string; error?: string; bufferBytes?: number[];
+  threshold: number; alpha: number; tick: number; trials: HubTrial[]; valid: boolean; fingerprint?: string; error?: string; bufferBytes?: number[];
   stages: Array<{ stage: string; positions: number; forces: number; cpuValid: boolean }>;
   anchors: ReturnType<typeof profileCheck>[]; cleanup?: number[];
 }
 export type HubReport = {
-  experiment: string; gpuApi: string; browser: string; info: string; policy: HubPolicy; tolerance: typeof TOLERANCE;
-  algorithm: { threshold: number; tile: number; springs: typeof SPRINGS; repulsion: typeof REPULSION; gravity: number; alpha: number; tick: number };
+  experiment: string; gpuApi: string; browser: string; info: string; policy: HubPolicy; tolerance: typeof TOLERANCE; springTolerance: typeof SPRING_TOLERANCE;
+  algorithm: { tile: number; noHubDirection: 'baseline'; springs: typeof SPRINGS; repulsion: typeof REPULSION; gravity: number };
   sameDevice: boolean; status: 'ready' | 'running' | 'complete' | 'cancelled' | 'failed'; rows: HubRow[];
   captures: Record<string, { positions: number[]; samples: number[] }>; error?: string;
   failure?: { field: string; actual: { positions: number[]; forces: number[] }; expected: { positions: number[]; forces: number[] } };
 }
-function combine (frames: Frame[]): { timing: Measurement; stages?: StageTiming[]; check: Frame['check'] } {
+function combine (frames: Array<Frame & { timing: Measurement }>): { timing: Measurement; stages?: StageTiming[]; check: Frame['check'] } {
   const valid = frames.every(f => f.timing.timerStatus === 'valid' && f.timing.batchGpuMs !== null &&
     Number.isFinite(f.timing.batchGpuMs) && f.timing.batchGpuMs >= 0)
   const timing: Measurement = {
@@ -47,11 +52,14 @@ function combine (frames: Frame[]): { timing: Measurement; stages?: StageTiming[
   return { timing, stages, check }
 }
 export async function createHubStudy (canvas: HTMLCanvasElement, policy: HubPolicy = HUB_POLICY): Promise<{
-  report: HubReport; run(cases: HubCase[], options: { cancelled(): boolean; progress(message: string): void }): Promise<void>;
+  report: HubReport; run(cases: HubCase[], options: { capture?: HubCapture; cancelled(): boolean; progress(message: string): void }): Promise<void>;
   destroy(): void; remainingBytes(): number[];
 }> {
   if (policy.samples < 4 || policy.samples > 32 || policy.samples % 4 || policy.frames < 1 || policy.frames > 8 ||
-    policy.warmups < 0 || policy.warmups > 4 || !Object.values(policy).every(Number.isInteger)) throw new Error('Invalid hub timing policy')
+    policy.warmups < 0 || policy.warmups > 4 || ![policy.samples, policy.frames, policy.warmups].every(Number.isInteger)) {
+    throw new Error('Invalid hub timing policy')
+  }
+  if (policy.batched && policy.diagnostics !== false) throw new Error('Batched hub timing supports normal frames only')
   let failure: string | undefined; let destroyed = false; let started = false
   const device = await createDevice('webgpu', canvas, true, error => { failure = error.message })
   const ledgers = [new BufferLedger(), new BufferLedger()]; let backends: CombinedBackend[] = []
@@ -70,7 +78,8 @@ export async function createHubStudy (canvas: HTMLCanvasElement, policy: HubPoli
     info: '',
     policy,
     tolerance: TOLERANCE,
-    algorithm: { threshold: HUB_THRESHOLD, tile: HUB_TILE, springs: SPRINGS, repulsion: REPULSION, gravity: GRAVITY, alpha: 1, tick: 0 },
+    springTolerance: SPRING_TOLERANCE,
+    algorithm: { tile: HUB_TILE, noHubDirection: 'baseline', springs: SPRINGS, repulsion: REPULSION, gravity: GRAVITY },
     sameDevice: true,
     status: 'ready',
     rows: [],
@@ -85,7 +94,7 @@ export async function createHubStudy (canvas: HTMLCanvasElement, policy: HubPoli
   return {
     report,
     remainingBytes,
-    async run (cases, { cancelled, progress }): Promise<void> {
+    async run (cases, { cancelled, progress, capture }): Promise<void> {
       if (started) throw new Error('Hub study already started')
       started = true; report.status = 'running'
       const stop = (): boolean => { if (!cancelled()) return false; report.status = 'cancelled'; return true }
@@ -93,32 +102,40 @@ export async function createHubStudy (canvas: HTMLCanvasElement, policy: HubPoli
         for (const settings of cases) {
           if (stop()) return
           check()
-          const row: HubRow = { ...settings, trials: [], stages: [], anchors: [], valid: false }; report.rows.push(row)
+          const alpha = capture?.alpha ?? 1; const tick = capture?.tick ?? 0
+          const row: HubRow = {
+            ...settings, threshold: settings.threshold ?? HUB_THRESHOLD, alpha, tick, trials: [], stages: [], anchors: [], valid: false,
+          }; report.rows.push(row)
           try {
             if (!Number.isInteger(settings.count) || settings.count < 16 || settings.count > 8192) throw new Error('Hub study supports 16–8192 points')
             const { graph, input } = createHubGraph(settings.count, settings.degree, settings.pinned)
-            const frozen = input.points.slice(); const view = fitView([frozen]); const key = fingerprint(frozen)
+            if (!Number.isFinite(alpha) || alpha < 0 || alpha > 1 || !Number.isInteger(tick) || tick < 0) throw new Error('Invalid captured frame')
+            const frozen = capture?.positions.slice() ?? input.points.slice()
+            if (frozen.length !== settings.count * 4 || !frozen.every(Number.isFinite)) throw new Error('Invalid captured positions')
+            input.points = frozen; graph.points = frozen; const view = fitView([frozen]); const key = fingerprint(frozen)
             row.fingerprint = key
             report.captures[key] ??= { positions: Array.from(frozen), samples: Array.from(input.samples) }
             progress(`Preparing degree ${settings.degree} · ${settings.pinned ? 'pinned' : 'unpinned'} hub · ${settings.optimization}`)
             for (const [i, springOptimization] of (['baseline', settings.optimization] as const).entries()) {
               backends.push(await createCombinedWebGPU(canvas, graph, input, 'trig', {
-                gpuBounds: true, springOptimization, context: { device, ledger: ledgers[i], check },
+                gpuBounds: true, springOptimization, hubThreshold: row.threshold, context: { device, ledger: ledgers[i], check },
               }))
             }
             report.info = backends[0].info; row.bufferBytes = remainingBytes()
             if (backends.some(b => b.positionSource!().device !== device)) throw new Error('Benchmark lanes must share one device')
-            const oracle = createOracle(graph, input); const cpuWhole = oracle.tick(frozen, 1, 0)
+            const oracle = createOracle(graph, input); const cpuWhole = oracle.tick(frozen, alpha, tick)
             let current: Float32Array = frozen; let staged: Snapshot | undefined
-            for (const b of backends) b.setGpuFrame!(0)
+            for (const b of backends) b.setGpuFrame!(tick)
             for (const stage of STAGES) {
               if (stop()) return
-              const cpu = oracle.stage(stage, current, 1, 0)
-              for (const b of backends) b.stepStage(stage, 1)
+              const cpu = oracle.stage(stage, current, alpha, tick)
+              for (const b of backends) b.stepStage(stage, alpha)
               const snapshots = await Promise.all(backends.map(b => b.read()))
               const positions = differingBits(snapshots[0].positions, snapshots[1].positions)
               const forces = differingBits(snapshots[0].forces, snapshots[1].forces)
-              const cpuValid = snapshots.every(s => compare(s, cpu).valid)
+              const cpuValid = snapshots.every(s => stage === 'incoming' || stage === 'outgoing'
+                ? springCompare(s.positions, cpu.positions).valid && springCompare(s.forces, cpu.forces).valid
+                : compare(s, cpu).valid)
               row.stages.push({ stage, positions, forces, cpuValid })
               if (positions || forces || !cpuValid) {
                 captureFailure(`stage ${stage}${cpuValid ? ' baseline replay' : ' CPU'}`, snapshots[1], cpuValid ? snapshots[0] : cpu)
@@ -132,7 +149,7 @@ export async function createHubStudy (canvas: HTMLCanvasElement, policy: HubPoli
             }
             for (const b of backends) {
               b.setPositions(frozen)
-              const { snapshot } = await b.measureCurrentFrame!(1, 0, view)
+              const { snapshot } = await b.measureCurrentFrame!(alpha, tick, view)
               const check = profileCheck(snapshot, staged!, cpuWhole); row.anchors.push(check)
               if (!check.valid) {
                 captureFailure('normal frame anchor', snapshot, staged!)
@@ -143,26 +160,39 @@ export async function createHubStudy (canvas: HTMLCanvasElement, policy: HubPoli
               { lane: 0, kind: 'profile' }, { lane: 1, kind: 'profile' }] as const
             for (const warmup of [true, false]) {
               for (let round = 0; round < (warmup ? policy.warmups : policy.samples); round++) {
-                const order = profileOrder(round)
+                const order = policy.diagnostics === false ? (round % 2 ? [1, 0] : [0, 1]) : profileOrder(round)
                 for (const index of order) {
                   if (stop()) return
                   const { lane, kind } = methods[index]; const b = backends[lane]; const frames: Frame[] = []
                   progress(`Degree ${settings.degree} · ${settings.pinned ? 'pinned' : 'unpinned'} · ${warmup ? 'warmup' : 'sample'} ` +
                     `${round + 1}/${warmup ? policy.warmups : policy.samples} · ${lane ? settings.optimization : 'baseline'} · ${kind}`)
-                  for (let frame = 0; frame < policy.frames; frame++) {
-                    if (stop()) return
-                    b.setPositions(frozen)
-                    const result: { timing: Measurement; stages?: StageTiming[]; snapshot: Snapshot } = kind === 'normal'
-                      ? await b.measureCurrentFrame!(1, 0, view)
-                      : await b.profileCurrentFrame!(1, 0, view)
-                    const check = profileCheck(result.snapshot, staged!, cpuWhole)
-                    frames.push({ timing: result.timing, stages: result.stages, check })
+                  const validate = (snapshot: Snapshot): Frame['check'] => {
+                    const check = profileCheck(snapshot, staged!, cpuWhole)
                     if (!check.valid) {
-                      captureFailure('frame baseline replay', result.snapshot, staged!)
+                      captureFailure('frame baseline replay', snapshot, staged!)
                       throw new Error(`Frame validation failed: ${JSON.stringify(check)}`)
                     }
+                    return check
                   }
-                  row.trials.push({ round, warmup, order, lane, kind, frames, ...combine(frames) })
+                  let aggregate: ReturnType<typeof combine>
+                  if (policy.batched) {
+                    b.setPositions(frozen)
+                    const result = await b.measureFrozenFrames!({ frames: policy.frames, alpha, tick, view })
+                    for (const [i, snapshot] of result.snapshots.entries()) frames.push({ gpuMs: result.frameGpuMs[i], check: validate(snapshot) })
+                    aggregate = { timing: result.timing, check: { ...frames[0].check, valid: frames.every(f => f.check.valid) } }
+                  } else {
+                    const individual: Array<Frame & { timing: Measurement }> = []
+                    for (let frame = 0; frame < policy.frames; frame++) {
+                      if (stop()) return
+                      b.setPositions(frozen)
+                      const result: { timing: Measurement; stages?: StageTiming[]; snapshot: Snapshot } = kind === 'normal'
+                        ? await b.measureCurrentFrame!(alpha, tick, view)
+                        : await b.profileCurrentFrame!(alpha, tick, view)
+                      individual.push({ timing: result.timing, stages: result.stages, check: validate(result.snapshot) })
+                    }
+                    frames.push(...individual); aggregate = combine(individual)
+                  }
+                  row.trials.push({ round, warmup, order, lane, kind, frames, ...aggregate })
                   await new Promise(resolve => setTimeout(resolve, 0))
                 }
               }
@@ -188,4 +218,10 @@ export function hubSummary (row: HubRow, policy: HubPolicy, lane: number, kind: 
     values.some(n => n === undefined || n === null || !Number.isFinite(n) || n < 0)) return { samples: trials.length, median: null, range: null }
   const sorted = [...values as number[]].sort((a, b) => a - b); const n = sorted.length / 2
   return { samples: trials.length, median: (sorted[n - 1] + sorted[n]) / 2, range: [sorted[0], sorted.at(-1)!] }
+}
+
+export function hubPairedWins (row: HubRow, policy: HubPolicy): number | null {
+  if ([0, 1].some(lane => hubSummary(row, policy, lane, 'normal').median === null)) return null
+  const trials = row.trials.filter(t => !t.warmup && t.kind === 'normal')
+  return trials.filter(t => t.lane === 0 && trials.find(c => c.lane === 1 && c.round === t.round)!.timing.batchGpuMs! < t.timing.batchGpuMs!).length
 }

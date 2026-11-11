@@ -70,7 +70,7 @@ fixtures needed to reproduce correctness bugs belong with tests, separately from
   update costs and buffer cleanup.
 - `gpu-stage-profile`: frozen-input stage timing, balanced rebuilt/retained trials and exact instrumentation replay.
 - `hub-springs`: pinned/unpinned degree controls and ordered cooperative neighbor prefetch, checked against the
-  strict baseline on one device and measured through the normal frame path.
+  strict baseline on one device, evolving checkpoint validation and GPU-batched normal-frame threshold controls.
 
 Reference pages cover the lab architecture, WebGPU vocabulary and parallel reduction.
 Start with **How WebGPU works** (`#/learn`) for a guided introduction with five interactive teaching models.

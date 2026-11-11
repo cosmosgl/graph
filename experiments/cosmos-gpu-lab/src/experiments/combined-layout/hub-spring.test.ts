@@ -90,13 +90,17 @@ for (const optimization of ['hoist', 'prefetch'] as const) {
   })
 }
 it.skipIf(!import.meta.env.LAB_NATIVE_GPU)('measures normal frames on one device and validates every frozen frame', async () => {
-  const s = await createHubStudy(document.createElement('canvas'), { warmups: 0, samples: 4, frames: 1 })
+  const s = await createHubStudy(document.createElement('canvas'), { warmups: 0, samples: 4, frames: 4, diagnostics: false, batched: true })
   try {
     await s.run([{ count: 8192, degree: 8191, pinned: false, optimization: 'prefetch' }], { cancelled: () => false, progress: () => {} })
     const row = s.report.rows[0]
     expect(s.report.error, JSON.stringify(s.report)).toBeUndefined(); expect(s.report.status).toBe('complete')
     expect(row.valid).toBe(true); expect(row.stages).toHaveLength(4); expect(row.anchors.every(a => a.valid)).toBe(true)
-    expect(row.trials).toHaveLength(16); expect(row.trials.every(t => t.frames.every(f => f.check.valid))).toBe(true)
+    expect(row.trials).toHaveLength(8)
+    expect(row.trials.every(t => t.frames.length === 4 && t.frames.every(f => f.check.valid))).toBe(true)
+    if (row.trials.every(t => t.timing.timerStatus === 'valid')) {
+      for (const trial of row.trials) expect(trial.frames.reduce((sum, f) => sum + f.gpuMs!, 0)).toBeCloseTo(trial.timing.batchGpuMs!, 10)
+    }
     expect(hubSummary(row, s.report.policy, 1, 'normal').samples).toBe(4)
     expect(row.cleanup).toEqual([0, 0]); expect(s.report.sameDevice).toBe(true)
   } finally { s.destroy() }

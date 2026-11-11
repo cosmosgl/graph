@@ -23,7 +23,11 @@ it.skipIf(!import.meta.env.LAB_NATIVE_GPU)('pairs compute-pass timestamps and ru
       } finally { pass.end() }
     })
     expect(timing.timerStatus).toBe(device.features.has('timestamp-query') ? 'valid' : 'unavailable')
-    if (device.features.has('timestamp-query')) expect(timing.batchGpuMs).toBeGreaterThanOrEqual(0)
+    if (device.features.has('timestamp-query')) {
+      expect(timing.batchGpuMs).toBeGreaterThanOrEqual(0)
+      expect(timing.frameGpuMs).toHaveLength(3)
+      expect(timing.frameGpuMs.reduce<number>((sum, n) => sum + n!, 0)).toBeCloseTo(timing.batchGpuMs!, 10)
+    }
     const bytes = await data.readAsync(); expect(new Uint32Array(bytes.buffer, bytes.byteOffset, 4)[0]).toBe(6)
   } finally { kernel.destroy(); data.destroy(); device.destroy() }
 })

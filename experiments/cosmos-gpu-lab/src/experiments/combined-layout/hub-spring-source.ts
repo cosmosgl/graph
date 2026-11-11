@@ -11,14 +11,15 @@ export function hoistedSpringSource (): string {
 }
 // Prefetch changes memory scheduling, never the serial velocity recurrence.
 // Both pieces below are extracted from the existing corrected spring source.
-export function prefetchSpringSources (): { regular: string; hub: string } {
+export function prefetchSpringSources (threshold = HUB_THRESHOLD): { regular: string; hub: string } {
+  if (!Number.isInteger(threshold) || threshold < 64 || threshold > 16384) throw new Error('Hub threshold must be 64–16384')
   const source = hoistedSpringSource()
   const main = source.indexOf('@compute @workgroup_size(64)')
   const rest = source.indexOf('    var rest = '); const delta = source.indexOf('    let delta = ')
   const end = source.indexOf('\n  }\n  forces[i]')
   if (main < 0 || rest < main || delta < rest || end < delta) throw new Error('Spring source markers changed')
   const regular = replaceOnce(source, 'let point = positions[i];',
-    `if (offsets[i + 1u] - offsets[i] >= ${HUB_THRESHOLD}u) { return; }\n  let point = positions[i];`)
+    `if (offsets[i + 1u] - offsets[i] >= ${threshold}u) { return; }\n  let point = positions[i];`)
   const hub = `${source.slice(0, main)}
 @group(0) @binding(6) var<storage, read> hubs: array<u32>;
 var<workgroup> sharedEdges: array<Edge, ${HUB_TILE}>;
