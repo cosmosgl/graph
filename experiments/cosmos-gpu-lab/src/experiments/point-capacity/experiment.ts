@@ -7,6 +7,11 @@ export const experiment = defineExperiment({
   create: async host => (await import('./view')).createCapacityView(host),
   pages: [{
     kind: 'markdown',
+    id: 'reuse',
+    title: 'Retained capacity',
+    load: async (): Promise<string> => (await import('./reuse.md?raw')).default,
+  }, {
+    kind: 'markdown',
     id: 'findings',
     title: 'Resize contract and findings',
     load: async (): Promise<string> => (await import('./findings.md?raw')).default,

@@ -32,23 +32,24 @@ export async function createGridWebGPU (
   let readBounds: GridBackend['readBounds']
   let diagnose: NonNullable<GridBackend['diagnose']>
   let readStructure: () => Promise<Structure> = async () => { throw new Error('Grid not initialized') }
-  const base = await createWebGPU(canvas, input, p, 'direct', wrapForce(async ({ device, positions, samples, forces, count }) => {
+  const base = await createWebGPU(canvas, input, p, 'direct', wrapForce(async ({ device, positions, samples, forces, count: initialCount, capacity }) => {
     const scope = resourceScope(options.context?.ledger); const own = scope.own
     try {
-      const l = layout(count)
+      let count = initialCount; let l = layout(count)
+      const allocated = layout(capacity)
       if (centroidMode !== 'inline' && centroidMode !== 'stored') verifyDivision = (): ReturnType<typeof verifyCountDivision> => verifyCountDivision(device)
       const storage = (bytes: number): Buffer => own(device.createBuffer({ byteLength: Math.max(16, bytes), usage: Buffer.STORAGE | Buffer.COPY_SRC }))
-      const farContributions = centroidMode === 'materialized' || streamed ? storage(count * (streamed ? 1 : l.sizes.length) * 100 * 8) : undefined
-      const farSums = streamed ? storage(count * l.sizes.length * 8) : undefined
-      const levelQueries = streamed ? l.sizes.map((_, level) => own(upload(device, new Uint32Array([level, 0, 0, 0]), Buffer.UNIFORM))) : []
-      const heads = storage(l.cells * 4); const links = storage(l.sizes.length * count * 4)
-      const aggregates = storage(l.cells * 16); const slots = storage(l.finest ** 2 * frame.slots * 8)
-      const centroids = centroidMode !== 'inline' ? storage(l.cells * 16) : undefined
-      if (centroids) readCentroids = (): Promise<Float32Array> => readFloats(centroids)
-      const levels = own(upload(device, new Uint32Array(l.sizes.flatMap((n, i) => [n, l.offsets[i], 0, 0]))))
+      const farContributions = centroidMode === 'materialized' || streamed ? storage(capacity * (streamed ? 1 : allocated.sizes.length) * 100 * 8) : undefined
+      const farSums = streamed ? storage(capacity * allocated.sizes.length * 8) : undefined
+      const levelQueries = streamed ? allocated.sizes.map((_, level) => own(upload(device, new Uint32Array([level, 0, 0, 0]), Buffer.UNIFORM))) : []
+      const heads = storage(allocated.cells * 4); const links = storage(allocated.sizes.length * capacity * 4)
+      const aggregates = storage(allocated.cells * 16); const slots = storage(allocated.finest ** 2 * frame.slots * 8)
+      const centroids = centroidMode !== 'inline' ? storage(allocated.cells * 16) : undefined
+      if (centroids) readCentroids = (): Promise<Float32Array> => readFloats(centroids, l.cells * 16)
+      const levels = own(upload(device, new Uint32Array(allocated.sizes.flatMap((n, i) => [n, allocated.offsets[i], 0, 0]))))
       const params = own(upload(device, new Float32Array(12), Buffer.UNIFORM))
       const box = own(upload(device, frame.bounds, options.gpuBounds ? Buffer.STORAGE : Buffer.UNIFORM))
-      const bounds = options.gpuBounds ? own(await createGpuBounds(device, count, l.finest, box, options.context?.ledger)) : undefined
+      const bounds = options.gpuBounds ? own(await createGpuBounds(device, count, l.finest, box, options.context?.ledger, capacity)) : undefined
       readBounds = (): Promise<Float32Array> => readFloats(box)
       const bindings = bindingLayout([
         ['positions', 'read-only-storage'], ['samples', 'read-only-storage'], ['heads', 'storage'], ['links', 'storage'],
@@ -176,8 +177,17 @@ export async function createGridWebGPU (
           } finally { temporary.reverse().forEach(r => r.destroy()) }
         }
       }
-      readStructure = async (): Promise<Structure> => ({ aggregates: await readFloats(aggregates), slots: await readFloats(slots) })
+      readStructure = async (): Promise<Structure> => ({
+        aggregates: await readFloats(aggregates, l.cells * 16), slots: await readFloats(slots, l.finest ** 2 * frame.slots * 8),
+      })
       return {
+        resize (next): void {
+          const n = next.points.length / 4
+          if (n > capacity) throw new Error('Grid capacity exceeded')
+          count = n; l = layout(count); lastSource = -1
+          levels.write(new Uint32Array(l.sizes.flatMap((size, i) => [size, l.offsets[i], 0, 0])))
+          bounds?.resize(count, l.finest)
+        },
         prepare (): void {
           params.write(new Float32Array([count, l.finest, l.sizes.length, frame.slots, p.alpha, p.repulsion, nearLimit(count, p),
             frame.precise ? 1 : 0, frame.seed, l.cells, 0, 0]))
@@ -190,7 +200,9 @@ export async function createGridWebGPU (
             ...(centroids ? [l.cells] : []), ...(farContributions ? [count] : []), ...(streamed ? [count] : []), count]
           const dispatches = kernels.flatMap<{ i: number; farLevel?: Buffer }>((_, i) => {
             if (streamed && entryPoints[i] === 'accumulateMain') return []
-            if (streamed && entryPoints[i] === 'farMain') return levelQueries.flatMap(farLevel => [{ i, farLevel }, { i: i + 1, farLevel }])
+            if (streamed && entryPoints[i] === 'farMain') {
+              return levelQueries.slice(0, l.sizes.length).flatMap(farLevel => [{ i, farLevel }, { i: i + 1, farLevel }])
+            }
             return [{ i, farLevel: undefined }]
           }).filter(d => sizes[d.i] > 0)
           const pass = sharedPass ?? device.beginComputePass(timing)

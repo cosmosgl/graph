@@ -41,9 +41,10 @@ export async function createCombinedWebGPU (
   const polarGravity = overrides.polarGravity ?? (precision === 'aligned' || precision === 'trig')
   const refinedTrig = overrides.refinedTrig ?? precision === 'trig'
   let stage: Stage = 'gravity'; const p = { ...REPULSION }
+  let nextGraph: GraphInput | undefined
   let device: Device; let replaceLinks: NonNullable<CombinedBackend['replaceLinks']>
   const base = await createGridWebGPU(canvas, input, p, frameFor(input.points, 0), 'streamed', gridFactory => async resources => {
-    const { positions, forces, count } = resources
+    const { positions, forces } = resources; let count = resources.count
     device = resources.device
     const scope = resourceScope(overrides.context?.ledger); const own = scope.own
     try {
@@ -90,6 +91,13 @@ export async function createCombinedWebGPU (
         ])))
         : undefined
       return {
+        resize (next): void {
+          if (!nextGraph) throw new Error('Use resizeGraph to update composed resources')
+          linkResources.update(next.points, nextGraph)
+          grid.resize!(next)
+          count = next.points.length / 4; input = next
+          integrationParams.write(new Float32Array([count, 0, 0, 0, p.friction, p.referenceLength, 0, 0]))
+        },
         integrate (source, timing, sharedPass): boolean {
           const rounded = (roundSpring && (stage === 'incoming' || stage === 'outgoing')) || extraStages.includes(stage)
           if (!integration || !rounded) return false
@@ -151,6 +159,10 @@ export async function createCombinedWebGPU (
   }, { gpuBounds: overrides.gpuBounds, context: overrides.context, preserve: overrides.preserve })
   return {
     ...base,
+    resizeGraph (graph, input, preserve): ReturnType<NonNullable<CombinedBackend['resizeGraph']>> {
+      nextGraph = graph
+      try { return base.resizeInput!(input, preserve) } finally { nextGraph = undefined }
+    },
     replaceLinks: (next): ReturnType<NonNullable<CombinedBackend['replaceLinks']>> => { base.resourceIdentity!(); return replaceLinks(next) },
     measureCurrentFrame: overrides.gpuBounds
       ? async (alpha, tick, view): ReturnType<NonNullable<CombinedBackend['measureCurrentFrame']>> => {

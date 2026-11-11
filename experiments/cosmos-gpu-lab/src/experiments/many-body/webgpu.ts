@@ -27,9 +27,10 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
 }`
 
 export type WebGPUForceFactory = (resources: {
-  device: Device; positions: Buffer[]; samples: Buffer; forces: Buffer; count: number;
+  device: Device; positions: Buffer[]; samples: Buffer; forces: Buffer; count: number; capacity: number;
 }) => Promise<{
   prepare?(): void; encode(source: number, timing: TimestampWrites, pass?: ComputePass): void;
+  resize?(input: Input): void;
   render?(source: number, view: View, pass: RenderPass): void;
   integrate?(source: number, timing: TimestampWrites, pass?: ComputePass): boolean; destroy(): void;
 }>
@@ -62,14 +63,15 @@ export async function createWebGPU (
     if (destroyed || failure || loss.message || device.isLost) throw new Error(failure ?? loss.message ?? 'WebGPU device lost or destroyed')
   }
   try {
-    const count = input.points.length / 4
+    let count = input.points.length / 4
+    const capacity = count
     healthy()
     if (options.preserve && options.preserve.device !== device) throw new Error('Cannot copy positions between devices')
     const preserved = Math.min(options.preserve?.count ?? 0, count)
     const tail = input.points.subarray(preserved * 4)
     const positions = [0, 1].map(() => {
       const buffer = own(device.createBuffer({
-        byteLength: Math.max(16, input.points.byteLength),
+        byteLength: Math.max(16, capacity * 16),
         usage: Buffer.STORAGE | Buffer.COPY_SRC | Buffer.COPY_DST,
       }))
       if (tail.byteLength) buffer.write(tail, preserved * 16)
@@ -115,7 +117,7 @@ export async function createWebGPU (
     }))
     const renderer = own(createStorageRenderer(device, renderSource, 'triangle-list', bindingLayout([['positions', 'read-only-storage'], ['view', 'uniform']])))
     let current = 0
-    const extension = customForce ? own(await customForce({ device, positions, samples, forces, count })) : undefined
+    const extension = customForce ? own(await customForce({ device, positions, samples, forces, count, capacity })) : undefined
     const encodeForce = (forceTimes: TimestampWrites = {}, sharedPass?: ComputePass): void => {
       if (extension) { extension.encode(current, forceTimes, sharedPass); return }
       const forcePass = sharedPass ?? device.beginComputePass(forceTimes)
@@ -139,6 +141,19 @@ export async function createWebGPU (
       info: `${device.info.vendor} ${device.info.renderer}; luma Kernel / RenderKernel; 64 invocations per group`,
       positionSource (): PositionSource { healthy(); return { device, buffer: positions[current], count } },
       positionTransfer: { preserved, copiedBytes: preserved * 32, uploadedBytes: tail.byteLength * 2, copySubmitMs },
+      resizeInput (next, preserve): ReturnType<NonNullable<Backend['resizeInput']>> {
+        healthy(); validateInput(next, p, capacity)
+        if (customForce && !extension?.resize) throw new Error('Force does not support logical-count changes')
+        const kept = preserve ? Math.min(count, next.points.length / 4) : 0
+        // Validate/reconfigure dependent resources before changing base state.
+        extension?.resize?.(next)
+        const tail = next.points.subarray(kept * 4)
+        if (tail.byteLength) positions.forEach(buffer => buffer.write(tail, kept * 16))
+        if (next.samples.byteLength) samples.write(next.samples)
+        input = next; count = next.points.length / 4
+        params.write(new Float32Array([count, p.alpha, p.repulsion, nearLimit(count, p), p.friction, p.referenceLength, 0, 0]))
+        return { preserved: kept, copiedBytes: 0, uploadedBytes: tail.byteLength * 2, copySubmitMs: 0 }
+      },
       setAbsent (index, value): void {
         healthy()
         if (!Number.isInteger(index) || index < 0 || index >= count) throw new Error('Invalid absent-point index')

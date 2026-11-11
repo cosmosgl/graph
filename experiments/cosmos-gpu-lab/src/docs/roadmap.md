@@ -57,7 +57,7 @@ The strongest conclusion today is **primitive feasibility**. The most important 
 
 | Milestone | Current position | Next acceptance evidence |
 | --- | --- | --- |
-| luma integration | **Partial:** resident ticks, minimal drawing, state-preserving updates and same-device point-count changes use public luma APIs | Retained-capacity reuse, host ownership, device loss and the production dependency decision |
+| luma integration | **Partial:** resident ticks, minimal drawing, state-preserving updates and retained-capacity reuse use public luma APIs | Retention budgets, controlled GPU-stage timing, host ownership, device loss and the production dependency decision |
 | Cosmos simulation | **Partial:** gravity, hierarchical repulsion, ordered springs and cooling have a passing bounded precision candidate at 8,192 points | Remaining forces, layout-quality criteria, scalable hierarchy construction and default-length schedules |
 | Rendering and interaction | **Early:** circles and minimal straight links | Styling, picking, dragging and the rest of the renderer |
 | Library and embedding contracts | **Unproven** | Live typed-array/config updates, resizing, shared ownership, device loss and host integration |
@@ -70,8 +70,9 @@ layout quality and performance as separate acceptance contracts; the existing to
 
 The [GPU-resident engine slice](#/resident-layout) now connects GPU bounds, the composed forces and minimal
 drawing without routine position readback. [Point capacity and memory](#/point-capacity/docs/findings) adds
-same-device growth/shrinkage and cleanup evidence. The next resource optimization is retained-capacity and
-kernel reuse: the conservative rebuild path preserves state but has not demonstrated cheaper updates.
+same-device growth/shrinkage and cleanup evidence. [Retained capacity](#/point-capacity/docs/reuse) now reduces
+bounded update latency by reusing buffers and kernels, at a substantial idle-memory cost. Order-sensitive GPU
+frame cost still needs investigation before choosing a production retention policy.
 Broader forces, rendering and lifecycle validation should follow alongside targeted numerical work.
 
 ## 3. What the experiments tell us about Cosmos
@@ -229,8 +230,20 @@ Resident application buffers at 8,192 points occupy **14.66–14.93 MiB**, with 
 
 **Meaning for Cosmos:** a same-device transfer/ownership contract is feasible without downloading positions
 inside the resize. This exact-size implementation rebuilds buffers and kernels and is slower to update than
-the CPU-copy control in these observations. Retained capacity and pipeline reuse need a separate comparison;
-this does not establish the full Graph setter/transition API, external host ownership or device recovery.
+the CPU-copy control in those observations. This does not establish the full Graph setter/transition API,
+external host ownership or device recovery.
+
+The [retained-capacity follow-up](#/point-capacity/docs/reuse) compares two GPU-bound lanes under unchanged
+tolerances. Another 36 paired resizes and 36 subsequent CPU-checked frames pass. After first growth, in-capacity
+updates reuse buffers/kernels and preserve the prefix without any GPU copy: local completion medians fall to
+**0.6–2.7 ms**, compared with **19.0–21.7 ms** for rebuilding. Shrink retains the larger **14.66–14.93 MiB**
+footprint at 2,048 points instead of releasing it to **3.64–3.71 MiB**; these are explicit application buffers.
+
+Frame order is balanced per point count, with both GPU lanes timed. First-frame ranges overlap, but an
+eight-frame warm-star follow-up measures **27.20 ms rebuild versus 15.14 ms retained** with identical
+position/force bits and broad ranges. This is one evolved workload, not a general frame-speed conclusion.
+Profile GPU stages and ordering effects before adopting the policy or increasing star size; update-latency
+gains alone do not establish a production frame budget.
 
 ### Weighted springs: Cosmos semantics can run through luma compute
 
@@ -396,7 +409,8 @@ performance and memory meet the target budgets; supported devices are tested; an
 | Demonstrated in a bounded slice | [Resident tick, timing and state-preserving updates](#/resident-layout/docs/timing-updates) | GPU bounds and composed forces avoid routine readback; measured cost and update semantics now have native evidence |
 | Next | Adaptive samples and parallel hierarchy construction | Can the same approximation scale without serial dense-cell work? |
 | Demonstrated in a bounded slice | [Point-count changes and buffer cleanup](#/point-capacity/docs/findings) | Surviving records transfer on the GPU; same devices and count-dependent footprints survive repeated cycles |
-| Next resource step | Retained capacity, kernel reuse and ownership | Can updates become cheaper without extra retained-memory cost, and can a host safely own the device? |
+| Demonstrated in a bounded slice | [Retained capacity and kernel reuse](#/point-capacity/docs/reuse) | In-capacity updates are cheaper locally; more idle memory is retained and GPU-frame timings remain order-sensitive |
+| Next resource step | Profile GPU stages, then define retention/trim and ownership policies | Can update gains preserve a practical frame/memory budget, and can a host safely own the device? |
 | Supporting | Refined gravity cost and a bounded larger-star cost check | Can the strict precision reference scale affordably, and which arithmetic policy should production use? |
 | Alongside simulation | Links, richer points and picking from shared GPU state | Can Cosmos render and interact correctly without transferring all positions back? |
 | Then | Combined engine workload on multiple native GPUs | Is the whole migration practical for the intended users and graph sizes? |
