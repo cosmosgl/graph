@@ -16,6 +16,7 @@ import { cool, GRAVITY, REPULSION, SPRINGS, STAGES, type SpringPrecision, type S
 import { polarGravitySource, refinedGravitySource } from './gravity-source'
 import type { CombinedBackend } from './backend'
 import { createRoundedKernel, roundedSpringSource, roundedIntegrationSource, distanceSpringSource } from './spring-precision'
+import { HUB_THRESHOLD, hoistedSpringSource, prefetchSpringSources, type SpringOptimization } from './hub-spring-source'
 const gravitySource = `
 @group(0) @binding(0) var<storage, read> positions: array<vec4<f32>>;
 @group(0) @binding(1) var<uniform> params: vec4<f32>;
@@ -36,8 +37,13 @@ const linkSource = `
 `
 export async function createCombinedWebGPU (
   canvas: HTMLCanvasElement, graph: GraphInput, input: Input, precision: SpringPrecision = 'baseline',
-  overrides: WebGPUOptions & { roundedStages?: readonly Stage[]; polarGravity?: boolean; refinedTrig?: boolean; gpuBounds?: boolean } = {}
+  overrides: WebGPUOptions & {
+    roundedStages?: readonly Stage[]; polarGravity?: boolean; refinedTrig?: boolean; gpuBounds?: boolean; springOptimization?: SpringOptimization;
+  } = {}
 ): Promise<CombinedBackend> {
+  const optimization = overrides.springOptimization ?? 'baseline'
+  if (optimization !== 'baseline' && precision !== 'trig') throw new Error('Spring optimization requires the strict trig candidate')
+  const prefetch = optimization === 'prefetch' ? prefetchSpringSources() : undefined
   const roundedStages = overrides.roundedStages ?? []
   const polarGravity = overrides.polarGravity ?? (precision === 'aligned' || precision === 'trig')
   const refinedTrig = overrides.refinedTrig ?? precision === 'trig'
@@ -52,10 +58,11 @@ export async function createCombinedWebGPU (
       const grid = own(await gridFactory(resources))
       const gravityParams = own(upload(device, new Float32Array(4), Buffer.UNIFORM))
       const springParams = own(upload(device, new Float32Array(12), Buffer.UNIFORM))
-      let linkResources = createLinkResources(device, input.points, graph, overrides.context?.ledger); let version = 0
+      const threshold = prefetch ? HUB_THRESHOLD : undefined
+      let linkResources = createLinkResources(device, input.points, graph, overrides.context?.ledger, threshold); let version = 0
       own({ destroy: () => linkResources.destroy() })
       replaceLinks = (next): ReturnType<NonNullable<CombinedBackend['replaceLinks']>> => {
-        const replacement = createLinkResources(device, input.points, next, overrides.context?.ledger)
+        const replacement = createLinkResources(device, input.points, next, overrides.context?.ledger, threshold)
         const previous = linkResources; linkResources = replacement; version++
         previous.destroy()
         return { version, bytes: replacement.bytes, edgeCount: replacement.edgeCount, buildMs: replacement.buildMs }
@@ -82,9 +89,17 @@ export async function createCombinedWebGPU (
       const spring = own(precision === 'force' || precision === 'both' || precision === 'refined'
         ? await createRoundedKernel(device, roundedSpringSource(precision === 'refined'), springBindings)
         : await Kernel.createAsync(device, {
-          source: roundedProducts ? distanceSpringSource('products') : precision === 'distance' ? distanceSpringSource() : springSource,
+          source: prefetch?.regular ?? (optimization === 'hoist'
+            ? hoistedSpringSource()
+            : roundedProducts ? distanceSpringSource('products') : precision === 'distance' ? distanceSpringSource() : springSource),
           shaderLayout: { bindings: springBindings },
         }))
+      const hub = prefetch
+        ? own(await Kernel.createAsync(device, {
+          source: prefetch.hub,
+          shaderLayout: { bindings: [...springBindings, { name: 'hubs', location: 6, type: 'read-only-storage', group: 0 }] },
+        }))
+        : undefined
       const integrationParams = own(upload(device, new Float32Array([count, 0, 0, 0, p.friction, p.referenceLength, 0, 0]), Buffer.UNIFORM))
       const integration = roundSpring || extraStages.length > 0
         ? own(await createRoundedKernel(device, roundedIntegrationSource(), bindingLayout([
@@ -150,6 +165,20 @@ export async function createCombinedWebGPU (
                   forces,
                 },
               })
+              if (hub && linkResources.hubCounts[side]) {
+                hub.dispatch(pass, {
+                  x: linkResources.hubCounts[side],
+                  bindings: {
+                    positions: positions[source],
+                    offsets: linkResources.offsets[side],
+                    edges: linkResources.edges[side],
+                    sizes: linkResources.sizes,
+                    params: springParams,
+                    forces,
+                    hubs: linkResources.hubs![side],
+                  },
+                })
+              }
             }
           }
           if (profile) { profile('force', encode); return }
