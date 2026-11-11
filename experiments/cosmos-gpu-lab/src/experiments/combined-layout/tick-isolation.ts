@@ -2,6 +2,8 @@ import { compareArray, TOLERANCE } from '../many-body/reference'
 import { compareArray as springCompare } from '../weighted-links/reference'
 import { frameFor } from '../many-body-grid/data'
 import { STAGES, createGraph, type Stage } from './data'
+import { validateGravityTrig, type TrigValidation } from './gravity-trig-validation'
+import { traceGravity, type GravityTrace } from './gravity-trace'
 import { createOracle } from './reference'
 import { createCombinedWebGPU } from './webgpu'
 import type { CombinedSession } from './session'
@@ -11,6 +13,9 @@ const sameBits = (a: Float32Array, b: Float32Array): boolean => {
 }
 type Check = ReturnType<typeof springCompare>
 export type TickIsolation = {
+  trigValidation?: TrigValidation;
+  gravity?: GravityTrace;
+  refinedGravity?: GravityTrace;
   capture: string; tick: number; alpha: number; baselineMatchesCapture: boolean;
   components: Array<{ point: number; axis: number; actual: number; expected: number; budget: number }>;
   stages: Array<{
@@ -21,7 +26,7 @@ export type TickIsolation = {
 }
 // Boundary replacements are causal diagnostics only. They are never a GPU implementation candidate.
 export async function isolateTickFailure (session: CombinedSession, cancelled: () => boolean = (): boolean => false): Promise<TickIsolation> {
-  if (!['products', 'composed', 'aligned'].includes(session.settings.springPrecision ?? 'baseline')) {
+  if (!['products', 'composed', 'aligned', 'trig'].includes(session.settings.springPrecision ?? 'baseline')) {
     throw new Error('Tick isolation requires a products, repulsion-rounded, or aligned capture')
   }
   const key = session.firstTickFailures['probe-webgpu'] ? 'probe-webgpu' : 'webgpu'
@@ -42,7 +47,7 @@ export async function isolateTickFailure (session: CombinedSession, cancelled: (
     stages: [],
     ablations: [],
   }
-  const variants: Array<{ name: string; rounded: Stage[]; boundary?: Stage; polar?: boolean }> = [
+  const variants: Array<{ name: string; rounded: Stage[]; boundary?: Stage; polar?: boolean; trig?: boolean }> = [
     { name: 'original', rounded: [] },
     { name: 'CPU gravity boundary', rounded: [], boundary: 'gravity' },
     { name: 'CPU repulsion boundary', rounded: [], boundary: 'repulsion' },
@@ -50,12 +55,17 @@ export async function isolateTickFailure (session: CombinedSession, cancelled: (
     { name: 'rounded repulsion integration', rounded: ['repulsion'] },
     { name: 'rounded gravity + repulsion integration', rounded: ['gravity', 'repulsion'] },
     { name: 'polar gravity + rounded repulsion integration', rounded: ['repulsion'], polar: true },
+    { name: 'refined gravity trigonometry', rounded: [], polar: true, trig: true },
+    { name: 'refined trigonometry + rounded gravity integration', rounded: ['gravity'], polar: true, trig: true },
   ]
   for (const variant of variants) {
     if (cancelled()) throw new Error('Tick isolation stopped')
     const backend = await createCombinedWebGPU(
-      document.createElement('canvas'), graph, input, session.settings.springPrecision, variant.rounded,
-      variant.polar ?? session.settings.springPrecision === 'aligned'
+      document.createElement('canvas'), graph, input, session.settings.springPrecision, {
+        roundedStages: variant.rounded,
+        polarGravity: variant.polar ?? (session.settings.springPrecision === 'aligned' || session.settings.springPrecision === 'trig'),
+        refinedTrig: variant.trig ?? session.settings.springPrecision === 'trig',
+      }
     )
     try {
       backend.setPositions(capture.input)
@@ -67,7 +77,13 @@ export async function isolateTickFailure (session: CombinedSession, cancelled: (
         if (stage === 'repulsion') backend.setFrame(frameFor(gpu, capture.tick - 1))
         backend.stepStage(stage, capture.alpha)
         const actual = await backend.read()
+        if (stage === 'gravity' && variant.trig && variant.rounded.includes('gravity')) {
+          report.refinedGravity = await traceGravity(capture.input, capture.alpha, actual.forces, true)
+        }
         if (local) {
+          if (stage === 'gravity' && session.settings.springPrecision === 'aligned') {
+            report.gravity = await traceGravity(capture.input, capture.alpha, actual.forces)
+          }
           const compare = stage === 'incoming' || stage === 'outgoing' ? springCompare : compareArray
           report.stages.push({
             stage,
@@ -96,5 +112,6 @@ export async function isolateTickFailure (session: CombinedSession, cancelled: (
       })
     } finally { backend.destroy() }
   }
+  if (!cancelled()) report.trigValidation = await validateGravityTrig()
   return report
 }

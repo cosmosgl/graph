@@ -67,7 +67,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     el<HTMLButtonElement>('[data-action="spring-isolation"]').disabled = busy || session?.settings.springPrecision !== 'distance' ||
       !Object.keys(session.firstFailures).some(k => k === 'webgpu-incoming' || k === 'webgpu-outgoing')
     el<HTMLButtonElement>('[data-action="tick-isolation"]').disabled = busy || !session ||
-      !['products', 'composed', 'aligned'].includes(session.settings.springPrecision ?? 'baseline') ||
+      !['products', 'composed', 'aligned', 'trig'].includes(session.settings.springPrecision ?? 'baseline') ||
       (!session.firstTickFailures['probe-webgpu'] && !session.firstTickFailures.webgpu)
     el<HTMLButtonElement>('[data-action="replay"]').disabled = busy || !session || !Object.keys(session.captures).length
     el<HTMLButtonElement>('[data-action="run"]').disabled = busy || !session || session.rows.length >= session.settings.decay
@@ -230,6 +230,22 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       <table><thead><tr><th>Replay</th><th>Type</th><th>Whole-tick failures</th><th>Max error</th></tr></thead><tbody>
       ${tickIsolation.ablations.map(a => `<tr><td>${a.name}</td><td>${a.kind === 'boundary' ? 'CPU boundary diagnostic' : 'GPU kernel'}</td>
         <td>${a.positions.failures}</td><td>${num(a.positions.maxError)}</td></tr>`).join('')}</tbody></table>
+      ${tickIsolation.gravity
+    ? `<h4>Gravity arithmetic trace</h4>
+        <p>Trace matches original force bits: ${tickIsolation.gravity.forcesMatchUninstrumented ? 'Yes' : 'NO — instrumentation perturbs the result'}.</p>
+        <table><thead><tr><th>Operation</th><th>Differing points</th><th>Max error</th></tr></thead><tbody>
+        ${tickIsolation.gravity.fields.map(f => `<tr><td>${f.field}</td><td>${f.differing}</td><td>${num(f.maxError)}</td></tr>`).join('')}</tbody></table>`
+    : ''}
+      ${tickIsolation.refinedGravity
+    ? `<h4>Refined gravity trace</h4>
+        <p>Trace matches refined force bits: ${tickIsolation.refinedGravity.forcesMatchUninstrumented ? 'Yes' : 'NO'}.</p>
+        <table><thead><tr><th>Operation</th><th>Differing points</th></tr></thead><tbody>
+        ${tickIsolation.refinedGravity.fields.map(f => `<tr><td>${f.field}</td><td>${f.differing}</td></tr>`).join('')}</tbody></table>`
+    : ''}
+      ${tickIsolation.trigValidation
+    ? `<p>Independent trigonometry check: ${tickIsolation.trigValidation.cases} vectors;
+        angle / sine / cosine bit mismatches: ${tickIsolation.trigValidation.differing.join(' / ')}.</p>`
+    : ''}
       <p class="demo-note">Exact coordinates after each stage and all replay values are in Export JSON.</p>`
       : ''
     if (!row) { el('[data-output="chart"]').replaceChildren(); return }
@@ -348,8 +364,8 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
         await benchmarkSprings({
           settings: session.settings,
           modes: action === 'repulsion-timing'
-            ? ['products', 'composed', 'aligned']
-            : session.settings.count > 2048 ? ['baseline', 'products', 'aligned'] : PRECISION_MODES,
+            ? ['products', 'aligned', 'trig']
+            : session.settings.count > 2048 ? ['baseline', 'aligned', 'trig'] : PRECISION_MODES,
           stages: action === 'repulsion-timing' ? ['gravity', 'repulsion'] : ['incoming', 'outgoing'],
           rows: springTimings,
           cancelled: () => stopped || destroyed,
