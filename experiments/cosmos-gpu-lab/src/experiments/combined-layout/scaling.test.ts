@@ -15,7 +15,7 @@ const record = (event: string, value: unknown): void => {
 
 // Always measure the serial star hub before starting longer trajectories at the requested size.
 scaleTest(`spring GPU cost at ${count} points: star first, then chain and communities`, async () => {
-  expect(['products', 'composed', 'aligned']).toContain(precision)
+  expect(['products', 'composed', 'aligned', 'trig']).toContain(precision)
   const modes = [...new Set<SpringPrecision>(['baseline', 'products', precision])]
   for (const fixture of ['star', 'chain', 'communities'] as const) {
     const rows: SpringTimingRow[] = []

@@ -11,7 +11,8 @@ alongside the CPU trajectory. Hierarchical repulsion is used throughout this exp
 
 The follow-up [tick-precision investigation](#/combined-layout/docs/tick-rounding) isolates repulsion-integration
 rounding and gravity evaluation order. Its diagnostic candidate fixes both star schedules but regresses the
-communities tick-1 whole-tick check. The full acceptance gate remains open.
+communities tick-1 whole-tick check. The subsequent [gravity-math correction](#/combined-layout/docs/gravity-trig) passes the full 8,192-point
+M3 matrix with the original budget, at a measurable gravity cost. The original controls below retain their failures.
 
 ## Correctness results
 

@@ -40,5 +40,10 @@ export const experiment = defineExperiment({
     id: 'tick-rounding',
     title: 'Tick precision',
     load: async (): Promise<string> => (await import('./docs/tick-rounding.md?raw')).default,
+  }, {
+    kind: 'markdown',
+    id: 'gravity-trig',
+    title: 'Gravity math',
+    load: async (): Promise<string> => (await import('./docs/gravity-trig.md?raw')).default,
   }],
 })

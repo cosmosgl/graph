@@ -8,8 +8,9 @@ import springSource from '../weighted-links/force.wgsl?raw'
 import { createGridWebGPU } from '../many-body-grid/webgpu'
 import { frameFor } from '../many-body-grid/data'
 import { GRAVITY, REPULSION, SPRINGS, type SpringPrecision, type Stage } from './data'
+import { polarGravitySource, refinedGravitySource } from './gravity-source'
 import type { CombinedBackend } from './backend'
-import { createRoundedKernel, roundedSpringSource, roundedIntegrationSource, distanceSpringSource, roundedArithmetic } from './spring-precision'
+import { createRoundedKernel, roundedSpringSource, roundedIntegrationSource, distanceSpringSource } from './spring-precision'
 const gravitySource = `
 @group(0) @binding(0) var<storage, read> positions: array<vec4<f32>>;
 @group(0) @binding(1) var<uniform> params: vec4<f32>;
@@ -18,22 +19,6 @@ const gravitySource = `
   if (id.x >= u32(params.x)) { return; }
   // The production polar expression is a linear spring toward the origin.
   forces[id.x] = vec4(-positions[id.x].xy * (params.y * params.z * 0.1), 0., 0.);
-}`
-const polarGravitySource = `${roundedArithmetic}
-@group(0) @binding(0) var<storage, read> positions: array<vec4f>;
-@group(0) @binding(1) var<uniform> params: vec4f;
-@group(0) @binding(2) var<storage, read_write> forces: array<vec4f>;
-@compute @workgroup_size(64) fn main(@builtin(global_invocation_id) id: vec3u) {
-  if (id.x >= u32(params.x)) { return; }
-  let delta = -positions[id.x].xy;
-  let distance = springRoot(springAdd(springMul(delta.x, delta.x), springMul(delta.y, delta.y)));
-  var force = vec2f(0.);
-  if (distance > 0.) {
-    let angle = atan2(delta.y, delta.x);
-    let magnitude = springMul(springMul(springMul(params.y, params.z), distance), 0.1);
-    force = vec2f(springMul(magnitude, cos(angle)), springMul(magnitude, sin(angle)));
-  }
-  forces[id.x] = vec4f(force, 0., 0.);
 }`
 const linkSource = `
 @group(0) @binding(0) var<storage, read> positions: array<vec4<f32>>;
@@ -46,8 +31,11 @@ const linkSource = `
 `
 export async function createCombinedWebGPU (
   canvas: HTMLCanvasElement, graph: GraphInput, input: Input, precision: SpringPrecision = 'baseline',
-  roundedStages: readonly Stage[] = [], polarGravity = precision === 'aligned'
+  overrides: { roundedStages?: readonly Stage[]; polarGravity?: boolean; refinedTrig?: boolean } = {}
 ): Promise<CombinedBackend> {
+  const roundedStages = overrides.roundedStages ?? []
+  const polarGravity = overrides.polarGravity ?? (precision === 'aligned' || precision === 'trig')
+  const refinedTrig = overrides.refinedTrig ?? precision === 'trig'
   let stage: Stage = 'gravity'; const p = { ...REPULSION }; const topology = buildTopology(graph)
   const base = await createGridWebGPU(canvas, input, p, frameFor(input.points, 0), 'streamed', gridFactory => async resources => {
     const { device, positions, forces, count } = resources
@@ -72,15 +60,17 @@ export async function createCombinedWebGPU (
         ['positions', 'read-only-storage'], ['params', 'uniform'], ['forces', 'storage'],
       ])
       const gravity = own(polarGravity
-        ? await createRoundedKernel(device, polarGravitySource, gravityBindings)
+        ? await createRoundedKernel(device, refinedTrig ? refinedGravitySource : polarGravitySource, gravityBindings)
         : await Kernel.createAsync(device, { source: gravitySource, shaderLayout: { bindings: gravityBindings } }))
       const springBindings = bindingLayout([
         ['positions', 'read-only-storage'], ['offsets', 'read-only-storage'], ['edges', 'read-only-storage'],
         ['sizes', 'read-only-storage'], ['params', 'uniform'], ['forces', 'storage'],
       ])
-      const roundedProducts = precision === 'products' || precision === 'composed' || precision === 'aligned'
-      const roundSpring = ['integration', 'both', 'refined', 'distance', 'products', 'composed', 'aligned'].includes(precision)
-      const extraStages = precision === 'composed' || precision === 'aligned' ? [...roundedStages, 'repulsion'] : roundedStages
+      const roundedProducts = precision === 'products' || precision === 'composed' || precision === 'aligned' || precision === 'trig'
+      const roundSpring = ['integration', 'both', 'refined', 'distance', 'products', 'composed', 'aligned', 'trig'].includes(precision)
+      const extraStages = precision === 'trig'
+        ? [...roundedStages, 'gravity', 'repulsion']
+        : precision === 'composed' || precision === 'aligned' ? [...roundedStages, 'repulsion'] : roundedStages
       const spring = own(precision === 'force' || precision === 'both' || precision === 'refined'
         ? await createRoundedKernel(device, roundedSpringSource(precision === 'refined'), springBindings)
         : await Kernel.createAsync(device, {
