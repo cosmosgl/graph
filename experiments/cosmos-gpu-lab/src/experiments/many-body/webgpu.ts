@@ -1,7 +1,8 @@
 import { Buffer, type Device, type RenderPass, type ComputePass } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
 import { bindingLayout, createDevice, createStorageRenderer, readFloats, upload, waitForGpu } from '../../gpu/luma'
-import type { Backend, View } from './backend'
+import { resourceScope, type BufferLedger } from '../../gpu/resource-scope'
+import type { Backend, View, PositionSource } from './backend'
 import type { Snapshot } from './reference'
 import { measureBatch, timestamps, type TimestampWrites } from './timing'
 import { nearLimit, validateInput, type Input, type Parameters, type Variant } from './data'
@@ -32,25 +33,69 @@ export type WebGPUForceFactory = (resources: {
   render?(source: number, view: View, pass: RenderPass): void;
   integrate?(source: number, timing: TimestampWrites, pass?: ComputePass): boolean; destroy(): void;
 }>
+export type BackendContext = { device: Device; ledger?: BufferLedger; check?(): void }
+export type WebGPUOptions = { context?: BackendContext; preserve?: PositionSource }
+const deviceLosses = new WeakMap<Device, { message?: string }>()
+const absentSource = `
+@group(0) @binding(0) var<storage, read_write> source: array<vec4f>;
+@group(0) @binding(1) var<storage, read_write> outputPoints: array<vec4f>;
+@group(0) @binding(2) var<uniform> patchParams: vec4u;
+@compute @workgroup_size(1) fn main() {
+  var point = source[patchParams.x]; point.w = f32(patchParams.y);
+  source[patchParams.x] = point; outputPoints[patchParams.x] = point;
+}`
 export async function createWebGPU (
-  canvas: HTMLCanvasElement, input: Input, p: Parameters, variant: Variant, customForce?: WebGPUForceFactory
+  canvas: HTMLCanvasElement, input: Input, p: Parameters, variant: Variant, customForce?: WebGPUForceFactory,
+  options: WebGPUOptions = {}
 ): Promise<Backend> {
   validateInput(input, p, customForce ? 16384 : 4096)
   let failure: string | undefined; let destroyed = false
-  const device = await createDevice('webgpu', canvas, true, error => { failure = error.message })
-  device.lost.then(info => { failure = `WebGPU device lost: ${info.reason} · ${info.message}` })
-  const owned: Array<{ destroy(): void }> = []
-  const own = <T extends { destroy(): void }>(resource: T): T => { owned.push(resource); return resource }
-  const healthy = (): void => { if (destroyed || failure || device.isLost) throw new Error(failure ?? 'WebGPU device lost or destroyed') }
+  const device = options.context?.device ?? await createDevice('webgpu', canvas, true, error => { failure = error.message })
+  let loss = deviceLosses.get(device)
+  if (!loss) {
+    loss = {}; deviceLosses.set(device, loss); const state = loss
+    device.lost.then(info => { state.message = `WebGPU device lost: ${info.reason} · ${info.message}` })
+  }
+  const scope = resourceScope(options.context?.ledger); const own = scope.own
+  const healthy = (): void => {
+    options.context?.check?.()
+    if (destroyed || failure || loss.message || device.isLost) throw new Error(failure ?? loss.message ?? 'WebGPU device lost or destroyed')
+  }
   try {
     const count = input.points.length / 4
-    const positions = [own(upload(device, input.points)), own(upload(device, input.points))]
+    healthy()
+    if (options.preserve && options.preserve.device !== device) throw new Error('Cannot copy positions between devices')
+    const preserved = Math.min(options.preserve?.count ?? 0, count)
+    const tail = input.points.subarray(preserved * 4)
+    const positions = [0, 1].map(() => {
+      const buffer = own(device.createBuffer({
+        byteLength: Math.max(16, input.points.byteLength),
+        usage: Buffer.STORAGE | Buffer.COPY_SRC | Buffer.COPY_DST,
+      }))
+      if (tail.byteLength) buffer.write(tail, preserved * 16)
+      return buffer
+    })
+    let copySubmitMs = 0
+    if (preserved) {
+      const start = performance.now()
+      for (const destinationBuffer of positions) {
+        device.commandEncoder.copyBufferToBuffer({
+          sourceBuffer: options.preserve!.buffer, destinationBuffer, size: preserved * 16,
+        })
+      }
+      device.submit(); copySubmitMs = performance.now() - start
+    }
     const samples = own(upload(device, input.samples))
     const forces = own(upload(device, new Float32Array(input.points.length)))
     const params = own(upload(device, new Float32Array([
       count, p.alpha, p.repulsion, nearLimit(count, p), p.friction, p.referenceLength, 0, 0,
     ]), Buffer.UNIFORM))
     const viewBuffer = own(upload(device, new Float32Array([0, 0, 1, 1]), Buffer.UNIFORM))
+    const patch = own(upload(device, new Uint32Array(4), Buffer.UNIFORM))
+    const absent = own(await Kernel.createAsync(device, {
+      source: absentSource,
+      shaderLayout: { bindings: bindingLayout([['source', 'storage'], ['outputPoints', 'storage'], ['patchParams', 'uniform']]) },
+    }))
     const force = own(await Kernel.createAsync(device, {
       source: forceSource,
       entryPoint: variant,
@@ -92,6 +137,18 @@ export async function createWebGPU (
     return {
       name: `WebGPU ${variant}`,
       info: `${device.info.vendor} ${device.info.renderer}; luma Kernel / RenderKernel; 64 invocations per group`,
+      positionSource (): PositionSource { healthy(); return { device, buffer: positions[current], count } },
+      positionTransfer: { preserved, copiedBytes: preserved * 32, uploadedBytes: tail.byteLength * 2, copySubmitMs },
+      setAbsent (index, value): void {
+        healthy()
+        if (!Number.isInteger(index) || index < 0 || index >= count) throw new Error('Invalid absent-point index')
+        patch.write(new Uint32Array([index, value ? 1 : 0, 0, 0]))
+        const pass = device.beginComputePass()
+        try {
+          absent.dispatch(pass, { x: 1, bindings: { source: positions[current], outputPoints: positions[1 - current], patchParams: patch } })
+        } finally { pass.end() }
+        device.submit()
+      },
       setPositions (data): void {
         healthy()
         if (data.length !== input.points.length) throw new Error('Point count changed; recreate the backend')
@@ -159,11 +216,11 @@ export async function createWebGPU (
       destroy (): void {
         if (destroyed) return
         destroyed = true
-        try { owned.reverse().forEach(resource => resource.destroy()) } finally { device.destroy() }
+        try { scope.destroy() } finally { if (!options.context) device.destroy() }
       },
     }
   } catch (error) {
-    try { owned.reverse().forEach(resource => resource.destroy()) } finally { device.destroy() }
+    try { scope.destroy() } finally { if (!options.context) device.destroy() }
     throw error
   }
 }

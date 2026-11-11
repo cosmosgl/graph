@@ -1,6 +1,7 @@
 import { Buffer } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
-import { createWebGPU, type WebGPUForceFactory } from '../many-body/webgpu'
+import { createWebGPU, type WebGPUForceFactory, type WebGPUOptions } from '../many-body/webgpu'
+import { resourceScope } from '../../gpu/resource-scope'
 import { bindingLayout, readFloats, upload } from '../../gpu/luma'
 import { nearLimit, type Input, type Parameters } from '../many-body/data'
 import { contributionShader } from './contributions'
@@ -15,7 +16,7 @@ import shader from './grid.wgsl?raw'
 export async function createGridWebGPU (
   canvas: HTMLCanvasElement, input: Input, p: Parameters, initial: Frame, centroidMode: CentroidMode = 'inline',
   wrapForce: (factory: WebGPUForceFactory) => WebGPUForceFactory = (factory): WebGPUForceFactory => factory,
-  options: { gpuBounds?: boolean } = {}
+  options: WebGPUOptions & { gpuBounds?: boolean } = {}
 ): Promise<GridBackend> {
   let sourceShader = centroidMode !== 'inline' ? storedCentroidShader(shader, centroidMode !== 'stored') : shader
   const streamed = centroidMode === 'streamed'
@@ -32,8 +33,7 @@ export async function createGridWebGPU (
   let diagnose: NonNullable<GridBackend['diagnose']>
   let readStructure: () => Promise<Structure> = async () => { throw new Error('Grid not initialized') }
   const base = await createWebGPU(canvas, input, p, 'direct', wrapForce(async ({ device, positions, samples, forces, count }) => {
-    const owned: Array<{ destroy(): void }> = []
-    const own = <T extends { destroy(): void }>(v: T): T => { owned.push(v); return v }
+    const scope = resourceScope(options.context?.ledger); const own = scope.own
     try {
       const l = layout(count)
       if (centroidMode !== 'inline' && centroidMode !== 'stored') verifyDivision = (): ReturnType<typeof verifyCountDivision> => verifyCountDivision(device)
@@ -48,7 +48,7 @@ export async function createGridWebGPU (
       const levels = own(upload(device, new Uint32Array(l.sizes.flatMap((n, i) => [n, l.offsets[i], 0, 0]))))
       const params = own(upload(device, new Float32Array(12), Buffer.UNIFORM))
       const box = own(upload(device, frame.bounds, options.gpuBounds ? Buffer.STORAGE : Buffer.UNIFORM))
-      const bounds = options.gpuBounds ? own(await createGpuBounds(device, count, l.finest, box)) : undefined
+      const bounds = options.gpuBounds ? own(await createGpuBounds(device, count, l.finest, box, options.context?.ledger)) : undefined
       readBounds = (): Promise<Float32Array> => readFloats(box)
       const bindings = bindingLayout([
         ['positions', 'read-only-storage'], ['samples', 'read-only-storage'], ['heads', 'storage'], ['links', 'storage'],
@@ -218,10 +218,10 @@ export async function createGridWebGPU (
             }
           } finally { if (!sharedPass) pass.end() }
         },
-        destroy (): void { owned.reverse().forEach(resource => resource.destroy()) },
+        destroy: scope.destroy,
       }
-    } catch (error) { owned.reverse().forEach(resource => resource.destroy()); throw error }
-  }))
+    } catch (error) { scope.destroy(); throw error }
+  }), options)
   return {
     ...base,
     name: `WebGPU grid (${centroidMode} centroids)`,

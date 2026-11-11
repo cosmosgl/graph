@@ -2,6 +2,7 @@ import { Buffer, type Device, type ComputePass } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
 import { bindingLayout, upload } from '../../gpu/luma'
 import { createRoundedKernel } from '../../gpu/rounded-kernel'
+import { resourceScope, type BufferLedger } from '../../gpu/resource-scope'
 import { frameSamples } from './data'
 import source from './bounds.wgsl?raw'
 
@@ -26,11 +27,10 @@ fn div(a: f32, b: f32) -> f32 { return div_fp64(vec2f(a, 0.), vec2f(b, 0.)).x; }
 
 // One parallel min/max pass per level, then ONE invocation for frame arithmetic.
 // Fixed per-level uniforms avoid queue writes changing earlier encoded dispatches.
-export async function createGpuBounds (device: Device, count: number, finest: number, box: Buffer): Promise<{
+export async function createGpuBounds (device: Device, count: number, finest: number, box: Buffer, ledger?: BufferLedger): Promise<{
   prepare(tick: number): void; encode(pass: ComputePass, positions: Buffer): void; destroy(): void;
 }> {
-  const owned: Array<{ destroy(): void }> = []
-  const own = <T extends { destroy(): void }>(v: T): T => { owned.push(v); return v }
+  const scope = resourceScope(ledger); const own = scope.own
   try {
     const reduce = own(await Kernel.createAsync(device, {
       id: 'cosmos-bounds-reduce',
@@ -61,7 +61,7 @@ export async function createGpuBounds (device: Device, count: number, finest: nu
         }
         finish.dispatch(pass, { x: 1, bindings: { extrema: values, params, box } })
       },
-      destroy (): void { owned.reverse().forEach(r => r.destroy()) },
+      destroy: scope.destroy,
     }
-  } catch (error) { owned.reverse().forEach(r => r.destroy()); throw error }
+  } catch (error) { scope.destroy(); throw error }
 }

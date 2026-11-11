@@ -1,11 +1,12 @@
 import type { Device } from '@luma.gl/core'
 import { upload } from '../../gpu/luma'
+import { resourceScope, type BufferLedger } from '../../gpu/resource-scope'
 import { buildTopology, type GraphInput } from '../weighted-links/data'
 export type LinkInput = Pick<GraphInput, 'links' | 'weights' | 'sizes'>
 
 // A replacement owns its complete buffer bundle. Allocate before swapping it in;
 // the position buffers, kernels and device belong to the surrounding backend.
-export function createLinkResources (device: Device, points: Float32Array, input: LinkInput): {
+export function createLinkResources (device: Device, points: Float32Array, input: LinkInput, ledger?: BufferLedger): {
   links: ReturnType<typeof upload>; sizes: ReturnType<typeof upload>;
   offsets: Array<ReturnType<typeof upload>>; edges: Array<ReturnType<typeof upload>>;
   edgeCount: number; bytes: number; buildMs: number; destroy(): void;
@@ -15,7 +16,8 @@ export function createLinkResources (device: Device, points: Float32Array, input
   }
   const topology = buildTopology({ points, links: input.links, weights: input.weights, sizes: input.sizes })
   const owned: Array<ReturnType<typeof upload>> = []
-  const keep = <T extends ReturnType<typeof upload>>(buffer: T): T => { owned.push(buffer); return buffer }
+  const scope = resourceScope(ledger)
+  const keep = <T extends ReturnType<typeof upload>>(buffer: T): T => { owned.push(buffer); return scope.own(buffer) }
   try {
     const links = keep(upload(device, topology.links)); const sizes = keep(upload(device, input.sizes))
     const offsets = topology.directions.map(d => keep(upload(device, d.offsets)))
@@ -32,7 +34,7 @@ export function createLinkResources (device: Device, points: Float32Array, input
       edgeCount: topology.links.length / 2,
       bytes: owned.reduce((sum, buffer) => sum + buffer.byteLength, 0),
       buildMs: topology.buildMs,
-      destroy (): void { owned.reverse().forEach(buffer => buffer.destroy()) },
+      destroy: scope.destroy,
     }
-  } catch (error) { owned.reverse().forEach(buffer => buffer.destroy()); throw error }
+  } catch (error) { scope.destroy(); throw error }
 }
