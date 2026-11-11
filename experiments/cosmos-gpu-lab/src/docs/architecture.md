@@ -32,6 +32,18 @@ instead of becoming the active experiment.
 
 The shell lives in `src/app/app-shell.ts`; route parsing lives in `src/app/router.ts`.
 
+The homepage and sidebar share a curated catalog in `src/app/registry.ts`:
+
+| Group | Reading path |
+| --- | --- |
+| Foundations | Reductions, spatial indexing and basic point rendering |
+| Cosmos forces | Local neighbors, exact and hierarchical repulsion, then springs |
+| Combined engine | Independent trajectories, composed forces, resident frames and matched layouts |
+| Validation and optimization | Production gates, timing, targeted optimizations and resource capacity |
+
+Experiments within each group follow a suggested prerequisite order. They have no sequence numbers;
+the [migration roadmap](#/roadmap) describes research progress and remaining work.
+
 ## 2. Each experiment is a self-contained module
 
 An experiment typically has this structure; the exact backend organization varies:
@@ -68,8 +80,8 @@ type ExperimentInstance = {
 
 Vite automatically discovers `src/experiments/*/experiment.ts` through `import.meta.glob`.
 Lightweight manifests load at startup; demo implementations and experiment documentation load
-on demand. The registry checks for duplicate experiment and page identifiers and requires
-each experiment to have documentation.
+on demand. The registry checks for duplicate experiment and page identifiers, requires
+each experiment to have documentation, and checks that every experiment belongs to exactly one catalog group.
 
 ## 3. Experiments coordinate comparisons; backends own GPU work
 
@@ -172,9 +184,10 @@ command requires a WebGPU adapter.
 3. Implement the demo and backend ownership, including explicit `destroy()` cleanup.
 4. Add documentation explaining the algorithm, correctness, performance and limitations.
 5. Add CPU references and validation, then document findings and reproduction steps in Markdown.
+6. Place the experiment ID in its prerequisite position in one catalog group in `src/app/registry.ts`.
 
-The registry discovers the experiment automatically and the shell creates its navigation and
-documentation tabs. No central experiment list needs updating.
+Vite discovers the manifest automatically; the catalog supplies its group and display order.
+The shell creates its navigation, homepage card and documentation tabs from that information.
 
 Most GPU ownership and scheduling remain local to each experiment. As several experiments
 begin sharing the same operations, we can extract proven primitives—reduction, scan, grid

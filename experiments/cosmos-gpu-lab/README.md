@@ -22,6 +22,10 @@ rewrite configuration.
 
 Create `src/experiments/<id>/experiment.ts` and export an `ExperimentDefinition`. Vite discovers experiment manifests
 through `import.meta.glob`; the demo and documentation remain lazy-loaded.
+Assign the experiment ID to exactly one group in `src/app/registry.ts`, in prerequisite order.
+That catalog drives both the homepage and sidebar: Foundations, Cosmos forces, Combined engine,
+then Validation and optimization. The registry rejects missing, duplicate and unknown assignments.
+This is a suggested reading path; the migration roadmap records research progress.
 
 An experiment should contain:
 
