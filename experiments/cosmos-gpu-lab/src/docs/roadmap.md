@@ -156,7 +156,10 @@ fixes its counterexample and passes 252 scheduled checkpoints and 12 probes acro
 Its rerun star hub cost is 1.74 ms, versus 67.32 ms refined and 120.34 ms fully rounded, with the same tolerance.
 The [8,192-point scaling study](#/combined-layout/docs/scaling) passes all 126 scheduled WebGPU checkpoints,
 but the 100-tick star's full-strength probe fails its whole-tick comparison. Its spring stages still match exactly.
-The star hub costs about 6.99 ms; 32,768-point validation is held pending the composed-tick investigation.
+The star hub costs about 6.99 ms. [Tick-precision replay](#/combined-layout/docs/tick-rounding) traces the error
+to repulsion integration, then exposes gravity-order sensitivity along the corrected trajectory. An aligned
+diagnostic passes both star schedules and all six probes but regresses communities at tick 1. The complete
+acceptance gate remains open; 32,768-point validation is held.
 Cross-device behavior remains unvalidated; native f32 remains the default. Unchecked ticks
 are not counted as passing.
 
@@ -325,7 +328,7 @@ performance and memory meet the target budgets; supported devices are tested; an
 | --- | --- | --- |
 | Extend | Weighted-link compute-to-render path through luma | Can its demonstrated resource contract handle shared ownership, device loss and live updates? |
 | Extend | Weighted springs at larger sizes and over longer trajectories | Can ordered hub gathers and state-preserving topology updates meet the engine budget? |
-| First | Isolate the [8,192-point star probe](#/combined-layout/docs/scaling), then extend size and production options | Where do acceptable stage differences exceed the complete-tick budget? |
+| First | Isolate the [aligned-gravity communities counterexample](#/combined-layout/docs/tick-rounding) | Can the complete graph matrix pass its existing budget after correcting the star? |
 | Then | GPU bounds, adaptive samples and parallel hierarchy construction | Can the same approximation scale without CPU synchronization or serial dense-cell work? |
 | Alongside simulation | Links, richer points and picking from shared GPU state | Can Cosmos render and interact correctly without transferring all positions back? |
 | Then | Combined engine workload on multiple native GPUs | Is the whole migration practical for the intended users and graph sizes? |

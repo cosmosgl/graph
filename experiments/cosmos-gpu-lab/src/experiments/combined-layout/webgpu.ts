@@ -9,7 +9,7 @@ import { createGridWebGPU } from '../many-body-grid/webgpu'
 import { frameFor } from '../many-body-grid/data'
 import { GRAVITY, REPULSION, SPRINGS, type SpringPrecision, type Stage } from './data'
 import type { CombinedBackend } from './backend'
-import { createRoundedKernel, roundedSpringSource, roundedIntegrationSource, distanceSpringSource } from './spring-precision'
+import { createRoundedKernel, roundedSpringSource, roundedIntegrationSource, distanceSpringSource, roundedArithmetic } from './spring-precision'
 const gravitySource = `
 @group(0) @binding(0) var<storage, read> positions: array<vec4<f32>>;
 @group(0) @binding(1) var<uniform> params: vec4<f32>;
@@ -18,6 +18,22 @@ const gravitySource = `
   if (id.x >= u32(params.x)) { return; }
   // The production polar expression is a linear spring toward the origin.
   forces[id.x] = vec4(-positions[id.x].xy * (params.y * params.z * 0.1), 0., 0.);
+}`
+const polarGravitySource = `${roundedArithmetic}
+@group(0) @binding(0) var<storage, read> positions: array<vec4f>;
+@group(0) @binding(1) var<uniform> params: vec4f;
+@group(0) @binding(2) var<storage, read_write> forces: array<vec4f>;
+@compute @workgroup_size(64) fn main(@builtin(global_invocation_id) id: vec3u) {
+  if (id.x >= u32(params.x)) { return; }
+  let delta = -positions[id.x].xy;
+  let distance = springRoot(springAdd(springMul(delta.x, delta.x), springMul(delta.y, delta.y)));
+  var force = vec2f(0.);
+  if (distance > 0.) {
+    let angle = atan2(delta.y, delta.x);
+    let magnitude = springMul(springMul(springMul(params.y, params.z), distance), 0.1);
+    force = vec2f(springMul(magnitude, cos(angle)), springMul(magnitude, sin(angle)));
+  }
+  forces[id.x] = vec4f(force, 0., 0.);
 }`
 const linkSource = `
 @group(0) @binding(0) var<storage, read> positions: array<vec4<f32>>;
@@ -29,7 +45,8 @@ const linkSource = `
 @fragment fn fragmentMain() -> @location(0) vec4<f32> { return vec4(0.27,0.32,0.4,1.); }
 `
 export async function createCombinedWebGPU (
-  canvas: HTMLCanvasElement, graph: GraphInput, input: Input, precision: SpringPrecision = 'baseline'
+  canvas: HTMLCanvasElement, graph: GraphInput, input: Input, precision: SpringPrecision = 'baseline',
+  roundedStages: readonly Stage[] = [], polarGravity = precision === 'aligned'
 ): Promise<CombinedBackend> {
   let stage: Stage = 'gravity'; const p = { ...REPULSION }; const topology = buildTopology(graph)
   const base = await createGridWebGPU(canvas, input, p, frameFor(input.points, 0), 'streamed', gridFactory => async resources => {
@@ -51,33 +68,35 @@ export async function createCombinedWebGPU (
         for (let i = 0; i < d.neighbors.length; i++) { ints[i * 4] = d.neighbors[i]; floats.set(d.properties.subarray(i * 4, i * 4 + 3), i * 4 + 1) }
         return own(upload(device, new Uint8Array(data)))
       })
-      const gravity = own(await Kernel.createAsync(device, {
-        source: gravitySource,
-        shaderLayout: {
-          bindings: bindingLayout([
-            ['positions', 'read-only-storage'], ['params', 'uniform'], ['forces', 'storage'],
-          ]),
-        },
-      }))
+      const gravityBindings = bindingLayout([
+        ['positions', 'read-only-storage'], ['params', 'uniform'], ['forces', 'storage'],
+      ])
+      const gravity = own(polarGravity
+        ? await createRoundedKernel(device, polarGravitySource, gravityBindings)
+        : await Kernel.createAsync(device, { source: gravitySource, shaderLayout: { bindings: gravityBindings } }))
       const springBindings = bindingLayout([
         ['positions', 'read-only-storage'], ['offsets', 'read-only-storage'], ['edges', 'read-only-storage'],
         ['sizes', 'read-only-storage'], ['params', 'uniform'], ['forces', 'storage'],
       ])
+      const roundedProducts = precision === 'products' || precision === 'composed' || precision === 'aligned'
+      const roundSpring = ['integration', 'both', 'refined', 'distance', 'products', 'composed', 'aligned'].includes(precision)
+      const extraStages = precision === 'composed' || precision === 'aligned' ? [...roundedStages, 'repulsion'] : roundedStages
       const spring = own(precision === 'force' || precision === 'both' || precision === 'refined'
         ? await createRoundedKernel(device, roundedSpringSource(precision === 'refined'), springBindings)
         : await Kernel.createAsync(device, {
-          source: precision === 'products' ? distanceSpringSource('products') : precision === 'distance' ? distanceSpringSource() : springSource,
+          source: roundedProducts ? distanceSpringSource('products') : precision === 'distance' ? distanceSpringSource() : springSource,
           shaderLayout: { bindings: springBindings },
         }))
       const integrationParams = own(upload(device, new Float32Array([count, 0, 0, 0, p.friction, p.referenceLength, 0, 0]), Buffer.UNIFORM))
-      const integration = precision === 'integration' || precision === 'both' || precision === 'refined' || precision === 'distance' || precision === 'products'
+      const integration = roundSpring || extraStages.length > 0
         ? own(await createRoundedKernel(device, roundedIntegrationSource(), bindingLayout([
           ['positions', 'read-only-storage'], ['forces', 'read-only-storage'], ['params', 'uniform'], ['output', 'storage'],
         ])))
         : undefined
       return {
         integrate (source, timing): boolean {
-          if (!integration || (stage !== 'incoming' && stage !== 'outgoing')) return false
+          const rounded = (roundSpring && (stage === 'incoming' || stage === 'outgoing')) || extraStages.includes(stage)
+          if (!integration || !rounded) return false
           const pass = device.beginComputePass(timing)
           try {
             integration.dispatch(pass, {
@@ -132,6 +151,10 @@ export async function createCombinedWebGPU (
   return {
     ...base,
     stepStage (next, alpha): void { stage = next; p.alpha = alpha; base.step() },
+    measureStage (next, alpha, phase, operations): ReturnType<typeof base.measure> {
+      stage = next; p.alpha = alpha
+      return base.measure(phase, operations)
+    },
     measureSpring (next, alpha, phase, operations): ReturnType<typeof base.measure> {
       stage = next; p.alpha = alpha
       return base.measure(phase, operations)

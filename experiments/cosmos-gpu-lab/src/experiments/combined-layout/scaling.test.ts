@@ -2,9 +2,10 @@ import { expect, it } from 'vitest'
 import { TOLERANCE } from '../many-body/reference'
 import { createCombinedSession } from './session'
 import { benchmarkSprings, type SpringTimingRow } from './spring-benchmark'
-import type { Fixture } from './data'
+import type { Fixture, SpringPrecision } from './data'
 
 // Explicit research run: native GPU only, one size at a time. Inspect 8192 before enabling 32768.
+const precision = import.meta.env.LAB_SCALE_PRECISION as SpringPrecision
 const count = Number(import.meta.env.LAB_SCALE_COUNT)
 const scaleTest = it.skipIf(!import.meta.env.LAB_NATIVE_GPU || ![8192, 32768].includes(count))
 const record = (event: string, value: unknown): void => {
@@ -14,20 +15,23 @@ const record = (event: string, value: unknown): void => {
 
 // Always measure the serial star hub before starting longer trajectories at the requested size.
 scaleTest(`spring GPU cost at ${count} points: star first, then chain and communities`, async () => {
+  expect(['products', 'composed', 'aligned']).toContain(precision)
+  const modes = [...new Set<SpringPrecision>(['baseline', 'products', precision])]
   for (const fixture of ['star', 'chain', 'communities'] as const) {
     const rows: SpringTimingRow[] = []
     await benchmarkSprings({
       settings: { fixture, count, decay: 100 },
-      modes: ['baseline', 'products'],
+      modes,
       rows,
       cancelled: () => false,
       progress: () => {},
     })
     record('TIMING', { fixture, count, browser: navigator.userAgent, rows })
-    expect(rows).toHaveLength(8)
+    expect(rows).toHaveLength(modes.length * 4)
     expect(rows.every(r => !r.error && r.samples.length === 7 && r.summary?.gpuMs != null)).toBe(true)
     // The native baseline remains a diagnostic; only the corrected candidate is required to pass.
-    const corrected = rows.filter(r => r.mode === 'products')
+    const corrected = rows.filter(r => r.mode === precision)
+    expect(corrected).toHaveLength(4)
     const valid = corrected.every(r => r.checks.length === 10 && r.checks.every(c => c.forces.valid && c.positions.valid))
     expect(valid, JSON.stringify(corrected.map(r => ({ stage: r.stage, phase: r.phase, checks: r.checks })))).toBe(true)
   }
@@ -35,8 +39,8 @@ scaleTest(`spring GPU cost at ${count} points: star first, then chain and commun
 
 for (const fixture of ['chain', 'communities', 'star'] as Fixture[]) {
   for (const decay of [100, 300]) {
-    scaleTest(`products scaling: ${fixture} / ${count} / ${decay}`, async () => {
-      const session = await createCombinedSession({ fixture, count, decay, checkpointEvery: 10, springPrecision: 'products' },
+    scaleTest(`${precision} scaling: ${fixture} / ${count} / ${decay}`, async () => {
+      const session = await createCombinedSession({ fixture, count, decay, checkpointEvery: 10, springPrecision: precision },
         () => document.createElement('canvas'))
       try {
         expect(session.errors).toEqual({})
