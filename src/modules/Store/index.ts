@@ -104,8 +104,6 @@ export class Store {
    */
   public pointDefaultStrokeShade = 0
   public pointDefaultStrokeRgba: [number, number, number, number] | undefined = undefined
-  public highlightedPointSet: Set<number> | undefined = undefined
-  public outlinedPointSet: Set<number> | undefined = undefined
   public hoveredLinkColor = [-1, -1, -1, -1]
   // -1 means that the color is not set
   public greyoutPointColor = [-1, -1, -1, -1]
@@ -393,14 +391,6 @@ export class Store {
       this.pointDefaultStrokeShade = 2
       this.pointDefaultStrokeRgba = getRgbaColor(value)
     }
-  }
-
-  public setHighlightedPointSet (indices: number[] | undefined): void {
-    this.highlightedPointSet = indices ? new Set(indices) : undefined
-  }
-
-  public setOutlinedPointSet (indices: number[] | undefined): void {
-    this.outlinedPointSet = indices ? new Set(indices) : undefined
   }
 
   public setGreyoutPointColor (color: string | [number, number, number, number] | undefined): void {

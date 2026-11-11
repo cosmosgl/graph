@@ -511,6 +511,8 @@ export class Points extends CoreModule implements PointTrackerHost {
     };
   }> | undefined
 
+  private pointStatusState: Float32Array | undefined
+
   /** Whether an issued async pick is still awaiting its GPU readback. */
   public get hasPendingPickReadback (): boolean {
     return this.pickingReadback?.inFlight ?? false
@@ -564,6 +566,7 @@ export class Points extends CoreModule implements PointTrackerHost {
 
     const { pointsTextureSize } = store
     if (!pointsTextureSize || !data.pointPositions || data.pointsNumber === undefined) {
+      this.releaseStatusState()
       // Nothing to upload, but losing every point changes the point list too
       if (this.pointListCount !== 0) {
         this.pointListCount = 0
@@ -1383,9 +1386,26 @@ export class Points extends CoreModule implements PointTrackerHost {
     }
   }
 
+  public isPointHighlighted (index: number): boolean {
+    return this.config.highlightedPointIndices !== undefined && this.data.isPointIndex(index) &&
+      this.pointStatusState?.[index * 4] === 0
+  }
+
+  public isPointOutlined (index: number): boolean {
+    return this.config.outlinedPointIndices !== undefined && this.data.isPointIndex(index) &&
+      this.pointStatusState?.[index * 4 + 1] === 1
+  }
+
+  public releaseStatusState (): void {
+    this.pointStatusState = undefined
+  }
+
   public updatePointStatus (): void {
     const { device, config, data, store: { pointsTextureSize } } = this
-    if (!pointsTextureSize || data.pointsNumber === undefined) return
+    if (!pointsTextureSize || !data.pointsNumber) {
+      this.releaseStatusState()
+      return
+    }
     // Highlight status feeds the picking priority passes
     this.isPickingBufferStale = true
 
@@ -1396,21 +1416,21 @@ export class Points extends CoreModule implements PointTrackerHost {
     // Point status texture channels:
     // R = greyout (0 = highlighted/normal, 1 = greyed)
     // G = outlined (0 = no ring, 1 = draw ring)
-    const state = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
+    const length = pointsTextureSize * pointsTextureSize * 4
+    if (this.pointStatusState?.length !== length) this.pointStatusState = new Float32Array(length)
+    else this.pointStatusState.fill(0)
+    const state = this.pointStatusState
 
     if (hasHighlighting) {
-      // Fill R channel with 1 (all greyed by default)
       for (let i = 0; i < state.length; i += 4) state[i] = 1
-      // Clear R channel for highlighted points
       for (const idx of highlightedPointIndices) {
-        if (idx >= 0 && idx < data.pointsNumber) state[idx * 4] = 0
+        if (Number.isInteger(idx) && idx >= 0 && idx < data.pointsNumber) state[idx * 4] = 0
       }
     }
 
     if (hasOutlining) {
-      // Set G channel for outlined points
       for (const idx of outlinedPointIndices) {
-        if (idx >= 0 && idx < data.pointsNumber) state[idx * 4 + 1] = 1
+        if (Number.isInteger(idx) && idx >= 0 && idx < data.pointsNumber) state[idx * 4 + 1] = 1
       }
     }
 
@@ -1435,6 +1455,7 @@ export class Points extends CoreModule implements PointTrackerHost {
     } else {
       this.pointStatusTexture.copyImageData(copyData)
     }
+    if (!hasHighlighting && !hasOutlining) this.releaseStatusState()
   }
 
   public updatePinnedStatus (): void {
@@ -2923,6 +2944,7 @@ export class Points extends CoreModule implements PointTrackerHost {
       this.pointStatusTexture.destroy()
     }
     this.pointStatusTexture = undefined
+    this.pointStatusState = undefined
     if (this.pointColorsTexture && !this.pointColorsTexture.destroyed) {
       this.pointColorsTexture.destroy()
     }
