@@ -9,7 +9,7 @@ import { createGridWebGPU } from '../many-body-grid/webgpu'
 import { frameFor } from '../many-body-grid/data'
 import { GRAVITY, REPULSION, SPRINGS, type SpringPrecision, type Stage } from './data'
 import type { CombinedBackend } from './backend'
-import { createRoundedKernel, roundedSpringSource, roundedIntegrationSource } from './spring-precision'
+import { createRoundedKernel, roundedSpringSource, roundedIntegrationSource, distanceSpringSource } from './spring-precision'
 const gravitySource = `
 @group(0) @binding(0) var<storage, read> positions: array<vec4<f32>>;
 @group(0) @binding(1) var<uniform> params: vec4<f32>;
@@ -63,11 +63,13 @@ export async function createCombinedWebGPU (
         ['positions', 'read-only-storage'], ['offsets', 'read-only-storage'], ['edges', 'read-only-storage'],
         ['sizes', 'read-only-storage'], ['params', 'uniform'], ['forces', 'storage'],
       ])
-      const spring = own(precision === 'force' || precision === 'both'
-        ? await createRoundedKernel(device, roundedSpringSource(), springBindings)
-        : await Kernel.createAsync(device, { source: springSource, shaderLayout: { bindings: springBindings } }))
+      const spring = own(precision === 'force' || precision === 'both' || precision === 'refined'
+        ? await createRoundedKernel(device, roundedSpringSource(precision === 'refined'), springBindings)
+        : await Kernel.createAsync(device, {
+          source: precision === 'distance' ? distanceSpringSource() : springSource, shaderLayout: { bindings: springBindings },
+        }))
       const integrationParams = own(upload(device, new Float32Array([count, 0, 0, 0, p.friction, p.referenceLength, 0, 0]), Buffer.UNIFORM))
-      const integration = precision === 'integration' || precision === 'both'
+      const integration = precision === 'integration' || precision === 'both' || precision === 'refined' || precision === 'distance'
         ? own(await createRoundedKernel(device, roundedIntegrationSource(), bindingLayout([
           ['positions', 'read-only-storage'], ['forces', 'read-only-storage'], ['params', 'uniform'], ['output', 'storage'],
         ])))
@@ -126,5 +128,12 @@ export async function createCombinedWebGPU (
       }
     } catch (error) { owned.reverse().forEach(r => r.destroy()); throw error }
   })
-  return { ...base, stepStage (next, alpha): void { stage = next; p.alpha = alpha; base.step() } }
+  return {
+    ...base,
+    stepStage (next, alpha): void { stage = next; p.alpha = alpha; base.step() },
+    measureSpring (next, alpha, phase, operations): ReturnType<typeof base.measure> {
+      stage = next; p.alpha = alpha
+      return base.measure(phase, operations)
+    },
+  }
 }

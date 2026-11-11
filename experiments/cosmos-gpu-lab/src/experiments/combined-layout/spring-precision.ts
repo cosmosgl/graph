@@ -3,6 +3,7 @@ import { Computation, type Kernel } from '@luma.gl/engine'
 import { fp64arithmetic, type ShaderModule } from '@luma.gl/shadertools'
 import springSource from '../weighted-links/force.wgsl?raw'
 import integrationSource from '../many-body/integrate.wgsl?raw'
+import roundedSquare from '../many-body-grid/rounded-square.wgsl?raw'
 import { replaceOnce } from '../many-body-grid/trace'
 // Use luma's public expansion operations, taking the high limb after EACH operation.
 // This targets the existing stepwise float32 reference, not a new float64 force law.
@@ -13,7 +14,12 @@ fn springMul(a: f32, b: f32) -> f32 { return mul_fp64(vec2f(a, 0.), vec2f(b, 0.)
 fn springDiv(a: f32, b: f32) -> f32 { return div_fp64(vec2f(a, 0.), vec2f(b, 0.)).x; }
 fn springRoot(a: f32) -> f32 { return sqrt_fp64(vec2f(a, 0.)).x; }
 `
-export function roundedSpringSource (): string {
+// Residual correction is cheaper but not a portable correctly-rounded guarantee.
+// Keep integer-controlled addition/multiplication and the full candidate as a control.
+export const refinedArithmetic = roundedArithmetic
+  .replace('return div_fp64(vec2f(a, 0.), vec2f(b, 0.)).x;', 'let q = a / b; return q + fma(-q, b, a) / b;')
+  .replace('return sqrt_fp64(vec2f(a, 0.)).x;', 'if (a == 0.) { return 0.; } let q = sqrt(a); return q + fma(-q, q, a) / (2. * q);')
+export function roundedSpringSource (refined = false): string {
   let s = replaceOnce(springSource,
     '(edge.random * (params.high - params.low) + params.low) * params.distance',
     'springMul(springAdd(springMul(edge.random, springSub(params.high, params.low)), params.low), params.distance)')
@@ -27,7 +33,7 @@ export function roundedSpringSource (): string {
   s = replaceOnce(s, 'length *= edge.bias;', 'length = springMul(length, edge.bias);')
   s = replaceOnce(s, 'velocity += delta * length;',
     'velocity = vec2f(springAdd(velocity.x, springMul(delta.x, length)), springAdd(velocity.y, springMul(delta.y, length)));')
-  return roundedArithmetic + s
+  return (refined ? refinedArithmetic : roundedArithmetic) + s
 }
 export function roundedIntegrationSource (): string {
   return roundedArithmetic + replaceOnce(integrationSource,
@@ -47,4 +53,18 @@ export async function createRoundedKernel (device: Device, source: string, bindi
     dispatch (pass, options): void { computation.setBindings(options.bindings!); computation.dispatch(pass, options.x ?? 1, options.y, options.z) },
     destroy (): void { computation.destroy() },
   }
+}
+
+// A deliberately narrower candidate: no generic integer arithmetic in the edge loop.
+export function distanceSpringSource (): string {
+  let s = replaceOnce(springSource, 'sqrt(delta.x * delta.x + delta.y * delta.y)',
+    'distanceRoot(roundedSquare(delta.x) + roundedSquare(delta.y))')
+  s = replaceOnce(s, '(length - rest) / length', 'distanceDivide(length - rest, length)')
+  return `${roundedSquare}
+fn distanceDivide(a: f32, b: f32) -> f32 { let q = a / b; return q + fma(-q, b, a) / b; }
+fn distanceRoot(a: f32) -> f32 {
+  if (a == 0.) { return 0.; }
+  let q = sqrt(a); return q + fma(-q, q, a) / (2. * q);
+}
+${s}`
 }
