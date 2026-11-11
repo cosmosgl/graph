@@ -1,6 +1,6 @@
 import { createFixture as pointsFixture, type Input, type Parameters as RepulsionParameters } from '../many-body/data'
 import type { GraphInput, Parameters as SpringParameters } from '../weighted-links/data'
-export const PRECISION_MODES = ['baseline', 'force', 'integration', 'both', 'refined', 'distance'] as const
+export const PRECISION_MODES = ['baseline', 'force', 'integration', 'both', 'refined', 'distance', 'products'] as const
 export type SpringPrecision = typeof PRECISION_MODES[number]
 export const PRECISION_LABELS: Record<SpringPrecision, string> = {
   baseline: 'Native f32 · baseline',
@@ -9,6 +9,7 @@ export const PRECISION_LABELS: Record<SpringPrecision, string> = {
   both: 'Rounded force + integration',
   refined: 'Rounded + refined divide / root',
   distance: 'Distance-only · diagnostic',
+  products: 'Distance + rounded products',
 }
 export const STAGES = ['gravity', 'repulsion', 'incoming', 'outgoing'] as const
 export type Stage = typeof STAGES[number]

@@ -8,6 +8,9 @@ Refined division and square root reduced the measured 2,048-point star hub pass 
 passing the same trajectory checks. That is about 44% less GPU time, but still far too costly beside the 0.51 ms baseline.
 A more targeted distance-only variant is faster again and fails the unchanged budget; it remains a diagnostic.
 
+The follow-up [targeted product correction](#/combined-layout/docs/spring-products) fixes that counterexample and
+passes the expanded M3 matrix at a measured 1.74 ms star hub cost. The measurements below retain the earlier controls.
+
 ## A narrower correction
 
 The fifth mode, **Rounded + refined divide / root**, keeps the integer-controlled luma addition, subtraction and
@@ -70,7 +73,7 @@ Every WebGPU mode receives exactly the same stage input at alpha 1.
 
 ```flow
 Build initial CPU stage inputs · Outside timing
-Create six luma WebGPU backends · Pipeline compilation and upload outside timing
+Create seven luma WebGPU backends · Pipeline compilation and upload outside timing
 Pilot each mode · Choose 4–64 repeated operations toward a 6 ms batch
 Warm up twice · Rotate execution order across modes
 Collect seven samples · Timestamp first pass start through last pass end

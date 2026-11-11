@@ -5,6 +5,7 @@ import springSource from '../weighted-links/force.wgsl?raw'
 import integrationSource from '../many-body/integrate.wgsl?raw'
 import roundedSquare from '../many-body-grid/rounded-square.wgsl?raw'
 import { replaceOnce } from '../many-body-grid/trace'
+import roundedProduct from './rounded-product.wgsl?raw'
 // Use luma's public expansion operations, taking the high limb after EACH operation.
 // This targets the existing stepwise float32 reference, not a new float64 force law.
 export const roundedArithmetic = `
@@ -55,12 +56,21 @@ export async function createRoundedKernel (device: Device, source: string, bindi
   }
 }
 
-// A deliberately narrower candidate: no generic integer arithmetic in the edge loop.
-export function distanceSpringSource (): string {
+// Targeted finite-normal helpers avoid full fp64 expansion arithmetic in the edge loop.
+export type ProductCorrection = 'none' | 'scale' | 'accumulation' | 'products'
+export function distanceSpringSource (correction: ProductCorrection = 'none'): string {
   let s = replaceOnce(springSource, 'sqrt(delta.x * delta.x + delta.y * delta.y)',
     'distanceRoot(roundedSquare(delta.x) + roundedSquare(delta.y))')
   s = replaceOnce(s, '(length - rest) / length', 'distanceDivide(length - rest, length)')
-  return `${roundedSquare}
+  if (correction === 'scale' || correction === 'products') {
+    s = replaceOnce(s, 'length *= params.spring * params.alpha;', 'length = roundedProduct(length, roundedProduct(params.spring, params.alpha));')
+    s = replaceOnce(s, 'length *= edge.strength;', 'length = roundedProduct(length, edge.strength);')
+    s = replaceOnce(s, 'length *= edge.bias;', 'length = roundedProduct(length, edge.bias);')
+  }
+  if (correction === 'accumulation' || correction === 'products') {
+    s = replaceOnce(s, 'velocity += delta * length;', 'velocity += vec2(roundedProduct(delta.x, length), roundedProduct(delta.y, length));')
+  }
+  return `${correction === 'none' ? '' : roundedProduct}${roundedSquare}
 fn distanceDivide(a: f32, b: f32) -> f32 { let q = a / b; return q + fma(-q, b, a) / b; }
 fn distanceRoot(a: f32) -> f32 {
   if (a == 0.) { return 0.; }
