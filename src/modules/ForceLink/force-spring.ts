@@ -5,8 +5,7 @@ precision highp float;
 uniform sampler2D positionsTexture;
 uniform sampler2D exitTexture;
 uniform sampler2D linkInfoTexture; // Texture storing first link indices and amount
-uniform sampler2D linkIndicesTexture;
-uniform sampler2D linkPropertiesTexture; // Texture storing link bias and strength
+uniform sampler2D linkNeighborAndSpringTexture; // Neighbor texel in RG, bias and strength in BA
 uniform sampler2D linkRandomDistanceTexture;
 // Resolved point sizes (r channel), laid out like the positions texture. Only
 // read while useCollisionRadii is set; otherwise a placeholder is bound.
@@ -72,18 +71,16 @@ void main() {
           jCount += 1.0;
         }
         ivec2 linkTexel = ivec2(iCount, jCount);
-        vec4 connectedPointIndex = texelFetch(linkIndicesTexture, linkTexel, 0);
-        vec4 biasAndStrength = texelFetch(linkPropertiesTexture, linkTexel, 0);
-        vec4 randomMinDistance = texelFetch(linkRandomDistanceTexture, linkTexel, 0);
-        float bias = biasAndStrength.r;
-        float strength = biasAndStrength.g;
-        float randomMinLinkDist = randomMinDistance.r * (linkDistRandomVariationRange.g - linkDistRandomVariationRange.r) + linkDistRandomVariationRange.r;
+        vec4 neighborAndSpring = texelFetch(linkNeighborAndSpringTexture, linkTexel, 0);
+        float randomMinDistance = texelFetch(linkRandomDistanceTexture, linkTexel, 0).r;
+        float bias = neighborAndSpring.b;
+        float strength = neighborAndSpring.a;
+        float randomMinLinkDist = randomMinDistance * (linkDistRandomVariationRange.g - linkDistRandomVariationRange.r) + linkDistRandomVariationRange.r;
         randomMinLinkDist *= linkDistance;
 
         iCount += 1.0;
 
-        // linkIndicesTexture stores whole texel coordinates, so truncating is exact.
-        ivec2 connectedTexel = ivec2(connectedPointIndex.rg);
+        ivec2 connectedTexel = ivec2(neighborAndSpring.rg);
 
         // Skip a link to an absent point — its position would poison the spring
         // force. (exit.G = current absence)

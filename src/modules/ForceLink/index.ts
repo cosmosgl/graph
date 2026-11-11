@@ -14,7 +14,6 @@ export enum LinkDirection {
 
 export class ForceLink extends CoreModule {
   private linkFirstIndicesAndAmount: Float32Array = new Float32Array()
-  private indices: Float32Array = new Float32Array()
   private maxPointDegree = 0
   private previousMaxPointDegree: number | undefined
   private previousPointsTextureSize: number | undefined
@@ -36,8 +35,7 @@ export class ForceLink extends CoreModule {
   }> | undefined
 
   private linkFirstIndicesAndAmountTexture: Texture | undefined
-  private indicesTexture: Texture | undefined
-  private biasAndStrengthTexture: Texture | undefined
+  private neighborAndSpringTexture: Texture | undefined
   private randomDistanceTexture: Texture | undefined
 
   public create (direction: LinkDirection): void {
@@ -45,9 +43,9 @@ export class ForceLink extends CoreModule {
     if (!pointsTextureSize || !linksTextureSize) return
 
     this.linkFirstIndicesAndAmount = new Float32Array(pointsTextureSize * pointsTextureSize * 4)
-    this.indices = new Float32Array(linksTextureSize * linksTextureSize * 4)
-    const linkBiasAndStrengthState = new Float32Array(linksTextureSize * linksTextureSize * 4)
-    const linkDistanceState = new Float32Array(linksTextureSize * linksTextureSize * 4)
+    const linkTexelCount = linksTextureSize * linksTextureSize
+    const neighborAndSpringState = new Float32Array(linkTexelCount * 4)
+    const linkDistanceState = new Float32Array(linkTexelCount)
 
     const linksByPoint = direction === LinkDirection.INCOMING ? data.linksBySource : data.linksByTarget
     this.maxPointDegree = 0
@@ -65,8 +63,9 @@ export class ForceLink extends CoreModule {
         for (let linkIndex = firstLinkIndex; linkIndex < endLinkIndex; linkIndex++) {
           const connectedPointIndex = neighbors[linkIndex] as number
           const initialLinkIndex = linkIndices[linkIndex] as number
-          this.indices[linkIndex * 4 + 0] = connectedPointIndex % pointsTextureSize
-          this.indices[linkIndex * 4 + 1] = Math.floor(connectedPointIndex / pointsTextureSize)
+          const texelOffset = linkIndex * 4
+          neighborAndSpringState[texelOffset] = connectedPointIndex % pointsTextureSize
+          neighborAndSpringState[texelOffset + 1] = Math.floor(connectedPointIndex / pointsTextureSize)
           const degree = data.degree?.[connectedPointIndex] ?? 0
           const connectedDegree = data.degree?.[pointIndex] ?? 0
           const degreeSum = degree + connectedDegree
@@ -81,10 +80,9 @@ export class ForceLink extends CoreModule {
           if (strength === undefined || !Number.isFinite(strength) || strength < 0) {
             strength = 1 / Math.max(minDegree, 1) // max() prevents division by zero
           }
-          strength = Math.sqrt(strength)
-          linkBiasAndStrengthState[linkIndex * 4 + 0] = bias
-          linkBiasAndStrengthState[linkIndex * 4 + 1] = strength
-          linkDistanceState[linkIndex * 4] = this.store.getRandomFloat(0, 1)
+          neighborAndSpringState[texelOffset + 2] = bias
+          neighborAndSpringState[texelOffset + 3] = Math.sqrt(strength)
+          linkDistanceState[linkIndex] = this.store.getRandomFloat(0, 1)
         }
 
         this.maxPointDegree = Math.max(this.maxPointDegree, amount)
@@ -98,9 +96,12 @@ export class ForceLink extends CoreModule {
       this.linkFirstIndicesAndAmountTexture.height !== pointsTextureSize
 
     const recreateLinkTextures =
-      !this.indicesTexture ||
-      this.indicesTexture.width !== linksTextureSize ||
-      this.indicesTexture.height !== linksTextureSize
+      !this.neighborAndSpringTexture ||
+      !this.randomDistanceTexture ||
+      this.neighborAndSpringTexture.destroyed ||
+      this.neighborAndSpringTexture.width !== linksTextureSize ||
+      this.neighborAndSpringTexture.height !== linksTextureSize ||
+      this.randomDistanceTexture.destroyed
 
     if (recreatePointTextures) {
       if (this.linkFirstIndicesAndAmountTexture && !this.linkFirstIndicesAndAmountTexture.destroyed) {
@@ -122,17 +123,10 @@ export class ForceLink extends CoreModule {
     })
 
     if (recreateLinkTextures) {
-      if (this.indicesTexture && !this.indicesTexture.destroyed) this.indicesTexture.destroy()
-      if (this.biasAndStrengthTexture && !this.biasAndStrengthTexture.destroyed) this.biasAndStrengthTexture.destroy()
+      if (this.neighborAndSpringTexture && !this.neighborAndSpringTexture.destroyed) this.neighborAndSpringTexture.destroy()
       if (this.randomDistanceTexture && !this.randomDistanceTexture.destroyed) this.randomDistanceTexture.destroy()
 
-      this.indicesTexture = device.createTexture({
-        width: linksTextureSize,
-        height: linksTextureSize,
-        format: 'rgba32float',
-        usage: Texture.SAMPLE | Texture.COPY_DST,
-      })
-      this.biasAndStrengthTexture = device.createTexture({
+      this.neighborAndSpringTexture = device.createTexture({
         width: linksTextureSize,
         height: linksTextureSize,
         format: 'rgba32float',
@@ -141,20 +135,13 @@ export class ForceLink extends CoreModule {
       this.randomDistanceTexture = device.createTexture({
         width: linksTextureSize,
         height: linksTextureSize,
-        format: 'rgba32float',
+        format: 'r32float',
         usage: Texture.SAMPLE | Texture.COPY_DST,
       })
     }
 
-    this.indicesTexture!.copyImageData({
-      data: this.indices,
-      bytesPerRow: getBytesPerRow('rgba32float', linksTextureSize),
-      mipLevel: 0,
-      x: 0,
-      y: 0,
-    })
-    this.biasAndStrengthTexture!.copyImageData({
-      data: linkBiasAndStrengthState,
+    this.neighborAndSpringTexture!.copyImageData({
+      data: neighborAndSpringState,
       bytesPerRow: getBytesPerRow('rgba32float', linksTextureSize),
       mipLevel: 0,
       x: 0,
@@ -162,7 +149,7 @@ export class ForceLink extends CoreModule {
     })
     this.randomDistanceTexture!.copyImageData({
       data: linkDistanceState,
-      bytesPerRow: getBytesPerRow('rgba32float', linksTextureSize),
+      bytesPerRow: getBytesPerRow('r32float', linksTextureSize),
       mipLevel: 0,
       x: 0,
       y: 0,
@@ -182,7 +169,7 @@ export class ForceLink extends CoreModule {
   public initPrograms (): void {
     const { device, store, points } = this
     if (!points || !store.pointsTextureSize || !store.linksTextureSize) return
-    if (!this.linkFirstIndicesAndAmountTexture || !this.indicesTexture || !this.biasAndStrengthTexture || !this.randomDistanceTexture) return
+    if (!this.linkFirstIndicesAndAmountTexture || !this.neighborAndSpringTexture || !this.randomDistanceTexture) return
 
     this.vertexCoordBuffer ||= device.createBuffer({
       data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]),
@@ -240,7 +227,7 @@ export class ForceLink extends CoreModule {
     if (!this.runCommand || !this.uniformStore) return
     if (!points.previousPositionTexture || points.previousPositionTexture.destroyed) return
     if (!points.exitTexture || points.exitTexture.destroyed) return
-    if (!this.linkFirstIndicesAndAmountTexture || !this.indicesTexture || !this.biasAndStrengthTexture || !this.randomDistanceTexture) return
+    if (!this.linkFirstIndicesAndAmountTexture || !this.neighborAndSpringTexture || !this.randomDistanceTexture) return
     if (!points.velocityFbo || points.velocityFbo.destroyed) return
 
     // Skip if sizes changed and create() wasn't called again
@@ -271,8 +258,7 @@ export class ForceLink extends CoreModule {
       positionsTexture: points.previousPositionTexture,
       exitTexture: points.exitTexture,
       linkInfoTexture: this.linkFirstIndicesAndAmountTexture,
-      linkIndicesTexture: this.indicesTexture,
-      linkPropertiesTexture: this.biasAndStrengthTexture,
+      linkNeighborAndSpringTexture: this.neighborAndSpringTexture,
       linkRandomDistanceTexture: this.randomDistanceTexture,
       // A sampler must be bound even when the shader never reads it; the
       // positions texture stands in while collision is off.
@@ -304,14 +290,10 @@ export class ForceLink extends CoreModule {
       this.linkFirstIndicesAndAmountTexture.destroy()
     }
     this.linkFirstIndicesAndAmountTexture = undefined
-    if (this.indicesTexture && !this.indicesTexture.destroyed) {
-      this.indicesTexture.destroy()
+    if (this.neighborAndSpringTexture && !this.neighborAndSpringTexture.destroyed) {
+      this.neighborAndSpringTexture.destroy()
     }
-    this.indicesTexture = undefined
-    if (this.biasAndStrengthTexture && !this.biasAndStrengthTexture.destroyed) {
-      this.biasAndStrengthTexture.destroy()
-    }
-    this.biasAndStrengthTexture = undefined
+    this.neighborAndSpringTexture = undefined
     if (this.randomDistanceTexture && !this.randomDistanceTexture.destroyed) {
       this.randomDistanceTexture.destroy()
     }

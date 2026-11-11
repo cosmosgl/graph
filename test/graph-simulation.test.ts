@@ -1,8 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
-import { luma, type Device } from '@luma.gl/core'
+import { luma, type Device, type Texture } from '@luma.gl/core'
 import { webgl2Adapter, WebGLStateTracker } from '@luma.gl/webgl'
 
 import { GraphSimulation, type GraphSimulationConfig } from '@cosmos.gl/graph'
+import { readPixels } from '@/graph/helper'
+import type { ForceLink } from '@/graph/modules/ForceLink'
 
 /**
  * Standalone `GraphSimulation` contract tests: the extracted simulation class
@@ -469,6 +471,158 @@ describe('GraphSimulation', () => {
     } finally {
       device.canvasContext?.destroy()
       device.destroy()
+    }
+  })
+})
+
+const PACKING_POSITIONS = new Float32Array([1000, 1000, 1010, 1000, 1000, 1010, 1020, 1010, 1010, 1020, 1030, 1000])
+// The hub crosses texture rows; duplicates, a self-link and invalid endpoints
+// exercise adjacency compaction without changing the original strength indices.
+const PACKING_LINKS = new Float32Array([
+  0, 1, 0, 2, 0, 3, 0, 4, 0, 5, 0, 1, 0, 0, 0, 2, 0, 3,
+  0, 4, 0, 5, 1, 0, 2, 0, 5, 1, -1, 0, 0, 99, 0.5, 1,
+])
+const PACKING_STRENGTHS = new Float32Array([0, 0.25, 1, 4, NaN, -1, 0.5, 2, 0, 1, 0.25, 4, 1, 0.25, 0.5, NaN, -1])
+const PACKING_CONFIG: GraphSimulationConfig = {
+  randomSeed: 22477733,
+  rescalePositions: false,
+  simulationRepulsion: 0,
+  simulationGravity: 0,
+  simulationCenter: 0,
+  simulationCollision: 0,
+  simulationLinkSpring: 0.4,
+  simulationLinkDistance: 20,
+  simulationLinkDistRandomVariationRange: [0.3, 1.7],
+}
+const FORCE_DIRECTIONS = ['forceLinkIncoming', 'forceLinkOutgoing'] as const
+
+// Reference spring velocities captured before packing, at 53fb462. Keep these
+// independent of the packing code and GLSL arithmetic being tested.
+const PACKING_REFERENCE = [
+  {
+    count: 6,
+    velocities: [
+      [0.69861758, 0.03775049, 0.04713783, 0, 0, -0.62852716, 0, 0, 0, 0, -0.12800725, 0],
+      [-0.01347524, -0.00534759, -0.27108422, 0, 0, -0.06177985, 0.05303014, 0.02651507, 0.07968595, 0.15937190, -0.28692260, 0],
+    ],
+  },
+  {
+    count: 3,
+    velocities: [
+      [-0.00478214, -0.01583116, 0.04407719, 0, 0, -0.35855359],
+      [-0.01654259, -0.00826448, 0.01272400, 0, 0, 0.04222088],
+    ],
+  },
+]
+
+const getLinkForces = (simulation: GraphSimulation): ForceLink[] => FORCE_DIRECTIONS.map(name => Reflect.get(simulation, name) as ForceLink)
+
+const getLinkTextures = (force: ForceLink): Texture[] => [
+  Reflect.get(force, 'neighborAndSpringTexture') as Texture,
+  Reflect.get(force, 'randomDistanceTexture') as Texture,
+]
+
+const applyPackingFixture = (simulation: GraphSimulation, count = 6): void => {
+  simulation.store.addRandomSeed(22477733)
+  simulation.setPointPositions(PACKING_POSITIONS.subarray(0, count * 2), true)
+  simulation.setLinks(PACKING_LINKS)
+  simulation.setLinkStrength(PACKING_STRENGTHS)
+  simulation.applyData()
+  simulation.store.alpha = 0.75
+}
+
+const expectSpringVelocities = (simulation: GraphSimulation, expected: number[][]): void => {
+  getLinkForces(simulation).forEach((force, direction) => {
+    force.run()
+    const pixels = readPixels(simulation.device!, simulation.points!.velocityFbo!)
+    const velocities = expected[direction]!
+    velocities.forEach((value, index) => {
+      expect(pixels[Math.floor(index / 2) * 4 + index % 2]).toBeCloseTo(value, 4)
+    })
+  })
+}
+
+describe('packed link-force textures', () => {
+  it.each(PACKING_REFERENCE)('preserves pre-packing spring velocities with $count points', async ({ count, velocities }) => {
+    const simulation = new GraphSimulation(PACKING_CONFIG)
+    await simulation.ready
+    try {
+      applyPackingFixture(simulation, count)
+      expectSpringVelocities(simulation, velocities)
+    } finally {
+      simulation.destroy()
+    }
+  })
+
+  it('uses one texel per input link and reuses or replaces both directional textures at square boundaries', async () => {
+    const simulation = new GraphSimulation(PACKING_CONFIG)
+    await simulation.ready
+    let previous: Texture[][] | undefined
+    let previousSide = 0
+    try {
+      simulation.setPointPositions(PACKING_POSITIONS, true)
+      for (const count of [1, 4, 5, 9, 10, 16, 17, 26, 17]) {
+        simulation.setLinks(new Float32Array(Array.from({ length: count }, () => [0, 1]).flat()))
+        simulation.applyData()
+        const side = Math.ceil(Math.sqrt(count))
+        expect(simulation.store.linksTextureSize).toBe(side)
+        const current = getLinkForces(simulation).map(getLinkTextures)
+        current.forEach((textures, direction) => {
+          textures.forEach((texture, channel) => {
+            expect(texture.width).toBe(side)
+            expect(texture.height).toBe(side)
+            expect(texture.format).toBe(channel === 0 ? 'rgba32float' : 'r32float')
+            expect(texture.destroyed).toBe(false)
+            if (previous) {
+              const old = previous[direction]![channel]!
+              if (side === previousSide) expect(texture).toBe(old)
+              else {
+                expect(texture).not.toBe(old)
+                expect(old.destroyed).toBe(true)
+              }
+            }
+          })
+        })
+        previous = current
+        previousSide = side
+      }
+    } finally {
+      simulation.destroy()
+    }
+    previous!.flat().forEach(texture => expect(texture.destroyed).toBe(true))
+  })
+
+  it('refreshes packed strengths and adjacency after zeroing, shrinking, clearing and restoring', async () => {
+    const simulation = new GraphSimulation(PACKING_CONFIG)
+    await simulation.ready
+    try {
+      applyPackingFixture(simulation)
+      const originalTextures = getLinkForces(simulation).map(getLinkTextures)
+      simulation.setLinkStrength(new Float32Array(PACKING_STRENGTHS.length))
+      simulation.applyData()
+      expectSpringVelocities(simulation, [Array(12).fill(0), Array(12).fill(0)])
+      getLinkForces(simulation).forEach((force, direction) => {
+        getLinkTextures(force).forEach((texture, channel) => expect(texture).toBe(originalTextures[direction]![channel]))
+      })
+
+      applyPackingFixture(simulation, 3)
+      expectSpringVelocities(simulation, PACKING_REFERENCE[1]!.velocities)
+      simulation.setLinks(new Float32Array())
+      simulation.applyData()
+      expect(simulation.store.linksTextureSize).toBe(0)
+      const before = simulation.getPointPositionsArray().slice()
+      simulation.step()
+      expect(simulation.getPointPositionsArray()).toEqual(before)
+
+      simulation.setPointPositions(new Float32Array(), true)
+      simulation.applyData()
+      expect(simulation.store.pointsTextureSize).toBe(0)
+      expect(() => simulation.step()).not.toThrow()
+
+      applyPackingFixture(simulation)
+      expectSpringVelocities(simulation, PACKING_REFERENCE[0]!.velocities)
+    } finally {
+      simulation.destroy()
     }
   })
 })
