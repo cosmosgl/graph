@@ -63,6 +63,9 @@ fixtures needed to reproduce correctness bugs belong with tests, separately from
 - `many-body`: exact global repulsion using production GLSL, direct/tiled WGSL and an independent CPU reference,
   with batched fixed-input force/integration timing across point counts.
 - `weighted-links`: Cosmos directional springs, stable topology CSR and luma compute-to-render integration.
+- `repulsion-trajectories`: independent hierarchical-repulsion trajectories, local correctness and accumulated drift.
+- `combined-layout`: gravity, hierarchical repulsion, directional springs and cooling, with checkpoint validation and failure replay.
+- `resident-layout`: GPU bounds and composed compute-to-render ticks compared with the staged precision reference.
 
 Reference pages cover the lab architecture, WebGPU vocabulary and parallel reduction.
 Start with **How WebGPU works** (`#/learn`) for a guided introduction with five interactive teaching models.

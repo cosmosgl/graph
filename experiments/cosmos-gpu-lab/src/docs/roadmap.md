@@ -8,7 +8,7 @@ through the chosen luma APIs.
 
 The purpose of this lab is to answer that question with runnable evidence. This page summarizes what that
 evidence means for Cosmos and which demonstrations would justify the next migration step.
-Assessment reviewed **9 November 2026**; the production engine remains WebGL.
+Assessment reviewed **11 November 2026**; the production engine remains WebGL.
 
 For the complete force and rendering checklist, see [Cosmos feature coverage](#/feature-inventory):
 how each feature works in WebGL, what experiments already cover and what still needs WebGPU validation.
@@ -43,7 +43,7 @@ implementation and comparison. These are evidence levels, not a percentage of th
 | Circle point rendering | **Demonstrated:** matched WebGL sprites and WebGPU instanced circles | Complete shapes, strokes, images, transitions and render-order behavior |
 | Spatial indexing | **Demonstrated:** count/scan/scatter with variable cell occupancy | Establish production bounds, capacity, update and memory policies |
 | Local interaction and integration | **Partial:** CPU-validated local forces feeding GPU rendering | Preserve actual Cosmos integration and collision semantics |
-| Global many-body force | **Partial:** [exact](#/many-body) and [hierarchical](#/many-body-grid) comparisons use production GLSL, WGSL and CPU | Measure the passing precision candidate’s cost; validate GPU bounds, adaptive sampling, scale and convergence |
+| Global many-body force | **Partial:** [exact](#/many-body) and corrected [hierarchical](#/many-body-grid) candidates have bounded native checks; precision costs are measured | Validate resident integration, adaptive sampling, scalable construction, wider convergence and cross-device cost |
 | Link forces and graph topology | **Partial:** ordered Cosmos spring passes validated against production GLSL and CPU; stable directional CSR and replacement | Long-term trajectories, state-preserving updates and composition with other forces; native execution limits |
 | Complete rendering and interaction | **Partial:** circles and minimal straight links read GPU-resident state | Full point/link styling, picking, hover, drag, selection, tracking and overlays |
 | luma resource and execution APIs | **Partial:** all isolated experiments use luma resources, models/kernels, passes, fences and timestamps | Host ownership, device loss, reusable scheduling and complete-engine integration |
@@ -52,6 +52,27 @@ implementation and comparison. These are evidence levels, not a percentage of th
 
 The strongest conclusion today is **primitive feasibility**. The most important missing demonstration is
 **a representative Cosmos graph running its complete simulation and renderer through luma WebGPU**.
+
+### Where we are against the plan
+
+| Milestone | Current position | Next acceptance evidence |
+| --- | --- | --- |
+| luma integration | **Partial:** compute and minimal drawing use public luma APIs and resident buffers | A readback-free ordinary tick, update/ownership contracts and the production dependency decision |
+| Cosmos simulation | **Partial:** gravity, hierarchical repulsion, ordered springs and cooling have a passing bounded precision candidate at 8,192 points | Remaining forces, layout-quality criteria, scalable hierarchy construction and default-length schedules |
+| Rendering and interaction | **Early:** circles and minimal straight links | Styling, picking, dragging and the rest of the renderer |
+| Library and embedding contracts | **Unproven** | Live typed-array/config updates, resizing, shared ownership, device loss and host integration |
+| Production envelope | **Unproven** | Whole-frame time, peak memory and supported native GPU/browser coverage |
+
+The numerical studies found real porting risks, but exact agreement with one CPU arithmetic path has become
+a larger share of the work than planned. Keep the passing corrected candidate as a **reference**, alongside
+the native-f32 control. Neither is an approved production policy. Define numerical correctness, independent
+layout quality and performance as separate acceptance contracts; the existing tolerances stay unchanged.
+
+The next experiment is a [GPU-resident engine slice](#/resident-layout): GPU bounds feeding the existing
+force sequence and minimal renderer, compared with the staged reference. The original combined study still
+downloads positions for bounds and metrics and evolves a CPU oracle each tick; its stage timings are not
+whole-frame measurements. Removing those dependencies is the next integration gate. Broader forces,
+rendering and lifecycle validation should follow alongside targeted numerical work.
 
 ## 3. What the experiments tell us about Cosmos
 
@@ -127,7 +148,8 @@ construction remain necessary before considering production adoption. [Detailed 
 
 **New migration question:** the exact radius split and grid near-field partition can produce substantially different
 capped forces in dense data. Matching the WebGL implementation is necessary, but is not enough to establish layout
-quality. GPU bounds, adaptive sample counts and scalable construction still need evidence.
+quality. [GPU-resident bounds](#/resident-layout/docs/dataflow) now match the staged reference in bounded composed runs;
+adaptive sample counts and scalable construction still need evidence.
 
 ### Combined forces: bounded convergence evidence
 
@@ -169,6 +191,23 @@ are not counted as passing.
 **Limit:** hierarchical repulsion is forced at these small counts. Production's exact-to-grid transition, larger and
 dense graphs, default-length cooling, other GPUs and additional forces remain unvalidated in composition. These
 readback-heavy checks establish bounded behavior, not a frame-rate or production-readiness claim.
+
+### Resident engine slice: the bounds synchronization can be removed
+
+The [resident layout experiment](#/resident-layout/docs/dataflow) replaces post-gravity position downloads with
+a hierarchical min/max reduction and a GPU-written frame buffer. Repulsion consumes that buffer, springs use
+the updated positions and minimal points/links draw directly from resident state. Ordinary unchecked ticks have
+no position readback, completion wait or CPU force oracle.
+
+Native M3 automated checks at 128 and 8,192 points pass **40/40 checkpoints** across chain, communities, star and
+pinned fixtures over 20 ticks. Frame bits, positions, final forces, aggregates, sample slots and centroids match
+the staged WebGPU precision reference exactly. Independent bounds tests match the CPU frame bits through
+65,537 records; that larger count validates the reduction only, not a composed graph.
+
+**Limit:** the comparison intentionally synchronizes at checkpoints and keeps a staged reference lane. It does
+not measure the resident frame budget or independently validate the shared force implementation. Fixed sample
+counts, serial crowded-cell fallback, per-stage submissions and CPU topology construction remain. Resource/update
+contracts and broader rendering still need work before this becomes a representative production backend.
 
 ### Weighted springs: Cosmos semantics can run through luma compute
 
@@ -331,8 +370,10 @@ performance and memory meet the target budgets; supported devices are tested; an
 | --- | --- | --- |
 | Extend | Weighted-link compute-to-render path through luma | Can its demonstrated resource contract handle shared ownership, device loss and live updates? |
 | Extend | Weighted springs at larger sizes and over longer trajectories | Can ordered hub gathers and state-preserving topology updates meet the engine budget? |
-| First | Reduce the [refined gravity cost](#/combined-layout/docs/gravity-trig), then extend size coverage | Can the passing arithmetic contract scale affordably beyond 8,192 points? |
-| Then | GPU bounds, adaptive samples and parallel hierarchy construction | Can the same approximation scale without CPU synchronization or serial dense-cell work? |
+| First | [GPU-resident composed tick](#/resident-layout) with GPU bounds and minimal points/links | Can the tested force sequence run without routine position readbacks or a CPU oracle? |
+| Next | Adaptive samples and parallel hierarchy construction | Can the same approximation scale without serial dense-cell work? |
+| Next | Complete-frame time, memory and resource/update contracts | Does the resident engine slice meet a practical budget, including live updates and ownership? |
+| Supporting | Refined gravity cost and a bounded larger-star cost check | Can the strict precision reference scale affordably, and which arithmetic policy should production use? |
 | Alongside simulation | Links, richer points and picking from shared GPU state | Can Cosmos render and interact correctly without transferring all positions back? |
 | Then | Combined engine workload on multiple native GPUs | Is the whole migration practical for the intended users and graph sizes? |
 | Supporting optimization | Occupancy-dependent traversal and spatial locality | Which implementation choices improve complete frames once semantics are correct? |
@@ -340,6 +381,10 @@ performance and memory meet the target budgets; supported devices are tested; an
 Further optimization of the local-force experiment is useful, but it does not answer the largest remaining
 readiness questions. The next major evidence should connect **actual Cosmos graph behavior** with **the luma
 WebGPU integration path**.
+
+Automated native regression runs are available again: a quoted-string error in the test configuration had
+stopped the browser before test collection. Restoring the runner does not establish cross-device coverage;
+record the actual adapter and browser for every new result.
 
 ## 7. How to use this readiness assessment
 

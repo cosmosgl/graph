@@ -1,11 +1,9 @@
-import type { BindingDeclaration, Device } from '@luma.gl/core'
-import { Computation, type Kernel } from '@luma.gl/engine'
-import { fp64arithmetic, type ShaderModule } from '@luma.gl/shadertools'
 import springSource from '../weighted-links/force.wgsl?raw'
 import integrationSource from '../many-body/integrate.wgsl?raw'
 import roundedSquare from '../many-body-grid/rounded-square.wgsl?raw'
 import { replaceOnce } from '../many-body-grid/trace'
 import roundedProduct from './rounded-product.wgsl?raw'
+export { createRoundedKernel } from '../../gpu/rounded-kernel'
 // Use luma's public expansion operations, taking the high limb after EACH operation.
 // This targets the existing stepwise float32 reference, not a new float64 force law.
 export const roundedArithmetic = `
@@ -41,21 +39,6 @@ export function roundedIntegrationSource (): string {
     'point.xy + velocity * params.friction',
     'vec2f(springAdd(point.x, springMul(velocity.x, params.friction)), springAdd(point.y, springMul(velocity.y, params.friction)))')
 }
-export async function createRoundedKernel (device: Device, source: string, bindings: BindingDeclaration[]): Promise<Pick<Kernel, 'dispatch' | 'destroy'>> {
-  const computation = await Computation.createAsync(device, {
-    source,
-    // The pinned module's concrete uniform type is narrower than Computation's generic slot.
-    modules: [fp64arithmetic as unknown as ShaderModule],
-    defines: { LUMA_FP64_INTEGER_ARITHMETIC: true },
-    shaderLayout: { bindings },
-  })
-  try { computation.updateShaderInputs() } catch (error) { computation.destroy(); throw error }
-  return {
-    dispatch (pass, options): void { computation.setBindings(options.bindings!); computation.dispatch(pass, options.x ?? 1, options.y, options.z) },
-    destroy (): void { computation.destroy() },
-  }
-}
-
 // Targeted finite-normal helpers avoid full fp64 expansion arithmetic in the edge loop.
 export type ProductCorrection = 'none' | 'scale' | 'accumulation' | 'products'
 export function distanceSpringSource (correction: ProductCorrection = 'none'): string {

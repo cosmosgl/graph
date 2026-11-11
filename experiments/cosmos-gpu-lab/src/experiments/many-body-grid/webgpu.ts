@@ -7,23 +7,28 @@ import { contributionShader } from './contributions'
 import { verifyCountDivision } from './division-check'
 import { streamedFarShader, refinedFarShader, materializedFarShader } from './far-shader'
 import { storedCentroidShader, type CentroidMode } from './centroids'
-import { gpuTraceShader, stageNames } from './trace'
-import { layout, type Frame, type Structure } from './data'
+import { gpuTraceShader, replaceOnce, stageNames } from './trace'
+import { frameSamples, layout, type Frame, type Structure } from './data'
+import { createGpuBounds } from './bounds'
 import type { GridBackend } from './backend'
 import shader from './grid.wgsl?raw'
 export async function createGridWebGPU (
   canvas: HTMLCanvasElement, input: Input, p: Parameters, initial: Frame, centroidMode: CentroidMode = 'inline',
-  wrapForce: (factory: WebGPUForceFactory) => WebGPUForceFactory = (factory): WebGPUForceFactory => factory
+  wrapForce: (factory: WebGPUForceFactory) => WebGPUForceFactory = (factory): WebGPUForceFactory => factory,
+  options: { gpuBounds?: boolean } = {}
 ): Promise<GridBackend> {
   let sourceShader = centroidMode !== 'inline' ? storedCentroidShader(shader, centroidMode !== 'stored') : shader
   const streamed = centroidMode === 'streamed'
   if (streamed) sourceShader = streamedFarShader(sourceShader)
   if (centroidMode === 'refined') sourceShader = refinedFarShader(sourceShader)
   if (centroidMode === 'materialized') sourceShader = materializedFarShader(sourceShader)
+  if (options.gpuBounds) sourceShader = replaceOnce(sourceShader, 'var<uniform> box:', 'var<storage, read> box:')
   let readContributions: GridBackend['readContributions']
   let verifyDivision: GridBackend['verifyDivision']
   let readCentroids: (() => Promise<Float32Array>) | undefined
   let frame = initial
+  let gpuTick: number | undefined
+  let readBounds: GridBackend['readBounds']
   let diagnose: NonNullable<GridBackend['diagnose']>
   let readStructure: () => Promise<Structure> = async () => { throw new Error('Grid not initialized') }
   const base = await createWebGPU(canvas, input, p, 'direct', wrapForce(async ({ device, positions, samples, forces, count }) => {
@@ -41,10 +46,14 @@ export async function createGridWebGPU (
       const centroids = centroidMode !== 'inline' ? storage(l.cells * 16) : undefined
       if (centroids) readCentroids = (): Promise<Float32Array> => readFloats(centroids)
       const levels = own(upload(device, new Uint32Array(l.sizes.flatMap((n, i) => [n, l.offsets[i], 0, 0]))))
-      const params = own(upload(device, new Float32Array(12), Buffer.UNIFORM)); const box = own(upload(device, frame.bounds, Buffer.UNIFORM))
+      const params = own(upload(device, new Float32Array(12), Buffer.UNIFORM))
+      const box = own(upload(device, frame.bounds, options.gpuBounds ? Buffer.STORAGE : Buffer.UNIFORM))
+      const bounds = options.gpuBounds ? own(await createGpuBounds(device, count, l.finest, box)) : undefined
+      readBounds = (): Promise<Float32Array> => readFloats(box)
       const bindings = bindingLayout([
         ['positions', 'read-only-storage'], ['samples', 'read-only-storage'], ['heads', 'storage'], ['links', 'storage'],
-        ['aggregates', 'storage'], ['slots', 'storage'], ['forces', 'storage'], ['levels', 'read-only-storage'], ['params', 'uniform'], ['box', 'uniform'],
+        ['aggregates', 'storage'], ['slots', 'storage'], ['forces', 'storage'], ['levels', 'read-only-storage'], ['params', 'uniform'],
+        ['box', options.gpuBounds ? 'read-only-storage' : 'uniform'],
       ])
       if (centroids) bindings.push({ name: 'centroids', location: 11, type: 'storage', group: 0 })
       if (farContributions) bindings.push({ name: 'farContributions', location: 12, type: 'storage', group: 0 })
@@ -172,7 +181,8 @@ export async function createGridWebGPU (
         prepare (): void {
           params.write(new Float32Array([count, l.finest, l.sizes.length, frame.slots, p.alpha, p.repulsion, nearLimit(count, p),
             frame.precise ? 1 : 0, frame.seed, l.cells, 0, 0]))
-          box.write(frame.bounds)
+          if (gpuTick === undefined) box.write(frame.bounds)
+          else bounds!.prepare(gpuTick)
         },
         encode (source, timing): void {
           lastSource = source
@@ -185,6 +195,7 @@ export async function createGridWebGPU (
           }).filter(d => sizes[d.i] > 0)
           const pass = device.beginComputePass(timing)
           try {
+            if (gpuTick !== undefined) bounds!.encode(pass, positions[source])
             for (const { i, farLevel } of dispatches) {
               kernels[i].dispatch(pass, {
                 x: Math.ceil(sizes[i] / 64),
@@ -215,6 +226,13 @@ export async function createGridWebGPU (
     ...base,
     name: `WebGPU grid (${centroidMode} centroids)`,
     readCentroids,
+    readBounds: () => readBounds!(),
+    setGpuFrame: options.gpuBounds
+      ? (tick): void => {
+        if (!Number.isInteger(tick) || tick < 0) throw new Error('Invalid GPU frame tick')
+        gpuTick = tick; frame = { ...frame, seed: frameSamples(tick).seed }
+      }
+      : undefined,
     verifyDivision,
     readContributions,
     diagnose: () => diagnose(),
@@ -222,6 +240,7 @@ export async function createGridWebGPU (
     setFrame (next): void {
       if (next.slots !== initial.slots) throw new Error('Recreate the backend to change slot count')
       frame = next
+      gpuTick = undefined
     },
   }
 }

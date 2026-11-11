@@ -7,7 +7,7 @@ import { buildTopology } from '../weighted-links/data'
 import springSource from '../weighted-links/force.wgsl?raw'
 import { createGridWebGPU } from '../many-body-grid/webgpu'
 import { frameFor } from '../many-body-grid/data'
-import { GRAVITY, REPULSION, SPRINGS, type SpringPrecision, type Stage } from './data'
+import { GRAVITY, REPULSION, SPRINGS, STAGES, type SpringPrecision, type Stage } from './data'
 import { polarGravitySource, refinedGravitySource } from './gravity-source'
 import type { CombinedBackend } from './backend'
 import { createRoundedKernel, roundedSpringSource, roundedIntegrationSource, distanceSpringSource } from './spring-precision'
@@ -31,7 +31,7 @@ const linkSource = `
 `
 export async function createCombinedWebGPU (
   canvas: HTMLCanvasElement, graph: GraphInput, input: Input, precision: SpringPrecision = 'baseline',
-  overrides: { roundedStages?: readonly Stage[]; polarGravity?: boolean; refinedTrig?: boolean } = {}
+  overrides: { roundedStages?: readonly Stage[]; polarGravity?: boolean; refinedTrig?: boolean; gpuBounds?: boolean } = {}
 ): Promise<CombinedBackend> {
   const roundedStages = overrides.roundedStages ?? []
   const polarGravity = overrides.polarGravity ?? (precision === 'aligned' || precision === 'trig')
@@ -137,9 +137,15 @@ export async function createCombinedWebGPU (
         destroy (): void { owned.reverse().forEach(r => r.destroy()) },
       }
     } catch (error) { owned.reverse().forEach(r => r.destroy()); throw error }
-  })
+  }, { gpuBounds: overrides.gpuBounds })
   return {
     ...base,
+    stepTick: overrides.gpuBounds
+      ? (alpha, tick): void => {
+        base.setGpuFrame!(tick)
+        for (const next of STAGES) { stage = next; p.alpha = alpha; base.step() }
+      }
+      : undefined,
     stepStage (next, alpha): void { stage = next; p.alpha = alpha; base.step() },
     measureStage (next, alpha, phase, operations): ReturnType<typeof base.measure> {
       stage = next; p.alpha = alpha
