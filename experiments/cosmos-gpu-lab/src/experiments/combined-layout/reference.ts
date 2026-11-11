@@ -1,10 +1,11 @@
 import type { Input } from '../many-body/data'
-import type { Snapshot } from '../many-body/reference'
+import { referenceTick as exactTick, type Snapshot } from '../many-body/reference'
 import { buildReference, frameFor } from '../many-body-grid/data'
 import { gridReference, integrate } from '../many-body-grid/reference'
 import { createReferenceIndex, referenceTick as springTick } from '../weighted-links/reference'
 import type { GraphInput } from '../weighted-links/data'
 import { GRAVITY, REPULSION, SPRINGS, STAGES, type Stage } from './data'
+import { repulsionMethod, type RepulsionPolicy } from './repulsion-policy'
 const f = Math.fround
 export function gravity (points: Float32Array, alpha: number): Snapshot {
   const forces = new Float32Array(points.length)
@@ -17,7 +18,7 @@ export function gravity (points: Float32Array, alpha: number): Snapshot {
   }
   return { forces, positions: integrate(points, forces, REPULSION) }
 }
-export function createOracle (graph: GraphInput, input: Input): {
+export function createOracle (graph: GraphInput, input: Input, policy: RepulsionPolicy = 'hierarchical'): {
   stage(stage: Stage, points: Float32Array, alpha: number, tick: number): Snapshot;
   tick(points: Float32Array, alpha: number, tick: number): Float32Array;
 } {
@@ -25,6 +26,7 @@ export function createOracle (graph: GraphInput, input: Input): {
   const stage = (name: Stage, points: Float32Array, alpha: number, tick: number): Snapshot => {
     if (name === 'gravity') return gravity(points, alpha)
     if (name === 'repulsion') {
+      if (repulsionMethod(points.length / 4, policy) === 'exact') return exactTick(input, points, { ...REPULSION, alpha })
       const frame = frameFor(points, tick)
       return gridReference(input, points, { ...REPULSION, alpha }, frame, buildReference(points, frame))
     }

@@ -43,7 +43,7 @@ implementation and comparison. These are evidence levels, not a percentage of th
 | Circle point rendering | **Demonstrated:** matched WebGL sprites and WebGPU instanced circles | Complete shapes, strokes, images, transitions and render-order behavior |
 | Spatial indexing | **Demonstrated:** count/scan/scatter with variable cell occupancy | Establish production bounds, capacity, update and memory policies |
 | Local interaction and integration | **Partial:** CPU-validated local forces feeding GPU rendering | Preserve actual Cosmos integration and collision semantics |
-| Global many-body force | **Partial:** exact/hierarchical forces and resident composition have bounded checks through 8,192 points | Exact-to-grid switching, adaptive sampling, scalable construction, production defaults, wider quality and cross-device cost |
+| Global many-body force | **Partial:** exact/hierarchical forces, the production cutoff and resident composition have bounded checks through 8,192 points | Adaptive sampling, scalable construction, production defaults, wider quality and cross-device cost |
 | Link forces and graph topology | **Partial:** ordered springs, directional CSR, resident composition and state-preserving replacement | Default-length trajectories, broader parameters, large multi-hub cost and remaining force composition |
 | Complete rendering and interaction | **Partial:** circles and minimal straight links read GPU-resident state | Full point/link styling, picking, hover, drag, selection, tracking and overlays |
 | luma resource and execution APIs | **Partial:** all isolated experiments use luma resources, models/kernels, passes, fences and timestamps | Host ownership, device loss, reusable scheduling and complete-engine integration |
@@ -119,9 +119,17 @@ The [ordered grid aggregation study](#/cell-aggregation/docs/findings) now prese
 while caching membership and bounding the source-index sort. On M3, passing 8,192-point uniform chain and
 community cases improve normal-frame GPU time by roughly 12–15%; prepared inputs also retain gains. Dense
 chains improve, while smaller uniform hierarchy controls show no benefit. The candidate stays opt-in and
-still scans all sources in crowded cells. Clustered communities at 4,096 and 8,192 expose an existing
-whole-tick CPU failure despite local-stage and baseline/candidate bit agreement; no timing is accepted for
-those cases and their tolerance remains unchanged.
+still scans all sources in crowded cells. Its clustered-community whole-tick failure is now resolved by
+the [production layout gates](#/layout-acceptance/docs/findings): all far levels already matched; refined
+near-field roots/divisions plus explicitly rounded products remove the amplified error without changing tolerance.
+
+Production routing now passes at 4,095, 4,096, 4,097 and 8,192 points, including retained-buffer resizing
+across the cutoff. Combining hub prefetch and cached aggregation passes both 100- and 300-tick schedules for
+8,192-point chain, communities and star graphs, with uniform and clustered positions, twice each. All 9,600
+evolving tick checks and 3,072 normal timing captures pass. Normal-frame GPU time falls about **10–19%** on
+the tested M3; a duplicate-baseline control changes by about −0.6%. These compare two strict WebGPU paths,
+not production WebGL performance. Both optimizations remain opt-in. Production-default cooling, broader
+force parameters, adaptive sampling, scalable construction and other devices still need acceptance evidence.
 
 ## 3. What the experiments tell us about Cosmos
 
@@ -458,9 +466,9 @@ performance and memory meet the target budgets; supported devices are tested; an
 | Demonstrated in a bounded slice | [Controlled GPU stage profiling](#/gpu-stage-profile/docs/method) | Frozen replays isolate stage costs and normal/profile timing; no consistent large retained-buffer penalty was reproduced |
 | Demonstrated in a bounded slice | [Ordered hub springs](#/hub-springs/docs/acceptance) | GPU-batched controls identify a provisional M3 cutoff and repeat gains on final geometry; the candidate stays opt-in |
 | Demonstrated in a bounded slice | [Ordered grid aggregation](#/cell-aggregation/docs/findings) | Membership reuse plus a bounded sort improves validated larger normal frames; source-order sums and CPU gates remain unchanged |
-| Next acceptance step | Clustered communities and production dispatch policy | Resolve the existing whole-tick CPU mismatch and validate exact-to-grid switching without weakening the gate |
+| Demonstrated in a bounded slice | [Production layout gates](#/layout-acceptance/docs/findings) | Corrected near-field arithmetic resolves the dense-community tick; production cutoff and combined optimizations pass selected 100/300-tick trajectories with unchanged gates |
 | Further performance work | Stable cell membership and occupancy-dependent routing | Can CSR/sorting remove full-source scans without changing addition order or regressing sparse inputs? |
-| Next simulation contract | Production defaults and exact/grid switching | Do 5,000-decay runs, randomized spring lengths and automatic sampling preserve the existing checks? |
+| Next simulation contract | Production defaults and broader force parameters | Do 5,000-decay runs, randomized spring lengths/weights and automatic sampling preserve the existing checks across exact/grid routing? |
 | Next scaling step | Adaptive samples and parallel hierarchy construction | Can the same approximation scale without serial dense-cell work? |
 | Demonstrated in a bounded slice | [Point-count changes and buffer cleanup](#/point-capacity/docs/findings) | Surviving records transfer on the GPU; same devices and count-dependent footprints survive repeated cycles |
 | Demonstrated in a bounded slice | [Retained capacity and kernel reuse](#/point-capacity/docs/reuse) | In-capacity updates are cheaper locally; more idle memory is retained and GPU-frame timings remain order-sensitive |

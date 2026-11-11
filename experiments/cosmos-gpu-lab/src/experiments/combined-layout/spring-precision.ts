@@ -2,7 +2,7 @@ import springSource from '../weighted-links/force.wgsl?raw'
 import integrationSource from '../many-body/integrate.wgsl?raw'
 import roundedSquare from '../many-body-grid/rounded-square.wgsl?raw'
 import { replaceOnce } from '../many-body-grid/trace'
-import roundedProduct from './rounded-product.wgsl?raw'
+import roundedProduct from '../../gpu/rounded-product.wgsl?raw'
 export { createRoundedKernel } from '../../gpu/rounded-kernel'
 // Use luma's public expansion operations, taking the high limb after EACH operation.
 // This targets the existing stepwise float32 reference, not a new float64 force law.

@@ -14,13 +14,17 @@ import { createGraph, cool, STAGES, GRAVITY, SPRINGS, REPULSION, type Fixture } 
 import { differingBits } from './resident'
 import { fingerprint, profileCheck, type ProfileCheck } from './controlled-profile'
 import { FROZEN_POLICY, type FrozenTrial, type FrozenPolicy } from './frozen-timing'
+import { repulsionMethod, type RepulsionPolicy, type RepulsionMethod } from './repulsion-policy'
+import type { SpringOptimization } from './hub-spring-source'
 
 export type GridCase = {
-  count: number; fixture: Extract<Fixture, 'chain' | 'communities'>; distribution: 'uniform' | 'clusters';
-  historyTicks: number; candidate: AggregationMode; repeat?: number;
+  count: number; fixture: Extract<Fixture, 'chain' | 'communities' | 'star'>; distribution: 'uniform' | 'clusters';
+  historyTicks: number; candidate: AggregationMode; repeat?: number; decay?: number; probe?: boolean; pinned?: boolean;
+  repulsionPolicy?: RepulsionPolicy; springOptimization?: SpringOptimization;
 }
 export type GridRow = GridCase & {
-  valid: boolean; alpha: number; tick: number; fingerprint?: string; error?: string; cleanup?: number[]; bufferBytes?: number[];
+  valid: boolean; alpha: number; tick: number; cooledAlpha?: number; method?: RepulsionMethod;
+  fingerprint?: string; error?: string; cleanup?: number[]; bufferBytes?: number[];
   preparation: ProfileCheck[]; anchors: ProfileCheck[]; trials: FrozenTrial[]; diagnostic: FrozenTrial[];
   stages: Array<{ stage: string; positions: number; forces: number; cpuValid: boolean }>;
   work?: ReturnType<typeof aggregationWork>;
@@ -29,15 +33,17 @@ export type GridRow = GridCase & {
   structure?: { aggregates: number; slots: number; centroids: number; cpuAggregates: number; cpuCentroids: number; bounds: number };
 }
 export type GridReport = {
-  experiment: 'grid-aggregation'; gpuApi: 'luma'; browser: string; info: string; sameDevice: boolean;
+  experiment: 'grid-aggregation' | 'layout-acceptance'; gpuApi: 'luma'; browser: string; info: string; sameDevice: boolean;
   policy: FrozenPolicy; tolerance: typeof TOLERANCE; springTolerance: typeof SPRING_TOLERANCE;
   diagnosticPolicy: { warmups: number; samples: number; frames: number; separatePhase: boolean };
-  algorithm: { gravity: number; springs: typeof SPRINGS; repulsion: typeof REPULSION; coolingDecay: number; slots: number; centroidMode: string };
+  algorithm: { gravity: number; springs: typeof SPRINGS; repulsion: typeof REPULSION; defaultCoolingDecay: number; slots: number; centroidMode: string };
   status: 'ready' | 'running' | 'complete' | 'cancelled' | 'failed'; rows: GridRow[]; error?: string;
   captures: Record<string, { positions: number[]; samples: number[]; alpha: number; tick: number }>;
   failure?: { stage: string; input: number[]; actual: { positions: number[]; forces: number[] }; expected: { positions: number[]; forces: number[] } };
 }
-export async function createGridStudy (canvas: HTMLCanvasElement, policy: FrozenPolicy = FROZEN_POLICY): Promise<{
+export async function createGridStudy (
+  canvas: HTMLCanvasElement, policy: FrozenPolicy = FROZEN_POLICY, experiment: GridReport['experiment'] = 'grid-aggregation'
+): Promise<{
   report: GridReport; run(cases: GridCase[], options: { cancelled(): boolean; progress(message: string): void }): Promise<void>;
   destroy(): void; remainingBytes(): number[];
 }> {
@@ -54,14 +60,14 @@ export async function createGridStudy (canvas: HTMLCanvasElement, policy: Frozen
     if (firstError) throw firstError
   }
   const report: GridReport = {
-    experiment: 'grid-aggregation',
+    experiment,
     gpuApi: 'luma',
     browser: navigator.userAgent,
     info: '',
     sameDevice: true,
     policy,
     diagnosticPolicy: { warmups: policy.warmups, samples: policy.samples, frames: 1, separatePhase: true },
-    algorithm: { gravity: GRAVITY, springs: SPRINGS, repulsion: REPULSION, coolingDecay: 100, slots: 8, centroidMode: 'streamed' },
+    algorithm: { gravity: GRAVITY, springs: SPRINGS, repulsion: REPULSION, defaultCoolingDecay: 100, slots: 8, centroidMode: 'streamed' },
     tolerance: TOLERANCE,
     springTolerance: SPRING_TOLERANCE,
     status: 'ready',
@@ -88,17 +94,24 @@ export async function createGridStudy (canvas: HTMLCanvasElement, policy: Frozen
           report.rows.push(row)
           try {
             if (!Number.isInteger(settings.count) || settings.count < 16 || settings.count > 8192 ||
-              !Number.isInteger(settings.historyTicks) || settings.historyTicks < 0 || settings.historyTicks > 20) {
+              !Number.isInteger(settings.historyTicks) || settings.historyTicks < 0 || settings.historyTicks > 300 ||
+              !Number.isInteger(settings.decay ?? 100) || (settings.decay ?? 100) < 1 || (settings.decay ?? 100) > 300) {
               throw new Error('Invalid grid study size/history')
             }
-            const { graph, input } = createGraph({ count: settings.count, fixture: settings.fixture, decay: 100, springPrecision: 'trig' })
+            const decay = settings.decay ?? 100
+            const { graph, input } = createGraph({ count: settings.count, fixture: settings.fixture, decay, springPrecision: 'trig' })
             input.points = createFixture(settings.distribution, settings.count).points; graph.points = input.points
-            input.points[2] = 1; input.points[7] = 1 // A pinned mass and a finite absent record.
-            const oracle = createOracle(graph, input)
+            input.points[2] = settings.pinned === false ? 0 : 1; input.points[7] = 1 // A finite absent record.
+            const oracle = createOracle(graph, input, settings.repulsionPolicy)
+            row.method = repulsionMethod(settings.count, settings.repulsionPolicy ?? 'hierarchical')
             progress(`Preparing ${settings.fixture} · ${settings.distribution} · ${settings.count} points`)
             for (const [lane, gridAggregation] of (['baseline', settings.candidate] as const).entries()) {
               backends.push(await createCombinedWebGPU(canvas, graph, input, 'trig', {
-                gpuBounds: true, gridAggregation, context: { device, ledger: ledgers[lane], check },
+                gpuBounds: true,
+                gridAggregation,
+                repulsionPolicy: settings.repulsionPolicy,
+                springOptimization: lane ? settings.springOptimization : 'baseline',
+                context: { device, ledger: ledgers[lane], check },
               }))
             }
             report.info = backends[0].info; row.bufferBytes = remainingBytes()
@@ -106,6 +119,7 @@ export async function createGridStudy (canvas: HTMLCanvasElement, policy: Frozen
             let frozen: Float32Array = input.points.slice()
             for (let tick = 0; tick < settings.historyTicks; tick++) {
               if (stop()) return
+              progress(`Evolving ${settings.count} ${settings.fixture} ${settings.distribution} · tick ${tick + 1}/${settings.historyTicks}`)
               const cpu = oracle.tick(frozen, row.alpha, tick)
               for (const b of backends) b.stepTick!(row.alpha, tick)
               const snapshots = await Promise.all(backends.map(b => b.read()))
@@ -116,8 +130,12 @@ export async function createGridStudy (canvas: HTMLCanvasElement, policy: Frozen
                   cpuFailure ? { positions: cpu, forces: new Float32Array() } : snapshots[0])
                 throw new Error(`Preparation failed at tick ${tick + 1}`)
               }
-              frozen = snapshots[0].positions; row.alpha = cool(row.alpha, 100); row.tick++
+              frozen = snapshots[0].positions; row.alpha = cool(row.alpha, decay); row.tick++
+              if (tick === 0 || (tick + 1) % 10 === 0) backends[0].render(fitView([frozen]))
+              await new Promise(resolve => setTimeout(resolve, 0))
             }
+            row.cooledAlpha = row.alpha
+            if (settings.probe) row.alpha = 1
             row.fingerprint = fingerprint(frozen)
             report.captures[row.fingerprint] = { positions: Array.from(frozen), samples: Array.from(input.samples), alpha: row.alpha, tick: row.tick }
             const view = fitView([frozen]); const cpuWhole = oracle.tick(frozen, row.alpha, row.tick)
@@ -137,7 +155,7 @@ export async function createGridStudy (canvas: HTMLCanvasElement, policy: Frozen
               if (positions || forces || !cpuValid) {
                 fail(stage, current, snapshots[1], cpuValid ? snapshots[0] : cpu); throw new Error(`Stage validation failed: ${stage}`)
               }
-              if (stage === 'repulsion') {
+              if (stage === 'repulsion' && row.method === 'hierarchical') {
                 const frame = frameFor(current, row.tick); const expected = buildReference(current, frame)
                 const structures = await Promise.all(backends.map(b => b.readStructure()))
                 const centers = await Promise.all(backends.map(b => b.readCentroids!()))
@@ -169,6 +187,7 @@ export async function createGridStudy (canvas: HTMLCanvasElement, policy: Frozen
             for (const b of backends) { b.setPositions(frozen); row.anchors.push(validate((await b.measureCurrentFrame!(row.alpha, row.tick, view)).snapshot)) }
             // Separate phases: diagnostic pass boundaries never enter normal timing.
             for (const kind of ['normal', 'profile'] as const) {
+              if (kind === 'profile' && row.method === 'exact') continue
               for (const warmup of [true, false]) {
                 const rounds = warmup ? policy.warmups : policy.samples
                 for (let round = 0; round < rounds; round++) {

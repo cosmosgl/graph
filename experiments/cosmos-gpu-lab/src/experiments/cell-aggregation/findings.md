@@ -164,3 +164,13 @@ to reproduce this order. This is an implementation direction to test, not an est
 explains scan as a building block for radix sorting; [luma's current upstream notes](https://github.com/visgl/luma.gl/blob/master/docs/whats-new.md)
 describe scan, binning, aggregation and sort primitives. Their API compatibility with this pinned alpha and
 Cosmos's accumulation contract would need separate validation before adoption.
+
+## Follow-up: composed acceptance
+
+The [production layout gates](#/layout-acceptance/docs/findings) resolve the
+clustered-community whole-tick blocker reported in this study. The first difference was
+in near-field repulsion; all far levels already matched. Refined roots/divisions
+and explicitly rounded products now pass the original budget. Combining cached
+aggregation with hub prefetch also passes selected 8,192-point 100/300-tick
+trajectories twice, with roughly 10–19% lower normal-frame GPU time on M3.
+The earlier measurements on this page describe the aggregation-only controls.

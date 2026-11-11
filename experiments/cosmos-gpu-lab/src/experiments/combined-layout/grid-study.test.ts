@@ -35,21 +35,16 @@ it.skipIf(!import.meta.env.LAB_NATIVE_GPU)('checks preparation ticks and cancels
   } finally { study.destroy() }
   expect(study.remainingBytes()).toEqual([0, 0])
 })
-it.skipIf(!import.meta.env.LAB_NATIVE_GPU)('honors the baseline CPU verdict and continues independent cases', async () => {
+it.skipIf(!import.meta.env.LAB_NATIVE_GPU)('accepts the corrected dense-community CPU verdict and continues independent cases', async () => {
   const study = await createGridStudy(document.createElement('canvas'), { warmups: 0, samples: 4, frames: 1 })
   try {
     await study.run([
       { count: 4096, fixture: 'communities', distribution: 'clusters', candidate: 'baseline', historyTicks: 0 },
       { count: 256, fixture: 'chain', distribution: 'uniform', candidate: 'cached-small', historyTicks: 0 },
     ], { cancelled: () => false, progress: () => {} })
-    const r = study.report; const failed = r.rows[0]
-    expect(failed.stages.every(s => s.cpuValid && !s.positions && !s.forces)).toBe(true)
-    // This fixture fails on the measured M3. A GPU/driver that passes the CPU
-    // oracle must be accepted; the test must not require a rounding failure.
-    if (failed.wholeCPU?.valid) { expect(failed.valid).toBe(true); expect(r.status).toBe('complete') } else {
-      expect(r.status).toBe('failed'); expect(failed.valid).toBe(false)
-      expect(failed.trials).toHaveLength(0); expect(r.failure?.stage).toBe('baseline whole-tick positions CPU')
-    }
+    const r = study.report; const dense = r.rows[0]
+    expect(dense.stages.every(s => s.cpuValid && !s.positions && !s.forces)).toBe(true)
+    expect(dense.wholeCPU?.valid).toBe(true); expect(dense.valid).toBe(true); expect(r.status).toBe('complete')
     expect(r.rows[1].valid).toBe(true); expect(r.rows.every(row => row.cleanup?.every(n => n === 0))).toBe(true)
   } finally { study.destroy() }
 })

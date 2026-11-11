@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { Kernel } from '@luma.gl/engine'
 import { bindingLayout, createDevice, readFloats, upload } from '../../gpu/luma'
-import product from './rounded-product.wgsl?raw'
+import product from '../../gpu/rounded-product.wgsl?raw'
 
 it('rounds finite-normal products, including halfway ties, without native multiply-add fusion', async () => {
   const values: number[] = []; const scratch = new Uint32Array(1); const float = new Float32Array(scratch.buffer)

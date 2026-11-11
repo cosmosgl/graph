@@ -7,6 +7,7 @@ import { nearLimit, type Input, type Parameters } from '../many-body/data'
 import { contributionShader } from './contributions'
 import { verifyCountDivision } from './division-check'
 import { streamedFarShader, refinedFarShader, materializedFarShader } from './far-shader'
+import { refinedNearShader } from './near-shader'
 import { storedCentroidShader, type CentroidMode } from './centroids'
 import { gpuTraceShader, replaceOnce, stageNames } from './trace'
 import { frameSamples, layout, type Frame, type Structure } from './data'
@@ -27,13 +28,14 @@ const profileGroups: Record<string, string> = {
 export async function createGridWebGPU (
   canvas: HTMLCanvasElement, input: Input, p: Parameters, initial: Frame, centroidMode: CentroidMode = 'inline',
   wrapForce: (factory: WebGPUForceFactory) => WebGPUForceFactory = (factory): WebGPUForceFactory => factory,
-  options: WebGPUOptions & { gpuBounds?: boolean; aggregation?: AggregationMode } = {}
+  options: WebGPUOptions & { gpuBounds?: boolean; aggregation?: AggregationMode; nearArithmetic?: 'native' | 'refined' } = {}
 ): Promise<GridBackend> {
   let sourceShader = centroidMode !== 'inline' ? storedCentroidShader(shader, centroidMode !== 'stored') : shader
   const streamed = centroidMode === 'streamed'
   if (streamed) sourceShader = streamedFarShader(sourceShader)
   if (centroidMode === 'refined') sourceShader = refinedFarShader(sourceShader)
   if (centroidMode === 'materialized') sourceShader = materializedFarShader(sourceShader)
+  if (options.nearArithmetic === 'refined') sourceShader = refinedNearShader(sourceShader)
   if (options.gpuBounds) sourceShader = replaceOnce(sourceShader, 'var<uniform> box:', 'var<storage, read> box:')
   const cachedCells = options.aggregation === 'cached-cells' || options.aggregation === 'cached-small'
   if (cachedCells) sourceShader = cachedCellShader(sourceShader, aggregationLimit(options.aggregation!))
@@ -114,13 +116,20 @@ export async function createGridWebGPU (
         const keep = <T extends { destroy(): void }>(r: T): T => { temporary.push(r); return r }
         try {
           const names = stageNames(count)
-          const trace = keep(device.createBuffer({ byteLength: count * 16 * names.length, usage: Buffer.STORAGE | Buffer.COPY_SRC }))
-          const output = keep(device.createBuffer({ byteLength: count * 16, usage: Buffer.STORAGE | Buffer.COPY_SRC }))
+          // Store the final force alongside its trace. A separate output buffer
+          // would exceed WebGPU's eight-storage-buffer minimum with GPU bounds.
+          const trace = keep(device.createBuffer({ byteLength: count * 16 * (names.length + 1), usage: Buffer.STORAGE | Buffer.COPY_SRC }))
+          const traceSource = replaceOnce(gpuTraceShader(sourceShader),
+            '@group(0) @binding(6) var<storage, read_write> forces: array<vec4<f32>>;', '')
+            .replaceAll('forces[targetIndex]', `trace[${names.length}u * u32(params.count) + targetIndex]`)
           const kernel = keep(await Kernel.createAsync(device, {
             id: 'grid-force-trace',
-            source: gpuTraceShader(sourceShader),
+            source: traceSource,
             entryPoint: 'forceMain',
-            shaderLayout: { bindings: [...bindings.filter(b => forceNames.includes(b.name)), { name: 'trace', location: 10, type: 'storage', group: 0 }] },
+            shaderLayout: {
+              bindings: [...bindings.filter(b => b.name !== 'forces' && forceNames.includes(b.name)),
+                { name: 'trace', location: 10, type: 'storage', group: 0 }],
+            },
           }))
           const pass = device.beginComputePass()
           try {
@@ -131,7 +140,6 @@ export async function createGridWebGPU (
                 samples,
                 ...(!farContributions ? { aggregates } : {}),
                 slots,
-                forces: output,
                 levels,
                 params,
                 box,
@@ -146,7 +154,7 @@ export async function createGridWebGPU (
           const data = await readFloats(trace)
           return {
             trace: Object.fromEntries(names.map((name, i) => [name, data.slice(i * count * 4, (i + 1) * count * 4)])),
-            forces: await readFloats(output),
+            forces: data.slice(names.length * count * 4),
           }
         } finally { temporary.reverse().forEach(r => r.destroy()) }
       }
