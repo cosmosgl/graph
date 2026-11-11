@@ -10,7 +10,8 @@ export default defineConfig({
   define: {
     'import.meta.env.REQUIRE_WEBGPU': true,
     'import.meta.env.LAB_NATIVE_GPU': process.env.LAB_NATIVE_GPU === '1',
-    'import.meta.env.LAB_SCALE_PRECISION': process.env.LAB_SCALE_PRECISION ?? 'products',
+    // Vite define strings are JavaScript expressions; quote the selected mode.
+    'import.meta.env.LAB_SCALE_PRECISION': JSON.stringify(process.env.LAB_SCALE_PRECISION ?? 'products'),
     'import.meta.env.LAB_SCALE_COUNT': Number(process.env.LAB_SCALE_COUNT ?? 0),
   },
   test: {
