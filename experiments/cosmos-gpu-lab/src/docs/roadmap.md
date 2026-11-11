@@ -115,6 +115,14 @@ cooled strengths. All 4,608 captured timing frames pass unchanged checks. The pl
 applying the candidate where no hubs qualify. These are bounded single-device results; production defaults,
 large multi-hub graphs and portability remain open. The candidate stays opt-in.
 
+The [ordered grid aggregation study](#/cell-aggregation/docs/findings) now preserves aggregate/centroid bits
+while caching membership and bounding the source-index sort. On M3, passing 8,192-point uniform chain and
+community cases improve normal-frame GPU time by roughly 12–15%; prepared inputs also retain gains. Dense
+chains improve, while smaller uniform hierarchy controls show no benefit. The candidate stays opt-in and
+still scans all sources in crowded cells. Clustered communities at 4,096 and 8,192 expose an existing
+whole-tick CPU failure despite local-stage and baseline/candidate bit agreement; no timing is accepted for
+those cases and their tolerance remains unchanged.
+
 ## 3. What the experiments tell us about Cosmos
 
 ### Center and aggregation: a credible replacement exists
@@ -449,7 +457,9 @@ performance and memory meet the target budgets; supported devices are tested; an
 | Demonstrated in a bounded slice | [Resident tick, timing and state-preserving updates](#/resident-layout/docs/timing-updates) | GPU bounds and composed forces avoid routine readback; measured cost and update semantics now have native evidence |
 | Demonstrated in a bounded slice | [Controlled GPU stage profiling](#/gpu-stage-profile/docs/method) | Frozen replays isolate stage costs and normal/profile timing; no consistent large retained-buffer penalty was reproduced |
 | Demonstrated in a bounded slice | [Ordered hub springs](#/hub-springs/docs/acceptance) | GPU-batched controls identify a provisional M3 cutoff and repeat gains on final geometry; the candidate stays opt-in |
-| Next bounded performance step | Grid aggregation | Can hierarchy construction cost fall without changing force order or existing checks? |
+| Demonstrated in a bounded slice | [Ordered grid aggregation](#/cell-aggregation/docs/findings) | Membership reuse plus a bounded sort improves validated larger normal frames; source-order sums and CPU gates remain unchanged |
+| Next acceptance step | Clustered communities and production dispatch policy | Resolve the existing whole-tick CPU mismatch and validate exact-to-grid switching without weakening the gate |
+| Further performance work | Stable cell membership and occupancy-dependent routing | Can CSR/sorting remove full-source scans without changing addition order or regressing sparse inputs? |
 | Next simulation contract | Production defaults and exact/grid switching | Do 5,000-decay runs, randomized spring lengths and automatic sampling preserve the existing checks? |
 | Next scaling step | Adaptive samples and parallel hierarchy construction | Can the same approximation scale without serial dense-cell work? |
 | Demonstrated in a bounded slice | [Point-count changes and buffer cleanup](#/point-capacity/docs/findings) | Surviving records transfer on the GPU; same devices and count-dependent footprints survive repeated cycles |

@@ -9,6 +9,7 @@ import { validateBatch } from '../many-body/timing'
 import springSource from '../weighted-links/force.wgsl?raw'
 import { createGridWebGPU } from '../many-body-grid/webgpu'
 import { frameFor } from '../many-body-grid/data'
+import type { AggregationMode } from '../many-body-grid/aggregation'
 import { createLinkResources } from './topology'
 import { measureFrameBatch } from './frame-timing'
 import { measureGpuStages } from './stage-timing'
@@ -39,7 +40,7 @@ export async function createCombinedWebGPU (
   canvas: HTMLCanvasElement, graph: GraphInput, input: Input, precision: SpringPrecision = 'baseline',
   overrides: WebGPUOptions & {
     roundedStages?: readonly Stage[]; polarGravity?: boolean; refinedTrig?: boolean; gpuBounds?: boolean; springOptimization?: SpringOptimization;
-    hubThreshold?: number;
+    hubThreshold?: number; gridAggregation?: AggregationMode;
   } = {}
 ): Promise<CombinedBackend> {
   const optimization = overrides.springOptimization ?? 'baseline'
@@ -197,7 +198,7 @@ export async function createCombinedWebGPU (
         destroy: scope.destroy,
       }
     } catch (error) { scope.destroy(); throw error }
-  }, { gpuBounds: overrides.gpuBounds, context: overrides.context, preserve: overrides.preserve })
+  }, { gpuBounds: overrides.gpuBounds, context: overrides.context, preserve: overrides.preserve, aggregation: overrides.gridAggregation })
   return {
     ...base,
     resizeGraph (graph, input, preserve): ReturnType<NonNullable<CombinedBackend['resizeGraph']>> {
