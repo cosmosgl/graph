@@ -95,16 +95,22 @@ Large reductions are not large graph layouts. Current update timings and memory 
 eight-sample workload, not the full production-default engine. Internal backend generations borrowing a
 lane-owned device also do not establish external host/deck ownership or device recovery.
 
-The current bounded investigation is [controlled GPU stage profiling](#/gpu-stage-profile): freeze the input
-positions, alpha, seed, topology and camera; balance execution order; compare normal whole-frame timing with
-diagnostic stage passes; require unchanged CPU tolerance and exact instrumentation/replay agreement. Use the
-results to prioritize scalable hierarchy work and retention/trim policy. Then return to the remaining forces,
+The [controlled GPU stage profiling](#/gpu-stage-profile) method freezes input positions, alpha, seed, topology
+and camera, balances execution order, and compares normal whole-frame timing with diagnostic stage passes.
+It requires unchanged CPU tolerance and exact instrumentation/replay agreement. Use the results to prioritize
+ordered hub springs, scalable hierarchy work and retention/trim policy. Then return to the remaining forces,
 renderer, interaction and public API. `GPUCommandGraph` remains an optional evaluation, not a prerequisite.
 
 The [first controlled M3 profile](#/gpu-stage-profile/docs/method) now passes 240 trial and 12 anchor checks
 across six runs with the unchanged tolerance. Frozen inputs do not reproduce a consistent large retained-buffer
 penalty. The star's first spring pass dominates; aggregation, far-field work and strict gravity dominate chain
 and communities. Profiled passes are diagnostic and are measured separately from the ordinary frame path.
+
+The [ordered hub experiment](#/hub-springs/docs/findings) now adds unpinned controls and a fixed-size degree sweep.
+Cooperative prefetch preserves every spring correction in CSR order and passes 2,240 frozen-frame checks with
+the unchanged tolerance. On M3, the full 8,192-point star improves normal-frame GPU time by about 13–18% unpinned
+and 9–15% pinned across local runs; hoisting alone shows no gain. Low-degree results are mixed, including
+regressions. The candidate stays opt-in while trajectory validation and a measured degree threshold remain open.
 
 ## 3. What the experiments tell us about Cosmos
 
@@ -439,7 +445,8 @@ performance and memory meet the target budgets; supported devices are tested; an
 | Extend | Weighted springs at larger sizes and over longer trajectories | Can ordered hub gathers and state-preserving topology updates meet the engine budget? |
 | Demonstrated in a bounded slice | [Resident tick, timing and state-preserving updates](#/resident-layout/docs/timing-updates) | GPU bounds and composed forces avoid routine readback; measured cost and update semantics now have native evidence |
 | Demonstrated in a bounded slice | [Controlled GPU stage profiling](#/gpu-stage-profile/docs/method) | Frozen replays isolate stage costs and normal/profile timing; no consistent large retained-buffer penalty was reproduced |
-| Next bounded performance step | Ordered hub springs and grid aggregation | Which work dominates inside those stages, and can it be reduced without changing the existing checks? |
+| Demonstrated in a bounded slice | [Ordered hub springs](#/hub-springs/docs/findings) | Prefetch improves full-star frozen normal frames with unchanged checks; lower-degree cases are mixed and the candidate stays opt-in |
+| Next bounded performance step | Hub trajectory/threshold acceptance and grid aggregation | Does the hub gain survive evolving layouts, and can hierarchy build cost fall without changing existing checks? |
 | Next simulation contract | Production defaults and exact/grid switching | Do 5,000-decay runs, randomized spring lengths and automatic sampling preserve the existing checks? |
 | Next scaling step | Adaptive samples and parallel hierarchy construction | Can the same approximation scale without serial dense-cell work? |
 | Demonstrated in a bounded slice | [Point-count changes and buffer cleanup](#/point-capacity/docs/findings) | Surviving records transfer on the GPU; same devices and count-dependent footprints survive repeated cycles |
