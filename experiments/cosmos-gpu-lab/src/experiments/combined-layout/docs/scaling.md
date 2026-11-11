@@ -9,6 +9,10 @@ This extends [Targeted rounding](#/combined-layout/docs/spring-products), using 
 native Chrome 157 and Apple M3 on 11 November 2026. Both production WebGL and WebGPU evolve independently
 alongside the CPU trajectory. Hierarchical repulsion is used throughout this experiment.
 
+The follow-up [tick-precision investigation](#/combined-layout/docs/tick-rounding) isolates repulsion-integration
+rounding and gravity evaluation order. Its diagnostic candidate fixes both star schedules but regresses the
+communities tick-1 whole-tick check. The full acceptance gate remains open.
+
 ## Correctness results
 
 | Graph | Cooling schedule | Scheduled WebGPU checkpoints | Full-strength WebGPU probe | Failed WebGL checkpoints |
@@ -63,7 +67,7 @@ seven measured batches and rotated mode order. The luma GPU timestamps include t
 integration passes. Upload, compilation, readback, CPU reference calculation, validation and rendering are
 outside the interval. These are **spring-pass times**, not complete simulation ticks or FPS.
 
-Above 2,048 points, the UI compares native f32 and the corrected product candidate. The expensive full-arithmetic
+Above 2,048 points, the UI now also includes the aligned gravity/repulsion diagnostic. The measurements here compare native f32 and the original product candidate. The expensive full-arithmetic
 controls remain available in the earlier small-graph studies. Force-only measurements are retained in the local
 export and test output; the table below shows force plus integration, in **milliseconds per operation**.
 
@@ -98,7 +102,7 @@ their short kernels also show more timing variability. This timing set does not 
 Run the opt-in native research suite:
 
 ```sh
-LAB_NATIVE_GPU=1 LAB_SCALE_COUNT=8192 pnpm --filter @cosmos.gl/gpu-lab test:gpu scaling.test.ts
+LAB_NATIVE_GPU=1 LAB_SCALE_COUNT=8192 LAB_SCALE_PRECISION=products pnpm --filter @cosmos.gl/gpu-lab test:gpu scaling.test.ts
 ```
 
 On the measured M3, this intentionally returns a failing acceptance result for the star's 100-tick probe.
