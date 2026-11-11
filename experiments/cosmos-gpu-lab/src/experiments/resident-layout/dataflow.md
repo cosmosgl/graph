@@ -89,9 +89,10 @@ No complete-frame timing or larger composed-graph result is inferred from these 
 
 This is an engine slice: gravity, hierarchical repulsion, directional springs, cooling and minimal drawing.
 It still uses fixed sample counts, CPU-built topology and the diagnostic hierarchy's crowded-cell fallback.
-It does not implement the remaining forces, picking, richer rendering, live updates or host-owned devices.
-The two GPU lanes own separate devices. Resident work currently submits each force/integration stage;
-command batching and complete-frame timing remain separate questions.
+The remaining forces, picking, richer rendering, point-capacity growth and host-owned devices need validation.
+The two GPU lanes own separate devices. The follow-up [frame timing and updates](#/resident-layout/docs/timing-updates)
+groups the resident simulation into one compute pass, measures it with optional drawing and validates
+position patches and topology replacement while retaining the device, positions, tick and cooling.
 
 Finite, ordinary graph coordinates are the current arithmetic domain. Extreme/subnormal coordinates and
 other native GPUs need additional coverage. The production numerical/layout-quality contract and luma

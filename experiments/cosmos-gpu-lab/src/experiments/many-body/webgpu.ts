@@ -1,4 +1,4 @@
-import { Buffer, type Device, type RenderPass } from '@luma.gl/core'
+import { Buffer, type Device, type RenderPass, type ComputePass } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
 import { bindingLayout, createDevice, createStorageRenderer, readFloats, upload, waitForGpu } from '../../gpu/luma'
 import type { Backend, View } from './backend'
@@ -28,20 +28,20 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
 export type WebGPUForceFactory = (resources: {
   device: Device; positions: Buffer[]; samples: Buffer; forces: Buffer; count: number;
 }) => Promise<{
-  prepare?(): void; encode(source: number, timing: TimestampWrites): void;
+  prepare?(): void; encode(source: number, timing: TimestampWrites, pass?: ComputePass): void;
   render?(source: number, view: View, pass: RenderPass): void;
-  integrate?(source: number, timing: TimestampWrites): boolean; destroy(): void;
+  integrate?(source: number, timing: TimestampWrites, pass?: ComputePass): boolean; destroy(): void;
 }>
 export async function createWebGPU (
   canvas: HTMLCanvasElement, input: Input, p: Parameters, variant: Variant, customForce?: WebGPUForceFactory
 ): Promise<Backend> {
   validateInput(input, p, customForce ? 16384 : 4096)
-  let failure: string | undefined
+  let failure: string | undefined; let destroyed = false
   const device = await createDevice('webgpu', canvas, true, error => { failure = error.message })
   device.lost.then(info => { failure = `WebGPU device lost: ${info.reason} · ${info.message}` })
   const owned: Array<{ destroy(): void }> = []
   const own = <T extends { destroy(): void }>(resource: T): T => { owned.push(resource); return resource }
-  const healthy = (): void => { if (failure || device.isLost) throw new Error(failure ?? 'WebGPU device lost') }
+  const healthy = (): void => { if (destroyed || failure || device.isLost) throw new Error(failure ?? 'WebGPU device lost or destroyed') }
   try {
     const count = input.points.length / 4
     const positions = [own(upload(device, input.points)), own(upload(device, input.points))]
@@ -69,24 +69,24 @@ export async function createWebGPU (
       },
     }))
     const renderer = own(createStorageRenderer(device, renderSource, 'triangle-list', bindingLayout([['positions', 'read-only-storage'], ['view', 'uniform']])))
-    let current = 0; let destroyed = false
+    let current = 0
     const extension = customForce ? own(await customForce({ device, positions, samples, forces, count })) : undefined
-    const encodeForce = (forceTimes: TimestampWrites = {}): void => {
-      if (extension) { extension.encode(current, forceTimes); return }
-      const forcePass = device.beginComputePass(forceTimes)
+    const encodeForce = (forceTimes: TimestampWrites = {}, sharedPass?: ComputePass): void => {
+      if (extension) { extension.encode(current, forceTimes, sharedPass); return }
+      const forcePass = sharedPass ?? device.beginComputePass(forceTimes)
       try {
         force.dispatch(forcePass, { x: Math.ceil(count / 64), bindings: { positions: positions[current], samples, params, forces } })
-      } finally { forcePass.end() }
+      } finally { if (!sharedPass) forcePass.end() }
     }
-    const encodeIntegration = (integrationTimes: TimestampWrites = {}): void => {
-      if (extension?.integrate?.(current, integrationTimes)) return
-      const integratePass = device.beginComputePass(integrationTimes)
+    const encodeIntegration = (integrationTimes: TimestampWrites = {}, sharedPass?: ComputePass): void => {
+      if (extension?.integrate?.(current, integrationTimes, sharedPass)) return
+      const integratePass = sharedPass ?? device.beginComputePass(integrationTimes)
       try {
         integrate.dispatch(integratePass, {
           x: Math.ceil(count / 64),
           bindings: { positions: positions[current], forces, params, output: positions[1 - current] },
         })
-      } finally { integratePass.end() }
+      } finally { if (!sharedPass) integratePass.end() }
     }
     await waitForGpu(device); healthy()
     return {
@@ -97,12 +97,26 @@ export async function createWebGPU (
         if (data.length !== input.points.length) throw new Error('Point count changed; recreate the backend')
         positions.forEach(buffer => { if (data.byteLength) buffer.write(data) }); current = 0
       },
-      step (): void {
+      resourceIdentity (): { device: string; positions: string[] } {
+        healthy(); return { device: device.id, positions: positions.map(buffer => buffer.id) }
+      },
+      patchPositions (first, data): void {
         healthy()
+        if (!Number.isInteger(first) || first < 0 || data.length % 4 || first + data.length / 4 > count) throw new Error('Invalid position patch range')
+        for (let i = 0; i < data.length; i += 4) {
+          if (![data[i + 2], data[i + 3]].every(Number.isFinite) ||
+            (data[i + 3] <= 0.5 && ![data[i], data[i + 1]].every(Number.isFinite))) throw new Error('Invalid position patch values')
+        }
+        if (data.byteLength) positions.forEach(buffer => buffer.write(data, first * 16))
+      },
+      step (timing = {}): void {
+        healthy()
+        if (timing.pass && timing.submit !== false) throw new Error('A borrowed pass requires caller-owned submission')
         if (!count) return
         extension?.prepare?.()
-        encodeForce(); encodeIntegration()
-        current = 1 - current; device.submit()
+        encodeForce(timing.force, timing.pass); encodeIntegration(timing.integration, timing.pass)
+        current = 1 - current
+        if (timing.submit !== false) device.submit()
       },
       async measure (stage, operations): ReturnType<Backend['measure']> {
         healthy()
@@ -126,9 +140,9 @@ export async function createWebGPU (
         const result = { forces: await readFloats(forces, input.points.byteLength), positions: await readFloats(positions[current], input.points.byteLength) }
         healthy(); return result
       },
-      render (view): void {
+      render (view, timing = {}, submit = true): void {
         healthy(); viewBuffer.write(new Float32Array(view))
-        const pass = device.beginRenderPass({ clearColor: [0.075, 0.087, 0.105, 1], clearDepth: false })
+        const pass = device.beginRenderPass({ clearColor: [0.075, 0.087, 0.105, 1], clearDepth: false, ...timing })
         try {
           if (count) {
             extension?.render?.(current, view, pass)
@@ -140,7 +154,7 @@ export async function createWebGPU (
             })
           }
         } finally { pass.end() }
-        device.submit()
+        if (submit) device.submit()
       },
       destroy (): void {
         if (destroyed) return
