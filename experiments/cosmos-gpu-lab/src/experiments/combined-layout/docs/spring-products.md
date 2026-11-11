@@ -95,6 +95,9 @@ The star hub is about 39× faster than refined arithmetic, but still 3.4× its 0
 2× the rejected 0.885 ms distance-only candidate. Community ranges are broad. These are spring-pass measurements,
 not complete simulation ticks, rendering FPS or cross-device performance claims.
 
+The follow-up [8,192-point study](#/combined-layout/docs/scaling) passes scheduled checkpoints but exposes a
+whole-tick star-probe failure. The larger acceptance gate is not yet passed.
+
 ## Reproduce
 
 1. Run `pnpm --filter @cosmos.gl/gpu-lab dev` and open **Combined layout convergence**.

@@ -30,5 +30,10 @@ export const experiment = defineExperiment({
     id: 'spring-products',
     title: 'Targeted rounding',
     load: async (): Promise<string> => (await import('./docs/spring-products.md?raw')).default,
+  }, {
+    kind: 'markdown',
+    id: 'scaling',
+    title: 'Scaling',
+    load: async (): Promise<string> => (await import('./docs/scaling.md?raw')).default,
   }],
 })
