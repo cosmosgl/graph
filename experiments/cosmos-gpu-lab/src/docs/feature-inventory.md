@@ -131,6 +131,7 @@ reads both endpoint positions and constructs a ribbon along a straight or curved
 | [Ordered grid aggregation](#/cell-aggregation) | Exact aggregate/centroid/output bits with cached cell IDs and bounded source sorting; repeated larger normal-frame gains on M3 | A scalable builder, sparse-workload policy, production defaults or other devices; dense-community acceptance and dispatch follow-up are in [Production layout gates](#/layout-acceptance/docs/findings) |
 | [Performance lab](#/performance-lab) | Repeatable isolated rendering/reduction timing methodology | A complete-engine speedup or validation of missing features |
 | [Production layout gates](#/layout-acceptance) | Corrected near-field/varied-rest arithmetic, preserved exact/grid crossings, 32-sample and adaptive controls, and selected 5,000-tick runs through 8,192 points | Independent production/layout-quality comparison, broader parameters, full runtime sampling/allocation policy, larger/multi-hub graphs, remaining forces and other GPUs |
+| [Matched layout comparison](#/matched-layout/docs/findings) | Production GLSL, strict WebGPU and independent CPU trajectories in the default world frame; 12 M3 cases through 8,192 points, two independent 5,000-tick cases, stress/spring/motion metrics and unchanged frozen-input gates | Full Graph scheduling, agreed quality targets, broader graph/weight/landmark sets and other GPUs; WebGL scalar failures remain recorded |
 
 ### Keeping this checklist useful
 

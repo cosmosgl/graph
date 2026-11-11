@@ -38,7 +38,7 @@ function setup (missing = false): void {
       destroy (): void { destroyed++ },
     }
   }
-  vi.mocked(createCombinedWebGL).mockImplementation(make)
+  vi.mocked(createCombinedWebGL).mockImplementation((canvas, graph, input) => make(canvas, graph, input))
   vi.mocked(createCombinedWebGPU).mockImplementation(missing ? async (): Promise<never> => { throw new Error('Test device unavailable') } : make)
 }
 afterEach(() => { vi.clearAllMocks(); destroyed = 0 })

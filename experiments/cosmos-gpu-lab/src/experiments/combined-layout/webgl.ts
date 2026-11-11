@@ -9,9 +9,16 @@ import type { Input } from '../many-body/data'
 import { buildTopology, type GraphInput } from '../weighted-links/data'
 import { GRAVITY, REPULSION, SPRINGS, type Stage } from './data'
 import type { CombinedBackend } from './backend'
-export async function createCombinedWebGL (canvas: HTMLCanvasElement, graph: GraphInput, input: Input): Promise<CombinedBackend> {
+import { repulsionMethod, type RepulsionPolicy } from './repulsion-policy'
+import { forceSettings, validateForceSettings, type ForceSettings } from './production-settings'
+export async function createCombinedWebGL (
+  canvas: HTMLCanvasElement, graph: GraphInput, input: Input,
+  options: { forceSettings?: ForceSettings; repulsionPolicy?: RepulsionPolicy; adaptiveSampling?: boolean } = {}
+): Promise<CombinedBackend> {
+  const settings = options.forceSettings ?? forceSettings('reference', input.points.length / 4); validateForceSettings(settings)
+  const policy = options.repulsionPolicy ?? 'hierarchical'
   let stage: Stage = 'gravity'; const p = { ...REPULSION }; const topology = buildTopology(graph)
-  const base = await createGridWebGL(canvas, input, p, frameFor(input.points, 0), gridFactory => resources => {
+  const base = await createGridWebGL(canvas, input, p, frameFor(input.points, 0, settings.samples, settings.precise), gridFactory => resources => {
     const { device, positions, target, exit, size, count } = resources
     const owned: Array<{ destroy(): void }> = []; const own = <T extends { destroy(): void }>(v: T): T => { owned.push(v); return v }
     try {
@@ -103,10 +110,14 @@ out vec4 color; void main() { color = vec4(0.27,0.32,0.4,1.); }`,
           drawUniforms.setUniforms({ drawUniforms: { view } }); lines.setBindings({ positions: positions[source] }); lines.draw(pass)
         },
         encode (source): void {
-          if (stage === 'repulsion') { grid.encode(source); return }
+          if (stage === 'repulsion') {
+            if (repulsionMethod(count, policy) === 'exact') resources.encodeExact()
+            else grid.encode(source)
+            return
+          }
           let active: Model
           if (stage === 'gravity') {
-            gravityUniforms.setUniforms({ forceGravityUniforms: { gravity: GRAVITY, worldOrigin: [0, 0], alpha: p.alpha } })
+            gravityUniforms.setUniforms({ forceGravityUniforms: { gravity: GRAVITY, worldOrigin: settings.origin ?? [0, 0], alpha: p.alpha } })
             active = gravity; active.setBindings({ positionsTexture: positions[source] })
           } else {
             const side = stage === 'incoming' ? 0 : 1
@@ -114,7 +125,7 @@ out vec4 color; void main() { color = vec4(0.27,0.32,0.4,1.); }`,
               forceLinkUniforms: {
                 linkSpring: SPRINGS.spring,
                 linkDistance: SPRINGS.distance,
-                linkDistRandomVariationRange: SPRINGS.variation,
+                linkDistRandomVariationRange: settings.variation,
                 linksTextureSize: linkSize,
                 alpha: p.alpha,
                 collisionRadius: 0,
@@ -135,6 +146,14 @@ out vec4 color; void main() { color = vec4(0.27,0.32,0.4,1.); }`,
         destroy (): void { owned.reverse().forEach(r => r.destroy()) },
       }
     } catch (error) { owned.reverse().forEach(r => r.destroy()); throw error }
-  })
-  return { ...base, stepStage (next, alpha): void { stage = next; p.alpha = alpha; base.step() } }
+  }, options.adaptiveSampling ? 64 : settings.samples)
+  return {
+    ...base,
+    repulsionMethod: () => repulsionMethod(input.points.length / 4, policy),
+    async readStructure (): ReturnType<CombinedBackend['readStructure']> {
+      if (repulsionMethod(input.points.length / 4, policy) === 'exact') throw new Error('Exact repulsion does not build a grid')
+      return base.readStructure()
+    },
+    stepStage (next, alpha): void { stage = next; p.alpha = alpha; base.step() },
+  }
 }
