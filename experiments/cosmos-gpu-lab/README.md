@@ -68,6 +68,7 @@ fixtures needed to reproduce correctness bugs belong with tests, separately from
 - `resident-layout`: GPU bounds and composed compute-to-render ticks compared with the staged precision reference.
 - `point-capacity`: same-device point-count changes, GPU prefix preservation, retained-capacity/kernel reuse,
   update costs and buffer cleanup.
+- `gpu-stage-profile`: frozen-input stage timing, balanced rebuilt/retained trials and exact instrumentation replay.
 
 Reference pages cover the lab architecture, WebGPU vocabulary and parallel reduction.
 Start with **How WebGPU works** (`#/learn`) for a guided introduction with five interactive teaching models.

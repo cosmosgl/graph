@@ -5,12 +5,13 @@ import type { Input } from './data'
 export type PositionSource = { device: Device; buffer: Buffer; count: number }
 export type PositionTransfer = { preserved: number; copiedBytes: number; uploadedBytes: number; copySubmitMs: number }
 export type View = [number, number, number, number]
+export type ComputeScope = (name: string, encode: (pass: ComputePass) => void) => void
 export type Backend = {
   name: string;
   info: string;
   positionTransfer?: PositionTransfer;
   setPositions(positions: Float32Array): void;
-  step(timing?: { force?: TimestampWrites; integration?: TimestampWrites; submit?: boolean; pass?: ComputePass }): void;
+  step(timing?: { force?: TimestampWrites; integration?: TimestampWrites; submit?: boolean; pass?: ComputePass; profile?: ComputeScope }): void;
   patchPositions?(first: number, data: Float32Array): void;
   resourceIdentity?(): { device: string; positions: string[] };
   positionSource?(): PositionSource;

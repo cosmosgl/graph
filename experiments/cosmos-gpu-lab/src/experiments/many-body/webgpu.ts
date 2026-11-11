@@ -2,7 +2,7 @@ import { Buffer, type Device, type RenderPass, type ComputePass } from '@luma.gl
 import { Kernel } from '@luma.gl/engine'
 import { bindingLayout, createDevice, createStorageRenderer, readFloats, upload, waitForGpu } from '../../gpu/luma'
 import { resourceScope, type BufferLedger } from '../../gpu/resource-scope'
-import type { Backend, View, PositionSource } from './backend'
+import type { Backend, View, PositionSource, ComputeScope } from './backend'
 import type { Snapshot } from './reference'
 import { measureBatch, timestamps, type TimestampWrites } from './timing'
 import { nearLimit, validateInput, type Input, type Parameters, type Variant } from './data'
@@ -29,7 +29,7 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
 export type WebGPUForceFactory = (resources: {
   device: Device; positions: Buffer[]; samples: Buffer; forces: Buffer; count: number; capacity: number;
 }) => Promise<{
-  prepare?(): void; encode(source: number, timing: TimestampWrites, pass?: ComputePass): void;
+  prepare?(): void; encode(source: number, timing: TimestampWrites, pass?: ComputePass, profile?: ComputeScope): void;
   resize?(input: Input): void;
   render?(source: number, view: View, pass: RenderPass): void;
   integrate?(source: number, timing: TimestampWrites, pass?: ComputePass): boolean; destroy(): void;
@@ -118,8 +118,9 @@ export async function createWebGPU (
     const renderer = own(createStorageRenderer(device, renderSource, 'triangle-list', bindingLayout([['positions', 'read-only-storage'], ['view', 'uniform']])))
     let current = 0
     const extension = customForce ? own(await customForce({ device, positions, samples, forces, count, capacity })) : undefined
-    const encodeForce = (forceTimes: TimestampWrites = {}, sharedPass?: ComputePass): void => {
-      if (extension) { extension.encode(current, forceTimes, sharedPass); return }
+    const encodeForce = (forceTimes: TimestampWrites = {}, sharedPass?: ComputePass, profile?: ComputeScope): void => {
+      if (extension) { extension.encode(current, forceTimes, sharedPass, profile); return }
+      if (profile) { profile('force', pass => encodeForce({}, pass)); return }
       const forcePass = sharedPass ?? device.beginComputePass(forceTimes)
       try {
         force.dispatch(forcePass, { x: Math.ceil(count / 64), bindings: { positions: positions[current], samples, params, forces } })
@@ -184,9 +185,12 @@ export async function createWebGPU (
       step (timing = {}): void {
         healthy()
         if (timing.pass && timing.submit !== false) throw new Error('A borrowed pass requires caller-owned submission')
+        if (timing.profile && (timing.pass || timing.submit !== false)) throw new Error('Profiling owns its passes and submission')
         if (!count) return
         extension?.prepare?.()
-        encodeForce(timing.force, timing.pass); encodeIntegration(timing.integration, timing.pass)
+        encodeForce(timing.force, timing.pass, timing.profile)
+        if (timing.profile) timing.profile('integration', pass => encodeIntegration({}, pass))
+        else encodeIntegration(timing.integration, timing.pass)
         current = 1 - current
         if (timing.submit !== false) device.submit()
       },

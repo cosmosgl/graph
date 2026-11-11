@@ -89,7 +89,9 @@ No complete-frame timing or larger composed-graph result is inferred from these 
 
 This is an engine slice: gravity, hierarchical repulsion, directional springs, cooling and minimal drawing.
 It still uses fixed sample counts, CPU-built topology and the diagnostic hierarchy's crowded-cell fallback.
-The remaining forces, picking, richer rendering, point-capacity growth and host-owned devices need validation.
+The remaining forces, picking, richer rendering and host-owned devices need validation.
+The [capacity follow-up](#/point-capacity/docs/reuse) now checks bounded point-count changes and buffer/kernel reuse;
+full public setters, retention/trim policy and production lifecycle remain open.
 The two GPU lanes own separate devices. The follow-up [frame timing and updates](#/resident-layout/docs/timing-updates)
 groups the resident simulation into one compute pass, measures it with optional drawing and validates
 position patches and topology replacement while retaining the device, positions, tick and cooling.
