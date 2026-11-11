@@ -269,8 +269,6 @@ export class Graph implements PositionTextureSource {
       this.store.setGreyoutPointColor(this.config.pointGreyoutColor)
       this.store.setOutlinedPointRingColor(this.config.outlinedPointRingColor)
       this.store.setPointDefaultStrokeColor(this.config.pointDefaultStrokeColor)
-      this.store.setHighlightedPointSet(this.config.highlightedPointIndices)
-      this.store.setOutlinedPointSet(this.config.outlinedPointIndices)
       this.store.setHoveredLinkColor(this.config.hoveredLinkColor)
 
       this.store.updateLinkHoveringEnabled(this.config)
@@ -1044,6 +1042,8 @@ export class Graph implements PositionTextureSource {
       this.graph.update()
       this.points?.updateRingColor()
       this.points?.resetSampledReadback()
+      this.points?.releaseStatusState()
+      this.lines?.releaseStatusState()
       this.stopFrames()
       // Headless: the canvas belongs to the host — never clear or submit its device.
       if (!this._isHeadless) {
@@ -2073,12 +2073,6 @@ export class Graph implements PositionTextureSource {
     if (prevConfig.pointDefaultStrokeColor !== this.config.pointDefaultStrokeColor) {
       this.store.setPointDefaultStrokeColor(this.config.pointDefaultStrokeColor)
     }
-    if (prevConfig.highlightedPointIndices !== this.config.highlightedPointIndices) {
-      this.store.setHighlightedPointSet(this.config.highlightedPointIndices)
-    }
-    if (prevConfig.outlinedPointIndices !== this.config.outlinedPointIndices) {
-      this.store.setOutlinedPointSet(this.config.outlinedPointIndices)
-    }
     if (prevConfig.highlightedPointIndices !== this.config.highlightedPointIndices ||
         prevConfig.outlinedPointIndices !== this.config.outlinedPointIndices) {
       this.points?.updatePointStatus()
@@ -3012,8 +3006,8 @@ export class Graph implements PositionTextureSource {
         this.store.hoveredPoint.index,
         this.store.hoveredPoint.position,
         this.currentEvent,
-        this.store.highlightedPointSet?.has(idx) ?? false,
-        this.store.outlinedPointSet?.has(idx) ?? false
+        this.points?.isPointHighlighted(idx) ?? false,
+        this.points?.isPointOutlined(idx) ?? false
       )
     }
     if (link.mouseover && this.store.hoveredLinkIndex !== undefined) {

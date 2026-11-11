@@ -850,3 +850,147 @@ describe('collision skips removed points', () => {
     }
   })
 })
+
+describe('reusable highlight status', () => {
+  it('reuses status arrays and bounds membership through replacement and cleanup', async () => {
+    const graph = await createHeadlessGraph({
+      enableSimulation: false,
+      highlightedPointIndices: [0, 0, -1, 2.5, NaN, Infinity, 4],
+      outlinedPointIndices: [1],
+      highlightedLinkIndices: [0],
+    })
+    try {
+      graph.setLinks(new Float32Array([0, 1, 1, 2, 2, 3]))
+      graph.render()
+      const points = graph.simulation.points!
+      const lines = Reflect.get(graph, 'lines')
+      const pointState = Reflect.get(points, 'pointStatusState') as Float32Array
+      const linkState = Reflect.get(lines, 'linkStatusState') as Float32Array
+      expect(Array.from(pointState.slice(0, 8))).toEqual([0, 0, 0, 0, 1, 1, 0, 0])
+      expect(Array.from(linkState.slice(0, 12))).toEqual([0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0])
+      expect(points.isPointHighlighted(0)).toBe(true)
+      expect(points.isPointOutlined(1)).toBe(true)
+      for (const index of [-1, 2.5, NaN, Infinity, 4]) {
+        expect(points.isPointHighlighted(index)).toBe(false)
+        expect(points.isPointOutlined(index)).toBe(false)
+      }
+
+      graph.setConfigPartial({ highlightedPointIndices: [2], outlinedPointIndices: [], highlightedLinkIndices: [2] })
+      expect(Reflect.get(points, 'pointStatusState')).toBe(pointState)
+      expect(Reflect.get(lines, 'linkStatusState')).toBe(linkState)
+      expect(points.isPointHighlighted(0)).toBe(false)
+      expect(points.isPointHighlighted(2)).toBe(true)
+      expect(points.isPointOutlined(1)).toBe(false)
+      expect(pointState[5]).toBe(0)
+      expect(linkState[0]).toBe(1)
+      expect(linkState[8]).toBe(0)
+
+      graph.setConfigPartial({ highlightedPointIndices: [3], outlinedPointIndices: [3] })
+      graph.setPointPositions(new Float32Array([1000, 1000, 2000, 2000, 3000, 3000]))
+      graph.render()
+      expect(points.isPointHighlighted(3)).toBe(false)
+      expect(points.isPointOutlined(3)).toBe(false)
+      expect(Reflect.get(points, 'pointStatusState')).toBe(pointState)
+      graph.setPointPositions(POSITIONS)
+      graph.render()
+      expect(points.isPointHighlighted(3)).toBe(true)
+      expect(points.isPointOutlined(3)).toBe(true)
+
+      graph.setConfigPartial({ highlightedPointIndices: undefined, outlinedPointIndices: undefined, highlightedLinkIndices: undefined })
+      expect(points.isPointHighlighted(0)).toBe(false)
+      expect(points.isPointOutlined(0)).toBe(false)
+      expect(pointState.every(value => value === 0)).toBe(true)
+      expect(Reflect.get(points, 'pointStatusState')).toBeUndefined()
+      expect(Reflect.get(lines, 'linkStatusState')).toBeUndefined()
+      graph.setConfigPartial({ highlightedLinkIndices: [] })
+      const restoredLinkState = Reflect.get(lines, 'linkStatusState') as Float32Array
+      expect(restoredLinkState).not.toBe(linkState)
+      expect(restoredLinkState[8]).toBe(1)
+      graph.destroy()
+      expect(points.isPointHighlighted(0)).toBe(false)
+      expect(points.isPointOutlined(0)).toBe(false)
+      expect(Reflect.get(points, 'pointStatusState')).toBeUndefined()
+      expect(Reflect.get(lines, 'linkStatusState')).toBeUndefined()
+    } finally {
+      graph.destroy()
+    }
+  })
+
+  it('releases inactive and empty-graph caches and rebuilds configured flags on restore', async () => {
+    const graph = await createHeadlessGraph({ enableSimulation: false })
+    try {
+      graph.setLinks(new Float32Array([0, 1, 1, 2, 2, 3]))
+      graph.render()
+      const points = graph.simulation.points!
+      const lines = Reflect.get(graph, 'lines')
+      expect(Reflect.get(points, 'pointStatusState')).toBeUndefined()
+      expect(Reflect.get(lines, 'linkStatusState')).toBeUndefined()
+      graph.setConfigPartial({ highlightedPointIndices: [0], outlinedPointIndices: [1], highlightedLinkIndices: [0] })
+      const pointState = Reflect.get(points, 'pointStatusState')
+      const linkState = Reflect.get(lines, 'linkStatusState')
+      graph.setConfigPartial({ highlightedPointIndices: undefined })
+      expect(Reflect.get(points, 'pointStatusState')).toBe(pointState)
+      expect(points.isPointHighlighted(0)).toBe(false)
+      expect(points.isPointOutlined(1)).toBe(true)
+      graph.setConfigPartial({ outlinedPointIndices: undefined })
+      expect(Reflect.get(points, 'pointStatusState')).toBeUndefined()
+      graph.setConfigPartial({ highlightedPointIndices: [] })
+      expect(Reflect.get(points, 'pointStatusState')).toBeInstanceOf(Float32Array)
+      expect(points.isPointHighlighted(0)).toBe(false)
+      graph.setConfigPartial({ highlightedPointIndices: [0], outlinedPointIndices: [1] })
+      graph.setPointPositions(new Float32Array())
+      graph.render()
+      expect(Reflect.get(points, 'pointStatusState')).toBeUndefined()
+      expect(Reflect.get(lines, 'linkStatusState')).toBeUndefined()
+      graph.setPointPositions(POSITIONS)
+      graph.render()
+      expect(points.isPointHighlighted(0)).toBe(true)
+      expect(points.isPointOutlined(1)).toBe(true)
+      expect(Reflect.get(lines, 'linkStatusState')).toBeInstanceOf(Float32Array)
+      graph.setLinks(new Float32Array())
+      graph.render()
+      expect(Reflect.get(lines, 'linkStatusState')).toBeUndefined()
+      graph.setPointPositions(new Float32Array())
+      graph.render()
+      expect(Reflect.get(points, 'pointStatusState')).toBeUndefined()
+      expect(Reflect.get(lines, 'linkStatusState')).toBeUndefined()
+      expect(points.isPointHighlighted(0)).toBe(false)
+      expect(points.isPointOutlined(1)).toBe(false)
+      graph.setPointPositions(POSITIONS)
+      graph.setLinks(new Float32Array([0, 1, 1, 2, 2, 3]))
+      graph.render()
+      expect(Reflect.get(points, 'pointStatusState')).not.toBe(pointState)
+      expect(Reflect.get(lines, 'linkStatusState')).not.toBe(linkState)
+      expect(points.isPointHighlighted(0)).toBe(true)
+      expect(points.isPointOutlined(1)).toBe(true)
+      expect((Reflect.get(lines, 'linkStatusState') as Float32Array)[0]).toBe(0)
+    } finally {
+      graph.destroy()
+    }
+  })
+
+  it('reports hover flags from uploaded status while preserving disabled and empty selections', async () => {
+    const onPointMouseOver = vi.fn()
+    const graph = await createHeadlessGraph({ enableSimulation: false, onPointMouseOver })
+    try {
+      const hover = (): void => {
+        const processHoverResult = Reflect.get(graph, 'processHoverResult')
+        processHoverResult.call(graph, null, null)
+        processHoverResult.call(graph, { index: 0, position: [1000, 1000] }, null)
+      }
+      hover()
+      expect(onPointMouseOver).toHaveBeenLastCalledWith(0, [1000, 1000], undefined, false, false)
+      graph.setConfigPartial({ highlightedPointIndices: [], outlinedPointIndices: [] })
+      hover()
+      expect(onPointMouseOver).toHaveBeenLastCalledWith(0, [1000, 1000], undefined, false, false)
+      graph.setConfigPartial({ highlightedPointIndices: [0], outlinedPointIndices: [0] })
+      hover()
+      expect(onPointMouseOver).toHaveBeenLastCalledWith(0, [1000, 1000], undefined, true, true)
+      graph.setConfigPartial({ highlightedPointIndices: undefined, outlinedPointIndices: undefined })
+      hover()
+      expect(onPointMouseOver).toHaveBeenLastCalledWith(0, [1000, 1000], undefined, false, false)
+    } finally {
+      graph.destroy()
+    }
+  })
+})

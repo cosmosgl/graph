@@ -139,6 +139,8 @@ export class Lines extends CoreModule {
   // Track previous screen size to detect changes
   private previousScreenSize: [number, number] | undefined
 
+  private linkStatusState: Float32Array | undefined
+
   /** Whether an issued async pick is still awaiting its GPU readback. */
   public get hasPendingPickReadback (): boolean {
     return this.pickingReadback?.inFlight ?? false
@@ -477,6 +479,7 @@ export class Lines extends CoreModule {
 
   public updatePointsBuffer (): void {
     const { device, data, store } = this
+    if (!data.linksNumber || !data.pointsNumber) this.releaseStatusState()
     if (data.linksNumber === undefined || data.links === undefined) return
     if (!store.pointsTextureSize) return // Guard against 0/undefined
     // New link endpoints invalidate the rasterized link index buffer —
@@ -644,16 +647,21 @@ export class Lines extends CoreModule {
     this.setDrawCurveCommandAttributes({ linkStyle: this.linkStyleBuffer })
   }
 
+  public releaseStatusState (): void {
+    this.linkStatusState = undefined
+  }
+
   public updateLinkStatus (): void {
     const { device, config, data } = this
     const linksNumber = data.linksNumber ?? 0
     // Highlight status feeds the index pass
     this.isLinkIndexBufferStale = true
 
-    // No links yet — ensure a placeholder texture exists so luma.gl always has
+    // No drawable links yet — ensure a placeholder texture exists so luma.gl always has
     // a valid binding for the linkStatus sampler (it silently skips the draw
     // call if any declared sampler is unbound).
-    if (!linksNumber) {
+    if (!linksNumber || !data.pointsNumber) {
+      this.releaseStatusState()
       if (!this.linkStatusTexture) this.ensureLinkStatusPlaceholder()
       return
     }
@@ -665,6 +673,7 @@ export class Lines extends CoreModule {
     // (the isLinkHighlightingActive uniform is set to 0 when highlighting is off).
     // If no texture exists yet (first call), create a 1×1 placeholder.
     if (highlightedLinkIndices === undefined) {
+      this.releaseStatusState()
       if (!this.linkStatusTexture) this.ensureLinkStatusPlaceholder()
       this.linkStatusTextureSize = 0
       return
@@ -674,7 +683,9 @@ export class Lines extends CoreModule {
     const textureSize = Math.ceil(Math.sqrt(linksNumber))
     this.linkStatusTextureSize = textureSize
 
-    const state = new Float32Array(textureSize * textureSize * 4)
+    const length = textureSize * textureSize * 4
+    if (this.linkStatusState?.length !== length) this.linkStatusState = new Float32Array(length)
+    const state = this.linkStatusState
 
     // Mark all links as greyed out (R=1)
     for (let i = 0; i < linksNumber; i++) {
@@ -682,7 +693,7 @@ export class Lines extends CoreModule {
     }
     // Un-grey highlighted links
     for (const idx of highlightedLinkIndices) {
-      if (idx >= 0 && idx < linksNumber) {
+      if (Number.isInteger(idx) && idx >= 0 && idx < linksNumber) {
         state[idx * 4] = 0
       }
     }
@@ -1072,6 +1083,8 @@ export class Lines extends CoreModule {
       this.linkStatusTexture.destroy()
     }
     this.linkStatusTexture = undefined
+    this.linkStatusState = undefined
+    this.linkStatusTextureSize = 0
 
     // 4. Destroy UniformStores (Models already destroyed their managed uniform buffers)
     this.drawLineUniformStore?.destroy()
