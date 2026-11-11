@@ -6,7 +6,7 @@ import type {
 import vocabularySource from '../docs/vocabulary.md?raw'
 import reductionSource from '../docs/reduction.md?raw'
 import reductionTreeUrl from '../docs/diagrams/reduction-tree.svg?url'
-import { experiments, findExperiment } from './registry'
+import { experimentGroups, findExperiment } from './registry'
 import { architectureHref, conceptHref, experimentHref, featureInventoryHref, readRoute, roadmapHref, vocabularyHref } from './router'
 import { indexVocabularyTerms } from './vocabulary'
 
@@ -22,24 +22,30 @@ function renderNavigation (
   activeReference?: 'learn' | 'vocabulary' | 'reduction' | 'architecture' | 'roadmap' | 'feature-inventory'
 ): void {
   host.replaceChildren()
-  const label = document.createElement('p')
-  label.className = 'nav-label'
-  label.textContent = 'Experiments'
-  host.append(label)
-
-  for (const experiment of experiments) {
-    const link = document.createElement('a')
-    link.href = experimentHref(experiment.id)
-    link.className = 'experiment-link'
-    link.classList.toggle('active', experiment.id === activeId)
-    link.innerHTML = `<span>${experiment.title}</span><small>${experiment.tags[0] ?? 'experiment'}</small>`
-    host.append(link)
+  for (const group of experimentGroups) {
+    const section = document.createElement('section')
+    section.className = 'nav-group'
+    section.setAttribute('aria-labelledby', `nav-${group.id}`)
+    section.innerHTML = `<h2 class="nav-label" id="nav-${group.id}">${group.title}</h2><div class="nav-group-links"></div>`
+    const links = requiredElement<HTMLElement>(section, '.nav-group-links')
+    for (const experiment of group.experiments) {
+      const link = document.createElement('a')
+      link.href = experimentHref(experiment.id)
+      link.className = 'experiment-link'
+      link.classList.toggle('active', experiment.id === activeId)
+      if (experiment.id === activeId) link.setAttribute('aria-current', 'page')
+      link.innerHTML = `<span>${experiment.title}</span><small>${experiment.tags[0] ?? 'experiment'}</small>`
+      links.append(link)
+    }
+    host.append(section)
   }
 
-  const referenceLabel = document.createElement('p')
-  referenceLabel.className = 'nav-label nav-label-reference'
-  referenceLabel.textContent = 'Reference'
-  host.append(referenceLabel)
+  const reference = document.createElement('section')
+  reference.className = 'nav-group'
+  reference.setAttribute('aria-labelledby', 'nav-reference')
+  reference.innerHTML = '<h2 class="nav-label" id="nav-reference">Reference</h2><div class="nav-group-links"></div>'
+  const references = requiredElement<HTMLElement>(reference, '.nav-group-links')
+  host.append(reference)
 
   const learn = document.createElement('a')
   learn.href = '#/learn'
@@ -47,7 +53,7 @@ function renderNavigation (
   learn.classList.toggle('active', activeReference === 'learn')
   learn.innerHTML = '<span>How WebGPU works</span><small>learn</small>'
   if (activeReference === 'learn') learn.setAttribute('aria-current', 'page')
-  host.append(learn)
+  references.append(learn)
 
   const roadmap = document.createElement('a')
   roadmap.href = roadmapHref()
@@ -55,7 +61,7 @@ function renderNavigation (
   roadmap.classList.toggle('active', activeReference === 'roadmap')
   roadmap.innerHTML = '<span>WebGPU migration</span><small>roadmap</small>'
   if (activeReference === 'roadmap') roadmap.setAttribute('aria-current', 'page')
-  host.append(roadmap)
+  references.append(roadmap)
 
   const inventory = document.createElement('a')
   inventory.href = featureInventoryHref()
@@ -63,7 +69,7 @@ function renderNavigation (
   inventory.classList.toggle('active', activeReference === 'feature-inventory')
   inventory.innerHTML = '<span>Cosmos feature coverage</span><small>inventory</small>'
   if (activeReference === 'feature-inventory') inventory.setAttribute('aria-current', 'page')
-  host.append(inventory)
+  references.append(inventory)
 
   const architecture = document.createElement('a')
   architecture.href = architectureHref()
@@ -71,7 +77,7 @@ function renderNavigation (
   architecture.classList.toggle('active', activeReference === 'architecture')
   architecture.innerHTML = '<span>Lab architecture</span><small>guide</small>'
   if (activeReference === 'architecture') architecture.setAttribute('aria-current', 'page')
-  host.append(architecture)
+  references.append(architecture)
 
   const vocabulary = document.createElement('a')
   vocabulary.href = vocabularyHref()
@@ -79,7 +85,7 @@ function renderNavigation (
   vocabulary.classList.toggle('active', activeReference === 'vocabulary')
   vocabulary.innerHTML = '<span>WebGPU vocabulary</span><small>guide</small>'
   if (activeReference === 'vocabulary') vocabulary.setAttribute('aria-current', 'page')
-  host.append(vocabulary)
+  references.append(vocabulary)
 
   const reduction = document.createElement('a')
   reduction.href = conceptHref('reduction')
@@ -87,7 +93,10 @@ function renderNavigation (
   reduction.classList.toggle('active', activeReference === 'reduction')
   reduction.innerHTML = '<span>Parallel reduction</span><small>concept</small>'
   if (activeReference === 'reduction') reduction.setAttribute('aria-current', 'page')
-  host.append(reduction)
+  references.append(reduction)
+  const current = host.querySelector<HTMLElement>('[aria-current="page"]')
+  if (current) current.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  else { host.scrollTop = 0; host.scrollLeft = 0 }
 }
 
 function renderHome (host: HTMLElement): void {
@@ -117,7 +126,10 @@ function renderHome (host: HTMLElement): void {
       </span>
       <span aria-hidden="true">→</span>
     </a>
-    <section class="experiment-grid" aria-label="Available experiments"></section>
+    <div class="experiment-catalog" aria-label="Available experiments">
+      <p class="catalog-intro">Explore the groups from foundations to validation.
+        Experiments within each group follow a suggested reading order; the migration roadmap records our findings and next steps.</p>
+    </div>
     <a class="reference-card" href="${featureInventoryHref()}">
       <span class="card-index">COVERAGE</span>
       <span>
@@ -152,18 +164,31 @@ function renderHome (host: HTMLElement): void {
     </a>
     </div>
   `
-  const grid = requiredElement<HTMLElement>(host, '.experiment-grid')
-  for (const experiment of experiments) {
-    const link = document.createElement('a')
-    link.className = 'experiment-card'
-    link.href = experimentHref(experiment.id)
-    link.innerHTML = `
-      <span class="card-index">${String(grid.childElementCount + 1).padStart(2, '0')}</span>
-      <h2>${experiment.title}</h2>
-      <p>${experiment.summary}</p>
-      <span class="tag-row">${experiment.tags.map(tag => `<span>${tag}</span>`).join('')}</span>
+  const catalog = requiredElement<HTMLElement>(host, '.experiment-catalog')
+  for (const group of experimentGroups) {
+    const section = document.createElement('section')
+    section.className = 'home-experiment-group'
+    section.setAttribute('aria-labelledby', `catalog-${group.id}`)
+    section.innerHTML = `
+      <header class="catalog-group-heading">
+        <h2 id="catalog-${group.id}">${group.title}</h2>
+        <p>${group.description}</p>
+      </header>
+      <div class="experiment-grid"></div>
     `
-    grid.append(link)
+    const grid = requiredElement<HTMLElement>(section, '.experiment-grid')
+    for (const experiment of group.experiments) {
+      const link = document.createElement('a')
+      link.className = 'experiment-card'
+      link.href = experimentHref(experiment.id)
+      link.innerHTML = `
+        <h3>${experiment.title}</h3>
+        <p>${experiment.summary}</p>
+        <span class="tag-row">${experiment.tags.map(tag => `<span>${tag}</span>`).join('')}</span>
+      `
+      grid.append(link)
+    }
+    catalog.append(section)
   }
 }
 

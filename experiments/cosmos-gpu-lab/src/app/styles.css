@@ -119,9 +119,10 @@ a {
 
 .nav-label {
   margin: 0 8px 10px;
+  font-weight: 500;
 }
 
-.nav-label-reference {
+.nav-group + .nav-group {
   margin-top: 26px;
 }
 
@@ -208,8 +209,35 @@ h1 {
 
 .experiment-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
   gap: 16px;
+}
+
+.experiment-catalog {
+  display: grid;
+  gap: 40px;
+  margin: 16px 0;
+}
+
+.catalog-intro,
+.catalog-group-heading p {
+  max-width: 720px;
+  margin-bottom: 0;
+  color: #acb0b8;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.catalog-group-heading {
+  margin-bottom: 18px;
+}
+
+.catalog-group-heading h2 {
+  margin-bottom: 8px;
+  color: #ececef;
+  font-size: 23px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
 }
 
 .home-sections {
@@ -220,7 +248,7 @@ h1 {
 .experiment-card {
   display: flex;
   flex-direction: column;
-  min-height: 230px;
+  min-height: 200px;
   padding: 24px;
   border: 1px solid #414853;
   border-radius: 7px;
@@ -275,8 +303,8 @@ h1 {
   font: 11px ui-monospace, SFMono-Regular, Menlo, monospace;
 }
 
-.experiment-card h2 {
-  margin: 36px 0 10px;
+.experiment-card h3 {
+  margin: 0 0 10px;
   font-size: 22px;
   font-weight: 500;
 }
@@ -1558,14 +1586,31 @@ button[data-action="play"][aria-pressed="true"] {
 
   .experiment-nav {
     display: flex;
+    align-items: flex-start;
+    gap: 24px;
     overflow-x: auto;
     overflow-y: hidden;
     padding: 10px 12px;
   }
 
-  .nav-label,
   .sidebar-note {
     display: none;
+  }
+
+  .nav-group {
+    flex: 0 0 auto;
+  }
+
+  .nav-group + .nav-group {
+    margin-top: 0;
+  }
+
+  .nav-label {
+    margin: 0 9px 6px;
+  }
+
+  .nav-group-links {
+    display: flex;
   }
 
   .experiment-link {
