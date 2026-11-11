@@ -13,6 +13,7 @@ import { gpuTraceShader, replaceOnce, stageNames } from './trace'
 import { frameSamples, layout, type Frame, type Structure } from './data'
 import { createGpuBounds } from './bounds'
 import { cachedCellShader, aggregationLimit, type AggregationMode } from './aggregation'
+import { createOccupancy } from './occupancy'
 import type { GridBackend } from './backend'
 import shader from './grid.wgsl?raw'
 const profileGroups: Record<string, string> = {
@@ -28,9 +29,13 @@ const profileGroups: Record<string, string> = {
 export async function createGridWebGPU (
   canvas: HTMLCanvasElement, input: Input, p: Parameters, initial: Frame, centroidMode: CentroidMode = 'inline',
   wrapForce: (factory: WebGPUForceFactory) => WebGPUForceFactory = (factory): WebGPUForceFactory => factory,
-  options: WebGPUOptions & { gpuBounds?: boolean; aggregation?: AggregationMode; nearArithmetic?: 'native' | 'refined' } = {}
+  options: WebGPUOptions & {
+    gpuBounds?: boolean; aggregation?: AggregationMode; nearArithmetic?: 'native' | 'refined'; maxSamples?: number; occupancy?: boolean;
+  } = {}
 ): Promise<GridBackend> {
   let sourceShader = centroidMode !== 'inline' ? storedCentroidShader(shader, centroidMode !== 'stored') : shader
+  const maxSamples = options.maxSamples ?? initial.slots
+  if (!Number.isInteger(maxSamples) || maxSamples < initial.slots || maxSamples > 64) throw new Error('Invalid sample capacity')
   const streamed = centroidMode === 'streamed'
   if (streamed) sourceShader = streamedFarShader(sourceShader)
   if (centroidMode === 'refined') sourceShader = refinedFarShader(sourceShader)
@@ -46,6 +51,7 @@ export async function createGridWebGPU (
   let gpuTick: number | undefined
   let readBounds: GridBackend['readBounds']
   let diagnose: NonNullable<GridBackend['diagnose']>
+  let occupancy: Awaited<ReturnType<typeof createOccupancy>> | undefined; let occupancyRequested = false; let occupancyReady = false
   let readStructure: () => Promise<Structure> = async () => { throw new Error('Grid not initialized') }
   const base = await createWebGPU(canvas, input, p, 'direct', wrapForce(async ({ device, positions, samples, forces, count: initialCount, capacity }) => {
     const scope = resourceScope(options.context?.ledger); const own = scope.own
@@ -59,7 +65,11 @@ export async function createGridWebGPU (
       const levelQueries = streamed ? allocated.sizes.map((_, level) => own(upload(device, new Uint32Array([level, 0, 0, 0]), Buffer.UNIFORM))) : []
       const heads = storage(allocated.cells * 4); const links = storage(allocated.sizes.length * capacity * 4)
       const pointCells = cachedCells ? storage(allocated.sizes.length * capacity * 4) : undefined
-      const aggregates = storage(allocated.cells * 16); const slots = storage(allocated.finest ** 2 * frame.slots * 8)
+      const aggregates = storage(allocated.cells * 16); const slots = storage(allocated.finest ** 2 * maxSamples * 8)
+      if (options.occupancy) {
+        occupancy = own(await createOccupancy(device, aggregates, options.context?.ledger))
+        occupancy.resize(l.finest, l.offsets.at(-1)!)
+      }
       const centroids = centroidMode !== 'inline' ? storage(allocated.cells * 16) : undefined
       if (centroids) readCentroids = (): Promise<Float32Array> => readFloats(centroids, l.cells * 16)
       const levels = own(upload(device, new Uint32Array(allocated.sizes.flatMap((n, i) => [n, allocated.offsets[i], 0, 0]))))
@@ -210,6 +220,7 @@ export async function createGridWebGPU (
           count = n; l = layout(count); lastSource = -1
           levels.write(new Uint32Array(l.sizes.flatMap((size, i) => [size, l.offsets[i], 0, 0])))
           bounds?.resize(count, l.finest)
+          occupancy?.resize(l.finest, l.offsets.at(-1)!); occupancyReady = false; occupancyRequested = false
         },
         prepare (): void {
           params.write(new Float32Array([count, l.finest, l.sizes.length, frame.slots, p.alpha, p.repulsion, nearLimit(count, p),
@@ -248,6 +259,9 @@ export async function createGridWebGPU (
                 ...(streamed ? { farLevel, farSums } : {}),
               }).filter(([name]) => used[i].includes(name))),
             })
+            if (entryPoints[i] === 'aggregate' && occupancyRequested) {
+              occupancy!.encode(pass); occupancyRequested = false; occupancyReady = true
+            }
           }
           if (profile) {
             if (gpuTick !== undefined) profile('bounds', pass => bounds!.encode(pass, positions[source]))
@@ -275,6 +289,17 @@ export async function createGridWebGPU (
     name: `WebGPU grid (${centroidMode} centroids)`,
     readCentroids,
     readBounds: () => readBounds!(),
+    setSampling (samples): void {
+      if (!Number.isInteger(samples) || samples < 1 || samples > maxSamples) throw new Error('Sample count exceeds reserved capacity')
+      frame = { ...frame, slots: samples }
+    },
+    requestOccupancy: occupancy ? (): void => { occupancyRequested = true } : undefined,
+    readOccupancy: occupancy
+      ? async (): Promise<Awaited<ReturnType<NonNullable<GridBackend['readOccupancy']>>>> => {
+        if (!occupancyReady) throw new Error('Request and step before reading occupancy')
+        return occupancy!.read()
+      }
+      : undefined,
     setGpuFrame: options.gpuBounds
       ? (tick): void => {
         if (!Number.isInteger(tick) || tick < 0) throw new Error('Invalid GPU frame tick')
@@ -286,7 +311,7 @@ export async function createGridWebGPU (
     diagnose: () => diagnose(),
     readStructure: () => readStructure(),
     setFrame (next): void {
-      if (next.slots !== initial.slots) throw new Error('Recreate the backend to change slot count')
+      if (!Number.isInteger(next.slots) || next.slots < 1 || next.slots > maxSamples) throw new Error('Sample count exceeds reserved capacity')
       frame = next
       gpuTick = undefined
     },

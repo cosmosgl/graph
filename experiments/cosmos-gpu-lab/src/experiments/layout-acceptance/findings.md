@@ -1,5 +1,10 @@
 ## What this gate tests
 
+The [production-settings follow-up](#/layout-acceptance/docs/production) adds
+32-sample and varied-spring controls, adaptive sampling, state-preserving cutoff
+crossings and selected 5,000-tick runs. This page records the earlier fixed-setting
+matrix; its measurements retain that scope.
+
 This experiment combines the accepted **hub prefetch** (degree ≥1,024) and
 **cached grid IDs with a 32-index sort**. Both lanes use the same strict force
 arithmetic and production routing: exact all-pairs at **≤4,096** points,
