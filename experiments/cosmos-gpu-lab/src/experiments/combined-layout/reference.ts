@@ -4,6 +4,7 @@ import { buildReference, frameFor } from '../many-body-grid/data'
 import { gridReference, integrate } from '../many-body-grid/reference'
 import { createReferenceIndex, referenceTick as springTick } from '../weighted-links/reference'
 import type { GraphInput } from '../weighted-links/data'
+import { collisionReference } from '../collision/reference'
 import { GRAVITY, REPULSION, SPRINGS, stagesFor, type Stage } from './data'
 import { centerReference } from './center-reference'
 import { repulsionMethod, type RepulsionPolicy } from './repulsion-policy'
@@ -32,19 +33,30 @@ export function createOracle (
   const stage = (name: Stage, points: Float32Array, alpha: number, tick: number): Snapshot => {
     if (name === 'gravity') return gravity(points, alpha, settings.origin)
     if (name === 'center') return centerReference(points, alpha, settings.center ?? 0)
+    if (name === 'collision') {
+      if (!settings.collision) throw new Error('Collision settings are required')
+      return collisionReference(points, graph.sizes, settings.collision, alpha)
+    }
     if (name === 'repulsion') {
       if (repulsionMethod(points.length / 4, policy) === 'exact') return exactTick(input, points, { ...REPULSION, alpha })
       const frame = frameFor(points, tick, settings.samples, settings.precise)
       return gridReference(input, points, { ...REPULSION, alpha }, frame, buildReference(points, frame))
     }
     // Evaluate the requested direction first on this stage's actual input.
-    const result = springTick(graph, points, { ...SPRINGS, variation: settings.variation, alpha }, index, name === 'incoming' ? 0 : 1)
+    const result = springTick(graph, points, {
+      ...SPRINGS,
+      variation: settings.variation,
+      alpha,
+      collision: !!settings.collision?.strength,
+      radius: settings.collision?.radius ?? 0,
+      padding: settings.collision?.padding ?? 0,
+    }, index, name === 'incoming' ? 0 : 1)
     return { forces: result.firstForce, positions: result.intermediate }
   }
   return {
     stage,
     tick (points, alpha, tick): Float32Array {
-      for (const name of stagesFor(settings.center)) points = stage(name, points, alpha, tick).positions
+      for (const name of stagesFor(settings.center, settings.collision)) points = stage(name, points, alpha, tick).positions
       return points
     },
   }

@@ -37,7 +37,7 @@ The homepage and sidebar share a curated catalog in `src/app/registry.ts`:
 | Group | Reading path |
 | --- | --- |
 | Foundations | Reductions, spatial indexing and basic point rendering |
-| Cosmos forces | Local neighbors, exact and hierarchical repulsion, then springs |
+| Cosmos forces | Local neighbors, exact and hierarchical repulsion, springs and collision constraints |
 | Combined engine | Independent trajectories, composed forces, resident frames and matched layouts |
 | Validation and optimization | Production gates, timing, targeted optimizations and resource capacity |
 

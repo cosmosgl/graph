@@ -42,7 +42,7 @@ implementation and comparison. These are evidence levels, not a percentage of th
 | Large reductions | **Demonstrated:** hierarchical reduction with GPU-resident inputs and results | Validate every required aggregation, including cluster centers and bounds |
 | Circle point rendering | **Demonstrated:** matched WebGL sprites and WebGPU instanced circles | Complete shapes, strokes, images, transitions and render-order behavior |
 | Spatial indexing | **Demonstrated:** count/scan/scatter with variable cell occupancy | Establish production bounds, capacity, update and memory policies |
-| Local interaction and integration | **Partial:** CPU-validated local forces feeding GPU rendering | Preserve actual Cosmos integration and collision semantics |
+| Local interaction and integration | **Partial:** CPU-validated local forces and exact [collision constraints](#/collision) with resident integration/drawing | Large-graph collision, dense composition sensitivity, independent trajectories and full scheduling |
 | Global many-body force | **Partial:** exact/hierarchical forces, the production cutoff and resident composition have bounded checks through 8,192 points | Adaptive sampling, scalable construction, production defaults, wider quality and cross-device cost |
 | Link forces and graph topology | **Partial:** ordered springs, directional CSR, resident composition and state-preserving replacement | Default-length trajectories, broader parameters, large multi-hub cost and remaining force composition |
 | Complete rendering and interaction | **Partial:** circles and minimal straight links read GPU-resident state | Full point/link styling, picking, hover, drag, selection, tracking and overlays |
@@ -163,7 +163,24 @@ on the cooled 8,192-point cases. WebGL samples are much noisier and the initial 
 numerical gate. Evaluate a cheaper center arithmetic candidate with the same checks; the measured strict
 path is a correctness reference, not an approved production performance policy.
 
-The next force-composition step is **collision**. Broader data and weights, scalable hierarchy construction,
+The [exact collision comparison](#/collision/docs/findings) now adds radius-weighted projection, friction-1
+integration, repeated passes and the spring contact-distance floor. On M3 in the inline browser, eight
+100-tick comparisons cover isolated and composed collision, variable radii, coincidence, pins and absence.
+WebGPU passes 799/800 tick gates and WebGL 797/800 at unchanged tolerance. These use shared CPU starting
+states, rather than independently evolving trajectories.
+
+Dense four-pass composition retains a replayable WebGPU whole-tick failure at tick 2, despite passing
+local stage gates. Strict collision arithmetic does not remove it. Replacing only the center intermediate
+with the CPU result in a diagnostic replay makes the tick pass, localizing the observed sensitivity to
+the center output. That CPU upload is not part of the ordinary resident path or a production fix.
+
+Native-f32 collision is materially cheaper than its strict arithmetic control in the measured 128-point
+isolated case. Four collision passes at 512 dense points add roughly 0.84–0.93 ms to the initial frozen
+WebGPU frame. Single-pass deltas are noisier; the failing WebGL controls cannot supply accepted costs.
+Numerical accuracy, remaining overlap and frame cost stay separate acceptance questions.
+
+Next collision evidence includes a resident precision policy for dense composition, independent trajectories
+and the production hash/slot path above 4,096 points. Broader data and weights, scalable hierarchy construction,
 allocation policy, remaining forces, renderer/interaction contracts and native portability remain open.
 
 ## 3. What the experiments tell us about Cosmos

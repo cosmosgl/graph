@@ -17,8 +17,8 @@ export type CombinedBackend = GridBackend & {
   resizeGraph?(graph: GraphInput, input: Input, preserve: boolean): PositionTransfer;
   replaceLinks?(input: LinkInput): { version: number; bytes: number; edgeCount: number; buildMs: number };
   measureFrames?(options: FrameBatch): Promise<{ timing: Measurement; snapshot: Snapshot }>;
-  measureCurrentFrame?(alpha: number, tick: number, view: View): Promise<{ timing: Measurement; snapshot: Snapshot }>;
-  measureFrozenFrames?(options: { frames: number; alpha: number; tick: number; view: View }): Promise<{
+  measureCurrentFrame?(alpha: number, tick: number, view: View, stages?: readonly Stage[]): Promise<{ timing: Measurement; snapshot: Snapshot }>;
+  measureFrozenFrames?(options: { frames: number; alpha: number; tick: number; view: View; stages?: readonly Stage[] }): Promise<{
     timing: Measurement; frameGpuMs: Array<number | null>; snapshots: Snapshot[];
   }>;
   profileCurrentFrame?(alpha: number, tick: number, view: View): Promise<StageMeasurement & { snapshot: Snapshot }>;
