@@ -14,7 +14,8 @@ import type { AggregationMode } from '../many-body-grid/aggregation'
 import { createLinkResources } from './topology'
 import { measureFrameBatch } from './frame-timing'
 import { measureGpuStages } from './stage-timing'
-import { cool, GRAVITY, REPULSION, SPRINGS, STAGES, type SpringPrecision, type Stage } from './data'
+import { cool, GRAVITY, REPULSION, SPRINGS, stagesFor, type SpringPrecision, type Stage } from './data'
+import { createCenterWebGPU } from './center-webgpu'
 import { polarGravitySource, refinedGravitySource } from './gravity-source'
 import type { CombinedBackend } from './backend'
 import { createRoundedKernel, roundedSpringSource, roundedIntegrationSource, distanceSpringSource } from './spring-precision'
@@ -64,6 +65,7 @@ export async function createCombinedWebGPU (
   let stage: Stage = 'gravity'; const p = { ...REPULSION }
   let nextGraph: GraphInput | undefined
   let device: Device; let frameForces: Buffer; let replaceLinks: NonNullable<CombinedBackend['replaceLinks']>
+  let readCenter: CombinedBackend['readCenter']
   const initialFrame = frameFor(input.points, 0, settings.samples, settings.precise)
   const base = await createGridWebGPU(canvas, input, p, initialFrame, 'streamed', gridFactory => async resources => {
     const { positions, forces, samples } = resources; let count = resources.count
@@ -72,6 +74,8 @@ export async function createCombinedWebGPU (
     const scope = resourceScope(overrides.context?.ledger); const own = scope.own
     try {
       const grid = own(await gridFactory(resources))
+      const center = settings.center ? own(await createCenterWebGPU(device, count, forces)) : undefined
+      readCenter = center?.read
       const exactParams = policy === 'production' ? own(upload(device, new Float32Array(8), Buffer.UNIFORM)) : undefined
       const exact = exactParams
         ? own(await Kernel.createAsync(device, {
@@ -122,7 +126,7 @@ export async function createCombinedWebGPU (
       const roundedProducts = precision === 'products' || precision === 'composed' || precision === 'aligned' || precision === 'trig'
       const roundSpring = ['integration', 'both', 'refined', 'distance', 'products', 'composed', 'aligned', 'trig'].includes(precision)
       const extraStages = precision === 'trig'
-        ? [...roundedStages, 'gravity', 'repulsion']
+        ? [...roundedStages, 'gravity', 'center', 'repulsion']
         : precision === 'composed' || precision === 'aligned' ? [...roundedStages, 'repulsion'] : roundedStages
       const spring = own(precision === 'force' || precision === 'both' || precision === 'refined'
         ? await createRoundedKernel(device, roundedSpringSource(precision === 'refined'), springBindings)
@@ -154,6 +158,7 @@ export async function createCombinedWebGPU (
           if (!nextGraph) throw new Error('Use resizeGraph to update composed resources')
           linkResources.update(next.points, nextGraph)
           grid.resize!(next)
+          center?.resize(next.points.length / 4)
           count = next.points.length / 4; input = next
           integrationParams.write(new Float32Array([count, 0, 0, 0, p.friction, p.referenceLength, 0, 0]))
         },
@@ -180,6 +185,7 @@ export async function createCombinedWebGPU (
           })
         },
         prepare (): void {
+          if (stage === 'center') return
           if (stage === 'repulsion') {
             if (method() === 'exact') {
               exactParams!.write(new Float32Array([
@@ -193,6 +199,14 @@ export async function createCombinedWebGPU (
           }
         },
         encode (source, timing, sharedPass, profile): void {
+          if (stage === 'center') {
+            if (!center) throw new Error('Center force was not allocated')
+            const encodeCenter = (pass: ComputePass): void => center.encode(pass, positions[source], p.alpha, settings.center ?? 0)
+            if (profile) throw new Error('Center-enabled frames use normal-frame timing, not the historical fifteen-stage profile')
+            const pass = sharedPass ?? device.beginComputePass(timing)
+            try { encodeCenter(pass) } finally { if (!sharedPass) pass.end() }
+            return
+          }
           if (stage === 'repulsion' && method() === 'hierarchical') { grid.encode(source, timing, sharedPass, profile); return }
           const encode = (pass: ComputePass): void => {
             if (stage === 'repulsion') {
@@ -250,6 +264,7 @@ export async function createCombinedWebGPU (
   })
   return {
     ...base,
+    readCenter,
     name: `WebGPU composed (${policy} repulsion)`,
     repulsionMethod: method,
     requestOccupancy: base.requestOccupancy ? (): void => { requireGrid(); base.requestOccupancy!() } : undefined,
@@ -293,7 +308,7 @@ export async function createCombinedWebGPU (
               ? { timestampQuerySet: query, beginTimestampIndex: frame * 4, endTimestampIndex: frame * 4 + 1 }
               : {})
             try {
-              for (const next of STAGES) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
+              for (const next of stagesFor(settings.center)) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
             } finally { pass.end() }
             base.render(view, query
               ? { timestampQuerySet: query, beginTimestampIndex: frame * 4 + 2, endTimestampIndex: frame * 4 + 3 }
@@ -319,10 +334,11 @@ export async function createCombinedWebGPU (
       : undefined,
     profileCurrentFrame: overrides.gpuBounds
       ? async (alpha, tick, view): ReturnType<NonNullable<CombinedBackend['profileCurrentFrame']>> => {
+        if (settings.center) throw new Error('Center-enabled frames require normal-frame timing; the historical profile has fifteen fixed stages')
         if (method() === 'exact') throw new Error('The fifteen-stage grid profile requires hierarchical repulsion; use normal-frame timing for exact repulsion')
         base.resourceIdentity!(); base.setGpuFrame!(tick)
         const result = await measureGpuStages(device, (scope, draw) => {
-          for (const next of STAGES) {
+          for (const next of stagesFor(settings.center)) {
             stage = next; p.alpha = alpha
             base.step({ submit: false, profile: (name, work) => scope(`${next}.${name}`, work) })
           }
@@ -338,7 +354,7 @@ export async function createCombinedWebGPU (
           base.setGpuFrame!(tick)
           const pass = device.beginComputePass(query ? { timestampQuerySet: query, beginTimestampIndex: 0, endTimestampIndex: 1 } : {})
           try {
-            for (const next of STAGES) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
+            for (const next of stagesFor(settings.center)) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
           } finally { pass.end() }
           base.render(view, query ? { timestampQuerySet: query, beginTimestampIndex: 2, endTimestampIndex: 3 } : {}, false)
         }).catch(error => { base.resourceIdentity!(); throw error })
@@ -356,7 +372,7 @@ export async function createCombinedWebGPU (
           const index = frame * (draw ? 4 : 2)
           const pass = device.beginComputePass(query ? { timestampQuerySet: query, beginTimestampIndex: index, endTimestampIndex: index + 1 } : {})
           try {
-            for (const next of STAGES) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
+            for (const next of stagesFor(settings.center)) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
           } finally { pass.end() }
           if (draw) {
             base.render(view, query
@@ -375,7 +391,7 @@ export async function createCombinedWebGPU (
         base.setGpuFrame!(tick)
         const pass = device.beginComputePass()
         try {
-          for (const next of STAGES) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
+          for (const next of stagesFor(settings.center)) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
         } finally { pass.end() }
         device.submit()
       }

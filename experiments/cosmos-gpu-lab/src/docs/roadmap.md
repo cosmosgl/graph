@@ -8,7 +8,7 @@ through the chosen luma APIs.
 
 The purpose of this lab is to answer that question with runnable evidence. This page summarizes what that
 evidence means for Cosmos and which demonstrations would justify the next migration step.
-Assessment reviewed **11 November 2026**; the production engine remains WebGL.
+Assessment reviewed **12 November 2026**; the production engine remains WebGL.
 
 For the complete force and rendering checklist, see [Cosmos feature coverage](#/feature-inventory):
 how each feature works in WebGL, what experiments already cover and what still needs WebGPU validation.
@@ -38,7 +38,7 @@ implementation and comparison. These are evidence levels, not a percentage of th
 
 | Cosmos capability | Evidence today | Readiness gap |
 | --- | --- | --- |
-| Global center of mass | **Demonstrated:** WebGL and WebGPU results compared with a CPU reference | Integrate with production force order and state ownership |
+| Global center of mass | **Demonstrated:** CPU-checked reductions and bounded [center attraction](#/matched-layout/docs/center) in production force order | Full-engine integration, broader parameters and cross-device precision/cost policy |
 | Large reductions | **Demonstrated:** hierarchical reduction with GPU-resident inputs and results | Validate every required aggregation, including cluster centers and bounds |
 | Circle point rendering | **Demonstrated:** matched WebGL sprites and WebGPU instanced circles | Complete shapes, strokes, images, transitions and render-order behavior |
 | Spatial indexing | **Demonstrated:** count/scan/scatter with variable cell occupancy | Establish production bounds, capacity, update and memory policies |
@@ -151,9 +151,20 @@ gate. Those failures stay visible. Longer cooling improves the measured quality,
 and unagreed quality targets prevent calling these layouts fully converged. The shared CPU-driven sample
 tape controls the comparison; it does not validate full Graph wall-clock scheduling or runtime performance.
 
-The next force-composition step is **center attraction**, using the validated reduction as its aggregation
-foundation. Broader data and weights, scalable hierarchy construction, allocation policy, remaining forces,
-renderer/interaction contracts and native portability remain open.
+The [center-attraction comparison](#/matched-layout/docs/center) now adds the production optional force after
+gravity, including pinned/absent semantics and resident reduction/force/integration. Seven M3 runs cover
+5,600 ticks through 8,192 points, including one independent 5,000-tick case. WebGPU passes 567 checkpoints
+and seven full-strength probes at unchanged tolerance. Independent long-run positions drift by 2.50% of
+CPU layout radius, while stress stays close. Large WebGL center-force failures prevent declaring strict
+backend parity.
+
+Controlled on/off timing gives the current strict WebGPU center path an added cost of roughly 1.2–1.4 ms
+on the cooled 8,192-point cases. WebGL samples are much noisier and the initial dense controls fail the
+numerical gate. Evaluate a cheaper center arithmetic candidate with the same checks; the measured strict
+path is a correctness reference, not an approved production performance policy.
+
+The next force-composition step is **collision**. Broader data and weights, scalable hierarchy construction,
+allocation policy, remaining forces, renderer/interaction contracts and native portability remain open.
 
 ## 3. What the experiments tell us about Cosmos
 

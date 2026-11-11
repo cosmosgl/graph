@@ -6,6 +6,7 @@ export const experiment = defineExperiment({
   tags: ['simulation', 'validation', 'layout'],
   create: async host => (await import('./view')).createMatchedView(host),
   pages: [
+    { kind: 'markdown', id: 'center', title: 'Center force', load: async (): Promise<string> => (await import('./center.md?raw')).default },
     { kind: 'markdown', id: 'method', title: 'Method', load: async (): Promise<string> => (await import('./method.md?raw')).default },
     { kind: 'markdown', id: 'findings', title: 'Findings', load: async (): Promise<string> => (await import('./findings.md?raw')).default },
   ],

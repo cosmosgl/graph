@@ -15,9 +15,12 @@ export const PRECISION_LABELS: Record<SpringPrecision, string> = {
   trig: 'Refined gravity + rounded steps',
 }
 export const STAGES = ['gravity', 'repulsion', 'incoming', 'outgoing'] as const
-export type Stage = typeof STAGES[number]
+export type Stage = typeof STAGES[number] | 'center'
+export function stagesFor (center = 0): readonly Stage[] {
+  return center ? ['gravity', 'center', 'repulsion', 'incoming', 'outgoing'] : STAGES
+}
 export type Fixture = 'chain' | 'star' | 'communities' | 'pinned'
-export type Settings = { fixture: Fixture; count: number; decay: number; checkpointEvery?: number; springPrecision?: SpringPrecision }
+export type Settings = { fixture: Fixture; count: number; decay: number; checkpointEvery?: number; springPrecision?: SpringPrecision; center?: number }
 export const ALPHA_MIN = 0.001
 export const GRAVITY = 0.25
 export const REPULSION: RepulsionParameters = { alpha: 1, repulsion: 1, friction: 0.85, referenceLength: 4096 }
