@@ -128,6 +128,7 @@ reads both endpoint positions and constructs a ribbon along a straight or curved
 | [Point capacity and memory](#/point-capacity) | Same-device resizes, prefix preservation, pin/absence semantics and cleanup; retained buffers/kernels reduce local in-capacity update cost under unchanged CPU checks | Full-engine frame cost, retention/trim policy, total VRAM bounds, full Graph setters/transitions, host ownership or device recovery |
 | [Controlled GPU stage profiling](#/gpu-stage-profile) | Frozen-input, balanced normal/profile timing with exact replay and unchanged CPU checks; hub springs and grid aggregation are major diagnostic costs on M3 | Full-engine frame cost, production-default workloads or other devices |
 | [Ordered hub springs](#/hub-springs) | Unpinned/pinned controls, evolving checkpoint replay and original CPU gates; GPU-batched comparisons support a provisional M3 cutoff and final-geometry gains | Universal thresholds, production defaults, broader hub distributions, default-length trajectories, layout quality or other devices |
+| [Ordered grid aggregation](#/cell-aggregation) | Exact aggregate/centroid/output bits with cached cell IDs and bounded source sorting; repeated larger normal-frame gains on M3 | A scalable builder, sparse-workload policy, dense-community whole-tick acceptance, production dispatch/defaults or other devices |
 | [Performance lab](#/performance-lab) | Repeatable isolated rendering/reduction timing methodology | A complete-engine speedup or validation of missing features |
 
 ### Keeping this checklist useful

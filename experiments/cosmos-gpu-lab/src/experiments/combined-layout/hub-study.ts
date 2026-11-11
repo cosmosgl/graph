@@ -10,18 +10,19 @@ import { createHubGraph } from './hub-spring-data'
 import { HUB_THRESHOLD, HUB_TILE, type SpringOptimization } from './hub-spring-source'
 import { createOracle } from './reference'
 import { differingBits } from './resident'
-import { profileCheck, profileOrder, fingerprint, type ProfileTrial } from './controlled-profile'
+import { profileCheck, profileOrder, fingerprint } from './controlled-profile'
 import { STAGES, SPRINGS, REPULSION, GRAVITY } from './data'
 import type { StageTiming } from './stage-timing'
+import { FROZEN_POLICY, type FrozenPolicy, type FrozenFrame, type FrozenTrial } from './frozen-timing'
 export const HUB_POLICY = { warmups: 2, samples: 8, frames: 4 } as const
-export const HUB_NORMAL_POLICY = { warmups: 4, samples: 12, frames: 4, diagnostics: false, batched: true } as const
-export type HubPolicy = { warmups: number; samples: number; frames: number; diagnostics?: boolean; batched?: boolean }
+export const HUB_NORMAL_POLICY = FROZEN_POLICY
+export type HubPolicy = FrozenPolicy
 export type HubCapture = { positions: Float32Array; alpha: number; tick: number }
 export type HubCase = {
   count: number; degree: number; pinned: boolean; optimization: Exclude<SpringOptimization, 'baseline'>; threshold?: number; repeat?: number;
 }
-type Frame = { timing?: Measurement; gpuMs?: number | null; stages?: StageTiming[]; check: ReturnType<typeof profileCheck> }
-export type HubTrial = ProfileTrial & { frames: Frame[] }
+type Frame = FrozenFrame
+export type HubTrial = FrozenTrial
 export type HubRow = HubCase & {
   threshold: number; alpha: number; tick: number; trials: HubTrial[]; valid: boolean; fingerprint?: string; error?: string; bufferBytes?: number[];
   stages: Array<{ stage: string; positions: number; forces: number; cpuValid: boolean }>;
@@ -207,21 +208,4 @@ export async function createHubStudy (canvas: HTMLCanvasElement, policy: HubPoli
   }
 }
 export type HubStudy = Awaited<ReturnType<typeof createHubStudy>>
-export function hubSummary (row: HubRow, policy: HubPolicy, lane: number, kind: ProfileTrial['kind'], stage?: string): {
-  samples: number; median: number | null; range: [number, number] | null;
-} {
-  const trials = row.trials.filter(t => !t.warmup && t.lane === lane && t.kind === kind)
-  const values = trials.map(t => stage
-    ? t.stages?.find(s => s.name === stage)?.gpuMs
-    : t.timing.batchGpuMs === null ? null : t.timing.batchGpuMs / t.timing.operations)
-  if (trials.length !== policy.samples || trials.some(t => !t.check.valid || t.timing.timerStatus !== 'valid') ||
-    values.some(n => n === undefined || n === null || !Number.isFinite(n) || n < 0)) return { samples: trials.length, median: null, range: null }
-  const sorted = [...values as number[]].sort((a, b) => a - b); const n = sorted.length / 2
-  return { samples: trials.length, median: (sorted[n - 1] + sorted[n]) / 2, range: [sorted[0], sorted.at(-1)!] }
-}
-
-export function hubPairedWins (row: HubRow, policy: HubPolicy): number | null {
-  if ([0, 1].some(lane => hubSummary(row, policy, lane, 'normal').median === null)) return null
-  const trials = row.trials.filter(t => !t.warmup && t.kind === 'normal')
-  return trials.filter(t => t.lane === 0 && trials.find(c => c.lane === 1 && c.round === t.round)!.timing.batchGpuMs! < t.timing.batchGpuMs!).length
-}
+export { frozenSummary as hubSummary, frozenPairedWins as hubPairedWins } from './frozen-timing'

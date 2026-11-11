@@ -11,6 +11,7 @@ import { storedCentroidShader, type CentroidMode } from './centroids'
 import { gpuTraceShader, replaceOnce, stageNames } from './trace'
 import { frameSamples, layout, type Frame, type Structure } from './data'
 import { createGpuBounds } from './bounds'
+import { cachedCellShader, aggregationLimit, type AggregationMode } from './aggregation'
 import type { GridBackend } from './backend'
 import shader from './grid.wgsl?raw'
 const profileGroups: Record<string, string> = {
@@ -26,7 +27,7 @@ const profileGroups: Record<string, string> = {
 export async function createGridWebGPU (
   canvas: HTMLCanvasElement, input: Input, p: Parameters, initial: Frame, centroidMode: CentroidMode = 'inline',
   wrapForce: (factory: WebGPUForceFactory) => WebGPUForceFactory = (factory): WebGPUForceFactory => factory,
-  options: WebGPUOptions & { gpuBounds?: boolean } = {}
+  options: WebGPUOptions & { gpuBounds?: boolean; aggregation?: AggregationMode } = {}
 ): Promise<GridBackend> {
   let sourceShader = centroidMode !== 'inline' ? storedCentroidShader(shader, centroidMode !== 'stored') : shader
   const streamed = centroidMode === 'streamed'
@@ -34,6 +35,8 @@ export async function createGridWebGPU (
   if (centroidMode === 'refined') sourceShader = refinedFarShader(sourceShader)
   if (centroidMode === 'materialized') sourceShader = materializedFarShader(sourceShader)
   if (options.gpuBounds) sourceShader = replaceOnce(sourceShader, 'var<uniform> box:', 'var<storage, read> box:')
+  const cachedCells = options.aggregation === 'cached-cells' || options.aggregation === 'cached-small'
+  if (cachedCells) sourceShader = cachedCellShader(sourceShader, aggregationLimit(options.aggregation!))
   let readContributions: GridBackend['readContributions']
   let verifyDivision: GridBackend['verifyDivision']
   let readCentroids: (() => Promise<Float32Array>) | undefined
@@ -53,6 +56,7 @@ export async function createGridWebGPU (
       const farSums = streamed ? storage(capacity * allocated.sizes.length * 8) : undefined
       const levelQueries = streamed ? allocated.sizes.map((_, level) => own(upload(device, new Uint32Array([level, 0, 0, 0]), Buffer.UNIFORM))) : []
       const heads = storage(allocated.cells * 4); const links = storage(allocated.sizes.length * capacity * 4)
+      const pointCells = cachedCells ? storage(allocated.sizes.length * capacity * 4) : undefined
       const aggregates = storage(allocated.cells * 16); const slots = storage(allocated.finest ** 2 * frame.slots * 8)
       const centroids = centroidMode !== 'inline' ? storage(allocated.cells * 16) : undefined
       if (centroids) readCentroids = (): Promise<Float32Array> => readFloats(centroids, l.cells * 16)
@@ -73,14 +77,15 @@ export async function createGridWebGPU (
           { name: 'farLevel', location: 13, type: 'uniform', group: 0 },
           { name: 'farSums', location: 14, type: 'storage', group: 0 })
       }
+      if (pointCells) bindings.push({ name: 'pointCells', location: 15, type: 'storage', group: 0 })
       const forceNames = [
         'positions', 'samples', 'aggregates', 'slots', 'forces', 'levels', 'params', 'box',
         ...(centroids ? ['centroids'] : []), ...(farContributions && !streamed ? ['farContributions'] : []), ...(streamed ? ['farSums'] : []),
       ].filter(name => !farContributions || name !== 'aggregates')
       const used = [
         ['heads', 'params'],
-        ['positions', 'heads', 'links', 'levels', 'params', 'box'],
-        ['positions', 'heads', 'links', 'aggregates', 'levels', 'params', 'box'],
+        ['positions', 'heads', 'links', 'levels', 'params', 'box', ...(pointCells ? ['pointCells'] : [])],
+        ['positions', 'heads', 'links', 'aggregates', 'levels', 'params', ...(pointCells ? ['pointCells'] : ['box'])],
         ['heads', 'links', 'slots', 'levels', 'params'],
         ...(centroids ? [['aggregates', 'params', 'centroids']] : []),
         ...(farContributions
@@ -229,6 +234,7 @@ export async function createGridWebGPU (
                 levels,
                 params,
                 box,
+                ...(pointCells ? { pointCells } : {}),
                 ...(centroids ? { centroids } : {}),
                 ...(farContributions ? { farContributions } : {}),
                 ...(streamed ? { farLevel, farSums } : {}),
