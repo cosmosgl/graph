@@ -184,7 +184,7 @@ export async function createGridWebGPU (
           if (gpuTick === undefined) box.write(frame.bounds)
           else bounds!.prepare(gpuTick)
         },
-        encode (source, timing): void {
+        encode (source, timing, sharedPass): void {
           lastSource = source
           const sizes = [l.cells, count, l.cells, l.finest ** 2,
             ...(centroids ? [l.cells] : []), ...(farContributions ? [count] : []), ...(streamed ? [count] : []), count]
@@ -193,7 +193,7 @@ export async function createGridWebGPU (
             if (streamed && entryPoints[i] === 'farMain') return levelQueries.flatMap(farLevel => [{ i, farLevel }, { i: i + 1, farLevel }])
             return [{ i, farLevel: undefined }]
           }).filter(d => sizes[d.i] > 0)
-          const pass = device.beginComputePass(timing)
+          const pass = sharedPass ?? device.beginComputePass(timing)
           try {
             if (gpuTick !== undefined) bounds!.encode(pass, positions[source])
             for (const { i, farLevel } of dispatches) {
@@ -216,7 +216,7 @@ export async function createGridWebGPU (
                 }).filter(([name]) => used[i].includes(name))),
               })
             }
-          } finally { pass.end() }
+          } finally { if (!sharedPass) pass.end() }
         },
         destroy (): void { owned.reverse().forEach(resource => resource.destroy()) },
       }

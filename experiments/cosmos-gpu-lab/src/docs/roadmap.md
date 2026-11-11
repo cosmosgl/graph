@@ -57,7 +57,7 @@ The strongest conclusion today is **primitive feasibility**. The most important 
 
 | Milestone | Current position | Next acceptance evidence |
 | --- | --- | --- |
-| luma integration | **Partial:** compute and minimal drawing use public luma APIs and resident buffers | A readback-free ordinary tick, update/ownership contracts and the production dependency decision |
+| luma integration | **Partial:** resident ticks, minimal drawing and bounded state-preserving updates use public luma APIs | Position-capacity growth, host ownership, device loss and the production dependency decision |
 | Cosmos simulation | **Partial:** gravity, hierarchical repulsion, ordered springs and cooling have a passing bounded precision candidate at 8,192 points | Remaining forces, layout-quality criteria, scalable hierarchy construction and default-length schedules |
 | Rendering and interaction | **Early:** circles and minimal straight links | Styling, picking, dragging and the rest of the renderer |
 | Library and embedding contracts | **Unproven** | Live typed-array/config updates, resizing, shared ownership, device loss and host integration |
@@ -204,10 +204,16 @@ pinned fixtures over 20 ticks. Frame bits, positions, final forces, aggregates, 
 the staged WebGPU precision reference exactly. Independent bounds tests match the CPU frame bits through
 65,537 records; that larger count validates the reduction only, not a composed graph.
 
-**Limit:** the comparison intentionally synchronizes at checkpoints and keeps a staged reference lane. It does
-not measure the resident frame budget or independently validate the shared force implementation. Fixed sample
-counts, serial crowded-cell fallback, per-stage submissions and CPU topology construction remain. Resource/update
-contracts and broader rendering still need work before this becomes a representative production backend.
+The follow-up [resident frame measurements](#/resident-layout/docs/timing-updates) group the simulation into one
+compute pass and time it with minimal drawing in one submission. Batched M3 checks at 8,192 points measure
+refined GPU work around **5.4 ms** for chain/communities and **12.8 ms** for star. All 120 batch replay checks
+pass. Point patches and larger/empty/shrunk topology replacements retain positions, devices, tick and cooling;
+independent CPU checks and the existing resident matrix still pass with unchanged tolerances.
+
+**Limit:** the correctness comparison intentionally synchronizes at checkpoints and keeps a staged reference
+lane; the benchmark measures an initial engine slice with a minimal renderer. Fixed sample counts, serial
+crowded-cell fallback and CPU topology construction remain. Point-capacity growth, peak memory, broader
+rendering, host ownership and device-loss handling still need work before production adoption.
 
 ### Weighted springs: Cosmos semantics can run through luma compute
 
@@ -370,9 +376,9 @@ performance and memory meet the target budgets; supported devices are tested; an
 | --- | --- | --- |
 | Extend | Weighted-link compute-to-render path through luma | Can its demonstrated resource contract handle shared ownership, device loss and live updates? |
 | Extend | Weighted springs at larger sizes and over longer trajectories | Can ordered hub gathers and state-preserving topology updates meet the engine budget? |
-| First | [GPU-resident composed tick](#/resident-layout) with GPU bounds and minimal points/links | Can the tested force sequence run without routine position readbacks or a CPU oracle? |
+| Demonstrated in a bounded slice | [Resident tick, timing and state-preserving updates](#/resident-layout/docs/timing-updates) | GPU bounds and composed forces avoid routine readback; measured cost and update semantics now have native evidence |
 | Next | Adaptive samples and parallel hierarchy construction | Can the same approximation scale without serial dense-cell work? |
-| Next | Complete-frame time, memory and resource/update contracts | Does the resident engine slice meet a practical budget, including live updates and ownership? |
+| Next | Position-capacity growth, peak memory and resource ownership | Can the measured slice handle resizing, borrowed resources and device loss within a practical budget? |
 | Supporting | Refined gravity cost and a bounded larger-star cost check | Can the strict precision reference scale affordably, and which arithmetic policy should production use? |
 | Alongside simulation | Links, richer points and picking from shared GPU state | Can Cosmos render and interact correctly without transferring all positions back? |
 | Then | Combined engine workload on multiple native GPUs | Is the whole migration practical for the intended users and graph sizes? |

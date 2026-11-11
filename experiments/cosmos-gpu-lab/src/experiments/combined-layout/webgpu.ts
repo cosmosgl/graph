@@ -1,13 +1,15 @@
-import { Buffer } from '@luma.gl/core'
+import { Buffer, type Device } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
 import { bindingLayout, upload, createStorageRenderer } from '../../gpu/luma'
 import type { Input } from '../many-body/data'
 import type { GraphInput } from '../weighted-links/data'
-import { buildTopology } from '../weighted-links/data'
+import { validateBatch } from '../many-body/timing'
 import springSource from '../weighted-links/force.wgsl?raw'
 import { createGridWebGPU } from '../many-body-grid/webgpu'
 import { frameFor } from '../many-body-grid/data'
-import { GRAVITY, REPULSION, SPRINGS, STAGES, type SpringPrecision, type Stage } from './data'
+import { createLinkResources } from './topology'
+import { measureFrameBatch } from './frame-timing'
+import { cool, GRAVITY, REPULSION, SPRINGS, STAGES, type SpringPrecision, type Stage } from './data'
 import { polarGravitySource, refinedGravitySource } from './gravity-source'
 import type { CombinedBackend } from './backend'
 import { createRoundedKernel, roundedSpringSource, roundedIntegrationSource, distanceSpringSource } from './spring-precision'
@@ -36,26 +38,28 @@ export async function createCombinedWebGPU (
   const roundedStages = overrides.roundedStages ?? []
   const polarGravity = overrides.polarGravity ?? (precision === 'aligned' || precision === 'trig')
   const refinedTrig = overrides.refinedTrig ?? precision === 'trig'
-  let stage: Stage = 'gravity'; const p = { ...REPULSION }; const topology = buildTopology(graph)
+  let stage: Stage = 'gravity'; const p = { ...REPULSION }
+  let device: Device; let replaceLinks: NonNullable<CombinedBackend['replaceLinks']>
   const base = await createGridWebGPU(canvas, input, p, frameFor(input.points, 0), 'streamed', gridFactory => async resources => {
-    const { device, positions, forces, count } = resources
+    const { positions, forces, count } = resources
+    device = resources.device
     const owned: Array<{ destroy(): void }> = []; const own = <T extends { destroy(): void }>(v: T): T => { owned.push(v); return v }
     try {
       const grid = own(await gridFactory(resources))
       const gravityParams = own(upload(device, new Float32Array(4), Buffer.UNIFORM))
       const springParams = own(upload(device, new Float32Array(12), Buffer.UNIFORM))
-      const sizes = own(upload(device, graph.sizes))
-      const links = own(upload(device, topology.links))
+      let linkResources = createLinkResources(device, input.points, graph); let version = 0
+      own({ destroy: () => linkResources.destroy() })
+      replaceLinks = (next): ReturnType<NonNullable<CombinedBackend['replaceLinks']>> => {
+        const replacement = createLinkResources(device, input.points, next)
+        const previous = linkResources; linkResources = replacement; version++
+        previous.destroy()
+        return { version, bytes: replacement.bytes, edgeCount: replacement.edgeCount, buildMs: replacement.buildMs }
+      }
       const viewBuffer = own(upload(device, new Float32Array(4), Buffer.UNIFORM))
       const lines = own(createStorageRenderer(device, linkSource, 'line-list', bindingLayout([
         ['positions', 'read-only-storage'], ['links', 'read-only-storage'], ['view', 'uniform'],
       ])))
-      const offsets = topology.directions.map(d => own(upload(device, d.offsets)))
-      const edges = topology.directions.map(d => {
-        const data = new ArrayBuffer(d.neighbors.length * 16); const ints = new Uint32Array(data); const floats = new Float32Array(data)
-        for (let i = 0; i < d.neighbors.length; i++) { ints[i * 4] = d.neighbors[i]; floats.set(d.properties.subarray(i * 4, i * 4 + 3), i * 4 + 1) }
-        return own(upload(device, new Uint8Array(data)))
-      })
       const gravityBindings = bindingLayout([
         ['positions', 'read-only-storage'], ['params', 'uniform'], ['forces', 'storage'],
       ])
@@ -84,10 +88,10 @@ export async function createCombinedWebGPU (
         ])))
         : undefined
       return {
-        integrate (source, timing): boolean {
+        integrate (source, timing, sharedPass): boolean {
           const rounded = (roundSpring && (stage === 'incoming' || stage === 'outgoing')) || extraStages.includes(stage)
           if (!integration || !rounded) return false
-          const pass = device.beginComputePass(timing)
+          const pass = sharedPass ?? device.beginComputePass(timing)
           try {
             integration.dispatch(pass, {
               x: Math.ceil(count / 64),
@@ -95,15 +99,15 @@ export async function createCombinedWebGPU (
                 positions: positions[source], forces, params: integrationParams, output: positions[1 - source],
               },
             })
-          } finally { pass.end() }
+          } finally { if (!sharedPass) pass.end() }
           return true
         },
         render (source, view, pass): void {
           viewBuffer.write(new Float32Array(view))
           lines.kernel.draw(pass, {
             vertexArray: lines.vertexArray,
-            vertexCount: topology.links.length,
-            bindings: { positions: positions[source], links, view: viewBuffer },
+            vertexCount: linkResources.edgeCount * 2,
+            bindings: { positions: positions[source], links: linkResources.links, view: viewBuffer },
           })
         },
         prepare (): void {
@@ -114,9 +118,9 @@ export async function createCombinedWebGPU (
               SPRINGS.friction, SPRINGS.maxStep, 0, 0, 0, count, 0]))
           }
         },
-        encode (source, timing): void {
-          if (stage === 'repulsion') { grid.encode(source, timing); return }
-          const pass = device.beginComputePass(timing)
+        encode (source, timing, sharedPass): void {
+          if (stage === 'repulsion') { grid.encode(source, timing, sharedPass); return }
+          const pass = sharedPass ?? device.beginComputePass(timing)
           try {
             if (stage === 'gravity') {
               gravity.dispatch(pass, {
@@ -128,11 +132,16 @@ export async function createCombinedWebGPU (
               spring.dispatch(pass, {
                 x: Math.ceil(count / 64),
                 bindings: {
-                  positions: positions[source], offsets: offsets[side], edges: edges[side], sizes, params: springParams, forces,
+                  positions: positions[source],
+                  offsets: linkResources.offsets[side],
+                  edges: linkResources.edges[side],
+                  sizes: linkResources.sizes,
+                  params: springParams,
+                  forces,
                 },
               })
             }
-          } finally { pass.end() }
+          } finally { if (!sharedPass) pass.end() }
         },
         destroy (): void { owned.reverse().forEach(r => r.destroy()) },
       }
@@ -140,10 +149,40 @@ export async function createCombinedWebGPU (
   }, { gpuBounds: overrides.gpuBounds })
   return {
     ...base,
+    replaceLinks: (next): ReturnType<NonNullable<CombinedBackend['replaceLinks']>> => { base.resourceIdentity!(); return replaceLinks(next) },
+    measureFrames: overrides.gpuBounds
+      ? async ({ frames, draw, decay, view }): ReturnType<NonNullable<CombinedBackend['measureFrames']>> => {
+        validateBatch(frames)
+        if (!Number.isInteger(decay) || decay < 1) throw new Error('Invalid cooling schedule')
+        base.setPositions(input.points)
+        let alpha = 1; let tick = 0
+        const timing = await measureFrameBatch(device, frames, draw ? 2 : 1, (query, frame) => {
+          base.setGpuFrame!(tick)
+          const index = frame * (draw ? 4 : 2)
+          const pass = device.beginComputePass(query ? { timestampQuerySet: query, beginTimestampIndex: index, endTimestampIndex: index + 1 } : {})
+          try {
+            for (const next of STAGES) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
+          } finally { pass.end() }
+          if (draw) {
+            base.render(view, query
+              ? {
+                timestampQuerySet: query, beginTimestampIndex: index + 2, endTimestampIndex: index + 3,
+              }
+              : {}, false)
+          }
+          tick++; alpha = cool(alpha, decay)
+        }).catch(error => { base.resourceIdentity!(); throw error })
+        return { timing, snapshot: await base.read() }
+      }
+      : undefined,
     stepTick: overrides.gpuBounds
       ? (alpha, tick): void => {
         base.setGpuFrame!(tick)
-        for (const next of STAGES) { stage = next; p.alpha = alpha; base.step() }
+        const pass = device.beginComputePass()
+        try {
+          for (const next of STAGES) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
+        } finally { pass.end() }
+        device.submit()
       }
       : undefined,
     stepStage (next, alpha): void { stage = next; p.alpha = alpha; base.step() },

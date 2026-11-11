@@ -10,5 +10,10 @@ export const experiment = defineExperiment({
     id: 'dataflow',
     title: 'Dataflow and findings',
     load: async (): Promise<string> => (await import('./dataflow.md?raw')).default,
+  }, {
+    kind: 'markdown',
+    id: 'timing-updates',
+    title: 'Frame timing and updates',
+    load: async (): Promise<string> => (await import('./timing-updates.md?raw')).default,
   }],
 })

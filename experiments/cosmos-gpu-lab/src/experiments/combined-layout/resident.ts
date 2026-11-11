@@ -1,6 +1,6 @@
 import { fitView } from '../many-body/backend'
 import { frameFor } from '../many-body-grid/data'
-import { cool, createGraph, STAGES, type Settings } from './data'
+import { cool, createGraph, STAGES, type Fixture, type Settings } from './data'
 import { createCombinedWebGPU } from './webgpu'
 import type { CombinedBackend } from './backend'
 
@@ -8,6 +8,10 @@ export type ResidentCheck = {
   tick: number; bounds: number; positions: number; forces: number; aggregates: number; slots: number; centroids: number; finite: boolean; valid: boolean;
 }
 export type Readbacks = { snapshots: number; bytes: number }
+export type ResidentUpdate = {
+  tick: number; alpha: number; kind: 'point' | 'links'; description: string;
+  lanes: Array<{ submitMs: number; bytes: number; deviceRetained: boolean; positionsRetained: boolean; version?: number; edgeCount?: number }>;
+}
 export function differingBits (a: Float32Array, b: Float32Array): number {
   if (a.length !== b.length) throw new Error('Cannot compare different buffer lengths')
   const x = new Uint32Array(a.buffer, a.byteOffset, a.length); const y = new Uint32Array(b.buffer, b.byteOffset, b.length)
@@ -22,12 +26,15 @@ export function differingBits (a: Float32Array, b: Float32Array): number {
 export async function createResidentComparison (
   settings: Settings, canvas: (resident: boolean) => HTMLCanvasElement
 ): Promise<{
-  info: string[]; rows: ResidentCheck[]; readbacks: Readbacks[]; tick(): number; alpha(): number;
-  step(): Promise<ResidentCheck | undefined>; render(): void; destroy(): void;
+  info: string[]; rows: ResidentCheck[]; readbacks: Readbacks[]; updates: ResidentUpdate[]; tick(): number; alpha(): number;
+  step(forceCheck?: boolean): Promise<ResidentCheck | undefined>;
+  patchPoint(first: number, point: Float32Array): void; replaceLinks(fixture: Fixture | 'empty'): void;
+  render(): void; destroy(): void;
 }> {
   const { graph, input } = createGraph(settings)
   const backends: CombinedBackend[] = []; const rows: ResidentCheck[] = []
   const readbacks: Readbacks[] = [{ snapshots: 0, bytes: 0 }, { snapshots: 0, bytes: 0 }]
+  const updates: ResidentUpdate[] = []
   let tick = 0; let alpha = 1; let destroyed = false; let busy = false; let failed = false
   const view = fitView([input.points]); view[2] /= 2; view[3] /= 2
   const dispose = (): void => { if (destroyed) return; destroyed = true; backends.forEach(b => b.destroy()) }
@@ -44,9 +51,42 @@ export async function createResidentComparison (
       info: backends.map(b => b.info),
       rows,
       readbacks,
+      updates,
       tick: () => tick,
       alpha: () => alpha,
-      async step (): Promise<ResidentCheck | undefined> {
+      patchPoint (first, point): void {
+        if (busy || destroyed || failed) throw new Error('Resident comparison unavailable')
+        // Backends validate the complete patch before their first write.
+        const lanes = backends.map(b => {
+          const before = b.resourceIdentity!(); const start = performance.now()
+          b.patchPositions!(first, point)
+          const submitMs = performance.now() - start; const after = b.resourceIdentity!()
+          return {
+            submitMs,
+            bytes: point.byteLength * 2,
+            deviceRetained: before.device === after.device,
+            positionsRetained: before.positions.every((id, i) => id === after.positions[i]),
+          }
+        })
+        updates.push({ tick, alpha, kind: 'point', description: `Patch ${point.length / 4} points from ${first}`, lanes })
+      },
+      replaceLinks (fixture): void {
+        if (busy || destroyed || failed) throw new Error('Resident comparison unavailable')
+        const next = createGraph({ ...settings, fixture: fixture === 'empty' ? 'chain' : fixture }).graph
+        if (fixture === 'empty') { next.links = new Float32Array(); next.weights = new Float32Array() }
+        const lanes = backends.map(b => {
+          const before = b.resourceIdentity!(); const start = performance.now(); const replacement = b.replaceLinks!(next)
+          const submitMs = performance.now() - start; const after = b.resourceIdentity!()
+          return {
+            submitMs,
+            ...replacement,
+            deviceRetained: before.device === after.device,
+            positionsRetained: before.positions.every((id, i) => id === after.positions[i]),
+          }
+        })
+        updates.push({ tick, alpha, kind: 'links', description: `${fixture} links`, lanes })
+      },
+      async step (forceCheck = false): Promise<ResidentCheck | undefined> {
         if (busy || destroyed || failed || tick >= settings.decay) throw new Error('Resident comparison unavailable')
         busy = true
         try {
@@ -60,7 +100,7 @@ export async function createResidentComparison (
             backends[0].stepStage(stage, alpha)
           }
           tick++; alpha = cool(alpha, settings.decay)
-          const checked = tick === 1 || tick === settings.decay || tick % (settings.checkpointEvery ?? 10) === 0
+          const checked = forceCheck || tick === 1 || tick === settings.decay || tick % (settings.checkpointEvery ?? 10) === 0
           if (!checked) return undefined
           const snapshots = await Promise.all([read(0), read(1)])
           const bounds = await Promise.all(backends.map(b => b.readBounds!()))
