@@ -767,7 +767,7 @@ export class GraphSimulation implements PositionTextureSource {
    */
   public updateTextureSizes (): void {
     this.store.pointsTextureSize = Math.ceil(Math.sqrt(this.data.pointsNumber ?? 0))
-    this.store.linksTextureSize = Math.ceil(Math.sqrt((this.data.linksNumber ?? 0) * 2))
+    this.store.linksTextureSize = Math.ceil(Math.sqrt(this.data.linksNumber ?? 0))
   }
 
   /**
