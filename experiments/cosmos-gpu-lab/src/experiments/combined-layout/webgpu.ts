@@ -3,7 +3,7 @@ import { Kernel } from '@luma.gl/engine'
 import { bindingLayout, upload, createStorageRenderer, readFloats } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import type { WebGPUOptions } from '../many-body/webgpu'
-import type { Input } from '../many-body/data'
+import { nearLimit, type Input } from '../many-body/data'
 import type { GraphInput } from '../weighted-links/data'
 import { validateBatch } from '../many-body/timing'
 import springSource from '../weighted-links/force.wgsl?raw'
@@ -18,6 +18,8 @@ import { polarGravitySource, refinedGravitySource } from './gravity-source'
 import type { CombinedBackend } from './backend'
 import { createRoundedKernel, roundedSpringSource, roundedIntegrationSource, distanceSpringSource } from './spring-precision'
 import { HUB_THRESHOLD, hoistedSpringSource, prefetchSpringSources, type SpringOptimization } from './hub-spring-source'
+import { strictExactShader } from './exact-shader'
+import { repulsionMethod, type RepulsionPolicy } from './repulsion-policy'
 const gravitySource = `
 @group(0) @binding(0) var<storage, read> positions: array<vec4<f32>>;
 @group(0) @binding(1) var<uniform> params: vec4<f32>;
@@ -40,10 +42,13 @@ export async function createCombinedWebGPU (
   canvas: HTMLCanvasElement, graph: GraphInput, input: Input, precision: SpringPrecision = 'baseline',
   overrides: WebGPUOptions & {
     roundedStages?: readonly Stage[]; polarGravity?: boolean; refinedTrig?: boolean; gpuBounds?: boolean; springOptimization?: SpringOptimization;
-    hubThreshold?: number; gridAggregation?: AggregationMode;
+    hubThreshold?: number; gridAggregation?: AggregationMode; nearArithmetic?: 'native' | 'refined'; repulsionPolicy?: RepulsionPolicy;
   } = {}
 ): Promise<CombinedBackend> {
   const optimization = overrides.springOptimization ?? 'baseline'
+  const policy = overrides.repulsionPolicy ?? 'hierarchical'
+  const method = (): ReturnType<typeof repulsionMethod> => repulsionMethod(input.points.length / 4, policy)
+  const requireGrid = (): void => { if (method() === 'exact') throw new Error('Exact repulsion does not build a grid') }
   if (optimization !== 'baseline' && precision !== 'trig') throw new Error('Spring optimization requires the strict trig candidate')
   const hubThreshold = overrides.hubThreshold ?? HUB_THRESHOLD
   const prefetch = optimization === 'prefetch' ? prefetchSpringSources(hubThreshold) : undefined
@@ -54,12 +59,24 @@ export async function createCombinedWebGPU (
   let nextGraph: GraphInput | undefined
   let device: Device; let frameForces: Buffer; let replaceLinks: NonNullable<CombinedBackend['replaceLinks']>
   const base = await createGridWebGPU(canvas, input, p, frameFor(input.points, 0), 'streamed', gridFactory => async resources => {
-    const { positions, forces } = resources; let count = resources.count
+    const { positions, forces, samples } = resources; let count = resources.count
     frameForces = forces
     device = resources.device
     const scope = resourceScope(overrides.context?.ledger); const own = scope.own
     try {
       const grid = own(await gridFactory(resources))
+      const exactParams = policy === 'production' ? own(upload(device, new Float32Array(8), Buffer.UNIFORM)) : undefined
+      const exact = exactParams
+        ? own(await Kernel.createAsync(device, {
+          source: strictExactShader(),
+          entryPoint: 'direct',
+          shaderLayout: {
+            bindings: bindingLayout([
+              ['positions', 'read-only-storage'], ['samples', 'read-only-storage'], ['params', 'uniform'], ['forces', 'storage'],
+            ]),
+          },
+        }))
+        : undefined
       const gravityParams = own(upload(device, new Float32Array(4), Buffer.UNIFORM))
       const springParams = own(upload(device, new Float32Array(12), Buffer.UNIFORM))
       const threshold = prefetch ? hubThreshold : undefined
@@ -146,17 +163,24 @@ export async function createCombinedWebGPU (
           })
         },
         prepare (): void {
-          if (stage === 'repulsion') grid.prepare?.()
-          else if (stage === 'gravity') gravityParams.write(new Float32Array([count, p.alpha, GRAVITY, 0]))
+          if (stage === 'repulsion') {
+            if (method() === 'exact') {
+              exactParams!.write(new Float32Array([
+                count, p.alpha, p.repulsion, nearLimit(count, p), p.friction, p.referenceLength, 0, 0,
+              ]))
+            } else grid.prepare?.()
+          } else if (stage === 'gravity') gravityParams.write(new Float32Array([count, p.alpha, GRAVITY, 0]))
           else {
             springParams.write(new Float32Array([SPRINGS.spring, SPRINGS.distance, ...SPRINGS.variation, p.alpha,
               SPRINGS.friction, SPRINGS.maxStep, 0, 0, 0, count, 0]))
           }
         },
         encode (source, timing, sharedPass, profile): void {
-          if (stage === 'repulsion') { grid.encode(source, timing, sharedPass, profile); return }
+          if (stage === 'repulsion' && method() === 'hierarchical') { grid.encode(source, timing, sharedPass, profile); return }
           const encode = (pass: ComputePass): void => {
-            if (stage === 'gravity') {
+            if (stage === 'repulsion') {
+              exact!.dispatch(pass, { x: Math.ceil(count / 64), bindings: { positions: positions[source], samples, params: exactParams!, forces } })
+            } else if (stage === 'gravity') {
               gravity.dispatch(pass, {
                 x: Math.ceil(count / 64),
                 bindings: { positions: positions[source], params: gravityParams, forces },
@@ -198,9 +222,27 @@ export async function createCombinedWebGPU (
         destroy: scope.destroy,
       }
     } catch (error) { scope.destroy(); throw error }
-  }, { gpuBounds: overrides.gpuBounds, context: overrides.context, preserve: overrides.preserve, aggregation: overrides.gridAggregation })
+  }, {
+    gpuBounds: overrides.gpuBounds,
+    context: overrides.context,
+    preserve: overrides.preserve,
+    aggregation: overrides.gridAggregation,
+    nearArithmetic: overrides.nearArithmetic ?? (precision === 'trig' ? 'refined' : 'native'),
+  })
   return {
     ...base,
+    name: `WebGPU composed (${policy} repulsion)`,
+    repulsionMethod: method,
+    readStructure: async (): ReturnType<CombinedBackend['readStructure']> => {
+      requireGrid()
+      return base.readStructure()
+    },
+    readCentroids: async (): ReturnType<NonNullable<CombinedBackend['readCentroids']>> => { requireGrid(); return base.readCentroids!() },
+    readBounds: async (): ReturnType<NonNullable<CombinedBackend['readBounds']>> => { requireGrid(); return base.readBounds!() },
+    diagnose: async (): ReturnType<NonNullable<CombinedBackend['diagnose']>> => {
+      requireGrid()
+      return base.diagnose!()
+    },
     resizeGraph (graph, input, preserve): ReturnType<NonNullable<CombinedBackend['resizeGraph']>> {
       nextGraph = graph
       try { return base.resizeInput!(input, preserve) } finally { nextGraph = undefined }
@@ -252,6 +294,7 @@ export async function createCombinedWebGPU (
       : undefined,
     profileCurrentFrame: overrides.gpuBounds
       ? async (alpha, tick, view): ReturnType<NonNullable<CombinedBackend['profileCurrentFrame']>> => {
+        if (method() === 'exact') throw new Error('The fifteen-stage grid profile requires hierarchical repulsion; use normal-frame timing for exact repulsion')
         base.resourceIdentity!(); base.setGpuFrame!(tick)
         const result = await measureGpuStages(device, (scope, draw) => {
           for (const next of STAGES) {

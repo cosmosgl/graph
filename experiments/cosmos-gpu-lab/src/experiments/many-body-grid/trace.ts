@@ -19,9 +19,10 @@ export function gpuTraceShader (source: string): string {
   let s = `${source}\n@group(0) @binding(10) var<storage, read_write> trace: array<vec4<f32>>;\n`
   const far = source.includes('fn accumulateMain(') ? '    far = farSums[level * u32(params.count) + targetIndex];' : '    far += velocity;'
   s = replaceOnce(s, far, `${far}\n    trace[level * u32(params.count) + targetIndex] = vec4(far, 0., 0.);`)
-  s = replaceOnce(s, '  near += near * randomDir;', `  let base = u32(params.levelCount) * u32(params.count) + targetIndex;
+  const jitter = source.includes('near += nearProduct(near, randomDir);') ? '  near += nearProduct(near, randomDir);' : '  near += near * randomDir;'
+  s = replaceOnce(s, jitter, `  let base = u32(params.levelCount) * u32(params.count) + targetIndex;
   trace[base] = vec4(near, 0., 0.);
-  near += near * randomDir;
+${jitter}
   trace[base + u32(params.count)] = vec4(near, 0., 0.);`)
   return replaceOnce(s, '  forces[targetIndex] = vec4(far + near, 0., 0.);', `  trace[base + 2u * u32(params.count)] = vec4(near, 0., 0.);
   forces[targetIndex] = vec4(far + near, 0., 0.);`)

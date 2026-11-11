@@ -7,8 +7,10 @@ import type { Snapshot } from '../many-body/reference'
 import type { LinkInput } from './topology'
 import type { Stage } from './data'
 import type { StageMeasurement } from './stage-timing'
+import type { RepulsionMethod } from './repulsion-policy'
 export type FrameBatch = { frames: number; draw: boolean; decay: number; view: View }
 export type CombinedBackend = GridBackend & {
+  repulsionMethod?(): RepulsionMethod;
   stepStage(stage: Stage, alpha: number): void;
   stepTick?(alpha: number, tick: number): void;
   resizeGraph?(graph: GraphInput, input: Input, preserve: boolean): PositionTransfer;
