@@ -147,8 +147,10 @@ The lower candidate median is an observation of this evolved star workload, not 
 Both variants keep the baseline's buffer initialization and usage flags; frame measurements still span broad,
 overlapping ranges and remain sensitive to execution order.
 
-The next investigation should profile the composed GPU stages under controlled, repeated inputs and check
-ordering effects before adopting a retention policy or trying larger stars. The diagnostic hierarchy still has
+The [controlled stage profiler](#/gpu-stage-profile/docs/method) now replays frozen inputs with balanced
+lane/method order and exact instrumentation checks. Its first M3 runs do not reproduce a consistent large
+retained-buffer penalty; hub springs and grid aggregation are the main diagnostic targets. Broader timing
+and retention policy are still open before trying larger stars. The diagnostic hierarchy still has
 atomic linked-list construction, per-cell ordering and a crowded-cell fallback. These can vary in cost even
 when deterministic accumulation produces identical answers; their contribution to these timing differences
 has not been isolated. No force arithmetic or tolerance changed in this experiment.

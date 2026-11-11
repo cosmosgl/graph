@@ -43,15 +43,16 @@ implementation and comparison. These are evidence levels, not a percentage of th
 | Circle point rendering | **Demonstrated:** matched WebGL sprites and WebGPU instanced circles | Complete shapes, strokes, images, transitions and render-order behavior |
 | Spatial indexing | **Demonstrated:** count/scan/scatter with variable cell occupancy | Establish production bounds, capacity, update and memory policies |
 | Local interaction and integration | **Partial:** CPU-validated local forces feeding GPU rendering | Preserve actual Cosmos integration and collision semantics |
-| Global many-body force | **Partial:** [exact](#/many-body) and corrected [hierarchical](#/many-body-grid) candidates have bounded native checks; precision costs are measured | Validate resident integration, adaptive sampling, scalable construction, wider convergence and cross-device cost |
-| Link forces and graph topology | **Partial:** ordered Cosmos spring passes validated against production GLSL and CPU; stable directional CSR and replacement | Long-term trajectories, state-preserving updates and composition with other forces; native execution limits |
+| Global many-body force | **Partial:** exact/hierarchical forces and resident composition have bounded checks through 8,192 points | Exact-to-grid switching, adaptive sampling, scalable construction, production defaults, wider quality and cross-device cost |
+| Link forces and graph topology | **Partial:** ordered springs, directional CSR, resident composition and state-preserving replacement | Default-length trajectories, broader parameters, hub cost and remaining force composition |
 | Complete rendering and interaction | **Partial:** circles and minimal straight links read GPU-resident state | Full point/link styling, picking, hover, drag, selection, tracking and overlays |
 | luma resource and execution APIs | **Partial:** all isolated experiments use luma resources, models/kernels, passes, fences and timestamps | Host ownership, device loss, reusable scheduling and complete-engine integration |
 | Public API and embedded use | **Unproven:** production contracts have not been ported | Dynamic updates, lifecycle, exposed position resources and deck integration |
 | Hardware/browser portability | **Partial:** native Apple measurements and software-WebGPU regressions | Native validation across the intended support matrix |
 
-The strongest conclusion today is **primitive feasibility**. The most important missing demonstration is
-**a representative Cosmos graph running its complete simulation and renderer through luma WebGPU**.
+The strongest conclusion today is a **validated, bounded WebGPU engine slice**: composed forces, GPU bounds,
+minimal drawing and live storage updates use public luma APIs. A representative Cosmos graph running its
+**complete simulation, renderer, interaction and library contract** is still the main missing demonstration.
 
 ### Where we are against the plan
 
@@ -74,6 +75,36 @@ same-device growth/shrinkage and cleanup evidence. [Retained capacity](#/point-c
 bounded update latency by reusing buffers and kernels, at a substantial idle-memory cost. Order-sensitive GPU
 frame cost still needs investigation before choosing a production retention policy.
 Broader forces, rendering and lifecycle validation should follow alongside targeted numerical work.
+
+### Audit: keep the demonstrated scope separate from production defaults
+
+The recent resource work follows the migration plan. Numerical parity has received more attention than
+remaining features; preserve the passing strict candidate and its unchanged tolerances as regression evidence,
+then broaden Cosmos coverage instead of making CPU-path arithmetic identity the only migration criterion.
+
+| Contract | Current evidence | Acceptance still needed |
+| --- | --- | --- |
+| Cooling/default parameters | Composed 100/300-tick schedules; spring variation `[1, 1]` | Production `simulationDecay: 5000` and variation `[1, 1.2]`; the current experiment rejects decay above 1,000 |
+| Repulsion selection | Isolated exact force and forced-hierarchy composition | 4,096/4,097 switching in both directions during updates |
+| Sampling/quality | Composed runs use eight slots and precise far-field quality | Production automatic sampling and quality policies, including their memory/update cost |
+| Graph size | Composed native acceptance through 8,192; some isolated force checks at 16,384 | The 32,768 scaling-harness option is not validated; the current custom WebGPU backend caps input at 16,384 |
+| Quality | Local numerical checks, independent trajectories and restoring probes | Agreed layout-quality criteria for dense, disconnected, coincident and hub-heavy graphs |
+| Hardware gate | M3 native checks plus software-browser regressions | Repeatable native acceptance on the intended GPU/browser matrix; ordinary CI does not run the opt-in native gate |
+
+Large reductions are not large graph layouts. Current update timings and memory use describe the bounded
+eight-sample workload, not the full production-default engine. Internal backend generations borrowing a
+lane-owned device also do not establish external host/deck ownership or device recovery.
+
+The current bounded investigation is [controlled GPU stage profiling](#/gpu-stage-profile): freeze the input
+positions, alpha, seed, topology and camera; balance execution order; compare normal whole-frame timing with
+diagnostic stage passes; require unchanged CPU tolerance and exact instrumentation/replay agreement. Use the
+results to prioritize scalable hierarchy work and retention/trim policy. Then return to the remaining forces,
+renderer, interaction and public API. `GPUCommandGraph` remains an optional evaluation, not a prerequisite.
+
+The [first controlled M3 profile](#/gpu-stage-profile/docs/method) now passes 240 trial and 12 anchor checks
+across six runs with the unchanged tolerance. Frozen inputs do not reproduce a consistent large retained-buffer
+penalty. The star's first spring pass dominates; aggregation, far-field work and strict gravity dominate chain
+and communities. Profiled passes are diagnostic and are measured separately from the ordinary frame path.
 
 ## 3. What the experiments tell us about Cosmos
 
@@ -213,7 +244,7 @@ independent CPU checks and the existing resident matrix still pass with unchange
 
 **Limit:** the correctness comparison intentionally synchronizes at checkpoints and keeps a staged reference
 lane; the benchmark measures an initial engine slice with a minimal renderer. Fixed sample counts, serial
-crowded-cell fallback and CPU topology construction remain. Broader rendering, reusable allocation,
+crowded-cell fallback and CPU topology construction remain. Broader rendering, retention/trim policy,
 host ownership and device-loss handling still need work before production adoption.
 
 ### Point-count changes: resident state can survive replacement storage
@@ -407,10 +438,13 @@ performance and memory meet the target budgets; supported devices are tested; an
 | Extend | Weighted-link compute-to-render path through luma | Can its demonstrated resource contract handle shared ownership, device loss and live updates? |
 | Extend | Weighted springs at larger sizes and over longer trajectories | Can ordered hub gathers and state-preserving topology updates meet the engine budget? |
 | Demonstrated in a bounded slice | [Resident tick, timing and state-preserving updates](#/resident-layout/docs/timing-updates) | GPU bounds and composed forces avoid routine readback; measured cost and update semantics now have native evidence |
-| Next | Adaptive samples and parallel hierarchy construction | Can the same approximation scale without serial dense-cell work? |
+| Demonstrated in a bounded slice | [Controlled GPU stage profiling](#/gpu-stage-profile/docs/method) | Frozen replays isolate stage costs and normal/profile timing; no consistent large retained-buffer penalty was reproduced |
+| Next bounded performance step | Ordered hub springs and grid aggregation | Which work dominates inside those stages, and can it be reduced without changing the existing checks? |
+| Next simulation contract | Production defaults and exact/grid switching | Do 5,000-decay runs, randomized spring lengths and automatic sampling preserve the existing checks? |
+| Next scaling step | Adaptive samples and parallel hierarchy construction | Can the same approximation scale without serial dense-cell work? |
 | Demonstrated in a bounded slice | [Point-count changes and buffer cleanup](#/point-capacity/docs/findings) | Surviving records transfer on the GPU; same devices and count-dependent footprints survive repeated cycles |
 | Demonstrated in a bounded slice | [Retained capacity and kernel reuse](#/point-capacity/docs/reuse) | In-capacity updates are cheaper locally; more idle memory is retained and GPU-frame timings remain order-sensitive |
-| Next resource step | Profile GPU stages, then define retention/trim and ownership policies | Can update gains preserve a practical frame/memory budget, and can a host safely own the device? |
+| Next resource step | Retention/trim and ownership policies | Can the measured update/frame work fit a practical memory budget, and can a host safely own the device? |
 | Supporting | Refined gravity cost and a bounded larger-star cost check | Can the strict precision reference scale affordably, and which arithmetic policy should production use? |
 | Alongside simulation | Links, richer points and picking from shared GPU state | Can Cosmos render and interact correctly without transferring all positions back? |
 | Then | Combined engine workload on multiple native GPUs | Is the whole migration practical for the intended users and graph sizes? |

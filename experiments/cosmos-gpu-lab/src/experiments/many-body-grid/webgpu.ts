@@ -1,4 +1,4 @@
-import { Buffer } from '@luma.gl/core'
+import { Buffer, type ComputePass } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
 import { createWebGPU, type WebGPUForceFactory, type WebGPUOptions } from '../many-body/webgpu'
 import { resourceScope } from '../../gpu/resource-scope'
@@ -13,6 +13,16 @@ import { frameSamples, layout, type Frame, type Structure } from './data'
 import { createGpuBounds } from './bounds'
 import type { GridBackend } from './backend'
 import shader from './grid.wgsl?raw'
+const profileGroups: Record<string, string> = {
+  clear: 'bin',
+  linkPoints: 'bin',
+  aggregate: 'aggregate',
+  selectSlots: 'samples',
+  centroidMain: 'centroids',
+  farMain: 'far',
+  accumulateMain: 'far',
+  forceMain: 'resolve',
+}
 export async function createGridWebGPU (
   canvas: HTMLCanvasElement, input: Input, p: Parameters, initial: Frame, centroidMode: CentroidMode = 'inline',
   wrapForce: (factory: WebGPUForceFactory) => WebGPUForceFactory = (factory): WebGPUForceFactory => factory,
@@ -194,7 +204,7 @@ export async function createGridWebGPU (
           if (gpuTick === undefined) box.write(frame.bounds)
           else bounds!.prepare(gpuTick)
         },
-        encode (source, timing, sharedPass): void {
+        encode (source, timing, sharedPass, profile): void {
           lastSource = source
           const sizes = [l.cells, count, l.cells, l.finest ** 2,
             ...(centroids ? [l.cells] : []), ...(farContributions ? [count] : []), ...(streamed ? [count] : []), count]
@@ -205,29 +215,41 @@ export async function createGridWebGPU (
             }
             return [{ i, farLevel: undefined }]
           }).filter(d => sizes[d.i] > 0)
+          const dispatch = (pass: ComputePass, { i, farLevel }: typeof dispatches[number]): void => {
+            kernels[i].dispatch(pass, {
+              x: Math.ceil(sizes[i] / 64),
+              bindings: Object.fromEntries(Object.entries({
+                positions: positions[source],
+                samples,
+                heads,
+                links,
+                aggregates,
+                slots,
+                forces,
+                levels,
+                params,
+                box,
+                ...(centroids ? { centroids } : {}),
+                ...(farContributions ? { farContributions } : {}),
+                ...(streamed ? { farLevel, farSums } : {}),
+              }).filter(([name]) => used[i].includes(name))),
+            })
+          }
+          if (profile) {
+            if (gpuTick !== undefined) profile('bounds', pass => bounds!.encode(pass, positions[source]))
+            const groups: Array<{ name: string; dispatches: typeof dispatches }> = []
+            for (const d of dispatches) {
+              const name = profileGroups[entryPoints[d.i]]
+              if (groups.at(-1)?.name !== name) groups.push({ name, dispatches: [] })
+              groups.at(-1)!.dispatches.push(d)
+            }
+            for (const group of groups) profile(group.name, pass => { for (const d of group.dispatches) dispatch(pass, d) })
+            return
+          }
           const pass = sharedPass ?? device.beginComputePass(timing)
           try {
             if (gpuTick !== undefined) bounds!.encode(pass, positions[source])
-            for (const { i, farLevel } of dispatches) {
-              kernels[i].dispatch(pass, {
-                x: Math.ceil(sizes[i] / 64),
-                bindings: Object.fromEntries(Object.entries({
-                  positions: positions[source],
-                  samples,
-                  heads,
-                  links,
-                  aggregates,
-                  slots,
-                  forces,
-                  levels,
-                  params,
-                  box,
-                  ...(centroids ? { centroids } : {}),
-                  ...(farContributions ? { farContributions } : {}),
-                  ...(streamed ? { farLevel, farSums } : {}),
-                }).filter(([name]) => used[i].includes(name))),
-              })
-            }
+            for (const d of dispatches) dispatch(pass, d)
           } finally { if (!sharedPass) pass.end() }
         },
         destroy: scope.destroy,

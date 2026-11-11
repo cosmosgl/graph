@@ -1,4 +1,4 @@
-import { Buffer, type Device } from '@luma.gl/core'
+import { Buffer, type Device, type ComputePass } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
 import { bindingLayout, upload, createStorageRenderer } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
@@ -11,6 +11,7 @@ import { createGridWebGPU } from '../many-body-grid/webgpu'
 import { frameFor } from '../many-body-grid/data'
 import { createLinkResources } from './topology'
 import { measureFrameBatch } from './frame-timing'
+import { measureGpuStages } from './stage-timing'
 import { cool, GRAVITY, REPULSION, SPRINGS, STAGES, type SpringPrecision, type Stage } from './data'
 import { polarGravitySource, refinedGravitySource } from './gravity-source'
 import type { CombinedBackend } from './backend'
@@ -128,10 +129,9 @@ export async function createCombinedWebGPU (
               SPRINGS.friction, SPRINGS.maxStep, 0, 0, 0, count, 0]))
           }
         },
-        encode (source, timing, sharedPass): void {
-          if (stage === 'repulsion') { grid.encode(source, timing, sharedPass); return }
-          const pass = sharedPass ?? device.beginComputePass(timing)
-          try {
+        encode (source, timing, sharedPass, profile): void {
+          if (stage === 'repulsion') { grid.encode(source, timing, sharedPass, profile); return }
+          const encode = (pass: ComputePass): void => {
             if (stage === 'gravity') {
               gravity.dispatch(pass, {
                 x: Math.ceil(count / 64),
@@ -151,7 +151,10 @@ export async function createCombinedWebGPU (
                 },
               })
             }
-          } finally { if (!sharedPass) pass.end() }
+          }
+          if (profile) { profile('force', encode); return }
+          const pass = sharedPass ?? device.beginComputePass(timing)
+          try { encode(pass) } finally { if (!sharedPass) pass.end() }
         },
         destroy: scope.destroy,
       }
@@ -164,6 +167,19 @@ export async function createCombinedWebGPU (
       try { return base.resizeInput!(input, preserve) } finally { nextGraph = undefined }
     },
     replaceLinks: (next): ReturnType<NonNullable<CombinedBackend['replaceLinks']>> => { base.resourceIdentity!(); return replaceLinks(next) },
+    profileCurrentFrame: overrides.gpuBounds
+      ? async (alpha, tick, view): ReturnType<NonNullable<CombinedBackend['profileCurrentFrame']>> => {
+        base.resourceIdentity!(); base.setGpuFrame!(tick)
+        const result = await measureGpuStages(device, (scope, draw) => {
+          for (const next of STAGES) {
+            stage = next; p.alpha = alpha
+            base.step({ submit: false, profile: (name, work) => scope(`${next}.${name}`, work) })
+          }
+          base.render(view, draw(), false)
+        }).catch(error => { base.resourceIdentity!(); throw error })
+        return { ...result, snapshot: await base.read() }
+      }
+      : undefined,
     measureCurrentFrame: overrides.gpuBounds
       ? async (alpha, tick, view): ReturnType<NonNullable<CombinedBackend['measureCurrentFrame']>> => {
         base.resourceIdentity!()

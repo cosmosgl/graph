@@ -81,8 +81,9 @@ the swap; [WebGPU buffer destruction](https://www.w3.org/TR/webgpu/#dom-gpubuffe
 submitted work to complete. The update table reports CPU build/allocation/upload submission time and buffer
 bytes, not GPU completion latency or peak memory. JSON includes versions and retained-resource checks.
 
-Changing the point count, growing position capacity, a shared host device, device recovery and atomic updates
-across independently owned devices remain future work. An execution error requires resetting the comparison.
+The [capacity experiment](#/point-capacity/docs/reuse) separately validates point-count changes, growth and
+retained storage. Shared host devices, device recovery and atomic updates across independently owned devices
+remain future work. An execution error requires resetting the comparison.
 Timing uses fresh fixtures on a separate device and preserves the displayed comparison and edit history.
 
 ## Reproduce
@@ -139,4 +140,5 @@ them in local exports rather than presenting them as portable update-performance
 
 The focused native suite passes **13 tests**, including the 40-checkpoint resident matrix, frame replay and
 an independent CPU whole-tick check after topology updates. Tolerances remain unchanged. Wider trajectories,
-default-length cooling, point-capacity growth, memory/lifetime stress and other GPUs remain open.
+default-length cooling and other GPUs remain open. Bounded count changes and memory/lifetime checks now have
+separate [capacity evidence](#/point-capacity/docs/reuse); full-engine memory and recovery still need validation.
