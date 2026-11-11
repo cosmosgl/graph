@@ -7,7 +7,7 @@ import { createCombinedWebGPU } from './webgpu'
 import { createCombinedSession } from './session'
 import { createOracle } from './reference'
 import { createCombinedView } from './view'
-import { cool } from './data'
+import { cool, PRECISION_MODES } from './data'
 import { compareSpringPrecision } from './spring-study'
 vi.mock('./webgl', () => ({ createCombinedWebGL: vi.fn() }))
 vi.mock('./webgpu', () => ({ createCombinedWebGPU: vi.fn() }))
@@ -165,17 +165,17 @@ it('compares all spring modes on frozen captures without changing the live sessi
     const points = s.lanes.map(l => l.positions.slice()); const cpu = s.cpu().slice(); const alpha = s.alpha()
     const history = JSON.stringify(s.rows); const captures = JSON.stringify(s.firstFailures)
     const rows = await compareSpringPrecision(s)
-    expect(rows).toHaveLength(12)
+    expect(rows).toHaveLength(PRECISION_MODES.length * 2)
     expect(rows.every(r => !r.error && r.forces && r.positions)).toBe(true)
-    expect(vi.mocked(createCombinedWebGPU).mock.calls.slice(-6).map(call => call[3]))
-      .toEqual(['baseline', 'force', 'integration', 'both', 'refined', 'distance'])
+    expect(vi.mocked(createCombinedWebGPU).mock.calls.slice(-PRECISION_MODES.length).map(call => call[3]))
+      .toEqual(PRECISION_MODES)
     expect(s.lanes.map(l => l.positions)).toEqual(points); expect(s.cpu()).toEqual(cpu)
     expect(s.alpha()).toBe(alpha); expect(JSON.stringify(s.rows)).toBe(history); expect(JSON.stringify(s.firstFailures)).toBe(captures)
-    expect(destroyed).toBe(6)
+    expect(destroyed).toBe(PRECISION_MODES.length)
     expect(await compareSpringPrecision(s, () => true)).toEqual([])
-    expect(destroyed).toBe(6)
+    expect(destroyed).toBe(PRECISION_MODES.length)
   } finally { s.destroy() }
-  expect(destroyed).toBe(8)
+  expect(destroyed).toBe(PRECISION_MODES.length + 2)
 })
 it('records comparison setup errors without losing successful modes', async () => {
   setup()
@@ -184,10 +184,10 @@ it('records comparison setup errors without losing successful modes', async () =
     await s.step()
     vi.mocked(createCombinedWebGPU).mockRejectedValueOnce(new Error('Test precision pipeline failure'))
     const rows = await compareSpringPrecision(s)
-    expect(rows).toHaveLength(12)
+    expect(rows).toHaveLength(PRECISION_MODES.length * 2)
     expect(rows.filter(r => r.error)).toHaveLength(2)
     expect(rows.filter(r => r.error).every(r => r.mode === 'baseline')).toBe(true)
-    expect(destroyed).toBe(5)
+    expect(destroyed).toBe(PRECISION_MODES.length - 1)
     expect(s.errors).toEqual({})
   } finally { s.destroy() }
 })

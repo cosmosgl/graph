@@ -2,6 +2,7 @@ import type { ExperimentInstance } from '../../runtime/experiment'
 import { fitView } from '../many-body/backend'
 import { TOLERANCE as repulsionTolerance } from '../many-body/reference'
 import { TOLERANCE as springTolerance } from '../weighted-links/reference'
+import { isolateSpringFailure, TRACE_FIELDS, type IsolationReport } from './spring-isolation'
 import { benchmarkSprings, type SpringTimingRow } from './spring-benchmark'
 import { compareSpringPrecision, type SpringStudyRow } from './spring-study'
 import { PRECISION_MODES, PRECISION_LABELS, GRAVITY, REPULSION, SPRINGS, type Fixture, type SpringPrecision } from './data'
@@ -19,7 +20,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       <label>WebGPU spring arithmetic <select data-control="precision">${PRECISION_MODES.map(mode =>
     `<option value="${mode}">${PRECISION_LABELS[mode]}</option>`).join('')}</select></label>
     </div>
-    <p class="demo-note">Precision candidates use luma's integer-controlled arithmetic for selected spring operations.
+    <p class="demo-note">Precision candidates use integer-controlled rounding for selected spring operations through luma compute kernels.
       Production WebGL, gravity, repulsion and CPU arithmetic stay unchanged. Native f32 remains the baseline.</p>
     <p class="demo-note">Checkpoint mode checks all four stages and the whole tick at selected ticks only. Other ticks are unvalidated.
       CPU continues independently; bounds and final metrics still require readback. All force tolerances stay unchanged.</p>
@@ -29,6 +30,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       <button data-action="replay" disabled>Replay first failures</button>
       <button data-action="precision-study" disabled>Compare spring rounding</button>
       <button data-action="spring-timing">Time spring arithmetic</button>
+      <button data-action="spring-isolation" disabled>Isolate spring error</button>
       <button data-action="reset">Reset / retry</button><button data-action="export" disabled>Export JSON</button></div>
       <span class="tick-counter">Tick <strong data-output="tick">0</strong> · α <strong data-output="alpha">1</strong></span></div>
     <p data-output="status" class="many-body-status" role="status">Preparing combined simulation…</p>
@@ -41,12 +43,13 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     <div data-output="results" class="many-body-results"></div><div data-output="probe" class="many-body-results"></div>
     <div data-output="captures" class="many-body-results"></div><div data-output="replay" class="many-body-results"></div>
     <div data-output="precision-study" class="many-body-results"></div>
-    <div data-output="spring-timing" class="many-body-results"></div><div data-output="chart" class="trajectory-chart"></div>`
+    <div data-output="spring-timing" class="many-body-results"></div>
+    <div data-output="spring-isolation" class="many-body-results"></div><div data-output="chart" class="trajectory-chart"></div>`
   const el = <T extends HTMLElement>(q: string): T => host.querySelector<T>(q)!
   const control = (name: string): HTMLSelectElement => el(`[data-control="${name}"]`)
   const canvas = (name: Name | 'CPU'): HTMLCanvasElement => el(`[data-canvas="${name}"]`)
   let session: CombinedSession | undefined; let probe: Row | undefined; let busy = false; let stopped = false; let destroyed = false
-  let precisionStudy: SpringStudyRow[] = []; let springTimings: SpringTimingRow[] = []
+  let precisionStudy: SpringStudyRow[] = []; let springTimings: SpringTimingRow[] = []; let springIsolation: IsolationReport | undefined
   const status = el('[data-output="status"]')
   const controls = (): void => {
     host.querySelectorAll<HTMLButtonElement | HTMLSelectElement>('button,select').forEach(c => { c.disabled = busy })
@@ -54,6 +57,8 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     el<HTMLButtonElement>('[data-action="export"]').disabled = busy || (!session?.rows.length && !probe && !springTimings.length)
     el<HTMLButtonElement>('[data-action="precision-study"]').disabled = busy || !session ||
       !Object.keys(session.firstFailures).some(k => k.endsWith('-incoming') || k.endsWith('-outgoing'))
+    el<HTMLButtonElement>('[data-action="spring-isolation"]').disabled = busy || session?.settings.springPrecision !== 'distance' ||
+      !Object.keys(session.firstFailures).some(k => k === 'webgpu-incoming' || k === 'webgpu-outgoing')
     el<HTMLButtonElement>('[data-action="replay"]').disabled = busy || !session || !Object.keys(session.captures).length
     el<HTMLButtonElement>('[data-action="run"]').disabled = busy || !session || session.rows.length >= session.settings.decay
   }
@@ -154,7 +159,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       : ''
     el('[data-output="precision-study"]').innerHTML = precisionStudy.length
       ? `<h3>Frozen spring-input comparison</h3>
-      <p class="demo-note">All six WebGPU modes use the same captured stage inputs and CPU expectations.
+      <p class="demo-note">All seven WebGPU modes use the same captured stage inputs and CPU expectations.
         Separate devices leave the current layout unchanged. This isolates arithmetic; it is not a trajectory or timing result.</p>
       <table><thead><tr><th>Mode</th><th>Capture / tick</th><th>Force failures</th><th>Position failures</th><th>Max position error</th></tr></thead><tbody>
       ${precisionStudy.map(r => `<tr><td>${PRECISION_LABELS[r.mode]}</td><td>${r.capture} / ${r.tick}</td>
@@ -181,6 +186,28 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       <td>${r.error ? 'Error (see export)' : !r.checks.length ? 'Not checked' : !valid ? 'FAIL' : r.samples.length === 7 ? 'Pass' : 'Partial'}</td></tr>`
   }).join('')}</tbody></table>`
       : ''
+    el('[data-output="spring-isolation"]').innerHTML = springIsolation
+      ? `<h3>Distance-only error isolation</h3>
+      <p>Captured tick ${springIsolation.tick}, point ${springIsolation.point}, axis ${['x', 'y', 'pinned', 'absent'][springIsolation.axis]}.
+      Position error ${num(Math.abs(springIsolation.actual - springIsolation.expected))}; allowed ${num(springIsolation.budget)}.</p>
+      <p class="demo-note">Replay matches captured bits: ${springIsolation.baselineMatchesCapture ? 'Yes' : 'NO'}.
+      Instrumented trace matches the uninstrumented output: ${springIsolation.traceMatchesBaseline ? 'Yes' : 'NO — trace may perturb arithmetic'}.
+      The ablations below use uninstrumented shaders on identical frozen inputs. Live layout and tolerance are unchanged.</p>
+      <table><thead><tr><th>Rounded products</th><th>Force failures</th><th>Position failures</th><th>Max position error</th></tr></thead><tbody>
+      ${springIsolation.rows.map(r => `<tr><td>${r.correction}</td><td>${r.forces.failures}</td><td>${r.positions.failures}</td>
+        <td>${num(r.positions.maxError)}</td></tr>`).join('')}</tbody></table>
+      <h4>Intermediate differences at the captured point</h4>
+      <p class="demo-note">${springIsolation.traceMatchesBaseline
+    ? 'Only differing fields are listed, in edge and operation order.'
+    : 'Instrumentation changes the output: these values describe the instrumented shader, not the original failure.'} Full trace values are in the export.
+        A trace can change compilation; the bit checks above bound how confidently it can explain the original shader.</p>
+      <table><thead><tr><th>Edge ID</th><th>Operation</th><th>GPU</th><th>CPU</th></tr></thead><tbody>
+      ${Array.from(springIsolation.expectedTrace).flatMap((v, i) => v === springIsolation!.actualTrace[i]
+    ? []
+    : [`<tr><td>${springIsolation!.edges[Math.floor(i / 16)]}</td><td>${TRACE_FIELDS[i % 16]}</td>
+      <td>${springIsolation!.actualTrace[i].toPrecision(10)}</td><td>${v.toPrecision(10)}</td></tr>`]).join('') ||
+    '<tr><td colspan="4">No differences at this point in the instrumented shader.</td></tr>'}</tbody></table>`
+      : ''
     if (!row) { el('[data-output="chart"]').replaceChildren(); return }
     const charts = [
       { title: 'RMS motion per tick', get: (m: Row['cpu']) => m.motion.rms },
@@ -204,7 +231,8 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     }).join('')}<p>${[...BACKENDS, 'CPU' as const].map(n => `<span style="color:${colors[n]}">${LABELS[n]}</span>`).join(' · ')}</p>`
   }
   const setup = async (): Promise<void> => {
-    session?.destroy(); session = undefined; probe = undefined; precisionStudy = []; springTimings = []; status.textContent = 'Preparing combined simulation…'
+    session?.destroy(); session = undefined; probe = undefined; precisionStudy = []; springTimings = []; springIsolation = undefined
+    status.textContent = 'Preparing combined simulation…'
     for (const name of BACKENDS) { const old = canvas(name); old.replaceWith(old.cloneNode()) }
     const next = await createCombinedSession({
       fixture: control('fixture').value as Fixture,
@@ -279,7 +307,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
   el('[data-action="precision-study"]').addEventListener('click', () => {
     task(async () => {
       if (!session) return
-      status.textContent = 'Comparing six WebGPU arithmetic modes on captured spring inputs…'
+      status.textContent = 'Comparing seven WebGPU arithmetic modes on captured spring inputs…'
       precisionStudy = await compareSpringPrecision(session, () => stopped || destroyed)
       if (destroyed) return
       render(); status.textContent = precisionStudy.some(r => r.error)
@@ -303,6 +331,16 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       el('[data-output="spring-timing"]').scrollIntoView({ behavior: 'smooth', block: 'start' })
     })
   })
+  el('[data-action="spring-isolation"]').addEventListener('click', () => {
+    task(async () => {
+      if (!session) return
+      status.textContent = 'Replaying the captured spring stage and comparing product-rounding ablations…'
+      springIsolation = await isolateSpringFailure(session, () => stopped || destroyed)
+      if (destroyed) return
+      render(); status.textContent = 'Isolation finished. Compare the uninstrumented ablations and trace consistency below.'
+      el('[data-output="spring-isolation"]').scrollIntoView({ behavior: 'smooth', block: 'start' })
+    })
+  })
   el('[data-action="export"]').addEventListener('click', () => {
     if (!session) return
     const json = JSON.stringify({
@@ -322,6 +360,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       replays: session.replays,
       precisionStudy,
       springTimings,
+      springIsolation,
       devices: Object.fromEntries(session.lanes.map(l => [l.name, l.backend.info])),
     }, (_key, value) => ArrayBuffer.isView(value)
       ? Array.from(value as Float32Array)

@@ -66,10 +66,11 @@ export async function createCombinedWebGPU (
       const spring = own(precision === 'force' || precision === 'both' || precision === 'refined'
         ? await createRoundedKernel(device, roundedSpringSource(precision === 'refined'), springBindings)
         : await Kernel.createAsync(device, {
-          source: precision === 'distance' ? distanceSpringSource() : springSource, shaderLayout: { bindings: springBindings },
+          source: precision === 'products' ? distanceSpringSource('products') : precision === 'distance' ? distanceSpringSource() : springSource,
+          shaderLayout: { bindings: springBindings },
         }))
       const integrationParams = own(upload(device, new Float32Array([count, 0, 0, 0, p.friction, p.referenceLength, 0, 0]), Buffer.UNIFORM))
-      const integration = precision === 'integration' || precision === 'both' || precision === 'refined' || precision === 'distance'
+      const integration = precision === 'integration' || precision === 'both' || precision === 'refined' || precision === 'distance' || precision === 'products'
         ? own(await createRoundedKernel(device, roundedIntegrationSource(), bindingLayout([
           ['positions', 'read-only-storage'], ['forces', 'read-only-storage'], ['params', 'uniform'], ['output', 'storage'],
         ])))

@@ -151,7 +151,9 @@ and its integration passes all scheduled WebGPU checks and full-strength probes 
 2,048-point runs, without changing the budget. Frozen captures show that integration-only rounding is insufficient.
 The [spring cost study](#/combined-layout/docs/spring-cost) now tests a narrower division/root correction: it passes
 the same larger trajectory cases and reduces the M3 star hub pass from about 119 ms to 67 ms. That remains much too
-costly compared with the 0.51 ms baseline. A much faster distance-only candidate still fails cancellation checks.
+costly compared with the 0.51 ms baseline. The distance-only candidate still fails cancellation checks, but a [targeted product correction](#/combined-layout/docs/spring-products)
+fixes its counterexample and passes 252 scheduled checkpoints and 12 probes across the 512/2,048-point matrix.
+Its rerun star hub cost is 1.74 ms, versus 67.32 ms refined and 120.34 ms fully rounded, with the same tolerance.
 Cross-device behavior remains unvalidated; native f32 remains the default. Unchecked ticks
 are not counted as passing.
 
@@ -320,7 +322,7 @@ performance and memory meet the target budgets; supported devices are tested; an
 | --- | --- | --- |
 | Extend | Weighted-link compute-to-render path through luma | Can its demonstrated resource contract handle shared ownership, device loss and live updates? |
 | Extend | Weighted springs at larger sizes and over longer trajectories | Can ordered hub gathers and state-preserving topology updates meet the engine budget? |
-| First | Narrow the [spring precision cost](#/combined-layout/docs/spring-cost) further, then extend size and cooling coverage | Can targeted correction preserve strict agreement without making hub gathers prohibitively expensive? |
+| First | Extend [targeted spring rounding](#/combined-layout/docs/spring-products) to larger graphs, longer cooling and production options | Does the measured precision/cost improvement survive larger hubs, varied weights and other GPUs? |
 | Then | GPU bounds, adaptive samples and parallel hierarchy construction | Can the same approximation scale without CPU synchronization or serial dense-cell work? |
 | Alongside simulation | Links, richer points and picking from shared GPU state | Can Cosmos render and interact correctly without transferring all positions back? |
 | Then | Combined engine workload on multiple native GPUs | Is the whole migration practical for the intended users and graph sizes? |
