@@ -1,6 +1,6 @@
 import { Buffer, type Device, type ComputePass } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
-import { bindingLayout, upload, createStorageRenderer } from '../../gpu/luma'
+import { bindingLayout, upload, createStorageRenderer, readFloats } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import type { WebGPUOptions } from '../many-body/webgpu'
 import type { Input } from '../many-body/data'
@@ -39,26 +39,29 @@ export async function createCombinedWebGPU (
   canvas: HTMLCanvasElement, graph: GraphInput, input: Input, precision: SpringPrecision = 'baseline',
   overrides: WebGPUOptions & {
     roundedStages?: readonly Stage[]; polarGravity?: boolean; refinedTrig?: boolean; gpuBounds?: boolean; springOptimization?: SpringOptimization;
+    hubThreshold?: number;
   } = {}
 ): Promise<CombinedBackend> {
   const optimization = overrides.springOptimization ?? 'baseline'
   if (optimization !== 'baseline' && precision !== 'trig') throw new Error('Spring optimization requires the strict trig candidate')
-  const prefetch = optimization === 'prefetch' ? prefetchSpringSources() : undefined
+  const hubThreshold = overrides.hubThreshold ?? HUB_THRESHOLD
+  const prefetch = optimization === 'prefetch' ? prefetchSpringSources(hubThreshold) : undefined
   const roundedStages = overrides.roundedStages ?? []
   const polarGravity = overrides.polarGravity ?? (precision === 'aligned' || precision === 'trig')
   const refinedTrig = overrides.refinedTrig ?? precision === 'trig'
   let stage: Stage = 'gravity'; const p = { ...REPULSION }
   let nextGraph: GraphInput | undefined
-  let device: Device; let replaceLinks: NonNullable<CombinedBackend['replaceLinks']>
+  let device: Device; let frameForces: Buffer; let replaceLinks: NonNullable<CombinedBackend['replaceLinks']>
   const base = await createGridWebGPU(canvas, input, p, frameFor(input.points, 0), 'streamed', gridFactory => async resources => {
     const { positions, forces } = resources; let count = resources.count
+    frameForces = forces
     device = resources.device
     const scope = resourceScope(overrides.context?.ledger); const own = scope.own
     try {
       const grid = own(await gridFactory(resources))
       const gravityParams = own(upload(device, new Float32Array(4), Buffer.UNIFORM))
       const springParams = own(upload(device, new Float32Array(12), Buffer.UNIFORM))
-      const threshold = prefetch ? HUB_THRESHOLD : undefined
+      const threshold = prefetch ? hubThreshold : undefined
       let linkResources = createLinkResources(device, input.points, graph, overrides.context?.ledger, threshold); let version = 0
       own({ destroy: () => linkResources.destroy() })
       replaceLinks = (next): ReturnType<NonNullable<CombinedBackend['replaceLinks']>> => {
@@ -100,6 +103,11 @@ export async function createCombinedWebGPU (
           shaderLayout: { bindings: [...springBindings, { name: 'hubs', location: 6, type: 'read-only-storage', group: 0 }] },
         }))
         : undefined
+      // Directions without hubs use the unchanged baseline source, avoiding a
+      // degree guard and hoist on every low-degree point. No extra dispatch.
+      const fallback = prefetch
+        ? own(await Kernel.createAsync(device, { source: distanceSpringSource('products'), shaderLayout: { bindings: springBindings } }))
+        : spring
       const integrationParams = own(upload(device, new Float32Array([count, 0, 0, 0, p.friction, p.referenceLength, 0, 0]), Buffer.UNIFORM))
       const integration = roundSpring || extraStages.length > 0
         ? own(await createRoundedKernel(device, roundedIntegrationSource(), bindingLayout([
@@ -154,7 +162,8 @@ export async function createCombinedWebGPU (
               })
             } else {
               const side = stage === 'incoming' ? 0 : 1
-              spring.dispatch(pass, {
+              const kernel = hub && !linkResources.hubCounts[side] ? fallback : spring
+              kernel.dispatch(pass, {
                 x: Math.ceil(count / 64),
                 bindings: {
                   positions: positions[source],
@@ -196,6 +205,50 @@ export async function createCombinedWebGPU (
       try { return base.resizeInput!(input, preserve) } finally { nextGraph = undefined }
     },
     replaceLinks: (next): ReturnType<NonNullable<CombinedBackend['replaceLinks']>> => { base.resourceIdentity!(); return replaceLinks(next) },
+    measureFrozenFrames: overrides.gpuBounds
+      ? async ({ frames, alpha, tick, view }): ReturnType<NonNullable<CombinedBackend['measureFrozenFrames']>> => {
+        validateBatch(frames); base.resourceIdentity!()
+        const bytes = base.positionSource!().count * 16; const scope = resourceScope(overrides.context?.ledger)
+        const allocate = (byteLength: number): Buffer => scope.own(device.createBuffer({
+          byteLength, usage: Buffer.COPY_SRC | Buffer.COPY_DST,
+        }))
+        try {
+          const frozen = allocate(bytes); const outputs = allocate(bytes * frames); const forces = allocate(bytes * frames)
+          device.commandEncoder.copyBufferToBuffer({ sourceBuffer: base.positionSource!().buffer, destinationBuffer: frozen, size: bytes })
+          device.submit()
+          const timing = await measureFrameBatch(device, frames, 2, (query, frame) => {
+            // Copies are outside pass timestamp endpoints. Capture EVERY frame
+            // for validation after the batch; no CPU wait separates its frames.
+            device.commandEncoder.copyBufferToBuffer({ sourceBuffer: frozen, destinationBuffer: base.positionSource!().buffer, size: bytes })
+            base.setGpuFrame!(tick)
+            const pass = device.beginComputePass(query
+              ? { timestampQuerySet: query, beginTimestampIndex: frame * 4, endTimestampIndex: frame * 4 + 1 }
+              : {})
+            try {
+              for (const next of STAGES) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
+            } finally { pass.end() }
+            base.render(view, query
+              ? { timestampQuerySet: query, beginTimestampIndex: frame * 4 + 2, endTimestampIndex: frame * 4 + 3 }
+              : {}, false)
+            device.commandEncoder.copyBufferToBuffer({
+              sourceBuffer: base.positionSource!().buffer, destinationBuffer: outputs, destinationOffset: frame * bytes, size: bytes,
+            })
+            device.commandEncoder.copyBufferToBuffer({
+              sourceBuffer: frameForces, destinationBuffer: forces, destinationOffset: frame * bytes, size: bytes,
+            })
+          })
+          const [allPositions, allForces] = await Promise.all([readFloats(outputs), readFloats(forces)])
+          const floats = bytes / 4
+          return {
+            timing,
+            frameGpuMs: timing.frameGpuMs,
+            snapshots: Array.from({ length: frames }, (_, i) => ({
+              positions: allPositions.slice(i * floats, (i + 1) * floats), forces: allForces.slice(i * floats, (i + 1) * floats),
+            })),
+          }
+        } finally { scope.destroy() }
+      }
+      : undefined,
     profileCurrentFrame: overrides.gpuBounds
       ? async (alpha, tick, view): ReturnType<NonNullable<CombinedBackend['profileCurrentFrame']>> => {
         base.resourceIdentity!(); base.setGpuFrame!(tick)

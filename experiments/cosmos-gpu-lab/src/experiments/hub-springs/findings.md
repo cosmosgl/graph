@@ -1,3 +1,8 @@
+For current controls and stronger acceptance evidence, see [Trajectories and thresholds](#/hub-springs/docs/acceptance).
+The first study below used threshold 64, no plain-direction fallback and per-frame readback. Its timings
+are historical observations; do not pool them with the newer GPU-batched measurements. The follow-up also
+checks spring stages against their original tighter CPU budget.
+
 This experiment follows the [controlled stage profile](#/gpu-stage-profile/docs/method), where the star's
 first directional spring pass dominated GPU time. It adds an **unpinned hub control**, a **degree sweep** and
 order-preserving shader candidates. Existing CPU references and tolerances stay unchanged.

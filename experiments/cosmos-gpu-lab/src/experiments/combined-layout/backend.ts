@@ -15,6 +15,9 @@ export type CombinedBackend = GridBackend & {
   replaceLinks?(input: LinkInput): { version: number; bytes: number; edgeCount: number; buildMs: number };
   measureFrames?(options: FrameBatch): Promise<{ timing: Measurement; snapshot: Snapshot }>;
   measureCurrentFrame?(alpha: number, tick: number, view: View): Promise<{ timing: Measurement; snapshot: Snapshot }>;
+  measureFrozenFrames?(options: { frames: number; alpha: number; tick: number; view: View }): Promise<{
+    timing: Measurement; frameGpuMs: Array<number | null>; snapshots: Snapshot[];
+  }>;
   profileCurrentFrame?(alpha: number, tick: number, view: View): Promise<StageMeasurement & { snapshot: Snapshot }>;
   measureStage?(stage: Stage, alpha: number, phase: 'force' | 'step', operations: number): ReturnType<GridBackend['measure']>;
   measureSpring?(stage: 'incoming' | 'outgoing', alpha: number, phase: 'force' | 'step', operations: number): ReturnType<GridBackend['measure']>;
