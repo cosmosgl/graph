@@ -1,6 +1,7 @@
 import type { Buffer, Device, ComputePass } from '@luma.gl/core'
 import type { Snapshot } from './reference'
 import type { Measurement, Stage, TimestampWrites } from './timing'
+import type { Input } from './data'
 export type PositionSource = { device: Device; buffer: Buffer; count: number }
 export type PositionTransfer = { preserved: number; copiedBytes: number; uploadedBytes: number; copySubmitMs: number }
 export type View = [number, number, number, number]
@@ -13,6 +14,7 @@ export type Backend = {
   patchPositions?(first: number, data: Float32Array): void;
   resourceIdentity?(): { device: string; positions: string[] };
   positionSource?(): PositionSource;
+  resizeInput?(input: Input, preserve: boolean): PositionTransfer;
   setAbsent?(index: number, absent: boolean): void;
   measure(stage: Stage, operations: number): Promise<{ timing: Measurement; snapshot: Snapshot }>;
   read(): Promise<Snapshot>;

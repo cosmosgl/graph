@@ -1,12 +1,16 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
-import { createCapacitySession, type CapacitySession } from '../combined-layout/capacity-session'
+import { createCapacitySession, type CapacitySession, type CapacityComparison } from '../combined-layout/capacity-session'
 import { CAPACITY_CYCLE } from '../combined-layout/capacity'
 import type { Fixture, Settings } from '../combined-layout/data'
 const mib = (bytes: number): string => (bytes / 1048576).toFixed(3)
 export async function createCapacityView (host: HTMLElement): Promise<ExperimentInstance> {
-  host.innerHTML = `<p class="demo-note">Resize storage without resetting devices, tick or cooling. The CPU reference downloads the surviving prefix;
-    the resident path copies it on the GPU and uploads only new tail positions. Refined arithmetic; immediate updates; fixed camera.</p>
-    <div class="scale-toolbar"><label>Graph <select data-control="fixture"><option>chain</option><option>communities</option>
+  host.innerHTML = `<p class="demo-note">Resize storage without resetting devices, tick or cooling.
+    Compare rebuilding against retained buffers/kernels, or revisit the CPU-copy transfer control.
+    Refined arithmetic; immediate updates; fixed camera.</p>
+    <div class="scale-toolbar"><label>Comparison <select data-control="comparison">
+      <option value="reuse" selected>GPU rebuild vs retained capacity</option>
+      <option value="transfer">CPU copy vs GPU rebuild</option></select></label>
+      <label>Graph <select data-control="fixture"><option>chain</option><option>communities</option>
       <option>star</option></select></label>
       <label>Repetitions <select data-control="repeats"><option>1</option><option selected>3</option><option>5</option></select></label>
       <label class="checkbox-control"><input data-control="cpu" type="checkbox" checked> Check unchanged CPU tolerance</label></div>
@@ -14,9 +18,9 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
       <button data-action="stop" disabled>Stop</button><button data-action="reset">Reset / retry</button>
       <button data-action="export" disabled>Export JSON</button></div>
     <p data-output="status" role="status">Preparing 2,048-point lanes…</p>
-    <section class="backend-panels">${['CPU-copy reference', 'GPU-resident copy'].map((name, i) => `<article class="backend-panel">
-      <div class="panel-heading"><h2>${name}</h2><span data-output="memory-${i}" class="status">Starting</span></div>
-      <canvas data-lane="${i}" width="480" height="340" aria-label="${name} capacity layout"></canvas>
+    <section class="backend-panels">${['GPU rebuild', 'GPU retained capacity'].map((name, i) => `<article class="backend-panel">
+      <div class="panel-heading"><h2 data-output="name-${i}">${name}</h2><span data-output="memory-${i}" class="status">Starting</span></div>
+      <canvas data-lane="${i}" width="480" height="340" aria-label="${name} layout"></canvas>
       <p class="demo-note" data-output="info-${i}"></p></article>`).join('')}</section>
     <p class="demo-note">Cycle: 2,048 → 8,192 → 4,096 → 8,192 → 2,048. A resize preserves surviving indices, pinning and absence;
       regrowth initializes the removed tail. Checks download snapshots outside each measured update/frame.</p>
@@ -25,13 +29,13 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
       <button data-action="resize">Resize + preserve</button><button data-action="replace">Replace all positions</button>
       <button data-action="pin">Move + pin point 0</button><button data-action="hide">Hide point 1</button>
       <button data-action="restore">Restore point 1</button></div>
-    <p class="demo-note">Resize + preserve copies surviving GPU records. Replace all positions uses supplied coordinates/presence
+    <p class="demo-note">Resize + preserve keeps surviving GPU records. Replace all positions uses supplied coordinates/presence
       and retains registered pins.
       Hiding preserves the last coordinates and leaves an index gap. These are storage primitives; animated transitions are separate.</p>
     <p data-output="cleanup" class="demo-note"></p>
     <h3>Resize cost and buffer footprint</h3><p class="demo-note">Peak includes old + new explicitly tracked application buffers.
       These counters exclude driver allocation, pipeline/texture memory and internal staging/uniform buffers.
-      Exact-size generations rebuild on every count change.</p>
+      The retained lane keeps its high-water capacity on shrink; it rebuilds only when that capacity is exceeded.</p>
     <div data-output="resizes" class="many-body-results"></div>
     <h3>First frame after each update</h3><p class="demo-note">GPU work sums paired compute/render pass timestamps.
       One evolved frame per row, including first-use effects;
@@ -52,19 +56,27 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
   const render = (): void => {
     if (destroyed || !session) return
     session.render()
-    session.lanes.forEach((l, i) => { el(`[data-output="memory-${i}"]`).textContent = `${l.count.toLocaleString()} points · ${mib(l.footprint().bytes)} MiB` })
+    session.lanes.forEach((l, i) => {
+      el(`[data-output="memory-${i}"]`).textContent = `${l.count.toLocaleString()} / ${l.capacity.toLocaleString()} capacity · ${mib(l.footprint().bytes)} MiB`
+    })
     el('[data-output="resizes"]').innerHTML = session.resizes.length
-      ? `<table><thead><tr><th>Points</th><th>Path</th><th>Completion ms</th>
-      <th>Read MiB</th><th>Copy MiB</th><th>Position upload MiB</th><th>Live MiB</th><th>Peak MiB</th><th>Result</th></tr></thead>
+      ? `<table><thead><tr><th>Points</th><th>Path</th><th>Storage / kernels</th><th>Capacity</th><th>Completion ms</th>
+      ${session.comparison === 'transfer' ? '<th>Read MiB</th>' : ''}
+      <th>Copy MiB</th><th>Position upload MiB</th><th>Live MiB</th><th>Peak MiB</th><th>Result</th></tr></thead>
       <tbody>${session.resizes.flatMap(row =>
-    row.reports.map((r, i) => `<tr><td>${r.from} → ${r.count}${r.preserve ? '' : ' · replace'}</td><td>${i ? 'GPU' : 'CPU'}</td>
-      <td>${r.completionMs.toFixed(2)}</td><td>${mib(r.downloadedBytes)}</td><td>${mib(r.copiedBytes)}</td><td>${mib(r.uploadedBytes)}</td>
+    row.reports.map(r => `<tr><td>${r.from} → ${r.count}${r.preserve ? '' : ' · replace'}</td>
+      <td>${r.strategy === 'gpu-retained' ? 'Retain' : r.strategy === 'cpu-rebuild' ? 'CPU copy' : 'GPU rebuild'}</td>
+      <td>${r.reused ? 'Reuse' : 'Rebuild'}</td><td>${r.capacityAfter}</td><td>${r.completionMs.toFixed(2)}</td>
+      ${session!.comparison === 'transfer' ? `<td>${mib(r.downloadedBytes)}</td>` : ''}
+      <td>${mib(r.copiedBytes)}</td><td>${mib(r.uploadedBytes)}</td>
       <td>${mib(r.after.bytes)}</td><td>${mib(r.peakBytes)}</td><td>${row.valid ? 'Pass · same device' : 'FAIL'}</td></tr>`)).join('')}</tbody></table>`
       : ''
     el('[data-output="frames"]').innerHTML = session.rows.length
       ? `<table><thead><tr><th>Tick</th><th>Points</th><th>Position / force bit differences</th>
-      <th>CPU failures</th><th>GPU work ms</th><th>CPU submit ms</th><th>Completion ms</th><th>Result</th></tr></thead><tbody>${session.rows.map(r =>
+      <th>CPU failures</th><th>Reference GPU ms</th><th>Candidate GPU ms</th><th>Candidate submit ms</th>
+      <th>Candidate completion ms</th><th>Result</th></tr></thead><tbody>${session.rows.map(r =>
     `<tr><td>${r.tick}</td><td>${r.count}</td><td>${r.positions} / ${r.forces}</td><td>${r.cpu?.failures ?? 'Not checked'}</td>
+      <td>${r.controlTiming ? r.controlTiming.batchGpuMs?.toFixed(3) ?? r.controlTiming.timerStatus : 'Not timed'}</td>
       <td>${r.timing.batchGpuMs?.toFixed(3) ?? r.timing.timerStatus}</td><td>${r.timing.batchSubmitMs.toFixed(3)}</td>
       <td>${r.timing.batchCompletionMs.toFixed(3)}</td>
       <td>${r.valid ? r.cpu ? 'Pass' : 'Dataflow pass · CPU skipped' : 'FAIL'}</td></tr>`).join('')}</tbody></table>`
@@ -76,9 +88,15 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
     session = undefined; error = undefined; controls(); button('stop').disabled = true
     for (const name of ['resizes', 'frames']) el(`[data-output="${name}"]`).replaceChildren()
     active = { fixture: control('fixture').value as Fixture, count: 2048, decay: 100, springPrecision: 'trig' }
+    const comparison = control('comparison').value as CapacityComparison
+    const names = comparison === 'reuse' ? ['GPU rebuild', 'GPU retained capacity'] : ['CPU-copy reference', 'GPU-resident copy']
+    names.forEach((name, i) => {
+      el(`[data-output="name-${i}"]`).textContent = name
+      el(`[data-lane="${i}"]`).setAttribute('aria-label', `${name} layout`)
+    })
     status.textContent = 'Preparing 2,048-point lanes…'
     try {
-      const next = await createCapacitySession(active, i => el(`[data-lane="${i}"]`))
+      const next = await createCapacitySession(active, i => el(`[data-lane="${i}"]`), comparison)
       if (destroyed) { next.destroy(); return }
       session = next; next.lanes.forEach((l, i) => { el(`[data-output="info-${i}"]`).textContent = l.info })
       render(); status.textContent = 'Ready. Run the cycle or apply edits before resizing.'
@@ -139,12 +157,14 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
   button('stop').addEventListener('click', () => { stopped = true })
   button('reset').addEventListener('click', () => { if (!busy) reset().catch(() => {}) })
   control('fixture').addEventListener('change', () => { if (!busy) reset().catch(() => {}) })
+  control('comparison').addEventListener('change', () => { if (!busy) reset().catch(() => {}) })
   button('export').addEventListener('click', () => {
     if (!session) return
     const report = {
       experiment: 'point-capacity',
       gpuApi: 'luma',
       settings: active,
+      comparison: session.comparison,
       browser: navigator.userAgent,
       info: session.lanes.map(l => l.info),
       cycle: CAPACITY_CYCLE,
@@ -154,6 +174,7 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
       rows: session.rows,
       edits: session.edits,
       footprints: session.lanes.map(l => l.footprint()),
+      capacities: session.lanes.map(l => l.capacity),
       cleanups,
       error,
     }

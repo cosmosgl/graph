@@ -1,3 +1,7 @@
+This page records the **exact-size rebuild baseline**. Select **CPU copy vs GPU rebuild** in the demo to
+reproduce it. The [retained-capacity follow-up](#/point-capacity/docs/reuse) compares two GPU-bound lanes and
+reuses storage and kernels within a high-water allocation.
+
 Point-count changes affect more than the position buffer. Cosmos must also update random samples, hierarchy
 dimensions, force scratch space, integration limits, sizes, adjacency and rendering counts. This experiment
 checks those dependencies while **retaining the same luma device** for each lane.
@@ -94,7 +98,7 @@ FPS or directly compare their medians with the fixed-initial-state frame benchma
 
 ## Reproduce
 
-Open [Point capacity and memory](#/point-capacity), choose a graph, leave **Check unchanged CPU tolerance** on,
+Open [Point capacity and memory](#/point-capacity), select **CPU copy vs GPU rebuild**, choose a graph, leave **Check unchanged CPU tolerance** on,
 and run **Run resize cycles**. The cycle returns to 2,048 points so retained memory can be checked again:
 
 ```flow row
