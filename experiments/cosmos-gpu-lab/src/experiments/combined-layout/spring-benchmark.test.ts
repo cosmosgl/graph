@@ -74,3 +74,12 @@ it('retains numerical failures alongside valid timings without accepting the can
   expect(rows.every(r => r.summary?.gpuMs === 0.1)).toBe(true)
   expect(rows.every(r => r.checks.every(c => !c.forces.valid))).toBe(true)
 })
+
+it('limits large-workload comparisons to the requested modes and cleans up both devices', async () => {
+  setup(); const rows: SpringTimingRow[] = []
+  await benchmarkSprings({ settings, modes: ['baseline', 'products'], rows, cancelled: () => false, progress: () => {} })
+  expect(rows).toHaveLength(8)
+  expect(vi.mocked(createCombinedWebGPU).mock.calls.map(call => call[3])).toEqual(['baseline', 'products'])
+  expect(rows.every(r => r.samples.length === 7 && r.checks.length === 10)).toBe(true)
+  expect(destroyed).toBe(2)
+})

@@ -13,7 +13,8 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     Each backend evolves independently. The alpha = 1 probe tests whether a cooled layout still moves when forces regain full strength.</p>
     <div class="scale-toolbar">
       <label>Graph <select data-control="fixture">${['chain', 'star', 'communities', 'pinned'].map(f => `<option>${f}</option>`).join('')}</select></label>
-      <label>Points <select data-control="count"><option>32</option><option selected>128</option><option>512</option><option>2048</option></select></label>
+      <label>Points <select data-control="count"><option>32</option><option selected>128</option><option>512</option><option>2048</option>
+        <option>8192</option><option>32768</option></select></label>
       <label>Cooling schedule <select data-control="decay"><option value="100">100 ticks</option><option value="300">300 ticks</option></select></label>
       <label>Validation <select data-control="checkpoint"><option value="10">Every 10 ticks + first / final</option>
         <option value="1">Every tick · diagnostic</option></select></label>
@@ -23,7 +24,8 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     <p class="demo-note">Precision candidates use integer-controlled rounding for selected spring operations through luma compute kernels.
       Production WebGL, gravity, repulsion and CPU arithmetic stay unchanged. Native f32 remains the baseline.</p>
     <p class="demo-note">Checkpoint mode checks all four stages and the whole tick at selected ticks only. Other ticks are unvalidated.
-      CPU continues independently; bounds and final metrics still require readback. All force tolerances stay unchanged.</p>
+      CPU continues independently; bounds and final metrics still require readback. All force tolerances stay unchanged.
+      Above 2,048 points, spring timing compares native f32 with Distance + rounded products.</p>
     <div class="demo-toolbar playback-toolbar"><div class="controls"><button data-action="step">Step + validate</button>
       <button data-action="run" class="button-primary">Run cooling schedule</button><button data-action="stop" disabled>Stop</button>
       <button data-action="probe">Probe at α = 1</button>
@@ -169,6 +171,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     el('[data-output="spring-timing"]').innerHTML = springTimings.length
       ? `<h3>Spring GPU timing · fixed initial CPU inputs</h3>
       <p class="demo-note">Same ${session.settings.fixture} / ${session.settings.count} inputs for every mode at α = 1.
+        Modes: ${[...new Set(springTimings.map(r => PRECISION_LABELS[r.mode]))].join(', ')}.
         Each batch repeats one directional spring evaluation; it does not advance a layout.
         GPU medians and min–max ranges exclude upload, compilation, readback and validation. CPU completion is separate.
         Two warmups, seven samples; rotated mode order. A failed check remains FAIL regardless of speed.
@@ -322,6 +325,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       springTimings = []
       await benchmarkSprings({
         settings: session.settings,
+        modes: session.settings.count > 2048 ? ['baseline', 'products'] : PRECISION_MODES,
         rows: springTimings,
         cancelled: () => stopped || destroyed,
         progress: message => { if (!destroyed) status.textContent = message },

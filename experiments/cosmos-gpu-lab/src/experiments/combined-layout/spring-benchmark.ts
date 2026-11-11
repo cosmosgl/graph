@@ -11,17 +11,17 @@ export type SpringTimingRow = {
   summary: ReturnType<typeof summarize> | null; error?: string;
 }
 export type SpringTimingOptions = {
-  settings: Settings; rows: SpringTimingRow[]; cancelled(): boolean; progress(message: string): void;
+  settings: Settings; modes?: readonly SpringPrecision[]; rows: SpringTimingRow[]; cancelled(): boolean; progress(message: string): void;
 }
 // Initial CPU stage inputs are identical across modes, independent of the live demo.
 // Repeated measurements never swap the source positions: each operation is the same directional spring evaluation.
-export async function benchmarkSprings ({ settings, rows, cancelled, progress }: SpringTimingOptions): Promise<void> {
+export async function benchmarkSprings ({ settings, modes = PRECISION_MODES, rows, cancelled, progress }: SpringTimingOptions): Promise<void> {
   const { graph, input } = createGraph(settings); const oracle = createOracle(graph, input)
   let points = oracle.stage('gravity', input.points, 1, 1).positions
   points = oracle.stage('repulsion', points, 1, 1).positions
   const lanes: Array<{ mode: SpringPrecision; backend?: CombinedBackend; error?: string }> = []
   try {
-    for (const mode of PRECISION_MODES) {
+    for (const mode of modes) {
       if (cancelled()) return
       progress(`Preparing ${mode} spring arithmetic…`)
       const lane: typeof lanes[number] = { mode }; lanes.push(lane)

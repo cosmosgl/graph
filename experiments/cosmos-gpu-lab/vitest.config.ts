@@ -7,7 +7,11 @@ import { playwright } from '@vitest/browser-playwright'
 // eslint-disable-next-line import/no-default-export
 export default defineConfig({
   optimizeDeps: { include: ['@luma.gl/shadertools'] },
-  define: { 'import.meta.env.REQUIRE_WEBGPU': true, 'import.meta.env.LAB_NATIVE_GPU': process.env.LAB_NATIVE_GPU === '1' },
+  define: {
+    'import.meta.env.REQUIRE_WEBGPU': true,
+    'import.meta.env.LAB_NATIVE_GPU': process.env.LAB_NATIVE_GPU === '1',
+    'import.meta.env.LAB_SCALE_COUNT': Number(process.env.LAB_SCALE_COUNT ?? 0),
+  },
   test: {
     include: [
       'src/gpu/**/*.test.ts',

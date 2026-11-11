@@ -36,7 +36,7 @@ export function isCheckpoint (tick: number, settings: Settings): boolean {
   return tick === 1 || tick === settings.decay || tick % (settings.checkpointEvery ?? 1) === 0
 }
 export function createGraph (settings: Settings): { graph: GraphInput; input: Input } {
-  if (!Number.isInteger(settings.count) || settings.count < 4 || settings.count > 2048 ||
+  if (!Number.isInteger(settings.count) || settings.count < 4 || settings.count > 32768 ||
     !Number.isInteger(settings.decay) || settings.decay < 1 || settings.decay > 1000) throw new Error('Invalid combined experiment settings')
   if (!PRECISION_MODES.includes(settings.springPrecision ?? 'baseline')) throw new Error('Invalid spring precision mode')
   const interval = settings.checkpointEvery ?? 1
