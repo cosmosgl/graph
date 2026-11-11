@@ -20,5 +20,10 @@ export const experiment = defineExperiment({
     id: 'spring-precision',
     title: 'Spring precision',
     load: async (): Promise<string> => (await import('./docs/spring-precision.md?raw')).default,
+  }, {
+    kind: 'markdown',
+    id: 'spring-cost',
+    title: 'Spring cost',
+    load: async (): Promise<string> => (await import('./docs/spring-cost.md?raw')).default,
   }],
 })

@@ -6,7 +6,8 @@ position outside the original budget when the displacement nearly cancelled the 
 
 The new arithmetic modes investigate that problem **without changing the CPU reference, tolerance, force order,
 adjacency order, cooling, gravity, repulsion or production WebGL shaders**. Native f32 remains the default.
-These are correctness candidates, not a production recommendation or a performance result.
+These are correctness candidates. The follow-up [Spring cost study](#/combined-layout/docs/spring-cost) measures
+their cost and adds narrower alternatives; none is a production recommendation.
 
 ## Why integration alone is insufficient
 
@@ -95,17 +96,18 @@ still visible rather than corrected by this option.
 At each checkpoint, the original stage, hierarchy, centroid and whole-tick checks all pass. Unchecked intermediate
 ticks remain unvalidated. The independent CPU trajectory is unchanged. This is bounded evidence for correcting the
 WebGPU spring-position failures, not a claim of identical trajectories, general convergence or cross-device readiness.
-The force-only candidate has passed the frozen captures above; it has not received this complete trajectory sweep.
+The later [Spring cost study](#/combined-layout/docs/spring-cost) extends the trajectory checks to the force-only
+and refined division/root candidates.
 
-**Next decision:** measure the GPU cost of the four alternatives on identical captured workloads, then investigate
-whether selected operations need correction instead of rounding the entire force. Preserve this fully rounded
-candidate as the correctness control. CPU readbacks and these correctness-test durations are not GPU timing evidence.
+**Follow-up:** [Spring cost](#/combined-layout/docs/spring-cost) measures fixed-input GPU batches and tests narrower
+corrections. The fully rounded candidate remains the correctness control. CPU readbacks and these correctness-test
+durations are not GPU timing evidence.
 
 ## Reproduce
 
 1. Run `pnpm --filter @cosmos.gl/gpu-lab dev`, then open **Combined layout convergence** in native Chrome.
 2. Select star, 2048 points and **Native f32 · baseline**. Click **Step + validate**.
-3. If spring failures are captured, click **Compare spring rounding**. Inspect the four-mode table. This uses the
+3. If spring failures are captured, click **Compare spring rounding**. Inspect the comparison table (now including the narrower diagnostic modes). This uses the
    current session's first failed spring-stage inputs; it does not import earlier JSON. Stop cancels between cases,
    after any pending pipeline creation/readback completes. Partial results remain exportable.
 4. Select **Rounded force + integration**, run the 100- and 300-tick schedules for star and communities, and run

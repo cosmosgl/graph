@@ -149,7 +149,10 @@ The baseline failures remain visible. A selectable [spring precision candidate](
 uses luma's integer-controlled arithmetic to reproduce stepwise float32 rounding. Rounding both the spring force
 and its integration passes all scheduled WebGPU checks and full-strength probes in the four previously failing
 2,048-point runs, without changing the budget. Frozen captures show that integration-only rounding is insufficient.
-The arithmetic cost and cross-device behavior remain unmeasured; native f32 remains the default. Unchecked ticks
+The [spring cost study](#/combined-layout/docs/spring-cost) now tests a narrower division/root correction: it passes
+the same larger trajectory cases and reduces the M3 star hub pass from about 119 ms to 67 ms. That remains much too
+costly compared with the 0.51 ms baseline. A much faster distance-only candidate still fails cancellation checks.
+Cross-device behavior remains unvalidated; native f32 remains the default. Unchecked ticks
 are not counted as passing.
 
 **Limit:** hierarchical repulsion is forced at these small counts. Production's exact-to-grid transition, larger and
@@ -317,7 +320,7 @@ performance and memory meet the target budgets; supported devices are tested; an
 | --- | --- | --- |
 | Extend | Weighted-link compute-to-render path through luma | Can its demonstrated resource contract handle shared ownership, device loss and live updates? |
 | Extend | Weighted springs at larger sizes and over longer trajectories | Can ordered hub gathers and state-preserving topology updates meet the engine budget? |
-| First | Measure and narrow the [spring precision correction](#/combined-layout/docs/spring-precision), then extend size and cooling coverage | Can strict agreement remain affordable across the exact-to-grid transition? |
+| First | Narrow the [spring precision cost](#/combined-layout/docs/spring-cost) further, then extend size and cooling coverage | Can targeted correction preserve strict agreement without making hub gathers prohibitively expensive? |
 | Then | GPU bounds, adaptive samples and parallel hierarchy construction | Can the same approximation scale without CPU synchronization or serial dense-cell work? |
 | Alongside simulation | Links, richer points and picking from shared GPU state | Can Cosmos render and interact correctly without transferring all positions back? |
 | Then | Combined engine workload on multiple native GPUs | Is the whole migration practical for the intended users and graph sizes? |
