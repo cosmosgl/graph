@@ -30,7 +30,7 @@ void main() { if (length(gl_PointCoord * 2. - 1.) > 1.) discard; fragColor = vec
 
 export type WebGLForceFactory = (resources: {
   device: Device; positions: Texture[]; random: Texture; exit: Texture; target: Framebuffer; count: number; size: number; encodeExact(): void;
-}) => { encode(source: number): void; render?(source: number, view: View, pass: RenderPass): void; destroy(): void }
+}) => { encode(source: number): void; friction?(): number; render?(source: number, view: View, pass: RenderPass): void; destroy(): void }
 export async function createWebGL (canvas: HTMLCanvasElement, input: Input, p: Parameters, customForce?: WebGLForceFactory): Promise<Backend> {
   validateInput(input, p, customForce ? 16384 : 4096)
   let failure: string | undefined
@@ -128,6 +128,7 @@ export async function createWebGL (canvas: HTMLCanvasElement, input: Input, p: P
       else encodeExact(forceTimes)
     }
     const encodeIntegration = (integrationTimes: TimestampWrites = {}): void => {
+      if (extension?.friction) integrateUniforms.setUniforms({ updatePositionUniforms: { friction: extension.friction(), maxStep: p.referenceLength } })
       integrate.setBindings({ positionsTexture: positions[current], velocity: forces, pinnedStatusTexture: pinned, exitTexture: exit })
       const pass = device.beginRenderPass({ ...integrationTimes, framebuffer: targets[1 - current], clearColor: [0, 0, 0, 0], clearDepth: false })
       try { integrate.draw(pass) } finally { pass.end() }

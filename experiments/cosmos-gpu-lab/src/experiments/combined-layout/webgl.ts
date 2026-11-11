@@ -8,6 +8,7 @@ import { frameFor } from '../many-body-grid/data'
 import type { Input } from '../many-body/data'
 import { buildTopology, type GraphInput } from '../weighted-links/data'
 import { measureBatch } from '../many-body/timing'
+import { createCollisionWebGL } from '../collision/webgl'
 import { GRAVITY, REPULSION, SPRINGS, stagesFor, type Stage } from './data'
 import { createCenterWebGL } from './center-webgl'
 import type { CombinedBackend } from './backend'
@@ -28,6 +29,7 @@ export async function createCombinedWebGL (
     try {
       const grid = own(gridFactory(resources))
       const center = settings.center ? own(createCenterWebGL(device, count, size, positions, exit, target)) : undefined
+      const collision = settings.collision ? own(createCollisionWebGL(resources, graph.sizes, settings.collision)) : undefined
       readCenter = center?.read
       const texture = (width: number, data: Float32Array): Texture => {
         const t = own(device.createTexture({
@@ -112,10 +114,16 @@ out vec4 color; void main() { color = vec4(0.27,0.32,0.4,1.); }`,
         parameters: { blend: false, depthWriteEnabled: false, depthCompare: 'always' },
       }))
       return {
+        ...(collision ? { friction: (): number => stage === 'collision' ? 1 : p.friction } : {}),
         render (source, view, pass): void {
           drawUniforms.setUniforms({ drawUniforms: { view } }); lines.setBindings({ positions: positions[source] }); lines.draw(pass)
+          collision?.render(source, view, pass)
         },
         encode (source): void {
+          if (stage === 'collision') {
+            if (!collision) throw new Error('Collision was not allocated')
+            collision.encode(source, p.alpha); return
+          }
           if (stage === 'center') {
             if (!center) throw new Error('Center force was not allocated')
             center.encode(source, p.alpha, settings.center ?? 0); return
@@ -138,15 +146,15 @@ out vec4 color; void main() { color = vec4(0.27,0.32,0.4,1.); }`,
                 linkDistRandomVariationRange: settings.variation,
                 linksTextureSize: linkSize,
                 alpha: p.alpha,
-                collisionRadius: 0,
-                collisionPadding: 0,
-                useCollisionRadii: 0,
+                collisionRadius: settings.collision?.radius ?? 0,
+                collisionPadding: settings.collision?.padding ?? 0,
+                useCollisionRadii: settings.collision?.strength ? 1 : 0,
               },
             })
             active = springs[side]; active.setBindings({
               positionsTexture: positions[source],
               exitTexture: exit,
-              sizeTexture: exit,
+              sizeTexture: collision?.sizes ?? exit,
               ...directions[side],
             })
           }
@@ -165,11 +173,11 @@ out vec4 color; void main() { color = vec4(0.27,0.32,0.4,1.); }`,
       if (repulsionMethod(input.points.length / 4, policy) === 'exact') throw new Error('Exact repulsion does not build a grid')
       return base.readStructure()
     },
-    async measureCurrentFrame (alpha, _tick, view): ReturnType<NonNullable<CombinedBackend['measureCurrentFrame']>> {
+    async measureCurrentFrame (alpha, _tick, view, selected): ReturnType<NonNullable<CombinedBackend['measureCurrentFrame']>> {
       // A frozen bounds frame must be supplied by the caller for hierarchy.
       // All GPU force/integration/drawing passes are timed; uploads/readback are outside.
       const timing = await measureBatch(activeDevice, 1, () => {
-        for (const next of stagesFor(settings.center)) { stage = next; p.alpha = alpha; base.step() }
+        for (const next of selected ?? stagesFor(settings.center, settings.collision)) { stage = next; p.alpha = alpha; base.step() }
         base.render(view)
       })
       return { timing, snapshot: await base.read() }

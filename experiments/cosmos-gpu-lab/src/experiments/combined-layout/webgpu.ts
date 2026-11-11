@@ -11,6 +11,7 @@ import { createGridWebGPU } from '../many-body-grid/webgpu'
 import { frameFor } from '../many-body-grid/data'
 import { replaceOnce } from '../many-body-grid/trace'
 import type { AggregationMode } from '../many-body-grid/aggregation'
+import { createCollisionWebGPU } from '../collision/webgpu'
 import { createLinkResources } from './topology'
 import { measureFrameBatch } from './frame-timing'
 import { measureGpuStages } from './stage-timing'
@@ -75,6 +76,9 @@ export async function createCombinedWebGPU (
     try {
       const grid = own(await gridFactory(resources))
       const center = settings.center ? own(await createCenterWebGPU(device, count, forces)) : undefined
+      const collision = settings.collision
+        ? own(await createCollisionWebGPU(device, graph.sizes, forces, settings.collision, settings.collisionArithmetic))
+        : undefined
       readCenter = center?.read
       const exactParams = policy === 'production' ? own(upload(device, new Float32Array(8), Buffer.UNIFORM)) : undefined
       const exact = exactParams
@@ -148,7 +152,10 @@ export async function createCombinedWebGPU (
         ? own(await Kernel.createAsync(device, { source: distanceSpringSource('products', roundRest), shaderLayout: { bindings: springBindings } }))
         : spring
       const integrationParams = own(upload(device, new Float32Array([count, 0, 0, 0, p.friction, p.referenceLength, 0, 0]), Buffer.UNIFORM))
-      const integration = roundSpring || extraStages.length > 0
+      const collisionIntegrationParams = collision
+        ? own(upload(device, new Float32Array([count, 0, 0, 0, 1, p.referenceLength, 0, 0]), Buffer.UNIFORM))
+        : undefined
+      const integration = roundSpring || extraStages.length > 0 || collision
         ? own(await createRoundedKernel(device, roundedIntegrationSource(), bindingLayout([
           ['positions', 'read-only-storage'], ['forces', 'read-only-storage'], ['params', 'uniform'], ['output', 'storage'],
         ])))
@@ -156,21 +163,26 @@ export async function createCombinedWebGPU (
       return {
         resize (next): void {
           if (!nextGraph) throw new Error('Use resizeGraph to update composed resources')
+          collision?.resize(nextGraph.sizes)
           linkResources.update(next.points, nextGraph)
           grid.resize!(next)
           center?.resize(next.points.length / 4)
           count = next.points.length / 4; input = next
           integrationParams.write(new Float32Array([count, 0, 0, 0, p.friction, p.referenceLength, 0, 0]))
+          collisionIntegrationParams?.write(new Float32Array([count, 0, 0, 0, 1, p.referenceLength, 0, 0]))
         },
         integrate (source, timing, sharedPass): boolean {
-          const rounded = (roundSpring && (stage === 'incoming' || stage === 'outgoing')) || extraStages.includes(stage)
+          const rounded = stage === 'collision' || (roundSpring && (stage === 'incoming' || stage === 'outgoing')) || extraStages.includes(stage)
           if (!integration || !rounded) return false
           const pass = sharedPass ?? device.beginComputePass(timing)
           try {
             integration.dispatch(pass, {
               x: Math.ceil(count / 64),
               bindings: {
-                positions: positions[source], forces, params: integrationParams, output: positions[1 - source],
+                positions: positions[source],
+                forces,
+                params: stage === 'collision' ? collisionIntegrationParams! : integrationParams,
+                output: positions[1 - source],
               },
             })
           } finally { if (!sharedPass) pass.end() }
@@ -183,9 +195,10 @@ export async function createCombinedWebGPU (
             vertexCount: linkResources.edgeCount * 2,
             bindings: { positions: positions[source], links: linkResources.links, view: viewBuffer },
           })
+          collision?.render(positions[source], view, pass)
         },
         prepare (): void {
-          if (stage === 'center') return
+          if (stage === 'center' || stage === 'collision') return
           if (stage === 'repulsion') {
             if (method() === 'exact') {
               exactParams!.write(new Float32Array([
@@ -195,10 +208,18 @@ export async function createCombinedWebGPU (
           } else if (stage === 'gravity') gravityParams.write(new Float32Array([count, p.alpha, GRAVITY, 0]))
           else {
             springParams.write(new Float32Array([SPRINGS.spring, SPRINGS.distance, ...settings.variation, p.alpha,
-              SPRINGS.friction, SPRINGS.maxStep, 0, 0, 0, count, 0]))
+              SPRINGS.friction, SPRINGS.maxStep, settings.collision?.strength ? 1 : 0,
+              settings.collision?.radius ?? 0, settings.collision?.padding ?? 0, count, 0]))
           }
         },
         encode (source, timing, sharedPass, profile): void {
+          if (stage === 'collision') {
+            if (!collision) throw new Error('Collision was not allocated')
+            if (profile) throw new Error('Collision-enabled frames require normal-frame timing')
+            const pass = sharedPass ?? device.beginComputePass(timing)
+            try { collision.encode(pass, positions[source], p.alpha) } finally { if (!sharedPass) pass.end() }
+            return
+          }
           if (stage === 'center') {
             if (!center) throw new Error('Center force was not allocated')
             const encodeCenter = (pass: ComputePass): void => center.encode(pass, positions[source], p.alpha, settings.center ?? 0)
@@ -289,7 +310,7 @@ export async function createCombinedWebGPU (
     },
     replaceLinks: (next): ReturnType<NonNullable<CombinedBackend['replaceLinks']>> => { base.resourceIdentity!(); return replaceLinks(next) },
     measureFrozenFrames: overrides.gpuBounds
-      ? async ({ frames, alpha, tick, view }): ReturnType<NonNullable<CombinedBackend['measureFrozenFrames']>> => {
+      ? async ({ frames, alpha, tick, view, stages: selected }): ReturnType<NonNullable<CombinedBackend['measureFrozenFrames']>> => {
         validateBatch(frames); base.resourceIdentity!()
         const bytes = base.positionSource!().count * 16; const scope = resourceScope(overrides.context?.ledger)
         const allocate = (byteLength: number): Buffer => scope.own(device.createBuffer({
@@ -308,7 +329,9 @@ export async function createCombinedWebGPU (
               ? { timestampQuerySet: query, beginTimestampIndex: frame * 4, endTimestampIndex: frame * 4 + 1 }
               : {})
             try {
-              for (const next of stagesFor(settings.center)) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
+              for (const next of selected ?? stagesFor(settings.center, settings.collision)) {
+                stage = next; p.alpha = alpha; base.step({ submit: false, pass })
+              }
             } finally { pass.end() }
             base.render(view, query
               ? { timestampQuerySet: query, beginTimestampIndex: frame * 4 + 2, endTimestampIndex: frame * 4 + 3 }
@@ -334,11 +357,13 @@ export async function createCombinedWebGPU (
       : undefined,
     profileCurrentFrame: overrides.gpuBounds
       ? async (alpha, tick, view): ReturnType<NonNullable<CombinedBackend['profileCurrentFrame']>> => {
-        if (settings.center) throw new Error('Center-enabled frames require normal-frame timing; the historical profile has fifteen fixed stages')
+        if (settings.center || settings.collision?.strength) {
+          throw new Error('Optional forces require normal-frame timing; the historical profile has fifteen fixed stages')
+        }
         if (method() === 'exact') throw new Error('The fifteen-stage grid profile requires hierarchical repulsion; use normal-frame timing for exact repulsion')
         base.resourceIdentity!(); base.setGpuFrame!(tick)
         const result = await measureGpuStages(device, (scope, draw) => {
-          for (const next of stagesFor(settings.center)) {
+          for (const next of stagesFor(settings.center, settings.collision)) {
             stage = next; p.alpha = alpha
             base.step({ submit: false, profile: (name, work) => scope(`${next}.${name}`, work) })
           }
@@ -348,13 +373,13 @@ export async function createCombinedWebGPU (
       }
       : undefined,
     measureCurrentFrame: overrides.gpuBounds
-      ? async (alpha, tick, view): ReturnType<NonNullable<CombinedBackend['measureCurrentFrame']>> => {
+      ? async (alpha, tick, view, selected): ReturnType<NonNullable<CombinedBackend['measureCurrentFrame']>> => {
         base.resourceIdentity!()
         const timing = await measureFrameBatch(device, 1, 2, (query) => {
           base.setGpuFrame!(tick)
           const pass = device.beginComputePass(query ? { timestampQuerySet: query, beginTimestampIndex: 0, endTimestampIndex: 1 } : {})
           try {
-            for (const next of stagesFor(settings.center)) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
+            for (const next of selected ?? stagesFor(settings.center, settings.collision)) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
           } finally { pass.end() }
           base.render(view, query ? { timestampQuerySet: query, beginTimestampIndex: 2, endTimestampIndex: 3 } : {}, false)
         }).catch(error => { base.resourceIdentity!(); throw error })
@@ -372,7 +397,7 @@ export async function createCombinedWebGPU (
           const index = frame * (draw ? 4 : 2)
           const pass = device.beginComputePass(query ? { timestampQuerySet: query, beginTimestampIndex: index, endTimestampIndex: index + 1 } : {})
           try {
-            for (const next of stagesFor(settings.center)) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
+            for (const next of stagesFor(settings.center, settings.collision)) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
           } finally { pass.end() }
           if (draw) {
             base.render(view, query
@@ -391,7 +416,7 @@ export async function createCombinedWebGPU (
         base.setGpuFrame!(tick)
         const pass = device.beginComputePass()
         try {
-          for (const next of stagesFor(settings.center)) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
+          for (const next of stagesFor(settings.center, settings.collision)) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
         } finally { pass.end() }
         device.submit()
       }

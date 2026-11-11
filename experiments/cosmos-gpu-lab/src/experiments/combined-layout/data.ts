@@ -1,5 +1,6 @@
 import { createFixture as pointsFixture, type Input, type Parameters as RepulsionParameters } from '../many-body/data'
 import type { GraphInput, Parameters as SpringParameters } from '../weighted-links/data'
+import type { CollisionParameters } from '../collision/data'
 export const PRECISION_MODES = ['baseline', 'force', 'integration', 'both', 'refined', 'distance', 'products', 'composed', 'aligned', 'trig'] as const
 export type SpringPrecision = typeof PRECISION_MODES[number]
 export const PRECISION_LABELS: Record<SpringPrecision, string> = {
@@ -15,9 +16,11 @@ export const PRECISION_LABELS: Record<SpringPrecision, string> = {
   trig: 'Refined gravity + rounded steps',
 }
 export const STAGES = ['gravity', 'repulsion', 'incoming', 'outgoing'] as const
-export type Stage = typeof STAGES[number] | 'center'
-export function stagesFor (center = 0): readonly Stage[] {
-  return center ? ['gravity', 'center', 'repulsion', 'incoming', 'outgoing'] : STAGES
+export type Stage = typeof STAGES[number] | 'center' | 'collision'
+export function stagesFor (center = 0, collision?: CollisionParameters): readonly Stage[] {
+  const stages: Stage[] = center ? ['gravity', 'center', 'repulsion', 'incoming', 'outgoing'] : [...STAGES]
+  if (collision?.strength) for (let i = 0; i < collision.iterations; i++) stages.push('collision')
+  return stages
 }
 export type Fixture = 'chain' | 'star' | 'communities' | 'pinned'
 export type Settings = { fixture: Fixture; count: number; decay: number; checkpointEvery?: number; springPrecision?: SpringPrecision; center?: number }
