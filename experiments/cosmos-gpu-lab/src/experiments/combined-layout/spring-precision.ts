@@ -41,10 +41,14 @@ export function roundedIntegrationSource (): string {
 }
 // Targeted finite-normal helpers avoid full fp64 expansion arithmetic in the edge loop.
 export type ProductCorrection = 'none' | 'scale' | 'accumulation' | 'products'
-export function distanceSpringSource (correction: ProductCorrection = 'none'): string {
+export function distanceSpringSource (correction: ProductCorrection = 'none', roundRest = false): string {
   let s = replaceOnce(springSource, 'sqrt(delta.x * delta.x + delta.y * delta.y)',
     'distanceRoot(roundedSquare(delta.x) + roundedSquare(delta.y))')
   s = replaceOnce(s, '(length - rest) / length', 'distanceDivide(length - rest, length)')
+  if (correction === 'products' && roundRest) {
+    s = replaceOnce(s, '(edge.random * (params.high - params.low) + params.low) * params.distance',
+      'roundedProduct(roundedProduct(edge.random, params.high - params.low) + params.low, params.distance)')
+  }
   if (correction === 'scale' || correction === 'products') {
     s = replaceOnce(s, 'length *= params.spring * params.alpha;', 'length = roundedProduct(length, roundedProduct(params.spring, params.alpha));')
     s = replaceOnce(s, 'length *= edge.strength;', 'length = roundedProduct(length, edge.strength);')

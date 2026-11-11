@@ -6,6 +6,7 @@ import { createReferenceIndex, referenceTick as springTick } from '../weighted-l
 import type { GraphInput } from '../weighted-links/data'
 import { GRAVITY, REPULSION, SPRINGS, STAGES, type Stage } from './data'
 import { repulsionMethod, type RepulsionPolicy } from './repulsion-policy'
+import { forceSettings, validateForceSettings, type ForceSettings } from './production-settings'
 const f = Math.fround
 export function gravity (points: Float32Array, alpha: number): Snapshot {
   const forces = new Float32Array(points.length)
@@ -18,20 +19,23 @@ export function gravity (points: Float32Array, alpha: number): Snapshot {
   }
   return { forces, positions: integrate(points, forces, REPULSION) }
 }
-export function createOracle (graph: GraphInput, input: Input, policy: RepulsionPolicy = 'hierarchical'): {
+export function createOracle (
+  graph: GraphInput, input: Input, policy: RepulsionPolicy = 'hierarchical', settings: ForceSettings = forceSettings('reference', input.points.length / 4)
+): {
   stage(stage: Stage, points: Float32Array, alpha: number, tick: number): Snapshot;
   tick(points: Float32Array, alpha: number, tick: number): Float32Array;
 } {
+  validateForceSettings(settings)
   const index = createReferenceIndex(graph)
   const stage = (name: Stage, points: Float32Array, alpha: number, tick: number): Snapshot => {
     if (name === 'gravity') return gravity(points, alpha)
     if (name === 'repulsion') {
       if (repulsionMethod(points.length / 4, policy) === 'exact') return exactTick(input, points, { ...REPULSION, alpha })
-      const frame = frameFor(points, tick)
+      const frame = frameFor(points, tick, settings.samples, settings.precise)
       return gridReference(input, points, { ...REPULSION, alpha }, frame, buildReference(points, frame))
     }
     // Evaluate the requested direction first on this stage's actual input.
-    const result = springTick(graph, points, { ...SPRINGS, alpha }, index, name === 'incoming' ? 0 : 1)
+    const result = springTick(graph, points, { ...SPRINGS, variation: settings.variation, alpha }, index, name === 'incoming' ? 0 : 1)
     return { forces: result.firstForce, positions: result.intermediate }
   }
   return {

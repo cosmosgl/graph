@@ -20,6 +20,7 @@ import { createRoundedKernel, roundedSpringSource, roundedIntegrationSource, dis
 import { HUB_THRESHOLD, hoistedSpringSource, prefetchSpringSources, type SpringOptimization } from './hub-spring-source'
 import { strictExactShader } from './exact-shader'
 import { repulsionMethod, type RepulsionPolicy } from './repulsion-policy'
+import { forceSettings, validateForceSettings, type ForceSettings } from './production-settings'
 const gravitySource = `
 @group(0) @binding(0) var<storage, read> positions: array<vec4<f32>>;
 @group(0) @binding(1) var<uniform> params: vec4<f32>;
@@ -43,22 +44,27 @@ export async function createCombinedWebGPU (
   overrides: WebGPUOptions & {
     roundedStages?: readonly Stage[]; polarGravity?: boolean; refinedTrig?: boolean; gpuBounds?: boolean; springOptimization?: SpringOptimization;
     hubThreshold?: number; gridAggregation?: AggregationMode; nearArithmetic?: 'native' | 'refined'; repulsionPolicy?: RepulsionPolicy;
+    forceSettings?: ForceSettings; adaptiveSampling?: boolean;
   } = {}
 ): Promise<CombinedBackend> {
   const optimization = overrides.springOptimization ?? 'baseline'
   const policy = overrides.repulsionPolicy ?? 'hierarchical'
+  const settings = overrides.forceSettings ?? forceSettings('reference', input.points.length / 4)
+  validateForceSettings(settings)
   const method = (): ReturnType<typeof repulsionMethod> => repulsionMethod(input.points.length / 4, policy)
   const requireGrid = (): void => { if (method() === 'exact') throw new Error('Exact repulsion does not build a grid') }
   if (optimization !== 'baseline' && precision !== 'trig') throw new Error('Spring optimization requires the strict trig candidate')
   const hubThreshold = overrides.hubThreshold ?? HUB_THRESHOLD
-  const prefetch = optimization === 'prefetch' ? prefetchSpringSources(hubThreshold) : undefined
+  const roundRest = settings.variation[0] !== settings.variation[1]
+  const prefetch = optimization === 'prefetch' ? prefetchSpringSources(hubThreshold, roundRest) : undefined
   const roundedStages = overrides.roundedStages ?? []
   const polarGravity = overrides.polarGravity ?? (precision === 'aligned' || precision === 'trig')
   const refinedTrig = overrides.refinedTrig ?? precision === 'trig'
   let stage: Stage = 'gravity'; const p = { ...REPULSION }
   let nextGraph: GraphInput | undefined
   let device: Device; let frameForces: Buffer; let replaceLinks: NonNullable<CombinedBackend['replaceLinks']>
-  const base = await createGridWebGPU(canvas, input, p, frameFor(input.points, 0), 'streamed', gridFactory => async resources => {
+  const initialFrame = frameFor(input.points, 0, settings.samples, settings.precise)
+  const base = await createGridWebGPU(canvas, input, p, initialFrame, 'streamed', gridFactory => async resources => {
     const { positions, forces, samples } = resources; let count = resources.count
     frameForces = forces
     device = resources.device
@@ -111,8 +117,8 @@ export async function createCombinedWebGPU (
         ? await createRoundedKernel(device, roundedSpringSource(precision === 'refined'), springBindings)
         : await Kernel.createAsync(device, {
           source: prefetch?.regular ?? (optimization === 'hoist'
-            ? hoistedSpringSource()
-            : roundedProducts ? distanceSpringSource('products') : precision === 'distance' ? distanceSpringSource() : springSource),
+            ? hoistedSpringSource(roundRest)
+            : roundedProducts ? distanceSpringSource('products', roundRest) : precision === 'distance' ? distanceSpringSource() : springSource),
           shaderLayout: { bindings: springBindings },
         }))
       const hub = prefetch
@@ -124,7 +130,7 @@ export async function createCombinedWebGPU (
       // Directions without hubs use the unchanged baseline source, avoiding a
       // degree guard and hoist on every low-degree point. No extra dispatch.
       const fallback = prefetch
-        ? own(await Kernel.createAsync(device, { source: distanceSpringSource('products'), shaderLayout: { bindings: springBindings } }))
+        ? own(await Kernel.createAsync(device, { source: distanceSpringSource('products', roundRest), shaderLayout: { bindings: springBindings } }))
         : spring
       const integrationParams = own(upload(device, new Float32Array([count, 0, 0, 0, p.friction, p.referenceLength, 0, 0]), Buffer.UNIFORM))
       const integration = roundSpring || extraStages.length > 0
@@ -171,7 +177,7 @@ export async function createCombinedWebGPU (
             } else grid.prepare?.()
           } else if (stage === 'gravity') gravityParams.write(new Float32Array([count, p.alpha, GRAVITY, 0]))
           else {
-            springParams.write(new Float32Array([SPRINGS.spring, SPRINGS.distance, ...SPRINGS.variation, p.alpha,
+            springParams.write(new Float32Array([SPRINGS.spring, SPRINGS.distance, ...settings.variation, p.alpha,
               SPRINGS.friction, SPRINGS.maxStep, 0, 0, 0, count, 0]))
           }
         },
@@ -228,11 +234,19 @@ export async function createCombinedWebGPU (
     preserve: overrides.preserve,
     aggregation: overrides.gridAggregation,
     nearArithmetic: overrides.nearArithmetic ?? (precision === 'trig' ? 'refined' : 'native'),
+    maxSamples: overrides.adaptiveSampling ? 64 : settings.samples,
+    occupancy: overrides.adaptiveSampling,
   })
   return {
     ...base,
     name: `WebGPU composed (${policy} repulsion)`,
     repulsionMethod: method,
+    requestOccupancy: base.requestOccupancy ? (): void => { requireGrid(); base.requestOccupancy!() } : undefined,
+    readOccupancy: base.readOccupancy
+      ? async (): ReturnType<NonNullable<CombinedBackend['readOccupancy']>> => {
+        requireGrid(); return base.readOccupancy!()
+      }
+      : undefined,
     readStructure: async (): ReturnType<CombinedBackend['readStructure']> => {
       requireGrid()
       return base.readStructure()

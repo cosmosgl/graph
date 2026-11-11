@@ -3,17 +3,17 @@ import { distanceSpringSource } from './spring-precision'
 export type SpringOptimization = 'baseline' | 'hoist' | 'prefetch'
 export const HUB_THRESHOLD = 64
 export const HUB_TILE = 64
-export function hoistedSpringSource (): string {
-  let source = distanceSpringSource('products')
+export function hoistedSpringSource (roundRest = false): string {
+  let source = distanceSpringSource('products', roundRest)
   source = replaceOnce(source, 'var velocity = vec2<f32>(0.0);',
     'var velocity = vec2<f32>(0.0);\n  let springScale = roundedProduct(params.spring, params.alpha);')
   return replaceOnce(source, 'roundedProduct(length, roundedProduct(params.spring, params.alpha))', 'roundedProduct(length, springScale)')
 }
 // Prefetch changes memory scheduling, never the serial velocity recurrence.
 // Both pieces below are extracted from the existing corrected spring source.
-export function prefetchSpringSources (threshold = HUB_THRESHOLD): { regular: string; hub: string } {
+export function prefetchSpringSources (threshold = HUB_THRESHOLD, roundRest = false): { regular: string; hub: string } {
   if (!Number.isInteger(threshold) || threshold < 64 || threshold > 16384) throw new Error('Hub threshold must be 64–16384')
-  const source = hoistedSpringSource()
+  const source = hoistedSpringSource(roundRest)
   const main = source.indexOf('@compute @workgroup_size(64)')
   const rest = source.indexOf('    var rest = '); const delta = source.indexOf('    let delta = ')
   const end = source.indexOf('\n  }\n  forces[i]')

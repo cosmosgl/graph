@@ -5,5 +5,8 @@ export const experiment = defineExperiment({
   summary: 'Validate exact/grid routing and evolving layouts with hub prefetch and ordered grid aggregation enabled together.',
   tags: ['simulation', 'benchmark', 'compute'],
   create: async host => (await import('../cell-aggregation/view')).createGridAggregationView(host, true),
-  pages: [{ kind: 'markdown', id: 'findings', title: 'Method and findings', load: async (): Promise<string> => (await import('./findings.md?raw')).default }],
+  pages: [
+    { kind: 'markdown', id: 'production', title: 'Production settings', load: async (): Promise<string> => (await import('./production.md?raw')).default },
+    { kind: 'markdown', id: 'findings', title: 'Method and findings', load: async (): Promise<string> => (await import('./findings.md?raw')).default },
+  ],
 })

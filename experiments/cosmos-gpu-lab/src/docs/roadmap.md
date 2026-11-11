@@ -58,7 +58,7 @@ minimal drawing and live storage updates use public luma APIs. A representative 
 
 | Milestone | Current position | Next acceptance evidence |
 | --- | --- | --- |
-| luma integration | **Partial:** resident ticks, minimal drawing, state-preserving updates and retained-capacity reuse use public luma APIs | Retention budgets, controlled GPU-stage timing, host ownership, device loss and the production dependency decision |
+| luma integration | **Partial:** resident ticks, minimal drawing, preserved updates, retained capacity and controlled GPU-stage timing use public luma APIs | Allocation/trim budgets, host ownership, device loss and the production dependency decision |
 | Cosmos simulation | **Partial:** gravity, hierarchical repulsion, ordered springs and cooling have a passing bounded precision candidate at 8,192 points | Remaining forces, layout-quality criteria, scalable hierarchy construction and default-length schedules |
 | Rendering and interaction | **Early:** circles and minimal straight links | Styling, picking, dragging and the rest of the renderer |
 | Library and embedding contracts | **Unproven** | Live typed-array/config updates, resizing, shared ownership, device loss and host integration |
@@ -84,9 +84,9 @@ then broaden Cosmos coverage instead of making CPU-path arithmetic identity the 
 
 | Contract | Current evidence | Acceptance still needed |
 | --- | --- | --- |
-| Cooling/default parameters | Composed 100/300-tick schedules; spring variation `[1, 1]` | Production `simulationDecay: 5000` and variation `[1, 1.2]`; the current experiment rejects decay above 1,000 |
-| Repulsion selection | Isolated exact force and forced-hierarchy composition | 4,096/4,097 switching in both directions during updates |
-| Sampling/quality | Composed runs use eight slots and precise far-field quality | Production automatic sampling and quality policies, including their memory/update cost |
+| Cooling/default parameters | Staged 32-sample / `[1, 1.2]` controls and selected 5,000-tick adaptive runs pass through 8,192 points | Broader weights/data, reheating, remaining forces and independent layout-quality acceptance |
+| Repulsion selection | Inclusive 4,096 cutoff and retained-buffer updates across it pass with position preservation enabled | Full-engine update semantics, broader topology changes and larger counts |
+| Sampling/quality | 32 starting samples, GPU occupancy counts, production decision rules and hysteresis pass bounded checks; active counts change without position-buffer replacement | Matched Graph scheduling, allocation/trim policy, larger quality tiers and cross-device cost |
 | Graph size | Composed native acceptance through 8,192; some isolated force checks at 16,384 | The 32,768 scaling-harness option is not validated; the current custom WebGPU backend caps input at 16,384 |
 | Quality | Local numerical checks, independent trajectories and restoring probes | Agreed layout-quality criteria for dense, disconnected, coincident and hub-heavy graphs |
 | Hardware gate | M3 native checks plus software-browser regressions | Repeatable native acceptance on the intended GPU/browser matrix; ordinary CI does not run the opt-in native gate |
@@ -130,6 +130,19 @@ evolving tick checks and 3,072 normal timing captures pass. Normal-frame GPU tim
 the tested M3; a duplicate-baseline control changes by about −0.6%. These compare two strict WebGPU paths,
 not production WebGL performance. Both optimizations remain opt-in. Production-default cooling, broader
 force parameters, adaptive sampling, scalable construction and other devices still need acceptance evidence.
+
+The [production-settings follow-up](#/layout-acceptance/docs/production) closes the next bounded parameter
+and update gates. Thirty-two starting samples, `[1, 1.2]` spring variation and occupancy-driven sampling
+pass staged 100-tick controls and a repeated 300-tick adaptive matrix. Selected chain, dense-community and
+unpinned-star runs reach 5,000 ticks and pass their checked ticks and final full-strength probes. A varied
+spring exposed a further rest-length rounding boundary; the corrected path retains the original tolerance.
+
+These are **selected parameter and numerical checks**, not complete Graph-runtime acceptance. The long
+runs use sparse CPU checkpoints, not an independently evolved CPU trajectory over every tick. Adaptive
+sampling reserves 64 slots in this prototype and its paired validation affects wall-clock scheduling.
+The next evidence should compare matched production WebGL/WebGPU behavior and independent layout quality,
+then extend force coverage with center attraction. Broader data, allocation policy and native portability
+remain open.
 
 ## 3. What the experiments tell us about Cosmos
 
@@ -468,7 +481,9 @@ performance and memory meet the target budgets; supported devices are tested; an
 | Demonstrated in a bounded slice | [Ordered grid aggregation](#/cell-aggregation/docs/findings) | Membership reuse plus a bounded sort improves validated larger normal frames; source-order sums and CPU gates remain unchanged |
 | Demonstrated in a bounded slice | [Production layout gates](#/layout-acceptance/docs/findings) | Corrected near-field arithmetic resolves the dense-community tick; production cutoff and combined optimizations pass selected 100/300-tick trajectories with unchanged gates |
 | Further performance work | Stable cell membership and occupancy-dependent routing | Can CSR/sorting remove full-source scans without changing addition order or regressing sparse inputs? |
-| Next simulation contract | Production defaults and broader force parameters | Do 5,000-decay runs, randomized spring lengths/weights and automatic sampling preserve the existing checks across exact/grid routing? |
+| Demonstrated in a bounded slice | [Production settings](#/layout-acceptance/docs/production) | Staged sampling/variation controls, state-preserving cutoff changes and selected 5,000-tick adaptive runs pass unchanged checks |
+| Next acceptance step | Matched production WebGL and independent layout quality | How do identical inputs, random samples and sampling decisions compare, and do layouts retain useful geometry over long schedules? |
+| Next simulation features | Center attraction, then remaining forces | Do grouped reductions, attractors and collision preserve their production order and behavior? |
 | Next scaling step | Adaptive samples and parallel hierarchy construction | Can the same approximation scale without serial dense-cell work? |
 | Demonstrated in a bounded slice | [Point-count changes and buffer cleanup](#/point-capacity/docs/findings) | Surviving records transfer on the GPU; same devices and count-dependent footprints survive repeated cycles |
 | Demonstrated in a bounded slice | [Retained capacity and kernel reuse](#/point-capacity/docs/reuse) | In-capacity updates are cheaper locally; more idle memory is retained and GPU-frame timings remain order-sensitive |
