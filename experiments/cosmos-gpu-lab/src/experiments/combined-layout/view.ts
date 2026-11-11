@@ -10,7 +10,8 @@ import { PRECISION_MODES, PRECISION_LABELS, GRAVITY, REPULSION, SPRINGS, type Fi
 import { BACKENDS, LABELS, createCombinedSession, type CombinedSession, type Name, type Row } from './session'
 const num = (v: number): string => Number.isFinite(v) ? v.toExponential(2) : 'non-finite'
 export async function createCombinedView (host: HTMLElement): Promise<ExperimentInstance> {
-  host.innerHTML = `<p class="demo-note">Gravity → integrate → repulsion → integrate → incoming springs → integrate → outgoing springs → integrate → cool.
+  host.innerHTML = `<p class="demo-note">Gravity → integrate → optional center → integrate → repulsion → integrate →
+    incoming springs → integrate → outgoing springs → integrate → cool.
     Each backend evolves independently. The alpha = 1 probe tests whether a cooled layout still moves when forces regain full strength.</p>
     <div class="scale-toolbar">
       <label>Graph <select data-control="fixture">${['chain', 'star', 'communities', 'pinned'].map(f => `<option>${f}</option>`).join('')}</select></label>
@@ -19,11 +20,14 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       <label>Cooling schedule <select data-control="decay"><option value="100">100 ticks</option><option value="300">300 ticks</option></select></label>
       <label>Validation <select data-control="checkpoint"><option value="10">Every 10 ticks + first / final</option>
         <option value="1">Every tick · diagnostic</option></select></label>
+      <label>Center attraction <select data-control="center"><option value="0">Off · production default</option><option value="1">1</option></select></label>
       <label>WebGPU arithmetic <select data-control="precision">${PRECISION_MODES.map(mode =>
     `<option value="${mode}">${PRECISION_LABELS[mode]}</option>`).join('')}</select></label>
     </div>
     <p class="demo-note">Precision candidates use integer-controlled rounding for selected spring operations through luma compute kernels.
       The aligned candidate restores Cosmos's polar gravity calculation and rounds repulsion integration. Native f32 remains the baseline.</p>
+    <p class="demo-note">Optional center attraction always uses the refined polar kernel; the selector controls the other stages.
+      <a href="#/matched-layout/docs/center">Matched center comparison</a> adds aggregate checks and paired GPU cost measurements.</p>
     <p class="demo-note">Checkpoint mode checks all four stages and the whole tick at selected ticks only. Other ticks are unvalidated.
       CPU continues independently; bounds and final metrics still require readback. All force tolerances stay unchanged.
       Above 2,048 points, spring timing compares native f32, rounded products, and rounded repulsion integration.</p>
@@ -67,6 +71,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     el<HTMLButtonElement>('[data-action="spring-isolation"]').disabled = busy || session?.settings.springPrecision !== 'distance' ||
       !Object.keys(session.firstFailures).some(k => k === 'webgpu-incoming' || k === 'webgpu-outgoing')
     el<HTMLButtonElement>('[data-action="tick-isolation"]').disabled = busy || !session ||
+      Boolean(session.settings.center) ||
       !['products', 'composed', 'aligned', 'trig'].includes(session.settings.springPrecision ?? 'baseline') ||
       (!session.firstTickFailures['probe-webgpu'] && !session.firstTickFailures.webgpu)
     el<HTMLButtonElement>('[data-action="replay"]').disabled = busy || !session || !Object.keys(session.captures).length
@@ -280,6 +285,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       decay: Number(control('decay').value),
       checkpointEvery: Number(control('checkpoint').value),
       springPrecision: control('precision').value as SpringPrecision,
+      center: Number(control('center').value),
     }, canvas)
     if (destroyed) { next.destroy(); return }
     session = next; render()

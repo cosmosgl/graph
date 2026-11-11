@@ -11,6 +11,7 @@ import type { RepulsionMethod } from './repulsion-policy'
 export type FrameBatch = { frames: number; draw: boolean; decay: number; view: View }
 export type CombinedBackend = GridBackend & {
   repulsionMethod?(): RepulsionMethod;
+  readCenter?(): Promise<Float32Array>;
   stepStage(stage: Stage, alpha: number): void;
   stepTick?(alpha: number, tick: number): void;
   resizeGraph?(graph: GraphInput, input: Input, preserve: boolean): PositionTransfer;

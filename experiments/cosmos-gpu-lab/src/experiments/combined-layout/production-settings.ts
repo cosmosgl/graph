@@ -1,5 +1,5 @@
 import { getFinestGridSize, getNearFieldSlotCount } from '../../../../../src/modules/Shared/cell-slots'
-export type ForceSettings = { samples: number; variation: [number, number]; precise: boolean; origin?: [number, number] }
+export type ForceSettings = { samples: number; variation: [number, number]; precise: boolean; origin?: [number, number]; center?: number }
 export type ProductionPreset = 'reference' | 'samples32' | 'varied32' | 'adaptive'
 export const PRESETS: Record<ProductionPreset, string> = {
   reference: 'Reference · 8 samples, fixed springs',
@@ -19,6 +19,7 @@ export function validateForceSettings (s: ForceSettings): void {
   if (!Number.isInteger(s.samples) || s.samples < 1 || s.samples > 64 || s.variation.length !== 2 ||
     !s.variation.every(v => Number.isFinite(v) && v > 0) || s.variation[0] > s.variation[1]) throw new Error('Invalid force settings')
   if (s.origin && (s.origin.length !== 2 || !s.origin.every(Number.isFinite))) throw new Error('Invalid force origin')
+  if (s.center !== undefined && (!Number.isFinite(s.center) || s.center < 0)) throw new Error('Invalid center force')
 }
 export type Occupancy = { points: number; overflow: [number, number, number] }
 // Mirrors ForceManyBody's occupancy decision and budgets, independently of the

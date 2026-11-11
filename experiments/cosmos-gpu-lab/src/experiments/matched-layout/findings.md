@@ -1,5 +1,7 @@
 # Matched layout findings
 
+This is the **center-off baseline**. The [center-enabled comparison and GPU cost measurements](#/matched-layout/docs/center) extend it with the optional production center force.
+
 **The strict WebGPU candidate reproduced the independent CPU trajectory with zero measured pointwise drift across 12 M3 runs and 11,200 ticks.** All 1,132 frozen checkpoints and 12 full-strength probes passed the original numerical gate. This supports a behavioral port of this bounded Cosmos force sequence. Production WebGL’s layout scores stayed close, while its scalar numerical checks retained failures.
 
 Measured on **11 November 2026**, Apple M3, standalone Chrome 156, luma `10.0.0-alpha.4`. WebGL used ANGLE Metal and the repository’s production GLSL through luma v10. This is a matched shader/algorithm comparison; complete `Graph` runtime scheduling and public API behavior remain outside the study. See the [method](#/matched-layout/docs/method).
@@ -59,7 +61,7 @@ This study does **not** select a production arithmetic policy or establish a Web
 ## Reproduce
 
 1. Run `pnpm install`, then `pnpm --filter @cosmos.gl/gpu-lab dev`; open the Vite URL and **Matched layout comparison**.
-2. Choose **Adaptive samples · production spring variation**, **Pin point 0**, and the graph/distribution/count/cooling row above. Confirm the controls before starting.
+2. Choose **Adaptive samples · production spring variation**, **Pin point 0**, **Center attraction = Off**, and the graph/distribution/count/cooling row above. Confirm the controls before starting.
 3. **Run comparison**, then **Probe at α = 1**. If ordinary failures were captured, use **Replay failures** and inspect restoration. Every first/tenth/final tick is checked; **Step + check** can check an additional selected tick.
 4. **Export JSON** for local evidence, including environment, parameters, sample decisions, histories, checks and failure inputs. Commit Markdown findings and reproduction steps; keep measurement exports local.
 

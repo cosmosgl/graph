@@ -2,13 +2,15 @@ import { createFixture } from '../many-body/data'
 import { compareArray, TOLERANCE as repulsionTolerance } from '../many-body/reference'
 import { compareArray as springCompare, TOLERANCE as springTolerance } from '../weighted-links/reference'
 import { buildReference, frameFor, layout } from '../many-body-grid/data'
-import { createGraph, cool, GRAVITY, REPULSION, SPRINGS, STAGES, type Stage } from '../combined-layout/data'
+import { createGraph, cool, GRAVITY, REPULSION, SPRINGS, stagesFor, type Stage } from '../combined-layout/data'
+import { centerAggregate } from '../combined-layout/center-reference'
 import { createOracle } from '../combined-layout/reference'
 import { createCombinedWebGL } from '../combined-layout/webgl'
 import { createCombinedWebGPU } from '../combined-layout/webgpu'
 import { createSamplingPolicy, forceSettings, type ProductionPreset } from '../combined-layout/production-settings'
 import { repulsionMethod } from '../combined-layout/repulsion-policy'
 import type { CombinedBackend } from '../combined-layout/backend'
+import type { CenterCostReport } from '../combined-layout/center-cost'
 import { quality, stressPairs } from './metrics'
 export const NAMES = ['webgl', 'webgpu', 'cpu'] as const
 export type Name = typeof NAMES[number]
@@ -16,9 +18,12 @@ type GpuName = Exclude<Name, 'cpu'>
 export const LABELS: Record<Name, string> = { webgl: 'Production GLSL · WebGL', webgpu: 'luma WebGPU', cpu: 'CPU reference' }
 export type Settings = {
   count: number; fixture: 'chain' | 'communities' | 'star'; distribution: 'uniform' | 'clusters';
-  ticks: number; checkpointEvery: number; preset: ProductionPreset; pinned: boolean;
+  ticks: number; checkpointEvery: number; preset: ProductionPreset; pinned: boolean; center?: number;
 }
-export type StageCheck = { stage: Stage; forces: ReturnType<typeof springCompare>; positions: ReturnType<typeof springCompare>; flagsExact: boolean }
+export type StageCheck = {
+  stage: Stage; forces: ReturnType<typeof springCompare>; positions: ReturnType<typeof springCompare>; flagsExact: boolean;
+  aggregate?: ReturnType<typeof compareArray>;
+}
 export type Check = { stages: StageCheck[]; wholeTick: ReturnType<typeof compareArray>; valid: boolean; restored: boolean }
 type Quality = ReturnType<typeof quality>
 export type Row = {
@@ -36,6 +41,7 @@ export async function createMatchedSession (settings: Settings, canvas: (name: G
     physics: { gravity: number; repulsion: typeof REPULSION; springs: typeof SPRINGS }; policy: string;
     devices: Partial<Record<GpuName, string>>; stressSampling: { landmarks: number[]; pairs: number; unreachable: number };
     rows: Row[]; probe?: Row; captures: Partial<Record<GpuName, Capture>>;
+    centerCost?: CenterCostReport;
     sampling: Array<{ tick: number; wanted: number; applied: number; changed: boolean }>;
     replays: Array<{ name: GpuName; reproduced: boolean; restored: boolean }>; errors: Partial<Record<GpuName, string>>;
   };
@@ -52,11 +58,11 @@ export async function createMatchedSession (settings: Settings, canvas: (name: G
     input.points[i] = Math.fround(input.points[i] + 2048); input.points[i + 1] = Math.fround(input.points[i + 1] + 2048)
   }
   graph.points = input.points
-  const parameters = { ...forceSettings(settings.preset, settings.count), origin: [2048, 2048] as [number, number] }
+  const parameters = { ...forceSettings(settings.preset, settings.count), origin: [2048, 2048] as [number, number], center: settings.center ?? 0 }
   const oracle = createOracle(graph, input, 'production', parameters); const sampler = createSamplingPolicy(settings.count)
   const method = repulsionMethod(settings.count, 'production'); const sampled = stressPairs(graph)
   const report = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     experiment: 'matched-layout',
     recordedAt: new Date().toISOString(),
     browser: navigator.userAgent,
@@ -64,7 +70,7 @@ export async function createMatchedSession (settings: Settings, canvas: (name: G
     parameters: { ...parameters },
     physics: { gravity: GRAVITY, repulsion: REPULSION, springs: { ...SPRINGS, variation: parameters.variation } },
     policy: settings.preset === 'adaptive' && method === 'hierarchical'
-      ? 'CPU post-gravity occupancy before ticks 1, 31, 61, …; one shared decision tape; per-lane bounds'
+      ? 'CPU pre-repulsion occupancy before ticks 1, 31, 61, …; one shared decision tape; per-lane bounds'
       : 'Fixed sample count; per-lane bounds; sample count unused on the exact route',
     method,
     tolerances: { repulsionTolerance, springTolerance },
@@ -100,27 +106,29 @@ export async function createMatchedSession (settings: Settings, canvas: (name: G
   }> => {
     let previous = start; const stages: StageCheck[] = []
     const whole = checked ? oracle.tick(start, value, tick) : undefined
-    for (const stage of STAGES) {
+    for (const stage of stagesFor(parameters.center)) {
       if (destroyed) throw new Error('Matched session disposed')
       if (stage === 'repulsion' && method === 'hierarchical') lane.backend.setFrame(frameFor(previous, tick, parameters.samples, parameters.precise))
       const expected = checked ? oracle.stage(stage, previous, value, tick) : undefined
       lane.backend.stepStage(stage, value)
-      if (!checked && stage !== 'gravity' && stage !== 'outgoing') continue
+      if (!checked && stage !== 'gravity' && stage !== 'center' && stage !== 'outgoing') continue
       const actual = await lane.backend.read()
       if (expected) {
         const compare = stage === 'incoming' || stage === 'outgoing' ? springCompare : compareArray
-        stages.push({
+        const check: StageCheck = {
           stage,
           forces: compare(actual.forces, expected.forces),
           positions: compare(actual.positions, expected.positions),
           flagsExact: actual.positions.every((v, i) => i % 4 < 2 || v === expected.positions[i]) &&
             actual.forces.every((v, i) => i % 4 < 2 || v === expected.forces[i]),
-        })
+        }
+        if (stage === 'center') check.aggregate = compareArray(await lane.backend.readCenter!(), centerAggregate(previous))
+        stages.push(check)
       }
       previous = actual.positions
     }
     const check = whole ? { stages, wholeTick: compareArray(previous, whole), valid: false, restored: false } : undefined
-    if (check) check.valid = check.wholeTick.valid && stages.every(s => s.forces.valid && s.positions.valid && s.flagsExact)
+    if (check) check.valid = check.wholeTick.valid && stages.every(s => s.forces.valid && s.positions.valid && s.flagsExact && s.aggregate?.valid !== false)
     return { positions: previous, check }
   }
   const restore = async (lane: Lane, saved: Float32Array): Promise<boolean> => {
@@ -155,9 +163,10 @@ export async function createMatchedSession (settings: Settings, canvas: (name: G
       // One deterministic CPU-derived decision is applied to every lane BEFORE
       // the tick. It removes wall-clock adaptation as a comparison variable.
       if (!probe && method === 'hierarchical' && settings.preset === 'adaptive' && tick % 30 === 0) {
-        const gravity = oracle.stage('gravity', before, value, tick).positions
-        const frame = frameFor(gravity, tick, parameters.samples, parameters.precise)
-        const { aggregates } = buildReference(gravity, frame)
+        let beforeRepulsion = oracle.stage('gravity', before, value, tick).positions
+        if (parameters.center) beforeRepulsion = oracle.stage('center', beforeRepulsion, value, tick).positions
+        const frame = frameFor(beforeRepulsion, tick, parameters.samples, parameters.precise)
+        const { aggregates } = buildReference(beforeRepulsion, frame)
         const finest = aggregates.slice(-(layout(settings.count).finest ** 2 * 4))
         const stats = { points: 0, overflow: [0, 0, 0] as [number, number, number] }
         for (let i = 2; i < finest.length; i += 4) {

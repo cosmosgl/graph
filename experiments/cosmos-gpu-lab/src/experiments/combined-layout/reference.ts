@@ -4,7 +4,8 @@ import { buildReference, frameFor } from '../many-body-grid/data'
 import { gridReference, integrate } from '../many-body-grid/reference'
 import { createReferenceIndex, referenceTick as springTick } from '../weighted-links/reference'
 import type { GraphInput } from '../weighted-links/data'
-import { GRAVITY, REPULSION, SPRINGS, STAGES, type Stage } from './data'
+import { GRAVITY, REPULSION, SPRINGS, stagesFor, type Stage } from './data'
+import { centerReference } from './center-reference'
 import { repulsionMethod, type RepulsionPolicy } from './repulsion-policy'
 import { forceSettings, validateForceSettings, type ForceSettings } from './production-settings'
 const f = Math.fround
@@ -30,6 +31,7 @@ export function createOracle (
   const index = createReferenceIndex(graph)
   const stage = (name: Stage, points: Float32Array, alpha: number, tick: number): Snapshot => {
     if (name === 'gravity') return gravity(points, alpha, settings.origin)
+    if (name === 'center') return centerReference(points, alpha, settings.center ?? 0)
     if (name === 'repulsion') {
       if (repulsionMethod(points.length / 4, policy) === 'exact') return exactTick(input, points, { ...REPULSION, alpha })
       const frame = frameFor(points, tick, settings.samples, settings.precise)
@@ -42,7 +44,7 @@ export function createOracle (
   return {
     stage,
     tick (points, alpha, tick): Float32Array {
-      for (const name of STAGES) points = stage(name, points, alpha, tick).positions
+      for (const name of stagesFor(settings.center)) points = stage(name, points, alpha, tick).positions
       return points
     },
   }

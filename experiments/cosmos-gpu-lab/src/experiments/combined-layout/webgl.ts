@@ -1,4 +1,4 @@
-import { Texture, UniformStore, type Buffer } from '@luma.gl/core'
+import { Texture, UniformStore, type Buffer, type Device } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { forceFrag } from '../../../../../src/modules/ForceLink/force-spring'
 import gravitySource from '../../../../../src/modules/ForceGravity/force-gravity.frag?raw'
@@ -7,7 +7,9 @@ import { createGridWebGL } from '../many-body-grid/webgl'
 import { frameFor } from '../many-body-grid/data'
 import type { Input } from '../many-body/data'
 import { buildTopology, type GraphInput } from '../weighted-links/data'
-import { GRAVITY, REPULSION, SPRINGS, type Stage } from './data'
+import { measureBatch } from '../many-body/timing'
+import { GRAVITY, REPULSION, SPRINGS, stagesFor, type Stage } from './data'
+import { createCenterWebGL } from './center-webgl'
 import type { CombinedBackend } from './backend'
 import { repulsionMethod, type RepulsionPolicy } from './repulsion-policy'
 import { forceSettings, validateForceSettings, type ForceSettings } from './production-settings'
@@ -17,12 +19,16 @@ export async function createCombinedWebGL (
 ): Promise<CombinedBackend> {
   const settings = options.forceSettings ?? forceSettings('reference', input.points.length / 4); validateForceSettings(settings)
   const policy = options.repulsionPolicy ?? 'hierarchical'
+  let activeDevice: Device; let readCenter: CombinedBackend['readCenter']
   let stage: Stage = 'gravity'; const p = { ...REPULSION }; const topology = buildTopology(graph)
   const base = await createGridWebGL(canvas, input, p, frameFor(input.points, 0, settings.samples, settings.precise), gridFactory => resources => {
     const { device, positions, target, exit, size, count } = resources
+    activeDevice = device
     const owned: Array<{ destroy(): void }> = []; const own = <T extends { destroy(): void }>(v: T): T => { owned.push(v); return v }
     try {
       const grid = own(gridFactory(resources))
+      const center = settings.center ? own(createCenterWebGL(device, count, size, positions, exit, target)) : undefined
+      readCenter = center?.read
       const texture = (width: number, data: Float32Array): Texture => {
         const t = own(device.createTexture({
           width,
@@ -110,6 +116,10 @@ out vec4 color; void main() { color = vec4(0.27,0.32,0.4,1.); }`,
           drawUniforms.setUniforms({ drawUniforms: { view } }); lines.setBindings({ positions: positions[source] }); lines.draw(pass)
         },
         encode (source): void {
+          if (stage === 'center') {
+            if (!center) throw new Error('Center force was not allocated')
+            center.encode(source, p.alpha, settings.center ?? 0); return
+          }
           if (stage === 'repulsion') {
             if (repulsionMethod(count, policy) === 'exact') resources.encodeExact()
             else grid.encode(source)
@@ -149,10 +159,20 @@ out vec4 color; void main() { color = vec4(0.27,0.32,0.4,1.); }`,
   }, options.adaptiveSampling ? 64 : settings.samples)
   return {
     ...base,
+    readCenter,
     repulsionMethod: () => repulsionMethod(input.points.length / 4, policy),
     async readStructure (): ReturnType<CombinedBackend['readStructure']> {
       if (repulsionMethod(input.points.length / 4, policy) === 'exact') throw new Error('Exact repulsion does not build a grid')
       return base.readStructure()
+    },
+    async measureCurrentFrame (alpha, _tick, view): ReturnType<NonNullable<CombinedBackend['measureCurrentFrame']>> {
+      // A frozen bounds frame must be supplied by the caller for hierarchy.
+      // All GPU force/integration/drawing passes are timed; uploads/readback are outside.
+      const timing = await measureBatch(activeDevice, 1, () => {
+        for (const next of stagesFor(settings.center)) { stage = next; p.alpha = alpha; base.step() }
+        base.render(view)
+      })
+      return { timing, snapshot: await base.read() }
     },
     stepStage (next, alpha): void { stage = next; p.alpha = alpha; base.step() },
   }

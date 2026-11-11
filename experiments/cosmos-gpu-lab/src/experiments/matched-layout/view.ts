@@ -1,5 +1,6 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { PRESETS, type ProductionPreset } from '../combined-layout/production-settings'
+import { measureCenterCost, centerCostSummary } from '../combined-layout/center-cost'
 import { sharedView } from './metrics'
 import { createMatchedSession, LABELS, NAMES, type MatchedSession, type Name, type Row, type Settings } from './session'
 function num (value: number | null | undefined): string {
@@ -7,6 +8,7 @@ function num (value: number | null | undefined): string {
   return Number.isFinite(value) ? value.toExponential(3) : 'non-finite'
 }
 const COLORS = { webgl: '#e7b882', webgpu: '#9fb5d5', cpu: '#c7b1e0' }
+const time = (value: number | null): string => value === null ? '—' : value.toFixed(3)
 function settingsNote (settings: Settings): string {
   return settings.preset === 'adaptive' ? 'Shared CPU-derived sample decisions every 30 ticks (grid mode only).' : 'Fixed sample count.'
 }
@@ -23,11 +25,14 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
       <label>Cooling <select data-control="ticks"><option>100</option><option>300</option><option>5000</option></select></label>
       <label>Force settings <select data-control="preset">${presets}</select></label>
       <label>Anchor <select data-control="pinned"><option value="true">Pin point 0</option><option value="false">Unpinned</option></select></label>
+      <label>Center attraction <select data-control="center"><option value="0">Off · production default</option>
+        <option value="0.1">0.1</option><option value="1" selected>1 · comparison</option></select></label>
     </div>
     <div class="demo-toolbar playback-toolbar"><div class="controls">
       <button data-action="step">Step + check</button><button data-action="run" class="button-primary">Run comparison</button>
       <button data-action="stop" disabled>Stop</button><button data-action="probe">Probe at α = 1</button>
       <button data-action="replay" disabled>Replay failures</button><button data-action="reset">Reset</button>
+      <button data-action="center-cost">Measure center GPU cost</button>
       <button data-action="export" disabled>Export JSON</button>
     </div><span class="tick-counter">Tick <strong data-output="tick">0</strong> · α <strong data-output="alpha">1</strong></span></div>
     <p role="status" data-output="status" class="many-body-status">Preparing devices…</p>
@@ -38,6 +43,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     <p class="demo-note" data-output="method"></p>
     <div data-output="quality" class="many-body-results"></div><div data-output="probe" class="many-body-results"></div>
     <div data-output="charts" class="trajectory-chart"></div><div data-output="checks" class="many-body-results"></div>
+    <div data-output="center-cost" class="many-body-results"></div>
     <p class="demo-note">Read <a href="#/matched-layout/docs/method">the method and metric definitions</a> and
       <a href="#/matched-layout/docs/findings">measured findings</a>. This diagnostic includes CPU work and readbacks;
       it is not a runtime performance benchmark.</p>`
@@ -49,11 +55,12 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
   const controls = (): void => {
     host.querySelectorAll<HTMLButtonElement | HTMLSelectElement>('button,select').forEach(c => { c.disabled = busy })
     el<HTMLButtonElement>('[data-action="stop"]').disabled = !busy
-    el<HTMLButtonElement>('[data-action="export"]').disabled = busy || !session?.report.rows.length
+    el<HTMLButtonElement>('[data-action="export"]').disabled = busy || (!session?.report.rows.length && !session?.report.centerCost)
     el<HTMLButtonElement>('[data-action="replay"]').disabled = busy || !Object.keys(session?.report.captures ?? {}).length
     el<HTMLButtonElement>('[data-action="run"]').disabled = busy || !session || session.report.rows.length >= session.settings.ticks
     el<HTMLButtonElement>('[data-action="step"]').disabled = busy || !session || session.report.rows.length >= session.settings.ticks
     el<HTMLButtonElement>('[data-action="probe"]').disabled = busy || !session
+    el<HTMLButtonElement>('[data-action="center-cost"]').disabled = busy || !session || !(session.settings.center! > 0)
   }
   const qualityTable = (row: Row, title: string): string => `<table><caption>${title}</caption>
     <thead><tr><th>Path</th><th>Fitted stress RMS</th><th>Spring mismatch</th><th>RMS motion</th>
@@ -101,7 +108,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     el('[data-output="tick"]').textContent = String(report.rows.length); el('[data-output="alpha"]').textContent = num(session.alpha())
     const method = report.method === 'exact' ? 'Exact all-pairs' : 'Hierarchical'
     const sampling = report.method === 'exact' ? 'all present neighbors' : `${row?.samples ?? report.parameters.samples} samples`
-    el('[data-output="method"]').textContent = `${method} repulsion · ${sampling} · ` +
+    el('[data-output="method"]').textContent = `${method} repulsion · ${sampling} · center ${session.settings.center ?? 0} after gravity · ` +
       `origin (2048, 2048) · shared camera · orange pinned. ${settingsNote(session.settings)} ` +
       'Frozen checks: first, every 10 ticks and final. Unchecked ticks have no numerical verdict.'
     el('[data-output="quality"]').innerHTML = row ? qualityTable(row, `Independent trajectories · tick ${row.tick}`) : ''
@@ -126,8 +133,9 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     const check = r.checks[name]
     return `<tr><td>${r === report.probe ? 'α = 1 probe' : r.tick}</td><td>${LABELS[name]}</td><td>${check ? check.valid ? 'Pass' : 'FAIL' : 'Unavailable'}</td>
       <td>${check
-    ? check.stages.filter(s => !s.forces.valid || !s.positions.valid || !s.flagsExact).map(s =>
-      `${s.stage}: ${s.forces.failures} / ${s.positions.failures}${s.flagsExact ? '' : ' · flags differ'}`).join('; ') || '0 / 0'
+    ? check.stages.filter(s => !s.forces.valid || !s.positions.valid || !s.flagsExact || s.aggregate?.valid === false).map(s =>
+      `${s.stage}: ${s.forces.failures} / ${s.positions.failures}${s.flagsExact ? '' : ' · flags differ'}` +
+      `${s.aggregate?.valid === false ? ' · aggregate fails' : ''}`).join('; ') || '0 / 0'
     : '—'}</td>
       <td>${check?.wholeTick.failures ?? '—'}</td><td>${check?.restored ? 'Yes' : '—'}</td></tr>`
   })).join('')}</tbody></table></details>
@@ -136,6 +144,37 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
       `${LABELS[name as Name]} at tick ${c.tick}`).join(' · ')}. Export includes the frozen inputs and outputs.</p>`
     : ''}
       ${replaySummary ? `<p>Failure replay: ${replaySummary}.</p>` : ''}`
+      : ''
+    const cost = report.centerCost
+    el('[data-output="center-cost"]').innerHTML = cost
+      ? `<h3>Added center GPU cost · 0 → ${cost.strength}</h3>
+      <p class="demo-note">Frozen CPU geometry after ${cost.tick} ticks; α = ${num(cost.alpha)}; ${cost.samples} fixed samples in grid mode.
+        Alternate on/off order within every pair.
+        ${cost.status}. WebGPU batches ${cost.policy.frames} resident normal frames; WebGL times one frame with precomputed frozen bounds.
+        Uploads and readback are outside GPU timestamps. Compare the added cost within each API.</p>
+      <table><thead><tr><th>Path / block</th><th>Gate</th><th>Center off ms</th><th>Center on ms</th>
+        <th>Paired added ms</th><th>Paired range ms</th><th>Added %</th></tr></thead>
+      <tbody>${(['webgl', 'webgpu'] as const).flatMap(api => Array.from({ length: cost.policy.blocks }, (_, block) => {
+    const s = centerCostSummary(cost, api, block)
+    return `<tr><td>${LABELS[api]} · ${block + 1}</td><td>${s.accepted ? 'Pass' : 'Rejected'}</td><td>${time(s.offMs)}</td>
+      <td>${time(s.onMs)}</td><td>${time(s.deltaMs)}</td><td>${s.deltaRange?.map(time).join(' … ') ?? '—'}</td>
+      <td>${s.percent === null ? '—' : s.percent.toFixed(1)}</td></tr>`
+  })).join('')}</tbody></table>
+      <details><summary>Inspect timing gates</summary><table><thead><tr><th>Path / center</th><th>Scalar failures</th>
+        <th>Whole-tick failures</th><th>Timed-frame failures</th><th>Invalid timers</th></tr></thead><tbody>
+      ${cost.preflight.map(p => {
+    const trials = cost.trials.filter(t => t.api === p.api && t.center === p.center)
+    const failures = p.gate.stages.filter(s => s.forceFailures || s.positionFailures || s.aggregateFailures || !s.flagsExact)
+    return `<tr><td>${LABELS[p.api]} / ${p.center}</td><td>${failures.map(s =>
+      `${s.stage}: ${s.forceFailures} force, ${s.positionFailures} position, ` +
+      `${s.aggregateFailures} aggregate${s.flagsExact ? '' : ', flags'}`).join('; ') || '0'}</td>
+      <td>${p.gate.wholeTick.failures}</td><td>${trials.filter(t => !t.valid).length}</td>
+      <td>${trials.filter(t => t.timing.timerStatus !== 'valid').length}</td></tr>`
+  }).join('')}</tbody></table></details>
+      <p class="demo-note">A result requires unchanged scalar gates, exact replay of every timed frame and valid timers in every trial.
+        Added ms is the median of paired on − off samples; off/on columns are independent medians. Passing gates does not establish stable timing.
+        Rejected rows retain their raw trials in JSON. Delta includes the center reduction, force, integration and resulting downstream work.
+        This is a bounded GPU-work comparison; it does not measure production Graph end-to-end FPS.</p>`
       : ''
     const charts: Array<{ title: string; value: (q: NonNullable<Row['quality']['cpu']>) => number | null }> = [
       { title: 'Scale-fitted stress RMS', value: q => q.stress.rms },
@@ -170,6 +209,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
       checkpointEvery: 10,
       preset: control('preset').value as ProductionPreset,
       pinned: control('pinned').value === 'true',
+      center: Number(control('center').value),
     }, canvas)
     if (destroyed) { next.destroy(); return }
     session = next; render()
@@ -229,6 +269,23 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
       if (!session) return
       await session.replay(); render()
       if (!destroyed) status.textContent = 'Replay finished. Check reproduction and restoration results below.'
+    })
+  })
+  el('[data-action="center-cost"]').addEventListener('click', () => {
+    task(async () => {
+      if (!session) return
+      status.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      session.report.centerCost = await measureCenterCost(session.settings, session.cpu().slice(), session.alpha(), session.report.rows.length,
+        session.report.rows.at(-1)?.samples ?? session.report.parameters.samples, text => { if (!destroyed) status.textContent = text },
+        () => stopped || destroyed)
+      if (destroyed) return
+      render()
+      const cost = session.report.centerCost
+      const rejected = (['webgl', 'webgpu'] as const).some(api =>
+        Array.from({ length: cost.policy.blocks }, (_, block) => centerCostSummary(cost, api, block)).some(s => !s.accepted))
+      status.textContent = `Center cost comparison ${cost.status}${rejected ? ' with rejected controls' : ''}; inspect gates below. Layouts unchanged. ${
+        cost.errors.join(' ')}`
+      el('[data-output="center-cost"]').scrollIntoView({ block: 'center', behavior: 'smooth' })
     })
   })
   el('[data-action="export"]').addEventListener('click', () => {

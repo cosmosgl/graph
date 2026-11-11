@@ -4,6 +4,8 @@ Can Cosmos’s WebGL forces and the proposed WebGPU port produce comparable layo
 
 The WebGL lane imports the production gravity, exact/hierarchical repulsion, springs and integration GLSL, hosted through luma v10. It is not the complete production `Graph` runtime. The WebGPU lane uses luma kernels with the strict arithmetic candidate, ordered cached-small aggregation and order-preserving hub prefetch. The scalar CPU reference reproduces float32 operation order independently.
 
+The optional [center attraction](#/matched-layout/docs/center) now inserts centroid reduction, center force and integration after gravity. The current demo selects strength 1 for comparison; the production default and the original baseline are center **off**. Center-on bounds and the shared occupancy tape use post-center positions. Its independent CPU aggregate uses double-precision summation followed by float32 format rounding.
+
 ```flow
 One graph, initial positions and deterministic random samples
 Three independent trajectories · WebGL, WebGPU, CPU
@@ -21,7 +23,7 @@ Compare quality histories and full-strength residual motion
 - Same deterministic jitter and hash seed each tick, point jitter samples, directional spring-distance samples and edge traversal order. Variation is `[1, 1.2]` in the varied/adaptive presets.
 - Optional pin on point 0; all fixture points are present. Chain, bridged communities and star fixtures use the same point and edge IDs in every lane.
 
-Adaptive mode uses the production occupancy tiers, affordability cap and two-observation hysteresis. For a controlled comparison, one CPU-derived decision tape is applied to every lane before tick 1 and every 30 ticks thereafter, using the CPU’s post-gravity occupancy. It is **not** production’s wall-clock sampling schedule, nor three independently adapting controllers. Exports record every decision. Bounds still come from each lane’s own post-gravity positions, with the same bounds formula and jitter.
+Adaptive mode uses the production occupancy tiers, affordability cap and two-observation hysteresis. For a controlled comparison, one CPU-derived decision tape is applied to every lane before tick 1 and every 30 ticks thereafter, using the CPU’s pre-repulsion occupancy (after gravity and optional center). It is **not** production’s wall-clock sampling schedule, nor three independently adapting controllers. Exports record every decision. Bounds still come from each lane’s own pre-repulsion positions, with the same bounds formula and jitter.
 
 ## Numerical correctness is a separate gate
 

@@ -4,7 +4,8 @@ import { frameFor, buildReference } from '../many-body-grid/data'
 import { compareStructure } from '../many-body-grid/validation'
 import { centroidReference, centroidRounding } from '../many-body-grid/centroids'
 import { displacement } from '../repulsion-trajectories/metrics'
-import { createGraph, cool, isCheckpoint, STAGES, type Stage, type Settings } from './data'
+import { createGraph, cool, isCheckpoint, stagesFor, type Stage, type Settings } from './data'
+import { forceSettings } from './production-settings'
 import { createOracle } from './reference'
 import { metrics } from './metrics'
 import { createCombinedWebGL } from './webgl'
@@ -38,7 +39,9 @@ export async function createCombinedSession (settings: Settings, canvas: (name: 
   firstTickFailures: Record<string, TickFailure>; captures: Record<string, Capture>; replays: Replay[];
   cpu(): Float32Array; alpha(): number; step(forceCheck?: boolean): Promise<Row>; probe(): Promise<Row>; replayFailures(): Promise<Replay[]>; destroy(): void;
 }> {
-  const { graph, input } = createGraph(settings); const oracle = createOracle(graph, input)
+  const { graph, input } = createGraph(settings)
+  const parameters = { ...forceSettings('reference', settings.count), center: settings.center ?? 0 }
+  const oracle = createOracle(graph, input, 'hierarchical', parameters)
   let cpu = input.points; let alpha = 1; let destroyed = false; let busy = false
   const rows: Row[] = []; const errors: Partial<Record<Name, string>> = {}
   const firstFailures: Record<string, Failure> = {}; const firstTickFailures: Record<string, TickFailure> = {}
@@ -46,8 +49,8 @@ export async function createCombinedSession (settings: Settings, canvas: (name: 
   for (const name of BACKENDS) {
     try {
       const backend = name === 'webgl'
-        ? await createCombinedWebGL(canvas(name), graph, input)
-        : await createCombinedWebGPU(canvas(name), graph, input, settings.springPrecision)
+        ? await createCombinedWebGL(canvas(name), graph, input, { forceSettings: parameters })
+        : await createCombinedWebGPU(canvas(name), graph, input, settings.springPrecision, { forceSettings: parameters })
       lanes.push({ name, backend, positions: input.points })
     } catch (error) { errors[name] = error instanceof Error ? error.message : String(error) }
   }
@@ -57,7 +60,7 @@ export async function createCombinedSession (settings: Settings, canvas: (name: 
     let previous = start
     const wholeExpected = checked ? oracle.tick(start, value, tick) : undefined
     const stages: StageCheck[] = []
-    for (const stage of STAGES) {
+    for (const stage of stagesFor(parameters.center)) {
       await new Promise(resolve => setTimeout(resolve, 0))
       if (destroyed) throw new Error('Combined session disposed')
       const expected = checked ? oracle.stage(stage, previous, value, tick) : undefined
@@ -66,7 +69,7 @@ export async function createCombinedSession (settings: Settings, canvas: (name: 
       lane.backend.stepStage(stage, value)
       // Bounds need post-gravity positions; metrics need the final positions.
       // Intermediate spring/repulsion state stays resident on unchecked ticks.
-      if (!checked && stage !== 'gravity' && stage !== 'outgoing') continue
+      if (!checked && stage !== 'gravity' && stage !== 'center' && stage !== 'outgoing') continue
       const actual = await lane.backend.read()
       if (expected) {
         const compare = stage === 'incoming' || stage === 'outgoing' ? springCompare : compareArray
