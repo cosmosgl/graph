@@ -4,6 +4,8 @@ import type { Trace } from './trace'
 import type { Frame, Structure } from './data'
 export type GridBackend = Backend & {
   setFrame(frame: Frame): void;
+  setGpuFrame?(tick: number): void;
+  readBounds?(): Promise<Float32Array>;
   readStructure(): Promise<Structure>;
   readCentroids?(): Promise<Float32Array>;
   readContributions?(target: number): Promise<{ data: Float32Array; forces: Float32Array }>;

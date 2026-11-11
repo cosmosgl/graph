@@ -9,9 +9,13 @@ export function layout (count: number): Layout {
   return { finest, sizes, offsets, cells }
 }
 const f = Math.fround
-export function frameFor (points: Float32Array, tick: number, slots = 8, precise = true): Frame {
+export function frameSamples (tick: number): { jitter: [number, number]; seed: number } {
   let seed = (29471 + tick) >>> 0
   const random = (): number => { seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0; return f(seed / 4294967296) }
+  return { jitter: [random(), random()], seed: random() }
+}
+export function frameFor (points: Float32Array, tick: number, slots = 8, precise = true): Frame {
+  const samples = frameSamples(tick)
   let minX = Infinity; let minY = Infinity; let maxX = -Infinity; let maxY = -Infinity
   for (let i = 0; i < points.length; i += 4) {
     if (points[i + 3] > 0.5) continue
@@ -24,7 +28,8 @@ export function frameFor (points: Float32Array, tick: number, slots = 8, precise
   const x = f(f(f(minX + maxX) * 0.5) - f(extent * 0.5))
   const y = f(f(f(minY + maxY) * 0.5) - f(extent * 0.5))
   const span = f(extent + cell)
-  return { bounds: new Float32Array([f(x - f(random() * cell)), f(y - f(random() * cell)), span, f(1 / span)]), seed: random(), slots, precise }
+  const bounds = new Float32Array([f(x - f(samples.jitter[0] * cell)), f(y - f(samples.jitter[1] * cell)), span, f(1 / span)])
+  return { bounds, seed: samples.seed, slots, precise }
 }
 export function cellOf (x: number, y: number, n: number, box: Float32Array): number {
   const scale = f(box[3] * n)
