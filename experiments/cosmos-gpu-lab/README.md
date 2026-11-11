@@ -66,6 +66,7 @@ fixtures needed to reproduce correctness bugs belong with tests, separately from
 - `repulsion-trajectories`: independent hierarchical-repulsion trajectories, local correctness and accumulated drift.
 - `combined-layout`: gravity, hierarchical repulsion, directional springs and cooling, with checkpoint validation and failure replay.
 - `resident-layout`: GPU bounds and composed compute-to-render ticks compared with the staged precision reference.
+- `point-capacity`: same-device point-count changes, GPU prefix preservation, update costs and buffer cleanup.
 
 Reference pages cover the lab architecture, WebGPU vocabulary and parallel reduction.
 Start with **How WebGPU works** (`#/learn`) for a guided introduction with five interactive teaching models.

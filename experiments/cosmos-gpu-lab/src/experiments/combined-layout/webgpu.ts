@@ -1,6 +1,8 @@
 import { Buffer, type Device } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
 import { bindingLayout, upload, createStorageRenderer } from '../../gpu/luma'
+import { resourceScope } from '../../gpu/resource-scope'
+import type { WebGPUOptions } from '../many-body/webgpu'
 import type { Input } from '../many-body/data'
 import type { GraphInput } from '../weighted-links/data'
 import { validateBatch } from '../many-body/timing'
@@ -33,7 +35,7 @@ const linkSource = `
 `
 export async function createCombinedWebGPU (
   canvas: HTMLCanvasElement, graph: GraphInput, input: Input, precision: SpringPrecision = 'baseline',
-  overrides: { roundedStages?: readonly Stage[]; polarGravity?: boolean; refinedTrig?: boolean; gpuBounds?: boolean } = {}
+  overrides: WebGPUOptions & { roundedStages?: readonly Stage[]; polarGravity?: boolean; refinedTrig?: boolean; gpuBounds?: boolean } = {}
 ): Promise<CombinedBackend> {
   const roundedStages = overrides.roundedStages ?? []
   const polarGravity = overrides.polarGravity ?? (precision === 'aligned' || precision === 'trig')
@@ -43,15 +45,15 @@ export async function createCombinedWebGPU (
   const base = await createGridWebGPU(canvas, input, p, frameFor(input.points, 0), 'streamed', gridFactory => async resources => {
     const { positions, forces, count } = resources
     device = resources.device
-    const owned: Array<{ destroy(): void }> = []; const own = <T extends { destroy(): void }>(v: T): T => { owned.push(v); return v }
+    const scope = resourceScope(overrides.context?.ledger); const own = scope.own
     try {
       const grid = own(await gridFactory(resources))
       const gravityParams = own(upload(device, new Float32Array(4), Buffer.UNIFORM))
       const springParams = own(upload(device, new Float32Array(12), Buffer.UNIFORM))
-      let linkResources = createLinkResources(device, input.points, graph); let version = 0
+      let linkResources = createLinkResources(device, input.points, graph, overrides.context?.ledger); let version = 0
       own({ destroy: () => linkResources.destroy() })
       replaceLinks = (next): ReturnType<NonNullable<CombinedBackend['replaceLinks']>> => {
-        const replacement = createLinkResources(device, input.points, next)
+        const replacement = createLinkResources(device, input.points, next, overrides.context?.ledger)
         const previous = linkResources; linkResources = replacement; version++
         previous.destroy()
         return { version, bytes: replacement.bytes, edgeCount: replacement.edgeCount, buildMs: replacement.buildMs }
@@ -143,13 +145,27 @@ export async function createCombinedWebGPU (
             }
           } finally { if (!sharedPass) pass.end() }
         },
-        destroy (): void { owned.reverse().forEach(r => r.destroy()) },
+        destroy: scope.destroy,
       }
-    } catch (error) { owned.reverse().forEach(r => r.destroy()); throw error }
-  }, { gpuBounds: overrides.gpuBounds })
+    } catch (error) { scope.destroy(); throw error }
+  }, { gpuBounds: overrides.gpuBounds, context: overrides.context, preserve: overrides.preserve })
   return {
     ...base,
     replaceLinks: (next): ReturnType<NonNullable<CombinedBackend['replaceLinks']>> => { base.resourceIdentity!(); return replaceLinks(next) },
+    measureCurrentFrame: overrides.gpuBounds
+      ? async (alpha, tick, view): ReturnType<NonNullable<CombinedBackend['measureCurrentFrame']>> => {
+        base.resourceIdentity!()
+        const timing = await measureFrameBatch(device, 1, 2, (query) => {
+          base.setGpuFrame!(tick)
+          const pass = device.beginComputePass(query ? { timestampQuerySet: query, beginTimestampIndex: 0, endTimestampIndex: 1 } : {})
+          try {
+            for (const next of STAGES) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
+          } finally { pass.end() }
+          base.render(view, query ? { timestampQuerySet: query, beginTimestampIndex: 2, endTimestampIndex: 3 } : {}, false)
+        }).catch(error => { base.resourceIdentity!(); throw error })
+        return { timing, snapshot: await base.read() }
+      }
+      : undefined,
     measureFrames: overrides.gpuBounds
       ? async ({ frames, draw, decay, view }): ReturnType<NonNullable<CombinedBackend['measureFrames']>> => {
         validateBatch(frames)

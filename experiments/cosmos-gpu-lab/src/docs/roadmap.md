@@ -57,7 +57,7 @@ The strongest conclusion today is **primitive feasibility**. The most important 
 
 | Milestone | Current position | Next acceptance evidence |
 | --- | --- | --- |
-| luma integration | **Partial:** resident ticks, minimal drawing and bounded state-preserving updates use public luma APIs | Position-capacity growth, host ownership, device loss and the production dependency decision |
+| luma integration | **Partial:** resident ticks, minimal drawing, state-preserving updates and same-device point-count changes use public luma APIs | Retained-capacity reuse, host ownership, device loss and the production dependency decision |
 | Cosmos simulation | **Partial:** gravity, hierarchical repulsion, ordered springs and cooling have a passing bounded precision candidate at 8,192 points | Remaining forces, layout-quality criteria, scalable hierarchy construction and default-length schedules |
 | Rendering and interaction | **Early:** circles and minimal straight links | Styling, picking, dragging and the rest of the renderer |
 | Library and embedding contracts | **Unproven** | Live typed-array/config updates, resizing, shared ownership, device loss and host integration |
@@ -68,11 +68,11 @@ a larger share of the work than planned. Keep the passing corrected candidate as
 the native-f32 control. Neither is an approved production policy. Define numerical correctness, independent
 layout quality and performance as separate acceptance contracts; the existing tolerances stay unchanged.
 
-The next experiment is a [GPU-resident engine slice](#/resident-layout): GPU bounds feeding the existing
-force sequence and minimal renderer, compared with the staged reference. The original combined study still
-downloads positions for bounds and metrics and evolves a CPU oracle each tick; its stage timings are not
-whole-frame measurements. Removing those dependencies is the next integration gate. Broader forces,
-rendering and lifecycle validation should follow alongside targeted numerical work.
+The [GPU-resident engine slice](#/resident-layout) now connects GPU bounds, the composed forces and minimal
+drawing without routine position readback. [Point capacity and memory](#/point-capacity/docs/findings) adds
+same-device growth/shrinkage and cleanup evidence. The next resource optimization is retained-capacity and
+kernel reuse: the conservative rebuild path preserves state but has not demonstrated cheaper updates.
+Broader forces, rendering and lifecycle validation should follow alongside targeted numerical work.
 
 ## 3. What the experiments tell us about Cosmos
 
@@ -212,8 +212,25 @@ independent CPU checks and the existing resident matrix still pass with unchange
 
 **Limit:** the correctness comparison intentionally synchronizes at checkpoints and keeps a staged reference
 lane; the benchmark measures an initial engine slice with a minimal renderer. Fixed sample counts, serial
-crowded-cell fallback and CPU topology construction remain. Point-capacity growth, peak memory, broader
-rendering, host ownership and device-loss handling still need work before production adoption.
+crowded-cell fallback and CPU topology construction remain. Broader rendering, reusable allocation,
+host ownership and device-loss handling still need work before production adoption.
+
+### Point-count changes: resident state can survive replacement storage
+
+The [capacity experiment](#/point-capacity/docs/findings) runs 2,048 → 8,192 → 4,096 → 8,192 → 2,048 on
+the same devices. GPU copies preserve surviving position records, absence and pinning; only appended positions
+are uploaded. Registered pinned indices survive truncation in CPU metadata and are reapplied on regrowth.
+Authoritative coordinate replacement is a separate operation. Neither allocation operation resets tick or cooling.
+
+Native M3 chain, communities and star each pass three cycles: **36 paired resizes and 36 subsequent CPU-checked
+frames**, with unchanged tolerances. Repeated counts return to identical tracked and luma-reported buffer bytes.
+Resident application buffers at 8,192 points occupy **14.66–14.93 MiB**, with an old-plus-new peak of
+**20.19–20.60 MiB**. These figures exclude driver, pipeline, texture and internal-library memory.
+
+**Meaning for Cosmos:** a same-device transfer/ownership contract is feasible without downloading positions
+inside the resize. This exact-size implementation rebuilds buffers and kernels and is slower to update than
+the CPU-copy control in these observations. Retained capacity and pipeline reuse need a separate comparison;
+this does not establish the full Graph setter/transition API, external host ownership or device recovery.
 
 ### Weighted springs: Cosmos semantics can run through luma compute
 
@@ -378,7 +395,8 @@ performance and memory meet the target budgets; supported devices are tested; an
 | Extend | Weighted springs at larger sizes and over longer trajectories | Can ordered hub gathers and state-preserving topology updates meet the engine budget? |
 | Demonstrated in a bounded slice | [Resident tick, timing and state-preserving updates](#/resident-layout/docs/timing-updates) | GPU bounds and composed forces avoid routine readback; measured cost and update semantics now have native evidence |
 | Next | Adaptive samples and parallel hierarchy construction | Can the same approximation scale without serial dense-cell work? |
-| Next | Position-capacity growth, peak memory and resource ownership | Can the measured slice handle resizing, borrowed resources and device loss within a practical budget? |
+| Demonstrated in a bounded slice | [Point-count changes and buffer cleanup](#/point-capacity/docs/findings) | Surviving records transfer on the GPU; same devices and count-dependent footprints survive repeated cycles |
+| Next resource step | Retained capacity, kernel reuse and ownership | Can updates become cheaper without extra retained-memory cost, and can a host safely own the device? |
 | Supporting | Refined gravity cost and a bounded larger-star cost check | Can the strict precision reference scale affordably, and which arithmetic policy should production use? |
 | Alongside simulation | Links, richer points and picking from shared GPU state | Can Cosmos render and interact correctly without transferring all positions back? |
 | Then | Combined engine workload on multiple native GPUs | Is the whole migration practical for the intended users and graph sizes? |
