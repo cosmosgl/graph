@@ -8,10 +8,11 @@ import { GRAVITY, REPULSION, SPRINGS, STAGES, type Stage } from './data'
 import { repulsionMethod, type RepulsionPolicy } from './repulsion-policy'
 import { forceSettings, validateForceSettings, type ForceSettings } from './production-settings'
 const f = Math.fround
-export function gravity (points: Float32Array, alpha: number): Snapshot {
+export function gravity (points: Float32Array, alpha: number, origin?: [number, number]): Snapshot {
   const forces = new Float32Array(points.length)
   for (let i = 0; i < points.length; i += 4) {
-    const dx = f(-points[i]); const dy = f(-points[i + 1]); const distance = f(Math.sqrt(f(f(dx * dx) + f(dy * dy))))
+    const dx = f(origin ? f(origin[0]) - points[i] : -points[i]); const dy = f(origin ? f(origin[1]) - points[i + 1] : -points[i + 1])
+    const distance = f(Math.sqrt(f(f(dx * dx) + f(dy * dy))))
     if (distance > 0) {
       const angle = f(Math.atan2(dy, dx)); const magnitude = f(f(f(f(alpha) * f(GRAVITY)) * distance) * f(0.1))
       forces[i] = f(magnitude * f(Math.cos(angle))); forces[i + 1] = f(magnitude * f(Math.sin(angle)))
@@ -28,7 +29,7 @@ export function createOracle (
   validateForceSettings(settings)
   const index = createReferenceIndex(graph)
   const stage = (name: Stage, points: Float32Array, alpha: number, tick: number): Snapshot => {
-    if (name === 'gravity') return gravity(points, alpha)
+    if (name === 'gravity') return gravity(points, alpha, settings.origin)
     if (name === 'repulsion') {
       if (repulsionMethod(points.length / 4, policy) === 'exact') return exactTick(input, points, { ...REPULSION, alpha })
       const frame = frameFor(points, tick, settings.samples, settings.precise)

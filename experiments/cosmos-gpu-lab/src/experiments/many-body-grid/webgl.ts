@@ -31,9 +31,12 @@ const floats = (texture: Texture, z = 0): Float32Array => {
 }
 export async function createGridWebGL (
   canvas: HTMLCanvasElement, input: Input, p: Parameters, initial: Frame,
-  wrapForce: (factory: WebGLForceFactory) => WebGLForceFactory = (factory): WebGLForceFactory => factory
+  wrapForce: (factory: WebGLForceFactory) => WebGLForceFactory = (factory): WebGLForceFactory => factory,
+  maxSamples = initial.slots
 ): Promise<GridBackend> {
   let frame = initial
+  if (!Number.isInteger(initial.slots) || initial.slots < 1 || !Number.isInteger(maxSamples) ||
+    maxSamples < initial.slots || maxSamples > 64) throw new Error('Invalid WebGL sample capacity')
   let diagnose: NonNullable<GridBackend['diagnose']>
   let readStructure: () => Promise<Structure> = async () => { throw new Error('Grid not initialized') }
   const base = await createWebGL(canvas, input, p, wrapForce(({ device, positions, random, exit, target, count, size }) => {
@@ -58,9 +61,9 @@ export async function createGridWebGL (
       const levels = l.sizes.map(n => texture(n))
       const levelTargets = levels.map((t, i) => own(device.createFramebuffer({ width: l.sizes[i], height: l.sizes[i], colorAttachments: [t] })))
       // RGBA keeps luma's portable WebGL readback path available; shaders only use RG.
-      const arrays = [texture(l.finest, Math.ceil(frame.slots / 2)), texture(l.finest, Math.ceil(frame.slots / 2))]
+      const arrays = [texture(l.finest, Math.ceil(maxSamples / 2)), texture(l.finest, Math.ceil(maxSamples / 2))]
       const depth = own(device.createTexture({ width: l.finest, height: l.finest, format: 'depth24plus', usage: Texture.RENDER }))
-      const slots = Array.from({ length: frame.slots }, (_, s) => {
+      const slots = Array.from({ length: maxSamples }, (_, s) => {
         const view = own(arrays[s % 2].createView({ dimension: '2d', baseArrayLayer: s >> 1, arrayLayerCount: 1, mipLevelCount: 1 }))
         return own(device.createFramebuffer({ width: l.finest, height: l.finest, colorAttachments: [view], depthStencilAttachment: depth }))
       })
@@ -197,8 +200,12 @@ export async function createGridWebGL (
     name: 'WebGL grid',
     diagnose: () => diagnose(),
     readStructure: () => readStructure(),
+    setSampling (samples): void {
+      if (!Number.isInteger(samples) || samples < 1 || samples > maxSamples) throw new Error('WebGL sample count exceeds capacity')
+      frame = { ...frame, slots: samples }
+    },
     setFrame (next): void {
-      if (next.slots !== initial.slots) throw new Error('Recreate the backend to change slot count')
+      if (!Number.isInteger(next.slots) || next.slots < 1 || next.slots > maxSamples) throw new Error('WebGL sample count exceeds capacity')
       frame = next
     },
   }

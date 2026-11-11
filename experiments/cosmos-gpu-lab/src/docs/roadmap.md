@@ -88,7 +88,7 @@ then broaden Cosmos coverage instead of making CPU-path arithmetic identity the 
 | Repulsion selection | Inclusive 4,096 cutoff and retained-buffer updates across it pass with position preservation enabled | Full-engine update semantics, broader topology changes and larger counts |
 | Sampling/quality | 32 starting samples, GPU occupancy counts, production decision rules and hysteresis pass bounded checks; active counts change without position-buffer replacement | Matched Graph scheduling, allocation/trim policy, larger quality tiers and cross-device cost |
 | Graph size | Composed native acceptance through 8,192; some isolated force checks at 16,384 | The 32,768 scaling-harness option is not validated; the current custom WebGPU backend caps input at 16,384 |
-| Quality | Local numerical checks, independent trajectories and restoring probes | Agreed layout-quality criteria for dense, disconnected, coincident and hub-heavy graphs |
+| Quality | Matched production-GLSL/WebGPU/CPU trajectories, scale-fitted stress, spring mismatch and restoring probes on M3; two independent 5,000-tick cases | Agreed quality criteria, broader graph families/landmark sets and other native GPUs |
 | Hardware gate | M3 native checks plus software-browser regressions | Repeatable native acceptance on the intended GPU/browser matrix; ordinary CI does not run the opt-in native gate |
 
 Large reductions are not large graph layouts. Current update timings and memory use describe the bounded
@@ -140,9 +140,20 @@ spring exposed a further rest-length rounding boundary; the corrected path retai
 These are **selected parameter and numerical checks**, not complete Graph-runtime acceptance. The long
 runs use sparse CPU checkpoints, not an independently evolved CPU trajectory over every tick. Adaptive
 sampling reserves 64 slots in this prototype and its paired validation affects wall-clock scheduling.
-The next evidence should compare matched production WebGL/WebGPU behavior and independent layout quality,
-then extend force coverage with center attraction. Broader data, allocation policy and native portability
-remain open.
+The [matched layout comparison](#/matched-layout/docs/findings) now adds independently evolved production
+GLSL, WebGPU and CPU trajectories in Cosmos's default world frame. Across 12 M3 runs and 11,200 ticks,
+the strict WebGPU candidate has zero measured pointwise drift from CPU and passes 1,132 frozen checkpoints
+plus 12 full-strength probes. The matrix includes chain, communities and star through 8,192 points,
+and independent 5,000-tick communities at 128 and 512 points.
+
+WebGL's layout scores remain close while 35 ordinary checkpoints and four probes fail the unchanged scalar
+gate. Those failures stay visible. Longer cooling improves the measured quality, but residual-motion probes
+and unagreed quality targets prevent calling these layouts fully converged. The shared CPU-driven sample
+tape controls the comparison; it does not validate full Graph wall-clock scheduling or runtime performance.
+
+The next force-composition step is **center attraction**, using the validated reduction as its aggregation
+foundation. Broader data and weights, scalable hierarchy construction, allocation policy, remaining forces,
+renderer/interaction contracts and native portability remain open.
 
 ## 3. What the experiments tell us about Cosmos
 

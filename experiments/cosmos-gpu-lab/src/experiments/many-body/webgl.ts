@@ -29,7 +29,7 @@ in vec3 color; out vec4 fragColor;
 void main() { if (length(gl_PointCoord * 2. - 1.) > 1.) discard; fragColor = vec4(color,1.); }`
 
 export type WebGLForceFactory = (resources: {
-  device: Device; positions: Texture[]; random: Texture; exit: Texture; target: Framebuffer; count: number; size: number;
+  device: Device; positions: Texture[]; random: Texture; exit: Texture; target: Framebuffer; count: number; size: number; encodeExact(): void;
 }) => { encode(source: number): void; render?(source: number, view: View, pass: RenderPass): void; destroy(): void }
 export async function createWebGL (canvas: HTMLCanvasElement, input: Input, p: Parameters, customForce?: WebGLForceFactory): Promise<Backend> {
   validateInput(input, p, customForce ? 16384 : 4096)
@@ -112,12 +112,20 @@ export async function createWebGL (canvas: HTMLCanvasElement, input: Input, p: P
       return floats.slice(0, input.points.length)
     }
     let current = 0; let destroyed = false
-    const extension = customForce ? own(customForce({ device, positions, random, exit, target: targets[2], count, size })) : undefined
-    const encodeForce = (forceTimes: TimestampWrites = {}): void => {
-      if (extension) { extension.encode(current); return }
+    const encodeExact = (forceTimes: TimestampWrites = {}): void => {
+      forceUniforms.setUniforms({
+        forceAllPairsUniforms: {
+          pointsTextureSize: size, pointsNumber: count, alpha: p.alpha, repulsion: p.repulsion, maxStep: nearLimit(count, p),
+        },
+      })
       force.setBindings({ positionsTexture: positions[current], randomValues: random, exitTexture: exit })
       const forcePass = device.beginRenderPass({ ...forceTimes, framebuffer: targets[2], clearColor: [0, 0, 0, 0], clearDepth: false })
       try { force.draw(forcePass) } finally { forcePass.end() }
+    }
+    const extension = customForce ? own(customForce({ device, positions, random, exit, target: targets[2], count, size, encodeExact })) : undefined
+    const encodeForce = (forceTimes: TimestampWrites = {}): void => {
+      if (extension) extension.encode(current)
+      else encodeExact(forceTimes)
     }
     const encodeIntegration = (integrationTimes: TimestampWrites = {}): void => {
       integrate.setBindings({ positionsTexture: positions[current], velocity: forces, pinnedStatusTexture: pinned, exitTexture: exit })

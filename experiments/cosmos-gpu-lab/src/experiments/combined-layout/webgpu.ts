@@ -9,6 +9,7 @@ import { validateBatch } from '../many-body/timing'
 import springSource from '../weighted-links/force.wgsl?raw'
 import { createGridWebGPU } from '../many-body-grid/webgpu'
 import { frameFor } from '../many-body-grid/data'
+import { replaceOnce } from '../many-body-grid/trace'
 import type { AggregationMode } from '../many-body-grid/aggregation'
 import { createLinkResources } from './topology'
 import { measureFrameBatch } from './frame-timing'
@@ -84,6 +85,7 @@ export async function createCombinedWebGPU (
         }))
         : undefined
       const gravityParams = own(upload(device, new Float32Array(4), Buffer.UNIFORM))
+      const gravityOrigin = settings.origin ? own(upload(device, new Float32Array([...settings.origin, 0, 0]), Buffer.UNIFORM)) : undefined
       const springParams = own(upload(device, new Float32Array(12), Buffer.UNIFORM))
       const threshold = prefetch ? hubThreshold : undefined
       let linkResources = createLinkResources(device, input.points, graph, overrides.context?.ledger, threshold); let version = 0
@@ -101,9 +103,18 @@ export async function createCombinedWebGPU (
       const gravityBindings = bindingLayout([
         ['positions', 'read-only-storage'], ['params', 'uniform'], ['forces', 'storage'],
       ])
+      if (gravityOrigin) gravityBindings.push({ name: 'gravityOrigin', type: 'uniform', location: 3, group: 0 })
+      let selectedGravity = polarGravity ? refinedTrig ? refinedGravitySource : polarGravitySource : gravitySource
+      if (gravityOrigin) {
+        selectedGravity = polarGravity
+          ? replaceOnce(selectedGravity, 'let delta = -positions[id.x].xy;',
+            'let point = positions[id.x]; let delta = vec2f(springSub(gravityOrigin.x, point.x), springSub(gravityOrigin.y, point.y));')
+          : replaceOnce(selectedGravity, '-positions[id.x].xy', '(gravityOrigin.xy - positions[id.x].xy)')
+        selectedGravity += '\n@group(0) @binding(3) var<uniform> gravityOrigin: vec4f;\n'
+      }
       const gravity = own(polarGravity
-        ? await createRoundedKernel(device, refinedTrig ? refinedGravitySource : polarGravitySource, gravityBindings)
-        : await Kernel.createAsync(device, { source: gravitySource, shaderLayout: { bindings: gravityBindings } }))
+        ? await createRoundedKernel(device, selectedGravity, gravityBindings)
+        : await Kernel.createAsync(device, { source: selectedGravity, shaderLayout: { bindings: gravityBindings } }))
       const springBindings = bindingLayout([
         ['positions', 'read-only-storage'], ['offsets', 'read-only-storage'], ['edges', 'read-only-storage'],
         ['sizes', 'read-only-storage'], ['params', 'uniform'], ['forces', 'storage'],
@@ -189,7 +200,7 @@ export async function createCombinedWebGPU (
             } else if (stage === 'gravity') {
               gravity.dispatch(pass, {
                 x: Math.ceil(count / 64),
-                bindings: { positions: positions[source], params: gravityParams, forces },
+                bindings: { positions: positions[source], params: gravityParams, forces, ...(gravityOrigin ? { gravityOrigin } : {}) },
               })
             } else {
               const side = stage === 'incoming' ? 0 : 1
