@@ -43,6 +43,28 @@ it('rejects mismatched IDs, colors and invisible picks independently', () => {
   })
 })
 
+it('declares candidate visibility independently of the unchanged legacy reference', () => {
+  const points = [point(0.5, 0.5)]; const hidden = { ...DEFAULTS, opacity: 0 }
+  expect(referencePick(points, hidden, 0.5, 0.5)).toBeNull()
+  expect(referencePick(points, hidden, 0.5, 0.5, 'legacy')).toBe(0)
+  for (const opacity of [0.35, 1]) expect(referencePick(points, { ...DEFAULTS, opacity }, 0.5, 0.5)).toBe(0)
+  const blank = { width: 1, height: 1, color: new Uint8Array(4), ids: new Uint8Array(4), pickingRule: 'visible' as const }
+  const legacy = { ...blank, ids: new Uint8Array([1, 0, 0, 255]), pickingRule: 'legacy' as const }
+  expect(compareSnapshots(blank, blank, points, hidden)).toMatchObject({
+    valid: true, webglPickedPixels: 0, webgpuPickedPixels: 0, webglReferenceFailures: 0, webgpuReferenceFailures: 0,
+  })
+  expect(compareSnapshots(legacy, blank, points, hidden)).toMatchObject({
+    valid: false,
+    pickingRules: { webgl: 'legacy', webgpu: 'visible' },
+    idDisagreements: 1,
+    webglReferenceFailures: 0,
+    webgpuReferenceFailures: 0,
+    webglInvisiblePicks: 1,
+    webgpuInvisiblePicks: 0,
+    firstIdMismatch: { expected: { webgl: 0, webgpu: null } },
+  })
+})
+
 it('keeps exact sprite-boundary omissions as failures against the original closed CPU mask', () => {
   const points = [point(10.5, 10.5, 0, { size: 2 })]
   const color = new Uint8Array(20 * 20 * 4); const ids = color.slice()
@@ -161,10 +183,62 @@ it('checks explicit-coordinate quads at the unchanged full-frame gates and recov
     const hidden = { ...DEFAULTS, opacity: 0 }
     const visibility = compareSnapshots(await gl.render(points, hidden, false, 'explicit'),
       await gpu.render(points, hidden, false, 'explicit'), points, hidden)
-    expect(visibility.webglInvisiblePicks).toBeGreaterThan(0); expect(visibility.webgpuInvisiblePicks).toBeGreaterThan(0)
-    expect(visibility.valid).toBe(false)
+    expect(visibility).toMatchObject({
+      valid: true,
+      webglPickedPixels: 0,
+      webgpuPickedPixels: 0,
+      webglPaintedPixels: 0,
+      webgpuPaintedPixels: 0,
+      webglInvisiblePicks: 0,
+      webgpuInvisiblePicks: 0,
+    })
   } finally { gpu?.destroy(); gl.destroy() }
 })
+
+it.each([['shapes', false], ['overlap', false], ['overlap', true], ['edge-cases', false], ['fractional', false]] as const)(
+  'checks candidate opacity 0, 0.35 and 1 for %s, reversed %s, while retaining production picks', async (name, reverse) => {
+    const gl = await createStylingWebGL(document.createElement('canvas'))
+    let gpu: Awaited<ReturnType<typeof createStylingWebGPU>> | undefined
+    try {
+      gpu = await createStylingWebGPU(document.createElement('canvas'))
+      const points = fixture(name)
+      for (const ratio of [1, 2]) {
+        let translucent: { gl: Uint8Array; gpu: Uint8Array } | undefined
+        for (const opacity of [0, 0.35, 1]) {
+          const settings = { ...DEFAULTS, ratio, opacity, reverse }
+          const a = await gl.render(points, settings, false, 'explicit'); const b = await gpu.render(points, settings, false, 'explicit')
+          const result = compareSnapshots(a, b, points, settings)
+          expect(result, `${name} ${ratio} ${opacity} ${JSON.stringify(result)}`).toMatchObject({
+            valid: true,
+            pickingRules: { webgl: 'visible', webgpu: 'visible' },
+            idDisagreements: 0,
+            webglReferenceFailures: 0,
+            webgpuReferenceFailures: 0,
+            colorFailures: 0,
+            webglInvisiblePicks: 0,
+            webgpuInvisiblePicks: 0,
+          })
+          if (opacity === 0) {
+            for (const image of [a, b]) { expect(image.color.every(v => v === 0)).toBe(true); expect(image.ids.every(v => v === 0)).toBe(true) }
+          } else {
+            expect(result.webglPickedPixels).toBeGreaterThan(0); expect(result.webgpuPickedPixels).toBeGreaterThan(0)
+            if (opacity === 0.35) translucent = { gl: a.ids, gpu: b.ids }
+            else {
+              expect(a.ids.every((v, i) => v === translucent!.gl[i])).toBe(true)
+              expect(b.ids.every((v, i) => v === translucent!.gpu[i])).toBe(true)
+            }
+          }
+        }
+        const settings = { ...DEFAULTS, ratio, opacity: 0, reverse }
+        const legacy = compareSnapshots(await gl.render(points, settings), await gpu.render(points, settings), points, settings)
+        expect(legacy.pickingRules).toEqual({ webgl: 'legacy', webgpu: 'legacy' })
+        expect(legacy.webglInvisiblePicks).toBeGreaterThan(0); expect(legacy.webgpuInvisiblePicks).toBeGreaterThan(0)
+        expect(legacy.webglInvisiblePicks).toBe(legacy.webglPickedPixels)
+        expect(legacy.webgpuInvisiblePicks).toBe(legacy.webgpuPickedPixels)
+        expect(legacy.valid).toBe(false)
+      }
+    } finally { gpu?.destroy(); gl.destroy() }
+  })
 
 it('checks fractional pick visibility while retaining unaccepted geometry and color differences', async () => {
   const gl = await createStylingWebGL(document.createElement('canvas'))

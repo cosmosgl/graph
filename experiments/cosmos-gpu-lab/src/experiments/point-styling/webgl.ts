@@ -80,9 +80,14 @@ function coordinateSources (quads: boolean): { vertex: string; fragment: string 
     // the original closed scalar bounds; padding never increases shape size.
     gl_Position.xy += corners[gl_VertexID] * (overallSizeValue + 2.0) / (screenSize * ratio);`)
   }
-  const fragment = fs.replace('void main()', 'flat in vec2 diagnosticCenter;\nvoid main()')
+  let fragment = fs.replace('void main()', 'flat in vec2 diagnosticCenter;\nvoid main()')
     .replace(coord, `vec2 pointCoord = (gl_FragCoord.xy - diagnosticCenter) * vec2(2.0, -2.0) / overallSize;
       ${quads ? 'if (abs(pointCoord.x) > 1.0 || abs(pointCoord.y) > 1.0) discard;' : ''}`)
+  if (quads) {
+    const picking = 'if (renderMode > 2.5) {'
+    if (!fragment.includes(picking)) throw new Error('Production picking control location changed')
+    fragment = fragment.replace(picking, `${picking}\nif (pointOpacity <= 0.0) discard;`)
+  }
   return { vertex, fragment }
 }
 
@@ -256,7 +261,11 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
           const pickModel = variant === 'explicit' ? explicitPick! : picking
           draw(colorModel, 0, color.framebuffer); draw(pickModel, 3, ids.framebuffer); draw(colorModel, 0); device.submit()
           const result: Snapshot = {
-            width, height, color: await pixels(device, color.texture, color.framebuffer), ids: await pixels(device, ids.texture, ids.framebuffer),
+            pickingRule: variant === 'explicit' ? 'visible' : 'legacy',
+            width,
+            height,
+            color: await pixels(device, color.texture, color.framebuffer),
+            ids: await pixels(device, ids.texture, ids.framebuffer),
           }
           if (diagnose) {
             const geometry = frame.own(target(device, width, height, 'rgba32float'))
@@ -271,6 +280,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
             const analytic = frame.own(target(device, width, height)); const analyticIds = frame.own(target(device, width, height))
             draw(analyticColor!, 0, analytic.framebuffer); draw(analyticPick!, 3, analyticIds.framebuffer); device.submit()
             result.analyticControl = {
+              pickingRule: 'legacy',
               width,
               height,
               color: await pixels(device, analytic.texture, analytic.framebuffer),

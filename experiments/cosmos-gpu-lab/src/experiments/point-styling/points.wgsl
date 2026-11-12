@@ -103,9 +103,10 @@ fn distanceToShape(coord: vec2f, shape: u32) -> f32 {
   // Unblended float-target instrumentation; normal color/ID modes are unchanged.
   if (params.options.y == 2.0) { return vec4f(coord,core,input.diameter); }
   if (params.options.y == 3.0) { return vec4f(coord,distance,coverage); }
-  // Preserve production host-picking semantics: half coverage and positive fill
-  // alpha, before global pointOpacity. The zero-opacity discrepancy is audited.
+  // Keep the production rule when options.z is zero. The candidate additionally
+  // rejects invisible points; positive opacity preserves the same pick contour.
   if (params.options.y > 0.0) {
+    if (params.options.z > 0.0 && params.style.z <= 0.0) { discard; }
     if (coverage < 0.5) { discard; }
     let id = u32(p.properties.z) + 1u;
     return vec4f(vec3f(f32(id & 255u),f32((id >> 8u) & 255u),f32((id >> 16u) & 255u)) / 255.0,1);

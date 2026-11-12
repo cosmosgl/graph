@@ -11,12 +11,14 @@ export type ValidationContract = {
 export const validationContracts: Record<string, ValidationContract> = {
   'point-styling': {
     question: 'Do production Cosmos styling and shape-aware host picking match a luma WebGPU port and the rendered footprint?',
-    reference: 'Unmodified production draw/host-picking GLSL, independent scalar shape masks, and offscreen RGBA8 color/ID readback.',
+    reference: 'Unmodified production GLSL with the legacy CPU rule; independent candidate CPU geometry with positive global opacity ' +
+      '(visible rule); offscreen RGBA8 color/ID readback.',
     acceptance: 'Exact IDs and scalar masks at every pixel; at most two RGBA8 channel levels for color; no picked pixels with zero rendered alpha.',
     coverage: 'Frozen eight-shape, overlap, edge-case and fractional fixtures, zoom, pixel ratio, strokes, defaults and render order; ' +
       'production and explicit-coordinate candidate verdicts are named separately.',
     limits: 'Host picking only. Pointer tolerance, images, rings, automatic shades, greyout, transitions, occlusion and latency remain separate. ' +
-      'Zero opacity and fractional legacy compatibility still fail on the measured M3; candidate geometry is a separate bounded result.',
+      'Production zero-opacity visibility and fractional compatibility still fail on M3. Candidate opacity 0/0.35/1 is bounded; ' +
+      'tiny-alpha and atlas cases remain open.',
   },
   'center-mass': {
     question: 'Do blend accumulation and compute reduction calculate the same center accurately?',

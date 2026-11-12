@@ -124,16 +124,16 @@ export const research: Record<string, ResearchSummary> = {
     method: 'validation-contract',
     comparison: 'Same styled points → production WebGL / WebGPU color and ID images → full-image and scalar-mask checks',
     question: 'Does point-ID picking select the shapes that Cosmos actually renders?',
-    conclusion: 'The explicit-coordinate candidate passes 14 bounded styling cases and recovers all six missing boundary pixels at unchanged geometry gates.',
-    scope: 'Eight shapes, strokes, defaults, zoom, pixel ratio and overlap on M3. Candidate fractional geometry passes; ' +
-      'fractional compatibility with legacy rendering and zero-opacity visibility still fail.',
-    variant: 'Unchanged production control and explicit-coordinate GL/GPU quads; luma 10.0.0-alpha.4; Apple M3',
+    conclusion: 'The explicit candidate passes 30 opacity controls: invisible points return no IDs, while opacity 0.35 and 1 retain identical pick masks.',
+    scope: 'Bounded M3 styling, fractional geometry and zero-opacity visibility pass. Legacy coverage/picking compatibility ' +
+      'still fails; tiny-alpha, atlas and broader device cases remain open.',
+    variant: 'Unchanged production/legacy CPU control and explicit GL/GPU quads with visible CPU rule; luma 10.0.0-alpha.4; Apple M3',
     reviewed: REVIEWED,
     milestone: 'rendering',
     evidence: 'method',
-    next: 'Resolve invisible host picks and the production boundary policy, then broaden styling, devices and pointer-hover coverage.',
-    reproduce: 'Select Explicit-coordinate candidate and the fractional fixture at ratios 1 and 2. Compare the geometry audit, ' +
-      'production compatibility and six-pixel replay; retain zero opacity as a failing visibility control.',
+    next: 'Validate tiny positive alpha, image-atlas alpha and remaining styling/hover; settle the intended production coverage and picking policy.',
+    reproduce: 'Select Explicit-coordinate candidate and opacity 0, 0.35 and 1 at ratios 1 and 2. Compare painted/picked counts, ' +
+      'CPU rule names and the retained production failure. Use the fractional fixture for the six-pixel replay.',
     investigations: [{
       page: 'method',
       state: 'Current evidence',

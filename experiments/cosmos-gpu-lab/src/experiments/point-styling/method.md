@@ -2,7 +2,7 @@
 source: Recorded findings
 recorded: 2026-11-12
 device: Apple M3; installed Chrome 157 and inline Chromium 157
-scope: Twelve production-control configurations and fourteen explicit-coordinate candidate configurations; unchanged full-image gates, boundary replay and separate legacy/zero-opacity failures.
+scope: Twelve production-control configurations, fourteen explicit-coordinate styling cases and thirty opacity controls; separate CPU visibility rules, unchanged tolerances and preserved production failures.
 ---
 
 ## Question
@@ -55,6 +55,13 @@ fill alpha does not change the contour. At overlap, the last covered point in re
 including translucent points. IDs use the production 24-bit RGB encoding, with black reserved for
 background. Pick targets are linear RGBA8, unblended, without multisampling or color-space conversion.
 
+The candidate additionally requires **positive global opacity**. Its CPU rule is named `visible`;
+at opacity zero it returns background, while any positive opacity keeps the geometric contour.
+Production snapshots retain the `legacy` rule, which ignores global opacity. Resolved fill alpha
+zero, absence, `None` and nonpositive size remain unpickable under both rules. At overlap, an
+ineligible point must not block the point beneath it. The CPU makes these decisions from inputs,
+not from a GPU image. Snapshot metadata selects each lane's declared rule in all comparisons.
+
 Cosmos pointer hover is a **different contract**: a downsampled circular footprint and nearest
 candidate in a cursor window. Porting that tolerance and its priority/scheduling is still open.
 Do not interpret this experiment as validating the complete pointer API.
@@ -62,7 +69,7 @@ Do not interpret this experiment as validating the complete pointer API.
 ## Acceptance declared before measurement
 
 Every framebuffer pixel is checked. IDs must agree exactly between backends and against an
-independent scalar shape mask. Color channels may differ by at most **2/255**, accounting for
+independent scalar shape mask with its declared visibility rule. Color channels may differ by at most **2/255**, accounting for
 RGBA8 quantization and blend evaluation. Pixels beyond this budget remain failures, including
 edge cases; there is no relaxed picking-mask tolerance. Picked pixels with zero offscreen rendered
 alpha are counted separately and fail the visibility check. The force experiments’ numerical
@@ -227,7 +234,8 @@ These do not become passing legacy results. The candidate demonstrates agreement
 unchanged intended geometry on this bounded M3 matrix. Adopting the closed boundary behavior
 would be an intentional rendering change from the current production sprite. Other devices,
 broader geometry and performance remain unvalidated; this is not a complete renderer migration.
-Zero global opacity also retains its existing invisible-picking failure in the candidate.
+That initial candidate retained the zero-opacity failure. The visibility-aware follow-up below
+corrects it without changing the geometric contour or tolerances.
 
 ## Known failing control: global opacity zero
 
@@ -236,6 +244,48 @@ At global opacity zero, it still returns IDs for invisible points. The WebGPU co
 preserves this behavior, and the audit reports a failure in both lanes. This is evidence of a
 production contract gap, not an accepted rendering/picking match. No production fix is included.
 The default shape fixture records **15,180 invisible picked pixels per backend** at ratio 1.
+
+### Candidate visibility rule and opacity matrix
+
+Measured **12 November 2026**, **Codex inline Chromium / Apple M3**, luma **10.0.0-alpha.4**.
+The explicit candidate now discards its ID fragment when global opacity is zero. In GLSL this
+guard lives only in the candidate shader copy. WGSL enables it only for explicit-candidate mode.
+Color rendering, production shaders/mode, shape distances, the half-coverage threshold, exact-ID
+checks and the **2/255** color budget are unchanged. No low-alpha cutoff or epsilon is introduced.
+
+This is an explicit **visibility-reference update**, not a tolerance adjustment: `visible` applies
+the requested opacity rule; `legacy` retains the original CPU rule for the unchanged production
+control. Cross-backend IDs still have to agree exactly. A mixed legacy/candidate comparison
+checks each lane against its own declared CPU rule, reports both expected IDs at a mismatch, and
+continues to fail if actual IDs differ. Different reference roles do not make legacy picking
+compatible with candidate picking.
+
+The opacity matrix checks five fixture/order cases at pixel ratios 1 and 2, with opacity
+**0, 0.35 and 1**: **30 configurations and 12,288,000 pixels per backend**. The cases are eight
+shapes with fill/stroke rows, overlap in normal and reversed order, defaults/edge cases, and
+fractional sizes/positions.
+
+| Opacity | Candidate result across 10 fixture/ratio cases | Picking and visibility |
+| --- | --- | --- |
+| 0 | All pass | Entire color and ID images are zero; no painted, picked or invisible-picked pixels |
+| 0.35 | All pass | Exact CPU masks and cross-backend IDs; colors within 2/255; no invisible picks |
+| 1 | All pass | Same ID images as opacity 0.35, with the same gates passing |
+
+The previous 14-case styling matrix, isolated opaque paint/pick checks, boundary replay and
+production-state restoration also pass. The complete focused suite has **14 passing tests in the
+Codex inline browser**. Production mode is rechecked at opacity zero after candidate runs: it
+still returns invisible IDs and fails visibility. The six recovered boundary points become
+background in the candidate at opacity zero and retain their expected IDs at positive opacity.
+
+The live audit shows painted/picked pixel counts and names the active CPU rule. JSON schema 4
+includes each comparison's `pickingRules` and per-lane expected IDs in mismatch samples. These
+measurements are local exports; they are not stored in the repository.
+
+This closes the bounded **zero-global-opacity** case. Arbitrarily tiny positive alpha, display
+quantization, image-atlas alpha and broader device coverage remain separate validation work.
+The strict zero-rendered-alpha audit still rejects any such invisible pick; there is no waived
+visibility failure for inputs outside this matrix. Fractional legacy coverage differences also
+remain intentional, reported compatibility failures.
 
 ## Reproduce
 
@@ -246,8 +296,9 @@ The default shape fixture records **15,180 invisible picked pixels per backend**
    Use ratio 2 on the fractional fixture to inspect **Six boundary pixels**.
 3. Move over either canvas: both show the ID at the same normalized pixel. The UI reads the
    captured ID images; it does not issue or time a new GPU pick per pointer event.
-4. Set global opacity to zero and confirm the visibility failure stays explicit. Export JSON
-   to retain settings, original inputs, environment, counts and first ID, scalar-mask and color mismatches.
+4. Test opacity **0**, **0.35** and **1**. At zero, the candidate must paint and pick no pixels;
+   production must retain its failed visibility control. At positive opacity, the pick contour
+   stays unchanged. Export JSON to retain settings, CPU rule names, environment and raw mismatches.
 5. Run `LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling`.
 
 For the same regression suite **inside Codex**, set `LAB_INLINE_BROWSER=1` as well. This starts
@@ -256,7 +307,7 @@ the Codex inline browser; the suite runs in that browser, including both GPU bac
 regression checks that enabling probes preserves production images and counts, that the earlier
 coordinate-only control retains its closed-mask failures, and that the padded candidate recovers
 the boundary pixels at unchanged full-frame gates. JSON exports name the renderer and include
-candidate geometry, original production and compatibility verdicts; raw measurements remain local.
+candidate geometry/visibility, original production and compatibility verdicts; raw measurements remain local.
 
 No runtime performance, picking-latency or broad device claim follows from the readback-heavy
 diagnostic. Images/atlas alpha, rings/highlight priority, greyout, automatic perceptual stroke

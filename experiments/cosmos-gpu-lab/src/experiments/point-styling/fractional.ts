@@ -5,7 +5,7 @@ import { COLOR_BUDGET, compareSnapshots, referencePick } from './reference'
 type Captured = { coord: number[]; diameter: number; distance: number; coverage: number }
 export type FractionalPixel = {
   x: number; y: number; point: number; reason: string;
-  ids: { webgl: number | null; webgpu: number | null; cpu: number | null };
+  ids: { webgl: number | null; webgpu: number | null; cpu: number | null; cpuWebGPU: number | null };
   color: { webgl: number[]; webgpu: number[] };
   cpu: { coord: number[]; diameter: number; distance: number };
   webgl: Captured | null; webgpu: Captured | null;
@@ -48,17 +48,19 @@ export function investigateFractional (gl: Snapshot, gpu: Snapshot, points: Poin
   const centers = points.map(p => center(p, settings))
   for (let y = 0; y < gl.height; y++) {
     for (let x = 0; x < gl.width; x++) {
-      const a = pick(gl, x, y); const b = pick(gpu, x, y); const cpu = referencePick(points, settings, x + 0.5, y + 0.5)
+      const a = pick(gl, x, y); const b = pick(gpu, x, y)
+      const cpu = referencePick(points, settings, x + 0.5, y + 0.5, gl.pickingRule)
+      const cpuGpu = referencePick(points, settings, x + 0.5, y + 0.5, gpu.pickingRule)
       const offset = (y * gl.width + x) * 4
       let delta = 0
       for (let c = 0; c < 4; c++) delta = Math.max(delta, Math.abs(gl.color[offset + c] - gpu.color[offset + c]))
-      if (a === b && a === cpu && delta === 0) continue
+      if (a === b && a === cpu && b === cpuGpu && delta === 0) continue
       // Fractional fixtures contain isolated circles. Attribute a rejected pixel
       // to the nearest center, including fringe pixels where all IDs are empty.
       let id = 0; let nearest = Infinity
       centers.forEach(([cx, cy], i) => { const d = Math.hypot(x + 0.5 - cx, y + 0.5 - cy); if (d < nearest) { nearest = d; id = i } })
       const row = rows[id]
-      const differences = [['ID', a !== b], ['WebGL mask', a !== cpu], ['WebGPU mask', b !== cpu]] as const
+      const differences = [['ID', a !== b], ['WebGL mask', a !== cpu], ['WebGPU mask', b !== cpuGpu]] as const
       for (const [reason, failed] of differences) {
         if (failed) {
           if (reason === 'ID') row.idDifferences++
@@ -95,7 +97,12 @@ export function investigateFractional (gl: Snapshot, gpu: Snapshot, points: Poin
         y,
         point: id,
         reason: [...reasons].join(', '),
-        ids: { webgl: pick(gl, x, y), webgpu: pick(gpu, x, y), cpu: referencePick(points, settings, x + 0.5, y + 0.5) },
+        ids: {
+          webgl: pick(gl, x, y),
+          webgpu: pick(gpu, x, y),
+          cpu: referencePick(points, settings, x + 0.5, y + 0.5, gl.pickingRule),
+          cpuWebGPU: referencePick(points, settings, x + 0.5, y + 0.5, gpu.pickingRule),
+        },
         color: { webgl: Array.from(gl.color.subarray(offset, offset + 4)), webgpu: Array.from(gpu.color.subarray(offset, offset + 4)) },
         cpu: { coord, diameter: d, distance: Math.hypot(...coord) * d * 0.5 - d * 0.5 },
         webgl: captured(gl, offset),
@@ -116,7 +123,7 @@ export function renderFractionalInvestigation (
   section.innerHTML = `<h3>Fractional pixel investigation</h3>
     <p>Float-target probes capture the selected renderer’s coordinates, diameter, edge distance and coverage.
       ${variant === 'explicit'
-    ? 'The main verdict above checks the explicit-coordinate candidate against the unchanged CPU mask.'
+    ? 'The main verdict checks candidate geometry with the visibility-aware CPU rule.'
     : 'The analytical-coordinate control replaces only gl_PointCoord in a shader copy; the main verdict still uses the production shader.'}</p>
     ${control
     ? `<h4>Coordinate control</h4><table><thead><tr><th>Diagnostic comparison</th><th>ID differences</th>
@@ -138,10 +145,10 @@ export function renderFractionalInvestigation (
       Picking requires coverage ≥ 0.5. “No fragment” means the rasterized sprite did not reach that pixel.</p>
     ${investigation.samples.length ? '' : '<p>No rejected pixels in this candidate comparison.</p>'}
     <div data-mask-previews></div>
-    <table data-rejected-pixels><thead><tr><th>Pixel · point</th><th>Reason</th><th>IDs · GL / GPU / CPU</th><th>CPU distance · px</th>
+    <table data-rejected-pixels><thead><tr><th>Pixel · point</th><th>Reason</th><th>IDs · GL / GPU / CPU GL / CPU GPU</th><th>CPU distance · px</th>
       <th>WebGL distance / coverage</th><th>WebGPU distance / coverage</th><th>RGBA · GL / GPU</th></tr></thead>
       <tbody>${investigation.samples.map(row => `<tr><td>(${row.x}, ${row.y}) · ${row.point}</td><td>${row.reason}</td>
-        <td>${ids(row.ids.webgl)} / ${ids(row.ids.webgpu)} / ${ids(row.ids.cpu)}</td><td>${number(row.cpu.distance)}</td>
+        <td>${ids(row.ids.webgl)} / ${ids(row.ids.webgpu)} / ${ids(row.ids.cpu)} / ${ids(row.ids.cpuWebGPU)}</td><td>${number(row.cpu.distance)}</td>
         <td>${field(row.webgl)}</td><td>${field(row.webgpu)}</td>
         <td>${row.color.webgl.join(', ')} / ${row.color.webgpu.join(', ')}</td></tr>`).join('')}</tbody></table>
     <p>Export JSON includes the fitted coordinate fields, representative raw float values and the complete control verdict.
@@ -163,7 +170,7 @@ export function renderFractionalInvestigation (
           const px = sample.x + x - 4; const py = sample.y + y - 4
           const selected = px < 0 || py < 0 || px >= gl.width || py >= gl.height
             ? null
-            : snapshot ? pick(snapshot, px, py) : referencePick(points, settings, px + 0.5, py + 0.5)
+            : snapshot ? pick(snapshot, px, py) : referencePick(points, settings, px + 0.5, py + 0.5, gl.pickingRule)
           ctx.fillStyle = selected === null ? '#202329' : '#aac7e8'; ctx.fillRect(x * scale, y * scale, scale - 1, scale - 1)
         }
       }
