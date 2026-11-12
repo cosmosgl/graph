@@ -1,3 +1,4 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
 import { graphPalette } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { fitView, type Backend, type View } from './backend'
@@ -21,8 +22,10 @@ function drawCpu (canvas: HTMLCanvasElement, positions: Float32Array, view: View
 }
 
 export async function createManyBodyExperiment (host: HTMLElement): Promise<ExperimentInstance> {
+  let runError: string | undefined
   host.innerHTML = `
-    <section class="scale-toolbar">
+    <section
+      data-run-part="configuration" class="scale-toolbar">
       <label>Fixture <select data-control="fixture">
         ${FIXTURES.map(value => `<option ${value === 'uniform' ? 'selected' : ''}>${value}</option>`).join('')}</select></label>
       <label>Points <select data-control="count">
@@ -33,13 +36,22 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
         <option value="trajectory">Independent trajectories</option></select></label>
     </section>
     <div class="demo-toolbar playback-toolbar"><div class="controls">
-      <button class="button-primary" data-action="step">Step + validate</button>
-      <button data-action="ten">10 validated ticks</button><button data-action="stop" disabled>Stop</button>
-      <button data-action="reset">Reset / retry devices</button><button data-action="export" disabled>Export JSON</button>
+      <button class="button-primary" data-action="step"
+      data-run-action="primary">Step + validate</button>
+      <button data-action="ten"
+      data-run-action="primary">10 validated ticks</button>
+      <button data-action="stop" disabled
+      data-run-action="primary">Stop</button>
+      <button data-action="reset"
+      data-run-action="primary">Reset / retry devices</button>
+      <button data-action="export" disabled
+      data-run-action="export">Export JSON</button>
     </div><span class="tick-counter">Tick <strong data-output="tick">0</strong></span></div>
-    <p class="many-body-status" data-output="status" role="status">Creating GPU backends…</p>
+    <p class="many-body-status" data-output="status" role="status"
+      data-run-part="status">Creating GPU backends…</p>
     <p class="demo-note" data-output="mode"></p>
-    <section class="backend-panels many-body-panels">
+    <section
+      data-run-part="visualization" class="backend-panels many-body-panels">
       ${['WebGL', 'WebGPU', 'CPU'].map(name => `<article class="backend-panel">
         <div class="panel-heading"><div><p class="eyebrow">
           ${name === 'WebGL' ? 'Production GLSL · luma v10' : name === 'WebGPU' ? 'luma Kernel + RenderKernel' : 'Float32 operation reference'}</p>
@@ -51,13 +63,16 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
     <p class="demo-note">Identical initial positions, fixed random samples and parameters.
       Blue points are free; yellow points are pinned; absent points are hidden.
       The camera fits all three outputs together. This force-only layout expands; gravity, springs and cooling are not enabled.</p>
-    <div class="many-body-results" data-output="results"></div>
-    <section class="visible-section advanced-controls"><h3 class="visible-section-heading">Validation contract and parameters</h3>
+    <div class="many-body-results" data-output="results"
+      data-run-part="results"></div>
+    <section class="visible-section advanced-controls"
+      data-run-part="diagnostics"><h3 class="visible-section-heading">Validation contract and parameters</h3>
       <p class="demo-note" data-output="parameters"></p>
       <p class="demo-note">Every validation tick reads back forces and positions. This is a correctness comparison, not a GPU performance benchmark.
       Reported elapsed time includes CPU calculation, GPU work, readback and drawing submission. An unavailable or failed backend never counts as a pass.</p>
     </section>
-    <section class="many-body-benchmark">
+    <section class="many-body-benchmark"
+      data-run-part="diagnostics">
       <h2>Batched timing</h2>
       <p class="demo-note">Compare WebGL, direct WebGPU and tiled WebGPU at 128, 512, 1,024, 2,048 and 4,096 points.
         Time the force alone and force + integration on fixed inputs. Rendering, uploads and correctness checks are outside GPU timing.
@@ -65,8 +80,12 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
       <div class="scale-toolbar"><label>Timing fixture <select data-control="timing-fixture">
         <option value="uniform">Uniform</option><option value="clusters">Dense clusters</option><option value="both">Both distributions</option>
       </select></label></div>
-      <div class="controls"><button data-action="benchmark">Run timing sweep</button>
-        <button data-action="benchmark-stop" disabled>Stop sweep</button><button data-action="benchmark-export" disabled>Export timing JSON</button></div>
+      <div class="controls"><button data-action="benchmark"
+      data-run-action="diagnostic">Run timing sweep</button>
+        <button data-action="benchmark-stop" disabled
+      data-run-action="primary">Stop sweep</button>
+      <button data-action="benchmark-export" disabled
+      data-run-action="export">Export timing JSON</button></div>
       <p class="many-body-status" data-output="benchmark-status" role="status">
         Ready. Seven measured batches per backend and workload, 4–64 operations per batch after calibration and warmup.</p>
       <p class="demo-note">Keep this tab visible. GPU time is per operation; completion time also includes submission and fence waiting.
@@ -109,7 +128,7 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
     const view = fitView([cpu, ...lanes.filter(lane => !lane.failed).map(lane => lane.previous)])
     for (const lane of lanes) {
       if (lane.failed) continue
-      try { lane.backend.render(view) } catch (error) { fail(lane, error) }
+      try { lane.backend.render(view) } catch (error) { runError = String(error); fail(lane, error) }
     }
     drawCpu(canvas('CPU'), cpu, view)
   }
@@ -120,6 +139,7 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
     el(`[data-info="${lane.key}"]`).textContent = errors[lane.key]
   }
   const setup = async (): Promise<void> => {
+    runError = undefined
     cleanup(); rows.length = 0; tick = 0
     Object.keys(errors).forEach(key => { delete errors[key] }); Object.keys(info).forEach(key => { delete info[key] })
     input = createFixture(fixture.value as Fixture, Number(count.value), params); cpu = input.points.slice()
@@ -144,6 +164,7 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
         info[key] = backend.info
         el(`[data-status="${key}"]`).textContent = 'Ready'; el(`[data-info="${key}"]`).textContent = backend.info
       } catch (error) {
+        runError = String(error)
         errors[key] = error instanceof Error ? error.message : String(error)
         el(`[data-status="${key}"]`).textContent = 'Unavailable'; el(`[data-info="${key}"]`).textContent = errors[key]
       }
@@ -176,7 +197,7 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
         checks.push({ name: lane.key, result, drift }); outputs.set(lane.key, actual)
         lane.previous = actual.positions
         el(`[data-status="${lane.key}"]`).textContent = result.valid ? 'One-step pass' : 'Mismatch'
-      } catch (error) { fail(lane, error) }
+      } catch (error) { runError = String(error); fail(lane, error) }
     }
     if (destroyed) return false
     tick++; cpu = expected.positions; el('[data-output="tick"]').textContent = String(tick)
@@ -213,6 +234,7 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
     if (busy || destroyed) return
     busy = true; stopped = false; controls(true)
     try { await run() } catch (error) {
+      runError = String(error)
       if (!destroyed) status.textContent = error instanceof Error ? error.message : String(error)
     } finally { busy = false; if (!destroyed) controls(false) }
   }
@@ -283,7 +305,7 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
           progress: message => { if (!destroyed) { timingStatus.textContent = message; showTiming() } },
         })
         benchmarkOutcome = stopped || destroyed ? 'stopped' : 'complete'
-      } catch (error) { benchmarkOutcome = `failed: ${error instanceof Error ? error.message : String(error)}` }
+      } catch (error) { runError = String(error); benchmarkOutcome = `failed: ${error instanceof Error ? error.message : String(error)}` }
       if (!destroyed) {
         showTiming()
         timingStatus.textContent = `Sweep ${benchmarkOutcome}. ${benchmarkRows.filter(row => row.summary).length}/${benchmarkRows.length} rows complete. ` +
@@ -310,6 +332,14 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
     const url = URL.createObjectURL(new Blob([serialized], { type: 'application/json' }))
     const link = document.createElement('a'); link.href = url; link.download = 'cosmos-many-body-timing.json'; link.click(); URL.revokeObjectURL(url)
   })
+  mountRunLayout(host, () => summarizeRun(
+    busy ? 'Running' : stopped ? 'Stopped' : lanes.length ? 'Ready' : 'Preparing',
+    recordVerdicts(rows,
+      'fullComparisonPassed'),
+    'Unrun fixtures; trajectory quality and rendering parity.',
+    Object.keys(errors),
+    runError,
+    'complete tick comparisons'))
   await task(setup)
-  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; cleanup() } }
+  return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; cleanup() } }
 }

@@ -1,3 +1,4 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createPassDiagnostic } from './diagnostic'
 import { buildTopology, createFixture, FIXTURES, PARAMETERS, type Fixture } from './data'
@@ -19,8 +20,10 @@ function timingTable (rows: TimingRow[]): string {
 export async function createWeightedLinksExperiment (host: HTMLElement): Promise<ExperimentInstance> {
   const diagnostic = new URLSearchParams(window.location.search).get('linkDiagnostic')
   if (diagnostic === 'WebGL' || diagnostic === 'WebGPU') return await createPassDiagnostic(host, diagnostic)
+  let runError: string | undefined
   host.innerHTML = `
-    <section class="scale-toolbar">
+    <section
+      data-run-part="configuration" class="scale-toolbar">
       <label>Graph <select data-control="fixture">
         ${FIXTURES.map(name => `<option ${name === 'star' ? 'selected' : ''}>${name}</option>`).join('')}
       </select></label>
@@ -31,14 +34,26 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
     </section>
     <div class="demo-toolbar">
       <div class="controls">
-        <button class="button-primary" data-action="step">Step + validate</button><button data-action="ten">10 validated ticks</button>
-        <button data-action="reset">Reset</button><button data-action="topology">Replace links + reset</button>
-        <button data-action="benchmark">Measure stages</button>
-        <button data-action="stop" disabled>Stop</button><button data-action="restart" hidden>Restart devices</button>
-        <button data-action="export" disabled>Export JSON</button>
+        <button class="button-primary" data-action="step"
+      data-run-action="primary">Step + validate</button>
+      <button data-action="ten"
+      data-run-action="primary">10 validated ticks</button>
+        <button data-action="reset"
+      data-run-action="primary">Reset</button>
+      <button data-action="topology"
+      data-run-action="diagnostic">Replace links + reset</button>
+        <button data-action="benchmark"
+      data-run-action="diagnostic">Measure stages</button>
+        <button data-action="stop" disabled
+      data-run-action="primary">Stop</button>
+      <button data-action="restart" hidden
+      data-run-action="primary">Restart devices</button>
+        <button data-action="export" disabled
+      data-run-action="export">Export JSON</button>
       </div>
     </div>
-    <section class="visible-section advanced-controls">
+    <section class="visible-section advanced-controls"
+      data-run-part="diagnostics">
       <h3 class="visible-section-heading">Sweeps and WebGL diagnostics</h3>
     <section class="scale-toolbar">
       <label>Sweep backend <select data-control="sweep-backend"><option>Both</option><option>WebGL</option><option>WebGPU</option></select></label>
@@ -53,18 +68,25 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
       </select></label>
     </section>
       <div class="controls">
-        <button data-action="sweep-small">Sweep 1k–10k</button><button data-action="sweep-large">Sweep 1k–100k</button>
-        <button data-action="diagnose-render">Check WebGL rendering only</button>
-        <button data-action="check-star">Check 100k star (Cosmos bounds)</button>
+        <button data-action="sweep-small"
+      data-run-action="diagnostic">Sweep 1k–10k</button>
+      <button data-action="sweep-large"
+      data-run-action="diagnostic">Sweep 1k–100k</button>
+        <button data-action="diagnose-render"
+      data-run-action="diagnostic">Check WebGL rendering only</button>
+        <button data-action="check-star"
+      data-run-action="diagnostic">Check 100k star (Cosmos bounds)</button>
       </div>
       <p class="demo-note">Isolate simulation passes with one active device:
         <a href="?linkDiagnostic=WebGL#/weighted-links">WebGL only</a> ·
         <a href="?linkDiagnostic=WebGPU#/weighted-links">WebGPU only</a>.</p>
     </section>
-    <section class="summary" aria-live="polite">
+    <section class="summary" aria-live="polite"
+      data-run-part="metrics">
       <span>Tick <strong data-output="tick">0</strong></span><span data-output="graph"></span><span data-output="topology"></span>
     </section>
-    <section class="backend-panels">
+    <section
+      data-run-part="visualization" class="backend-panels">
       ${['WebGL', 'WebGPU'].map(name => `<article class="backend-panel">
         <div class="panel-heading"><div>
           <p class="eyebrow" data-kernel="${name}">
@@ -76,8 +98,10 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
     <p class="demo-note">Both directions retain input link order. One tick = source-side spring → integrate → target-side spring → integrate → draw.
       Validation reads both forces and both position substeps. The measured tick has no position readback or CPU reference work.
       Yellow points are pinned; absent points and their incident links are hidden.</p>
-    <p data-output="status" role="status">Creating backends…</p>
-    <div class="markdown-body" data-output="results"></div>
+    <p data-output="status" role="status"
+      data-run-part="status">Creating backends…</p>
+    <div class="markdown-body" data-output="results"
+      data-run-part="results"></div>
   `
   const el = <T extends HTMLElement>(selector: string): T => {
     const result = host.querySelector<T>(selector)
@@ -109,6 +133,7 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
     if (busy || destroyed) return
     busy = true; stop = false; disable(true)
     try { await run() } catch (error) {
+      runError = String(error)
       const message = error instanceof Error ? error.message : String(error)
       if (/context lost|device lost|external Instance/i.test(message)) deviceFailed = true
       if (!destroyed) status.textContent = message
@@ -136,6 +161,7 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
     }
   }
   const reset = (): void => {
+    runError = undefined
     ticks = 0; cpu = graph.points.slice(); validation.length = 0; capture = undefined
     for (const backend of backends) {
       backend.reset(); backend.render()
@@ -146,6 +172,7 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
     status.textContent = 'Ready. Validate both directional forces and integration substeps against the CPU.'
   }
   const configure = (): void => {
+    runError = undefined
     graph = createFixture(fixture.value as Fixture, Number(count.value), changed); topology = buildTopology(graph)
     params = { ...PARAMETERS, collision: collision.checked }
     for (const backend of backends) {
@@ -295,6 +322,7 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
       el<HTMLElement>(`[data-info="${name}"]`).textContent = backend.info
       el<HTMLElement>(`[data-status="${name}"]`).textContent = 'Ready'
     } catch (error) {
+      runError = String(error)
       el<HTMLElement>(`[data-status="${name}"]`).textContent = 'Unavailable'
       el<HTMLElement>(`[data-info="${name}"]`).textContent = error instanceof Error ? error.message : String(error)
     }
@@ -335,5 +363,12 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
     const a = document.createElement('a'); a.href = url; a.download = 'weighted-links-capture.json'; a.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   })
-  return { pause (): void { stop = true }, destroy (): void { destroyed = true; if (!busy) cleanup(); host.replaceChildren() } }
+  mountRunLayout(host, () => summarizeRun(
+    busy ? 'Running' : stop ? 'Stopped' : backends.length ? 'Ready' : 'Preparing',
+    validation.flatMap(r => (r.checks as Array<{ valid: boolean }>).map(c => c.valid)),
+    'Other topologies, larger graphs and rendered-pixel parity.',
+    deviceFailed ? ['GPU device'] : [],
+    runError,
+    'directional CPU comparisons'))
+  return { pause (): void { stop = true }, destroy (): void { disposeRunLayout(host); destroyed = true; if (!busy) cleanup(); host.replaceChildren() } }
 }

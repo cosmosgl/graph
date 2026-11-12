@@ -1,3 +1,4 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { validationContracts } from '../../runtime/validation'
 import { pick, type Backend, type Snapshot } from './backend'
@@ -7,9 +8,11 @@ import { createStylingWebGL } from './webgl'
 import { createStylingWebGPU } from './webgpu'
 
 export async function createStylingView (host: HTMLElement): Promise<ExperimentInstance> {
+  let runError: string | undefined
   host.innerHTML = `<p class="demo-note">Production Cosmos draw and host-picking GLSL beside a WGSL quad renderer.
     Move over either canvas to inspect the same pixel in both. Only the shape’s half-coverage interior is pickable; antialiased fringes are not.</p>
-    <div class="scale-toolbar styling-toolbar">
+    <div
+      data-run-part="configuration" class="scale-toolbar styling-toolbar">
       <label>Fixture <select data-fixture><option value="shapes">Eight shapes · fill and stroke</option>
         <option value="overlap">Overlap and draw order</option><option value="edge-cases">Defaults and edge cases</option>
         <option value="fractional">Fractional sizes and positions</option></select></label>
@@ -19,16 +22,20 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         <option value="no">Cosmos constant-size rule</option></select></label>
       <label>Global opacity <select data-opacity><option selected>1</option><option>0.35</option><option>0</option></select></label>
       <label>Draw order <select data-order><option value="normal">Input order</option><option value="reverse">Reversed</option></select></label>
-      <div class="controls"><button data-export disabled>Export JSON</button></div>
-    </div><p role="status">Creating luma devices…</p>
+      <div class="controls"><button data-export disabled
+      data-run-action="export">Export JSON</button></div>
+    </div><p role="status"
+      data-run-part="status">Creating luma devices…</p>
     <p class="demo-note" data-legend></p>
-    <section class="backend-panels styling-panels">${(['webgl', 'webgpu'] as const).map(name => `<article class="backend-panel">
+    <section
+      data-run-part="visualization" class="backend-panels styling-panels">${(['webgl', 'webgpu'] as const).map(name => `<article class="backend-panel">
       <div class="panel-heading"><h2>${name === 'webgl' ? 'Cosmos WebGL' : 'luma WebGPU'}</h2><span class="status" data-state="${name}">Starting…</span></div>
       <div class="styling-viewport"><canvas width="${WIDTH}" height="${HEIGHT}" data-canvas="${name}" aria-label="${name} styled points"></canvas>
         <span class="styling-cursor" data-cursor="${name}" hidden></span></div>
       <p data-pick="${name}" class="styling-pick">Move over a shape to inspect its ID</p><p class="demo-note" data-device="${name}"></p>
     </article>`).join('')}</section>
-    <div class="many-body-results" data-results></div>
+    <div class="many-body-results"
+      data-run-part="results" data-results></div>
     <p class="demo-note">Both offscreen passes are read back for this diagnostic. Hover uses the captured ID image;
       this does not measure production picking latency. Rings, greyout, images and transitions remain outside this first styling comparison.
       <a href="#/point-styling/docs/method">Read the method and limitations</a>.</p>`
@@ -38,10 +45,11 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   let snapshots: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
   const errors: Partial<Record<'webgl' | 'webgpu', string>> = {}
   let destroyed = false; let busy = false
+  let latestComparison: boolean | undefined
   let report: object | undefined
   const render = async (): Promise<void> => {
     if (busy || destroyed) return
-    busy = true; snapshots = {}; report = undefined; exportButton.disabled = true
+    busy = true; snapshots = {}; report = undefined; latestComparison = undefined; runError = undefined; exportButton.disabled = true
     host.querySelectorAll<HTMLElement>('[data-cursor]').forEach(cursor => { cursor.hidden = true })
     host.querySelectorAll<HTMLElement>('[data-pick]').forEach(label => { label.textContent = 'Move over a shape to inspect its ID' })
     host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
@@ -72,12 +80,14 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           el(`[data-device="${name}"]`).textContent = backends[name]!.info
           el(`[data-state="${name}"]`).textContent = 'Rendered'
         } catch (error) {
+          runError = String(error)
           errors[name] = String(error); el(`[data-state="${name}"]`).textContent = 'Failed'
           el(`[data-device="${name}"]`).textContent = String(error)
         }
       }
       if (destroyed) return
       const comparison = snapshots.webgl && snapshots.webgpu ? compareSnapshots(snapshots.webgl, snapshots.webgpu, points, settings) : undefined
+      latestComparison = comparison?.valid
       report = {
         schemaVersion: 1,
         experiment: 'point-styling',
@@ -122,6 +132,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     if (busy || destroyed) return
     const canvas = event.currentTarget as HTMLCanvasElement; const box = canvas.getBoundingClientRect()
     const u = (event.clientX - box.left) / box.width; const v = (event.clientY - box.top) / box.height
+
     for (const name of ['webgl', 'webgpu'] as const) {
       const cursor = el(`[data-cursor="${name}"]`); cursor.hidden = false; cursor.style.left = `${u * 100}%`; cursor.style.top = `${v * 100}%`
       const snapshot = snapshots[name]; if (!snapshot) continue
@@ -141,15 +152,23 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     const url = URL.createObjectURL(new Blob([json], { type: 'application/json' })); const link = document.createElement('a')
     link.href = url; link.download = 'cosmos-point-styling.json'; link.click(); URL.revokeObjectURL(url)
   })
+  mountRunLayout(host, () => summarizeRun(
+    busy ? 'Running' : report ? 'Complete' : 'Preparing',
+    [latestComparison],
+    'Other fixtures, pointer-hover tolerance and production picking latency.',
+    Object.keys(errors),
+    runError,
+    'full-image styling and picking comparisons'))
   for (const [name, create] of [['webgl', createStylingWebGL], ['webgpu', createStylingWebGPU]] as const) {
     try {
       const backend = await create(el<HTMLCanvasElement>(`[data-canvas="${name}"]`)); backends[name] = backend
       el(`[data-device="${name}"]`).textContent = backend.info
     } catch (error) {
+      runError = String(error)
       errors[name] = String(error); el(`[data-state="${name}"]`).textContent = 'Unavailable'
       el(`[data-device="${name}"]`).textContent = String(error)
     }
   }
-  try { await render() } catch (error) { Object.values(backends).forEach(backend => backend.destroy()); throw error }
-  return { destroy (): void { destroyed = true; if (!busy) Object.values(backends).forEach(backend => backend.destroy()) } }
+  try { await render() } catch (error) { runError = String(error); Object.values(backends).forEach(backend => backend.destroy()); throw error }
+  return { destroy (): void { disposeRunLayout(host); destroyed = true; if (!busy) Object.values(backends).forEach(backend => backend.destroy()) } }
 }

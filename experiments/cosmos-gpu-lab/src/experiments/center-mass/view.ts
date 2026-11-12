@@ -1,3 +1,4 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import type { BackendResult, CenterMassBackend } from './backend'
 import {
@@ -36,27 +37,34 @@ function centerDistance (left: Center, right: Center): number {
 }
 
 export async function createCenterMassExperiment (host: HTMLElement): Promise<ExperimentInstance> {
+  let runError: string | undefined
   host.innerHTML = `
     <section class="center-mass-demo">
-      <div class="demo-toolbar">
+      <div class="demo-toolbar"
+      data-run-part="configuration">
         <div>
           <p class="eyebrow">Synchronized input</p>
           <p>The same ${POINT_COUNT.toLocaleString()} moving points are sent to both backends.</p>
         </div>
         <div class="controls">
-          <button class="button-primary" data-action="step" type="button" disabled>Step</button>
-          <button data-action="play" type="button" disabled>Play</button>
-          <button data-action="reset" type="button" disabled>Reset</button>
+          <button class="button-primary" data-action="step" type="button" disabled
+      data-run-action="primary">Step</button>
+          <button data-action="play" type="button" disabled
+      data-run-action="primary">Play</button>
+          <button data-action="reset" type="button" disabled
+      data-run-action="primary">Reset</button>
         </div>
       </div>
 
-      <section class="summary" aria-live="polite">
+      <section class="summary" aria-live="polite"
+      data-run-part="results">
         <span>Tick <strong data-output="tick">0</strong></span>
         <span>CPU reference <strong data-output="cpu-center">—</strong></span>
         <span>Backend delta <strong data-output="backend-delta">—</strong></span>
       </section>
 
-      <section class="backend-panels">
+      <section
+      data-run-part="visualization" class="backend-panels">
         <article class="backend-panel">
           <div class="panel-heading">
             <div>
@@ -153,6 +161,7 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
           results.set(slot.id, result)
           showResult(slot.id, result, cpuCenter)
         } catch (error) {
+          runError = String(error)
           slot.error = error instanceof Error ? error.message : String(error)
           setStatus(slot.id, 'Runtime error', true)
           element<HTMLElement>(host, `[data-output="${slot.id}-center"]`).textContent = slot.error
@@ -215,11 +224,18 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
     },
   ]
 
+  mountRunLayout(host, () => summarizeRun(
+    isPlaying || isRunning ? 'Running' : slots.some(s => s.backend) ? 'Ready' : 'Preparing',
+    [],
+    'Center accuracy budget and rendered-pixel parity.',
+    slots.filter(s => s.error).map(s => s.id),
+    runError))
   await Promise.all(constructors.map(async ({ slot, create }) => {
     try {
       slot.backend = await create()
       setStatus(slot.id, 'Ready')
     } catch (error) {
+      runError = String(error)
       slot.error = error instanceof Error ? error.message : String(error)
       setStatus(slot.id, 'Unavailable', true)
       element<HTMLElement>(host, `[data-output="${slot.id}-center"]`).textContent = slot.error
@@ -235,6 +251,7 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
       playButton.textContent = 'Play'; playButton.setAttribute('aria-pressed', 'false')
     },
     destroy (): void {
+      disposeRunLayout(host)
       if (destroyed) return
       destroyed = true
       isPlaying = false

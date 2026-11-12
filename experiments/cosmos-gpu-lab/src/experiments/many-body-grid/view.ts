@@ -1,3 +1,4 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
 import { graphPalette } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createFixture, PARAMETERS, type Fixture } from '../many-body/data'
@@ -25,10 +26,12 @@ function drawCpu (canvas: HTMLCanvasElement, points: Float32Array, view: View): 
   }
 }
 export async function createGridExperiment (host: HTMLElement): Promise<ExperimentInstance> {
+  let runError: string | undefined
   host.innerHTML = `
     <p class="demo-note">Matched inputs: both GPUs build their own hierarchy and samples, using shared CPU bounds, shifts and seeds.
       Fixed sample budgets isolate the force port; automatic tuning and GPU bounds reduction are not validated here.</p>
-    <div class="scale-toolbar">
+    <div
+      data-run-part="configuration" class="scale-toolbar">
       <label>Fixture <select data-control="fixture">
         ${['uniform', 'clusters', 'coincident', 'edge-cases', 'boundary'].map(x => `<option>${x}</option>`).join('')}</select></label>
       <label>Points <select data-control="count">
@@ -39,24 +42,40 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
         <option value="precise">Precise · 5×5 shell</option>
         <option value="balanced">Balanced · 3×3 shell</option></select></label>
     </div>
-    <div class="demo-toolbar playback-toolbar"><div class="controls"><button data-action="step" class="button-primary">Step + validate</button>
-      <button data-action="centroids">Compare centroid pass</button><button data-action="trace">Trace next tick</button>
-      <button data-action="three">3 validated ticks</button><button data-action="benchmark">Benchmark precision</button>
-      <button data-action="stop" disabled>Stop</button>
-      <button data-action="reset">Reset / retry devices</button><button data-action="export" disabled>Export JSON</button>
+    <div class="demo-toolbar playback-toolbar"><div class="controls"><button data-action="step" class="button-primary"
+      data-run-action="primary">Step + validate</button>
+      <button data-action="centroids"
+      data-run-action="diagnostic">Compare centroid pass</button>
+      <button data-action="trace"
+      data-run-action="diagnostic">Trace next tick</button>
+      <button data-action="three"
+      data-run-action="primary">3 validated ticks</button>
+      <button data-action="benchmark"
+      data-run-action="diagnostic">Benchmark precision</button>
+      <button data-action="stop" disabled
+      data-run-action="primary">Stop</button>
+      <button data-action="reset"
+      data-run-action="primary">Reset / retry devices</button>
+      <button data-action="export" disabled
+      data-run-action="export">Export JSON</button>
       </div><span class="tick-counter">Tick <strong data-output="tick">0</strong></span></div>
-    <p class="many-body-status" data-output="status" role="status">Preparing backends…</p>
+    <p class="many-body-status" data-output="status" role="status"
+      data-run-part="status">Preparing backends…</p>
     <p class="demo-note" data-output="grid"></p>
-    <section class="backend-panels many-body-panels">${['WebGL', 'WebGPU', 'CPU'].map(name => `<article class="backend-panel">
+    <section
+      data-run-part="visualization" class="backend-panels many-body-panels">${['WebGL', 'WebGPU', 'CPU'].map(name => `<article class="backend-panel">
       <div class="panel-heading"><h2>${name}</h2><span data-status="${name}" class="status">Starting…</span></div>
       <canvas data-canvas="${name}" width="480" height="340" aria-label="${name} hierarchical positions"></canvas>
       <p class="demo-note" data-info="${name}"></p></article>`).join('')}</section>
     <p class="demo-note">Each tick starts from CPU-model positions. Blue points are free, yellow points pinned; absent points are hidden.
       GPU panels draw resident positions. Force-only motion expands the layout; springs, gravity and cooling are disabled.</p>
-    <div class="many-body-results" data-output="results"></div>
+    <div class="many-body-results" data-output="results"
+      data-run-part="results"></div>
     <div class="many-body-results" data-output="approximation"></div>
-    <div class="many-body-results precision-trace" data-output="centroids"></div>
-    <div class="many-body-results precision-trace" data-output="trace"></div>
+    <div class="many-body-results precision-trace" data-output="centroids"
+      data-run-part="diagnostics"></div>
+    <div class="many-body-results precision-trace" data-output="trace"
+      data-run-part="diagnostics"></div>
     <section class="many-body-results precision-trace" data-output="timing" aria-label="Precision performance comparison">
       <p class="demo-note">Benchmark precision compares inline, stored and streamed contributions at 8,192 and 16,384 points,
         uniform and clustered. Batched GPU timestamps cover grid construction + force, and complete steps. Rendering is excluded.
@@ -86,6 +105,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     for (const lane of lanes) {
       if (errors[lane.name]) continue
       try { lane.backend.render(view) } catch (error) {
+        runError = String(error)
         errors[lane.name] = error instanceof Error ? error.message : String(error)
         el(`[data-status="${lane.name}"]`).textContent = 'Failed'
         el(`[data-info="${lane.name}"]`).textContent = errors[lane.name]
@@ -94,6 +114,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     drawCpu(canvas('CPU'), cpu, view)
   }
   const setup = async (): Promise<void> => {
+    runError = undefined
     cleanup(); rows.length = 0; tick = 0
     Object.keys(errors).forEach(key => { delete errors[key] })
     input = createFixture(fixture.value as Fixture, Number(count.value)); cpu = input.points
@@ -116,6 +137,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
         el(`[data-status="${name}"]`).textContent = 'Ready'
         el(`[data-info="${name}"]`).textContent = backend.info
       } catch (error) {
+        runError = String(error)
         errors[name] = error instanceof Error ? error.message : String(error)
         el(`[data-status="${name}"]`).textContent = 'Unavailable'; el(`[data-info="${name}"]`).textContent = errors[name]
       }
@@ -162,6 +184,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
         const valid = check.structure.valid && check.output.valid && check.local.valid && check.integration.valid && (!report || report.replay.valid)
         el(`[data-status="${lane.name}"]`).textContent = valid ? 'Passed' : 'Mismatch'
       } catch (error) {
+        runError = String(error)
         errors[lane.name] = error instanceof Error ? error.message : String(error)
         el(`[data-status="${lane.name}"]`).textContent = 'Failed'; el(`[data-info="${lane.name}"]`).textContent = errors[lane.name]
       }
@@ -174,7 +197,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       try {
         if (!snapshots.WebGPU) throw new Error('Inline WebGPU result unavailable')
         centroidComparison = await compareCentroidPass(input, previous, PARAMETERS, frame, snapshots.WebGPU)
-      } catch (error) { centroidError = error instanceof Error ? error.message : String(error) }
+      } catch (error) { runError = String(error); centroidError = error instanceof Error ? error.message : String(error) }
       if (destroyed) return false
     }
     const approximation = approximationError(input, previous, expected.forces, PARAMETERS, frame)
@@ -307,6 +330,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     if (busy || destroyed) return
     busy = true; stopped = false; controls()
     try { await work() } catch (error) {
+      runError = String(error)
       if (!destroyed) status.textContent = error instanceof Error ? error.message : String(error)
     } finally { busy = false; if (!destroyed) controls() }
   }
@@ -358,6 +382,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
             : 'Precision benchmark complete; validation is shown beside each timing.'
         }
       } catch (error) {
+        runError = String(error)
         timingError = error instanceof Error ? error.message : String(error)
         throw error
       } finally { if (!destroyed) renderTiming() }
@@ -385,6 +410,14 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     const url = URL.createObjectURL(new Blob([serialized], { type: 'application/json' }))
     const a = document.createElement('a'); a.href = url; a.download = 'cosmos-many-body-grid.json'; a.click(); URL.revokeObjectURL(url)
   })
+  mountRunLayout(host, () => summarizeRun(
+    busy ? 'Running' : stopped ? 'Stopped' : lanes.length ? 'Ready' : 'Preparing',
+    recordVerdicts(rows,
+      'passed'),
+    'Approximation quality is separate from port compatibility; unrun inputs.',
+    Object.keys(errors),
+    runError,
+    'complete tick comparisons'))
   await task(setup)
-  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; cleanup() } }
+  return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; cleanup() } }
 }

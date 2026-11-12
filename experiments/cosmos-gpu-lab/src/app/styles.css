@@ -2026,3 +2026,45 @@ button[data-action="play"][aria-pressed="true"] {
 .trajectory-chart svg { display: block; width: 100%; color: var(--text-secondary); }
 .chart-series-key { display: inline-flex; align-items: center; gap: 6px; color: var(--text-primary); }
 .chart-series-key svg { flex: none; width: 24px; height: 12px; }
+
+/* The shared run frame keeps configuration and the live view within one glance. */
+.run-layout { font-size: var(--type-body); line-height: 1.65; }
+.run-overview { margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid var(--control-border); }
+.run-source { color: var(--text-secondary); font-size: var(--type-meta); margin: 0 0 12px; }
+.run-overview dl { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px 24px; margin: 0; }
+.run-overview dt { font-weight: 500; margin-bottom: 6px; }
+.run-overview dd { margin: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
+.run-overview [data-run-slot="status"] > * { margin: 14px 0 0; padding: 0; font-size: var(--type-body); overflow-wrap: anywhere; }
+.run-layout h2 { font-size: var(--type-body); font-weight: 500; margin: 0 0 16px; }
+.run-workbench { display: grid; gap: 28px; align-items: start; }
+.run-settings, .run-display, .run-visualization, .run-diagnostics, .run-layout [data-run-part] { min-width: 0; }
+.run-layout :is(#run-configuration, #run-run, #run-results, #run-diagnostics) { scroll-margin-top: 24px; }
+.run-settings > [data-run-section="configuration"] { margin: 0; }
+.run-settings .scale-toolbar { padding: 0; margin-bottom: 16px; border: 0; }
+.run-primary-actions { gap: 8px; margin: 0 0 20px; }
+.run-layout .backend-panels { margin: 0; }
+.run-layout .run-visualization .backend-panels { grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
+.run-layout .run-visualization canvas { max-width: 100%; height: auto; }
+.run-layout .run-visualization .benchmark-preview { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 200px), 1fr)); }
+.run-layout #run-results { margin-top: 28px; }
+.run-layout #run-results:has(> h2:only-child)::after { content: 'No live results yet. Configure and run the selected workload.'; color: var(--text-secondary); }
+.run-export-actions { margin-bottom: 16px; }
+.run-diagnostics { margin-top: 36px; padding-top: 24px; border-top: 1px solid var(--control-border); }
+.run-diagnostic-actions { gap: 8px; margin-bottom: 20px; }
+.run-diagnostics > [data-run-section="diagnostics"] { margin: 0; }
+.run-settings [data-run-section] > h2, .run-visualization [data-run-section] > h2 { margin-top: 0; }
+.run-layout .run-presets .controls { gap: 6px; }
+.run-layout .run-presets button { white-space: normal; text-align: left; }
+@media (min-width: 1200px) {
+  .run-workbench { grid-template-columns: 270px minmax(0, 1fr); }
+  .run-settings .scale-toolbar { grid-template-columns: minmax(0, 1fr); }
+  .run-settings .scale-toolbar label { width: 100%; }
+}
+@media (max-width: 700px) {
+  .run-overview dl { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 420px) {
+  .run-overview dl { grid-template-columns: minmax(0, 1fr); gap: 12px; }
+  .run-layout .run-visualization .backend-panels { grid-template-columns: minmax(0, 1fr); }
+}
+.run-selected-value { color: var(--text-secondary); font-size: var(--type-meta); line-height: 1.5; overflow-wrap: anywhere; }

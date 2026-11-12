@@ -1,3 +1,4 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { fitView } from '../many-body/backend'
@@ -7,9 +8,11 @@ import { createTrajectorySession, LANES, LABELS, type Lane, type TrajectorySessi
 const number = (v: number): string => Number.isFinite(v) ? v.toExponential(2) : 'non-finite'
 const colors = { webgl: comparisonSeries.webgl, materialized: comparisonSeries.webgpu, streamed: comparisonSeries.cpu }
 export async function createTrajectories (host: HTMLElement): Promise<ExperimentInstance> {
+  let runError: string | undefined
   host.innerHTML = `<p class="demo-note">Each path keeps its own positions and bounds. Every GPU tick is checked against CPU arithmetic on that path's input.
     Position drift is reported separately. Repulsion alone expands the layout; springs, gravity and cooling are not active.</p>
-    <div class="scale-toolbar">
+    <div
+      data-run-part="configuration" class="scale-toolbar">
       <label>Fixture <select data-control="fixture">
         ${['uniform', 'clusters', 'coincident', 'edge-cases', 'boundary'].map(f => `<option>${f}</option>`).join('')}</select></label>
       <label>Points <select data-control="count">
@@ -18,18 +21,29 @@ export async function createTrajectories (host: HTMLElement): Promise<Experiment
       <label>Quality <select data-control="quality"><option value="precise">Precise</option><option value="balanced">Balanced</option></select></label>
     </div>
     <div class="demo-toolbar playback-toolbar"><div class="controls">
-      <button data-action="step">Step + validate</button><button class="button-primary" data-action="run">Run 20 ticks</button>
-      <button data-action="stop" disabled>Stop</button><button data-action="reset">Reset / retry devices</button>
-      <button data-action="export" disabled>Export JSON</button></div><span class="tick-counter">Tick <strong data-output="tick">0</strong></span></div>
-    <p role="status" class="many-body-status" data-output="status">Preparing independent paths…</p>
-    <section class="backend-panels trajectory-panels">${[...LANES, 'CPU' as const].map(name => `<article class="backend-panel">
+      <button data-action="step"
+      data-run-action="primary">Step + validate</button>
+      <button class="button-primary" data-action="run"
+      data-run-action="primary">Run 20 ticks</button>
+      <button data-action="stop" disabled
+      data-run-action="primary">Stop</button>
+      <button data-action="reset"
+      data-run-action="primary">Reset / retry devices</button>
+      <button data-action="export" disabled
+      data-run-action="export">Export JSON</button></div><span class="tick-counter">Tick <strong data-output="tick">0</strong></span></div>
+    <p role="status" class="many-body-status" data-output="status"
+      data-run-part="status">Preparing independent paths…</p>
+    <section
+      data-run-part="visualization" class="backend-panels trajectory-panels">${[...LANES, 'CPU' as const].map(name => `<article class="backend-panel">
       <div class="panel-heading"><h2>${LABELS[name]}</h2><span class="status" data-state="${name}">Starting</span></div>
       <canvas data-canvas="${name}" width="480" height="340" aria-label="${LABELS[name]} independent positions"></canvas>
       <p class="demo-note" data-info="${name}"></p></article>`).join('')}</section>
     <p class="demo-note">All panels use the same camera. GPU panels draw their resident resources; CPU uses Canvas 2D.
       Readback and CPU checks run every tick: this is a validation experiment, not a performance test.</p>
-    <div data-output="results" class="many-body-results"></div>
-    <div data-output="chart" class="trajectory-chart"></div>`
+    <div data-output="results" class="many-body-results"
+      data-run-part="results"></div>
+    <div data-output="chart" class="trajectory-chart"
+      data-run-part="results"></div>`
   const el = <T extends HTMLElement>(q: string): T => host.querySelector<T>(q)!
   const control = (key: string): HTMLSelectElement => el(`[data-control="${key}"]`)
   const canvas = (name: Lane | 'CPU'): HTMLCanvasElement => el(`[data-canvas="${name}"]`)
@@ -47,6 +61,7 @@ export async function createTrajectories (host: HTMLElement): Promise<Experiment
     for (const lane of session.lanes) {
       if (!session.errors[lane.name]) {
         try { lane.backend.render(view) } catch (error) {
+          runError = String(error)
           session.errors[lane.name] = error instanceof Error ? error.message : String(error)
           if (row) { row.errors[lane.name] = session.errors[lane.name]; row.complete = false }
         }
@@ -114,6 +129,7 @@ export async function createTrajectories (host: HTMLElement): Promise<Experiment
   }).join('')}</svg><p>${LANES.map(name => seriesKey(colors[name], LABELS[name])).join(' · ')}</p>`
   }
   const setup = async (): Promise<void> => {
+    runError = undefined
     session?.destroy(); session = undefined; status.textContent = 'Preparing independent paths…'
     for (const name of LANES) { const old = canvas(name); old.replaceWith(old.cloneNode()) }
     const next = await createTrajectorySession({
@@ -132,6 +148,7 @@ export async function createTrajectories (host: HTMLElement): Promise<Experiment
     if (busy || destroyed) return
     busy = true; stopped = false; controls()
     try { await fn() } catch (error) {
+      runError = String(error)
       if (!destroyed) status.textContent = error instanceof Error ? error.message : String(error)
     } finally { busy = false; if (!destroyed) controls() }
   }
@@ -179,6 +196,13 @@ export async function createTrajectories (host: HTMLElement): Promise<Experiment
     const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'cosmos-repulsion-trajectories.json'
     a.click(); URL.revokeObjectURL(url)
   })
+  mountRunLayout(host, () => summarizeRun(
+    busy ? 'Running' : stopped ? 'Stopped' : session ? 'Ready' : 'Preparing',
+    session?.rows.flatMap(r => r.checks.map(c => c.valid)) ?? [],
+    'Drift is descriptive, not a quality pass; unrun fixtures and pixel parity.',
+    Object.keys(session?.errors ?? {}),
+    runError,
+    'local backend checks'))
   await task(setup)
-  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
+  return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

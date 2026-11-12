@@ -6,7 +6,7 @@ import type { PointRenderMeasurement } from '../experiments/point-rendering/back
 vi.mock('../experiments/point-rendering/webgl/backend', () => ({ createWebGLPointRenderer: vi.fn() }))
 vi.mock('../experiments/point-rendering/webgpu/backend', () => ({ createWebGPUPointRenderer: vi.fn() }))
 
-it('leaves a paused timing batch unaccepted and lets its controls start a complete new batch', async () => {
+it.for(['documentation', 'stop button'])('leaves a batch stopped by %s unaccepted and permits a new run', async reason => {
   let finish!: (value: PointRenderMeasurement) => void
   const value = { submitMilliseconds: 1, completionMilliseconds: 2 }
   const measure = vi.fn().mockImplementationOnce(() => new Promise(resolve => { finish = resolve })).mockResolvedValue(value)
@@ -18,10 +18,17 @@ it('leaves a paused timing batch unaccepted and lets its controls start a comple
   const button = (name: string): HTMLButtonElement => host.querySelector(`[data-action="${name}"]`)!
   try {
     button('run').click(); await vi.waitFor(() => expect(measure).toHaveBeenCalledTimes(1))
-    app.pause!(); finish(value)
+    if (reason === 'documentation') app.pause!()
+    else {
+      button('stop').click()
+      await vi.waitFor(() => expect(host.querySelector('[data-run-summary-value="state"]')!.textContent).toBe('Stopping'))
+    }
+    finish(value)
     await vi.waitFor(() => expect(button('run').disabled).toBe(false))
     expect(host.querySelector('[data-output="status"]')!.textContent).toContain('no accepted result')
     expect(button('export').disabled).toBe(true)
+    expect(button('stop').disabled).toBe(true)
+    await vi.waitFor(() => expect(host.querySelector('[data-run-summary-value="state"]')!.textContent).toBe('Stopped'))
     expect(host.querySelector<HTMLSelectElement>('[data-control="count"]')!.disabled).toBe(false)
     button('run').click()
     await vi.waitFor(() => expect(button('export').disabled).toBe(false))

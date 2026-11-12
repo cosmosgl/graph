@@ -1,3 +1,4 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { validationContracts } from '../../runtime/validation'
 import { gravity } from '../combined-layout/reference'
@@ -6,17 +7,23 @@ import { nativeDiagnostics, productionGravity } from './gpu'
 
 const number = (value: number | null): string => value === null ? 'not defined' : Number.isFinite(value) ? value.toExponential(5) : 'non-finite'
 export function createPrecisionView (host: HTMLElement): ExperimentInstance {
+  let runError: string | undefined
   host.innerHTML = `<p class="demo-note">Compare mathematical error and legacy compatibility separately.
     No production accuracy threshold or performance verdict is assigned. Every backend receives the same frozen float32 inputs.</p>
-    <div class="scale-toolbar">
+    <div
+      data-run-part="configuration" class="scale-toolbar">
       <label>Records <select data-count><option>257</option><option>1024</option><option>4096</option></select></label>
       <label>Gravity seed <input data-seed type="number" value="5931" min="0" max="4294967295" step="1"></label>
       <label>Sum fixture <select data-fixture><option value="cancellation">Cancellation</option><option value="positive">Positive integers</option>
         <option value="balanced">Balanced integers</option></select></label>
-      <div class="controls"><button data-run class="button-primary">Run frozen diagnostics</button>
-        <button data-export disabled>Export JSON</button></div>
-    </div><p role="status" data-status>Ready. GPU results depend on the selected browser and device.</p>
-    <div class="many-body-results precision-results" data-results></div>
+      <div class="controls"><button data-run class="button-primary"
+      data-run-action="primary">Run frozen diagnostics</button>
+        <button data-export disabled
+      data-run-action="export">Export JSON</button></div>
+    </div><p role="status" data-status
+      data-run-part="status">Ready. GPU results depend on the selected browser and device.</p>
+    <div class="many-body-results precision-results"
+      data-run-part="results" data-results></div>
     <p class="demo-note">Read the <a href="#/precision-diagnostics/docs/method">method</a>,
       <a href="#/validation-workflow">validation workflow</a> and <a href="#/numerical-research">sourced research report</a>.
       The sum kernels are diagnostic WGSL, not production WebGL blend reductions. Layouts and runtime performance are not assessed.</p>`
@@ -102,7 +109,7 @@ export function createPrecisionView (host: HTMLElement): ExperimentInstance {
           const result = await productionGravity(points)
           current.devices.webgl = result.device; current.gravity.push(gravityResult('Production GLSL polar', result.forces, points))
           current.gravityOutputs.push({ name: 'Production GLSL polar', forces: result.forces })
-        } catch (error) { current.errors.webgl = String(error) }
+        } catch (error) { runError = String(error); current.errors.webgl = String(error) }
         if (destroyed) return
         status.textContent = 'Checking native WGSL gravity and sums…'
         try {
@@ -114,12 +121,12 @@ export function createPrecisionView (host: HTMLElement): ExperimentInstance {
               ...row, exact: sums.exact, absoluteError: Math.abs(row.value - sums.exact), finite: Number.isFinite(row.value),
             })
           }
-        } catch (error) { current.errors.webgpu = String(error) }
+        } catch (error) { runError = String(error); current.errors.webgpu = String(error) }
         if (destroyed) return
         render(); status.textContent = Object.keys(current.errors).length
           ? 'Partial diagnostics. Unavailable GPU paths remain reported; CPU results are not GPU validation.'
           : 'Diagnostics completed. Inspect error and compatibility separately; no production approval or performance claim.'
-      } catch (error) { if (!destroyed) status.textContent = String(error) } finally {
+      } catch (error) { runError = String(error); if (!destroyed) status.textContent = String(error) } finally {
         busy = false
         if (!destroyed) {
           run.disabled = false; download.disabled = !report
@@ -137,5 +144,12 @@ export function createPrecisionView (host: HTMLElement): ExperimentInstance {
     const url = URL.createObjectURL(new Blob([json], { type: 'application/json' })); const link = document.createElement('a')
     link.href = url; link.download = 'cosmos-precision-diagnostics.json'; link.click(); URL.revokeObjectURL(url)
   })
-  return { destroy (): void { destroyed = true } }
+  mountRunLayout(host, () => summarizeRun(
+    busy ? 'Running' : report ? 'Complete' : 'Ready',
+    report?.gravity.map(r => r.legacyCompatibility.valid) ?? [],
+    'Mathematical accuracy has no pass budget; trajectories, quality and cost.',
+    Object.keys(report?.errors ?? {}),
+    runError,
+    'legacy compatibility comparisons'))
+  return { destroy (): void { disposeRunLayout(host); destroyed = true } }
 }

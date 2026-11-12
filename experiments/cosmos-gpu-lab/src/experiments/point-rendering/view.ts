@@ -1,3 +1,4 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import type { PointRenderBackend, PointRenderData } from './backend'
 import { createPointData, POINT_COUNTS } from './point-data'
@@ -42,9 +43,11 @@ export async function createPointRenderingExperiment (
     `<option value="${count}" ${count === 1024 ? 'selected' : ''}>${count.toLocaleString()}</option>`
   ).join('')
 
+  let runError: string | undefined
   host.innerHTML = `
     <section class="point-rendering-demo">
-      <div class="scale-toolbar point-toolbar">
+      <div
+      data-run-part="configuration" class="scale-toolbar point-toolbar">
         <label>
           Points
           <select data-control="count">${countOptions}</select>
@@ -54,17 +57,20 @@ export async function createPointRenderingExperiment (
           <input data-control="diameter" type="range" min="2" max="40" step="1" value="14">
         </label>
         <div class="controls">
-          <button data-action="regenerate" type="button">Regenerate layout</button>
+          <button data-action="regenerate" type="button"
+      data-run-action="primary">Regenerate layout</button>
         </div>
       </div>
 
-      <section class="summary" aria-live="polite">
+      <section
+      data-run-part="results" class="summary" aria-live="polite">
         <span>Shared input <strong data-output="count">1,024 points</strong></span>
         <span>Position + color data <strong data-output="bytes">24 KiB</strong></span>
         <span>Draw calls <strong>1 per backend</strong></span>
       </section>
 
-      <section class="backend-panels point-render-panels">
+      <section
+      data-run-part="visualization" class="backend-panels point-render-panels">
         <article class="backend-panel">
           <div class="panel-heading">
             <div>
@@ -112,6 +118,7 @@ export async function createPointRenderingExperiment (
   const slots: BackendSlot[] = [{ id: 'webgl' }, { id: 'webgpu' }]
   let data: PointRenderData = createPointData(1024, 0)
   let phase = 0
+  const renderErrors = new Set<string>()
   let destroyed = false
 
   const updateMetrics = (): void => {
@@ -136,6 +143,7 @@ export async function createPointRenderingExperiment (
       try {
         slot.backend.render(diameter)
       } catch (error) {
+        runError = String(error); renderErrors.add(slot.id)
         slot.backend.destroy()
         slot.backend = undefined
         showBackendError(host, slot, error)
@@ -174,6 +182,12 @@ export async function createPointRenderingExperiment (
     },
   ]
 
+  mountRunLayout(host, () => summarizeRun(
+    slots.some(s => s.backend) ? 'Ready' : 'Preparing',
+    [],
+    'Visual comparison only: pixel parity and picking are not tested here.',
+    slots.filter(s => renderErrors.has(s.id)).map(s => s.id),
+    runError))
   await Promise.all(constructors.map(async ({ slot, create }) => {
     try {
       slot.backend = await create()
@@ -181,6 +195,7 @@ export async function createPointRenderingExperiment (
       slot.backend.render(Number(diameterInput.value))
       setStatus(host, slot, 'Ready')
     } catch (error) {
+      runError = String(error); renderErrors.add(slot.id)
       showBackendError(host, slot, error)
     }
   }))
@@ -188,6 +203,7 @@ export async function createPointRenderingExperiment (
 
   return {
     destroy (): void {
+      disposeRunLayout(host)
       if (destroyed) return
       destroyed = true
       for (const slot of slots) slot.backend?.destroy()

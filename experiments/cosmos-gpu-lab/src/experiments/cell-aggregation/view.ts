@@ -1,15 +1,19 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createGridStudy, type GridStudy, type GridCase } from '../combined-layout/grid-study'
 import { FROZEN_POLICY, frozenSummary, frozenPairedWins } from '../combined-layout/frozen-timing'
 import { PRESETS, type ProductionPreset } from '../combined-layout/production-settings'
 const ms = (n: number | null): string => n === null ? 'Unavailable' : n.toFixed(3)
 export async function createGridAggregationView (host: HTMLElement, acceptance = false): Promise<ExperimentInstance> {
+  let runError: string | undefined
   host.innerHTML = `<p class="demo-note">${acceptance
     ? 'Validate production’s exact/grid switch and combine hub prefetch with cached grid aggregation. ' +
       'CPU checkpoints validate the evolving layout; normal frames measure the gain.'
     : 'Cache integer membership during binning; keep every floating-point addition in source-index order. ' +
       'Normal frames measure the gain. Diagnostic profiles and cell occupancy explain the work.'}</p>
-    <div class="scale-toolbar"><label>Points <select data-control="count">${acceptance ? '<option>4095</option>' : ''}<option>4096</option>
+    <div
+      data-run-part="configuration" class="scale-toolbar">
+      <label>Points <select data-control="count">${acceptance ? '<option>4095</option>' : ''}<option>4096</option>
       ${acceptance ? '<option>4097</option>' : ''}<option selected>8192</option></select></label>
       <label>Graph <select data-control="fixture"><option value="chain">Chain</option><option value="communities">Communities</option>
         ${acceptance ? '<option value="star">Star</option>' : ''}</select></label>
@@ -35,16 +39,24 @@ export async function createGridAggregationView (host: HTMLElement, acceptance =
         ${acceptance ? 'Hub prefetch + cached grid' : 'Cached IDs + 32-index sort'}</option>
         ${acceptance ? '' : '<option value="cached-cells">Cached IDs + 128-index sort</option>'}
         <option value="baseline">Duplicate baseline</option></select></label></div>
-    <div class="controls"><button data-action="compare" class="button-primary">Compare selected</button>
-      <button data-action="sweep">${acceptance ? 'Chain + communities + star sweep' : 'Repeat size + density sweep'}</button>
-      ${acceptance ? '<button data-action="ladder">100-tick preset ladder</button>' : ''}
-      <button data-action="stop" disabled>Stop</button>
-      <button data-action="reset" disabled>Reset</button><button data-action="export" disabled>Export JSON</button></div>
-    <p data-output="status" role="status">Ready. ${acceptance
+    <div class="controls"><button data-action="compare" class="button-primary"
+      data-run-action="primary">Compare selected</button>
+      <button data-action="sweep"
+      data-run-action="diagnostic">${acceptance ? 'Chain + communities + star sweep' : 'Repeat size + density sweep'}</button>
+      ${acceptance ? '<button data-action="ladder" data-run-action="diagnostic">100-tick preset ladder</button>' : ''}
+      <button data-action="stop" disabled
+      data-run-action="primary">Stop</button>
+      <button data-action="reset" disabled
+      data-run-action="primary">Reset</button>
+      <button data-action="export" disabled
+      data-run-action="export">Export JSON</button></div>
+    <p data-output="status" role="status"
+      data-run-part="status">Ready. ${acceptance
     ? 'Production routing: exact at ≤4,096; hierarchy above. The candidate also prefetches hubs at degree ≥1,024.'
     : 'Normal frames and diagnostic profiles run in separate phases.'}</p>
     ${acceptance ? '<p class="demo-note">The preset ladder always runs 100 ticks with ten-tick CPU checkpoints on the selected graph.</p>' : ''}
-    <section class="backend-panels"><article class="backend-panel"><div class="panel-heading"><h2>Shared graph</h2>
+    <section
+      data-run-part="visualization" class="backend-panels"><article class="backend-panel"><div class="panel-heading"><h2>Shared graph</h2>
       <span class="status" data-output="capture">Not prepared</span></div>
       <canvas data-canvas width="480" height="340" aria-label="Shared-device grid comparison"></canvas></article>
       <article class="backend-panel"><h2>Latest normal frame</h2><div data-output="latest"></div>
@@ -55,12 +67,20 @@ export async function createGridAggregationView (host: HTMLElement, acceptance =
     : 'Point 0 is pinned; point 1 is absent. Both variants keep the same spring implementation.'}
         Membership storage adds one integer per point per level.</p></article></section>
     <p class="demo-note" data-output="cleanup"></p>
-    <h3>Normal-frame comparisons</h3><div data-output="results" class="many-body-results"></div>
-    <h3>Latest diagnostic costs</h3><p class="demo-note">Separate passes change scheduling. Do not subtract these medians from normal-frame time.</p>
-    <div data-output="diagnostic" class="many-body-results"></div>
-    <h3>Post-gravity occupancy</h3><p class="demo-note">The baseline scans cells above 128 points.
+    <h3
+      data-run-part="results">Normal-frame comparisons</h3><div data-output="results" class="many-body-results"
+      data-run-part="results"></div>
+    <h3
+      data-run-part="diagnostics">Latest diagnostic costs</h3>
+    <p class="demo-note" data-run-part="diagnostics">Separate passes change scheduling. Do not subtract these medians from normal-frame time.</p>
+    <div data-output="diagnostic" class="many-body-results"
+      data-run-part="diagnostics"></div>
+    <h3
+      data-run-part="diagnostics">Post-gravity occupancy</h3>
+    <p class="demo-note" data-run-part="diagnostics">The baseline scans cells above 128 points.
       The smaller-sort candidate scans above 32 and bounds linked-list traversal. Both preserve source order.</p>
-    <div data-output="work" class="many-body-results"></div>`
+    <div data-output="work" class="many-body-results"
+      data-run-part="diagnostics"></div>`
   const el = <T extends HTMLElement>(q: string): T => host.querySelector<T>(q)!
   const control = (name: string): HTMLSelectElement => el(`[data-control="${name}"]`)
   const button = (name: string): HTMLButtonElement => el(`[data-action="${name}"]`)
@@ -165,7 +185,7 @@ export async function createGridAggregationView (host: HTMLElement, acceptance =
         : next.report.status === 'cancelled'
           ? 'Stopped. Export retains partial evidence.'
           : `Finished with ${next.report.rows.filter(row => row.error).length} failed validation case(s). Export retains failure captures.`
-    } catch (error) { if (!destroyed) status.textContent = String(error) } finally { busy = false; if (!destroyed) controls() }
+    } catch (error) { runError = String(error); if (!destroyed) status.textContent = String(error) } finally { busy = false; if (!destroyed) controls() }
   }
   button('compare').addEventListener('click', () => run('selected')); button('sweep').addEventListener('click', () => run('sweep'))
   if (acceptance) button('ladder').addEventListener('click', () => run('ladder'))
@@ -187,5 +207,12 @@ export async function createGridAggregationView (host: HTMLElement, acceptance =
     a.download = `cosmos-${acceptance ? 'layout-acceptance' : 'grid-aggregation'}-${Date.now()}.json`; a.click()
     setTimeout(() => URL.revokeObjectURL(url), 0)
   })
-  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; retire() } }
+  mountRunLayout(host, () => summarizeRun(
+    busy ? 'Running' : stopped ? 'Stopped' : study ? 'Complete' : 'Ready',
+    recordVerdicts(study?.report.rows ?? []),
+    'Pending trials and non-checkpoint ticks; broader graph acceptance.',
+    [],
+    runError,
+    'paired cases'))
+  return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; retire() } }
 }

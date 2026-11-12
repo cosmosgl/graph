@@ -1,3 +1,4 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createHubStudy, hubSummary, hubPairedWins, HUB_NORMAL_POLICY, type HubCase, type HubStudy, type HubCapture } from '../combined-layout/hub-study'
 import { createHubTrajectory, type HubTrajectory, type HubTrajectorySettings } from '../combined-layout/hub-trajectory'
@@ -6,9 +7,12 @@ import type { SpringOptimization } from '../combined-layout/hub-spring-source'
 const ms = (n: number | null): string => n === null ? 'Unavailable' : n.toFixed(3)
 type Mode = 'compare' | 'degree' | 'threshold' | 'trajectory' | 'evolved'
 export async function createHubView (host: HTMLElement): Promise<ExperimentInstance> {
+  let runError: string | undefined
   host.innerHTML = `<p class="demo-note">Compare ordered spring kernels on one device. Frozen controls keep coordinates and total links fixed.
     Trajectories evolve both variants independently, with checkpoint replay and unchanged CPU tolerances.</p>
-    <div class="scale-toolbar"><label>Points <select data-control="count"><option>4096</option><option selected>8192</option></select></label>
+    <div
+      data-run-part="configuration" class="scale-toolbar">
+      <label>Points <select data-control="count"><option>4096</option><option selected>8192</option></select></label>
       <label>Hub degree <select data-control="degree"></select></label>
       <label>Hub state <select data-control="pinned"><option value="false" selected>Unpinned</option>
         <option value="true">Pinned</option></select></label>
@@ -17,18 +21,31 @@ export async function createHubView (host: HTMLElement): Promise<ExperimentInsta
       <label>Prefetch threshold <select data-control="threshold"><option>64</option><option selected>1024</option><option>4096</option>
         <option>8192</option></select></label>
       <label>Trajectory ticks <select data-control="decay"><option selected>100</option><option>300</option></select></label></div>
-    <div class="controls"><button data-action="compare" class="button-primary">Compare selected</button>
-      <button data-action="degree">Run degree + pin sweep</button><button data-action="threshold">Repeat threshold controls</button>
-      <button data-action="trajectory">Validate trajectory</button></div>
-    <div class="controls"><label>Final-geometry strength <select data-control="capture"><option value="probe" selected>Full-strength probe</option>
-      <option value="cooled">End of cooling</option></select></label><button data-action="evolved" disabled>Benchmark final geometry</button>
-      <button data-action="stop" disabled>Stop</button><button data-action="reset" disabled>Reset</button>
-      <button data-action="export" disabled>Export JSON</button></div>
-    <p data-output="status" role="status">Ready. Compare frozen inputs or validate an evolving trajectory first.</p>
+    <div class="controls"><button data-action="compare" class="button-primary"
+      data-run-action="primary">Compare selected</button>
+      <button data-action="degree"
+      data-run-action="diagnostic">Run degree + pin sweep</button>
+      <button data-action="threshold"
+      data-run-action="diagnostic">Repeat threshold controls</button>
+      <button data-action="trajectory"
+      data-run-action="diagnostic">Validate trajectory</button></div>
+    <div class="controls" data-run-part="diagnostics"><label>Final-geometry strength <select data-control="capture">
+      <option value="probe" selected>Full-strength probe</option>
+      <option value="cooled">End of cooling</option></select></label><button data-action="evolved" disabled
+      data-run-action="diagnostic">Benchmark final geometry</button>
+      <button data-action="stop" disabled
+      data-run-action="primary">Stop</button>
+      <button data-action="reset" disabled
+      data-run-action="primary">Reset</button>
+      <button data-action="export" disabled
+      data-run-action="export">Export JSON</button></div>
+    <p data-output="status" role="status"
+      data-run-part="status">Ready. Compare frozen inputs or validate an evolving trajectory first.</p>
     <p class="demo-note">Timing: ${HUB_NORMAL_POLICY.warmups} warmup + ${HUB_NORMAL_POLICY.samples} measured paired rounds,
       ${HUB_NORMAL_POLICY.frames} restored frames per trial. Frames queue without per-frame CPU waits; only ordinary compute + render passes are timed.
       Trajectory checkpoints run at tick 1, every 10 ticks and the last tick, followed by a restoring full-strength probe.</p>
-    <section class="backend-panels"><article class="backend-panel"><div class="panel-heading"><h2>Shared graph</h2>
+    <section
+      data-run-part="visualization" class="backend-panels"><article class="backend-panel"><div class="panel-heading"><h2>Shared graph</h2>
       <span class="status" data-output="capture">Not prepared</span></div>
       <canvas data-canvas width="480" height="340" aria-label="Shared-device hub comparison"></canvas></article>
       <article class="backend-panel"><h2>Latest comparison</h2><div data-output="latest"></div>
@@ -37,11 +54,16 @@ export async function createHubView (host: HTMLElement): Promise<ExperimentInsta
       <p class="demo-note">Timing a final full-strength probe measures one restoring tick on evolved geometry;
         it does not measure the cooled trajectory's average frame time.</p></article></section>
     <p data-output="cleanup" class="demo-note"></p>
-    <h3>Timing comparisons</h3><p class="demo-note">Threshold controls repeat the selected degree and pin state in two blocks, reversing threshold order.
+    <h3
+      data-run-part="results">Timing comparisons</h3>
+    <p class="demo-note" data-run-part="results">Threshold controls repeat the selected degree and pin state in two blocks, reversing threshold order.
       Wins count paired rounds with lower candidate GPU time. GPU restore/capture copies stay outside the pass timestamps.
       JSON retains every frame check and GPU duration.</p>
-    <div data-output="results" class="many-body-results"></div>
-    <h3>Trajectory checkpoints</h3><div data-output="trajectory" class="many-body-results"></div>`
+    <div data-output="results" class="many-body-results"
+      data-run-part="results"></div>
+    <h3
+      data-run-part="results">Trajectory checkpoints</h3><div data-output="trajectory" class="many-body-results"
+      data-run-part="results"></div>`
   const el = <T extends HTMLElement>(q: string): T => host.querySelector<T>(q)!
   const control = (name: string): HTMLSelectElement => el(`[data-control="${name}"]`)
   const button = (name: string): HTMLButtonElement => el(`[data-action="${name}"]`)
@@ -158,7 +180,7 @@ export async function createHubView (host: HTMLElement): Promise<ExperimentInsta
       status.textContent = r.status === 'complete'
         ? 'Finished. All unchanged validation gates passed.'
         : r.status === 'cancelled' ? 'Stopped. Export retains partial evidence.' : `Failed: ${r.error}`
-    } catch (error) { if (!destroyed) status.textContent = String(error) } finally { busy = false; if (!destroyed) controls() }
+    } catch (error) { runError = String(error); if (!destroyed) status.textContent = String(error) } finally { busy = false; if (!destroyed) controls() }
   }
   for (const mode of ['compare', 'degree', 'threshold', 'trajectory', 'evolved'] as const) button(mode).addEventListener('click', () => run(mode))
   button('stop').addEventListener('click', () => { stopped = true })
@@ -182,6 +204,14 @@ export async function createHubView (host: HTMLElement): Promise<ExperimentInsta
     const a = document.createElement('a'); a.href = url; a.download = `cosmos-${exported.experiment}-${Date.now()}.json`; a.click()
     setTimeout(() => URL.revokeObjectURL(url), 0)
   })
+  mountRunLayout(host, () => summarizeRun(
+    busy ? 'Running' : stopped ? 'Stopped' : study || trajectory ? 'Complete' : 'Ready',
+    [...recordVerdicts(study?.report.rows ?? []),
+      ...(trajectory?.report.checkpoints.map(c => c.valid) ?? [])],
+    'Unrun degrees, thresholds and trajectories; production speedup.',
+    [],
+    runError,
+    'cases and trajectory checkpoints'))
   controls()
-  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; retire() } }
+  return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; retire() } }
 }
