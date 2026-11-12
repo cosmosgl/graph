@@ -1,3 +1,4 @@
+import { scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import type { BackendResult, CenterMassBackend } from './backend'
@@ -44,7 +45,7 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
       data-run-part="configuration">
         <div>
           <p class="eyebrow">Synchronized input</p>
-          <p>The same ${POINT_COUNT.toLocaleString()} moving points are sent to both backends.</p>
+          <p>The same ${POINT_COUNT.toLocaleString('en-US')} moving points are sent to both backends.</p>
         </div>
         <div class="controls">
           <button class="button-primary" data-action="step" type="button" disabled
@@ -98,7 +99,8 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
         </article>
       </section>
 
-      <p class="demo-note">
+      <p class="demo-note"
+      data-run-part="explanation">
         Red square = GPU-computed center. Timing includes upload, execution, synchronization,
         readback and drawing; use the Results and Performance sections for interpretation.
       </p>
@@ -128,12 +130,12 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
 
   const showResult = (id: BackendSlot['id'], result: BackendResult, cpuCenter: Center): void => {
     element<HTMLElement>(host, `[data-output="${id}-center"]`).textContent = formatCenter(result.center)
-    element<HTMLElement>(host, `[data-output="${id}-error"]`).textContent = centerDistance(
+    element<HTMLElement>(host, `[data-output="${id}-error"]`).textContent = scientific(centerDistance(
       result.center,
       cpuCenter
-    ).toExponential(3)
+    ), 3)
     element<HTMLElement>(host, `[data-output="${id}-time"]`).textContent =
-      `${result.elapsedMilliseconds.toFixed(2)} ms`
+      `${milliseconds(result.elapsedMilliseconds)} ms`
   }
 
   const runTick = async (advance: boolean): Promise<void> => {
@@ -173,7 +175,7 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
       const webgl = results.get('webgl')
       const webgpu = results.get('webgpu')
       deltaOutput.textContent = webgl && webgpu
-        ? centerDistance(webgl.center, webgpu.center).toExponential(3)
+        ? scientific(centerDistance(webgl.center, webgpu.center), 3)
         : 'Unavailable'
     } finally {
       isRunning = false
@@ -229,7 +231,7 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
     [],
     'Center accuracy budget and rendered-pixel parity.',
     slots.filter(s => s.error).map(s => s.id),
-    runError))
+    runError), { experiment: 'center-mass', devices: () => slots.flatMap(s => s.backend?.info ? [s.backend.info] : []) })
   await Promise.all(constructors.map(async ({ slot, create }) => {
     try {
       slot.backend = await create()

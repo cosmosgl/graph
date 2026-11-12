@@ -1,3 +1,4 @@
+import { count as formatCount, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createCapacitySession, type CapacitySession, type CapacityComparison } from '../combined-layout/capacity-session'
@@ -6,7 +7,8 @@ import type { Fixture, Settings } from '../combined-layout/data'
 const mib = (bytes: number): string => (bytes / 1048576).toFixed(3)
 export async function createCapacityView (host: HTMLElement): Promise<ExperimentInstance> {
   let runError: string | undefined
-  host.innerHTML = `<p class="demo-note">Resize storage without resetting devices, tick or cooling.
+  host.innerHTML = `<p class="demo-note"
+      data-run-part="explanation">Resize storage without resetting devices, tick or cooling.
     Compare rebuilding against retained buffers/kernels, or revisit the CPU-copy transfer control.
     Refined arithmetic; immediate updates; fixed camera.</p>
     <div
@@ -34,9 +36,11 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
       <div class="panel-heading"><h2 data-output="name-${i}">${name}</h2><span data-output="memory-${i}" class="status">Starting</span></div>
       <canvas data-lane="${i}" width="480" height="340" aria-label="${name} layout"></canvas>
       <p class="demo-note" data-output="info-${i}"></p></article>`).join('')}</section>
-    <p class="demo-note">Cycle: 2,048 → 8,192 → 4,096 → 8,192 → 2,048. A resize preserves surviving indices, pinning and absence;
+    <p class="demo-note"
+      data-run-part="explanation">Cycle: 2,048 → 8,192 → 4,096 → 8,192 → 2,048. A resize preserves surviving indices, pinning and absence;
       regrowth initializes the removed tail. Checks download snapshots outside each measured update/frame.</p>
-    <section data-run-part="diagnostics">
+    <section
+      data-run-part="diagnostics">
     <h3>Immediate edits</h3><div class="scale-toolbar">
       <label>New point count <select data-control="target"><option>2048</option><option selected>8192</option><option>4096</option></select></label>
       <button data-action="resize"
@@ -55,13 +59,15 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
     <p data-output="cleanup" class="demo-note"></p>
     </section>
     <h3
-      data-run-part="results">Resize cost and buffer footprint</h3><p class="demo-note">Peak includes old + new explicitly tracked application buffers.
+      data-run-part="results">Resize cost and buffer footprint</h3><p class="demo-note"
+      data-run-part="explanation">Peak includes old + new explicitly tracked application buffers.
       These counters exclude driver allocation, pipeline/texture memory and internal staging/uniform buffers.
       The retained lane keeps its high-water capacity on shrink; it rebuilds only when that capacity is exceeded.</p>
     <div data-output="resizes" class="many-body-results"
       data-run-part="results"></div>
     <h3
-      data-run-part="results">First frame after each update</h3><p class="demo-note">GPU work sums paired compute/render pass timestamps.
+      data-run-part="results">First frame after each update</h3><p class="demo-note"
+      data-run-part="explanation">GPU work sums paired compute/render pass timestamps.
       One evolved frame per row, including first-use effects;
       this is a resize diagnostic, not a steady-state FPS benchmark. CPU reference evaluation and validation are outside the measured frame.</p>
     <div data-output="frames" class="many-body-results"
@@ -82,29 +88,30 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
     if (destroyed || !session) return
     session.render()
     session.lanes.forEach((l, i) => {
-      el(`[data-output="memory-${i}"]`).textContent = `${l.count.toLocaleString()} / ${l.capacity.toLocaleString()} capacity · ${mib(l.footprint().bytes)} MiB`
+      el(`[data-output="memory-${i}"]`).textContent =
+        `${l.count.toLocaleString('en-US')} / ${l.capacity.toLocaleString('en-US')} capacity · ${mib(l.footprint().bytes)} MiB`
     })
     el('[data-output="resizes"]').innerHTML = session.resizes.length
-      ? `<table><thead><tr><th>Points</th><th>Path</th><th>Storage / kernels</th><th>Capacity</th><th>Completion ms</th>
-      ${session.comparison === 'transfer' ? '<th>Read MiB</th>' : ''}
-      <th>Copy MiB</th><th>Position upload MiB</th><th>Live MiB</th><th>Peak MiB</th><th>Result</th></tr></thead>
+      ? `<table><thead><tr><th>Points</th><th>Backend</th><th>Storage / kernels</th><th>Capacity</th><th>Completion (ms)</th>
+      ${session.comparison === 'transfer' ? '<th>Read (MiB)</th>' : ''}
+      <th>Copy (MiB)</th><th>Position upload (MiB)</th><th>Live (MiB)</th><th>Peak (MiB)</th><th>Result</th></tr></thead>
       <tbody>${session.resizes.flatMap(row =>
     row.reports.map(r => `<tr><td>${r.from} → ${r.count}${r.preserve ? '' : ' · replace'}</td>
       <td>${r.strategy === 'gpu-retained' ? 'Retain' : r.strategy === 'cpu-rebuild' ? 'CPU copy' : 'GPU rebuild'}</td>
-      <td>${r.reused ? 'Reuse' : 'Rebuild'}</td><td>${r.capacityAfter}</td><td>${r.completionMs.toFixed(2)}</td>
+      <td>${r.reused ? 'Reuse' : 'Rebuild'}</td><td>${formatCount(r.capacityAfter)}</td><td>${milliseconds(r.completionMs)}</td>
       ${session!.comparison === 'transfer' ? `<td>${mib(r.downloadedBytes)}</td>` : ''}
       <td>${mib(r.copiedBytes)}</td><td>${mib(r.uploadedBytes)}</td>
-      <td>${mib(r.after.bytes)}</td><td>${mib(r.peakBytes)}</td><td>${row.valid ? 'Pass · same device' : 'FAIL'}</td></tr>`)).join('')}</tbody></table>`
+      <td>${mib(r.after.bytes)}</td><td>${mib(r.peakBytes)}</td><td>${row.valid ? 'Pass · same device' : 'Fail'}</td></tr>`)).join('')}</tbody></table>`
       : ''
     el('[data-output="frames"]').innerHTML = session.rows.length
       ? `<table><thead><tr><th>Tick</th><th>Points</th><th>Position / force bit differences</th>
-      <th>CPU failures</th><th>Reference GPU ms</th><th>Candidate GPU ms</th><th>Candidate submit ms</th>
-      <th>Candidate completion ms</th><th>Result</th></tr></thead><tbody>${session.rows.map(r =>
-    `<tr><td>${r.tick}</td><td>${r.count}</td><td>${r.positions} / ${r.forces}</td><td>${r.cpu?.failures ?? 'Not checked'}</td>
+      <th>CPU failures</th><th>Reference GPU (ms)</th><th>Candidate GPU (ms)</th><th>Candidate submit (ms)</th>
+      <th>Candidate completion (ms)</th><th>Result</th></tr></thead><tbody>${session.rows.map(r =>
+    `<tr><td>${r.tick}</td><td>${formatCount(r.count)}</td><td>${r.positions} / ${r.forces}</td><td>${r.cpu?.failures ?? 'Unchecked'}</td>
       <td>${r.controlTiming ? r.controlTiming.batchGpuMs?.toFixed(3) ?? r.controlTiming.timerStatus : 'Not timed'}</td>
-      <td>${r.timing.batchGpuMs?.toFixed(3) ?? r.timing.timerStatus}</td><td>${r.timing.batchSubmitMs.toFixed(3)}</td>
-      <td>${r.timing.batchCompletionMs.toFixed(3)}</td>
-      <td>${r.valid ? r.cpu ? 'Pass' : 'Dataflow pass · CPU skipped' : 'FAIL'}</td></tr>`).join('')}</tbody></table>`
+      <td>${r.timing.batchGpuMs?.toFixed(3) ?? r.timing.timerStatus}</td><td>${milliseconds(r.timing.batchSubmitMs)}</td>
+      <td>${milliseconds(r.timing.batchCompletionMs)}</td>
+      <td>${r.valid ? r.cpu ? 'Pass' : 'Pass · dataflow; CPU unchecked' : 'Fail'}</td></tr>`).join('')}</tbody></table>`
       : ''
   }
   const reset = async (): Promise<void> => {
@@ -144,7 +151,7 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
   }
   button('step').addEventListener('click', () => run(async () => {
     status.textContent = 'Checking the next evolved frame…'; await step()
-    if (!destroyed) status.textContent = `Tick ${session!.tick()} validated at ${session!.lanes[0].count.toLocaleString()} points.`
+    if (!destroyed) status.textContent = `Tick ${session!.tick()} validated at ${session!.lanes[0].count.toLocaleString('en-US')} points.`
   }))
   for (const action of ['resize', 'replace']) {
     button(action).addEventListener('click', () => run(async () => {
@@ -167,7 +174,7 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
     for (let cycle = 0; cycle < repeats; cycle++) {
       for (const count of CAPACITY_CYCLE) {
         if (stopped || destroyed) break
-        status.textContent = `Cycle ${cycle + 1}/${repeats}: resizing to ${count.toLocaleString()} points…`
+        status.textContent = `Cycle ${cycle + 1}/${repeats}: resizing to ${count.toLocaleString('en-US')} points…`
         const row = await session!.resize(count)
         if (destroyed) return
         if (!row.valid) throw new Error('Resize data preservation failed')
@@ -215,7 +222,7 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
     'Unrun resize histories, total VRAM and device recovery.',
     [],
     runError ?? error,
-    'frame and resize checks'))
+    'frame and resize checks'), { experiment: 'point-capacity', devices: () => session?.lanes.map(l => l.info) ?? [] })
   await reset()
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

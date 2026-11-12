@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-11
+device: Apple M3; standalone Chrome 156
+scope: GPU rebuild versus retained high-water capacity; selected resize histories and frame checks.
+---
+
 Growing storage and shrinking a graph are different operations. **Logical count** says how many point records
 belong to the graph. **Capacity** says how many records its allocation can hold. Keeping those separate lets
 Cosmos change the count without rebuilding its entire GPU workload each time.

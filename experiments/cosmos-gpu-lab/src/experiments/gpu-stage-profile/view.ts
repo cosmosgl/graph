@@ -1,3 +1,4 @@
+import { milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createControlledProfiler, profileSummary, PROFILE_POLICY, type ControlledProfiler } from '../combined-layout/controlled-profile'
@@ -9,10 +10,11 @@ const labels = [
   'Incoming springs', 'Incoming integration', 'Outgoing springs', 'Outgoing integration', 'Draw circles + links',
 ]
 const names = ['GPU rebuild', 'GPU retained capacity']
-const number = (n: number | null): string => n === null ? 'Unavailable' : n.toFixed(3)
+const number = milliseconds
 export async function createProfileView (host: HTMLElement): Promise<ExperimentInstance> {
   let runError: string | undefined
-  host.innerHTML = `<p class="demo-note">One frozen input per run: positions, topology, samples, alpha, tick/seed and camera stay fixed.
+  host.innerHTML = `<p class="demo-note"
+      data-run-part="explanation">One frozen input per run: positions, topology, samples, alpha, tick/seed and camera stay fixed.
     Normal frames keep one simulation pass; diagnostic profiles use 15 passes. Their times are shown separately.</p>
     <div
       data-run-part="configuration" class="scale-toolbar"><label>Graph <select data-control="fixture"><option>chain</option><option>communities</option>
@@ -20,7 +22,8 @@ export async function createProfileView (host: HTMLElement): Promise<ExperimentI
       <label>Logical points <select data-control="count"><option>4096</option><option selected>8192</option></select></label>
       <label>Input state <select data-control="history"><option value="resized" selected>After resize history</option>
         <option value="initial">Initial fixture · control</option></select></label></div>
-    <p class="demo-note">${PROFILE_POLICY.warmups} warmup rounds + ${PROFILE_POLICY.samples} measured rounds.
+    <p class="demo-note"
+      data-run-part="explanation">${PROFILE_POLICY.warmups} warmup rounds + ${PROFILE_POLICY.samples} measured rounds.
       Each round balances rebuilt/retained resources and normal/profile timing. Keep this tab visible.
       Both lanes use the strict arithmetic candidate and the unchanged CPU tolerance.</p>
     <div class="controls"><button data-action="run" class="button-primary"
@@ -67,23 +70,23 @@ export async function createProfileView (host: HTMLElement): Promise<ExperimentI
     const r = profiler.report; const c = r.capture
     if (c) {
       el('[data-output="capture"]').textContent = `Frozen input ${c.fingerprint} · tick ${c.tick} · alpha ${c.alpha.toFixed(6)} · ` +
-        `${r.settings.count.toLocaleString()} points. Input is restored before each trial; the clock and seed do not advance.`
+        `${r.settings.count.toLocaleString('en-US')} points. Input is restored before each trial; the clock and seed do not advance.`
       c.capacities.forEach((count, i) => {
-        el(`[data-output="memory-${i}"]`).textContent = `${count.toLocaleString()} capacity · ${(c.bufferBytes[i] / 1048576).toFixed(3)} MiB`
+        el(`[data-output="memory-${i}"]`).textContent = `${count.toLocaleString('en-US')} capacity · ${(c.bufferBytes[i] / 1048576).toFixed(3)} MiB`
       })
     }
-    el('[data-output="frames"]').innerHTML = `<table><thead><tr><th>Path</th><th>Timing mode</th><th>Samples</th>
-      <th>GPU median ms</th><th>GPU range ms</th></tr></thead><tbody>${names.flatMap((name, lane) =>
+    el('[data-output="frames"]').innerHTML = `<table><thead><tr><th>Backend</th><th>Timing mode</th><th>Samples</th>
+      <th>GPU median (ms)</th><th>GPU range (ms)</th></tr></thead><tbody>${names.flatMap((name, lane) =>
     (['normal', 'profile'] as const).map(kind => {
       const s = profileSummary(r, lane, kind)
       return `<tr><td>${name}</td><td>${kind === 'normal' ? 'Normal · 2 passes' : 'Diagnostic · 15 passes'}</td>
         <td>${s.samples}/8</td><td>${number(s.gpuMs)}</td><td>${s.range?.map(n => n.toFixed(3)).join('–') ?? 'Unavailable'}</td></tr>`
     })).join('')}</tbody></table>`
-    el('[data-output="stages"]').innerHTML = `<table><thead><tr><th>Stage</th><th>Rebuild ms</th><th>Rebuild range</th>
-      <th>Retained ms</th><th>Retained range</th></tr></thead><tbody>${PROFILE_STAGES.map((name, i) => {
+    el('[data-output="stages"]').innerHTML = `<table><thead><tr><th>Stage</th><th>Rebuild (ms)</th><th>Rebuild range</th>
+      <th>Retained (ms)</th><th>Retained range</th></tr></thead><tbody>${PROFILE_STAGES.map((name, i) => {
     const a = profileSummary(r, 0, 'profile', name); const b = profileSummary(r, 1, 'profile', name)
-    return `<tr><td>${labels[i]}</td><td>${number(a.gpuMs)}</td><td>${a.range?.map(n => n.toFixed(3)).join('–') ?? '—'}</td>
-        <td>${number(b.gpuMs)}</td><td>${b.range?.map(n => n.toFixed(3)).join('–') ?? '—'}</td></tr>`
+    return `<tr><td>${labels[i]}</td><td>${number(a.gpuMs)}</td><td>${a.range?.map(n => n.toFixed(3)).join('–') ?? 'Unavailable'}</td>
+        <td>${number(b.gpuMs)}</td><td>${b.range?.map(n => n.toFixed(3)).join('–') ?? 'Unavailable'}</td></tr>`
   }).join('')}</tbody></table>`
     const checks = r.trials.filter(t => t.check.valid).length
     el('[data-output="checks"]').textContent = `${checks}/${r.trials.length} trial checks pass · ` +
@@ -143,6 +146,6 @@ export async function createProfileView (host: HTMLElement): Promise<ExperimentI
     'Incomplete timing samples; broader inputs and runtime performance.',
     [],
     runError,
-    'trial checks'))
+    'trial checks'), { experiment: 'gpu-stage-profile', devices: () => profiler?.report.info ?? [] })
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; profiler?.destroy() } }
 }

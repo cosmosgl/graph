@@ -1,7 +1,7 @@
 import { Buffer, type ComputePass, type Bindings } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
+import { describeDevice, bindingLayout, createDevice, createStorageRenderer, readFloats, upload, waitForGpu } from '../../gpu/luma'
 import { graphRgba, graphWgsl } from '../../runtime/palette'
-import { bindingLayout, createDevice, createStorageRenderer, readFloats, upload, waitForGpu } from '../../gpu/luma'
 import drawCenterShader from './shaders/draw-center.wgsl?raw'
 import drawPointsShader from './shaders/draw-points.wgsl?raw'
 import initializeShader from './shaders/initialize.wgsl?raw'
@@ -32,6 +32,7 @@ export type ReductionBenchmark = {
 }
 
 export type ScalableReductionBackend = {
+  readonly info?: string;
   readonly pointCount: number;
   readonly renderedPointCount: number;
   readonly reductionCounts: number[];
@@ -45,7 +46,7 @@ export type ScalableReductionBackend = {
 type ReductionStage = { outputCount: number; kernel: Kernel; bindings: Bindings }
 
 export function formatBytes (bytes: number): string {
-  return bytes >= 1024 ** 2 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${(bytes / 1024).toFixed(1)} KB`
+  return bytes >= 1024 ** 2 ? `${(bytes / 1024 ** 2).toFixed(1)} MiB` : `${(bytes / 1024).toFixed(1)} KiB`
 }
 
 export async function createScalableReductionBackend (canvas: HTMLCanvasElement, pointCount: number): Promise<ScalableReductionBackend> {
@@ -109,6 +110,7 @@ export async function createScalableReductionBackend (canvas: HTMLCanvasElement,
     for (const stage of stages) stage.kernel.dispatch(pass, { x: stage.outputCount, bindings: stage.bindings })
   }
   return {
+    info: describeDevice(device),
     pointCount,
     renderedPointCount,
     positionBytes,

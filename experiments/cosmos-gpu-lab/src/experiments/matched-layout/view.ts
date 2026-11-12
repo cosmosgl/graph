@@ -1,3 +1,4 @@
+import { count as formatCount, milliseconds, scientific } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
@@ -5,12 +6,9 @@ import { PRESETS, type ProductionPreset } from '../combined-layout/production-se
 import { measureCenterCost, centerCostSummary } from '../combined-layout/center-cost'
 import { sharedView } from './metrics'
 import { createMatchedSession, LABELS, NAMES, type MatchedSession, type Name, type Row, type Settings } from './session'
-function num (value: number | null | undefined): string {
-  if (value === null || value === undefined) return '—'
-  return Number.isFinite(value) ? value.toExponential(3) : 'non-finite'
-}
+const num = scientific
 const COLORS = comparisonSeries
-const time = (value: number | null): string => value === null ? '—' : value.toFixed(3)
+const time = milliseconds
 function settingsNote (settings: Settings): string {
   return settings.preset === 'adaptive' ? 'Shared CPU-derived sample decisions every 30 ticks (grid mode only).' : 'Fixed sample count.'
 }
@@ -18,7 +16,8 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
   const presets = Object.entries(PRESETS).map(([key, title]) =>
     `<option value="${key}"${key === 'adaptive' ? ' selected' : ''}>${title}</option>`).join('')
   let runError: string | undefined
-  host.innerHTML = `<p class="demo-note">Three independent layouts, one initial graph and random-sample schedule.
+  host.innerHTML = `<p class="demo-note"
+      data-run-part="explanation">Three independent layouts, one initial graph and random-sample schedule.
     Legacy compatibility checks replay a common CPU starting state, then restore the live GPU layouts.
     They test a float32 operation model, not an independent mathematical accuracy contract. Quality metrics never change the tolerance.</p>
     <div
@@ -90,7 +89,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     el<HTMLButtonElement>('[data-action="center-cost"]').disabled = busy || !session || !(session.settings.center! > 0)
   }
   const qualityTable = (row: Row, title: string): string => `<table><caption>${title}</caption>
-    <thead><tr><th>Path</th><th>Fitted stress RMS</th><th>Spring mismatch</th><th>RMS motion</th>
+    <thead><tr><th>Backend</th><th>Fitted stress RMS</th><th>Spring mismatch</th><th>RMS motion</th>
       <th>RMS radius</th><th>Raw drift / radius</th><th>Aligned drift / radius</th></tr></thead>
     <tbody>${NAMES.map(name => {
     const q = row.quality[name]; const radius = row.quality.cpu?.shape.radius || 1
@@ -144,7 +143,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
       'Frozen checks: first, every 10 ticks and final. Unchecked ticks have no numerical verdict.'
     const assessment = report.assessment
     el('[data-output="assessment"]').innerHTML = `<h3>Evidence by contract</h3>
-      <table><thead><tr><th>Path</th><th>Flags and restoration only</th><th>Legacy compatibility</th>
+      <table><thead><tr><th>Backend</th><th>Flags and restoration only</th><th>Legacy compatibility</th>
         <th>Checked ticks / probe</th><th>Finite layouts</th></tr></thead>
       <tbody>${(['webgl', 'webgpu'] as const).map(name => {
     const evidence = assessment.lanes[name]
@@ -172,16 +171,16 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
       <section class="visible-section">
       <h3 class="visible-section-heading">${checkpoints.length} checkpoint ${checkpoints.length === 1 ? 'tick' : 'ticks'}
         ${report.probe ? ' and the full-strength probe' : ''}</h3>
-      <table><thead><tr><th>Tick</th><th>Path</th><th>Verdict</th><th>Force / position failures</th><th>Whole-tick failures</th><th>Restored</th></tr></thead>
+      <table><thead><tr><th>Tick</th><th>Backend</th><th>Result</th><th>Force / position failures</th><th>Whole-tick failures</th><th>Restored</th></tr></thead>
       <tbody>${[...checkpoints, ...(report.probe ? [report.probe] : [])].flatMap(r => (['webgl', 'webgpu'] as const).map(name => {
     const check = r.checks[name]
-    return `<tr><td>${r === report.probe ? 'α = 1 probe' : r.tick}</td><td>${LABELS[name]}</td><td>${check ? check.valid ? 'Pass' : 'FAIL' : 'Unavailable'}</td>
+    return `<tr><td>${r === report.probe ? 'α = 1 probe' : r.tick}</td><td>${LABELS[name]}</td><td>${check ? check.valid ? 'Pass' : 'Fail' : 'Unavailable'}</td>
       <td>${check
     ? check.stages.filter(s => !s.forces.valid || !s.positions.valid || !s.flagsExact || s.aggregate?.valid === false).map(s =>
       `${s.stage}: ${s.forces.failures} / ${s.positions.failures}${s.flagsExact ? '' : ' · flags differ'}` +
       `${s.aggregate?.valid === false ? ' · aggregate fails' : ''}`).join('; ') || '0 / 0'
-    : '—'}</td>
-      <td>${check?.wholeTick.failures ?? '—'}</td><td>${check?.restored ? 'Yes' : '—'}</td></tr>`
+    : 'Unavailable'}</td>
+      <td>${check?.wholeTick.failures ?? 'Unavailable'}</td><td>${check?.restored ? 'Yes' : 'Unavailable'}</td></tr>`
   })).join('')}</tbody></table></section>
       ${Object.entries(report.captures).length
     ? `<p>First captured failures: ${Object.entries(report.captures).map(([name, c]) =>
@@ -196,15 +195,15 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
         Alternate on/off order within every pair.
         ${cost.status}. WebGPU batches ${cost.policy.frames} resident normal frames; WebGL times one frame with precomputed frozen bounds.
         Uploads and readback are outside GPU timestamps. Compare the added cost within each API.</p>
-      <table><thead><tr><th>Path / block</th><th>Gate</th><th>Center off ms</th><th>Center on ms</th>
-        <th>Paired added ms</th><th>Paired range ms</th><th>Added %</th></tr></thead>
+      <table><thead><tr><th>Backend / block</th><th>Gate</th><th>Center off (ms)</th><th>Center on (ms)</th>
+        <th>Paired added (ms)</th><th>Paired range (ms)</th><th>Added %</th></tr></thead>
       <tbody>${(['webgl', 'webgpu'] as const).flatMap(api => Array.from({ length: cost.policy.blocks }, (_, block) => {
     const s = centerCostSummary(cost, api, block)
     return `<tr><td>${LABELS[api]} · ${block + 1}</td><td>${s.accepted ? 'Pass' : 'Rejected'}</td><td>${time(s.offMs)}</td>
-      <td>${time(s.onMs)}</td><td>${time(s.deltaMs)}</td><td>${s.deltaRange?.map(time).join(' … ') ?? '—'}</td>
+      <td>${time(s.onMs)}</td><td>${time(s.deltaMs)}</td><td>${s.deltaRange?.map(time).join(' … ') ?? 'Unavailable'}</td>
       <td>${s.percent === null ? '—' : s.percent.toFixed(1)}</td></tr>`
   })).join('')}</tbody></table>
-      <section class="visible-section"><h3 class="visible-section-heading">Timing gates</h3><table><thead><tr><th>Path / center</th><th>Scalar failures</th>
+      <section class="visible-section"><h3 class="visible-section-heading">Timing gates</h3><table><thead><tr><th>Backend / center</th><th>Scalar failures</th>
         <th>Whole-tick failures</th><th>Timed-frame failures</th><th>Invalid timers</th></tr></thead><tbody>
       ${cost.preflight.map(p => {
     const trials = cost.trials.filter(t => t.api === p.api && t.center === p.center)
@@ -212,7 +211,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     return `<tr><td>${LABELS[p.api]} / ${p.center}</td><td>${failures.map(s =>
       `${s.stage}: ${s.forceFailures} force, ${s.positionFailures} position, ` +
       `${s.aggregateFailures} aggregate${s.flagsExact ? '' : ', flags'}`).join('; ') || '0'}</td>
-      <td>${p.gate.wholeTick.failures}</td><td>${trials.filter(t => !t.valid).length}</td>
+      <td>${formatCount(p.gate.wholeTick.failures)}</td><td>${trials.filter(t => !t.valid).length}</td>
       <td>${trials.filter(t => t.timing.timerStatus !== 'valid').length}</td></tr>`
   }).join('')}</tbody></table></section>
       <p class="demo-note">A result requires unchanged scalar gates, exact replay of every timed frame and valid timers in every trial.
@@ -351,7 +350,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     'Non-checkpoint ticks; no agreed quality budget or full runtime scheduler.',
     Object.keys(session?.report.errors ?? {}),
     runError,
-    'backend checkpoints'))
+    'backend checkpoints'), { experiment: 'matched-layout', devices: () => Object.values(session?.report.devices ?? {}) })
   await task(setup)
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

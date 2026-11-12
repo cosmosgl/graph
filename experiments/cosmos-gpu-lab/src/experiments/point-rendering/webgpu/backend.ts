@@ -1,5 +1,5 @@
 import { Buffer } from '@luma.gl/core'
-import { ALPHA_BLEND, bindingLayout, createDevice, createStorageRenderer, waitForGpu } from '../../../gpu/luma'
+import { describeDevice, ALPHA_BLEND, bindingLayout, createDevice, createStorageRenderer, waitForGpu } from '../../../gpu/luma'
 import type { PointRenderBackend, PointRenderData, PointRenderMeasurement } from '../backend'
 import { MAX_POINT_COUNT } from '../point-data'
 import source from './shaders/circle.wgsl?raw'
@@ -24,6 +24,7 @@ export async function createWebGPUPointRenderer (canvas: HTMLCanvasElement, capa
     pass.end(); device.submit()
   }
   return {
+    info: describeDevice(device),
     setData (data: PointRenderData): void {
       if (data.count > capacity) throw new Error('Point data exceeds renderer capacity')
       count = data.count; positions.write(data.positions); colors.write(data.colors)

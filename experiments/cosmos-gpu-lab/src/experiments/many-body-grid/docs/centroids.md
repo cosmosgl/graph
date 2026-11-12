@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: Not recorded
+device: Apple M3; inline Chromium WebGPU
+scope: Separate-centroid and targeted division controls; neither is complete far-field acceptance.
+---
+
 ## Does a separate centroid pass fix dense precision?
 
 The follow-up [far-field correction](#/many-body-grid/docs/far-field) now passes both checked dense sizes by refining

@@ -1,4 +1,4 @@
-import { createDevice, waitForGpu } from '../../gpu/luma'
+import { describeDevice, createDevice, waitForGpu } from '../../gpu/luma'
 import { createBlendReduction } from '../center-mass/webgl/reduction'
 import type { ReductionBenchmark, ReductionCenter } from '../scalable-reduction/backend'
 import { createInitialPositions } from '../scalable-reduction/reference'
@@ -10,6 +10,7 @@ export async function createWebGLSimulationBenchmark (canvas: HTMLCanvasElement,
     const reduction = createBlendReduction(device, pointCount)
     reduction.positions.write(createInitialPositions(pointCount))
     return {
+      info: describeDevice(device),
       async benchmark (iterations: number): Promise<ReductionBenchmark> {
         const start = performance.now(); reduction.encode(iterations); device.submit(); const submitted = performance.now()
         await waitForGpu(device)

@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: Not recorded
+device: Apple M3; standalone Chrome
+scope: Initial 128-point combined-force study; historical arithmetic and convergence observations.
+---
+
 ## From isolated forces to a cooling layout
 
 This experiment combines gravity, hierarchical repulsion and ordered directional springs using Cosmos's force order.

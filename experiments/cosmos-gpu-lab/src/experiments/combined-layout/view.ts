@@ -1,3 +1,4 @@
+import { count as formatCount, scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import { organizeRunControls } from '../../runtime/run-controls'
@@ -11,7 +12,7 @@ import { benchmarkSprings, type SpringTimingRow } from './spring-benchmark'
 import { compareSpringPrecision, type SpringStudyRow } from './spring-study'
 import { PRECISION_MODES, PRECISION_LABELS, GRAVITY, REPULSION, SPRINGS, type Fixture, type SpringPrecision } from './data'
 import { BACKENDS, LABELS, createCombinedSession, type CombinedSession, type Name, type Row } from './session'
-const num = (v: number): string => Number.isFinite(v) ? v.toExponential(2) : 'non-finite'
+const num = scientific
 export async function createCombinedView (host: HTMLElement): Promise<ExperimentInstance> {
   let runError: string | undefined
   host.innerHTML = `<section
@@ -122,15 +123,17 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     ? '<p class="demo-note">This tick was not validated.</p>'
     : `<section class="visible-section"><h3 class="visible-section-heading">Stage and whole-tick checks</h3>
     <table><thead><tr><th>Backend / stage</th><th>Force failures</th><th>Position failures</th><th>Structure / centroids</th></tr></thead><tbody>
-    ${row.results.map(r => `${r.stages.map(s => `<tr><td>${LABELS[r.name]} · ${s.stage}</td><td>${s.forces.failures}</td>
-      <td>${s.positions.failures}</td>
-      <td>${s.structure ? `${s.structure.valid ? 'Pass' : 'FAIL'} / ${s.centroidDifferences ?? 'not stored'}` : '—'}</td></tr>`).join('')
-  }<tr><td>${LABELS[r.name]} · full tick from own starting positions</td><td>—</td><td>${r.wholeTick?.failures ?? '—'}</td><td>—</td></tr>`).join('')}
+    ${row.results.map(r => `${r.stages.map(s => `<tr><td>${LABELS[r.name]} · ${s.stage}</td><td>${formatCount(s.forces.failures)}</td>
+      <td>${formatCount(s.positions.failures)}</td>
+      <td>${s.structure ? `${s.structure.valid ? 'Pass' : 'Fail'} / ${s.centroidDifferences ?? 'Unavailable · not stored'}` : 'Not applicable'}</td>
+      </tr>`).join('')
+  }<tr><td>${LABELS[r.name]} · full tick from own starting positions</td><td>Not applicable</td>
+      <td>${r.wholeTick?.failures ?? 'Unchecked'}</td><td>Not applicable</td></tr>`).join('')}
     </tbody></table></section>`
   const render = (): void => {
     if (!session || destroyed) return
     el('[data-live-settings]').textContent = `Live variant: ${PRECISION_LABELS[session.settings.springPrecision ?? 'baseline']} · ` +
-      `${session.settings.fixture}, ${session.settings.count.toLocaleString()} points, ${session.settings.decay} cooling ticks, ` +
+      `${session.settings.fixture}, ${session.settings.count.toLocaleString('en-US')} points, ${session.settings.decay} cooling ticks, ` +
       `center ${session.settings.center ?? 0}.`
     const row = session.rows.at(-1); const cpu = session.cpu(); const view = fitView([cpu, ...session.lanes.map(l => l.positions)])
     for (const lane of session.lanes) {
@@ -176,7 +179,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       summary.push({ name: 'CPU', m: row.cpu, drift: '0', failed: 0 })
       el('[data-output="results"]').innerHTML = `<table><caption>Tick ${row.tick} · used α = ${num(row.alpha)}
         · ${row.checked ? 'validated checkpoint' : 'not validated'}</caption>
-        <thead><tr><th>Path</th><th>RMS motion</th><th>Link-length error</th><th>RMS radius</th>
+        <thead><tr><th>Backend</th><th>RMS motion</th><th>Link-length error</th><th>RMS radius</th>
           <th>RMS drift vs CPU</th><th>Failed checkpoints</th></tr></thead>
         <tbody>${summary.map(r => `<tr><td>${r.name}</td><td>${num(r.m.motion.rms)}</td><td>${num(r.m.linkError)}</td>
           <td>${num(r.m.shape.radius)}</td><td>${r.drift}</td><td>${r.failed}</td></tr>`).join('')}</tbody></table>
@@ -186,9 +189,9 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     el('[data-output="probe"]').innerHTML = probe
       ? `<h3>Full-strength probe · layout after tick ${session.rows.length}</h3>
       <p class="demo-note">One diagnostic tick at α = 1, then restore all original positions. Cooling and trajectory are unchanged.</p>
-      <table><thead><tr><th>Path</th><th>Probe RMS / max motion</th><th>Checks</th></tr></thead><tbody>
+      <table><thead><tr><th>Backend</th><th>Probe RMS / max motion</th><th>Result</th></tr></thead><tbody>
       ${probe.results.map(r => `<tr><td>${LABELS[r.name]}</td><td>${num(r.metrics.motion.rms)} / ${num(r.metrics.motion.max)}</td>
-        <td>${r.valid ? 'Pass' : 'FAIL'}</td></tr>`).join('')}
+        <td>${r.valid ? 'Pass' : 'Fail'}</td></tr>`).join('')}
       <tr><td>CPU</td><td>${num(probe.cpu.motion.rms)} / ${num(probe.cpu.motion.max)}</td><td>Reference</td></tr></tbody></table>${checksTable(probe)}`
       : ''
     const failed = session.rows.flatMap(row => row.results.filter(r => r.valid === false).map(r => ({ tick: row.tick, r })))
@@ -201,13 +204,13 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       ${Object.entries(session.captures).map(([key, c]) => `<tr><td>${key}</td><td>${c.tick}</td><td>${num(c.alpha)}</td>
         <td>${c.checks.stages.filter(s => !s.valid).map(s => `${s.stage}: ${s.forces.failures} / ${s.positions.failures}` +
           `${s.structure && !s.structure.valid ? ' · structure FAIL' : ''}${s.centroidDifferences ? ' · centroid FAIL' : ''}`).join('; ') || 'None'}</td>
-        <td>${c.checks.wholeTick?.failures ?? '—'}</td></tr>`).join('')}</tbody></table>
+        <td>${c.checks.wholeTick?.failures ?? 'Unchecked'}</td></tr>`).join('')}</tbody></table>
       <section class="visible-section"><h3 class="visible-section-heading">All failed checkpoints (${failed.length} backend results)</h3>
       <table><thead><tr><th>Tick</th><th>Backend</th><th>Failed stages (force / position)</th><th>Whole-tick failures</th></tr></thead><tbody>
       ${failed.map(({ tick, r }) => `<tr><td>${tick}</td><td>${LABELS[r.name]}</td>
         <td>${r.stages.filter(s => !s.valid).map(s => `${s.stage}: ${s.forces.failures} / ${s.positions.failures}` +
           `${s.structure && !s.structure.valid ? ' · structure FAIL' : ''}${s.centroidDifferences ? ' · centroid FAIL' : ''}`).join('; ') || 'None'}</td>
-        <td>${r.wholeTick?.failures ?? '—'}</td></tr>`).join('')}</tbody></table></section>`
+        <td>${r.wholeTick?.failures ?? 'Unchecked'}</td></tr>`).join('')}</tbody></table></section>`
       : ''
     el('[data-output="replay"]').innerHTML = session.replays.length
       ? `<h3>Failure replay</h3>
@@ -215,7 +218,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
         Reproduced requires identical check results and bit-identical final positions; it does not make a failing tick pass.</p>
       <table><thead><tr><th>Capture</th><th>Tick</th><th>Outcome</th><th>Changed output components</th><th>Restored</th></tr></thead><tbody>
       ${session.replays.map(r => `<tr><td>${r.key}</td><td>${r.tick}</td><td>${r.error ? 'Replay error' : r.reproduced ? 'Reproduced' : 'Not reproduced'}</td>
-        <td>${r.differingComponents ?? '—'}</td><td>${r.restored ? 'Yes' : 'NO'}</td></tr>`).join('')}</tbody></table>`
+        <td>${r.differingComponents ?? 'Unavailable'}</td><td>${r.restored ? 'Yes' : 'No'}</td></tr>`).join('')}</tbody></table>`
       : ''
     el('[data-output="precision-study"]').innerHTML = precisionStudy.length
       ? `<h3>Frozen spring-input comparison</h3>
@@ -223,8 +226,8 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
         Separate devices leave the current layout unchanged. This isolates arithmetic; it is not a trajectory or timing result.</p>
       <table><thead><tr><th>Mode</th><th>Capture / tick</th><th>Force failures</th><th>Position failures</th><th>Max position error</th></tr></thead><tbody>
       ${precisionStudy.map(r => `<tr><td>${PRECISION_LABELS[r.mode]}</td><td>${r.capture} / ${r.tick}</td>
-        <td>${r.error ? 'Error (see export)' : r.forces?.failures}</td><td>${r.positions?.failures ?? '—'}</td>
-        <td>${r.positions ? num(r.positions.maxError) : '—'}</td></tr>`).join('')}</tbody></table>`
+        <td>${r.error ? 'Error (see export)' : r.forces?.failures}</td><td>${r.positions?.failures ?? 'Unavailable'}</td>
+        <td>${r.positions ? num(r.positions.maxError) : 'Unavailable'}</td></tr>`).join('')}</tbody></table>`
       : ''
     el('[data-output="spring-timing"]').innerHTML = springTimings.length
       ? `<h3>GPU stage timing · fixed initial CPU inputs</h3>
@@ -235,7 +238,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
         Two warmups, seven samples; rotated mode order. A failed check remains FAIL regardless of speed.
         Small batches can approach timestamp resolution; compare ranges, not just medians.</p>
       <table><thead><tr><th>Direction / work</th><th>Mode</th><th>Batch × samples</th><th>GPU µs / operation (range)</th>
-        <th>CPU completion µs / operation</th><th>Checks</th></tr></thead><tbody>
+        <th>CPU completion µs / operation</th><th>Result</th></tr></thead><tbody>
       ${springTimings.map(r => {
     const gpu = r.summary?.gpuMs; const range = r.summary?.gpuRange
     const valid = r.checks.length && r.checks.every(c => c.forces.valid && c.positions.valid)
@@ -243,19 +246,19 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       <td>${r.operations} × ${r.samples.length}</td><td>${gpu == null
   ? 'Unavailable / incomplete'
   : `${(gpu * 1000).toFixed(2)} (${range!.map(v => (v * 1000).toFixed(2)).join('–')})`}</td>
-      <td>${r.summary ? (r.summary.completionMs * 1000).toFixed(2) : '—'}</td>
-      <td>${r.error ? 'Error (see export)' : !r.checks.length ? 'Not checked' : !valid ? 'FAIL' : r.samples.length === 7 ? 'Pass' : 'Partial'}</td></tr>`
+      <td>${r.summary ? milliseconds((r.summary.completionMs * 1000)) : 'Unavailable'}</td>
+      <td>${r.error ? 'Error (see export)' : !r.checks.length ? 'Unchecked' : !valid ? 'Fail' : r.samples.length === 7 ? 'Pass' : 'Partial'}</td></tr>`
   }).join('')}</tbody></table>`
       : ''
     el('[data-output="spring-isolation"]').innerHTML = springIsolation
       ? `<h3>Distance-only error isolation</h3>
       <p>Captured tick ${springIsolation.tick}, point ${springIsolation.point}, axis ${['x', 'y', 'pinned', 'absent'][springIsolation.axis]}.
       Position error ${num(Math.abs(springIsolation.actual - springIsolation.expected))}; allowed ${num(springIsolation.budget)}.</p>
-      <p class="demo-note">Replay matches captured bits: ${springIsolation.baselineMatchesCapture ? 'Yes' : 'NO'}.
+      <p class="demo-note">Replay matches captured bits: ${springIsolation.baselineMatchesCapture ? 'Yes' : 'No'}.
       Instrumented trace matches the uninstrumented output: ${springIsolation.traceMatchesBaseline ? 'Yes' : 'NO — trace may perturb arithmetic'}.
       The ablations below use uninstrumented shaders on identical frozen inputs. Live layout and tolerance are unchanged.</p>
       <table><thead><tr><th>Rounded products</th><th>Force failures</th><th>Position failures</th><th>Max position error</th></tr></thead><tbody>
-      ${springIsolation.rows.map(r => `<tr><td>${r.correction}</td><td>${r.forces.failures}</td><td>${r.positions.failures}</td>
+      ${springIsolation.rows.map(r => `<tr><td>${r.correction}</td><td>${formatCount(r.forces.failures)}</td><td>${formatCount(r.positions.failures)}</td>
         <td>${num(r.positions.maxError)}</td></tr>`).join('')}</tbody></table>
       <h4>Intermediate differences at the captured point</h4>
       <p class="demo-note">${springIsolation.traceMatchesBaseline
@@ -271,7 +274,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       : ''
     el('[data-output="tick-isolation"]').innerHTML = tickIsolation
       ? `<h3>Whole-tick error isolation</h3>
-      <p>${tickIsolation.capture}, tick ${tickIsolation.tick}. Original output bits reproduced: ${tickIsolation.baselineMatchesCapture ? 'Yes' : 'NO'}.</p>
+      <p>${tickIsolation.capture}, tick ${tickIsolation.tick}. Original output bits reproduced: ${tickIsolation.baselineMatchesCapture ? 'Yes' : 'No'}.</p>
       <p class="demo-note">Local checks use each stage's actual GPU input. Composed checks use the uninterrupted CPU sequence.
         CPU boundary replacements only locate the cause; they are not GPU fixes. All runs use the same captured start and original budget.</p>
       <table><thead><tr><th>Stage</th><th>Local force / position failures</th><th>Composed force / position failures</th></tr></thead><tbody>
@@ -279,7 +282,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
         <td>${s.composedForce.failures} / ${s.composedPosition.failures}</td></tr>`).join('')}</tbody></table>
       <table><thead><tr><th>Replay</th><th>Type</th><th>Whole-tick failures</th><th>Max error</th></tr></thead><tbody>
       ${tickIsolation.ablations.map(a => `<tr><td>${a.name}</td><td>${a.kind === 'boundary' ? 'CPU boundary diagnostic' : 'GPU kernel'}</td>
-        <td>${a.positions.failures}</td><td>${num(a.positions.maxError)}</td></tr>`).join('')}</tbody></table>
+        <td>${formatCount(a.positions.failures)}</td><td>${num(a.positions.maxError)}</td></tr>`).join('')}</tbody></table>
       ${tickIsolation.gravity
     ? `<h4>Gravity arithmetic trace</h4>
         <p>Trace matches original force bits: ${tickIsolation.gravity.forcesMatchUninstrumented ? 'Yes' : 'NO — instrumentation perturbs the result'}.</p>
@@ -288,7 +291,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     : ''}
       ${tickIsolation.refinedGravity
     ? `<h4>Refined gravity trace</h4>
-        <p>Trace matches refined force bits: ${tickIsolation.refinedGravity.forcesMatchUninstrumented ? 'Yes' : 'NO'}.</p>
+        <p>Trace matches refined force bits: ${tickIsolation.refinedGravity.forcesMatchUninstrumented ? 'Yes' : 'No'}.</p>
         <table><thead><tr><th>Operation</th><th>Differing points</th></tr></thead><tbody>
         ${tickIsolation.refinedGravity.fields.map(f => `<tr><td>${f.field}</td><td>${f.differing}</td></tr>`).join('')}</tbody></table>`
     : ''}
@@ -502,7 +505,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     `${session?.rows.filter(r => !r.checked).length ?? 0} unchecked ticks; layout quality and rendering parity.`,
     Object.keys(session?.errors ?? {}),
     runError,
-    'backend checkpoints'))
+    'backend checkpoints'), { experiment: 'combined-layout', devices: () => session?.lanes.map(l => l.backend.info) ?? [] })
   await task(setup)
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

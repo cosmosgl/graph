@@ -1,6 +1,7 @@
 import type { ReductionBenchmark, ReductionCenter } from '../scalable-reduction/backend'
 
 export type SimulationBenchmarkBackend = {
+  readonly info?: string;
   benchmark: (iterations: number) => Promise<ReductionBenchmark>;
   readCenter: () => Promise<ReductionCenter>;
   destroy: () => void;

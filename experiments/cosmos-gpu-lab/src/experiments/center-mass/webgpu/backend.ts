@@ -1,7 +1,7 @@
 import { Buffer } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
+import { describeDevice, bindingLayout, createDevice, createStorageRenderer, readFloats, upload } from '../../../gpu/luma'
 import { graphRgba, graphWgsl } from '../../../runtime/palette'
-import { bindingLayout, createDevice, createStorageRenderer, readFloats, upload } from '../../../gpu/luma'
 import type { BackendResult, CenterMassBackend } from '../backend'
 import drawCenterShader from './shaders/draw-center.wgsl?raw'
 import drawShader from './shaders/draw.wgsl?raw'
@@ -38,6 +38,7 @@ export async function createWebGPUCenterMass (canvas: HTMLCanvasElement, pointCo
     const points = createStorageRenderer(device, graphWgsl + drawShader, 'point-list', bindingLayout([['positions', 'read-only-storage']]))
     const marker = createStorageRenderer(device, graphWgsl + drawCenterShader, 'triangle-list', bindingLayout([['uniforms', 'uniform']]))
     return {
+      info: describeDevice(device),
       label: 'WebGPU · luma two-stage f32 reduction',
       async run (data: Float32Array): Promise<BackendResult> {
         const start = performance.now(); positions.write(data)

@@ -1,3 +1,4 @@
+import { milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createResidentComparison, type ResidentComparison } from '../combined-layout/resident'
@@ -6,7 +7,8 @@ import { benchmarkResidentFrames, FRAME_POLICY, type FrameTimingRow } from '../c
 
 export async function createResidentView (host: HTMLElement): Promise<ExperimentInstance> {
   let runError: string | undefined
-  host.innerHTML = `<p class="demo-note">The same gravity → repulsion → incoming springs → outgoing springs tick in two WebGPU lanes.
+  host.innerHTML = `<p class="demo-note"
+      data-run-part="explanation">The same gravity → repulsion → incoming springs → outgoing springs tick in two WebGPU lanes.
     The staged reference reads positions for bounds. The resident lane computes bounds and draws points and links on the GPU.
     Checkpoints read both lanes for exact bit comparisons; other resident ticks have no position readback or CPU oracle.</p>
     <div
@@ -40,8 +42,10 @@ export async function createResidentView (host: HTMLElement): Promise<Experiment
       This compares dataflow on one adapter, not independent force correctness or frame rate.</p>
     <div data-output="results" class="many-body-results"
       data-run-part="results"></div>
-    <section data-run-part="diagnostics">
-    <h3>Update the current layout</h3><p class="demo-note">Use Step + check, apply an edit between ticks, then continue.
+    <section
+      data-run-part="diagnostics">
+    <h3>Update the current layout</h3><p class="demo-note"
+      data-run-part="diagnostics">Use Step + check, apply an edit between ticks, then continue.
       Edits preserve the tick, cooling and existing positions. Point count stays fixed.</p>
     <div class="scale-toolbar"><button data-action="patch"
       data-run-action="diagnostic">Move + pin point 0</button>
@@ -89,13 +93,14 @@ export async function createResidentView (host: HTMLElement): Promise<Experiment
     if (destroyed) return
     el('[data-output="timing"]').innerHTML = timings.length
       ? `<table><thead><tr><th>Arithmetic / workload</th><th>Frames/batch</th>
-      <th>GPU work ms/frame</th><th>Range</th><th>CPU submit</th><th>Completion</th><th>Checks</th></tr></thead><tbody>${timings.map(r => {
+      <th>GPU work (ms/frame)</th><th>GPU range (ms/frame)</th><th>CPU submit (ms/frame)</th><th>Completion (ms/frame)</th><th>Result</th>
+      </tr></thead><tbody>${timings.map(r => {
     const summary = r.summary; const valid = !r.error && r.checks.length === 10 && r.checks.every(c => c.valid)
     return `<tr><td>${r.mode === 'trig' ? 'Refined' : 'Native f32'} / ${r.draw ? 'frame' : 'simulation'}</td><td>${r.frames}</td>
-      <td>${summary?.gpuMs?.toFixed(3) ?? 'Unavailable / partial'}</td>
-      <td>${summary?.gpuRange?.map(v => v.toFixed(3)).join('–') ?? '—'}</td>
-      <td>${summary?.submitMs.toFixed(3) ?? '—'} ms</td><td>${summary?.completionMs.toFixed(3) ?? '—'} ms</td>
-      <td>${r.error ? 'Error (export details)' : valid && r.samples.length === 7 ? '10/10 replay checks' : 'Partial'}</td></tr>`
+      <td>${milliseconds(summary?.gpuMs)}</td>
+      <td>${summary?.gpuRange?.map(milliseconds).join('–') ?? 'Unavailable'}</td>
+      <td>${milliseconds(summary?.submitMs)}</td><td>${milliseconds(summary?.completionMs)}</td>
+      <td>${r.error ? 'Unavailable · see export' : valid && r.samples.length === 7 ? 'Pass · 10/10 replay checks' : 'Unchecked · incomplete batch'}</td></tr>`
   }).join('')}</tbody></table>`
       : ''
     if (!session) return
@@ -107,14 +112,14 @@ export async function createResidentView (host: HTMLElement): Promise<Experiment
         <th>Samples</th><th>Centroids</th><th>Result</th></tr></thead>
       <tbody>${session.rows.map(r => `<tr><td>${r.tick}</td><td>${r.bounds}</td><td>${r.positions}</td><td>${r.forces}</td>
         <td>${r.aggregates}</td><td>${r.slots}</td><td>${r.centroids}</td>
-        <td>${r.valid ? 'Pass' : !r.finite ? 'Non-finite' : 'FAIL'}</td></tr>`).join('')}</tbody></table>`
+        <td>${r.valid ? 'Pass' : !r.finite ? 'Non-finite' : 'Fail'}</td></tr>`).join('')}</tbody></table>`
       : ''
     el('[data-output="updates"]').innerHTML = session.updates.length
       ? `<table><thead><tr><th>Tick</th><th>Edit</th>
       <th>CPU submit, staged / resident</th><th>Bytes per lane</th><th>Device / positions</th></tr></thead><tbody>${session.updates.map(u =>
-    `<tr><td>${u.tick}</td><td>${u.description}</td><td>${u.lanes.map(l => l.submitMs.toFixed(3)).join(' / ')} ms</td>
-      <td>${u.lanes.map(l => l.bytes.toLocaleString()).join(' / ')}</td>
-      <td>${u.lanes.every(l => l.deviceRetained && l.positionsRetained) ? 'Retained' : 'FAIL'}</td></tr>`).join('')}</tbody></table>`
+    `<tr><td>${u.tick}</td><td>${u.description}</td><td>${u.lanes.map(l => milliseconds(l.submitMs)).join(' / ')} ms</td>
+      <td>${u.lanes.map(l => l.bytes.toLocaleString('en-US')).join(' / ')}</td>
+      <td>${u.lanes.every(l => l.deviceRetained && l.positionsRetained) ? 'Retained' : 'Fail'}</td></tr>`).join('')}</tbody></table>`
       : ''
   }
   const reset = async (): Promise<void> => {
@@ -165,7 +170,7 @@ export async function createResidentView (host: HTMLElement): Promise<Experiment
     try {
       const row = await session.step(true)
       if (!destroyed) {
-        render(); status.textContent = `Tick ${session.tick()}: ${row?.valid ? 'all compared bits match' : 'FAIL'}. Apply an edit or continue.`
+        render(); status.textContent = `Tick ${session.tick()}: ${row?.valid ? 'all compared bits match' : 'Fail'}. Apply an edit or continue.`
       }
     } catch (error) {
       runError = String(error)
@@ -241,7 +246,7 @@ export async function createResidentView (host: HTMLElement): Promise<Experiment
     'Non-checkpoint frames; independent layout quality and rendering parity.',
     [],
     runError ?? failure,
-    'resident checkpoints'))
+    'resident checkpoints'), { experiment: 'resident-layout', devices: () => session?.info ?? [] })
   await reset()
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

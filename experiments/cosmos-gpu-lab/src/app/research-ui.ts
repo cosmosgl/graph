@@ -7,7 +7,7 @@ import { mainOpenIssues, milestones, research, REVIEWED, type ResearchSummary } 
 export function renderMigrationOverview (host: HTMLElement, detailed = false): void {
   const advances = ['collision', 'matched-layout', 'point-styling']
   host.innerHTML = `<section class="migration-overview" aria-label="Current migration assessment">
-    <p class="research-meta">Reviewed ${new Intl.DateTimeFormat('en-GB', {
+    <p class="research-meta">Recorded assessment · reviewed ${new Intl.DateTimeFormat('en-GB', {
     day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
   }).format(new Date(REVIEWED))}</p>
     <h2>Current phase: prototype validation</h2>
@@ -59,13 +59,14 @@ export function renderResearchOverview (host: HTMLElement, experiment: Experimen
 export function renderEvidenceIndex (host: HTMLElement, experiment: ExperimentDefinition, record: ResearchSummary): void {
   const order = ['Current evidence', 'Supporting investigation', 'Historical baseline', 'Superseded', 'Parked']
   const investigations = record.investigations!.slice().sort((a, b) => order.indexOf(a.state) - order.indexOf(b.state))
-  host.innerHTML = `<section class="evidence-index"><p class="research-meta">Recorded research · separate from the current run</p>
+  host.innerHTML = `<section class="evidence-index"><p class="research-meta">Recorded research · reviewed ${record.reviewed} · separate from the current run</p>
     <h2>Evidence and investigation history</h2><p>${record.conclusion}</p>
-    <p>${record.scope}</p><ul>${investigations.map(item => {
-  const page = experiment.pages.find(page => page.id === item.page)!
-  return `<li><span class="evidence-state">${item.state}</span><h3><a href="${experimentHref(experiment.id, item.page)}">${page.title}</a></h3>
+    <p>${record.scope}</p><p class="demo-note">${record.variant}. Measurement dates and precise conditions are recorded in each article.</p>
+    <ul>${investigations.map(item => {
+    const page = experiment.pages.find(page => page.id === item.page)!
+    return `<li><span class="evidence-state">${item.state}</span><h3><a href="${experimentHref(experiment.id, item.page)}">${page.title}</a></h3>
       <p>${item.description}</p>${item.replacement ? `<a href="${experimentHref(experiment.id, item.replacement)}">Current conclusion →</a>` : ''}</li>`
-}).join('')}</ul></section>`
+  }).join('')}</ul></section>`
 }
 
 export function renderInvestigationContext (host: HTMLElement, experiment: ExperimentDefinition, record: ResearchSummary, pageId: string): void {

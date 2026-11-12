@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: Not recorded
+device: Apple M3; Chrome 156
+scope: Production-style 32-sample, varied-spring and adaptive-sampling controls; selected 5,000-tick runs.
+---
+
 ## From reference settings to Cosmos defaults
 
 The composed WebGPU force slice now supports **32 starting samples, production

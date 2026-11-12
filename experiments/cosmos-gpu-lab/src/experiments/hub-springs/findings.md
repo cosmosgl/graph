@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: Not recorded
+device: Apple M3; standalone Chrome 156
+scope: Historical threshold-64 hub optimization; per-frame readback and frozen controls.
+---
+
 For current controls and stronger acceptance evidence, see [Trajectories and thresholds](#/hub-springs/docs/acceptance).
 The first study below used threshold 64, no plain-direction fallback and per-frame readback. Its timings
 are historical observations; do not pool them with the newer GPU-batched measurements. The follow-up also

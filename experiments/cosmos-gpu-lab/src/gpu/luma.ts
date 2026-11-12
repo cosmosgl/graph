@@ -5,6 +5,11 @@ import { RenderKernel } from '@luma.gl/engine'
 import { webgl2Adapter } from '@luma.gl/webgl'
 import { webgpuAdapter, type WebGPUDevice } from '@luma.gl/webgpu'
 
+export function describeDevice (device: Device): string {
+  const info = device.info
+  return `${info.type}: ${[info.vendor, info.renderer, info.version].filter(Boolean).join(' · ') || 'Adapter identity not exposed'}`
+}
+
 export async function createDevice (
   type: 'webgl' | 'webgpu', canvas?: HTMLCanvasElement, timestamps = true, onError?: (error: Error) => unknown
 ): Promise<Device> {

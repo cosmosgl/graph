@@ -1,5 +1,6 @@
 import { luma } from '@luma.gl/core'
 import { webgpuAdapter, type WebGPUDevice } from '@luma.gl/webgpu'
+import { scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { BATCH_POLICY } from './gpu-timer'
@@ -68,16 +69,17 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
         <section class="backend-panel"><h2>Tiled all-pairs</h2>
           <p class="demo-note">WebGPU · reference path · up to 4,096 points</p>
           <canvas data-canvas="brute" width="480" height="480" aria-label="All-pairs simulation"></canvas>
-          <p data-validation="brute">Not validated</p>
+          <p data-validation="brute">Unchecked</p>
         </section>
         <section class="backend-panel"><h2>Spatial grid</h2>
           <p class="demo-note">WebGPU · count, scan, scatter + neighbor traversal</p>
           <canvas data-canvas="grid" width="480" height="480" aria-label="Grid simulation"></canvas>
-          <p data-validation="grid">Not validated</p>
+          <p data-validation="grid">Unchecked</p>
         </section>
       </div>
       </div>
-      <p class="demo-note">Local repulsion within a fixed radius · identical inputs and circle rendering ·
+      <p class="demo-note"
+      data-run-part="explanation">Local repulsion within a fixed radius · identical inputs and circle rendering ·
         damping and reflecting walls · no per-tick CPU readback. This is not the global many-body force.</p>
       <section class="visible-section advanced-controls"
       data-run-part="diagnostics">
@@ -217,7 +219,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
     tick.textContent = '0'
     const distribution = element<HTMLSelectElement>(host, '[data-control="distribution"]')
     element<HTMLElement>(host, '[data-output="settings-summary"]').textContent =
-      `${options.count.toLocaleString()} points · ${distribution.selectedOptions[0].text} · radius ${options.radius} · ` +
+      `${options.count.toLocaleString('en-US')} points · ${distribution.selectedOptions[0].text} · radius ${options.radius} · ` +
       `${options.density}× density · ${options.gridSize}×${options.gridSize} grid`
     status.textContent = 'Creating WebGPU pipelines…'
     const reach = Math.ceil(options.radius * options.gridSize / 2)
@@ -296,9 +298,9 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
       if (destroyed) return
       validations[backend.method] = result
       element<HTMLElement>(host, `[data-validation="${backend.method}"]`).textContent =
-        `${result.valid ? 'PASS' : 'FAIL'} · ${result.checked}/${result.total} points checked · ` +
-        `neighbor mismatches ${result.neighborMismatches} · max force error ${result.maximumForceError.toExponential(2)} · ` +
-        `max position error ${result.maximumPositionError.toExponential(2)} · ` +
+        `${result.valid ? 'Pass' : 'Fail'} · ${result.checked}/${result.total} points checked · ` +
+        `neighbor mismatches ${result.neighborMismatches} · max force error ${scientific(result.maximumForceError, 2)} · ` +
+        `max position error ${scientific(result.maximumPositionError, 2)} · ` +
         `mean candidates ${result.meanCandidates.toFixed(1)}`
     }
     status.textContent = 'Validation complete. Large datasets use 128 deterministic CPU samples; all GPU outputs are checked for non-finite values.'
@@ -464,9 +466,9 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
           const row = document.createElement('tr')
           for (const text of [`${method} / ${result.stage}`, String(result.batchSize), ...[
             result.submit.p50, result.completion.p50, result.completion.p95,
-          ].map(value => `${value.toFixed(3)} ms`),
-          result.gpu ? `${result.gpu.p50.toFixed(4)} ms` : 'Unavailable',
-          result.gpu ? `${result.gpu.p95.toFixed(4)} ms` : 'Unavailable', String(result.invalidGpuSamples)]) {
+          ].map(value => `${milliseconds(value)} ms`),
+          result.gpu ? `${milliseconds(result.gpu.p50)} ms` : 'Unavailable',
+          result.gpu ? `${milliseconds(result.gpu.p95)} ms` : 'Unavailable', String(result.invalidGpuSamples)]) {
             const cell = document.createElement('td')
             cell.textContent = text
             row.append(cell)
@@ -580,9 +582,9 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
             const timing = row.timings?.find(item => item.stage === 'tick')
             for (const value of [`${row.repetition + 1} / ${row.method}`, `${row.count} / ${row.density}×`,
               `${row.radius} / ${row.cellWidth}`, row.reason ?? row.status,
-              row.validation?.meanCandidates.toFixed(1) ?? '—', String(timing?.batchSize ?? '—'),
-              timing?.gpu ? `${timing.gpu.p50.toFixed(4)} ms` : 'Unavailable',
-              timing ? `${timing.completion.p50.toFixed(3)} ms` : '—']) {
+              row.validation?.meanCandidates.toFixed(1) ?? 'Unavailable', String(timing?.batchSize ?? 'Unavailable'),
+              timing?.gpu ? `${milliseconds(timing.gpu.p50)} ms` : 'Unavailable',
+              timing ? `${milliseconds(timing.completion.p50)} ms` : 'Unavailable']) {
               const td = document.createElement('td')
               td.textContent = value
               tr.append(td)
@@ -628,7 +630,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
     frame ? 'Ticks after the last explicit validation; global Cosmos forces.' : 'Current inputs until Validate is run; global Cosmos forces.',
     [],
     runError,
-    'latest backend validations'))
+    'latest backend validations'), { experiment: 'neighborhood-forces', devices: () => device ? [JSON.stringify(device.info)] : [] })
   describePlan()
   configure()
   return {

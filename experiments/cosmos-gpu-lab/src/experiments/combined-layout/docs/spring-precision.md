@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: Not recorded
+device: Apple M3; standalone Chrome 156 and native Chrome 157
+scope: Early spring arithmetic and captured-stage controls; later composition fixes are separate.
+---
+
 ## Spring precision near cancellation
 
 The larger combined runs exposed a specific problem: a spring force could pass its own check, yet produce a

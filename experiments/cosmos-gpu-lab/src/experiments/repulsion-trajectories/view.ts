@@ -1,3 +1,4 @@
+import { count as formatCount, scientific } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
@@ -5,11 +6,12 @@ import { fitView } from '../many-body/backend'
 import { PARAMETERS, type Fixture } from '../many-body/data'
 import { TOLERANCE } from '../many-body/reference'
 import { createTrajectorySession, LANES, LABELS, type Lane, type TrajectorySession } from './session'
-const number = (v: number): string => Number.isFinite(v) ? v.toExponential(2) : 'non-finite'
+const number = scientific
 const colors = { webgl: comparisonSeries.webgl, materialized: comparisonSeries.webgpu, streamed: comparisonSeries.cpu }
 export async function createTrajectories (host: HTMLElement): Promise<ExperimentInstance> {
   let runError: string | undefined
-  host.innerHTML = `<p class="demo-note">Each path keeps its own positions and bounds. Every GPU tick is checked against CPU arithmetic on that path's input.
+  host.innerHTML = `<p class="demo-note"
+      data-run-part="explanation">Each path keeps its own positions and bounds. Every GPU tick is checked against CPU arithmetic on that path's input.
     Position drift is reported separately. Repulsion alone expands the layout; springs, gravity and cooling are not active.</p>
     <div
       data-run-part="configuration" class="scale-toolbar">
@@ -91,24 +93,24 @@ export async function createTrajectories (host: HTMLElement): Promise<Experiment
     el('[data-output="tick"]').textContent = String(session.rows.length)
     if (!row) { el('[data-output="results"]').replaceChildren(); el('[data-output="chart"]').replaceChildren(); return }
     el('[data-output="results"]').innerHTML = `<table><caption>Tick ${row.tick} · strict local checks and independent-path drift</caption>
-      <thead><tr><th>Path</th><th>Local check</th><th>Failed ticks / checked</th><th>RMS / max drift vs CPU</th>
+      <thead><tr><th>Backend</th><th>Local check</th><th>Failed ticks / checked</th><th>RMS / max drift vs CPU</th>
       <th>RMS motion</th><th>RMS radius</th><th>Different cells</th></tr></thead>
-      <tbody>${row.checks.map(check => `<tr><td>${LABELS[check.name]}</td><td>${check.valid ? 'Pass' : 'FAIL'}</td>
+      <tbody>${row.checks.map(check => `<tr><td>${LABELS[check.name]}</td><td>${check.valid ? 'Pass' : 'Fail'}</td>
         <td>${session!.rows.filter(r => r.checks.some(c => c.name === check.name && !c.valid)).length} /
           ${session!.rows.filter(r => r.checks.some(c => c.name === check.name)).length}</td>
         <td>${number(check.drift.rms)} / ${number(check.drift.max)}</td><td>${number(check.motion.rms)}</td>
         <td>${number(check.shape.radius)}</td><td>${check.cellDifferences}</td></tr>`).join('')}
-      <tr><td>CPU</td><td>Reference</td><td>—</td><td>0</td><td>${number(row.cpu.motion.rms)}</td>
-      <td>${number(row.cpu.shape.radius)}</td><td>—</td></tr></tbody></table>
+      <tr><td>CPU</td><td>Reference</td><td>Not applicable</td><td>0</td><td>${number(row.cpu.motion.rms)}</td>
+      <td>${number(row.cpu.shape.radius)}</td><td>Not applicable</td></tr></tbody></table>
       <p class="demo-note">Full-buffer vs streamed position drift:
       ${row.correctedDrift ? `${number(row.correctedDrift.rms)} RMS / ${number(row.correctedDrift.max)} max` : 'unavailable'}.
       Drift and cell differences have no quality pass/fail threshold. Different cells counts input points assigned to a different finest cell
       than the CPU path, using each path's own bounds.</p>
       <section class="visible-section"><h3 class="visible-section-heading">Latest local checks</h3>
-      <table><thead><tr><th>Path</th><th>Force failures</th><th>Position failures</th>
+      <table><thead><tr><th>Backend</th><th>Force failures</th><th>Position failures</th>
       <th>Structure</th><th>Integration</th><th>Centroid bit differences</th></tr></thead><tbody>${row.checks.map(c => `<tr><td>${LABELS[c.name]}</td>
-      <td>${c.output.forces.failures}</td><td>${c.output.positions.failures}</td><td>${c.structure.valid ? 'Pass' : 'FAIL'}</td>
-      <td>${c.integration.valid ? 'Pass' : 'FAIL'}</td><td>${c.centroidDifferences ?? 'not stored'}</td></tr>`).join('')}</tbody></table></section>`
+      <td>${formatCount(c.output.forces.failures)}</td><td>${formatCount(c.output.positions.failures)}</td><td>${c.structure.valid ? 'Pass' : 'Fail'}</td>
+      <td>${c.integration.valid ? 'Pass' : 'Fail'}</td><td>${c.centroidDifferences ?? 'not stored'}</td></tr>`).join('')}</tbody></table></section>`
     const all = session.rows.flatMap(r => r.checks.map(c => c.drift.rms)).filter(Number.isFinite)
     const max = Math.max(1e-12, ...all)
     const x = (tick: number): number => 50 + (tick - 1) / Math.max(1, session!.rows.length - 1) * 640
@@ -202,7 +204,7 @@ export async function createTrajectories (host: HTMLElement): Promise<Experiment
     'Drift is descriptive, not a quality pass; unrun fixtures and pixel parity.',
     Object.keys(session?.errors ?? {}),
     runError,
-    'local backend checks'))
+    'local backend checks'), { experiment: 'repulsion-trajectories', devices: () => session?.lanes.map(l => l.backend.info) ?? [] })
   await task(setup)
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

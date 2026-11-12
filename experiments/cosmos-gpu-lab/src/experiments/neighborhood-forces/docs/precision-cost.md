@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: Not recorded
+device: Native Apple / Metal 3 adapter; Chrome 156
+scope: Paired baseline/chunked traversal across dense, sparse and small fixed-radius workloads.
+---
+
 # Reducing the cost of the precision fix
 
 **Chunked traversal helps dense workloads, but is not a universal replacement.** On the native

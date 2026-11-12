@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-11
+device: Apple M3; native Chrome 157
+scope: Initial 8,192-point matrix; historical full-strength probe and whole-tick failures.
+---
+
 ## Scaling the corrected springs to 8,192 points
 
 The targeted spring correction passes **all 126 scheduled WebGPU checkpoints** at 8,192 points, but the

@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-09
+device: Apple M3; Chrome 156 in the desktop inline browser
+scope: CSR preparation and spring timing sweep; large-star context loss limits usable WebGL evidence.
+---
+
 ## Historical topology sweep — superseded WebGL baseline
 
 **These timings do not establish a Cosmos → WebGPU speedup.** The raw-WebGL prototype used one

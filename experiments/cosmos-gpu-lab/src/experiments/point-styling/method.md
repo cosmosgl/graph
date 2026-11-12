@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-12
+device: Apple M3; installed Chrome 157 and inline Chromium 157
+scope: Twelve bounded styling configurations; full-image IDs, color budgets and explicit rejected fractional/zero-opacity controls.
+---
+
 ## Question
 
 Can a luma WebGPU quad renderer preserve Cosmos point styling and select the point actually

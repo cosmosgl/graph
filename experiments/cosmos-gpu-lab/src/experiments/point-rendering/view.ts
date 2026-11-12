@@ -40,7 +40,7 @@ export async function createPointRenderingExperiment (
   host: HTMLElement
 ): Promise<ExperimentInstance> {
   const countOptions = POINT_COUNTS.map(count =>
-    `<option value="${count}" ${count === 1024 ? 'selected' : ''}>${count.toLocaleString()}</option>`
+    `<option value="${count}" ${count === 1024 ? 'selected' : ''}>${count.toLocaleString('en-US')}</option>`
   ).join('')
 
   let runError: string | undefined
@@ -104,7 +104,8 @@ export async function createPointRenderingExperiment (
         </article>
       </section>
 
-      <p class="demo-note">
+      <p class="demo-note"
+      data-run-part="explanation">
         Both canvases receive identical positions, colors and CSS-pixel diameter. The WebGL
         shader uses the point-sprite path used by Cosmos today; WebGPU expands each instance
         into two triangles because portable wide points are not available.
@@ -126,13 +127,13 @@ export async function createPointRenderingExperiment (
     const pointNoun = data.count === 1 ? 'point' : 'points'
     const vertexNoun = data.count === 1 ? 'vertex' : 'vertices'
     element<HTMLElement>(host, '[data-output="count"]').textContent =
-      `${data.count.toLocaleString()} ${pointNoun}`
+      `${data.count.toLocaleString('en-US')} ${pointNoun}`
     element<HTMLElement>(host, '[data-output="bytes"]').textContent =
       `${(bytes / 1024).toLocaleString(undefined, { maximumFractionDigits: 1 })} KiB`
     element<HTMLElement>(host, '[data-output="webgl-vertices"]').textContent =
-      `${data.count.toLocaleString()} ${vertexNoun}`
+      `${data.count.toLocaleString('en-US')} ${vertexNoun}`
     element<HTMLElement>(host, '[data-output="webgpu-vertices"]').textContent =
-      `${(data.count * 6).toLocaleString()} vertices (6 × ${data.count.toLocaleString()})`
+      `${(data.count * 6).toLocaleString('en-US')} vertices (6 × ${data.count.toLocaleString('en-US')})`
   }
 
   const render = (): void => {
@@ -187,7 +188,7 @@ export async function createPointRenderingExperiment (
     [],
     'Visual comparison only: pixel parity and picking are not tested here.',
     slots.filter(s => renderErrors.has(s.id)).map(s => s.id),
-    runError))
+    runError), { experiment: 'point-rendering', devices: () => slots.flatMap(s => s.backend?.info ? [s.backend.info] : []) })
   await Promise.all(constructors.map(async ({ slot, create }) => {
     try {
       slot.backend = await create()

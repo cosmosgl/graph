@@ -9,6 +9,7 @@ export async function createWebGPUSimulationBenchmark (
   const backend = await createScalableReductionBackend(canvas, pointCount)
   await backend.run(false, false)
   return {
+    info: backend.info,
     benchmark: iterations => backend.benchmark(iterations),
     async readCenter (): Promise<ReductionCenter> {
       const result = await backend.run(false, true)

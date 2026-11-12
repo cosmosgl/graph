@@ -1,8 +1,10 @@
 import MarkdownIt from 'markdown-it'
+import { presentDocumentTables } from '../runtime/result-tables'
 import { renderFlow } from './flow'
 import { highlightGlsl, highlightWgsl } from './syntax-highlight'
 import { linkVocabularyTerms } from './vocabulary'
 import { addSectionNavigation } from './sections'
+import { readEvidenceSource, evidenceSourceNote } from './evidence-source'
 
 type MarkdownOptions = {
   linkTerms?: boolean;
@@ -63,7 +65,14 @@ export async function renderMarkdown (
       renderer.renderToken(tokens, index, options)
   }
 
-  host.innerHTML = `<article class="prose">${markdown.render(source)}</article>`
+  const { body, evidence } = readEvidenceSource(source)
+  host.innerHTML = `<article class="prose">${markdown.render(body)}</article>`
+  const article = host.querySelector('article')!
+  if (evidence) {
+    const title = article.firstElementChild
+    if (title?.matches('h1,h2')) title.after(evidenceSourceNote(evidence))
+    else article.prepend(evidenceSourceNote(evidence))
+  }
   if (options.linkTerms !== false) {
     linkVocabularyTerms(host, new Set(options.excludedTermIds))
   }
@@ -71,4 +80,5 @@ export async function renderMarkdown (
     examples[element.dataset.docExample!](element)
   }
   if (options.sectionNavigation !== false) addSectionNavigation(host)
+  presentDocumentTables(host)
 }

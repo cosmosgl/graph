@@ -7,6 +7,7 @@ import reductionSource from '../docs/reduction.md?raw'
 import reductionTreeUrl from '../docs/diagrams/reduction-tree.svg?url'
 import { createRetainedRun } from '../runtime/retained-run'
 import { validationContractMarkdown } from '../runtime/validation'
+import { disposeDocumentTables } from '../runtime/result-tables'
 import { experimentGroups, findExperiment } from './registry'
 import { architectureHref, conceptHref, experimentHref, featureInventoryHref, readRoute, roadmapHref, vocabularyHref, currentSection, runHref } from './router'
 import { indexVocabularyTerms } from './vocabulary'
@@ -403,6 +404,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
   const render = async (): Promise<void> => {
     renderVersion += 1
     const version = renderVersion
+    disposeDocumentTables(workspace)
     const route = readRoute()
     if (previousPath) scrollPositions.set(previousPath, window.scrollY)
     const path = window.location.hash.split('?')[0] || '#/'
@@ -600,6 +602,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
   handleRoute()
   return {
     destroy (): void {
+      disposeDocumentTables(workspace)
       renderVersion++; run.destroy()
       window.removeEventListener('hashchange', handleRoute)
       window.removeEventListener('beforeunload', run.destroy)

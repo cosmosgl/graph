@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-12
+device: Apple M3; inline Chromium 157; separate native Chrome regressions
+scope: Historical native collision matrix with corrected center; accumulated trajectory failures retained.
+---
+
 # Independent collision layouts
 
 **Original native-arithmetic baseline.** The follow-up [targeted correction](#/collision/docs/precision) now passes all 1,700 tick and trajectory gates in the repeated matrix, with zero measured pointwise drift. The native results below remain historical controls, including their recorded failures.

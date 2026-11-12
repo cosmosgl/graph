@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-11
+device: Apple M3; standalone Chrome 156
+scope: Center-off matched WebGL/WebGPU/CPU trajectories; selected production-style presets and shared sampling decisions.
+---
+
 # Matched layout findings
 
 This is the **center-off baseline**. The [center-enabled comparison and GPU cost measurements](#/matched-layout/docs/center) extend it with the optional production center force.

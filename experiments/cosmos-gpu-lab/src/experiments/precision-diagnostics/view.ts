@@ -1,3 +1,4 @@
+import { scientific, yesNo, checkResult } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { validationContracts } from '../../runtime/validation'
@@ -5,10 +6,11 @@ import { gravity } from '../combined-layout/reference'
 import { cpuSums, gravityFixture, gravityResult, sumFixture, type SumFixture } from './model'
 import { nativeDiagnostics, productionGravity } from './gpu'
 
-const number = (value: number | null): string => value === null ? 'not defined' : Number.isFinite(value) ? value.toExponential(5) : 'non-finite'
+const number = (value: number | null): string => scientific(value, 5)
 export function createPrecisionView (host: HTMLElement): ExperimentInstance {
   let runError: string | undefined
-  host.innerHTML = `<p class="demo-note">Compare mathematical error and legacy compatibility separately.
+  host.innerHTML = `<p class="demo-note"
+      data-run-part="explanation">Compare mathematical error and legacy compatibility separately.
     No production accuracy threshold or performance verdict is assigned. Every backend receives the same frozen float32 inputs.</p>
     <div
       data-run-part="configuration" class="scale-toolbar">
@@ -45,21 +47,21 @@ export function createPrecisionView (host: HTMLElement): ExperimentInstance {
     // Only numeric and source-controlled labels enter the tables; device/errors use textContent below.
     results.innerHTML = `<h3>Gravity force accuracy</h3><p class="demo-note">Tables scroll horizontally on narrow screens.</p>
       <div class="precision-table" tabindex="0" role="region" aria-label="Gravity force accuracy">
-      <table><thead><tr><th>Path</th><th>Finite</th><th>Max absolute error</th><th>Non-axis max error</th>
+      <table><thead><tr><th>Backend</th><th>Finite</th><th>Max absolute error</th><th>Non-axis max error</th>
       <th>RMS error</th><th>Relative L2 error</th><th>Legacy compatibility</th></tr></thead>
-      <tbody>${report.gravity.map(row => `<tr><td>${row.name}</td><td>${row.mathematicalError.finite}</td>
+      <tbody>${report.gravity.map(row => `<tr><td>${row.name}</td><td>${yesNo(row.mathematicalError.finite)}</td>
         <td>${number(row.mathematicalError.maxAbsolute)}</td><td>${number(row.nonAxisError.maxAbsolute)}</td>
         <td>${number(row.mathematicalError.rms)}</td><td>${number(row.mathematicalError.relativeL2)}</td>
-        <td>${row.legacyCompatibility.valid ? 'match within existing budget' : `${row.legacyCompatibility.failures} failures`}</td></tr>`)
+        <td>${checkResult(row.legacyCompatibility.valid)} · ${row.legacyCompatibility.failures} failures</td></tr>`)
     .join('')}</tbody></table></div>
       <p class="demo-note">Mathematical target: linear attraction toward (0, 0), with alpha 1, gravity 0.25 and a float32 0.1 coefficient.
         Legacy target: the existing stepwise float32 CPU polar model, including its original tolerance.
         Neither an accuracy threshold nor a production candidate is selected. Zero CPU self-difference is not independent evidence.
         Axis and non-axis errors are exported separately because native atan2 has restricted accuracy guarantees near its special cases.</p>
       <h3>Sum accuracy</h3><div class="precision-table" tabindex="0" role="region" aria-label="Sum accuracy">
-      <table><thead><tr><th>Path</th><th>Result</th><th>Exact fixture sum</th><th>Absolute error</th><th>Finite</th></tr></thead>
+      <table><thead><tr><th>Backend</th><th>Result</th><th>Exact fixture sum</th><th>Absolute error</th><th>Finite</th></tr></thead>
       <tbody>${report.sums.map(row => `<tr><td>${row.name}</td><td>${number(row.value)}</td><td>${number(row.exact)}</td>
-        <td>${number(row.absoluteError)}</td><td>${row.finite}</td></tr>`).join('')}</tbody></table></div>
+        <td>${number(row.absoluteError)}</td><td>${yesNo(row.finite)}</td></tr>`).join('')}</tbody></table></div>
       <p class="demo-note">These bounded integer fixtures have exact double-precision sums. CPU order models round to float32;
         GPU results may differ because of permitted evaluation changes. Differences alone do not identify compiler behavior.</p>`
     for (const [name, info] of Object.entries(report.devices)) {
@@ -150,6 +152,6 @@ export function createPrecisionView (host: HTMLElement): ExperimentInstance {
     'Mathematical accuracy has no pass budget; trajectories, quality and cost.',
     Object.keys(report?.errors ?? {}),
     runError,
-    'legacy compatibility comparisons'))
+    'legacy compatibility comparisons'), { experiment: 'precision-diagnostics', devices: () => Object.values(report?.devices ?? {}) })
   return { destroy (): void { disposeRunLayout(host); destroyed = true } }
 }

@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-11 to 2026-11-12
+device: Apple M3; standalone Chrome 156
+scope: Optional center attraction, independent layout gates and paired added GPU cost.
+---
+
 # Center attraction in the combined layout
 
 Cosmos’s optional `simulationCenter` force attracts each point toward the current centroid. It runs **after gravity and before repulsion**, with its own integration pass. The production default is **0 (off)**; this experiment also offers strengths 0.1 and 1. The earlier [matched baseline](#/matched-layout/docs/findings) uses center off.

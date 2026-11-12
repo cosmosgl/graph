@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: Not recorded
+device: Apple M3; standalone Chrome 156
+scope: 512/2,048-point chain, communities and star; selected checkpoints and deterministic replay.
+---
+
 ## Checkpoints and failure replay
 
 The default validation mode checks tick 1, every tenth tick and the final scheduled tick: 11 checkpoints for 100 ticks,

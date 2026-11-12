@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-05
+device: macOS Chromium; exact GPU and browser version not recorded
+scope: Four reduction presets through ten million points; capped rendering and partial CPU-reference availability.
+---
+
 # Scalable reduction findings
 
 All four presets initialized, reduced, rendered and returned finite centers in a local Chromium

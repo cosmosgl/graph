@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: Not recorded
+device: Apple M3; Chrome 156
+scope: Historical fixed-setting 8,192-point matrix with eight near-field samples; production follow-up remains separate.
+---
+
 ## What this gate tests
 
 The [production-settings follow-up](#/layout-acceptance/docs/production) adds

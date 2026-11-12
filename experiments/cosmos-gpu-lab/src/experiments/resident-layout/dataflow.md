@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-11
+device: Apple M3; installed headless Chrome 157.0.8103.40
+scope: Streamed versus resident force dataflow; bounded checkpoints, not complete production rendering.
+---
+
 The migration needs a simulation that can **compute and render without downloading every position each tick**.
 This experiment compares that dataflow with the staged WebGPU reference from the combined-layout study.
 Both lanes use the same luma kernels, force order, topology, arithmetic mode and cooling schedule.

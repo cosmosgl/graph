@@ -75,8 +75,8 @@ it('does not let GPU agreement hide a shared CPU-reference mismatch', async () =
   const page = await mount({ badBoth: true }); await step(page)
   expect(page.querySelector('[data-output="status"]')!.textContent).toContain('Mismatch')
   expect(page.querySelector('[data-output="results"]')!.textContent).toContain('WebGPU vs production WebGL: forces Pass')
-  expect(page.querySelector('[data-status="WebGL"]')!.textContent).toBe('Mismatch')
-  expect(page.querySelector('[data-status="WebGPU"]')!.textContent).toBe('Mismatch')
+  expect(page.querySelector('[data-status="WebGL"]')!.textContent).toBe('Fail')
+  expect(page.querySelector('[data-status="WebGPU"]')!.textContent).toBe('Fail')
 })
 it('retains the other panels and export after a rendering failure', async () => {
   const page = await mount({ renderFailure: true }); await step(page)
@@ -99,7 +99,7 @@ it('does not trust an instrumented replay that changes the normal force', async 
   const page = await mount({ badReplay: true })
   page.querySelector<HTMLButtonElement>('[data-action="trace"]')!.click(); await ready(page)
   expect(page.querySelector('[data-output="status"]')!.textContent).toContain('Mismatch')
-  expect(page.querySelector('[data-status="WebGPU"]')!.textContent).toBe('Mismatch')
+  expect(page.querySelector('[data-status="WebGPU"]')!.textContent).toBe('Fail')
   expect(page.querySelector('[data-output="trace"]')!.textContent).toContain('trace is not representative')
 })
 
@@ -154,7 +154,7 @@ it('keeps a failed centroid variant distinct from a passing inline baseline and 
   const page = await mount()
   page.querySelector<HTMLButtonElement>('[data-action="centroids"]')!.click(); await ready(page)
   expect(page.querySelector('[data-output="status"]')!.textContent).toContain('Inline baseline: Passed')
-  expect(page.querySelector('[data-output="status"]')!.textContent).toContain('Stored centroid variant: Mismatch')
+  expect(page.querySelector('[data-output="status"]')!.textContent).toContain('Stored centroid variant: Fail')
   let captured: Blob | undefined
   const url = vi.spyOn(URL, 'createObjectURL').mockImplementation(blob => { captured = blob as Blob; return 'blob:test' })
   const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})

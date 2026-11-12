@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-11
+device: Apple M3; native Chrome
+scope: Targeted rounded spring contributions; 512/2,048-point trajectories and hub cost.
+---
+
 ## Fixing the distance-only counterexample
 
 **Distance + rounded products** fixes the remaining captured mismatch without changing the tolerance.

@@ -1,3 +1,4 @@
+import { milliseconds, scientific } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import {
@@ -53,7 +54,7 @@ export async function createScalableReductionExperiment (
           <select data-control="point-count">
             ${POINT_PRESETS.map(count => `
               <option value="${count}" ${count === DEFAULT_POINT_COUNT ? 'selected' : ''}>
-                ${count.toLocaleString()}
+                ${count.toLocaleString('en-US')}
               </option>
             `).join('')}
           </select>
@@ -96,7 +97,8 @@ export async function createScalableReductionExperiment (
         <div><span>Reduction benchmark</span><strong data-output="benchmark">Not run</strong></div>
       </section>
 
-      <p class="demo-note">
+      <p class="demo-note"
+      data-run-part="explanation">
         Positions are generated, advanced, reduced and sampled for rendering on the GPU. Turning readback off keeps
         the center GPU-resident; the displayed tick time then measures command encoding and submission, not GPU completion.
       </p>
@@ -141,7 +143,7 @@ export async function createScalableReductionExperiment (
       : 'CPU encode + submit'
     timingOutput.textContent = result.elapsedMilliseconds < 0.01
       ? '<0.01 ms'
-      : `${result.elapsedMilliseconds.toFixed(2)} ms`
+      : `${milliseconds(result.elapsedMilliseconds)} ms`
     if (!result.center) {
       centerOutput.textContent = 'GPU resident · no readback'
       errorOutput.textContent = 'Not sampled'
@@ -149,8 +151,8 @@ export async function createScalableReductionExperiment (
     }
     centerOutput.textContent = formatCenter(result.center)
     errorOutput.textContent = cpuCenter
-      ? centerDistance(result.center, cpuCenter).toExponential(3)
-      : `CPU reference skipped above ${CPU_REFERENCE_LIMIT.toLocaleString()} points`
+      ? scientific(centerDistance(result.center, cpuCenter), 3)
+      : `CPU reference skipped above ${CPU_REFERENCE_LIMIT.toLocaleString('en-US')} points`
   }
 
   const runTick = async (advance: boolean): Promise<void> => {
@@ -212,7 +214,7 @@ export async function createScalableReductionExperiment (
     errorOutput.textContent = '—'
     timingOutput.textContent = '—'
     const pointCount = Number(countSelect.value)
-    statusOutput.textContent = `Allocating ${pointCount.toLocaleString()} GPU-resident points…`
+    statusOutput.textContent = `Allocating ${pointCount.toLocaleString('en-US')} GPU-resident points…`
     await nextFrame()
 
     try {
@@ -224,13 +226,13 @@ export async function createScalableReductionExperiment (
       }
       backend = createdBackend
       element<HTMLElement>(host, '[data-output="hierarchy"]').textContent =
-        createdBackend.reductionCounts.map(count => count.toLocaleString()).join(' → ')
+        createdBackend.reductionCounts.map(count => count.toLocaleString('en-US')).join(' → ')
       element<HTMLElement>(host, '[data-output="positions"]').textContent =
         formatBytes(createdBackend.positionBytes)
       element<HTMLElement>(host, '[data-output="partials"]').textContent =
         formatBytes(createdBackend.partialBytes)
       element<HTMLElement>(host, '[data-output="rendered"]').textContent =
-        `${createdBackend.renderedPointCount.toLocaleString()} of ${pointCount.toLocaleString()}`
+        `${createdBackend.renderedPointCount.toLocaleString('en-US')} of ${pointCount.toLocaleString('en-US')}`
       const result = await createdBackend.run(false, readbackCheckbox.checked)
       if (configurationRevision !== revision || destroyed) return
       showResult(result)
@@ -280,7 +282,7 @@ export async function createScalableReductionExperiment (
     try {
       const result = await backend.benchmark(iterations)
       benchmarkOutput.textContent =
-        `${result.averageMilliseconds.toFixed(2)} ms average · ${result.totalMilliseconds.toFixed(1)} ms total`
+        `${milliseconds(result.averageMilliseconds)} ms average · ${milliseconds(result.totalMilliseconds)} ms total`
     } catch (error) {
       runError = String(error)
       benchmarkOutput.textContent = error instanceof Error ? error.message : String(error)
@@ -295,7 +297,7 @@ export async function createScalableReductionExperiment (
     [],
     'Center accuracy budget; unsampled GPU-resident ticks and pixel parity.',
     [],
-    runError))
+    runError), { experiment: 'scalable-reduction', devices: () => backend?.info ? [backend.info] : [] })
   await configure()
 
   return {

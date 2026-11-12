@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: Not recorded
+device: Apple M3; inline Chromium, ANGLE Metal WebGL
+scope: 8,192 clustered points; cumulative far-field precision isolation at hierarchy boundaries.
+---
+
 ## Where the dense mismatch begins
 
 This page describes the original path. The follow-up [far-field precision experiment](#/many-body-grid/docs/far-field)

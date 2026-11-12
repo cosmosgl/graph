@@ -1,3 +1,4 @@
+import { count as formatCount, milliseconds, scientific } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import { organizeRunControls } from '../../runtime/run-controls'
@@ -8,8 +9,8 @@ import { createCollisionSession, type CollisionSession } from './session'
 import { COST_POLICY, collisionCostSummary, measureCollisionCost } from './timing'
 const NAMES = ['webgl', 'webgpu', 'cpu'] as const
 const LABELS = { webgl: 'Production GLSL · WebGL', webgpu: 'luma WebGPU', cpu: 'CPU reference' }
-const num = (n: number | undefined | null): string => n === null || n === undefined ? '—' : n.toExponential(2)
-const ms = (n: number | null): string => n === null ? '—' : n.toFixed(3)
+const num = scientific
+const ms = milliseconds
 export async function createCollisionView (host: HTMLElement): Promise<ExperimentInstance> {
   let runError: string | undefined
   host.innerHTML = `<section
@@ -169,7 +170,7 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
     }
     el('[data-output="trajectory"]').innerHTML = row
       ? `<table><caption>Tick ${row.tick} · ${settings.evolution === 'independent' ? 'independent trajectories' : 'shared-input outputs'}</caption>
-      <thead><tr><th>Path</th><th>Tick checks pass</th><th>Trajectory checks pass</th><th>Raw RMS drift / CPU radius</th>
+      <thead><tr><th>Backend</th><th>Tick checks passed</th><th>Trajectory checks passed</th><th>Raw RMS drift / CPU radius</th>
       <th>Aligned RMS / CPU radius</th></tr></thead><tbody>
       ${NAMES.map(name => {
     const m = row.metrics[name]
@@ -177,14 +178,14 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       <td>${name === 'cpu' ? 'Reference' : `${report.rows.filter(r => r.checks[name]?.valid).length}/${report.rows.length}`}</td>
       <td>${name === 'cpu' ? 'Reference' : `${report.rows.filter(r => r.trajectory[name]?.valid).length}/${report.rows.length}`}</td>
       <td>${m?.normalizedDrift === null || m?.normalizedDrift === undefined ? '—' : `${(100 * m.normalizedDrift).toFixed(3)}%`}</td>
-      <td>${m && row.metrics.cpu?.shape.radius ? `${(100 * m.alignedRms / row.metrics.cpu.shape.radius).toFixed(3)}%` : '—'}</td></tr>`
+      <td>${m && row.metrics.cpu?.shape.radius ? `${(100 * m.alignedRms / row.metrics.cpu.shape.radius).toFixed(3)}%` : 'Unavailable'}</td></tr>`
   }).join('')}</tbody></table>
-      <table><caption>Layout geometry · descriptive metrics</caption><thead><tr><th>Path</th><th>Motion RMS</th>
+      <table><caption>Layout geometry · descriptive metrics</caption><thead><tr><th>Backend</th><th>Motion RMS</th>
       <th>Layout radius</th><th>Stress RMS</th><th>Finite</th></tr></thead><tbody>
       ${NAMES.map(name => {
     const m = row.metrics[name]
     return `<tr><td>${LABELS[name]}</td><td>${num(m?.motion.rms)}</td><td>${num(m?.shape.radius)}</td>
-      <td>${num(m?.stress.rms)}</td><td>${m ? m.shape.finite ? 'Yes' : 'NO' : '—'}</td></tr>`
+      <td>${num(m?.stress.rms)}</td><td>${m ? m.shape.finite ? 'Yes' : 'No' : 'Unavailable'}</td></tr>`
   }).join('')}</tbody></table>
       <p class="demo-note">Tick checks compare each GPU step with the CPU calculation from that GPU’s own input.
       Trajectory checks compare accumulated raw coordinates with the independently evolving CPU at the original position tolerance.
@@ -218,56 +219,57 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       : ''
     el('[data-output="center"]').innerHTML = settings.mode === 'combined' && report.rows.length
       ? `<table><caption>Center precision · maximum absolute error across ${report.rows.length} validated ticks</caption>
-      <thead><tr><th>Path</th><th>Position sum / count</th><th>Force</th><th>Integrated position</th></tr></thead><tbody>
+      <thead><tr><th>Backend</th><th>Position sum / count</th><th>Force</th><th>Integrated position</th></tr></thead><tbody>
       ${(['webgl', 'webgpu'] as const).map(api => {
     const stages = report.rows.flatMap(r => r.checks[api]?.stages.filter(s => s.stage === 'center') ?? [])
     return `<tr><td>${LABELS[api]}</td>${(['aggregate', 'forces', 'positions'] as const).map(key =>
-      `<td>${stages.length ? num(Math.max(...stages.map(s => s[key]?.maxError ?? 0))) : '—'}</td>`).join('')}</tr>`
+      `<td>${stages.length ? num(Math.max(...stages.map(s => s[key]?.maxError ?? 0))) : 'Unavailable'}</td>`).join('')}</tr>`
   }).join('')}</tbody></table>`
       : ''
     el('[data-output="overlap"]').innerHTML = `<table><caption>Geometric overlap · measured separately from numerical tolerance</caption>
-      <thead><tr><th>Path</th><th>Overlapping pairs</th><th>Both pinned</th><th>Maximum penetration</th></tr></thead><tbody>
+      <thead><tr><th>Backend</th><th>Overlapping pairs</th><th>Both pinned</th><th>Maximum penetration</th></tr></thead><tbody>
       ${NAMES.map(name => {
     const positions = name === 'cpu' ? cpu : session!.lanes.find(l => l.api === name)?.positions
     const metric = row?.overlap[name] ?? (positions ? overlap(positions, graph.sizes, settings.collision) : undefined)
-    return `<tr><td>${LABELS[name]}</td><td>${metric?.pairs ?? '—'}</td><td>${metric?.pinnedPairs ?? '—'}</td><td>${num(metric?.maxPenetration)}</td></tr>`
+    return `<tr><td>${LABELS[name]}</td><td>${metric?.pairs ?? 'Unavailable'}</td><td>${metric?.pinnedPairs ?? 'Unavailable'}</td>
+      <td>${num(metric?.maxPenetration)}</td></tr>`
   }).join('')}</tbody></table>`
     el('[data-output="checks"]').innerHTML = row
       ? `<table><caption>Tick ${row.tick} · unchanged CPU gates from each GPU’s starting state</caption>
-      <thead><tr><th>Path / stage</th><th>Force failures</th><th>Position failures</th><th>Flags exact</th><th>Result</th></tr></thead><tbody>
+      <thead><tr><th>Backend / stage</th><th>Force failures</th><th>Position failures</th><th>Flags exact</th><th>Result</th></tr></thead><tbody>
       ${(['webgl', 'webgpu'] as const).map(api => `${(row.checks[api]?.stages ?? []).map((check, i) => `<tr><td>${LABELS[api]} · ${i + 1}. ${check.stage}</td>
-        <td>${check.forces.failures}</td>
-        <td>${check.positions.failures}</td>
+        <td>${formatCount(check.forces.failures)}</td>
+        <td>${formatCount(check.positions.failures)}</td>
         <td>${check.flagsExact ? 'Yes' : 'No'}</td>
-        <td>${check.valid ? 'Pass' : 'FAIL'}</td></tr>`).join('')
-  }<tr><td>${LABELS[api]} · whole tick</td><td>—</td><td>${row.checks[api]?.whole.failures ?? '—'}</td><td>Included</td>
-        <td>${row.checks[api]?.whole.valid ? 'Pass' : row.checks[api] ? 'FAIL' : 'Unavailable'}</td></tr>
-      <tr><td>${LABELS[api]} · trajectory vs CPU</td><td>—</td><td>${row.trajectory[api]?.failures ?? '—'}</td><td>Included</td>
-      <td>${row.trajectory[api]?.valid ? 'Pass' : row.trajectory[api] ? 'FAIL' : 'Unavailable'}</td></tr>`).join('')}
-      <tr><td>WebGPU vs WebGL positions</td><td>—</td><td>${row.cross?.failures ?? '—'}</td><td>Included</td>
-      <td>${row.cross?.valid ? 'Pass' : row.cross ? 'FAIL' : 'Unavailable'}</td></tr></tbody></table>`
+        <td>${check.valid ? 'Pass' : 'Fail'}</td></tr>`).join('')
+  }<tr><td>${LABELS[api]} · whole tick</td><td>Not applicable</td><td>${row.checks[api]?.whole.failures ?? 'Unavailable'}</td><td>Included</td>
+        <td>${row.checks[api]?.whole.valid ? 'Pass' : row.checks[api] ? 'Fail' : 'Unavailable'}</td></tr>
+      <tr><td>${LABELS[api]} · trajectory vs CPU</td><td>Not applicable</td><td>${row.trajectory[api]?.failures ?? 'Unavailable'}</td><td>Included</td>
+      <td>${row.trajectory[api]?.valid ? 'Pass' : row.trajectory[api] ? 'Fail' : 'Unavailable'}</td></tr>`).join('')}
+      <tr><td>WebGPU vs WebGL positions</td><td>Not applicable</td><td>${row.cross?.failures ?? 'Unavailable'}</td><td>Included</td>
+      <td>${row.cross?.valid ? 'Pass' : row.cross ? 'Fail' : 'Unavailable'}</td></tr></tbody></table>`
       : ''
     const failures = report.rows.flatMap(r => (['webgl', 'webgpu'] as const).flatMap(api => {
       const gate = r.checks[api]; if (!gate || gate.valid) return []
       const stages = gate.stages.filter(check => !check.valid).map(check => `${check.stage}: ${check.forces.failures} force, ` +
         `${check.positions.failures} position, ${check.aggregate?.failures ?? 0} aggregate${check.flagsExact ? '' : ', flags differ'}`).join('; ')
-      return [`<tr><td>${LABELS[api]}</td><td>${r.tick}</td><td>${stages || 'All local gates pass'}</td><td>${gate.whole.failures}</td></tr>`]
+      return [`<tr><td>${LABELS[api]}</td><td>${r.tick}</td><td>${stages || 'All local gates pass'}</td><td>${formatCount(gate.whole.failures)}</td></tr>`]
     }))
     const trajectoryFailures = Object.entries(report.trajectoryFailures)
     if (trajectoryFailures.length) {
       el('[data-output="trajectory"]').insertAdjacentHTML('beforeend', `<table><caption>First accumulated trajectory difference · retained for replay</caption>
-      <thead><tr><th>Path</th><th>Tick</th><th>Alpha</th><th>Coordinate failures</th><th>Max error</th></tr></thead><tbody>
+      <thead><tr><th>Backend</th><th>Tick</th><th>Alpha</th><th>Coordinate failures</th><th>Max error</th></tr></thead><tbody>
       ${trajectoryFailures.map(([api, capture]) => {
     const gate = report.rows[capture.tick - 1].trajectory[api as 'webgl' | 'webgpu']!
     return `<tr><td>${LABELS[api as 'webgl' | 'webgpu']}</td><td>${capture.tick}</td><td>${num(capture.alpha)}</td>
-      <td>${gate.failures}</td><td>${num(gate.maxError)}</td></tr>`
+      <td>${formatCount(gate.failures)}</td><td>${num(gate.maxError)}</td></tr>`
   }).join('')}</tbody></table>`)
     }
     if (failures.length) {
       el('[data-output="checks"]').insertAdjacentHTML('afterbegin', `<section class="visible-section">
       <h3 class="visible-section-heading">Tick failure history · ${failures.length} entries</h3>
       <table><caption>Failed ticks · retained across the run</caption>
-      <thead><tr><th>Path</th><th>Tick</th><th>Local stage failures</th><th>Whole-tick position failures</th></tr></thead>
+      <thead><tr><th>Backend</th><th>Tick</th><th>Local stage failures</th><th>Whole-tick position failures</th></tr></thead>
       <tbody>${failures.join('')}</tbody></table></section>`)
     }
     if (row && Object.values(row.checks).some(gate => gate.stages.some(check => check.absentSpringTargets > 0))) {
@@ -288,23 +290,23 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       <p class="demo-note">${cost.status} · frozen CPU geometry after ${cost.frozenTick} ticks ·
       ${cost.policy.frames} WebGPU frames per observation${webgpuOnly ? '; WebGPU only' : '; one WebGL frame'}.
       Force/integration and drawing are timed; uploads, capture copies and readback are outside GPU timestamps.</p>
-      <table><thead><tr><th>Path / block</th>
+      <table><thead><tr><th>Backend / block</th>
         <th>Gate</th>
-        <th>${firstControl} ms</th>
-        <th>${secondControl} ms</th>
-        <th>Paired added ms</th>
-        <th>Pair range ms</th>
+        <th>${firstControl} (ms)</th>
+        <th>${secondControl} (ms)</th>
+        <th>Paired added (ms)</th>
+        <th>Pair range (ms)</th>
         <th>Added %</th></tr></thead><tbody>
       ${(webgpuOnly ? ['webgpu'] as const : ['webgl', 'webgpu'] as const).map(api => Array.from({ length: cost.policy.blocks }, (_, block) => {
     const summary = collisionCostSummary(cost, api, block)
     return `<tr><td>${LABELS[api]} · ${block + 1}</td><td>${summary.accepted ? 'Pass' : 'Rejected / incomplete'}</td>
       <td>${ms(summary.offMs)}</td><td>${ms(summary.onMs)}</td><td>${ms(summary.deltaMs)}</td>
-      <td>${summary.range ? summary.range.map(ms).join(' … ') : '—'}</td><td>${summary.percent?.toFixed(1) ?? '—'}</td></tr>`
+      <td>${summary.range ? summary.range.map(ms).join(' … ') : 'Unavailable'}</td><td>${summary.percent?.toFixed(1) ?? 'Unavailable'}</td></tr>`
   }).join('')).join('')}</tbody></table><section class="visible-section"><h3 class="visible-section-heading">Timing gates</h3>
-      <table><thead><tr><th>Path / control</th><th>Local stage gates</th><th>Whole-tick failures</th></tr></thead><tbody>
+      <table><thead><tr><th>Backend / control</th><th>Local stage gates</th><th>Whole-tick failures</th></tr></thead><tbody>
       ${cost.preflight.map(p => `<tr><td>${LABELS[p.api]} · ${p.enabled ? secondControl : firstControl}</td>
-        <td>${p.gate.stages.every(check => check.valid) ? 'Pass' : 'FAIL'}</td>
-        <td>${p.gate.whole.failures}</td></tr>`).join('')}</tbody></table></section>
+        <td>${p.gate.stages.every(check => check.valid) ? 'Pass' : 'Fail'}</td>
+        <td>${formatCount(p.gate.whole.failures)}</td></tr>`).join('')}</tbody></table></section>
       <p class="demo-note">Acceptance requires both scalar preflights, every timed-frame replay and valid queries, including warmups.
       Added cost is the median paired ${secondControl} − ${firstControl} difference; columns are separate medians. Inspect ranges for noise.
       ${precisionCost
@@ -467,7 +469,7 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
     'Larger collision routes, unrun fixtures and rendering parity.',
     Object.keys(session?.report.errors ?? {}),
     runError,
-    'tick and trajectory gates'))
+    'tick and trajectory gates'), { experiment: 'collision', devices: () => Object.values(session?.report.devices ?? {}) })
   await task(setup)
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

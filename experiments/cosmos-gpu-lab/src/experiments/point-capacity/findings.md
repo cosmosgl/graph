@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-11
+device: Apple M3; standalone Chrome 156
+scope: Exact-size rebuild baseline with retained IDs, data preservation and tracked buffer cleanup.
+---
+
 This page records the **exact-size rebuild baseline**. Select **CPU copy vs GPU rebuild** in the demo to
 reproduce it. The [retained-capacity follow-up](#/point-capacity/docs/reuse) compares two GPU-bound lanes and
 reuses storage and kernels within a high-water allocation.

@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: Not recorded
+device: Apple M3; native browser
+scope: Independently evolving repulsion-only layouts; local compatibility and descriptive accumulated drift.
+---
+
 ## Independent repulsion trajectories
 
 This experiment follows the [precision cost comparison](#/many-body-grid/docs/precision-cost). Each backend now

@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-11
+device: Apple M3; standalone Chrome 156 and native Chrome 157
+scope: Frozen spring arithmetic timings; selected trajectory controls and historical candidate failures.
+---
+
 ## The cost of matching spring arithmetic
 
 A fully rounded spring force and integration passed the larger combined-layout checks without changing the
