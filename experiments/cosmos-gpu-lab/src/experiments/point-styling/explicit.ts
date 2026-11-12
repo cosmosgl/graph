@@ -12,12 +12,14 @@ export function renderExplicitControl (
 ): void {
   const section = document.createElement('section'); section.className = 'explicit-control'
   const { production, compatibility } = comparisons
-  const row = (label: string, result: ReturnType<typeof compareSnapshots>): string => `<tr><td>${label}</td><td>${result.valid ? 'Pass' : 'Fail'}</td>
+  const row = (label: string, result: ReturnType<typeof compareSnapshots>): string => `<tr><td>${label}<br>
+    CPU: ${result.pickingRules.webgl} / ${result.pickingRules.webgpu}</td><td>${result.valid ? 'Pass' : 'Fail'}</td>
     <td>${result.idDisagreements}</td><td>${result.webglReferenceFailures} / ${result.webgpuReferenceFailures}</td>
     <td>${result.colorFailures} · ${result.maxChannelError}/255</td><td>${result.webglInvisiblePicks} / ${result.webgpuInvisiblePicks}</td></tr>`
   section.innerHTML = `<h3>Production control and compatibility</h3>
     <p>The canvases and audit above show the explicit-coordinate candidate in both APIs. It uses padded quads and closed shape bounds.
-      The production WebGL point shader is retained below. The CPU mask, exact-ID rule and 2/255 color budget are unchanged.</p>
+      The production shader and its legacy CPU rule are retained below. The candidate CPU rule additionally rejects global opacity zero.
+      Geometric contours, exact-ID checks and the 2/255 color budget stay unchanged.</p>
     <table data-production-comparison><thead><tr><th>Full-frame comparison</th><th>Result</th><th>ID differences</th>
       <th>CPU mask differences · left / right</th><th>Color failures · max</th><th>Invisible picks · left / right</th></tr></thead><tbody>
       ${row('Production WebGL ↔ compatibility WebGPU', production)}
@@ -32,7 +34,7 @@ export function renderExplicitControl (
       ${BOUNDARY_PIXELS.map(([x, y]) => `<tr><td>(${x}, ${y})</td>
         <td>${id(original.webgl, x, y)} / ${id(original.webgpu, x, y)}</td>
         <td>${id(selected.webgl, x, y)} / ${id(selected.webgpu, x, y)}</td>
-        <td>${String(referencePick(points, settings, x + 0.5, y + 0.5))}</td>
+        <td>${String(referencePick(points, settings, x + 0.5, y + 0.5) ?? 'background')}</td>
         <td>${selected.webgl.color[(y * selected.webgl.width + x) * 4 + 3]} / ${selected.webgpu.color[(y * selected.webgpu.width + x) * 4 + 3]}</td>
         </tr>`).join('')}</tbody></table>`)
   }

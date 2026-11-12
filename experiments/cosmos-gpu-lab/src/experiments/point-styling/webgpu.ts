@@ -60,6 +60,7 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<B
           draw(colorKernel, visibleParams, color.framebuffer); draw(pickKernel, pickingParams, ids.framebuffer); draw(displayKernel, visibleParams)
           device.submit()
           const result: Snapshot = {
+            pickingRule: variant === 'explicit' ? 'visible' : 'legacy',
             width,
             height,
             color: await pixels(device, color.texture, color.framebuffer),

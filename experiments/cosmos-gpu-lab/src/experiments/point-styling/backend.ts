@@ -2,7 +2,10 @@ import { Buffer, Texture, type Device, type Framebuffer } from '@luma.gl/core'
 import { HEIGHT, WIDTH, type Point, type Settings } from './data'
 export type Probe = { geometry: Float32Array; edge: Float32Array }
 export type RenderVariant = 'production' | 'explicit'
-export type Snapshot = { width: number; height: number; color: Uint8Array; ids: Uint8Array; probe?: Probe; analyticControl?: Snapshot }
+export type PickingRule = 'legacy' | 'visible'
+export type Snapshot = {
+  width: number; height: number; color: Uint8Array; ids: Uint8Array; probe?: Probe; analyticControl?: Snapshot; pickingRule?: PickingRule;
+}
 export type Backend = {
   info: string; render(points: Point[], settings: Settings, diagnose?: boolean, variant?: RenderVariant): Promise<Snapshot>; destroy(): void;
 }

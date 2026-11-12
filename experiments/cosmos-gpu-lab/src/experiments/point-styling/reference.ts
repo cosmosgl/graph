@@ -1,4 +1,4 @@
-import { pick, type Snapshot } from './backend'
+import { pick, type PickingRule, type Snapshot } from './backend'
 import { center, diameter, resolvePoint, type Point, type Settings } from './data'
 const clamp = (x: number, a: number, b: number): number => Math.min(b, Math.max(a, x))
 // Independent scalar geometry control. This does not read a GPU mask or shader output.
@@ -50,7 +50,10 @@ export function shapeDistance (x: number, y: number, shape: number): number {
   }
   return Infinity
 }
-export function referencePick (points: Point[], settings: Settings, x: number, y: number): number | null {
+export function referencePick (points: Point[], settings: Settings, x: number, y: number, rule: PickingRule = 'visible'): number | null {
+  // Candidate visibility is explicit. Retain the original opacity-independent
+  // geometry reference for the production control; neither rule reads GPU pixels.
+  if (rule === 'visible' && settings.opacity <= 0) return null
   const order = points.map((_, id) => id); if (!settings.reverse) order.reverse()
   for (const id of order) {
     const p = resolvePoint(points[id], settings); const d = diameter(p, settings)
@@ -64,16 +67,22 @@ export function referencePick (points: Point[], settings: Settings, x: number, y
 // RGBA8 comparison budget declared before evaluation: two channel levels account
 // for quantization/blend evaluation. IDs and visibility checks have no tolerance.
 export const COLOR_BUDGET = 2
+type MaskMismatch = {
+  x: number; y: number; webgl: number | null; webgpu: number | null; expected: { webgl: number | null; webgpu: number | null };
+}
 export function compareSnapshots (gl: Snapshot, gpu: Snapshot, points: Point[], settings: Settings): {
   pixels: number; idDisagreements: number; webglReferenceFailures: number; webgpuReferenceFailures: number;
   colorFailures: number; maxChannelError: number; webglInvisiblePicks: number; webgpuInvisiblePicks: number;
-  firstIdMismatch?: { x: number; y: number; webgl: number | null; webgpu: number | null; reference: number | null };
-  firstReferenceMismatch?: { x: number; y: number; webgl: number | null; webgpu: number | null; reference: number | null };
+  pickingRules: { webgl: PickingRule; webgpu: PickingRule };
+  webglPickedPixels: number; webgpuPickedPixels: number; webglPaintedPixels: number; webgpuPaintedPixels: number;
+  firstIdMismatch?: MaskMismatch;
+  firstReferenceMismatch?: MaskMismatch;
   firstColorMismatch?: { x: number; y: number; webgl: number[]; webgpu: number[] };
   valid: boolean;
 } {
   if (gl.width !== gpu.width || gl.height !== gpu.height) throw new Error('Mismatched framebuffer dimensions')
   const result = {
+    pickingRules: { webgl: gl.pickingRule ?? 'visible', webgpu: gpu.pickingRule ?? 'visible' },
     pixels: gl.width * gl.height,
     idDisagreements: 0,
     webglReferenceFailures: 0,
@@ -82,19 +91,35 @@ export function compareSnapshots (gl: Snapshot, gpu: Snapshot, points: Point[], 
     maxChannelError: 0,
     webglInvisiblePicks: 0,
     webgpuInvisiblePicks: 0,
-    firstIdMismatch: undefined as { x: number; y: number; webgl: number | null; webgpu: number | null; reference: number | null } | undefined,
-    firstReferenceMismatch: undefined as { x: number; y: number; webgl: number | null; webgpu: number | null; reference: number | null } | undefined,
+    webglPickedPixels: 0,
+    webgpuPickedPixels: 0,
+    webglPaintedPixels: 0,
+    webgpuPaintedPixels: 0,
+    firstIdMismatch: undefined as MaskMismatch | undefined,
+    firstReferenceMismatch: undefined as MaskMismatch | undefined,
     firstColorMismatch: undefined as { x: number; y: number; webgl: number[]; webgpu: number[] } | undefined,
     valid: false,
   }
   for (let y = 0; y < gl.height; y++) {
     for (let x = 0; x < gl.width; x++) {
       const offset = (y * gl.width + x) * 4
-      const a = pick(gl, x, y); const b = pick(gpu, x, y); const expected = referencePick(points, settings, x + 0.5, y + 0.5)
-      if (a !== b) { result.idDisagreements++; result.firstIdMismatch ??= { x, y, webgl: a, webgpu: b, reference: expected } }
-      if (a !== expected) result.webglReferenceFailures++
-      if (b !== expected) result.webgpuReferenceFailures++
-      if (a !== expected || b !== expected) result.firstReferenceMismatch ??= { x, y, webgl: a, webgpu: b, reference: expected }
+      const a = pick(gl, x, y); const b = pick(gpu, x, y)
+      const expectedGl = referencePick(points, settings, x + 0.5, y + 0.5, result.pickingRules.webgl)
+      const expectedGpu = result.pickingRules.webgl === result.pickingRules.webgpu
+        ? expectedGl
+        : referencePick(points, settings, x + 0.5, y + 0.5, result.pickingRules.webgpu)
+      if (a !== b) {
+        result.idDisagreements++; result.firstIdMismatch ??= { x, y, webgl: a, webgpu: b, expected: { webgl: expectedGl, webgpu: expectedGpu } }
+      }
+      if (a !== expectedGl) result.webglReferenceFailures++
+      if (b !== expectedGpu) result.webgpuReferenceFailures++
+      if (a !== expectedGl || b !== expectedGpu) {
+        result.firstReferenceMismatch ??= { x, y, webgl: a, webgpu: b, expected: { webgl: expectedGl, webgpu: expectedGpu } }
+      }
+      if (a !== null) result.webglPickedPixels++
+      if (b !== null) result.webgpuPickedPixels++
+      if (gl.color[offset + 3] > 0) result.webglPaintedPixels++
+      if (gpu.color[offset + 3] > 0) result.webgpuPaintedPixels++
       if (a !== null && gl.color[offset + 3] === 0) result.webglInvisiblePicks++
       if (b !== null && gpu.color[offset + 3] === 0) result.webgpuInvisiblePicks++
       let maximum = 0

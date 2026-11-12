@@ -114,7 +114,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       latestComparison = comparison?.valid
       latestCompatibility = compatibility?.valid
       report = {
-        schemaVersion: 3,
+        schemaVersion: 4,
         experiment: 'point-styling',
         recordedAt: new Date().toISOString(),
         browser: navigator.userAgent,
@@ -134,12 +134,17 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       }
       const output = el('[data-results]')
       if (comparison) {
-        output.innerHTML = `<h3>Framebuffer audit</h3><table><tbody>
+        output.innerHTML = `<h3>Framebuffer audit</h3>
+          <p data-picking-rule>CPU rule: ${comparison.pickingRules.webgl === 'visible'
+    ? 'visible — global opacity zero returns background; positive opacity retains the half-coverage contour.'
+    : 'legacy — global opacity does not change picking.'}</p><table><tbody>
           <tr><th>Result</th><td>${checkResult(comparison.valid)}</td></tr>
           <tr><th>Pixels checked</th><td>${formatCount(comparison.pixels)}</td></tr>
           <tr><th>WebGL ↔ WebGPU ID differences</th><td>${comparison.idDisagreements}</td></tr>
           <tr><th>Scalar mask differences · WebGL / WebGPU</th><td>${comparison.webglReferenceFailures} / ${comparison.webgpuReferenceFailures}</td></tr>
           <tr><th>RGBA pixels beyond ${COLOR_BUDGET}/255 channel budget</th><td>${comparison.colorFailures} · max ${comparison.maxChannelError}/255</td></tr>
+          <tr><th>Painted pixels · WebGL / WebGPU</th><td>${comparison.webglPaintedPixels} / ${comparison.webgpuPaintedPixels}</td></tr>
+          <tr><th>Picked pixels · WebGL / WebGPU</th><td>${comparison.webglPickedPixels} / ${comparison.webgpuPickedPixels}</td></tr>
           <tr><th>Picked pixels with zero rendered alpha · WebGL / WebGPU</th>
             <td>${comparison.webglInvisiblePicks} / ${comparison.webgpuInvisiblePicks}</td></tr>
           </tbody></table>`
@@ -153,9 +158,9 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         }
         status.textContent = comparison.valid
           ? variant === 'explicit'
-            ? `Explicit candidate geometry passed. Production compatibility ${compatibility?.valid ? 'passed' : 'differs; see the control below'}.`
+            ? `Explicit candidate passed. Production compatibility ${compatibility?.valid ? 'passed' : 'differs; see the control below'}.`
             : 'Passed: exact IDs and shape masks; colors within the declared budget; no invisible picks.'
-          : settings.opacity === 0
+          : variant === 'production' && settings.opacity === 0
             ? 'Failed visibility control: production host picking still selects points at global opacity zero. Both paths retain this discrepancy.'
             : 'Differences found. Inspect the counts and export the frozen inputs; this configuration is not accepted.'
       } else {
