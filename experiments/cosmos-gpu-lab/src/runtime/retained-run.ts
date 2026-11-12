@@ -7,7 +7,7 @@ type Run = {
 
 // One run, not a cache of GPU sessions. Its DOM and resources survive visits to
 // documentation, including while asynchronous setup is still finishing.
-export function createRetainedRun (): {
+export function createRetainedRun (disposePresentation: (host: HTMLElement) => void = (): void => {}): {
   readonly id: string | undefined;
   show(definition: ExperimentDefinition, parent: HTMLElement): Promise<void>;
   hide(): void;
@@ -22,7 +22,7 @@ export function createRetainedRun (): {
   const destroy = (): void => {
     if (!current) return
     const run = current; current = undefined; run.retired = true
-    run.instance?.pause?.(); run.host.remove(); run.instance?.destroy()
+    run.instance?.pause?.(); disposePresentation(run.host); run.host.remove(); run.instance?.destroy()
   }
   return {
     get id (): string | undefined { return current?.id },

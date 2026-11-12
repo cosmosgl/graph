@@ -6,7 +6,7 @@ import { validationContracts } from '../runtime/validation'
 import { createAppShell } from './app-shell'
 import { experiments, findExperiment } from './registry'
 import { research } from './research'
-import { readRoute } from './router'
+import { articleSectionId, readRoute } from './router'
 
 let host: HTMLElement | undefined
 let shell: ReturnType<typeof createAppShell> | undefined
@@ -54,19 +54,26 @@ it('puts every visible migration decision before the complete experiment catalog
   creates.forEach(create => expect(create).not.toHaveBeenCalled())
 })
 
-it('keeps technical article routes readable without creating GPU sessions', async () => {
-  const creates = experiments.map(experiment => vi.spyOn(experiment, 'create'))
-  window.history.replaceState(null, '', '#/')
+it('keeps the complete document readable when GPU initialization fails', async () => {
+  const create = vi.spyOn(findExperiment('center-mass')!, 'create').mockRejectedValue(new Error('Test adapter unavailable'))
+  window.history.replaceState(null, '', '#/center-mass/docs/algorithm?section=webgpu-reduction')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  for (const experiment of experiments) {
-    await route(`#/${experiment.id}/docs/${research[experiment.id].method}`, () => {
-      expect(host!.querySelector('.experiment-return')?.getAttribute('href')).toBe(`#/${experiment.id}`)
-      expect(host!.querySelector('.prose')?.textContent).toContain(validationContracts[experiment.id].acceptance)
-    })
-    expect(host.querySelector('.page-tabs,.method-topics,.research-breadcrumb,details')).toBeNull()
-  }
-  creates.forEach(create => expect(create).not.toHaveBeenCalled())
-}, 20_000)
+  await vi.waitFor(() => expect(document.activeElement?.id).toBe('doc-algorithm-webgpu-reduction'))
+  expect(window.location.hash).toBe('#/center-mass?section=doc-algorithm-webgpu-reduction')
+  expect(host.textContent).toContain('Live experiment unavailable')
+  for (const page of findExperiment('center-mass')!.pages) expect(host.querySelector(`#${articleSectionId(page.id)}`)).not.toBeNull()
+  expect(host.textContent).toContain(validationContracts['center-mass'].acceptance)
+  expect(host.querySelector('details')).toBeNull()
+  expect(create).toHaveBeenCalledTimes(1)
+})
+
+it('rejects an unknown legacy article without creating a device', async () => {
+  const create = vi.spyOn(findExperiment('center-mass')!, 'create')
+  window.history.replaceState(null, '', '#/center-mass/docs/unknown')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.textContent).toContain('Unknown experiment'))
+  expect(create).not.toHaveBeenCalled()
+})
 
 it('preserves old base-route Run bookmarks and focuses the requested result', async () => {
   const { create } = mockRun('point-rendering')
@@ -101,28 +108,29 @@ for (const { id } of experiments) {
     const findings = host.querySelector('[data-recorded-report]')!
     expect(host.querySelector('.research-conclusion')!.textContent).toBe(research[id].conclusion)
     expect(host.querySelector('.page-tabs,.method-topics,.research-actions,.run-contents,.evidence-index,details')).toBeNull()
-    expect(host.querySelectorAll('main > .experiment-stage > nav')).toHaveLength(1)
+    expect(host.querySelectorAll('main nav')).toHaveLength(1)
+    expect(host.querySelector('.sidebar,.experiment-return,.unified-document')).toBeNull()
     expect(host.querySelectorAll('main h1')).toHaveLength(1)
     expect(host.querySelector('#run-explanation')!.textContent).toContain('Original guidance.')
     for (const value of Object.values(validationContracts[id]).slice(1)) expect(host.textContent).toContain(value)
-    for (const page of definition.pages) {
-      if (page.id !== research[id].evidence) expect(host.querySelector(`.experiment-notes a[href="#/${id}/docs/${page.id}"]`)).not.toBeNull()
-    }
+    for (const page of definition.pages) expect(host.querySelector(`#${articleSectionId(page.id)}`)).not.toBeNull()
+    const ids = Array.from(host.querySelectorAll('[id]'), node => node.id)
+    expect(new Set(ids).size).toBe(ids.length)
     for (const link of host.querySelectorAll<HTMLAnchorElement>('.experiment-contents a')) {
       const section = new URLSearchParams(link.hash.split('?')[1]).get('section')
       expect(host.querySelector(`#${section}`)).not.toBeNull()
     }
-    expect(host.querySelector('.recorded-findings')!.textContent).not.toContain('Historical baseline')
     if (!research[id].evidence) expect(findings.textContent).toContain('No recorded measurement matrix')
     else expect(findings.querySelector('article')).not.toBeNull()
     host.querySelector<HTMLButtonElement>('.run-primary-actions button')!.click()
     const pausesBeforeSection = pause.mock.calls.length
     host.querySelector<HTMLAnchorElement>('.experiment-contents a[href$="section=run-explanation"]')!.click()
-    expect(document.activeElement?.id).toBe('run-explanation')
+    await vi.waitFor(() => expect(document.activeElement?.id).toBe('run-explanation'))
     expect(create).toHaveBeenCalledTimes(1); expect(pause).toHaveBeenCalledTimes(pausesBeforeSection)
-    await route(`#/${id}/docs/${research[id].method}`, () => expect(host!.querySelector('.unified-document .prose')).not.toBeNull())
-    expect(host.querySelector('.experiment-return')?.getAttribute('href')).toBe(`#/${id}`)
+    await route(`#/${id}/docs/${research[id].method}`, () => expect(document.activeElement?.id).toBe(articleSectionId(research[id].method)))
+    expect(window.location.hash).toBe(`#/${id}?section=${articleSectionId(research[id].method)}`)
     expect(host.querySelector('.page-tabs,.method-topics,.research-breadcrumb')).toBeNull()
+    expect(pause).toHaveBeenCalledTimes(pausesBeforeSection)
     await route(`#/${id}/run?section=run-results`, () => expect(document.activeElement?.id).toBe('run-results'))
     expect(window.location.hash).toBe(`#/${id}?section=run-results`)
     expect(host.querySelector('canvas')).toBe(canvas); expect(host.querySelector('input')).toBe(input)

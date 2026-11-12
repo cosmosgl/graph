@@ -10,7 +10,8 @@ function definition (id: string, create: ExperimentDefinition['create']): Experi
 afterEach(() => { hosts.splice(0).forEach(host => host.remove()) })
 
 it('retains the same controls, canvas and state across documentation, with one owned run', async () => {
-  const run = createRetainedRun(); const first = parent(); const second = parent(); const pause = vi.fn(); const destroy = vi.fn()
+  const disposePresentation = vi.fn()
+  const run = createRetainedRun(disposePresentation); const first = parent(); const second = parent(); const pause = vi.fn(); const destroy = vi.fn()
   const create = vi.fn(async (host: HTMLElement): Promise<ExperimentInstance> => {
     host.innerHTML = '<canvas></canvas><input value="initial">'; return { pause, destroy }
   })
@@ -18,13 +19,14 @@ it('retains the same controls, canvas and state across documentation, with one o
   const input = first.querySelector('input')!; const canvas = first.querySelector('canvas')!
   input.value = 'tick 17, changed settings'; run.hide()
   expect(pause).toHaveBeenCalledTimes(1); expect(destroy).not.toHaveBeenCalled(); expect(canvas.isConnected).toBe(false)
+  expect(disposePresentation).not.toHaveBeenCalled()
   await run.show(definition('one', create), second)
   expect(create).toHaveBeenCalledTimes(1); expect(second.querySelector('input')).toBe(input)
   expect(input.value).toBe('tick 17, changed settings'); expect(second.querySelector('canvas')).toBe(canvas)
   const nextDestroy = vi.fn()
   await run.show(definition('two', async (): Promise<ExperimentInstance> => ({ destroy: nextDestroy })), first)
-  expect(destroy).toHaveBeenCalledTimes(1); expect(run.id).toBe('two')
-  run.destroy(); run.destroy(); expect(nextDestroy).toHaveBeenCalledTimes(1)
+  expect(destroy).toHaveBeenCalledTimes(1); expect(run.id).toBe('two'); expect(disposePresentation).toHaveBeenCalledTimes(1)
+  run.destroy(); run.destroy(); expect(nextDestroy).toHaveBeenCalledTimes(1); expect(disposePresentation).toHaveBeenCalledTimes(2)
 })
 
 it('does not recreate a loading run and pauses it if documentation wins the setup race', async () => {

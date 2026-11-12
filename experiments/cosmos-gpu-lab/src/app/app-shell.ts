@@ -1,117 +1,26 @@
 import type {
   ExperimentDefinition,
-  ExperimentPage,
 } from '../runtime/experiment'
 import vocabularySource from '../docs/vocabulary.md?raw'
 import reductionSource from '../docs/reduction.md?raw'
 import reductionTreeUrl from '../docs/diagrams/reduction-tree.svg?url'
 import { createRetainedRun } from '../runtime/retained-run'
-import { validationContractMarkdown } from '../runtime/validation'
 import { disposeDocumentTables } from '../runtime/result-tables'
 import { experimentGroups, findExperiment } from './registry'
-import { architectureHref, conceptHref, experimentHref, featureInventoryHref, readRoute, roadmapHref, vocabularyHref, currentSection, runHref } from './router'
+import {
+  architectureHref, articleSectionId, conceptHref, experimentHref, featureInventoryHref, readRoute, roadmapHref, vocabularyHref, currentSection,
+} from './router'
 import { indexVocabularyTerms } from './vocabulary'
 import { research } from './research'
-import { renderInvestigationContext, renderMigrationOverview } from './research-ui'
+import { renderMigrationOverview } from './research-ui'
 import { scrollToSection } from './sections'
-import { mountExperimentNotes, renderExperimentContents } from './experiment-page'
+import { resolveExperimentSection } from './article-sections'
+import { disposeExperimentNotes, mountExperimentNotes, renderExperimentContents } from './experiment-page'
 
 function requiredElement<T extends HTMLElement> (host: ParentNode, selector: string): T {
   const element = host.querySelector<T>(selector)
   if (!element) throw new Error(`Missing ${selector}`)
   return element
-}
-
-function renderNavigation (
-  host: HTMLElement,
-  activeId?: string,
-  activeReference?: 'learn' | 'vocabulary' | 'reduction' | 'architecture' | 'roadmap' | 'feature-inventory' | 'validation-workflow' | 'numerical-research'
-): void {
-  host.replaceChildren()
-  for (const group of experimentGroups) {
-    const section = document.createElement('section')
-    section.className = 'nav-group'
-    section.setAttribute('aria-labelledby', `nav-${group.id}`)
-    section.innerHTML = `<h2 class="nav-label" id="nav-${group.id}">${group.title}</h2><div class="nav-group-links"></div>`
-    const links = requiredElement<HTMLElement>(section, '.nav-group-links')
-    for (const experiment of group.experiments) {
-      const link = document.createElement('a')
-      link.href = experimentHref(experiment.id)
-      link.className = 'experiment-link'
-      link.classList.toggle('active', experiment.id === activeId)
-      if (experiment.id === activeId) link.setAttribute('aria-current', 'page')
-      link.innerHTML = `<span>${experiment.title}</span><small>${experiment.tags[0] ?? 'experiment'}</small>`
-      links.append(link)
-    }
-    host.append(section)
-  }
-
-  const reference = document.createElement('section')
-  reference.className = 'nav-group'
-  reference.setAttribute('aria-labelledby', 'nav-reference')
-  reference.innerHTML = '<h2 class="nav-label" id="nav-reference">Reference</h2><div class="nav-group-links"></div>'
-  const references = requiredElement<HTMLElement>(reference, '.nav-group-links')
-  host.append(reference)
-
-  const learn = document.createElement('a')
-  learn.href = '#/learn'
-  learn.className = 'experiment-link reference-link'
-  learn.classList.toggle('active', activeReference === 'learn')
-  learn.innerHTML = '<span>How WebGPU works</span><small>learn</small>'
-  if (activeReference === 'learn') learn.setAttribute('aria-current', 'page')
-  references.append(learn)
-
-  const roadmap = document.createElement('a')
-  roadmap.href = roadmapHref()
-  roadmap.className = 'experiment-link reference-link'
-  roadmap.classList.toggle('active', activeReference === 'roadmap')
-  roadmap.innerHTML = '<span>WebGPU migration</span><small>roadmap</small>'
-  if (activeReference === 'roadmap') roadmap.setAttribute('aria-current', 'page')
-  references.append(roadmap)
-
-  const inventory = document.createElement('a')
-  inventory.href = featureInventoryHref()
-  inventory.className = 'experiment-link reference-link'
-  inventory.classList.toggle('active', activeReference === 'feature-inventory')
-  inventory.innerHTML = '<span>Cosmos feature coverage</span><small>inventory</small>'
-  if (activeReference === 'feature-inventory') inventory.setAttribute('aria-current', 'page')
-  references.append(inventory)
-
-  for (const [id, title] of [['validation-workflow', 'Validation workflow'], ['numerical-research', 'Numerical research']] as const) {
-    const link = document.createElement('a')
-    link.href = `#/${id}`; link.className = 'experiment-link reference-link'
-    link.classList.toggle('active', activeReference === id)
-    if (activeReference === id) link.setAttribute('aria-current', 'page')
-    link.innerHTML = `<span>${title}</span><small>validation</small>`
-    references.append(link)
-  }
-
-  const architecture = document.createElement('a')
-  architecture.href = architectureHref()
-  architecture.className = 'experiment-link reference-link'
-  architecture.classList.toggle('active', activeReference === 'architecture')
-  architecture.innerHTML = '<span>Lab architecture</span><small>guide</small>'
-  if (activeReference === 'architecture') architecture.setAttribute('aria-current', 'page')
-  references.append(architecture)
-
-  const vocabulary = document.createElement('a')
-  vocabulary.href = vocabularyHref()
-  vocabulary.className = 'experiment-link reference-link'
-  vocabulary.classList.toggle('active', activeReference === 'vocabulary')
-  vocabulary.innerHTML = '<span>WebGPU vocabulary</span><small>guide</small>'
-  if (activeReference === 'vocabulary') vocabulary.setAttribute('aria-current', 'page')
-  references.append(vocabulary)
-
-  const reduction = document.createElement('a')
-  reduction.href = conceptHref('reduction')
-  reduction.className = 'experiment-link reference-link'
-  reduction.classList.toggle('active', activeReference === 'reduction')
-  reduction.innerHTML = '<span>Parallel reduction</span><small>concept</small>'
-  if (activeReference === 'reduction') reduction.setAttribute('aria-current', 'page')
-  references.append(reduction)
-  const current = host.querySelector<HTMLElement>('[aria-current="page"]')
-  if (current) current.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-  else { host.scrollTop = 0; host.scrollLeft = 0 }
 }
 
 function renderHome (host: HTMLElement): void {
@@ -299,18 +208,12 @@ function renderReductionFrame (host: HTMLElement): HTMLElement {
   return requiredElement<HTMLElement>(host, '.reference-stage')
 }
 
-function renderExperimentFrame (
-  host: HTMLElement,
-  experiment: ExperimentDefinition,
-  activePage?: ExperimentPage
-): void {
+function renderExperimentFrame (host: HTMLElement, experiment: ExperimentDefinition): void {
   const record = research[experiment.id]
-  host.innerHTML = activePage
-    ? `<a class="experiment-return" href="${experimentHref(experiment.id)}">← ${experiment.title}</a>
-      <section class="experiment-stage unified-document"></section>`
-    : `<header class="experiment-header unified-header"><h1>${experiment.title}</h1><p>${record.question}</p>
-      <p class="research-conclusion">${record.conclusion}</p></header><section class="experiment-stage unified-experiment" aria-busy="true"></section>`
-  if (!activePage) renderExperimentContents(requiredElement(host, '.experiment-stage'), experiment)
+  host.innerHTML = `<div class="experiment-document">
+    <header class="experiment-header unified-header"><h1>${experiment.title}</h1><p>${record.question}</p>
+      <p class="research-conclusion">${record.conclusion}</p></header>
+    <section class="experiment-stage unified-experiment" aria-busy="true"></section></div>`
 }
 
 function renderMissing (host: HTMLElement, id: string): void {
@@ -340,41 +243,53 @@ function renderFailure (host: HTMLElement, error: unknown): void {
 export function createAppShell (root: HTMLElement): { destroy(): void } {
   root.innerHTML = `
     <div class="app-shell">
-      <aside class="sidebar">
+      <header class="lab-header">
         <a class="brand" href="#/" aria-label="Cosmos GPU Lab home">
           <span class="brand-mark" aria-hidden="true"></span>
           <span><strong>Cosmos</strong><small>GPU Lab</small></span>
         </a>
-        <nav class="experiment-nav" aria-label="Experiments"></nav>
-        <nav class="compact-lab-navigation" aria-label="Lab navigation">
-          <a href="#/?section=experiment-catalog">Experiments</a><a href="#/roadmap">Roadmap</a><a href="#/learn">Learn</a>
+        <nav class="lab-navigation" aria-label="Lab navigation">
+          <a href="#/?section=experiment-catalog">All experiments</a><a href="#/roadmap">Roadmap</a><a href="#/learn">Learn</a>
         </nav>
-        <div class="sidebar-note">
-          <span class="status-dot"></span>
-          luma.gl v10 research workspace
-        </div>
-      </aside>
+      </header>
       <main class="workspace" tabindex="-1"></main>
     </div>
   `
 
-  const navigation = requiredElement<HTMLElement>(root, '.experiment-nav')
   const workspace = requiredElement<HTMLElement>(root, '.workspace')
-  const run = createRetainedRun()
+  const run = createRetainedRun(disposeExperimentNotes)
+  let disposeContents = (): void => {}
+  let mountedExperiment: string | undefined
+  let failedRun: HTMLElement | undefined
   let renderVersion = 0
   const scrollPositions = new Map<string, number>()
   let previousPath: string | undefined
 
+  const focusExperimentSection = (id: string): void => {
+    const original = currentSection()
+    const loading = workspace.querySelector('.unified-experiment[aria-busy="true"]')
+    const section = loading ? original : resolveExperimentSection(workspace, research[id], original)
+    if (section !== original) window.history.replaceState(null, '', `${experimentHref(id)}?section=${encodeURIComponent(section!)}`)
+    if (section) scrollToSection(workspace, section)
+    else window.scrollTo(0, 0)
+  }
+
   const render = async (): Promise<void> => {
+    const route = readRoute()
+    const definition = route.kind === 'experiment' ? findExperiment(route.experimentId) : undefined
+    const validPage = definition && (route.kind !== 'experiment' || !route.pageId || definition.pages.some(page => page.id === route.pageId))
+    if (route.kind === 'experiment' && validPage) {
+      const params = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
+      if (route.pageId) params.set('section', articleSectionId(route.pageId, currentSection() ?? undefined))
+      else if (route.view === 'evidence' && !params.has('section')) params.set('section', 'recorded-findings')
+      window.history.replaceState(null, '', `${experimentHref(route.experimentId)}${params.size ? `?${params}` : ''}`)
+      if (mountedExperiment === route.experimentId) { focusExperimentSection(route.experimentId); return }
+    }
     renderVersion += 1
     const version = renderVersion
+    disposeContents(); mountedExperiment = undefined
+    if (failedRun) { disposeExperimentNotes(failedRun); failedRun = undefined }
     disposeDocumentTables(workspace)
-    const route = readRoute()
-    if (route.kind === 'experiment' && !route.pageId && route.view) {
-      const params = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
-      if (route.view === 'evidence' && !params.has('section')) params.set('section', 'recorded-findings')
-      window.history.replaceState(null, '', `${experimentHref(route.experimentId)}${params.size ? `?${params}` : ''}`)
-    }
     if (previousPath) scrollPositions.set(previousPath, window.scrollY)
     const path = window.location.hash.split('?')[0] || '#/'
     previousPath = path
@@ -385,21 +300,9 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     }
     run.hide()
     if (route.kind === 'home' || (route.kind === 'experiment' && run.id !== route.experimentId)) {
-      if (run.id) { scrollPositions.delete(experimentHref(run.id)); scrollPositions.delete(runHref(run.id)) }
+      if (run.id) scrollPositions.delete(experimentHref(run.id))
       run.destroy()
     }
-    renderNavigation(
-      navigation,
-      route.kind === 'experiment' ? route.experimentId : undefined,
-      route.kind === 'vocabulary'
-        ? 'vocabulary'
-        : route.kind === 'concept' && route.conceptId === 'reduction'
-          ? 'reduction'
-          : route.kind === 'learn' || route.kind === 'architecture' || route.kind === 'roadmap' || route.kind === 'feature-inventory' ||
-            route.kind === 'validation-workflow' || route.kind === 'numerical-research'
-            ? route.kind
-            : undefined
-    )
     window.scrollTo(0, 0)
 
     if (route.kind === 'home') {
@@ -526,45 +429,38 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       return
     }
 
-    const page = route.pageId
-      ? experiment.pages.find(candidate => candidate.id === route.pageId)
-      : undefined
-    if (route.pageId && !page) { renderMissing(workspace, `${experiment.id}/docs/${route.pageId}`); finish(); return }
+    if (route.pageId && !experiment.pages.some(page => page.id === route.pageId)) {
+      renderMissing(workspace, `${experiment.id}/docs/${route.pageId}`); finish(); return
+    }
     const record = research[experiment.id]
-    renderExperimentFrame(workspace, experiment, page)
+    renderExperimentFrame(workspace, experiment)
+    const documentFrame = requiredElement<HTMLElement>(workspace, '.experiment-document')
     const stage = requiredElement<HTMLElement>(workspace, '.experiment-stage')
-
+    disposeContents = renderExperimentContents(documentFrame, experiment)
     try {
-      if (!page) {
+      let live: HTMLElement
+      try {
         await run.show(experiment, stage)
         if (version !== renderVersion) return
-        await mountExperimentNotes(requiredElement(stage, '.experiment-run'), experiment, record)
+        live = requiredElement(stage, '.experiment-run')
+      } catch (error) {
         if (version !== renderVersion) return
-        renderExperimentContents(stage, experiment)
-        stage.setAttribute('aria-busy', 'false')
-        scrollToSection(stage, currentSection())
-      } else if (page.kind === 'markdown') {
-        stage.innerHTML = '<div class="loading">Loading documentation…</div>'
-        const [source, renderer] = await Promise.all([page.load(), import('./markdown')])
-        if (version !== renderVersion) return
-        const method = page.id === record.method && page.id !== 'validation-contract'
-        await renderer.renderMarkdown(stage, method ? `${source}\n\n${validationContractMarkdown(experiment.id, false)}` : source, page.assets)
-        if (version !== renderVersion) return
-        const layout = stage.querySelector('.document-layout')
-        const title = layout?.querySelector('.prose > h1')
-        if (title) layout!.before(title)
-        renderInvestigationContext(stage, experiment, record, page.id)
-        scrollToSection(stage, currentSection())
-      } else {
-        stage.innerHTML = '<div class="loading">Loading results…</div>'
-        const [report, renderer] = await Promise.all([page.load(), import('./report')])
-        if (version !== renderVersion) return
-        renderer.renderReport(stage, report, experiment.id)
+        live = document.createElement('div'); live.className = 'experiment-run'
+        live.innerHTML = `<div class="run-layout"><section id="run-run"><h2>Live experiment unavailable</h2>
+          <p>The explanations and recorded findings remain available below.</p><pre></pre></section>
+          <section id="run-results"><h2>Live results</h2><p>Unavailable: the experiment could not initialize.</p></section></div>`
+        live.querySelector('pre')!.textContent = error instanceof Error ? error.message : String(error)
+        stage.append(live); failedRun = live
       }
+      mountedExperiment = experiment.id
+      await mountExperimentNotes(live, experiment, record)
+      if (version !== renderVersion) return
+      disposeContents(); disposeContents = renderExperimentContents(documentFrame, experiment)
+      stage.setAttribute('aria-busy', 'false'); mountedExperiment = experiment.id
+      if (currentSection()) focusExperimentSection(experiment.id)
     } catch (error) {
       if (version !== renderVersion) return
-      stage.setAttribute('aria-busy', 'false')
-      renderFailure(stage, error)
+      stage.setAttribute('aria-busy', 'false'); renderFailure(stage, error)
     }
     finish()
   }
@@ -573,13 +469,23 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     render().catch(error => renderFailure(workspace, error))
   }
 
+  const handleSameSection = (event: MouseEvent): void => {
+    if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !mountedExperiment) return
+    const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a[href]') : null
+    if (link && link.hash === window.location.hash && link.origin === window.location.origin && link.pathname === window.location.pathname) {
+      event.preventDefault(); focusExperimentSection(mountedExperiment)
+    }
+  }
+  root.addEventListener('click', handleSameSection)
   window.addEventListener('hashchange', handleRoute)
   window.addEventListener('beforeunload', run.destroy)
   handleRoute()
   return {
     destroy (): void {
       disposeDocumentTables(workspace)
-      renderVersion++; run.destroy()
+      renderVersion++; disposeContents(); run.destroy()
+      if (failedRun) disposeExperimentNotes(failedRun)
+      root.removeEventListener('click', handleSameSection)
       window.removeEventListener('hashchange', handleRoute)
       window.removeEventListener('beforeunload', run.destroy)
       root.replaceChildren()

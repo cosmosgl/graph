@@ -3,7 +3,7 @@
 type Dispose = () => void
 const documents = new WeakMap<HTMLElement, Dispose>()
 
-export function createResultTables (host: HTMLElement): { refresh(): void; destroy(): void } {
+export function createResultTables (host: HTMLElement, scope: { only?: string; exclude?: string } = {}): { refresh(): void; destroy(): void } {
   const regions = new Map<HTMLTableElement, { region: HTMLElement; hint: HTMLElement }>()
   const update = (): void => {
     for (const [table, { region, hint }] of regions) {
@@ -17,6 +17,7 @@ export function createResultTables (host: HTMLElement): { refresh(): void; destr
   return {
     refresh (): void {
       for (const table of host.querySelectorAll('table')) {
+        if ((scope.only && !table.closest(scope.only)) || (scope.exclude && table.closest(scope.exclude))) continue
         if (regions.has(table)) continue
         let region = table.parentElement!
         if (!region.matches('.table-scroll, .precision-table, .result-table-scroll')) {

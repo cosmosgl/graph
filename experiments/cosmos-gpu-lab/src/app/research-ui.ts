@@ -35,7 +35,7 @@ export function renderMigrationOverview (host: HTMLElement, detailed = false): v
         <div class="migration-links">
           <a href="${runHref(migrationFocus.experiment)}">Run styling and picking</a>
           <a href="${experimentHref(migrationFocus.experiment, focus.evidence)}">Recorded controls</a>
-          <a href="${experimentHref(migrationFocus.experiment, focus.method)}?section=acceptance">Acceptance criteria</a>
+          <a href="${experimentHref(migrationFocus.experiment, 'validation-contract', 'acceptance')}">Acceptance criteria</a>
         </div>
       </section>
     </div></div>
