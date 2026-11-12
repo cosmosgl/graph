@@ -1,6 +1,7 @@
 import { nearLimit, type Input, type Parameters } from './data'
 export type Snapshot = { forces: Float32Array; positions: Float32Array }
-// Fixed before GPU evaluation: operation-rounding reference, not bitwise identity.
+// Legacy float32 compatibility model, independently coded; not an exact-real oracle
+// or an emulator of every GPU-permitted evaluation. Preserve this historical gate.
 export const TOLERANCE = { absolute: 2e-5, relative: 3e-5 }
 const f = Math.fround
 

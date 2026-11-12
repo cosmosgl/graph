@@ -12,11 +12,13 @@ import { createSamplingPolicy, forceSettings, type ProductionPreset } from '../c
 import { repulsionMethod } from '../combined-layout/repulsion-policy'
 import type { CombinedBackend } from '../combined-layout/backend'
 import type { CenterCostReport } from '../combined-layout/center-cost'
+import { validationContracts, type ValidationContract } from '../../runtime/validation'
 import { quality, stressPairs } from './metrics'
+import { assessMatchedEvidence, type MatchedAssessment } from './assessment'
 export const NAMES = ['webgl', 'webgpu', 'cpu'] as const
 export type Name = typeof NAMES[number]
 type GpuName = Exclude<Name, 'cpu'>
-export const LABELS: Record<Name, string> = { webgl: 'Production GLSL · WebGL', webgpu: 'luma WebGPU', cpu: 'CPU reference' }
+export const LABELS: Record<Name, string> = { webgl: 'Production GLSL · WebGL', webgpu: 'luma WebGPU', cpu: 'CPU float32 model' }
 export type Settings = {
   count: number; fixture: 'chain' | 'communities' | 'star'; distribution: 'uniform' | 'clusters';
   ticks: number; checkpointEvery: number; preset: ProductionPreset; pinned: boolean; center?: number;
@@ -37,6 +39,7 @@ export async function createMatchedSession (settings: Settings, canvas: (name: G
   settings: Settings; graph: ReturnType<typeof createGraph>['graph']; lanes: Lane[];
   report: {
     schemaVersion: number; experiment: string; recordedAt: string; browser: string; settings: Settings;
+    validationContract: ValidationContract; readonly assessment: MatchedAssessment;
     parameters: ReturnType<typeof forceSettings>; method: string;
     tolerances: { repulsionTolerance: typeof repulsionTolerance; springTolerance: typeof springTolerance };
     physics: { gravity: number; repulsion: typeof REPULSION; springs: typeof SPRINGS }; policy: string;
@@ -68,8 +71,10 @@ export async function createMatchedSession (settings: Settings, canvas: (name: G
   const oracle = createOracle(graph, input, 'production', parameters); const sampler = createSamplingPolicy(settings.count)
   const method = repulsionMethod(settings.count, 'production'); const sampled = stressPairs(graph)
   const report = {
-    schemaVersion: 2,
+    schemaVersion: 3,
     experiment: 'matched-layout',
+    validationContract: validationContracts['matched-layout'],
+    get assessment (): MatchedAssessment { return assessMatchedEvidence(this.rows, this.probe, this.errors) },
     recordedAt: new Date().toISOString(),
     browser: navigator.userAgent,
     settings: { ...settings },

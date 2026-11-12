@@ -2,6 +2,12 @@
 
 Can Cosmos’s WebGL forces and the proposed WebGPU port produce comparable layouts under the same inputs? This page studies that question separately from runtime performance.
 
+The live **Evidence by contract** summary and JSON schema v3 classify the existing scalar checks as
+**legacy compatibility**. Flags and diagnostic restoration are limited behavioral checks. Layout
+quality is **measured only**; independent mathematical accuracy and runtime performance are **not
+assessed** here. These labels preserve the original thresholds and failures. See the
+[validation workflow](#/validation-workflow) and [research report](#/numerical-research).
+
 The WebGL lane imports the production gravity, exact/hierarchical repulsion, springs and integration GLSL, hosted through luma v10. It is not the complete production `Graph` runtime. The WebGPU lane uses luma kernels with the strict arithmetic candidate, ordered cached-small aggregation and order-preserving hub prefetch. The scalar CPU reference reproduces float32 operation order independently.
 
 The optional [center attraction](#/matched-layout/docs/center) now inserts centroid reduction, center force and integration after gravity. The current demo selects strength 1 for comparison; the production default and the original baseline are center **off**. Center-on bounds and the shared occupancy tape use post-center positions. Its independent CPU aggregate uses double-precision summation followed by float32 format rounding.

@@ -1,5 +1,7 @@
 import { distanceSample, validIndex, type GraphInput, type Parameters } from './data'
 const f = Math.fround
+// Structural independence comes from edge lists; stepwise f32 arithmetic models
+// legacy compatibility. Mathematical accuracy and layout quality need separate checks.
 export type Snapshot = { firstForce: Float32Array; intermediate: Float32Array; secondForce: Float32Array; positions: Float32Array }
 // Independent JavaScript lists retain original edge IDs; this never consumes the GPU CSR/properties.
 export function createReferenceIndex (graph: GraphInput): {

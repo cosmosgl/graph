@@ -5,6 +5,11 @@
 The CPU iterates over the same `Float32Array` used for GPU upload, but JavaScript arithmetic accumulates the values as
 double-precision numbers. This is a useful reference, not a claim that the GPU should match every bit.
 
+Reference role: **mathematical control** on the uploaded coordinates. This double sum is not an
+exact-sum guarantee for arbitrary inputs. Count is a discrete contract; center accuracy and legacy
+arithmetic agreement are different questions. See the shared [validation workflow](#/validation-workflow)
+and [controlled cancellation study](#/precision-diagnostics/docs/method).
+
 ## Why the answers differ
 
 Floating-point addition is not associative:

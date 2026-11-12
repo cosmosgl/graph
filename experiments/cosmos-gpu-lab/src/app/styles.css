@@ -1876,6 +1876,9 @@ button[data-action="play"][aria-pressed="true"] {
 .many-body-results { margin: 20px 0; overflow-x: auto; }
 .many-body-results table { width: 100%; border-collapse: collapse; font-size: 12px; }
 .many-body-results caption { padding: 0 0 12px; text-align: left; color: #afb3bb; }
+.precision-table { overflow-x: auto; }
+.precision-table table { min-width: 820px; }
+.precision-table td { white-space: nowrap; }
 .many-body-results th, .many-body-results td { padding: 10px; border-bottom: 1px solid var(--control-border); text-align: left; }
 @media (max-width: 1100px) { .many-body-panels { grid-template-columns: 1fr; } }
 .many-body-benchmark { margin-top: 40px; padding-top: 24px; border-top: 1px solid #3a404a; }

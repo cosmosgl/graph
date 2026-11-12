@@ -16,7 +16,8 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
   const presets = Object.entries(PRESETS).map(([key, title]) =>
     `<option value="${key}"${key === 'adaptive' ? ' selected' : ''}>${title}</option>`).join('')
   host.innerHTML = `<p class="demo-note">Three independent layouts, one initial graph and random-sample schedule.
-    Numerical checks replay a common CPU starting state, then restore the live GPU layouts. Quality metrics never change the tolerance.</p>
+    Legacy compatibility checks replay a common CPU starting state, then restore the live GPU layouts.
+    They test a float32 operation model, not an independent mathematical accuracy contract. Quality metrics never change the tolerance.</p>
     <div class="scale-toolbar">
       <label>Graph <select data-control="fixture"><option>chain</option><option>communities</option><option>star</option></select></label>
       <label>Points <select data-control="count"><option selected>128</option><option>512</option>
@@ -41,6 +42,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
       <canvas width="480" height="340" data-canvas="${name}" aria-label="${LABELS[name]} layout"></canvas>
       <p class="demo-note" data-info="${name}"></p></article>`).join('')}</div></section>
     <p class="demo-note" data-output="method"></p>
+    <div data-output="assessment" class="many-body-results"></div>
     <div data-output="quality" class="many-body-results"></div><div data-output="probe" class="many-body-results"></div>
     <div data-output="charts" class="trajectory-chart"></div><div data-output="checks" class="many-body-results"></div>
     <div data-output="center-cost" class="many-body-results"></div>
@@ -97,10 +99,10 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     for (const name of NAMES) {
       const failed = name === 'cpu' ? 0 : report.rows.filter(r => r.checks[name]?.valid === false).length
       el(`[data-state="${name}"]`).textContent = name === 'cpu'
-        ? 'Independent reference'
+        ? 'Independent operation model'
         : report.errors[name]
           ? 'Unavailable / stopped'
-          : failed ? `${failed} failed checks` : `${report.rows.filter(r => r.checks[name]?.valid).length} checkpoints pass`
+          : failed ? `${failed} compatibility failures` : `${report.rows.filter(r => r.checks[name]?.valid).length} compatibility checkpoints pass`
       el(`[data-info="${name}"]`).textContent = name === 'cpu'
         ? 'Float32 scalar operations · Canvas2D preview'
         : report.errors[name] ?? report.devices[name] ?? ''
@@ -111,6 +113,18 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     el('[data-output="method"]').textContent = `${method} repulsion · ${sampling} · center ${session.settings.center ?? 0} after gravity · ` +
       `origin (2048, 2048) · shared camera · orange pinned. ${settingsNote(session.settings)} ` +
       'Frozen checks: first, every 10 ticks and final. Unchecked ticks have no numerical verdict.'
+    const assessment = report.assessment
+    el('[data-output="assessment"]').innerHTML = `<h3>Evidence by contract</h3>
+      <table><thead><tr><th>Path</th><th>Flags and restoration only</th><th>Legacy compatibility</th>
+        <th>Checked ticks / probe</th><th>Finite layouts</th></tr></thead>
+      <tbody>${(['webgl', 'webgpu'] as const).map(name => {
+    const evidence = assessment.lanes[name]
+    return `<tr><td>${LABELS[name]}</td><td>${evidence.flagsAndRestoration}</td><td>${evidence.legacyCompatibility}</td>
+      <td>${evidence.checkedTicks} / ${evidence.probeChecked ? 'checked' : 'not checked'}</td><td>${evidence.finiteLayouts}</td></tr>`
+  }).join('')}</tbody></table>
+      <p class="demo-note">Independent mathematical accuracy: ${assessment.numericalAccuracy}. Layout quality: ${assessment.layoutQuality}.
+        Runtime performance: ${assessment.performance} (center cost, when requested, is a separate bounded study).
+        These flag/restoration checks do not certify complete behavioral contracts. Finite output alone is not numerical accuracy.</p>`
     el('[data-output="quality"]').innerHTML = row ? qualityTable(row, `Independent trajectories · tick ${row.tick}`) : ''
     el('[data-output="probe"]').innerHTML = report.probe ? qualityTable(report.probe, 'One full-strength diagnostic tick · original layouts restored') : ''
     const checkpoints = report.rows.filter(r => Object.keys(r.checks).length)
@@ -119,7 +133,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
       return `${LABELS[r.name]} ${result}, ${restored}`
     }).join(' · ')
     el('[data-output="checks"]').innerHTML = checkpoints.length
-      ? `<h3>Frozen-input numerical checks</h3>
+      ? `<h3>Frozen-input legacy compatibility checks</h3>
       <p class="demo-note">Both GPUs start each checked tick from the same CPU state. Local checks use each stage’s actual input;
         whole-tick checks use the uninterrupted CPU result. Every diagnostic restores the independent layout bit for bit.</p>
       <p>${(['webgl', 'webgpu'] as const).map(name => {
@@ -241,7 +255,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
         Object.keys(session.report.errors).length
           ? 'Partial comparison; see backend errors.'
           : session.report.rows.some(r => Object.values(r.checks).some(c => !c.valid))
-            ? 'Numerical failures remain recorded below; quality is diagnostic.'
+            ? 'Legacy compatibility failures remain recorded below; quality is diagnostic.'
             : 'Completed checkpoints pass; other ticks are unchecked. Use the full-strength probe to test residual motion.'}`
     }
   }

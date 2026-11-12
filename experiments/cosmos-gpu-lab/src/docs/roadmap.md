@@ -6,6 +6,13 @@ The destination is **full WebGPU simulation and rendering sharing resident GPU s
 
 ## 1. Where we are
 
+Use the [validation workflow](#/validation-workflow) and [numerical research report](#/numerical-research)
+to distinguish accuracy, legacy arithmetic compatibility, behavior, quality and cost. Every example
+declares its comparison contract. [Precision diagnostics](#/precision-diagnostics) compares analytic
+gravity and bounded cancellation sums without changing historical gates or selecting a production
+policy. Independent candidate integration, runtime adaptation and agreed quality budgets remain
+acceptance work.
+
 We are primarily in **simulation-prototype validation**, milestone 2. The basic luma execution path works, while milestone 1's production ownership and dependency decisions remain open. Rendering is at its first primitives; complete library integration and the production envelope remain ahead.
 
 | Area | Demonstrated scope | Remaining acceptance |

@@ -19,7 +19,7 @@ function requiredElement<T extends HTMLElement> (host: ParentNode, selector: str
 function renderNavigation (
   host: HTMLElement,
   activeId?: string,
-  activeReference?: 'learn' | 'vocabulary' | 'reduction' | 'architecture' | 'roadmap' | 'feature-inventory'
+  activeReference?: 'learn' | 'vocabulary' | 'reduction' | 'architecture' | 'roadmap' | 'feature-inventory' | 'validation-workflow' | 'numerical-research'
 ): void {
   host.replaceChildren()
   for (const group of experimentGroups) {
@@ -71,6 +71,15 @@ function renderNavigation (
   if (activeReference === 'feature-inventory') inventory.setAttribute('aria-current', 'page')
   references.append(inventory)
 
+  for (const [id, title] of [['validation-workflow', 'Validation workflow'], ['numerical-research', 'Numerical research']] as const) {
+    const link = document.createElement('a')
+    link.href = `#/${id}`; link.className = 'experiment-link reference-link'
+    link.classList.toggle('active', activeReference === id)
+    if (activeReference === id) link.setAttribute('aria-current', 'page')
+    link.innerHTML = `<span>${title}</span><small>validation</small>`
+    references.append(link)
+  }
+
   const architecture = document.createElement('a')
   architecture.href = architectureHref()
   architecture.className = 'experiment-link reference-link'
@@ -110,6 +119,11 @@ function renderHome (host: HTMLElement): void {
       </p>
     </section>
     <div class="home-sections">
+    <a class="reference-card" href="#/validation-workflow">
+      <span class="card-index">VALIDATION</span>
+      <span><strong>Validation workflow</strong><small>Separate behavioral contracts, accuracy, compatibility, quality and cost</small></span>
+      <span aria-hidden="true">→</span>
+    </a>
     <a class="reference-card" href="${roadmapHref()}">
       <span class="card-index">THE JOURNEY</span>
       <span>
@@ -309,6 +323,13 @@ function renderExperimentFrame (
   for (const page of experiment.pages) {
     tabs.append(createTab(page.title, experimentHref(experiment.id, page.id), page.id === activePage?.id))
   }
+  if (!activePage) {
+    const note = document.createElement('p'); note.className = 'demo-note'
+    const link = document.createElement('a'); link.href = experimentHref(experiment.id, 'validation-contract')
+    link.textContent = 'Validation contract'
+    note.append(link, ' · Reference, acceptance rules, checked population and limits. A completed run is not a production approval.')
+    tabs.after(note)
+  }
 }
 
 function renderMissing (host: HTMLElement, id: string): void {
@@ -375,7 +396,10 @@ export function createAppShell (root: HTMLElement): void {
         ? 'vocabulary'
         : route.kind === 'concept' && route.conceptId === 'reduction'
           ? 'reduction'
-          : route.kind === 'learn' || route.kind === 'architecture' || route.kind === 'roadmap' || route.kind === 'feature-inventory' ? route.kind : undefined
+          : route.kind === 'learn' || route.kind === 'architecture' || route.kind === 'roadmap' || route.kind === 'feature-inventory' ||
+            route.kind === 'validation-workflow' || route.kind === 'numerical-research'
+            ? route.kind
+            : undefined
     )
 
     if (route.kind === 'home') {
@@ -406,6 +430,24 @@ export function createAppShell (root: HTMLElement): void {
         if (version !== renderVersion) return
         renderFailure(stage, error)
       }
+      return
+    }
+
+    if (route.kind === 'validation-workflow' || route.kind === 'numerical-research') {
+      const title = route.kind === 'validation-workflow' ? 'Validation workflow' : 'Numerical research'
+      workspace.innerHTML = `<header class="experiment-header reference-header"><div>
+        <p class="eyebrow">Migration evidence</p><h1>${title}</h1>
+        <p>Behavior, numerical accuracy, compatibility, layout quality and cost.</p>
+        </div></header><section class="experiment-stage reference-stage"></section>`
+      const stage = requiredElement<HTMLElement>(workspace, '.reference-stage')
+      try {
+        const [source, renderer] = await Promise.all([
+          route.kind === 'validation-workflow' ? import('../docs/validation-workflow.md?raw') : import('../docs/numerical-research.md?raw'),
+          import('./markdown'),
+        ])
+        if (version !== renderVersion) return
+        await renderer.renderMarkdown(stage, source.default)
+      } catch (error) { if (version === renderVersion) renderFailure(stage, error) }
       return
     }
 
