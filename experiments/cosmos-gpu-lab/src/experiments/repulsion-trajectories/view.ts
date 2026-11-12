@@ -1,10 +1,11 @@
+import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { fitView } from '../many-body/backend'
 import { PARAMETERS, type Fixture } from '../many-body/data'
 import { TOLERANCE } from '../many-body/reference'
 import { createTrajectorySession, LANES, LABELS, type Lane, type TrajectorySession } from './session'
 const number = (v: number): string => Number.isFinite(v) ? v.toExponential(2) : 'non-finite'
-const colors = { webgl: '#e7b882', materialized: '#9fb5d5', streamed: '#c7b1e0' }
+const colors = { webgl: comparisonSeries.webgl, materialized: comparisonSeries.webgpu, streamed: comparisonSeries.cpu }
 export async function createTrajectories (host: HTMLElement): Promise<ExperimentInstance> {
   host.innerHTML = `<p class="demo-note">Each path keeps its own positions and bounds. Every GPU tick is checked against CPU arithmetic on that path's input.
     Position drift is reported separately. Repulsion alone expands the layout; springs, gravity and cooling are not active.</p>
@@ -52,10 +53,10 @@ export async function createTrajectories (host: HTMLElement): Promise<Experiment
       }
     }
     const c = canvas('CPU'); const ctx = c.getContext('2d')!
-    ctx.fillStyle = '#13161b'; ctx.fillRect(0, 0, c.width, c.height)
+    ctx.fillStyle = graphPalette.background; ctx.fillRect(0, 0, c.width, c.height)
     for (let i = 0; i < cpu.length; i += 4) {
       if (cpu[i + 3] > 0.5) continue
-      ctx.fillStyle = cpu[i + 2] > 0.5 ? '#ffb866' : '#9fb5d5'
+      ctx.fillStyle = cpu[i + 2] > 0.5 ? graphPalette.pinned : graphPalette.point
       ctx.beginPath()
       ctx.arc(((cpu[i] - view[0]) * view[2] + 1) * c.width / 2,
         (1 - (cpu[i + 1] - view[1]) * view[3]) * c.height / 2, 2.5, 0, Math.PI * 2)
@@ -109,8 +110,8 @@ export async function createTrajectories (host: HTMLElement): Promise<Experiment
       const c = r.checks.find(c => c.name === name)
       return c && Number.isFinite(c.drift.rms) ? [`${x(r.tick)},${y(c.drift.rms)}`] : []
     })
-    return `<polyline points="${points.join(' ')}" fill="none" stroke="${colors[name]}" stroke-width="2"/>`
-  }).join('')}</svg><p>${LANES.map(name => `<span style="color:${colors[name]}">${LABELS[name]}</span>`).join(' · ')}</p>`
+    return `<polyline points="${points.join(' ')}" fill="none" stroke="${colors[name].color}" stroke-dasharray="${colors[name].dash}" stroke-width="2"/>`
+  }).join('')}</svg><p>${LANES.map(name => seriesKey(colors[name], LABELS[name])).join(' · ')}</p>`
   }
   const setup = async (): Promise<void> => {
     session?.destroy(); session = undefined; status.textContent = 'Preparing independent paths…'

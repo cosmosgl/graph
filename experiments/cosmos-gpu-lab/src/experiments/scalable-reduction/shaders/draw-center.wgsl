@@ -24,5 +24,5 @@ fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 
 @fragment
 fn fragmentMain() -> @location(0) vec4f {
-  return vec4f(0.94, 0.43, 0.36, 1.0);
+  return graphHighlightColor;
 }

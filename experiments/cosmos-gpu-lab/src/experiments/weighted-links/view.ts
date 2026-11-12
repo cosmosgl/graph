@@ -75,7 +75,7 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
     </section>
     <p class="demo-note">Both directions retain input link order. One tick = source-side spring → integrate → target-side spring → integrate → draw.
       Validation reads both forces and both position substeps. The measured tick has no position readback or CPU reference work.
-      Orange points are pinned; absent points and their incident links are hidden.</p>
+      Yellow points are pinned; absent points and their incident links are hidden.</p>
     <p data-output="status" role="status">Creating backends…</p>
     <div class="markdown-body" data-output="results"></div>
   `

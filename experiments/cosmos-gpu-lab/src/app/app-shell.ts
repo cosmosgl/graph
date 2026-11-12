@@ -311,11 +311,10 @@ function renderExperimentFrame (
 ): void {
   const record = research[experiment.id]
   host.innerHTML = `
-    <header class="experiment-header${record?.pilot ? ' pilot-header' : ''}">
+    <header class="experiment-header">
       <div>
-        ${record?.pilot ? '' : `<p class="eyebrow">Experiment · ${experiment.tags.join(' · ')}</p>`}
         <h1>${experiment.title}</h1>
-        ${record?.pilot ? !activePage && !view ? `<p>${record.question}</p>` : '' : `<p>${experiment.summary}</p>`}
+        ${!activePage && !view ? `<p>${record?.pilot ? record.question : experiment.summary}</p>` : ''}
       </div>
     </header>
     <nav class="page-tabs" aria-label="Experiment sections"></nav>

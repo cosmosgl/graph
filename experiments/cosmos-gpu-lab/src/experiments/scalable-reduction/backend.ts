@@ -1,5 +1,6 @@
 import { Buffer, type ComputePass, type Bindings } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
+import { graphRgba, graphWgsl } from '../../runtime/palette'
 import { bindingLayout, createDevice, createStorageRenderer, readFloats, upload, waitForGpu } from '../../gpu/luma'
 import drawCenterShader from './shaders/draw-center.wgsl?raw'
 import drawPointsShader from './shaders/draw-points.wgsl?raw'
@@ -96,10 +97,10 @@ export async function createScalableReductionBackend (canvas: HTMLCanvasElement,
     count = outputCount; input = output
   } while (count > 1)
   const final = output
-  const points = createStorageRenderer(device, drawPointsShader, 'point-list', bindingLayout([
+  const points = createStorageRenderer(device, graphWgsl + drawPointsShader, 'point-list', bindingLayout([
     ['positions', 'read-only-storage'], ['parameters', 'uniform'],
   ]))
-  const marker = createStorageRenderer(device, drawCenterShader, 'triangle-list', bindingLayout([
+  const marker = createStorageRenderer(device, graphWgsl + drawCenterShader, 'triangle-list', bindingLayout([
     ['result', 'read-only-storage'], ['parameters', 'uniform'],
   ]))
   let initialized = false; let destroyed = false
@@ -121,7 +122,7 @@ export async function createScalableReductionBackend (canvas: HTMLCanvasElement,
         initialized = true
       }
       reduce(compute); compute.end()
-      const pass = device.beginRenderPass({ clearColor: [0.09, 0.1, 0.12, 1], clearDepth: false })
+      const pass = device.beginRenderPass({ clearColor: graphRgba.background, clearDepth: false })
       points.kernel.draw(pass, { vertexArray: points.vertexArray, vertexCount: renderedPointCount, bindings: { positions, parameters: drawParameters } })
       marker.kernel.draw(pass, { vertexArray: marker.vertexArray, vertexCount: 6, bindings: { result: final, parameters: centerParameters } })
       pass.end(); device.submit()

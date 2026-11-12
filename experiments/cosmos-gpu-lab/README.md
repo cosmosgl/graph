@@ -30,6 +30,20 @@ pnpm --filter @cosmos.gl/gpu-lab dev
 The application uses hash routes, so experiment demos and documentation pages can be linked directly without server
 rewrite configuration.
 
+## Interface palette
+
+Keep charcoal surfaces and neutral reading text. Shared tokens in `src/app/styles.css` use pale
+King’s blue (`--accent`, `#aac7e8`) for links, focus and selected controls; Naples yellow
+(`--highlight`, `#f4d889`) for sparse priority/context highlights; and coral (`--danger`, `#ed695b`)
+for errors, with a lighter `--danger-text` for small labels on raised surfaces. Preserve text or
+structural cues alongside color, such as error messages, active underlines and context borders.
+
+Graph presentation uses `src/runtime/palette.ts` across CPU canvases and GPU render shaders:
+blue free points, yellow pins/center markers, charcoal backgrounds and neutral links. Comparison
+charts use solid blue for WebGPU, dashed yellow for WebGL and dotted coral for CPU; trajectory
+variants use the same three styles with their own labels. Keep diagnostic color fixtures and
+spatial-grid encodings independent of the presentation palette.
+
 ## Add an experiment
 
 Create `src/experiments/<id>/experiment.ts` and export an `ExperimentDefinition`. Vite discovers experiment manifests
@@ -113,6 +127,11 @@ These use DOM/SVG and JavaScript, require no GPU and make no performance claims.
 Keep settings, explanations, validation tables and chapter navigation visible in ordinary sections.
 Use headings and section links to organize long content instead of accordions, including reports
 created after running an experiment. Use the shared body typography for these section headings.
+Apply the same three text roles to every experiment and document: page title, 14px reading text
+(including section headings, controls and result values), and 12px secondary metadata. Distinguish
+sections with spacing and medium weight rather than extra sizes, uppercase labels or heavy bold.
+Use the shared wrapping tab navigation and control grid; keep wide tables within their own horizontal
+scroll container, with all rows visible. These rules apply to the whole lab, including older experiments.
 
 The learning guide lives in `src/docs/learn-webgpu.md`; its small interactive examples live in
 `src/app/learning-examples.ts`. An `example` fence contains a registered example name, such as

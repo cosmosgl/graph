@@ -1,5 +1,6 @@
 import { Buffer, type Device, type RenderPass, type ComputePass } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
+import { graphRgb, graphRgba } from '../../runtime/palette'
 import { bindingLayout, createDevice, createStorageRenderer, readFloats, upload, waitForGpu } from '../../gpu/luma'
 import { resourceScope, type BufferLedger } from '../../gpu/resource-scope'
 import type { Backend, View, PositionSource, ComputeScope } from './backend'
@@ -18,7 +19,7 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
   let p = positions[i]; var result: Vertex;
   result.position = vec4(3.,3.,0.,1.);
   if (p.w <= 0.5) { result.position = vec4((p.xy - view.xy) * view.zw + corners[v] * vec2(5. / 480., 5. / 340.), 0., 1.); }
-  result.uv = corners[v]; result.color = select(vec3(0.62,0.71,0.84),vec3(1.,0.72,0.4), p.z > 0.5);
+  result.uv = corners[v]; result.color = select(vec3(${graphRgb.point}),vec3(${graphRgb.pinned}), p.z > 0.5);
   return result;
 }
 @fragment fn fragmentMain(input: Vertex) -> @location(0) vec4<f32> {
@@ -218,7 +219,7 @@ export async function createWebGPU (
       },
       render (view, timing = {}, submit = true): void {
         healthy(); viewBuffer.write(new Float32Array(view))
-        const pass = device.beginRenderPass({ clearColor: [0.075, 0.087, 0.105, 1], clearDepth: false, ...timing })
+        const pass = device.beginRenderPass({ clearColor: graphRgba.background, clearDepth: false, ...timing })
         try {
           if (count) {
             extension?.render?.(current, view, pass)

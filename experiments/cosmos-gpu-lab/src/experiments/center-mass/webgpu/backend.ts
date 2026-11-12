@@ -1,5 +1,6 @@
 import { Buffer } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
+import { graphRgba, graphWgsl } from '../../../runtime/palette'
 import { bindingLayout, createDevice, createStorageRenderer, readFloats, upload } from '../../../gpu/luma'
 import type { BackendResult, CenterMassBackend } from '../backend'
 import drawCenterShader from './shaders/draw-center.wgsl?raw'
@@ -34,8 +35,8 @@ export async function createWebGPUCenterMass (canvas: HTMLCanvasElement, pointCo
         ]),
       },
     })
-    const points = createStorageRenderer(device, drawShader, 'point-list', bindingLayout([['positions', 'read-only-storage']]))
-    const marker = createStorageRenderer(device, drawCenterShader, 'triangle-list', bindingLayout([['uniforms', 'uniform']]))
+    const points = createStorageRenderer(device, graphWgsl + drawShader, 'point-list', bindingLayout([['positions', 'read-only-storage']]))
+    const marker = createStorageRenderer(device, graphWgsl + drawCenterShader, 'triangle-list', bindingLayout([['uniforms', 'uniform']]))
     return {
       label: 'WebGPU · luma two-stage f32 reduction',
       async run (data: Float32Array): Promise<BackendResult> {
@@ -47,7 +48,7 @@ export async function createWebGPUCenterMass (canvas: HTMLCanvasElement, pointCo
         const values = await readFloats(result)
         const center = { x: values[0] / values[2], y: values[1] / values[2], count: values[2] }
         uniforms.write(new Float32Array([center.x, center.y, 2 / canvas.width, 2 / canvas.height]))
-        const pass = device.beginRenderPass({ clearColor: [0.09, 0.1, 0.12, 1], clearDepth: false })
+        const pass = device.beginRenderPass({ clearColor: graphRgba.background, clearDepth: false })
         points.kernel.draw(pass, { vertexArray: points.vertexArray, vertexCount: pointCount, bindings: { positions } })
         marker.kernel.draw(pass, { vertexArray: marker.vertexArray, vertexCount: 6, bindings: { uniforms } })
         pass.end(); device.submit()

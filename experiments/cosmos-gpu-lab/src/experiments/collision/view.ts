@@ -1,3 +1,4 @@
+import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import { organizeRunControls } from '../../runtime/run-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { collisionView } from './camera'
@@ -63,7 +64,7 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
     <div class="many-body-results" data-output="overlap"></div><div class="many-body-results" data-output="checks"></div></section>
     <section data-run-section="diagnostics">
     <div class="many-body-results" data-output="cost"></div>
-    <p class="demo-note">Exact all-pairs collision, limited to small graphs. Discs show effective world-space radii; orange centers are pinned.
+    <p class="demo-note">Exact all-pairs collision, limited to small graphs. Discs show effective world-space radii; yellow centers are pinned.
       Validation includes readback and CPU work. Use the paired GPU measurement for cost, not the elapsed validation time.
       <a href="#/collision/docs/method">Method and scope</a> · <a href="#/collision/docs/precision">Targeted findings</a> ·
       <a href="#/collision/docs/trajectories">Native baseline</a> ·
@@ -101,16 +102,17 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       }
     }
     const c = canvas('cpu'); const ctx = c.getContext('2d')!
-    ctx.fillStyle = '#13161b'; ctx.fillRect(0, 0, c.width, c.height)
+    ctx.fillStyle = graphPalette.background; ctx.fillRect(0, 0, c.width, c.height)
     for (let i = 0; i < graph.sizes.length; i++) {
       if (cpu[i * 4 + 3] > 0.5) continue
       const x = ((cpu[i * 4] - view[0]) * view[2] + 1) * 240; const y = (1 - (cpu[i * 4 + 1] - view[1]) * view[3]) * 170
       const r = radius(graph.sizes[i], settings.collision) * view[3] * 170
       const pinned = cpu[i * 4 + 2] > 0.5
       // Keep the outline inside the physical radius, like both GPU shaders.
-      ctx.fillStyle = pinned ? '#e7b882' : '#9fb5d5'; ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.fill()
-      ctx.fillStyle = pinned ? '#5d4934' : '#3f4956'; ctx.beginPath(); ctx.arc(x, y, r * 0.88, 0, 2 * Math.PI); ctx.fill()
-      ctx.fillStyle = pinned ? '#ffb866' : '#9fb5d5'; ctx.beginPath(); ctx.arc(x, y, 2.5, 0, 2 * Math.PI); ctx.fill()
+      ctx.fillStyle = pinned ? graphPalette.pinned : graphPalette.point; ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.fill()
+      ctx.fillStyle = pinned ? graphPalette.pinnedInterior : graphPalette.pointInterior
+      ctx.beginPath(); ctx.arc(x, y, r * 0.88, 0, 2 * Math.PI); ctx.fill()
+      ctx.fillStyle = pinned ? graphPalette.pinned : graphPalette.point; ctx.beginPath(); ctx.arc(x, y, 2.5, 0, 2 * Math.PI); ctx.fill()
     }
     el('[data-output="tick"]').textContent = String(report.rows.length)
     el('[data-output="pipeline"]').textContent = `${settings.mode === 'combined'
@@ -160,7 +162,7 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       All paths share the initial graph, fixed random samples and alpha schedule.
       ${settings.evolution === 'shared' ? 'Shared-input mode resets both GPUs each tick.' : ''}</p>`
       : ''
-    const colors = { webgl: '#e7b882', webgpu: '#9fb5d5', cpu: '#c7b1e0' }
+    const colors = comparisonSeries
     const charts = [
       { title: 'RMS drift from CPU · world units', value: (r: typeof row, name: typeof NAMES[number]): number | undefined => r?.metrics[name]?.drift.rms },
       {
@@ -169,14 +171,15 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       },
     ]
     el('[data-output="charts"]').innerHTML = row
-      ? `<p>${NAMES.map(n => `<span style="color:${colors[n]}">${LABELS[n]}</span>`).join(' · ')}</p>${charts.map(chart => {
+      ? `<p>${NAMES.map(n => seriesKey(colors[n], LABELS[n])).join(' · ')}</p>${charts.map(chart => {
         const values = report.rows.flatMap(r => NAMES.map(n => chart.value(r, n))).filter((v): v is number => v !== undefined && Number.isFinite(v))
         const max = Math.max(1e-12, ...values)
         return `<h3>${chart.title}</h3><svg viewBox="0 0 720 170" role="img" aria-label="${chart.title} over ${row.tick} ticks">
         <path d="M60 20 V135 H690" stroke="currentColor" opacity="0.3" fill="none"/>
-        <text x="0" y="24" fill="currentColor" font-size="11">${num(max)}</text><text x="45" y="139" fill="currentColor" font-size="11">0</text>
-        <text x="60" y="160" fill="currentColor" font-size="11">Tick 1</text><text x="630" y="160" fill="currentColor" font-size="11">Tick ${row.tick}</text>
-        ${NAMES.map(n => `<polyline fill="none" stroke="${colors[n]}" stroke-width="1.5" points="${report.rows.flatMap(r => {
+        <text x="0" y="24" fill="currentColor" font-size="12">${num(max)}</text><text x="45" y="139" fill="currentColor" font-size="12">0</text>
+        <text x="60" y="160" fill="currentColor" font-size="12">Tick 1</text><text x="630" y="160" fill="currentColor" font-size="12">Tick ${row.tick}</text>
+        ${NAMES.map(n => `<polyline fill="none" stroke="${colors[n].color}" stroke-dasharray="${colors[n].dash}"
+          stroke-width="1.5" points="${report.rows.flatMap(r => {
     const v = chart.value(r, n)
     return v !== undefined && Number.isFinite(v) ? [`${60 + (r.tick - 1) / Math.max(1, row.tick - 1) * 630},${135 - v / max * 110}`] : []
   }).join(' ')}"/>`).join('')}</svg>`

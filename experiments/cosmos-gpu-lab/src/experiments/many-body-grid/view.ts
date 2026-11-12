@@ -1,3 +1,4 @@
+import { graphPalette } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createFixture, PARAMETERS, type Fixture } from '../many-body/data'
 import { fitView, type View } from '../many-body/backend'
@@ -13,10 +14,10 @@ import { createGridWebGPU } from './webgpu'
 import type { GridBackend } from './backend'
 function drawCpu (canvas: HTMLCanvasElement, points: Float32Array, view: View): void {
   const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = '#13161b'; ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.fillStyle = graphPalette.background; ctx.fillRect(0, 0, canvas.width, canvas.height)
   for (let i = 0; i < points.length; i += 4) {
     if (points[i + 3] > 0.5) continue
-    ctx.fillStyle = points[i + 2] > 0.5 ? '#ffb866' : '#9fb5d5'
+    ctx.fillStyle = points[i + 2] > 0.5 ? graphPalette.pinned : graphPalette.point
     ctx.beginPath()
     ctx.arc(((points[i] - view[0]) * view[2] + 1) * canvas.width / 2,
       (1 - (points[i + 1] - view[1]) * view[3]) * canvas.height / 2, 2.5, 0, Math.PI * 2)
@@ -50,7 +51,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       <div class="panel-heading"><h2>${name}</h2><span data-status="${name}" class="status">Starting…</span></div>
       <canvas data-canvas="${name}" width="480" height="340" aria-label="${name} hierarchical positions"></canvas>
       <p class="demo-note" data-info="${name}"></p></article>`).join('')}</section>
-    <p class="demo-note">Each tick starts from CPU-model positions. Blue points are free, orange points pinned; absent points are hidden.
+    <p class="demo-note">Each tick starts from CPU-model positions. Blue points are free, yellow points pinned; absent points are hidden.
       GPU panels draw resident positions. Force-only motion expands the layout; springs, gravity and cooling are disabled.</p>
     <div class="many-body-results" data-output="results"></div>
     <div class="many-body-results" data-output="approximation"></div>

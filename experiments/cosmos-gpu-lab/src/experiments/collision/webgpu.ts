@@ -1,5 +1,6 @@
 import { Buffer, type ComputePass, type RenderPass, type Device } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
+import { graphRgb } from '../../runtime/palette'
 import { bindingLayout, createStorageRenderer, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import { createRoundedKernel } from '../combined-layout/spring-precision'
@@ -17,7 +18,7 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f, @loc
   let p = positions[i]; let r = select(sizes[i] * 0.5, params.radius, params.radius > 0.) + params.padding;
   var result: Vertex; result.position = vec4f(3.,3.,0.,1.);
   if (p.w <= 0.5) { result.position = vec4f((p.xy - params.view.xy + corners[v] * r) * params.view.zw,0.,1.); }
-  result.uv = corners[v]; result.color = select(vec3f(0.62,0.71,0.84),vec3f(0.91,0.72,0.51),p.z > 0.5); return result;
+  result.uv = corners[v]; result.color = select(vec3f(${graphRgb.point}),vec3f(${graphRgb.pinned}),p.z > 0.5); return result;
 }
 @fragment fn fragmentMain(v: Vertex) -> @location(0) vec4f {
   let d = length(v.uv); if (d > 1.) { discard; } return vec4f(v.color * select(0.4,1.,d > 0.88),1.);
