@@ -9,6 +9,14 @@ export type ValidationContract = {
 // These describe existing gates, not new pass thresholds or production approvals.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match existing public hash routes. */
 export const validationContracts: Record<string, ValidationContract> = {
+  'point-styling': {
+    question: 'Do production Cosmos styling and shape-aware host picking match a luma WebGPU port and the rendered footprint?',
+    reference: 'Unmodified production draw/host-picking GLSL, independent scalar shape masks, and offscreen RGBA8 color/ID readback.',
+    acceptance: 'Exact IDs and scalar masks at every pixel; at most two RGBA8 channel levels for color; no picked pixels with zero rendered alpha.',
+    coverage: 'Frozen eight-shape, overlap and edge-case fixtures, zoom, pixel ratio, explicit strokes, defaults and render-order controls.',
+    limits: 'Host picking only. Pointer tolerance, images, rings, automatic shades, greyout, transitions, occlusion and latency remain separate. ' +
+      'Zero opacity and fractional-size parity remain explicit failing controls on the measured M3.',
+  },
   'center-mass': {
     question: 'Do blend accumulation and compute reduction calculate the same center accurately?',
     reference: 'Mathematical reference: JavaScript double-precision sum of the uploaded float32 coordinates.',
