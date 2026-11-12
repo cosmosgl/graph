@@ -23,6 +23,7 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
         <option value="100">Cool over 100 ticks</option><option value="300">Cool over 300 ticks</option></select></label>
       <label>Passes per tick <select data-control="iterations"><option>1</option><option>2</option><option>4</option></select></label>
       <label>Collision arithmetic (WebGPU) <select data-control="arithmetic"><option value="native">Native f32</option>
+        <option value="targeted" selected>Targeted distance + contributions</option>
         <option value="strict">Strict reference</option></select></label>
     </div>
     <details class="advanced-controls"><summary>Radius, strength, cooling and center precision</summary><div class="scale-toolbar">
@@ -45,6 +46,7 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       <button data-action="stop" disabled>Stop</button><button data-action="reset">Reset</button>
       <button data-action="replay" disabled>Replay failures</button><button data-action="cost">Measure added GPU cost</button>
       <button data-action="center-cost" disabled>Compare center precision cost</button>
+      <button data-action="precision-cost">Compare collision precision cost</button>
       <button data-action="export" disabled>Export JSON</button>
     </div><span class="tick-counter">Tick <strong data-output="tick">0</strong></span></div>
     <p role="status" class="many-body-status" data-output="status">Preparing devices…</p>
@@ -60,7 +62,8 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
     <div class="many-body-results" data-output="cost"></div>
     <p class="demo-note">Exact all-pairs collision, limited to small graphs. Discs show effective world-space radii; orange centers are pinned.
       Validation includes readback and CPU work. Use the paired GPU measurement for cost, not the elapsed validation time.
-      <a href="#/collision/docs/method">Method and scope</a> · <a href="#/collision/docs/trajectories">Independent findings</a> ·
+      <a href="#/collision/docs/method">Method and scope</a> · <a href="#/collision/docs/precision">Targeted findings</a> ·
+      <a href="#/collision/docs/trajectories">Native baseline</a> ·
       <a href="#/collision/docs/findings">Center-correction findings</a>.</p>`
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
   const control = (name: string): HTMLSelectElement => el(`[data-control="${name}"]`)
@@ -109,6 +112,7 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       `cooling exponent ${settings.collision.cooling} · radius ${settings.collision.radius || 'size / 2'} + padding ${settings.collision.padding}.${
         settings.mode === 'combined' ? ` ${settings.topology} topology; WebGPU center: ${settings.centerReduction ?? 'high-low'}.` : ''} ${
         settings.evolution === 'independent' ? 'Independent GPU/CPU positions between ticks; no shared-state reset.' : 'Shared CPU input per tick.'}`
+    el('[data-output="pipeline"]').append(` WebGPU collision: ${settings.arithmetic}.`)
     for (const name of NAMES) {
       const errors = name === 'cpu' ? undefined : report.errors[name]
       const failed = name === 'cpu' ? 0 : report.rows.filter(r => r.checks[name]?.valid === false).length
@@ -230,33 +234,41 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
     }
     const cost = report.cost
     const centerCost = cost?.comparison === 'center-reduction'
+    const precisionCost = cost?.comparison === 'collision-precision'
+    const webgpuOnly = centerCost || precisionCost
+    const firstControl = centerCost ? 'Float32' : precisionCost ? 'Native' : 'Off'
+    const secondControl = centerCost ? 'High/low' : precisionCost ? 'Targeted' : 'On'
     el('[data-output="cost"]').innerHTML = cost
-      ? `<h3>${centerCost ? 'Center precision GPU cost · float32 → high/low' : 'Added collision GPU cost · off → on'}</h3>
+      ? `<h3>${centerCost
+        ? 'Center precision GPU cost · float32 → high/low'
+        : precisionCost ? 'Collision precision GPU cost · native → targeted' : 'Added collision GPU cost · off → on'}</h3>
       <p class="demo-note">${cost.status} · frozen CPU geometry after ${cost.frozenTick} ticks ·
-      ${cost.policy.frames} WebGPU frames per observation${centerCost ? '; WebGPU only' : '; one WebGL frame'}.
+      ${cost.policy.frames} WebGPU frames per observation${webgpuOnly ? '; WebGPU only' : '; one WebGL frame'}.
       Force/integration and drawing are timed; uploads, capture copies and readback are outside GPU timestamps.</p>
       <table><thead><tr><th>Path / block</th>
         <th>Gate</th>
-        <th>${centerCost ? 'Float32' : 'Off'} ms</th>
-        <th>${centerCost ? 'High/low' : 'On'} ms</th>
+        <th>${firstControl} ms</th>
+        <th>${secondControl} ms</th>
         <th>Paired added ms</th>
         <th>Pair range ms</th>
         <th>Added %</th></tr></thead><tbody>
-      ${(centerCost ? ['webgpu'] as const : ['webgl', 'webgpu'] as const).map(api => Array.from({ length: cost.policy.blocks }, (_, block) => {
+      ${(webgpuOnly ? ['webgpu'] as const : ['webgl', 'webgpu'] as const).map(api => Array.from({ length: cost.policy.blocks }, (_, block) => {
     const summary = collisionCostSummary(cost, api, block)
     return `<tr><td>${LABELS[api]} · ${block + 1}</td><td>${summary.accepted ? 'Pass' : 'Rejected / incomplete'}</td>
       <td>${ms(summary.offMs)}</td><td>${ms(summary.onMs)}</td><td>${ms(summary.deltaMs)}</td>
       <td>${summary.range ? summary.range.map(ms).join(' … ') : '—'}</td><td>${summary.percent?.toFixed(1) ?? '—'}</td></tr>`
   }).join('')).join('')}</tbody></table><details><summary>Inspect timing gates</summary>
       <table><thead><tr><th>Path / control</th><th>Local stage gates</th><th>Whole-tick failures</th></tr></thead><tbody>
-      ${cost.preflight.map(p => `<tr><td>${LABELS[p.api]} · ${centerCost ? p.enabled ? 'high/low' : 'float32' : p.enabled ? 'on' : 'off'}</td>
+      ${cost.preflight.map(p => `<tr><td>${LABELS[p.api]} · ${p.enabled ? secondControl : firstControl}</td>
         <td>${p.gate.stages.every(check => check.valid) ? 'Pass' : 'FAIL'}</td>
         <td>${p.gate.whole.failures}</td></tr>`).join('')}</tbody></table></details>
       <p class="demo-note">Acceptance requires both scalar preflights, every timed-frame replay and valid queries, including warmups.
-      Added cost is the median paired ${centerCost ? 'high/low − float32' : 'on − off'} difference; columns are separate medians. Inspect ranges for noise.
-      ${centerCost
-    ? 'Both controls retain every collision pass and the spring floor; only the GPU center sum changes.'
-    : 'This measures the selected workload, including the collision spring floor in combined mode.'} This is not production Graph FPS.</p>`
+      Added cost is the median paired ${secondControl} − ${firstControl} difference; columns are separate medians. Inspect ranges for noise.
+      ${precisionCost
+    ? 'Both controls keep collision enabled; only collision arithmetic changes.'
+    : centerCost
+      ? 'Both controls retain every collision pass and the spring floor; only the GPU center sum changes.'
+      : 'This measures the selected workload, including the collision spring floor in combined mode.'} This is not production Graph FPS.</p>`
       : ''
     controls()
   }
@@ -317,14 +329,14 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       status.textContent = session!.report.replays.map(r => `${r.api} ${r.kind}: reproduced ${r.reproduced}, restored ${r.restored}`).join(' · ')
     })
   })
-  for (const action of ['cost', 'center-cost']) {
+  for (const action of ['cost', 'center-cost', 'precision-cost']) {
     el(`[data-action="${action}"]`).addEventListener('click', () => {
       task(async () => {
         status.scrollIntoView({ block: 'nearest' })
         const current = session!
         current.report.cost = await measureCollisionCost({ ...current.settings, alpha: current.alpha() }, current.cpu(),
           text => { if (!destroyed) status.textContent = text }, () => stopped || destroyed, COST_POLICY, current.report.rows.length,
-          action === 'center-cost' ? 'center-reduction' : 'collision')
+          action === 'center-cost' ? 'center-reduction' : action === 'precision-cost' ? 'collision-precision' : 'collision')
         if (!destroyed) {
           render(); status.textContent = `GPU cost comparison ${current.report.cost.status}; inspect gates below. Demo state unchanged.`
           el('[data-output="cost"]').scrollIntoView({ block: 'center' })

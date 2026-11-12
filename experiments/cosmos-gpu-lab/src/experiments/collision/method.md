@@ -39,6 +39,8 @@ One invocation owns one target correction and scans sources in ascending order. 
 
 The **Native f32** control translates the pair law using ordinary WGSL arithmetic and trigonometry. **Strict reference** reuses the lab’s explicit float32 arithmetic helpers and high/low trigonometry for the golden-angle fallback. The selector controls the collision force kernel; integration and other composed forces retain the existing strict reference. Both collision kernels are checked at exactly the same CPU budgets; a faster path does not gain acceptance by changing the tolerance. Integer-controlled arithmetic inside the quadratic loop can be expensive. WGSL allows implementation-dependent floating-point errors and evaluation choices; see the [WGSL accuracy rules](https://www.w3.org/TR/WGSL/#floating-point-accuracy).
 
+The current demo default, **Targeted distance + contributions**, preserves squared-component and per-neighbor product rounding while refining roots/divisions with residual corrections. It retains native coincidence trigonometry and the same force law. The [targeted study](#/collision/docs/precision) repeats the original independent matrix at unchanged gates and records the added GPU cost. Native and strict remain controls; the targeted candidate is not a universal correctly-rounded arithmetic guarantee.
+
 Absent points are excluded before arithmetic, including NaN sentinels and finite positions left by a fade. GPU buffers/textures, kernels, models, passes, rendering and timestamps all use luma APIs.
 
 ## Isolated and combined comparison
@@ -76,6 +78,8 @@ Every control must pass scalar preflight; every captured timed frame must reprod
 Added cost is the median of paired `on − off` times. The displayed off/on columns are independent medians, whose difference can disagree with the paired median under noise. The delta includes changes in drawing work from the corrected positions, and in combined mode also the changed spring floor. It is not a force-kernel-only measurement. WebGL’s immediate command stream can include CPU/driver submission gaps inside its elapsed interval. Passing validation/query gates does not establish statistical stability; report pair ranges and repeated blocks. These are bounded GPU-work measurements, not production Graph FPS or a universal cross-API speed ratio.
 
 **Compare center precision cost** is a separate WebGPU-only comparison available in combined mode. Both controls keep collision strength, iterations, radii and the spring contact floor enabled. They use the same backend and preallocated resources; only the center sum changes from the original float32 tree to high/low. The same frozen-frame, preflight, exact-anchor, whole-position and timer gates apply. A failed original control rejects the comparison even if the corrected control passes. Use initial geometry for the accepted dense timing control; the known failing tick-2 input cannot establish an accepted speed comparison. The demo state remains unchanged.
+
+**Compare collision precision cost** keeps all collision passes enabled and compares original native versus targeted arithmetic on WebGPU. Both kernels are preallocated on one timing backend before warmup. Every frame uses the same frozen input, alpha, topology, radii and camera, with the same numerical/query/replay acceptance. The failing native tick-5 input rejects the comparison; accepted timing uses passing controls. Current demo positions and cooling are restored independently of these isolated timing backends.
 
 ## Reproduce
 

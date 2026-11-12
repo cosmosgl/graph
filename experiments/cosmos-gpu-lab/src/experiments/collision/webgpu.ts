@@ -2,11 +2,10 @@ import { Buffer, type ComputePass, type RenderPass, type Device } from '@luma.gl
 import { Kernel } from '@luma.gl/engine'
 import { bindingLayout, createStorageRenderer, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
-import { createRoundedKernel, roundedArithmetic } from '../combined-layout/spring-precision'
+import { createRoundedKernel } from '../combined-layout/spring-precision'
 import type { View } from '../many-body/backend'
-import trig from '../combined-layout/gravity-trig.wgsl?raw'
 import { maxRadius, validateCollision, validateSizes, type CollisionParameters, type CollisionArithmetic } from './data'
-import source from './force.wgsl?raw'
+import { collisionForceSource } from './force-source'
 const drawSource = `
 struct View { view: vec4f, radius: f32, padding: f32, count: f32, pad: f32 }
 @group(0) @binding(0) var<storage, read> positions: array<vec4f>;
@@ -24,7 +23,8 @@ struct Vertex { @builtin(position) position: vec4f, @location(0) uv: vec2f, @loc
   let d = length(v.uv); if (d > 1.) { discard; } return vec4f(v.color * select(0.4,1.,d > 0.88),1.);
 }`
 export async function createCollisionWebGPU (
-  device: Device, initialSizes: Float32Array, forces: Buffer, settings: CollisionParameters, arithmetic: CollisionArithmetic = 'strict'
+  device: Device, initialSizes: Float32Array, forces: Buffer, settings: CollisionParameters, arithmetic: CollisionArithmetic = 'strict',
+  alternatives: readonly CollisionArithmetic[] = [], selection: () => CollisionArithmetic = (): CollisionArithmetic => arithmetic
 ): Promise<{
   encode(pass: ComputePass, positions: Buffer, alpha: number): void; resize(sizes: Float32Array): void;
   render(positions: Buffer, view: View, pass: RenderPass): void; destroy(): void;
@@ -37,20 +37,14 @@ export async function createCollisionWebGPU (
     const layout = bindingLayout([
       ['positions', 'read-only-storage'], ['sizes', 'read-only-storage'], ['params', 'uniform'], ['forces', 'storage'],
     ])
-    const direction = source.slice(source.indexOf('fn collisionDirection'), source.indexOf('@compute'))
-    const nativeSource = `
-fn springAdd(a: f32, b: f32) -> f32 { return a + b; }
-fn springSub(a: f32, b: f32) -> f32 { return a - b; }
-fn springMul(a: f32, b: f32) -> f32 { return a * b; }
-fn springDiv(a: f32, b: f32) -> f32 { return a / b; }
-fn springRoot(a: f32) -> f32 { return sqrt(a); }
-${source.replace(direction, `fn collisionDirection(index: u32) -> vec2f {
-  let angle = f32(index) * 2.399963229728653; return vec2f(cos(angle), sin(angle));
-}
-`)}`
-    const force = own(arithmetic === 'strict'
-      ? await createRoundedKernel(device, roundedArithmetic + trig + source, layout)
-      : await Kernel.createAsync(device, { source: nativeSource, shaderLayout: { bindings: layout } }))
+    // Allocate every compared pipeline before warmup; switching never compiles
+    // or reallocates inside a timed frame.
+    const kernels = new Map<CollisionArithmetic, Pick<Kernel, 'dispatch' | 'destroy'>>()
+    for (const mode of new Set([arithmetic, ...alternatives])) {
+      kernels.set(mode, own(mode === 'strict'
+        ? await createRoundedKernel(device, collisionForceSource(mode), layout)
+        : await Kernel.createAsync(device, { source: collisionForceSource(mode), shaderLayout: { bindings: layout } })))
+    }
     const draw = own(createStorageRenderer(device, drawSource, 'triangle-list', bindingLayout([
       ['positions', 'read-only-storage'], ['sizes', 'read-only-storage'], ['params', 'uniform'],
     ])))
@@ -63,6 +57,8 @@ ${source.replace(direction, `fn collisionDirection(index: u32) -> vec2f {
         params.write(new Float32Array([
           sizes.length, settings.strength, settings.radius, settings.padding, maxRadius(sizes, settings), alpha, settings.cooling, 0,
         ]))
+        const force = kernels.get(selection())
+        if (!force) throw new Error('Collision arithmetic was not allocated before dispatch')
         force.dispatch(pass, { x: Math.ceil(sizes.length / 64), bindings: { positions, sizes: sizeBuffer, params, forces } })
       },
       render (positions, view, pass): void {

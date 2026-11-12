@@ -42,7 +42,7 @@ it('excludes only unused absent spring corrections, preserving collision zero an
   expect(stageCheck('collision', actual, { positions, forces: new Float32Array(4) }, positions).valid).toBe(false)
   expect(stageCheck('outgoing', actual, actual, new Float32Array(4)).valid).toBe(false)
 })
-for (const [api, arithmetic] of [['webgl', 'strict'], ['webgpu', 'strict'], ['webgpu', 'native']] as const) {
+for (const [api, arithmetic] of [['webgl', 'strict'], ['webgpu', 'strict'], ['webgpu', 'native'], ['webgpu', 'targeted']] as const) {
   for (const fixture of ['pair', 'masks', 'coincident', 'uniform', 'clusters', 'separated'] as const) {
     it.skipIf(!import.meta.env.LAB_NATIVE_GPU)(`${api}/${arithmetic}: exact collision / ${fixture}`, async () => {
       const { input, graph } = createFixture(fixture, fixture === 'clusters' ? 512 : 128)
