@@ -6,7 +6,7 @@ import { playwright } from '@vitest/browser-playwright'
 // Full integer-arithmetic shaders currently fail compilation on SwiftShader; those tests opt into native mode.
 // eslint-disable-next-line import/no-default-export
 export default defineConfig({
-  optimizeDeps: { include: ['@luma.gl/shadertools'] },
+  optimizeDeps: { include: ['@luma.gl/shadertools', 'markdown-it'] },
   define: {
     'import.meta.env.REQUIRE_WEBGPU': true,
     'import.meta.env.LAB_NATIVE_GPU': process.env.LAB_NATIVE_GPU === '1',
@@ -16,6 +16,7 @@ export default defineConfig({
   },
   test: {
     include: [
+      'src/app/**/*.test.ts',
       'src/gpu/**/*.test.ts',
       'src/runtime/**/*.test.ts',
       'src/experiments/neighborhood-forces/**/*.test.ts',

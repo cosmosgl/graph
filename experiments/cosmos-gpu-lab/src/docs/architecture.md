@@ -25,10 +25,18 @@ link directly to a demo, documentation page or vocabulary term without server re
 #/concepts/reduction
 ```
 
-Only the selected demo is instantiated. When you navigate away, the shell calls its `destroy()`
-method to stop its activity and release GPU resources. It also guards against asynchronous
-initialization finishing after you have already switched pages: a stale instance is destroyed
-instead of becoming the active experiment.
+Only one experiment run is retained. Reading its method, evidence, overview or a shared reference
+pauses playback/sweeps at a safe boundary and detaches the run’s DOM. Returning reattaches the
+same controls, canvases, positions, tick, reports and settings. Playback stays stopped until an
+explicit Run/Play action; an operation already in flight may finish its current atomic step.
+Incomplete timing batches remain unaccepted and can be restarted.
+
+Opening another experiment or the homepage destroys the retained run. There is no cache of live
+GPU sessions. `src/runtime/retained-run.ts` handles setup races: documentation can open while the
+same run initializes, while a retired run that finishes late is destroyed instead of replacing
+the newer one. A browser reload still starts fresh; this is in-session navigation, not persistence.
+New destinations start at the top, returning pages restore their reading position, and explicit
+section links take precedence. Retiring a run also retires its saved scroll position.
 
 The shell lives in `src/app/app-shell.ts`; route parsing lives in `src/app/router.ts`.
 
@@ -50,6 +58,41 @@ adds a **Validation contract** page from `src/runtime/validation.ts` and rejects
 Contracts describe existing acceptance and coverage, not a global pass. The matched-layout live
 summary and schema v3 export separate limited behavior checks, legacy compatibility and quality;
 other experiments retain their detailed reports with the contract explaining their scope.
+
+### Research navigation pilot
+
+Collision and Combined layout use **Overview → Run → Method → Evidence** as four page destinations.
+Their existing article URLs remain valid. Evidence indexes label current work, supporting studies
+and historical baselines; historical pages link to the current conclusion without erasing original
+failures or measurements. The shared contract is available from Overview/Method instead of another
+peer destination. Other experiments retain their existing page navigation during this pilot.
+
+`src/app/research.ts` owns the compact reviewed summaries and milestone gates. The homepage and
+roadmap use the same assessment renderer; home highlights and pilot overviews read the same
+experiment conclusion. Detailed measurements stay in their evidence articles. These are editorial
+assessments, not status inferred from a test count or a completion percentage.
+
+Long Markdown pages gain duplicate-safe heading IDs, route-preserving section links and a contents
+rail, with a visible short contents list above the article on smaller screens. The learning guide and
+vocabulary retain their own navigation. Pilot Run pages author visible **Configuration → Run →
+Results → Diagnostics** sections. Arithmetic, cooling and validation settings stay in Configuration;
+isolation and timing actions stay in Diagnostics. Section jumps scroll without pausing or rebuilding
+the run. Method shows reference, acceptance, population and limits as ordinary content, while
+Overview links to it. The live variant is always named, and recorded conclusions remain separate
+from the browser’s current run.
+
+This pilot addresses the verified run-reset, status/entry-point and history-priority problems.
+Full-text search and overview/evidence classification for the remaining experiments are still
+follow-up work; unclassified studies are not automatically called historical or superseded.
+Expand the pattern after checking that readers can find current conclusions, identify release
+obstacles, distinguish original failures and reproduce a named configuration.
+
+The design follows [Diátaxis’s incremental approach](https://diataxis.fr/how-to-use-diataxis/),
+[clear section labels and contents alternatives](https://design-system.service.gov.uk/components/tabs/),
+[progressive disclosure](https://www.nngroup.com/articles/progressive-disclosure/) and
+[retaining superseded decisions with explicit status](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions).
+These sources guide the design; they do not establish that this exact four-destination layout is
+optimal for every experiment. Browser task checks validate the pilot behavior, not reader usability.
 
 ## 2. Each experiment is a self-contained module
 
@@ -81,6 +124,7 @@ type ExperimentDefinition = {
 }
 
 type ExperimentInstance = {
+  pause?: () => void;
   destroy: () => void;
 }
 ```

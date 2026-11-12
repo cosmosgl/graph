@@ -1,3 +1,4 @@
+import { organizeRunControls } from '../../runtime/run-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { fitView } from '../many-body/backend'
 import { TOLERANCE as repulsionTolerance } from '../many-body/reference'
@@ -10,7 +11,7 @@ import { PRECISION_MODES, PRECISION_LABELS, GRAVITY, REPULSION, SPRINGS, type Fi
 import { BACKENDS, LABELS, createCombinedSession, type CombinedSession, type Name, type Row } from './session'
 const num = (v: number): string => Number.isFinite(v) ? v.toExponential(2) : 'non-finite'
 export async function createCombinedView (host: HTMLElement): Promise<ExperimentInstance> {
-  host.innerHTML = `<p class="demo-note">Gravity → integrate → optional center → integrate → repulsion → integrate →
+  host.innerHTML = `<section data-run-section="configuration"><p class="demo-note">Gravity → integrate → optional center → integrate → repulsion → integrate →
     incoming springs → integrate → outgoing springs → integrate → cool.
     Each backend evolves independently. The alpha = 1 probe tests whether a cooled layout still moves when forces regain full strength.</p>
     <div class="scale-toolbar">
@@ -30,7 +31,8 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       <a href="#/matched-layout/docs/center">Matched center comparison</a> adds aggregate checks and paired GPU cost measurements.</p>
     <p class="demo-note">Checkpoint mode checks all four stages and the whole tick at selected ticks only. Other ticks are unvalidated.
       CPU continues independently; bounds and final metrics still require readback. All force tolerances stay unchanged.
-      Above 2,048 points, spring timing compares native f32, rounded products, and rounded repulsion integration.</p>
+      Above 2,048 points, spring timing compares native f32, rounded products, and rounded repulsion integration.</p></section>
+    <section data-run-section="run">
     <div class="demo-toolbar playback-toolbar"><div class="controls"><button data-action="step">Step + validate</button>
       <button data-action="run" class="button-primary">Run cooling schedule</button><button data-action="stop" disabled>Stop</button>
       <button data-action="probe">Probe at α = 1</button>
@@ -48,13 +50,16 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       <canvas data-canvas="${name}" width="480" height="340" aria-label="${LABELS[name]} combined layout"></canvas>
       <p class="demo-note" data-info="${name}"></p></article>`).join('')}</section>
     <p class="demo-note">Shared camera; blue free points, orange pinned. GPU points and links use resident positions.
-      Checkpoint sub-steps are read back for validation. This is a correctness and layout study, not an FPS benchmark.</p>
+      Checkpoint sub-steps are read back for validation. This is a correctness and layout study, not an FPS benchmark.</p></section>
+    <section data-run-section="results"><p class="demo-note">Live numerical checks and layout measurements. Recorded findings are under Evidence.</p>
     <div data-output="results" class="many-body-results"></div><div data-output="probe" class="many-body-results"></div>
+    <div data-output="chart" class="trajectory-chart"></div></section>
+    <section data-run-section="diagnostics">
     <div data-output="captures" class="many-body-results"></div><div data-output="replay" class="many-body-results"></div>
     <div data-output="precision-study" class="many-body-results"></div>
     <div data-output="spring-timing" class="many-body-results"></div>
     <div data-output="spring-isolation" class="many-body-results"></div>
-    <div data-output="tick-isolation" class="many-body-results"></div><div data-output="chart" class="trajectory-chart"></div>`
+    <div data-output="tick-isolation" class="many-body-results"></div></section>`
   const el = <T extends HTMLElement>(q: string): T => host.querySelector<T>(q)!
   const control = (name: string): HTMLSelectElement => el(`[data-control="${name}"]`)
   const canvas = (name: Name | 'CPU'): HTMLCanvasElement => el(`[data-canvas="${name}"]`)
@@ -79,15 +84,18 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
   }
   const checksTable = (row: Row): string => !row.checked
     ? '<p class="demo-note">This tick was not validated.</p>'
-    : `<details><summary>Inspect stage and whole-tick checks</summary>
+    : `<section class="visible-section"><h3 class="visible-section-heading">Stage and whole-tick checks</h3>
     <table><thead><tr><th>Backend / stage</th><th>Force failures</th><th>Position failures</th><th>Structure / centroids</th></tr></thead><tbody>
     ${row.results.map(r => `${r.stages.map(s => `<tr><td>${LABELS[r.name]} · ${s.stage}</td><td>${s.forces.failures}</td>
       <td>${s.positions.failures}</td>
       <td>${s.structure ? `${s.structure.valid ? 'Pass' : 'FAIL'} / ${s.centroidDifferences ?? 'not stored'}` : '—'}</td></tr>`).join('')
   }<tr><td>${LABELS[r.name]} · full tick from own starting positions</td><td>—</td><td>${r.wholeTick?.failures ?? '—'}</td><td>—</td></tr>`).join('')}
-    </tbody></table></details>`
+    </tbody></table></section>`
   const render = (): void => {
     if (!session || destroyed) return
+    el('[data-live-settings]').textContent = `Live variant: ${PRECISION_LABELS[session.settings.springPrecision ?? 'baseline']} · ` +
+      `${session.settings.fixture}, ${session.settings.count.toLocaleString()} points, ${session.settings.decay} cooling ticks, ` +
+      `center ${session.settings.center ?? 0}.`
     const row = session.rows.at(-1); const cpu = session.cpu(); const view = fitView([cpu, ...session.lanes.map(l => l.positions)])
     for (const lane of session.lanes) {
       if (!session.errors[lane.name]) {
@@ -157,12 +165,12 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
         <td>${c.checks.stages.filter(s => !s.valid).map(s => `${s.stage}: ${s.forces.failures} / ${s.positions.failures}` +
           `${s.structure && !s.structure.valid ? ' · structure FAIL' : ''}${s.centroidDifferences ? ' · centroid FAIL' : ''}`).join('; ') || 'None'}</td>
         <td>${c.checks.wholeTick?.failures ?? '—'}</td></tr>`).join('')}</tbody></table>
-      <details><summary>All failed checkpoints (${failed.length} backend results)</summary>
+      <section class="visible-section"><h3 class="visible-section-heading">All failed checkpoints (${failed.length} backend results)</h3>
       <table><thead><tr><th>Tick</th><th>Backend</th><th>Failed stages (force / position)</th><th>Whole-tick failures</th></tr></thead><tbody>
       ${failed.map(({ tick, r }) => `<tr><td>${tick}</td><td>${LABELS[r.name]}</td>
         <td>${r.stages.filter(s => !s.valid).map(s => `${s.stage}: ${s.forces.failures} / ${s.positions.failures}` +
           `${s.structure && !s.structure.valid ? ' · structure FAIL' : ''}${s.centroidDifferences ? ' · centroid FAIL' : ''}`).join('; ') || 'None'}</td>
-        <td>${r.wholeTick?.failures ?? '—'}</td></tr>`).join('')}</tbody></table></details>`
+        <td>${r.wholeTick?.failures ?? '—'}</td></tr>`).join('')}</tbody></table></section>`
       : ''
     el('[data-output="replay"]').innerHTML = session.replays.length
       ? `<h3>Failure replay</h3>
@@ -431,6 +439,24 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     const url = URL.createObjectURL(new Blob([json], { type: 'application/json' })); const a = document.createElement('a')
     a.href = url; a.download = 'cosmos-combined-layout.json'; a.click(); URL.revokeObjectURL(url)
   })
+  organizeRunControls(host,
+    ['replay', 'precision-study', 'spring-timing', 'repulsion-timing', 'spring-isolation', 'tick-isolation'], [
+      {
+        name: 'recorded',
+        label: 'Recorded control',
+        values: {
+          fixture: 'communities', count: '8192', decay: '100', checkpoint: '10', center: '0', precision: 'trig',
+        },
+      },
+      { name: 'simple', label: 'Simple case', values: { fixture: 'chain', count: '128', decay: '100', checkpoint: '10', center: '0', precision: 'trig' } },
+      {
+        name: 'boundary',
+        label: 'Known boundary',
+        values: {
+          fixture: 'communities', count: '8192', decay: '100', checkpoint: '10', center: '0', precision: 'aligned',
+        },
+      },
+    ], values => { task(async () => { for (const [name, value] of Object.entries(values)) control(name).value = value; await setup() }) })
   await task(setup)
-  return { destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
+  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
 }

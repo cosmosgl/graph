@@ -252,9 +252,10 @@ export const learningExamples: Record<string, (host: HTMLElement) => void> = {
 }
 
 export function addLearningContents (host: HTMLElement, sectionId?: string): void {
-  const contents = element('details', undefined, 'learning-contents')
-  const summary = element('summary', 'Chapters · 12 lessons and references')
-  contents.append(summary)
+  const contents = element('section', undefined, 'learning-contents')
+  const title = element('h2', 'Chapters · 12 lessons and references')
+  title.tabIndex = -1
+  contents.append(title)
   const links = element('nav')
   links.setAttribute('aria-label', 'Guide chapters')
   const headings = Array.from(host.querySelectorAll<HTMLElement>('h2'))
@@ -273,7 +274,6 @@ export function addLearningContents (host: HTMLElement, sectionId?: string): voi
     link.addEventListener('click', event => {
       if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
       event.preventDefault()
-      contents.open = false
       jump(heading, link.href)
     })
     links.append(link)
@@ -284,8 +284,7 @@ export function addLearningContents (host: HTMLElement, sectionId?: string): voi
     back.addEventListener('click', event => {
       if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return
       event.preventDefault()
-      contents.open = true
-      jump(summary, back.href)
+      jump(title, back.href)
     })
     heading.before(chapter)
     chapter.append(heading, back)

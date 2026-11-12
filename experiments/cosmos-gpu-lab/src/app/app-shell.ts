@@ -1,14 +1,18 @@
 import type {
   ExperimentDefinition,
-  ExperimentInstance,
   ExperimentPage,
 } from '../runtime/experiment'
 import vocabularySource from '../docs/vocabulary.md?raw'
 import reductionSource from '../docs/reduction.md?raw'
 import reductionTreeUrl from '../docs/diagrams/reduction-tree.svg?url'
+import { createRetainedRun } from '../runtime/retained-run'
+import { validationContractMarkdown } from '../runtime/validation'
 import { experimentGroups, findExperiment } from './registry'
-import { architectureHref, conceptHref, experimentHref, featureInventoryHref, readRoute, roadmapHref, vocabularyHref } from './router'
+import { architectureHref, conceptHref, experimentHref, featureInventoryHref, readRoute, roadmapHref, vocabularyHref, currentSection, runHref } from './router'
 import { indexVocabularyTerms } from './vocabulary'
+import { research } from './research'
+import { renderEvidenceIndex, renderInvestigationContext, renderMigrationOverview, renderResearchOverview } from './research-ui'
+import { scrollToSection } from './sections'
 
 function requiredElement<T extends HTMLElement> (host: ParentNode, selector: string): T {
   const element = host.querySelector<T>(selector)
@@ -110,15 +114,16 @@ function renderNavigation (
 
 function renderHome (host: HTMLElement): void {
   host.innerHTML = `
-    <section class="home-intro">
-      <p class="eyebrow">Migration research workspace</p>
+    <header class="home-intro">
       <h1>Cosmos GPU Lab</h1>
-      <p>
-        Experiments that assess whether Cosmos can preserve its behavior, meet performance goals
-        and move from luma WebGL to luma WebGPU.
-      </p>
-    </section>
+    </header>
+    <div data-migration-overview></div>
     <div class="home-sections">
+    <div class="experiment-catalog" aria-label="Available experiments">
+      <p class="catalog-intro">Explore the groups from foundations to validation.
+        Experiments within each group follow a suggested reading order; the migration roadmap records our findings and next steps.</p>
+    </div>
+
     <a class="reference-card" href="#/validation-workflow">
       <span class="card-index">VALIDATION</span>
       <span><strong>Validation workflow</strong><small>Separate behavioral contracts, accuracy, compatibility, quality and cost</small></span>
@@ -140,10 +145,6 @@ function renderHome (host: HTMLElement): void {
       </span>
       <span aria-hidden="true">→</span>
     </a>
-    <div class="experiment-catalog" aria-label="Available experiments">
-      <p class="catalog-intro">Explore the groups from foundations to validation.
-        Experiments within each group follow a suggested reading order; the migration roadmap records our findings and next steps.</p>
-    </div>
     <a class="reference-card" href="${featureInventoryHref()}">
       <span class="card-index">COVERAGE</span>
       <span>
@@ -178,6 +179,7 @@ function renderHome (host: HTMLElement): void {
     </a>
     </div>
   `
+  renderMigrationOverview(requiredElement(host, '[data-migration-overview]'))
   const catalog = requiredElement<HTMLElement>(host, '.experiment-catalog')
   for (const group of experimentGroups) {
     const section = document.createElement('section')
@@ -197,7 +199,7 @@ function renderHome (host: HTMLElement): void {
       link.href = experimentHref(experiment.id)
       link.innerHTML = `
         <h3>${experiment.title}</h3>
-        <p>${experiment.summary}</p>
+        <p>${research[experiment.id]?.conclusion ?? experiment.summary}</p>
         <span class="tag-row">${experiment.tags.map(tag => `<span>${tag}</span>`).join('')}</span>
       `
       grid.append(link)
@@ -304,14 +306,16 @@ function createTab (label: string, href: string, active: boolean): HTMLAnchorEle
 function renderExperimentFrame (
   host: HTMLElement,
   experiment: ExperimentDefinition,
-  activePage?: ExperimentPage
+  activePage?: ExperimentPage,
+  view?: 'run' | 'evidence'
 ): void {
+  const record = research[experiment.id]
   host.innerHTML = `
-    <header class="experiment-header">
+    <header class="experiment-header${record?.pilot ? ' pilot-header' : ''}">
       <div>
-        <p class="eyebrow">Experiment · ${experiment.tags.join(' · ')}</p>
+        ${record?.pilot ? '' : `<p class="eyebrow">Experiment · ${experiment.tags.join(' · ')}</p>`}
         <h1>${experiment.title}</h1>
-        <p>${experiment.summary}</p>
+        ${record?.pilot ? !activePage && !view ? `<p>${record.question}</p>` : '' : `<p>${experiment.summary}</p>`}
       </div>
     </header>
     <nav class="page-tabs" aria-label="Experiment sections"></nav>
@@ -319,6 +323,22 @@ function renderExperimentFrame (
   `
 
   const tabs = requiredElement<HTMLElement>(host, '.page-tabs')
+  if (record?.pilot) {
+    const section = activePage ? activePage.id === record.method || activePage.id === 'validation-contract' ? 'method' : 'evidence' : view ?? 'overview'
+    tabs.append(
+      createTab('Overview', experimentHref(experiment.id), section === 'overview'),
+      createTab('Run', runHref(experiment.id), section === 'run'),
+      createTab('Method', experimentHref(experiment.id, record.method), section === 'method'),
+      createTab('Evidence', `#/${experiment.id}/evidence`, section === 'evidence')
+    )
+    if (activePage && section === 'evidence') {
+      const breadcrumb = document.createElement('p'); breadcrumb.className = 'research-breadcrumb'
+      breadcrumb.innerHTML = `<a href="${experimentHref(experiment.id)}">Overview</a> →
+        <a href="#/${experiment.id}/evidence">Evidence</a>`
+      breadcrumb.append(` → ${activePage.title}`); tabs.after(breadcrumb)
+    }
+    return
+  }
   tabs.append(createTab('Demo', experimentHref(experiment.id), !activePage))
   for (const page of experiment.pages) {
     tabs.append(createTab(page.title, experimentHref(experiment.id, page.id), page.id === activePage?.id))
@@ -356,7 +376,7 @@ function renderFailure (host: HTMLElement, error: unknown): void {
   requiredElement<HTMLElement>(host, 'pre').textContent = message
 }
 
-export function createAppShell (root: HTMLElement): void {
+export function createAppShell (root: HTMLElement): { destroy(): void } {
   root.innerHTML = `
     <div class="app-shell">
       <aside class="sidebar">
@@ -376,19 +396,28 @@ export function createAppShell (root: HTMLElement): void {
 
   const navigation = requiredElement<HTMLElement>(root, '.experiment-nav')
   const workspace = requiredElement<HTMLElement>(root, '.workspace')
-  let activeInstance: ExperimentInstance | undefined
+  const run = createRetainedRun()
   let renderVersion = 0
-
-  const destroyActive = (): void => {
-    activeInstance?.destroy()
-    activeInstance = undefined
-  }
+  const scrollPositions = new Map<string, number>()
+  let previousPath: string | undefined
 
   const render = async (): Promise<void> => {
     renderVersion += 1
     const version = renderVersion
-    destroyActive()
     const route = readRoute()
+    if (previousPath) scrollPositions.set(previousPath, window.scrollY)
+    const path = window.location.hash.split('?')[0] || '#/'
+    previousPath = path
+    const finish = (): void => {
+      if (version !== renderVersion || currentSection() || (route.kind === 'learn' && route.sectionId) ||
+        (route.kind === 'vocabulary' && route.termId)) return
+      window.scrollTo(0, route.kind === 'home' ? 0 : scrollPositions.get(path) ?? 0)
+    }
+    run.hide()
+    if (route.kind === 'home' || (route.kind === 'experiment' && run.id !== route.experimentId)) {
+      if (run.id) { scrollPositions.delete(experimentHref(run.id)); scrollPositions.delete(runHref(run.id)) }
+      run.destroy()
+    }
     renderNavigation(
       navigation,
       route.kind === 'experiment' ? route.experimentId : undefined,
@@ -401,9 +430,11 @@ export function createAppShell (root: HTMLElement): void {
             ? route.kind
             : undefined
     )
+    window.scrollTo(0, 0)
 
     if (route.kind === 'home') {
       renderHome(workspace)
+      finish()
       return
     }
 
@@ -424,13 +455,13 @@ export function createAppShell (root: HTMLElement): void {
           import('../docs/learn-webgpu.md?raw'), import('./markdown'), import('./learning-examples'),
         ])
         if (version !== renderVersion) return
-        await renderer.renderMarkdown(stage, source.default, {}, { examples: examples.learningExamples })
+        await renderer.renderMarkdown(stage, source.default, {}, { examples: examples.learningExamples, sectionNavigation: false })
         examples.addLearningContents(stage, route.sectionId)
       } catch (error) {
         if (version !== renderVersion) return
         renderFailure(stage, error)
       }
-      return
+      finish(); return
     }
 
     if (route.kind === 'validation-workflow' || route.kind === 'numerical-research') {
@@ -447,8 +478,9 @@ export function createAppShell (root: HTMLElement): void {
         ])
         if (version !== renderVersion) return
         await renderer.renderMarkdown(stage, source.default)
+        if (version === renderVersion) scrollToSection(stage, currentSection())
       } catch (error) { if (version === renderVersion) renderFailure(stage, error) }
-      return
+      finish(); return
     }
 
     if (route.kind === 'architecture' || route.kind === 'roadmap' || route.kind === 'feature-inventory') {
@@ -463,12 +495,15 @@ export function createAppShell (root: HTMLElement): void {
           import('./markdown'),
         ])
         if (version !== renderVersion) return
-        await renderer.renderMarkdown(stage, source.default)
+        await renderer.renderMarkdown(stage, source.default, {}, {
+          examples: { migrationStatus: host => renderMigrationOverview(host, true) },
+        })
+        if (version === renderVersion) scrollToSection(stage, currentSection())
       } catch (error) {
         if (version !== renderVersion) return
         renderFailure(stage, error)
       }
-      return
+      finish(); return
     }
 
     if (route.kind === 'vocabulary') {
@@ -476,7 +511,7 @@ export function createAppShell (root: HTMLElement): void {
       try {
         const renderer = await import('./markdown')
         if (version !== renderVersion) return
-        await renderer.renderMarkdown(stage, vocabularySource, {}, { linkTerms: false })
+        await renderer.renderMarkdown(stage, vocabularySource, {}, { linkTerms: false, sectionNavigation: false })
         indexVocabularyTerms(stage)
         if (route.termId) {
           const target = document.getElementById(route.termId)
@@ -489,7 +524,7 @@ export function createAppShell (root: HTMLElement): void {
         if (version !== renderVersion) return
         renderFailure(stage, error)
       }
-      return
+      finish(); return
     }
 
     if (route.kind === 'concept') {
@@ -505,39 +540,45 @@ export function createAppShell (root: HTMLElement): void {
         await renderer.renderMarkdown(stage, reductionSource, assets, {
           excludedTermIds: ['reduction'],
         })
+        if (version === renderVersion) scrollToSection(stage, currentSection())
       } catch (error) {
         if (version !== renderVersion) return
         renderFailure(stage, error)
       }
-      return
+      finish(); return
     }
 
     const experiment = findExperiment(route.experimentId)
     if (!experiment) {
       renderMissing(workspace, route.experimentId)
+      finish()
       return
     }
 
     const page = route.pageId
       ? experiment.pages.find(candidate => candidate.id === route.pageId)
       : undefined
-    renderExperimentFrame(workspace, experiment, page)
+    if (route.pageId && !page) { renderMissing(workspace, `${experiment.id}/docs/${route.pageId}`); finish(); return }
+    const record = research[experiment.id]
+    renderExperimentFrame(workspace, experiment, page, route.view)
     const stage = requiredElement<HTMLElement>(workspace, '.experiment-stage')
 
     try {
-      if (!page) {
-        stage.innerHTML = '<div class="loading">Creating GPU devices…</div>'
-        const instance = await experiment.create(stage)
-        if (version !== renderVersion) {
-          instance.destroy()
-          return
-        }
-        activeInstance = instance
+      if (record?.pilot && !page && route.view !== 'run') {
+        if (route.view === 'evidence') renderEvidenceIndex(stage, experiment, record)
+        else renderResearchOverview(stage, experiment, record)
+      } else if (!page) {
+        await run.show(experiment, stage)
+        if (version === renderVersion) scrollToSection(stage, currentSection())
       } else if (page.kind === 'markdown') {
         stage.innerHTML = '<div class="loading">Loading documentation…</div>'
         const [source, renderer] = await Promise.all([page.load(), import('./markdown')])
         if (version !== renderVersion) return
-        await renderer.renderMarkdown(stage, source, page.assets)
+        const method = record?.pilot && page.id === record.method
+        await renderer.renderMarkdown(stage, method ? `${source}\n\n${validationContractMarkdown(experiment.id, false)}` : source, page.assets)
+        if (version !== renderVersion) return
+        if (record?.pilot) renderInvestigationContext(stage, experiment, record, page.id)
+        scrollToSection(stage, currentSection())
       } else {
         stage.innerHTML = '<div class="loading">Loading results…</div>'
         const [report, renderer] = await Promise.all([page.load(), import('./report')])
@@ -548,6 +589,7 @@ export function createAppShell (root: HTMLElement): void {
       if (version !== renderVersion) return
       renderFailure(stage, error)
     }
+    finish()
   }
 
   const handleRoute = (): void => {
@@ -555,6 +597,14 @@ export function createAppShell (root: HTMLElement): void {
   }
 
   window.addEventListener('hashchange', handleRoute)
-  window.addEventListener('beforeunload', destroyActive)
+  window.addEventListener('beforeunload', run.destroy)
   handleRoute()
+  return {
+    destroy (): void {
+      renderVersion++; run.destroy()
+      window.removeEventListener('hashchange', handleRoute)
+      window.removeEventListener('beforeunload', run.destroy)
+      root.replaceChildren()
+    },
+  }
 }

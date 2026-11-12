@@ -161,16 +161,19 @@ export const validationContracts: Record<string, ValidationContract> = {
 
 /* eslint-enable @typescript-eslint/naming-convention */
 
-export function validationContractMarkdown (id: string): string {
+export function validationContractMarkdown (id: string, includeQuestion = true): string {
   const contract = validationContracts[id]
   if (!contract) throw new Error(`Missing validation contract: ${id}`)
-  return `This contract describes what this experiment checks. It is not a live run result.
+  const introduction = includeQuestion
+    ? `This contract describes what this experiment checks. It is not a live run result.
 
 ## Question
 
 ${contract.question}
 
-## Reference
+`
+    : ''
+  return `${introduction}## Reference
 
 ${contract.reference}
 

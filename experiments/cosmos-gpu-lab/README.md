@@ -7,6 +7,13 @@ lifecycle.
 Follow the **WebGPU migration** roadmap (`#/roadmap`) for Cosmos migration readiness, demonstrated capabilities,
 remaining gaps and the evidence needed for a production switch.
 
+The homepage opens with the reviewed migration assessment. Collision and Combined layout pilot
+**Overview / Run / Method / Evidence** navigation, keeping historical studies labeled and their
+existing URLs intact. Documentation visits preserve one paused run; another experiment or Home
+releases it. Run uses visible Configuration, Run, Results and Diagnostics sections. Method includes the comparison
+contract. Long articles have route-preserving section links and visible contents navigation. Search
+and the remaining experiment overviews are follow-up work after this pilot.
+
 Use the **Validation workflow** (`#/validation-workflow`) and **Numerical research**
 (`#/numerical-research`) for reference roles, source-backed precision findings and acceptance policy.
 Every experiment has a **Validation contract** tab describing its question, reference, gates,
@@ -102,6 +109,10 @@ Start with **How WebGPU works** (`#/learn`) for a guided introduction with five 
 These use DOM/SVG and JavaScript, require no GPU and make no performance claims.
 
 ## Interactive documentation
+
+Keep settings, explanations, validation tables and chapter navigation visible in ordinary sections.
+Use headings and section links to organize long content instead of accordions, including reports
+created after running an experiment. Use the shared body typography for these section headings.
 
 The learning guide lives in `src/docs/learn-webgpu.md`; its small interactive examples live in
 `src/app/learning-examples.ts`. An `example` fence contains a registered example name, such as

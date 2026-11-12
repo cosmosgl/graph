@@ -187,5 +187,5 @@ export async function createGridAggregationView (host: HTMLElement, acceptance =
     a.download = `cosmos-${acceptance ? 'layout-acceptance' : 'grid-aggregation'}-${Date.now()}.json`; a.click()
     setTimeout(() => URL.revokeObjectURL(url), 0)
   })
-  return { destroy (): void { destroyed = true; stopped = true; retire() } }
+  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; retire() } }
 }

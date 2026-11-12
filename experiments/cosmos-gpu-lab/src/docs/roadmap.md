@@ -13,18 +13,9 @@ gravity and bounded cancellation sums without changing historical gates or selec
 policy. Independent candidate integration, runtime adaptation and agreed quality budgets remain
 acceptance work.
 
-We are primarily in **simulation-prototype validation**, milestone 2. The basic luma execution path works, while milestone 1's production ownership and dependency decisions remain open. Rendering is at its first primitives; complete library integration and the production envelope remain ahead.
-
-| Area | Demonstrated scope | Remaining acceptance |
-| --- | --- | --- |
-| luma execution | Buffers, models/kernels, passes, fences, readback and optional timestamps; resident compute-to-render and same-device resizing | Production dependency choice, host-owned resources, device recovery and lifecycle |
-| Core simulation | Gravity, exact/hierarchical repulsion, ordered springs and cooling; selected composed cases through **8,192 points** | Broader inputs/weights, full scheduling, remaining forces and affordable precision |
-| Center attraction | Resident reduction/force/integration; corrected high/low sum is locally exact across the recent **1,600 combined independent ticks** | Wider coordinate/device envelope and production cost policy |
-| Collision | Exact all-pairs law, spring contact floor, repeated passes and independent fixed/cooled layouts through **512 points** | Broader inputs/devices, production precision/cost policy and the hash/slot algorithm above 4,096 points |
-| Rendering | Resident circles/minimal links; bounded production shapes, explicit strokes, defaults and shape-aware host IDs in the [styling study](#/point-styling/docs/method) | Fractional raster parity, invisible picks at zero global opacity, remaining styling/interaction and complete renderer integration |
-| Data updates | Bounded point patches, topology replacement, prefix-preserving resizes and retained storage | Full setters/transitions, allocation/trim policy and public data contracts |
-| Library and embedding | Supporting resource-transfer mechanisms | Complete `Graph` backend, callbacks, borrowed device/pass ownership, deck integration and recovery |
-| Production envelope | Bounded native M3 measurements and software-browser regressions | Agreed workloads/budgets and representative native GPU/browser coverage |
+```example
+migrationStatus
+```
 
 **These envelopes differ.** The 8,192-point composed-force results do not include the complete newer collision-enabled workload. Larger reductions or spatial indices do not establish larger complete graph layouts. Some isolated force checks reach 16,384 points; the 32,768 scaling-harness option has not established acceptance.
 

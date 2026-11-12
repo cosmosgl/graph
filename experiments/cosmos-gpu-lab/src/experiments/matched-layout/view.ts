@@ -140,8 +140,9 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     const checked = checkpoints.flatMap(r => r.checks[name] ? [r.checks[name]!] : [])
     return `${LABELS[name]}: ${checked.filter(c => c.valid).length} / ${checked.length} pass, ${checked.filter(c => !c.valid).length} fail`
   }).join(' · ')}.</p>
-      <details><summary>Inspect ${checkpoints.length} checkpoint ${checkpoints.length === 1 ? 'tick' : 'ticks'}
-        ${report.probe ? ' and the full-strength probe' : ''}</summary>
+      <section class="visible-section">
+      <h3 class="visible-section-heading">${checkpoints.length} checkpoint ${checkpoints.length === 1 ? 'tick' : 'ticks'}
+        ${report.probe ? ' and the full-strength probe' : ''}</h3>
       <table><thead><tr><th>Tick</th><th>Path</th><th>Verdict</th><th>Force / position failures</th><th>Whole-tick failures</th><th>Restored</th></tr></thead>
       <tbody>${[...checkpoints, ...(report.probe ? [report.probe] : [])].flatMap(r => (['webgl', 'webgpu'] as const).map(name => {
     const check = r.checks[name]
@@ -152,7 +153,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
       `${s.aggregate?.valid === false ? ' · aggregate fails' : ''}`).join('; ') || '0 / 0'
     : '—'}</td>
       <td>${check?.wholeTick.failures ?? '—'}</td><td>${check?.restored ? 'Yes' : '—'}</td></tr>`
-  })).join('')}</tbody></table></details>
+  })).join('')}</tbody></table></section>
       ${Object.entries(report.captures).length
     ? `<p>First captured failures: ${Object.entries(report.captures).map(([name, c]) =>
       `${LABELS[name as Name]} at tick ${c.tick}`).join(' · ')}. Export includes the frozen inputs and outputs.</p>`
@@ -174,7 +175,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
       <td>${time(s.onMs)}</td><td>${time(s.deltaMs)}</td><td>${s.deltaRange?.map(time).join(' … ') ?? '—'}</td>
       <td>${s.percent === null ? '—' : s.percent.toFixed(1)}</td></tr>`
   })).join('')}</tbody></table>
-      <details><summary>Inspect timing gates</summary><table><thead><tr><th>Path / center</th><th>Scalar failures</th>
+      <section class="visible-section"><h3 class="visible-section-heading">Timing gates</h3><table><thead><tr><th>Path / center</th><th>Scalar failures</th>
         <th>Whole-tick failures</th><th>Timed-frame failures</th><th>Invalid timers</th></tr></thead><tbody>
       ${cost.preflight.map(p => {
     const trials = cost.trials.filter(t => t.api === p.api && t.center === p.center)
@@ -184,7 +185,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
       `${s.aggregateFailures} aggregate${s.flagsExact ? '' : ', flags'}`).join('; ') || '0'}</td>
       <td>${p.gate.wholeTick.failures}</td><td>${trials.filter(t => !t.valid).length}</td>
       <td>${trials.filter(t => t.timing.timerStatus !== 'valid').length}</td></tr>`
-  }).join('')}</tbody></table></details>
+  }).join('')}</tbody></table></section>
       <p class="demo-note">A result requires unchanged scalar gates, exact replay of every timed frame and valid timers in every trial.
         Added ms is the median of paired on − off samples; off/on columns are independent medians. Passing gates does not establish stable timing.
         Rejected rows retain their raw trials in JSON. Delta includes the center reduction, force, integration and resulting downstream work.
@@ -311,5 +312,5 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     a.href = url; a.download = 'cosmos-matched-layout.json'; a.click(); URL.revokeObjectURL(url)
   })
   await task(setup)
-  return { destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
+  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
 }

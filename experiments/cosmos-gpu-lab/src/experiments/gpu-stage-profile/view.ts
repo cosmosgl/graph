@@ -120,5 +120,5 @@ export async function createProfileView (host: HTMLElement): Promise<ExperimentI
     const a = document.createElement('a'); a.href = url; a.download = `cosmos-gpu-stage-profile-${Date.now()}.json`; a.click()
     setTimeout(() => URL.revokeObjectURL(url), 0)
   })
-  return { destroy (): void { destroyed = true; stopped = true; profiler?.destroy() } }
+  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; profiler?.destroy() } }
 }

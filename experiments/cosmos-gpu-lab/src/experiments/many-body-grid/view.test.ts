@@ -90,6 +90,8 @@ it('shows a useful precision trace and keeps the original verdict', async () => 
   const page = await mount()
   page.querySelector<HTMLButtonElement>('[data-action="trace"]')!.click(); await ready(page)
   expect(page.querySelector('[data-output="status"]')!.textContent).toMatch(/^Passed/)
+  expect(page.querySelector('[data-output="trace"] details')).toBeNull()
+  expect(document.activeElement).toBe(page.querySelector('[data-output="trace"] .visible-section-heading'))
   expect(page.querySelector('[data-output="trace"]')!.textContent).toContain('near clamped')
   expect(page.querySelector('[data-output="trace"]')!.textContent).toContain('do not replace the baseline')
 })

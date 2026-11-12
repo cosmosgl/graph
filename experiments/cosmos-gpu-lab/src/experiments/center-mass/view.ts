@@ -230,6 +230,10 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
   playButton.disabled = false
 
   return {
+    pause (): void {
+      isPlaying = false; window.clearTimeout(playTimer)
+      playButton.textContent = 'Play'; playButton.setAttribute('aria-pressed', 'false')
+    },
     destroy (): void {
       if (destroyed) return
       destroyed = true
