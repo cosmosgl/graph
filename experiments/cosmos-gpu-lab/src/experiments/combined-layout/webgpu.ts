@@ -17,6 +17,7 @@ import { measureFrameBatch } from './frame-timing'
 import { measureGpuStages } from './stage-timing'
 import { cool, GRAVITY, REPULSION, SPRINGS, stagesFor, type SpringPrecision, type Stage } from './data'
 import { createCenterWebGPU } from './center-webgpu'
+import { DEFAULT_CENTER_REDUCTION } from './center-reduction'
 import { polarGravitySource, refinedGravitySource } from './gravity-source'
 import type { CombinedBackend } from './backend'
 import { createRoundedKernel, roundedSpringSource, roundedIntegrationSource, distanceSpringSource } from './spring-precision'
@@ -75,7 +76,9 @@ export async function createCombinedWebGPU (
     const scope = resourceScope(overrides.context?.ledger); const own = scope.own
     try {
       const grid = own(await gridFactory(resources))
-      const center = settings.center ? own(await createCenterWebGPU(device, count, forces)) : undefined
+      const center = settings.center
+        ? own(await createCenterWebGPU(device, count, forces, () => settings.centerReduction ?? DEFAULT_CENTER_REDUCTION))
+        : undefined
       const collision = settings.collision
         ? own(await createCollisionWebGPU(device, graph.sizes, forces, settings.collision, settings.collisionArithmetic))
         : undefined

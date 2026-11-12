@@ -42,7 +42,7 @@ implementation and comparison. These are evidence levels, not a percentage of th
 | Large reductions | **Demonstrated:** hierarchical reduction with GPU-resident inputs and results | Validate every required aggregation, including cluster centers and bounds |
 | Circle point rendering | **Demonstrated:** matched WebGL sprites and WebGPU instanced circles | Complete shapes, strokes, images, transitions and render-order behavior |
 | Spatial indexing | **Demonstrated:** count/scan/scatter with variable cell occupancy | Establish production bounds, capacity, update and memory policies |
-| Local interaction and integration | **Partial:** CPU-validated local forces and exact [collision constraints](#/collision) with resident integration/drawing | Large-graph collision, dense composition sensitivity, independent trajectories and full scheduling |
+| Local interaction and integration | **Partial:** CPU-validated local forces and exact [collision constraints](#/collision), including a resident fix for the observed dense center sensitivity | Large-graph collision, independently evolving collision trajectories and full scheduling |
 | Global many-body force | **Partial:** exact/hierarchical forces, the production cutoff and resident composition have bounded checks through 8,192 points | Adaptive sampling, scalable construction, production defaults, wider quality and cross-device cost |
 | Link forces and graph topology | **Partial:** ordered springs, directional CSR, resident composition and state-preserving replacement | Default-length trajectories, broader parameters, large multi-hub cost and remaining force composition |
 | Complete rendering and interaction | **Partial:** circles and minimal straight links read GPU-resident state | Full point/link styling, picking, hover, drag, selection, tracking and overlays |
@@ -151,14 +151,15 @@ gate. Those failures stay visible. Longer cooling improves the measured quality,
 and unagreed quality targets prevent calling these layouts fully converged. The shared CPU-driven sample
 tape controls the comparison; it does not validate full Graph wall-clock scheduling or runtime performance.
 
-The [center-attraction comparison](#/matched-layout/docs/center) now adds the production optional force after
+The [center-attraction comparison](#/matched-layout/docs/center) adds the production optional force after
 gravity, including pinned/absent semantics and resident reduction/force/integration. Seven M3 runs cover
 5,600 ticks through 8,192 points, including one independent 5,000-tick case. WebGPU passes 567 checkpoints
 and seven full-strength probes at unchanged tolerance. Independent long-run positions drift by 2.50% of
-CPU layout radius, while stress stays close. Large WebGL center-force failures prevent declaring strict
-backend parity.
+CPU layout radius, while stress stays close. These measurements use the original float32 center tree;
+the later high/low correction does not retroactively change them. Large WebGL center-force failures prevent
+declaring strict backend parity.
 
-Controlled on/off timing gives the current strict WebGPU center path an added cost of roughly 1.2–1.4 ms
+Controlled on/off timing gives that original strict WebGPU center path an added cost of roughly 1.2–1.4 ms
 on the cooled 8,192-point cases. WebGL samples are much noisier and the initial dense controls fail the
 numerical gate. Evaluate a cheaper center arithmetic candidate with the same checks; the measured strict
 path is a correctness reference, not an approved production performance policy.
@@ -169,18 +170,26 @@ integration, repeated passes and the spring contact-distance floor. On M3 in the
 WebGPU passes 799/800 tick gates and WebGL 797/800 at unchanged tolerance. These use shared CPU starting
 states, rather than independently evolving trajectories.
 
-Dense four-pass composition retains a replayable WebGPU whole-tick failure at tick 2, despite passing
-local stage gates. Strict collision arithmetic does not remove it. Replacing only the center intermediate
-with the CPU result in a diagnostic replay makes the tick pass, localizing the observed sensitivity to
-the center output. That CPU upload is not part of the ordinary resident path or a production fix.
+The original center tree exposes a replayable dense four-pass WebGPU failure at tick 2 despite passing
+local gates. Its position sum loses 0.125 in Y; a one-ULP center-position change is amplified downstream.
+Retaining high/low residuals through a GPU reduction fixes that case without a CPU intermediate or a
+tolerance change. A new 512-point dense run passes **100/100** WebGPU ticks with zero center aggregate,
+force and position error; one-pass dense and four-pass masked controls also pass 100/100. The original
+tree still reproduces its 99/100 result, while production WebGL retains its separate failures.
+
+The corrected center reduction is the lab default. It doubles partial/scratch size, preserves dispatch
+count and stays GPU-resident through luma APIs. Paired complete-frame measurements at the initial dense
+512-point state report median added costs of 0.074/0.098 ms (about 2.1–2.7%); ranges cross zero, so the
+small overhead estimate is noisy. Both preflights, 256 captured frames and queries pass. This bounded
+double-single solution is not a universal exact-sum guarantee; broader coordinates and devices remain open.
 
 Native-f32 collision is materially cheaper than its strict arithmetic control in the measured 128-point
 isolated case. Four collision passes at 512 dense points add roughly 0.84–0.93 ms to the initial frozen
 WebGPU frame. Single-pass deltas are noisier; the failing WebGL controls cannot supply accepted costs.
 Numerical accuracy, remaining overlap and frame cost stay separate acceptance questions.
 
-Next collision evidence includes a resident precision policy for dense composition, independent trajectories
-and the production hash/slot path above 4,096 points. Broader data and weights, scalable hierarchy construction,
+Next collision evidence includes independently evolving trajectories and the production hash/slot path above
+4,096 points. Broader data and weights, scalable hierarchy construction,
 allocation policy, remaining forces, renderer/interaction contracts and native portability remain open.
 
 ## 3. What the experiments tell us about Cosmos

@@ -14,7 +14,9 @@ Outgoing springs · integrate, then cool
 
 Production GLSL calculates `delta = centroid − point`, its length and angle, then a correction of `alpha × center × length × 0.01` in that direction. The WebGL lane imports those shaders unchanged. A clear precedes every additive accumulation, and blending is explicitly disabled for the following force/integration/draw passes.
 
-WebGPU uses luma kernels to reduce present `vec4` positions into sums/count in 256-invocation workgroups, recursively reducing partials until one aggregate remains. It computes the polar force with the existing refined arithmetic helpers and integrates through the strict candidate. All stages, including reduction and the next force, consume GPU-resident buffers in the resident normal frame’s compute pass. No float atomics, CPU centroid upload or per-tick reduction readback is required by this path. The [parallel reduction guide](#/concepts/reduction) explains the tree.
+WebGPU uses luma kernels to reduce present `vec4` positions into sums/count in 256-invocation workgroups, recursively reducing partials until one aggregate remains. The current default retains high/low limbs per coordinate through every level, using integer-controlled luma `sum_fp64`, before writing one float32 aggregate. This [center correction](#/collision/docs/findings) fixes the observed dense four-pass collision failure at unchanged tolerance. The original float32 tree remains a selectable control in the collision experiment.
+
+The polar force still uses the existing refined arithmetic helpers and integrates through the strict candidate. All stages, including reduction and the next force, consume GPU-resident buffers in the resident normal frame’s compute pass. No float atomics, CPU centroid upload or per-tick reduction readback is required by this path. The [parallel reduction guide](#/concepts/reduction) explains the tree.
 
 The new independent CPU oracle sums stored float32 positions in JS double precision, rounds the aggregate to its GPU format, then evaluates the polar force with explicit float32 rounding and the existing integrator. It does not mimic a GPU reduction tree or the WebGL blend order. Those accumulation orders can differ, so aggregate checks accompany the original force and position gates. The numerical constants and pre-existing reference paths remain unchanged.
 
@@ -41,6 +43,8 @@ The added cost is the median of each pair’s `on − off` duration. Off/on colu
 Timing backends reserve the selected sample tier in both controls; the interactive adaptive demo reserves 64. Initial geometry measurements freeze 32 samples before the first adaptive decision, while the measured 8,192-point cooled cases use 8. WebGL’s immediate command stream can include CPU/driver submission gaps inside its elapsed interval, especially for short workloads. These allocation and timing scopes remain separate from production Graph frame-time or memory claims.
 
 ## Native findings · 11–12 November 2026
+
+**Historical float32-tree baseline:** the trajectory, quality and center-cost measurements in the following sections precede the high/low correction. They have not been rerun for the new reduction and must not be attributed to it. Current matched reports record the effective reduction in their parameters; center-cost exports record it separately. See the [new bounded correction evidence and paired cost](#/collision/docs/findings).
 
 Apple M3, standalone Chrome 156, pinned luma `10.0.0-alpha.4`. Every run uses center **1**, a pin on point 0, explicit unit link weights, production spring variation and the shared adaptive policy. Distributions are uniform except dense 8,192-point communities, which start in two clusters.
 

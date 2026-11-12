@@ -12,12 +12,14 @@ import { forceSettings } from './production-settings'
 import { createCombinedWebGL } from './webgl'
 import { createCombinedWebGPU } from './webgpu'
 import type { CombinedBackend } from './backend'
+import { DEFAULT_CENTER_REDUCTION, type CenterReduction } from './center-reduction'
 export const CENTER_COST_POLICY = { warmups: 4, samples: 12, frames: 4, blocks: 2 } as const
 type Api = 'webgl' | 'webgpu'
 type Gate = { valid: boolean; stages: Array<{ stage: string; forceFailures: number; positionFailures: number; aggregateFailures: number; flagsExact: boolean }>;
   wholeTick: ReturnType<typeof compareArray>; }
 type Trial = { block: number; round: number; warmup: boolean; api: Api; center: number; timing: Measurement; valid: boolean; mismatchedFrames: number }
 export type CenterCostReport = {
+  centerReduction?: CenterReduction;
   settings: Settings; alpha: number; tick: number; samples: number; strength: number; recordedAt: string; browser: string;
   policy: { warmups: number; samples: number; frames: number; blocks: number }; status: string;
   input: Float32Array;
@@ -67,6 +69,7 @@ export async function measureCenterCost (
   if (frozen.length !== input.points.length) throw new Error('Frozen graph size differs')
   input.points = frozen.slice(); graph.points = input.points
   const report: CenterCostReport = {
+    centerReduction: DEFAULT_CENTER_REDUCTION,
     settings: { ...settings },
     alpha,
     tick,
