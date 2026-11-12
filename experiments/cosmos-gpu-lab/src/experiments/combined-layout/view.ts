@@ -1,3 +1,4 @@
+import { drawPoint } from '../../runtime/presentation'
 import { count as formatCount, scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
@@ -74,7 +75,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       <div class="panel-heading"><h2>${LABELS[name]}</h2><span class="status" data-state="${name}">Starting</span></div>
       <canvas data-canvas="${name}" width="480" height="340" aria-label="${LABELS[name]} combined layout"></canvas>
       <p class="demo-note" data-info="${name}"></p></article>`).join('')}</section>
-    <p class="demo-note">Shared camera; blue free points, yellow pinned. GPU points and links use resident positions.
+    <p class="demo-note">Shared camera; blue circles are free, yellow squares are pinned. GPU points and links use resident positions.
       Checkpoint sub-steps are read back for validation. This is a correctness and layout study, not an FPS benchmark.</p></section>
     <section
       data-run-section="results"><p class="demo-note">Live numerical checks and layout measurements. Recorded findings are under Evidence.</p>
@@ -155,10 +156,11 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     }
     ctx.stroke()
     for (let i = 0; i < cpu.length; i += 4) {
-      ctx.fillStyle = cpu[i + 2] > 0.5 ? graphPalette.pinned : graphPalette.point; ctx.beginPath(); ctx.arc(...xy(i), 2.5, 0, Math.PI * 2); ctx.fill()
+      drawPoint(ctx, ...xy(i), cpu[i + 2] > 0.5)
     }
     for (const name of BACKENDS) {
       const failures = session.rows.filter(r => r.results.some(c => c.name === name && c.valid === false)).length
+      el(`[data-state="${name}"]`).classList.toggle('failed', Boolean(session.errors[name]) || failures > 0)
       el(`[data-state="${name}"]`).textContent = session.errors[name]
         ? 'Unavailable / stopped'
         : failures
@@ -311,7 +313,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       const values = session!.rows.flatMap(r => [chart.get(r.cpu), ...r.results.map(c => chart.get(c.metrics))]).filter(Number.isFinite)
       const max = Math.max(1e-12, ...values)
       return `<h3>${chart.title}</h3><svg viewBox="0 0 720 185" role="img" aria-label="${chart.title} over ${row.tick} ticks">
-        <path d="M50 20 V150 H690" stroke="currentColor" opacity="0.4" fill="none"/>
+        <path d="M50 20 V150 H690" stroke="${graphPalette.link}" fill="none"/>
         <text x="50" y="14" fill="currentColor" font-size="12">${num(max)}</text><text x="30" y="154" fill="currentColor" font-size="12">0</text>
         <text x="50" y="175" fill="currentColor" font-size="12">Tick 1</text><text x="630" y="175" fill="currentColor" font-size="12">Tick ${row.tick}</text>
         ${[...BACKENDS, 'CPU' as const].map(name => {

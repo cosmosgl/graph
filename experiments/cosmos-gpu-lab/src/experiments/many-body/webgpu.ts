@@ -13,17 +13,17 @@ import integrationSource from './integrate.wgsl?raw'
 const renderSource = `
 @group(0) @binding(0) var<storage, read> positions: array<vec4<f32>>;
 @group(0) @binding(1) var<uniform> view: vec4<f32>;
-struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32>, @location(1) color: vec3<f32> }
+struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f32>, @location(1) color: vec3<f32>, @location(2) @interpolate(flat) pinned: f32 }
 @vertex fn vertexMain(@builtin(vertex_index) v: u32, @builtin(instance_index) i: u32) -> Vertex {
   let corners = array<vec2<f32>,6>(vec2(-1.,-1.),vec2(1.,-1.),vec2(-1.,1.),vec2(-1.,1.),vec2(1.,-1.),vec2(1.,1.));
   let p = positions[i]; var result: Vertex;
   result.position = vec4(3.,3.,0.,1.);
   if (p.w <= 0.5) { result.position = vec4((p.xy - view.xy) * view.zw + corners[v] * vec2(5. / 480., 5. / 340.), 0., 1.); }
-  result.uv = corners[v]; result.color = select(vec3(${graphRgb.point}),vec3(${graphRgb.pinned}), p.z > 0.5);
+  result.pinned = p.z; result.uv = corners[v]; result.color = select(vec3(${graphRgb.point}),vec3(${graphRgb.pinned}), p.z > 0.5);
   return result;
 }
 @fragment fn fragmentMain(input: Vertex) -> @location(0) vec4<f32> {
-  if (dot(input.uv,input.uv) > 1.) { discard; }
+  if (input.pinned <= 0.5 && dot(input.uv,input.uv) > 1.) { discard; }
   return vec4(input.color,1.);
 }`
 

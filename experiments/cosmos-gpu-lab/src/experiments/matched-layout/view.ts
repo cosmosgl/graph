@@ -1,3 +1,4 @@
+import { drawPoint } from '../../runtime/presentation'
 import { count as formatCount, milliseconds, scientific } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
@@ -120,12 +121,12 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     ctx.stroke()
     for (let id = 0; id < cpu.length / 4; id++) {
       if (cpu[id * 4 + 3] <= 0.5) {
-        ctx.fillStyle = cpu[id * 4 + 2] > 0.5 ? graphPalette.pinned : graphPalette.point
-        ctx.beginPath(); ctx.arc(...xy(id), 2.5, 0, Math.PI * 2); ctx.fill()
+        drawPoint(ctx, ...xy(id), cpu[id * 4 + 2] > 0.5)
       }
     }
     for (const name of NAMES) {
       const failed = name === 'cpu' ? 0 : report.rows.filter(r => r.checks[name]?.valid === false).length
+      el(`[data-state="${name}"]`).classList.toggle('failed', name !== 'cpu' && (Boolean(report.errors[name]) || failed > 0))
       el(`[data-state="${name}"]`).textContent = name === 'cpu'
         ? 'Independent operation model'
         : report.errors[name]
@@ -139,7 +140,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     const method = report.method === 'exact' ? 'Exact all-pairs' : 'Hierarchical'
     const sampling = report.method === 'exact' ? 'all present neighbors' : `${row?.samples ?? report.parameters.samples} samples`
     el('[data-output="method"]').textContent = `${method} repulsion · ${sampling} · center ${session.settings.center ?? 0} after gravity · ` +
-      `origin (2048, 2048) · shared camera · yellow pinned. ${settingsNote(session.settings)} ` +
+      `origin (2048, 2048) · shared camera · yellow squares pinned. ${settingsNote(session.settings)} ` +
       'Frozen checks: first, every 10 ticks and final. Unchecked ticks have no numerical verdict.'
     const assessment = report.assessment
     el('[data-output="assessment"]').innerHTML = `<h3>Evidence by contract</h3>
@@ -230,7 +231,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
           .filter((v): v is number => v !== null && Number.isFinite(v))
         const max = Math.max(1e-12, ...values)
         return `<h3>${chart.title}</h3><svg viewBox="0 0 720 170" role="img" aria-label="${chart.title} over ${row.tick} ticks">
-        <path d="M60 20 V135 H690" stroke="currentColor" opacity="0.3" fill="none"/>
+        <path d="M60 20 V135 H690" stroke="${graphPalette.link}" fill="none"/>
         <text x="0" y="24" fill="currentColor" font-size="12">${num(max)}</text><text x="45" y="139" fill="currentColor" font-size="12">0</text>
         <text x="60" y="160" fill="currentColor" font-size="12">Tick 1</text><text x="630" y="160" fill="currentColor" font-size="12">Tick ${row.tick}</text>
         ${NAMES.map(n => `<polyline fill="none" stroke="${COLORS[n].color}" stroke-dasharray="${COLORS[n].dash}"

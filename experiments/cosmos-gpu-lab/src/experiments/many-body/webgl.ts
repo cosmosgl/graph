@@ -16,18 +16,19 @@ precision highp float;
 precision highp int;
 uniform sampler2D positions;
 layout(std140) uniform drawUniforms { vec4 view; float size; };
-out vec3 color;
+out vec3 color; flat out float pinnedMarker;
 void main() {
   vec4 p = texelFetch(positions, ivec2(gl_VertexID % int(size), gl_VertexID / int(size)), 0);
   gl_Position = vec4(3.,3.,0.,1.);
   if (p.w <= 0.5) gl_Position = vec4((p.xy - view.xy) * view.zw,0.,1.);
   gl_PointSize = 5.;
+  pinnedMarker = p.z;
   color = p.z > 0.5 ? vec3(${graphRgb.pinned}) : vec3(${graphRgb.point});
 }`
 const fragment = `#version 300 es
 precision highp float;
-in vec3 color; out vec4 fragColor;
-void main() { if (length(gl_PointCoord * 2. - 1.) > 1.) discard; fragColor = vec4(color,1.); }`
+in vec3 color; flat in float pinnedMarker; out vec4 fragColor;
+void main() { if (pinnedMarker <= 0.5 && length(gl_PointCoord * 2. - 1.) > 1.) discard; fragColor = vec4(color,1.); }`
 
 export type WebGLForceFactory = (resources: {
   device: Device; positions: Texture[]; random: Texture; exit: Texture; target: Framebuffer; count: number; size: number; encodeExact(): void;

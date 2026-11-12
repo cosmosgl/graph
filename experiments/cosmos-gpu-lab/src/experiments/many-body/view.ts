@@ -1,3 +1,4 @@
+import { setStatus, drawPoint } from '../../runtime/presentation'
 import { scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
 import { graphPalette } from '../../runtime/palette'
@@ -17,8 +18,7 @@ function drawCpu (canvas: HTMLCanvasElement, positions: Float32Array, view: View
     if (positions[i + 3] > 0.5) continue
     const x = ((positions[i] - view[0]) * view[2] + 1) * canvas.width / 2
     const y = (1 - (positions[i + 1] - view[1]) * view[3]) * canvas.height / 2
-    ctx.fillStyle = positions[i + 2] > 0.5 ? graphPalette.pinned : graphPalette.point
-    ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill()
+    drawPoint(ctx, x, y, positions[i + 2] > 0.5)
   }
 }
 
@@ -63,7 +63,7 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
     </section>
     <p class="demo-note"
       data-run-part="explanation">Identical initial positions, fixed random samples and parameters.
-      Blue points are free; yellow points are pinned; absent points are hidden.
+      Blue circles are free; yellow squares are pinned; absent points are hidden.
       The camera fits all three outputs together. This force-only layout expands; gravity, springs and cooling are not enabled.</p>
     <div class="many-body-results" data-output="results"
       data-run-part="results"></div>
@@ -138,7 +138,7 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
   const fail = (lane: Lane, error: unknown): void => {
     lane.failed = true
     errors[lane.key] = error instanceof Error ? error.message : String(error)
-    el(`[data-status="${lane.key}"]`).textContent = 'Failed'
+    setStatus(el(`[data-status="${lane.key}"]`), 'Failed', true)
     el(`[data-info="${lane.key}"]`).textContent = errors[lane.key]
   }
   const setup = async (): Promise<void> => {
@@ -159,17 +159,17 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
     for (const key of ['WebGL', 'WebGPU'] as const) {
       // A canvas cannot switch to another device context: replace it when recreating devices.
       const old = canvas(key); const fresh = old.cloneNode() as HTMLCanvasElement; old.replaceWith(fresh)
-      el(`[data-status="${key}"]`).textContent = 'Starting…'; el(`[data-info="${key}"]`).textContent = ''
+      setStatus(el(`[data-status="${key}"]`), 'Starting…'); el(`[data-info="${key}"]`).textContent = ''
       try {
         const backend = key === 'WebGL' ? await createWebGL(fresh, input, params) : await createWebGPU(fresh, input, params, variant.value as Variant)
         if (destroyed) { backend.destroy(); return }
         lanes.push({ key, backend, previous: input.points.slice(), failed: false })
         info[key] = backend.info
-        el(`[data-status="${key}"]`).textContent = 'Ready'; el(`[data-info="${key}"]`).textContent = backend.info
+        setStatus(el(`[data-status="${key}"]`), 'Ready'); el(`[data-info="${key}"]`).textContent = backend.info
       } catch (error) {
         runError = String(error)
         errors[key] = error instanceof Error ? error.message : String(error)
-        el(`[data-status="${key}"]`).textContent = 'Unavailable'; el(`[data-info="${key}"]`).textContent = errors[key]
+        setStatus(el(`[data-status="${key}"]`), 'Unavailable', true); el(`[data-info="${key}"]`).textContent = errors[key]
       }
       if (destroyed) return
     }
@@ -199,7 +199,7 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
         const result = compare(actual, local); const drift = compare(actual, expected)
         checks.push({ name: lane.key, result, drift }); outputs.set(lane.key, actual)
         lane.previous = actual.positions
-        el(`[data-status="${lane.key}"]`).textContent = result.valid ? 'One-step pass' : 'Mismatch'
+        setStatus(el(`[data-status="${lane.key}"]`), result.valid ? 'One-step pass' : 'Mismatch', !result.valid)
       } catch (error) { runError = String(error); fail(lane, error) }
     }
     if (destroyed) return false
