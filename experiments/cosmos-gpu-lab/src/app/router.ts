@@ -65,9 +65,13 @@ export function conceptHref (conceptId: string): string {
   return `#/concepts/${encodeURIComponent(conceptId)}`
 }
 
-export function experimentHref (experimentId: string, pageId?: string): string {
+export function articleSectionId (pageId: string, section?: string): string {
+  return `doc-${pageId}${section ? `-${section}` : ''}`
+}
+
+export function experimentHref (experimentId: string, pageId?: string, section?: string): string {
   const root = `#/${encodeURIComponent(experimentId)}`
-  return pageId ? `${root}/docs/${encodeURIComponent(pageId)}` : root
+  return pageId ? `${root}?section=${encodeURIComponent(articleSectionId(pageId, section))}` : root
 }
 
 export function runHref (experimentId: string): string {

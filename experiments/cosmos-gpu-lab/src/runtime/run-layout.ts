@@ -105,7 +105,7 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
     ? `${validationContracts[context.experiment]?.coverage ?? 'Only the inputs and checks explicitly named below.'} ` +
       'Sweeps use their own row parameters. This session does not approve the overall migration.'
     : 'Only the inputs and checks explicitly named below; no overall migration approval.'
-  const tables = createResultTables(frame)
+  const tables = createResultTables(frame, { exclude: '.experiment-notes, .experiment-references' })
   const refresh = (): void => {
     const values = read()
     for (const key of ['state', 'passed', 'failed', 'unchecked'] as const) {

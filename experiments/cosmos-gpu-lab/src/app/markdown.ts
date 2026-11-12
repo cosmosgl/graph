@@ -26,15 +26,15 @@ export async function renderMarkdown (
     linkify: true,
     typographer: true,
   })
-  if (options.headingLevelOffset) {
-    markdown.core.ruler.push('heading-offset', state => {
-      for (const token of state.tokens) {
-        if (token.type === 'heading_open' || token.type === 'heading_close') {
-          token.tag = `h${Math.min(6, Number(token.tag.slice(1)) + options.headingLevelOffset!)}`
-        }
+  markdown.core.ruler.push('heading-levels', state => {
+    for (const token of state.tokens) {
+      if (token.type === 'heading_open' || token.type === 'heading_close') {
+        const level = Number(token.tag.slice(1))
+        if (token.type === 'heading_open') token.attrSet('data-heading-level', String(level))
+        token.tag = `h${Math.min(6, level + (options.headingLevelOffset ?? 0))}`
       }
-    })
-  }
+    }
+  })
 
   // Keep wide evidence tables within the article, without clipping their rows.
   markdown.renderer.rules.table_open = (): string => '<div class="table-scroll"><table>\n'

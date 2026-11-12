@@ -13,21 +13,23 @@ current focus is editorial data in `research.ts`; conclusions, criteria and bloc
 records as experiment pages and Roadmap. The complete milestone table and checklists remain on
 Roadmap, linked from the homepage. Reviewed findings remain separate from this browser's live run.
 
-Every experiment uses a continuous page: question and current finding, live visualization,
-expanded settings, live results, explanation, recorded findings and diagnostics. Wide screens put
-settings beside the graph; narrow screens show the graph first. One contents list links to visible
-sections. The latest recorded article is readable on the page; earlier investigations and technical
-articles stay linked. Experiments without a published measurement matrix say so explicitly.
-Article pages use a return link and their own contents, without stacked experiment/topic tabs.
-Existing `/run`, `/evidence`, article URLs and Run section bookmarks continue to work. Consulting
-an article preserves one paused experiment; another experiment or Home releases it. Mobile pages use
-compact catalog, roadmap and learning links instead of a horizontal strip of experiment titles.
-All content stays expanded. Full-text search remains follow-up work.
+Each experiment is one complete document: question and current finding, live visualization,
+expanded settings and results, technical explanations, current and earlier findings, diagnostics,
+and references. A sticky contents menu sits on the right on wide screens and becomes a short,
+expanded list above the experiment on narrow screens. The top header links to All experiments,
+Roadmap and Learn; there is no permanent catalog sidebar.
+
+All technical articles and investigations are embedded, with their source metadata and historical
+warnings intact. Shared comparison criteria appear once. Sources move into References with their
+annotations. Article headings have namespaced anchors, so repeated headings cannot collide.
+Old `/run`, `/evidence` and `/docs/page?section=heading` links land on the corresponding sections.
+Reading and section navigation preserve the running instance, canvas, controls and tick. Leaving
+for a shared reference pauses the instance; another experiment or Home releases it. Documentation
+remains readable when GPU initialization fails. All content stays expanded, without accordions.
 
 Use the **Validation workflow** (`#/validation-workflow`) and **Numerical research**
 (`#/numerical-research`) for reference roles, source-backed precision findings and acceptance policy.
-Every experiment has a **Validation contract** technical article describing its question, reference, gates,
-checked population and limits. The contract is not a live verdict.
+Every experiment includes **What we compare**, describing its reference, gates, checked population and limits. The contract is not a live verdict.
 
 ## Run
 
@@ -202,16 +204,18 @@ their separate meanings.
 ### Experiment navigation
 
 `src/app/research.ts` and `research-catalog.ts` hold reviewed findings, technical article links,
-and earlier investigations. Add a summary, primary method article, any related articles and an
+and earlier investigations. Add a summary, primary method article, related articles and an
 investigation list when adding an experiment. Describe its actual comparison paths: a WebGPU-only
 grid or resource study must not inherit a WebGL/WebGPU/CPU trajectory claim. The registry rejects
 unknown pages, missing assessments and unreachable documents. An empty investigation list means
 no recorded matrix is published; local runs do not populate it.
 
-Base routes (`#/experiment`) open the live experiment and its visible notes. Old `/run` routes
-resolve to the same page; `/evidence` resolves to its Recorded findings section. Existing `docs/page`
-URLs remain unchanged. Section jumps preserve the running instance; article visits pause it and
-retain the same controls, canvas, tick and results for the return trip.
+Base routes (`#/experiment`) open the full experiment document. Old `/run` routes resolve to that
+page; `/evidence` resolves to Recorded findings. Old `docs/page` URLs become `?section=doc-page`
+links, retaining the original heading slug after the page prefix. Article-local links use that prefix.
+Section changes scroll and focus the target without recreating or pausing the run. The contents menu
+tracks the section being read. Static-document table observers have their own lifetime and are
+excluded from per-tick live table refreshes.
 
 The learning guide lives in `src/docs/learn-webgpu.md`; its small interactive examples live in
 `src/app/learning-examples.ts`. An `example` fence contains a registered example name, such as

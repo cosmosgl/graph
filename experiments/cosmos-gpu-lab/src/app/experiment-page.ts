@@ -1,103 +1,181 @@
-import type { ExperimentDefinition } from '../runtime/experiment'
+import type { ExperimentDefinition, ExperimentPage } from '../runtime/experiment'
+import { createResultTables } from '../runtime/result-tables'
 import { validationContracts } from '../runtime/validation'
-import { experimentHref } from './router'
+import { addArticleSections, rewriteArticleLinks } from './article-sections'
+import { articleSectionId, experimentHref } from './router'
 import { researchMethodPages, type ResearchSummary } from './research'
+import { renderInvestigationContext } from './research-ui'
 
-const notes = new WeakMap<HTMLElement, Promise<void>>()
+type Notes = { ready: Promise<void>; disposed: boolean; dispose(): void }
+const notes = new WeakMap<HTMLElement, Notes>()
+const contentsSections = [
+  ['run-run', 'Experiment'], ['run-results', 'Live results'], ['run-explanation', 'How it works'],
+  ['recorded-findings', 'Recorded findings'], ['run-diagnostics', 'Diagnostics'], ['experiment-references', 'References'],
+]
 
-export function renderExperimentContents (host: HTMLElement, experiment: ExperimentDefinition): void {
+export function renderExperimentContents (host: HTMLElement, experiment: ExperimentDefinition): () => void {
   const contents = document.createElement('nav'); contents.className = 'experiment-contents'
-  contents.setAttribute('aria-label', 'Experiment contents')
-  const sections = [['run-configuration', 'Settings'], ['run-results', 'Live results'],
-    ['run-explanation', 'How it works'], ['recorded-findings', 'Recorded findings']]
-  if (host.querySelector('#run-diagnostics')) sections.push(['run-diagnostics', 'Diagnostics'])
-  for (const [id, label] of sections) {
-    const link = document.createElement('a'); link.textContent = label
-    link.href = `${experimentHref(experiment.id)}?section=${id}`
-    link.addEventListener('click', event => {
-      if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-      const target = host.querySelector<HTMLElement>(`#${id}`)
-      if (!target) return
-      event.preventDefault(); window.history.replaceState(null, '', link.href)
-      target.scrollIntoView({ block: 'start' }); target.tabIndex = -1; target.focus({ preventScroll: true })
-    })
-    contents.append(link)
+  contents.setAttribute('aria-label', 'On this page'); contents.innerHTML = '<p>On this page</p><ul></ul>'
+  const targets: Array<{ link: HTMLAnchorElement; target: HTMLElement }> = []
+  for (const [id, label] of contentsSections) {
+    const target = host.querySelector<HTMLElement>(`#${id}`)
+    if (!target && id === 'run-diagnostics') continue
+    const item = document.createElement('li'); const link = document.createElement('a'); link.textContent = label
+    link.href = `${experimentHref(experiment.id)}?section=${id}`; item.append(link); contents.querySelector('ul')!.append(item)
+    if (target) targets.push({ link, target })
   }
-  const previous = host.querySelector(':scope > .experiment-contents')
-  if (previous) previous.replaceWith(contents)
-  else host.prepend(contents)
+  host.querySelector(':scope > .experiment-contents')?.remove()
+  host.querySelector('.experiment-header')!.after(contents)
+  let frame = 0
+  const refresh = (): void => {
+    frame = 0
+    let active = targets[0]
+    for (const entry of targets) if (entry.target.getBoundingClientRect().top <= 130) active = entry
+    for (const entry of targets) {
+      if (entry === active) entry.link.setAttribute('aria-current', 'location')
+      else entry.link.removeAttribute('aria-current')
+    }
+  }
+  const schedule = (): void => { if (!frame) frame = requestAnimationFrame(refresh) }
+  const resize = new ResizeObserver(schedule); resize.observe(host)
+  window.addEventListener('scroll', schedule, { passive: true }); window.addEventListener('resize', schedule)
+  refresh()
+  return () => {
+    resize.disconnect(); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule)
+    cancelAnimationFrame(frame)
+  }
+}
+
+function moveReferences (wrapper: HTMLElement, page: ExperimentPage, references: HTMLElement): void {
+  if (page.id === 'references') {
+    wrapper.querySelector('[data-heading-level="1"]')?.remove()
+    references.append(wrapper); return
+  }
+  for (const heading of wrapper.querySelectorAll<HTMLElement>('[data-heading-level="2"]')) {
+    const label = heading.childNodes[0]?.textContent?.trim()
+    if (!label || !/^(references|sources)$/i.test(label)) continue
+    const group = document.createElement('section'); group.className = 'reference-group prose'; group.dataset.documentId = page.id
+    const next = heading.nextElementSibling
+    let sibling = next
+    // Keep all annotations with their sources, and retain the heading's old ID.
+    while (sibling && !(sibling.matches('[data-heading-level]') && Number((sibling as HTMLElement).dataset.headingLevel) <= 2)) {
+      const following = sibling.nextElementSibling; group.append(sibling); sibling = following
+    }
+    const title = document.createElement('h3'); title.id = heading.id; title.textContent = page.title === 'Overview' ? 'Concept and pipeline' : page.title
+    group.prepend(title); heading.remove(); references.append(group)
+  }
+}
+
+async function renderArticle (
+  parent: HTMLElement, references: HTMLElement, experiment: ExperimentDefinition, record: ResearchSummary, page: ExperimentPage
+): Promise<void> {
+  const wrapper = document.createElement('section'); wrapper.className = 'experiment-article'
+  wrapper.id = articleSectionId(page.id); wrapper.dataset.documentId = page.id
+  const target = document.createElement('div'); wrapper.append(target); parent.append(wrapper)
+  const item = record.investigations.find(item => item.page === page.id)
+  if (item && page.id !== record.evidence && item.state === 'Supporting investigation') {
+    const description = document.createElement('p'); description.textContent = item.description; wrapper.prepend(description)
+  }
+  renderInvestigationContext(target, experiment, record, page.id)
+  if (page.id === record.evidence) wrapper.dataset.recordedReport = ''
+  try {
+    if (page.kind === 'markdown') {
+      const { renderMarkdown } = await import('./markdown')
+      await renderMarkdown(target, await page.load(), page.assets, { sectionNavigation: false, headingLevelOffset: 2, tables: false })
+      addArticleSections(wrapper, experiment.id, page.id)
+      if (page.title === 'Overview') {
+        const title = target.querySelector('[data-heading-level="1"]')
+        if (title) title.childNodes[0].textContent = 'Concept and pipeline'
+      }
+    } else {
+      const { renderReport } = await import('./report')
+      renderReport(target, await page.load(), experiment.id, { embedded: true })
+    }
+    moveReferences(wrapper, page, references)
+  } catch {
+    target.innerHTML = '<p>Could not load this article. Reload the page to try again.</p>'
+  }
 }
 
 async function renderNotes (host: HTMLElement, experiment: ExperimentDefinition, record: ResearchSummary): Promise<void> {
   const contract = validationContracts[experiment.id]
   const content = document.createElement('div'); content.className = 'experiment-notes'
-  const methods = researchMethodPages(record).map(id => experiment.pages.find(page => page.id === id)!)
+  const contractId = articleSectionId('validation-contract')
+  const fields = [['question', 'Comparison question', contract.question], ['reference', 'Reference', contract.reference],
+    ['acceptance', 'Acceptance', contract.acceptance], ['checked-population', 'Checked population', contract.coverage], ['limits', 'Limits', contract.limits]]
   content.innerHTML = `<section class="experiment-method" id="run-explanation" aria-labelledby="experiment-method-title">
-    <h2 id="experiment-method-title">How it works</h2>
-    <p>${experiment.summary}</p><p>${record.comparison}</p>
-    <div data-experiment-guidance></div>
-    <h3>Reproduce</h3><p>${record.reproduce}</p>
-    <dl class="experiment-contract">
-      <div><dt>Reference</dt><dd>${contract.reference}</dd></div>
-      <div><dt>Acceptance</dt><dd>${contract.acceptance}</dd></div>
-      <div><dt>Checked population</dt><dd>${contract.coverage}</dd></div>
-      <div><dt>Limits</dt><dd>${contract.limits}</dd></div>
-    </dl>
-    <h3>Technical articles</h3><ul class="experiment-articles">${methods.map(page => `<li>
-      <a href="${experimentHref(experiment.id, page.id)}">${page.title === 'Overview' ? 'Concept and pipeline' : page.title}</a></li>`).join('')}</ul>
-    </section>
+    <h2 id="experiment-method-title">How it works</h2><p>${record.comparison}</p>
+    <div data-experiment-guidance></div><h3>Try it</h3><p>${record.reproduce}</p>
+    <section id="${contractId}"><h3>What we compare</h3><dl class="experiment-contract">${fields.map(([id, title, value]) =>
+  `<div id="${articleSectionId('validation-contract', id)}"><dt>${title}</dt><dd>${value}</dd></div>`).join('')}</dl></section>
+    <div data-method-articles></div></section>
     <section class="recorded-findings" id="recorded-findings" aria-labelledby="recorded-findings-title">
-      <h2 id="recorded-findings-title">Recorded findings</h2>
-      <div data-recorded-report></div>
+      <h2 id="recorded-findings-title">Recorded findings</h2><div data-findings-articles></div>
       <h3>Scope and next steps</h3><p>${record.scope}</p><p>${record.next}</p>
       <p class="research-meta">Assessed variant: ${record.variant}. Reviewed ${record.reviewed}.</p>
       <p><a href="#/roadmap?section=milestone-${record.milestone}">Related migration milestone</a></p>
-    </section>`
+      <section class="earlier-findings"><h3>Earlier investigations</h3><div data-earlier-articles></div></section>
+    </section>
+    <section class="experiment-references" id="experiment-references"><h2>References</h2>
+      <p>Use the <a href="#/validation-workflow">validation workflow</a> to classify a difference and the
+      <a href="#/numerical-research">numerical research report</a> for the specification basis.
+      Record backend, browser, device, inputs, checked population and raw failures with every finding.</p>
+      <div data-article-references></div></section>`
   const frame = host.querySelector('.run-layout')!
   const originalGuidance = frame.querySelector('#run-explanation')
   if (originalGuidance) {
     originalGuidance.querySelector('h2')?.remove()
-    content.querySelector('[data-experiment-guidance]')!.append(...originalGuidance.childNodes)
-    originalGuidance.remove()
+    content.querySelector('[data-experiment-guidance]')!.append(...originalGuidance.childNodes); originalGuidance.remove()
   }
+  const references = content.querySelector<HTMLElement>('[data-article-references]')!
   const diagnostics = frame.querySelector('#run-diagnostics')
-  if (diagnostics) diagnostics.before(content)
-  else frame.append(content)
-  const previous = record.investigations.filter(item => item.page !== record.evidence)
-  if (previous.length) {
-    const history = document.createElement('section'); history.className = 'earlier-findings'
-    history.innerHTML = `<h3>Earlier investigations</h3><ul>${previous.map(item => {
-      const page = experiment.pages.find(page => page.id === item.page)!
-      return `<li><a href="${experimentHref(experiment.id, item.page)}">${page.title}</a><p>${item.description}</p></li>`
-    }).join('')}</ul>`
-    content.querySelector('.recorded-findings')!.append(history)
+  if (diagnostics) {
+    diagnostics.before(content)
+    diagnostics.after(content.querySelector('.experiment-references')!)
+  } else frame.append(content)
+  const jobs: Promise<void>[] = []
+  for (const id of researchMethodPages(record)) {
+    if (id === 'validation-contract' || id === record.evidence) continue
+    const page = experiment.pages.find(page => page.id === id)!
+    jobs.push(renderArticle(content.querySelector('[data-method-articles]')!, references, experiment, record, page))
   }
-  const report = content.querySelector<HTMLElement>('[data-recorded-report]')!
-  const page = experiment.pages.find(page => page.id === record.evidence)
-  if (!page) {
-    report.innerHTML = '<p>No recorded measurement matrix is published for this experiment yet. ' +
+  const primary = experiment.pages.find(page => page.id === record.evidence)
+  if (primary) jobs.push(renderArticle(content.querySelector('[data-findings-articles]')!, references, experiment, record, primary))
+  else {
+    content.querySelector('[data-findings-articles]')!.innerHTML =
+      '<p data-recorded-report>No recorded measurement matrix is published for this experiment yet. ' +
       'Live results above describe this browser session; they do not approve the overall migration.</p>'
-    return
   }
-  try {
-    if (page.kind === 'markdown') {
-      const { renderMarkdown } = await import('./markdown')
-      await renderMarkdown(report, await page.load(), page.assets, { sectionNavigation: false, headingLevelOffset: 2, tables: false })
-    } else {
-      const { renderReport } = await import('./report')
-      renderReport(report, await page.load(), experiment.id, { embedded: true })
-    }
-  } catch {
-    report.innerHTML = `<p>Could not load the recorded article. <a href="${experimentHref(experiment.id, page.id)}">Open ${page.title}</a>.</p>`
+  const earlier = record.investigations.filter(item => item.page !== record.evidence)
+  for (const item of earlier) {
+    const page = experiment.pages.find(page => page.id === item.page)!
+    jobs.push(renderArticle(content.querySelector('[data-earlier-articles]')!, references, experiment, record, page))
   }
+  if (!earlier.length) content.querySelector('.earlier-findings')!.remove()
+  await Promise.all(jobs)
+  // Source requests are concurrent, while reference groups retain article order.
+  const order = experiment.pages.map(page => page.id)
+  references.replaceChildren(...Array.from(references.children).sort((a, b) => {
+    const pageOf = (element: Element): number => order.indexOf((element as HTMLElement).dataset.documentId!)
+    return pageOf(a) - pageOf(b)
+  }))
+  rewriteArticleLinks(host, experiment, record)
 }
 
-// Notes belong to the retained experiment DOM too. Opening an article and
-// returning must not reset either the live controls or the recorded article.
 export function mountExperimentNotes (host: HTMLElement, experiment: ExperimentDefinition, record: ResearchSummary): Promise<void> {
   const existing = notes.get(host)
-  if (existing) return existing
-  const pending = renderNotes(host, experiment, record)
-  notes.set(host, pending)
-  return pending
+  if (existing) return existing.ready
+  const state: Notes = { ready: undefined!, disposed: false, dispose: () => {} }
+  notes.set(host, state)
+  state.ready = renderNotes(host, experiment, record).then(() => {
+    if (state.disposed) return
+    const tables = createResultTables(host.querySelector('.run-layout')!, { only: '.experiment-notes, .experiment-references' })
+    tables.refresh(); state.dispose = tables.destroy
+  })
+  return state.ready
+}
+
+export function disposeExperimentNotes (host: HTMLElement): void {
+  const state = notes.get(host)
+  if (state) { state.disposed = true; state.dispose(); notes.delete(host) }
 }

@@ -61,23 +61,26 @@ other experiments retain their detailed reports with the contract explaining the
 
 ### Shared research navigation
 
-Every experiment uses one continuous page in `src/app/experiment-page.ts`.
-The question and current finding lead directly into the live visualization. Settings stay expanded
-beside the graph on wide screens and follow it on narrow screens; live results, the explanation,
-recorded findings and diagnostics remain visible below. A single contents list links to sections.
-The recorded article reuses its original Markdown and measurement metadata. Earlier investigations
-remain ordinary article links with descriptive context instead of a separate evidence index.
-Technical articles have a return link and their own contents, without stacked navigation rows.
-Legacy `/run` and `/evidence` routes resolve to this page and its recorded-findings section.
+Every experiment is a complete document assembled by `src/app/experiment-page.ts`. The live view,
+technical articles, current findings, earlier investigations, diagnostics and references remain
+expanded on that document. A sticky right-hand contents menu tracks the section being read; on
+narrow screens it becomes a short list above the experiment. Simple header links replace the
+permanent left catalog sidebar. The full grouped catalog remains on Home.
 
-Existing article URLs remain valid. The registry checks that every document is reachable from
-technical articles or recorded investigations and that replacement links resolve. Experiments
-without a published matrix say so explicitly; no live run is promoted into a recorded finding.
+Articles reuse their Markdown, assets, source metadata and investigation warnings. Shared comparison
+criteria appear once. Reference sections keep their annotations while moving to the document footer.
+Article headings have page-prefixed IDs, including the old duplicate-heading suffixes. Old `/docs/page`
+URLs and heading links resolve to these anchors; `/run` and `/evidence` also remain valid aliases.
+Section navigation updates the location and focus without pausing or remounting the run, including
+browser Back and Forward. The document remains readable after a GPU initialization failure.
+
+The registry checks that every article is included and replacement links resolve. Experiments
+without a published matrix say so explicitly; a local run never becomes a recorded finding.
 
 `src/app/research.ts` and `research-catalog.ts` own the compact reviewed summaries, document
 assignments and milestone gates. The homepage and roadmap use the same assessment renderer;
 home highlights and experiment pages read the same
-experiment conclusion. Detailed measurements stay in their evidence articles. These are editorial
+experiment conclusion. Detailed measurements stay in their embedded source articles. These are editorial
 assessments, not status inferred from a test count or a completion percentage.
 
 Home leads with the current milestone, bounded demonstrated successes, blockers and next acceptance
@@ -97,7 +100,8 @@ Rendering-only and benchmark completion never imply numerical acceptance. Sectio
 the run. How it works shows reference, acceptance, population and limits as ordinary content. The live variant is always named, and recorded conclusions remain separate
 from the browser’s current run.
 
-The run frame also connects short setting descriptions to their controls, presents tables with
+Static-document tables have separate observers, disposed with the retained experiment. Per-tick
+refreshes exclude these tables. The run frame connects short setting descriptions to controls, presents tables with
 shared numeric and verdict conventions, and names the live session's devices and validation scope.
 Long explanations remain visible below the visualization or alongside the diagnostic they explain.
 Recorded measurement articles carry explicit source, measurement date, device/browser and scope
@@ -261,7 +265,7 @@ command requires a WebGPU adapter.
 6. Place the experiment ID in its prerequisite position in one catalog group in `src/app/registry.ts`.
 
 Vite discovers the manifest automatically; the catalog supplies its group and display order.
-The shell creates its navigation, homepage card and documentation tabs from that information.
+The shell creates the homepage entry and complete experiment document from that information.
 
 Most GPU ownership and scheduling remain local to each experiment. As several experiments
 begin sharing the same operations, we can extract proven primitives—reduction, scan, grid
