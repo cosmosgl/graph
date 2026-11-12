@@ -193,7 +193,17 @@ export const milestones = [
 ] as const
 
 export const mainOpenIssues = [
-  'Complete production force/rendering coverage and the Graph/host contracts.',
-  'Establish larger graph behavior and an affordable precision policy.',
-  'Agree quality, latency/memory budgets and the intended native GPU/browser matrix.',
-]
+  { text: 'Complete production force/rendering coverage and the Graph/host contracts.', href: '#/feature-inventory' },
+  { text: 'Establish larger graph behavior and an affordable precision policy.', href: '#/roadmap?section=milestone-simulation' },
+  { text: 'Agree quality, latency/memory budgets and the intended native GPU/browser matrix.', href: '#/roadmap?section=milestone-production' },
+] as const
+
+// Current editorial priority. The gate and findings come from the same records
+// used by Roadmap and experiment Overview, never from this browser's live run.
+export const migrationFocus = {
+  milestone: 'rendering',
+  experiment: 'point-styling',
+  phase: 'Prototype validation',
+  status: 'Production Cosmos uses WebGL. Integration and production acceptance remain open.',
+  demonstrated: ['collision', 'matched-layout', 'point-styling'],
+} as const

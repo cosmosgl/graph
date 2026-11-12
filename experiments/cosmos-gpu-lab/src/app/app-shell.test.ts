@@ -17,6 +17,24 @@ async function route (hash: string, ready: () => void): Promise<void> {
   await vi.waitFor(ready)
 }
 
+it('puts every visible migration decision before the complete experiment catalog', async () => {
+  const creates = experiments.map(experiment => vi.spyOn(experiment, 'create'))
+  window.history.replaceState(null, '', '#/')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('.experiment-catalog')).not.toBeNull())
+  const catalog = host.querySelector('.experiment-catalog')!
+  const decisions = host.querySelectorAll('[data-decision]')
+  expect(decisions).toHaveLength(4)
+  for (const section of decisions) {
+    expect(section.compareDocumentPosition(catalog) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(section.closest('details,[hidden]')).toBeNull()
+  }
+  expect(host.querySelectorAll('.experiment-card')).toHaveLength(experiments.length)
+  expect(host.querySelector('[data-decision="gate"] a[href="#/point-styling/run"]')).not.toBeNull()
+  expect(host.querySelector('[data-decision="milestone"] a[href="#/roadmap?section=milestone-rendering"]')).not.toBeNull()
+  creates.forEach(create => expect(create).not.toHaveBeenCalled())
+})
+
 it('provides all four destinations for every experiment without starting GPU work on documentation routes', async () => {
   const creates = experiments.map(experiment => vi.spyOn(experiment, 'create'))
   window.history.replaceState(null, '', '#/')

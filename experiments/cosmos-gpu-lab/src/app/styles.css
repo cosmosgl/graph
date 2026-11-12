@@ -1926,7 +1926,6 @@ button[data-action="play"][aria-pressed="true"] {
 }
 .migration-overview h2, .research-overview h2, .evidence-index h2 { margin: 12px 0; }
 .migration-overview p, .research-overview p, .evidence-index p { margin: 0 0 16px; }
-.migration-next > strong { color: var(--highlight); }
 .migration-overview strong, .research-overview strong, .compact-run strong, .prose strong { font-weight: 500; }
 .research-meta, .evidence-state, .research-breadcrumb {
   color: var(--text-secondary); font-size: var(--type-meta); font-weight: 400; line-height: 1.7;
@@ -1936,6 +1935,21 @@ button[data-action="play"][aria-pressed="true"] {
 .readiness-columns ul, .readiness-columns ol { padding-left: 20px; margin: 0; }
 .readiness-columns li { padding-left: 4px; margin-bottom: 24px; }
 .readiness-columns li p { margin: 6px 0; }
+.migration-current > p:first-of-type { margin-bottom: 8px; }
+.migration-decisions { grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 40px; margin: 28px 0; }
+.migration-decisions h2 { margin: 0 0 12px; }
+.migration-successes ul { padding: 0; list-style: none; }
+.migration-successes li { padding: 0; margin-bottom: 24px; }
+.migration-successes li:last-child { margin-bottom: 0; }
+.migration-next-steps { min-width: 0; }
+.migration-next-steps li { margin-bottom: 12px; }
+.migration-next-gate { margin-top: 28px; padding-top: 24px; border-top: 1px solid var(--control-border); }
+.migration-links { display: flex; flex-wrap: wrap; gap: 8px 18px; }
+.migration-overview > .migration-links { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--control-border); }
+.catalog-title { margin: 0 0 8px; font-size: var(--type-body); font-weight: 500; }
+@media (max-width: 1200px) {
+  .migration-decisions { grid-template-columns: minmax(0, 1fr); gap: 28px; }
+}
 .advance-scope { color: var(--text-secondary); }
 .migration-overview a, .research-overview a, .evidence-index a, .investigation-context a, .research-breadcrumb a {
   color: var(--accent); text-underline-offset: 3px;
@@ -2004,7 +2018,6 @@ button[data-action="play"][aria-pressed="true"] {
   .document-contents ul { flex-direction: column; }
 }
 @media (max-width: 600px) {
-  .readiness-columns { grid-template-columns: 1fr; gap: 8px; }
   .research-summary > div { grid-template-columns: 1fr; gap: 5px; }
 }
 .many-body-results th, .many-body-results td { padding: 10px; border-bottom: 1px solid var(--control-border); text-align: left; }
