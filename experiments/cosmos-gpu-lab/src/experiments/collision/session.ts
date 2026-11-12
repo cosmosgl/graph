@@ -8,7 +8,7 @@ import { cool } from '../combined-layout/data'
 import { stressPairs } from '../matched-layout/metrics'
 import { layoutMetrics } from './metrics'
 import { collisionView } from './camera'
-import { createFixture, overlap, type Settings } from './data'
+import { DEFAULT_COLLISION_ARITHMETIC, createFixture, overlap, type Settings } from './data'
 import { createBackend, parametersFor, sequence, type Api } from './backend'
 import { evaluate, expectedTick, sameBits, stageCheck, type Failure, type Gate } from './checks'
 import type { CollisionCostReport } from './timing'
@@ -33,6 +33,7 @@ export async function createCollisionSession (settings: Settings, canvas: (api: 
     count: graph.sizes.length,
     collision: { ...settings.collision },
     centerReduction: settings.centerReduction ?? DEFAULT_CENTER_REDUCTION,
+    arithmetic: settings.arithmetic ?? DEFAULT_COLLISION_ARITHMETIC,
     evolution: settings.evolution ?? 'shared',
     topology: settings.topology ?? 'chain',
   }

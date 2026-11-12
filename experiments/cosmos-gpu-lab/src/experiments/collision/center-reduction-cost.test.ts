@@ -6,7 +6,14 @@ import { expectedTick } from './checks'
 import { measureCollisionCost, collisionCostSummary } from './timing'
 
 it.skipIf(!import.meta.env.LAB_NATIVE_GPU)('compares center sums with collision retained and rejects an invalid original control', async () => {
-  const settings = { fixture: 'clusters' as const, count: 512, mode: 'combined' as const, alpha: 1, collision: { ...COLLISION, iterations: 4 } }
+  const settings = {
+    fixture: 'clusters' as const,
+    count: 512,
+    mode: 'combined' as const,
+    arithmetic: 'native' as const,
+    alpha: 1,
+    collision: { ...COLLISION, iterations: 4 },
+  }
   const { input, graph } = createFixture(settings.fixture, settings.count)
   const parameters = parametersFor(settings); const oracle = createOracle(graph, input, 'production', parameters)
   const stages = sequence(settings.mode, parameters)

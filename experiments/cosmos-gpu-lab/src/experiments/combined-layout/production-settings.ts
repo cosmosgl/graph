@@ -1,5 +1,5 @@
 import { getFinestGridSize, getNearFieldSlotCount } from '../../../../../src/modules/Shared/cell-slots'
-import { validateCollision, type CollisionParameters, type CollisionArithmetic } from '../collision/data'
+import { COLLISION_ARITHMETICS, validateCollision, type CollisionParameters, type CollisionArithmetic } from '../collision/data'
 import type { CenterReduction } from './center-reduction'
 export type ForceSettings = {
   samples: number; variation: [number, number]; precise: boolean; origin?: [number, number]; center?: number;
@@ -27,7 +27,7 @@ export function validateForceSettings (s: ForceSettings): void {
   if (s.center !== undefined && (!Number.isFinite(s.center) || s.center < 0)) throw new Error('Invalid center force')
   if (s.centerReduction && !['f32', 'high-low'].includes(s.centerReduction)) throw new Error('Invalid center reduction')
   if (s.collision) validateCollision(s.collision)
-  if (s.collisionArithmetic && !['native', 'strict'].includes(s.collisionArithmetic)) throw new Error('Invalid collision arithmetic')
+  if (s.collisionArithmetic && !COLLISION_ARITHMETICS.includes(s.collisionArithmetic)) throw new Error('Invalid collision arithmetic')
 }
 export type Occupancy = { points: number; overflow: [number, number, number] }
 // Mirrors ForceManyBody's occupancy decision and budgets, independently of the

@@ -12,6 +12,7 @@ import { frameFor } from '../many-body-grid/data'
 import { replaceOnce } from '../many-body-grid/trace'
 import type { AggregationMode } from '../many-body-grid/aggregation'
 import { createCollisionWebGPU } from '../collision/webgpu'
+import type { CollisionArithmetic } from '../collision/data'
 import { createLinkResources } from './topology'
 import { measureFrameBatch } from './frame-timing'
 import { measureGpuStages } from './stage-timing'
@@ -48,7 +49,7 @@ export async function createCombinedWebGPU (
   overrides: WebGPUOptions & {
     roundedStages?: readonly Stage[]; polarGravity?: boolean; refinedTrig?: boolean; gpuBounds?: boolean; springOptimization?: SpringOptimization;
     hubThreshold?: number; gridAggregation?: AggregationMode; nearArithmetic?: 'native' | 'refined'; repulsionPolicy?: RepulsionPolicy;
-    forceSettings?: ForceSettings; adaptiveSampling?: boolean;
+    forceSettings?: ForceSettings; adaptiveSampling?: boolean; collisionAlternatives?: readonly CollisionArithmetic[];
   } = {}
 ): Promise<CombinedBackend> {
   const optimization = overrides.springOptimization ?? 'baseline'
@@ -80,7 +81,8 @@ export async function createCombinedWebGPU (
         ? own(await createCenterWebGPU(device, count, forces, () => settings.centerReduction ?? DEFAULT_CENTER_REDUCTION))
         : undefined
       const collision = settings.collision
-        ? own(await createCollisionWebGPU(device, graph.sizes, forces, settings.collision, settings.collisionArithmetic))
+        ? own(await createCollisionWebGPU(device, graph.sizes, forces, settings.collision, settings.collisionArithmetic,
+          overrides.collisionAlternatives, () => settings.collisionArithmetic ?? 'strict'))
         : undefined
       readCenter = center?.read
       const exactParams = policy === 'production' ? own(upload(device, new Float32Array(8), Buffer.UNIFORM)) : undefined

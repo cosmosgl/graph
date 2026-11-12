@@ -1,5 +1,7 @@
 # Independent collision layouts
 
+**Original native-arithmetic baseline.** The follow-up [targeted correction](#/collision/docs/precision) now passes all 1,700 tick and trajectory gates in the repeated matrix, with zero measured pointwise drift. The native results below remain historical controls, including their recorded failures.
+
 **Accurate individual ticks do not establish matching long trajectories.** With the corrected high/low center sum, WebGPU passes **1,699 / 1,700** tick gates in this study; production WebGL passes **1,589 / 1,700**. Independent coordinates exceed the original tolerance in every larger combined fixture. The cooled dense star also exposes one replayable WebGPU whole-tick failure. The numerical budgets remain unchanged throughout.
 
 Measured **12 November 2026**, Apple M3, Codex inline browser **Chromium 157**, pinned luma `10.0.0-alpha.4`. Native regression checks run separately in installed Chrome. The earlier [center-correction findings](#/collision/docs/findings) use shared CPU starting states; this study carries each backend’s own output into its next tick.
@@ -111,4 +113,4 @@ Run `LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/
 
 JSON captures stay local; this page preserves the findings, environment, settings and reproduction steps. Existing GPU-cost buttons still measure frozen CPU geometry separately, using the current alpha. No GPU speed claim is inferred from validation elapsed time.
 
-**Next acceptance work:** isolate a cheaper collision arithmetic correction on the captured tick, then repeat the independent runs at the same gates. Larger collision hashing/slots, wider inputs, full Graph scheduling and native portability remain open. Similar aggregate layout scores alone are insufficient to declare trajectory parity or visual-quality acceptance.
+The [targeted collision correction](#/collision/docs/precision) now closes the captured tick and repeated matrix at the same gates, with paired GPU cost. Larger collision hashing/slots, wider inputs, full Graph scheduling and native portability remain open. Similar aggregate layout scores alone are insufficient to declare trajectory parity or visual-quality acceptance.

@@ -12,6 +12,7 @@ it.skipIf(!import.meta.env.LAB_NATIVE_GPU)('compares collision arithmetic on the
     topology: 'star' as const,
     mode: 'combined' as const,
     evolution: 'independent' as const,
+    arithmetic: 'native' as const,
     alpha: 1,
     coolingTicks: 300,
     collision: { ...COLLISION, iterations: 4 },
@@ -25,7 +26,7 @@ it.skipIf(!import.meta.env.LAB_NATIVE_GPU)('compares collision arithmetic on the
   } finally { session.destroy() }
   // Freeze the native trajectory's input to tick 5. Starting a new strict
   // trajectory would compare different histories, rather than this error.
-  for (const arithmetic of ['native', 'strict'] as const) {
+  for (const arithmetic of ['native', 'targeted', 'strict'] as const) {
     const parameters = parametersFor({ ...settings, arithmetic })
     const oracle = createOracle(session.graph, session.report.input.input, 'production', parameters)
     const stages = sequence(settings.mode, parameters)
@@ -35,7 +36,7 @@ it.skipIf(!import.meta.env.LAB_NATIVE_GPU)('compares collision arithmetic on the
       const repeated = await evaluate(b, oracle, stages, start, alpha)
       expect(sameBits(repeated.actual.positions, result.actual.positions)).toBe(true)
       expect(result.gate.stages.every(s => s.valid), JSON.stringify(result.gate)).toBe(true)
-      if (arithmetic === 'strict') expect(result.gate.valid, JSON.stringify(result.gate)).toBe(true)
+      if (arithmetic !== 'native') expect(result.gate.valid, JSON.stringify(result.gate)).toBe(true)
     } finally { b.destroy() }
   }
 }, 120000)

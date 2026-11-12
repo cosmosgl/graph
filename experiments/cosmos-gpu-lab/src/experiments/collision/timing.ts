@@ -6,13 +6,13 @@ import type { CombinedBackend } from '../combined-layout/backend'
 import { DEFAULT_CENTER_REDUCTION } from '../combined-layout/center-reduction'
 import type { View } from '../many-body/backend'
 import { collisionView } from './camera'
-import { createFixture, type Settings } from './data'
+import { DEFAULT_COLLISION_ARITHMETIC, createFixture, type Settings } from './data'
 import { createBackend, parametersFor, sequence, type Api } from './backend'
 import { evaluate, sameBits, type Gate } from './checks'
 export const COST_POLICY = { warmups: 4, samples: 12, frames: 4, blocks: 2 } as const
 type Trial = { api: Api; enabled: boolean; block: number; round: number; warmup: boolean; valid: boolean; failedFrames: number; timing: Measurement }
 export type CollisionCostReport = {
-  comparison?: 'collision' | 'center-reduction';
+  comparison?: 'collision' | 'center-reduction' | 'collision-precision';
   camera: View;
   frozenTick: number;
   recordedAt: string; browser: string; settings: Settings; input: Float32Array; policy: { warmups: number; samples: number; frames: number; blocks: number };
@@ -59,7 +59,12 @@ export async function measureCollisionCost (
     camera: collisionView([frozen], graph.sizes, settings.collision),
     recordedAt: new Date().toISOString(),
     browser: navigator.userAgent,
-    settings: { ...settings, collision: { ...settings.collision }, centerReduction: settings.centerReduction ?? DEFAULT_CENTER_REDUCTION },
+    settings: {
+      ...settings,
+      arithmetic: settings.arithmetic ?? DEFAULT_COLLISION_ARITHMETIC,
+      collision: { ...settings.collision },
+      centerReduction: settings.centerReduction ?? DEFAULT_CENTER_REDUCTION,
+    },
     input: frozen.slice(),
     policy: { ...policy },
     status: 'running',
@@ -68,8 +73,9 @@ export async function measureCollisionCost (
     trials: [],
     errors: [],
   }
-  const configs = (comparison === 'center-reduction' ? ['webgpu'] as const : ['webgl', 'webgpu'] as const).map(api => {
+  const configs = (comparison !== 'collision' ? ['webgpu'] as const : ['webgl', 'webgpu'] as const).map(api => {
     const parameters = parametersFor(settings)
+    if (comparison === 'collision-precision') parameters.collisionArithmetic = 'native'
     return {
       api,
       parameters,
@@ -82,13 +88,15 @@ export async function measureCollisionCost (
   const strength = settings.collision.strength
   const select = (parameters: ReturnType<typeof parametersFor>, enabled: boolean): void => {
     if (comparison === 'center-reduction') parameters.centerReduction = enabled ? 'high-low' : 'f32'
+    else if (comparison === 'collision-precision') parameters.collisionArithmetic = enabled ? 'targeted' : 'native'
     else parameters.collision!.strength = enabled ? strength : 0
   }
   try {
     for (const config of configs) {
       progress(`Preparing ${config.api} collision timing…`)
       const canvas = document.createElement('canvas'); canvas.width = 480; canvas.height = 340
-      const b = config.backend = await createBackend(config.api, canvas, graph, input, config.parameters)
+      const b = config.backend = await createBackend(config.api, canvas, graph, input, config.parameters,
+        comparison === 'collision-precision' ? ['native', 'targeted'] : undefined)
       report.devices[config.api] = b.info
       for (const enabled of [false, true]) {
         select(config.parameters, enabled)
@@ -112,7 +120,9 @@ export async function measureCollisionCost (
             if (cancelled()) { report.status = 'cancelled'; return report }
             if (document.visibilityState !== 'visible') throw new Error('Keep the lab tab visible while timing')
             progress(`${api} · block ${block + 1}/${policy.blocks} · pair ${round + 1}/${policy.warmups + policy.samples} · ${
-              comparison === 'center-reduction' ? `center ${enabled ? 'high/low' : 'f32'}` : `collision ${enabled ? 'on' : 'off'}`}`)
+              comparison === 'center-reduction'
+                ? `center ${enabled ? 'high/low' : 'f32'}`
+                : comparison === 'collision-precision' ? `collision ${enabled ? 'targeted' : 'native'}` : `collision ${enabled ? 'on' : 'off'}`}`)
             select(parameters, enabled)
             const stages = sequence(settings.mode, parameters); b!.setPositions(frozen)
             const result = api === 'webgpu'

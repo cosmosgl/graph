@@ -4,7 +4,7 @@
 
 Measured **12 November 2026** on Apple M3 in **Codex’s inline browser, Chromium 157**, with luma `10.0.0-alpha.4`. Native regression checks also run separately in installed Chrome. These are bounded single-device findings, not a support-matrix claim.
 
-**Follow-up:** [Independent collision layouts](#/collision/docs/trajectories) now tests each backend’s own evolving history. It records 1,700 ticks per GPU, accumulated drift, cooled geometry and a new native-collision whole-tick failure. The shared-input center-correction evidence below remains separate.
+**Follow-ups:** [Independent native layouts](#/collision/docs/trajectories) record accumulated drift and a cooled-star collision failure. The [targeted collision correction](#/collision/docs/precision) then passes all 1,700 tick and trajectory gates in the repeated matrix at unchanged tolerance, with zero measured pointwise drift. The shared-input center-correction evidence below remains separate.
 
 ## Original float32-tree baseline
 
@@ -118,4 +118,4 @@ Reset to tick 0 and choose **Compare center precision cost** for the correction�
 
 Run `LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/collision src/experiments/combined-layout/center` for collision and center regression checks. `composition.test.ts` retains the original CPU-splice diagnostic, then requires the resident correction to pass without that splice. `center-reduction.test.ts` checks aggregate bits across reduction boundaries; `center-reduction-cost.test.ts` checks accepted/rejected control timing.
 
-The independent trajectory study is now recorded [separately](#/collision/docs/trajectories): center remains locally exact in its tested envelope, while accumulated coordinates diverge and one cooled native-collision tick fails composition. The next evidence is a focused collision-arithmetic correction and larger collision workloads. The spatial-hash/slot production path above 4,096 points, broader coordinate ranges/data/weights, dynamic updates, native portability and a complete Graph integration remain unvalidated. Earlier long-run center drift and timings used the original float32 tree; this correction does not retroactively change those measurements.
+The [independent native study](#/collision/docs/trajectories) and [targeted collision correction](#/collision/docs/precision) are recorded separately. The latter closes that bounded composition failure and repeated matrix. The spatial-hash/slot production path above 4,096 points, broader coordinate ranges/data/weights, dynamic updates, native portability and a complete Graph integration remain unvalidated. Earlier long-run center drift and timings used the original float32 tree; later corrections do not retroactively change those measurements.

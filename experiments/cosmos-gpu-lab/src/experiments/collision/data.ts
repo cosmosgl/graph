@@ -2,7 +2,10 @@ import { createFixture as pointFixture, type Input } from '../many-body/data'
 import type { GraphInput } from '../weighted-links/data'
 import type { CenterReduction } from '../combined-layout/center-reduction'
 export type CollisionParameters = { strength: number; radius: number; padding: number; iterations: number; cooling: number }
-export type CollisionArithmetic = 'native' | 'strict'
+// Distance/accumulation are diagnostic ablations, rather than accepted kernels.
+export const COLLISION_ARITHMETICS = ['native', 'targeted', 'distance', 'accumulation', 'strict'] as const
+export type CollisionArithmetic = typeof COLLISION_ARITHMETICS[number]
+export const DEFAULT_COLLISION_ARITHMETIC: CollisionArithmetic = 'targeted'
 export const COLLISION: CollisionParameters = { strength: 1, radius: 0, padding: 0.25, iterations: 1, cooling: 0 }
 export const FIXTURES = ['pair', 'uniform', 'clusters', 'coincident', 'masks', 'separated'] as const
 export type Fixture = typeof FIXTURES[number]
