@@ -4,6 +4,8 @@ export type AppRoute =
   | { kind: 'learn'; sectionId?: string }
   | { kind: 'roadmap' }
   | { kind: 'feature-inventory' }
+  | { kind: 'validation-workflow' }
+  | { kind: 'numerical-research' }
   | { kind: 'vocabulary'; termId?: string }
   | { kind: 'concept'; conceptId: string }
   | { kind: 'experiment'; experimentId: string; pageId?: string }
@@ -19,6 +21,8 @@ export function readRoute (): AppRoute {
   if (segments[0] === 'roadmap') return { kind: 'roadmap' }
   if (segments[0] === 'feature-inventory') return { kind: 'feature-inventory' }
   if (segments[0] === 'architecture') return { kind: 'architecture' }
+  if (segments[0] === 'validation-workflow') return { kind: 'validation-workflow' }
+  if (segments[0] === 'numerical-research') return { kind: 'numerical-research' }
   if (segments[0] === 'vocabulary') {
     return {
       kind: 'vocabulary',

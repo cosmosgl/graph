@@ -10,6 +10,8 @@ import { centerReference } from './center-reference'
 import { repulsionMethod, type RepulsionPolicy } from './repulsion-policy'
 import { forceSettings, validateForceSettings, type ForceSettings } from './production-settings'
 const f = Math.fround
+// Polar gravity is the legacy operation model. The intended linear force also has
+// a Cartesian formulation; precision-diagnostics assesses it independently.
 export function gravity (points: Float32Array, alpha: number, origin?: [number, number]): Snapshot {
   const forces = new Float32Array(points.length)
   for (let i = 0; i < points.length; i += 4) {

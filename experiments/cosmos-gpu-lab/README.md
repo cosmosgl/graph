@@ -7,6 +7,11 @@ lifecycle.
 Follow the **WebGPU migration** roadmap (`#/roadmap`) for Cosmos migration readiness, demonstrated capabilities,
 remaining gaps and the evidence needed for a production switch.
 
+Use the **Validation workflow** (`#/validation-workflow`) and **Numerical research**
+(`#/numerical-research`) for reference roles, source-backed precision findings and acceptance policy.
+Every experiment has a **Validation contract** tab describing its question, reference, gates,
+checked population and limits. The contract is not a live verdict.
+
 ## Run
 
 From the repository root:
@@ -34,6 +39,9 @@ An experiment should contain:
 - Sequences as `flow` fences, ownership as nested lists, and source-controlled SVG figures where shape matters.
 - Concise Markdown findings with measurement conditions, limitations and reproduction steps.
 - Backend-local shaders and resources, accessed through luma.gl APIs only.
+- An entry in `src/runtime/validation.ts`; registration rejects a missing comparison contract.
+  Distinguish mathematical accuracy, float32 compatibility, structure and execution equivalence.
+  Do not infer complete correctness from a finite run or one numerical gate.
 
 Use `Model` / `UniformStore` for GLSL, `Kernel` / `RenderKernel` for WGSL, and luma resources,
 passes, fences, readback and query sets. Do not access native device handles or create native GPU
@@ -50,12 +58,21 @@ Commit the knowledge: what was tested, why, the environment and implementation v
 limitations, and the exact controls or commands needed to reproduce the comparison. Timings vary across machines;
 they are local observations, not expected values for every GPU.
 
+Follow `src/docs/validation-workflow.md` when investigating a mismatch. Keep historical tolerances
+and failures; define any new accuracy/quality budget explicitly. Report behavior, mathematical
+accuracy, legacy compatibility, layout quality and cost separately, with **Not assessed** for
+missing checks or thresholds. Record existing WebGL issues as well as WebGPU issues. CPU prediction
+and validation readback stay outside timed work. The matched-layout JSON schema v3 includes its
+contract and separate evidence summary; older exports retain their original semantics.
+
 Keep **Export JSON** in benchmark demos for local analysis. Routine measurement JSON and ZIP archives stay outside
 Git; use the ignored `captures/` directory if you want to keep exports inside the lab folder. Small deterministic
 fixtures needed to reproduce correctness bugs belong with tests, separately from benchmark captures.
 
 ## Experiments
 
+- `precision-diagnostics`: production GLSL/native WGSL gravity versus analytic and compatibility
+  references, plus controlled serial/blocked/tree sums on exact bounded-integer fixtures.
 - `center-mass`: tick-by-tick WebGL/WebGPU correctness comparison.
 - `scalable-reduction`: GPU-resident hierarchical reduction at larger point counts.
 - `point-rendering`: WebGL point sprites and WebGPU instanced circle quads.

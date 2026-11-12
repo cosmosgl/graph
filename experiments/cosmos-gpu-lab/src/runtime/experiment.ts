@@ -1,3 +1,4 @@
+import { validationContractMarkdown } from './validation'
 export type ExperimentInstance = {
   destroy: () => void;
 }
@@ -51,5 +52,16 @@ export type ExperimentModule = {
 }
 
 export function defineExperiment (definition: ExperimentDefinition): ExperimentDefinition {
-  return definition
+  if (definition.pages.some(page => page.id === 'validation-contract')) throw new Error('Reserved validation-contract page id')
+  // Resolve eagerly so a new experiment cannot silently omit its comparison contract.
+  const contract = validationContractMarkdown(definition.id)
+  return {
+    ...definition,
+    pages: [...definition.pages, {
+      kind: 'markdown',
+      id: 'validation-contract',
+      title: 'Validation contract',
+      load: async (): Promise<string> => contract,
+    }],
+  }
 }

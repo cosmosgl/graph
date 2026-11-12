@@ -56,7 +56,7 @@ export const experimentGroups = [
     id: 'validation',
     title: 'Validation and optimization',
     description: 'Check production settings, measure GPU cost, then investigate bottlenecks and resource capacity.',
-    experiments: ['layout-acceptance', 'performance-lab', 'gpu-stage-profile', 'hub-springs', 'cell-aggregation', 'point-capacity'],
+    experiments: ['precision-diagnostics', 'layout-acceptance', 'performance-lab', 'gpu-stage-profile', 'hub-springs', 'cell-aggregation', 'point-capacity'],
   },
 ].map(({ experiments: ids, ...group }) => ({
   ...group,

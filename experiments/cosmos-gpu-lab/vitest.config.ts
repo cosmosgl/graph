@@ -17,6 +17,7 @@ export default defineConfig({
   test: {
     include: [
       'src/gpu/**/*.test.ts',
+      'src/runtime/**/*.test.ts',
       'src/experiments/neighborhood-forces/**/*.test.ts',
       'src/experiments/weighted-links/**/*.test.ts',
       'src/experiments/many-body/**/*.test.ts',
@@ -25,6 +26,7 @@ export default defineConfig({
       'src/experiments/combined-layout/**/*.test.ts',
       'src/experiments/matched-layout/**/*.test.ts',
       'src/experiments/collision/**/*.test.ts',
+      'src/experiments/precision-diagnostics/**/*.test.ts',
     ],
     testTimeout: 60000,
     maxWorkers: 1,

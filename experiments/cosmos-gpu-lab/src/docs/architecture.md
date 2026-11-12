@@ -44,6 +44,13 @@ The homepage and sidebar share a curated catalog in `src/app/registry.ts`:
 Experiments within each group follow a suggested prerequisite order. They have no sequence numbers;
 the [migration roadmap](#/roadmap) describes research progress and remaining work.
 
+The [validation workflow](#/validation-workflow) defines comparison and reporting rules; the
+[numerical research report](#/numerical-research) records their specification basis. `defineExperiment`
+adds a **Validation contract** page from `src/runtime/validation.ts` and rejects missing entries.
+Contracts describe existing acceptance and coverage, not a global pass. The matched-layout live
+summary and schema v3 export separate limited behavior checks, legacy compatibility and quality;
+other experiments retain their detailed reports with the contract explaining their scope.
+
 ## 2. Each experiment is a self-contained module
 
 An experiment typically has this structure; the exact backend organization varies:
