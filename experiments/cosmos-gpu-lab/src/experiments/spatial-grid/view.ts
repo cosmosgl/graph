@@ -1,3 +1,4 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import {
   createSpatialGridBackend,
@@ -118,9 +119,11 @@ function renderHeatmap (
 export async function createSpatialGridExperiment (
   host: HTMLElement
 ): Promise<ExperimentInstance> {
+  let runError: string | undefined
   host.innerHTML = `
     <section class="spatial-grid-demo">
-      <div class="scale-toolbar grid-toolbar">
+      <div
+      data-run-part="configuration" class="scale-toolbar grid-toolbar">
         <label>
           <span>Points</span>
           <select data-control="point-count">
@@ -150,13 +153,17 @@ export async function createSpatialGridExperiment (
           </select>
         </label>
         <div class="controls">
-          <button class="button-primary" data-action="build" type="button" disabled>Build + validate</button>
-          <button data-action="benchmark" type="button" disabled>Benchmark</button>
+          <button class="button-primary" data-action="build" type="button" disabled
+      data-run-action="primary">Build + validate</button>
+          <button data-action="benchmark" type="button" disabled
+      data-run-action="diagnostic">Benchmark</button>
         </div>
       </div>
 
-      <section class="scale-status" aria-live="polite">
-        <span data-output="status">Creating WebGPU resources…</span>
+      <section class="scale-status" aria-live="polite"
+      data-run-part="metrics">
+        <span data-output="status"
+      data-run-part="status">Creating WebGPU resources…</span>
         <span data-output="phase">Preparing</span>
       </section>
 
@@ -165,9 +172,10 @@ export async function createSpatialGridExperiment (
         <span>scatter</span><b>→</b><span>CSR grid</span>
       </div>
 
-      <canvas class="scale-canvas grid-canvas" data-output="canvas" width="900" height="440"></canvas>
+      <canvas class="scale-canvas grid-canvas"
+      data-run-part="visualization" data-output="canvas" width="900" height="440"></canvas>
 
-      <section class="scale-metrics grid-metrics">
+      <section class="scale-metrics grid-metrics" data-run-part="results">
         <div><span>Scan hierarchy</span><strong data-output="hierarchy">—</strong></div>
         <div><span>Position storage</span><strong data-output="positions">—</strong></div>
         <div><span>Grid storage</span><strong data-output="grid-memory">—</strong></div>
@@ -201,6 +209,7 @@ export async function createSpatialGridExperiment (
   let positions: Float32Array | undefined
   let reference: CpuGridReference | undefined
   let destroyed = false
+  let latestValidation: boolean | undefined
   let busy = false
   let revision = 0
 
@@ -235,6 +244,7 @@ export async function createSpatialGridExperiment (
         grid.offsets,
         grid.pointIndices
       )
+      latestValidation = validation.valid
       validationOutput.textContent = validationLabel(validation)
       validationOutput.classList.toggle('metric-error', !validation.valid)
       renderHeatmap(
@@ -255,6 +265,7 @@ export async function createSpatialGridExperiment (
   }
 
   const configure = async (): Promise<void> => {
+    runError = undefined; latestValidation = undefined
     revision += 1
     const configurationRevision = revision
     backend?.destroy()
@@ -300,6 +311,7 @@ export async function createSpatialGridExperiment (
       busy = false
       await buildAndValidate()
     } catch (error) {
+      runError = String(error)
       statusOutput.textContent = error instanceof Error ? error.message : String(error)
       phaseOutput.textContent = 'Unavailable'
       busy = false
@@ -352,10 +364,18 @@ export async function createSpatialGridExperiment (
   pointCountSelect.addEventListener('change', () => { configure().catch(console.error) })
   gridSizeSelect.addEventListener('change', () => { configure().catch(console.error) })
   distributionSelect.addEventListener('change', () => { configure().catch(console.error) })
+  mountRunLayout(host, () => summarizeRun(
+    busy ? 'Running' : backend ? 'Ready' : 'Preparing',
+    [latestValidation],
+    'Force accuracy, layout quality and rendering parity.',
+    [],
+    runError,
+    'exhaustive grid builds'))
   configure().catch(console.error)
 
   return {
     destroy (): void {
+      disposeRunLayout(host)
       if (destroyed) return
       destroyed = true
       revision += 1

@@ -74,9 +74,12 @@ assessments, not status inferred from a test count or a completion percentage.
 
 Long Markdown pages gain duplicate-safe heading IDs, route-preserving section links and a contents
 rail, with a visible short contents list above the article on smaller screens. The learning guide and
-vocabulary retain their own navigation. Pilot Run pages author visible **Configuration → Run →
-Results → Diagnostics** sections. Arithmetic, cooling and validation settings stay in Configuration;
-isolation and timing actions stay in Diagnostics. Section jumps scroll without pausing or rebuilding
+vocabulary retain their own navigation. Every live experiment shares a visible **Configuration → Run →
+Results → Diagnostics** frame, with configuration beside the visualization on wide screens and stacked
+above it on smaller screens. A session summary reports actual checks, failures and unchecked scope. Arithmetic, cooling and validation settings stay in Configuration;
+primary actions stay with the visualization, while isolation, replay, precision and timing actions stay
+in Diagnostics. The summary reads typed experiment records rather than parsing displayed text.
+Rendering-only and benchmark completion never imply numerical acceptance. Section jumps scroll without pausing or rebuilding
 the run. Method shows reference, acceptance, population and limits as ordinary content, while
 Overview links to it. The live variant is always named, and recorded conclusions remain separate
 from the browser’s current run.

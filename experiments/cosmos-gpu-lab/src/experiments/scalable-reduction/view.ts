@@ -1,3 +1,4 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import {
   createScalableReductionBackend,
@@ -42,9 +43,11 @@ function benchmarkIterations (pointCount: number): number {
 export async function createScalableReductionExperiment (
   host: HTMLElement
 ): Promise<ExperimentInstance> {
+  let runError: string | undefined
   host.innerHTML = `
     <section class="scalable-demo">
-      <div class="scale-toolbar">
+      <div
+      data-run-part="configuration" class="scale-toolbar">
         <label>
           <span>Point count</span>
           <select data-control="point-count">
@@ -60,21 +63,29 @@ export async function createScalableReductionExperiment (
           <span>Read center back to CPU</span>
         </label>
         <div class="controls">
-          <button class="button-primary" data-action="step" type="button" disabled>Step</button>
-          <button data-action="play" type="button" disabled>Play</button>
-          <button data-action="reset" type="button" disabled>Reset</button>
-          <button data-action="benchmark" type="button" disabled>Benchmark</button>
+          <button class="button-primary" data-action="step" type="button" disabled
+      data-run-action="primary">Step</button>
+          <button data-action="play" type="button" disabled
+      data-run-action="primary">Play</button>
+          <button data-action="reset" type="button" disabled
+      data-run-action="primary">Reset</button>
+          <button data-action="benchmark" type="button" disabled
+      data-run-action="diagnostic">Benchmark</button>
         </div>
       </div>
 
-      <section class="scale-status" aria-live="polite">
-        <span data-output="status">Creating WebGPU resources…</span>
+      <section class="scale-status" aria-live="polite"
+      data-run-part="metrics">
+        <span data-output="status"
+      data-run-part="status">Creating WebGPU resources…</span>
         <span>Tick <strong data-output="tick">0</strong></span>
       </section>
 
-      <canvas class="scale-canvas" data-output="canvas" width="900" height="440"></canvas>
+      <canvas class="scale-canvas"
+      data-run-part="visualization" data-output="canvas" width="900" height="440"></canvas>
 
-      <section class="scale-metrics">
+      <section class="scale-metrics"
+      data-run-part="results">
         <div><span>Reduction hierarchy</span><strong data-output="hierarchy">—</strong></div>
         <div><span>Position storage</span><strong data-output="positions">—</strong></div>
         <div><span>Ping-pong partials</span><strong data-output="partials">—</strong></div>
@@ -183,6 +194,7 @@ export async function createScalableReductionExperiment (
   }
 
   const configure = async (): Promise<void> => {
+    runError = undefined
     revision += 1
     const configurationRevision = revision
     isPlaying = false
@@ -224,6 +236,7 @@ export async function createScalableReductionExperiment (
       showResult(result)
       statusOutput.textContent = `Ready · ${createdBackend.reductionCounts.length - 1} reduction passes`
     } catch (error) {
+      runError = String(error)
       if (configurationRevision !== revision || destroyed) return
       statusOutput.textContent = error instanceof Error ? error.message : String(error)
       statusOutput.classList.add('failed')
@@ -269,6 +282,7 @@ export async function createScalableReductionExperiment (
       benchmarkOutput.textContent =
         `${result.averageMilliseconds.toFixed(2)} ms average · ${result.totalMilliseconds.toFixed(1)} ms total`
     } catch (error) {
+      runError = String(error)
       benchmarkOutput.textContent = error instanceof Error ? error.message : String(error)
     } finally {
       isRunning = false
@@ -276,6 +290,12 @@ export async function createScalableReductionExperiment (
     }
   })
 
+  mountRunLayout(host, () => summarizeRun(
+    isPlaying || isRunning ? 'Running' : backend ? 'Ready' : 'Preparing',
+    [],
+    'Center accuracy budget; unsampled GPU-resident ticks and pixel parity.',
+    [],
+    runError))
   await configure()
 
   return {
@@ -284,6 +304,7 @@ export async function createScalableReductionExperiment (
       playButton.textContent = 'Play'; playButton.setAttribute('aria-pressed', 'false')
     },
     destroy (): void {
+      disposeRunLayout(host)
       if (destroyed) return
       destroyed = true
       revision += 1

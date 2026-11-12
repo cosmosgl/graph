@@ -1,3 +1,4 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { PRESETS, type ProductionPreset } from '../combined-layout/production-settings'
@@ -16,10 +17,12 @@ function settingsNote (settings: Settings): string {
 export async function createMatchedView (host: HTMLElement): Promise<ExperimentInstance> {
   const presets = Object.entries(PRESETS).map(([key, title]) =>
     `<option value="${key}"${key === 'adaptive' ? ' selected' : ''}>${title}</option>`).join('')
+  let runError: string | undefined
   host.innerHTML = `<p class="demo-note">Three independent layouts, one initial graph and random-sample schedule.
     Legacy compatibility checks replay a common CPU starting state, then restore the live GPU layouts.
     They test a float32 operation model, not an independent mathematical accuracy contract. Quality metrics never change the tolerance.</p>
-    <div class="scale-toolbar">
+    <div
+      data-run-part="configuration" class="scale-toolbar">
       <label>Graph <select data-control="fixture"><option>chain</option><option>communities</option><option>star</option></select></label>
       <label>Points <select data-control="count"><option selected>128</option><option>512</option>
         <option>4096</option><option>4097</option><option>8192</option></select></label>
@@ -31,22 +34,43 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
         <option value="0.1">0.1</option><option value="1" selected>1 · comparison</option></select></label>
     </div>
     <div class="demo-toolbar playback-toolbar"><div class="controls">
-      <button data-action="step">Step + check</button><button data-action="run" class="button-primary">Run comparison</button>
-      <button data-action="stop" disabled>Stop</button><button data-action="probe">Probe at α = 1</button>
-      <button data-action="replay" disabled>Replay failures</button><button data-action="reset">Reset</button>
-      <button data-action="center-cost">Measure center GPU cost</button>
-      <button data-action="export" disabled>Export JSON</button>
+      <button data-action="step"
+      data-run-action="primary">Step + check</button>
+      <button data-action="run" class="button-primary"
+      data-run-action="primary">Run comparison</button>
+      <button data-action="stop" disabled
+      data-run-action="primary">Stop</button>
+      <button data-action="probe"
+      data-run-action="diagnostic">Probe at α = 1</button>
+      <button data-action="replay" disabled
+      data-run-action="diagnostic">Replay failures</button>
+      <button data-action="reset"
+      data-run-action="primary">Reset</button>
+      <button data-action="center-cost"
+      data-run-action="diagnostic">Measure center GPU cost</button>
+      <button data-action="export" disabled
+      data-run-action="export">Export JSON</button>
     </div><span class="tick-counter">Tick <strong data-output="tick">0</strong> · α <strong data-output="alpha">1</strong></span></div>
-    <p role="status" data-output="status" class="many-body-status">Preparing devices…</p>
-    <section class="simulation-preview"><div class="backend-panels many-body-panels">${NAMES.map(name => `<article class="backend-panel">
+    <p role="status" data-output="status" class="many-body-status"
+      data-run-part="status">Preparing devices…</p>
+    <section class="simulation-preview"><div
+      data-run-part="visualization" class="backend-panels many-body-panels">${NAMES.map(name => `<article class="backend-panel">
       <div class="panel-heading"><h2>${LABELS[name]}</h2><span class="status" data-state="${name}">Preparing</span></div>
       <canvas width="480" height="340" data-canvas="${name}" aria-label="${LABELS[name]} layout"></canvas>
       <p class="demo-note" data-info="${name}"></p></article>`).join('')}</div></section>
     <p class="demo-note" data-output="method"></p>
-    <div data-output="assessment" class="many-body-results"></div>
-    <div data-output="quality" class="many-body-results"></div><div data-output="probe" class="many-body-results"></div>
-    <div data-output="charts" class="trajectory-chart"></div><div data-output="checks" class="many-body-results"></div>
-    <div data-output="center-cost" class="many-body-results"></div>
+    <div data-output="assessment" class="many-body-results"
+      data-run-part="results"></div>
+    <div data-output="quality" class="many-body-results"
+      data-run-part="results"></div>
+    <div data-output="probe" class="many-body-results"
+      data-run-part="results"></div>
+    <div data-output="charts" class="trajectory-chart"
+      data-run-part="results"></div>
+    <div data-output="checks" class="many-body-results"
+      data-run-part="results"></div>
+    <div data-output="center-cost" class="many-body-results"
+      data-run-part="diagnostics"></div>
     <p class="demo-note">Read <a href="#/matched-layout/docs/method">the method and metric definitions</a> and
       <a href="#/matched-layout/docs/findings">measured findings</a>. This diagnostic includes CPU work and readbacks;
       it is not a runtime performance benchmark.</p>`
@@ -79,7 +103,10 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     const view = sharedView([cpu, ...session.lanes.map(l => l.positions)])
     for (const lane of session.lanes) {
       if (!report.errors[lane.name]) {
-        try { lane.backend.render(view) } catch (error) { report.errors[lane.name] = String(error); if (row) row.complete = false }
+        try { lane.backend.render(view) } catch (error) {
+          runError = String(error)
+          report.errors[lane.name] = String(error); if (row) row.complete = false
+        }
       }
     }
     const c = canvas('cpu'); const ctx = c.getContext('2d')!
@@ -217,6 +244,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
       : ''
   }
   const setup = async (): Promise<void> => {
+    runError = undefined
     session?.destroy(); session = undefined; status.textContent = 'Preparing matched layouts…'
     for (const name of ['webgl', 'webgpu'] as const) { const old = canvas(name); old.replaceWith(old.cloneNode()) }
     const next = await createMatchedSession({
@@ -238,7 +266,10 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
   const task = async (work: () => Promise<void>): Promise<void> => {
     if (busy || destroyed) return
     busy = true; stopped = false; controls()
-    try { await work() } catch (error) { if (!destroyed) status.textContent = String(error) } finally { busy = false; if (!destroyed) controls() }
+    try { await work() } catch (error) {
+      runError = String(error)
+      if (!destroyed) status.textContent = String(error)
+    } finally { busy = false; if (!destroyed) controls() }
   }
   const run = async (steps: number, checked: boolean): Promise<void> => {
     if (!session) return
@@ -314,6 +345,13 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     const url = URL.createObjectURL(new Blob([text], { type: 'application/json' })); const a = document.createElement('a')
     a.href = url; a.download = 'cosmos-matched-layout.json'; a.click(); URL.revokeObjectURL(url)
   })
+  mountRunLayout(host, () => summarizeRun(
+    busy ? 'Running' : stopped ? 'Stopped' : session ? 'Ready' : 'Preparing',
+    session?.report.rows.flatMap(r => Object.values(r.checks).map(c => c?.valid)) ?? [],
+    'Non-checkpoint ticks; no agreed quality budget or full runtime scheduler.',
+    Object.keys(session?.report.errors ?? {}),
+    runError,
+    'backend checkpoints'))
   await task(setup)
-  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
+  return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

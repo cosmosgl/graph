@@ -1,3 +1,4 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import { organizeRunControls } from '../../runtime/run-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
@@ -10,7 +11,10 @@ const LABELS = { webgl: 'Production GLSL · WebGL', webgpu: 'luma WebGPU', cpu: 
 const num = (n: number | undefined | null): string => n === null || n === undefined ? '—' : n.toExponential(2)
 const ms = (n: number | null): string => n === null ? '—' : n.toFixed(3)
 export async function createCollisionView (host: HTMLElement): Promise<ExperimentInstance> {
-  host.innerHTML = `<section data-run-section="configuration"><p class="demo-note">Collision separates overlapping discs.
+  let runError: string | undefined
+  host.innerHTML = `<section
+      data-run-section="configuration"><p class="demo-note"
+      data-run-part="diagnostics">Collision separates overlapping discs.
     Compare shared CPU inputs or let WebGL, WebGPU and CPU evolve independently.
     Tick checks and accumulated trajectory differences use the same unchanged tolerances.</p>
     <div class="scale-toolbar">
@@ -41,29 +45,53 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
         <option>1</option>
         <option>2</option></select></label>
     </div></section>
-    <section data-run-section="run">
+    <section
+      data-run-section="run">
     <div class="demo-toolbar playback-toolbar"><div class="controls">
-      <button data-action="step" class="button-primary">Step + validate</button><button data-action="run">100 validated ticks</button>
-      <button data-action="schedule" disabled>Run cooling schedule</button>
-      <button data-action="stop" disabled>Stop</button><button data-action="reset">Reset</button>
-      <button data-action="replay" disabled>Replay failures</button><button data-action="cost">Measure added GPU cost</button>
-      <button data-action="center-cost" disabled>Compare center precision cost</button>
-      <button data-action="precision-cost">Compare collision precision cost</button>
-      <button data-action="export" disabled>Export JSON</button>
+      <button data-action="step" class="button-primary"
+      data-run-action="primary">Step + validate</button>
+      <button data-action="run"
+      data-run-action="primary">100 validated ticks</button>
+      <button data-action="schedule" disabled
+      data-run-action="primary">Run cooling schedule</button>
+      <button data-action="stop" disabled
+      data-run-action="primary">Stop</button>
+      <button data-action="reset"
+      data-run-action="primary">Reset</button>
+      <button data-action="replay" disabled
+      data-run-action="diagnostic">Replay failures</button>
+      <button data-action="cost"
+      data-run-action="diagnostic">Measure added GPU cost</button>
+      <button data-action="center-cost" disabled
+      data-run-action="diagnostic">Compare center precision cost</button>
+      <button data-action="precision-cost"
+      data-run-action="diagnostic">Compare collision precision cost</button>
+      <button data-action="export" disabled
+      data-run-action="export">Export JSON</button>
     </div><span class="tick-counter">Tick <strong data-output="tick">0</strong></span></div>
-    <p role="status" class="many-body-status" data-output="status">Preparing devices…</p>
+    <p role="status" class="many-body-status" data-output="status"
+      data-run-part="status">Preparing devices…</p>
     <section class="simulation-preview"><div class="backend-panels many-body-panels">${NAMES.map(name => `<article class="backend-panel">
       <div class="panel-heading"><h2>${LABELS[name]}</h2><span class="status" data-state="${name}">Preparing</span></div>
       <canvas width="480" height="340" data-canvas="${name}" aria-label="${LABELS[name]} collision discs"></canvas>
       <p class="demo-note" data-info="${name}"></p></article>`).join('')}</div></section>
     <p class="demo-note" data-output="pipeline"></p></section>
-    <section data-run-section="results"><p class="demo-note">Live numerical checks and layout measurements. Recorded findings are under Evidence.</p>
-    <div class="many-body-results" data-output="trajectory"></div>
-    <div class="trajectory-chart" data-output="charts"></div>
-    <div class="many-body-results" data-output="center"></div>
-    <div class="many-body-results" data-output="overlap"></div><div class="many-body-results" data-output="checks"></div></section>
-    <section data-run-section="diagnostics">
-    <div class="many-body-results" data-output="cost"></div>
+    <section
+      data-run-section="results"><p class="demo-note">Live numerical checks and layout measurements. Recorded findings are under Evidence.</p>
+    <div class="many-body-results" data-output="trajectory"
+      data-run-part="results"></div>
+    <div class="trajectory-chart" data-output="charts"
+      data-run-part="results"></div>
+    <div class="many-body-results" data-output="center"
+      data-run-part="results"></div>
+    <div class="many-body-results" data-output="overlap"
+      data-run-part="results"></div>
+    <div class="many-body-results" data-output="checks"
+      data-run-part="results"></div></section>
+    <section
+      data-run-section="diagnostics">
+    <div class="many-body-results" data-output="cost"
+      data-run-part="diagnostics"></div>
     <p class="demo-note">Exact all-pairs collision, limited to small graphs. Discs show effective world-space radii; yellow centers are pinned.
       Validation includes readback and CPU work. Use the paired GPU measurement for cost, not the elapsed validation time.
       <a href="#/collision/docs/method">Method and scope</a> · <a href="#/collision/docs/precision">Targeted findings</a> ·
@@ -98,7 +126,10 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
     const view = collisionView([cpu, ...session.lanes.map(l => l.positions)], graph.sizes, settings.collision)
     for (const lane of session.lanes) {
       if (!report.errors[lane.api]) {
-        try { lane.backend.render(view) } catch (error) { report.errors[lane.api] = String(error) }
+        try { lane.backend.render(view) } catch (error) {
+          runError = String(error)
+          report.errors[lane.api] = String(error)
+        }
       }
     }
     const c = canvas('cpu'); const ctx = c.getContext('2d')!
@@ -287,9 +318,13 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
   const task = async (work: () => Promise<void>): Promise<void> => {
     if (busy || destroyed) return
     busy = true; stopped = false; controls()
-    try { await work() } catch (error) { if (!destroyed) status.textContent = String(error) } finally { busy = false; if (!destroyed) controls() }
+    try { await work() } catch (error) {
+      runError = String(error)
+      if (!destroyed) status.textContent = String(error)
+    } finally { busy = false; if (!destroyed) controls() }
   }
   const setup = async (): Promise<void> => {
+    runError = undefined
     session?.destroy(); session = undefined; status.textContent = 'Preparing collision backends…'
     for (const name of ['webgl', 'webgpu']) { const old = canvas(name); old.replaceWith(old.cloneNode()) }
     const collision = { ...COLLISION }
@@ -425,6 +460,14 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       },
     },
   ], values => { task(async () => { for (const [name, value] of Object.entries(values)) control(name).value = value; await setup() }) })
+  mountRunLayout(host, () => summarizeRun(
+    busy ? 'Running' : stopped ? 'Stopped' : session ? 'Ready' : 'Preparing',
+    session?.report.rows.flatMap(r => [...Object.values(r.checks).map(c => c.valid),
+      ...Object.values(r.trajectory).map(c => c.valid)]) ?? [],
+    'Larger collision routes, unrun fixtures and rendering parity.',
+    Object.keys(session?.report.errors ?? {}),
+    runError,
+    'tick and trajectory gates'))
   await task(setup)
-  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
+  return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

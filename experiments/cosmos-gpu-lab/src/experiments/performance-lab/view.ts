@@ -1,3 +1,4 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import type { PointRenderBackend } from '../point-rendering/backend'
 import { createPointData } from '../point-rendering/point-data'
@@ -110,9 +111,11 @@ function nextFrame (): Promise<void> {
 }
 
 export async function createPerformanceLab (host: HTMLElement): Promise<ExperimentInstance> {
+  let runError: string | undefined
   host.innerHTML = `
     <section class="performance-lab">
-      <div class="scale-toolbar benchmark-toolbar">
+      <div
+      data-run-part="configuration" class="scale-toolbar benchmark-toolbar">
         <label>
           Workload
           <select data-control="workload">
@@ -140,20 +143,27 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
           </select>
         </label>
         <div class="controls">
-          <button class="button-primary" data-action="run" type="button">Run benchmark</button>
-          <button data-action="export" type="button" disabled>Export JSON</button>
+          <button class="button-primary" data-action="run" type="button"
+      data-run-action="primary">Run benchmark</button>
+          <button data-action="stop" type="button" disabled
+      data-run-action="primary">Stop</button>
+          <button data-action="export" type="button" disabled
+      data-run-action="export">Export JSON</button>
         </div>
       </div>
 
-      <section class="benchmark-status" aria-live="polite">
+      <section class="benchmark-status"
+      data-run-part="metrics" aria-live="polite">
         <div>
-          <span data-output="status">Choose a workload and run the benchmark.</span>
+          <span data-output="status"
+      data-run-part="status">Choose a workload and run the benchmark.</span>
           <strong data-output="progress-label">Idle</strong>
         </div>
         <progress data-output="progress" max="1" value="0"></progress>
       </section>
 
-      <section class="benchmark-preview" aria-label="Rendering benchmark preview">
+      <section class="benchmark-preview"
+      data-run-part="visualization" aria-label="Rendering benchmark preview">
         <article>
           <span>WebGL 2 · point sprite</span>
           <canvas data-canvas="webgl" width="480" height="270"></canvas>
@@ -164,7 +174,8 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
         </article>
       </section>
 
-      <section class="benchmark-results">
+      <section class="benchmark-results"
+      data-run-part="results">
         <div class="benchmark-empty">
           <p class="eyebrow">No measurements yet</p>
           <p>Pipeline creation, warm-up and data generation are kept outside sampled iterations.</p>
@@ -185,6 +196,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
   const diameterGroup = element<HTMLElement>(host, '[data-control-group="diameter"]')
   const presetSelect = element<HTMLSelectElement>(host, '[data-control="preset"]')
   const runButton = element<HTMLButtonElement>(host, '[data-action="run"]')
+  const stopButton = element<HTMLButtonElement>(host, '[data-action="stop"]')
   const exportButton = element<HTMLButtonElement>(host, '[data-action="export"]')
   const statusOutput = element<HTMLElement>(host, '[data-output="status"]')
   const progressLabel = element<HTMLElement>(host, '[data-output="progress-label"]')
@@ -356,6 +368,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
         slot.report.setupMilliseconds = performance.now() - started
         activeBackends.push(slot.backend)
       } catch (error) {
+        runError = String(error)
         slot.report.status = 'unavailable'
         slot.report.error = error instanceof Error ? error.message : String(error)
       }
@@ -438,6 +451,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
         slot.report.setupMilliseconds = performance.now() - started
         activeBackends.push(slot.backend)
       } catch (error) {
+        runError = String(error)
         slot.report.status = 'unavailable'
         slot.report.error = error instanceof Error ? error.message : String(error)
       }
@@ -496,12 +510,14 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
   }
 
   const run = async (): Promise<void> => {
+    runError = undefined
     paused = false
     runRevision += 1
     const revision = runRevision
     destroyBackends()
     resetCanvases()
     runButton.disabled = true
+    stopButton.disabled = false
     exportButton.disabled = true
     workloadSelect.disabled = true
     countSelect.disabled = true
@@ -526,6 +542,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
       progressLabel.textContent = `${shape.samples} samples complete`
       exportButton.disabled = false
     } catch (error) {
+      runError = String(error)
       if (destroyed || revision !== runRevision) return
       statusOutput.textContent = paused
         ? 'Benchmark paused at a trial boundary; this batch has no accepted result.'
@@ -536,6 +553,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
     } finally {
       if (!destroyed && revision === runRevision) {
         runButton.disabled = false
+        stopButton.disabled = true
         workloadSelect.disabled = false
         countSelect.disabled = false
         diameterSelect.disabled = false
@@ -545,6 +563,10 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
   }
 
   workloadSelect.addEventListener('change', updateControls)
+  stopButton.addEventListener('click', () => {
+    paused = true; stopButton.disabled = true
+    statusOutput.textContent = 'Stopping after the current trial; this incomplete batch will not be accepted.'
+  })
   runButton.addEventListener('click', () => {
     run().catch(error => console.error(error))
   })
@@ -559,11 +581,18 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
     URL.revokeObjectURL(url)
   })
 
+  mountRunLayout(host, () => summarizeRun(
+    runButton.disabled ? paused ? 'Stopping' : 'Running' : paused ? 'Stopped' : lastReport ? 'Complete' : 'Ready',
+    [],
+    'Benchmark completion is not correctness, stability or Graph FPS acceptance.',
+    lastReport?.results.filter(r => r.status === 'unavailable').map(r => r.backend) ?? [],
+    paused ? undefined : runError))
   updateControls()
 
   return {
     pause (): void { paused = true },
     destroy (): void {
+      disposeRunLayout(host)
       if (destroyed) return
       destroyed = true
       runRevision += 1

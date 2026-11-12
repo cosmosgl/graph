@@ -1,46 +1,71 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createCapacitySession, type CapacitySession, type CapacityComparison } from '../combined-layout/capacity-session'
 import { CAPACITY_CYCLE } from '../combined-layout/capacity'
 import type { Fixture, Settings } from '../combined-layout/data'
 const mib = (bytes: number): string => (bytes / 1048576).toFixed(3)
 export async function createCapacityView (host: HTMLElement): Promise<ExperimentInstance> {
+  let runError: string | undefined
   host.innerHTML = `<p class="demo-note">Resize storage without resetting devices, tick or cooling.
     Compare rebuilding against retained buffers/kernels, or revisit the CPU-copy transfer control.
     Refined arithmetic; immediate updates; fixed camera.</p>
-    <div class="scale-toolbar"><label>Comparison <select data-control="comparison">
+    <div
+      data-run-part="configuration" class="scale-toolbar"><label>Comparison <select data-control="comparison">
       <option value="reuse" selected>GPU rebuild vs retained capacity</option>
       <option value="transfer">CPU copy vs GPU rebuild</option></select></label>
       <label>Graph <select data-control="fixture"><option>chain</option><option>communities</option>
       <option>star</option></select></label>
       <label>Repetitions <select data-control="repeats"><option>1</option><option selected>3</option><option>5</option></select></label>
       <label class="checkbox-control"><input data-control="cpu" type="checkbox" checked> Check unchanged CPU tolerance</label></div>
-    <div class="controls"><button data-action="step">Step + validate</button><button data-action="cycle" class="button-primary">Run resize cycles</button>
-      <button data-action="stop" disabled>Stop</button><button data-action="reset">Reset / retry</button>
-      <button data-action="export" disabled>Export JSON</button></div>
-    <p data-output="status" role="status">Preparing 2,048-point lanes…</p>
-    <section class="backend-panels">${['GPU rebuild', 'GPU retained capacity'].map((name, i) => `<article class="backend-panel">
+    <div class="controls"><button data-action="step"
+      data-run-action="primary">Step + validate</button>
+      <button data-action="cycle" class="button-primary"
+      data-run-action="primary">Run resize cycles</button>
+      <button data-action="stop" disabled
+      data-run-action="primary">Stop</button>
+      <button data-action="reset"
+      data-run-action="primary">Reset / retry</button>
+      <button data-action="export" disabled
+      data-run-action="export">Export JSON</button></div>
+    <p data-output="status" role="status"
+      data-run-part="status">Preparing 2,048-point lanes…</p>
+    <section
+      data-run-part="visualization" class="backend-panels">${['GPU rebuild', 'GPU retained capacity'].map((name, i) => `<article class="backend-panel">
       <div class="panel-heading"><h2 data-output="name-${i}">${name}</h2><span data-output="memory-${i}" class="status">Starting</span></div>
       <canvas data-lane="${i}" width="480" height="340" aria-label="${name} layout"></canvas>
       <p class="demo-note" data-output="info-${i}"></p></article>`).join('')}</section>
     <p class="demo-note">Cycle: 2,048 → 8,192 → 4,096 → 8,192 → 2,048. A resize preserves surviving indices, pinning and absence;
       regrowth initializes the removed tail. Checks download snapshots outside each measured update/frame.</p>
+    <section data-run-part="diagnostics">
     <h3>Immediate edits</h3><div class="scale-toolbar">
       <label>New point count <select data-control="target"><option>2048</option><option selected>8192</option><option>4096</option></select></label>
-      <button data-action="resize">Resize + preserve</button><button data-action="replace">Replace all positions</button>
-      <button data-action="pin">Move + pin point 0</button><button data-action="hide">Hide point 1</button>
-      <button data-action="restore">Restore point 1</button></div>
+      <button data-action="resize"
+      data-run-action="diagnostic">Resize + preserve</button>
+      <button data-action="replace"
+      data-run-action="diagnostic">Replace all positions</button>
+      <button data-action="pin"
+      data-run-action="diagnostic">Move + pin point 0</button>
+      <button data-action="hide"
+      data-run-action="diagnostic">Hide point 1</button>
+      <button data-action="restore"
+      data-run-action="diagnostic">Restore point 1</button></div>
     <p class="demo-note">Resize + preserve keeps surviving GPU records. Replace all positions uses supplied coordinates/presence
       and retains registered pins.
       Hiding preserves the last coordinates and leaves an index gap. These are storage primitives; animated transitions are separate.</p>
     <p data-output="cleanup" class="demo-note"></p>
-    <h3>Resize cost and buffer footprint</h3><p class="demo-note">Peak includes old + new explicitly tracked application buffers.
+    </section>
+    <h3
+      data-run-part="results">Resize cost and buffer footprint</h3><p class="demo-note">Peak includes old + new explicitly tracked application buffers.
       These counters exclude driver allocation, pipeline/texture memory and internal staging/uniform buffers.
       The retained lane keeps its high-water capacity on shrink; it rebuilds only when that capacity is exceeded.</p>
-    <div data-output="resizes" class="many-body-results"></div>
-    <h3>First frame after each update</h3><p class="demo-note">GPU work sums paired compute/render pass timestamps.
+    <div data-output="resizes" class="many-body-results"
+      data-run-part="results"></div>
+    <h3
+      data-run-part="results">First frame after each update</h3><p class="demo-note">GPU work sums paired compute/render pass timestamps.
       One evolved frame per row, including first-use effects;
       this is a resize diagnostic, not a steady-state FPS benchmark. CPU reference evaluation and validation are outside the measured frame.</p>
-    <div data-output="frames" class="many-body-results"></div>`
+    <div data-output="frames" class="many-body-results"
+      data-run-part="results"></div>`
   const el = <T extends HTMLElement>(q: string): T => host.querySelector<T>(q)!
   const button = (name: string): HTMLButtonElement => el(`[data-action="${name}"]`)
   const control = (name: string): HTMLSelectElement => el(`[data-control="${name}"]`)
@@ -83,6 +108,7 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
       : ''
   }
   const reset = async (): Promise<void> => {
+    runError = undefined
     busy = true
     if (session) { session.destroy(); cleanups.push(session.lanes.map(l => l.footprint().bytes)) }
     session = undefined; error = undefined; controls(); button('stop').disabled = true
@@ -182,6 +208,14 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
     const a = document.createElement('a'); a.href = url; a.download = `cosmos-point-capacity-${Date.now()}.json`; a.click()
     setTimeout(() => URL.revokeObjectURL(url), 0)
   })
+  mountRunLayout(host, () => summarizeRun(
+    busy ? 'Running' : stopped ? 'Stopped' : session ? 'Ready' : 'Preparing',
+    [...recordVerdicts(session?.rows ?? []),
+      ...recordVerdicts(session?.resizes ?? [])],
+    'Unrun resize histories, total VRAM and device recovery.',
+    [],
+    runError ?? error,
+    'frame and resize checks'))
   await reset()
-  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
+  return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

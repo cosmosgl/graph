@@ -1,13 +1,16 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createResidentComparison, type ResidentComparison } from '../combined-layout/resident'
 import { type Fixture, type SpringPrecision, PRECISION_LABELS } from '../combined-layout/data'
 import { benchmarkResidentFrames, FRAME_POLICY, type FrameTimingRow } from '../combined-layout/frame-benchmark'
 
 export async function createResidentView (host: HTMLElement): Promise<ExperimentInstance> {
+  let runError: string | undefined
   host.innerHTML = `<p class="demo-note">The same gravity → repulsion → incoming springs → outgoing springs tick in two WebGPU lanes.
     The staged reference reads positions for bounds. The resident lane computes bounds and draws points and links on the GPU.
     Checkpoints read both lanes for exact bit comparisons; other resident ticks have no position readback or CPU oracle.</p>
-    <div class="scale-toolbar">
+    <div
+      data-run-part="configuration" class="scale-toolbar">
       <label>Graph <select data-control="fixture"><option>chain</option><option>communities</option>
         <option>star</option><option>pinned</option></select></label>
       <label>Points <select data-control="count"><option>128</option><option>512</option><option>2048</option><option>8192</option></select></label>
@@ -15,33 +18,49 @@ export async function createResidentView (host: HTMLElement): Promise<Experiment
       <label>Arithmetic <select data-control="precision">${(['trig', 'baseline'] as const).map(mode =>
     `<option value="${mode}">${PRECISION_LABELS[mode]}</option>`).join('')}</select></label>
     </div>
-    <div class="demo-toolbar"><div class="controls"><button data-action="step">Step + check</button>
-      <button data-action="run" class="button-primary">Run comparison</button>
-      <button data-action="stop" disabled>Stop</button><button data-action="reset">Reset / retry</button>
-      <button data-action="export" disabled>Export JSON</button></div><span class="tick-counter">Tick <strong data-output="tick">0</strong></span></div>
-    <p role="status" data-output="status">Preparing WebGPU lanes…</p>
-    <section class="backend-panels">${['Staged reference', 'GPU-resident'].map((name, i) => `<article class="backend-panel">
+    <div class="demo-toolbar"><div class="controls"><button data-action="step"
+      data-run-action="primary">Step + check</button>
+      <button data-action="run" class="button-primary"
+      data-run-action="primary">Run comparison</button>
+      <button data-action="stop" disabled
+      data-run-action="primary">Stop</button>
+      <button data-action="reset"
+      data-run-action="primary">Reset / retry</button>
+      <button data-action="export" disabled
+      data-run-action="export">Export JSON</button></div><span class="tick-counter">Tick <strong data-output="tick">0</strong></span></div>
+    <p role="status" data-output="status"
+      data-run-part="status">Preparing WebGPU lanes…</p>
+    <section
+      data-run-part="visualization" class="backend-panels">${['Staged reference', 'GPU-resident'].map((name, i) => `<article class="backend-panel">
       <div class="panel-heading"><h2>${name}</h2><span data-output="reads-${i}" class="status">No snapshots</span></div>
       <canvas data-lane="${i}" width="480" height="340" aria-label="${name} layout"></canvas>
       <p class="demo-note" data-output="info-${i}"></p></article>`).join('')}</section>
     <p class="demo-note">Fixed camera; blue free points, yellow pinned. Checks at tick 1, every 5 ticks and the final tick.
       Snapshot counts include both force and position buffers; bounds and hierarchy checks add checkpoint-only downloads.
       This compares dataflow on one adapter, not independent force correctness or frame rate.</p>
-    <div data-output="results" class="many-body-results"></div>
+    <div data-output="results" class="many-body-results"
+      data-run-part="results"></div>
+    <section data-run-part="diagnostics">
     <h3>Update the current layout</h3><p class="demo-note">Use Step + check, apply an edit between ticks, then continue.
       Edits preserve the tick, cooling and existing positions. Point count stays fixed.</p>
-    <div class="scale-toolbar"><button data-action="patch">Move + pin point 0</button>
+    <div class="scale-toolbar"><button data-action="patch"
+      data-run-action="diagnostic">Move + pin point 0</button>
       <label>New links <select data-update="links"><option>communities</option><option>chain</option>
         <option>star</option><option>empty</option></select></label>
-      <button data-action="links">Replace links</button></div>
+      <button data-action="links"
+      data-run-action="diagnostic">Replace links</button></div>
     <div data-output="updates" class="many-body-results"></div>
     <h3>Time the resident workload</h3><p class="demo-note">Measures fresh native-f32 and refined lanes from the initial fixture,
       simulation-only and with 480 × 340 point/link drawing. Two warmups, seven samples; checks and resets are outside each batch.
       Each frame uses one compute pass and one submission, plus a render pass when drawing. GPU time sums the per-pass timestamp pairs.
       This measures the engine slice, not browser presentation or FPS.</p>
-    <div class="controls"><button data-action="timing">Time resident frames</button><button data-action="stop-timing" disabled>Stop timing</button></div>
+    <div class="controls"><button data-action="timing"
+      data-run-action="diagnostic">Time resident frames</button>
+      <button data-action="stop-timing" disabled
+      data-run-action="primary">Stop timing</button></div>
     <p data-output="timing-status" role="status">Ready to measure the initial fixture.</p>
-    <div data-output="timing" class="many-body-results"></div>`
+    <div data-output="timing" class="many-body-results"></div>
+    </section>`
   const el = <T extends HTMLElement>(q: string): T => host.querySelector<T>(q)!
   const control = (name: string): HTMLSelectElement => el(`[data-control="${name}"]`)
   const button = (name: string): HTMLButtonElement => el(`[data-action="${name}"]`)
@@ -99,6 +118,7 @@ export async function createResidentView (host: HTMLElement): Promise<Experiment
       : ''
   }
   const reset = async (): Promise<void> => {
+    runError = undefined
     busy = true; session?.destroy(); session = undefined; failure = undefined; controls(); button('stop').disabled = true; activeSettings = settings()
     timings = []; timingFailure = undefined
     el('[data-output="timing-status"]').textContent = 'Ready to measure the initial fixture.'
@@ -112,6 +132,7 @@ export async function createResidentView (host: HTMLElement): Promise<Experiment
       session = next; next.info.forEach((info, i) => { el(`[data-output="info-${i}"]`).textContent = info })
       render(); status.textContent = 'Ready. Run the comparison to check GPU bounds and composed ticks.'
     } catch (error) {
+      runError = String(error)
       session?.destroy(); session = undefined
       if (!destroyed) status.textContent = String(error)
     } finally { busy = false; if (!destroyed) controls() }
@@ -132,6 +153,7 @@ export async function createResidentView (host: HTMLElement): Promise<Experiment
       status.textContent = `${stopped ? 'Stopped' : 'Finished'} at tick ${session.tick()}. ` +
         `${session.rows.filter(r => r.valid).length} / ${session.rows.length} checkpoints match exactly. Unchecked ticks are not validated.`
     } catch (error) {
+      runError = String(error)
       failure = String(error)
       if (!destroyed) status.textContent = `${failure}. Use Reset / retry to restart both lanes.`
     } finally { busy = false; if (!destroyed) controls() }
@@ -145,7 +167,10 @@ export async function createResidentView (host: HTMLElement): Promise<Experiment
       if (!destroyed) {
         render(); status.textContent = `Tick ${session.tick()}: ${row?.valid ? 'all compared bits match' : 'FAIL'}. Apply an edit or continue.`
       }
-    } catch (error) { failure = String(error); if (!destroyed) status.textContent = failure } finally { busy = false; if (!destroyed) controls() }
+    } catch (error) {
+      runError = String(error)
+      failure = String(error); if (!destroyed) status.textContent = failure
+    } finally { busy = false; if (!destroyed) controls() }
   })
   for (const action of ['patch', 'links']) {
     button(action).addEventListener('click', () => {
@@ -155,7 +180,10 @@ export async function createResidentView (host: HTMLElement): Promise<Experiment
         else session.replaceLinks(el<HTMLSelectElement>('[data-update="links"]').value as Fixture | 'empty')
         render(); status.textContent = `Edit applied at tick ${session.tick()}; cooling and resident positions retained. ` +
           'Step + check to validate the next tick.'
-      } catch (error) { failure = String(error); status.textContent = failure }
+      } catch (error) {
+        runError = String(error)
+        failure = String(error); status.textContent = failure
+      }
       controls()
     })
   }
@@ -178,6 +206,7 @@ export async function createResidentView (host: HTMLElement): Promise<Experiment
         el('[data-output="timing-status"]').textContent = status.textContent
       }
     } catch (error) {
+      runError = String(error)
       timingFailure = String(error)
       if (!destroyed) { render(); status.textContent = timingFailure; el('[data-output="timing-status"]').textContent = timingFailure }
     } finally { busy = false; timingBusy = false; if (!destroyed) controls() }
@@ -206,6 +235,13 @@ export async function createResidentView (host: HTMLElement): Promise<Experiment
     const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url
     a.download = `cosmos-resident-layout-${Date.now()}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 0)
   })
+  mountRunLayout(host, () => summarizeRun(
+    busy ? 'Running' : stopped ? 'Stopped' : session ? 'Ready' : 'Preparing',
+    session?.rows.map(r => r.valid) ?? [],
+    'Non-checkpoint frames; independent layout quality and rendering parity.',
+    [],
+    runError ?? failure,
+    'resident checkpoints'))
   await reset()
-  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
+  return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

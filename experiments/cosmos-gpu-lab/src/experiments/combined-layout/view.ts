@@ -1,3 +1,4 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import { organizeRunControls } from '../../runtime/run-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
@@ -12,7 +13,10 @@ import { PRECISION_MODES, PRECISION_LABELS, GRAVITY, REPULSION, SPRINGS, type Fi
 import { BACKENDS, LABELS, createCombinedSession, type CombinedSession, type Name, type Row } from './session'
 const num = (v: number): string => Number.isFinite(v) ? v.toExponential(2) : 'non-finite'
 export async function createCombinedView (host: HTMLElement): Promise<ExperimentInstance> {
-  host.innerHTML = `<section data-run-section="configuration"><p class="demo-note">Gravity → integrate → optional center → integrate → repulsion → integrate →
+  let runError: string | undefined
+  host.innerHTML = `<section
+      data-run-section="configuration"><p class="demo-note"
+      data-run-part="diagnostics">Gravity → integrate → optional center → integrate → repulsion → integrate →
     incoming springs → integrate → outgoing springs → integrate → cool.
     Each backend evolves independently. The alpha = 1 probe tests whether a cooled layout still moves when forces regain full strength.</p>
     <div class="scale-toolbar">
@@ -26,41 +30,72 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       <label>WebGPU arithmetic <select data-control="precision">${PRECISION_MODES.map(mode =>
     `<option value="${mode}">${PRECISION_LABELS[mode]}</option>`).join('')}</select></label>
     </div>
-    <p class="demo-note">Precision candidates use integer-controlled rounding for selected spring operations through luma compute kernels.
+    <p class="demo-note"
+      data-run-part="diagnostics">Precision candidates use integer-controlled rounding for selected spring operations through luma compute kernels.
       The aligned candidate restores Cosmos's polar gravity calculation and rounds repulsion integration. Native f32 remains the baseline.</p>
-    <p class="demo-note">Optional center attraction always uses the refined polar kernel; the selector controls the other stages.
+    <p class="demo-note"
+      data-run-part="diagnostics">Optional center attraction always uses the refined polar kernel; the selector controls the other stages.
       <a href="#/matched-layout/docs/center">Matched center comparison</a> adds aggregate checks and paired GPU cost measurements.</p>
-    <p class="demo-note">Checkpoint mode checks all four stages and the whole tick at selected ticks only. Other ticks are unvalidated.
+    <p class="demo-note"
+      data-run-part="diagnostics">Checkpoint mode checks all four stages and the whole tick at selected ticks only. Other ticks are unvalidated.
       CPU continues independently; bounds and final metrics still require readback. All force tolerances stay unchanged.
       Above 2,048 points, spring timing compares native f32, rounded products, and rounded repulsion integration.</p></section>
-    <section data-run-section="run">
-    <div class="demo-toolbar playback-toolbar"><div class="controls"><button data-action="step">Step + validate</button>
-      <button data-action="run" class="button-primary">Run cooling schedule</button><button data-action="stop" disabled>Stop</button>
-      <button data-action="probe">Probe at α = 1</button>
-      <button data-action="replay" disabled>Replay first failures</button>
-      <button data-action="precision-study" disabled>Compare spring rounding</button>
-      <button data-action="spring-timing">Time spring arithmetic</button>
-      <button data-action="repulsion-timing">Time gravity + repulsion</button>
-      <button data-action="spring-isolation" disabled>Isolate spring error</button>
-      <button data-action="tick-isolation" disabled>Isolate tick error</button>
-      <button data-action="reset">Reset / retry</button><button data-action="export" disabled>Export JSON</button></div>
+    <section
+      data-run-section="run">
+    <div class="demo-toolbar playback-toolbar"><div class="controls"><button data-action="step"
+      data-run-action="primary">Step + validate</button>
+      <button data-action="run" class="button-primary"
+      data-run-action="primary">Run cooling schedule</button>
+      <button data-action="stop" disabled
+      data-run-action="primary">Stop</button>
+      <button data-action="probe"
+      data-run-action="diagnostic">Probe at α = 1</button>
+      <button data-action="replay" disabled
+      data-run-action="diagnostic">Replay first failures</button>
+      <button data-action="precision-study" disabled
+      data-run-action="diagnostic">Compare spring rounding</button>
+      <button data-action="spring-timing"
+      data-run-action="diagnostic">Time spring arithmetic</button>
+      <button data-action="repulsion-timing"
+      data-run-action="diagnostic">Time gravity + repulsion</button>
+      <button data-action="spring-isolation" disabled
+      data-run-action="diagnostic">Isolate spring error</button>
+      <button data-action="tick-isolation" disabled
+      data-run-action="diagnostic">Isolate tick error</button>
+      <button data-action="reset"
+      data-run-action="primary">Reset / retry</button>
+      <button data-action="export" disabled
+      data-run-action="export">Export JSON</button></div>
       <span class="tick-counter">Tick <strong data-output="tick">0</strong> · α <strong data-output="alpha">1</strong></span></div>
-    <p data-output="status" class="many-body-status" role="status">Preparing combined simulation…</p>
+    <p data-output="status" class="many-body-status" role="status"
+      data-run-part="status">Preparing combined simulation…</p>
     <section class="backend-panels many-body-panels">${[...BACKENDS, 'CPU' as const].map(name => `<article class="backend-panel">
       <div class="panel-heading"><h2>${LABELS[name]}</h2><span class="status" data-state="${name}">Starting</span></div>
       <canvas data-canvas="${name}" width="480" height="340" aria-label="${LABELS[name]} combined layout"></canvas>
       <p class="demo-note" data-info="${name}"></p></article>`).join('')}</section>
     <p class="demo-note">Shared camera; blue free points, yellow pinned. GPU points and links use resident positions.
       Checkpoint sub-steps are read back for validation. This is a correctness and layout study, not an FPS benchmark.</p></section>
-    <section data-run-section="results"><p class="demo-note">Live numerical checks and layout measurements. Recorded findings are under Evidence.</p>
-    <div data-output="results" class="many-body-results"></div><div data-output="probe" class="many-body-results"></div>
-    <div data-output="chart" class="trajectory-chart"></div></section>
-    <section data-run-section="diagnostics">
-    <div data-output="captures" class="many-body-results"></div><div data-output="replay" class="many-body-results"></div>
-    <div data-output="precision-study" class="many-body-results"></div>
-    <div data-output="spring-timing" class="many-body-results"></div>
-    <div data-output="spring-isolation" class="many-body-results"></div>
-    <div data-output="tick-isolation" class="many-body-results"></div></section>`
+    <section
+      data-run-section="results"><p class="demo-note">Live numerical checks and layout measurements. Recorded findings are under Evidence.</p>
+    <div data-output="results" class="many-body-results"
+      data-run-part="results"></div>
+    <div data-output="probe" class="many-body-results"></div>
+    <div data-output="chart" class="trajectory-chart"
+      data-run-part="results"></div></section>
+    <section
+      data-run-section="diagnostics">
+    <div data-output="captures" class="many-body-results"
+      data-run-part="diagnostics"></div>
+    <div data-output="replay" class="many-body-results"
+      data-run-part="diagnostics"></div>
+    <div data-output="precision-study" class="many-body-results"
+      data-run-part="diagnostics"></div>
+    <div data-output="spring-timing" class="many-body-results"
+      data-run-part="diagnostics"></div>
+    <div data-output="spring-isolation" class="many-body-results"
+      data-run-part="diagnostics"></div>
+    <div data-output="tick-isolation" class="many-body-results"
+      data-run-part="diagnostics"></div></section>`
   const el = <T extends HTMLElement>(q: string): T => host.querySelector<T>(q)!
   const control = (name: string): HTMLSelectElement => el(`[data-control="${name}"]`)
   const canvas = (name: Name | 'CPU'): HTMLCanvasElement => el(`[data-canvas="${name}"]`)
@@ -101,6 +136,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     for (const lane of session.lanes) {
       if (!session.errors[lane.name]) {
         try { lane.backend.render(view) } catch (error) {
+          runError = String(error)
           session.errors[lane.name] = error instanceof Error ? error.message : String(error)
           if (row) row.complete = false
           if (probe) probe.complete = false
@@ -285,6 +321,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     }).join('')}<p>${[...BACKENDS, 'CPU' as const].map(n => seriesKey(colors[n], LABELS[n])).join(' · ')}</p>`
   }
   const setup = async (): Promise<void> => {
+    runError = undefined
     session?.destroy(); session = undefined; probe = undefined; precisionStudy = []; springTimings = []; springIsolation = undefined; tickIsolation = undefined
     status.textContent = 'Preparing combined simulation…'
     for (const name of BACKENDS) { const old = canvas(name); old.replaceWith(old.cloneNode()) }
@@ -304,6 +341,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     if (busy || destroyed) return
     busy = true; stopped = false; controls()
     try { await work() } catch (error) {
+      runError = String(error)
       if (!destroyed) status.textContent = error instanceof Error ? error.message : String(error)
     } finally { busy = false; if (!destroyed) controls() }
   }
@@ -458,6 +496,13 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
         },
       },
     ], values => { task(async () => { for (const [name, value] of Object.entries(values)) control(name).value = value; await setup() }) })
+  mountRunLayout(host, () => summarizeRun(
+    busy ? 'Running' : stopped ? 'Stopped' : session ? 'Ready' : 'Preparing',
+    session?.rows.flatMap(r => r.results.map(c => c.valid)) ?? [],
+    `${session?.rows.filter(r => !r.checked).length ?? 0} unchecked ticks; layout quality and rendering parity.`,
+    Object.keys(session?.errors ?? {}),
+    runError,
+    'backend checkpoints'))
   await task(setup)
-  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
+  return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

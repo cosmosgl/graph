@@ -133,6 +133,25 @@ sections with spacing and medium weight rather than extra sizes, uppercase label
 Use the shared wrapping tab navigation and control grid; keep wide tables within their own horizontal
 scroll container, with all rows visible. These rules apply to the whole lab, including older experiments.
 
+### Live experiment frame
+
+Every live experiment uses `src/runtime/run-layout.ts`, including the standalone link diagnostic.
+At 1,200px and wider, Configuration sits beside Run and its visualization/results. Smaller screens
+stack the same expanded content. The top summary always names the run state, passed checks,
+failures/unavailable backends and unchecked scope. It describes this browser session, not migration approval.
+Rendering-only demos and benchmarks do not acquire a numerical pass merely by completing.
+
+Author regions with `data-run-part="configuration|visualization|metrics|status|results|diagnostics"`
+and actions with `data-run-action="primary|diagnostic|export"`. Primary actions drive or stop the
+workload; tracing, replay, precision comparisons and sweeps remain in the visible Diagnostics section.
+The two research pilots can also use their existing `data-run-section` regions and presets.
+Section links scroll without restarting or pausing a run.
+
+Call `mountRunLayout(host, readSummary)` before asynchronous setup. Its summary getter reads the
+experiment's own check records; it never interprets status text or table colors. A small observer
+refreshes the getter after UI updates. Call `disposeRunLayout(host)` during destruction. Controls,
+listeners and canvas objects are moved intact, preserving GPU ownership and retained-run state.
+
 The learning guide lives in `src/docs/learn-webgpu.md`; its small interactive examples live in
 `src/app/learning-examples.ts`. An `example` fence contains a registered example name, such as
 `invocations` or `pingPong`. The page passes an explicit example registry to the Markdown renderer;

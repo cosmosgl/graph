@@ -1,3 +1,4 @@
+import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { SIMULATION_PASSES, type LinkBackend, type WebGLCheckpoint } from './backend'
 import { buildTopology, PARAMETERS } from './data'
@@ -13,12 +14,16 @@ const STORAGE_KEY = 'cosmos-weighted-links-pass-diagnostic'
 // still owns the other device, so it cannot provide the same isolation.
 export async function createPassDiagnostic (host: HTMLElement, name: 'WebGL' | 'WebGPU'): Promise<ExperimentInstance> {
   host.innerHTML = `<section class="pass-diagnostic">
-    <h2>${name} · isolated simulation passes</h2>
-    <p>One device, no rendering or timer queries. Run one pass at a time; each complete output is read back
+    <h3
+      data-run-part="metrics">${name} · isolated simulation passes</h3>
+    <p
+      data-run-part="metrics">One device, no rendering or timer queries. Run one pass at a time; each complete output is read back
       and compared with the independent CPU reference. Completion times include readback and are not GPU benchmarks.</p>
-    <p><a href="?linkDiagnostic=WebGL#/weighted-links">WebGL only</a> ·
+    <p
+      data-run-part="configuration"><a href="?linkDiagnostic=WebGL#/weighted-links">WebGL only</a> ·
       <a href="?linkDiagnostic=WebGPU#/weighted-links">WebGPU only</a> · <a href="?#/weighted-links">Paired demo</a></p>
-    <div class="scale-toolbar">
+    <div class="scale-toolbar"
+      data-run-part="configuration">
     <label>Star points <select data-count>${[1000, 10000, 50000, 100000].map(n => `<option>${n}</option>`).join('')}</select></label>
     ${name === 'WebGL'
     ? `<label>Spring loop <select data-loop><option value="original">Cosmos directional bounds</option>
@@ -28,14 +33,26 @@ export async function createPassDiagnostic (host: HTMLElement, name: 'WebGL' | '
     ? `<label>Trajectory synchronization <select data-sync>
       <option value="fence">GPU fence</option><option value="pixel">One-pixel read (baseline)</option></select></label>`
     : ''}
-    <div class="controls"><button data-prepare disabled>Prepare star</button><button data-next disabled>Run source spring</button>
-      <button data-grouped disabled>Run one grouped tick</button>
-      <button data-trajectory disabled>Validate 25 ticks</button><button data-export disabled>Export JSON</button></div></div>
-    <p>Start small. A 100k star has caused native device loss. On failure, this diagnostic stops without retrying.
+    <div class="controls"><button data-prepare disabled
+      data-run-action="primary">Prepare star</button>
+      <button data-next disabled
+      data-run-action="primary">Run source spring</button>
+      <button data-grouped disabled
+      data-run-action="primary">Run one grouped tick</button>
+      <button data-trajectory disabled
+      data-run-action="diagnostic">Validate 25 ticks</button>
+      <button data-export disabled
+      data-run-action="export">Export JSON</button></div></div>
+    <p
+      data-run-part="configuration">Start small. A 100k star has caused native device loss. On failure, this diagnostic stops without retrying.
       The last checkpoint is kept in this browser so it survives a page reload.</p>
-    <p role="status" data-status>Creating ${name} only…</p><p data-device></p>
-    <div class="markdown-body" data-results></div>
-    <section class="visible-section saved-diagnostic">
+    <p role="status" data-status
+      data-run-part="status">Creating ${name} only…</p><p data-device
+      data-run-part="metrics"></p>
+    <div class="markdown-body many-body-results"
+      data-run-part="results" data-results></div>
+    <section class="visible-section saved-diagnostic"
+      data-run-part="diagnostics">
       <h3 class="visible-section-heading">Last saved diagnostic</h3><pre data-saved></pre></section>
     <canvas width="480" height="340" hidden></canvas>
   </section>`
@@ -200,6 +217,11 @@ export async function createPassDiagnostic (host: HTMLElement, name: 'WebGL' | '
     const a = document.createElement('a'); a.href = url; a.download = `weighted-links-${name.toLowerCase()}-passes.json`; a.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   })
+  mountRunLayout(host, () => summarizeRun(
+    busy ? 'Running' : failed ? 'Failed' : backend ? 'Ready' : 'Preparing',
+    recordVerdicts([...rows, ...(Array.isArray(capture?.trajectory) ? capture.trajectory : []), capture?.groupedTick]),
+    'Unsubmitted passes, the other backend and rendering; this diagnostic does not draw.',
+    failed && !backend ? [name] : [], undefined, 'pass and trajectory checks'))
   try {
     const canvas = el<HTMLCanvasElement>('canvas')
     backend = name === 'WebGL'
@@ -221,5 +243,5 @@ export async function createPassDiagnostic (host: HTMLElement, name: 'WebGL' | '
     failed = true; status.textContent = `GPU unavailable: ${error instanceof Error ? error.message : String(error)}`
   }
   controls()
-  return { destroy (): void { destroyed = true; if (!busy) backend?.destroy(); host.replaceChildren() } }
+  return { destroy (): void { disposeRunLayout(host); destroyed = true; if (!busy) backend?.destroy(); host.replaceChildren() } }
 }

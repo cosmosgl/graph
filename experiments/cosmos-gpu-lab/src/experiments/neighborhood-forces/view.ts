@@ -1,5 +1,6 @@
 import { luma } from '@luma.gl/core'
 import { webgpuAdapter, type WebGPUDevice } from '@luma.gl/webgpu'
+import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { BATCH_POLICY } from './gpu-timer'
 import { COMPARISON_SEED, createPrecisionPlan, runPrecisionComparison, type PrecisionRow } from './precision-comparison'
@@ -14,9 +15,11 @@ function element<T extends HTMLElement> (host: ParentNode, selector: string): T 
 }
 
 export async function createNeighborhoodExperiment (host: HTMLElement): Promise<ExperimentInstance> {
+  let runError: string | undefined
   host.innerHTML = `
     <section class="neighborhood-demo">
-      <section class="visible-section demo-settings">
+      <section class="visible-section demo-settings"
+      data-run-part="configuration">
         <h3 class="visible-section-heading">Simulation settings <span data-output="settings-summary">1,024 points · Uniform · radius 0.08</span></h3>
       <div class="scale-toolbar">
         <label><span>Points</span><select data-control="count">
@@ -47,13 +50,21 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
       <div class="simulation-preview">
       <div class="demo-toolbar playback-toolbar">
         <div class="controls">
-          <button class="button-primary" data-action="step">Step</button><button data-action="play">Play</button>
-          <button data-action="reset">Reset</button><button data-action="validate">Validate next step</button>
+          <button class="button-primary" data-action="step"
+      data-run-action="primary">Step</button>
+      <button data-action="play"
+      data-run-action="primary">Play</button>
+          <button data-action="reset"
+      data-run-action="primary">Reset</button>
+      <button data-action="validate"
+      data-run-action="diagnostic">Validate next step</button>
         </div>
         <span class="tick-counter">Tick <strong data-output="tick">0</strong></span>
       </div>
-      <div class="scale-status" role="status"><span data-output="status">Creating WebGPU resources…</span></div>
-      <div class="backend-panels">
+      <div class="scale-status" role="status"
+      data-run-part="status"><span data-output="status">Creating WebGPU resources…</span></div>
+      <div
+      data-run-part="visualization" class="backend-panels">
         <section class="backend-panel"><h2>Tiled all-pairs</h2>
           <p class="demo-note">WebGPU · reference path · up to 4,096 points</p>
           <canvas data-canvas="brute" width="480" height="480" aria-label="All-pairs simulation"></canvas>
@@ -68,12 +79,18 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
       </div>
       <p class="demo-note">Local repulsion within a fixed radius · identical inputs and circle rendering ·
         damping and reflecting walls · no per-tick CPU readback. This is not the global many-body force.</p>
-      <section class="visible-section advanced-controls">
+      <section class="visible-section advanced-controls"
+      data-run-part="diagnostics">
         <h3 class="visible-section-heading">Measurements and technical details</h3>
         <div class="controls">
-          <button data-action="precision">Check dense precision</button>
-          <button data-action="precision-cost">Compare precision cost</button>
-          <button data-action="benchmark">Benchmark</button><button data-action="export" disabled>Export JSON</button>
+          <button data-action="precision"
+      data-run-action="diagnostic">Check dense precision</button>
+          <button data-action="precision-cost"
+      data-run-action="diagnostic">Compare precision cost</button>
+          <button data-action="benchmark"
+      data-run-action="diagnostic">Benchmark</button>
+      <button data-action="export" disabled
+      data-run-action="export">Export JSON</button>
         </div>
       <p class="demo-note" data-output="gpu-timing">Checking GPU timestamp support…</p>
       <p class="demo-note">Check dense precision compares the original and fixed shaders at 65,536 points,
@@ -84,8 +101,10 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
         <span>local forces</span><b>→</b><span>integration</span><b>→</b><span>circles</span></div>
       <p class="demo-note" data-output="search"></p>
       </section>
-      <section data-output="timings" aria-live="polite"></section>
-      <section class="neighborhood-sweep">
+      <section data-output="timings" aria-live="polite"
+      data-run-part="diagnostics"></section>
+      <section class="neighborhood-sweep"
+      data-run-part="diagnostics">
         <h2>Repeatable parameter sweep</h2>
         <p class="demo-note">Uniform positions compressed into 1×, 4× or 16× density.
           Sweeps use the baseline loop and their own fixed parameter matrix, independent of the demo controls above.
@@ -100,9 +119,12 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
             <option>1</option><option selected>2</option><option>3</option>
           </select></label>
           <label><span>Order seed</span><input data-sweep="seed" type="number" min="0" max="4294967295" step="1" value="20261109"></label>
-          <div class="controls"><button data-action="sweep">Run sweep</button>
-            <button data-action="cancel-sweep" disabled>Cancel sweep</button>
-            <button data-action="export-sweep" disabled>Export sweep JSON</button></div>
+          <div class="controls"><button data-action="sweep"
+      data-run-action="diagnostic">Run sweep</button>
+            <button data-action="cancel-sweep" disabled
+      data-run-action="primary">Cancel sweep</button>
+            <button data-action="export-sweep" disabled
+      data-run-action="export">Export sweep JSON</button></div>
         </div>
         <p data-output="sweep-plan" class="demo-note"></p>
         <p data-output="sweep-status" role="status">Not run. Larger matrices can take several minutes.</p>
@@ -175,6 +197,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
     }
   }
   const configure = async (): Promise<void> => {
+    runError = undefined
     const current = ++revision
     busy = true
     pause()
@@ -228,6 +251,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
       }
       status.textContent = 'Ready. Step or play to see motion; validate to compare forces and integration with the CPU.'
     } catch (error) {
+      runError = String(error)
       for (const backend of backends) backend.destroy()
       backends = []
       device?.destroy()
@@ -241,7 +265,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
     if (busy || destroyed || backends.length === 0) return
     busy = true
     controls()
-    try { await action() } catch (error) { fail(error) } finally {
+    try { await action() } catch (error) { runError = String(error); fail(error) } finally {
       if (!destroyed) { busy = false; controls() }
     }
   }
@@ -356,6 +380,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
             ? 'complete-with-failures'
             : 'complete'
       } catch (error) {
+        runError = String(error)
         output.status = destroyed || cancelSweep || document.hidden ? 'cancelled' : 'failed'
         if (output.status === 'failed') throw error
       } finally {
@@ -500,7 +525,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
         `density: ${[...new Set(plan.map(item => item.density))].sort((a, b) => a - b).join(', ')}×; ` +
         `radii: ${[...new Set(plan.map(item => item.radius))].sort().join(', ')}; ` +
         `cell widths: ${[...new Set(plan.map(item => 2 / item.gridSize))].sort().join(', ')}.`
-    } catch (error) { sweepStatus.textContent = error instanceof Error ? error.message : String(error) }
+    } catch (error) { runError = String(error); sweepStatus.textContent = error instanceof Error ? error.message : String(error) }
   }
   element<HTMLButtonElement>(host, '[data-action="sweep"]').onclick = (): void => {
     perform(async () => {
@@ -568,6 +593,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
           ? 'cancelled'
           : rows.some(row => row.status === 'failed') ? 'complete-with-failures' : 'complete'
       } catch (error) {
+        runError = String(error)
         output.status = 'failed'
         throw error
       } finally {
@@ -596,11 +622,19 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
   }
   for (const select of host.querySelectorAll<HTMLSelectElement>('[data-control]')) select.onchange = (): void => { configure() }
   for (const control of host.querySelectorAll<HTMLSelectElement | HTMLInputElement>('[data-sweep]')) control.onchange = describePlan
+  mountRunLayout(host, () => summarizeRun(
+    playing || busy || sweeping ? 'Running' : backends.length ? 'Ready' : 'Preparing',
+    Object.values(validations).map(v => v.valid),
+    frame ? 'Ticks after the last explicit validation; global Cosmos forces.' : 'Current inputs until Validate is run; global Cosmos forces.',
+    [],
+    runError,
+    'latest backend validations'))
   describePlan()
   configure()
   return {
     pause (): void { cancelSweep = true; pause() },
     destroy (): void {
+      disposeRunLayout(host)
       destroyed = true
       revision += 1
       pause()
