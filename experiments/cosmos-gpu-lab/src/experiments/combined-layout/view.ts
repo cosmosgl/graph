@@ -1,3 +1,4 @@
+import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import { organizeRunControls } from '../../runtime/run-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { fitView } from '../many-body/backend'
@@ -49,7 +50,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       <div class="panel-heading"><h2>${LABELS[name]}</h2><span class="status" data-state="${name}">Starting</span></div>
       <canvas data-canvas="${name}" width="480" height="340" aria-label="${LABELS[name]} combined layout"></canvas>
       <p class="demo-note" data-info="${name}"></p></article>`).join('')}</section>
-    <p class="demo-note">Shared camera; blue free points, orange pinned. GPU points and links use resident positions.
+    <p class="demo-note">Shared camera; blue free points, yellow pinned. GPU points and links use resident positions.
       Checkpoint sub-steps are read back for validation. This is a correctness and layout study, not an FPS benchmark.</p></section>
     <section data-run-section="results"><p class="demo-note">Live numerical checks and layout measurements. Recorded findings are under Evidence.</p>
     <div data-output="results" class="many-body-results"></div><div data-output="probe" class="many-body-results"></div>
@@ -109,13 +110,13 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     const c = canvas('CPU'); const ctx = c.getContext('2d')!
     const xy = (i: number): [number, number] => [((cpu[i] - view[0]) * view[2] + 1) * c.width / 2,
       (1 - (cpu[i + 1] - view[1]) * view[3]) * c.height / 2]
-    ctx.fillStyle = '#13161b'; ctx.fillRect(0, 0, c.width, c.height); ctx.strokeStyle = '#455266'; ctx.lineWidth = 1; ctx.beginPath()
+    ctx.fillStyle = graphPalette.background; ctx.fillRect(0, 0, c.width, c.height); ctx.strokeStyle = graphPalette.link; ctx.lineWidth = 1; ctx.beginPath()
     for (let e = 0; e < session.graph.links.length; e += 2) {
       ctx.moveTo(...xy(session.graph.links[e] * 4)); ctx.lineTo(...xy(session.graph.links[e + 1] * 4))
     }
     ctx.stroke()
     for (let i = 0; i < cpu.length; i += 4) {
-      ctx.fillStyle = cpu[i + 2] > 0.5 ? '#ffb866' : '#9fb5d5'; ctx.beginPath(); ctx.arc(...xy(i), 2.5, 0, Math.PI * 2); ctx.fill()
+      ctx.fillStyle = cpu[i + 2] > 0.5 ? graphPalette.pinned : graphPalette.point; ctx.beginPath(); ctx.arc(...xy(i), 2.5, 0, Math.PI * 2); ctx.fill()
     }
     for (const name of BACKENDS) {
       const failures = session.rows.filter(r => r.results.some(c => c.name === name && c.valid === false)).length
@@ -266,7 +267,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       { title: 'RMS motion per tick', get: (m: Row['cpu']) => m.motion.rms },
       { title: 'Normalized link-length error', get: (m: Row['cpu']) => m.linkError },
     ]
-    const colors = { webgl: '#e7b882', webgpu: '#9fb5d5', CPU: '#c7b1e0' }
+    const colors = { ...comparisonSeries, CPU: comparisonSeries.cpu }
     el('[data-output="chart"]').innerHTML = `${charts.map(chart => {
       const values = session!.rows.flatMap(r => [chart.get(r.cpu), ...r.results.map(c => chart.get(c.metrics))]).filter(Number.isFinite)
       const max = Math.max(1e-12, ...values)
@@ -279,9 +280,9 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
       const m = name === 'CPU' ? r.cpu : r.results.find(c => c.name === name)?.metrics
       return m && Number.isFinite(chart.get(m)) ? [`${50 + (r.tick - 1) / Math.max(1, row.tick - 1) * 640},${150 - chart.get(m) / max * 125}`] : []
     })
-    return `<polyline points="${points.join(' ')}" fill="none" stroke="${colors[name]}" stroke-width="2"/>`
+    return `<polyline points="${points.join(' ')}" fill="none" stroke="${colors[name].color}" stroke-dasharray="${colors[name].dash}" stroke-width="2"/>`
   }).join('')}</svg>`
-    }).join('')}<p>${[...BACKENDS, 'CPU' as const].map(n => `<span style="color:${colors[n]}">${LABELS[n]}</span>`).join(' · ')}</p>`
+    }).join('')}<p>${[...BACKENDS, 'CPU' as const].map(n => seriesKey(colors[n], LABELS[n])).join(' · ')}</p>`
   }
   const setup = async (): Promise<void> => {
     session?.destroy(); session = undefined; probe = undefined; precisionStudy = []; springTimings = []; springIsolation = undefined; tickIsolation = undefined

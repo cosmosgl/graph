@@ -1,6 +1,7 @@
 import { Buffer, luma, type BindingDeclaration } from '@luma.gl/core'
 import { Kernel, RenderKernel } from '@luma.gl/engine'
 import { webgpuAdapter, type WebGPUDevice } from '@luma.gl/webgpu'
+import { graphRgb, graphRgba } from '../../runtime/palette'
 import { waitForGpu } from '../../gpu/luma'
 import type { LinkBackend, Measurement, Stage, SetupSubmission } from './backend'
 import type { GraphInput, Parameters, Topology } from './data'
@@ -26,14 +27,14 @@ struct Vertex { @builtin(position) position: vec4<f32>, @location(0) uv: vec2<f3
   let p = positions[i]; var result: Vertex;
   result.position = vec4(p.xy + corners[v] * vec2(5. / 480., 5. / 340.), 0., 1.);
   if (p.w > 0.5) { result.position = vec4(3.,3.,0.,1.); }
-  result.uv = corners[v]; result.color = select(vec3(0.48,0.76,0.84), vec3(1.,0.72,0.4), p.z > 0.5);
+  result.uv = corners[v]; result.color = select(vec3(${graphRgb.point}), vec3(${graphRgb.pinned}), p.z > 0.5);
   return result;
 }
 @vertex fn link(@builtin(vertex_index) v: u32) -> Vertex {
   let a = positions[links[(v / 2u) * 2u]]; let b = positions[links[(v / 2u) * 2u + 1u]];
   var result: Vertex; result.position = vec4(positions[links[v]].xy, 0., 1.);
   if (a.w > 0.5 || b.w > 0.5) { result.position = vec4(3.,3.,0.,1.); }
-  result.uv = vec2(0.); result.color = vec3(0.27,0.35,0.43); return result;
+  result.uv = vec2(0.); result.color = vec3(${graphRgb.link}); return result;
 }
 @fragment fn fragment(input: Vertex) -> @location(0) vec4<f32> {
   if (dot(input.uv, input.uv) > 1.) { discard; }
@@ -105,7 +106,7 @@ export async function createWebGPUBackend (canvas: HTMLCanvasElement): Promise<L
     }
     const encodeRender = (positionIndex = 0, begin = false, end = false): void => {
       const pass = device.beginRenderPass({
-        clearColor: [0.075, 0.087, 0.105, 1],
+        clearColor: graphRgba.background,
         clearDepth: false,
         ...timestamps(begin, end),
       })

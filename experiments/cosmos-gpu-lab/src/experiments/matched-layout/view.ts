@@ -1,3 +1,4 @@
+import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { PRESETS, type ProductionPreset } from '../combined-layout/production-settings'
 import { measureCenterCost, centerCostSummary } from '../combined-layout/center-cost'
@@ -7,7 +8,7 @@ function num (value: number | null | undefined): string {
   if (value === null || value === undefined) return '—'
   return Number.isFinite(value) ? value.toExponential(3) : 'non-finite'
 }
-const COLORS = { webgl: '#e7b882', webgpu: '#9fb5d5', cpu: '#c7b1e0' }
+const COLORS = comparisonSeries
 const time = (value: number | null): string => value === null ? '—' : value.toFixed(3)
 function settingsNote (settings: Settings): string {
   return settings.preset === 'adaptive' ? 'Shared CPU-derived sample decisions every 30 ticks (grid mode only).' : 'Fixed sample count.'
@@ -84,7 +85,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     const c = canvas('cpu'); const ctx = c.getContext('2d')!
     const xy = (id: number): [number, number] => [((cpu[id * 4] - view[0]) * view[2] + 1) * c.width / 2,
       (1 - (cpu[id * 4 + 1] - view[1]) * view[3]) * c.height / 2]
-    ctx.fillStyle = '#13161b'; ctx.fillRect(0, 0, c.width, c.height); ctx.strokeStyle = '#455266'; ctx.lineWidth = 1; ctx.beginPath()
+    ctx.fillStyle = graphPalette.background; ctx.fillRect(0, 0, c.width, c.height); ctx.strokeStyle = graphPalette.link; ctx.lineWidth = 1; ctx.beginPath()
     for (let e = 0; e < session.graph.links.length; e += 2) {
       const a = session.graph.links[e]; const b = session.graph.links[e + 1]
       if (cpu[a * 4 + 3] > 0.5 || cpu[b * 4 + 3] > 0.5) continue
@@ -93,7 +94,8 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     ctx.stroke()
     for (let id = 0; id < cpu.length / 4; id++) {
       if (cpu[id * 4 + 3] <= 0.5) {
-        ctx.fillStyle = cpu[id * 4 + 2] > 0.5 ? '#ffb866' : '#9fb5d5'; ctx.beginPath(); ctx.arc(...xy(id), 2.5, 0, Math.PI * 2); ctx.fill()
+        ctx.fillStyle = cpu[id * 4 + 2] > 0.5 ? graphPalette.pinned : graphPalette.point
+        ctx.beginPath(); ctx.arc(...xy(id), 2.5, 0, Math.PI * 2); ctx.fill()
       }
     }
     for (const name of NAMES) {
@@ -111,7 +113,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     const method = report.method === 'exact' ? 'Exact all-pairs' : 'Hierarchical'
     const sampling = report.method === 'exact' ? 'all present neighbors' : `${row?.samples ?? report.parameters.samples} samples`
     el('[data-output="method"]').textContent = `${method} repulsion · ${sampling} · center ${session.settings.center ?? 0} after gravity · ` +
-      `origin (2048, 2048) · shared camera · orange pinned. ${settingsNote(session.settings)} ` +
+      `origin (2048, 2048) · shared camera · yellow pinned. ${settingsNote(session.settings)} ` +
       'Frozen checks: first, every 10 ticks and final. Unchecked ticks have no numerical verdict.'
     const assessment = report.assessment
     el('[data-output="assessment"]').innerHTML = `<h3>Evidence by contract</h3>
@@ -197,15 +199,16 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
       { title: 'Motion / layout radius', value: q => q.normalizedMotion },
     ]
     el('[data-output="charts"]').innerHTML = row
-      ? `<p>${NAMES.map(n => `<span style="color:${COLORS[n]}">${LABELS[n]}</span>`).join(' · ')}</p>${charts.map(chart => {
+      ? `<p>${NAMES.map(n => seriesKey(COLORS[n], LABELS[n])).join(' · ')}</p>${charts.map(chart => {
         const values = report.rows.flatMap(r => NAMES.flatMap(n => r.quality[n] ? [chart.value(r.quality[n]!)] : []))
           .filter((v): v is number => v !== null && Number.isFinite(v))
         const max = Math.max(1e-12, ...values)
         return `<h3>${chart.title}</h3><svg viewBox="0 0 720 170" role="img" aria-label="${chart.title} over ${row.tick} ticks">
         <path d="M60 20 V135 H690" stroke="currentColor" opacity="0.3" fill="none"/>
-        <text x="0" y="24" fill="currentColor" font-size="11">${num(max)}</text><text x="45" y="139" fill="currentColor" font-size="11">0</text>
-        <text x="60" y="160" fill="currentColor" font-size="11">Tick 1</text><text x="630" y="160" fill="currentColor" font-size="11">Tick ${row.tick}</text>
-        ${NAMES.map(n => `<polyline fill="none" stroke="${COLORS[n]}" stroke-width="1.5" points="${report.rows.flatMap(r => {
+        <text x="0" y="24" fill="currentColor" font-size="12">${num(max)}</text><text x="45" y="139" fill="currentColor" font-size="12">0</text>
+        <text x="60" y="160" fill="currentColor" font-size="12">Tick 1</text><text x="630" y="160" fill="currentColor" font-size="12">Tick ${row.tick}</text>
+        ${NAMES.map(n => `<polyline fill="none" stroke="${COLORS[n].color}" stroke-dasharray="${COLORS[n].dash}"
+          stroke-width="1.5" points="${report.rows.flatMap(r => {
     const v = r.quality[n] ? chart.value(r.quality[n]!) : null
     return v !== null && Number.isFinite(v) ? [`${60 + (r.tick - 1) / Math.max(1, row.tick - 1) * 630},${135 - v / max * 110}`] : []
   }).join(' ')}"/>`).join('')}</svg>`

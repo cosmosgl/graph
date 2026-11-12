@@ -1,5 +1,6 @@
 import { Buffer, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
+import { graphRgba } from '../../../runtime/palette'
 import { createDevice } from '../../../gpu/luma'
 import type { BackendResult, CenterMassBackend } from '../backend'
 import { createBlendReduction } from './reduction'
@@ -29,11 +30,11 @@ export async function createWebGLCenterMass (canvas: HTMLCanvasElement, pointCou
         const values = reduction.read()
         const center = { x: values[0] / values[2], y: values[1] / values[2], count: values[2] }
         marker.write(new Float32Array([center.x, center.y]))
-        const pass = device.beginRenderPass({ clearColor: [0.09, 0.1, 0.12, 1], clearDepth: false })
+        const pass = device.beginRenderPass({ clearColor: graphRgba.background, clearDepth: false })
         model.setAttributes({ position: reduction.positions }); model.setVertexCount(pointCount)
-        uniforms.setUniforms({ drawUniforms: { pointSize: 1, color: [0.76, 0.82, 0.91, 0.88] } }); model.draw(pass)
+        uniforms.setUniforms({ drawUniforms: { pointSize: 1, color: [...graphRgba.point.slice(0, 3), 0.88] } }); model.draw(pass)
         model.setAttributes({ position: marker }); model.setVertexCount(1)
-        uniforms.setUniforms({ drawUniforms: { pointSize: 9, color: [1, 0.32, 0.24, 1] } }); model.draw(pass)
+        uniforms.setUniforms({ drawUniforms: { pointSize: 9, color: graphRgba.pinned } }); model.draw(pass)
         pass.end(); device.submit()
         return { center, elapsedMilliseconds: performance.now() - start }
       },

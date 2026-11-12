@@ -1,5 +1,6 @@
 import { Texture, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
+import { graphRgb } from '../../runtime/palette'
 import type { WebGLForceFactory } from '../many-body/webgl'
 import { resourceScope } from '../../gpu/resource-scope'
 import forceSource from '../../../../../src/modules/ForceCollision/force-collision-allpairs.frag?raw'
@@ -16,7 +17,7 @@ void main() {
   vec4 p = texelFetch(positions, texel, 0); uv = corners[gl_VertexID];
   float r = (radius > 0. ? radius : texelFetch(sizes, texel, 0).r * 0.5) + padding;
   gl_Position = p.w > 0.5 ? vec4(3.,3.,0.,1.) : vec4((p.xy - view.xy + uv * r) * view.zw,0.,1.);
-  color = p.z > 0.5 ? vec3(0.91,0.72,0.51) : vec3(0.62,0.71,0.84);
+  color = p.z > 0.5 ? vec3(${graphRgb.pinned}) : vec3(${graphRgb.point});
 }`
 const drawFragment = `#version 300 es
 precision highp float;

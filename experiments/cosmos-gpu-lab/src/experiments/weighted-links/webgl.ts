@@ -1,6 +1,7 @@
 import { luma, Texture, UniformStore, type Buffer, type Framebuffer, type QuerySet, type RenderPassProps } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { webgl2Adapter, type WebGLDevice } from '@luma.gl/webgl'
+import { graphRgb, graphRgba } from '../../runtime/palette'
 import { forceFrag } from '../../../../../src/modules/ForceLink/force-spring'
 import quad from '../../../../../src/modules/Shared/quad.vert?raw'
 import integrateSource from '../../../../../src/modules/Points/update-position.frag?raw'
@@ -37,7 +38,7 @@ void main() {
   }
   vec4 p = pointAt(i); gl_Position = vec4(p.xy, 0., 1.); gl_PointSize = 5.;
   if (p.w > 0.5 || absent) gl_Position = vec4(3.,3.,0.,1.);
-  color = isLink == 1 ? vec3(0.27,0.35,0.43) : (p.z > 0.5 ? vec3(1.,0.72,0.4) : vec3(0.48,0.76,0.84));
+  color = isLink == 1 ? vec3(${graphRgb.link}) : (p.z > 0.5 ? vec3(${graphRgb.pinned}) : vec3(${graphRgb.point}));
 }`
 const renderFragment = `#version 300 es
 precision highp float;
@@ -143,7 +144,7 @@ export async function createWebGLBackend (
     try { model.draw(pass) } finally { pass.end() }
   }
   const draw = (positionIndex = 0, mode = 'both', verticesPerDraw = Infinity, begin = false, end = false, framebuffer?: Framebuffer): void => {
-    const pass = device.beginRenderPass({ framebuffer, clearColor: [0.075, 0.087, 0.105, 1], clearDepth: false, ...timestamps(begin, end) })
+    const pass = device.beginRenderPass({ framebuffer, clearColor: graphRgba.background, clearDepth: false, ...timestamps(begin, end) })
     const drawRange = (model: Model, count: number, isLink: number): void => {
       renderUniforms.setUniforms({ renderUniforms: { pointSize, linkSize, isLink } })
       model.setBindings({ positions: positions[positionIndex], links })

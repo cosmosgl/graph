@@ -1,5 +1,6 @@
 import { Buffer, type Device, type CommandEncoder, type Bindings, type CanvasContext } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
+import { graphRgba } from '../../runtime/palette'
 import { ALPHA_BLEND, bindingLayout, createStorageRenderer, readFloats, waitForGpu } from '../../gpu/luma'
 import { createSpatialGridResources, type SpatialGridBackend, type GridTimestamps } from '../spatial-grid/resources'
 import circleShader from '../point-rendering/webgpu/shaders/circle.wgsl?raw'
@@ -126,7 +127,8 @@ export async function createNeighborhoodBackend (
       context = device.createCanvasContext({ canvas, autoResize: false, useDevicePixels: false, alphaMode: 'opaque' })
       const colors = storage('circle colors', count * 16)
       const colorData = new Float32Array(count * 4)
-      for (let i = 0; i < count; i++) colorData.set([0.56, 0.78, 0.71, 0.8], i * 4)
+      const pointColor = [...graphRgba.point.slice(0, 3), 0.8]
+      for (let i = 0; i < count; i++) colorData.set(pointColor, i * 4)
       colors.write(colorData)
       const renderUniforms = buffer('circle uniforms', 16, Buffer.UNIFORM | Buffer.COPY_DST)
       renderUniforms.write(new Float32Array([count > 4096 ? 2 : 4, canvas.width, canvas.height, 0]))
@@ -152,7 +154,7 @@ export async function createNeighborhoodBackend (
       if (!context || !renderer) return
       const pass = encoder.beginRenderPass({
         framebuffer: context.getCurrentFramebuffer(),
-        clearColor: [0.075, 0.087, 0.105, 1],
+        clearColor: graphRgba.background,
         clearDepth: false,
         ...timestamps,
       })

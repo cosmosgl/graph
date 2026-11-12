@@ -1,5 +1,6 @@
 import { Texture, UniformStore, type Buffer, type Device } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
+import { graphRgb } from '../../runtime/palette'
 import { forceFrag } from '../../../../../src/modules/ForceLink/force-spring'
 import gravitySource from '../../../../../src/modules/ForceGravity/force-gravity.frag?raw'
 import quadSource from '../../../../../src/modules/Shared/quad.vert?raw'
@@ -105,7 +106,7 @@ layout(std140) uniform drawUniforms { vec4 view; };
 void main() { vec2 p = texelFetch(positions, ivec2(pointIndex), 0).xy; gl_Position = vec4((p - view.xy) * view.zw,0.,1.); }`,
         fs: `#version 300 es
 precision highp float;
-out vec4 color; void main() { color = vec4(0.27,0.32,0.4,1.); }`,
+out vec4 color; void main() { color = vec4(${graphRgb.link},1.); }`,
         topology: 'line-list',
         vertexCount: topology.links.length,
         attributes: { pointIndex: indices },

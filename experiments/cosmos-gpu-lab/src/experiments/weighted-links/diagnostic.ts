@@ -12,12 +12,13 @@ const STORAGE_KEY = 'cosmos-weighted-links-pass-diagnostic'
 // Intentionally creates one device. A paired demo with one backend filtered from its sweep
 // still owns the other device, so it cannot provide the same isolation.
 export async function createPassDiagnostic (host: HTMLElement, name: 'WebGL' | 'WebGPU'): Promise<ExperimentInstance> {
-  host.innerHTML = `<section class="scale-toolbar">
+  host.innerHTML = `<section class="pass-diagnostic">
     <h2>${name} · isolated simulation passes</h2>
     <p>One device, no rendering or timer queries. Run one pass at a time; each complete output is read back
       and compared with the independent CPU reference. Completion times include readback and are not GPU benchmarks.</p>
     <p><a href="?linkDiagnostic=WebGL#/weighted-links">WebGL only</a> ·
       <a href="?linkDiagnostic=WebGPU#/weighted-links">WebGPU only</a> · <a href="?#/weighted-links">Paired demo</a></p>
+    <div class="scale-toolbar">
     <label>Star points <select data-count>${[1000, 10000, 50000, 100000].map(n => `<option>${n}</option>`).join('')}</select></label>
     ${name === 'WebGL'
     ? `<label>Spring loop <select data-loop><option value="original">Cosmos directional bounds</option>
@@ -29,7 +30,7 @@ export async function createPassDiagnostic (host: HTMLElement, name: 'WebGL' | '
     : ''}
     <div class="controls"><button data-prepare disabled>Prepare star</button><button data-next disabled>Run source spring</button>
       <button data-grouped disabled>Run one grouped tick</button>
-      <button data-trajectory disabled>Validate 25 ticks</button><button data-export disabled>Export JSON</button></div>
+      <button data-trajectory disabled>Validate 25 ticks</button><button data-export disabled>Export JSON</button></div></div>
     <p>Start small. A 100k star has caused native device loss. On failure, this diagnostic stops without retrying.
       The last checkpoint is kept in this browser so it survives a page reload.</p>
     <p role="status" data-status>Creating ${name} only…</p><p data-device></p>

@@ -19,7 +19,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         <option value="no">Cosmos constant-size rule</option></select></label>
       <label>Global opacity <select data-opacity><option selected>1</option><option>0.35</option><option>0</option></select></label>
       <label>Draw order <select data-order><option value="normal">Input order</option><option value="reverse">Reversed</option></select></label>
-      <button data-export disabled>Export JSON</button>
+      <div class="controls"><button data-export disabled>Export JSON</button></div>
     </div><p role="status">Creating luma devices…</p>
     <p class="demo-note" data-legend></p>
     <section class="backend-panels styling-panels">${(['webgl', 'webgpu'] as const).map(name => `<article class="backend-panel">

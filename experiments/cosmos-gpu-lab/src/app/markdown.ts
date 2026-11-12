@@ -23,6 +23,10 @@ export async function renderMarkdown (
     typographer: true,
   })
 
+  // Keep wide evidence tables within the article, without clipping their rows.
+  markdown.renderer.rules.table_open = (): string => '<div class="table-scroll"><table>\n'
+  markdown.renderer.rules.table_close = (): string => '</table></div>\n'
+
   const defaultFence = markdown.renderer.rules.fence
   const examples = options.examples ?? {}
   markdown.renderer.rules.fence = (tokens, index, options, environment, renderer): string => {

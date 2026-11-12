@@ -1,3 +1,4 @@
+import { graphPalette } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { fitView, type Backend, type View } from './backend'
 import { createFixture, FIXTURES, nearLimit, PARAMETERS, type Fixture, type Variant } from './data'
@@ -9,12 +10,12 @@ import { TIMING_POLICY } from './timing'
 
 function drawCpu (canvas: HTMLCanvasElement, positions: Float32Array, view: View): void {
   const ctx = canvas.getContext('2d')!
-  ctx.fillStyle = 'rgb(19,22,27)'; ctx.fillRect(0, 0, canvas.width, canvas.height)
+  ctx.fillStyle = graphPalette.background; ctx.fillRect(0, 0, canvas.width, canvas.height)
   for (let i = 0; i < positions.length; i += 4) {
     if (positions[i + 3] > 0.5) continue
     const x = ((positions[i] - view[0]) * view[2] + 1) * canvas.width / 2
     const y = (1 - (positions[i + 1] - view[1]) * view[3]) * canvas.height / 2
-    ctx.fillStyle = positions[i + 2] > 0.5 ? '#ffb866' : '#9fb5d5'
+    ctx.fillStyle = positions[i + 2] > 0.5 ? graphPalette.pinned : graphPalette.point
     ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill()
   }
 }
@@ -48,7 +49,7 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
       </article>`).join('')}
     </section>
     <p class="demo-note">Identical initial positions, fixed random samples and parameters.
-      Blue points are free; orange points are pinned; absent points are hidden.
+      Blue points are free; yellow points are pinned; absent points are hidden.
       The camera fits all three outputs together. This force-only layout expands; gravity, springs and cooling are not enabled.</p>
     <div class="many-body-results" data-output="results"></div>
     <section class="visible-section advanced-controls"><h3 class="visible-section-heading">Validation contract and parameters</h3>

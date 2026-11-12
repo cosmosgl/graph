@@ -13,7 +13,8 @@ export function createPrecisionView (host: HTMLElement): ExperimentInstance {
       <label>Gravity seed <input data-seed type="number" value="5931" min="0" max="4294967295" step="1"></label>
       <label>Sum fixture <select data-fixture><option value="cancellation">Cancellation</option><option value="positive">Positive integers</option>
         <option value="balanced">Balanced integers</option></select></label>
-      <button data-run class="button-primary">Run frozen diagnostics</button><button data-export disabled>Export JSON</button>
+      <div class="controls"><button data-run class="button-primary">Run frozen diagnostics</button>
+        <button data-export disabled>Export JSON</button></div>
     </div><p role="status" data-status>Ready. GPU results depend on the selected browser and device.</p>
     <div class="many-body-results precision-results" data-results></div>
     <p class="demo-note">Read the <a href="#/precision-diagnostics/docs/method">method</a>,

@@ -1,5 +1,6 @@
 import { Buffer, type Device, type ComputePass } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
+import { graphRgb } from '../../runtime/palette'
 import { bindingLayout, upload, createStorageRenderer, readFloats } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import type { WebGPUOptions } from '../many-body/webgpu'
@@ -42,7 +43,7 @@ const linkSource = `
 @vertex fn vertexMain(@builtin(vertex_index) i: u32) -> @builtin(position) vec4<f32> {
   return vec4((positions[links[i]].xy - view.xy) * view.zw, 0., 1.);
 }
-@fragment fn fragmentMain() -> @location(0) vec4<f32> { return vec4(0.27,0.32,0.4,1.); }
+@fragment fn fragmentMain() -> @location(0) vec4<f32> { return vec4(${graphRgb.link},1.); }
 `
 export async function createCombinedWebGPU (
   canvas: HTMLCanvasElement, graph: GraphInput, input: Input, precision: SpringPrecision = 'baseline',

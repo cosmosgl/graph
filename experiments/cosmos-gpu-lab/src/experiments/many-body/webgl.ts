@@ -1,5 +1,6 @@
 import { Texture, UniformStore, type Buffer, type Device, type Framebuffer, type RenderPass } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
+import { graphRgb, graphRgba } from '../../runtime/palette'
 import quadSource from '../../../../../src/modules/Shared/quad.vert?raw'
 import forceSource from '../../../../../src/modules/ForceManyBody/force-allpairs.frag?raw'
 import integrationSource from '../../../../../src/modules/Points/update-position.frag?raw'
@@ -21,7 +22,7 @@ void main() {
   gl_Position = vec4(3.,3.,0.,1.);
   if (p.w <= 0.5) gl_Position = vec4((p.xy - view.xy) * view.zw,0.,1.);
   gl_PointSize = 5.;
-  color = p.z > 0.5 ? vec3(1.,0.72,0.4) : vec3(0.62,0.71,0.84);
+  color = p.z > 0.5 ? vec3(${graphRgb.pinned}) : vec3(${graphRgb.point});
 }`
 const fragment = `#version 300 es
 precision highp float;
@@ -169,7 +170,7 @@ export async function createWebGL (canvas: HTMLCanvasElement, input: Input, p: P
       },
       render (view): void {
         healthy(); drawUniforms.setUniforms({ drawUniforms: { view, size } }); draw.setBindings({ positions: positions[current] })
-        const pass = device.beginRenderPass({ clearColor: [0.075, 0.087, 0.105, 1], clearDepth: false })
+        const pass = device.beginRenderPass({ clearColor: graphRgba.background, clearDepth: false })
         try { if (count) { extension?.render?.(current, view, pass); draw.draw(pass) } } finally { pass.end() }
         device.submit()
       },
