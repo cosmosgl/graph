@@ -1,4 +1,6 @@
 import type { ExperimentReport } from '../runtime/experiment'
+import { presentDocumentTables } from '../runtime/result-tables'
+import { evidenceSourceNote } from './evidence-source'
 
 function heading (tag: 'h2' | 'h3', text: string): HTMLHeadingElement {
   const element = document.createElement(tag)
@@ -80,7 +82,13 @@ export function renderReport (
 
   article.append(
     heading('h2', report.title),
-    paragraph(`${report.status} · recorded ${report.recordedAt} · commit ${report.commit}`),
+    paragraph(report.status),
+    evidenceSourceNote({
+      source: 'Recorded report',
+      recorded: report.recordedAt,
+      device: Object.entries(report.environment).map(([key, value]) => `${key}: ${value}`).join(' · ') || 'Not recorded',
+      scope: Object.entries(report.parameters).map(([key, value]) => `${key}: ${value}`).join(' · ') || 'See report notes',
+    }),
     heading('h3', 'Environment'),
     keyValueTable(report.environment),
     heading('h3', 'Parameters'),
@@ -92,4 +100,5 @@ export function renderReport (
   )
 
   host.append(article)
+  presentDocumentTables(host)
 }

@@ -141,7 +141,7 @@ stack the same expanded content. The top summary always names the run state, pas
 failures/unavailable backends and unchecked scope. It describes this browser session, not migration approval.
 Rendering-only demos and benchmarks do not acquire a numerical pass merely by completing.
 
-Author regions with `data-run-part="configuration|visualization|metrics|status|results|diagnostics"`
+Author regions with `data-run-part="configuration|visualization|metrics|status|results|explanation|diagnostics"`
 and actions with `data-run-action="primary|diagnostic|export"`. Primary actions drive or stop the
 workload; tracing, replay, precision comparisons and sweeps remain in the visible Diagnostics section.
 The two research pilots can also use their existing `data-run-section` regions and presets.
@@ -151,6 +151,43 @@ Call `mountRunLayout(host, readSummary)` before asynchronous setup. Its summary 
 experiment's own check records; it never interprets status text or table colors. A small observer
 refreshes the getter after UI updates. Call `disposeRunLayout(host)` during destruction. Controls,
 listeners and canvas objects are moved intact, preserving GPU ownership and retained-run state.
+
+### Guidance, results and their source
+
+Keep one short description next to a setting, using the authored control keys in
+`src/runtime/run-guidance.ts`. Longer explanation belongs in an explicit `explanation` region
+below the visualization, or beside its diagnostic tool. Neither grouping depends on paragraph order.
+The descriptions remain visible and are connected to the controls with `aria-describedby`.
+
+Use `src/runtime/result-format.ts` for live display values: **Pass**, **Fail**, **Unchecked** and
+**Unavailable** have different meanings. A missing check is Unchecked; a missing measurement or
+backend is Unavailable. Use Not applicable for a field that does not belong to that comparison.
+Finite flags are Yes/No, not a correctness verdict. Use **Backend** and **Result** for equivalent
+table columns; put units in headers or captions. Durations use milliseconds with three decimal
+places (scientific notation below 0.001 ms), counts use comma separators, and component errors
+normally use three significant digits. Deep numerical diagnostics may retain additional digits.
+Memory divided by powers of 1,024 is labeled KiB/MiB. Raw exports retain original numeric values.
+The shared table presenter adds header associations and a keyboard-accessible horizontal scroll
+region with a visible hint when columns overflow; it never rewrites measurements or verdicts.
+
+Live Run pages name the session start, actual reported devices and validation scope. Passes apply
+only to their named checks; sweeps retain their row-specific settings. The session date is not a
+measurement date for a historical article. Add explicit provenance to recorded Markdown findings:
+
+```text
+---
+source: Recorded findings
+recorded: 2026-11-05
+device: The GPU and browser documented by the measurement
+scope: The exact fixture, variant and checked population
+---
+```
+
+Only these four plain-text fields are supported. Use `Not recorded` when a measurement date or
+device was not retained; never infer it from a review date, seed, source revision or today's date.
+The article keeps the detailed conditions and reproduction instructions. General method pages
+need no measurement label. Reviewed research summaries and historical/superseded warnings retain
+their separate meanings.
 
 The learning guide lives in `src/docs/learn-webgpu.md`; its small interactive examples live in
 `src/app/learning-examples.ts`. An `example` fence contains a registered example name, such as

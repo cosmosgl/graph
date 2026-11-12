@@ -1,3 +1,4 @@
+import { milliseconds, scientific } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createPassDiagnostic } from './diagnostic'
@@ -10,11 +11,11 @@ import { createWebGLBackend } from './webgl'
 import { createWebGPUBackend } from './webgpu'
 
 function timingTable (rows: TimingRow[]): string {
-  return `<table><thead><tr><th>Backend</th><th>Stage</th><th>Batch</th><th>CPU submit ms</th><th>Completion ms</th><th>GPU ms</th></tr></thead><tbody>
+  return `<table><thead><tr><th>Backend</th><th>Stage</th><th>Batch</th><th>CPU submit (ms)</th><th>Completion (ms)</th><th>GPU (ms)</th></tr></thead><tbody>
     ${rows.map(row => `<tr><td>${row.backend}</td><td>${row.stage}</td><td>${row.operations}</td>
-      <td>${median(row.samples.map(s => s.submitMs)).toFixed(4)}</td>
-      <td>${median(row.samples.map(s => s.completionMs)).toFixed(4)}</td>
-      <td>${gpuMedian(row.samples)?.toFixed(4) ?? 'unavailable / invalid'}</td></tr>`).join('')}</tbody></table>`
+      <td>${milliseconds(median(row.samples.map(s => s.submitMs)))}</td>
+      <td>${milliseconds(median(row.samples.map(s => s.completionMs)))}</td>
+      <td>${milliseconds(gpuMedian(row.samples))}</td></tr>`).join('')}</tbody></table>`
 }
 
 export async function createWeightedLinksExperiment (host: HTMLElement): Promise<ExperimentInstance> {
@@ -77,7 +78,8 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
         <button data-action="check-star"
       data-run-action="diagnostic">Check 100k star (Cosmos bounds)</button>
       </div>
-      <p class="demo-note">Isolate simulation passes with one active device:
+      <p class="demo-note"
+      data-run-part="diagnostics">Isolate simulation passes with one active device:
         <a href="?linkDiagnostic=WebGL#/weighted-links">WebGL only</a> ·
         <a href="?linkDiagnostic=WebGPU#/weighted-links">WebGPU only</a>.</p>
     </section>
@@ -95,7 +97,8 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
         <canvas data-canvas="${name}" width="480" height="340"></canvas><p class="demo-note" data-info="${name}"></p>
       </article>`).join('')}
     </section>
-    <p class="demo-note">Both directions retain input link order. One tick = source-side spring → integrate → target-side spring → integrate → draw.
+    <p class="demo-note"
+      data-run-part="explanation">Both directions retain input link order. One tick = source-side spring → integrate → target-side spring → integrate → draw.
       Validation reads both forces and both position substeps. The measured tick has no position readback or CPU reference work.
       Yellow points are pinned; absent points and their incident links are hidden.</p>
     <p data-output="status" role="status"
@@ -184,7 +187,7 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
       : 'luma Model · Cosmos directional GLSL'
     el<HTMLElement>('[data-output="graph"]').textContent =
       `${graph.points.length / 4} points · ${topology.links.length / 2} valid links · max degree ${topology.maxDegree}`
-    el<HTMLElement>('[data-output="topology"]').textContent = `CPU CSR build ${topology.buildMs.toFixed(2)} ms`
+    el<HTMLElement>('[data-output="topology"]').textContent = `CPU CSR build ${milliseconds(topology.buildMs)} ms`
     reset()
   }
   const step = async (): Promise<boolean> => {
@@ -198,11 +201,11 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
     const valid = checks.length > 0 && checks.every(r => r.valid) && (pair?.valid ?? true)
     validation.push({ tick: ticks, checks, crossBackend: pair })
     for (const check of checks) {
-      el<HTMLElement>(`[data-status="${check.backend}"]`).textContent = `${check.valid ? 'PASS' : 'FAIL'} · max Δ ${check.maxError.toExponential(2)}`
+      el<HTMLElement>(`[data-status="${check.backend}"]`).textContent = `${check.valid ? 'Pass' : 'Fail'} · max Δ ${scientific(check.maxError, 2)}`
     }
     el<HTMLElement>('[data-output="tick"]').textContent = String(ticks)
-    status.textContent = `${valid ? 'PASS' : 'FAIL'} · all points, both forces and both substeps · ${backends.length}/2 backends${
-      pair ? ` · WebGL/WebGPU max Δ ${pair.maxError.toExponential(2)}` : ''}`
+    status.textContent = `${valid ? 'Pass' : 'Fail'} · all points, both forces and both substeps · ${backends.length}/2 backends${
+      pair ? ` · WebGL/WebGPU max Δ ${scientific(pair.maxError, 2)}` : ''}`
     makeCapture()
     return valid
   }
@@ -225,9 +228,9 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
     }
     el<HTMLElement>('[data-output="results"]').innerHTML = `<h3>100k star · rendering only</h3>
       <p>Initial positions; no spring or integration draws and no timer queries. Completion includes full image readback.</p>
-      <table><thead><tr><th>Mode</th><th>Vertices/draw</th><th>Completion ms</th><th>Image checksum</th>
+      <table><thead><tr><th>Mode</th><th>Vertices/draw</th><th>Completion (ms)</th><th>Image checksum</th>
       <th>Colored pixels</th><th>Exact image match</th></tr></thead><tbody>
-      ${rows.map(row => `<tr><td>${row.mode}</td><td>${row.verticesPerDraw || 'all'}</td><td>${row.completionMs.toFixed(3)}</td>
+      ${rows.map(row => `<tr><td>${row.mode}</td><td>${row.verticesPerDraw || 'all'}</td><td>${milliseconds(row.completionMs)}</td>
         <td>${row.checksum}</td><td>${row.coloredPixels}</td><td>${row.matchesBounded ? 'yes' : 'no'}</td></tr>`).join('')}</tbody></table>`
     makeCapture({ mode: 'render-diagnostic', count: 100000, fixture: 'star', links: 99999, renderProbes: rows, cancelled: stop, error })
     status.textContent = error || (stop
@@ -278,21 +281,22 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
     }
     el<HTMLElement>('[data-output="results"]').innerHTML = `<h3>Topology sweep · ${rows.length}/${plan.length} cases</h3>
       <p>Identical positions, weights and V−1 links at each point count. Full CPU validation at ticks 1, 10 and 25 gates timing.</p>
-      <table><thead><tr><th>Points</th><th>Topology</th><th>Max degree</th><th>Outcome</th><th>CSR ms</th>
-        <th>WebGL tick GPU ms</th><th>WebGPU tick GPU ms</th></tr></thead><tbody>
-      ${rows.map(row => `<tr><td>${row.count.toLocaleString()}</td><td>${row.shape}</td><td>${row.maxDegree}</td><td>${row.status}</td>
-        <td>${median(row.topologyBuildMs).toFixed(3)}</td><td>${tickTime(row, 'WebGL')?.toFixed(4) ?? '—'}</td>
-        <td>${tickTime(row, 'WebGPU')?.toFixed(4) ?? '—'}</td></tr>`).join('')}</tbody></table>
+      <table><thead><tr><th>Points</th><th>Topology</th><th>Max degree</th><th>Outcome</th><th>CSR (ms)</th>
+        <th>WebGL tick GPU (ms)</th><th>WebGPU tick GPU (ms)</th></tr></thead><tbody>
+      ${rows.map(row => `<tr><td>${row.count.toLocaleString('en-US')}</td><td>${row.shape}</td><td>${row.maxDegree}</td><td>${row.status}</td>
+        <td>${milliseconds(median(row.topologyBuildMs))}</td><td>${milliseconds(tickTime(row, 'WebGL'))}</td>
+        <td>${milliseconds(tickTime(row, 'WebGPU'))}</td></tr>`).join('')}</tbody></table>
       <p>A dash means no valid complete GPU timing set; it never means zero. Resource setup and upload-call costs are separate in the capture.</p>
       <section class="visible-section"><h3 class="visible-section-heading">Resource setup and upload calls</h3>
         <p>One recreation per case/backend. CPU upload-call time includes texture allocation on WebGL; it is not GPU transfer time.</p>
-        <table><thead><tr><th>Case</th><th>Backend</th><th>Setup submit ms</th><th>Upload calls ms</th><th>Setup completion ms</th></tr></thead><tbody>
-        ${rows.flatMap(row => row.setup.map(setup => `<tr><td>${row.shape} · ${row.count.toLocaleString()}</td><td>${setup.backend}</td>
-          <td>${setup.setupSubmitMs.toFixed(3)}</td><td>${setup.uploadCallMs.toFixed(3)}</td><td>${setup.completionMs.toFixed(3)}</td></tr>`)).join('')}
+        <table><thead><tr><th>Case</th><th>Backend</th><th>Setup submit (ms)</th><th>Upload calls (ms)</th><th>Setup completion (ms)</th></tr></thead><tbody>
+        ${rows.flatMap(row => row.setup.map(setup => `<tr><td>${row.shape} · ${row.count.toLocaleString('en-US')}</td><td>${setup.backend}</td>
+          <td>${milliseconds(setup.setupSubmitMs)}</td><td>${milliseconds(setup.uploadCallMs)}</td>
+          <td>${milliseconds(setup.completionMs)}</td></tr>`)).join('')}
         </tbody></table>
       </section>
       <section class="visible-section"><h3 class="visible-section-heading">All stage measurements</h3>
-      ${rows.map(row => `<h4>${row.shape} · ${row.count.toLocaleString()} points</h4>
+      ${rows.map(row => `<h4>${row.shape} · ${row.count.toLocaleString('en-US')} points</h4>
         ${timingTable(row.timings)}`).join('')}</section>`
     makeCapture({
       mode: 'topology-sweep',
@@ -369,6 +373,6 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
     'Other topologies, larger graphs and rendered-pixel parity.',
     deviceFailed ? ['GPU device'] : [],
     runError,
-    'directional CPU comparisons'))
+    'directional CPU comparisons'), { experiment: 'weighted-links', devices: () => backends.map(b => b.info) })
   return { pause (): void { stop = true }, destroy (): void { disposeRunLayout(host); destroyed = true; if (!busy) cleanup(); host.replaceChildren() } }
 }

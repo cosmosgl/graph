@@ -1,3 +1,4 @@
+import { milliseconds, scientific } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import type { PointRenderBackend } from '../point-rendering/backend'
@@ -14,6 +15,7 @@ type BenchmarkPreset = 'quick' | 'stable'
 
 type BackendReport = {
   backend: 'WebGL 2' | 'WebGPU';
+  device?: string;
   status: 'complete' | 'unavailable';
   setupMilliseconds?: number;
   submitSamples: number[];
@@ -69,10 +71,9 @@ function element<T extends HTMLElement> (host: ParentNode, selector: string): T 
 }
 
 function formatMilliseconds (value: number | undefined): string {
-  if (value === undefined) return '—'
+  if (value === undefined) return 'Unavailable'
   if (value === 0) return '≤ timer resolution'
-  if (value < 0.01) return '<0.01 ms'
-  return `${value.toFixed(value < 1 ? 3 : 2)} ms`
+  return `${milliseconds(value)} ms`
 }
 
 function escapeHtml (value: string): string {
@@ -182,7 +183,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
         </div>
       </section>
 
-      <p class="demo-note benchmark-note">
+      <p class="demo-note benchmark-note" data-run-part="explanation">
         Completion time includes submission and waiting for a luma GPU fence. It is a synchronized
         wall-time measurement, not an isolated timestamp-query GPU duration. Use relative results on the
         same device; do not compare exported reports from unlike hardware as an API verdict.
@@ -233,7 +234,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
     const workload = workloadSelect.value as Workload
     const counts = workload === 'rendering' ? RENDER_COUNTS : SIMULATION_COUNTS
     countSelect.innerHTML = counts.map((count, index) =>
-      `<option value="${count}" ${index === 1 ? 'selected' : ''}>${count.toLocaleString()}</option>`
+      `<option value="${count}" ${index === 1 ? 'selected' : ''}>${count.toLocaleString('en-US')}</option>`
     ).join('')
     diameterGroup.hidden = workload !== 'rendering'
     preview.hidden = workload !== 'rendering'
@@ -280,8 +281,8 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
           <td>${formatMilliseconds(result.submit?.p95)}</td>
           <td>${formatMilliseconds(result.completion?.p50)}</td>
           <td>${formatMilliseconds(result.completion?.p95)}</td>
-          <td>${result.throughputMillionsPerSecond?.toFixed(2) ?? '—'} M/s · ${relative}</td>
-          <td>${result.correctness ?? '—'}</td>
+          <td>${result.throughputMillionsPerSecond?.toFixed(2) ?? 'Unavailable'} M/s · ${relative}</td>
+          <td>${result.correctness ?? 'Unavailable'}</td>
         </tr>
       `
     }).join('')
@@ -290,7 +291,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
       <div class="benchmark-result-heading">
         <div>
           <p class="eyebrow">${report.workload === 'rendering' ? 'Rendering' : 'Simulation primitive'}</p>
-          <h2>${report.parameters.pointCount.toLocaleString()} points</h2>
+          <h2>${report.parameters.pointCount.toLocaleString('en-US')} points</h2>
         </div>
         <span>p50 / p95 across ${report.parameters.samples} synchronized samples</span>
       </div>
@@ -342,7 +343,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
     samples: number,
     revision: number
   ): Promise<PerformanceReport> => {
-    statusOutput.textContent = `Generating ${pointCount.toLocaleString()} shared points…`
+    statusOutput.textContent = `Generating ${pointCount.toLocaleString('en-US')} shared points…`
     await nextFrame()
     const data = createPointData(pointCount, 0)
     const diameter = Number(diameterSelect.value)
@@ -365,6 +366,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
           ? await createWebGLPointRenderer(webglCanvas)
           : await createWebGPUPointRenderer(webgpuCanvas, pointCount)
         slot.backend.setData(data)
+        slot.report.device = slot.backend.info
         slot.report.setupMilliseconds = performance.now() - started
         activeBackends.push(slot.backend)
       } catch (error) {
@@ -448,6 +450,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
         slot.backend = slot.name === 'WebGL 2'
           ? await createWebGLSimulationBenchmark(webglCanvas, pointCount)
           : await createWebGPUSimulationBenchmark(webgpuCanvas, pointCount)
+        slot.report.device = slot.backend.info
         slot.report.setupMilliseconds = performance.now() - started
         activeBackends.push(slot.backend)
       } catch (error) {
@@ -496,7 +499,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
       }
       const center = await slot.backend.readCenter()
       slot.report.correctness = cpuCenter
-        ? `error ${centerDistance(center, cpuCenter).toExponential(2)}`
+        ? `error ${scientific(centerDistance(center, cpuCenter), 2)}`
         : 'CPU check skipped'
     }
     return createReport(
@@ -586,7 +589,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
     [],
     'Benchmark completion is not correctness, stability or Graph FPS acceptance.',
     lastReport?.results.filter(r => r.status === 'unavailable').map(r => r.backend) ?? [],
-    paused ? undefined : runError))
+    paused ? undefined : runError), { experiment: 'performance-lab', devices: () => lastReport?.results.flatMap(r => r.device ? [r.device] : []) ?? [] })
   updateControls()
 
   return {

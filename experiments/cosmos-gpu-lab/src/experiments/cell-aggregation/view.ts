@@ -1,12 +1,14 @@
-import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
+import { count as formatCount, milliseconds } from '../../runtime/result-format'
+import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createGridStudy, type GridStudy, type GridCase } from '../combined-layout/grid-study'
 import { FROZEN_POLICY, frozenSummary, frozenPairedWins } from '../combined-layout/frozen-timing'
 import { PRESETS, type ProductionPreset } from '../combined-layout/production-settings'
-const ms = (n: number | null): string => n === null ? 'Unavailable' : n.toFixed(3)
+const ms = milliseconds
 export async function createGridAggregationView (host: HTMLElement, acceptance = false): Promise<ExperimentInstance> {
   let runError: string | undefined
-  host.innerHTML = `<p class="demo-note">${acceptance
+  host.innerHTML = `<p class="demo-note"
+      data-run-part="explanation">${acceptance
     ? 'Validate production’s exact/grid switch and combine hub prefetch with cached grid aggregation. ' +
       'CPU checkpoints validate the evolving layout; normal frames measure the gain.'
     : 'Cache integer membership during binning; keep every floating-point addition in source-index order. ' +
@@ -60,7 +62,8 @@ export async function createGridAggregationView (host: HTMLElement, acceptance =
       <span class="status" data-output="capture">Not prepared</span></div>
       <canvas data-canvas width="480" height="340" aria-label="Shared-device grid comparison"></canvas></article>
       <article class="backend-panel"><h2>Latest normal frame</h2><div data-output="latest"></div>
-      <p class="demo-note">${FROZEN_POLICY.warmups} warmup + ${FROZEN_POLICY.samples} measured paired rounds,
+      <p class="demo-note"
+      data-run-part="explanation">${FROZEN_POLICY.warmups} warmup + ${FROZEN_POLICY.samples} measured paired rounds,
         ${FROZEN_POLICY.frames} GPU-restored frames per normal trial. Copies, allocation, readback and CPU work stay outside pass timestamps.</p>
       <p class="demo-note">${acceptance
     ? 'Both lanes use production routing and strict arithmetic. Only the candidate enables hub prefetch and cached aggregation. Point 1 is absent.'
@@ -72,12 +75,14 @@ export async function createGridAggregationView (host: HTMLElement, acceptance =
       data-run-part="results"></div>
     <h3
       data-run-part="diagnostics">Latest diagnostic costs</h3>
-    <p class="demo-note" data-run-part="diagnostics">Separate passes change scheduling. Do not subtract these medians from normal-frame time.</p>
+    <p class="demo-note"
+      data-run-part="diagnostics">Separate passes change scheduling. Do not subtract these medians from normal-frame time.</p>
     <div data-output="diagnostic" class="many-body-results"
       data-run-part="diagnostics"></div>
     <h3
       data-run-part="diagnostics">Post-gravity occupancy</h3>
-    <p class="demo-note" data-run-part="diagnostics">The baseline scans cells above 128 points.
+    <p class="demo-note"
+      data-run-part="diagnostics">The baseline scans cells above 128 points.
       The smaller-sort candidate scans above 32 and bounds linked-list traversal. Both preserve source order.</p>
     <div data-output="work" class="many-body-results"
       data-run-part="diagnostics"></div>`
@@ -102,7 +107,7 @@ export async function createGridAggregationView (host: HTMLElement, acceptance =
         <p>Candidate: <strong>${ms(normal[1].median)} ms</strong></p>
         <p class="demo-note">${row.trials.reduce((n, t) => n + t.frames.length, 0)} normal frame checks · ${row.stages.length}/4 stage gates ·
           ${row.anchors.length}/2 anchors. ${row.structure ? `Grid bit differences: ${Object.values(row.structure).join(' / ')}.` : ''}</p>
-        <p class="demo-note">Independent whole-tick CPU: ${row.wholeCPU ? row.wholeCPU.valid ? 'Pass' : 'FAIL · no timing accepted' : 'Pending'}.</p>`
+        <p class="demo-note">Independent whole-tick CPU: ${row.wholeCPU ? row.wholeCPU.valid ? 'Pass' : 'Fail · no timing accepted' : 'Unchecked'}.</p>`
       if (acceptance) {
         el('[data-output="latest"]').insertAdjacentHTML('beforeend',
           `<p class="demo-note">${row.preparation.length} evolving tick checks · ${row.checkpoints?.length ?? 0} stage checkpoints ·
@@ -116,21 +121,22 @@ export async function createGridAggregationView (host: HTMLElement, acceptance =
         <th>Scan cells: baseline / candidate</th>
         <th>Source tests: baseline / candidate</th></tr></thead><tbody>${(row.work ?? []).map((w, i) => `<tr><td>${w.grid}²</td><td>${w.empty}</td>
         <td>${w.occupied}</td><td>${w.maxOccupancy}</td><td>${w.dense} / ${row.candidateWork?.[i].dense ?? w.dense}</td>
-        <td>${w.denseSourceTests.toLocaleString()} / ${row.candidateWork?.[i].denseSourceTests.toLocaleString() ?? '—'}</td></tr>`).join('')}</tbody></table>`
-      el('[data-output="diagnostic"]').innerHTML = `<table><thead><tr><th>Diagnostic</th><th>Baseline ms</th><th>Candidate ms</th></tr></thead>
+        <td>${w.denseSourceTests.toLocaleString('en-US')} / ${row.candidateWork?.[i].denseSourceTests.toLocaleString('en-US') ?? 'Unavailable'}</td>
+        </tr>`).join('')}</tbody></table>`
+      el('[data-output="diagnostic"]').innerHTML = `<table><thead><tr><th>Diagnostic</th><th>Baseline (ms)</th><th>Candidate (ms)</th></tr></thead>
         <tbody>${[['repulsion.bin', 'Clear + bin'], ['repulsion.aggregate', 'Aggregate'], ['repulsion.samples', 'Samples'],
     ['repulsion.centroids', 'Centroids'], ['repulsion.far', 'Far field']].map(([key, name]) => `<tr><td>${name}</td>${[0, 1].map(lane =>
     `<td>${ms(frozenSummary({ trials: row.diagnostic }, r.policy, lane, 'profile', key).median)}</td>`).join('')}</tr>`).join('')}</tbody></table>`
     }
     el('[data-output="results"]').innerHTML = `<table><thead><tr><th>Points</th><th>Graph / positions</th><th>Preset / ticks</th>
-      <th>Block</th><th>Baseline ms</th>
-      <th>Candidate ms</th><th>Change</th><th>Paired wins</th><th>Checks</th></tr></thead><tbody>${r.rows.map(row => {
+      <th>Block</th><th>Baseline (ms)</th>
+      <th>Candidate (ms)</th><th>Change</th><th>Paired wins</th><th>Result</th></tr></thead><tbody>${r.rows.map(row => {
     const a = frozenSummary(row, r.policy, 0, 'normal'); const b = frozenSummary(row, r.policy, 1, 'normal'); const wins = frozenPairedWins(row, r.policy)
-    const change = a.median && b.median !== null ? `${((b.median / a.median - 1) * 100).toFixed(1)}%` : '—'
-    return `<tr><td>${row.count}</td><td>${row.fixture} / ${row.distribution}</td><td>${row.preset ?? 'reference'} / ${row.tick}</td>
+    const change = a.median && b.median !== null ? `${((b.median / a.median - 1) * 100).toFixed(1)}%` : 'Unavailable'
+    return `<tr><td>${formatCount(row.count)}</td><td>${row.fixture} / ${row.distribution}</td><td>${row.preset ?? 'reference'} / ${row.tick}</td>
       <td>${row.repeat ?? 1}</td><td>${ms(a.median)}</td><td>${ms(b.median)}</td>
       <td>${change}</td><td>${wins === null ? '—' : `${wins}/${r.policy.samples}`}</td>
-      <td>${row.error ? 'FAIL' : row.valid ? 'Pass' : r.status === 'cancelled' ? 'Stopped' : 'In progress'}</td></tr>`
+      <td>${row.error ? 'Fail' : row.valid ? 'Pass' : r.status === 'cancelled' ? 'Stopped' : 'Unchecked · in progress'}</td></tr>`
   }).join('')}</tbody></table>`
   }
   const retire = (): void => {
@@ -209,10 +215,10 @@ export async function createGridAggregationView (host: HTMLElement, acceptance =
   })
   mountRunLayout(host, () => summarizeRun(
     busy ? 'Running' : stopped ? 'Stopped' : study ? 'Complete' : 'Ready',
-    recordVerdicts(study?.report.rows ?? []),
+    study?.report.rows.map(r => r.valid ? true : r.error ? false : undefined) ?? [],
     'Pending trials and non-checkpoint ticks; broader graph acceptance.',
     [],
     runError,
-    'paired cases'))
+    'paired cases'), { experiment: acceptance ? 'layout-acceptance' : 'cell-aggregation', devices: () => study?.report.info ? [study.report.info] : [] })
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; retire() } }
 }

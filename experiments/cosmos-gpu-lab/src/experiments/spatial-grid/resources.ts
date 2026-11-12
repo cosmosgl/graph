@@ -1,6 +1,6 @@
 import { Buffer, type Device, type CommandEncoder, type Bindings, type ComputePassProps } from '@luma.gl/core'
 import { Kernel } from '@luma.gl/engine'
-import { bindingLayout, upload, waitForGpu } from '../../gpu/luma'
+import { describeDevice, bindingLayout, upload, waitForGpu } from '../../gpu/luma'
 import clearShader from './shaders/clear.wgsl?raw'
 import addBlockOffsetsShader from './shaders/add-block-offsets.wgsl?raw'
 import countShader from './shaders/count.wgsl?raw'
@@ -13,6 +13,7 @@ export type GridTimestamps = Pick<ComputePassProps, 'timestampQuerySet' | 'begin
 export type GridBenchmark = { iterations: number; submitMilliseconds: number; totalMilliseconds: number; averageMilliseconds: number }
 export type GridReadback = { counts: Uint32Array; offsets: Uint32Array; pointIndices: Uint32Array }
 export type SpatialGridBackend = {
+  readonly info?: string;
   readonly cellOffsets: Buffer;
   readonly pointIndices: Buffer;
   readonly pointCount: number;
@@ -29,7 +30,7 @@ export type SpatialGridBackend = {
 }
 type ScanLevel = { count: number; blockCount: number; offsets: Buffer; blockSums: Buffer; parameters: Buffer; bindings: Bindings }
 export function formatGridBytes (bytes: number): string {
-  return bytes >= 1024 ** 2 ? `${(bytes / 1024 ** 2).toFixed(1)} MB` : `${(bytes / 1024).toFixed(1)} KB`
+  return bytes >= 1024 ** 2 ? `${(bytes / 1024 ** 2).toFixed(1)} MiB` : `${(bytes / 1024).toFixed(1)} KiB`
 }
 /** Owns the index only; the caller owns the luma device and all position buffers. */
 export function createSpatialGridResources (device: Device, positionBuffers: Buffer[], pointCount: number, gridSize: number): SpatialGridBackend {
@@ -165,6 +166,7 @@ export function createSpatialGridResources (device: Device, positionBuffers: Buf
   const gridBytes = cellBytes * 2 + offsetBytes + pointIndexBytes + levels.reduce(
     (total, level, i) => total + level.blockCount * 4 + (i ? level.count * 4 : 0), 0)
   return {
+    info: describeDevice(device),
     cellOffsets,
     pointIndices,
     encodeBuild,

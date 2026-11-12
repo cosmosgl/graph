@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-09
+device: Apple M3; inline Chromium 157, ANGLE Metal WebGL and Apple WebGPU
+scope: Exact all-pairs repulsion; shared-input correctness and bounded independently evolving controls.
+---
+
 ## Initial validation
 
 The required-WebGPU Chromium suite passed **36 tests** across the CPU reference, production GLSL, both WGSL loops

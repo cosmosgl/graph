@@ -5,6 +5,7 @@ export type PointRenderData = {
 }
 
 export type PointRenderBackend = {
+  readonly info?: string;
   setData: (data: PointRenderData) => void;
   render: (diameter: number) => void;
   measure: (diameter: number, iterations?: number) => Promise<PointRenderMeasurement>;

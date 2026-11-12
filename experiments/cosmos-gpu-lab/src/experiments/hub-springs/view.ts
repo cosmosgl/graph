@@ -1,14 +1,16 @@
-import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
+import { count as formatCount, milliseconds } from '../../runtime/result-format'
+import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createHubStudy, hubSummary, hubPairedWins, HUB_NORMAL_POLICY, type HubCase, type HubStudy, type HubCapture } from '../combined-layout/hub-study'
 import { createHubTrajectory, type HubTrajectory, type HubTrajectorySettings } from '../combined-layout/hub-trajectory'
 import { hubDegrees } from '../combined-layout/hub-spring-data'
 import type { SpringOptimization } from '../combined-layout/hub-spring-source'
-const ms = (n: number | null): string => n === null ? 'Unavailable' : n.toFixed(3)
+const ms = milliseconds
 type Mode = 'compare' | 'degree' | 'threshold' | 'trajectory' | 'evolved'
 export async function createHubView (host: HTMLElement): Promise<ExperimentInstance> {
   let runError: string | undefined
-  host.innerHTML = `<p class="demo-note">Compare ordered spring kernels on one device. Frozen controls keep coordinates and total links fixed.
+  host.innerHTML = `<p class="demo-note"
+      data-run-part="explanation">Compare ordered spring kernels on one device. Frozen controls keep coordinates and total links fixed.
     Trajectories evolve both variants independently, with checkpoint replay and unchanged CPU tolerances.</p>
     <div
       data-run-part="configuration" class="scale-toolbar">
@@ -29,7 +31,8 @@ export async function createHubView (host: HTMLElement): Promise<ExperimentInsta
       data-run-action="diagnostic">Repeat threshold controls</button>
       <button data-action="trajectory"
       data-run-action="diagnostic">Validate trajectory</button></div>
-    <div class="controls" data-run-part="diagnostics"><label>Final-geometry strength <select data-control="capture">
+    <div class="controls"
+      data-run-part="diagnostics"><label>Final-geometry strength <select data-control="capture">
       <option value="probe" selected>Full-strength probe</option>
       <option value="cooled">End of cooling</option></select></label><button data-action="evolved" disabled
       data-run-action="diagnostic">Benchmark final geometry</button>
@@ -41,7 +44,8 @@ export async function createHubView (host: HTMLElement): Promise<ExperimentInsta
       data-run-action="export">Export JSON</button></div>
     <p data-output="status" role="status"
       data-run-part="status">Ready. Compare frozen inputs or validate an evolving trajectory first.</p>
-    <p class="demo-note">Timing: ${HUB_NORMAL_POLICY.warmups} warmup + ${HUB_NORMAL_POLICY.samples} measured paired rounds,
+    <p class="demo-note"
+      data-run-part="explanation">Timing: ${HUB_NORMAL_POLICY.warmups} warmup + ${HUB_NORMAL_POLICY.samples} measured paired rounds,
       ${HUB_NORMAL_POLICY.frames} restored frames per trial. Frames queue without per-frame CPU waits; only ordinary compute + render passes are timed.
       Trajectory checkpoints run at tick 1, every 10 ticks and the last tick, followed by a restoring full-strength probe.</p>
     <section
@@ -56,7 +60,8 @@ export async function createHubView (host: HTMLElement): Promise<ExperimentInsta
     <p data-output="cleanup" class="demo-note"></p>
     <h3
       data-run-part="results">Timing comparisons</h3>
-    <p class="demo-note" data-run-part="results">Threshold controls repeat the selected degree and pin state in two blocks, reversing threshold order.
+    <p class="demo-note"
+      data-run-part="results">Threshold controls repeat the selected degree and pin state in two blocks, reversing threshold order.
       Wins count paired rounds with lower candidate GPU time. GPU restore/capture copies stay outside the pass timestamps.
       JSON retains every frame check and GPU duration.</p>
     <div data-output="results" class="many-body-results"
@@ -93,20 +98,21 @@ export async function createHubView (host: HTMLElement): Promise<ExperimentInsta
       const normal = [0, 1].map(i => hubSummary(row, r.policy, i, 'normal'))
       el('[data-output="latest"]').innerHTML = `<p>Baseline: <strong>${ms(normal[0].median)} ms</strong></p>
         <p>Candidate: <strong>${ms(normal[1].median)} ms</strong></p>
-        <p class="demo-note">Ranges: ${normal.map(s => s.range?.map(n => n.toFixed(3)).join('–') ?? 'pending').join(' / ')} ms.</p>
+        <p class="demo-note">Ranges: ${normal.map(s => s.range?.map(n => n.toFixed(3)).join('–') ?? 'Unavailable').join(' / ')} ms.</p>
         <p class="demo-note">${row.trials.reduce((n, t) => n + t.frames.length, 0)} restored frame checks ·
           ${row.stages.length}/4 stage gates · ${row.anchors.length}/2 anchors.
           Allocation, uploads, CPU work and readback stay outside GPU time.</p>`
     }
-    el('[data-output="results"]').innerHTML = `<table><caption>${r.rows[0]?.count ?? '—'} points · frozen normal frames</caption>
+    el('[data-output="results"]').innerHTML = `<table><caption>${r.rows[0]?.count ?? 'Unavailable'} points · frozen normal frames</caption>
       <thead><tr><th>Degree</th><th>Hub</th><th>Threshold</th><th>Block</th>
-      <th>Baseline ms</th><th>Candidate ms</th><th>Change</th><th>Paired wins</th><th>Checks</th></tr></thead><tbody>${r.rows.map(row => {
+      <th>Baseline (ms)</th><th>Candidate (ms)</th><th>Change</th><th>Paired wins</th><th>Result</th></tr></thead><tbody>${r.rows.map(row => {
     const a = hubSummary(row, r.policy, 0, 'normal'); const b = hubSummary(row, r.policy, 1, 'normal')
-    const change = a.median && b.median !== null ? `${((b.median / a.median - 1) * 100).toFixed(1)}%` : '—'
+    const change = a.median && b.median !== null ? `${((b.median / a.median - 1) * 100).toFixed(1)}%` : 'Unavailable'
     const wins = hubPairedWins(row, r.policy)
-    return `<tr><td>${row.degree}</td><td>${row.pinned ? 'Pinned' : 'Unpinned'}</td><td>${row.threshold}</td><td>${row.repeat ?? 1}</td>
+    return `<tr><td>${formatCount(row.degree)}</td><td>${row.pinned ? 'Pinned' : 'Unpinned'}</td>
+      <td>${formatCount(row.threshold)}</td><td>${row.repeat ?? 1}</td>
       <td>${ms(a.median)}</td><td>${ms(b.median)}</td><td>${change}</td><td>${wins === null ? '—' : `${wins}/${r.policy.samples}`}</td>
-      <td>${row.error ? 'FAIL' : row.valid ? 'Pass' : 'In progress'}</td></tr>`
+      <td>${row.error ? 'Fail' : row.valid ? 'Pass' : 'Unchecked · in progress'}</td></tr>`
   }).join('')}</tbody></table>`
   }
   const renderTrajectory = (): void => {
@@ -206,12 +212,15 @@ export async function createHubView (host: HTMLElement): Promise<ExperimentInsta
   })
   mountRunLayout(host, () => summarizeRun(
     busy ? 'Running' : stopped ? 'Stopped' : study || trajectory ? 'Complete' : 'Ready',
-    [...recordVerdicts(study?.report.rows ?? []),
+    [...(study?.report.rows.map(r => r.valid ? true : r.error ? false : undefined) ?? []),
       ...(trajectory?.report.checkpoints.map(c => c.valid) ?? [])],
     'Unrun degrees, thresholds and trajectories; production speedup.',
     [],
     runError,
-    'cases and trajectory checkpoints'))
+    'cases and trajectory checkpoints'), {
+    experiment: 'hub-springs',
+    devices: () => [study?.report.info, trajectory?.report.info].filter((s): s is string => Boolean(s)),
+  })
   controls()
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; retire() } }
 }

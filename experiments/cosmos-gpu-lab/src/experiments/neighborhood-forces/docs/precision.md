@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: Not recorded
+device: Native Apple / Metal 3 adapter
+scope: Dense 65,536-point local force cases; unchanged tolerance, compensated sums and cutoff correction.
+---
+
 # Fixing dense-case precision
 
 Follow-up: [reducing the cost of this fix](#/neighborhood-forces/docs/precision-cost) compares

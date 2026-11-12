@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-05
+device: macOS Chromium; exact GPU and browser version not recorded
+scope: 8,192 moving points; per-tick readback; exploratory center correctness, not a controlled speed comparison.
+---
+
 # Initial correctness findings
 
 Both approaches produced centers close to the CPU reference for the same 8,192 moving points.

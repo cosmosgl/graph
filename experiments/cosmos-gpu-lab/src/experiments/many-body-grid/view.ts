@@ -1,3 +1,4 @@
+import { count as formatCount, scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
 import { graphPalette } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
@@ -28,7 +29,8 @@ function drawCpu (canvas: HTMLCanvasElement, points: Float32Array, view: View): 
 export async function createGridExperiment (host: HTMLElement): Promise<ExperimentInstance> {
   let runError: string | undefined
   host.innerHTML = `
-    <p class="demo-note">Matched inputs: both GPUs build their own hierarchy and samples, using shared CPU bounds, shifts and seeds.
+    <p class="demo-note"
+      data-run-part="explanation">Matched inputs: both GPUs build their own hierarchy and samples, using shared CPU bounds, shifts and seeds.
       Fixed sample budgets isolate the force port; automatic tuning and GPU bounds reduction are not validated here.</p>
     <div
       data-run-part="configuration" class="scale-toolbar">
@@ -80,7 +82,8 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       <p class="demo-note">Benchmark precision compares inline, stored and streamed contributions at 8,192 and 16,384 points,
         uniform and clustered. Batched GPU timestamps cover grid construction + force, and complete steps. Rendering is excluded.
         Stop keeps partial results; Export JSON includes timings and validation.</p></section>
-    <p class="demo-note">Port checks use every present target and every cell/slot. Approximation error uses up to 64 evenly spaced target indices,
+    <p class="demo-note"
+      data-run-part="explanation">Port checks use every present target and every cell/slot. Approximation error uses up to 64 evenly spaced target indices,
       each evaluated against every source. Approximation-error rows are a diagnostic subset, not a whole-layout accuracy guarantee.</p>
   `
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
@@ -182,7 +185,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
         if (report) diagnostics.push({ name: lane.name, report })
         checks.push(check); snapshots[lane.name] = actual; lane.positions = actual.positions
         const valid = check.structure.valid && check.output.valid && check.local.valid && check.integration.valid && (!report || report.replay.valid)
-        el(`[data-status="${lane.name}"]`).textContent = valid ? 'Passed' : 'Mismatch'
+        el(`[data-status="${lane.name}"]`).textContent = valid ? 'Pass' : 'Fail'
       } catch (error) {
         runError = String(error)
         errors[lane.name] = error instanceof Error ? error.message : String(error)
@@ -222,10 +225,10 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       passed,
       errors: { ...errors },
     })
-    const num = (n: number): string => Number.isFinite(n) ? n.toExponential(2) : 'non-finite'
+    const num = scientific
     const crossLabel = cross
-      ? `forces ${cross.forces.valid ? 'Pass' : 'FAIL'} (${num(cross.forces.maxError)} max); ` +
-        `positions ${cross.positions.valid ? 'Pass' : 'FAIL'} (${num(cross.positions.maxError)} max).`
+      ? `forces ${cross.forces.valid ? 'Pass' : 'Fail'} (${num(cross.forces.maxError)} max); ` +
+        `positions ${cross.positions.valid ? 'Pass' : 'Fail'} (${num(cross.positions.maxError)} max).`
       : 'Unavailable.'
     el('[data-output="results"]').innerHTML = `<table><caption>Tick ${tick} · port checks against CPU</caption>
       <thead><tr><th>Backend</th><th>Aggregate components</th><th>Slot IDs</th><th>Force max error</th><th>Position max error</th>
@@ -233,9 +236,9 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       <tbody>${checks.map(c => `<tr><td>${c.name}</td><td>${c.structure.aggregates.valid ? 'Pass' : `${c.structure.aggregates.failures} fail`}</td>
         <td>${c.structure.slotMismatches ? `${c.structure.slotMismatches} differ` : 'Exact'}
           ${c.structure.maxHashError > 2e-7 ? `· hash FAIL (${num(c.structure.maxHashError)})` : ''}</td>
-        <td>${num(c.output.forces.maxError)} · ${c.output.forces.valid ? 'Pass' : 'FAIL'}</td>
-        <td>${num(c.output.positions.maxError)} · ${c.output.positions.valid ? 'Pass' : 'FAIL'}</td>
-        <td>${c.local.valid ? 'Pass' : 'FAIL'}</td><td>${c.integration.valid ? 'Pass' : 'FAIL'}</td></tr>`).join('')}</tbody></table>
+        <td>${num(c.output.forces.maxError)} · ${c.output.forces.valid ? 'Pass' : 'Fail'}</td>
+        <td>${num(c.output.positions.maxError)} · ${c.output.positions.valid ? 'Pass' : 'Fail'}</td>
+        <td>${c.local.valid ? 'Pass' : 'Fail'}</td><td>${c.integration.valid ? 'Pass' : 'Fail'}</td></tr>`).join('')}</tbody></table>
       <p class="demo-note">WebGPU vs production WebGL: ${crossLabel}
       Integration uses each GPU’s own force readback to isolate the position update; it does not replace the full comparison above.</p>`
     el('[data-output="approximation"]').innerHTML = `<table><caption>CPU approximation · relative L2 force error on ${approximation.targets} targets
@@ -260,15 +263,15 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
           <table><thead><tr><th>WebGPU variant</th><th>Force failures / max error</th><th>Position failures / max error</th></tr></thead>
           <tbody>${comparisonRows}</tbody></table>
           ${candidates.map(({ label, result: r }) => `<h3>${label}: ${r.storedPassed ? 'Pass' : 'Mismatch'}</h3>
-            <p class="demo-note">Structure ${r.structural.valid ? 'Pass' : 'FAIL'} · centroid budget ${r.centroidCheck.valid ? 'Pass' : 'FAIL'} ·
-              replay ${r.replay.valid ? 'Pass' : 'FAIL'}. ${r.centroids.differingComponents} centroid components differ from CPU division;
+            <p class="demo-note">Structure ${r.structural.valid ? 'Pass' : 'Fail'} · centroid budget ${r.centroidCheck.valid ? 'Pass' : 'Fail'} ·
+              replay ${r.replay.valid ? 'Pass' : 'Fail'}. ${r.centroids.differingComponents} centroid components differ from CPU division;
               max ${r.centroids.maxUlp} ULP. CPU using GPU centroids: ${r.sameCentroids.forces.failures} force /
               ${r.sameCentroids.positions.failures} position failures (diagnostic only).</p>
             ${r.division ? `<p class="demo-note">Division corpus: ${r.division.cases} cases, ${r.division.mismatches} bit-pattern mismatches.</p>` : ''}
             ${r.contributions
     ? `<section class="visible-section">
               <h3 class="visible-section-heading">128×128 contributions · point ${r.contributions.target} ·
-                replay ${r.contributions.replay.valid ? 'Pass' : 'FAIL'}</h3>
+                replay ${r.contributions.replay.valid ? 'Pass' : 'Fail'}</h3>
               <table><thead><tr><th>Operation</th><th>Differing components</th><th>Max error</th></tr></thead>
               <tbody>${r.contributions.summary.map(s => `<tr><td>${s.stage}</td><td>${s.differing}</td>
                 <td>${num(s.maxError)}</td></tr>`).join('')}</tbody></table>
@@ -279,8 +282,9 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
               ${r.extraDispatches} extra dispatch${r.extraDispatches === 1 ? '' : 'es'} per tick. See Benchmark precision for measured cost.</p>
             <section class="visible-section"><h3 class="visible-section-heading">${label} · inspect force stages</h3>
               <table><thead><tr><th>Stage</th><th>Failures</th><th>Max error</th><th>Worst budget ratio</th><th>Point / axis</th></tr></thead>
-                <tbody>${r.stages.map(s => `<tr><td>${s.stage}</td><td>${s.check.failures}</td><td>${num(s.check.maxError)}</td>
-                  <td>${s.worst ? num(s.worst.ratio) : '—'}</td><td>${s.worst ? `${s.worst.point} / ${s.worst.axis}` : '—'}</td></tr>`).join('')}
+                <tbody>${r.stages.map(s => `<tr><td>${s.stage}</td><td>${formatCount(s.check.failures)}</td><td>${num(s.check.maxError)}</td>
+                  <td>${s.worst ? num(s.worst.ratio) : 'Unavailable'}</td>
+                  <td>${s.worst ? `${s.worst.point} / ${s.worst.axis}` : 'Unavailable'}</td></tr>`).join('')}
               </tbody></table></section>`).join('')}
           <p class="demo-note">The canvases above keep the inline baseline. Arithmetic variants are opt-in diagnostics;
             a passing candidate does not change the baseline verdict.</p></section>`
@@ -297,10 +301,11 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       el('[data-output="trace"]').innerHTML = `<section class="visible-section"><h3 class="visible-section-heading">Precision trace · tick ${tick}</h3>
         <p class="demo-note">CPU uses each backend’s own cell aggregates and selected neighbors. Far rows are cumulative after each level.
         Ratio is error / unchanged component budget; above 1 fails. Replay checks the instrumented force against normal execution.</p>
-        ${diagnostics.map(d => `<h3>${d.name} · replay ${d.report.replay.valid ? 'Pass' : 'FAIL — trace is not representative'}</h3>
+        ${diagnostics.map(d => `<h3>${d.name} · replay ${d.report.replay.valid ? 'Pass' : 'Fail · trace is not representative'}</h3>
           <table><thead><tr><th>Stage</th><th>Failures</th><th>Max error</th><th>Worst budget ratio</th><th>Target / axis</th></tr></thead>
-          <tbody>${d.report.stages.map(s => `<tr><td>${s.stage}</td><td>${s.check.failures}</td><td>${num(s.check.maxError)}</td>
-            <td>${s.worst ? num(s.worst.ratio) : '—'}</td><td>${s.worst ? `${s.worst.point} / ${s.worst.axis}` : '—'}</td></tr>`).join('')}</tbody></table>
+          <tbody>${d.report.stages.map(s => `<tr><td>${s.stage}</td><td>${formatCount(s.check.failures)}</td><td>${num(s.check.maxError)}</td>
+            <td>${s.worst ? num(s.worst.ratio) : 'Unavailable'}</td>
+            <td>${s.worst ? `${s.worst.point} / ${s.worst.axis}` : 'Unavailable'}</td></tr>`).join('')}</tbody></table>
           <p class="demo-note">Alternative CPU arithmetic (diagnostic only):
           ${d.report.hypotheses.map(h => `${labels.get(h.arithmetic)}: ` +
             `${h.output.forces.failures} force / ${h.output.positions.failures} position failures`).join('; ')}.
@@ -319,10 +324,10 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     el('[data-status="CPU"]').textContent = 'Computed'
     const verdict = passed ? 'Passed' : checks.length < 2 ? 'Partial comparison' : 'Mismatch'
     status.textContent = `${comparingCentroids ? 'Inline baseline: ' : ''}${verdict} · tick ${tick}. ${comparingCentroids
-      ? `Stored centroid variant: ${centroidError ? 'unavailable' : centroidComparison?.storedPassed ? 'Passed' : 'Mismatch'}; ` +
-        `corrected division: ${centroidError ? 'unavailable' : centroidComparison?.corrected.storedPassed ? 'Passed' : 'Mismatch'}; ` +
-        `refined + stored contributions: ${centroidError ? 'unavailable' : centroidComparison?.materialized.storedPassed ? 'Passed' : 'Mismatch'}; ` +
-        `streamed: ${centroidError ? 'unavailable' : centroidComparison?.streamed.storedPassed ? 'Passed' : 'Mismatch'}.`
+      ? `Stored centroid variant: ${centroidError ? 'Unavailable' : centroidComparison?.storedPassed ? 'Pass' : 'Fail'}; ` +
+        `corrected division: ${centroidError ? 'Unavailable' : centroidComparison?.corrected.storedPassed ? 'Pass' : 'Fail'}; ` +
+        `refined + stored contributions: ${centroidError ? 'Unavailable' : centroidComparison?.materialized.storedPassed ? 'Pass' : 'Fail'}; ` +
+        `streamed: ${centroidError ? 'Unavailable' : centroidComparison?.streamed.storedPassed ? 'Pass' : 'Fail'}.`
       : 'Approximation error is reported separately.'}`
     return passed
   }
@@ -345,12 +350,12 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     })
   })
   const renderTiming = (): void => {
-    const num = (n: number | null | undefined): string => n === null || n === undefined ? 'unavailable' : n.toFixed(3)
+    const num = milliseconds
     el('[data-output="timing"]').innerHTML = `<h3>Precision performance</h3>
       <p class="demo-note">GPU milliseconds per repeated fixed-input operation: seven samples after two warmups, common batch per case,
         rotating variant order. Readback, validation, uploads and rendering are outside the GPU interval.
         Inline is a control; a CPU mismatch disqualifies it as a precision replacement. Stop retains partial rows.</p>
-      <table><thead><tr><th>Workload</th><th>Variant</th><th>GPU ms · median [range]</th><th>CPU check</th><th>Extra MiB</th></tr></thead>
+      <table><thead><tr><th>Workload</th><th>Variant</th><th>GPU ms · median [range]</th><th>CPU check</th><th>Extra (MiB)</th></tr></thead>
       <tbody>${timingRows.map(r => {
     const valid = r.validation.length && r.validation.every(v => v.valid) && r.structure?.valid &&
       (r.mode === 'inline' || r.centroidDifferences === 0)
@@ -358,7 +363,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     return `<tr><td>${r.fixture} · ${r.count} · ${r.stage === 'force' ? 'grid + force' : 'step'}</td>
           <td>${MODE_LABELS[r.mode]}</td><td>${r.summary ? num(r.summary.gpuMs) : `${r.samples.length}/7 samples`}
           ${range ? `[${num(range[0])}–${num(range[1])}]` : ''}</td>
-          <td>${r.validation.length ? valid ? 'Pass' : 'FAIL' : 'pending'}</td><td>${(r.extraStorageBytes / 1048576).toFixed(2)}</td></tr>`
+          <td>${r.validation.length ? valid ? 'Pass' : 'Fail' : 'Unchecked'}</td><td>${(r.extraStorageBytes / 1048576).toFixed(2)}</td></tr>`
   }).join('')}</tbody></table>
       <p class="demo-note">The fixed sweep uses eight samples per cell and precise quality, independent of the demo controls.
         “Unavailable” means no valid GPU timer; CPU completion measurements remain separate in JSON.
@@ -417,7 +422,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     'Approximation quality is separate from port compatibility; unrun inputs.',
     Object.keys(errors),
     runError,
-    'complete tick comparisons'))
+    'complete tick comparisons'), { experiment: 'many-body-grid', devices: () => lanes.map(l => l.backend.info) })
   await task(setup)
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; cleanup() } }
 }

@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: Not recorded
+device: Apple M3; inline Chromium 157, ANGLE Metal WebGL and Apple WebGPU
+scope: Hierarchical port compatibility; dense strict-CPU failures and approximation quality remain separate.
+---
+
 ## What this establishes
 
 The hierarchical force can be expressed through luma WebGPU without floating-point atomics. With deterministic cell

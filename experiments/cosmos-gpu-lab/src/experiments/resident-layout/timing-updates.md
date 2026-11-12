@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-11
+device: Apple M3; standalone Chrome 156
+scope: Resident frame timings and immediate edits; instrumentation controls and readbacks are identified separately.
+---
+
 This experiment now measures the **resident engine slice** and checks edits to a running layout.
 Both features use the public luma APIs and the same force kernels as the staged reference.
 Production Cosmos still needs its remaining forces, full renderer, interaction and embedding contracts.

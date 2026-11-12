@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: Not recorded
+device: Apple M3 / ANGLE Metal; eight fresh Chrome 156 processes
+scope: Parked 100k-star context-loss investigation; temporary production controls have been removed.
+---
+
 ## Investigating the 100k-star WebGL reset
 
 **Investigation parked.** The temporary production v9 control, sample-replay bridge and fresh-Chrome

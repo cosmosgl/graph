@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: Not recorded
+device: Apple M3; standalone Chrome 156 and native Chrome 157
+scope: Six 8,192-point trajectories, scheduled checkpoints and full-strength probes; refined gravity candidate only.
+---
+
 ## Isolating the communities tick-1 failure
 
 The aligned candidate's 8,192-point communities graph fails its whole-tick check at tick 1, despite passing every

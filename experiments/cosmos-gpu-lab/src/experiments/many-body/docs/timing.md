@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-09
+device: Apple M3; inline Chromium 157, ANGLE Metal WebGL and Apple WebGPU
+scope: Two fixed-input all-pairs timing sweeps; batched timestamps and checks outside timing.
+---
+
 ## What this measures
 
 The sweep compares production GLSL through luma v10 WebGL, direct WGSL and tiled WGSL. It measures the **force alone**

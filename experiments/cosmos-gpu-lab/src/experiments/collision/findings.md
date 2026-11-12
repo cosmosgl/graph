@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-12
+device: Apple M3; inline Chromium 157; separate native Chrome regressions
+scope: Dense 512-point four-pass combined collision; high/low center correction and retained WebGL failures.
+---
+
 # Exact collision: retaining the center sum fixes the dense case
 
 **A GPU-resident high/low center reduction fixes the observed dense four-pass WebGPU failure at unchanged tolerance. The corrected 512-point run passes all 100 ticks, with zero center aggregate, force and position error. The production WebGL control retains its separate failures; complete backend parity is not established.**

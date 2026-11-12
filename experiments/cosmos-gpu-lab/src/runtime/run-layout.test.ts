@@ -30,3 +30,22 @@ it('never turns pending work or benchmark completion into a numerical pass', () 
   expect(summarizeRun('Ready', [true], 'Other fixtures', ['WebGPU'])).toMatchObject({ failed: 'Unavailable: WebGPU' })
   expect(summarizeRun('Ready', [], 'All checks', [], 'Pipeline error')).toMatchObject({ state: 'Failed' })
 })
+
+it('keeps guidance accessible and adds scrolling to new result tables without changing their values', async () => {
+  host = document.createElement('div'); document.body.append(host)
+  host.style.width = '250px'
+  host.innerHTML = `<div data-run-part="configuration"><label>Points <select data-control="count"><option>128</option></select></label></div>
+    <div data-run-part="results" data-output></div>`
+  mountRunLayout(host, () => summarizeRun('Ready', [], 'Other inputs'), { experiment: 'combined-layout', devices: () => ['Test adapter'] })
+  const control = host.querySelector('select')!
+  const description = document.getElementById(control.getAttribute('aria-describedby')!)!
+  expect(description.textContent).toContain('Total simulated points')
+  expect(host.querySelector('[data-run-devices]')!.textContent).toBe('Test adapter')
+  host.querySelector('[data-output]')!.innerHTML = `<table style="width:1000px"><thead><tr><th>Result</th></tr></thead>
+    <tbody><tr><td>Unchecked</td></tr></tbody></table>`
+  const table = host.querySelector('table')!
+  await vi.waitFor(() => expect(table.parentElement!.classList.contains('result-table-scroll')).toBe(true))
+  expect(table.querySelector('th')!.scope).toBe('col')
+  expect(table.querySelector('td')!.textContent).toBe('Unchecked')
+  expect(table.parentElement!.tabIndex).toBe(0)
+})

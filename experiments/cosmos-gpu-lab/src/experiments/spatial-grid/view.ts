@@ -1,3 +1,4 @@
+import { milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import {
@@ -96,10 +97,10 @@ function renderHeatmap (
   context.fillStyle = '#9fa5ae'
   context.font = '12px ui-monospace, monospace'
   const lines = [
-    `${pointCount.toLocaleString()} points`,
+    `${pointCount.toLocaleString('en-US')} points`,
     `${gridSize} × ${gridSize} cells`,
-    `${reference.occupiedCells.toLocaleString()} occupied`,
-    `${reference.maximumCellLoad.toLocaleString()} max load`,
+    `${reference.occupiedCells.toLocaleString('en-US')} occupied`,
+    `${reference.maximumCellLoad.toLocaleString('en-US')} max load`,
     distribution,
   ]
   lines.forEach((line, index) => context.fillText(line, textLeft, top + 42 + index * 22))
@@ -129,7 +130,7 @@ export async function createSpatialGridExperiment (
           <select data-control="point-count">
             ${POINT_PRESETS.map(count => `
               <option value="${count}" ${count === DEFAULT_POINT_COUNT ? 'selected' : ''}>
-                ${count.toLocaleString()}
+                ${count.toLocaleString('en-US')}
               </option>
             `).join('')}
           </select>
@@ -175,7 +176,8 @@ export async function createSpatialGridExperiment (
       <canvas class="scale-canvas grid-canvas"
       data-run-part="visualization" data-output="canvas" width="900" height="440"></canvas>
 
-      <section class="scale-metrics grid-metrics" data-run-part="results">
+      <section class="scale-metrics grid-metrics"
+      data-run-part="results">
         <div><span>Scan hierarchy</span><strong data-output="hierarchy">—</strong></div>
         <div><span>Position storage</span><strong data-output="positions">—</strong></div>
         <div><span>Grid storage</span><strong data-output="grid-memory">—</strong></div>
@@ -186,7 +188,8 @@ export async function createSpatialGridExperiment (
         <div><span>Steady-state benchmark</span><strong data-output="benchmark">Not run</strong></div>
       </section>
 
-      <p class="demo-note">
+      <p class="demo-note"
+      data-run-part="explanation">
         Timed builds keep positions, counts, offsets, cursors and grouped point indices on the GPU.
         Readback and exhaustive CPU validation happen once after the build and are excluded from the timing.
       </p>
@@ -230,7 +233,7 @@ export async function createSpatialGridExperiment (
       phaseOutput.textContent = 'GPU build'
       await nextFrame()
       const elapsed = await backend.build()
-      timingOutput.textContent = `${elapsed.toFixed(2)} ms`
+      timingOutput.textContent = `${milliseconds(elapsed)} ms`
 
       statusOutput.textContent = 'Reading the finished CSR grid for exhaustive validation…'
       phaseOutput.textContent = 'CPU validation'
@@ -280,7 +283,7 @@ export async function createSpatialGridExperiment (
     const pointCount = Number(pointCountSelect.value)
     const gridSize = Number(gridSizeSelect.value)
     const distribution = distributionSelect.value as PointDistribution
-    statusOutput.textContent = `Generating ${pointCount.toLocaleString()} deterministic positions…`
+    statusOutput.textContent = `Generating ${pointCount.toLocaleString('en-US')} deterministic positions…`
     phaseOutput.textContent = 'CPU setup'
     await nextFrame()
 
@@ -299,15 +302,15 @@ export async function createSpatialGridExperiment (
       reference = nextReference
       backend = nextBackend
       element<HTMLElement>(host, '[data-output="hierarchy"]').textContent =
-        nextBackend.scanHierarchy.map(count => count.toLocaleString()).join(' → ')
+        nextBackend.scanHierarchy.map(count => count.toLocaleString('en-US')).join(' → ')
       element<HTMLElement>(host, '[data-output="positions"]').textContent =
         formatGridBytes(nextBackend.positionBytes)
       element<HTMLElement>(host, '[data-output="grid-memory"]').textContent =
         formatGridBytes(nextBackend.gridBytes)
       element<HTMLElement>(host, '[data-output="occupied"]').textContent =
-        `${nextReference.occupiedCells.toLocaleString()} / ${nextBackend.cellCount.toLocaleString()}`
+        `${nextReference.occupiedCells.toLocaleString('en-US')} / ${nextBackend.cellCount.toLocaleString('en-US')}`
       element<HTMLElement>(host, '[data-output="maximum"]').textContent =
-        `${nextReference.maximumCellLoad.toLocaleString()} points`
+        `${nextReference.maximumCellLoad.toLocaleString('en-US')} points`
       busy = false
       await buildAndValidate()
     } catch (error) {
@@ -347,7 +350,7 @@ export async function createSpatialGridExperiment (
         }
         const p50 = percentile(samples, 0.5)
         const p95 = percentile(samples, 0.95)
-        benchmarkOutput.textContent = `p50 ${p50.toFixed(2)} ms · p95 ${p95.toFixed(2)} ms`
+        benchmarkOutput.textContent = `p50 ${milliseconds(p50)} ms · p95 ${milliseconds(p95)} ms`
         statusOutput.textContent = 'Steady-state benchmark complete.'
         phaseOutput.textContent = 'Ready'
       })
@@ -370,7 +373,7 @@ export async function createSpatialGridExperiment (
     'Force accuracy, layout quality and rendering parity.',
     [],
     runError,
-    'exhaustive grid builds'))
+    'exhaustive grid builds'), { experiment: 'spatial-grid', devices: () => backend?.info ? [backend.info] : [] })
   configure().catch(console.error)
 
   return {

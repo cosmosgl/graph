@@ -1,3 +1,4 @@
+import { checkResult, count as formatCount } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { validationContracts } from '../../runtime/validation'
@@ -9,7 +10,8 @@ import { createStylingWebGPU } from './webgpu'
 
 export async function createStylingView (host: HTMLElement): Promise<ExperimentInstance> {
   let runError: string | undefined
-  host.innerHTML = `<p class="demo-note">Production Cosmos draw and host-picking GLSL beside a WGSL quad renderer.
+  host.innerHTML = `<p class="demo-note"
+      data-run-part="explanation">Production Cosmos draw and host-picking GLSL beside a WGSL quad renderer.
     Move over either canvas to inspect the same pixel in both. Only the shape’s half-coverage interior is pickable; antialiased fringes are not.</p>
     <div
       data-run-part="configuration" class="scale-toolbar styling-toolbar">
@@ -36,7 +38,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     </article>`).join('')}</section>
     <div class="many-body-results"
       data-run-part="results" data-results></div>
-    <p class="demo-note">Both offscreen passes are read back for this diagnostic. Hover uses the captured ID image;
+    <p class="demo-note"
+      data-run-part="explanation">Both offscreen passes are read back for this diagnostic. Hover uses the captured ID image;
       this does not measure production picking latency. Rings, greyout, images and transitions remain outside this first styling comparison.
       <a href="#/point-styling/docs/method">Read the method and limitations</a>.</p>`
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
@@ -105,7 +108,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       const output = el('[data-results]')
       if (comparison) {
         output.innerHTML = `<h3>Framebuffer audit</h3><table><tbody>
-          <tr><th>Pixels checked</th><td>${comparison.pixels.toLocaleString()}</td></tr>
+          <tr><th>Result</th><td>${checkResult(comparison.valid)}</td></tr>
+          <tr><th>Pixels checked</th><td>${formatCount(comparison.pixels)}</td></tr>
           <tr><th>WebGL ↔ WebGPU ID differences</th><td>${comparison.idDisagreements}</td></tr>
           <tr><th>Scalar mask differences · WebGL / WebGPU</th><td>${comparison.webglReferenceFailures} / ${comparison.webgpuReferenceFailures}</td></tr>
           <tr><th>RGBA pixels beyond ${COLOR_BUDGET}/255 channel budget</th><td>${comparison.colorFailures} · max ${comparison.maxChannelError}/255</td></tr>
@@ -158,7 +162,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     'Other fixtures, pointer-hover tolerance and production picking latency.',
     Object.keys(errors),
     runError,
-    'full-image styling and picking comparisons'))
+    'full-image styling and picking comparisons'), { experiment: 'point-styling', devices: () => Object.values(backends).map(b => b.info) })
   for (const [name, create] of [['webgl', createStylingWebGL], ['webgpu', createStylingWebGPU]] as const) {
     try {
       const backend = await create(el<HTMLCanvasElement>(`[data-canvas="${name}"]`)); backends[name] = backend

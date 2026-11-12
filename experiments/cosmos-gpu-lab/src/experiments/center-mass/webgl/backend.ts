@@ -1,7 +1,7 @@
 import { Buffer, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
+import { describeDevice, createDevice } from '../../../gpu/luma'
 import { graphRgba } from '../../../runtime/palette'
-import { createDevice } from '../../../gpu/luma'
 import type { BackendResult, CenterMassBackend } from '../backend'
 import { createBlendReduction } from './reduction'
 import fs from './shaders/draw.frag.glsl?raw'
@@ -23,6 +23,7 @@ export async function createWebGLCenterMass (canvas: HTMLCanvasElement, pointCou
       parameters: { depthWriteEnabled: false, depthCompare: 'always' },
     })
     return {
+      info: describeDevice(device),
       label: 'WebGL2 · luma additive RGBA32F blend',
       async run (positions: Float32Array): Promise<BackendResult> {
         const start = performance.now()

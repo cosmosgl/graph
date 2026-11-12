@@ -84,6 +84,14 @@ the run. Method shows reference, acceptance, population and limits as ordinary c
 Overview links to it. The live variant is always named, and recorded conclusions remain separate
 from the browser’s current run.
 
+The run frame also connects short setting descriptions to their controls, presents tables with
+shared numeric and verdict conventions, and names the live session's devices and validation scope.
+Long explanations remain visible below the visualization or alongside the diagnostic they explain.
+Recorded measurement articles carry explicit source, measurement date, device/browser and scope
+metadata in Markdown. Missing historical metadata stays marked as not recorded; the review date
+does not become a measurement date. Table scrolling and source labels change presentation only,
+not the numerical gates or exported raw measurements.
+
 This pilot addresses the verified run-reset, status/entry-point and history-priority problems.
 Full-text search and overview/evidence classification for the remaining experiments are still
 follow-up work; unclassified studies are not automatically called historical or superseded.

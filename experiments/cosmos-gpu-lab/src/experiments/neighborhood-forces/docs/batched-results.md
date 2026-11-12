@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-09
+device: Native Apple GPU / Metal 3; exact browser version not recorded
+scope: Historical serial-kernel sweep; dense precision failures are retained and timings exclude the later fix.
+---
+
 # Batched timing: where the grid wins
 
 > Historical measurements of the original serial kernel. The [precision investigation](#/neighborhood-forces/docs/precision)

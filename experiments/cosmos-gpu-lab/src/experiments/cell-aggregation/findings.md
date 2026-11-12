@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: Not recorded
+device: Apple M3; standalone Chrome 156
+scope: Ordered aggregation with cached integer membership; composed strict-force reference settings.
+---
+
 This follows the [controlled GPU profile](#/gpu-stage-profile/docs/method) and
 [ordered hub study](#/hub-springs/docs/acceptance). It targets hierarchy aggregation with the same
 source-index accumulation order, original CPU budgets and strict reference output bits.

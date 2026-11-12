@@ -6,6 +6,7 @@ export type BackendResult = {
 }
 
 export interface CenterMassBackend {
+  readonly info?: string;
   readonly label: string;
   run: (positions: Float32Array) => Promise<BackendResult>;
   destroy: () => void;

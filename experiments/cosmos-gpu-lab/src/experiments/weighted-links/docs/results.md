@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-09
+device: Apple M3; ANGLE Metal WebGL and Apple WebGPU
+scope: Weighted incoming/outgoing springs; bounded fixtures and original directional CPU gates.
+---
+
 The current WebGL baseline is `luma-model-directional-v1`: luma `Model`/`UniformStore`, explicit render
 passes and independent directional shader bounds. Historical raw-WebGL captures are not comparable
 performance samples; see the [baseline correction](#/weighted-links/docs/context-loss).

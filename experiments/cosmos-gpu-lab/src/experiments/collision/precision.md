@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-12
+device: Apple M3; inline Chromium 157; separate native Chrome regressions
+scope: Targeted collision arithmetic; repeated 1,700 tick and trajectory gates at the original tolerance.
+---
+
 # Collision precision: the targeted correction
 
 **The targeted WebGPU collision kernel passes all 1,700 tick gates and all 1,700 independent trajectory gates in the repeated M3 matrix, with zero measured pointwise drift from CPU.** The original native kernel and its recorded failures remain selectable controls. No tolerance, CPU reference or force-law constant changes.

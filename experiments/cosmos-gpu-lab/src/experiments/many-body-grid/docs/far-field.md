@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: Not recorded
+device: Apple M3; native browser
+scope: 8,192 and 16,384 clustered points over three CPU-anchored ticks; refined and stored force contributions.
+---
+
 ## Closing the dense far-field mismatch
 
 **The refined, stored-contribution candidate passes the checked dense cases at the original tolerance.**

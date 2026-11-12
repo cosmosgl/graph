@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: Not recorded
+device: Apple M3; standalone Chrome 156 and native Chrome 157
+scope: Repulsion integration alignment; the communities gravity failure is retained.
+---
+
 ## Fixing the 8,192-point star probe
 
 The **Aligned gravity + repulsion · diagnostic** candidate combines the production polar gravity expression with

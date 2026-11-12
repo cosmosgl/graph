@@ -1,3 +1,10 @@
+---
+source: Recorded findings
+recorded: 2026-11-09
+device: Chrome 156 on macOS; native Apple / Metal 3 adapter
+scope: Initial fixed-radius local-repulsion implementation; superseded by the precision correction.
+---
+
 # Initial neighborhood-force findings
 
 The first local browser check matched the CPU reference for both tiled all-pairs and spatial-grid

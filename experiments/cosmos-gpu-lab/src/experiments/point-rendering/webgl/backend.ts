@@ -1,6 +1,6 @@
 import { Buffer, UniformStore } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
-import { ALPHA_BLEND, createDevice, waitForGpu } from '../../../gpu/luma'
+import { describeDevice, ALPHA_BLEND, createDevice, waitForGpu } from '../../../gpu/luma'
 import type { PointRenderBackend, PointRenderData, PointRenderMeasurement } from '../backend'
 import fragmentShader from './shaders/circle.frag.glsl?raw'
 import vertexShader from './shaders/circle.vert.glsl?raw'
@@ -25,6 +25,7 @@ export async function createWebGLPointRenderer (canvas: HTMLCanvasElement): Prom
     pass.end(); device.submit()
   }
   return {
+    info: describeDevice(device),
     setData (data: PointRenderData): void {
       positions?.destroy(); colors?.destroy()
       positions = device.createBuffer({ data: data.positions, usage: Buffer.VERTEX | Buffer.COPY_DST })

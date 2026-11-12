@@ -1,3 +1,4 @@
+import { scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { SIMULATION_PASSES, type LinkBackend, type WebGLCheckpoint } from './backend'
@@ -158,9 +159,9 @@ export async function createPassDiagnostic (host: HTMLElement, name: 'WebGL' | '
       const check = compareArray(data, expected[pass])
       rows.push({ pass, completionMs, ...check })
       results.innerHTML = `<table><thead><tr><th>Pass</th><th>Result</th><th>Failures</th>
-        <th>Max error</th><th>Completion + readback ms</th></tr></thead><tbody>${rows.map((row, i) =>
-    `<tr><td>${LABELS[i]}</td><td>${row.valid ? 'PASS' : 'FAIL'}</td><td>${row.failures}</td>
-          <td>${Number(row.maxError).toExponential(3)}</td><td>${Number(row.completionMs).toFixed(3)}</td></tr>`).join('')}</tbody></table>`
+        <th>Max error</th><th>Completion + readback (ms)</th></tr></thead><tbody>${rows.map((row, i) =>
+    `<tr><td>${LABELS[i]}</td><td>${row.valid ? 'Pass' : 'Fail'}</td><td>${row.failures}</td>
+          <td>${scientific(Number(row.maxError), 3)}</td><td>${milliseconds(Number(row.completionMs))}</td></tr>`).join('')}</tbody></table>`
       if (!check.valid) failed = true
       index++
       capture!.status = failed ? 'failed' : index === SIMULATION_PASSES.length ? 'passed' : 'ready'; save()
@@ -190,7 +191,7 @@ export async function createPassDiagnostic (host: HTMLElement, name: 'WebGL' | '
       failed = !check.valid
       // This run started from the initial positions and consumed all four passes.
       index = SIMULATION_PASSES.length; save()
-      status.textContent = `Grouped tick ${check.valid ? 'PASS' : 'FAIL'} · ${check.failures} failures · max error ${check.maxError.toExponential(3)}.`
+      status.textContent = `Grouped tick ${check.valid ? 'Pass' : 'Fail'} · ${check.failures} failures · max error ${scientific(check.maxError, 3)}.`
     })
   })
   trajectory.addEventListener('click', () => {
@@ -208,7 +209,7 @@ export async function createPassDiagnostic (host: HTMLElement, name: 'WebGL' | '
       failed = checks.some(check => !check.valid)
       capture!.trajectory = checks; capture!.status = failed ? 'failed' : 'passed'
       index = SIMULATION_PASSES.length; save()
-      status.textContent = `25-tick trajectory ${failed ? 'FAIL' : 'PASS'} · snapshots at 1, 10, 25 · no rendering or timer queries.`
+      status.textContent = `25-tick trajectory ${failed ? 'Fail' : 'Pass'} · snapshots at 1, 10, 25 · no rendering or timer queries.`
     })
   })
   exportButton.addEventListener('click', () => {
@@ -221,7 +222,7 @@ export async function createPassDiagnostic (host: HTMLElement, name: 'WebGL' | '
     busy ? 'Running' : failed ? 'Failed' : backend ? 'Ready' : 'Preparing',
     recordVerdicts([...rows, ...(Array.isArray(capture?.trajectory) ? capture.trajectory : []), capture?.groupedTick]),
     'Unsubmitted passes, the other backend and rendering; this diagnostic does not draw.',
-    failed && !backend ? [name] : [], undefined, 'pass and trajectory checks'))
+    failed && !backend ? [name] : [], undefined, 'pass and trajectory checks'), { experiment: 'weighted-links', devices: () => backend ? [backend.info] : [] })
   try {
     const canvas = el<HTMLCanvasElement>('canvas')
     backend = name === 'WebGL'

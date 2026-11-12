@@ -1,3 +1,4 @@
+import { scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
 import { graphPalette } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
@@ -60,7 +61,8 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
         <p class="demo-note" data-info="${name}"></p>
       </article>`).join('')}
     </section>
-    <p class="demo-note">Identical initial positions, fixed random samples and parameters.
+    <p class="demo-note"
+      data-run-part="explanation">Identical initial positions, fixed random samples and parameters.
       Blue points are free; yellow points are pinned; absent points are hidden.
       The camera fits all three outputs together. This force-only layout expands; gravity, springs and cooling are not enabled.</p>
     <div class="many-body-results" data-output="results"
@@ -68,7 +70,8 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
     <section class="visible-section advanced-controls"
       data-run-part="diagnostics"><h3 class="visible-section-heading">Validation contract and parameters</h3>
       <p class="demo-note" data-output="parameters"></p>
-      <p class="demo-note">Every validation tick reads back forces and positions. This is a correctness comparison, not a GPU performance benchmark.
+      <p class="demo-note"
+      data-run-part="explanation">Every validation tick reads back forces and positions. This is a correctness comparison, not a GPU performance benchmark.
       Reported elapsed time includes CPU calculation, GPU work, readback and drawing submission. An unavailable or failed backend never counts as a pass.</p>
     </section>
     <section class="many-body-benchmark"
@@ -211,14 +214,14 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
     const verdict = (check: ReturnType<typeof compare>): string => check.valid
       ? 'Pass'
       : `Fail (${check.forces.failures + check.positions.failures} components)`
-    const number = (value: number): string => Number.isFinite(value) ? value.toExponential(2) : 'non-finite'
+    const number = scientific
     el('[data-output="results"]').innerHTML = `<table><caption>Tick ${tick} · maximum absolute component error</caption>
       <thead><tr><th>Comparison</th><th>Force</th><th>Position</th><th>Result</th></tr></thead><tbody>
       ${checks.map(check => `<tr><td>${check.name} vs CPU, same input</td><td>${number(check.result.forces.maxError)}</td>
         <td>${number(check.result.positions.maxError)}</td><td>${verdict(check.result)}</td></tr>`).join('')}
       ${cross
     ? `<tr><td>WebGPU vs WebGL${mode.value === 'trajectory' ? ' · independent paths' : ''}</td><td>${number(cross.forces.maxError)}</td>
-        <td>${number(cross.positions.maxError)}</td><td>${mode.value === 'trajectory' ? 'Drift only' : cross.valid ? 'Pass' : 'Fail'}</td></tr>`
+        <td>${number(cross.positions.maxError)}</td><td>${mode.value === 'trajectory' ? 'Unchecked · drift only' : cross.valid ? 'Pass' : 'Fail'}</td></tr>`
     : ''}
       ${mode.value === 'trajectory'
     ? checks.map(check => `<tr><td>${check.name} vs independent CPU path</td><td>${number(check.drift.forces.maxError)}</td>
@@ -226,7 +229,7 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
     : ''}</tbody></table>`
     const allAvailableChecksPass = checks.every(check => check.result.valid)
     const outcome = passed ? 'Passed' : checks.length < 2 ? 'Partial comparison' : 'Mismatch'
-    status.textContent = `${outcome} · tick ${tick} · ${elapsedMs.toFixed(1)} ms validation elapsed (not GPU timing).${
+    status.textContent = `${outcome} · tick ${tick} · ${milliseconds(elapsedMs)} ms validation elapsed (not GPU timing).${
       mode.value === 'trajectory' ? ' Independent-path drift is reported separately; no trajectory-quality verdict.' : ''}`
     return allAvailableChecksPass && (mode.value !== 'matched' || !cross || cross.valid) && Object.keys(errors).length === 0
   }
@@ -276,13 +279,13 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
   })
   const timingStatus = el<HTMLElement>('[data-output="benchmark-status"]')
   const showTiming = (): void => {
-    const ms = (n: number | null | undefined): string => n === null || n === undefined ? '—' : n === 0 ? '0 (timer resolution)' : n.toFixed(4)
+    const ms = milliseconds
     el('[data-output="benchmark-results"]').innerHTML = benchmarkRows.length
       ? `<table>
       <caption>Milliseconds per operation · GPU median and range across seven batches</caption>
       <thead><tr><th>Fixture / points</th><th>Work</th><th>Backend</th><th>Batch</th><th>GPU median [min–max]</th>
         <th>Completion</th><th>Samples / checks</th></tr></thead><tbody>
-      ${benchmarkRows.map(row => `<tr><td>${row.fixture} / ${row.count.toLocaleString()}</td>
+      ${benchmarkRows.map(row => `<tr><td>${row.fixture} / ${row.count.toLocaleString('en-US')}</td>
         <td>${row.stage === 'force' ? 'Force' : 'Force + integrate'}</td><td>${row.backend}</td><td>${row.operations}</td>
         <td>${ms(row.summary?.gpuMs)}${row.summary?.gpuRange ? ` [${ms(row.summary.gpuRange[0])}–${ms(row.summary.gpuRange[1])}]` : ''}</td>
         <td>${ms(row.summary?.completionMs)}</td><td>${row.samples.length}/7 · ${
@@ -339,7 +342,7 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
     'Unrun fixtures; trajectory quality and rendering parity.',
     Object.keys(errors),
     runError,
-    'complete tick comparisons'))
+    'complete tick comparisons'), { experiment: 'many-body', devices: () => Object.values(info) })
   await task(setup)
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; cleanup() } }
 }
