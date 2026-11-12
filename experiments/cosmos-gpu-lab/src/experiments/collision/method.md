@@ -51,7 +51,11 @@ The advanced **Center reduction (WebGPU)** selector retains the original float32
 
 When collision is enabled, both spring directions also floor their desired length at the sum of effective endpoint radii. Omitting this production coupling would let springs demand overlap that collision then repeatedly undoes.
 
-Every validated tick resets both GPUs to a shared CPU starting state. Stage checks evaluate each GPU’s actual intermediate input; a separate whole-tick check uses the independent CPU chain. Repulsion uses fixed shared random samples. This isolates numerical error and does not establish independently evolving trajectory identity. Alpha is held at the selected value; this page does not reproduce Graph’s wall-clock cooling scheduler.
+**Shared CPU input per tick** retains the original control: each tick resets both GPUs to the CPU starting state. **Independent layouts** keeps each GPU’s own output resident for the next tick, with no ordinary position-reset upload. CPU advances its own state once. Both modes retain stage checks on actual GPU intermediates and a whole-tick CPU chain from that GPU’s starting input.
+
+A separate trajectory gate compares accumulated raw coordinates against the independently evolving CPU at the original position tolerance. Raw/aligned RMS drift, radius, motion, scale-fitted graph-distance stress and overlap describe the layouts without changing that gate. Aligned drift removes translation and rotation only. See the [independent findings and metric scope](#/collision/docs/trajectories).
+
+Repulsion uses fixed shared random samples. Choose fixed alpha or a 100/300-tick cooling schedule. Cooling uses the existing scalar `alpha += (0 - alpha) * (1 - pow(0.001, 1 / ticks))`; all paths share its values. Collision’s optional cooling exponent remains a separate setting. These tick-based schedules do not reproduce Graph’s wall-clock scheduler.
 
 Collision and whole-tick gates reuse the existing `2e-5 + 3e-5 × |reference|` budget. Springs retain their tighter `2e-6 + 2e-5 × |reference|` budget. Flags must match exactly. Only explicitly absent coordinates may preserve NaN sentinels. No tolerance constant changes.
 
@@ -59,7 +63,7 @@ Absent spring targets have no consumed correction: the production shader can emi
 
 Geometric overlap counts and maximum penetration are separate observations. Passing a numerical gate does not mean every overlap has disappeared in one pass. Repeated constraints can leave tiny residual overlaps; the page reports them without introducing an arbitrary geometric pass threshold.
 
-The first failing stage or whole tick is retained for local JSON export. **Replay failures** reruns that input, checks output bits and restores the displayed GPU positions without advancing the CPU tick.
+The first failing stage/whole tick and the first accumulated trajectory difference are retained separately for local JSON export. **Replay failures** reruns the captured GPU input and alpha, checks output bits and restores displayed GPU positions without advancing CPU state or cooling. A trajectory replay compares against its captured independent CPU output, rather than replacing it with a CPU tick from the GPU’s different input.
 
 ## Added GPU cost
 

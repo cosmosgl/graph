@@ -6,9 +6,12 @@ export type CollisionArithmetic = 'native' | 'strict'
 export const COLLISION: CollisionParameters = { strength: 1, radius: 0, padding: 0.25, iterations: 1, cooling: 0 }
 export const FIXTURES = ['pair', 'uniform', 'clusters', 'coincident', 'masks', 'separated'] as const
 export type Fixture = typeof FIXTURES[number]
+export const TOPOLOGIES = ['chain', 'communities', 'star'] as const
+export type Topology = typeof TOPOLOGIES[number]
 export type Settings = {
   fixture: Fixture; count: number; mode: 'collision' | 'combined'; alpha: number; collision: CollisionParameters;
   arithmetic?: CollisionArithmetic; centerReduction?: CenterReduction;
+  evolution?: 'shared' | 'independent'; topology?: Topology; coolingTicks?: number;
 }
 export function validateCollision (p: CollisionParameters): void {
   if (![p.strength, p.radius, p.padding, p.cooling].every(v => Number.isFinite(v) && v >= 0) || p.strength > 1 ||
@@ -25,8 +28,9 @@ export function radius (size: number, p: CollisionParameters): number {
 export function maxRadius (sizes: Float32Array, p: CollisionParameters): number {
   return Math.fround((p.radius > 0 ? p.radius : Math.max(0, ...sizes) * 0.5) + p.padding)
 }
-export function createFixture (fixture: Fixture, requested = 128): { input: Input; graph: GraphInput } {
+export function createFixture (fixture: Fixture, requested = 128, topology: Topology = 'chain'): { input: Input; graph: GraphInput } {
   if (!FIXTURES.includes(fixture) || !Number.isInteger(requested) || requested < 2 || requested > 4096) throw new Error('Invalid collision fixture')
+  if (!TOPOLOGIES.includes(topology)) throw new Error('Invalid collision topology')
   const count = fixture === 'pair' ? 2 : fixture === 'masks' ? 8 : requested
   const input = pointFixture('uniform', count); const sizes = new Float32Array(count)
   for (let i = 0; i < count; i++) {
@@ -50,9 +54,16 @@ export function createFixture (fixture: Fixture, requested = 128): { input: Inpu
       2050, 2049, 0, 0, 2048, 2048, 0, 0, 2048, 2048, 1, 0, 2090, 2048, 0, 0,
     ])
   }
-  const links = new Float32Array((count - 1) * 2)
-  for (let i = 1; i < count; i++) links.set([i - 1, i], (i - 1) * 2)
-  return { input, graph: { points: input.points, sizes, links, weights: new Float32Array(count - 1).fill(1) } }
+  const edges: number[] = []
+  for (let i = 1; i < count; i++) {
+    if (topology === 'star') edges.push(0, i)
+    else {
+      edges.push(i - 1, i)
+      if (topology === 'communities' && i % 16 > 1) edges.push(Math.floor(i / 16) * 16, i)
+    }
+  }
+  const links = new Float32Array(edges)
+  return { input, graph: { points: input.points, sizes, links, weights: new Float32Array(links.length / 2).fill(1) } }
 }
 export function overlap (points: Float32Array, sizes: Float32Array, p: CollisionParameters): { pairs: number; pinnedPairs: number; maxPenetration: number } {
   let pairs = 0; let pinnedPairs = 0; let maxPenetration = 0

@@ -50,7 +50,7 @@ export async function measureCollisionCost (
   if (!(settings.collision.strength > 0) || ![policy.warmups, policy.samples, policy.frames, policy.blocks].every(Number.isInteger) || policy.warmups < 0 ||
     policy.samples < 2 || policy.frames < 1 || policy.frames > 8 || policy.blocks < 1 || policy.blocks > 4) throw new Error('Invalid collision timing settings')
   if (comparison === 'center-reduction' && settings.mode !== 'combined') throw new Error('Center comparison requires combined forces')
-  const { input, graph } = createFixture(settings.fixture, settings.count)
+  const { input, graph } = createFixture(settings.fixture, settings.count, settings.topology)
   if (frozen.length !== input.points.length) throw new Error('Frozen input size differs')
   input.points = frozen.slice(); graph.points = input.points
   const report: CollisionCostReport = {
