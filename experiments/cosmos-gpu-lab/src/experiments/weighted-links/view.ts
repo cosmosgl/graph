@@ -80,8 +80,8 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
       </div>
       <p class="demo-note"
       data-run-part="diagnostics">Isolate simulation passes with one active device:
-        <a href="?linkDiagnostic=WebGL#/weighted-links">WebGL only</a> ·
-        <a href="?linkDiagnostic=WebGPU#/weighted-links">WebGPU only</a>.</p>
+        <a href="?linkDiagnostic=WebGL#/weighted-links/run">WebGL only</a> ·
+        <a href="?linkDiagnostic=WebGPU#/weighted-links/run">WebGPU only</a>.</p>
     </section>
     <section class="summary" aria-live="polite"
       data-run-part="metrics">

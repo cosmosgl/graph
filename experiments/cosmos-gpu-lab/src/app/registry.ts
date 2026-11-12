@@ -1,4 +1,5 @@
 import type { ExperimentDefinition, ExperimentModule } from '../runtime/experiment'
+import { research, researchMethodPages } from './research'
 
 function validateExperiments (definitions: ExperimentDefinition[]): void {
   const experimentIds = new Set<string>()
@@ -18,6 +19,21 @@ function validateExperiments (definitions: ExperimentDefinition[]): void {
         throw new Error(`Duplicate page id in ${experiment.id}: ${page.id}`)
       }
       pageIds.add(page.id)
+    }
+    const record = research[experiment.id]
+    if (!record) throw new Error(`Add a research assessment for ${experiment.id}`)
+    const methodIds = researchMethodPages(record)
+    const evidenceIds = record.investigations.map(item => item.page)
+    if (new Set(evidenceIds).size !== evidenceIds.length) throw new Error(`Duplicate evidence in ${experiment.id}`)
+    for (const id of [...methodIds, ...evidenceIds, ...record.evidence ? [record.evidence] : []]) {
+      if (!pageIds.has(id)) throw new Error(`Unknown research page ${experiment.id}/${id}`)
+    }
+    for (const id of pageIds) {
+      if (!methodIds.includes(id) && !evidenceIds.includes(id)) throw new Error(`Assign ${experiment.id}/${id} to Method or Evidence`)
+    }
+    if (record.evidence && !evidenceIds.includes(record.evidence)) throw new Error(`Current evidence is not indexed in ${experiment.id}`)
+    for (const item of record.investigations) {
+      if (item.replacement && !evidenceIds.includes(item.replacement)) throw new Error(`Unknown replacement in ${experiment.id}/${item.page}`)
     }
   }
 }

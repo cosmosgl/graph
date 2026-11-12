@@ -59,16 +59,19 @@ Contracts describe existing acceptance and coverage, not a global pass. The matc
 summary and schema v3 export separate limited behavior checks, legacy compatibility and quality;
 other experiments retain their detailed reports with the contract explaining their scope.
 
-### Research navigation pilot
+### Shared research navigation
 
-Collision and Combined layout use **Overview → Run → Method → Evidence** as four page destinations.
-Their existing article URLs remain valid. Evidence indexes label current work, supporting studies
+Every experiment uses **Overview → Run → Method → Evidence** as four page destinations.
+Existing article URLs remain valid. Method keeps its technical topics visible; Evidence indexes label current work, supporting studies
 and historical baselines; historical pages link to the current conclusion without erasing original
 failures or measurements. The shared contract is available from Overview/Method instead of another
-peer destination. Other experiments retain their existing page navigation during this pilot.
+peer destination. Experiments without a published measurement matrix state that explicitly.
+The registry checks that every document is reachable from Method or Evidence and that all evidence
+and replacement links resolve. Old base-route Run section bookmarks continue to open the live view.
 
-`src/app/research.ts` owns the compact reviewed summaries and milestone gates. The homepage and
-roadmap use the same assessment renderer; home highlights and pilot overviews read the same
+`src/app/research.ts` and `research-catalog.ts` own the compact reviewed summaries, document
+assignments and milestone gates. The homepage and roadmap use the same assessment renderer;
+home highlights and experiment overviews read the same
 experiment conclusion. Detailed measurements stay in their evidence articles. These are editorial
 assessments, not status inferred from a test count or a completion percentage.
 
@@ -92,18 +95,17 @@ metadata in Markdown. Missing historical metadata stays marked as not recorded; 
 does not become a measurement date. Table scrolling and source labels change presentation only,
 not the numerical gates or exported raw measurements.
 
-This pilot addresses the verified run-reset, status/entry-point and history-priority problems.
-Full-text search and overview/evidence classification for the remaining experiments are still
-follow-up work; unclassified studies are not automatically called historical or superseded.
-Expand the pattern after checking that readers can find current conclusions, identify release
-obstacles, distinguish original failures and reproduce a named configuration.
+This structure addresses run retention, status/entry-point and history-priority problems across
+the catalog. Each comparison description names its actual backends and reference roles; a
+WebGPU-only study does not inherit an independent WebGL/WebGPU/CPU trajectory description.
+Full-text search and further reader-usability checks remain follow-up work.
 
 The design follows [Diátaxis’s incremental approach](https://diataxis.fr/how-to-use-diataxis/),
 [clear section labels and contents alternatives](https://design-system.service.gov.uk/components/tabs/),
 [progressive disclosure](https://www.nngroup.com/articles/progressive-disclosure/) and
 [retaining superseded decisions with explicit status](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions).
 These sources guide the design; they do not establish that this exact four-destination layout is
-optimal for every experiment. Browser task checks validate the pilot behavior, not reader usability.
+optimal for every experiment. Browser task checks validate navigation behavior, not reader usability.
 
 ## 2. Each experiment is a self-contained module
 
