@@ -5,7 +5,7 @@ const original = window.location.href
 let host: HTMLElement
 afterEach(() => { disposeRunLayout(host); host.remove(); window.history.replaceState(null, '', original) })
 
-it('keeps essential settings visible, respects authored sections and jumps without restarting the run', () => {
+it('keeps essential settings visible, respects authored sections and preserves action listeners', () => {
   window.history.replaceState(null, '', '#/collision/run')
   host = document.createElement('div'); document.body.append(host)
   host.innerHTML = `<section data-run-section="configuration"><p class="demo-note">Technical note</p><div class="scale-toolbar">
@@ -24,11 +24,9 @@ it('keeps essential settings visible, respects authored sections and jumps witho
   expect(host.querySelector('[data-control="precision"]')!.closest('details')).toBeNull()
   expect(host.querySelector('#run-diagnostics button')).toBe(timing); timing.click(); expect(clicks).toBe(1)
   expect(host.querySelector('#run-configuration [data-run-section="configuration"] > p')!.textContent).toBe('Technical note')
-  expect(Array.from(host.querySelectorAll('.run-settings > h2, .run-display > section > h2, .run-diagnostics > h2'), h => h.textContent))
-    .toEqual(['Configuration', 'Run', 'Results', 'Diagnostics'])
-  host.querySelector<HTMLAnchorElement>('nav a[href$="section=run-results"]')!.click()
-  expect(window.location.hash).toBe('#/collision/run?section=run-results')
-  expect(document.activeElement?.id).toBe('run-results')
+  expect(Array.from(host.querySelectorAll('#run-configuration > h2, #run-results > h2, #run-diagnostics > h2'), h => h.textContent))
+    .toEqual(['Configuration', 'Live results', 'Diagnostics'])
+  expect(host.querySelector('nav')).toBeNull()
   expect(host.querySelector('canvas')).not.toBeNull()
   expect(chosen).toBeUndefined(); host.querySelector<HTMLButtonElement>('[data-run-preset="simple"]')!.click()
   expect(chosen).toEqual({ count: '128' })

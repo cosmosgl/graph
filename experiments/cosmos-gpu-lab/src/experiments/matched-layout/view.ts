@@ -272,8 +272,7 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
   }
   const run = async (steps: number, checked: boolean): Promise<void> => {
     if (!session) return
-    const preview = el('.simulation-preview'); preview.style.scrollMarginTop = `${el('.playback-toolbar').offsetHeight + 12}px`
-    preview.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    el('.run-primary-actions').scrollIntoView({ behavior: 'smooth', block: 'start' })
     for (let i = 0; i < steps; i++) {
       if (stopped || destroyed) break
       status.textContent = `Running tick ${session.report.rows.length + 1} / ${session.settings.ticks}…`

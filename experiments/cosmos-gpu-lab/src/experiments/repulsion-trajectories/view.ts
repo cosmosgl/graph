@@ -156,9 +156,7 @@ export async function createTrajectories (host: HTMLElement): Promise<Experiment
   }
   const run = async (ticks: number): Promise<void> => {
     if (!session) return
-    const panels = el('.trajectory-panels')
-    panels.style.scrollMarginTop = `${el('.playback-toolbar').offsetHeight + 16}px`
-    panels.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    el('.run-primary-actions').scrollIntoView({ behavior: 'smooth', block: 'start' })
     for (let i = 0; i < ticks; i++) {
       if (stopped || destroyed) break
       status.textContent = `Checking independent tick ${session.rows.length + 1}…`

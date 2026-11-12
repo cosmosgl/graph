@@ -18,7 +18,7 @@ type RunContext = { experiment: string; devices?: () => string[] }
 export function mountRunLayout (host: HTMLElement, read: () => RunSummary, context?: RunContext): void {
   presentations.get(host)?.()
   const opened = new Date().toISOString()
-  const frame = document.createElement('div'); frame.className = 'run-layout'
+  const frame = document.createElement('div'); frame.className = 'run-layout integrated-run'
   frame.innerHTML = `<section class="run-overview" aria-label="Current local run"
       data-run-summary>
     <p class="run-source">Live results · session started ${opened.replace('T', ' ').replace(/\.\d+Z$/, ' UTC')}</p>
@@ -27,10 +27,9 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
       data-run-summary-value="${key}"></dd></div>`).join('')}</dl>
     <div
       data-run-slot="status"></div></section>
-    <nav class="run-contents" aria-label="Run sections"></nav>
-    <div class="run-workbench"><section class="run-settings" id="run-configuration"><h2>Configuration</h2></section>
-      <div class="run-display"><section id="run-run"><h2>Run</h2><div class="controls run-primary-actions"></div>
-        <div class="run-visualization"></div></section><section id="run-results"><h2>Results</h2>
+    <div class="run-workbench"><section class="run-settings" id="run-configuration" aria-label="Configuration"><h2>Configuration</h2></section>
+      <div class="run-display"><section id="run-run" aria-label="Live comparison"><div class="controls run-primary-actions"></div>
+        <div class="run-visualization"></div></section><section id="run-results" aria-label="Live results"><h2>Live results</h2>
         <div class="result-context"
       data-run-owned><dl><div><dt>Device</dt><dd
       data-run-devices>Not reported</dd></div>
@@ -39,7 +38,8 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
           <p>Pass / Fail refer to the named check. Unchecked means no check ran; Unavailable means a result could not be obtained.</p></div>
         <div class="controls run-export-actions"></div></section></div></div>
     <section class="run-explanation" id="run-explanation"><h2>Explanation</h2></section>
-    <section class="run-diagnostics" id="run-diagnostics"><h2>Diagnostics</h2><div class="controls run-diagnostic-actions"></div></section>`
+    <section class="run-diagnostics" id="run-diagnostics" aria-label="Diagnostics"><h2>Diagnostics</h2>
+      <div class="controls run-diagnostic-actions"></div></section>`
   const slot = (selector: string): HTMLElement => frame.querySelector<HTMLElement>(selector)!
   const destinations: Record<string, HTMLElement> = {
     configuration: slot('.run-settings'),
@@ -80,20 +80,25 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
     select.after(hint)
     return { select, hint }
   })
-  const base = window.location.hash.split('?')[0]
-  for (const [id, label] of [['configuration', 'Configuration'], ['run', 'Run'], ['results', 'Results'],
-    ['explanation', 'Explanation'], ['diagnostics', 'Diagnostics']]) {
-    const target = frame.querySelector<HTMLElement>(`#run-${id}`)
-    if (!target) continue
-    target.setAttribute('aria-label', label)
-    const link = document.createElement('a'); link.href = `${base}?section=run-${id}`; link.textContent = label
-    link.addEventListener('click', event => {
-      if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
-      event.preventDefault(); window.history.replaceState(null, '', link.href)
-      target.scrollIntoView({ block: 'start' }); target.tabIndex = -1; target.focus({ preventScroll: true })
-    })
-    slot('.run-contents').append(link)
+  slot('#run-results > h2').after(slot('.run-overview'))
+  slot('.run-visualization').before(slot('[data-run-slot="status"]'))
+  const tick = frame.querySelector('.tick-counter')
+  if (tick) {
+    const toolbar = tick.parentElement!
+    slot('.run-primary-actions').append(tick)
+    if (!toolbar.children.length) toolbar.remove()
   }
+  const workbench = slot('.run-workbench'); const display = slot('.run-display')
+  const settings = slot('.run-settings'); const visualization = slot('#run-run'); const results = slot('#run-results')
+  const wide = window.matchMedia('(min-width: 1200px)')
+  // Move the original nodes so visual, keyboard and reading order agree at
+  // both sizes. Settings never push the narrow-screen canvas out of reach.
+  const reflow = (): void => {
+    if (wide.matches) {
+      display.append(visualization, results); workbench.replaceChildren(display, settings)
+    } else workbench.replaceChildren(visualization, settings, results)
+  }
+  reflow(); wide.addEventListener('change', reflow)
   host.prepend(frame)
   if (context) addRunGuidance(frame, context.experiment)
   slot('[data-run-scope]').textContent = context
@@ -128,7 +133,9 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
   })
   observer.observe(host, { subtree: true, childList: true, characterData: true, attributes: true, attributeFilter: ['disabled', 'hidden'] })
   host.addEventListener('change', refresh)
-  presentations.set(host, () => { observer.disconnect(); tables.destroy(); host.removeEventListener('change', refresh) })
+  presentations.set(host, () => {
+    observer.disconnect(); tables.destroy(); wide.removeEventListener('change', reflow); host.removeEventListener('change', refresh)
+  })
   refresh()
 }
 

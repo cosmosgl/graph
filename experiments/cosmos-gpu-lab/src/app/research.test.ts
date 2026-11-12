@@ -2,7 +2,7 @@ import { expect, it } from 'vitest'
 import { validationContracts } from '../runtime/validation'
 import { experiments, findExperiment } from './registry'
 import { mainOpenIssues, migrationFocus, milestones, research, researchMethodPages } from './research'
-import { renderEvidenceIndex, renderMigrationOverview, renderResearchOverview } from './research-ui'
+import { renderInvestigationContext, renderMigrationOverview } from './research-ui'
 
 it('assigns every experiment and document to the shared research destinations without dropping history', () => {
   expect(Object.keys(research).sort()).toEqual(experiments.map(e => e.id).sort())
@@ -24,23 +24,10 @@ it('assigns every experiment and document to the shared research destinations wi
   for (const milestone of milestones) for (const [id] of milestone.evidence) expect(findExperiment(id)).toBeDefined()
 })
 
-it('does not invent a recorded matrix or backend comparison for method-only demos', () => {
-  for (const id of ['point-rendering', 'spatial-grid', 'performance-lab', 'precision-diagnostics']) {
-    const host = document.createElement('div'); const experiment = findExperiment(id)!
-    renderEvidenceIndex(host, experiment, research[id])
-    expect(host.textContent).toContain('No recorded measurement matrix')
-    expect(host.querySelector(`a[href="#/${id}/run"]`)).not.toBeNull()
-  }
-  const host = document.createElement('div')
-  renderResearchOverview(host, findExperiment('spatial-grid')!, research['spatial-grid'])
-  expect(host.querySelector('.comparison-rail')!.textContent).not.toContain('WebGL')
-})
-
-it('derives the home conclusion and overview from one record and keeps historical evidence visible', () => {
-  const home = document.createElement('div'); const overview = document.createElement('div'); const index = document.createElement('div')
-  renderMigrationOverview(home); renderResearchOverview(overview, findExperiment('collision')!, research.collision)
-  renderEvidenceIndex(index, findExperiment('collision')!, research.collision)
-  expect(home.textContent).toContain(research.collision.conclusion); expect(overview.textContent).toContain(research.collision.conclusion)
+it('derives the bounded home assessment from shared experiment records', () => {
+  const home = document.createElement('div')
+  renderMigrationOverview(home)
+  expect(home.textContent).toContain(research.collision.conclusion)
   expect(Array.from(home.querySelectorAll<HTMLElement>('[data-decision]'), section => section.dataset.decision))
     .toEqual(['milestone', 'successes', 'blockers', 'gate'])
   const current = milestones.find(m => m.id === migrationFocus.milestone)!
@@ -53,9 +40,6 @@ it('derives the home conclusion and overview from one record and keeps historica
   }
   for (const issue of mainOpenIssues) expect(home.querySelector(`a[href="${issue.href}"]`)).not.toBeNull()
   expect(home.querySelector('details')).toBeNull()
-  expect(overview.querySelector('details')).toBeNull()
-  expect(overview.querySelector('.research-contract a')?.getAttribute('href')).toBe('#/collision/docs/method?section=reference')
-  expect(index.textContent).toContain('Historical baseline'); expect(index.querySelector('a[href="#/collision/docs/trajectories"]')).not.toBeNull()
 })
 
 it('keeps the complete milestone table, gates and deep links visible on Roadmap', () => {
@@ -68,4 +52,17 @@ it('keeps the complete milestone table, gates and deep links visible on Roadmap'
     for (const gate of milestone.gates) expect(section.textContent).toContain(gate)
   }
   expect(host.querySelector('details,[hidden]')).toBeNull()
+})
+
+it('preserves earlier findings, their warnings and links to corrected work', () => {
+  for (const experiment of experiments) {
+    for (const item of research[experiment.id].investigations) {
+      if (!['Historical baseline', 'Superseded', 'Parked'].includes(item.state)) continue
+      const container = document.createElement('div'); const article = document.createElement('div'); container.append(article)
+      renderInvestigationContext(article, experiment, research[experiment.id], item.page)
+      expect(container.querySelector('.investigation-context')!.textContent).toContain(item.description)
+      if (item.page !== research[experiment.id].evidence) expect(container.querySelector('.investigation-context a')).not.toBeNull()
+      expect(container.querySelector('details')).toBeNull()
+    }
+  }
 })

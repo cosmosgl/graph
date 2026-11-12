@@ -289,7 +289,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
           <p class="demo-note">The canvases above keep the inline baseline. Arithmetic variants are opt-in diagnostics;
             a passing candidate does not change the baseline verdict.</p></section>`
       } else { target.textContent = `Centroid comparison unavailable: ${centroidError}` }
-      target.style.scrollMarginTop = `${el('.playback-toolbar').offsetHeight + 16}px`
+      target.style.scrollMarginTop = `${el('.run-primary-actions').offsetHeight + 16}px`
       target.scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
     if (tracing) {
@@ -318,7 +318,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
         </section>`
       const heading = el('[data-output="trace"] .visible-section-heading')
       heading.tabIndex = -1; heading.focus({ preventScroll: true })
-      el('[data-output="trace"]').style.scrollMarginTop = `${el('.playback-toolbar').offsetHeight + 16}px`
+      el('[data-output="trace"]').style.scrollMarginTop = `${el('.run-primary-actions').offsetHeight + 16}px`
       el('[data-output="trace"]').scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
     el('[data-status="CPU"]').textContent = 'Computed'
@@ -373,7 +373,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     task(async () => {
       timingRows.length = 0; timingError = undefined; renderTiming()
       const panel = el('[data-output="timing"]')
-      panel.style.scrollMarginTop = `${el('.playback-toolbar').offsetHeight + 16}px`
+      panel.style.scrollMarginTop = `${el('.run-primary-actions').offsetHeight + 16}px`
       panel.scrollIntoView({ behavior: 'smooth', block: 'start' })
       try {
         await runPrecisionSweep({

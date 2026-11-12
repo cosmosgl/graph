@@ -43,7 +43,7 @@ export function readRoute (): AppRoute {
   return {
     kind: 'experiment',
     experimentId: decodeURIComponent(segments[0]),
-    // Retain old in-page Run bookmarks after base experiment routes become Overview.
+    // Retain the old Run/Evidence routes and in-page Run bookmarks as aliases.
     view: segments[1] === 'run' || (segments.length === 1 && legacyRun)
       ? 'run'
       : segments[1] === 'evidence' ? 'evidence' : undefined,
@@ -52,8 +52,6 @@ export function readRoute (): AppRoute {
       : undefined,
   }
 }
-
-export function runHref (experimentId: string): string { return `#/${encodeURIComponent(experimentId)}/run` }
 
 export function vocabularyHref (): string {
   return '#/vocabulary'
@@ -70,6 +68,10 @@ export function conceptHref (conceptId: string): string {
 export function experimentHref (experimentId: string, pageId?: string): string {
   const root = `#/${encodeURIComponent(experimentId)}`
   return pageId ? `${root}/docs/${encodeURIComponent(pageId)}` : root
+}
+
+export function runHref (experimentId: string): string {
+  return experimentHref(experimentId)
 }
 
 export function roadmapHref (): string {

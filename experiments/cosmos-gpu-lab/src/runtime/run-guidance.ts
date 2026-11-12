@@ -66,7 +66,7 @@ const guidance: Record<string, Guidance> = {
     radius: 'Point radius in simulation coordinates.',
     padding: 'Extra separation added to the point radii.',
     iterations: 'Repeated collision passes within each tick.',
-    arithmetic: 'Native or corrected collision arithmetic; CPU tolerance stays unchanged.',
+    arithmetic: 'Targeted correction fixes distance and contribution rounding. CPU tolerance stays unchanged.',
     centerReduction: 'Center-sum implementation used before collision in combined mode.',
     cooling: 'Scale collision strength by alpha raised to this exponent. Zero keeps collision strength fixed.',
     coolingTicks: 'Use fixed alpha or choose the number of ticks in the cooling schedule.',

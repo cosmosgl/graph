@@ -10,21 +10,23 @@ remaining gaps and the evidence needed for a production switch.
 The homepage opens with the current milestone, demonstrated successes and their scope, main blockers,
 and the next acceptance gate before the experiment catalog. All four sections stay expanded. The
 current focus is editorial data in `research.ts`; conclusions, criteria and blockers reuse the same
-records as experiment Overview and Roadmap. The complete milestone table and checklists remain on
+records as experiment pages and Roadmap. The complete milestone table and checklists remain on
 Roadmap, linked from the homepage. Reviewed findings remain separate from this browser's live run.
 
-Every experiment uses
-**Overview / Run / Method / Evidence** navigation. Overview states the question, current finding,
-scope and next gate. Run opens the live comparison. Method keeps technical topics and the comparison
-contract visible. Evidence labels current, supporting, historical and parked studies; experiments
-without a published matrix say so explicitly. Existing article URLs and old Run section bookmarks
-remain valid. Documentation visits preserve one paused run; another experiment or Home releases it.
-Run uses visible Configuration, Run, Results and Diagnostics sections. Long articles have
-route-preserving section links and visible contents navigation. Full-text search remains follow-up work.
+Every experiment uses a continuous page: question and current finding, live visualization,
+expanded settings, live results, explanation, recorded findings and diagnostics. Wide screens put
+settings beside the graph; narrow screens show the graph first. One contents list links to visible
+sections. The latest recorded article is readable on the page; earlier investigations and technical
+articles stay linked. Experiments without a published measurement matrix say so explicitly.
+Article pages use a return link and their own contents, without stacked experiment/topic tabs.
+Existing `/run`, `/evidence`, article URLs and Run section bookmarks continue to work. Consulting
+an article preserves one paused experiment; another experiment or Home releases it. Mobile pages use
+compact catalog, roadmap and learning links instead of a horizontal strip of experiment titles.
+All content stays expanded. Full-text search remains follow-up work.
 
 Use the **Validation workflow** (`#/validation-workflow`) and **Numerical research**
 (`#/numerical-research`) for reference roles, source-backed precision findings and acceptance policy.
-Every experiment has a **Validation contract** page under Method describing its question, reference, gates,
+Every experiment has a **Validation contract** technical article describing its question, reference, gates,
 checked population and limits. The contract is not a live verdict.
 
 ## Run
@@ -199,16 +201,17 @@ their separate meanings.
 
 ### Experiment navigation
 
-`src/app/research.ts` and `research-catalog.ts` hold reviewed editorial findings and explicit
-Method/Evidence assignments. Add a summary, primary Method page, optional additional Method topics,
-and an investigation list when adding an experiment. Describe its actual comparison paths: a
-WebGPU-only grid or resource study must not inherit a WebGL/WebGPU/CPU trajectory claim.
-The registry rejects unknown pages, missing assessments and documents absent from both destinations.
-An empty investigation list means no recorded matrix is published; local runs do not populate it.
+`src/app/research.ts` and `research-catalog.ts` hold reviewed findings, technical article links,
+and earlier investigations. Add a summary, primary method article, any related articles and an
+investigation list when adding an experiment. Describe its actual comparison paths: a WebGPU-only
+grid or resource study must not inherit a WebGL/WebGPU/CPU trajectory claim. The registry rejects
+unknown pages, missing assessments and unreachable documents. An empty investigation list means
+no recorded matrix is published; local runs do not populate it.
 
-Base routes (`#/experiment`) open Overview; `#/experiment/run` opens Run. Existing `docs/page` URLs
-remain unchanged. Legacy base routes with a `?section=run-…` bookmark still open and focus Run.
-Overview, Method and Evidence retain the same paused instance, controls, canvas and results.
+Base routes (`#/experiment`) open the live experiment and its visible notes. Old `/run` routes
+resolve to the same page; `/evidence` resolves to its Recorded findings section. Existing `docs/page`
+URLs remain unchanged. Section jumps preserve the running instance; article visits pause it and
+retain the same controls, canvas, tick and results for the return trip.
 
 The learning guide lives in `src/docs/learn-webgpu.md`; its small interactive examples live in
 `src/app/learning-examples.ts`. An `example` fence contains a registered example name, such as

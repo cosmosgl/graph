@@ -101,7 +101,7 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
 
       <p class="demo-note"
       data-run-part="explanation">
-        Red square = GPU-computed center. Timing includes upload, execution, synchronization,
+        Yellow square = GPU-computed center. Timing includes upload, execution, synchronization,
         readback and drawing; use the Results and Performance sections for interpretation.
       </p>
     </section>
@@ -203,7 +203,7 @@ export async function createCenterMassExperiment (host: HTMLElement): Promise<Ex
     isPlaying = !isPlaying
     playButton.textContent = isPlaying ? 'Pause' : 'Play'
     playButton.setAttribute('aria-pressed', String(isPlaying))
-    if (isPlaying) element<HTMLElement>(host, '.center-mass-demo').scrollIntoView({ block: 'start' })
+    if (isPlaying) element<HTMLElement>(host, '.run-primary-actions').scrollIntoView({ block: 'start' })
     schedulePlay()
   })
   resetButton.addEventListener('click', () => {

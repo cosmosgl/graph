@@ -313,7 +313,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
       return
     }
     if (busy || backends.length === 0) return
-    element<HTMLElement>(host, '.simulation-preview').scrollIntoView({ block: 'start' })
+    element<HTMLElement>(host, '.run-primary-actions').scrollIntoView({ block: 'start' })
     playing = true
     status.textContent = 'Running fixed 1/60-second simulation steps. Both methods advance one tick together.'
     controls()

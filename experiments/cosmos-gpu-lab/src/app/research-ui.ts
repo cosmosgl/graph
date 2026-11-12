@@ -59,52 +59,12 @@ export function renderMigrationOverview (host: HTMLElement, detailed = false): v
   }
 }
 
-export function renderResearchOverview (host: HTMLElement, experiment: ExperimentDefinition, record: ResearchSummary): void {
-  const contract = validationContracts[experiment.id]
-  host.innerHTML = `<section class="research-overview">
-    <p class="research-meta">Research assessment · reviewed ${record.reviewed}</p><h2>Current finding</h2>
-    <p class="research-conclusion">${record.conclusion}</p>
-    <div class="research-actions"><a class="button-link" href="${runHref(experiment.id)}">Open run</a>
-      <a href="${experimentHref(experiment.id, record.method)}">Read the method</a>
-      <a href="${record.evidence ? experimentHref(experiment.id, record.evidence) : `#/${experiment.id}/evidence`}">
-        ${record.evidence ? 'Inspect current evidence' : 'Evidence status'}</a></div>
-    <dl class="research-summary"><div><dt>Scope</dt><dd>${record.scope}</dd></div>
-      <div><dt>Next unresolved question</dt><dd>${record.next}</dd></div></dl>
-    <p class="demo-note">${record.variant} · <a href="#/roadmap?section=milestone-${record.milestone}">${record.milestone} milestone</a></p>
-    <p class="comparison-rail">${record.comparison}</p>
-    <h3>Reproduce</h3><p>${record.reproduce}</p>
-    <section class="research-contract"><h3>Comparison contract</h3><p>${contract.reference}</p>
-      <a href="${experimentHref(experiment.id, record.method)}?section=reference">Reference, acceptance and limits in Method →</a>
-    </section></section>`
-}
-
-export function renderEvidenceIndex (host: HTMLElement, experiment: ExperimentDefinition, record: ResearchSummary): void {
-  const order = ['Current evidence', 'Supporting investigation', 'Historical baseline', 'Superseded', 'Parked']
-  const investigations = record.investigations.slice().sort((a, b) => order.indexOf(a.state) - order.indexOf(b.state))
-  host.innerHTML = `<section class="evidence-index"><p class="research-meta">
-    ${investigations.length ? 'Recorded research' : 'Evidence status'} · reviewed ${record.reviewed} · separate from the current run</p>
-    <h2>Evidence and investigation history</h2><p>${record.conclusion}</p>
-    <p>${record.scope}</p><p class="demo-note">${record.variant}.${investigations.length
-  ? ' Each article identifies its measurement date or marks it as not recorded.'
-  : ''}</p>
-    ${investigations.length
-    ? `<ul>${investigations.map(item => {
-      const page = experiment.pages.find(page => page.id === item.page)!
-      return `<li><span class="evidence-state">${item.state}</span><h3><a href="${experimentHref(experiment.id, item.page)}">${page.title}</a></h3>
-      <p>${item.description}</p>${item.replacement ? `<a href="${experimentHref(experiment.id, item.replacement)}">Current conclusion →</a>` : ''}</li>`
-    }).join('')}</ul>`
-    : `<p>No recorded measurement matrix is published for this experiment yet.</p>
-    <p>Run results describe this browser session. Reproduce the comparison and export measurements locally;
-      completing a run does not create a published finding or approve the migration.</p>
-    <a href="${runHref(experiment.id)}">Open run</a> · <a href="${experimentHref(experiment.id, record.method)}">Read the method</a>`}</section>`
-}
-
 export function renderInvestigationContext (host: HTMLElement, experiment: ExperimentDefinition, record: ResearchSummary, pageId: string): void {
   const item = record.investigations?.find(item => item.page === pageId)
   if (!item || !['Historical baseline', 'Superseded', 'Parked'].includes(item.state)) return
   const note = document.createElement('aside'); note.className = 'investigation-context'
-  note.setAttribute('aria-label', 'Evidence status')
-  note.innerHTML = `<p class="research-meta">${item.state}</p>
+  note.setAttribute('aria-label', 'Recorded finding context')
+  note.innerHTML = `<p class="research-meta">${item.state === 'Parked' ? 'Unresolved investigation' : 'Earlier result'}</p>
     <p>${item.description}</p>
     ${item.page !== record.evidence
     ? `<a href="${experimentHref(experiment.id, item.replacement ?? record.evidence)}">Current conclusion →</a>`
