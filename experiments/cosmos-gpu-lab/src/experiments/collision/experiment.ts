@@ -7,6 +7,7 @@ export const experiment = defineExperiment({
   create: async host => (await import('./view')).createCollisionView(host),
   pages: [
     { kind: 'markdown', id: 'method', title: 'How collision works', load: async (): Promise<string> => (await import('./method.md?raw')).default },
+    { kind: 'markdown', id: 'trajectories', title: 'Independent layouts', load: async (): Promise<string> => (await import('./trajectories.md?raw')).default },
     { kind: 'markdown', id: 'findings', title: 'Findings', load: async (): Promise<string> => (await import('./findings.md?raw')).default },
   ],
 })

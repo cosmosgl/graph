@@ -42,7 +42,7 @@ implementation and comparison. These are evidence levels, not a percentage of th
 | Large reductions | **Demonstrated:** hierarchical reduction with GPU-resident inputs and results | Validate every required aggregation, including cluster centers and bounds |
 | Circle point rendering | **Demonstrated:** matched WebGL sprites and WebGPU instanced circles | Complete shapes, strokes, images, transitions and render-order behavior |
 | Spatial indexing | **Demonstrated:** count/scan/scatter with variable cell occupancy | Establish production bounds, capacity, update and memory policies |
-| Local interaction and integration | **Partial:** CPU-validated local forces and exact [collision constraints](#/collision), including a resident fix for the observed dense center sensitivity | Large-graph collision, independently evolving collision trajectories and full scheduling |
+| Local interaction and integration | **Partial:** CPU-validated local forces and exact [collision constraints](#/collision), including a resident center fix and independently evolving comparisons | Native-collision composition failure, trajectory parity, large-graph collision and full scheduling |
 | Global many-body force | **Partial:** exact/hierarchical forces, the production cutoff and resident composition have bounded checks through 8,192 points | Adaptive sampling, scalable construction, production defaults, wider quality and cross-device cost |
 | Link forces and graph topology | **Partial:** ordered springs, directional CSR, resident composition and state-preserving replacement | Default-length trajectories, broader parameters, large multi-hub cost and remaining force composition |
 | Complete rendering and interaction | **Partial:** circles and minimal straight links read GPU-resident state | Full point/link styling, picking, hover, drag, selection, tracking and overlays |
@@ -188,8 +188,21 @@ isolated case. Four collision passes at 512 dense points add roughly 0.84–0.93
 WebGPU frame. Single-pass deltas are noisier; the failing WebGL controls cannot supply accepted costs.
 Numerical accuracy, remaining overlap and frame cost stay separate acceptance questions.
 
-Next collision evidence includes independently evolving trajectories and the production hash/slot path above
-4,096 points. Broader data and weights, scalable hierarchy construction,
+The [independent collision study](#/collision/docs/trajectories) now covers 1,700 ticks per GPU across chain,
+communities, star and semantic controls. WebGPU passes 1,699 tick gates; WebGL passes 1,589. Corrected WebGPU
+center stages remain locally exact throughout the 1,600 combined ticks. Independent coordinates still exceed
+the original tolerance in all larger combined fixtures. Cooled dense runs have similar radius/stress and
+smaller motion, with WebGPU raw drift of about 23%, 28% and 138% of CPU radius for chain, communities and star.
+Those descriptive scores do not waive the raw-coordinate failures.
+
+The cooled dense star adds a replayable WebGPU whole-tick failure at tick 5: two coordinates, maximum error
+0.131958. Its first difference appears in native collision, after exact local agreement through both spring
+stages. A strict-collision control passes the reconstructed same-input tick at unchanged gates. A focused
+collision arithmetic correction is the next acceptance step; strict whole-trajectory parity and affordable
+production precision remain unproven. The 26 recorded failure replays reproduce and restore live state.
+
+Further collision evidence includes the production hash/slot path above 4,096 points.
+Broader data and weights, scalable hierarchy construction,
 allocation policy, remaining forces, renderer/interaction contracts and native portability remain open.
 
 ## 3. What the experiments tell us about Cosmos
@@ -531,7 +544,7 @@ performance and memory meet the target budgets; supported devices are tested; an
 | Further performance work | Stable cell membership and occupancy-dependent routing | Can CSR/sorting remove full-source scans without changing addition order or regressing sparse inputs? |
 | Demonstrated in a bounded slice | [Production settings](#/layout-acceptance/docs/production) | Staged sampling/variation controls, state-preserving cutoff changes and selected 5,000-tick adaptive runs pass unchanged checks |
 | Next acceptance step | Matched production WebGL and independent layout quality | How do identical inputs, random samples and sampling decisions compare, and do layouts retain useful geometry over long schedules? |
-| Next simulation features | Center attraction, then remaining forces | Do grouped reductions, attractors and collision preserve their production order and behavior? |
+| Next simulation features | Bounded center/collision composition, then remaining forces | Resolve native collision's cooled composition failure; validate grouped reductions, attractors and mouse forces in production order |
 | Next scaling step | Adaptive samples and parallel hierarchy construction | Can the same approximation scale without serial dense-cell work? |
 | Demonstrated in a bounded slice | [Point-count changes and buffer cleanup](#/point-capacity/docs/findings) | Surviving records transfer on the GPU; same devices and count-dependent footprints survive repeated cycles |
 | Demonstrated in a bounded slice | [Retained capacity and kernel reuse](#/point-capacity/docs/reuse) | In-capacity updates are cheaper locally; more idle memory is retained and GPU-frame timings remain order-sensitive |

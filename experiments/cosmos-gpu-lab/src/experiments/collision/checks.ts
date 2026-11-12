@@ -44,9 +44,12 @@ export function expectedTick (oracle: ReturnType<typeof createOracle>, stages: r
   return result
 }
 export async function evaluate (
-  backend: CombinedBackend, oracle: ReturnType<typeof createOracle>, stages: readonly Stage[], start: Float32Array, alpha: number
+  backend: CombinedBackend, oracle: ReturnType<typeof createOracle>, stages: readonly Stage[], start: Float32Array, alpha: number, uploadStart = true
 ): Promise<{ gate: Gate; actual: Snapshot; expected: Snapshot; failure?: Failure }> {
-  backend.setPositions(start); let previous = start; const checks: Check[] = []; let failure: Failure | undefined
+  // Independent trajectories already have their own previous output resident.
+  // Uploads are reserved for shared-input controls and explicit failure replay.
+  if (uploadStart) backend.setPositions(start)
+  let previous = start; const checks: Check[] = []; let failure: Failure | undefined
   let actual: Snapshot = { positions: start, forces: new Float32Array(start.length) }
   for (const stage of stages) {
     const expected = oracle.stage(stage, previous, alpha, 0)

@@ -1,6 +1,6 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { collisionView } from './camera'
-import { FIXTURES, COLLISION, overlap, radius, type Settings } from './data'
+import { FIXTURES, TOPOLOGIES, COLLISION, overlap, radius, type Settings } from './data'
 import { createCollisionSession, type CollisionSession } from './session'
 import { COST_POLICY, collisionCostSummary, measureCollisionCost } from './timing'
 const NAMES = ['webgl', 'webgpu', 'cpu'] as const
@@ -8,14 +8,19 @@ const LABELS = { webgl: 'Production GLSL · WebGL', webgpu: 'luma WebGPU', cpu: 
 const num = (n: number | undefined | null): string => n === null || n === undefined ? '—' : n.toExponential(2)
 const ms = (n: number | null): string => n === null ? '—' : n.toFixed(3)
 export async function createCollisionView (host: HTMLElement): Promise<ExperimentInstance> {
-  host.innerHTML = `<p class="demo-note">Collision separates overlapping discs. Each validated tick starts all three paths from the same CPU input.
-    Try the isolated constraint first, then include gravity, center attraction, repulsion and springs.</p>
+  host.innerHTML = `<p class="demo-note">Collision separates overlapping discs. Compare shared CPU inputs or let WebGL, WebGPU and CPU evolve independently.
+    Tick checks and accumulated trajectory differences use the same unchanged tolerances.</p>
     <div class="scale-toolbar">
       <label>Fixture <select data-control="fixture">${FIXTURES.map(f => `<option${f === 'uniform' ? ' selected' : ''}>${f}</option>`).join('')}</select></label>
       <label>Points <select data-control="count">${[2, 8, 32, 128, 512, 1024]
     .map(n => `<option${n === 128 ? ' selected' : ''}>${n}</option>`).join('')}</select></label>
       <label>Workload <select data-control="mode"><option value="collision">Collision only</option>
         <option value="combined">Combined forces</option></select></label>
+      <label>Evolution <select data-control="evolution"><option value="shared">Shared CPU input per tick</option>
+        <option value="independent">Independent layouts</option></select></label>
+      <label>Topology <select data-control="topology">${TOPOLOGIES.map(t => `<option>${t}</option>`).join('')}</select></label>
+      <label>Alpha schedule <select data-control="coolingTicks"><option value="0">Fixed alpha</option>
+        <option value="100">Cool over 100 ticks</option><option value="300">Cool over 300 ticks</option></select></label>
       <label>Passes per tick <select data-control="iterations"><option>1</option><option>2</option><option>4</option></select></label>
       <label>Collision arithmetic (WebGPU) <select data-control="arithmetic"><option value="native">Native f32</option>
         <option value="strict">Strict reference</option></select></label>
@@ -36,6 +41,7 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
     </div></details>
     <div class="demo-toolbar playback-toolbar"><div class="controls">
       <button data-action="step" class="button-primary">Step + validate</button><button data-action="run">100 validated ticks</button>
+      <button data-action="schedule" disabled>Run cooling schedule</button>
       <button data-action="stop" disabled>Stop</button><button data-action="reset">Reset</button>
       <button data-action="replay" disabled>Replay failures</button><button data-action="cost">Measure added GPU cost</button>
       <button data-action="center-cost" disabled>Compare center precision cost</button>
@@ -47,12 +53,15 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       <canvas width="480" height="340" data-canvas="${name}" aria-label="${LABELS[name]} collision discs"></canvas>
       <p class="demo-note" data-info="${name}"></p></article>`).join('')}</div></section>
     <p class="demo-note" data-output="pipeline"></p>
+    <div class="many-body-results" data-output="trajectory"></div>
+    <div class="trajectory-chart" data-output="charts"></div>
     <div class="many-body-results" data-output="center"></div>
     <div class="many-body-results" data-output="overlap"></div><div class="many-body-results" data-output="checks"></div>
     <div class="many-body-results" data-output="cost"></div>
     <p class="demo-note">Exact all-pairs collision, limited to small graphs. Discs show effective world-space radii; orange centers are pinned.
       Validation includes readback and CPU work. Use the paired GPU measurement for cost, not the elapsed validation time.
-      <a href="#/collision/docs/method">Method and scope</a> · <a href="#/collision/docs/findings">Findings</a>.</p>`
+      <a href="#/collision/docs/method">Method and scope</a> · <a href="#/collision/docs/trajectories">Independent findings</a> ·
+      <a href="#/collision/docs/findings">Center-correction findings</a>.</p>`
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
   const control = (name: string): HTMLSelectElement => el(`[data-control="${name}"]`)
   const canvas = (name: string): HTMLCanvasElement => el(`[data-canvas="${name}"]`)
@@ -62,9 +71,14 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
     host.querySelectorAll<HTMLButtonElement | HTMLSelectElement>('button,select').forEach(c => { c.disabled = busy })
     el<HTMLButtonElement>('[data-action="stop"]').disabled = !busy
     el<HTMLButtonElement>('[data-action="export"]').disabled = busy || !session || (!session.report.rows.length && !session.report.cost)
-    el<HTMLButtonElement>('[data-action="replay"]').disabled = busy || !Object.keys(session?.report.failures ?? {}).length
+    el<HTMLButtonElement>('[data-action="replay"]').disabled = busy ||
+      (!Object.keys(session?.report.failures ?? {}).length && !Object.keys(session?.report.trajectoryFailures ?? {}).length)
     el<HTMLButtonElement>('[data-action="center-cost"]').disabled = busy || control('mode').value !== 'combined'
+    const finished = !!session?.settings.coolingTicks && session.report.rows.length >= session.settings.coolingTicks
+    for (const action of ['step', 'run']) el<HTMLButtonElement>(`[data-action="${action}"]`).disabled = busy || finished
+    el<HTMLButtonElement>('[data-action="schedule"]').disabled = busy || finished || !Number(control('coolingTicks').value)
     control('count').disabled = busy || ['pair', 'masks'].includes(control('fixture').value)
+    control('topology').disabled = busy || control('mode').value !== 'combined'
   }
   const render = (): void => {
     if (!session || destroyed) return
@@ -90,9 +104,11 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
     el('[data-output="tick"]').textContent = String(report.rows.length)
     el('[data-output="pipeline"]').textContent = `${settings.mode === 'combined'
       ? 'Gravity → center → exact repulsion → incoming springs → outgoing springs → collision'
-      : 'Collision'} · ${settings.collision.iterations} collision pass(es) per tick · friction 1 for collision · alpha ${settings.alpha}, fixed · ` +
+      : 'Collision'} · ${settings.collision.iterations} collision pass(es) per tick · friction 1 for collision · alpha ${session.alpha().toPrecision(3)}, ` +
+      `${settings.coolingTicks ? `cooling over ${settings.coolingTicks} ticks` : 'fixed'} · ` +
       `cooling exponent ${settings.collision.cooling} · radius ${settings.collision.radius || 'size / 2'} + padding ${settings.collision.padding}.${
-        settings.mode === 'combined' ? ` WebGPU center: ${settings.centerReduction ?? 'high-low'}.` : ''}`
+        settings.mode === 'combined' ? ` ${settings.topology} topology; WebGPU center: ${settings.centerReduction ?? 'high-low'}.` : ''} ${
+        settings.evolution === 'independent' ? 'Independent GPU/CPU positions between ticks; no shared-state reset.' : 'Shared CPU input per tick.'}`
     for (const name of NAMES) {
       const errors = name === 'cpu' ? undefined : report.errors[name]
       const failed = name === 'cpu' ? 0 : report.rows.filter(r => r.checks[name]?.valid === false).length
@@ -100,11 +116,60 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
         ? 'Unavailable / stopped'
         : name === 'cpu'
           ? 'Independent oracle'
-          : failed ? `${failed} failed ticks` : `${report.rows.filter(r => r.checks[name]?.valid).length} ticks pass`
+          : `${report.rows.filter(r => r.checks[name]?.valid).length}/${report.rows.length} tick checks`
       el(`[data-info="${name}"]`).textContent = errors ?? (name === 'cpu'
         ? 'Stepwise float32 arithmetic · Canvas2D preview'
-        : report.devices[name] ?? 'Unavailable')
+        : `${report.devices[name] ?? 'Unavailable'} · ${failed} failed tick checks · ` +
+          `${report.rows.filter(r => r.trajectory[name]?.valid).length}/${report.rows.length} trajectory checks vs CPU pass`)
     }
+    el('[data-output="trajectory"]').innerHTML = row
+      ? `<table><caption>Tick ${row.tick} · ${settings.evolution === 'independent' ? 'independent trajectories' : 'shared-input outputs'}</caption>
+      <thead><tr><th>Path</th><th>Tick checks pass</th><th>Trajectory checks pass</th><th>Raw RMS drift / CPU radius</th>
+      <th>Aligned RMS / CPU radius</th></tr></thead><tbody>
+      ${NAMES.map(name => {
+    const m = row.metrics[name]
+    return `<tr><td>${LABELS[name]}</td>
+      <td>${name === 'cpu' ? 'Reference' : `${report.rows.filter(r => r.checks[name]?.valid).length}/${report.rows.length}`}</td>
+      <td>${name === 'cpu' ? 'Reference' : `${report.rows.filter(r => r.trajectory[name]?.valid).length}/${report.rows.length}`}</td>
+      <td>${m?.normalizedDrift === null || m?.normalizedDrift === undefined ? '—' : `${(100 * m.normalizedDrift).toFixed(3)}%`}</td>
+      <td>${m && row.metrics.cpu?.shape.radius ? `${(100 * m.alignedRms / row.metrics.cpu.shape.radius).toFixed(3)}%` : '—'}</td></tr>`
+  }).join('')}</tbody></table>
+      <table><caption>Layout geometry · descriptive metrics</caption><thead><tr><th>Path</th><th>Motion RMS</th>
+      <th>Layout radius</th><th>Stress RMS</th><th>Finite</th></tr></thead><tbody>
+      ${NAMES.map(name => {
+    const m = row.metrics[name]
+    return `<tr><td>${LABELS[name]}</td><td>${num(m?.motion.rms)}</td><td>${num(m?.shape.radius)}</td>
+      <td>${num(m?.stress.rms)}</td><td>${m ? m.shape.finite ? 'Yes' : 'NO' : '—'}</td></tr>`
+  }).join('')}</tbody></table>
+      <p class="demo-note">Tick checks compare each GPU step with the CPU calculation from that GPU’s own input.
+      Trajectory checks compare accumulated raw coordinates with the independently evolving CPU at the original position tolerance.
+      Drift, motion, stress and overlap are separate observations; they never waive a failed coordinate gate.
+      Alignment removes translation and rotation only; numerical gates use raw coordinates.
+      All paths share the initial graph, fixed random samples and alpha schedule.
+      ${settings.evolution === 'shared' ? 'Shared-input mode resets both GPUs each tick.' : ''}</p>`
+      : ''
+    const colors = { webgl: '#e7b882', webgpu: '#9fb5d5', cpu: '#c7b1e0' }
+    const charts = [
+      { title: 'RMS drift from CPU · world units', value: (r: typeof row, name: typeof NAMES[number]): number | undefined => r?.metrics[name]?.drift.rms },
+      {
+        title: 'Maximum penetration · world units',
+        value: (r: typeof row, name: typeof NAMES[number]): number | undefined => r?.overlap[name]?.maxPenetration,
+      },
+    ]
+    el('[data-output="charts"]').innerHTML = row
+      ? `<p>${NAMES.map(n => `<span style="color:${colors[n]}">${LABELS[n]}</span>`).join(' · ')}</p>${charts.map(chart => {
+        const values = report.rows.flatMap(r => NAMES.map(n => chart.value(r, n))).filter((v): v is number => v !== undefined && Number.isFinite(v))
+        const max = Math.max(1e-12, ...values)
+        return `<h3>${chart.title}</h3><svg viewBox="0 0 720 170" role="img" aria-label="${chart.title} over ${row.tick} ticks">
+        <path d="M60 20 V135 H690" stroke="currentColor" opacity="0.3" fill="none"/>
+        <text x="0" y="24" fill="currentColor" font-size="11">${num(max)}</text><text x="45" y="139" fill="currentColor" font-size="11">0</text>
+        <text x="60" y="160" fill="currentColor" font-size="11">Tick 1</text><text x="630" y="160" fill="currentColor" font-size="11">Tick ${row.tick}</text>
+        ${NAMES.map(n => `<polyline fill="none" stroke="${colors[n]}" stroke-width="1.5" points="${report.rows.flatMap(r => {
+    const v = chart.value(r, n)
+    return v !== undefined && Number.isFinite(v) ? [`${60 + (r.tick - 1) / Math.max(1, row.tick - 1) * 630},${135 - v / max * 110}`] : []
+  }).join(' ')}"/>`).join('')}</svg>`
+      }).join('')}`
+      : ''
     el('[data-output="center"]').innerHTML = settings.mode === 'combined' && report.rows.length
       ? `<table><caption>Center precision · maximum absolute error across ${report.rows.length} validated ticks</caption>
       <thead><tr><th>Path</th><th>Position sum / count</th><th>Force</th><th>Integrated position</th></tr></thead><tbody>
@@ -122,7 +187,7 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
     return `<tr><td>${LABELS[name]}</td><td>${metric?.pairs ?? '—'}</td><td>${metric?.pinnedPairs ?? '—'}</td><td>${num(metric?.maxPenetration)}</td></tr>`
   }).join('')}</tbody></table>`
     el('[data-output="checks"]').innerHTML = row
-      ? `<table><caption>Tick ${row.tick} · unchanged CPU gates</caption>
+      ? `<table><caption>Tick ${row.tick} · unchanged CPU gates from each GPU’s starting state</caption>
       <thead><tr><th>Path / stage</th><th>Force failures</th><th>Position failures</th><th>Flags exact</th><th>Result</th></tr></thead><tbody>
       ${(['webgl', 'webgpu'] as const).map(api => `${(row.checks[api]?.stages ?? []).map((check, i) => `<tr><td>${LABELS[api]} · ${i + 1}. ${check.stage}</td>
         <td>${check.forces.failures}</td>
@@ -130,7 +195,9 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
         <td>${check.flagsExact ? 'Yes' : 'No'}</td>
         <td>${check.valid ? 'Pass' : 'FAIL'}</td></tr>`).join('')
   }<tr><td>${LABELS[api]} · whole tick</td><td>—</td><td>${row.checks[api]?.whole.failures ?? '—'}</td><td>Included</td>
-        <td>${row.checks[api]?.whole.valid ? 'Pass' : row.checks[api] ? 'FAIL' : 'Unavailable'}</td></tr>`).join('')}
+        <td>${row.checks[api]?.whole.valid ? 'Pass' : row.checks[api] ? 'FAIL' : 'Unavailable'}</td></tr>
+      <tr><td>${LABELS[api]} · trajectory vs CPU</td><td>—</td><td>${row.trajectory[api]?.failures ?? '—'}</td><td>Included</td>
+      <td>${row.trajectory[api]?.valid ? 'Pass' : row.trajectory[api] ? 'FAIL' : 'Unavailable'}</td></tr>`).join('')}
       <tr><td>WebGPU vs WebGL positions</td><td>—</td><td>${row.cross?.failures ?? '—'}</td><td>Included</td>
       <td>${row.cross?.valid ? 'Pass' : row.cross ? 'FAIL' : 'Unavailable'}</td></tr></tbody></table>`
       : ''
@@ -140,10 +207,21 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
         `${check.positions.failures} position, ${check.aggregate?.failures ?? 0} aggregate${check.flagsExact ? '' : ', flags differ'}`).join('; ')
       return [`<tr><td>${LABELS[api]}</td><td>${r.tick}</td><td>${stages || 'All local gates pass'}</td><td>${gate.whole.failures}</td></tr>`]
     }))
+    const trajectoryFailures = Object.entries(report.trajectoryFailures)
+    if (trajectoryFailures.length) {
+      el('[data-output="trajectory"]').insertAdjacentHTML('beforeend', `<table><caption>First accumulated trajectory difference · retained for replay</caption>
+      <thead><tr><th>Path</th><th>Tick</th><th>Alpha</th><th>Coordinate failures</th><th>Max error</th></tr></thead><tbody>
+      ${trajectoryFailures.map(([api, capture]) => {
+    const gate = report.rows[capture.tick - 1].trajectory[api as 'webgl' | 'webgpu']!
+    return `<tr><td>${LABELS[api as 'webgl' | 'webgpu']}</td><td>${capture.tick}</td><td>${num(capture.alpha)}</td>
+      <td>${gate.failures}</td><td>${num(gate.maxError)}</td></tr>`
+  }).join('')}</tbody></table>`)
+    }
     if (failures.length) {
-      el('[data-output="checks"]').insertAdjacentHTML('afterbegin', `<table><caption>Failed ticks · retained across the run</caption>
+      el('[data-output="checks"]').insertAdjacentHTML('afterbegin', `<details><summary>Tick failure history · ${failures.length} entries</summary>
+      <table><caption>Failed ticks · retained across the run</caption>
       <thead><tr><th>Path</th><th>Tick</th><th>Local stage failures</th><th>Whole-tick position failures</th></tr></thead>
-      <tbody>${failures.join('')}</tbody></table>`)
+      <tbody>${failures.join('')}</tbody></table></details>`)
     }
     if (row && Object.values(row.checks).some(gate => gate.stages.some(check => check.absentSpringTargets > 0))) {
       const note = document.createElement('p'); note.className = 'demo-note'
@@ -196,6 +274,9 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       fixture: control('fixture').value as Settings['fixture'],
       count: Number(control('count').value),
       mode: control('mode').value as Settings['mode'],
+      evolution: control('evolution').value as Settings['evolution'],
+      topology: control('topology').value as Settings['topology'],
+      coolingTicks: Number(control('coolingTicks').value),
       arithmetic: control('arithmetic').value as Settings['arithmetic'],
       centerReduction: control('centerReduction').value as Settings['centerReduction'],
       alpha: Number(control('alpha').value),
@@ -208,6 +289,7 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       : 'Ready. Step to validate each collision pass.'
   }
   const run = async (count: number): Promise<void> => {
+    if (session!.settings.coolingTicks) count = Math.min(count, session!.settings.coolingTicks - session!.report.rows.length)
     el('.playback-toolbar').scrollIntoView({ block: 'start' })
     for (let i = 0; i < count; i++) {
       if (stopped || destroyed) break
@@ -216,19 +298,23 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
     }
     if (destroyed) return
     const report = session!.report
-    const failures = report.rows.filter(r => !r.complete || !r.cross?.valid || Object.values(r.checks).some(c => !c.valid)).length
-    status.textContent = `${stopped ? 'Stopped' : 'Finished'} · ${report.rows.length} validated ticks · ${failures} failing/partial ticks. ` +
-      'Validation elapsed time is not GPU time.'
+    const failures = report.rows.filter(r => !r.complete || Object.values(r.checks).some(c => !c.valid)).length
+    const trajectoryFailures = report.rows.filter(r => Object.values(r.trajectory).some(c => !c.valid)).length
+    status.textContent = `${stopped ? 'Stopped' : 'Finished'} · ${report.rows.length} ${session!.settings.evolution} ticks · ` +
+      `${failures} ticks with local/whole failures · ${trajectoryFailures} ticks with trajectory differences. Validation elapsed time is not GPU time.`
   }
   host.querySelectorAll('select').forEach(c => c.addEventListener('change', () => { task(setup) }))
   el('[data-action="step"]').addEventListener('click', () => { task(async () => { await run(1) }) })
   el('[data-action="run"]').addEventListener('click', () => { task(async () => { await run(100) }) })
+  el('[data-action="schedule"]').addEventListener('click', () => {
+    task(async () => { await run(session!.settings.coolingTicks! - session!.report.rows.length) })
+  })
   el('[data-action="stop"]').addEventListener('click', () => { stopped = true })
   el('[data-action="reset"]').addEventListener('click', () => { task(setup) })
   el('[data-action="replay"]').addEventListener('click', () => {
     task(async () => {
       await session!.replay(); render()
-      status.textContent = session!.report.replays.map(r => `${r.api}: reproduced ${r.reproduced}, restored ${r.restored}`).join(' · ')
+      status.textContent = session!.report.replays.map(r => `${r.api} ${r.kind}: reproduced ${r.reproduced}, restored ${r.restored}`).join(' · ')
     })
   })
   for (const action of ['cost', 'center-cost']) {
@@ -236,7 +322,7 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       task(async () => {
         status.scrollIntoView({ block: 'nearest' })
         const current = session!
-        current.report.cost = await measureCollisionCost(current.settings, current.cpu(),
+        current.report.cost = await measureCollisionCost({ ...current.settings, alpha: current.alpha() }, current.cpu(),
           text => { if (!destroyed) status.textContent = text }, () => stopped || destroyed, COST_POLICY, current.report.rows.length,
           action === 'center-cost' ? 'center-reduction' : 'collision')
         if (!destroyed) {
