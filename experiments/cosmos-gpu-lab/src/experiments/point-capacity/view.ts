@@ -183,5 +183,5 @@ export async function createCapacityView (host: HTMLElement): Promise<Experiment
     setTimeout(() => URL.revokeObjectURL(url), 0)
   })
   await reset()
-  return { destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
+  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
 }

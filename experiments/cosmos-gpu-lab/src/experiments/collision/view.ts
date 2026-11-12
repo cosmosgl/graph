@@ -1,3 +1,4 @@
+import { organizeRunControls } from '../../runtime/run-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { collisionView } from './camera'
 import { FIXTURES, TOPOLOGIES, COLLISION, overlap, radius, type Settings } from './data'
@@ -8,7 +9,8 @@ const LABELS = { webgl: 'Production GLSL · WebGL', webgpu: 'luma WebGPU', cpu: 
 const num = (n: number | undefined | null): string => n === null || n === undefined ? '—' : n.toExponential(2)
 const ms = (n: number | null): string => n === null ? '—' : n.toFixed(3)
 export async function createCollisionView (host: HTMLElement): Promise<ExperimentInstance> {
-  host.innerHTML = `<p class="demo-note">Collision separates overlapping discs. Compare shared CPU inputs or let WebGL, WebGPU and CPU evolve independently.
+  host.innerHTML = `<section data-run-section="configuration"><p class="demo-note">Collision separates overlapping discs.
+    Compare shared CPU inputs or let WebGL, WebGPU and CPU evolve independently.
     Tick checks and accumulated trajectory differences use the same unchanged tolerances.</p>
     <div class="scale-toolbar">
       <label>Fixture <select data-control="fixture">${FIXTURES.map(f => `<option${f === 'uniform' ? ' selected' : ''}>${f}</option>`).join('')}</select></label>
@@ -25,8 +27,6 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       <label>Collision arithmetic (WebGPU) <select data-control="arithmetic"><option value="native">Native f32</option>
         <option value="targeted" selected>Targeted distance + contributions</option>
         <option value="strict">Strict reference</option></select></label>
-    </div>
-    <details class="advanced-controls"><summary>Radius, strength, cooling and center precision</summary><div class="scale-toolbar">
       <label>Center reduction (WebGPU) <select data-control="centerReduction"><option value="high-low">High/low sum · corrected</option>
         <option value="f32">Float32 tree · original control</option></select></label>
       <label>Radius <select data-control="radius"><option value="0">Size / 2 · variable</option>
@@ -39,7 +39,8 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
         <option>0.5</option>
         <option>1</option>
         <option>2</option></select></label>
-    </div></details>
+    </div></section>
+    <section data-run-section="run">
     <div class="demo-toolbar playback-toolbar"><div class="controls">
       <button data-action="step" class="button-primary">Step + validate</button><button data-action="run">100 validated ticks</button>
       <button data-action="schedule" disabled>Run cooling schedule</button>
@@ -54,17 +55,19 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       <div class="panel-heading"><h2>${LABELS[name]}</h2><span class="status" data-state="${name}">Preparing</span></div>
       <canvas width="480" height="340" data-canvas="${name}" aria-label="${LABELS[name]} collision discs"></canvas>
       <p class="demo-note" data-info="${name}"></p></article>`).join('')}</div></section>
-    <p class="demo-note" data-output="pipeline"></p>
+    <p class="demo-note" data-output="pipeline"></p></section>
+    <section data-run-section="results"><p class="demo-note">Live numerical checks and layout measurements. Recorded findings are under Evidence.</p>
     <div class="many-body-results" data-output="trajectory"></div>
     <div class="trajectory-chart" data-output="charts"></div>
     <div class="many-body-results" data-output="center"></div>
-    <div class="many-body-results" data-output="overlap"></div><div class="many-body-results" data-output="checks"></div>
+    <div class="many-body-results" data-output="overlap"></div><div class="many-body-results" data-output="checks"></div></section>
+    <section data-run-section="diagnostics">
     <div class="many-body-results" data-output="cost"></div>
     <p class="demo-note">Exact all-pairs collision, limited to small graphs. Discs show effective world-space radii; orange centers are pinned.
       Validation includes readback and CPU work. Use the paired GPU measurement for cost, not the elapsed validation time.
       <a href="#/collision/docs/method">Method and scope</a> · <a href="#/collision/docs/precision">Targeted findings</a> ·
       <a href="#/collision/docs/trajectories">Native baseline</a> ·
-      <a href="#/collision/docs/findings">Center-correction findings</a>.</p>`
+      <a href="#/collision/docs/findings">Center-correction findings</a>.</p></section>`
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
   const control = (name: string): HTMLSelectElement => el(`[data-control="${name}"]`)
   const canvas = (name: string): HTMLCanvasElement => el(`[data-canvas="${name}"]`)
@@ -85,6 +88,11 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
   }
   const render = (): void => {
     if (!session || destroyed) return
+    el('[data-live-settings]').textContent = `Live variant: ${session.settings.arithmetic ?? 'targeted'} collision, ` +
+      `${session.settings.mode === 'combined' ? 'combined forces' : 'collision only'}, ${session.settings.evolution} · ` +
+      `${session.settings.fixture}, ${session.settings.count} points, ` +
+      `${session.settings.collision.iterations} passes, ${
+        session.settings.coolingTicks ? `${session.settings.coolingTicks}-tick cooling.` : 'fixed alpha.'}`
     const { report, settings, graph } = session; const cpu = session.cpu(); const row = report.rows.at(-1)
     const view = collisionView([cpu, ...session.lanes.map(l => l.positions)], graph.sizes, settings.collision)
     for (const lane of session.lanes) {
@@ -222,10 +230,11 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
   }).join('')}</tbody></table>`)
     }
     if (failures.length) {
-      el('[data-output="checks"]').insertAdjacentHTML('afterbegin', `<details><summary>Tick failure history · ${failures.length} entries</summary>
+      el('[data-output="checks"]').insertAdjacentHTML('afterbegin', `<section class="visible-section">
+      <h3 class="visible-section-heading">Tick failure history · ${failures.length} entries</h3>
       <table><caption>Failed ticks · retained across the run</caption>
       <thead><tr><th>Path</th><th>Tick</th><th>Local stage failures</th><th>Whole-tick position failures</th></tr></thead>
-      <tbody>${failures.join('')}</tbody></table></details>`)
+      <tbody>${failures.join('')}</tbody></table></section>`)
     }
     if (row && Object.values(row.checks).some(gate => gate.stages.some(check => check.absentSpringTargets > 0))) {
       const note = document.createElement('p'); note.className = 'demo-note'
@@ -257,11 +266,11 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
     return `<tr><td>${LABELS[api]} · ${block + 1}</td><td>${summary.accepted ? 'Pass' : 'Rejected / incomplete'}</td>
       <td>${ms(summary.offMs)}</td><td>${ms(summary.onMs)}</td><td>${ms(summary.deltaMs)}</td>
       <td>${summary.range ? summary.range.map(ms).join(' … ') : '—'}</td><td>${summary.percent?.toFixed(1) ?? '—'}</td></tr>`
-  }).join('')).join('')}</tbody></table><details><summary>Inspect timing gates</summary>
+  }).join('')).join('')}</tbody></table><section class="visible-section"><h3 class="visible-section-heading">Timing gates</h3>
       <table><thead><tr><th>Path / control</th><th>Local stage gates</th><th>Whole-tick failures</th></tr></thead><tbody>
       ${cost.preflight.map(p => `<tr><td>${LABELS[p.api]} · ${p.enabled ? secondControl : firstControl}</td>
         <td>${p.gate.stages.every(check => check.valid) ? 'Pass' : 'FAIL'}</td>
-        <td>${p.gate.whole.failures}</td></tr>`).join('')}</tbody></table></details>
+        <td>${p.gate.whole.failures}</td></tr>`).join('')}</tbody></table></section>
       <p class="demo-note">Acceptance requires both scalar preflights, every timed-frame replay and valid queries, including warmups.
       Added cost is the median paired ${secondControl} − ${firstControl} difference; columns are separate medians. Inspect ranges for noise.
       ${precisionCost
@@ -351,6 +360,68 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
     const url = URL.createObjectURL(new Blob([serialized], { type: 'application/json' })); const link = document.createElement('a')
     link.href = url; link.download = 'cosmos-collision.json'; link.click(); URL.revokeObjectURL(url)
   })
+  organizeRunControls(host, ['replay', 'cost', 'center-cost', 'precision-cost'], [
+    {
+      name: 'recorded',
+      label: 'Recorded control',
+      values: {
+        fixture: 'clusters',
+        count: '512',
+        mode: 'combined',
+        evolution: 'independent',
+        topology: 'star',
+        coolingTicks: '300',
+        iterations: '4',
+        arithmetic: 'targeted',
+        centerReduction: 'high-low',
+        radius: '0',
+        padding: '0.25',
+        strength: '1',
+        alpha: '1',
+        cooling: '0',
+      },
+    },
+    {
+      name: 'simple',
+      label: 'Simple case',
+      values: {
+        fixture: 'uniform',
+        count: '128',
+        mode: 'collision',
+        evolution: 'independent',
+        topology: 'chain',
+        coolingTicks: '0',
+        iterations: '1',
+        arithmetic: 'targeted',
+        centerReduction: 'high-low',
+        radius: '0',
+        padding: '0.25',
+        strength: '1',
+        alpha: '1',
+        cooling: '0',
+      },
+    },
+    {
+      name: 'boundary',
+      label: 'Known boundary',
+      values: {
+        fixture: 'clusters',
+        count: '512',
+        mode: 'combined',
+        evolution: 'independent',
+        topology: 'star',
+        coolingTicks: '300',
+        iterations: '4',
+        arithmetic: 'native',
+        centerReduction: 'high-low',
+        radius: '0',
+        padding: '0.25',
+        strength: '1',
+        alpha: '1',
+        cooling: '0',
+      },
+    },
+  ], values => { task(async () => { for (const [name, value] of Object.entries(values)) control(name).value = value; await setup() }) })
   await task(setup)
-  return { destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
+  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
 }

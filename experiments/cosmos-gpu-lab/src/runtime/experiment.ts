@@ -1,5 +1,7 @@
 import { validationContractMarkdown } from './validation'
 export type ExperimentInstance = {
+  // Stop playback/sweeps at a safe boundary without discarding the current run.
+  pause?: () => void;
   destroy: () => void;
 }
 

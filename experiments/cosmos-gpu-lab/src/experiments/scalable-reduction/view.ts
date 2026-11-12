@@ -279,6 +279,10 @@ export async function createScalableReductionExperiment (
   await configure()
 
   return {
+    pause (): void {
+      isPlaying = false; window.clearTimeout(playTimer)
+      playButton.textContent = 'Play'; playButton.setAttribute('aria-pressed', 'false')
+    },
     destroy (): void {
       if (destroyed) return
       destroyed = true

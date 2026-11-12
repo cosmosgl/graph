@@ -7,43 +7,48 @@ export const experiment = defineExperiment({
   create: async host => (await import('./view')).createCombinedView(host),
   pages: [{
     kind: 'markdown',
+    id: 'method',
+    title: 'Comparison method',
+    load: async (): Promise<string> => (await import('./docs/method.md?raw')).default,
+  }, {
+    kind: 'markdown',
     id: 'findings',
-    title: 'Method and findings',
+    title: 'Initial convergence study',
     load: async (): Promise<string> => (await import('./docs/findings.md?raw')).default,
   }, {
     kind: 'markdown',
     id: 'checkpoints',
-    title: 'Larger graphs',
+    title: 'Checkpoint and replay validation',
     load: async (): Promise<string> => (await import('./docs/checkpoints.md?raw')).default,
   }, {
     kind: 'markdown',
     id: 'spring-precision',
-    title: 'Spring precision',
+    title: 'Early spring precision',
     load: async (): Promise<string> => (await import('./docs/spring-precision.md?raw')).default,
   }, {
     kind: 'markdown',
     id: 'spring-cost',
-    title: 'Spring cost',
+    title: 'Frozen spring arithmetic cost',
     load: async (): Promise<string> => (await import('./docs/spring-cost.md?raw')).default,
   }, {
     kind: 'markdown',
     id: 'spring-products',
-    title: 'Targeted rounding',
+    title: 'Targeted spring contribution rounding',
     load: async (): Promise<string> => (await import('./docs/spring-products.md?raw')).default,
   }, {
     kind: 'markdown',
     id: 'scaling',
-    title: 'Scaling',
+    title: 'Initial 8,192-point scaling',
     load: async (): Promise<string> => (await import('./docs/scaling.md?raw')).default,
   }, {
     kind: 'markdown',
     id: 'tick-rounding',
-    title: 'Tick precision',
+    title: 'Repulsion integration alignment',
     load: async (): Promise<string> => (await import('./docs/tick-rounding.md?raw')).default,
   }, {
     kind: 'markdown',
     id: 'gravity-trig',
-    title: 'Gravity math',
+    title: 'Refined gravity and final 8,192-point matrix',
     load: async (): Promise<string> => (await import('./docs/gravity-trig.md?raw')).default,
   }],
 })

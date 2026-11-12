@@ -1,0 +1,177 @@
+export type EvidenceState = 'Current evidence' | 'Supporting investigation' | 'Historical baseline' | 'Superseded' | 'Parked'
+export type Investigation = { page: string; state: EvidenceState; description: string; replacement?: string }
+export type ResearchSummary = {
+  question: string; conclusion: string; scope: string; variant: string; reviewed: string;
+  milestone: 'simulation' | 'rendering'; evidence: string; next: string; reproduce: string;
+  pilot?: boolean; method?: string; investigations?: Investigation[];
+}
+export const REVIEWED = '2026-11-12'
+// Editorial assessments, never inferred from a test count. Home highlights and
+// experiment overviews read these same records; exact measurements stay linked.
+/* eslint-disable @typescript-eslint/naming-convention -- Keys match public experiment routes. */
+export const research: Record<string, ResearchSummary> = {
+  collision: {
+    pilot: true,
+    question: 'Can WebGPU preserve collision behavior when composed with the other Cosmos forces?',
+    conclusion: 'The targeted correction passes all 1,700 tick and 1,700 independent trajectory gates in the recorded M3 matrix.',
+    scope: 'Selected isolated and combined fixtures through 512 points; zero measured pointwise drift. This is bounded compatibility evidence.',
+    variant: 'Targeted collision distance + contributions; corrected high/low center; luma 10.0.0-alpha.4; M3 / Chromium 157',
+    reviewed: REVIEWED,
+    milestone: 'simulation',
+    evidence: 'precision',
+    method: 'method',
+    next: 'Validate larger collision workloads, broader inputs/devices and the production precision/cost policy.',
+    reproduce: 'Use Recorded control in Run: dense 512-point star, combined independent layouts, four collision passes, 300 ' +
+      'cooling ticks, targeted arithmetic and high/low center.',
+    investigations: [
+      { page: 'precision', state: 'Current evidence', description: 'Targeted correction, repeated independent matrix, ablations and paired GPU cost.' },
+      {
+        page: 'findings',
+        state: 'Supporting investigation',
+        description: 'The corrected center sum and dense four-pass composition. This closes the earlier center-stage discrepancy.',
+      },
+      {
+        page: 'trajectories',
+        state: 'Historical baseline',
+        description: 'Original native collision arithmetic and its independent drift/failing cooled star. These failures still apply to that variant.',
+        replacement: 'precision',
+      },
+    ],
+  },
+  'combined-layout': {
+    pilot: true,
+    question: 'Do repulsion, ordered springs, gravity and cooling converge consistently when each backend evolves independently?',
+    conclusion: 'The refined-gravity candidate passes the documented 8,192-point chain, communities and star checks at unchanged compatibility tolerances.',
+    scope: 'Selected force settings, own-input checkpoints and full-strength probes. These runs do not include the newer ' +
+      'collision workload or prove broad layout quality.',
+    variant: 'Refined gravity + rounded steps (trig); luma 10.0.0-alpha.4; Apple M3',
+    reviewed: REVIEWED,
+    milestone: 'simulation',
+    evidence: 'gravity-trig',
+    method: 'method',
+    next: 'Broaden remaining force coverage and quality/runtime acceptance; keep the corrected collision envelope separate.',
+    reproduce: 'Use Recorded control in Run (8,192-point communities, refined gravity, 100 cooling ticks). The current evidence ' +
+      'lists the larger 8,192-point matrix and exact measurement settings.',
+    investigations: [
+      {
+        page: 'gravity-trig',
+        state: 'Current evidence',
+        description: 'Refined gravity closes the communities whole-tick discrepancy; includes the final 8,192-point matrix and bounded cost.',
+      },
+      {
+        page: 'tick-rounding',
+        state: 'Supporting investigation',
+        description: 'Repulsion integration alignment that precedes the gravity correction; its remaining failure is retained.',
+        replacement: 'gravity-trig',
+      },
+      {
+        page: 'spring-products',
+        state: 'Supporting investigation',
+        description: 'Contribution-rounding ablations and the targeted spring candidate; not complete composed-tick acceptance.',
+      },
+      { page: 'spring-cost', state: 'Supporting investigation', description: 'Frozen spring arithmetic timings and their acceptance boundaries.' },
+      {
+        page: 'spring-precision',
+        state: 'Historical baseline',
+        description: 'Early distance/strict arithmetic investigation and its then-current failure.',
+        replacement: 'gravity-trig',
+      },
+      {
+        page: 'scaling',
+        state: 'Historical baseline',
+        description: 'Initial 8,192-point scaling matrix, including the failures later isolated and corrected.',
+        replacement: 'gravity-trig',
+      },
+      {
+        page: 'checkpoints',
+        state: 'Supporting investigation',
+        description: 'Checkpoint validation and deterministic failure replay on 512/2,048-point graphs.',
+      },
+      {
+        page: 'findings',
+        state: 'Historical baseline',
+        description: 'Initial small-graph composition and convergence study; useful method/history, not the final candidate result.',
+        replacement: 'gravity-trig',
+      },
+    ],
+  },
+  'matched-layout': {
+    question: 'Do production GLSL, WebGPU and CPU retain comparable layout behavior under matched inputs?',
+    conclusion: 'The center-off strict WebGPU comparison records zero measured pointwise drift across 11,200 independently evolving M3 ticks.',
+    scope: '12 selected runs; shared CPU sampling decisions. Center-on historical runs and full runtime adaptation remain separate.',
+    variant: 'Strict WebGPU, center off; luma 10.0.0-alpha.4; Apple M3',
+    reviewed: REVIEWED,
+    milestone: 'simulation',
+    evidence: 'findings',
+    next: 'Validate independent runtime scheduling and agree quality budgets across representative data and devices.',
+    reproduce: 'Use the matched comparison method and findings for the exact center-off fixture/preset matrix.',
+  },
+  'point-styling': {
+    question: 'Does point-ID picking select the shapes that Cosmos actually renders?',
+    conclusion: 'Twelve bounded styling configurations pass; isolated opaque shapes pick exactly their rendered half-alpha footprint.',
+    scope: 'Eight shapes, explicit strokes, defaults, zoom, pixel ratio and overlap on M3. Fractional parity and ' +
+      'zero-opacity visibility remain rejected controls.',
+    variant: 'Production draw/host-picking GLSL and WGSL quads; luma 10.0.0-alpha.4; Apple M3',
+    reviewed: REVIEWED,
+    milestone: 'rendering',
+    evidence: 'method',
+    next: 'Resolve fractional coverage and invisible host picks, then validate remaining styling and pointer-hover behavior.',
+    reproduce: 'Run the shapes, overlap and edge-case fixtures, then inspect fractional sizes and zero opacity as explicit failing controls.',
+  },
+}
+
+/* eslint-enable @typescript-eslint/naming-convention */
+
+export const milestones = [
+  {
+    id: 'execution',
+    title: 'GPU execution and resources',
+    position: 'Resident execution and bounded resizing demonstrated',
+    acceptance: 'Host ownership, recovery and the production dependency',
+    gates: ['Choose a pinned luma package family for the complete engine.', 'Verify borrowed resource ownership, cleanup and recovery after device loss.'],
+    evidence: [['resident-layout', 'Resident execution'], ['point-capacity', 'Point capacity']],
+  },
+  {
+    id: 'simulation',
+    title: 'Simulation',
+    position: 'Selected composed-force cases through 8,192 points; collision through 512',
+    acceptance: 'Remaining forces, graph scalability and affordable precision',
+    gates: ['Validate clusters, per-point attractors and mouse repulsion in production force order.',
+      'Validate the larger collision route and representative graph families at unchanged declared gates.',
+      'Agree independent layout-quality and runtime sampling contracts; measure accepted precision cost.'],
+    evidence: [['combined-layout', 'Combined forces'], ['collision', 'Collision'], ['matched-layout', 'Matched layouts']],
+  },
+  {
+    id: 'rendering',
+    title: 'Rendering and interaction',
+    position: 'Bounded production shapes, strokes and host IDs demonstrated',
+    acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
+    gates: ['Resolve fractional raster parity and invisible host picks at global opacity zero.',
+      'Validate images, rings/greyout, transitions, links and the separate pointer-hover contract.'],
+    evidence: [['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],
+  },
+  {
+    id: 'integration',
+    title: 'Library and embedding',
+    position: 'Supporting resource-transfer mechanisms demonstrated',
+    acceptance: 'Complete Graph and host contracts',
+    gates: ['Exercise typed-array setters, stable IDs, transitions, callbacks and lifecycle through Graph.',
+      'Validate host devices/passes, picking, state isolation, deck integration and position-resource exposure.'],
+    evidence: [['point-capacity', 'Resident updates']],
+  },
+  {
+    id: 'production',
+    title: 'Production acceptance',
+    position: 'Bounded local measurements available',
+    acceptance: 'Agreed quality/performance budgets and native support matrix',
+    gates: ['Agree representative workloads, quality, frame/update latency and peak-memory budgets.',
+      'Verify intended native GPUs/browsers and unsupported-device behavior before switching production.'],
+    evidence: [['gpu-stage-profile', 'Controlled profiling'], ['performance-lab', 'Isolated benchmarks']],
+  },
+] as const
+
+export const mainOpenIssues = [
+  'Complete production force/rendering coverage and the Graph/host contracts.',
+  'Establish larger graph behavior and an affordable precision policy.',
+  'Agree quality, latency/memory budgets and the intended native GPU/browser matrix.',
+]

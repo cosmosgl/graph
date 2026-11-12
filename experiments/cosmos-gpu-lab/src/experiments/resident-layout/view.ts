@@ -207,5 +207,5 @@ export async function createResidentView (host: HTMLElement): Promise<Experiment
     a.download = `cosmos-resident-layout-${Date.now()}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(url), 0)
   })
   await reset()
-  return { destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
+  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
 }

@@ -88,10 +88,11 @@ export async function createTrajectories (host: HTMLElement): Promise<Experiment
       ${row.correctedDrift ? `${number(row.correctedDrift.rms)} RMS / ${number(row.correctedDrift.max)} max` : 'unavailable'}.
       Drift and cell differences have no quality pass/fail threshold. Different cells counts input points assigned to a different finest cell
       than the CPU path, using each path's own bounds.</p>
-      <details><summary>Inspect latest local checks</summary><table><thead><tr><th>Path</th><th>Force failures</th><th>Position failures</th>
+      <section class="visible-section"><h3 class="visible-section-heading">Latest local checks</h3>
+      <table><thead><tr><th>Path</th><th>Force failures</th><th>Position failures</th>
       <th>Structure</th><th>Integration</th><th>Centroid bit differences</th></tr></thead><tbody>${row.checks.map(c => `<tr><td>${LABELS[c.name]}</td>
       <td>${c.output.forces.failures}</td><td>${c.output.positions.failures}</td><td>${c.structure.valid ? 'Pass' : 'FAIL'}</td>
-      <td>${c.integration.valid ? 'Pass' : 'FAIL'}</td><td>${c.centroidDifferences ?? 'not stored'}</td></tr>`).join('')}</tbody></table></details>`
+      <td>${c.integration.valid ? 'Pass' : 'FAIL'}</td><td>${c.centroidDifferences ?? 'not stored'}</td></tr>`).join('')}</tbody></table></section>`
     const all = session.rows.flatMap(r => r.checks.map(c => c.drift.rms)).filter(Number.isFinite)
     const max = Math.max(1e-12, ...all)
     const x = (tick: number): number => 50 + (tick - 1) / Math.max(1, session!.rows.length - 1) * 640
@@ -178,5 +179,5 @@ export async function createTrajectories (host: HTMLElement): Promise<Experiment
     a.click(); URL.revokeObjectURL(url)
   })
   await task(setup)
-  return { destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
+  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; session?.destroy() } }
 }

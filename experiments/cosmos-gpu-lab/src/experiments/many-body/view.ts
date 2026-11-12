@@ -51,11 +51,11 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
       Blue points are free; orange points are pinned; absent points are hidden.
       The camera fits all three outputs together. This force-only layout expands; gravity, springs and cooling are not enabled.</p>
     <div class="many-body-results" data-output="results"></div>
-    <details class="advanced-controls"><summary>Validation contract and parameters</summary>
+    <section class="visible-section advanced-controls"><h3 class="visible-section-heading">Validation contract and parameters</h3>
       <p class="demo-note" data-output="parameters"></p>
       <p class="demo-note">Every validation tick reads back forces and positions. This is a correctness comparison, not a GPU performance benchmark.
       Reported elapsed time includes CPU calculation, GPU work, readback and drawing submission. An unavailable or failed backend never counts as a pass.</p>
-    </details>
+    </section>
     <section class="many-body-benchmark">
       <h2>Batched timing</h2>
       <p class="demo-note">Compare WebGL, direct WebGPU and tiled WebGPU at 128, 512, 1,024, 2,048 and 4,096 points.
@@ -310,5 +310,5 @@ export async function createManyBodyExperiment (host: HTMLElement): Promise<Expe
     const link = document.createElement('a'); link.href = url; link.download = 'cosmos-many-body-timing.json'; link.click(); URL.revokeObjectURL(url)
   })
   await task(setup)
-  return { destroy (): void { destroyed = true; stopped = true; cleanup() } }
+  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; cleanup() } }
 }

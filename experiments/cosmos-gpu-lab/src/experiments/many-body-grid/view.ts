@@ -231,7 +231,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
         const comparisonRows = [{ label: 'Inline', check: c.inline }, ...candidates.map(v => ({ label: v.label, check: v.result.stored }))]
           .map(({ label, check }) => `<tr><td>${label}</td><td>${check.forces.failures} / ${num(check.forces.maxError)}</td>
             <td>${check.positions.failures} / ${num(check.positions.maxError)}</td></tr>`).join('')
-        target.innerHTML = `<details open><summary>Centroid and far-field comparison · tick ${tick}</summary>
+        target.innerHTML = `<section class="visible-section"><h3 class="visible-section-heading">Centroid and far-field comparison · tick ${tick}</h3>
           <p class="demo-note">Same input, bounds, samples and unchanged CPU reference. Only WebGPU centroid and far-field arithmetic differ.</p>
           <table><thead><tr><th>WebGPU variant</th><th>Force failures / max error</th><th>Position failures / max error</th></tr></thead>
           <tbody>${comparisonRows}</tbody></table>
@@ -242,22 +242,24 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
               ${r.sameCentroids.positions.failures} position failures (diagnostic only).</p>
             ${r.division ? `<p class="demo-note">Division corpus: ${r.division.cases} cases, ${r.division.mismatches} bit-pattern mismatches.</p>` : ''}
             ${r.contributions
-    ? `<details><summary>128×128 contributions · point ${r.contributions.target} · replay ${r.contributions.replay.valid ? 'Pass' : 'FAIL'}</summary>
+    ? `<section class="visible-section">
+              <h3 class="visible-section-heading">128×128 contributions · point ${r.contributions.target} ·
+                replay ${r.contributions.replay.valid ? 'Pass' : 'FAIL'}</h3>
               <table><thead><tr><th>Operation</th><th>Differing components</th><th>Max error</th></tr></thead>
               <tbody>${r.contributions.summary.map(s => `<tr><td>${s.stage}</td><td>${s.differing}</td>
                 <td>${num(s.maxError)}</td></tr>`).join('')}</tbody></table>
               <p class="demo-note">Instrumented replay; detailed cell rows are included in JSON.
-                Differences here are exact-value differences, not tolerance failures.</p></details>`
+                Differences here are exact-value differences, not tolerance failures.</p></section>`
     : ''}
             <p class="demo-note">Extra working storage: ${(r.extraStorageBytes / 1048576).toFixed(2)} MiB ·
               ${r.extraDispatches} extra dispatch${r.extraDispatches === 1 ? '' : 'es'} per tick. See Benchmark precision for measured cost.</p>
-            <details><summary>${label} · inspect force stages</summary>
+            <section class="visible-section"><h3 class="visible-section-heading">${label} · inspect force stages</h3>
               <table><thead><tr><th>Stage</th><th>Failures</th><th>Max error</th><th>Worst budget ratio</th><th>Point / axis</th></tr></thead>
                 <tbody>${r.stages.map(s => `<tr><td>${s.stage}</td><td>${s.check.failures}</td><td>${num(s.check.maxError)}</td>
                   <td>${s.worst ? num(s.worst.ratio) : '—'}</td><td>${s.worst ? `${s.worst.point} / ${s.worst.axis}` : '—'}</td></tr>`).join('')}
-              </tbody></table></details>`).join('')}
+              </tbody></table></section>`).join('')}
           <p class="demo-note">The canvases above keep the inline baseline. Arithmetic variants are opt-in diagnostics;
-            a passing candidate does not change the baseline verdict.</p></details>`
+            a passing candidate does not change the baseline verdict.</p></section>`
       } else { target.textContent = `Centroid comparison unavailable: ${centroidError}` }
       target.style.scrollMarginTop = `${el('.playback-toolbar').offsetHeight + 16}px`
       target.scrollIntoView({ behavior: 'smooth', block: 'start' })
@@ -268,7 +270,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
         ['fused-reciprocal', 'Fused centroid delta'],
         ['fused-reciprocal-rsqrt', 'Fused delta + inverse roots'],
       ])
-      el('[data-output="trace"]').innerHTML = `<details open><summary>Precision trace · tick ${tick}</summary>
+      el('[data-output="trace"]').innerHTML = `<section class="visible-section"><h3 class="visible-section-heading">Precision trace · tick ${tick}</h3>
         <p class="demo-note">CPU uses each backend’s own cell aggregates and selected neighbors. Far rows are cumulative after each level.
         Ratio is error / unchanged component budget; above 1 fails. Replay checks the instrumented force against normal execution.</p>
         ${diagnostics.map(d => `<h3>${d.name} · replay ${d.report.replay.valid ? 'Pass' : 'FAIL — trace is not representative'}</h3>
@@ -279,12 +281,14 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
           ${d.report.hypotheses.map(h => `${labels.get(h.arithmetic)}: ` +
             `${h.output.forces.failures} force / ${h.output.positions.failures} position failures`).join('; ')}.
           These alternatives do not replace the baseline or change its verdict.</p>
-          <details><summary>Follow worst final-force component: point ${d.report.target?.point} / ${d.report.target?.axis}</summary>
+          <section class="visible-section">
+            <h3 class="visible-section-heading">Worst final-force component: point ${d.report.target?.point} / ${d.report.target?.axis}</h3>
             <table><thead><tr><th>Stage</th><th>GPU value</th><th>CPU value</th><th>Absolute error</th></tr></thead>
             <tbody>${d.report.target?.stages.map(s => `<tr><td>${s.stage}</td><td>${s.actual.toPrecision(9)}</td>
-              <td>${s.expected.toPrecision(9)}</td><td>${num(s.error)}</td></tr>`).join('') ?? ''}</tbody></table></details>`).join('')}
-        </details>`
-      el('[data-output="trace"] summary').focus({ preventScroll: true })
+              <td>${s.expected.toPrecision(9)}</td><td>${num(s.error)}</td></tr>`).join('') ?? ''}</tbody></table></section>`).join('')}
+        </section>`
+      const heading = el('[data-output="trace"] .visible-section-heading')
+      heading.tabIndex = -1; heading.focus({ preventScroll: true })
       el('[data-output="trace"]').style.scrollMarginTop = `${el('.playback-toolbar').offsetHeight + 16}px`
       el('[data-output="trace"]').scrollIntoView({ behavior: 'smooth', block: 'start' })
     }
@@ -381,5 +385,5 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     const a = document.createElement('a'); a.href = url; a.download = 'cosmos-many-body-grid.json'; a.click(); URL.revokeObjectURL(url)
   })
   await task(setup)
-  return { destroy (): void { destroyed = true; stopped = true; cleanup() } }
+  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; cleanup() } }
 }

@@ -34,7 +34,8 @@ export async function createPassDiagnostic (host: HTMLElement, name: 'WebGL' | '
       The last checkpoint is kept in this browser so it survives a page reload.</p>
     <p role="status" data-status>Creating ${name} only…</p><p data-device></p>
     <div class="markdown-body" data-results></div>
-    <details><summary>Last saved diagnostic</summary><pre data-saved></pre></details>
+    <section class="visible-section saved-diagnostic">
+      <h3 class="visible-section-heading">Last saved diagnostic</h3><pre data-saved></pre></section>
     <canvas width="480" height="340" hidden></canvas>
   </section>`
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!

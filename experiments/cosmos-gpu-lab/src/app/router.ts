@@ -8,10 +8,11 @@ export type AppRoute =
   | { kind: 'numerical-research' }
   | { kind: 'vocabulary'; termId?: string }
   | { kind: 'concept'; conceptId: string }
-  | { kind: 'experiment'; experimentId: string; pageId?: string }
+  | { kind: 'experiment'; experimentId: string; pageId?: string; view?: 'run' | 'evidence' }
 
 export function readRoute (): AppRoute {
   const segments = window.location.hash
+    .split('?')[0]
     .replace(/^#\/?/, '')
     .split('/')
     .filter(Boolean)
@@ -36,10 +37,17 @@ export function readRoute (): AppRoute {
   return {
     kind: 'experiment',
     experimentId: decodeURIComponent(segments[0]),
+    view: segments[1] === 'run' ? 'run' : segments[1] === 'evidence' ? 'evidence' : undefined,
     pageId: segments[1] === 'docs' && segments[2]
       ? decodeURIComponent(segments[2])
       : undefined,
   }
+}
+
+export function runHref (experimentId: string): string { return `#/${encodeURIComponent(experimentId)}/run` }
+
+export function currentSection (): string | null {
+  return new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('section')
 }
 
 export function vocabularyHref (): string {

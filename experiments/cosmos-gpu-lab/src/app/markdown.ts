@@ -2,11 +2,13 @@ import MarkdownIt from 'markdown-it'
 import { renderFlow } from './flow'
 import { highlightGlsl, highlightWgsl } from './syntax-highlight'
 import { linkVocabularyTerms } from './vocabulary'
+import { addSectionNavigation } from './sections'
 
 type MarkdownOptions = {
   linkTerms?: boolean;
   excludedTermIds?: string[];
   examples?: Record<string, (host: HTMLElement) => void>;
+  sectionNavigation?: boolean;
 }
 
 export async function renderMarkdown (
@@ -64,4 +66,5 @@ export async function renderMarkdown (
   for (const element of host.querySelectorAll<HTMLElement>('[data-doc-example]')) {
     examples[element.dataset.docExample!](element)
   }
+  if (options.sectionNavigation !== false) addSectionNavigation(host)
 }

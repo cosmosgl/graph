@@ -38,8 +38,8 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
         <button data-action="export" disabled>Export JSON</button>
       </div>
     </div>
-    <details class="advanced-controls">
-      <summary>Sweeps and WebGL diagnostics</summary>
+    <section class="visible-section advanced-controls">
+      <h3 class="visible-section-heading">Sweeps and WebGL diagnostics</h3>
     <section class="scale-toolbar">
       <label>Sweep backend <select data-control="sweep-backend"><option>Both</option><option>WebGL</option><option>WebGPU</option></select></label>
       <label>Sweep topology <select data-control="sweep-shape">
@@ -60,7 +60,7 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
       <p class="demo-note">Isolate simulation passes with one active device:
         <a href="?linkDiagnostic=WebGL#/weighted-links">WebGL only</a> ·
         <a href="?linkDiagnostic=WebGPU#/weighted-links">WebGPU only</a>.</p>
-    </details>
+    </section>
     <section class="summary" aria-live="polite">
       <span>Tick <strong data-output="tick">0</strong></span><span data-output="graph"></span><span data-output="topology"></span>
     </section>
@@ -257,15 +257,16 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
         <td>${median(row.topologyBuildMs).toFixed(3)}</td><td>${tickTime(row, 'WebGL')?.toFixed(4) ?? '—'}</td>
         <td>${tickTime(row, 'WebGPU')?.toFixed(4) ?? '—'}</td></tr>`).join('')}</tbody></table>
       <p>A dash means no valid complete GPU timing set; it never means zero. Resource setup and upload-call costs are separate in the capture.</p>
-      <details><summary>Resource setup and upload calls</summary>
+      <section class="visible-section"><h3 class="visible-section-heading">Resource setup and upload calls</h3>
         <p>One recreation per case/backend. CPU upload-call time includes texture allocation on WebGL; it is not GPU transfer time.</p>
         <table><thead><tr><th>Case</th><th>Backend</th><th>Setup submit ms</th><th>Upload calls ms</th><th>Setup completion ms</th></tr></thead><tbody>
         ${rows.flatMap(row => row.setup.map(setup => `<tr><td>${row.shape} · ${row.count.toLocaleString()}</td><td>${setup.backend}</td>
           <td>${setup.setupSubmitMs.toFixed(3)}</td><td>${setup.uploadCallMs.toFixed(3)}</td><td>${setup.completionMs.toFixed(3)}</td></tr>`)).join('')}
         </tbody></table>
-      </details>
-      <details><summary>All stage measurements</summary>${rows.map(row => `<h4>${row.shape} · ${row.count.toLocaleString()} points</h4>
-        ${timingTable(row.timings)}`).join('')}</details>`
+      </section>
+      <section class="visible-section"><h3 class="visible-section-heading">All stage measurements</h3>
+      ${rows.map(row => `<h4>${row.shape} · ${row.count.toLocaleString()} points</h4>
+        ${timingTable(row.timings)}`).join('')}</section>`
     makeCapture({
       mode: 'topology-sweep',
       fixture: undefined,
@@ -334,5 +335,5 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
     const a = document.createElement('a'); a.href = url; a.download = 'weighted-links-capture.json'; a.click()
     setTimeout(() => URL.revokeObjectURL(url), 1000)
   })
-  return { destroy (): void { destroyed = true; if (!busy) cleanup(); host.replaceChildren() } }
+  return { pause (): void { stop = true }, destroy (): void { destroyed = true; if (!busy) cleanup(); host.replaceChildren() } }
 }

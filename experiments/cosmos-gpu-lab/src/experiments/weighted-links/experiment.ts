@@ -8,12 +8,6 @@ export const experiment = defineExperiment({
   pages: [
     {
       kind: 'markdown',
-      id: 'context-loss',
-      title: 'WebGL reset investigation',
-      load: async (): Promise<string> => (await import('./docs/context-loss.md?raw')).default,
-    },
-    {
-      kind: 'markdown',
       id: 'performance',
       title: 'Topology sweep findings',
       load: async (): Promise<string> => (await import('./docs/performance.md?raw')).default,
@@ -35,6 +29,12 @@ export const experiment = defineExperiment({
       id: 'results',
       title: 'Validation and reproduction',
       load: async (): Promise<string> => (await import('./docs/results.md?raw')).default,
+    },
+    {
+      kind: 'markdown',
+      id: 'context-loss',
+      title: 'Parked: WebGL reset investigation',
+      load: async (): Promise<string> => (await import('./docs/context-loss.md?raw')).default,
     },
   ],
 })

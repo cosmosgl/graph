@@ -172,9 +172,8 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
       </section>
 
       <p class="demo-note benchmark-note">
-        Completion time deliberately waits for each API to finish: <code>gl.finish()</code> for
-        WebGL and <code>queue.onSubmittedWorkDone()</code> for WebGPU. It is a portable synchronized
-        wall-time measurement, not a pure timestamp-query GPU duration. Use relative results on the
+        Completion time includes submission and waiting for a luma GPU fence. It is a synchronized
+        wall-time measurement, not an isolated timestamp-query GPU duration. Use relative results on the
         same device; do not compare exported reports from unlike hardware as an API verdict.
       </p>
     </section>
@@ -198,6 +197,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
   let lastReport: PerformanceReport | undefined
   let destroyed = false
   let runRevision = 0
+  let paused = false
 
   const destroyBackends = (): void => {
     for (const backend of activeBackends) backend.destroy()
@@ -366,7 +366,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
     let completed = 0
     for (let iteration = 0; iteration < warmups; iteration += 1) {
       for (const slot of available) {
-        if (destroyed || revision !== runRevision) throw new Error('Benchmark cancelled')
+        if (destroyed || revision !== runRevision || paused) throw new Error('Benchmark cancelled')
         statusOutput.textContent = `Warming ${slot.name}…`
         await slot.backend?.measure(diameter, batchSize)
         completed += 1
@@ -377,7 +377,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
     for (let sample = 0; sample < samples; sample += 1) {
       const order = sample % 2 === 0 ? available : [...available].reverse()
       for (const slot of order) {
-        if (destroyed || revision !== runRevision) throw new Error('Benchmark cancelled')
+        if (destroyed || revision !== runRevision || paused) throw new Error('Benchmark cancelled')
         statusOutput.textContent = `Measuring ${slot.name} · sample ${sample + 1}/${samples}…`
         const measurement = await slot.backend?.measure(diameter, batchSize)
         if (measurement) {
@@ -448,7 +448,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
     let completed = 0
     for (let iteration = 0; iteration < warmups; iteration += 1) {
       for (const slot of available) {
-        if (destroyed || revision !== runRevision) throw new Error('Benchmark cancelled')
+        if (destroyed || revision !== runRevision || paused) throw new Error('Benchmark cancelled')
         statusOutput.textContent = `Warming ${slot.name} reduction…`
         await slot.backend?.benchmark(batchSize)
         completed += 1
@@ -459,7 +459,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
     for (let sample = 0; sample < samples; sample += 1) {
       const order = sample % 2 === 0 ? available : [...available].reverse()
       for (const slot of order) {
-        if (destroyed || revision !== runRevision) throw new Error('Benchmark cancelled')
+        if (destroyed || revision !== runRevision || paused) throw new Error('Benchmark cancelled')
         statusOutput.textContent = `Measuring ${slot.name} · sample ${sample + 1}/${samples}…`
         const measurement = await slot.backend?.benchmark(batchSize)
         if (measurement) {
@@ -496,6 +496,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
   }
 
   const run = async (): Promise<void> => {
+    paused = false
     runRevision += 1
     const revision = runRevision
     destroyBackends()
@@ -518,6 +519,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
         ? await runRendering(pointCount, shape.warmups, shape.samples, revision)
         : await runSimulation(pointCount, shape.warmups, shape.samples, revision)
       if (destroyed || revision !== runRevision) return
+      if (paused) throw new Error('Benchmark paused while consulting documentation')
       lastReport = report
       renderResults(report)
       statusOutput.textContent = 'Benchmark complete.'
@@ -525,9 +527,12 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
       exportButton.disabled = false
     } catch (error) {
       if (destroyed || revision !== runRevision) return
-      statusOutput.textContent = error instanceof Error ? error.message : String(error)
-      progressLabel.textContent = 'Failed'
-      resultsHost.innerHTML = '<div class="benchmark-empty benchmark-error"><p>Benchmark did not complete.</p></div>'
+      statusOutput.textContent = paused
+        ? 'Benchmark paused at a trial boundary; this batch has no accepted result.'
+        : error instanceof Error ? error.message : String(error)
+      progressLabel.textContent = paused ? 'Paused' : 'Failed'
+      resultsHost.textContent = paused ? 'Restart the benchmark to record a complete batch.' : 'Benchmark did not complete.'
+      exportButton.disabled = true
     } finally {
       if (!destroyed && revision === runRevision) {
         runButton.disabled = false
@@ -557,6 +562,7 @@ export async function createPerformanceLab (host: HTMLElement): Promise<Experime
   updateControls()
 
   return {
+    pause (): void { paused = true },
     destroy (): void {
       if (destroyed) return
       destroyed = true

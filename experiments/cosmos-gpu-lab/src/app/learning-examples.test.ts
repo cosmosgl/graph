@@ -8,7 +8,7 @@ const initialUrl = window.location.href
 async function mount (): Promise<HTMLDivElement> {
   host = document.createElement('div')
   document.body.append(host)
-  await renderMarkdown(host, source, {}, { examples: learningExamples })
+  await renderMarkdown(host, source, {}, { examples: learningExamples, sectionNavigation: false })
   return host
 }
 function click (root: Element, text: string): void {
@@ -39,8 +39,9 @@ describe('WebGPU learning guide', () => {
     expect(document.activeElement?.id).toBe('learn-8')
     expect(example.textContent).toContain('Tick 1 complete')
     page.querySelector<HTMLAnchorElement>('#learn-8 + .learning-back')!.click()
-    expect(page.querySelector<HTMLDetailsElement>('.learning-contents')?.open).toBe(true)
-    expect(document.activeElement?.tagName).toBe('SUMMARY')
+    expect(page.querySelector('.learning-contents')?.tagName).toBe('SECTION')
+    expect(page.querySelector('.learning-contents details')).toBeNull()
+    expect(document.activeElement).toBe(page.querySelector('.learning-contents > h2'))
     expect(window.location.hash).toBe('#/learn')
     expect(example.textContent).toContain('Tick 1 complete')
   })

@@ -94,6 +94,10 @@ it('exports a cancelled partial run and probe without losing failure evidence', 
     expect(Array.isArray(report.firstFailures['webgpu-outgoing'].input)).toBe(true)
     button('reset').click(); await vi.waitFor(() => expect(button('step').disabled).toBe(false))
     expect(button('export').disabled).toBe(true)
+    button('run').click(); app.pause!()
+    await vi.waitFor(() => expect(button('step').disabled).toBe(false))
+    expect(host.querySelector('[data-output="tick"]')!.textContent).toBe('1')
+    expect(button('export').disabled).toBe(false)
   } finally { app.destroy(); host.remove(); url.mockRestore(); click.mockRestore() }
 })
 it('checks first, interval and final ticks without treating unchecked ticks as passing', async () => {

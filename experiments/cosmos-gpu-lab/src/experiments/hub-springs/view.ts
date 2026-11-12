@@ -183,5 +183,5 @@ export async function createHubView (host: HTMLElement): Promise<ExperimentInsta
     setTimeout(() => URL.revokeObjectURL(url), 0)
   })
   controls()
-  return { destroy (): void { destroyed = true; stopped = true; retire() } }
+  return { pause (): void { stopped = true }, destroy (): void { destroyed = true; stopped = true; retire() } }
 }

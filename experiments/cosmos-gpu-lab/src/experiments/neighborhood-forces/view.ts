@@ -16,8 +16,8 @@ function element<T extends HTMLElement> (host: ParentNode, selector: string): T 
 export async function createNeighborhoodExperiment (host: HTMLElement): Promise<ExperimentInstance> {
   host.innerHTML = `
     <section class="neighborhood-demo">
-      <details class="demo-settings">
-        <summary>Simulation settings <span data-output="settings-summary">1,024 points · Uniform · radius 0.08</span></summary>
+      <section class="visible-section demo-settings">
+        <h3 class="visible-section-heading">Simulation settings <span data-output="settings-summary">1,024 points · Uniform · radius 0.08</span></h3>
       <div class="scale-toolbar">
         <label><span>Points</span><select data-control="count">
           <option>256</option><option selected>1024</option><option>4096</option>
@@ -43,7 +43,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
           <option value="chunked">Chunked · fewer inner-loop checks</option>
         </select></label>
       </div>
-      </details>
+      </section>
       <div class="simulation-preview">
       <div class="demo-toolbar playback-toolbar">
         <div class="controls">
@@ -68,8 +68,8 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
       </div>
       <p class="demo-note">Local repulsion within a fixed radius · identical inputs and circle rendering ·
         damping and reflecting walls · no per-tick CPU readback. This is not the global many-body force.</p>
-      <details class="advanced-controls">
-        <summary>Measurements and technical details</summary>
+      <section class="visible-section advanced-controls">
+        <h3 class="visible-section-heading">Measurements and technical details</h3>
         <div class="controls">
           <button data-action="precision">Check dense precision</button>
           <button data-action="precision-cost">Compare precision cost</button>
@@ -83,7 +83,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
       <div class="grid-pipeline"><span>positions</span><b>→</b><span>grid</span><b>→</b>
         <span>local forces</span><b>→</b><span>integration</span><b>→</b><span>circles</span></div>
       <p class="demo-note" data-output="search"></p>
-      </details>
+      </section>
       <section data-output="timings" aria-live="polite"></section>
       <section class="neighborhood-sweep">
         <h2>Repeatable parameter sweep</h2>
@@ -287,7 +287,6 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
       return
     }
     if (busy || backends.length === 0) return
-    element<HTMLDetailsElement>(host, '.demo-settings').open = false
     element<HTMLElement>(host, '.simulation-preview').scrollIntoView({ block: 'start' })
     playing = true
     status.textContent = 'Running fixed 1/60-second simulation steps. Both methods advance one tick together.'
@@ -600,6 +599,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
   describePlan()
   configure()
   return {
+    pause (): void { cancelSweep = true; pause() },
     destroy (): void {
       destroyed = true
       revision += 1
