@@ -1,25 +1,38 @@
 import { expect, it } from 'vitest'
-import { findExperiment } from './registry'
-import { milestones, research } from './research'
+import { experiments, findExperiment } from './registry'
+import { milestones, research, researchMethodPages } from './research'
 import { renderEvidenceIndex, renderMigrationOverview, renderResearchOverview } from './research-ui'
 
-it('links current summaries and every pilot investigation to existing pages without dropping history', () => {
+it('assigns every experiment and document to the shared research destinations without dropping history', () => {
+  expect(Object.keys(research).sort()).toEqual(experiments.map(e => e.id).sort())
   for (const [id, record] of Object.entries(research)) {
     const experiment = findExperiment(id)!
-    expect(experiment).toBeDefined(); expect(experiment.pages.some(page => page.id === record.evidence)).toBe(true)
-    if (!record.pilot) continue
+    expect(experiment).toBeDefined()
+    if (record.evidence) expect(experiment.pages.some(page => page.id === record.evidence)).toBe(true)
     expect(experiment.pages.some(page => page.id === record.method)).toBe(true)
-    const indexed = record.investigations!.map(item => item.page)
+    const indexed = record.investigations.map(item => item.page)
     expect(new Set(indexed).size).toBe(indexed.length)
     for (const page of experiment.pages) {
-      if (page.id !== record.method && page.id !== 'validation-contract') expect(indexed).toContain(page.id)
+      expect([...researchMethodPages(record), ...indexed]).toContain(page.id)
     }
-    for (const item of record.investigations!) {
+    for (const item of record.investigations) {
       expect(experiment.pages.some(page => page.id === item.page)).toBe(true)
       if (item.replacement) expect(indexed).toContain(item.replacement)
     }
   }
   for (const milestone of milestones) for (const [id] of milestone.evidence) expect(findExperiment(id)).toBeDefined()
+})
+
+it('does not invent a recorded matrix or backend comparison for method-only demos', () => {
+  for (const id of ['point-rendering', 'spatial-grid', 'performance-lab', 'precision-diagnostics']) {
+    const host = document.createElement('div'); const experiment = findExperiment(id)!
+    renderEvidenceIndex(host, experiment, research[id])
+    expect(host.textContent).toContain('No recorded measurement matrix')
+    expect(host.querySelector(`a[href="#/${id}/run"]`)).not.toBeNull()
+  }
+  const host = document.createElement('div')
+  renderResearchOverview(host, findExperiment('spatial-grid')!, research['spatial-grid'])
+  expect(host.querySelector('.comparison-rail')!.textContent).not.toContain('WebGL')
 })
 
 it('derives the home conclusion and overview from one record and keeps historical evidence visible', () => {

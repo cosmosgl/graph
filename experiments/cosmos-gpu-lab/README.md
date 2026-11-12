@@ -7,16 +7,18 @@ lifecycle.
 Follow the **WebGPU migration** roadmap (`#/roadmap`) for Cosmos migration readiness, demonstrated capabilities,
 remaining gaps and the evidence needed for a production switch.
 
-The homepage opens with the reviewed migration assessment. Collision and Combined layout pilot
-**Overview / Run / Method / Evidence** navigation, keeping historical studies labeled and their
-existing URLs intact. Documentation visits preserve one paused run; another experiment or Home
-releases it. Run uses visible Configuration, Run, Results and Diagnostics sections. Method includes the comparison
-contract. Long articles have route-preserving section links and visible contents navigation. Search
-and the remaining experiment overviews are follow-up work after this pilot.
+The homepage opens with the reviewed migration assessment. Every experiment uses
+**Overview / Run / Method / Evidence** navigation. Overview states the question, current finding,
+scope and next gate. Run opens the live comparison. Method keeps technical topics and the comparison
+contract visible. Evidence labels current, supporting, historical and parked studies; experiments
+without a published matrix say so explicitly. Existing article URLs and old Run section bookmarks
+remain valid. Documentation visits preserve one paused run; another experiment or Home releases it.
+Run uses visible Configuration, Run, Results and Diagnostics sections. Long articles have
+route-preserving section links and visible contents navigation. Full-text search remains follow-up work.
 
 Use the **Validation workflow** (`#/validation-workflow`) and **Numerical research**
 (`#/numerical-research`) for reference roles, source-backed precision findings and acceptance policy.
-Every experiment has a **Validation contract** tab describing its question, reference, gates,
+Every experiment has a **Validation contract** page under Method describing its question, reference, gates,
 checked population and limits. The contract is not a live verdict.
 
 ## Run
@@ -144,7 +146,7 @@ Rendering-only demos and benchmarks do not acquire a numerical pass merely by co
 Author regions with `data-run-part="configuration|visualization|metrics|status|results|explanation|diagnostics"`
 and actions with `data-run-action="primary|diagnostic|export"`. Primary actions drive or stop the
 workload; tracing, replay, precision comparisons and sweeps remain in the visible Diagnostics section.
-The two research pilots can also use their existing `data-run-section` regions and presets.
+Collision and Combined layout also use authored `data-run-section` regions and presets.
 Section links scroll without restarting or pausing a run.
 
 Call `mountRunLayout(host, readSummary)` before asynchronous setup. Its summary getter reads the
@@ -188,6 +190,19 @@ device was not retained; never infer it from a review date, seed, source revisio
 The article keeps the detailed conditions and reproduction instructions. General method pages
 need no measurement label. Reviewed research summaries and historical/superseded warnings retain
 their separate meanings.
+
+### Experiment navigation
+
+`src/app/research.ts` and `research-catalog.ts` hold reviewed editorial findings and explicit
+Method/Evidence assignments. Add a summary, primary Method page, optional additional Method topics,
+and an investigation list when adding an experiment. Describe its actual comparison paths: a
+WebGPU-only grid or resource study must not inherit a WebGL/WebGPU/CPU trajectory claim.
+The registry rejects unknown pages, missing assessments and documents absent from both destinations.
+An empty investigation list means no recorded matrix is published; local runs do not populate it.
+
+Base routes (`#/experiment`) open Overview; `#/experiment/run` opens Run. Existing `docs/page` URLs
+remain unchanged. Legacy base routes with a `?section=run-…` bookmark still open and focus Run.
+Overview, Method and Evidence retain the same paused instance, controls, canvas and results.
 
 The learning guide lives in `src/docs/learn-webgpu.md`; its small interactive examples live in
 `src/app/learning-examples.ts`. An `example` fence contains a registered example name, such as

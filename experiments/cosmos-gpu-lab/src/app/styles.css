@@ -2087,6 +2087,8 @@ button[data-action="play"][aria-pressed="true"] {
 .result-table-scroll > table { min-width: 100%; font-size: var(--type-body); font-variant-numeric: tabular-nums; }
 .result-table-scroll th { font-size: inherit; font-weight: 500; text-transform: none; letter-spacing: normal; }
 .table-scroll-hint { margin: 10px 0 6px; }
+.method-topics { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0 0 24px; font-size: var(--type-body); }
+.method-topics .active { color: var(--text-primary); text-decoration-thickness: 2px; text-underline-offset: 5px; }
 @media (max-width: 600px) {
   .result-context dl > div, .source-fields > div { grid-template-columns: minmax(0, 1fr); gap: 3px; margin-bottom: 12px; }
 }

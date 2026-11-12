@@ -21,8 +21,8 @@ export async function createPassDiagnostic (host: HTMLElement, name: 'WebGL' | '
       data-run-part="metrics">One device, no rendering or timer queries. Run one pass at a time; each complete output is read back
       and compared with the independent CPU reference. Completion times include readback and are not GPU benchmarks.</p>
     <p
-      data-run-part="configuration"><a href="?linkDiagnostic=WebGL#/weighted-links">WebGL only</a> ·
-      <a href="?linkDiagnostic=WebGPU#/weighted-links">WebGPU only</a> · <a href="?#/weighted-links">Paired demo</a></p>
+      data-run-part="configuration"><a href="?linkDiagnostic=WebGL#/weighted-links/run">WebGL only</a> ·
+      <a href="?linkDiagnostic=WebGPU#/weighted-links/run">WebGPU only</a> · <a href="?#/weighted-links/run">Paired demo</a></p>
     <div class="scale-toolbar"
       data-run-part="configuration">
     <label>Star points <select data-count>${[1000, 10000, 50000, 100000].map(n => `<option>${n}</option>`).join('')}</select></label>

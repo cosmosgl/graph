@@ -11,7 +11,7 @@ import { disposeDocumentTables } from '../runtime/result-tables'
 import { experimentGroups, findExperiment } from './registry'
 import { architectureHref, conceptHref, experimentHref, featureInventoryHref, readRoute, roadmapHref, vocabularyHref, currentSection, runHref } from './router'
 import { indexVocabularyTerms } from './vocabulary'
-import { research } from './research'
+import { research, researchMethodPages } from './research'
 import { renderEvidenceIndex, renderInvestigationContext, renderMigrationOverview, renderResearchOverview } from './research-ui'
 import { scrollToSection } from './sections'
 
@@ -315,7 +315,7 @@ function renderExperimentFrame (
     <header class="experiment-header">
       <div>
         <h1>${experiment.title}</h1>
-        ${!activePage && !view ? `<p>${record?.pilot ? record.question : experiment.summary}</p>` : ''}
+        ${!activePage && !view ? `<p>${record.question}</p>` : ''}
       </div>
     </header>
     <nav class="page-tabs" aria-label="Experiment sections"></nav>
@@ -323,32 +323,27 @@ function renderExperimentFrame (
   `
 
   const tabs = requiredElement<HTMLElement>(host, '.page-tabs')
-  if (record?.pilot) {
-    const section = activePage ? activePage.id === record.method || activePage.id === 'validation-contract' ? 'method' : 'evidence' : view ?? 'overview'
-    tabs.append(
-      createTab('Overview', experimentHref(experiment.id), section === 'overview'),
-      createTab('Run', runHref(experiment.id), section === 'run'),
-      createTab('Method', experimentHref(experiment.id, record.method), section === 'method'),
-      createTab('Evidence', `#/${experiment.id}/evidence`, section === 'evidence')
-    )
-    if (activePage && section === 'evidence') {
-      const breadcrumb = document.createElement('p'); breadcrumb.className = 'research-breadcrumb'
-      breadcrumb.innerHTML = `<a href="${experimentHref(experiment.id)}">Overview</a> →
-        <a href="#/${experiment.id}/evidence">Evidence</a>`
-      breadcrumb.append(` → ${activePage.title}`); tabs.after(breadcrumb)
+  const methods = researchMethodPages(record)
+  const section = activePage ? methods.includes(activePage.id) ? 'method' : 'evidence' : view ?? 'overview'
+  tabs.append(
+    createTab('Overview', experimentHref(experiment.id), section === 'overview'),
+    createTab('Run', runHref(experiment.id), section === 'run'),
+    createTab('Method', experimentHref(experiment.id, record.method), section === 'method'),
+    createTab('Evidence', `#/${experiment.id}/evidence`, section === 'evidence')
+  )
+  if (activePage && section === 'evidence') {
+    const breadcrumb = document.createElement('p'); breadcrumb.className = 'research-breadcrumb'
+    breadcrumb.innerHTML = `<a href="${experimentHref(experiment.id)}">Overview</a> →
+      <a href="#/${experiment.id}/evidence">Evidence</a>`
+    breadcrumb.append(` → ${activePage.title}`); tabs.after(breadcrumb)
+  }
+  if (activePage && section === 'method' && methods.length > 1) {
+    const topics = document.createElement('nav'); topics.className = 'method-topics'; topics.setAttribute('aria-label', 'Method topics')
+    for (const id of methods) {
+      const page = experiment.pages.find(page => page.id === id)!
+      topics.append(createTab(page.title === 'Overview' ? 'Method overview' : page.title, experimentHref(experiment.id, id), id === activePage.id))
     }
-    return
-  }
-  tabs.append(createTab('Demo', experimentHref(experiment.id), !activePage))
-  for (const page of experiment.pages) {
-    tabs.append(createTab(page.title, experimentHref(experiment.id, page.id), page.id === activePage?.id))
-  }
-  if (!activePage) {
-    const note = document.createElement('p'); note.className = 'demo-note'
-    const link = document.createElement('a'); link.href = experimentHref(experiment.id, 'validation-contract')
-    link.textContent = 'Validation contract'
-    note.append(link, ' · Reference, acceptance rules, checked population and limits. A completed run is not a production approval.')
-    tabs.after(note)
+    tabs.after(topics)
   }
 }
 
@@ -565,7 +560,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     const stage = requiredElement<HTMLElement>(workspace, '.experiment-stage')
 
     try {
-      if (record?.pilot && !page && route.view !== 'run') {
+      if (!page && route.view !== 'run') {
         if (route.view === 'evidence') renderEvidenceIndex(stage, experiment, record)
         else renderResearchOverview(stage, experiment, record)
       } else if (!page) {
@@ -575,10 +570,10 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
         stage.innerHTML = '<div class="loading">Loading documentation…</div>'
         const [source, renderer] = await Promise.all([page.load(), import('./markdown')])
         if (version !== renderVersion) return
-        const method = record?.pilot && page.id === record.method
+        const method = page.id === record.method && page.id !== 'validation-contract'
         await renderer.renderMarkdown(stage, method ? `${source}\n\n${validationContractMarkdown(experiment.id, false)}` : source, page.assets)
         if (version !== renderVersion) return
-        if (record?.pilot) renderInvestigationContext(stage, experiment, record, page.id)
+        renderInvestigationContext(stage, experiment, record, page.id)
         scrollToSection(stage, currentSection())
       } else {
         stage.innerHTML = '<div class="loading">Loading results…</div>'

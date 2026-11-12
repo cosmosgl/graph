@@ -1,17 +1,25 @@
+import { additionalResearch } from './research-catalog'
+
 export type EvidenceState = 'Current evidence' | 'Supporting investigation' | 'Historical baseline' | 'Superseded' | 'Parked'
 export type Investigation = { page: string; state: EvidenceState; description: string; replacement?: string }
 export type ResearchSummary = {
   question: string; conclusion: string; scope: string; variant: string; reviewed: string;
-  milestone: 'simulation' | 'rendering'; evidence: string; next: string; reproduce: string;
-  pilot?: boolean; method?: string; investigations?: Investigation[];
+  milestone: 'execution' | 'simulation' | 'rendering' | 'integration' | 'production';
+  evidence?: string; next: string; reproduce: string; comparison: string;
+  method: string; methodPages?: string[]; investigations: Investigation[];
 }
 export const REVIEWED = '2026-11-12'
+
+export function researchMethodPages (record: ResearchSummary): string[] {
+  return [...new Set([record.method, ...record.methodPages ?? [], 'validation-contract'])]
+}
 // Editorial assessments, never inferred from a test count. Home highlights and
 // experiment overviews read these same records; exact measurements stay linked.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match public experiment routes. */
 export const research: Record<string, ResearchSummary> = {
+  ...additionalResearch(REVIEWED),
   collision: {
-    pilot: true,
+    comparison: 'Shared initial graph → WebGL / WebGPU / CPU → shared-input or independent collision checks',
     question: 'Can WebGPU preserve collision behavior when composed with the other Cosmos forces?',
     conclusion: 'The targeted correction passes all 1,700 tick and 1,700 independent trajectory gates in the recorded M3 matrix.',
     scope: 'Selected isolated and combined fixtures through 512 points; zero measured pointwise drift. This is bounded compatibility evidence.',
@@ -39,7 +47,7 @@ export const research: Record<string, ResearchSummary> = {
     ],
   },
   'combined-layout': {
-    pilot: true,
+    comparison: 'Shared initial graph → independently evolving WebGL / WebGPU / CPU → stage and whole-tick checks',
     question: 'Do repulsion, ordered springs, gravity and cooling converge consistently when each backend evolves independently?',
     conclusion: 'The refined-gravity candidate passes the documented 8,192-point chain, communities and star checks at unchanged compatibility tolerances.',
     scope: 'Selected force settings, own-input checkpoints and full-strength probes. These runs do not include the newer ' +
@@ -96,6 +104,8 @@ export const research: Record<string, ResearchSummary> = {
     ],
   },
   'matched-layout': {
+    method: 'method',
+    comparison: 'Shared graph and sampling tape → independently evolving WebGL / WebGPU / CPU → compatibility and descriptive quality',
     question: 'Do production GLSL, WebGPU and CPU retain comparable layout behavior under matched inputs?',
     conclusion: 'The center-off strict WebGPU comparison records zero measured pointwise drift across 11,200 independently evolving M3 ticks.',
     scope: '12 selected runs; shared CPU sampling decisions. Center-on historical runs and full runtime adaptation remain separate.',
@@ -105,8 +115,14 @@ export const research: Record<string, ResearchSummary> = {
     evidence: 'findings',
     next: 'Validate independent runtime scheduling and agree quality budgets across representative data and devices.',
     reproduce: 'Use the matched comparison method and findings for the exact center-off fixture/preset matrix.',
+    investigations: [
+      { page: 'findings', state: 'Current evidence', description: 'Center-off production-style trajectories and their bounded quality/drift measurements.' },
+      { page: 'center', state: 'Supporting investigation', description: 'Optional center attraction, aggregate checks and paired added GPU cost.' },
+    ],
   },
   'point-styling': {
+    method: 'validation-contract',
+    comparison: 'Same styled points → production WebGL / WebGPU color and ID images → full-image and scalar-mask checks',
     question: 'Does point-ID picking select the shapes that Cosmos actually renders?',
     conclusion: 'Twelve bounded styling configurations pass; isolated opaque shapes pick exactly their rendered half-alpha footprint.',
     scope: 'Eight shapes, explicit strokes, defaults, zoom, pixel ratio and overlap on M3. Fractional parity and ' +
@@ -117,6 +133,12 @@ export const research: Record<string, ResearchSummary> = {
     evidence: 'method',
     next: 'Resolve fractional coverage and invisible host picks, then validate remaining styling and pointer-hover behavior.',
     reproduce: 'Run the shapes, overlap and edge-case fixtures, then inspect fractional sizes and zero opacity as explicit failing controls.',
+    investigations: [{
+      page: 'method',
+      state: 'Current evidence',
+      description: 'Styling/picking method, bounded native matrix and rejected visibility/coverage ' +
+      'controls.',
+    }],
   },
 }
 

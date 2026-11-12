@@ -10,6 +10,10 @@ export type AppRoute =
   | { kind: 'concept'; conceptId: string }
   | { kind: 'experiment'; experimentId: string; pageId?: string; view?: 'run' | 'evidence' }
 
+export function currentSection (): string | null {
+  return new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('section')
+}
+
 export function readRoute (): AppRoute {
   const segments = window.location.hash
     .split('?')[0]
@@ -34,10 +38,15 @@ export function readRoute (): AppRoute {
     return { kind: 'concept', conceptId: decodeURIComponent(segments[1]) }
   }
 
+  const legacyRun = currentSection()?.startsWith('run-') || (segments[0] === 'weighted-links' &&
+    ['WebGL', 'WebGPU'].includes(new URLSearchParams(window.location.search).get('linkDiagnostic') ?? ''))
   return {
     kind: 'experiment',
     experimentId: decodeURIComponent(segments[0]),
-    view: segments[1] === 'run' ? 'run' : segments[1] === 'evidence' ? 'evidence' : undefined,
+    // Retain old in-page Run bookmarks after base experiment routes become Overview.
+    view: segments[1] === 'run' || (segments.length === 1 && legacyRun)
+      ? 'run'
+      : segments[1] === 'evidence' ? 'evidence' : undefined,
     pageId: segments[1] === 'docs' && segments[2]
       ? decodeURIComponent(segments[2])
       : undefined,
@@ -45,10 +54,6 @@ export function readRoute (): AppRoute {
 }
 
 export function runHref (experimentId: string): string { return `#/${encodeURIComponent(experimentId)}/run` }
-
-export function currentSection (): string | null {
-  return new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('section')
-}
 
 export function vocabularyHref (): string {
   return '#/vocabulary'
