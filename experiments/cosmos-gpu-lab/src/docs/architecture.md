@@ -75,6 +75,11 @@ home highlights and experiment overviews read the same
 experiment conclusion. Detailed measurements stay in their evidence articles. These are editorial
 assessments, not status inferred from a test count or a completion percentage.
 
+Home leads with the current milestone, bounded demonstrated successes, blockers and next acceptance
+gate before the experiment catalog. These sections stay visible; the full milestone table and
+checklists live on Roadmap. `migrationFocus` selects the working milestone and highlighted records;
+gate text and numerical criteria come from the existing milestone and validation contracts.
+
 Long Markdown pages gain duplicate-safe heading IDs, route-preserving section links and a contents
 rail, with a visible short contents list above the article on smaller screens. The learning guide and
 vocabulary retain their own navigation. Every live experiment shares a visible **Configuration → Run →

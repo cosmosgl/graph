@@ -121,8 +121,11 @@ function renderHome (host: HTMLElement): void {
     <div data-migration-overview></div>
     <div class="home-sections">
     <div class="experiment-catalog" aria-label="Available experiments">
+      <header class="catalog-header">
+      <h2 class="catalog-title">Experiment catalog</h2>
       <p class="catalog-intro">Explore the groups from foundations to validation.
         Experiments within each group follow a suggested reading order; the migration roadmap records our findings and next steps.</p>
+      </header>
     </div>
 
     <a class="reference-card" href="#/validation-workflow">

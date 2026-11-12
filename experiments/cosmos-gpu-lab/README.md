@@ -7,7 +7,13 @@ lifecycle.
 Follow the **WebGPU migration** roadmap (`#/roadmap`) for Cosmos migration readiness, demonstrated capabilities,
 remaining gaps and the evidence needed for a production switch.
 
-The homepage opens with the reviewed migration assessment. Every experiment uses
+The homepage opens with the current milestone, demonstrated successes and their scope, main blockers,
+and the next acceptance gate before the experiment catalog. All four sections stay expanded. The
+current focus is editorial data in `research.ts`; conclusions, criteria and blockers reuse the same
+records as experiment Overview and Roadmap. The complete milestone table and checklists remain on
+Roadmap, linked from the homepage. Reviewed findings remain separate from this browser's live run.
+
+Every experiment uses
 **Overview / Run / Method / Evidence** navigation. Overview states the question, current finding,
 scope and next gate. Run opens the live comparison. Method keeps technical topics and the comparison
 contract visible. Evidence labels current, supporting, historical and parked studies; experiments
