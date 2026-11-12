@@ -259,7 +259,7 @@ export async function createScalableReductionExperiment (
     isPlaying = !isPlaying
     playButton.textContent = isPlaying ? 'Pause' : 'Play'
     playButton.setAttribute('aria-pressed', String(isPlaying))
-    if (isPlaying) element<HTMLElement>(host, '.scalable-demo').scrollIntoView({ block: 'start' })
+    if (isPlaying) element<HTMLElement>(host, '.run-primary-actions').scrollIntoView({ block: 'start' })
     schedulePlay()
   })
   resetButton.addEventListener('click', () => {

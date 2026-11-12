@@ -67,7 +67,8 @@ function list (items: string[]): HTMLUListElement {
 export function renderReport (
   host: HTMLElement,
   report: ExperimentReport,
-  expectedExperiment: string
+  expectedExperiment: string,
+  options: { embedded?: boolean } = {}
 ): void {
   if (report.schemaVersion !== 1) {
     throw new Error(`Unsupported report schema: ${report.schemaVersion}`)
@@ -81,7 +82,7 @@ export function renderReport (
   article.className = 'report prose'
 
   article.append(
-    heading('h2', report.title),
+    heading(options.embedded ? 'h3' : 'h2', report.title),
     paragraph(report.status),
     evidenceSourceNote({
       source: 'Recorded report',
@@ -100,5 +101,5 @@ export function renderReport (
   )
 
   host.append(article)
-  presentDocumentTables(host)
+  if (!options.embedded) presentDocumentTables(host)
 }

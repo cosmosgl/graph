@@ -2,7 +2,7 @@ import { afterEach, expect, it, vi } from 'vitest'
 import { disposeRunLayout, mountRunLayout, summarizeRun } from './run-layout'
 
 let host: HTMLElement | undefined
-afterEach(() => { if (host) { disposeRunLayout(host); host.remove() } })
+afterEach(() => { if (host) { disposeRunLayout(host); host.remove() }; vi.restoreAllMocks() })
 
 it('preserves controls, listeners and canvas identity while separating diagnostic actions', async () => {
   host = document.createElement('div'); document.body.append(host)
@@ -29,6 +29,29 @@ it('never turns pending work or benchmark completion into a numerical pass', () 
   expect(summarizeRun('Complete', [undefined], 'Pixel parity')).toMatchObject({ passed: 'No checks yet', unchecked: 'Pixel parity' })
   expect(summarizeRun('Ready', [true], 'Other fixtures', ['WebGPU'])).toMatchObject({ failed: 'Unavailable: WebGPU' })
   expect(summarizeRun('Ready', [], 'All checks', [], 'Pipeline error')).toMatchObject({ state: 'Failed' })
+})
+
+it('keeps the integrated canvas first on narrow screens and preserves controls when the columns change', () => {
+  const media = Object.assign(new EventTarget(), { matches: false })
+  vi.spyOn(window, 'matchMedia').mockReturnValue(media as MediaQueryList)
+  host = document.createElement('div'); document.body.append(host)
+  host.innerHTML = `<section data-run-part="configuration"><input value="custom"></section>
+    <button data-run-action="primary">Step</button><section data-run-part="visualization"><canvas></canvas></section>
+    <p data-run-part="results">Measured value</p>`
+  const canvas = host.querySelector('canvas')!; const input = host.querySelector('input')!
+  mountRunLayout(host, () => summarizeRun('Ready', [], 'Unrun cases'), { experiment: 'center-mass' })
+  const order = (): string[] => Array.from(host!.querySelector('.run-workbench')!.children, child => child.id || child.className)
+  expect(order()).toEqual(['run-run', 'run-configuration', 'run-results'])
+  media.matches = true; media.dispatchEvent(new Event('change'))
+  expect(order()).toEqual(['run-display', 'run-configuration'])
+  expect(host.querySelector('.run-display #run-results')).not.toBeNull()
+  media.matches = false; media.dispatchEvent(new Event('change'))
+  expect(order()).toEqual(['run-run', 'run-configuration', 'run-results'])
+  expect(host.querySelector('canvas')).toBe(canvas); expect(host.querySelector('input')).toBe(input)
+  expect(host.querySelector('.run-contents,details')).toBeNull()
+  disposeRunLayout(host)
+  media.matches = true; media.dispatchEvent(new Event('change'))
+  expect(order()).toEqual(['run-run', 'run-configuration', 'run-results'])
 })
 
 it('keeps guidance accessible and adds scrolling to new result tables without changing their values', async () => {

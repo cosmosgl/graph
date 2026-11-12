@@ -18,7 +18,7 @@ changing the result enough to affect simulation behavior?
 - Computes an `f64` CPU reference.
 - Uploads the snapshot independently to WebGL and WebGPU.
 - Reads both GPU results back and reports their distance from the CPU value.
-- Draws the same points as one-pixel primitives and marks the computed center in red.
+- Draws the same points as one-pixel primitives and marks the computed center in yellow.
 
 The visualization is deliberately minimal. It exists to expose the compute path, not to reproduce the complete Cosmos
 renderer.

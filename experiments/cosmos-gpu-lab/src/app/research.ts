@@ -14,7 +14,7 @@ export function researchMethodPages (record: ResearchSummary): string[] {
   return [...new Set([record.method, ...record.methodPages ?? [], 'validation-contract'])]
 }
 // Editorial assessments, never inferred from a test count. Home highlights and
-// experiment overviews read these same records; exact measurements stay linked.
+// experiment pages read these same records; exact measurements stay linked.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match public experiment routes. */
 export const research: Record<string, ResearchSummary> = {
   ...additionalResearch(REVIEWED),
@@ -29,7 +29,7 @@ export const research: Record<string, ResearchSummary> = {
     evidence: 'precision',
     method: 'method',
     next: 'Validate larger collision workloads, broader inputs/devices and the production precision/cost policy.',
-    reproduce: 'Use Recorded control in Run: dense 512-point star, combined independent layouts, four collision passes, 300 ' +
+    reproduce: 'Use Recorded control above: dense 512-point star, combined independent layouts, four collision passes, 300 ' +
       'cooling ticks, targeted arithmetic and high/low center.',
     investigations: [
       { page: 'precision', state: 'Current evidence', description: 'Targeted correction, repeated independent matrix, ablations and paired GPU cost.' },
@@ -58,7 +58,7 @@ export const research: Record<string, ResearchSummary> = {
     evidence: 'gravity-trig',
     method: 'method',
     next: 'Broaden remaining force coverage and quality/runtime acceptance; keep the corrected collision envelope separate.',
-    reproduce: 'Use Recorded control in Run (8,192-point communities, refined gravity, 100 cooling ticks). The current evidence ' +
+    reproduce: 'Use Recorded control above (8,192-point communities, refined gravity, 100 cooling ticks). The current evidence ' +
       'lists the larger 8,192-point matrix and exact measurement settings.',
     investigations: [
       {
@@ -199,7 +199,7 @@ export const mainOpenIssues = [
 ] as const
 
 // Current editorial priority. The gate and findings come from the same records
-// used by Roadmap and experiment Overview, never from this browser's live run.
+// used by Roadmap and the experiment page, never from this browser's live run.
 export const migrationFocus = {
   milestone: 'rendering',
   experiment: 'point-styling',

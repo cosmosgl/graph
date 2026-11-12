@@ -351,8 +351,7 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
   const run = async (ticks: number, forceCheck = false): Promise<void> => {
     if (!session) return
     probe = undefined
-    const panels = el('.backend-panels'); panels.style.scrollMarginTop = `${el('.playback-toolbar').offsetHeight + 16}px`
-    panels.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    el('.run-primary-actions').scrollIntoView({ behavior: 'smooth', block: 'start' })
     for (let i = 0; i < ticks; i++) {
       if (destroyed || stopped) break
       status.textContent = `Checking tick ${session.rows.length + 1} / ${session.settings.decay}…`

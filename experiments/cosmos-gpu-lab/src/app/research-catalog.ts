@@ -9,7 +9,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
     question: validationContracts[id].question,
     reviewed,
     scope: validationContracts[id].coverage,
-    reproduce: 'Open Run, select the documented input, then inspect the named checks and unchecked scope. Method defines the comparison contract.',
+    reproduce: 'Select the documented input above, then inspect the named checks and unchecked scope. How it works defines the comparison contract.',
     ...details,
     variant: details.variant.replace(/\.$/, ''),
   })
@@ -24,7 +24,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       evidence: 'results',
       methodPages: ['algorithm', 'implementation', 'correctness', 'performance', 'limitations', 'references'],
       next: 'Agree a center-accuracy budget and validate the reduction when composed with the center force.',
-      reproduce: 'Open Run and Step or Play the same 8,192 moving points. Read absolute CPU error and ' +
+      reproduce: 'Step or Play the same 8,192 moving points above. Read absolute CPU error and ' +
         'backend delta; elapsed time includes readback and drawing.',
       investigations: [{
         page: 'results',
@@ -41,7 +41,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       evidence: 'results',
       methodPages: ['algorithm', 'implementation', 'performance', 'limitations'],
       next: 'Agree accuracy and resource budgets; validate larger reductions inside an accepted simulation workload.',
-      reproduce: 'Select a point count in Run. Step with readback to inspect the center; unsampled resident ticks remain unchecked.',
+      reproduce: 'Select a point count above. Step with readback to inspect the center; unsampled resident ticks remain unchecked.',
       investigations: [{
         page: 'results',
         state: 'Current evidence',
@@ -56,7 +56,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       method: 'overview',
       methodPages: ['algorithm', 'buffers', 'validation', 'performance'],
       next: 'Record a bounded native grid matrix, then judge the force that consumes it separately.',
-      reproduce: 'Choose point count, distribution and grid size in Run; build and validate before interpreting timing.',
+      reproduce: 'Choose point count, distribution and grid size above; build and validate before interpreting timing.',
       investigations: [],
     }),
     'point-rendering': entry('point-rendering', {
@@ -67,7 +67,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       method: 'overview',
       methodPages: ['implementation', 'limitations'],
       next: 'Use the production styling/picking experiment for image-based checks; validate the remaining rendering features.',
-      reproduce: 'Change count and circle diameter in Run. For rendered-pixel and ID checks, continue to Point styling and picking.',
+      reproduce: 'Change count and circle diameter above. For rendered-pixel and ID checks, continue to Point styling and picking.',
       investigations: [],
     }),
     'neighborhood-forces': entry('neighborhood-forces', {
@@ -80,7 +80,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       evidence: 'precision-cost',
       methodPages: ['algorithm', 'validation', 'performance', 'sweep', 'research'],
       next: 'Validate broader density/radius envelopes and devices before choosing a traversal policy; global repulsion is separate.',
-      reproduce: 'Use Run for a local comparison. Diagnostics contains dense precision, paired precision cost and the repeatable parameter sweep.',
+      reproduce: 'Use the live view for a local comparison. Diagnostics contains dense precision, paired precision cost and the repeatable parameter sweep.',
       investigations: [
         {
           page: 'precision-cost',
@@ -114,7 +114,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       evidence: 'results',
       methodPages: ['research'],
       next: 'Keep this exact control while judging hierarchical approximation, composed forces and broader device coverage.',
-      reproduce: 'Choose direct or tiled WebGPU and shared-input or independent evolution in Run. Use the separate timing sweep for accepted frozen workloads.',
+      reproduce: 'Choose direct or tiled WebGPU and shared-input or independent evolution above. Use the separate timing sweep for accepted frozen workloads.',
       investigations: [
         { page: 'results', state: 'Current evidence', description: 'Exact repulsion observations and explicit correctness limits.' },
         { page: 'timing', state: 'Supporting investigation', description: 'Batched native M3 timing sweeps with checks outside the measured interval.' },
@@ -163,7 +163,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       evidence: 'results',
       methodPages: ['implementation'],
       next: 'Extend accepted topology/device coverage and validate springs in the full runtime; keep the parked reset investigation separate.',
-      reproduce: 'Select a graph and count in Run, then Step or Play and validate. Stage timing and isolated pass tools remain in Diagnostics.',
+      reproduce: 'Select a graph and count above, then Step or Play and validate. Stage timing and isolated pass tools remain in Diagnostics.',
       investigations: [
         { page: 'results', state: 'Current evidence', description: 'Directional CPU reference, edge semantics and bounded native correctness findings.' },
         {
@@ -182,7 +182,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       method: 'validation-contract',
       evidence: 'findings',
       next: 'Judge cooling and composed forces explicitly; repulsion-only expansion cannot establish convergence or graph quality.',
-      reproduce: 'Select fixture, count, sample budget and quality in Run. Step or run 20 ticks, then compare local checks and descriptive drift.',
+      reproduce: 'Select fixture, count, sample budget and quality above. Step or run 20 ticks, then compare local checks and descriptive drift.',
       investigations: [{
         page: 'findings',
         state: 'Current evidence',
@@ -220,7 +220,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       method: 'methodology',
       methodPages: ['interpretation'],
       next: 'Measure accepted complete-engine workloads under agreed latency and quality budgets; isolated completion time is not Graph FPS.',
-      reproduce: 'Choose rendering or simulation, count and sample preset in Run. Stop cancels ' +
+      reproduce: 'Choose rendering or simulation, count and sample preset above. Stop cancels ' +
         'acceptance of an incomplete batch; export completed local measurements.',
       investigations: [],
     }),
@@ -232,7 +232,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       milestone: 'simulation',
       method: 'method',
       next: 'Agree the intended mathematical contract and accuracy budget before choosing a production arithmetic policy.',
-      reproduce: 'Choose a finite corpus and seed in Run. Compare mathematical error and legacy ' +
+      reproduce: 'Choose a finite corpus and seed above. Compare mathematical error and legacy ' +
         'compatibility separately; export results for local investigation.',
       investigations: [],
     }),
@@ -265,7 +265,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       method: 'validation-contract',
       evidence: 'method',
       next: 'Measure order-preserving optimizations in normal frames and keep instrumentation overhead separate.',
-      reproduce: 'Select graph, count and input history in Run, then prepare/profile. Inspect normal-frame and diagnostic tables as different workloads.',
+      reproduce: 'Select graph, count and input history above, then prepare/profile. Inspect normal-frame and diagnostic tables as different workloads.',
       investigations: [{
         page: 'method',
         state: 'Current evidence',
@@ -323,7 +323,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       method: 'validation-contract',
       evidence: 'production',
       next: 'Broaden force coverage, graphs and devices, then agree quality/runtime budgets before integrating the complete engine.',
-      reproduce: 'Use the preset ladder, adaptive sampling and documented input history in Run. ' +
+      reproduce: 'Use the preset ladder, adaptive sampling and documented input history above. ' +
         'Validate the full-strength probe and keep intermediate unchecked ticks explicit.',
       investigations: [
         { page: 'production', state: 'Current evidence', description: '32-sample/varied-spring controls, adaptive sampling and selected 5,000-tick runs.' },

@@ -11,6 +11,8 @@ type MarkdownOptions = {
   excludedTermIds?: string[];
   examples?: Record<string, (host: HTMLElement) => void>;
   sectionNavigation?: boolean;
+  headingLevelOffset?: number;
+  tables?: boolean;
 }
 
 export async function renderMarkdown (
@@ -24,6 +26,15 @@ export async function renderMarkdown (
     linkify: true,
     typographer: true,
   })
+  if (options.headingLevelOffset) {
+    markdown.core.ruler.push('heading-offset', state => {
+      for (const token of state.tokens) {
+        if (token.type === 'heading_open' || token.type === 'heading_close') {
+          token.tag = `h${Math.min(6, Number(token.tag.slice(1)) + options.headingLevelOffset!)}`
+        }
+      }
+    })
+  }
 
   // Keep wide evidence tables within the article, without clipping their rows.
   markdown.renderer.rules.table_open = (): string => '<div class="table-scroll"><table>\n'
@@ -70,7 +81,7 @@ export async function renderMarkdown (
   const article = host.querySelector('article')!
   if (evidence) {
     const title = article.firstElementChild
-    if (title?.matches('h1,h2')) title.after(evidenceSourceNote(evidence))
+    if (title?.matches('h1,h2,h3,h4,h5,h6')) title.after(evidenceSourceNote(evidence))
     else article.prepend(evidenceSourceNote(evidence))
   }
   if (options.linkTerms !== false) {
@@ -80,5 +91,5 @@ export async function renderMarkdown (
     examples[element.dataset.docExample!](element)
   }
   if (options.sectionNavigation !== false) addSectionNavigation(host)
-  presentDocumentTables(host)
+  if (options.tables !== false) presentDocumentTables(host)
 }

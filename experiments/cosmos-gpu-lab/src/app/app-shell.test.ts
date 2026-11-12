@@ -1,9 +1,13 @@
 import { afterEach, expect, it, vi } from 'vitest'
+import type { Mock, MockInstance } from 'vitest'
+import type { ExperimentDefinition } from '../runtime/experiment'
+import { disposeRunLayout, mountRunLayout, summarizeRun } from '../runtime/run-layout'
 import { validationContracts } from '../runtime/validation'
 import { createAppShell } from './app-shell'
 import { experiments, findExperiment } from './registry'
 import { research } from './research'
 import { readRoute } from './router'
+
 let host: HTMLElement | undefined
 let shell: ReturnType<typeof createAppShell> | undefined
 const initial = window.location.href
@@ -17,7 +21,22 @@ async function route (hash: string, ready: () => void): Promise<void> {
   await vi.waitFor(ready)
 }
 
-it('puts every visible migration decision before the complete experiment catalog', async () => {
+function mockRun (id: string): { create: MockInstance<ExperimentDefinition['create']>; pause: Mock; destroy: Mock } {
+  const pause = vi.fn(); const destroy = vi.fn()
+  const create = vi.spyOn(findExperiment(id)!, 'create').mockImplementation(async stage => {
+    let tick = 0
+    stage.innerHTML = `<section data-run-part="configuration"><label>Fixture <input value="custom"></label></section>
+      <button data-run-action="primary">Step</button><section data-run-part="visualization"><canvas></canvas></section>
+      <p data-run-part="results" data-test-tick>0</p><p data-run-part="explanation">Original guidance.</p>
+      ${id === 'point-styling' ? '' : '<button data-run-action="diagnostic">Trace</button>'}`
+    stage.querySelector('button')!.addEventListener('click', () => { stage.querySelector('[data-test-tick]')!.textContent = String(++tick) })
+    mountRunLayout(stage, () => summarizeRun('Ready', [], 'Other inputs'), { experiment: id })
+    return { pause, destroy: (): void => { disposeRunLayout(stage); destroy() } }
+  })
+  return { create, pause, destroy }
+}
+
+it('puts every visible migration decision before the complete experiment catalog without starting GPU work', async () => {
   const creates = experiments.map(experiment => vi.spyOn(experiment, 'create'))
   window.history.replaceState(null, '', '#/')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
@@ -30,53 +49,35 @@ it('puts every visible migration decision before the complete experiment catalog
     expect(section.closest('details,[hidden]')).toBeNull()
   }
   expect(host.querySelectorAll('.experiment-card')).toHaveLength(experiments.length)
-  expect(host.querySelector('[data-decision="gate"] a[href="#/point-styling/run"]')).not.toBeNull()
+  expect(host.querySelector('[data-decision="gate"] a[href="#/point-styling"]')).not.toBeNull()
   expect(host.querySelector('[data-decision="milestone"] a[href="#/roadmap?section=milestone-rendering"]')).not.toBeNull()
   creates.forEach(create => expect(create).not.toHaveBeenCalled())
 })
 
-it('provides all four destinations for every experiment without starting GPU work on documentation routes', async () => {
+it('keeps technical article routes readable without creating GPU sessions', async () => {
   const creates = experiments.map(experiment => vi.spyOn(experiment, 'create'))
   window.history.replaceState(null, '', '#/')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   for (const experiment of experiments) {
-    const record = research[experiment.id]
-    await route(`#/${experiment.id}`, () => {
-      expect(host!.querySelector('.experiment-header h1')?.textContent).toBe(experiment.title)
-      expect(host!.querySelector('.research-conclusion')?.textContent).toBe(record.conclusion)
-    })
-    expect(Array.from(host.querySelectorAll('.page-tabs a'), a => a.textContent)).toEqual(['Overview', 'Run', 'Method', 'Evidence'])
-    await route(`#/${experiment.id}/docs/${record.method}`, () => {
-      expect(host!.querySelector('.page-tabs [aria-current="page"]')?.textContent).toBe('Method')
+    await route(`#/${experiment.id}/docs/${research[experiment.id].method}`, () => {
+      expect(host!.querySelector('.experiment-return')?.getAttribute('href')).toBe(`#/${experiment.id}`)
       expect(host!.querySelector('.prose')?.textContent).toContain(validationContracts[experiment.id].acceptance)
     })
-    expect(host.querySelector('details')).toBeNull()
-    await route(`#/${experiment.id}/evidence`, () => {
-      expect(host!.querySelector('.page-tabs [aria-current="page"]')?.textContent).toBe('Evidence')
-      expect(host!.querySelector('.evidence-index')?.textContent).toContain(record.conclusion)
-    })
-    for (const item of record.investigations) {
-      expect(host.querySelector(`.evidence-index a[href="#/${experiment.id}/docs/${item.page}"]`)).not.toBeNull()
-    }
+    expect(host.querySelector('.page-tabs,.method-topics,.research-breadcrumb,details')).toBeNull()
   }
   creates.forEach(create => expect(create).not.toHaveBeenCalled())
 }, 20_000)
 
-it('preserves legacy Run section bookmarks while the plain route opens Overview', async () => {
-  const create = vi.spyOn(findExperiment('point-rendering')!, 'create').mockImplementation(async stage => {
-    stage.innerHTML = '<section id="run-results">Legacy results</section>'
-    return { destroy: vi.fn() }
-  })
+it('preserves old base-route Run bookmarks and focuses the requested result', async () => {
+  const { create } = mockRun('point-rendering')
   window.history.replaceState(null, '', '#/point-rendering?section=run-results')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(document.activeElement?.id).toBe('run-results'))
-  expect(host.querySelector('.page-tabs [aria-current="page"]')?.textContent).toBe('Run')
+  expect(host.querySelector('.research-conclusion')).not.toBeNull()
   expect(create).toHaveBeenCalledTimes(1)
-  await route('#/point-rendering', () => expect(host!.querySelector('.research-overview')).not.toBeNull())
-  expect(host.querySelector('.page-tabs [aria-current="page"]')?.textContent).toBe('Overview')
 })
 
-it('preserves explicit isolated-link diagnostic entry points without changing ordinary overview routes', () => {
+it('preserves explicit isolated-link diagnostic entry points', () => {
   for (const backend of ['WebGL', 'WebGPU']) {
     window.history.replaceState(null, '', `?linkDiagnostic=${backend}#/weighted-links`)
     expect(readRoute()).toMatchObject({ experimentId: 'weighted-links', view: 'run' })
@@ -89,46 +90,48 @@ it('preserves explicit isolated-link diagnostic entry points without changing or
   expect(readRoute()).toMatchObject({ experimentId: 'weighted-links', view: undefined })
 })
 
-it('keeps tick, controls and the same run when consulting method/sections, then releases it for another experiment', async () => {
-  const pause = vi.fn(); const destroy = vi.fn()
-  const create = vi.spyOn(findExperiment('matched-layout')!, 'create').mockImplementation(async stage => {
-    stage.style.minHeight = '2400px'
-    stage.innerHTML = '<button data-test-step>Step</button><output data-test-tick>0</output><input value="custom settings">'
-    let tick = 0
-    stage.querySelector('button')!.addEventListener('click', () => { stage.querySelector('output')!.textContent = String(++tick) })
-    return { pause, destroy }
+for (const { id } of experiments) {
+  it(`keeps ${id} on one visible page and preserves its run through sections, aliases and articles`, async () => {
+    const { create, pause, destroy } = mockRun(id)
+    const definition = findExperiment(id)!
+    window.history.replaceState(null, '', `#/${id}`)
+    host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+    await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
+    const canvas = host.querySelector('canvas')!; const input = host.querySelector('input')!
+    const findings = host.querySelector('[data-recorded-report]')!
+    expect(host.querySelector('.research-conclusion')!.textContent).toBe(research[id].conclusion)
+    expect(host.querySelector('.page-tabs,.method-topics,.research-actions,.run-contents,.evidence-index,details')).toBeNull()
+    expect(host.querySelectorAll('main > .experiment-stage > nav')).toHaveLength(1)
+    expect(host.querySelectorAll('main h1')).toHaveLength(1)
+    expect(host.querySelector('#run-explanation')!.textContent).toContain('Original guidance.')
+    for (const value of Object.values(validationContracts[id]).slice(1)) expect(host.textContent).toContain(value)
+    for (const page of definition.pages) {
+      if (page.id !== research[id].evidence) expect(host.querySelector(`.experiment-notes a[href="#/${id}/docs/${page.id}"]`)).not.toBeNull()
+    }
+    for (const link of host.querySelectorAll<HTMLAnchorElement>('.experiment-contents a')) {
+      const section = new URLSearchParams(link.hash.split('?')[1]).get('section')
+      expect(host.querySelector(`#${section}`)).not.toBeNull()
+    }
+    expect(host.querySelector('.recorded-findings')!.textContent).not.toContain('Historical baseline')
+    if (!research[id].evidence) expect(findings.textContent).toContain('No recorded measurement matrix')
+    else expect(findings.querySelector('article')).not.toBeNull()
+    host.querySelector<HTMLButtonElement>('.run-primary-actions button')!.click()
+    const pausesBeforeSection = pause.mock.calls.length
+    host.querySelector<HTMLAnchorElement>('.experiment-contents a[href$="section=run-explanation"]')!.click()
+    expect(document.activeElement?.id).toBe('run-explanation')
+    expect(create).toHaveBeenCalledTimes(1); expect(pause).toHaveBeenCalledTimes(pausesBeforeSection)
+    await route(`#/${id}/docs/${research[id].method}`, () => expect(host!.querySelector('.unified-document .prose')).not.toBeNull())
+    expect(host.querySelector('.experiment-return')?.getAttribute('href')).toBe(`#/${id}`)
+    expect(host.querySelector('.page-tabs,.method-topics,.research-breadcrumb')).toBeNull()
+    await route(`#/${id}/run?section=run-results`, () => expect(document.activeElement?.id).toBe('run-results'))
+    expect(window.location.hash).toBe(`#/${id}?section=run-results`)
+    expect(host.querySelector('canvas')).toBe(canvas); expect(host.querySelector('input')).toBe(input)
+    expect(host.querySelector('[data-test-tick]')!.textContent).toBe('1')
+    await route(`#/${id}/evidence`, () => expect(document.activeElement?.id).toBe('recorded-findings'))
+    expect(window.location.hash).toBe(`#/${id}?section=recorded-findings`)
+    expect(host.querySelector('[data-recorded-report]')).toBe(findings)
+    expect(create).toHaveBeenCalledTimes(1)
+    await route('#/?section=experiment-catalog', () => expect(document.activeElement?.id).toBe('experiment-catalog'))
+    expect(destroy).toHaveBeenCalledTimes(1)
   })
-  const collision = vi.spyOn(findExperiment('collision')!, 'create')
-  window.history.replaceState(null, '', '#/matched-layout/run')
-  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelector('[data-test-step]')).not.toBeNull())
-  const button = host.querySelector<HTMLButtonElement>('[data-test-step]')!; button.click()
-  expect(host.querySelector('output')!.textContent).toBe('1')
-  window.scrollTo(0, 600)
-  await route('#/matched-layout/docs/method', () => expect(host!.querySelector('.prose')).not.toBeNull())
-  expect(pause).toHaveBeenCalledTimes(1); expect(destroy).not.toHaveBeenCalled()
-  const id = host.querySelector('.prose h2[id]')!.id
-  await route(`#/matched-layout/docs/method?section=${id}`, () => expect(document.activeElement?.id).toBe(id))
-  await route('#/matched-layout', () => expect(host!.querySelector('.research-overview')).not.toBeNull())
-  await route('#/matched-layout/evidence', () => expect(host!.querySelector('.evidence-index')).not.toBeNull())
-  await route('#/matched-layout/run', () => expect(host!.querySelector('[data-test-tick]')?.textContent).toBe('1'))
-  expect(host.querySelector('[data-test-step]')).toBe(button)
-  expect(window.scrollY).toBe(600)
-  expect(host.querySelector('input')!.value).toBe('custom settings'); expect(create).toHaveBeenCalledTimes(1)
-  await route('#/collision', () => expect(host!.querySelector('.research-overview')).not.toBeNull())
-  expect(destroy).toHaveBeenCalledTimes(1); expect(collision).not.toHaveBeenCalled()
-  expect(Array.from(host.querySelectorAll('.page-tabs a'), a => a.textContent)).toEqual(['Overview', 'Run', 'Method', 'Evidence'])
-  await route('#/collision/docs/method', () => expect(host!.textContent).toContain(validationContracts.collision.acceptance))
-  expect(host.querySelector('.research-breadcrumb,.investigation-context')).toBeNull()
-  expect(host.querySelector('.experiment-header p')).toBeNull()
-  expect(host.querySelector('#reference')!.closest('details')).toBeNull()
-  await route('#/collision/evidence', () => expect(host!.querySelector('.evidence-index')).not.toBeNull())
-  expect(host.textContent).toContain('Historical baseline')
-  await route('#/collision/docs/trajectories', () => expect(host!.querySelector('.investigation-context')?.textContent).toContain('Historical baseline'))
-  expect(host.querySelector('.investigation-context a')?.getAttribute('href')).toBe('#/collision/docs/precision')
-  expect(collision).not.toHaveBeenCalled()
-  await route('#/', () => expect(host!.querySelector('.migration-overview')).not.toBeNull())
-  expect(window.scrollY).toBe(0)
-  await route('#/collision/docs/does-not-exist', () => expect(host!.textContent).toContain('Unknown experiment'))
-  expect(collision).not.toHaveBeenCalled()
-})
+}

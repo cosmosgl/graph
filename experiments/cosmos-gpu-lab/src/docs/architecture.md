@@ -61,17 +61,22 @@ other experiments retain their detailed reports with the contract explaining the
 
 ### Shared research navigation
 
-Every experiment uses **Overview → Run → Method → Evidence** as four page destinations.
-Existing article URLs remain valid. Method keeps its technical topics visible; Evidence indexes label current work, supporting studies
-and historical baselines; historical pages link to the current conclusion without erasing original
-failures or measurements. The shared contract is available from Overview/Method instead of another
-peer destination. Experiments without a published measurement matrix state that explicitly.
-The registry checks that every document is reachable from Method or Evidence and that all evidence
-and replacement links resolve. Old base-route Run section bookmarks continue to open the live view.
+Every experiment uses one continuous page in `src/app/experiment-page.ts`.
+The question and current finding lead directly into the live visualization. Settings stay expanded
+beside the graph on wide screens and follow it on narrow screens; live results, the explanation,
+recorded findings and diagnostics remain visible below. A single contents list links to sections.
+The recorded article reuses its original Markdown and measurement metadata. Earlier investigations
+remain ordinary article links with descriptive context instead of a separate evidence index.
+Technical articles have a return link and their own contents, without stacked navigation rows.
+Legacy `/run` and `/evidence` routes resolve to this page and its recorded-findings section.
+
+Existing article URLs remain valid. The registry checks that every document is reachable from
+technical articles or recorded investigations and that replacement links resolve. Experiments
+without a published matrix say so explicitly; no live run is promoted into a recorded finding.
 
 `src/app/research.ts` and `research-catalog.ts` own the compact reviewed summaries, document
 assignments and milestone gates. The homepage and roadmap use the same assessment renderer;
-home highlights and experiment overviews read the same
+home highlights and experiment pages read the same
 experiment conclusion. Detailed measurements stay in their evidence articles. These are editorial
 assessments, not status inferred from a test count or a completion percentage.
 
@@ -82,14 +87,14 @@ gate text and numerical criteria come from the existing milestone and validation
 
 Long Markdown pages gain duplicate-safe heading IDs, route-preserving section links and a contents
 rail, with a visible short contents list above the article on smaller screens. The learning guide and
-vocabulary retain their own navigation. Every live experiment shares a visible **Configuration → Run →
-Results → Diagnostics** frame, with configuration beside the visualization on wide screens and stacked
-above it on smaller screens. A session summary reports actual checks, failures and unchecked scope. Arithmetic, cooling and validation settings stay in Configuration;
+vocabulary retain their own navigation. Live experiments share expanded configuration, visualization,
+results and diagnostics regions. The visualization comes first on
+narrow screens. Wide screens place the two beside
+each other. A session summary reports actual checks, failures and unchecked scope. Arithmetic, cooling and validation settings stay in Configuration;
 primary actions stay with the visualization, while isolation, replay, precision and timing actions stay
 in Diagnostics. The summary reads typed experiment records rather than parsing displayed text.
 Rendering-only and benchmark completion never imply numerical acceptance. Section jumps scroll without pausing or rebuilding
-the run. Method shows reference, acceptance, population and limits as ordinary content, while
-Overview links to it. The live variant is always named, and recorded conclusions remain separate
+the run. How it works shows reference, acceptance, population and limits as ordinary content. The live variant is always named, and recorded conclusions remain separate
 from the browser’s current run.
 
 The run frame also connects short setting descriptions to their controls, presents tables with

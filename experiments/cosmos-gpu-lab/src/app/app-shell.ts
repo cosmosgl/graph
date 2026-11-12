@@ -11,9 +11,10 @@ import { disposeDocumentTables } from '../runtime/result-tables'
 import { experimentGroups, findExperiment } from './registry'
 import { architectureHref, conceptHref, experimentHref, featureInventoryHref, readRoute, roadmapHref, vocabularyHref, currentSection, runHref } from './router'
 import { indexVocabularyTerms } from './vocabulary'
-import { research, researchMethodPages } from './research'
-import { renderEvidenceIndex, renderInvestigationContext, renderMigrationOverview, renderResearchOverview } from './research-ui'
+import { research } from './research'
+import { renderInvestigationContext, renderMigrationOverview } from './research-ui'
 import { scrollToSection } from './sections'
+import { mountExperimentNotes, renderExperimentContents } from './experiment-page'
 
 function requiredElement<T extends HTMLElement> (host: ParentNode, selector: string): T {
   const element = host.querySelector<T>(selector)
@@ -120,7 +121,7 @@ function renderHome (host: HTMLElement): void {
     </header>
     <div data-migration-overview></div>
     <div class="home-sections">
-    <div class="experiment-catalog" aria-label="Available experiments">
+    <div class="experiment-catalog" id="experiment-catalog" aria-label="Available experiments">
       <header class="catalog-header">
       <h2 class="catalog-title">Experiment catalog</h2>
       <p class="catalog-intro">Explore the groups from foundations to validation.
@@ -298,56 +299,18 @@ function renderReductionFrame (host: HTMLElement): HTMLElement {
   return requiredElement<HTMLElement>(host, '.reference-stage')
 }
 
-function createTab (label: string, href: string, active: boolean): HTMLAnchorElement {
-  const link = document.createElement('a')
-  link.textContent = label
-  link.href = href
-  link.classList.toggle('active', active)
-  if (active) link.setAttribute('aria-current', 'page')
-  return link
-}
-
 function renderExperimentFrame (
   host: HTMLElement,
   experiment: ExperimentDefinition,
-  activePage?: ExperimentPage,
-  view?: 'run' | 'evidence'
+  activePage?: ExperimentPage
 ): void {
   const record = research[experiment.id]
-  host.innerHTML = `
-    <header class="experiment-header">
-      <div>
-        <h1>${experiment.title}</h1>
-        ${!activePage && !view ? `<p>${record.question}</p>` : ''}
-      </div>
-    </header>
-    <nav class="page-tabs" aria-label="Experiment sections"></nav>
-    <section class="experiment-stage"></section>
-  `
-
-  const tabs = requiredElement<HTMLElement>(host, '.page-tabs')
-  const methods = researchMethodPages(record)
-  const section = activePage ? methods.includes(activePage.id) ? 'method' : 'evidence' : view ?? 'overview'
-  tabs.append(
-    createTab('Overview', experimentHref(experiment.id), section === 'overview'),
-    createTab('Run', runHref(experiment.id), section === 'run'),
-    createTab('Method', experimentHref(experiment.id, record.method), section === 'method'),
-    createTab('Evidence', `#/${experiment.id}/evidence`, section === 'evidence')
-  )
-  if (activePage && section === 'evidence') {
-    const breadcrumb = document.createElement('p'); breadcrumb.className = 'research-breadcrumb'
-    breadcrumb.innerHTML = `<a href="${experimentHref(experiment.id)}">Overview</a> →
-      <a href="#/${experiment.id}/evidence">Evidence</a>`
-    breadcrumb.append(` → ${activePage.title}`); tabs.after(breadcrumb)
-  }
-  if (activePage && section === 'method' && methods.length > 1) {
-    const topics = document.createElement('nav'); topics.className = 'method-topics'; topics.setAttribute('aria-label', 'Method topics')
-    for (const id of methods) {
-      const page = experiment.pages.find(page => page.id === id)!
-      topics.append(createTab(page.title === 'Overview' ? 'Method overview' : page.title, experimentHref(experiment.id, id), id === activePage.id))
-    }
-    tabs.after(topics)
-  }
+  host.innerHTML = activePage
+    ? `<a class="experiment-return" href="${experimentHref(experiment.id)}">← ${experiment.title}</a>
+      <section class="experiment-stage unified-document"></section>`
+    : `<header class="experiment-header unified-header"><h1>${experiment.title}</h1><p>${record.question}</p>
+      <p class="research-conclusion">${record.conclusion}</p></header><section class="experiment-stage unified-experiment" aria-busy="true"></section>`
+  if (!activePage) renderExperimentContents(requiredElement(host, '.experiment-stage'), experiment)
 }
 
 function renderMissing (host: HTMLElement, id: string): void {
@@ -383,6 +346,9 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
           <span><strong>Cosmos</strong><small>GPU Lab</small></span>
         </a>
         <nav class="experiment-nav" aria-label="Experiments"></nav>
+        <nav class="compact-lab-navigation" aria-label="Lab navigation">
+          <a href="#/?section=experiment-catalog">Experiments</a><a href="#/roadmap">Roadmap</a><a href="#/learn">Learn</a>
+        </nav>
         <div class="sidebar-note">
           <span class="status-dot"></span>
           luma.gl v10 research workspace
@@ -404,6 +370,11 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     const version = renderVersion
     disposeDocumentTables(workspace)
     const route = readRoute()
+    if (route.kind === 'experiment' && !route.pageId && route.view) {
+      const params = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
+      if (route.view === 'evidence' && !params.has('section')) params.set('section', 'recorded-findings')
+      window.history.replaceState(null, '', `${experimentHref(route.experimentId)}${params.size ? `?${params}` : ''}`)
+    }
     if (previousPath) scrollPositions.set(previousPath, window.scrollY)
     const path = window.location.hash.split('?')[0] || '#/'
     previousPath = path
@@ -433,6 +404,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
 
     if (route.kind === 'home') {
       renderHome(workspace)
+      scrollToSection(workspace, currentSection())
       finish()
       return
     }
@@ -559,16 +531,18 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       : undefined
     if (route.pageId && !page) { renderMissing(workspace, `${experiment.id}/docs/${route.pageId}`); finish(); return }
     const record = research[experiment.id]
-    renderExperimentFrame(workspace, experiment, page, route.view)
+    renderExperimentFrame(workspace, experiment, page)
     const stage = requiredElement<HTMLElement>(workspace, '.experiment-stage')
 
     try {
-      if (!page && route.view !== 'run') {
-        if (route.view === 'evidence') renderEvidenceIndex(stage, experiment, record)
-        else renderResearchOverview(stage, experiment, record)
-      } else if (!page) {
+      if (!page) {
         await run.show(experiment, stage)
-        if (version === renderVersion) scrollToSection(stage, currentSection())
+        if (version !== renderVersion) return
+        await mountExperimentNotes(requiredElement(stage, '.experiment-run'), experiment, record)
+        if (version !== renderVersion) return
+        renderExperimentContents(stage, experiment)
+        stage.setAttribute('aria-busy', 'false')
+        scrollToSection(stage, currentSection())
       } else if (page.kind === 'markdown') {
         stage.innerHTML = '<div class="loading">Loading documentation…</div>'
         const [source, renderer] = await Promise.all([page.load(), import('./markdown')])
@@ -576,6 +550,9 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
         const method = page.id === record.method && page.id !== 'validation-contract'
         await renderer.renderMarkdown(stage, method ? `${source}\n\n${validationContractMarkdown(experiment.id, false)}` : source, page.assets)
         if (version !== renderVersion) return
+        const layout = stage.querySelector('.document-layout')
+        const title = layout?.querySelector('.prose > h1')
+        if (title) layout!.before(title)
         renderInvestigationContext(stage, experiment, record, page.id)
         scrollToSection(stage, currentSection())
       } else {
@@ -586,6 +563,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       }
     } catch (error) {
       if (version !== renderVersion) return
+      stage.setAttribute('aria-busy', 'false')
       renderFailure(stage, error)
     }
     finish()

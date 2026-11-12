@@ -30,11 +30,11 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       <label>Alpha schedule <select data-control="coolingTicks"><option value="0">Fixed alpha</option>
         <option value="100">Cool over 100 ticks</option><option value="300">Cool over 300 ticks</option></select></label>
       <label>Passes per tick <select data-control="iterations"><option>1</option><option>2</option><option>4</option></select></label>
-      <label>Collision arithmetic (WebGPU) <select data-control="arithmetic"><option value="native">Native f32</option>
-        <option value="targeted" selected>Targeted distance + contributions</option>
+      <label>WebGPU collision arithmetic <select data-control="arithmetic"><option value="native">Native f32</option>
+        <option value="targeted" selected>Targeted correction</option>
         <option value="strict">Strict reference</option></select></label>
-      <label>Center reduction (WebGPU) <select data-control="centerReduction"><option value="high-low">High/low sum · corrected</option>
-        <option value="f32">Float32 tree · original control</option></select></label>
+      <label>WebGPU center reduction <select data-control="centerReduction"><option value="high-low">Corrected high/low sum</option>
+        <option value="f32">Original float32 tree</option></select></label>
       <label>Radius <select data-control="radius"><option value="0">Size / 2 · variable</option>
         <option value="4">Fixed 4</option>
         <option value="8">Fixed 8</option></select></label>
@@ -50,11 +50,11 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       data-run-section="run">
     <div class="demo-toolbar playback-toolbar"><div class="controls">
       <button data-action="step" class="button-primary"
-      data-run-action="primary">Step + validate</button>
+      data-run-action="primary">Step</button>
       <button data-action="run"
-      data-run-action="primary">100 validated ticks</button>
+      data-run-action="primary">Run 100 ticks</button>
       <button data-action="schedule" disabled
-      data-run-action="primary">Run cooling schedule</button>
+      data-run-action="primary">Run cooling</button>
       <button data-action="stop" disabled
       data-run-action="primary">Stop</button>
       <button data-action="reset"
@@ -78,7 +78,7 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       <p class="demo-note" data-info="${name}"></p></article>`).join('')}</div></section>
     <p class="demo-note" data-output="pipeline"></p></section>
     <section
-      data-run-section="results"><p class="demo-note">Live numerical checks and layout measurements. Recorded findings are under Evidence.</p>
+      data-run-section="results"><p class="demo-note">Live numerical checks and layout measurements. Recorded findings follow below.</p>
     <div class="many-body-results" data-output="trajectory"
       data-run-part="results"></div>
     <div class="trajectory-chart" data-output="charts"
@@ -94,10 +94,7 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
     <div class="many-body-results" data-output="cost"
       data-run-part="diagnostics"></div>
     <p class="demo-note">Exact all-pairs collision, limited to small graphs. Discs show effective world-space radii; yellow centers are pinned.
-      Validation includes readback and CPU work. Use the paired GPU measurement for cost, not the elapsed validation time.
-      <a href="#/collision/docs/method">Method and scope</a> · <a href="#/collision/docs/precision">Targeted findings</a> ·
-      <a href="#/collision/docs/trajectories">Native baseline</a> ·
-      <a href="#/collision/docs/findings">Center-correction findings</a>.</p></section>`
+      Validation includes readback and CPU work. Use the paired GPU measurement for cost, not the elapsed validation time.</p></section>`
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
   const control = (name: string): HTMLSelectElement => el(`[data-control="${name}"]`)
   const canvas = (name: string): HTMLCanvasElement => el(`[data-canvas="${name}"]`)
@@ -162,10 +159,10 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
         ? 'Unavailable / stopped'
         : name === 'cpu'
           ? 'Independent oracle'
-          : `${report.rows.filter(r => r.checks[name]?.valid).length}/${report.rows.length} tick checks`
+          : report.rows.length ? `${report.rows.filter(r => r.checks[name]?.valid).length}/${report.rows.length} tick checks` : 'Ready · no checks yet'
       el(`[data-info="${name}"]`).textContent = errors ?? (name === 'cpu'
         ? 'Stepwise float32 arithmetic · Canvas2D preview'
-        : `${report.devices[name] ?? 'Unavailable'} · ${failed} failed tick checks · ` +
+        : `${failed} failed tick checks · ` +
           `${report.rows.filter(r => r.trajectory[name]?.valid).length}/${report.rows.length} trajectory checks vs CPU pass`)
     }
     el('[data-output="trajectory"]').innerHTML = row
@@ -351,7 +348,7 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
   }
   const run = async (count: number): Promise<void> => {
     if (session!.settings.coolingTicks) count = Math.min(count, session!.settings.coolingTicks - session!.report.rows.length)
-    el('.playback-toolbar').scrollIntoView({ block: 'start' })
+    el('.run-primary-actions').scrollIntoView({ block: 'start' })
     for (let i = 0; i < count; i++) {
       if (stopped || destroyed) break
       status.textContent = `Validating tick ${session!.report.rows.length + 1}…`
