@@ -37,7 +37,7 @@ export async function createResidentView (host: HTMLElement): Promise<Experiment
       <div class="panel-heading"><h2>${name}</h2><span data-output="reads-${i}" class="status">No snapshots</span></div>
       <canvas data-lane="${i}" width="480" height="340" aria-label="${name} layout"></canvas>
       <p class="demo-note" data-output="info-${i}"></p></article>`).join('')}</section>
-    <p class="demo-note">Fixed camera; blue free points, yellow pinned. Checks at tick 1, every 5 ticks and the final tick.
+    <p class="demo-note">Fixed camera; blue circles are free, yellow squares are pinned. Checks at tick 1, every 5 ticks and the final tick.
       Snapshot counts include both force and position buffers; bounds and hierarchy checks add checkpoint-only downloads.
       This compares dataflow on one adapter, not independent force correctness or frame rate.</p>
     <div data-output="results" class="many-body-results"

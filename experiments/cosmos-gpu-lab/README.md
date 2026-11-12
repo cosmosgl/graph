@@ -49,7 +49,7 @@ for errors, with a lighter `--danger-text` for small labels on raised surfaces. 
 structural cues alongside color, such as error messages, active underlines and context borders.
 
 Graph presentation uses `src/runtime/palette.ts` across CPU canvases and GPU render shaders:
-blue free points, yellow pins/center markers, charcoal backgrounds and neutral links. Comparison
+blue free circles, yellow square pins/center markers, charcoal backgrounds and neutral links. Comparison
 charts use solid blue for WebGPU, dashed yellow for WebGL and dotted coral for CPU; trajectory
 variants use the same three styles with their own labels. Keep diagnostic color fixtures and
 spatial-grid encodings independent of the presentation palette.

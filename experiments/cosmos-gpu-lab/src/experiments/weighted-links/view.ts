@@ -1,3 +1,4 @@
+import { setStatus } from '../../runtime/presentation'
 import { milliseconds, scientific } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
@@ -100,7 +101,7 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
     <p class="demo-note"
       data-run-part="explanation">Both directions retain input link order. One tick = source-side spring → integrate → target-side spring → integrate → draw.
       Validation reads both forces and both position substeps. The measured tick has no position readback or CPU reference work.
-      Yellow points are pinned; absent points and their incident links are hidden.</p>
+      Yellow squares are pinned; absent points and their incident links are hidden.</p>
     <p data-output="status" role="status"
       data-run-part="status">Creating backends…</p>
     <div class="markdown-body" data-output="results"
@@ -168,7 +169,7 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
     ticks = 0; cpu = graph.points.slice(); validation.length = 0; capture = undefined
     for (const backend of backends) {
       backend.reset(); backend.render()
-      el<HTMLElement>(`[data-status="${backend.name}"]`).textContent = 'Ready'
+      setStatus(el<HTMLElement>(`[data-status="${backend.name}"]`), 'Ready')
     }
     el<HTMLElement>('[data-output="tick"]').textContent = '0'
     el<HTMLElement>('[data-output="results"]').replaceChildren()
@@ -201,7 +202,7 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
     const valid = checks.length > 0 && checks.every(r => r.valid) && (pair?.valid ?? true)
     validation.push({ tick: ticks, checks, crossBackend: pair })
     for (const check of checks) {
-      el<HTMLElement>(`[data-status="${check.backend}"]`).textContent = `${check.valid ? 'Pass' : 'Fail'} · max Δ ${scientific(check.maxError, 2)}`
+      setStatus(el<HTMLElement>(`[data-status="${check.backend}"]`), `${check.valid ? 'Pass' : 'Fail'} · max Δ ${scientific(check.maxError, 2)}`, !check.valid)
     }
     el<HTMLElement>('[data-output="tick"]').textContent = String(ticks)
     status.textContent = `${valid ? 'Pass' : 'Fail'} · all points, both forces and both substeps · ${backends.length}/2 backends${
@@ -324,10 +325,10 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
         () => el<HTMLSelectElement>('[data-control="spring-loop"]').value === 'early-exit')
       backends.push(backend)
       el<HTMLElement>(`[data-info="${name}"]`).textContent = backend.info
-      el<HTMLElement>(`[data-status="${name}"]`).textContent = 'Ready'
+      setStatus(el<HTMLElement>(`[data-status="${name}"]`), 'Ready')
     } catch (error) {
       runError = String(error)
-      el<HTMLElement>(`[data-status="${name}"]`).textContent = 'Unavailable'
+      setStatus(el<HTMLElement>(`[data-status="${name}"]`), 'Unavailable', true)
       el<HTMLElement>(`[data-info="${name}"]`).textContent = error instanceof Error ? error.message : String(error)
     }
   }))

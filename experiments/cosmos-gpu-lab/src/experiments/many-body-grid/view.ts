@@ -1,3 +1,4 @@
+import { setStatus, drawPoint } from '../../runtime/presentation'
 import { count as formatCount, scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
 import { graphPalette } from '../../runtime/palette'
@@ -19,11 +20,8 @@ function drawCpu (canvas: HTMLCanvasElement, points: Float32Array, view: View): 
   ctx.fillStyle = graphPalette.background; ctx.fillRect(0, 0, canvas.width, canvas.height)
   for (let i = 0; i < points.length; i += 4) {
     if (points[i + 3] > 0.5) continue
-    ctx.fillStyle = points[i + 2] > 0.5 ? graphPalette.pinned : graphPalette.point
-    ctx.beginPath()
-    ctx.arc(((points[i] - view[0]) * view[2] + 1) * canvas.width / 2,
-      (1 - (points[i + 1] - view[1]) * view[3]) * canvas.height / 2, 2.5, 0, Math.PI * 2)
-    ctx.fill()
+    drawPoint(ctx, ((points[i] - view[0]) * view[2] + 1) * canvas.width / 2,
+      (1 - (points[i + 1] - view[1]) * view[3]) * canvas.height / 2, points[i + 2] > 0.5)
   }
 }
 export async function createGridExperiment (host: HTMLElement): Promise<ExperimentInstance> {
@@ -69,7 +67,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       <div class="panel-heading"><h2>${name}</h2><span data-status="${name}" class="status">Starting…</span></div>
       <canvas data-canvas="${name}" width="480" height="340" aria-label="${name} hierarchical positions"></canvas>
       <p class="demo-note" data-info="${name}"></p></article>`).join('')}</section>
-    <p class="demo-note">Each tick starts from CPU-model positions. Blue points are free, yellow points pinned; absent points are hidden.
+    <p class="demo-note">Each tick starts from CPU-model positions. Blue circles are free, yellow squares pinned; absent points are hidden.
       GPU panels draw resident positions. Force-only motion expands the layout; springs, gravity and cooling are disabled.</p>
     <div class="many-body-results" data-output="results"
       data-run-part="results"></div>
@@ -110,7 +108,7 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
       try { lane.backend.render(view) } catch (error) {
         runError = String(error)
         errors[lane.name] = error instanceof Error ? error.message : String(error)
-        el(`[data-status="${lane.name}"]`).textContent = 'Failed'
+        setStatus(el(`[data-status="${lane.name}"]`), 'Failed', true)
         el(`[data-info="${lane.name}"]`).textContent = errors[lane.name]
       }
     }
@@ -132,17 +130,17 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
     status.textContent = 'Preparing backends…'
     for (const name of ['WebGL', 'WebGPU']) {
       const old = canvas(name); const fresh = old.cloneNode() as HTMLCanvasElement; old.replaceWith(fresh)
-      el(`[data-status="${name}"]`).textContent = 'Starting…'
+      setStatus(el(`[data-status="${name}"]`), 'Starting…')
       try {
         const backend = await (name === 'WebGL' ? createGridWebGL : createGridWebGPU)(fresh, input, PARAMETERS, frame)
         if (destroyed) { backend.destroy(); return }
         lanes.push({ name, backend, positions: cpu })
-        el(`[data-status="${name}"]`).textContent = 'Ready'
+        setStatus(el(`[data-status="${name}"]`), 'Ready')
         el(`[data-info="${name}"]`).textContent = backend.info
       } catch (error) {
         runError = String(error)
         errors[name] = error instanceof Error ? error.message : String(error)
-        el(`[data-status="${name}"]`).textContent = 'Unavailable'; el(`[data-info="${name}"]`).textContent = errors[name]
+        setStatus(el(`[data-status="${name}"]`), 'Unavailable', true); el(`[data-info="${name}"]`).textContent = errors[name]
       }
       if (destroyed) return
     }
@@ -185,11 +183,11 @@ export async function createGridExperiment (host: HTMLElement): Promise<Experime
         if (report) diagnostics.push({ name: lane.name, report })
         checks.push(check); snapshots[lane.name] = actual; lane.positions = actual.positions
         const valid = check.structure.valid && check.output.valid && check.local.valid && check.integration.valid && (!report || report.replay.valid)
-        el(`[data-status="${lane.name}"]`).textContent = valid ? 'Pass' : 'Fail'
+        setStatus(el(`[data-status="${lane.name}"]`), valid ? 'Pass' : 'Fail', !valid)
       } catch (error) {
         runError = String(error)
         errors[lane.name] = error instanceof Error ? error.message : String(error)
-        el(`[data-status="${lane.name}"]`).textContent = 'Failed'; el(`[data-info="${lane.name}"]`).textContent = errors[lane.name]
+        setStatus(el(`[data-status="${lane.name}"]`), 'Failed', true); el(`[data-info="${lane.name}"]`).textContent = errors[lane.name]
       }
     }
     if (destroyed) return false

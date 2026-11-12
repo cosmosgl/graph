@@ -1,3 +1,4 @@
+import { drawPoint } from '../../runtime/presentation'
 import { count as formatCount, milliseconds, scientific } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
@@ -93,7 +94,7 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       data-run-section="diagnostics">
     <div class="many-body-results" data-output="cost"
       data-run-part="diagnostics"></div>
-    <p class="demo-note">Exact all-pairs collision, limited to small graphs. Discs show effective world-space radii; yellow centers are pinned.
+    <p class="demo-note">Exact all-pairs collision, limited to small graphs. Discs show effective world-space radii; yellow square centers are pinned.
       Validation includes readback and CPU work. Use the paired GPU measurement for cost, not the elapsed validation time.</p></section>`
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
   const control = (name: string): HTMLSelectElement => el(`[data-control="${name}"]`)
@@ -141,7 +142,7 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
       ctx.fillStyle = pinned ? graphPalette.pinned : graphPalette.point; ctx.beginPath(); ctx.arc(x, y, r, 0, 2 * Math.PI); ctx.fill()
       ctx.fillStyle = pinned ? graphPalette.pinnedInterior : graphPalette.pointInterior
       ctx.beginPath(); ctx.arc(x, y, r * 0.88, 0, 2 * Math.PI); ctx.fill()
-      ctx.fillStyle = pinned ? graphPalette.pinned : graphPalette.point; ctx.beginPath(); ctx.arc(x, y, 2.5, 0, 2 * Math.PI); ctx.fill()
+      drawPoint(ctx, x, y, pinned)
     }
     el('[data-output="tick"]').textContent = String(report.rows.length)
     el('[data-output="pipeline"]').textContent = `${settings.mode === 'combined'
@@ -155,6 +156,8 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
     for (const name of NAMES) {
       const errors = name === 'cpu' ? undefined : report.errors[name]
       const failed = name === 'cpu' ? 0 : report.rows.filter(r => r.checks[name]?.valid === false).length
+      const trajectoryFailed = name !== 'cpu' && report.rows.some(r => r.trajectory[name]?.valid === false)
+      el(`[data-state="${name}"]`).classList.toggle('failed', Boolean(errors) || failed > 0 || trajectoryFailed)
       el(`[data-state="${name}"]`).textContent = errors
         ? 'Unavailable / stopped'
         : name === 'cpu'
@@ -204,7 +207,7 @@ export async function createCollisionView (host: HTMLElement): Promise<Experimen
         const values = report.rows.flatMap(r => NAMES.map(n => chart.value(r, n))).filter((v): v is number => v !== undefined && Number.isFinite(v))
         const max = Math.max(1e-12, ...values)
         return `<h3>${chart.title}</h3><svg viewBox="0 0 720 170" role="img" aria-label="${chart.title} over ${row.tick} ticks">
-        <path d="M60 20 V135 H690" stroke="currentColor" opacity="0.3" fill="none"/>
+        <path d="M60 20 V135 H690" stroke="${graphPalette.link}" fill="none"/>
         <text x="0" y="24" fill="currentColor" font-size="12">${num(max)}</text><text x="45" y="139" fill="currentColor" font-size="12">0</text>
         <text x="60" y="160" fill="currentColor" font-size="12">Tick 1</text><text x="630" y="160" fill="currentColor" font-size="12">Tick ${row.tick}</text>
         ${NAMES.map(n => `<polyline fill="none" stroke="${colors[n].color}" stroke-dasharray="${colors[n].dash}"

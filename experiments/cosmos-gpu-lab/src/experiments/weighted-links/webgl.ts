@@ -27,7 +27,7 @@ precision highp float;
 precision highp int;
 uniform sampler2D positions; uniform sampler2D links;
 ${renderUniformBlock}
-out vec3 color;
+out vec3 color; flat out float pinnedMarker;
 vec4 pointAt(int i) { return texelFetch(positions, ivec2(i % pointSize, i / pointSize), 0); }
 void main() {
   int i = gl_VertexID; bool absent = false;
@@ -38,14 +38,15 @@ void main() {
   }
   vec4 p = pointAt(i); gl_Position = vec4(p.xy, 0., 1.); gl_PointSize = 5.;
   if (p.w > 0.5 || absent) gl_Position = vec4(3.,3.,0.,1.);
+  pinnedMarker = p.z;
   color = isLink == 1 ? vec3(${graphRgb.link}) : (p.z > 0.5 ? vec3(${graphRgb.pinned}) : vec3(${graphRgb.point}));
 }`
 const renderFragment = `#version 300 es
 precision highp float;
 precision highp int;
 ${renderUniformBlock}
-in vec3 color; out vec4 outColor;
-void main() { if (isLink == 0 && length(gl_PointCoord * 2. - 1.) > 1.) discard; outColor = vec4(color, 1.); }`
+in vec3 color; flat in float pinnedMarker; out vec4 outColor;
+void main() { if (isLink == 0 && pinnedMarker <= 0.5 && length(gl_PointCoord * 2. - 1.) > 1.) discard; outColor = vec4(color, 1.); }`
 
 export function springShader (maxDegree: number, stopAtDegree: boolean): string {
   const source = forceFrag(maxDegree)

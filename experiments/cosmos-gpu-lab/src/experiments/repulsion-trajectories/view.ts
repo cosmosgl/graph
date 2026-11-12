@@ -1,3 +1,4 @@
+import { drawPoint } from '../../runtime/presentation'
 import { count as formatCount, scientific } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
@@ -73,14 +74,12 @@ export async function createTrajectories (host: HTMLElement): Promise<Experiment
     ctx.fillStyle = graphPalette.background; ctx.fillRect(0, 0, c.width, c.height)
     for (let i = 0; i < cpu.length; i += 4) {
       if (cpu[i + 3] > 0.5) continue
-      ctx.fillStyle = cpu[i + 2] > 0.5 ? graphPalette.pinned : graphPalette.point
-      ctx.beginPath()
-      ctx.arc(((cpu[i] - view[0]) * view[2] + 1) * c.width / 2,
-        (1 - (cpu[i + 1] - view[1]) * view[3]) * c.height / 2, 2.5, 0, Math.PI * 2)
-      ctx.fill()
+      drawPoint(ctx, ((cpu[i] - view[0]) * view[2] + 1) * c.width / 2,
+        (1 - (cpu[i + 1] - view[1]) * view[3]) * c.height / 2, cpu[i + 2] > 0.5)
     }
     for (const name of LANES) {
       const failures = session.rows.filter(r => r.checks.some(c => c.name === name && !c.valid)).length
+      el(`[data-state="${name}"]`).classList.toggle('failed', Boolean(session.errors[name]) || failures > 0)
       el(`[data-state="${name}"]`).textContent = session.errors[name]
         ? 'Unavailable / stopped'
         : failures ? `${failures} failed ticks` : row ? 'Local checks pass' : 'Ready'
@@ -118,7 +117,7 @@ export async function createTrajectories (host: HTMLElement): Promise<Experiment
     el('[data-output="chart"]').innerHTML = `<h3>Position drift over time</h3>
       <p class="demo-note">RMS distance from the independent CPU path, in world units. Linear scale; no convergence verdict.</p>
       <svg viewBox="0 0 720 205" role="img" aria-label="Independent position drift over ${row.tick} ticks">
-      <path d="M50 25 V170 H690" fill="none" stroke="currentColor" opacity="0.4"/>
+      <path d="M50 25 V170 H690" fill="none" stroke="${graphPalette.link}"/>
       <text x="50" y="17" fill="currentColor" font-size="12">${number(max)}</text>
       <text x="30" y="174" fill="currentColor" font-size="12">0</text><text x="50" y="195" fill="currentColor" font-size="12">Tick 1</text>
       <text x="640" y="195" fill="currentColor" font-size="12">Tick ${row.tick}</text>
