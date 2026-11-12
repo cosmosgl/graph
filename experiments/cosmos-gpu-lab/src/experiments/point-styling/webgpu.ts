@@ -2,7 +2,7 @@ import { Buffer, type TextureFormatColor } from '@luma.gl/core'
 import { RenderKernel } from '@luma.gl/engine'
 import { ALPHA_BLEND, bindingLayout, createDevice, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
-import { dimensions, pixels, target, type Backend, type Snapshot } from './backend'
+import { dimensions, floatPixels, pixels, target, type Backend, type Snapshot } from './backend'
 import { HEIGHT, resolvePoint, WIDTH } from './data'
 import source from './points.wgsl?raw'
 
@@ -29,10 +29,11 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<B
       },
     }))
     const colorKernel = make('rgba8unorm', false); const pickKernel = make('rgba8unorm', true)
+    let diagnostic: RenderKernel | undefined
     const displayKernel = make(device.canvasContext!.getCurrentFramebuffer().colorAttachments[0].texture.format as TextureFormatColor, false, true)
     return {
       info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
-      async render (points, settings): Promise<Snapshot> {
+      async render (points, settings, diagnose = false, variant = 'production'): Promise<Snapshot> {
         const frame = resourceScope()
         try {
           const [width, height] = dimensions(settings); canvas.width = width; canvas.height = height
@@ -45,11 +46,11 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<B
             records.set([p.x, p.y, p.size, p.shape, ...p.color, ...p.strokeColor, p.stroke, Number(!!p.absent), id, 0], index * 16)
           })
           const buffer = frame.own(upload(device, records))
-          const params = (picking: boolean): ReturnType<typeof upload> => frame.own(upload(device, new Float32Array([
+          const params = (mode: number): ReturnType<typeof upload> => frame.own(upload(device, new Float32Array([
             WIDTH, HEIGHT, settings.ratio, settings.zoom, settings.sizeScale, settings.maxSize, settings.opacity, 0,
-            Number(settings.scaleOnZoom), Number(picking), 0, 0,
+            Number(settings.scaleOnZoom), mode, Number(variant === 'explicit'), 0,
           ]), Buffer.UNIFORM))
-          const visibleParams = params(false); const pickingParams = params(true)
+          const visibleParams = params(0); const pickingParams = params(1)
           const draw = (kernel: RenderKernel, uniforms: ReturnType<typeof upload>, framebuffer?: ReturnType<typeof target>['framebuffer']): void => {
             const pass = device.beginRenderPass({ framebuffer, clearColor: framebuffer ? [0, 0, 0, 0] : [0.14, 0.16, 0.185, 1], clearDepth: false })
             try {
@@ -58,11 +59,20 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<B
           }
           draw(colorKernel, visibleParams, color.framebuffer); draw(pickKernel, pickingParams, ids.framebuffer); draw(displayKernel, visibleParams)
           device.submit()
-          const result = {
+          const result: Snapshot = {
             width,
             height,
             color: await pixels(device, color.texture, color.framebuffer),
             ids: await pixels(device, ids.texture, ids.framebuffer),
+          }
+          if (diagnose) {
+            diagnostic ??= make('rgba32float', true)
+            const geometry = frame.own(target(device, width, height, 'rgba32float'))
+            const edge = frame.own(target(device, width, height, 'rgba32float'))
+            draw(diagnostic, params(2), geometry.framebuffer); draw(diagnostic, params(3), edge.framebuffer); device.submit()
+            result.probe = {
+              geometry: await floatPixels(device, geometry.texture, geometry.framebuffer), edge: await floatPixels(device, edge.texture, edge.framebuffer),
+            }
           }
           if (failure || device.isLost) throw new Error(failure ?? 'WebGPU device lost')
           return result

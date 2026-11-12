@@ -1,15 +1,36 @@
 import { Buffer, Texture, type Device, type Framebuffer } from '@luma.gl/core'
 import { HEIGHT, WIDTH, type Point, type Settings } from './data'
-export type Snapshot = { width: number; height: number; color: Uint8Array; ids: Uint8Array }
+export type Probe = { geometry: Float32Array; edge: Float32Array }
+export type RenderVariant = 'production' | 'explicit'
+export type Snapshot = { width: number; height: number; color: Uint8Array; ids: Uint8Array; probe?: Probe; analyticControl?: Snapshot }
 export type Backend = {
-  info: string; render(points: Point[], settings: Settings): Promise<Snapshot>; destroy(): void;
+  info: string; render(points: Point[], settings: Settings, diagnose?: boolean, variant?: RenderVariant): Promise<Snapshot>; destroy(): void;
 }
-export function target (device: Device, width: number, height: number): { texture: Texture; framebuffer: Framebuffer; destroy(): void } {
-  const texture = device.createTexture({ width, height, format: 'rgba8unorm', usage: Texture.RENDER | Texture.COPY_SRC })
+export function target (device: Device, width: number, height: number, format: 'rgba8unorm' | 'rgba32float' = 'rgba8unorm'):
+{ texture: Texture; framebuffer: Framebuffer; destroy(): void } {
+  const texture = device.createTexture({ width, height, format, usage: Texture.RENDER | Texture.COPY_SRC })
   try {
     const framebuffer = device.createFramebuffer({ width, height, colorAttachments: [texture] })
     return { texture, framebuffer, destroy (): void { framebuffer.destroy(); texture.destroy() } }
   } catch (error) { texture.destroy(); throw error }
+}
+// Diagnostic float targets are unblended and read through public luma APIs.
+export async function floatPixels (device: Device, texture: Texture, framebuffer: Framebuffer): Promise<Float32Array> {
+  const { width, height } = texture; const stride = Math.ceil(width * 16 / 256) * 256
+  const result = new Float32Array(width * height * 4)
+  if (device.type === 'webgl') {
+    const raw = device.readPixelsToArrayWebGL(framebuffer) as Float32Array
+    for (let y = 0; y < height; y++) result.set(raw.subarray((height - 1 - y) * width * 4, (height - y) * width * 4), y * width * 4)
+    return result
+  }
+  const buffer = device.createBuffer({ byteLength: stride * height, usage: Buffer.COPY_DST | Buffer.COPY_SRC })
+  try {
+    device.commandEncoder.copyTextureToBuffer({ sourceTexture: texture, destinationBuffer: buffer, width, height, bytesPerRow: stride })
+    device.submit()
+    const bytes = await buffer.readAsync(); const raw = new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4)
+    for (let y = 0; y < height; y++) result.set(raw.subarray(y * stride / 4, y * stride / 4 + width * 4), y * width * 4)
+    return result
+  } finally { buffer.destroy() }
 }
 export async function pixels (device: Device, texture: Texture, framebuffer: Framebuffer): Promise<Uint8Array> {
   const { width, height } = texture; const stride = Math.ceil(width * 4 / 256) * 256

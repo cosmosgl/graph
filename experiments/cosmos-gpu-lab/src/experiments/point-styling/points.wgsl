@@ -90,10 +90,19 @@ fn distanceToShape(coord: vec2f, shape: u32) -> f32 {
 @fragment fn fragmentMain(input: Vertex) -> @location(0) vec4f {
   let p = points[input.index]; let shape = u32(p.geometry.w); let core = max(input.diameter,1.0);
   let offset = input.position.xy - input.center;
-  if (offset.x < -core * 0.5 || offset.x >= core * 0.5 || offset.y <= -core * 0.5 || offset.y > core * 0.5) { discard; }
+  if (params.options.z > 0.0) {
+    // Closed bounds match the unchanged scalar mask. The padded carrier reaches
+    // all four exact boundary pixels without increasing the shape diameter.
+    if (abs(offset.x) > core * 0.5 || abs(offset.y) > core * 0.5) { discard; }
+  } else {
+    if (offset.x < -core * 0.5 || offset.x >= core * 0.5 || offset.y <= -core * 0.5 || offset.y > core * 0.5) { discard; }
+  }
   let coord = offset * (2.0 / core);
   let distance = distanceToShape(coord,shape) * core * 0.5;
   let coverage = 1.0 - smoothstep(-0.5,0.5,distance);
+  // Unblended float-target instrumentation; normal color/ID modes are unchanged.
+  if (params.options.y == 2.0) { return vec4f(coord,core,input.diameter); }
+  if (params.options.y == 3.0) { return vec4f(coord,distance,coverage); }
   // Preserve production host-picking semantics: half coverage and positive fill
   // alpha, before global pointOpacity. The zero-opacity discrepancy is audited.
   if (params.options.y > 0.0) {

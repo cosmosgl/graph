@@ -17,3 +17,22 @@ it('shows the image verdict at startup and keeps the same run when inspecting a 
   expect(host.querySelector('[data-pick]')!.textContent).toContain('Pixel')
   expect(host.querySelector('details')).toBeNull()
 })
+
+it('labels candidate geometry separately from production compatibility and replays the boundary pixels', async () => {
+  host = document.createElement('div'); document.body.append(host)
+  instance = await createStylingView(host)
+  const canvas = host.querySelector('canvas')!
+  const select = async (selector: string, value: string): Promise<void> => {
+    const element = host!.querySelector<HTMLSelectElement>(selector)!
+    element.value = value; element.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(element.disabled).toBe(false), { timeout: 20000 })
+  }
+  await select('[data-fixture]', 'fractional'); await select('[data-renderer]', 'explicit'); await select('[data-ratio]', '2')
+  expect(host.querySelector('canvas')).toBe(canvas)
+  expect(host.querySelector('[role="status"]')!.textContent).toContain('Explicit candidate geometry passed')
+  const rows = host.querySelectorAll('[data-boundary-replay] tbody tr')
+  expect(rows).toHaveLength(6)
+  rows.forEach((row, i) => expect(row.children[2].textContent).toBe(`${[2, 2, 4, 4, 6, 6][i]} / ${[2, 2, 4, 4, 6, 6][i]}`))
+  expect(host.querySelector('[data-production-comparison]')!.textContent).toContain('Production WebGL ↔ explicit WebGPU')
+  expect(host.querySelector('details')).toBeNull()
+})

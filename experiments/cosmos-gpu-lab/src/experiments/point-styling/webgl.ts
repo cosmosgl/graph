@@ -9,7 +9,7 @@ import pointSize from '../../../../../src/modules/Points/point-size.glsl?raw'
 import exitRamp from '../../../../../src/modules/Points/exit-ramp.glsl?raw'
 import { ALPHA_BLEND, createDevice } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
-import { dimensions, pixels, target, type Backend, type Snapshot } from './backend'
+import { dimensions, floatPixels, pixels, target, type Backend, type Snapshot } from './backend'
 import { HEIGHT, WIDTH } from './data'
 
 // Declaration order matches the production std140 blocks verbatim.
@@ -66,6 +66,34 @@ function moduleSource (source: string): string {
   return match[1]
 }
 
+function coordinateSources (quads: boolean): { vertex: string; fragment: string } {
+  const position = 'gl_Position = vec4(finalPosition.rg, depthZ, 1.0);'
+  const coord = 'vec2 pointCoord = 2.0 * gl_PointCoord - 1.0;'
+  const size = 'overallSize = overallSizeValue;'
+  if (!vs.includes(position) || !vs.includes(size) || !fs.includes(coord)) throw new Error('Production coordinate control location changed')
+  let vertex = vs.replace('void main()', 'flat out vec2 diagnosticCenter;\nvoid main()')
+    .replace(position, `${position}\ndiagnosticCenter = (finalPosition.rg * 0.5 + 0.5) * screenSize * ratio;`)
+  if (quads) {
+    vertex = vertex.replace(size, `${size}
+    const vec2 corners[6] = vec2[6](vec2(-1,-1),vec2(1,-1),vec2(-1,1),vec2(-1,1),vec2(1,-1),vec2(1,1));
+    // Pad the carrier by one device pixel on every side. The fragment performs
+    // the original closed scalar bounds; padding never increases shape size.
+    gl_Position.xy += corners[gl_VertexID] * (overallSizeValue + 2.0) / (screenSize * ratio);`)
+  }
+  const fragment = fs.replace('void main()', 'flat in vec2 diagnosticCenter;\nvoid main()')
+    .replace(coord, `vec2 pointCoord = (gl_FragCoord.xy - diagnosticCenter) * vec2(2.0, -2.0) / overallSize;
+      ${quads ? 'if (abs(pointCoord.x) > 1.0 || abs(pointCoord.y) > 1.0) discard;' : ''}`)
+  return { vertex, fragment }
+}
+
+function instrumentCoverage (fragment: string): string {
+  const marker = 'shapeCoverage = opacity;'
+  if (!fragment.includes(marker)) throw new Error('Production coverage probe location changed')
+  return fragment.replace(marker, `${marker}
+    if (renderMode == 4.0) { fragColor = vec4(pointCoord, coreDiameterPx, shapeDiameterPx); return; }
+    if (renderMode == 5.0) { fragColor = vec4(coreCoord, edgeDistancePx, opacity); return; }`)
+}
+
 export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Backend> {
   const device = await createDevice('webgl', canvas, false); const scope = resourceScope()
   try {
@@ -79,32 +107,39 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
       ['sourceStrokeColor', 'float32x4'], ['targetStrokeColor', 'float32x4'],
       ['sourceStrokeWidth', 'float32'], ['targetStrokeWidth', 'float32'],
     ] as const
-    const make = (picking: boolean): Model => scope.own(new Model(device, {
-      vs,
-      fs,
-      topology: 'point-list',
-      vertexCount: 0,
-      modules: [{ name: 'shapeGeometry', vs: moduleSource(shapeGeometry), fs: moduleSource(shapeGeometry) },
-        { name: 'oklab', vs: moduleSource(oklab), fs: moduleSource(oklab) }, { name: 'pickingColor', fs: moduleSource(pickingColor) },
-        { name: 'pointSize', vs: pointSize, fs: pointSize }, { name: 'exitRamp', vs: exitRamp }],
-      defines: {
-        USE_UNIFORM_BUFFERS: true,
-        POINT_STROKE: true,
-        ...({
-          EXIT_DEFAULT_SIZE: '0.0', EXIT_DEFAULT_COLOR_CHANNEL: '0.0', EDGE_RAMP_PX: '1.0', POINT_RING_SCALE: '1.3',
-        } as unknown as Record<string, boolean>),
-      },
-      bufferLayout: attributes.map(([name, format]) => ({ name, format })),
-      bindings: {
-        drawVertexUniforms: uniforms.getManagedUniformBuffer('drawVertexUniforms'),
-        drawFragmentUniforms: uniforms.getManagedUniformBuffer('drawFragmentUniforms'),
-      },
-      parameters: { ...(picking ? { blend: false } : ALPHA_BLEND), depthWriteEnabled: false, depthCompare: 'always', cullMode: 'none' },
-    }))
+    const models: Array<{ model: Model; quads: boolean }> = []
+    const make = (picking: boolean, fragment = fs, vertex = vs, quads = false): Model => {
+      const model = scope.own(new Model(device, {
+        vs: vertex,
+        fs: fragment,
+        topology: quads ? 'triangle-list' : 'point-list',
+        vertexCount: 0,
+        modules: [{ name: 'shapeGeometry', vs: moduleSource(shapeGeometry), fs: moduleSource(shapeGeometry) },
+          { name: 'oklab', vs: moduleSource(oklab), fs: moduleSource(oklab) }, { name: 'pickingColor', fs: moduleSource(pickingColor) },
+          { name: 'pointSize', vs: pointSize, fs: pointSize }, { name: 'exitRamp', vs: exitRamp }],
+        defines: {
+          USE_UNIFORM_BUFFERS: true,
+          POINT_STROKE: true,
+          ...({
+            EXIT_DEFAULT_SIZE: '0.0', EXIT_DEFAULT_COLOR_CHANNEL: '0.0', EDGE_RAMP_PX: '1.0', POINT_RING_SCALE: '1.3',
+          } as unknown as Record<string, boolean>),
+        },
+        bufferLayout: attributes.map(([name, format]) => ({ name, format, stepMode: quads ? 'instance' : 'vertex' })),
+        bindings: {
+          drawVertexUniforms: uniforms.getManagedUniformBuffer('drawVertexUniforms'),
+          drawFragmentUniforms: uniforms.getManagedUniformBuffer('drawFragmentUniforms'),
+        },
+        parameters: { ...(picking ? { blend: false } : ALPHA_BLEND), depthWriteEnabled: false, depthCompare: 'always', cullMode: 'none' },
+      }))
+      models.push({ model, quads }); return model
+    }
     const visible = make(false); const picking = make(true)
+    let diagnostic: Model | undefined
+    let analyticColor: Model | undefined; let analyticPick: Model | undefined
+    let explicitColor: Model | undefined; let explicitPick: Model | undefined; let explicitProbe: Model | undefined
     return {
       info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
-      async render (points, settings): Promise<Snapshot> {
+      async render (points, settings, diagnose = false, variant = 'production'): Promise<Snapshot> {
         const frame = resourceScope()
         try {
           const [width, height] = dimensions(settings); canvas.width = width; canvas.height = height
@@ -150,7 +185,21 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
             })
             records[name] = frame.own(device.createBuffer({ data: new Float32Array(values.length ? values : [0, 0, 0, 0]) }))
           }
-          for (const model of [visible, picking]) { model.setAttributes(records); model.setBindings(bindings); model.setVertexCount(points.length) }
+          if (variant === 'explicit' && !explicitColor) {
+            const { vertex, fragment } = coordinateSources(true)
+            explicitColor = make(false, fragment, vertex, true); explicitPick = make(true, fragment, vertex, true)
+            explicitProbe = make(true, instrumentCoverage(fragment), vertex, true)
+          }
+          if (diagnose && variant === 'production' && !diagnostic) {
+            // Instrument a copy, leaving the production color/picking shader untouched.
+            diagnostic = make(true, instrumentCoverage(fs))
+            const { vertex, fragment } = coordinateSources(false)
+            analyticColor = make(false, fragment, vertex); analyticPick = make(true, fragment, vertex)
+          }
+          for (const { model, quads } of models) {
+            model.setAttributes(records); model.setBindings(bindings); model.setVertexCount(quads ? 6 : points.length)
+            if (quads) model.setInstanceCount(points.length)
+          }
           uniforms.setUniforms({
             drawVertexUniforms: {
               ratio: settings.ratio,
@@ -203,9 +252,30 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
             const pass = device.beginRenderPass({ framebuffer, clearColor: framebuffer ? [0, 0, 0, 0] : [0.14, 0.16, 0.185, 1], clearDepth: false })
             try { model.draw(pass) } finally { pass.end() }
           }
-          draw(visible, 0, color.framebuffer); draw(picking, 3, ids.framebuffer); draw(visible, 0); device.submit()
-          const result = {
+          const colorModel = variant === 'explicit' ? explicitColor! : visible
+          const pickModel = variant === 'explicit' ? explicitPick! : picking
+          draw(colorModel, 0, color.framebuffer); draw(pickModel, 3, ids.framebuffer); draw(colorModel, 0); device.submit()
+          const result: Snapshot = {
             width, height, color: await pixels(device, color.texture, color.framebuffer), ids: await pixels(device, ids.texture, ids.framebuffer),
+          }
+          if (diagnose) {
+            const geometry = frame.own(target(device, width, height, 'rgba32float'))
+            const edge = frame.own(target(device, width, height, 'rgba32float'))
+            const probe = variant === 'explicit' ? explicitProbe! : diagnostic!
+            draw(probe, 4, geometry.framebuffer); draw(probe, 5, edge.framebuffer); device.submit()
+            result.probe = {
+              geometry: await floatPixels(device, geometry.texture, geometry.framebuffer), edge: await floatPixels(device, edge.texture, edge.framebuffer),
+            }
+          }
+          if (diagnose && variant === 'production') {
+            const analytic = frame.own(target(device, width, height)); const analyticIds = frame.own(target(device, width, height))
+            draw(analyticColor!, 0, analytic.framebuffer); draw(analyticPick!, 3, analyticIds.framebuffer); device.submit()
+            result.analyticControl = {
+              width,
+              height,
+              color: await pixels(device, analytic.texture, analytic.framebuffer),
+              ids: await pixels(device, analyticIds.texture, analyticIds.framebuffer),
+            }
           }
           if (device.isLost) throw new Error('WebGL device lost')
           return result
