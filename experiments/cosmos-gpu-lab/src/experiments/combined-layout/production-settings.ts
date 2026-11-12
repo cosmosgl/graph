@@ -1,8 +1,9 @@
 import { getFinestGridSize, getNearFieldSlotCount } from '../../../../../src/modules/Shared/cell-slots'
 import { validateCollision, type CollisionParameters, type CollisionArithmetic } from '../collision/data'
+import type { CenterReduction } from './center-reduction'
 export type ForceSettings = {
   samples: number; variation: [number, number]; precise: boolean; origin?: [number, number]; center?: number;
-  collision?: CollisionParameters; collisionArithmetic?: CollisionArithmetic;
+  collision?: CollisionParameters; collisionArithmetic?: CollisionArithmetic; centerReduction?: CenterReduction;
 }
 export type ProductionPreset = 'reference' | 'samples32' | 'varied32' | 'adaptive'
 export const PRESETS: Record<ProductionPreset, string> = {
@@ -24,6 +25,7 @@ export function validateForceSettings (s: ForceSettings): void {
     !s.variation.every(v => Number.isFinite(v) && v > 0) || s.variation[0] > s.variation[1]) throw new Error('Invalid force settings')
   if (s.origin && (s.origin.length !== 2 || !s.origin.every(Number.isFinite))) throw new Error('Invalid force origin')
   if (s.center !== undefined && (!Number.isFinite(s.center) || s.center < 0)) throw new Error('Invalid center force')
+  if (s.centerReduction && !['f32', 'high-low'].includes(s.centerReduction)) throw new Error('Invalid center reduction')
   if (s.collision) validateCollision(s.collision)
   if (s.collisionArithmetic && !['native', 'strict'].includes(s.collisionArithmetic)) throw new Error('Invalid collision arithmetic')
 }

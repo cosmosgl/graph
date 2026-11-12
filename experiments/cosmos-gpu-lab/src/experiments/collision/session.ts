@@ -3,6 +3,7 @@ import { TOLERANCE as springTolerance } from '../weighted-links/reference'
 import { createOracle } from '../combined-layout/reference'
 import { centerAggregate } from '../combined-layout/center-reference'
 import type { CombinedBackend } from '../combined-layout/backend'
+import { DEFAULT_CENTER_REDUCTION } from '../combined-layout/center-reduction'
 import { collisionView } from './camera'
 import { createFixture, overlap, type Settings } from './data'
 import { createBackend, parametersFor, sequence, type Api } from './backend'
@@ -20,7 +21,9 @@ export async function createCollisionSession (settings: Settings, canvas: (api: 
   cpu(): Float32Array; step(): Promise<void>; replay(): Promise<void>; destroy(): void;
 }> {
   const { input, graph } = createFixture(settings.fixture, settings.count)
-  settings = { ...settings, count: graph.sizes.length, collision: { ...settings.collision } }
+  settings = {
+    ...settings, count: graph.sizes.length, collision: { ...settings.collision }, centerReduction: settings.centerReduction ?? DEFAULT_CENTER_REDUCTION,
+  }
   const parameters = parametersFor(settings); const stages = sequence(settings.mode, parameters)
   const oracle = createOracle(graph, input, 'production', parameters); let cpu: Float32Array = input.points.slice(); let destroyed = false
   const lanes: Array<{ api: Api; backend: CombinedBackend; positions: Float32Array }> = []

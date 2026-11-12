@@ -5,6 +5,7 @@ import { createCombinedWebGPU } from '../combined-layout/webgpu'
 import type { CombinedBackend } from '../combined-layout/backend'
 import { forceSettings, type ForceSettings } from '../combined-layout/production-settings'
 import { stagesFor, type Stage } from '../combined-layout/data'
+import { DEFAULT_CENTER_REDUCTION } from '../combined-layout/center-reduction'
 import type { Settings } from './data'
 export type Api = 'webgl' | 'webgpu'
 export function parametersFor (settings: Settings): ForceSettings {
@@ -12,6 +13,7 @@ export function parametersFor (settings: Settings): ForceSettings {
     ...forceSettings('varied32', settings.count),
     origin: [2048, 2048],
     center: settings.mode === 'combined' ? 1 : 0,
+    centerReduction: settings.centerReduction ?? DEFAULT_CENTER_REDUCTION,
     collision: { ...settings.collision },
     collisionArithmetic: settings.arithmetic ?? 'native',
   }

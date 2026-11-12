@@ -4,6 +4,7 @@ import { compareArray as springCompare, TOLERANCE as springTolerance } from '../
 import { buildReference, frameFor, layout } from '../many-body-grid/data'
 import { createGraph, cool, GRAVITY, REPULSION, SPRINGS, stagesFor, type Stage } from '../combined-layout/data'
 import { centerAggregate } from '../combined-layout/center-reference'
+import { DEFAULT_CENTER_REDUCTION } from '../combined-layout/center-reduction'
 import { createOracle } from '../combined-layout/reference'
 import { createCombinedWebGL } from '../combined-layout/webgl'
 import { createCombinedWebGPU } from '../combined-layout/webgpu'
@@ -58,7 +59,12 @@ export async function createMatchedSession (settings: Settings, canvas: (name: G
     input.points[i] = Math.fround(input.points[i] + 2048); input.points[i + 1] = Math.fround(input.points[i + 1] + 2048)
   }
   graph.points = input.points
-  const parameters = { ...forceSettings(settings.preset, settings.count), origin: [2048, 2048] as [number, number], center: settings.center ?? 0 }
+  const parameters = {
+    ...forceSettings(settings.preset, settings.count),
+    origin: [2048, 2048] as [number, number],
+    center: settings.center ?? 0,
+    centerReduction: DEFAULT_CENTER_REDUCTION,
+  }
   const oracle = createOracle(graph, input, 'production', parameters); const sampler = createSamplingPolicy(settings.count)
   const method = repulsionMethod(settings.count, 'production'); const sampled = stressPairs(graph)
   const report = {

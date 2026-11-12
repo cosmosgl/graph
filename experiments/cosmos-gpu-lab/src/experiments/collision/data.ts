@@ -1,12 +1,14 @@
 import { createFixture as pointFixture, type Input } from '../many-body/data'
 import type { GraphInput } from '../weighted-links/data'
+import type { CenterReduction } from '../combined-layout/center-reduction'
 export type CollisionParameters = { strength: number; radius: number; padding: number; iterations: number; cooling: number }
 export type CollisionArithmetic = 'native' | 'strict'
 export const COLLISION: CollisionParameters = { strength: 1, radius: 0, padding: 0.25, iterations: 1, cooling: 0 }
 export const FIXTURES = ['pair', 'uniform', 'clusters', 'coincident', 'masks', 'separated'] as const
 export type Fixture = typeof FIXTURES[number]
 export type Settings = {
-  fixture: Fixture; count: number; mode: 'collision' | 'combined'; alpha: number; collision: CollisionParameters; arithmetic?: CollisionArithmetic;
+  fixture: Fixture; count: number; mode: 'collision' | 'combined'; alpha: number; collision: CollisionParameters;
+  arithmetic?: CollisionArithmetic; centerReduction?: CenterReduction;
 }
 export function validateCollision (p: CollisionParameters): void {
   if (![p.strength, p.radius, p.padding, p.cooling].every(v => Number.isFinite(v) && v >= 0) || p.strength > 1 ||

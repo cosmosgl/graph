@@ -3,6 +3,7 @@ import { compareArray } from '../many-body/reference'
 import type { Measurement } from '../many-body/timing'
 import { createOracle } from '../combined-layout/reference'
 import type { CombinedBackend } from '../combined-layout/backend'
+import { DEFAULT_CENTER_REDUCTION } from '../combined-layout/center-reduction'
 import type { View } from '../many-body/backend'
 import { collisionView } from './camera'
 import { createFixture, type Settings } from './data'
@@ -11,6 +12,7 @@ import { evaluate, sameBits, type Gate } from './checks'
 export const COST_POLICY = { warmups: 4, samples: 12, frames: 4, blocks: 2 } as const
 type Trial = { api: Api; enabled: boolean; block: number; round: number; warmup: boolean; valid: boolean; failedFrames: number; timing: Measurement }
 export type CollisionCostReport = {
+  comparison?: 'collision' | 'center-reduction';
   camera: View;
   frozenTick: number;
   recordedAt: string; browser: string; settings: Settings; input: Float32Array; policy: { warmups: number; samples: number; frames: number; blocks: number };
@@ -43,19 +45,21 @@ export function collisionCostSummary (report: CollisionCostReport, api: Api, blo
 }
 export async function measureCollisionCost (
   settings: Settings, frozen: Float32Array, progress: (text: string) => void, cancelled: () => boolean,
-  policy: CollisionCostReport['policy'] = COST_POLICY, frozenTick = 0
+  policy: CollisionCostReport['policy'] = COST_POLICY, frozenTick = 0, comparison: NonNullable<CollisionCostReport['comparison']> = 'collision'
 ): Promise<CollisionCostReport> {
   if (!(settings.collision.strength > 0) || ![policy.warmups, policy.samples, policy.frames, policy.blocks].every(Number.isInteger) || policy.warmups < 0 ||
     policy.samples < 2 || policy.frames < 1 || policy.frames > 8 || policy.blocks < 1 || policy.blocks > 4) throw new Error('Invalid collision timing settings')
+  if (comparison === 'center-reduction' && settings.mode !== 'combined') throw new Error('Center comparison requires combined forces')
   const { input, graph } = createFixture(settings.fixture, settings.count)
   if (frozen.length !== input.points.length) throw new Error('Frozen input size differs')
   input.points = frozen.slice(); graph.points = input.points
   const report: CollisionCostReport = {
+    comparison,
     frozenTick,
     camera: collisionView([frozen], graph.sizes, settings.collision),
     recordedAt: new Date().toISOString(),
     browser: navigator.userAgent,
-    settings: { ...settings, collision: { ...settings.collision } },
+    settings: { ...settings, collision: { ...settings.collision }, centerReduction: settings.centerReduction ?? DEFAULT_CENTER_REDUCTION },
     input: frozen.slice(),
     policy: { ...policy },
     status: 'running',
@@ -64,7 +68,7 @@ export async function measureCollisionCost (
     trials: [],
     errors: [],
   }
-  const configs = (['webgl', 'webgpu'] as const).map(api => {
+  const configs = (comparison === 'center-reduction' ? ['webgpu'] as const : ['webgl', 'webgpu'] as const).map(api => {
     const parameters = parametersFor(settings)
     return {
       api,
@@ -76,6 +80,10 @@ export async function measureCollisionCost (
     }
   })
   const strength = settings.collision.strength
+  const select = (parameters: ReturnType<typeof parametersFor>, enabled: boolean): void => {
+    if (comparison === 'center-reduction') parameters.centerReduction = enabled ? 'high-low' : 'f32'
+    else parameters.collision!.strength = enabled ? strength : 0
+  }
   try {
     for (const config of configs) {
       progress(`Preparing ${config.api} collision timing…`)
@@ -83,7 +91,7 @@ export async function measureCollisionCost (
       const b = config.backend = await createBackend(config.api, canvas, graph, input, config.parameters)
       report.devices[config.api] = b.info
       for (const enabled of [false, true]) {
-        config.parameters.collision!.strength = enabled ? strength : 0
+        select(config.parameters, enabled)
         const result = await evaluate(b, config.oracle, sequence(settings.mode, config.parameters), frozen, settings.alpha)
         report.preflight.push({ api: config.api, enabled, gate: result.gate })
         config.anchors.set(enabled, result.actual); config.expected.set(enabled, result.expected)
@@ -103,30 +111,30 @@ export async function measureCollisionCost (
           for (const enabled of (round + block) % 2 ? [true, false] : [false, true]) {
             if (cancelled()) { report.status = 'cancelled'; return report }
             if (document.visibilityState !== 'visible') throw new Error('Keep the lab tab visible while timing')
-            progress(`${api} · block ${block + 1}/${policy.blocks} · pair ${round + 1}/${policy.warmups + policy.samples} · ` +
-              `collision ${enabled ? 'on' : 'off'}`)
-          parameters.collision!.strength = enabled ? strength : 0
-          const stages = sequence(settings.mode, parameters); b!.setPositions(frozen)
-          const result = api === 'webgpu'
-            ? await b!.measureFrozenFrames!({ frames: policy.frames, alpha: settings.alpha, tick: 0, view, stages })
-            : await b!.measureCurrentFrame!(settings.alpha, 0, view, stages).then(r => ({ timing: r.timing, snapshots: [r.snapshot] }))
-          const anchor = config.anchors.get(enabled)!; const expected = config.expected.get(enabled)!
-          // An off collision-only frame has no force output. Its stale scratch
-          // buffer is deliberately excluded; every position is still checked.
-          const failures = result.snapshots.filter(s => !sameBits(s.positions, anchor.positions) ||
+            progress(`${api} · block ${block + 1}/${policy.blocks} · pair ${round + 1}/${policy.warmups + policy.samples} · ${
+              comparison === 'center-reduction' ? `center ${enabled ? 'high/low' : 'f32'}` : `collision ${enabled ? 'on' : 'off'}`}`)
+            select(parameters, enabled)
+            const stages = sequence(settings.mode, parameters); b!.setPositions(frozen)
+            const result = api === 'webgpu'
+              ? await b!.measureFrozenFrames!({ frames: policy.frames, alpha: settings.alpha, tick: 0, view, stages })
+              : await b!.measureCurrentFrame!(settings.alpha, 0, view, stages).then(r => ({ timing: r.timing, snapshots: [r.snapshot] }))
+            const anchor = config.anchors.get(enabled)!; const expected = config.expected.get(enabled)!
+            // An off collision-only frame has no force output. Its stale scratch
+            // buffer is deliberately excluded; every position is still checked.
+            const failures = result.snapshots.filter(s => !sameBits(s.positions, anchor.positions) ||
             (stages.length > 0 && !sameBits(s.forces, anchor.forces)) || !compareArray(s.positions, expected.positions, frozen).valid)
-          report.trials.push({
-            api,
-            enabled,
-            block,
-            round,
-            warmup: round < policy.warmups,
-            valid: !failures.length && result.snapshots.length === (api === 'webgpu' ? policy.frames : 1),
-            failedFrames: failures.length,
-            timing: result.timing,
-          })
-          if (failures.length && !report.failure) report.failure = { api, enabled, input: frozen.slice(), actual: failures[0], expected }
-          await new Promise(resolve => setTimeout(resolve, 0))
+            report.trials.push({
+              api,
+              enabled,
+              block,
+              round,
+              warmup: round < policy.warmups,
+              valid: !failures.length && result.snapshots.length === (api === 'webgpu' ? policy.frames : 1),
+              failedFrames: failures.length,
+              timing: result.timing,
+            })
+            if (failures.length && !report.failure) report.failure = { api, enabled, input: frozen.slice(), actual: failures[0], expected }
+            await new Promise(resolve => setTimeout(resolve, 0))
           }
         }
       }
