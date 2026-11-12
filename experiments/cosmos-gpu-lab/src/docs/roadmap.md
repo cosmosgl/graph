@@ -21,7 +21,7 @@ We are primarily in **simulation-prototype validation**, milestone 2. The basic 
 | Core simulation | Gravity, exact/hierarchical repulsion, ordered springs and cooling; selected composed cases through **8,192 points** | Broader inputs/weights, full scheduling, remaining forces and affordable precision |
 | Center attraction | Resident reduction/force/integration; corrected high/low sum is locally exact across the recent **1,600 combined independent ticks** | Wider coordinate/device envelope and production cost policy |
 | Collision | Exact all-pairs law, spring contact floor, repeated passes and independent fixed/cooled layouts through **512 points** | Broader inputs/devices, production precision/cost policy and the hash/slot algorithm above 4,096 points |
-| Rendering | Circles, variable-radius collision discs and minimal straight links consume resident positions | Complete point/link styling, picking and visual/interaction parity |
+| Rendering | Resident circles/minimal links; bounded production shapes, explicit strokes, defaults and shape-aware host IDs in the [styling study](#/point-styling/docs/method) | Fractional raster parity, invisible picks at zero global opacity, remaining styling/interaction and complete renderer integration |
 | Data updates | Bounded point patches, topology replacement, prefix-preserving resizes and retained storage | Full setters/transitions, allocation/trim policy and public data contracts |
 | Library and embedding | Supporting resource-transfer mechanisms | Complete `Graph` backend, callbacks, borrowed device/pass ownership, deck integration and recovery |
 | Production envelope | Bounded native M3 measurements and software-browser regressions | Agreed workloads/budgets and representative native GPU/browser coverage |
@@ -64,9 +64,9 @@ Agree layout-quality targets for overlap, stress, motion, stability and represen
 
 ### 1 — Broaden feature coverage
 
-The bounded collision-arithmetic gate is closed. Start with production point styling and picking, while continuing the remaining force coverage through the same shared-state architecture:
+The bounded collision-arithmetic gate is closed. The first [production point styling and picking study](#/point-styling/docs/method) now checks eight shapes, sizes/colors/defaults, inset strokes, zoom/pixel ratio and host IDs. Twelve bounded configurations pass on M3; fractional raster parity and zero-opacity visibility remain explicitly unaccepted. Continue that renderer boundary alongside the remaining forces:
 
-- **Rendering:** production point shapes, per-point color/size, inside strokes and zoom/pixel-ratio rules, followed by point-ID picking. Verify that visible and pickable coverage agree before expanding link styles and interaction.
+- **Rendering:** resolve fractional-size coverage and invisible host picking at zero global opacity, then add images, rings/greyout, automatic stroke shades and transitions. Validate pointer hover’s separate circular tolerance/priority before expanding link styles and complete interaction.
 - **Simulation:** cluster attraction, per-point attractors and mouse repulsion. Validate grouped centers, membership/target updates, coordinate transforms, pinning and production force order.
 
 These three force families remain unvalidated. Global center reduction supplies infrastructure for clustering; it does not establish grouped-force behavior. Time-box further precision investigations and keep feature coverage moving alongside them.
