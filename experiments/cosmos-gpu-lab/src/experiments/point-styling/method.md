@@ -2,7 +2,7 @@
 source: Recorded findings
 recorded: 2026-11-12
 device: Apple M3; installed Chrome 157 and inline Chromium 157
-scope: Twelve bounded styling configurations; full-image IDs, color budgets and explicit rejected fractional/zero-opacity controls.
+scope: Twelve production-control configurations and fourteen explicit-coordinate candidate configurations; unchanged full-image gates, boundary replay and separate legacy/zero-opacity failures.
 ---
 
 ## Question
@@ -105,7 +105,8 @@ ID requirements are unchanged. Other adapters still need native validation.
 ### Fractional sizes and positions remain unaccepted
 
 The separate fixture uses diameters `0.25` through `42.5` CSS px and quarter-pixel coordinates.
-It is **not** included among the 12 passing configurations:
+The rejection in this subsection applies to the **production control**. It is **not** included
+among the 12 passing production configurations. The explicit-coordinate candidate follows below:
 
 | Pixel ratio | WebGL ↔ WebGPU ID differences | Scalar mask failures, GL / GPU | Color pixels beyond 2/255 | Maximum channel difference |
 | --- | ---: | ---: | ---: | ---: |
@@ -121,7 +122,112 @@ driver violation or silently replace the scalar rule to obtain a pass.
 
 The fractional regression checks visibility and reports the raw rejected parity result; it does
 not require the same native failure on every adapter. A passing regression suite therefore does
-not approve these configurations. Resolving this boundary is the next renderer task.
+not approve these configurations.
+
+### Fractional mismatch isolation in the Codex inline browser
+
+Measured **12 November 2026**, Codex inline Chromium, Apple M3 / ANGLE Metal, luma
+**10.0.0-alpha.4**, default zoom, opacity and draw order. The original acceptance rules,
+production shader sources and CPU mask are unchanged. The two rows above reproduce inline.
+
+The fractional fixture now captures two unblended RGBA32F diagnostic targets through public luma
+APIs: point/core coordinates and diameters, then edge distance and coverage. A copy of the production
+GLSL writes these intermediates before picking; normal color/ID images still come from the
+unmodified shader. The WGSL probe captures its own coordinates and coverage. Per-circle counts,
+representative rejected pixels and magnified picking masks stay visible below the live audit.
+
+**Cause 1: WebGL's point-coordinate field differs from analytical pixel coordinates.** Only point 9,
+the 13.3 CSS-pixel circle, exceeds the color budget in this fixture. Both GPUs receive a
+float32 diameter of `13.300000190734863` at ratio 1, so the large difference is not explained by
+uploading the decimal size as float32. Fitting neighboring captured coordinates gives:
+
+| Pixel ratio | Intended device diameter | WebGL coordinate span, x / y | WebGPU coordinate span, x / y |
+| --- | ---: | --- | --- |
+| 1 | 13.3 | 13.250000 / 13.250000 | 13.299999 / 13.300000 |
+| 2 | 26.6 | 26.625008 / 26.625008 | 26.599999 / 26.599999 |
+
+These are measured coordinate-field fits, not hardware capability queries or a portable rounding
+law. At ratio 1, pixel `(192, 254)` has CPU signed edge distance `−0.007334872` px. WebGPU reports
+`−0.007334780` with coverage `0.511001`; WebGL reports `+0.047850687` with coverage `0.428443`.
+That puts the pixel on opposite sides of the unchanged half-coverage picking threshold. Its
+rendered alpha is `109/255` in WebGL and `130/255` in WebGPU.
+
+An explicit **diagnostic control**, separate from the production lane, replaces only
+`2 * gl_PointCoord − 1` in a shader copy with coordinates reconstructed from `gl_FragCoord`, a
+flat projected center and the existing sprite diameter. Shape formulas, size, color, blending,
+picking threshold and CPU reference remain the same. Its full-frame comparison with WebGPU is:
+
+| Pixel ratio | ID differences | CPU mask failures, control GL / GPU | Color failures | Maximum channel error | Overall gate |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 1 | 0 | 0 / 0 | 0 | 0/255 | Pass for the diagnostic control |
+| 2 | 0 | 6 / 6 | 0 | 0/255 | Fail |
+
+This isolates the observed cross-backend ID/color disagreement to the coordinate path. It does
+not accept the original production rendering or establish a driver violation. The captured
+coordinate field and its limits can differ on another adapter.
+
+**Cause 2: sprite boundaries and the existing CPU mask disagree at exact ties.** At ratio 2,
+three circles have device diameters 2, 4 and 6. Their top and right cardinal pixels lie exactly
+on the closed CPU circle. Both GPU sprites omit those pixels; the float probe contains no fragment
+there. The six rejected coordinates are `(630, 120)`, `(631, 121)`, `(130, 319)`, `(132, 321)`,
+`(630, 318)` and `(633, 321)`. This is a raster-footprint boundary before shape-distance evaluation,
+not accumulated SDF arithmetic error. The analytical-coordinate control cannot recover a
+fragment that the point sprite did not generate.
+
+The WebGPU carrier currently reproduces the observed half-open sprite bounds (left/bottom
+included; top/right excluded). The scalar mask includes all four exact boundaries. Both are
+retained and the six differences remain failures. Changing the CPU rule would change the
+acceptance contract; it is not part of this investigation.
+
+The follow-up below tests an explicit-coordinate candidate while keeping these original
+controls and their failures intact.
+
+### Explicit-coordinate renderer with closed coverage
+
+Measured **12 November 2026**, **Codex inline Chromium / Apple M3**, luma **10.0.0-alpha.4**.
+Both candidate backends use six-vertex instanced quads, with one device pixel of carrier padding
+on each side. The WebGL candidate copies the production styling shader and substitutes
+pixel coordinates reconstructed from `gl_FragCoord` and a flat projected center. luma `Model`
+provides instancing; the WebGPU candidate uses the existing luma `RenderKernel` and an explicit
+closed-bounds mode. Production sources and the default production mode remain unchanged.
+
+The carrier includes boundary fragments; the fragment shader clips to the original closed sprite
+square. It does **not** increase the requested diameter or change shape distances, the antialiasing ramp,
+stroke width, alpha, draw order or the half-coverage picking threshold. No epsilon, excluded pixels,
+CPU-mask edit or larger color budget is used. The previously omitted top/right pixels can now
+execute the same shape-distance test as the other pixels.
+
+| Fractional fixture | ID differences | CPU mask failures, explicit GL / GPU | Color failures | Maximum channel error | Invisible picks | Candidate geometry |
+| --- | ---: | ---: | ---: | ---: | ---: | --- |
+| Ratio 1 | 0 | 0 / 0 | 0 | 0/255 | 0 / 0 | Pass |
+| Ratio 2 | 0 | 0 / 0 | 0 | 0/255 | 0 / 0 | Pass |
+
+All six original ratio-2 omissions return the CPU's expected point ID in both candidate backends:
+point 2 at `(630, 120)` and `(631, 121)`; point 4 at `(130, 319)` and `(132, 321)`; point 6 at
+`(630, 318)` and `(633, 321)`. Their rendered alpha is **128/255 in both backends**, agreeing with
+the half-coverage pick. The live **Six boundary pixels** table replays these against the original
+production images. It is an explanation, not a filtered acceptance population.
+
+The candidate also passes the previous **12 styling configurations** at the same full-frame gates,
+giving **14 bounded cases and 4,259,840 checked pixels per backend** in that matrix. Isolated opaque
+instances of all eight shapes retain the additional equality between their picked masks and
+rendered alpha ≥ 128/255. Returning to production mode reproduces the original images; the
+candidate does not overwrite the control.
+
+**Legacy compatibility still fails on the fractional fixture.** Closed coverage emits samples
+that the production point sprite omitted, including antialiased fringe samples. Comparing
+production WebGL directly with explicit WebGPU, using the original gates, records:
+
+| Pixel ratio | ID differences | CPU mask failures, production / candidate | Color failures | Maximum channel error | Compatibility |
+| --- | ---: | ---: | ---: | ---: | --- |
+| 1 | 2 | 2 / 0 | 61 | 127/255 | Fail |
+| 2 | 6 | 6 / 0 | 63 | 128/255 | Fail |
+
+These do not become passing legacy results. The candidate demonstrates agreement with the
+unchanged intended geometry on this bounded M3 matrix. Adopting the closed boundary behavior
+would be an intentional rendering change from the current production sprite. Other devices,
+broader geometry and performance remain unvalidated; this is not a complete renderer migration.
+Zero global opacity also retains its existing invisible-picking failure in the candidate.
 
 ## Known failing control: global opacity zero
 
@@ -135,11 +241,22 @@ The default shape fixture records **15,180 invisible picked pixels per backend**
 
 1. Run `pnpm --filter @cosmos.gl/gpu-lab dev` and open **Point styling and picking**.
 2. Compare the shapes, overlap, edge-case and fractional fixtures. Change zoom, pixel ratio and draw order.
+   Select **Renderer → Explicit-coordinate candidate** to compare padded WebGL/WebGPU quads.
+   The main audit checks candidate geometry; the separate production control retains legacy failures.
+   Use ratio 2 on the fractional fixture to inspect **Six boundary pixels**.
 3. Move over either canvas: both show the ID at the same normalized pixel. The UI reads the
    captured ID images; it does not issue or time a new GPU pick per pointer event.
 4. Set global opacity to zero and confirm the visibility failure stays explicit. Export JSON
    to retain settings, original inputs, environment, counts and first ID, scalar-mask and color mismatches.
 5. Run `LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling`.
+
+For the same regression suite **inside Codex**, set `LAB_INLINE_BROWSER=1` as well. This starts
+a local Vitest server without launching Chrome. Open its printed “inline test session” URL in
+the Codex inline browser; the suite runs in that browser, including both GPU backends. The
+regression checks that enabling probes preserves production images and counts, that the earlier
+coordinate-only control retains its closed-mask failures, and that the padded candidate recovers
+the boundary pixels at unchanged full-frame gates. JSON exports name the renderer and include
+candidate geometry, original production and compatibility verdicts; raw measurements remain local.
 
 No runtime performance, picking-latency or broad device claim follows from the readback-heavy
 diagnostic. Images/atlas alpha, rings/highlight priority, greyout, automatic perceptual stroke

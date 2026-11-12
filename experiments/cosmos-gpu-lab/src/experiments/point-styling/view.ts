@@ -2,11 +2,13 @@ import { checkResult, count as formatCount } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { validationContracts } from '../../runtime/validation'
-import { pick, type Backend, type Snapshot } from './backend'
+import { pick, type Backend, type Snapshot, type RenderVariant } from './backend'
 import { DEFAULTS, fixture, HEIGHT, WIDTH } from './data'
 import { COLOR_BUDGET, compareSnapshots } from './reference'
 import { createStylingWebGL } from './webgl'
 import { createStylingWebGPU } from './webgpu'
+import { investigateFractional, renderFractionalInvestigation } from './fractional'
+import { renderExplicitControl } from './explicit'
 
 export async function createStylingView (host: HTMLElement): Promise<ExperimentInstance> {
   let runError: string | undefined
@@ -15,6 +17,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     Move over either canvas to inspect the same pixel in both. Only the shape’s half-coverage interior is pickable; antialiased fringes are not.</p>
     <div
       data-run-part="configuration" class="scale-toolbar styling-toolbar">
+      <label>Renderer <select data-renderer><option value="production">Production control</option>
+        <option value="explicit">Explicit-coordinate candidate</option></select></label>
       <label>Fixture <select data-fixture><option value="shapes">Eight shapes · fill and stroke</option>
         <option value="overlap">Overlap and draw order</option><option value="edge-cases">Defaults and edge cases</option>
         <option value="fractional">Fractional sizes and positions</option></select></label>
@@ -49,10 +53,12 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   const errors: Partial<Record<'webgl' | 'webgpu', string>> = {}
   let destroyed = false; let busy = false
   let latestComparison: boolean | undefined
+  let latestCompatibility: boolean | undefined
   let report: object | undefined
   const render = async (): Promise<void> => {
     if (busy || destroyed) return
-    busy = true; snapshots = {}; report = undefined; latestComparison = undefined; runError = undefined; exportButton.disabled = true
+    busy = true; snapshots = {}; report = undefined; latestComparison = undefined; latestCompatibility = undefined
+    runError = undefined; exportButton.disabled = true
     host.querySelectorAll<HTMLElement>('[data-cursor]').forEach(cursor => { cursor.hidden = true })
     host.querySelectorAll<HTMLElement>('[data-pick]').forEach(label => { label.textContent = 'Move over a shape to inspect its ID' })
     host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
@@ -66,6 +72,9 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       reverse: el<HTMLSelectElement>('[data-order]').value === 'reverse',
     }
     const name = el<HTMLSelectElement>('[data-fixture]').value as Parameters<typeof fixture>[0]; const points = fixture(name)
+    const variant = el<HTMLSelectElement>('[data-renderer]').value as RenderVariant
+    const original: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
+    const diagnose = name === 'fractional'
     el('[data-legend]').textContent = name === 'shapes'
       ? 'Circle · square · triangle · diamond · pentagon · hexagon · star · cross. Top row: fill. Bottom row: inset stroke.'
       : name === 'edge-cases'
@@ -77,11 +86,15 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       for (const name of ['webgl', 'webgpu'] as const) {
         if (!backends[name]) continue
         try {
-          snapshots[name] = await backends[name]!.render(points, settings)
+          if (variant === 'explicit') original[name] = await backends[name]!.render(points, settings)
+          snapshots[name] = await backends[name]!.render(points, settings, diagnose, variant)
           if (destroyed) return
           delete errors[name]
           el(`[data-device="${name}"]`).textContent = backends[name]!.info
           el(`[data-state="${name}"]`).textContent = 'Rendered'
+          el(`[data-canvas="${name}"]`).closest('.backend-panel')!.querySelector('h2')!.textContent = variant === 'explicit'
+            ? `Explicit ${name === 'webgl' ? 'WebGL' : 'WebGPU'} quads`
+            : name === 'webgl' ? 'Cosmos WebGL' : 'luma WebGPU'
         } catch (error) {
           runError = String(error)
           errors[name] = String(error); el(`[data-state="${name}"]`).textContent = 'Failed'
@@ -90,20 +103,34 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       }
       if (destroyed) return
       const comparison = snapshots.webgl && snapshots.webgpu ? compareSnapshots(snapshots.webgl, snapshots.webgpu, points, settings) : undefined
+      const fractional = diagnose && snapshots.webgl && snapshots.webgpu
+        ? investigateFractional(snapshots.webgl, snapshots.webgpu, points, settings)
+        : undefined
+      const analyticControl = snapshots.webgl?.analyticControl && snapshots.webgpu
+        ? compareSnapshots(snapshots.webgl.analyticControl, snapshots.webgpu, points, settings)
+        : undefined
+      const productionComparison = original.webgl && original.webgpu ? compareSnapshots(original.webgl, original.webgpu, points, settings) : undefined
+      const compatibility = original.webgl && snapshots.webgpu ? compareSnapshots(original.webgl, snapshots.webgpu, points, settings) : undefined
       latestComparison = comparison?.valid
+      latestCompatibility = compatibility?.valid
       report = {
-        schemaVersion: 1,
+        schemaVersion: 3,
         experiment: 'point-styling',
         recordedAt: new Date().toISOString(),
         browser: navigator.userAgent,
         validationContract: validationContracts['point-styling'],
         fixture: name,
+        renderer: variant,
         points,
         settings,
         colorBudget: COLOR_BUDGET,
         devices: Object.fromEntries(Object.entries(backends).map(([name, backend]) => [name, backend.info])),
         errors: { ...errors },
         comparison,
+        fractional,
+        analyticControl,
+        productionComparison,
+        compatibility,
       }
       const output = el('[data-results]')
       if (comparison) {
@@ -116,8 +143,18 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           <tr><th>Picked pixels with zero rendered alpha · WebGL / WebGPU</th>
             <td>${comparison.webglInvisiblePicks} / ${comparison.webgpuInvisiblePicks}</td></tr>
           </tbody></table>`
+        if (original.webgl && original.webgpu) {
+          renderExplicitControl(output, { webgl: original.webgl, webgpu: original.webgpu },
+            { webgl: snapshots.webgl!, webgpu: snapshots.webgpu! }, points, settings,
+            { production: productionComparison!, compatibility: compatibility! })
+        }
+        if (fractional) {
+          renderFractionalInvestigation(output, fractional, snapshots.webgl!, snapshots.webgpu!, points, settings, analyticControl, variant)
+        }
         status.textContent = comparison.valid
-          ? 'Passed: exact IDs and shape masks; colors within the declared budget; no invisible picks.'
+          ? variant === 'explicit'
+            ? `Explicit candidate geometry passed. Production compatibility ${compatibility?.valid ? 'passed' : 'differs; see the control below'}.`
+            : 'Passed: exact IDs and shape masks; colors within the declared budget; no invisible picks.'
           : settings.opacity === 0
             ? 'Failed visibility control: production host picking still selects points at global opacity zero. Both paths retain this discrepancy.'
             : 'Differences found. Inspect the counts and export the frozen inputs; this configuration is not accepted.'
@@ -158,7 +195,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   })
   mountRunLayout(host, () => summarizeRun(
     busy ? 'Running' : report ? 'Complete' : 'Preparing',
-    [latestComparison],
+    latestCompatibility === undefined ? [latestComparison] : [latestComparison, latestCompatibility],
     'Other fixtures, pointer-hover tolerance and production picking latency.',
     Object.keys(errors),
     runError,

@@ -124,15 +124,16 @@ export const research: Record<string, ResearchSummary> = {
     method: 'validation-contract',
     comparison: 'Same styled points → production WebGL / WebGPU color and ID images → full-image and scalar-mask checks',
     question: 'Does point-ID picking select the shapes that Cosmos actually renders?',
-    conclusion: 'Twelve bounded styling configurations pass; isolated opaque shapes pick exactly their rendered half-alpha footprint.',
-    scope: 'Eight shapes, explicit strokes, defaults, zoom, pixel ratio and overlap on M3. Fractional parity and ' +
-      'zero-opacity visibility remain rejected controls.',
-    variant: 'Production draw/host-picking GLSL and WGSL quads; luma 10.0.0-alpha.4; Apple M3',
+    conclusion: 'The explicit-coordinate candidate passes 14 bounded styling cases and recovers all six missing boundary pixels at unchanged geometry gates.',
+    scope: 'Eight shapes, strokes, defaults, zoom, pixel ratio and overlap on M3. Candidate fractional geometry passes; ' +
+      'fractional compatibility with legacy rendering and zero-opacity visibility still fail.',
+    variant: 'Unchanged production control and explicit-coordinate GL/GPU quads; luma 10.0.0-alpha.4; Apple M3',
     reviewed: REVIEWED,
     milestone: 'rendering',
     evidence: 'method',
-    next: 'Resolve fractional coverage and invisible host picks, then validate remaining styling and pointer-hover behavior.',
-    reproduce: 'Run the shapes, overlap and edge-case fixtures, then inspect fractional sizes and zero opacity as explicit failing controls.',
+    next: 'Resolve invisible host picks and the production boundary policy, then broaden styling, devices and pointer-hover coverage.',
+    reproduce: 'Select Explicit-coordinate candidate and the fractional fixture at ratios 1 and 2. Compare the geometry audit, ' +
+      'production compatibility and six-pixel replay; retain zero opacity as a failing visibility control.',
     investigations: [{
       page: 'method',
       state: 'Current evidence',

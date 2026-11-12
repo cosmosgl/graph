@@ -1,6 +1,19 @@
 import { defineConfig } from 'vitest/config'
 import { playwright } from '@vitest/browser-playwright'
 
+const browserProvider = playwright({ launchOptions: { ...(process.env.LAB_NATIVE_GPU === '1' ? { channel: 'chrome', args: ['--enable-unsafe-webgpu'] }
+  : { args: ['--enable-unsafe-webgpu', '--use-angle=swiftshader'] }) } })
+// Run the real suite in a user-selected inline browser without launching Chrome.
+// Open the printed session URL through the Codex browser tool to start the tests.
+if (process.env.LAB_INLINE_BROWSER === '1') {
+  browserProvider.name = 'codex-inline'
+  browserProvider.providerFactory = () => ({
+    name: 'codex-inline', supportsParallelism: false, getCommandsContext: () => ({}),
+    openPage: async (_session, url): Promise<void> => { process.stdout.write(`\nOpen inline test session: ${url}\n`) },
+    close: () => {},
+  })
+}
+
 // Explicit opt-in for GPU regression tests; fail if no adapter can be created.
 // Default: software Chromium. LAB_NATIVE_GPU=1 uses installed Chrome without forcing an adapter.
 // Full integer-arithmetic shaders currently fail compilation on SwiftShader; those tests opt into native mode.
@@ -34,10 +47,10 @@ export default defineConfig({
     maxWorkers: 1,
     browser: {
       enabled: true,
-      headless: true,
+      headless: process.env.LAB_INLINE_BROWSER !== '1',
+      connectTimeout: process.env.LAB_INLINE_BROWSER === '1' ? 180000 : 60000,
       screenshotFailures: false,
-      provider: playwright({ launchOptions: { ...(process.env.LAB_NATIVE_GPU === '1' ? { channel: 'chrome', args: ['--enable-unsafe-webgpu'] }
-        : { args: ['--enable-unsafe-webgpu', '--use-angle=swiftshader'] }) } }),
+      provider: browserProvider,
       instances: [{ browser: 'chromium' }],
     },
   },

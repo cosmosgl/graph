@@ -55,9 +55,9 @@ Agree layout-quality targets for overlap, stress, motion, stability and represen
 
 ### 1 — Broaden feature coverage
 
-The bounded collision-arithmetic gate is closed. The first [production point styling and picking study](#/point-styling/docs/method) now checks eight shapes, sizes/colors/defaults, inset strokes, zoom/pixel ratio and host IDs. Twelve bounded configurations pass on M3; fractional raster parity and zero-opacity visibility remain explicitly unaccepted. Continue that renderer boundary alongside the remaining forces:
+The bounded collision-arithmetic gate is closed. The [point styling and picking study](#/point-styling/docs/method) checks eight shapes, sizes/colors/defaults, inset strokes, zoom/pixel ratio and host IDs. Twelve production-control configurations pass on M3. The explicit-coordinate candidate passes 14 geometry configurations, including both fractional ratios and all six recovered boundary pixels. Fractional legacy compatibility and zero-opacity visibility still fail. Continue that renderer boundary alongside the remaining forces:
 
-- **Rendering:** resolve fractional-size coverage and invisible host picking at zero global opacity, then add images, rings/greyout, automatic stroke shades and transitions. Validate pointer hover’s separate circular tolerance/priority before expanding link styles and complete interaction.
+- **Rendering:** the explicit-coordinate candidate closes the bounded fractional geometry gate at unchanged criteria. Its closed boundary coverage intentionally differs from production sprites; retain that compatibility failure and settle the intended rendering policy. Resolve invisible host picking at zero global opacity, then add images, rings/greyout, automatic stroke shades and transitions. Validate pointer hover’s separate circular tolerance/priority before expanding link styles and complete interaction.
 - **Simulation:** cluster attraction, per-point attractors and mouse repulsion. Validate grouped centers, membership/target updates, coordinate transforms, pinning and production force order.
 
 These three force families remain unvalidated. Global center reduction supplies infrastructure for clustering; it does not establish grouped-force behavior. Time-box further precision investigations and keep feature coverage moving alongside them.

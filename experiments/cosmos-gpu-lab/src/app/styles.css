@@ -1779,6 +1779,11 @@ button[data-action="play"][aria-pressed="true"] {
 .styling-viewport { position: relative; background: #24292f; }
 .styling-viewport canvas { display: block; width: 100%; height: auto; cursor: crosshair; }
 .styling-cursor { position: absolute; width: 12px; height: 12px; border: 1px solid #ececef; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+.fractional-investigation { margin-top: 32px; }
+.fractional-mask-previews { display: flex; flex-wrap: wrap; gap: 24px; margin: 20px 0 12px; }
+.fractional-mask-previews figure { margin: 0; }
+.fractional-mask-previews figcaption { margin-bottom: 8px; color: var(--text-secondary); }
+.fractional-mask-previews canvas { display: block; width: 144px; height: 144px; }
 .styling-pick { min-height: 1.5em; color: var(--accent); font-variant-numeric: tabular-nums; }
 
 /* Three shared text roles: title, reading text, secondary metadata. */

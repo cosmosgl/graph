@@ -4,6 +4,15 @@ import { DEFAULTS, fixture, point } from './data'
 import { compareSnapshots, referencePick, shapeDistance } from './reference'
 import { createStylingWebGL } from './webgl'
 import { createStylingWebGPU } from './webgpu'
+import { investigateFractional } from './fractional'
+import { BOUNDARY_PIXELS } from './explicit'
+
+const STYLING_CASES = [
+  ['shapes', {}], ['shapes', { ratio: 2 }], ['shapes', { zoom: 0.5 }], ['shapes', { zoom: 2, scaleOnZoom: false }],
+  ['overlap', {}], ['overlap', { reverse: true }], ['overlap', { opacity: 0.35 }], ['edge-cases', {}],
+  ['shapes', { zoom: 2 }], ['overlap', { ratio: 2, reverse: true }],
+  ['edge-cases', { ratio: 2 }], ['edge-cases', { defaultSize: 54, defaultStroke: 8, sizeScale: 0.5 }],
+] as const
 
 it('uses shape geometry rather than bounding squares and preserves stable IDs in reversed order', () => {
   expect(shapeDistance(0.9, 0.9, 0)).toBeGreaterThan(0)
@@ -34,17 +43,29 @@ it('rejects mismatched IDs, colors and invisible picks independently', () => {
   })
 })
 
+it('keeps exact sprite-boundary omissions as failures against the original closed CPU mask', () => {
+  const points = [point(10.5, 10.5, 0, { size: 2 })]
+  const color = new Uint8Array(20 * 20 * 4); const ids = color.slice()
+  // Include left/bottom and exclude top/right, matching the sprite boundary.
+  for (const [x, y] of [[9, 10], [10, 10], [10, 11]]) {
+    const offset = (y * 20 + x) * 4
+    color.set([255, 255, 255, 255], offset); ids.set([1, 0, 0, 255], offset)
+  }
+  const snapshot = { width: 20, height: 20, color, ids }
+  expect(compareSnapshots(snapshot, snapshot, points, DEFAULTS)).toMatchObject({
+    idDisagreements: 0, colorFailures: 0, webglReferenceFailures: 2, webgpuReferenceFailures: 2, valid: false,
+  })
+  const detail = investigateFractional(snapshot, snapshot, points, DEFAULTS)
+  expect(detail.points[0]).toMatchObject({ glMask: 2, gpuMask: 2, idDifferences: 0 })
+  expect(detail.samples[0]).toMatchObject({ x: 10, y: 9, webgl: null, webgpu: null, ids: { webgl: null, webgpu: null, cpu: 0 } })
+})
+
 it('compares production styling, exact pick masks and visual alpha across frozen settings', async () => {
   const gl = await createStylingWebGL(document.createElement('canvas'))
   let gpu: Awaited<ReturnType<typeof createStylingWebGPU>> | undefined
   try {
     gpu = await createStylingWebGPU(document.createElement('canvas'))
-    for (const [name, changes] of [
-      ['shapes', {}], ['shapes', { ratio: 2 }], ['shapes', { zoom: 0.5 }], ['shapes', { zoom: 2, scaleOnZoom: false }],
-      ['overlap', {}], ['overlap', { reverse: true }], ['overlap', { opacity: 0.35 }], ['edge-cases', {}],
-      ['shapes', { zoom: 2 }], ['overlap', { ratio: 2, reverse: true }],
-      ['edge-cases', { ratio: 2 }], ['edge-cases', { defaultSize: 54, defaultStroke: 8, sizeScale: 0.5 }],
-    ] as const) {
+    for (const [name, changes] of STYLING_CASES) {
       const settings = { ...DEFAULTS, ...changes }; const points = fixture(name)
       const a = await gl.render(points, settings); const b = await gpu.render(points, settings)
       const comparison = compareSnapshots(a, b, points, settings)
@@ -93,6 +114,58 @@ it('compares production styling, exact pick masks and visual alpha across frozen
   } finally { gpu?.destroy(); gl.destroy() }
 })
 
+it('checks explicit-coordinate quads at the unchanged full-frame gates and recovers the six boundary pixels', async () => {
+  const gl = await createStylingWebGL(document.createElement('canvas'))
+  let gpu: Awaited<ReturnType<typeof createStylingWebGPU>> | undefined
+  try {
+    gpu = await createStylingWebGPU(document.createElement('canvas'))
+    for (const [name, changes] of [...STYLING_CASES, ['fractional', {}], ['fractional', { ratio: 2 }]] as const) {
+      const settings = { ...DEFAULTS, ...changes }; const points = fixture(name)
+      const a = await gl.render(points, settings, false, 'explicit'); const b = await gpu.render(points, settings, false, 'explicit')
+      const result = compareSnapshots(a, b, points, settings)
+      expect(result, `${name} ${JSON.stringify(changes)} ${JSON.stringify(result)}`).toMatchObject({
+        idDisagreements: 0,
+        webglReferenceFailures: 0,
+        webgpuReferenceFailures: 0,
+        colorFailures: 0,
+        webglInvisiblePicks: 0,
+        webgpuInvisiblePicks: 0,
+        valid: true,
+      })
+      if (name === 'fractional' && settings.ratio === 2) {
+        for (const [i, [x, y]] of BOUNDARY_PIXELS.entries()) {
+          for (const image of [a, b]) {
+            expect(pick(image, x, y)).toBe([2, 2, 4, 4, 6, 6][i])
+            expect(image.color[(y * image.width + x) * 4 + 3]).toBeGreaterThanOrEqual(128)
+          }
+        }
+      }
+    }
+    for (let shape = 0; shape < 8; shape++) {
+      for (const backend of [gl, gpu]) {
+        const image = await backend.render([point(100, 100, shape)], DEFAULTS, false, 'explicit')
+        let failures = 0
+        for (let i = 0; i < image.width * image.height; i++) {
+          if ((image.color[i * 4 + 3] >= 128) !== (pick(image, i % image.width, Math.floor(i / image.width)) !== null)) failures++
+        }
+        expect(failures, `explicit shape ${shape}: rendered half-alpha must equal picked mask`).toBe(0)
+      }
+    }
+    // Switching away from the candidate must restore the original point path.
+    const points = fixture('fractional'); const settings = { ...DEFAULTS, ratio: 2 }
+    const before = await gl.render(points, settings)
+    await gl.render(points, settings, true, 'explicit')
+    const after = await gl.render(points, settings)
+    expect(after.color.every((v, i) => v === before.color[i])).toBe(true)
+    expect(after.ids.every((v, i) => v === before.ids[i])).toBe(true)
+    const hidden = { ...DEFAULTS, opacity: 0 }
+    const visibility = compareSnapshots(await gl.render(points, hidden, false, 'explicit'),
+      await gpu.render(points, hidden, false, 'explicit'), points, hidden)
+    expect(visibility.webglInvisiblePicks).toBeGreaterThan(0); expect(visibility.webgpuInvisiblePicks).toBeGreaterThan(0)
+    expect(visibility.valid).toBe(false)
+  } finally { gpu?.destroy(); gl.destroy() }
+})
+
 it('checks fractional pick visibility while retaining unaccepted geometry and color differences', async () => {
   const gl = await createStylingWebGL(document.createElement('canvas'))
   let gpu: Awaited<ReturnType<typeof createStylingWebGPU>> | undefined
@@ -100,7 +173,25 @@ it('checks fractional pick visibility while retaining unaccepted geometry and co
     gpu = await createStylingWebGPU(document.createElement('canvas'))
     for (const ratio of [1, 2]) {
       const settings = { ...DEFAULTS, ratio }; const points = fixture('fractional')
-      const comparison = compareSnapshots(await gl.render(points, settings), await gpu.render(points, settings), points, settings)
+      const plainGl = await gl.render(points, settings); const plainGpu = await gpu.render(points, settings)
+      const diagnosticGl = await gl.render(points, settings, true); const diagnosticGpu = await gpu.render(points, settings, true)
+      for (const [plain, diagnostic] of [[plainGl, diagnosticGl], [plainGpu, diagnosticGpu]]) {
+        expect(diagnostic.color.every((v, i) => v === plain.color[i]), 'probes must not change production color').toBe(true)
+        expect(diagnostic.ids.every((v, i) => v === plain.ids[i]), 'probes must not change production IDs').toBe(true)
+        const offset = (Math.floor(260.75 * ratio) * diagnostic.width + Math.floor(190.25 * ratio)) * 4
+        expect(diagnostic.probe!.geometry[offset + 2]).toBe(Math.fround(13.3 * ratio))
+      }
+      const comparison = compareSnapshots(diagnosticGl, diagnosticGpu, points, settings)
+      const investigation = investigateFractional(diagnosticGl, diagnosticGpu, points, settings)
+      expect(investigation.points.reduce((n, p) => n + p.idDifferences, 0)).toBe(comparison.idDisagreements)
+      expect(investigation.points.reduce((n, p) => n + p.glMask, 0)).toBe(comparison.webglReferenceFailures)
+      expect(investigation.points.reduce((n, p) => n + p.gpuMask, 0)).toBe(comparison.webgpuReferenceFailures)
+      expect(investigation.points.reduce((n, p) => n + p.colorFailures, 0)).toBe(comparison.colorFailures)
+      const control = compareSnapshots(diagnosticGl.analyticControl!, diagnosticGpu, points, settings)
+      expect(control.idDisagreements).toBe(0); expect(control.colorFailures).toBe(0)
+      // Sprite-boundary disagreement with the original closed scalar mask is
+      // retained even when both GPU renderers agree with one another.
+      expect(control.webglReferenceFailures).toBe(control.webgpuReferenceFailures)
       expect(comparison.webglInvisiblePicks).toBe(0)
       expect(comparison.webgpuInvisiblePicks).toBe(0)
       // This is a diagnostic report, not a universal requirement for WebGL to fail.
