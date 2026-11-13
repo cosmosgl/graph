@@ -85,3 +85,27 @@ it('keeps invisible foreground rejection visible and cancels a sweep without cha
   await select('[data-renderer]', 'explicit')
   expect(host.querySelector('[role="status"]')!.textContent).toContain('Failed contribution check')
 })
+
+it('shows atlas checks and retains a cancelled row without changing the live fixture', async () => {
+  host = document.createElement('div'); document.body.append(host)
+  instance = await createStylingView(host)
+  const select = async (selector: string, value: string): Promise<void> => {
+    const element = host!.querySelector<HTMLSelectElement>(selector)!
+    element.value = value; element.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(element.disabled).toBe(false), { timeout: 20000 })
+  }
+  await select('[data-fixture]', 'atlas-overlap'); await select('[data-renderer]', 'eligibility')
+  await select('[data-image-filter]', 'linear')
+  expect(host.querySelector('[role="status"]')!.textContent).toContain('Source-byte candidate passed')
+  host.querySelectorAll('[data-atlas-cpu] tbody tr').forEach(row => expect(row.children[1].textContent).toBe('0'))
+  host.querySelectorAll('[data-color-preservation] tbody tr').forEach(row => expect(row.children[1].textContent).toBe('0'))
+  const canvas = host.querySelector('canvas')!
+  host.querySelector<HTMLButtonElement>('[data-atlas-sweep]')!.click()
+  host.querySelector<HTMLButtonElement>('[data-atlas-cancel]')!.click()
+  await vi.waitFor(() => expect(host!.querySelector('[data-atlas-progress]')!.textContent).toContain('cancelled'), { timeout: 20000 })
+  expect(host.querySelectorAll('[data-atlas-table] tbody tr')).toHaveLength(1)
+  expect(host.querySelector('canvas')).toBe(canvas)
+  expect(host.querySelector<HTMLSelectElement>('[data-fixture]')!.value).toBe('atlas-overlap')
+  expect(host.querySelector<HTMLSelectElement>('[data-image-filter]')!.value).toBe('linear')
+  expect(host.querySelector('details')).toBeNull()
+})

@@ -1,13 +1,17 @@
-struct Point { geometry: vec4f, color: vec4f, strokeColor: vec4f, properties: vec4f }
+struct Point { geometry: vec4f, color: vec4f, strokeColor: vec4f, properties: vec4f, image: vec4f, uv: vec4f }
 struct Params { view: vec4f, style: vec4f, options: vec4f }
 @group(0) @binding(0) var<storage, read> points: array<Point>;
 @group(0) @binding(1) var<uniform> params: Params;
+@group(0) @binding(2) var atlas: texture_2d<f32>;
+@group(0) @binding(3) var atlasSampler: sampler;
 struct Vertex {
   @builtin(position) position: vec4f,
   @location(0) coord: vec2f,
   @location(1) @interpolate(flat) index: u32,
   @location(2) @interpolate(flat) diameter: f32,
   @location(3) @interpolate(flat) center: vec2f,
+  @location(4) @interpolate(flat) sprite: f32,
+  @location(5) @interpolate(flat) imageDiameter: f32,
 }
 fn inradius(shape: u32) -> f32 {
   switch shape {
@@ -75,7 +79,9 @@ fn distanceToShape(coord: vec2f, shape: u32) -> f32 {
   let p = points[index]; let ratio = params.view.z; let zoom = params.view.w;
   let sizeZoom = select(min(5.0,max(1.0,zoom * 0.01)), zoom, params.options.x > 0.0);
   let diameter = min(p.geometry.z * params.style.x * ratio * sizeZoom, params.style.y * ratio);
-  let sprite = max(diameter,1.0);
+  let hasImage = p.image.z > 0.0;
+  let imageDiameter = select(0.0,min(p.image.y * params.style.x * ratio * sizeZoom,params.style.y * ratio),hasImage);
+  let sprite = max(max(diameter,1.0),imageDiameter);
   let center = (params.view.xy * 0.5 + (p.geometry.xy - params.view.xy * 0.5) * zoom) * ratio;
   // Expand only the carrier quad; the fragment clips to the original sprite.
   // GL points include the bottom edge, whereas WebGPU triangles include the top.
@@ -83,8 +89,11 @@ fn distanceToShape(coord: vec2f, shape: u32) -> f32 {
   let pixel = center + corners[vertex] * (sprite + 2.0) * 0.5;
   var result: Vertex;
   result.position = vec4f(pixel.x / (params.view.x * ratio) * 2.0 - 1.0, 1.0 - pixel.y / (params.view.y * ratio) * 2.0, 0, 1);
-  if (diameter <= 0.0 || p.properties.y > 0.0 || p.geometry.w == 8.0 || p.color.a == 0.0) { result.position = vec4f(3,3,0,1); }
+  if (max(diameter,imageDiameter) <= 0.0 || p.properties.y > 0.0 || (!hasImage && (p.geometry.w == 8.0 || p.color.a == 0.0))) {
+    result.position = vec4f(3,3,0,1);
+  }
   result.coord = corners[vertex]; result.index = index; result.diameter = diameter; result.center = center;
+  result.sprite = sprite; result.imageDiameter = imageDiameter;
   return result;
 }
 @fragment fn fragmentMain(input: Vertex) -> @location(0) vec4f {
@@ -93,22 +102,35 @@ fn distanceToShape(coord: vec2f, shape: u32) -> f32 {
   if (params.options.z > 0.0) {
     // Closed bounds match the unchanged scalar mask. The padded carrier reaches
     // all four exact boundary pixels without increasing the shape diameter.
-    if (abs(offset.x) > core * 0.5 || abs(offset.y) > core * 0.5) { discard; }
+    if (abs(offset.x) > input.sprite * 0.5 || abs(offset.y) > input.sprite * 0.5) { discard; }
   } else {
-    if (offset.x < -core * 0.5 || offset.x >= core * 0.5 || offset.y <= -core * 0.5 || offset.y > core * 0.5) { discard; }
+    if (offset.x < -input.sprite * 0.5 || offset.x >= input.sprite * 0.5 || offset.y <= -input.sprite * 0.5 || offset.y > input.sprite * 0.5) { discard; }
   }
   let coord = offset * (2.0 / core);
   let distance = distanceToShape(coord,shape) * core * 0.5;
-  let coverage = 1.0 - smoothstep(-0.5,0.5,distance);
+  var coverage = 1.0 - smoothstep(-0.5,0.5,distance);
+  if (shape == 8u || input.diameter <= 0.0) { coverage = 0.0; }
+  var imageColor = vec4f(0.0); var imageCovered = false;
+  if (p.image.z > 0.0 && input.imageDiameter > 0.0) {
+    let imageCoord = offset * (2.0 / input.imageDiameter);
+    if (abs(imageCoord.x) <= 1.0 && abs(imageCoord.y) <= 1.0) {
+      let uv = mix(p.uv.xy,p.uv.zw,(imageCoord + 1.0) * 0.5);
+      imageColor = textureSampleLevel(atlas,atlasSampler,uv,0.0);
+      imageCovered = true;
+    }
+  }
   // Unblended float-target instrumentation; normal color/ID modes are unchanged.
   if (params.options.y == 2.0) { return vec4f(coord,core,input.diameter); }
   if (params.options.y == 3.0) { return vec4f(coord,distance,coverage); }
   let smallAlpha = min(1.0,input.diameter * input.diameter / (core * core));
   var sourceAlpha = coverage * smallAlpha * p.color.a * params.style.z;
+  if (p.image.z > 0.0) { sourceAlpha = max(coverage * smallAlpha * p.color.a,imageColor.a) * params.style.z; }
   var pickingAlpha = sourceAlpha;
   if (params.options.w > 0.0 && (params.options.w < 1.5 || params.options.y > 0.0)) {
     // Same grouping as the GLSL candidate's finalShapeColor.a * pointOpacity.
-    pickingAlpha = quantizeSourceAlpha(coverage * (smallAlpha * p.color.a) * params.style.z);
+    var effectiveAlpha = coverage * (smallAlpha * p.color.a) * params.style.z;
+    if (p.image.z > 0.0) { effectiveAlpha = max(coverage * (smallAlpha * p.color.a),imageColor.a) * params.style.z; }
+    pickingAlpha = quantizeSourceAlpha(effectiveAlpha);
   }
   // Mode 2 changes picking only; its color output retains the original alpha.
   if (params.options.w == 1.0) { sourceAlpha = pickingAlpha; }
@@ -117,13 +139,17 @@ fn distanceToShape(coord: vec2f, shape: u32) -> f32 {
   if (params.options.y > 0.0) {
     if (params.options.z > 0.0 && params.style.z <= 0.0) { discard; }
     if (params.options.w > 0.0 && pickingAlpha <= 0.0) { discard; }
-    if (coverage < 0.5) { discard; }
+    let shapeCovered = coverage >= 0.5 && p.color.a > 0.0;
+    let sampledImageCovered = imageCovered && (params.options.w == 0.0 || imageColor.a > 0.0);
+    if (!shapeCovered && !sampledImageCovered) { discard; }
     let id = u32(p.properties.z) + 1u;
     return vec4f(vec3f(f32(id & 255u),f32((id >> 8u) & 255u),f32((id >> 16u) & 255u)) / 255.0,1);
   }
   let strokeWidth = min(max(p.properties.x,0.0) * params.view.z,input.diameter * 0.5 * inradius(shape) * 0.5);
   let bandDistance = abs(distance + strokeWidth * 0.5) - strokeWidth * 0.5;
   let stroke = select(0.0,1.0 - smoothstep(-0.5,0.5,bandDistance),strokeWidth > 0.0);
-  let color = mix(p.color.rgb,p.strokeColor.rgb,stroke * p.strokeColor.a);
+  var color = mix(p.color.rgb,p.strokeColor.rgb,stroke * p.strokeColor.a);
+  if (shape == 8u || input.diameter <= 0.0) { color = vec3f(0.0); }
+  if (p.image.z > 0.0) { color = mix(color,imageColor.rgb,imageColor.a); }
   return vec4f(color,sourceAlpha);
 }

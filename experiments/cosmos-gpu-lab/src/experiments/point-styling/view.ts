@@ -4,12 +4,14 @@ import type { ExperimentInstance } from '../../runtime/experiment'
 import { validationContracts } from '../../runtime/validation'
 import { pick, type Backend, type Snapshot, type RenderVariant } from './backend'
 import { DEFAULTS, fixture, HEIGHT, WIDTH } from './data'
-import { COLOR_BUDGET, compareColors, compareSnapshotsAsync } from './reference'
+import { COLOR_BUDGET, atlasCpuColors, compareColors, compareSnapshotsAsync } from './reference'
 import { createStylingWebGL } from './webgl'
 import { createStylingWebGPU } from './webgpu'
 import { investigateFractional, renderFractionalInvestigation } from './fractional'
 import { renderExplicitControl } from './explicit'
 import { SOURCE_ALPHA_POLICY, SOURCE_BYTE_PICKING_POLICY } from './source-alpha'
+import { ATLAS_EXPORT, ATLAS_PICKING_POLICY, ATLAS_QUANTIZED_POLICY } from './atlas'
+import { ATLAS_FIXTURES, ATLAS_PROFILES, renderAtlasRows, runAtlasSweep, type AtlasRow } from './atlas-study'
 import {
   contributionPasses, inspectForeground, renderContributionAudit, renderTinyAlphaRows, runTinyAlphaSweep, TINY_OPACITIES,
   type TinyAlphaRow,
@@ -19,7 +21,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   let runError: string | undefined
   host.innerHTML = `<p class="demo-note"
       data-run-part="explanation">Production Cosmos draw and host-picking GLSL beside a WGSL quad renderer.
-    Move over either canvas to inspect the same pixel in both. Only the shape’s half-coverage interior is pickable; antialiased fringes are not.</p>
+    Move over either canvas to inspect the same pixel in both. Shape picking uses the half-coverage interior.
+    For images, compare production rectangle picking with the source-byte candidate’s sampled-alpha rule.</p>
     <div
       data-run-part="configuration" class="scale-toolbar styling-toolbar">
       <label>Renderer <select data-renderer><option value="production">Production control</option>
@@ -28,7 +31,11 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       <label>Fixture <select data-fixture><option value="shapes">Eight shapes · fill and stroke</option>
         <option value="overlap">Overlap and draw order</option><option value="edge-cases">Defaults and edge cases</option>
         <option value="fractional">Fractional sizes and positions</option><option value="tiny-alpha">Tiny-alpha grid</option>
-        <option value="tiny-overlap">Tiny-alpha overlap</option><option value="alpha-stack">Faint overlap stack · 64 points</option></select></label>
+        <option value="tiny-overlap">Tiny-alpha overlap</option><option value="alpha-stack">Faint overlap stack · 64 points</option>
+        <option value="atlas-images">Atlas · image-only points</option><option value="atlas-shapes">Atlas · image over shape</option>
+        <option value="atlas-overlap">Atlas · overlapping points</option><option value="atlas-edges">Atlas · filtering and tile edges</option></select></label>
+      <label>Atlas filter <select data-image-filter><option value="nearest">Nearest · production default</option>
+        <option value="linear">Linear</option></select></label>
       <label>Zoom <select data-zoom><option>0.5</option><option selected>1</option><option>2</option></select></label>
       <label>Pixel ratio <select data-ratio><option selected>1</option><option>2</option></select></label>
       <label>Size on zoom <select data-scale><option value="yes">Scale with camera</option>
@@ -53,10 +60,13 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     <section data-run-part="diagnostics"><h3>Tiny-alpha sweep</h3>
       <p>Check tiny positive opacity, subpixel ink and faint foreground picks. Uses offscreen draws; the live canvases and settings stay in place.</p>
       <div class="controls"><button data-tiny-sweep disabled>Run tiny-alpha sweep</button><button data-tiny-cancel disabled>Cancel sweep</button></div>
-      <p data-tiny-progress>No sweep run. All rows, including failures, remain visible and exportable.</p><div data-tiny-results></div></section>
+      <p data-tiny-progress>No sweep run. All rows, including failures, remain visible and exportable.</p><div data-tiny-results></div>
+      <h3>Image-atlas sweep</h3><p>40 cases compare production, explicit and source-byte paths, sampled CPU colors and foreground visibility.</p>
+      <div class="controls"><button data-atlas-sweep disabled>Run image-atlas sweep</button><button data-atlas-cancel disabled>Cancel atlas sweep</button></div>
+      <p data-atlas-progress>No atlas sweep run.</p><div data-atlas-results></div></section>
     <p class="demo-note"
       data-run-part="explanation">Both offscreen passes are read back for this diagnostic. Hover uses the captured ID image;
-      this does not measure production picking latency. Rings, greyout, images and transitions remain outside this first styling comparison.
+      this does not measure production picking latency. Atlas fixtures add texture sampling; rings, greyout and transitions remain separate.
       <a href="#/point-styling/docs/method">Read the method and limitations</a>.</p>`
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
   const status = el('[role="status"]'); const exportButton = el<HTMLButtonElement>('[data-export]')
@@ -68,6 +78,9 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   let latestCompatibility: boolean | undefined
   let latestContribution: boolean | undefined
   let latestColorPreservation: boolean | undefined
+  let latestAtlasColors: boolean | undefined
+  let atlasStudy: { startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[];
+    rows: AtlasRow[]; error?: string; } | undefined
   let tinyStudy: {
     startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[]; rows: TinyAlphaRow[]; error?: string;
   } | undefined
@@ -76,8 +89,10 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     if (busy || sweepRunning || destroyed) return
     busy = true; snapshots = {}; report = undefined; latestComparison = undefined; latestCompatibility = undefined; latestContribution = undefined
     latestColorPreservation = undefined
+    latestAtlasColors = undefined
     runError = undefined; exportButton.disabled = true
     el<HTMLButtonElement>('[data-tiny-sweep]').disabled = true
+    el<HTMLButtonElement>('[data-atlas-sweep]').disabled = true
     host.querySelectorAll<HTMLElement>('[data-cursor]').forEach(cursor => { cursor.hidden = true })
     host.querySelectorAll<HTMLElement>('[data-pick]').forEach(label => { label.textContent = 'Move over a shape to inspect its ID' })
     host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
@@ -89,26 +104,36 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       opacity: Number(el<HTMLSelectElement>('[data-opacity]').value),
       scaleOnZoom: el<HTMLSelectElement>('[data-scale]').value === 'yes',
       reverse: el<HTMLSelectElement>('[data-order]').value === 'reverse',
+      imageFilter: el<HTMLSelectElement>('[data-image-filter]').value as 'nearest' | 'linear',
     }
     const name = el<HTMLSelectElement>('[data-fixture]').value as Parameters<typeof fixture>[0]; const points = fixture(name)
     const variant = el<HTMLSelectElement>('[data-renderer]').value as RenderVariant
     const candidateLabel = variant === 'eligibility' ? 'Source-byte' : variant === 'quantized' ? 'Quantized' : 'Explicit'
+    const isAtlas = name.startsWith('atlas-')
     const original: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
     const unmodified: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
     const diagnose = name === 'fractional'
-    el('[data-legend]').textContent = name === 'shapes'
-      ? 'Circle · square · triangle · diamond · pentagon · hexagon · star · cross. Top row: fill. Bottom row: inset stroke.'
-      : name === 'edge-cases'
-        ? 'Top: defaults · zero size · transparent · None · absent · size cap. Bottom: subpixel · capped stroke · translucent.'
-        : name === 'fractional'
-          ? 'Circle diameters from 0.25 to 42.5 CSS px at fractional positions. This is a strict parity diagnostic.'
-          : name === 'tiny-alpha'
-            ? 'Columns: 1/64, 1/8, 1/2, 2 and 42 CSS px. Rows: fill alpha 1, 1/255 and 1/65536. Tiny source ink may quantize to zero.'
-            : name === 'tiny-overlap'
-              ? 'Opaque blue background point and faint warm foreground point (fill alpha 1/65536). The foreground is also checked in isolation.'
-              : name === 'alpha-stack'
-                ? '64 overlapping white circles, each at fill alpha 0.51/255. Compare production color compatibility as well as candidate visibility.'
-                : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
+    el('[data-legend]').textContent = isAtlas
+      ? name === 'atlas-images'
+        ? 'Four atlas tiles: asymmetric opaque/transparent image, opaque contrast, invisible RGB, faint alpha 1/255.'
+        : name === 'atlas-shapes'
+          ? 'The same image is smaller and larger than its point shape. Transparent texels may reveal the same point’s shape.'
+          : name === 'atlas-overlap'
+            ? 'A textured foreground over a visible background point. Holes must not steal the background ID; reverse the order to compare.'
+            : 'Fractional sizes/positions and exact UV edges. Production atlas rectangles are retained, including potential neighbor sampling.'
+      : name === 'shapes'
+        ? 'Circle · square · triangle · diamond · pentagon · hexagon · star · cross. Top row: fill. Bottom row: inset stroke.'
+        : name === 'edge-cases'
+          ? 'Top: defaults · zero size · transparent · None · absent · size cap. Bottom: subpixel · capped stroke · translucent.'
+          : name === 'fractional'
+            ? 'Circle diameters from 0.25 to 42.5 CSS px at fractional positions. This is a strict parity diagnostic.'
+            : name === 'tiny-alpha'
+              ? 'Columns: 1/64, 1/8, 1/2, 2 and 42 CSS px. Rows: fill alpha 1, 1/255 and 1/65536. Tiny source ink may quantize to zero.'
+              : name === 'tiny-overlap'
+                ? 'Opaque blue background point and faint warm foreground point (fill alpha 1/65536). The foreground is also checked in isolation.'
+                : name === 'alpha-stack'
+                  ? '64 overlapping white circles, each at fill alpha 0.51/255. Compare production color compatibility as well as candidate visibility.'
+                  : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
     try {
       for (const name of ['webgl', 'webgpu'] as const) {
         if (!backends[name]) continue
@@ -130,7 +155,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         }
       }
       if (destroyed) return
-      const contribution = name === 'tiny-overlap' && snapshots.webgl && snapshots.webgpu
+      const contribution = (name === 'tiny-overlap' || name === 'atlas-overlap') && snapshots.webgl && snapshots.webgpu
         ? await inspectForeground({ webgl: backends.webgl!, webgpu: backends.webgpu! },
           { webgl: snapshots.webgl, webgpu: snapshots.webgpu }, points, settings, variant)
         : undefined
@@ -158,16 +183,24 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       latestColorPreservation = colorPreservation
         ? colorPreservation.webgl.changedPixels === 0 && colorPreservation.webgpu.changedPixels === 0
         : undefined
+      const cpuAtlasColors = isAtlas && snapshots.webgl && snapshots.webgpu
+        ? { webgl: atlasCpuColors(snapshots.webgl, points, settings), webgpu: atlasCpuColors(snapshots.webgpu, points, settings) }
+        : undefined
+      latestAtlasColors = cpuAtlasColors ? cpuAtlasColors.webgl.budgetFailures === 0 && cpuAtlasColors.webgpu.budgetFailures === 0 : undefined
       report = {
-        schemaVersion: 7,
+        schemaVersion: 8,
         experiment: 'point-styling',
         recordedAt: new Date().toISOString(),
         browser: navigator.userAgent,
         validationContract: validationContracts['point-styling'],
         fixture: name,
         renderer: variant,
-        sourceAlphaPolicy: variant === 'eligibility' ? SOURCE_BYTE_PICKING_POLICY : variant === 'quantized' ? SOURCE_ALPHA_POLICY : undefined,
+        sourceAlphaPolicy: variant === 'eligibility'
+          ? (isAtlas ? ATLAS_PICKING_POLICY : SOURCE_BYTE_PICKING_POLICY)
+          : variant === 'quantized' ? (isAtlas ? ATLAS_QUANTIZED_POLICY : SOURCE_ALPHA_POLICY) : undefined,
         colorPreservation,
+        atlas: isAtlas ? ATLAS_EXPORT : undefined,
+        cpuAtlasColors,
         points,
         settings,
         colorBudget: COLOR_BUDGET,
@@ -186,7 +219,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           <p data-picking-rule>CPU rule: ${comparison.pickingRules.webgl === 'source-alpha'
     ? variant === 'eligibility'
       ? 'source-alpha — nonzero source byte gates picking; color retains the original alpha and blending.'
-      : 'source-alpha — half-coverage geometry intersected with a nonzero source byte; color and picking share quantized alpha.'
+      : 'source-alpha — shape/image coverage intersected with a nonzero source byte; color and picking share quantized alpha.'
     : comparison.pickingRules.webgl === 'visible'
       ? 'visible — global opacity zero returns background; positive opacity retains the half-coverage contour.'
       : 'legacy — global opacity does not change picking.'}</p><table><tbody>
@@ -207,6 +240,14 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
               <th>Maximum channel difference</th><th>Unchanged</th></tr></thead>
             <tbody>${(['webgl', 'webgpu'] as const).map(lane => `<tr><td>${lane}</td><td>${colorPreservation[lane].changedPixels}</td>
               <td>${colorPreservation[lane].maxChannelError}/255</td><td>${checkResult(colorPreservation[lane].changedPixels === 0)}</td></tr>`)
+    .join('')}</tbody></table>`)
+        }
+        if (cpuAtlasColors) {
+          output.insertAdjacentHTML('beforeend', `<h3>CPU atlas color reference</h3>
+            <p>Independent CPU sampling and production color composition; the same 2/255 budget applies to every pixel.</p>
+            <table data-atlas-cpu><thead><tr><th>Backend</th><th>Pixels beyond 2/255</th><th>Maximum difference</th><th>Result</th></tr></thead>
+            <tbody>${(['webgl', 'webgpu'] as const).map(lane => `<tr><td>${lane}</td><td>${cpuAtlasColors[lane].budgetFailures}</td>
+              <td>${cpuAtlasColors[lane].maxChannelError}/255</td><td>${checkResult(cpuAtlasColors[lane].budgetFailures === 0)}</td></tr>`)
     .join('')}</tbody></table>`)
         }
         if (contribution) renderContributionAudit(output, contribution)
@@ -231,6 +272,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
             `max ${compatibility.maxChannelError}/255, budget ${COLOR_BUDGET}/255.`
         }
         if (latestColorPreservation === false) status.textContent = 'Failed color-preservation check: this candidate changed the original color image.'
+        if (latestAtlasColors === false) status.textContent = 'Failed CPU atlas color check. Inspect the full-image counts and export the first rejected pixel.'
         if (latestContribution === false) {
           status.textContent = 'Failed contribution check: the selected foreground paints zero alpha by itself. ' +
           'Background paint does not make it visible.'
@@ -241,6 +283,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       }
       exportButton.disabled = false
       el<HTMLButtonElement>('[data-tiny-sweep]').disabled = !backends.webgl || !backends.webgpu
+      el<HTMLButtonElement>('[data-atlas-sweep]').disabled = !backends.webgl || !backends.webgpu
     } finally {
       busy = false
       if (destroyed) Object.values(backends).forEach(backend => backend.destroy())
@@ -280,6 +323,17 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           fixtures: [{ name: 'tiny-alpha', points: fixture('tiny-alpha') }, { name: 'tiny-overlap', points: fixture('tiny-overlap') }],
         },
       },
+      atlasSweep: atlasStudy && {
+        ...atlasStudy,
+        inputs: {
+          defaults: DEFAULTS,
+          atlas: ATLAS_EXPORT,
+          policy: ATLAS_PICKING_POLICY,
+          profiles: ATLAS_PROFILES,
+          filters: ['nearest', 'linear'],
+          fixtures: ATLAS_FIXTURES.map(name => ({ name, points: fixture(name) })),
+        },
+      },
     },
     (_key, value) => typeof value === 'number' && !Number.isFinite(value) ? String(value) : value, 2)
     const url = URL.createObjectURL(new Blob([json], { type: 'application/json' })); const link = document.createElement('a')
@@ -300,6 +354,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         error: undefined as string | undefined,
       }
       tinyStudy = study; exportButton.disabled = true
+      el<HTMLButtonElement>('[data-atlas-sweep]').disabled = true
       el('[data-tiny-results]').replaceChildren()
       host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
       el<HTMLButtonElement>('[data-tiny-sweep]').disabled = true; el<HTMLButtonElement>('[data-tiny-cancel]').disabled = false
@@ -319,6 +374,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         else {
           host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
           exportButton.disabled = !report; el<HTMLButtonElement>('[data-tiny-sweep]').disabled = false
+          el<HTMLButtonElement>('[data-atlas-sweep]').disabled = false
           el<HTMLButtonElement>('[data-tiny-cancel]').disabled = true
           el('[data-tiny-progress]').textContent = `${study.status} · ${study.rows.length} / 32 rows · ` +
             `${study.rows.filter(row => !row.candidateAccepted).length} explicit / ` +
@@ -329,10 +385,52 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     }
     runSweep().catch(error => { runError = String(error) })
   })
+  el('[data-atlas-cancel]').addEventListener('click', () => { cancelSweep = true })
+  el('[data-atlas-sweep]').addEventListener('click', () => {
+    if (busy || sweepRunning || destroyed || !backends.webgl || !backends.webgpu) return
+    const runSweep = async (): Promise<void> => {
+      sweepRunning = true; cancelSweep = false
+      const study = {
+        startedAt: new Date().toISOString(),
+        status: 'running',
+        browser: navigator.userAgent,
+        devices: Object.values(backends).map(b => b.info),
+        rows: [] as AtlasRow[],
+        finishedAt: undefined as string | undefined,
+        error: undefined as string | undefined,
+      }
+      atlasStudy = study; exportButton.disabled = true; el('[data-atlas-results]').replaceChildren()
+      host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
+      el<HTMLButtonElement>('[data-atlas-sweep]').disabled = true; el<HTMLButtonElement>('[data-tiny-sweep]').disabled = true
+      el<HTMLButtonElement>('[data-atlas-cancel]').disabled = false
+      el('[data-atlas-progress]').textContent = 'Starting 40 full-frame cases…'
+      try {
+        await runAtlasSweep({ webgl: backends.webgl!, webgpu: backends.webgpu! }, row => {
+          study.rows.push(row)
+          if (destroyed) return
+          renderAtlasRows(el('[data-atlas-results]'), study.rows)
+          el('[data-atlas-progress]').textContent = `${study.rows.length} / 40 · ${row.fixture} · ${row.filter} · ${row.profile}`
+        }, () => cancelSweep || destroyed)
+        study.status = cancelSweep || destroyed ? 'cancelled' : 'complete'
+      } catch (error) { study.status = 'failed'; study.error = String(error); runError = study.error } finally {
+        study.finishedAt = new Date().toISOString(); sweepRunning = false
+        if (destroyed) Object.values(backends).forEach(backend => backend.destroy())
+        else {
+          host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
+          exportButton.disabled = !report; el<HTMLButtonElement>('[data-atlas-sweep]').disabled = false
+          el<HTMLButtonElement>('[data-tiny-sweep]').disabled = false; el<HTMLButtonElement>('[data-atlas-cancel]').disabled = true
+          el('[data-atlas-progress]').textContent = `${study.status} · ${study.rows.length} / 40 · ` +
+            `${study.rows.filter(row => !row.accepted).length} source-byte cases rejected. Export retains all counts and first failures.`
+        }
+      }
+    }
+    runSweep().catch(error => { runError = String(error) })
+  })
   mountRunLayout(host, () => summarizeRun(
     busy || sweepRunning ? 'Running' : report ? 'Complete' : 'Preparing',
     [latestComparison, ...(latestContribution === undefined ? [] : [latestContribution]),
       ...(latestColorPreservation === undefined ? [] : [latestColorPreservation]),
+      ...(latestAtlasColors === undefined ? [] : [latestAtlasColors]),
       ...(latestCompatibility === undefined ? [] : [latestCompatibility])],
     'Other fixtures, pointer-hover tolerance and production picking latency.',
     Object.keys(errors),

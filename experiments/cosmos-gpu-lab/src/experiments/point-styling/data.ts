@@ -4,11 +4,13 @@ export const SHAPES = ['Circle', 'Square', 'Triangle', 'Diamond', 'Pentagon', 'H
 export type Point = {
   x: number; y: number; size: number; shape: number; color: [number, number, number, number];
   stroke: number; strokeColor: [number, number, number, number]; absent?: boolean;
+  image?: number; imageSize?: number;
 }
 export type Settings = {
   zoom: number; ratio: number; scaleOnZoom: boolean; sizeScale: number; opacity: number; maxSize: number;
   defaultSize: number; defaultColor: [number, number, number, number];
   defaultStroke: number; defaultStrokeColor: [number, number, number, number]; reverse: boolean;
+  imageFilter?: 'nearest' | 'linear';
 }
 export const DEFAULTS: Settings = {
   zoom: 1,
@@ -43,8 +45,25 @@ export function center (point: Point, settings: Settings): [number, number] {
 export function point (x: number, y: number, shape = 0, changes: Partial<Point> = {}): Point {
   return { x, y, shape, size: 42, color: [0.62, 0.71, 0.84, 1], stroke: 0, strokeColor: [0.95, 0.8, 0.57, 1], ...changes }
 }
-export type FixtureName = 'shapes' | 'overlap' | 'edge-cases' | 'fractional' | 'tiny-alpha' | 'tiny-overlap' | 'alpha-stack'
+export type FixtureName = 'shapes' | 'overlap' | 'edge-cases' | 'fractional' | 'tiny-alpha' | 'tiny-overlap' | 'alpha-stack' |
+  'atlas-images' | 'atlas-shapes' | 'atlas-overlap' | 'atlas-edges'
 export function fixture (name: FixtureName): Point[] {
+  if (name === 'atlas-images') {
+    return Array.from({ length: 4 }, (_, image) =>
+      point(192 + (image % 2) * 128, 112 + Math.floor(image / 2) * 96, 8, { size: 0, image, imageSize: 64, color: [0, 0, 0, 0] }))
+  }
+  if (name === 'atlas-shapes') {
+    return [point(192, 160, 0, { size: 96, image: 0, imageSize: 64 }),
+      point(320, 160, 0, { size: 48, image: 0, imageSize: 96, color: [0.3, 0.55, 0.85, 0.6] })]
+  }
+  if (name === 'atlas-overlap') {
+    return [point(256, 160, 1, { size: 128, color: [0.2, 0.45, 0.8, 1] }),
+      point(256, 160, 8, { size: 0, image: 0, imageSize: 96, color: [0, 0, 0, 0] })]
+  }
+  if (name === 'atlas-edges') {
+    return [point(192.5, 112.5, 8, { size: 0, image: 0, imageSize: 32, color: [0, 0, 0, 0] }),
+      point(320.25, 208.75, 8, { size: 0, image: 3, imageSize: 31.5, color: [0, 0, 0, 0] })]
+  }
   if (name === 'alpha-stack') {
     return Array.from({ length: 64 }, () => point(256.5, 160.5, 0, { color: [1, 1, 1, 0.51 / 255] }))
   }
