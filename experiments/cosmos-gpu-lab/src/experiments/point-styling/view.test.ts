@@ -75,6 +75,13 @@ it('keeps invisible foreground rejection visible and cancels a sweep without cha
     expect(row.children[1].textContent).toBe('0'); expect(row.children[2].textContent).toBe('0')
   })
   expect(host.querySelector('[data-production-comparison]')!.textContent).toContain('Production WebGL ↔ quantized WebGPU')
+  await select('[data-renderer]', 'eligibility')
+  expect(host.querySelector('[role="status"]')!.textContent).toContain('Source-byte candidate passed')
+  expect(host.querySelector('[data-picking-rule]')!.textContent).toContain('original alpha and blending')
+  host.querySelectorAll('[data-color-preservation] tbody tr').forEach(row => {
+    expect(row.children[1].textContent).toBe('0'); expect(row.children[2].textContent).toBe('0/255')
+  })
+  expect(host.querySelector('[data-production-comparison]')!.textContent).toContain('Production WebGL ↔ source-byte WebGPU')
   await select('[data-renderer]', 'explicit')
   expect(host.querySelector('[role="status"]')!.textContent).toContain('Failed contribution check')
 })

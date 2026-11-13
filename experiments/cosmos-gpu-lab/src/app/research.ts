@@ -124,16 +124,16 @@ export const research: Record<string, ResearchSummary> = {
     method: 'validation-contract',
     comparison: 'Same styled points → production WebGL / WebGPU color and ID images → full-image and scalar-mask checks',
     question: 'Does point-ID picking select the shapes that Cosmos actually renders?',
-    conclusion: 'Source-alpha quantization passes 32 visibility cases, but a 64-point faint stack fails production color compatibility by up to 59/255.',
-    scope: 'Exact CPU/cross-backend IDs, no invisible picks, maximum color difference 1/255. Also 24 styling controls and ' +
-      '767 alpha-byte samples per backend pass. The faint stack exceeds the unchanged 2/255 color budget at 1,321 pixels; adoption is blocked.',
-    variant: 'Production/legacy and explicit/visible controls, plus quantized GL/GPU quads with source-alpha CPU rule; luma 10.0.0-alpha.4; Apple M3',
+    conclusion: 'Source-byte picking passes 32 visibility cases with unchanged colors; faint-stack production color difference drops from 59/255 to 0/255.',
+    scope: 'Apple M3: exact IDs/CPU masks, no invisible picks and byte-identical colors to the unquantized controls. ' +
+      'Also 24 styling cases, 767 alpha samples per backend and a 64-point stack pass. Legacy picking/coverage compatibility remains separate.',
+    variant: 'Production/legacy, explicit/visible, quantized/source-alpha and pick-only/source-alpha; luma 10.0.0-alpha.4; Apple M3',
     reviewed: '2026-11-13',
     milestone: 'rendering',
     evidence: 'method',
-    next: 'Test source-byte picking eligibility with original color accumulation, retaining this failed quantized control; then validate atlas alpha and cost.',
-    reproduce: 'Select Source-alpha quantized candidate and Tiny-alpha overlap at opacity 1. The invisible foreground must not block point 0. ' +
-      'Run the 32-row sweep, then select Faint overlap stack · 64 points to inspect the rejected production color comparison. Export local JSON.',
+    next: 'Validate image-atlas alpha, transparent texels and overlap order; measure ID-pass cost and expand native coverage.',
+    reproduce: 'Select Source-byte picking candidate, run the 32-row sweep and replay Faint overlap stack · 64 points. ' +
+      'Original color output must show zero changed pixels. The production control retains its original picking failures. Export local JSON.',
     investigations: [{
       page: 'method',
       state: 'Current evidence',

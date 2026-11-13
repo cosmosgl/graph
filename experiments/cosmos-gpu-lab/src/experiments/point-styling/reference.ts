@@ -80,6 +80,21 @@ export function referencePick (points: Point[], settings: Settings, x: number, y
 // RGBA8 comparison budget declared before evaluation: two channel levels account
 // for quantization/blend evaluation. IDs and visibility checks have no tolerance.
 export const COLOR_BUDGET = 2
+export type ColorComparison = { changedPixels: number; maxChannelError: number; budgetFailures: number }
+export function compareColors (a: Snapshot, b: Snapshot): ColorComparison {
+  if (a.width !== b.width || a.height !== b.height || a.color.length !== a.width * a.height * 4 || b.color.length !== a.color.length) {
+    throw new Error('Mismatched color framebuffer dimensions')
+  }
+  const result: ColorComparison = { changedPixels: 0, maxChannelError: 0, budgetFailures: 0 }
+  for (let offset = 0; offset < a.color.length; offset += 4) {
+    let difference = 0
+    for (let c = 0; c < 4; c++) difference = Math.max(difference, Math.abs(a.color[offset + c] - b.color[offset + c]))
+    if (difference > 0) result.changedPixels++
+    if (difference > COLOR_BUDGET) result.budgetFailures++
+    result.maxChannelError = Math.max(result.maxChannelError, difference)
+  }
+  return result
+}
 type MaskMismatch = {
   x: number; y: number; webgl: number | null; webgpu: number | null; expected: { webgl: number | null; webgpu: number | null };
 }

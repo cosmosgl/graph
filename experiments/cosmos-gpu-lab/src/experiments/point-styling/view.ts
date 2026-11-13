@@ -4,12 +4,12 @@ import type { ExperimentInstance } from '../../runtime/experiment'
 import { validationContracts } from '../../runtime/validation'
 import { pick, type Backend, type Snapshot, type RenderVariant } from './backend'
 import { DEFAULTS, fixture, HEIGHT, WIDTH } from './data'
-import { COLOR_BUDGET, compareSnapshotsAsync } from './reference'
+import { COLOR_BUDGET, compareColors, compareSnapshotsAsync } from './reference'
 import { createStylingWebGL } from './webgl'
 import { createStylingWebGPU } from './webgpu'
 import { investigateFractional, renderFractionalInvestigation } from './fractional'
 import { renderExplicitControl } from './explicit'
-import { SOURCE_ALPHA_POLICY } from './source-alpha'
+import { SOURCE_ALPHA_POLICY, SOURCE_BYTE_PICKING_POLICY } from './source-alpha'
 import {
   contributionPasses, inspectForeground, renderContributionAudit, renderTinyAlphaRows, runTinyAlphaSweep, TINY_OPACITIES,
   type TinyAlphaRow,
@@ -23,7 +23,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     <div
       data-run-part="configuration" class="scale-toolbar styling-toolbar">
       <label>Renderer <select data-renderer><option value="production">Production control</option>
-        <option value="explicit">Explicit-coordinate candidate</option><option value="quantized">Source-alpha quantized candidate</option></select></label>
+        <option value="explicit">Explicit-coordinate candidate</option><option value="quantized">Source-alpha quantized candidate</option>
+        <option value="eligibility">Source-byte picking candidate</option></select></label>
       <label>Fixture <select data-fixture><option value="shapes">Eight shapes · fill and stroke</option>
         <option value="overlap">Overlap and draw order</option><option value="edge-cases">Defaults and edge cases</option>
         <option value="fractional">Fractional sizes and positions</option><option value="tiny-alpha">Tiny-alpha grid</option>
@@ -66,6 +67,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   let latestComparison: boolean | undefined
   let latestCompatibility: boolean | undefined
   let latestContribution: boolean | undefined
+  let latestColorPreservation: boolean | undefined
   let tinyStudy: {
     startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[]; rows: TinyAlphaRow[]; error?: string;
   } | undefined
@@ -73,6 +75,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   const render = async (): Promise<void> => {
     if (busy || sweepRunning || destroyed) return
     busy = true; snapshots = {}; report = undefined; latestComparison = undefined; latestCompatibility = undefined; latestContribution = undefined
+    latestColorPreservation = undefined
     runError = undefined; exportButton.disabled = true
     el<HTMLButtonElement>('[data-tiny-sweep]').disabled = true
     host.querySelectorAll<HTMLElement>('[data-cursor]').forEach(cursor => { cursor.hidden = true })
@@ -89,7 +92,9 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     }
     const name = el<HTMLSelectElement>('[data-fixture]').value as Parameters<typeof fixture>[0]; const points = fixture(name)
     const variant = el<HTMLSelectElement>('[data-renderer]').value as RenderVariant
+    const candidateLabel = variant === 'eligibility' ? 'Source-byte' : variant === 'quantized' ? 'Quantized' : 'Explicit'
     const original: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
+    const unmodified: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
     const diagnose = name === 'fractional'
     el('[data-legend]').textContent = name === 'shapes'
       ? 'Circle · square · triangle · diamond · pentagon · hexagon · star · cross. Top row: fill. Bottom row: inset stroke.'
@@ -109,13 +114,14 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         if (!backends[name]) continue
         try {
           if (variant !== 'production') original[name] = await backends[name]!.render(points, settings)
+          if (variant === 'eligibility') unmodified[name] = await backends[name]!.render(points, settings, false, 'explicit', false)
           snapshots[name] = await backends[name]!.render(points, settings, diagnose, variant)
           if (destroyed) return
           delete errors[name]
           el(`[data-device="${name}"]`).textContent = backends[name]!.info
           el(`[data-state="${name}"]`).textContent = 'Rendered'
           el(`[data-canvas="${name}"]`).closest('.backend-panel')!.querySelector('h2')!.textContent = variant !== 'production'
-            ? `${variant === 'quantized' ? 'Quantized' : 'Explicit'} ${name === 'webgl' ? 'WebGL' : 'WebGPU'} quads`
+            ? `${candidateLabel} ${name === 'webgl' ? 'WebGL' : 'WebGPU'} quads`
             : name === 'webgl' ? 'Cosmos WebGL' : 'luma WebGPU'
         } catch (error) {
           runError = String(error)
@@ -146,15 +152,22 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       latestComparison = comparison?.valid
       latestCompatibility = compatibility?.valid
       latestContribution = contribution ? contributionPasses(contribution) : undefined
+      const colorPreservation = unmodified.webgl && unmodified.webgpu && snapshots.webgl && snapshots.webgpu
+        ? { webgl: compareColors(unmodified.webgl, snapshots.webgl), webgpu: compareColors(unmodified.webgpu, snapshots.webgpu) }
+        : undefined
+      latestColorPreservation = colorPreservation
+        ? colorPreservation.webgl.changedPixels === 0 && colorPreservation.webgpu.changedPixels === 0
+        : undefined
       report = {
-        schemaVersion: 6,
+        schemaVersion: 7,
         experiment: 'point-styling',
         recordedAt: new Date().toISOString(),
         browser: navigator.userAgent,
         validationContract: validationContracts['point-styling'],
         fixture: name,
         renderer: variant,
-        sourceAlphaPolicy: variant === 'quantized' ? SOURCE_ALPHA_POLICY : undefined,
+        sourceAlphaPolicy: variant === 'eligibility' ? SOURCE_BYTE_PICKING_POLICY : variant === 'quantized' ? SOURCE_ALPHA_POLICY : undefined,
+        colorPreservation,
         points,
         settings,
         colorBudget: COLOR_BUDGET,
@@ -171,7 +184,9 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       if (comparison) {
         output.innerHTML = `<h3>Framebuffer audit</h3>
           <p data-picking-rule>CPU rule: ${comparison.pickingRules.webgl === 'source-alpha'
-    ? 'source-alpha — half-coverage geometry intersected with a nonzero source byte; color and picking share quantized alpha.'
+    ? variant === 'eligibility'
+      ? 'source-alpha — nonzero source byte gates picking; color retains the original alpha and blending.'
+      : 'source-alpha — half-coverage geometry intersected with a nonzero source byte; color and picking share quantized alpha.'
     : comparison.pickingRules.webgl === 'visible'
       ? 'visible — global opacity zero returns background; positive opacity retains the half-coverage contour.'
       : 'legacy — global opacity does not change picking.'}</p><table><tbody>
@@ -185,27 +200,37 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           <tr><th>Picked pixels with zero rendered alpha · WebGL / WebGPU</th>
             <td>${comparison.webglInvisiblePicks} / ${comparison.webgpuInvisiblePicks}</td></tr>
           </tbody></table>`
+        if (colorPreservation) {
+          output.insertAdjacentHTML('beforeend', `<h3>Original color output</h3>
+            <p>Byte comparison with the unquantized explicit-coordinate control in each API. This checks color independently of the changed picking rule.</p>
+            <table data-color-preservation><thead><tr><th>Backend</th><th>Changed color pixels</th>
+              <th>Maximum channel difference</th><th>Unchanged</th></tr></thead>
+            <tbody>${(['webgl', 'webgpu'] as const).map(lane => `<tr><td>${lane}</td><td>${colorPreservation[lane].changedPixels}</td>
+              <td>${colorPreservation[lane].maxChannelError}/255</td><td>${checkResult(colorPreservation[lane].changedPixels === 0)}</td></tr>`)
+    .join('')}</tbody></table>`)
+        }
         if (contribution) renderContributionAudit(output, contribution)
         if (original.webgl && original.webgpu) {
           renderExplicitControl(output, { webgl: original.webgl, webgpu: original.webgpu },
             { webgl: snapshots.webgl!, webgpu: snapshots.webgpu! }, points, settings,
-            { production: productionComparison!, compatibility: compatibility! })
+            { production: productionComparison!, compatibility: compatibility! }, variant)
         }
         if (fractional) {
           renderFractionalInvestigation(output, fractional, snapshots.webgl!, snapshots.webgpu!, points, settings, analyticControl, variant)
         }
         status.textContent = comparison.valid
           ? variant !== 'production'
-            ? `${variant === 'quantized' ? 'Quantized' : 'Explicit'} candidate passed. ` +
+            ? `${candidateLabel} candidate passed. ` +
               `Production compatibility ${compatibility?.valid ? 'passed' : 'differs; see the control below'}.`
             : 'Passed: exact IDs and shape masks; colors within the declared budget; no invisible picks.'
           : variant === 'production' && settings.opacity === 0
             ? 'Failed visibility control: production host picking still selects points at global opacity zero. Both paths retain this discrepancy.'
             : 'Differences found. Inspect the counts and export the frozen inputs; this configuration is not accepted.'
-        if (variant === 'quantized' && comparison.valid && compatibility && compatibility.colorFailures > 0) {
-          status.textContent = `Quantized frame passed. Production color compatibility failed at ${formatCount(compatibility.colorFailures)} pixels: ` +
+        if ((variant === 'quantized' || variant === 'eligibility') && comparison.valid && compatibility && compatibility.colorFailures > 0) {
+          status.textContent = `${candidateLabel} frame passed. Production color compatibility failed at ${formatCount(compatibility.colorFailures)} pixels: ` +
             `max ${compatibility.maxChannelError}/255, budget ${COLOR_BUDGET}/255.`
         }
+        if (latestColorPreservation === false) status.textContent = 'Failed color-preservation check: this candidate changed the original color image.'
         if (latestContribution === false) {
           status.textContent = 'Failed contribution check: the selected foreground paints zero alpha by itself. ' +
           'Background paint does not make it visible.'
@@ -249,6 +274,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         inputs: {
           defaults: DEFAULTS,
           sourceAlphaPolicy: SOURCE_ALPHA_POLICY,
+          sourceBytePickingPolicy: SOURCE_BYTE_PICKING_POLICY,
           opacities: TINY_OPACITIES,
           ratios: [1, 2],
           fixtures: [{ name: 'tiny-alpha', points: fixture('tiny-alpha') }, { name: 'tiny-overlap', points: fixture('tiny-overlap') }],
@@ -296,7 +322,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           el<HTMLButtonElement>('[data-tiny-cancel]').disabled = true
           el('[data-tiny-progress]').textContent = `${study.status} · ${study.rows.length} / 32 rows · ` +
             `${study.rows.filter(row => !row.candidateAccepted).length} explicit / ` +
-            `${study.rows.filter(row => !row.quantizedAccepted).length} quantized rows rejected. Export JSON retains every count and first failure.`
+            `${study.rows.filter(row => !row.quantizedAccepted).length} quantized / ` +
+            `${study.rows.filter(row => !row.eligibilityAccepted).length} source-byte rows rejected. Export JSON retains every count and first failure.`
         }
       }
     }
@@ -305,6 +332,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   mountRunLayout(host, () => summarizeRun(
     busy || sweepRunning ? 'Running' : report ? 'Complete' : 'Preparing',
     [latestComparison, ...(latestContribution === undefined ? [] : [latestContribution]),
+      ...(latestColorPreservation === undefined ? [] : [latestColorPreservation]),
       ...(latestCompatibility === undefined ? [] : [latestCompatibility])],
     'Other fixtures, pointer-hover tolerance and production picking latency.',
     Object.keys(errors),

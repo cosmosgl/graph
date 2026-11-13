@@ -12,14 +12,14 @@ export const validationContracts: Record<string, ValidationContract> = {
   'point-styling': {
     question: 'Do production Cosmos styling and shape-aware host picking match a luma WebGPU port and the rendered footprint?',
     reference: 'Unmodified production GLSL with the legacy CPU rule; independent candidate CPU geometry with positive global opacity ' +
-      '(visible rule), plus the separately declared quantized source-alpha candidate; offscreen RGBA8 color/ID readback.',
+      '(visible rule), plus quantized and pick-only candidates with the declared source-alpha rule; offscreen RGBA8 color/ID readback.',
     acceptance: 'Exact IDs and scalar masks at every pixel; at most two RGBA8 channel levels for color; no picked pixels with zero rendered alpha.',
     coverage: 'Frozen eight-shape, overlap, edge-case, fractional and tiny-alpha fixtures, zoom, pixel ratio, strokes, defaults and render order; ' +
       'production, explicit-coordinate and isolated-source verdicts are named separately.',
     limits: 'Host picking only. Pointer tolerance, images, rings, automatic shades, greyout, transitions, occlusion and latency remain separate. ' +
       'Production zero-opacity visibility and fractional compatibility still fail on M3. Candidate opacity 0/0.35/1 is bounded; ' +
-      'Quantization passes 32 visibility cases but fails faint-stack production colors (59/255). ' +
-      'Original controls, atlas and broader-device gates remain open.',
+      'Pick-only source-byte eligibility preserves colors in the 32-case M3 sweep and faint stack. ' +
+      'Original raster/picking and pre-blend-quantization failures stay visible; atlas, cost and broader devices remain open.',
   },
   'center-mass': {
     question: 'Do blend accumulation and compute reduction calculate the same center accurately?',

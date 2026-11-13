@@ -67,7 +67,8 @@ function moduleSource (source: string): string {
   return match[1]
 }
 
-function coordinateSources (quads: boolean, quantized = false): { vertex: string; fragment: string } {
+function coordinateSources (quads: boolean, alphaPolicy: 'unchanged' | 'quantized' | 'eligibility' = 'unchanged'):
+{ vertex: string; fragment: string } {
   const position = 'gl_Position = vec4(finalPosition.rg, depthZ, 1.0);'
   const coord = 'vec2 pointCoord = 2.0 * gl_PointCoord - 1.0;'
   const size = 'overallSize = overallSizeValue;'
@@ -88,13 +89,18 @@ function coordinateSources (quads: boolean, quantized = false): { vertex: string
     const picking = 'if (renderMode > 2.5) {'
     if (!fragment.includes(picking)) throw new Error('Production picking control location changed')
     fragment = fragment.replace(picking, `${picking}\nif (pointOpacity <= 0.0) discard;`)
-    if (quantized) {
+    if (alphaPolicy === 'quantized') {
       const alpha = 'finalPointAlpha *= pointOpacity;'
       if (!fragment.includes(alpha)) throw new Error('Production source-alpha location changed')
       fragment = fragment.replace('void main()', `${SOURCE_ALPHA_GLSL}\nvoid main()`)
         .replace(picking, `float candidateSourceAlpha = quantizeSourceAlpha(finalShapeColor.a * pointOpacity);
           ${picking}\nif (candidateSourceAlpha <= 0.0) discard;`)
         .replace(alpha, 'finalPointAlpha = candidateSourceAlpha;')
+    } else if (alphaPolicy === 'eligibility') {
+      // Only the ID pass uses the source byte. Leave color alpha and blending
+      // exactly as in the explicit control, including faint-source accumulation.
+      fragment = fragment.replace('void main()', `${SOURCE_ALPHA_GLSL}\nvoid main()`)
+        .replace(picking, `${picking}\nif (quantizeSourceAlpha(finalShapeColor.a * pointOpacity) <= 0.0) discard;`)
     }
   }
   return { vertex, fragment }
@@ -152,6 +158,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
     let analyticColor: Model | undefined; let analyticPick: Model | undefined
     let explicitColor: Model | undefined; let explicitPick: Model | undefined; let explicitProbe: Model | undefined
     let quantizedColor: Model | undefined; let quantizedPick: Model | undefined; let quantizedProbe: Model | undefined
+    let eligibilityColor: Model | undefined; let eligibilityPick: Model | undefined; let eligibilityProbe: Model | undefined
     return {
       info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
       async render (points, settings, diagnose = false, variant = 'production', display = true): Promise<Snapshot> {
@@ -206,9 +213,14 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
             explicitProbe = make(true, instrumentCoverage(fragment), vertex, true)
           }
           if (variant === 'quantized' && !quantizedColor) {
-            const { vertex, fragment } = coordinateSources(true, true)
+            const { vertex, fragment } = coordinateSources(true, 'quantized')
             quantizedColor = make(false, fragment, vertex, true); quantizedPick = make(true, fragment, vertex, true)
             quantizedProbe = make(true, instrumentCoverage(fragment), vertex, true)
+          }
+          if (variant === 'eligibility' && !eligibilityColor) {
+            const { vertex, fragment } = coordinateSources(true, 'eligibility')
+            eligibilityColor = make(false, fragment, vertex, true); eligibilityPick = make(true, fragment, vertex, true)
+            eligibilityProbe = make(true, instrumentCoverage(fragment), vertex, true)
           }
           if (diagnose && variant === 'production' && !diagnostic) {
             // Instrument a copy, leaving the production color/picking shader untouched.
@@ -272,13 +284,17 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
             const pass = device.beginRenderPass({ framebuffer, clearColor: framebuffer ? [0, 0, 0, 0] : [0.14, 0.16, 0.185, 1], clearDepth: false })
             try { model.draw(pass) } finally { pass.end() }
           }
-          const colorModel = variant === 'quantized' ? quantizedColor! : variant === 'explicit' ? explicitColor! : visible
-          const pickModel = variant === 'quantized' ? quantizedPick! : variant === 'explicit' ? explicitPick! : picking
+          const colorModel = variant === 'eligibility'
+            ? eligibilityColor!
+            : variant === 'quantized' ? quantizedColor! : variant === 'explicit' ? explicitColor! : visible
+          const pickModel = variant === 'eligibility'
+            ? eligibilityPick!
+            : variant === 'quantized' ? quantizedPick! : variant === 'explicit' ? explicitPick! : picking
           draw(colorModel, 0, color.framebuffer); draw(pickModel, 3, ids.framebuffer)
           if (display) draw(colorModel, 0)
           device.submit()
           const result: Snapshot = {
-            pickingRule: variant === 'quantized' ? 'source-alpha' : variant === 'explicit' ? 'visible' : 'legacy',
+            pickingRule: variant === 'production' ? 'legacy' : variant === 'explicit' ? 'visible' : 'source-alpha',
             width,
             height,
             color: await pixels(device, color.texture, color.framebuffer),
@@ -287,7 +303,9 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
           if (diagnose) {
             const geometry = frame.own(target(device, width, height, 'rgba32float'))
             const edge = frame.own(target(device, width, height, 'rgba32float'))
-            const probe = variant === 'quantized' ? quantizedProbe! : variant === 'explicit' ? explicitProbe! : diagnostic!
+            const probe = variant === 'eligibility'
+              ? eligibilityProbe!
+              : variant === 'quantized' ? quantizedProbe! : variant === 'explicit' ? explicitProbe! : diagnostic!
             draw(probe, 4, geometry.framebuffer); draw(probe, 5, edge.framebuffer); device.submit()
             result.probe = {
               geometry: await floatPixels(device, geometry.texture, geometry.framebuffer), edge: await floatPixels(device, edge.texture, edge.framebuffer),
