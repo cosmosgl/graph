@@ -122,8 +122,8 @@ export function renderFractionalInvestigation (
   const field = (value: Captured | null): string => value ? `${number(value.distance)} / ${number(value.coverage)}` : 'No fragment'
   section.innerHTML = `<h3>Fractional pixel investigation</h3>
     <p>Float-target probes capture the selected renderer’s coordinates, diameter, edge distance and coverage.
-      ${variant === 'explicit'
-    ? 'The main verdict checks candidate geometry with the visibility-aware CPU rule.'
+      ${variant !== 'production'
+    ? `The main verdict checks candidate geometry with the declared ${gl.pickingRule} CPU rule.`
     : 'The analytical-coordinate control replaces only gl_PointCoord in a shader copy; the main verdict still uses the production shader.'}</p>
     ${control
     ? `<h4>Coordinate control</h4><table><thead><tr><th>Diagnostic comparison</th><th>ID differences</th>
@@ -158,8 +158,8 @@ export function renderFractionalInvestigation (
   if (sample) {
     const previews = section.querySelector<HTMLElement>('[data-mask-previews]')!
     previews.className = 'fractional-mask-previews'
-    for (const [title, snapshot] of [[variant === 'explicit' ? 'Explicit WebGL' : 'Production WebGL', gl],
-      [variant === 'explicit' ? 'Explicit WebGPU' : 'luma WebGPU', gpu], ['CPU mask', null]] as const) {
+    for (const [title, snapshot] of [[variant !== 'production' ? `${variant} WebGL` : 'Production WebGL', gl],
+      [variant !== 'production' ? `${variant} WebGPU` : 'luma WebGPU', gpu], ['CPU mask', null]] as const) {
       const figure = document.createElement('figure'); const caption = document.createElement('figcaption'); caption.textContent = title
       const canvas = document.createElement('canvas'); const cells = 9; const scale = 16
       canvas.width = canvas.height = cells * scale

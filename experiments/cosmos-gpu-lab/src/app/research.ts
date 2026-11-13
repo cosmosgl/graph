@@ -124,16 +124,16 @@ export const research: Record<string, ResearchSummary> = {
     method: 'validation-contract',
     comparison: 'Same styled points → production WebGL / WebGPU color and ID images → full-image and scalar-mask checks',
     question: 'Does point-ID picking select the shapes that Cosmos actually renders?',
-    conclusion: 'Bounded styling and zero opacity pass, but 28 of 32 tiny-alpha cases fail visibility: matching IDs can still select an invisible source.',
-    scope: 'Apple M3 inline: exact CPU/cross-backend IDs and colors within 2/255 in the tiny-alpha sweep. ' +
-      'Six overlap rows pass the frame audit but fail isolated-source visibility. Legacy compatibility and atlas coverage remain open.',
-    variant: 'Unchanged production/legacy CPU control and explicit GL/GPU quads with visible CPU rule; luma 10.0.0-alpha.4; Apple M3',
+    conclusion: 'Source-alpha quantization passes 32 visibility cases, but a 64-point faint stack fails production color compatibility by up to 59/255.',
+    scope: 'Exact CPU/cross-backend IDs, no invisible picks, maximum color difference 1/255. Also 24 styling controls and ' +
+      '767 alpha-byte samples per backend pass. The faint stack exceeds the unchanged 2/255 color budget at 1,321 pixels; adoption is blocked.',
+    variant: 'Production/legacy and explicit/visible controls, plus quantized GL/GPU quads with source-alpha CPU rule; luma 10.0.0-alpha.4; Apple M3',
     reviewed: '2026-11-13',
     milestone: 'rendering',
     evidence: 'method',
-    next: 'Prototype shared effective source alpha and explicit format-aware picking eligibility; preserve current controls, then validate image-atlas alpha.',
-    reproduce: 'Select Explicit-coordinate candidate and Tiny-alpha overlap at opacity 1. Compare the frame and picked-point contribution audits. ' +
-      'Run the 32-row tiny-alpha sweep in Diagnostics; export local JSON for all rows and frozen inputs.',
+    next: 'Test source-byte picking eligibility with original color accumulation, retaining this failed quantized control; then validate atlas alpha and cost.',
+    reproduce: 'Select Source-alpha quantized candidate and Tiny-alpha overlap at opacity 1. The invisible foreground must not block point 0. ' +
+      'Run the 32-row sweep, then select Faint overlap stack · 64 points to inspect the rejected production color comparison. Export local JSON.',
     investigations: [{
       page: 'method',
       state: 'Current evidence',
@@ -169,7 +169,7 @@ export const milestones = [
     title: 'Rendering and interaction',
     position: 'Bounded production shapes, strokes and host IDs demonstrated',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
-    gates: ['Choose production coverage/picking policy; resolve tiny-alpha source visibility after bounded fractional and zero-opacity candidate passes.',
+    gates: ['Choose production coverage/source-visibility policy; broaden the bounded quantized candidate across devices and measure its cost.',
       'Validate images, rings/greyout, transitions, links and the separate pointer-hover contract.'],
     evidence: [['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],
   },

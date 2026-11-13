@@ -11,9 +11,9 @@ type Pair = { webgl: Snapshot; webgpu: Snapshot }
 export type ContributionPair = { webgl: ContributionAudit; webgpu: ContributionAudit }
 export type TinyAlphaRow = {
   fixture: 'tiny-alpha' | 'tiny-overlap'; ratio: number; opacity: number;
-  production: Comparison; candidate: Comparison;
-  productionContribution?: ContributionPair; candidateContribution?: ContributionPair;
-  candidateAccepted: boolean;
+  production: Comparison; candidate: Comparison; quantized: Comparison;
+  productionContribution?: ContributionPair; candidateContribution?: ContributionPair; quantizedContribution?: ContributionPair;
+  candidateAccepted: boolean; quantizedAccepted: boolean;
 }
 
 // Independent paint evidence, not a new CPU contour or an alpha threshold.
@@ -68,7 +68,7 @@ export async function runTinyAlphaSweep (
         const points = fixture(name); const settings = { ...DEFAULTS, ratio, opacity }
         const frames = {} as Record<RenderVariant, Pair>
         const contribution: Partial<Record<RenderVariant, ContributionPair>> = {}
-        for (const variant of ['production', 'explicit'] as const) {
+        for (const variant of ['production', 'explicit', 'quantized'] as const) {
           const pair = {} as Pair
           for (const lane of ['webgl', 'webgpu'] as const) pair[lane] = await backends[lane].render(points, settings, false, variant, false)
           frames[variant] = pair
@@ -76,15 +76,19 @@ export async function runTinyAlphaSweep (
         }
         const production = await compareSnapshotsAsync(frames.production.webgl, frames.production.webgpu, points, settings)
         const candidate = await compareSnapshotsAsync(frames.explicit.webgl, frames.explicit.webgpu, points, settings)
+        const quantized = await compareSnapshotsAsync(frames.quantized.webgl, frames.quantized.webgpu, points, settings)
         const row: TinyAlphaRow = {
           fixture: name,
           ratio,
           opacity,
           production,
           candidate,
+          quantized,
           productionContribution: contribution.production,
           candidateContribution: contribution.explicit,
+          quantizedContribution: contribution.quantized,
           candidateAccepted: candidate.valid && contributionPasses(contribution.explicit),
+          quantizedAccepted: quantized.valid && contributionPasses(contribution.quantized),
         }
         rows.push(row); onRow(row)
         await new Promise<void>(resolve => { setTimeout(resolve, 0) })
@@ -109,13 +113,14 @@ export function renderContributionAudit (host: HTMLElement, audit: ContributionP
 }
 
 export function renderTinyAlphaRows (host: HTMLElement, rows: TinyAlphaRow[]): void {
-  host.innerHTML = `<p>Frozen sweep: 2 fixtures × 2 pixel ratios × 8 opacities. The original CPU rules and tolerances remain in force.
+  host.innerHTML = `<p>Frozen sweep: 2 fixtures × 2 pixel ratios × 8 opacities. Each variant keeps its declared CPU rule; acceptance budgets are unchanged.
+    Accepted includes full-frame and applicable source checks. The quantized candidate uses the source-alpha CPU rule.
     “Invisible foreground” checks the foreground in isolation; “—” means that check does not apply to the isolated grid.</p>
-    <table data-tiny-alpha-table><thead><tr><th>Fixture</th><th>Ratio</th><th>Opacity</th><th>Production frame</th><th>Candidate frame</th>
-      <th>Candidate invisible picks · GL / GPU</th><th>Invisible foreground · GL / GPU</th><th>Candidate accepted</th></tr></thead>
+    <table data-tiny-alpha-table><thead><tr><th>Fixture</th><th>Ratio</th><th>Opacity</th><th>Production frame</th><th>Explicit accepted</th>
+      <th>Quantized invisible picks · GL / GPU</th><th>Quantized invisible foreground · GL / GPU</th><th>Quantized accepted</th></tr></thead>
     <tbody>${rows.map(row => `<tr><td>${row.fixture}</td><td>${row.ratio}</td><td>${row.opacity.toPrecision(5)}</td>
-      <td>${row.production.valid ? 'Pass' : 'Fail'}</td><td>${row.candidate.valid ? 'Pass' : 'Fail'}</td>
-      <td>${row.candidate.webglInvisiblePicks} / ${row.candidate.webgpuInvisiblePicks}</td>
-      <td>${row.candidateContribution ? `${row.candidateContribution.webgl.invisible} / ${row.candidateContribution.webgpu.invisible}` : '—'}</td>
-      <td>${row.candidateAccepted ? 'Pass' : 'Fail'}</td></tr>`).join('')}</tbody></table>`
+      <td>${row.production.valid ? 'Pass' : 'Fail'}</td><td>${row.candidateAccepted ? 'Pass' : 'Fail'}</td>
+      <td>${row.quantized.webglInvisiblePicks} / ${row.quantized.webgpuInvisiblePicks}</td>
+      <td>${row.quantizedContribution ? `${row.quantizedContribution.webgl.invisible} / ${row.quantizedContribution.webgpu.invisible}` : '—'}</td>
+      <td>${row.quantizedAccepted ? 'Pass' : 'Fail'}</td></tr>`).join('')}</tbody></table>`
 }

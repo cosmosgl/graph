@@ -4,11 +4,12 @@ import type { ExperimentInstance } from '../../runtime/experiment'
 import { validationContracts } from '../../runtime/validation'
 import { pick, type Backend, type Snapshot, type RenderVariant } from './backend'
 import { DEFAULTS, fixture, HEIGHT, WIDTH } from './data'
-import { COLOR_BUDGET, compareSnapshots } from './reference'
+import { COLOR_BUDGET, compareSnapshotsAsync } from './reference'
 import { createStylingWebGL } from './webgl'
 import { createStylingWebGPU } from './webgpu'
 import { investigateFractional, renderFractionalInvestigation } from './fractional'
 import { renderExplicitControl } from './explicit'
+import { SOURCE_ALPHA_POLICY } from './source-alpha'
 import {
   contributionPasses, inspectForeground, renderContributionAudit, renderTinyAlphaRows, runTinyAlphaSweep, TINY_OPACITIES,
   type TinyAlphaRow,
@@ -22,11 +23,11 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     <div
       data-run-part="configuration" class="scale-toolbar styling-toolbar">
       <label>Renderer <select data-renderer><option value="production">Production control</option>
-        <option value="explicit">Explicit-coordinate candidate</option></select></label>
+        <option value="explicit">Explicit-coordinate candidate</option><option value="quantized">Source-alpha quantized candidate</option></select></label>
       <label>Fixture <select data-fixture><option value="shapes">Eight shapes · fill and stroke</option>
         <option value="overlap">Overlap and draw order</option><option value="edge-cases">Defaults and edge cases</option>
         <option value="fractional">Fractional sizes and positions</option><option value="tiny-alpha">Tiny-alpha grid</option>
-        <option value="tiny-overlap">Tiny-alpha overlap</option></select></label>
+        <option value="tiny-overlap">Tiny-alpha overlap</option><option value="alpha-stack">Faint overlap stack · 64 points</option></select></label>
       <label>Zoom <select data-zoom><option>0.5</option><option selected>1</option><option>2</option></select></label>
       <label>Pixel ratio <select data-ratio><option selected>1</option><option>2</option></select></label>
       <label>Size on zoom <select data-scale><option value="yes">Scale with camera</option>
@@ -100,19 +101,21 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
             ? 'Columns: 1/64, 1/8, 1/2, 2 and 42 CSS px. Rows: fill alpha 1, 1/255 and 1/65536. Tiny source ink may quantize to zero.'
             : name === 'tiny-overlap'
               ? 'Opaque blue background point and faint warm foreground point (fill alpha 1/65536). The foreground is also checked in isolation.'
-              : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
+              : name === 'alpha-stack'
+                ? '64 overlapping white circles, each at fill alpha 0.51/255. Compare production color compatibility as well as candidate visibility.'
+                : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
     try {
       for (const name of ['webgl', 'webgpu'] as const) {
         if (!backends[name]) continue
         try {
-          if (variant === 'explicit') original[name] = await backends[name]!.render(points, settings)
+          if (variant !== 'production') original[name] = await backends[name]!.render(points, settings)
           snapshots[name] = await backends[name]!.render(points, settings, diagnose, variant)
           if (destroyed) return
           delete errors[name]
           el(`[data-device="${name}"]`).textContent = backends[name]!.info
           el(`[data-state="${name}"]`).textContent = 'Rendered'
-          el(`[data-canvas="${name}"]`).closest('.backend-panel')!.querySelector('h2')!.textContent = variant === 'explicit'
-            ? `Explicit ${name === 'webgl' ? 'WebGL' : 'WebGPU'} quads`
+          el(`[data-canvas="${name}"]`).closest('.backend-panel')!.querySelector('h2')!.textContent = variant !== 'production'
+            ? `${variant === 'quantized' ? 'Quantized' : 'Explicit'} ${name === 'webgl' ? 'WebGL' : 'WebGPU'} quads`
             : name === 'webgl' ? 'Cosmos WebGL' : 'luma WebGPU'
         } catch (error) {
           runError = String(error)
@@ -126,26 +129,32 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           { webgl: snapshots.webgl, webgpu: snapshots.webgpu }, points, settings, variant)
         : undefined
       if (destroyed) return
-      const comparison = snapshots.webgl && snapshots.webgpu ? compareSnapshots(snapshots.webgl, snapshots.webgpu, points, settings) : undefined
+      const comparison = snapshots.webgl && snapshots.webgpu ? await compareSnapshotsAsync(snapshots.webgl, snapshots.webgpu, points, settings) : undefined
       const fractional = diagnose && snapshots.webgl && snapshots.webgpu
         ? investigateFractional(snapshots.webgl, snapshots.webgpu, points, settings)
         : undefined
       const analyticControl = snapshots.webgl?.analyticControl && snapshots.webgpu
-        ? compareSnapshots(snapshots.webgl.analyticControl, snapshots.webgpu, points, settings)
+        ? await compareSnapshotsAsync(snapshots.webgl.analyticControl, snapshots.webgpu, points, settings)
         : undefined
-      const productionComparison = original.webgl && original.webgpu ? compareSnapshots(original.webgl, original.webgpu, points, settings) : undefined
-      const compatibility = original.webgl && snapshots.webgpu ? compareSnapshots(original.webgl, snapshots.webgpu, points, settings) : undefined
+      const productionComparison = original.webgl && original.webgpu
+        ? await compareSnapshotsAsync(original.webgl, original.webgpu, points, settings)
+        : undefined
+      const compatibility = original.webgl && snapshots.webgpu
+        ? await compareSnapshotsAsync(original.webgl, snapshots.webgpu, points, settings)
+        : undefined
+      if (destroyed) return
       latestComparison = comparison?.valid
       latestCompatibility = compatibility?.valid
       latestContribution = contribution ? contributionPasses(contribution) : undefined
       report = {
-        schemaVersion: 5,
+        schemaVersion: 6,
         experiment: 'point-styling',
         recordedAt: new Date().toISOString(),
         browser: navigator.userAgent,
         validationContract: validationContracts['point-styling'],
         fixture: name,
         renderer: variant,
+        sourceAlphaPolicy: variant === 'quantized' ? SOURCE_ALPHA_POLICY : undefined,
         points,
         settings,
         colorBudget: COLOR_BUDGET,
@@ -161,9 +170,11 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       const output = el('[data-results]')
       if (comparison) {
         output.innerHTML = `<h3>Framebuffer audit</h3>
-          <p data-picking-rule>CPU rule: ${comparison.pickingRules.webgl === 'visible'
-    ? 'visible — global opacity zero returns background; positive opacity retains the half-coverage contour.'
-    : 'legacy — global opacity does not change picking.'}</p><table><tbody>
+          <p data-picking-rule>CPU rule: ${comparison.pickingRules.webgl === 'source-alpha'
+    ? 'source-alpha — half-coverage geometry intersected with a nonzero source byte; color and picking share quantized alpha.'
+    : comparison.pickingRules.webgl === 'visible'
+      ? 'visible — global opacity zero returns background; positive opacity retains the half-coverage contour.'
+      : 'legacy — global opacity does not change picking.'}</p><table><tbody>
           <tr><th>Result</th><td>${checkResult(comparison.valid)}</td></tr>
           <tr><th>Pixels checked</th><td>${formatCount(comparison.pixels)}</td></tr>
           <tr><th>WebGL ↔ WebGPU ID differences</th><td>${comparison.idDisagreements}</td></tr>
@@ -184,12 +195,17 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           renderFractionalInvestigation(output, fractional, snapshots.webgl!, snapshots.webgpu!, points, settings, analyticControl, variant)
         }
         status.textContent = comparison.valid
-          ? variant === 'explicit'
-            ? `Explicit candidate passed. Production compatibility ${compatibility?.valid ? 'passed' : 'differs; see the control below'}.`
+          ? variant !== 'production'
+            ? `${variant === 'quantized' ? 'Quantized' : 'Explicit'} candidate passed. ` +
+              `Production compatibility ${compatibility?.valid ? 'passed' : 'differs; see the control below'}.`
             : 'Passed: exact IDs and shape masks; colors within the declared budget; no invisible picks.'
           : variant === 'production' && settings.opacity === 0
             ? 'Failed visibility control: production host picking still selects points at global opacity zero. Both paths retain this discrepancy.'
             : 'Differences found. Inspect the counts and export the frozen inputs; this configuration is not accepted.'
+        if (variant === 'quantized' && comparison.valid && compatibility && compatibility.colorFailures > 0) {
+          status.textContent = `Quantized frame passed. Production color compatibility failed at ${formatCount(compatibility.colorFailures)} pixels: ` +
+            `max ${compatibility.maxChannelError}/255, budget ${COLOR_BUDGET}/255.`
+        }
         if (latestContribution === false) {
           status.textContent = 'Failed contribution check: the selected foreground paints zero alpha by itself. ' +
           'Background paint does not make it visible.'
@@ -232,6 +248,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         ...tinyStudy,
         inputs: {
           defaults: DEFAULTS,
+          sourceAlphaPolicy: SOURCE_ALPHA_POLICY,
           opacities: TINY_OPACITIES,
           ratios: [1, 2],
           fixtures: [{ name: 'tiny-alpha', points: fixture('tiny-alpha') }, { name: 'tiny-overlap', points: fixture('tiny-overlap') }],
@@ -278,7 +295,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           exportButton.disabled = !report; el<HTMLButtonElement>('[data-tiny-sweep]').disabled = false
           el<HTMLButtonElement>('[data-tiny-cancel]').disabled = true
           el('[data-tiny-progress]').textContent = `${study.status} · ${study.rows.length} / 32 rows · ` +
-            `${study.rows.filter(row => !row.candidateAccepted).length} rejected candidate rows. Export JSON retains every count and first failure.`
+            `${study.rows.filter(row => !row.candidateAccepted).length} explicit / ` +
+            `${study.rows.filter(row => !row.quantizedAccepted).length} quantized rows rejected. Export JSON retains every count and first failure.`
         }
       }
     }
