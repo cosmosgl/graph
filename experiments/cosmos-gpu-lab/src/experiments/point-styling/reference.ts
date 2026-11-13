@@ -70,16 +70,20 @@ export const COLOR_BUDGET = 2
 type MaskMismatch = {
   x: number; y: number; webgl: number | null; webgpu: number | null; expected: { webgl: number | null; webgpu: number | null };
 }
-export function compareSnapshots (gl: Snapshot, gpu: Snapshot, points: Point[], settings: Settings): {
+type InvisiblePick = { x: number; y: number; point: number }
+export type Comparison = {
   pixels: number; idDisagreements: number; webglReferenceFailures: number; webgpuReferenceFailures: number;
   colorFailures: number; maxChannelError: number; webglInvisiblePicks: number; webgpuInvisiblePicks: number;
   pickingRules: { webgl: PickingRule; webgpu: PickingRule };
   webglPickedPixels: number; webgpuPickedPixels: number; webglPaintedPixels: number; webgpuPaintedPixels: number;
+  firstWebglInvisiblePick?: InvisiblePick; firstWebgpuInvisiblePick?: InvisiblePick;
   firstIdMismatch?: MaskMismatch;
   firstReferenceMismatch?: MaskMismatch;
   firstColorMismatch?: { x: number; y: number; webgl: number[]; webgpu: number[] };
   valid: boolean;
-} {
+}
+
+function * compareRows (gl: Snapshot, gpu: Snapshot, points: Point[], settings: Settings): Generator<void, Comparison> {
   if (gl.width !== gpu.width || gl.height !== gpu.height) throw new Error('Mismatched framebuffer dimensions')
   const result = {
     pickingRules: { webgl: gl.pickingRule ?? 'visible', webgpu: gpu.pickingRule ?? 'visible' },
@@ -95,6 +99,8 @@ export function compareSnapshots (gl: Snapshot, gpu: Snapshot, points: Point[], 
     webgpuPickedPixels: 0,
     webglPaintedPixels: 0,
     webgpuPaintedPixels: 0,
+    firstWebglInvisiblePick: undefined as InvisiblePick | undefined,
+    firstWebgpuInvisiblePick: undefined as InvisiblePick | undefined,
     firstIdMismatch: undefined as MaskMismatch | undefined,
     firstReferenceMismatch: undefined as MaskMismatch | undefined,
     firstColorMismatch: undefined as { x: number; y: number; webgl: number[]; webgpu: number[] } | undefined,
@@ -120,8 +126,12 @@ export function compareSnapshots (gl: Snapshot, gpu: Snapshot, points: Point[], 
       if (b !== null) result.webgpuPickedPixels++
       if (gl.color[offset + 3] > 0) result.webglPaintedPixels++
       if (gpu.color[offset + 3] > 0) result.webgpuPaintedPixels++
-      if (a !== null && gl.color[offset + 3] === 0) result.webglInvisiblePicks++
-      if (b !== null && gpu.color[offset + 3] === 0) result.webgpuInvisiblePicks++
+      if (a !== null && gl.color[offset + 3] === 0) {
+        result.webglInvisiblePicks++; result.firstWebglInvisiblePick ??= { x, y, point: a }
+      }
+      if (b !== null && gpu.color[offset + 3] === 0) {
+        result.webgpuInvisiblePicks++; result.firstWebgpuInvisiblePick ??= { x, y, point: b }
+      }
       let maximum = 0
       for (let c = 0; c < 4; c++) maximum = Math.max(maximum, Math.abs(gl.color[offset + c] - gpu.color[offset + c]))
       result.maxChannelError = Math.max(result.maxChannelError, maximum)
@@ -132,8 +142,28 @@ export function compareSnapshots (gl: Snapshot, gpu: Snapshot, points: Point[], 
         }
       }
     }
+    if ((y + 1) % 16 === 0) yield
   }
   result.valid = result.idDisagreements === 0 && result.webglReferenceFailures === 0 && result.webgpuReferenceFailures === 0 &&
     result.colorFailures === 0 && result.webglInvisiblePicks === 0 && result.webgpuInvisiblePicks === 0
   return result
+}
+
+export function compareSnapshots (gl: Snapshot, gpu: Snapshot, points: Point[], settings: Settings): Comparison {
+  const rows = compareRows(gl, gpu, points, settings)
+  let step = rows.next()
+  while (!step.done) step = rows.next()
+  return step.value
+}
+
+// Sweeps use the identical pixel audit in small chunks so input and paint are
+// serviced during CPU reference evaluation. Cancellation still retains full rows.
+export async function compareSnapshotsAsync (gl: Snapshot, gpu: Snapshot, points: Point[], settings: Settings): Promise<Comparison> {
+  const rows = compareRows(gl, gpu, points, settings)
+  let step = rows.next()
+  while (!step.done) {
+    await new Promise<void>(resolve => { setTimeout(resolve, 0) })
+    step = rows.next()
+  }
+  return step.value
 }

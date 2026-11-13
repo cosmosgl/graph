@@ -43,7 +43,17 @@ export function center (point: Point, settings: Settings): [number, number] {
 export function point (x: number, y: number, shape = 0, changes: Partial<Point> = {}): Point {
   return { x, y, shape, size: 42, color: [0.62, 0.71, 0.84, 1], stroke: 0, strokeColor: [0.95, 0.8, 0.57, 1], ...changes }
 }
-export function fixture (name: 'shapes' | 'overlap' | 'edge-cases' | 'fractional'): Point[] {
+export type FixtureName = 'shapes' | 'overlap' | 'edge-cases' | 'fractional' | 'tiny-alpha' | 'tiny-overlap'
+export function fixture (name: FixtureName): Point[] {
+  if (name === 'tiny-alpha') {
+    return [1, 1 / 255, 1 / 65536].flatMap((alpha, row) => [1 / 64, 1 / 8, 0.5, 2, 42].map((size, col) =>
+      point(50 + col * 100 + (row === 1 ? 0.25 : 0.5), 60 + row * 100 + (row === 1 ? 0.75 : 0.5), 0,
+        { size, color: [0.62, 0.71, 0.84, alpha] })))
+  }
+  if (name === 'tiny-overlap') {
+    return [point(256, 160, 0, { size: 90, color: [0.3, 0.6, 0.9, 1] }),
+      point(256, 160, 0, { size: 42, color: [0.95, 0.65, 0.35, 1 / 65536] })]
+  }
   if (name === 'fractional') {
     return [0.25, 0.5, 1, 1.25, 2, 2.5, 3, 3.5, 7.5, 13.3, 22.5, 42.5].map((size, i) =>
       point(65.25 + (i % 4) * 125, 60.75 + Math.floor(i / 4) * 100, 0, { size }))

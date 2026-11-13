@@ -1,8 +1,8 @@
 ---
 source: Recorded findings
-recorded: 2026-11-12
+recorded: 2026-11-13
 device: Apple M3; installed Chrome 157 and inline Chromium 157
-scope: Twelve production-control configurations, fourteen explicit-coordinate styling cases and thirty opacity controls; separate CPU visibility rules, unchanged tolerances and preserved production failures.
+scope: Bounded styling and zero-opacity controls, plus a 32-case tiny-alpha sweep exposing invisible source picks; unchanged CPU rules and tolerances, with production failures preserved.
 ---
 
 ## Question
@@ -287,6 +287,102 @@ The strict zero-rendered-alpha audit still rejects any such invisible pick; ther
 visibility failure for inputs outside this matrix. Fractional legacy coverage differences also
 remain intentional, reported compatibility failures.
 
+## Tiny positive alpha and source visibility
+
+Measured **13 November 2026**, **Codex inline Chromium / Apple M3**, luma **10.0.0-alpha.4**.
+The zero-opacity fix remains valid within its recorded matrix. Positive shader alpha, however,
+does not guarantee a nonzero RGBA8 alpha byte. The new fixtures expose two distinct problems:
+
+- **Tiny-alpha grid:** 15 isolated circles, with CSS diameters **1/64, 1/8, 0.5, 2 and 42**
+  across columns and fill alpha **1, 1/255 and 1/65536** across rows. Pixel-aligned and fractional
+  centers exercise minimum-size attenuation and partial coverage.
+- **Tiny-alpha overlap:** a 42-pixel foreground circle with fill alpha **1/65536**, over an
+  opaque 90-pixel circle. This asks whether the selected point contributes paint, rather than
+  merely whether some point has painted that pixel.
+
+The repeatable sweep runs both fixtures at ratios **1 and 2**, with global opacity **0, 0.0001,
+0.49/255, 0.5/255, 0.51/255, 1/255, 0.35 and 1**: **32 configurations**. Each compares the
+production/legacy pair and the explicit/visible pair. Exact CPU masks, exact cross-backend IDs,
+the **2/255** color budget and zero-alpha visibility requirements remain unchanged. No shader
+cutoff, reference eligibility update or relaxed gate is introduced in this investigation.
+
+### Results
+
+**Only the four zero-opacity candidate rows pass all applicable checks; 28 rows fail.**
+All 32 candidate rows nevertheless have exact cross-backend IDs and CPU masks, with no color
+budget failures. The largest color-channel difference is **1/255**. Matching implementations
+can therefore still select an invisible point.
+
+| Fixture and global opacity | Ratio | Painted pixels per backend | Invisible picks per backend | Candidate result |
+| --- | --- | --- | --- | --- |
+| Isolated grid, 0 | 1 / 2 | 0 / 0 | 0 / 0 | Pass |
+| Isolated grid, 0.0001 | 1 / 2 | 0 / 0 | 4,154 / 16,653 | Fail |
+| Isolated grid, 0.5/255 | 1 / 2 | 1,314 / 5,392 | 2,840 / 11,261 | Fail |
+| Isolated grid, 1 | 1 / 2 | 2,857 / 11,219 | 1,385 / 5,558 | Fail |
+| Faint foreground over opaque background, 1 | 1 / 2 | Background remains painted | 1,396 / 5,544 foreground picks have zero own alpha | Fail |
+
+WebGL and WebGPU have the same counts in this table. The paired values separated by `/` are
+**ratio 1 / ratio 2**, not different backends. The live sweep and local JSON export retain every row.
+
+One small example explains the isolated failure. At ratio 1, global opacity 1 and pixel **(50, 60)**,
+point **0** is a circle of diameter **1/64 CSS pixel** with opaque fill. Cosmos keeps a minimum
+one-pixel core and attenuates its ink by the area ratio: **(1/64)² = 1/4096**. At this centered
+pixel, the geometry passes the picking threshold, while the rendered alpha byte is zero.
+This is a measured RGBA8 storage result, not a claim that every adapter rounds boundary ties
+identically.
+
+### Why composed-frame alpha is insufficient
+
+At ratio 1 and opacity 1, the overlap fixture passes the existing full-frame audit: exact IDs,
+exact CPU masks, equal color images and nonzero composed alpha. Both backends select foreground
+point **1** at **1,396 pixels**. Rendering that point alone through the same pipeline yields
+zero alpha at every selected pixel. Removing it from the composition changes **zero RGBA pixels**.
+The first example is **(251, 139)**: own alpha **0**, composed alpha **255/255**. Ratio 2 has
+**5,544** such picks and still zero color changes after removal.
+
+The new **Picked-point contribution** diagnostic reports this separately. Six overlap rows
+(opacities **1/255, 0.35 and 1**, at both ratios) pass the composed-frame checks but fail the
+source check. The page's current result and sweep acceptance include this failure, so a painted
+background cannot produce an overall Pass for an invisible foreground.
+
+This is diagnostic isolation for a two-point fixture, not a proposal to render each production
+point separately. Isolated alpha and removal deltas answer different questions: overlapping faint
+sources may accumulate, and an opaque foreground can conceal a source beneath it. These fixtures
+demonstrate concrete failures; they do not establish a complete general compositing policy.
+
+### Approaches checked against the specifications
+
+| Approach | Assessment for Cosmos |
+| --- | --- |
+| Require positive input alpha/opacity | Current candidate policy; insufficient after size attenuation, coverage and RGBA8 conversion |
+| Read final composed alpha during picking | Cannot solve the measured opaque-background case: composed alpha is already 255 |
+| Add a configurable alpha cutoff | An established interaction policy, but an arbitrary cutoff would change which faint points are pickable |
+| Render into a floating-point target | Can retain smaller source values, but does not by itself establish final-display visibility or correct source identity |
+| Share effective source alpha and an explicit format-aware eligibility rule | Best next prototype; must be a declared candidate/reference policy and tested at conversion ties and overlaps |
+
+[deck.gl IconLayer](https://deck.gl/docs/api-reference/layers/icon-layer#alphacutoff-number-optional)
+uses an alpha cutoff (default **0.05**) to create holes excluded from picking. This confirms that
+cutoff selection is an interaction contract. It does not justify importing a 5% cutoff into Cosmos.
+
+The [WGSL `pack4x8unorm` definition](https://www.w3.org/TR/WGSL/#pack4x8unorm) provides an explicit
+8-bit packing model: `floor(0.5 + 255 * clamp(alpha, 0, 1))`. This can inform an application-defined
+quantizer shared by color, picking and CPU reference. It is **not** a guarantee that a WebGL
+render attachment performs that exact rounding. [OpenGL ES 3.0, §2.1.6.2](https://registry.khronos.org/OpenGL/specs/es/3.0/es_spec_3.0.pdf)
+permits either neighboring integer for normalized conversion and prefers nearest rounding.
+The **0.5/255** neighborhood therefore needs native tests; it is not a portable assumed cutoff.
+
+Higher precision also changes the storage experiment. In particular, blending with `rgba32float`
+requires the optional [WebGPU `float32-blendable` feature](https://www.w3.org/TR/webgpu/#float32-blendable).
+Neither that feature nor a higher-precision target is required by this RGBA8 study.
+
+**Next:** prototype a shared effective source alpha calculation, including shape coverage,
+subpixel area attenuation, resolved fill alpha and global opacity. Intersect the existing
+geometric half-coverage contour with an explicitly declared source-byte eligibility policy.
+If quantizing explicitly, keep color and picking coherent rather than guessing framebuffer
+rounding only in the ID pass. Preserve the current candidate and production controls; compare
+the new policy with the unchanged exact-ID and color budgets. This is a proposed experiment,
+not a validated fix. Image-atlas alpha follows once this source-visibility policy is established.
+
 ## Reproduce
 
 1. Run `pnpm --filter @cosmos.gl/gpu-lab dev` and open **Point styling and picking**.
@@ -300,10 +396,22 @@ remain intentional, reported compatibility failures.
    production must retain its failed visibility control. At positive opacity, the pick contour
    stays unchanged. Export JSON to retain settings, CPU rule names, environment and raw mismatches.
 5. Run `LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling`.
+6. Select **Tiny-alpha grid** with opacity **0.0001**, then **Tiny-alpha overlap** at opacity **1**.
+   Inspect both the frame audit and **Picked-point contribution**. The latter must report the
+   invisible selected foreground even when the composed-frame audit passes.
+7. Choose **Run tiny-alpha sweep** in Diagnostics for all 32 rows. It uses offscreen draws and
+   preserves the selected settings and live canvas dimensions. CPU mask evaluation yields between
+   small row chunks to service input. **Cancel sweep** finishes the current configuration and
+   retains completed rows. Export JSON for environment, frozen point inputs/settings, rule names, first invisible
+   samples, frame verdicts and isolated-source audits. Schema **5** includes the sweep and its scope;
+   raw measurements remain local, outside the repository.
 
 For the same regression suite **inside Codex**, set `LAB_INLINE_BROWSER=1` as well. This starts
 a local Vitest server without launching Chrome. Open its printed “inline test session” URL in
-the Codex inline browser; the suite runs in that browser, including both GPU backends. The
+the Codex inline browser; the suite runs in that browser, including both GPU backends.
+**19 focused tests pass in the Codex inline browser**, including quiet-draw restoration, partial
+sweep cancellation, the invisible-foreground counterexample and its visible failed result. The
+chunked CPU audit returns the same complete result as the synchronous audit. The
 regression checks that enabling probes preserves production images and counts, that the earlier
 coordinate-only control retains its closed-mask failures, and that the padded candidate recovers
 the boundary pixels at unchanged full-frame gates. JSON exports name the renderer and include

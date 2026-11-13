@@ -7,7 +7,7 @@ export type Snapshot = {
   width: number; height: number; color: Uint8Array; ids: Uint8Array; probe?: Probe; analyticControl?: Snapshot; pickingRule?: PickingRule;
 }
 export type Backend = {
-  info: string; render(points: Point[], settings: Settings, diagnose?: boolean, variant?: RenderVariant): Promise<Snapshot>; destroy(): void;
+  info: string; render(points: Point[], settings: Settings, diagnose?: boolean, variant?: RenderVariant, display?: boolean): Promise<Snapshot>; destroy(): void;
 }
 export function target (device: Device, width: number, height: number, format: 'rgba8unorm' | 'rgba32float' = 'rgba8unorm'):
 { texture: Texture; framebuffer: Framebuffer; destroy(): void } {

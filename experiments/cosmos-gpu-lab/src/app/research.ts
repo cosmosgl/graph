@@ -124,16 +124,16 @@ export const research: Record<string, ResearchSummary> = {
     method: 'validation-contract',
     comparison: 'Same styled points → production WebGL / WebGPU color and ID images → full-image and scalar-mask checks',
     question: 'Does point-ID picking select the shapes that Cosmos actually renders?',
-    conclusion: 'The explicit candidate passes 30 opacity controls: invisible points return no IDs, while opacity 0.35 and 1 retain identical pick masks.',
-    scope: 'Bounded M3 styling, fractional geometry and zero-opacity visibility pass. Legacy coverage/picking compatibility ' +
-      'still fails; tiny-alpha, atlas and broader device cases remain open.',
+    conclusion: 'Bounded styling and zero opacity pass, but 28 of 32 tiny-alpha cases fail visibility: matching IDs can still select an invisible source.',
+    scope: 'Apple M3 inline: exact CPU/cross-backend IDs and colors within 2/255 in the tiny-alpha sweep. ' +
+      'Six overlap rows pass the frame audit but fail isolated-source visibility. Legacy compatibility and atlas coverage remain open.',
     variant: 'Unchanged production/legacy CPU control and explicit GL/GPU quads with visible CPU rule; luma 10.0.0-alpha.4; Apple M3',
-    reviewed: REVIEWED,
+    reviewed: '2026-11-13',
     milestone: 'rendering',
     evidence: 'method',
-    next: 'Validate tiny positive alpha, image-atlas alpha and remaining styling/hover; settle the intended production coverage and picking policy.',
-    reproduce: 'Select Explicit-coordinate candidate and opacity 0, 0.35 and 1 at ratios 1 and 2. Compare painted/picked counts, ' +
-      'CPU rule names and the retained production failure. Use the fractional fixture for the six-pixel replay.',
+    next: 'Prototype shared effective source alpha and explicit format-aware picking eligibility; preserve current controls, then validate image-atlas alpha.',
+    reproduce: 'Select Explicit-coordinate candidate and Tiny-alpha overlap at opacity 1. Compare the frame and picked-point contribution audits. ' +
+      'Run the 32-row tiny-alpha sweep in Diagnostics; export local JSON for all rows and frozen inputs.',
     investigations: [{
       page: 'method',
       state: 'Current evidence',
@@ -169,7 +169,7 @@ export const milestones = [
     title: 'Rendering and interaction',
     position: 'Bounded production shapes, strokes and host IDs demonstrated',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
-    gates: ['Resolve fractional raster parity and invisible host picks at global opacity zero.',
+    gates: ['Choose production coverage/picking policy; resolve tiny-alpha source visibility after bounded fractional and zero-opacity candidate passes.',
       'Validate images, rings/greyout, transitions, links and the separate pointer-hover contract.'],
     evidence: [['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],
   },
