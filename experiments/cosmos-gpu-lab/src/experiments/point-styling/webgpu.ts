@@ -49,7 +49,7 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<B
           const buffer = frame.own(upload(device, records))
           const params = (mode: number): ReturnType<typeof upload> => frame.own(upload(device, new Float32Array([
             WIDTH, HEIGHT, settings.ratio, settings.zoom, settings.sizeScale, settings.maxSize, settings.opacity, 0,
-            Number(settings.scaleOnZoom), mode, Number(variant !== 'production'), Number(variant === 'quantized'),
+            Number(settings.scaleOnZoom), mode, Number(variant !== 'production'), variant === 'eligibility' ? 2 : Number(variant === 'quantized'),
           ]), Buffer.UNIFORM))
           const visibleParams = params(0); const pickingParams = params(1)
           const draw = (kernel: RenderKernel, uniforms: ReturnType<typeof upload>, framebuffer?: ReturnType<typeof target>['framebuffer']): void => {
@@ -62,7 +62,7 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<B
           if (display) draw(displayKernel, visibleParams)
           device.submit()
           const result: Snapshot = {
-            pickingRule: variant === 'quantized' ? 'source-alpha' : variant === 'explicit' ? 'visible' : 'legacy',
+            pickingRule: variant === 'production' ? 'legacy' : variant === 'explicit' ? 'visible' : 'source-alpha',
             width,
             height,
             color: await pixels(device, color.texture, color.framebuffer),

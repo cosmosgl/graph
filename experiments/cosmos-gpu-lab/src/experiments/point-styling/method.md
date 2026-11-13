@@ -2,7 +2,7 @@
 source: Recorded findings
 recorded: 2026-11-13
 device: Apple M3; installed Chrome 157 and inline Chromium 157
-scope: Three declared policies; quantized visibility passes 32 tiny-alpha cases and 24 styling controls on M3, with 767 quantizer samples per backend. Dense overlap fails production colors by 59/255; acceptance gates remain unchanged.
+scope: Source-byte picking passes 32 visibility cases, 24 styling controls and 767 alpha samples per backend on M3. Color bytes are preserved, including the 64-point faint stack; prior controls and acceptance gates remain unchanged.
 ---
 
 ## Question
@@ -517,9 +517,117 @@ or performance improvement is claimed by this readback-heavy diagnostic.
 
 Next, test source-byte **picking eligibility while preserving the original color accumulation**.
 Retain these quantized and production controls and apply the same full-frame, isolated-source and
-threshold checks. That alternative is unvalidated; no new tolerance or driver-rounding assumption
-is accepted here. Then validate image-atlas alpha, transparent texels and overlap order, alongside
+threshold checks. The follow-up below tests that alternative without accepting a new tolerance or universal
+driver-rounding assumption. Then validate image-atlas alpha, transparent texels and overlap order, alongside
 per-fragment GPU cost and broader native coverage.
+
+## Source-byte picking with original color blending
+
+Measured **13 November 2026**, **Codex inline Chromium / Apple M3**, luma **10.0.0-alpha.4**.
+The fourth renderer, **Source-byte picking candidate**, keeps the original unquantized color
+alpha and blend state. Only the ID pass applies the already-declared `source-alpha` CPU policy.
+The production, explicit-coordinate and pre-blend-quantized variants remain separate controls.
+
+```text
+Color pass:   original coverage, subpixel ink, fill alpha and global opacity → original blending
+Picking pass: effective source alpha → nearest UNORM8 byte → require half coverage AND a nonzero byte
+Both passes:  retain shape distances, carrier bounds and draw order
+```
+
+The source-byte calculation and tie rule are unchanged from the quantized control. The GPU color
+path does not write `q / 255` or discard fragments based on that byte. This preserves how faint
+sources accumulate while preventing a mathematically zero-byte source from replacing another
+point's ID. The CPU oracle remains independent of GPU images and uses the same `source-alpha`
+rule already declared for the preceding candidate. There is no new epsilon or reference-policy
+adjustment in this follow-up.
+Picking retains the earlier candidate's declared float32 multiplication grouping; the color
+expression remains original rather than assuming that reassociation is byte-identical.
+
+The distinction follows the [WebGPU blend-state definitions](https://www.w3.org/TR/webgpu/#blend-state):
+`src-alpha` and `one-minus-src-alpha` use the alpha actually emitted by the fragment shader.
+Changing that output changes color accumulation. Keeping the source byte inside picking retains
+the original color inputs to blending. The [WGSL packing rule](https://www.w3.org/TR/WGSL/#pack4x8unorm)
+still defines the explicit eligibility policy; it does not establish a universal WebGL framebuffer
+conversion rule. Actual native paint remains part of validation.
+
+### What is preserved and what changes
+
+| Property | Source-byte picking candidate |
+| --- | --- |
+| Source RGB, alpha and source-over blend factors | Original unquantized values/state |
+| Shape distances, stroke, requested size and AA ramp | Unchanged |
+| Sprite geometry | The earlier explicit candidate's padded carrier and closed bounds |
+| ID eligibility | Same half-coverage geometry, with a nonzero computed source byte |
+| Production shaders and `legacy` CPU rule | Retained unchanged as controls |
+| Existing acceptance gates | Exact IDs/CPU masks, color budget 2/255 and zero invisible picks |
+
+The new **Original color output** table additionally checks **byte identity** against the
+unquantized explicit-coordinate control separately in each API. This is a stricter preservation
+check for this candidate, not a relaxation of the existing budget. It isolates the alpha-policy
+change from the known production point-sprite versus closed-quad raster differences. Passing it
+does not turn those older production compatibility failures into passes.
+
+### Native results
+
+All **25 focused tests pass in one complete Codex inline-browser run**. The new checks cover:
+
+- **767 alpha samples per backend:** all 255 byte boundaries, their nearest float32 values and
+  both neighbors, plus 0 and 1. IDs match the declared byte policy; each selected sample has
+  nonzero actual paint. Every color byte matches the unquantized control.
+- **24 styling configurations:** four fixture families × ratios 1/2 × opacities 0/0.35/1. The
+  unchanged full-frame CPU/GPU gates pass, and every color byte is preserved in each backend.
+- **Faint foreground over opaque background:** the invisible foreground is unpickable and
+  center picking returns background point 0. Both isolated-source audits pass.
+- **64-point faint stack:** full-frame CPU/GPU acceptance and original color preservation pass.
+  Returning to each of the three retained variants after eligibility draws restores its exact
+  color and ID images. Their known failures are not overwritten by the new candidate.
+
+The **32-case tiny-alpha sweep passes completely** in the source-byte candidate. There are
+**zero cross-backend ID differences, zero CPU-mask failures and zero invisible picks**. Maximum
+cross-backend color-channel difference is **1/255**, within the unchanged 2/255 budget. Across all
+32 rows, both APIs also have **zero changed color pixels** relative to their unquantized explicit
+controls. The own-source overlap audits pass at both pixel ratios.
+
+All recorded comparisons, source audits and verdicts for the **three retained variants match the
+preceding sweep in every row**. The earlier explicit candidate still rejects 28 rows; pre-blend
+quantization still passes this bounded matrix while retaining its separate accumulation failure.
+
+The **64-point faint-stack replay** resolves the previous color-accumulation failure:
+
+| WebGPU variant compared with production WebGL | Color pixels beyond 2/255 | Maximum channel difference | Invisible picks in this variant |
+| --- | --- | --- | --- |
+| Compatibility control | 0 | 0/255 | 50 |
+| Pre-blend quantized control | 1,321 | 59/255 | 0 |
+| Source-byte picking candidate | **0** | **0/255** | **0** |
+
+Both source-byte backends paint and pick **1,321 pixels**, with exact cross-backend color/ID images
+and CPU masks. The original color-preservation audit has **zero changed pixels in each API**.
+At the preceding control's first failed pixel, **(252, 140)**, the new candidate keeps production
+RGBA **[6, 6, 6, 6]**, rather than the quantized control's **[64, 64, 64, 64]**.
+
+Whole production picking compatibility still fails: its **50 invisible IDs** and **two scalar-mask
+mismatches** remain visible, while the source-byte candidate has no CPU-mask failures. These are
+retained legacy failures, not waived acceptance gates or a claim of identical production picking.
+
+### Reproduction and remaining scope
+
+Select **Source-byte picking candidate**, then **Tiny-alpha overlap**, opacity **1**. Compare
+**Original color output**, **Picked-point contribution** and the retained production comparison.
+Run **Run tiny-alpha sweep** for the 32 cases, then select **Faint overlap stack · 64 points** at
+ratio **1**, opacity **1** to replay the accumulation failure and correction. The latter is a
+separate stress case, not part of the 32-row matrix.
+
+Export **schema 7** records the selected renderer/policy, byte-level color-preservation counts,
+all four variants' sweep verdicts and source audits, device/browser and frozen inputs. Completed
+rows survive cancellation. Raw JSON stays local; the repository retains findings and reproduction
+instructions. The native regression command remains the one below, with `LAB_INLINE_BROWSER=1`
+when running inside Codex.
+
+This is bounded shape-aware host picking on one native device. It does not establish universal
+RGBA8 conversion behavior, perceptual contrast, full pointer-hover behavior or all production
+raster compatibility. Image/atlas alpha, rings/greyout, transitions, broader native coverage
+and GPU cost remain open. The next feature investigation is image-atlas alpha and transparent
+texel/overlap picking with these controls and the same acceptance gates.
 
 ## Reproduce
 
@@ -541,16 +649,20 @@ per-fragment GPU cost and broader native coverage.
    preserves the selected settings and live canvas dimensions. CPU mask evaluation yields between
    small row chunks to service input. **Cancel sweep** finishes the current configuration and
    retains completed rows. Export JSON for environment, frozen point inputs/settings, rule names, first invisible
-   samples, frame verdicts and isolated-source audits. Schema **6** includes the sweep, quantized policy/version and its scope;
+   samples, frame verdicts and isolated-source audits. Schema **7** includes all four variants, their policy/version and color-preservation counts;
    raw measurements remain local, outside the repository.
-8. Select **Source-alpha quantized candidate**, then rerun the same fixtures and sweep. Compare the
-   **Explicit accepted** and **Quantized accepted** columns. The source-alpha policy must pass all
+8. Select **Source-alpha quantized candidate**, then rerun the same fixtures and sweep. Compare its
+   verdict with the explicit renderer in **Retained controls**. The source-alpha policy must pass all
    32 local cases; the original explicit candidate retains its 28 failed rows. Use the focused
    quantizer test for all byte thresholds and their neighboring float32 values.
 9. Select **Faint overlap stack · 64 points**, ratio **1**, opacity **1** and the quantized renderer.
    Inspect **Production control and compatibility**: the candidate's paired frame passes, while
    the production color comparison fails its original 2/255 budget on M3. Export this separate
    control with its 64 frozen inputs; it is not included in the 32-row tiny-alpha matrix.
+10. Select **Source-byte picking candidate** and repeat the sweep and 64-point replay.
+    **Original color output** must show zero changed pixels in each backend. The retained
+    production comparison still rejects its original invisible IDs; the new source-byte frame
+    and its CPU rule must pass without changing the color budget.
 
 For the same regression suite **inside Codex**, set `LAB_INLINE_BROWSER=1` as well. This starts
 a local Vitest server without launching Chrome. Open its printed “inline test session” URL in

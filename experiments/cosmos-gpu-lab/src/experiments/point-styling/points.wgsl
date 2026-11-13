@@ -105,15 +105,18 @@ fn distanceToShape(coord: vec2f, shape: u32) -> f32 {
   if (params.options.y == 3.0) { return vec4f(coord,distance,coverage); }
   let smallAlpha = min(1.0,input.diameter * input.diameter / (core * core));
   var sourceAlpha = coverage * smallAlpha * p.color.a * params.style.z;
-  if (params.options.w > 0.0) {
+  var pickingAlpha = sourceAlpha;
+  if (params.options.w > 0.0 && (params.options.w < 1.5 || params.options.y > 0.0)) {
     // Same grouping as the GLSL candidate's finalShapeColor.a * pointOpacity.
-    sourceAlpha = quantizeSourceAlpha(coverage * (smallAlpha * p.color.a) * params.style.z);
+    pickingAlpha = quantizeSourceAlpha(coverage * (smallAlpha * p.color.a) * params.style.z);
   }
+  // Mode 2 changes picking only; its color output retains the original alpha.
+  if (params.options.w == 1.0) { sourceAlpha = pickingAlpha; }
   // Keep the production rule when options.z is zero. The candidate additionally
   // rejects invisible points; positive opacity preserves the same pick contour.
   if (params.options.y > 0.0) {
     if (params.options.z > 0.0 && params.style.z <= 0.0) { discard; }
-    if (params.options.w > 0.0 && sourceAlpha <= 0.0) { discard; }
+    if (params.options.w > 0.0 && pickingAlpha <= 0.0) { discard; }
     if (coverage < 0.5) { discard; }
     let id = u32(p.properties.z) + 1u;
     return vec4f(vec3f(f32(id & 255u),f32((id >> 8u) & 255u),f32((id >> 16u) & 255u)) / 255.0,1);

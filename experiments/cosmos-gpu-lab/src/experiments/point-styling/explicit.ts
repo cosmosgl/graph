@@ -1,4 +1,4 @@
-import { pick, type Snapshot } from './backend'
+import { pick, type RenderVariant, type Snapshot } from './backend'
 import type { Point, Settings } from './data'
 import { compareSnapshots, referencePick } from './reference'
 
@@ -8,20 +8,22 @@ export const BOUNDARY_PIXELS = [[630, 120], [631, 121], [130, 319], [132, 321], 
 
 export function renderExplicitControl (
   host: HTMLElement, original: { webgl: Snapshot; webgpu: Snapshot }, selected: { webgl: Snapshot; webgpu: Snapshot }, points: Point[], settings: Settings,
-  comparisons: { production: ReturnType<typeof compareSnapshots>; compatibility: ReturnType<typeof compareSnapshots> }
+  comparisons: { production: ReturnType<typeof compareSnapshots>; compatibility: ReturnType<typeof compareSnapshots> }, variant: RenderVariant
 ): void {
   const section = document.createElement('section'); section.className = 'explicit-control'
   const { production, compatibility } = comparisons
-  const quantized = selected.webgpu.pickingRule === 'source-alpha'; const label = quantized ? 'quantized' : 'explicit'
+  const label = variant === 'eligibility' ? 'source-byte' : variant === 'quantized' ? 'quantized' : 'explicit'
   const row = (label: string, result: ReturnType<typeof compareSnapshots>): string => `<tr><td>${label}<br>
     CPU: ${result.pickingRules.webgl} / ${result.pickingRules.webgpu}</td><td>${result.valid ? 'Pass' : 'Fail'}</td>
     <td>${result.idDisagreements}</td><td>${result.webglReferenceFailures} / ${result.webgpuReferenceFailures}</td>
     <td>${result.colorFailures} · ${result.maxChannelError}/255</td><td>${result.webglInvisiblePicks} / ${result.webgpuInvisiblePicks}</td></tr>`
   section.innerHTML = `<h3>Production control and compatibility</h3>
     <p>The canvases and audit above show the ${label} candidate in both APIs. It uses padded quads and closed shape bounds.
-      The production shader and its legacy CPU rule are retained below. ${quantized
-    ? 'The source-alpha CPU rule intersects geometry with nonzero quantized source alpha; color and picking use the same quantized value.'
-    : 'The candidate CPU rule additionally rejects global opacity zero.'}
+      The production shader and its legacy CPU rule are retained below. ${variant === 'eligibility'
+    ? 'The source-alpha CPU rule gates picking with a nonzero source byte; color retains the original alpha and blend state.'
+    : variant === 'quantized'
+      ? 'The source-alpha CPU rule intersects geometry with nonzero quantized source alpha; color and picking use the same quantized value.'
+      : 'The candidate CPU rule additionally rejects global opacity zero.'}
       Geometric contours, exact-ID checks and the 2/255 color budget stay unchanged.</p>
     <table data-production-comparison><thead><tr><th>Full-frame comparison</th><th>Result</th><th>ID differences</th>
       <th>CPU mask differences · left / right</th><th>Color failures · max</th><th>Invisible picks · left / right</th></tr></thead><tbody>

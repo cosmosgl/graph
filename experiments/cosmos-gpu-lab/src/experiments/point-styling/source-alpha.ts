@@ -13,6 +13,12 @@ export const SOURCE_ALPHA_POLICY = {
   picking: 'original half-coverage geometry and source byte > 0',
 } as const
 
+export const SOURCE_BYTE_PICKING_POLICY = {
+  ...SOURCE_ALPHA_POLICY,
+  name: 'source-byte-picking-original-color',
+  color: 'original unquantized source alpha and source-over blending',
+} as const
+
 // Match WGSL's specified packing rule without an f32 "+ 0.5" rounding a value
 // just below the first threshold up to 1. Integer significand * 255 fits u32.
 // Read quotient and rounding bit separately to avoid addition overflow.
