@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 240" role="img" aria-labelledby="title desc">
+  <title id="title">Balanced reduction tree</title>
+  <desc id="desc">Eight inputs combine in adjacent pairs into four partials, then two partials, then one result. Seven operations, three dependency levels.</desc>
+  <style>
+    text { fill: #ececef; font: 20px Inter, ui-sans-serif, system-ui, sans-serif; text-anchor: middle; }
+    .label { fill: #a0a7b2; font-size: 12px; letter-spacing: .1em; }
+    .result { fill: #9fb5d5; }
+    path { fill: none; stroke: #69717d; stroke-width: 1; }
+  </style>
+  <text class="label" x="280" y="18">EIGHT INPUTS · THREE LEVELS</text>
+  <g>
+    <text x="35" y="55">x₀</text><text x="105" y="55">x₁</text>
+    <text x="175" y="55">x₂</text><text x="245" y="55">x₃</text>
+    <text x="315" y="55">x₄</text><text x="385" y="55">x₅</text>
+    <text x="455" y="55">x₆</text><text x="525" y="55">x₇</text>
+  </g>
+  <path d="M35 64 V74 H105 V64 M70 74 V88 M175 64 V74 H245 V64 M210 74 V88 M315 64 V74 H385 V64 M350 74 V88 M455 64 V74 H525 V64 M490 74 V88"/>
+  <g><text x="70" y="108">⊕</text><text x="210" y="108">⊕</text><text x="350" y="108">⊕</text><text x="490" y="108">⊕</text></g>
+  <path d="M70 118 V130 H210 V118 M140 130 V144 M350 118 V130 H490 V118 M420 130 V144"/>
+  <g><text x="140" y="164">⊕</text><text x="420" y="164">⊕</text></g>
+  <path d="M140 174 V186 H420 V174 M280 186 V200"/>
+  <text class="result" x="280" y="220">⊕</text>
+  <text class="label result" x="280" y="239">RESULT</text>
+</svg>

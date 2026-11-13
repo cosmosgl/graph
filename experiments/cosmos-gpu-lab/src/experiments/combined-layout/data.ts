@@ -1,0 +1,71 @@
+import { createFixture as pointsFixture, type Input, type Parameters as RepulsionParameters } from '../many-body/data'
+import type { GraphInput, Parameters as SpringParameters } from '../weighted-links/data'
+import type { CollisionParameters } from '../collision/data'
+export const PRECISION_MODES = ['baseline', 'force', 'integration', 'both', 'refined', 'distance', 'products', 'composed', 'aligned', 'trig'] as const
+export type SpringPrecision = typeof PRECISION_MODES[number]
+export const PRECISION_LABELS: Record<SpringPrecision, string> = {
+  baseline: 'Native f32 · baseline',
+  force: 'Rounded spring force',
+  integration: 'Rounded spring integration',
+  both: 'Rounded force + integration',
+  refined: 'Rounded + refined divide / root',
+  distance: 'Distance-only · diagnostic',
+  products: 'Distance + rounded products',
+  composed: 'Rounded repulsion step · diagnostic',
+  aligned: 'Aligned gravity + repulsion · diagnostic',
+  trig: 'Refined gravity + rounded steps',
+}
+export const STAGES = ['gravity', 'repulsion', 'incoming', 'outgoing'] as const
+export type Stage = typeof STAGES[number] | 'center' | 'collision'
+export function stagesFor (center = 0, collision?: CollisionParameters): readonly Stage[] {
+  const stages: Stage[] = center ? ['gravity', 'center', 'repulsion', 'incoming', 'outgoing'] : [...STAGES]
+  if (collision?.strength) for (let i = 0; i < collision.iterations; i++) stages.push('collision')
+  return stages
+}
+export type Fixture = 'chain' | 'star' | 'communities' | 'pinned'
+export type Settings = { fixture: Fixture; count: number; decay: number; checkpointEvery?: number; springPrecision?: SpringPrecision; center?: number }
+export const ALPHA_MIN = 0.001
+export const GRAVITY = 0.25
+export const REPULSION: RepulsionParameters = { alpha: 1, repulsion: 1, friction: 0.85, referenceLength: 4096 }
+export const SPRINGS: SpringParameters = {
+  spring: 1,
+  distance: 10,
+  variation: [1, 1],
+  alpha: 1,
+  friction: 0.85,
+  maxStep: 4096,
+  collision: false,
+  radius: 0,
+  padding: 0,
+}
+export function cool (alpha: number, decay: number): number {
+  return alpha + (0 - alpha) * (1 - Math.pow(ALPHA_MIN, 1 / decay))
+}
+export function isCheckpoint (tick: number, settings: Settings): boolean {
+  return tick === 1 || tick === settings.decay || tick % (settings.checkpointEvery ?? 1) === 0
+}
+export function createGraph (settings: Settings): { graph: GraphInput; input: Input } {
+  if (!Number.isInteger(settings.count) || settings.count < 4 || settings.count > 32768 ||
+    !Number.isInteger(settings.decay) || settings.decay < 1 || settings.decay > 5000) throw new Error('Invalid combined experiment settings')
+  if (!PRECISION_MODES.includes(settings.springPrecision ?? 'baseline')) throw new Error('Invalid spring precision mode')
+  const interval = settings.checkpointEvery ?? 1
+  if (!Number.isInteger(interval) || interval < 1 || interval > settings.decay) throw new Error('Invalid checkpoint interval')
+  const input = pointsFixture('uniform', settings.count)
+  const edges: number[] = []; const add = (a: number, b: number): void => { edges.push(a, b) }
+  for (let i = 1; i < settings.count; i++) {
+    if (settings.fixture === 'star') add(0, i)
+    else if (settings.fixture === 'communities') {
+      if (i % 16) { add(i - 1, i); if (i % 16 > 1) add(Math.floor(i / 16) * 16, i) } else add(i - 1, i) // Bridges make the community fixture connected.
+    } else add(i - 1, i)
+  }
+  if (settings.fixture === 'pinned') {
+    input.points.set([-64, 0, 1, 0], 0); input.points.set([64, 0, 1, 0], (settings.count - 1) * 4)
+  }
+  const graph: GraphInput = {
+    points: input.points,
+    links: new Float32Array(edges),
+    weights: new Float32Array(edges.length / 2).fill(1),
+    sizes: new Float32Array(settings.count).fill(2),
+  }
+  return { input, graph }
+}

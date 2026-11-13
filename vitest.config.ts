@@ -15,7 +15,17 @@ export default defineConfig({
     },
   },
   test: {
-    include: ['test/**/*.test.ts'],
+    // Keep the engine's luma v9 and the lab's pinned v10 dependency optimization
+    // separate. A shared root optimizer can silently serve v9 to a v10 import.
+    projects: [
+      { extends: true, test: { name: 'engine', include: ['test/**/*.test.ts'] } },
+      {
+        extends: true,
+        root: resolve(__dirname, 'experiments/cosmos-gpu-lab'),
+        cacheDir: resolve(__dirname, 'experiments/cosmos-gpu-lab/node_modules/.vite/root-tests'),
+        test: { name: 'gpu-lab', include: ['src/**/*.test.ts'] },
+      },
+    ],
     // Device init and shader compilation on SwiftShader are slow
     testTimeout: 30000,
     // Browser workers are pages sharing one Chromium process. In CI every

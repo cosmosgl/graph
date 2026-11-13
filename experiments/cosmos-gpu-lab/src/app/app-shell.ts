@@ -1,0 +1,518 @@
+import type {
+  ExperimentDefinition,
+  ExperimentInstance,
+  ExperimentPage,
+} from '../runtime/experiment'
+import vocabularySource from '../docs/vocabulary.md?raw'
+import reductionSource from '../docs/reduction.md?raw'
+import reductionTreeUrl from '../docs/diagrams/reduction-tree.svg?url'
+import { experimentGroups, findExperiment } from './registry'
+import { architectureHref, conceptHref, experimentHref, featureInventoryHref, readRoute, roadmapHref, vocabularyHref } from './router'
+import { indexVocabularyTerms } from './vocabulary'
+
+function requiredElement<T extends HTMLElement> (host: ParentNode, selector: string): T {
+  const element = host.querySelector<T>(selector)
+  if (!element) throw new Error(`Missing ${selector}`)
+  return element
+}
+
+function renderNavigation (
+  host: HTMLElement,
+  activeId?: string,
+  activeReference?: 'learn' | 'vocabulary' | 'reduction' | 'architecture' | 'roadmap' | 'feature-inventory'
+): void {
+  host.replaceChildren()
+  for (const group of experimentGroups) {
+    const section = document.createElement('section')
+    section.className = 'nav-group'
+    section.setAttribute('aria-labelledby', `nav-${group.id}`)
+    section.innerHTML = `<h2 class="nav-label" id="nav-${group.id}">${group.title}</h2><div class="nav-group-links"></div>`
+    const links = requiredElement<HTMLElement>(section, '.nav-group-links')
+    for (const experiment of group.experiments) {
+      const link = document.createElement('a')
+      link.href = experimentHref(experiment.id)
+      link.className = 'experiment-link'
+      link.classList.toggle('active', experiment.id === activeId)
+      if (experiment.id === activeId) link.setAttribute('aria-current', 'page')
+      link.innerHTML = `<span>${experiment.title}</span><small>${experiment.tags[0] ?? 'experiment'}</small>`
+      links.append(link)
+    }
+    host.append(section)
+  }
+
+  const reference = document.createElement('section')
+  reference.className = 'nav-group'
+  reference.setAttribute('aria-labelledby', 'nav-reference')
+  reference.innerHTML = '<h2 class="nav-label" id="nav-reference">Reference</h2><div class="nav-group-links"></div>'
+  const references = requiredElement<HTMLElement>(reference, '.nav-group-links')
+  host.append(reference)
+
+  const learn = document.createElement('a')
+  learn.href = '#/learn'
+  learn.className = 'experiment-link reference-link'
+  learn.classList.toggle('active', activeReference === 'learn')
+  learn.innerHTML = '<span>How WebGPU works</span><small>learn</small>'
+  if (activeReference === 'learn') learn.setAttribute('aria-current', 'page')
+  references.append(learn)
+
+  const roadmap = document.createElement('a')
+  roadmap.href = roadmapHref()
+  roadmap.className = 'experiment-link reference-link'
+  roadmap.classList.toggle('active', activeReference === 'roadmap')
+  roadmap.innerHTML = '<span>WebGPU migration</span><small>roadmap</small>'
+  if (activeReference === 'roadmap') roadmap.setAttribute('aria-current', 'page')
+  references.append(roadmap)
+
+  const inventory = document.createElement('a')
+  inventory.href = featureInventoryHref()
+  inventory.className = 'experiment-link reference-link'
+  inventory.classList.toggle('active', activeReference === 'feature-inventory')
+  inventory.innerHTML = '<span>Cosmos feature coverage</span><small>inventory</small>'
+  if (activeReference === 'feature-inventory') inventory.setAttribute('aria-current', 'page')
+  references.append(inventory)
+
+  const architecture = document.createElement('a')
+  architecture.href = architectureHref()
+  architecture.className = 'experiment-link reference-link'
+  architecture.classList.toggle('active', activeReference === 'architecture')
+  architecture.innerHTML = '<span>Lab architecture</span><small>guide</small>'
+  if (activeReference === 'architecture') architecture.setAttribute('aria-current', 'page')
+  references.append(architecture)
+
+  const vocabulary = document.createElement('a')
+  vocabulary.href = vocabularyHref()
+  vocabulary.className = 'experiment-link reference-link'
+  vocabulary.classList.toggle('active', activeReference === 'vocabulary')
+  vocabulary.innerHTML = '<span>WebGPU vocabulary</span><small>guide</small>'
+  if (activeReference === 'vocabulary') vocabulary.setAttribute('aria-current', 'page')
+  references.append(vocabulary)
+
+  const reduction = document.createElement('a')
+  reduction.href = conceptHref('reduction')
+  reduction.className = 'experiment-link reference-link'
+  reduction.classList.toggle('active', activeReference === 'reduction')
+  reduction.innerHTML = '<span>Parallel reduction</span><small>concept</small>'
+  if (activeReference === 'reduction') reduction.setAttribute('aria-current', 'page')
+  references.append(reduction)
+  const current = host.querySelector<HTMLElement>('[aria-current="page"]')
+  if (current) current.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  else { host.scrollTop = 0; host.scrollLeft = 0 }
+}
+
+function renderHome (host: HTMLElement): void {
+  host.innerHTML = `
+    <section class="home-intro">
+      <p class="eyebrow">Migration research workspace</p>
+      <h1>Cosmos GPU Lab</h1>
+      <p>
+        Experiments that assess whether Cosmos can preserve its behavior, meet performance goals
+        and move from luma WebGL to luma WebGPU.
+      </p>
+    </section>
+    <div class="home-sections">
+    <a class="reference-card" href="${roadmapHref()}">
+      <span class="card-index">THE JOURNEY</span>
+      <span>
+        <strong>Cosmos → WebGPU</strong>
+        <small>Migration readiness: what is demonstrated, what is missing and what would justify switching</small>
+      </span>
+      <span aria-hidden="true">→</span>
+    </a>
+    <a class="reference-card" href="#/learn">
+      <span class="card-index">START HERE</span>
+      <span>
+        <strong>How WebGPU works</strong>
+        <small>Learn the vocabulary through small interactive examples, from point data to pixels</small>
+      </span>
+      <span aria-hidden="true">→</span>
+    </a>
+    <div class="experiment-catalog" aria-label="Available experiments">
+      <p class="catalog-intro">Explore the groups from foundations to validation.
+        Experiments within each group follow a suggested reading order; the migration roadmap records our findings and next steps.</p>
+    </div>
+    <a class="reference-card" href="${featureInventoryHref()}">
+      <span class="card-index">COVERAGE</span>
+      <span>
+        <strong>Cosmos feature coverage</strong>
+        <small>Forces and rendering: how WebGL works, what experiments cover and what WebGPU still needs to prove</small>
+      </span>
+      <span aria-hidden="true">→</span>
+    </a>
+    <a class="reference-card" href="${architectureHref()}">
+      <span class="card-index">REFERENCE</span>
+      <span>
+        <strong>Lab architecture</strong>
+        <small>How the shell, experiments, GPU backends and documentation fit together</small>
+      </span>
+      <span aria-hidden="true">→</span>
+    </a>
+    <a class="reference-card" href="${vocabularyHref()}">
+      <span class="card-index">REFERENCE</span>
+      <span>
+        <strong>WebGPU vocabulary</strong>
+        <small>Core concepts, execution model, resources and Cosmos compute terms</small>
+      </span>
+      <span aria-hidden="true">→</span>
+    </a>
+    <a class="reference-card" href="${conceptHref('reduction')}">
+      <span class="card-index">CONCEPT</span>
+      <span>
+        <strong>Parallel reduction</strong>
+        <small>From algebra and workgroup trees to a production Cosmos compute primitive</small>
+      </span>
+      <span aria-hidden="true">→</span>
+    </a>
+    </div>
+  `
+  const catalog = requiredElement<HTMLElement>(host, '.experiment-catalog')
+  for (const group of experimentGroups) {
+    const section = document.createElement('section')
+    section.className = 'home-experiment-group'
+    section.setAttribute('aria-labelledby', `catalog-${group.id}`)
+    section.innerHTML = `
+      <header class="catalog-group-heading">
+        <h2 id="catalog-${group.id}">${group.title}</h2>
+        <p>${group.description}</p>
+      </header>
+      <div class="experiment-grid"></div>
+    `
+    const grid = requiredElement<HTMLElement>(section, '.experiment-grid')
+    for (const experiment of group.experiments) {
+      const link = document.createElement('a')
+      link.className = 'experiment-card'
+      link.href = experimentHref(experiment.id)
+      link.innerHTML = `
+        <h3>${experiment.title}</h3>
+        <p>${experiment.summary}</p>
+        <span class="tag-row">${experiment.tags.map(tag => `<span>${tag}</span>`).join('')}</span>
+      `
+      grid.append(link)
+    }
+    catalog.append(section)
+  }
+}
+
+function renderVocabularyFrame (host: HTMLElement): HTMLElement {
+  host.innerHTML = `
+    <header class="experiment-header reference-header">
+      <div>
+        <p class="eyebrow">Lab reference · WebGPU</p>
+        <h1>Vocabulary</h1>
+        <p>
+          A shared language for WebGPU resources, commands, shaders and the parallel
+          data structures used by Cosmos.
+        </p>
+      </div>
+    </header>
+    <section class="experiment-stage reference-stage">
+      <div class="loading">Loading vocabulary…</div>
+    </section>
+  `
+  return requiredElement<HTMLElement>(host, '.reference-stage')
+}
+
+function renderRoadmapFrame (host: HTMLElement): HTMLElement {
+  host.innerHTML = `
+    <header class="experiment-header reference-header">
+      <div>
+        <p class="eyebrow">Migration journey · Cosmos readiness</p>
+        <h1>Cosmos → WebGPU</h1>
+        <p>How realistic is the migration, how ready is Cosmos, and what evidence do we still need?</p>
+      </div>
+    </header>
+    <section class="experiment-stage reference-stage">
+      <div class="loading">Loading migration roadmap…</div>
+    </section>
+  `
+  return requiredElement<HTMLElement>(host, '.reference-stage')
+}
+
+function renderArchitectureFrame (host: HTMLElement): HTMLElement {
+  host.innerHTML = `
+    <header class="experiment-header reference-header">
+      <div>
+        <p class="eyebrow">Lab reference · Architecture</p>
+        <h1>Lab architecture</h1>
+        <p>One shared interface for independent GPU experiments, explanations and results.</p>
+      </div>
+    </header>
+    <section class="experiment-stage reference-stage">
+      <div class="loading">Loading architecture guide…</div>
+    </section>
+  `
+  return requiredElement<HTMLElement>(host, '.reference-stage')
+}
+
+function renderFeatureInventoryFrame (host: HTMLElement): HTMLElement {
+  host.innerHTML = `
+    <header class="experiment-header reference-header">
+      <div>
+        <p class="eyebrow">Cosmos → WebGPU · Feature inventory</p>
+        <h1>Cosmos feature coverage</h1>
+        <p>The production WebGL behavior, the evidence in our experiments and the remaining WebGPU validation.</p>
+      </div>
+    </header>
+    <section class="experiment-stage reference-stage">
+      <div class="loading">Loading feature inventory…</div>
+    </section>
+  `
+  return requiredElement<HTMLElement>(host, '.reference-stage')
+}
+
+function renderReductionFrame (host: HTMLElement): HTMLElement {
+  host.innerHTML = `
+    <header class="experiment-header reference-header">
+      <div>
+        <p class="eyebrow">Concept deep dive · Parallel compute</p>
+        <h1>Parallel reduction</h1>
+        <p>
+          How millions of independent values become one trustworthy result through
+          local trees, partial buffers and recursively scheduled compute passes.
+        </p>
+      </div>
+    </header>
+    <section class="experiment-stage reference-stage">
+      <div class="loading">Loading reduction research…</div>
+    </section>
+  `
+  return requiredElement<HTMLElement>(host, '.reference-stage')
+}
+
+function createTab (label: string, href: string, active: boolean): HTMLAnchorElement {
+  const link = document.createElement('a')
+  link.textContent = label
+  link.href = href
+  link.classList.toggle('active', active)
+  if (active) link.setAttribute('aria-current', 'page')
+  return link
+}
+
+function renderExperimentFrame (
+  host: HTMLElement,
+  experiment: ExperimentDefinition,
+  activePage?: ExperimentPage
+): void {
+  host.innerHTML = `
+    <header class="experiment-header">
+      <div>
+        <p class="eyebrow">Experiment · ${experiment.tags.join(' · ')}</p>
+        <h1>${experiment.title}</h1>
+        <p>${experiment.summary}</p>
+      </div>
+    </header>
+    <nav class="page-tabs" aria-label="Experiment sections"></nav>
+    <section class="experiment-stage"></section>
+  `
+
+  const tabs = requiredElement<HTMLElement>(host, '.page-tabs')
+  tabs.append(createTab('Demo', experimentHref(experiment.id), !activePage))
+  for (const page of experiment.pages) {
+    tabs.append(createTab(page.title, experimentHref(experiment.id, page.id), page.id === activePage?.id))
+  }
+}
+
+function renderMissing (host: HTMLElement, id: string): void {
+  host.innerHTML = `
+    <section class="empty-state">
+      <p class="eyebrow">Not found</p>
+      <h1>Unknown experiment</h1>
+      <p>No experiment is registered as <code data-missing-id></code>.</p>
+      <a class="button-link" href="#/">Return to the lab</a>
+    </section>
+  `
+  requiredElement<HTMLElement>(host, '[data-missing-id]').textContent = id
+}
+
+function renderFailure (host: HTMLElement, error: unknown): void {
+  const message = error instanceof Error ? error.message : String(error)
+  host.innerHTML = `
+    <section class="empty-state failure">
+      <p class="eyebrow">Experiment error</p>
+      <h2>Unable to load this section</h2>
+      <pre></pre>
+    </section>
+  `
+  requiredElement<HTMLElement>(host, 'pre').textContent = message
+}
+
+export function createAppShell (root: HTMLElement): void {
+  root.innerHTML = `
+    <div class="app-shell">
+      <aside class="sidebar">
+        <a class="brand" href="#/" aria-label="Cosmos GPU Lab home">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <span><strong>Cosmos</strong><small>GPU Lab</small></span>
+        </a>
+        <nav class="experiment-nav" aria-label="Experiments"></nav>
+        <div class="sidebar-note">
+          <span class="status-dot"></span>
+          luma.gl v10 research workspace
+        </div>
+      </aside>
+      <main class="workspace" tabindex="-1"></main>
+    </div>
+  `
+
+  const navigation = requiredElement<HTMLElement>(root, '.experiment-nav')
+  const workspace = requiredElement<HTMLElement>(root, '.workspace')
+  let activeInstance: ExperimentInstance | undefined
+  let renderVersion = 0
+
+  const destroyActive = (): void => {
+    activeInstance?.destroy()
+    activeInstance = undefined
+  }
+
+  const render = async (): Promise<void> => {
+    renderVersion += 1
+    const version = renderVersion
+    destroyActive()
+    const route = readRoute()
+    renderNavigation(
+      navigation,
+      route.kind === 'experiment' ? route.experimentId : undefined,
+      route.kind === 'vocabulary'
+        ? 'vocabulary'
+        : route.kind === 'concept' && route.conceptId === 'reduction'
+          ? 'reduction'
+          : route.kind === 'learn' || route.kind === 'architecture' || route.kind === 'roadmap' || route.kind === 'feature-inventory' ? route.kind : undefined
+    )
+
+    if (route.kind === 'home') {
+      renderHome(workspace)
+      return
+    }
+
+    if (route.kind === 'learn') {
+      workspace.innerHTML = `
+        <header class="experiment-header reference-header">
+          <div>
+            <p class="eyebrow">Learn · From point data to pixels</p>
+            <h1>How WebGPU works</h1>
+            <p>A guided introduction through one Cosmos simulation tick. Read, try, then explore the real experiments.</p>
+          </div>
+        </header>
+        <section class="experiment-stage reference-stage"><div class="loading">Loading guide…</div></section>
+      `
+      const stage = requiredElement<HTMLElement>(workspace, '.reference-stage')
+      try {
+        const [source, renderer, examples] = await Promise.all([
+          import('../docs/learn-webgpu.md?raw'), import('./markdown'), import('./learning-examples'),
+        ])
+        if (version !== renderVersion) return
+        await renderer.renderMarkdown(stage, source.default, {}, { examples: examples.learningExamples })
+        examples.addLearningContents(stage, route.sectionId)
+      } catch (error) {
+        if (version !== renderVersion) return
+        renderFailure(stage, error)
+      }
+      return
+    }
+
+    if (route.kind === 'architecture' || route.kind === 'roadmap' || route.kind === 'feature-inventory') {
+      const stage = route.kind === 'roadmap'
+        ? renderRoadmapFrame(workspace)
+        : route.kind === 'feature-inventory' ? renderFeatureInventoryFrame(workspace) : renderArchitectureFrame(workspace)
+      try {
+        const [source, renderer] = await Promise.all([
+          route.kind === 'roadmap'
+            ? import('../docs/roadmap.md?raw')
+            : route.kind === 'feature-inventory' ? import('../docs/feature-inventory.md?raw') : import('../docs/architecture.md?raw'),
+          import('./markdown'),
+        ])
+        if (version !== renderVersion) return
+        await renderer.renderMarkdown(stage, source.default)
+      } catch (error) {
+        if (version !== renderVersion) return
+        renderFailure(stage, error)
+      }
+      return
+    }
+
+    if (route.kind === 'vocabulary') {
+      const stage = renderVocabularyFrame(workspace)
+      try {
+        const renderer = await import('./markdown')
+        if (version !== renderVersion) return
+        await renderer.renderMarkdown(stage, vocabularySource, {}, { linkTerms: false })
+        indexVocabularyTerms(stage)
+        if (route.termId) {
+          const target = document.getElementById(route.termId)
+          if (target && stage.contains(target)) {
+            target.classList.add('vocabulary-target')
+            target.scrollIntoView({ block: 'start' })
+          }
+        }
+      } catch (error) {
+        if (version !== renderVersion) return
+        renderFailure(stage, error)
+      }
+      return
+    }
+
+    if (route.kind === 'concept') {
+      if (route.conceptId !== 'reduction') {
+        renderMissing(workspace, `concepts/${route.conceptId}`)
+        return
+      }
+      const stage = renderReductionFrame(workspace)
+      try {
+        const renderer = await import('./markdown')
+        if (version !== renderVersion) return
+        const assets = Object.fromEntries([['diagrams/reduction-tree.svg', reductionTreeUrl]])
+        await renderer.renderMarkdown(stage, reductionSource, assets, {
+          excludedTermIds: ['reduction'],
+        })
+      } catch (error) {
+        if (version !== renderVersion) return
+        renderFailure(stage, error)
+      }
+      return
+    }
+
+    const experiment = findExperiment(route.experimentId)
+    if (!experiment) {
+      renderMissing(workspace, route.experimentId)
+      return
+    }
+
+    const page = route.pageId
+      ? experiment.pages.find(candidate => candidate.id === route.pageId)
+      : undefined
+    renderExperimentFrame(workspace, experiment, page)
+    const stage = requiredElement<HTMLElement>(workspace, '.experiment-stage')
+
+    try {
+      if (!page) {
+        stage.innerHTML = '<div class="loading">Creating GPU devices…</div>'
+        const instance = await experiment.create(stage)
+        if (version !== renderVersion) {
+          instance.destroy()
+          return
+        }
+        activeInstance = instance
+      } else if (page.kind === 'markdown') {
+        stage.innerHTML = '<div class="loading">Loading documentation…</div>'
+        const [source, renderer] = await Promise.all([page.load(), import('./markdown')])
+        if (version !== renderVersion) return
+        await renderer.renderMarkdown(stage, source, page.assets)
+      } else {
+        stage.innerHTML = '<div class="loading">Loading results…</div>'
+        const [report, renderer] = await Promise.all([page.load(), import('./report')])
+        if (version !== renderVersion) return
+        renderer.renderReport(stage, report, experiment.id)
+      }
+    } catch (error) {
+      if (version !== renderVersion) return
+      renderFailure(stage, error)
+    }
+  }
+
+  const handleRoute = (): void => {
+    render().catch(error => renderFailure(workspace, error))
+  }
+
+  window.addEventListener('hashchange', handleRoute)
+  window.addEventListener('beforeunload', destroyActive)
+  handleRoute()
+}

@@ -1,0 +1,26 @@
+{
+  "name": "@cosmos.gl/gpu-lab",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "test:gpu": "vitest run --config vitest.config.ts",
+    "typecheck": "node scripts/check-luma-api.mjs && tsc --noEmit"
+  },
+  "dependencies": {
+    "@luma.gl/core": "10.0.0-alpha.4",
+    "@luma.gl/engine": "10.0.0-alpha.4",
+    "@luma.gl/shadertools": "10.0.0-alpha.4",
+    "@luma.gl/webgl": "10.0.0-alpha.4",
+    "@luma.gl/webgpu": "10.0.0-alpha.4",
+    "markdown-it": "14.3.3"
+  },
+  "devDependencies": {
+    "@types/markdown-it": "14.1.2",
+    "typescript": "7.0.2",
+    "vite": "catalog:"
+  }
+}
