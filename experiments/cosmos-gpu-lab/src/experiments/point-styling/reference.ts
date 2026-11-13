@@ -1,6 +1,7 @@
 import { pick, type PickingRule, type Snapshot } from './backend'
 import { center, diameter, resolvePoint, type Point, type Settings } from './data'
 import { sourceAlphaByte } from './source-alpha'
+import { IMAGE_COUNT, sampleAtlas } from './atlas'
 const clamp = (x: number, a: number, b: number): number => Math.min(b, Math.max(a, x))
 // Independent scalar geometry control. This does not read a GPU mask or shader output.
 export function shapeDistance (x: number, y: number, shape: number): number {
@@ -51,6 +52,30 @@ export function shapeDistance (x: number, y: number, shape: number): number {
   }
   return Infinity
 }
+function imageFragment (p: Point, settings: Settings, x: number, y: number):
+{ imageCovered: boolean; imageAlpha: number; shapeCovered: boolean; sourceAlpha: number; color: number[] } | null {
+  if (p.absent) return null
+  const d = diameter(p, settings); const hasImage = p.image !== undefined && p.image >= 0 && p.image < IMAGE_COUNT
+  const imageD = hasImage ? diameter({ ...p, size: p.imageSize ?? p.size }, settings) : 0
+  if (Math.max(d, imageD) <= 0) return null
+  const sprite = Math.max(d, 1, imageD); const core = Math.max(d, 1); const [cx, cy] = center(p, settings)
+  if (Math.abs(x - cx) > sprite / 2 || Math.abs(y - cy) > sprite / 2) return null
+  const distance = p.shape === 8 || d <= 0 ? Infinity : shapeDistance((x - cx) * 2 / core, (y - cy) * 2 / core, p.shape) * core * 0.5
+  const ramp = clamp(distance + 0.5, 0, 1); const coverage = 1 - ramp * ramp * (3 - 2 * ramp)
+  const area = Math.min(1, d * d / (core * core)); const f = Math.fround
+  const shapeAlpha = f(f(coverage) * f(f(area) * f(p.color[3])))
+  const imageCovered = hasImage && imageD > 0 && Math.abs(x - cx) <= imageD / 2 && Math.abs(y - cy) <= imageD / 2
+  const image = imageCovered ? sampleAtlas(p.image!, (x - cx) / imageD + 0.5, (y - cy) / imageD + 0.5, settings.imageFilter ?? 'nearest') : [0, 0, 0, 0]
+  const color = [0, 1, 2].map(c => (p.shape === 8 || d <= 0 ? 0 : p.color[c]) * (1 - image[3]) + image[c] * image[3])
+  return {
+    imageCovered,
+    imageAlpha: image[3],
+    shapeCovered: distance <= 0 && p.color[3] > 0,
+    sourceAlpha: f(Math.max(shapeAlpha, f(image[3])) * f(settings.opacity)),
+    color,
+  }
+}
+
 export function referencePick (points: Point[], settings: Settings, x: number, y: number, rule: PickingRule = 'visible'): number | null {
   // Candidate visibility is explicit. Retain the original opacity-independent
   // geometry reference for the production control; neither rule reads GPU pixels.
@@ -58,6 +83,13 @@ export function referencePick (points: Point[], settings: Settings, x: number, y
   const order = points.map((_, id) => id); if (!settings.reverse) order.reverse()
   for (const id of order) {
     const p = resolvePoint(points[id], settings); const d = diameter(p, settings)
+    if (p.image !== undefined && p.image >= 0 && p.image < IMAGE_COUNT) {
+      const fragment = imageFragment(p, settings, x, y)
+      if (!fragment) continue
+      const covered = fragment.shapeCovered || (fragment.imageCovered && (rule !== 'source-alpha' || fragment.imageAlpha > 0))
+      if (covered && (rule !== 'source-alpha' || sourceAlphaByte(fragment.sourceAlpha) > 0)) return id
+      continue
+    }
     if (p.absent || p.shape === 8 || d <= 0 || p.color[3] <= 0) continue
     const [cx, cy] = center(p, settings); const core = Math.max(d, 1)
     const dx = (x - cx) * 2 / core; const dy = (y - cy) * 2 / core
@@ -80,7 +112,8 @@ export function referencePick (points: Point[], settings: Settings, x: number, y
 // RGBA8 comparison budget declared before evaluation: two channel levels account
 // for quantization/blend evaluation. IDs and visibility checks have no tolerance.
 export const COLOR_BUDGET = 2
-export type ColorComparison = { changedPixels: number; maxChannelError: number; budgetFailures: number }
+export type ColorComparison = { changedPixels: number; maxChannelError: number; budgetFailures: number;
+  firstBudgetMismatch?: { x: number; y: number; left: number[]; right: number[] }; }
 export function compareColors (a: Snapshot, b: Snapshot): ColorComparison {
   if (a.width !== b.width || a.height !== b.height || a.color.length !== a.width * a.height * 4 || b.color.length !== a.color.length) {
     throw new Error('Mismatched color framebuffer dimensions')
@@ -90,10 +123,45 @@ export function compareColors (a: Snapshot, b: Snapshot): ColorComparison {
     let difference = 0
     for (let c = 0; c < 4; c++) difference = Math.max(difference, Math.abs(a.color[offset + c] - b.color[offset + c]))
     if (difference > 0) result.changedPixels++
-    if (difference > COLOR_BUDGET) result.budgetFailures++
+    if (difference > COLOR_BUDGET) {
+      result.budgetFailures++
+      result.firstBudgetMismatch ??= {
+        x: (offset / 4) % a.width,
+        y: Math.floor(offset / 4 / a.width),
+        left: Array.from(a.color.subarray(offset, offset + 4)),
+        right: Array.from(b.color.subarray(offset, offset + 4)),
+      }
+    }
     result.maxChannelError = Math.max(result.maxChannelError, difference)
   }
   return result
+}
+
+// Independent scalar texture/shape composition. Preserve production's RGB mix
+// and max(shapeAlpha, imageAlpha), including its image-only alpha attenuation.
+// Fixtures have no strokes; this is not a CPU renderer for all Cosmos features.
+export function atlasCpuColors (snapshot: Snapshot, points: Point[], settings: Settings): ColorComparison {
+  const { width, height } = snapshot; const color = new Uint8Array(width * height * 4)
+  const order = points.map((_, i) => i); if (settings.reverse) order.reverse()
+  for (const id of order) {
+    const p = resolvePoint(points[id], settings)
+    if (p.stroke > 0) throw new Error('CPU atlas color fixtures must not have strokes')
+    const d = diameter(p, settings)
+    const imageD = p.image !== undefined ? diameter({ ...p, size: p.imageSize ?? p.size }, settings) : 0
+    const sprite = Math.max(d, 1, imageD); const [cx, cy] = center(p, settings)
+    const left = Math.max(0, Math.ceil(cx - sprite / 2 - 0.5)); const right = Math.min(width - 1, Math.floor(cx + sprite / 2 - 0.5))
+    const top = Math.max(0, Math.ceil(cy - sprite / 2 - 0.5)); const bottom = Math.min(height - 1, Math.floor(cy + sprite / 2 - 0.5))
+    for (let y = top; y <= bottom; y++) {
+      for (let x = left; x <= right; x++) {
+        const fragment = imageFragment(p, settings, x + 0.5, y + 0.5)
+        if (!fragment) continue
+        const a = clamp(fragment.sourceAlpha, 0, 1); const offset = (y * width + x) * 4
+        for (let c = 0; c < 3; c++) color[offset + c] = Math.round(clamp(fragment.color[c] * a + color[offset + c] / 255 * (1 - a), 0, 1) * 255)
+        color[offset + 3] = Math.round((a + color[offset + 3] / 255 * (1 - a)) * 255)
+      }
+    }
+  }
+  return compareColors(snapshot, { ...snapshot, color })
 }
 type MaskMismatch = {
   x: number; y: number; webgl: number | null; webgpu: number | null; expected: { webgl: number | null; webgpu: number | null };

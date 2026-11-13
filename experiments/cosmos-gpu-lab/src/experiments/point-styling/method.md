@@ -2,7 +2,7 @@
 source: Recorded findings
 recorded: 2026-11-13
 device: Apple M3; installed Chrome 157 and inline Chromium 157
-scope: Source-byte picking passes 32 visibility cases, 24 styling controls and 767 alpha samples per backend on M3. Color bytes are preserved, including the 64-point faint stack; prior controls and acceptance gates remain unchanged.
+scope: Source-byte picking passes 32 visibility cases and 40 atlas cases on M3, with exact IDs and unchanged color bytes. Atlas CPU colors stay within 1/255; production picking, raster compatibility and tile-isolation failures remain visible. Also 24 styling controls and 767 alpha samples per backend pass.
 ---
 
 ## Question
@@ -40,6 +40,7 @@ Readback · Compare every color and ID pixel; scalar geometry is a separate cont
 - NaN channel defaults, size zero, subpixel size, absent records, overlap and reversed render order.
   Original point identity stays stable when the draw order changes.
 - A separate fractional-size/position diagnostic retains its failing parity gates.
+- Raw image-atlas sampling, transparent holes, independent image/shape sizes and overlap, with nearest/linear CPU color and ID references. Tile isolation remains open.
 
 WebGL receives NaN default sentinels as production does. Before WebGPU upload, the host resolves
 them against configuration defaults; WGSL receives finite records and an explicit absence flag.
@@ -627,7 +628,173 @@ This is bounded shape-aware host picking on one native device. It does not estab
 RGBA8 conversion behavior, perceptual contrast, full pointer-hover behavior or all production
 raster compatibility. Image/atlas alpha, rings/greyout, transitions, broader native coverage
 and GPU cost remain open. The next feature investigation is image-atlas alpha and transparent
-texel/overlap picking with these controls and the same acceptance gates.
+texel/overlap picking with these controls and the same acceptance gates; that follow-up is recorded below.
+
+## Image-atlas alpha and picking
+
+The next bounded study adds images to the same point-styling experiment. It compares the
+unmodified production image shader with the luma WebGPU port and an independent scalar CPU
+sampler. The source-byte candidate changes ID eligibility only; the original color path and
+all earlier controls remain available.
+
+### Frozen atlas and sampling
+
+Four 32 × 32 images occupy a 64 × 64 RGBA8 atlas. A test feeds the four tiles through Cosmos's
+`createAtlasDataFromImageData` and requires exactly the same bytes and UV rectangles. This is
+the production square-grid layout, including its edge UVs and lack of gutters.
+
+| Tile | Input | Purpose |
+|---|---|---|
+| 0 | RGB gradient, transparent border, asymmetric hole, 96/255-alpha band | Orientation, holes, translucent edges and filtering |
+| 1 | Opaque contrasting gradient | Wrong-tile reads and atlas-edge leakage |
+| 2 | Alpha zero with nonzero hidden RGB | Transparent texels must contribute neither ink nor ID |
+| 3 | Alpha 1/255 | Faint source visibility |
+
+The fixture uploads raw bytes, without DOM image decoding, premultiplication, row flipping or
+color-space conversion. Both GPU lanes use public luma `Texture` resources. WebGL retains
+production `Model`/`UniformStore`; WebGPU uses `RenderKernel`, a texture and its paired sampler.
+An asymmetric hole and gradients make an accidental orientation change observable.
+
+The production control's default is **nearest**, verified in the installed production luma v9
+and lab v10 sampler implementations. **Linear** is an explicit alternative applied to both
+controls and candidates. Each texture has one mip level. WGSL uses
+`textureSampleLevel(atlas, atlasSampler, uv, 0.0)` so its image-coverage branch needs no implicit
+derivatives. The CPU independently implements nearest and bilinear sampling of the full atlas.
+Clamp-to-edge applies at the full texture boundary, not at each tile boundary. See the
+[luma sampler API](https://luma.gl/docs/api-reference/core/resources/sampler) and
+[WGSL explicit-LOD sampling](https://www.w3.org/TR/WGSL/#texturesamplelevel).
+
+### Preserve Cosmos's composition
+
+The production image shader combines the point's shape and sampled image before ordinary
+source-alpha framebuffer blending:
+
+```glsl
+shapeAlpha = coverage * (subpixelArea * fillAlpha);
+sourceAlpha = max(shapeAlpha, imageAlpha) * globalOpacity;
+sourceRGB = mix(shapeRGB, imageRGB, imageAlpha);
+```
+
+This is Cosmos's existing formula. In particular, an image-only translucent texel attenuates
+its RGB during the mix with the absent shape, then attenuates it again during framebuffer
+blending. Replacing that with a different compositing formula would change production colors.
+This experiment preserves it and checks the CPU composition against both GPU color images.
+The CPU color fixtures have no strokes; they are not a general CPU implementation of every
+Cosmos rendering feature.
+
+Production host picking treats an image's rectangle as covered, regardless of sampled alpha.
+Consequently a transparent hole can select an invisible foreground point, including where a
+visible background point makes the composed framebuffer look valid. The existing isolated
+foreground audit detects that case independently of the final composed alpha.
+
+The source-byte candidate instead requires:
+
+```text
+(shape coverage >= 1/2 and fill alpha > 0)
+    OR
+(inside the image and sampled image alpha > 0)
+
+AND the combined source alpha encodes to a nonzero source byte
+```
+
+The source-byte quantizer and tie rule are unchanged. A hole can reveal another point, or the
+same point's own shape beneath its image. Rejecting the entire point whenever the image texel
+is transparent would incorrectly remove that underlying shape. Color output remains on the
+original unquantized path.
+
+### Full-frame atlas sweep
+
+Four fixtures cover image-only points, images above their own shapes, overlapping points and
+fractional image sizes/atlas edges. Each runs with nearest and linear sampling under five
+frozen profiles: native, pixel ratio 2, zoom 0.5 with opacity 0.35, zoom 2 with reversed draw
+order, and opacity zero. That gives **40 cases**. These are bounded combinations, not the full
+Cartesian product of every available control.
+
+Every row retains production, explicit-coordinate and source-byte verdicts. Candidate
+acceptance requires exact cross-backend IDs, exact independent CPU masks, no invisible picks,
+the existing **2/255** color budget, CPU sampled-color agreement within that same budget and
+**zero changed color pixels** relative to each backend's unquantized explicit control.
+The overlap fixture additionally requires the isolated foreground contribution audit. No
+pixel is excluded because it lies on a tile or sprite edge. Production compatibility is a
+separate visible result and is not required to pass by deleting its known failures.
+
+Recorded **13 November 2026**, in the Codex inline browser (Chromium 157) on Apple M3,
+with pinned luma **10.0.0-alpha.4**. All **40/40 candidate rows pass** across **10,485,760
+pixel positions**:
+
+| Check | Recorded result |
+|---|---|
+| WebGL ↔ WebGPU candidate IDs and color bytes | Exact; zero differences |
+| Candidate ↔ independent CPU picking masks | Zero failures in either backend |
+| Picked pixels with zero composed alpha | Zero in either backend |
+| Isolated foreground visibility | Zero invisible selections in either backend |
+| Candidate ↔ CPU colors | Maximum 1/255; zero pixels beyond 2/255 |
+| Candidate ↔ each API's original explicit color output | Zero changed pixels |
+| Retained production / explicit frame controls | 6/40 and 14/40 pass |
+| Production WebGL ↔ candidate WebGPU compatibility | 0/40 pass; failures retained |
+
+The last two rows matter: the candidate's declared policy is validated here; complete legacy
+compatibility is not. The production controls agree with each other on IDs yet retain invisible
+rectangle picks. At native nearest overlap, **4,752 foreground picks per backend** have zero
+isolated source alpha even though the composed framebuffer is opaque. The candidate removes
+these selections, keeping **4,464 visible foreground picks** and allowing the background ID
+through the holes.
+
+Production color compatibility also fails at **81 pixels across three edge profiles**, with a
+maximum difference of 255/255. The closed-coordinate candidate reaches boundary pixels that
+production point rasterization excludes, and those pixels can sample an opaque neighboring
+tile. These remain failures of the original 2/255 compatibility gate, not excluded edge pixels.
+The candidate's own paired images and independent CPU masks/colors pass at those same locations.
+
+All **29 point-styling tests** pass in the Codex inline browser.
+
+### Tile-edge agreement is not tile isolation
+
+The edge fixture deliberately reaches tile 0's upper U boundary at a device-pixel center.
+The sample at local image UV `(1, 0.5)` addresses the next tile with nearest filtering; linear
+filtering straddles the two tiles. Texture clamp-to-edge cannot protect an internal atlas
+rectangle. The export includes a CPU sample and both GPU RGBA/ID readings at this pixel.
+
+At pixel **(208, 112)** in the native edge fixture, both candidate GPUs read:
+
+| Filter | CPU sampled alpha | WebGL RGBA8 | WebGPU RGBA8 | Picked ID |
+|---|---|---|---|---|
+| Nearest | 1 | [220, 98, 160, 255] | [220, 98, 160, 255] | 0 |
+| Linear | 0.5 | [52, 28, 43, 128] | [52, 28, 43, 128] | 0 |
+
+Tile 0's edge texel is transparent. The nonzero alpha comes from tile 1. The linear result's
+RGB also reflects the preserved production composition described above.
+
+These samples follow the existing atlas packing and sampling policy. Matching them establishes
+port parity, not correct isolation of each image. A later experiment should compare half-texel
+insets, duplicated-edge gutters and texture-array layers, including minification and mipmaps.
+Those alternatives are not implemented or accepted here. Changing the production UVs or atlas
+padding silently would conceal a separate behavior change.
+
+### Reproduce the atlas study
+
+1. Open **Point styling and picking** and select **Source-byte picking candidate**.
+2. Select each **Atlas** fixture. Inspect transparent holes and move over the image to compare
+   IDs. Switch to the production control to retain its rectangle-picking failures.
+3. Change **Atlas filter**, opacity, zoom, pixel ratio and draw order. The **CPU atlas color
+   reference** and **Original color output** tables check sampling/composition and byte-level
+   color preservation separately from the cross-backend frame audit.
+4. In Diagnostics, run **Run image-atlas sweep**. It uses frozen offscreen inputs and leaves
+   the live settings and canvases in place. Cancellation finishes the current row and retains
+   completed rows, including failures.
+5. **Export JSON** locally. Schema **8** records raw atlas bytes/UVs, sampling settings, profiles,
+   CPU color checks, color preservation, source audits, controls, first failures and environment.
+   Raw measurements remain outside the repository.
+6. Run the point-styling browser suite with `LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1` as described
+   below. Open the printed inline session URL in Codex. The atlas tests include production-packer
+   equality, CPU sampling/masks, both GPU backends, hidden-point behavior, restoration of
+   shape-only images after atlas draws and UI sweep cancellation/state preservation.
+
+This covers raw square images on one native adapter. DOM image decoding/color conversion,
+non-square packing/scaling, mipmaps, images combined with rings/greyout/transitions or strokes,
+pointer-hover scheduling and GPU cost need separate validation. The production engine is
+unchanged, and this readback-heavy diagnostic makes no performance claim.
+
 
 ## Reproduce
 
@@ -649,7 +816,7 @@ texel/overlap picking with these controls and the same acceptance gates.
    preserves the selected settings and live canvas dimensions. CPU mask evaluation yields between
    small row chunks to service input. **Cancel sweep** finishes the current configuration and
    retains completed rows. Export JSON for environment, frozen point inputs/settings, rule names, first invisible
-   samples, frame verdicts and isolated-source audits. Schema **7** includes all four variants, their policy/version and color-preservation counts;
+   samples, frame verdicts and isolated-source audits. Schema **8** includes all four variants, their policy/version and color-preservation counts;
    raw measurements remain local, outside the repository.
 8. Select **Source-alpha quantized candidate**, then rerun the same fixtures and sweep. Compare its
    verdict with the explicit renderer in **Retained controls**. The source-alpha policy must pass all
@@ -676,7 +843,7 @@ the boundary pixels at unchanged full-frame gates. JSON exports name the rendere
 candidate geometry/visibility, original production and compatibility verdicts; raw measurements remain local.
 
 No runtime performance, picking-latency or broad device claim follows from the readback-heavy
-diagnostic. Images/atlas alpha, rings/highlight priority, greyout, automatic perceptual stroke
+diagnostic. Atlas isolation, image updates/decoding, rings/highlight priority, greyout, automatic perceptual stroke
 shading, transitions, clipping of offscreen centers, occlusion optimization and host depth/picking
 integration require additional fixtures before full renderer acceptance.
 

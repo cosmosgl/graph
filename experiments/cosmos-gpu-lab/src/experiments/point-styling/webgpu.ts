@@ -6,13 +6,20 @@ import { dimensions, floatPixels, pixels, target, type Backend, type Snapshot } 
 import { HEIGHT, resolvePoint, WIDTH } from './data'
 import source from './points.wgsl?raw'
 import { SOURCE_ALPHA_WGSL } from './source-alpha'
+import { atlasTexture, ATLAS_COORDS, IMAGE_COUNT } from './atlas'
 
 export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<Backend> {
   let failure: string | undefined
   const device = await createDevice('webgpu', canvas, false, error => { failure ??= error.message; return true })
   const scope = resourceScope()
   try {
-    const shaderLayout = { attributes: [], bindings: bindingLayout([['points', 'read-only-storage'], ['params', 'uniform']]) }
+    const shaderLayout = {
+      attributes: [],
+      bindings: [...bindingLayout([['points', 'read-only-storage'], ['params', 'uniform']]),
+        { name: 'atlas', type: 'texture' as const, location: 2, group: 0, sampleType: 'float' as const, viewDimension: '2d' as const },
+        { name: 'atlasSampler', type: 'sampler' as const, location: 3, group: 0, samplerType: 'filtering' as const }],
+    }
+    const atlases = { nearest: scope.own(atlasTexture(device, 'nearest')), linear: scope.own(atlasTexture(device, 'linear')) }
     const vertexArray = scope.own(device.createVertexArray({ shaderLayout, bufferLayout: [] }))
     const make = (format: TextureFormatColor, picking: boolean, display = false): RenderKernel => scope.own(new RenderKernel(device, {
       vertexSource: `${source}\n${SOURCE_ALPHA_WGSL}`,
@@ -41,10 +48,13 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<B
           if (display) { canvas.width = width; canvas.height = height; device.canvasContext!.resize({ width, height }) }
           const color = frame.own(target(device, width, height)); const ids = frame.own(target(device, width, height))
           const order = points.map((_, id) => id); if (settings.reverse) order.reverse()
-          const records = new Float32Array(Math.max(16, points.length * 16))
+          const records = new Float32Array(Math.max(24, points.length * 24))
           order.forEach((id, index) => {
             const p = resolvePoint(points[id], settings)
-            records.set([p.x, p.y, p.size, p.shape, ...p.color, ...p.strokeColor, p.stroke, Number(!!p.absent), id, 0], index * 16)
+            const image = p.image ?? -1; const hasImage = image >= 0 && image < IMAGE_COUNT
+            records.set([p.x, p.y, p.size, p.shape, ...p.color, ...p.strokeColor, p.stroke, Number(!!p.absent), id, 0,
+              image, p.imageSize ?? p.size, Number(hasImage), 0,
+              ...(hasImage ? ATLAS_COORDS.subarray(image * 4, image * 4 + 4) : [-1, -1, -1, -1])], index * 24)
           })
           const buffer = frame.own(upload(device, records))
           const params = (mode: number): ReturnType<typeof upload> => frame.own(upload(device, new Float32Array([
@@ -55,7 +65,14 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<B
           const draw = (kernel: RenderKernel, uniforms: ReturnType<typeof upload>, framebuffer?: ReturnType<typeof target>['framebuffer']): void => {
             const pass = device.beginRenderPass({ framebuffer, clearColor: framebuffer ? [0, 0, 0, 0] : [0.14, 0.16, 0.185, 1], clearDepth: false })
             try {
-              kernel.draw(pass, { vertexArray, vertexCount: 6, instanceCount: points.length, bindings: { points: buffer, params: uniforms } })
+              const atlas = atlases[settings.imageFilter ?? 'nearest']
+              kernel.draw(pass, {
+                vertexArray,
+                vertexCount: 6,
+                instanceCount: points.length,
+                // luma pairs atlas with atlasSampler from the texture's sampler.
+                bindings: { points: buffer, params: uniforms, atlas },
+              })
             } finally { pass.end() }
           }
           draw(colorKernel, visibleParams, color.framebuffer); draw(pickKernel, pickingParams, ids.framebuffer)

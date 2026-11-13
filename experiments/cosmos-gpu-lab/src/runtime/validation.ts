@@ -15,11 +15,12 @@ export const validationContracts: Record<string, ValidationContract> = {
       '(visible rule), plus quantized and pick-only candidates with the declared source-alpha rule; offscreen RGBA8 color/ID readback.',
     acceptance: 'Exact IDs and scalar masks at every pixel; at most two RGBA8 channel levels for color; no picked pixels with zero rendered alpha.',
     coverage: 'Frozen eight-shape, overlap, edge-case, fractional and tiny-alpha fixtures, zoom, pixel ratio, strokes, defaults and render order; ' +
-      'production, explicit-coordinate and isolated-source verdicts are named separately.',
-    limits: 'Host picking only. Pointer tolerance, images, rings, automatic shades, greyout, transitions, occlusion and latency remain separate. ' +
+      'raw atlas images with nearest/linear sampling and CPU colors; production, explicit-coordinate and isolated-source verdicts are named separately.',
+    limits: 'Host picking only. Pointer tolerance, image decoding/updates, rings, automatic shades, ' +
+      'greyout, transitions, occlusion and latency remain separate. ' +
       'Production zero-opacity visibility and fractional compatibility still fail on M3. Candidate opacity 0/0.35/1 is bounded; ' +
-      'Pick-only source-byte eligibility preserves colors in the 32-case M3 sweep and faint stack. ' +
-      'Original raster/picking and pre-blend-quantization failures stay visible; atlas, cost and broader devices remain open.',
+      'Pick-only source-byte eligibility preserves colors in the 32-case M3 sweep, faint stack and 40 atlas cases. ' +
+      'Original raster/picking and pre-blend-quantization failures stay visible; atlas tile isolation, cost and broader devices remain open.',
   },
   'center-mass': {
     question: 'Do blend accumulation and compute reduction calculate the same center accurately?',

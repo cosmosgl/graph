@@ -12,6 +12,7 @@ import { resourceScope } from '../../gpu/resource-scope'
 import { dimensions, floatPixels, pixels, target, type Backend, type Snapshot } from './backend'
 import { HEIGHT, WIDTH } from './data'
 import { SOURCE_ALPHA_GLSL } from './source-alpha'
+import { atlasTexture, ATLAS_COORDS, IMAGE_COUNT } from './atlas'
 
 // Declaration order matches the production std140 blocks verbatim.
 const vertexTypes = {
@@ -93,15 +94,16 @@ function coordinateSources (quads: boolean, alphaPolicy: 'unchanged' | 'quantize
       const alpha = 'finalPointAlpha *= pointOpacity;'
       if (!fragment.includes(alpha)) throw new Error('Production source-alpha location changed')
       fragment = fragment.replace('void main()', `${SOURCE_ALPHA_GLSL}\nvoid main()`)
-        .replace(picking, `float candidateSourceAlpha = quantizeSourceAlpha(finalShapeColor.a * pointOpacity);
+        .replace(picking, `float candidateSourceAlpha = quantizeSourceAlpha(max(finalShapeColor.a, finalImageColor.a) * pointOpacity);
           ${picking}\nif (candidateSourceAlpha <= 0.0) discard;`)
         .replace(alpha, 'finalPointAlpha = candidateSourceAlpha;')
     } else if (alphaPolicy === 'eligibility') {
       // Only the ID pass uses the source byte. Leave color alpha and blending
       // exactly as in the explicit control, including faint-source accumulation.
       fragment = fragment.replace('void main()', `${SOURCE_ALPHA_GLSL}\nvoid main()`)
-        .replace(picking, `${picking}\nif (quantizeSourceAlpha(finalShapeColor.a * pointOpacity) <= 0.0) discard;`)
+        .replace(picking, `${picking}\nif (quantizeSourceAlpha(max(finalShapeColor.a, finalImageColor.a) * pointOpacity) <= 0.0) discard;`)
     }
+    if (alphaPolicy !== 'unchanged') fragment = fragment.replace('|| imageCovered;', '|| (imageCovered && finalImageColor.a > 0.0);')
   }
   return { vertex, fragment }
 }
@@ -117,6 +119,7 @@ function instrumentCoverage (fragment: string): string {
 export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Backend> {
   const device = await createDevice('webgl', canvas, false); const scope = resourceScope()
   try {
+    const atlases = { nearest: scope.own(atlasTexture(device, 'nearest')), linear: scope.own(atlasTexture(device, 'linear')) }
     const uniforms = scope.own(new UniformStore(device, {
       drawVertexUniforms: { uniformTypes: vertexTypes }, drawFragmentUniforms: { uniformTypes: fragmentTypes },
     }))
@@ -170,23 +173,23 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
           const size = Math.max(1, Math.ceil(Math.sqrt(points.length))); const positions = new Float32Array(size * size * 4)
           const absent = positions.slice()
           points.forEach((p, i) => { positions.set([p.x - WIDTH / 2, HEIGHT / 2 - p.y, 0, 0], i * 4); absent[i * 4 + 1] = p.absent ? 1 : 0 })
-          const texture = (data: Float32Array): Texture => {
+          const texture = (data: Float32Array, width = size): Texture => {
             const result = frame.own(device.createTexture({
-              width: size,
-              height: size,
+              width,
+              height: width,
               format: 'rgba32float',
               usage: Texture.SAMPLE | Texture.COPY_DST,
               sampler: { minFilter: 'nearest', magFilter: 'nearest' },
             }))
-            result.copyImageData({ data, bytesPerRow: size * 16 }); return result
+            result.copyImageData({ data, bytesPerRow: width * 16 }); return result
           }
           const zero = texture(new Float32Array(positions.length))
           const bindings = {
             positionsTexture: texture(positions),
             exitTexture: texture(absent),
             pointStatus: zero,
-            imageAtlasCoords: zero,
-            imageAtlasTexture: zero,
+            imageAtlasCoords: texture(ATLAS_COORDS, 2),
+            imageAtlasTexture: atlases[settings.imageFilter ?? 'nearest'],
           }
           const order = points.map((_, i) => i); if (settings.reverse) order.reverse()
           const records: Record<string, Buffer> = {}
@@ -198,8 +201,8 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
               case 'sourceSize': case 'targetSize': return [p.size]
               case 'sourceColor': case 'targetColor': return p.color
               case 'shape': return [p.shape]
-              case 'imageIndex': return [-1]
-              case 'imageSize': return [0]
+              case 'imageIndex': return [p.image ?? -1]
+              case 'imageSize': return [p.imageSize ?? p.size]
               case 'renderRank': return [rank]
               case 'sourceStrokeWidth': case 'targetStrokeWidth': return [p.stroke]
               default: return p.strokeColor
@@ -247,9 +250,9 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
               isDarkenGreyout: 1,
               skipHighlighted: 0,
               skipGreyed: 0,
-              hasImages: 0,
-              imageCount: 0,
-              imageAtlasCoordsTextureSize: size,
+              hasImages: Number(points.some(p => p.image !== undefined && p.image >= 0 && p.image < IMAGE_COUNT)),
+              imageCount: IMAGE_COUNT,
+              imageAtlasCoordsTextureSize: 2,
               transitionProgress: 1,
               animateColors: 0,
               animateSizes: 0,

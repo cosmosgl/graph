@@ -124,16 +124,16 @@ export const research: Record<string, ResearchSummary> = {
     method: 'validation-contract',
     comparison: 'Same styled points → production WebGL / WebGPU color and ID images → full-image and scalar-mask checks',
     question: 'Does point-ID picking select the shapes that Cosmos actually renders?',
-    conclusion: 'Source-byte picking passes 32 visibility cases with unchanged colors; faint-stack production color difference drops from 59/255 to 0/255.',
-    scope: 'Apple M3: exact IDs/CPU masks, no invisible picks and byte-identical colors to the unquantized controls. ' +
-      'Also 24 styling cases, 767 alpha samples per backend and a 64-point stack pass. Legacy picking/coverage compatibility remains separate.',
+    conclusion: 'Source-byte picking passes 32 visibility and 40 atlas cases with unchanged colors; transparent image holes no longer steal IDs.',
+    scope: 'Apple M3: exact candidate IDs/color bytes, no invisible picks; atlas CPU colors differ by at most 1/255. ' +
+      'Also 24 styling cases, 767 alpha samples per backend and a 64-point stack pass. Legacy compatibility and atlas tile isolation remain open.',
     variant: 'Production/legacy, explicit/visible, quantized/source-alpha and pick-only/source-alpha; luma 10.0.0-alpha.4; Apple M3',
     reviewed: '2026-11-13',
     milestone: 'rendering',
     evidence: 'method',
-    next: 'Validate image-atlas alpha, transparent texels and overlap order; measure ID-pass cost and expand native coverage.',
-    reproduce: 'Select Source-byte picking candidate, run the 32-row sweep and replay Faint overlap stack · 64 points. ' +
-      'Original color output must show zero changed pixels. The production control retains its original picking failures. Export local JSON.',
+    next: 'Compare atlas tile-isolation policies; validate rings/greyout, measure ID-pass cost and expand native coverage.',
+    reproduce: 'Select Source-byte picking candidate and an Atlas fixture; run the 40-row image-atlas sweep. ' +
+      'CPU colors must stay within 2/255 and Original color output must remain unchanged. Compare the retained production failures; export local JSON.',
     investigations: [{
       page: 'method',
       state: 'Current evidence',
