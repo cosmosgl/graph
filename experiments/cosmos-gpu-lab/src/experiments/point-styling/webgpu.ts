@@ -33,11 +33,11 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<B
     const displayKernel = make(device.canvasContext!.getCurrentFramebuffer().colorAttachments[0].texture.format as TextureFormatColor, false, true)
     return {
       info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
-      async render (points, settings, diagnose = false, variant = 'production'): Promise<Snapshot> {
+      async render (points, settings, diagnose = false, variant = 'production', display = true): Promise<Snapshot> {
         const frame = resourceScope()
         try {
-          const [width, height] = dimensions(settings); canvas.width = width; canvas.height = height
-          device.canvasContext!.resize({ width, height })
+          const [width, height] = dimensions(settings)
+          if (display) { canvas.width = width; canvas.height = height; device.canvasContext!.resize({ width, height }) }
           const color = frame.own(target(device, width, height)); const ids = frame.own(target(device, width, height))
           const order = points.map((_, id) => id); if (settings.reverse) order.reverse()
           const records = new Float32Array(Math.max(16, points.length * 16))
@@ -57,7 +57,8 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<B
               kernel.draw(pass, { vertexArray, vertexCount: 6, instanceCount: points.length, bindings: { points: buffer, params: uniforms } })
             } finally { pass.end() }
           }
-          draw(colorKernel, visibleParams, color.framebuffer); draw(pickKernel, pickingParams, ids.framebuffer); draw(displayKernel, visibleParams)
+          draw(colorKernel, visibleParams, color.framebuffer); draw(pickKernel, pickingParams, ids.framebuffer)
+          if (display) draw(displayKernel, visibleParams)
           device.submit()
           const result: Snapshot = {
             pickingRule: variant === 'explicit' ? 'visible' : 'legacy',

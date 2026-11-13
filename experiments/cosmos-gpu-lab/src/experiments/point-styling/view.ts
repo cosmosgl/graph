@@ -9,6 +9,10 @@ import { createStylingWebGL } from './webgl'
 import { createStylingWebGPU } from './webgpu'
 import { investigateFractional, renderFractionalInvestigation } from './fractional'
 import { renderExplicitControl } from './explicit'
+import {
+  contributionPasses, inspectForeground, renderContributionAudit, renderTinyAlphaRows, runTinyAlphaSweep, TINY_OPACITIES,
+  type TinyAlphaRow,
+} from './tiny-alpha'
 
 export async function createStylingView (host: HTMLElement): Promise<ExperimentInstance> {
   let runError: string | undefined
@@ -21,12 +25,14 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         <option value="explicit">Explicit-coordinate candidate</option></select></label>
       <label>Fixture <select data-fixture><option value="shapes">Eight shapes · fill and stroke</option>
         <option value="overlap">Overlap and draw order</option><option value="edge-cases">Defaults and edge cases</option>
-        <option value="fractional">Fractional sizes and positions</option></select></label>
+        <option value="fractional">Fractional sizes and positions</option><option value="tiny-alpha">Tiny-alpha grid</option>
+        <option value="tiny-overlap">Tiny-alpha overlap</option></select></label>
       <label>Zoom <select data-zoom><option>0.5</option><option selected>1</option><option>2</option></select></label>
       <label>Pixel ratio <select data-ratio><option selected>1</option><option>2</option></select></label>
       <label>Size on zoom <select data-scale><option value="yes">Scale with camera</option>
         <option value="no">Cosmos constant-size rule</option></select></label>
-      <label>Global opacity <select data-opacity><option selected>1</option><option>0.35</option><option>0</option></select></label>
+      <label>Global opacity <select data-opacity><option selected>1</option><option>0.35</option><option>0</option>
+        ${TINY_OPACITIES.filter(x => x > 0 && x < 0.35).map(x => `<option value="${x}">${x.toPrecision(5)}</option>`).join('')}</select></label>
       <label>Draw order <select data-order><option value="normal">Input order</option><option value="reverse">Reversed</option></select></label>
       <div class="controls"><button data-export disabled
       data-run-action="export">Export JSON</button></div>
@@ -42,6 +48,10 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     </article>`).join('')}</section>
     <div class="many-body-results"
       data-run-part="results" data-results></div>
+    <section data-run-part="diagnostics"><h3>Tiny-alpha sweep</h3>
+      <p>Check tiny positive opacity, subpixel ink and faint foreground picks. Uses offscreen draws; the live canvases and settings stay in place.</p>
+      <div class="controls"><button data-tiny-sweep disabled>Run tiny-alpha sweep</button><button data-tiny-cancel disabled>Cancel sweep</button></div>
+      <p data-tiny-progress>No sweep run. All rows, including failures, remain visible and exportable.</p><div data-tiny-results></div></section>
     <p class="demo-note"
       data-run-part="explanation">Both offscreen passes are read back for this diagnostic. Hover uses the captured ID image;
       this does not measure production picking latency. Rings, greyout, images and transitions remain outside this first styling comparison.
@@ -51,14 +61,19 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   const backends: Partial<Record<'webgl' | 'webgpu', Backend>> = {}
   let snapshots: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
   const errors: Partial<Record<'webgl' | 'webgpu', string>> = {}
-  let destroyed = false; let busy = false
+  let destroyed = false; let busy = false; let sweepRunning = false; let cancelSweep = false
   let latestComparison: boolean | undefined
   let latestCompatibility: boolean | undefined
+  let latestContribution: boolean | undefined
+  let tinyStudy: {
+    startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[]; rows: TinyAlphaRow[]; error?: string;
+  } | undefined
   let report: object | undefined
   const render = async (): Promise<void> => {
-    if (busy || destroyed) return
-    busy = true; snapshots = {}; report = undefined; latestComparison = undefined; latestCompatibility = undefined
+    if (busy || sweepRunning || destroyed) return
+    busy = true; snapshots = {}; report = undefined; latestComparison = undefined; latestCompatibility = undefined; latestContribution = undefined
     runError = undefined; exportButton.disabled = true
+    el<HTMLButtonElement>('[data-tiny-sweep]').disabled = true
     host.querySelectorAll<HTMLElement>('[data-cursor]').forEach(cursor => { cursor.hidden = true })
     host.querySelectorAll<HTMLElement>('[data-pick]').forEach(label => { label.textContent = 'Move over a shape to inspect its ID' })
     host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
@@ -81,7 +96,11 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         ? 'Top: defaults · zero size · transparent · None · absent · size cap. Bottom: subpixel · capped stroke · translucent.'
         : name === 'fractional'
           ? 'Circle diameters from 0.25 to 42.5 CSS px at fractional positions. This is a strict parity diagnostic.'
-          : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
+          : name === 'tiny-alpha'
+            ? 'Columns: 1/64, 1/8, 1/2, 2 and 42 CSS px. Rows: fill alpha 1, 1/255 and 1/65536. Tiny source ink may quantize to zero.'
+            : name === 'tiny-overlap'
+              ? 'Opaque blue background point and faint warm foreground point (fill alpha 1/65536). The foreground is also checked in isolation.'
+              : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
     try {
       for (const name of ['webgl', 'webgpu'] as const) {
         if (!backends[name]) continue
@@ -102,6 +121,11 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         }
       }
       if (destroyed) return
+      const contribution = name === 'tiny-overlap' && snapshots.webgl && snapshots.webgpu
+        ? await inspectForeground({ webgl: backends.webgl!, webgpu: backends.webgpu! },
+          { webgl: snapshots.webgl, webgpu: snapshots.webgpu }, points, settings, variant)
+        : undefined
+      if (destroyed) return
       const comparison = snapshots.webgl && snapshots.webgpu ? compareSnapshots(snapshots.webgl, snapshots.webgpu, points, settings) : undefined
       const fractional = diagnose && snapshots.webgl && snapshots.webgpu
         ? investigateFractional(snapshots.webgl, snapshots.webgpu, points, settings)
@@ -113,8 +137,9 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       const compatibility = original.webgl && snapshots.webgpu ? compareSnapshots(original.webgl, snapshots.webgpu, points, settings) : undefined
       latestComparison = comparison?.valid
       latestCompatibility = compatibility?.valid
+      latestContribution = contribution ? contributionPasses(contribution) : undefined
       report = {
-        schemaVersion: 4,
+        schemaVersion: 5,
         experiment: 'point-styling',
         recordedAt: new Date().toISOString(),
         browser: navigator.userAgent,
@@ -131,6 +156,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         analyticControl,
         productionComparison,
         compatibility,
+        contribution,
       }
       const output = el('[data-results]')
       if (comparison) {
@@ -148,6 +174,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           <tr><th>Picked pixels with zero rendered alpha · WebGL / WebGPU</th>
             <td>${comparison.webglInvisiblePicks} / ${comparison.webgpuInvisiblePicks}</td></tr>
           </tbody></table>`
+        if (contribution) renderContributionAudit(output, contribution)
         if (original.webgl && original.webgpu) {
           renderExplicitControl(output, { webgl: original.webgl, webgpu: original.webgpu },
             { webgl: snapshots.webgl!, webgpu: snapshots.webgpu! }, points, settings,
@@ -163,11 +190,16 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           : variant === 'production' && settings.opacity === 0
             ? 'Failed visibility control: production host picking still selects points at global opacity zero. Both paths retain this discrepancy.'
             : 'Differences found. Inspect the counts and export the frozen inputs; this configuration is not accepted.'
+        if (latestContribution === false) {
+          status.textContent = 'Failed contribution check: the selected foreground paints zero alpha by itself. ' +
+          'Background paint does not make it visible.'
+        }
       } else {
         output.textContent = 'Incomplete comparison. Both backends must render before a verdict is available.'
         status.textContent = 'Incomplete: see backend errors.'
       }
       exportButton.disabled = false
+      el<HTMLButtonElement>('[data-tiny-sweep]').disabled = !backends.webgl || !backends.webgpu
     } finally {
       busy = false
       if (destroyed) Object.values(backends).forEach(backend => backend.destroy())
@@ -193,14 +225,69 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     render().catch(error => { status.textContent = String(error) })
   }))
   exportButton.addEventListener('click', () => {
-    if (!report || busy) return
-    const json = JSON.stringify(report, (_key, value) => typeof value === 'number' && !Number.isFinite(value) ? String(value) : value, 2)
+    if (!report || busy || sweepRunning) return
+    const json = JSON.stringify({
+      ...report,
+      tinyAlphaSweep: tinyStudy && {
+        ...tinyStudy,
+        inputs: {
+          defaults: DEFAULTS,
+          opacities: TINY_OPACITIES,
+          ratios: [1, 2],
+          fixtures: [{ name: 'tiny-alpha', points: fixture('tiny-alpha') }, { name: 'tiny-overlap', points: fixture('tiny-overlap') }],
+        },
+      },
+    },
+    (_key, value) => typeof value === 'number' && !Number.isFinite(value) ? String(value) : value, 2)
     const url = URL.createObjectURL(new Blob([json], { type: 'application/json' })); const link = document.createElement('a')
     link.href = url; link.download = 'cosmos-point-styling.json'; link.click(); URL.revokeObjectURL(url)
   })
+  el('[data-tiny-cancel]').addEventListener('click', () => { cancelSweep = true })
+  el('[data-tiny-sweep]').addEventListener('click', () => {
+    if (busy || sweepRunning || destroyed || !backends.webgl || !backends.webgpu) return
+    const runSweep = async (): Promise<void> => {
+      sweepRunning = true; cancelSweep = false
+      const study = {
+        startedAt: new Date().toISOString(),
+        status: 'running',
+        browser: navigator.userAgent,
+        devices: Object.values(backends).map(b => b.info),
+        rows: [] as TinyAlphaRow[],
+        finishedAt: undefined as string | undefined,
+        error: undefined as string | undefined,
+      }
+      tinyStudy = study; exportButton.disabled = true
+      el('[data-tiny-results]').replaceChildren()
+      host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
+      el<HTMLButtonElement>('[data-tiny-sweep]').disabled = true; el<HTMLButtonElement>('[data-tiny-cancel]').disabled = false
+      el('[data-tiny-progress]').textContent = 'Starting 32 paired rows…'
+      try {
+        await runTinyAlphaSweep({ webgl: backends.webgl!, webgpu: backends.webgpu! }, row => {
+          study.rows.push(row)
+          if (destroyed) return
+          renderTinyAlphaRows(el('[data-tiny-results]'), study.rows)
+          el('[data-tiny-progress]').textContent = `${study.rows.length} / 32 rows · ${row.fixture} · ratio ${row.ratio} · ` +
+            `opacity ${row.opacity.toPrecision(5)}`
+        }, () => cancelSweep || destroyed)
+        study.status = cancelSweep || destroyed ? 'cancelled' : 'complete'
+      } catch (error) { study.status = 'failed'; study.error = String(error); runError = study.error } finally {
+        study.finishedAt = new Date().toISOString(); sweepRunning = false
+        if (destroyed) Object.values(backends).forEach(backend => backend.destroy())
+        else {
+          host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
+          exportButton.disabled = !report; el<HTMLButtonElement>('[data-tiny-sweep]').disabled = false
+          el<HTMLButtonElement>('[data-tiny-cancel]').disabled = true
+          el('[data-tiny-progress]').textContent = `${study.status} · ${study.rows.length} / 32 rows · ` +
+            `${study.rows.filter(row => !row.candidateAccepted).length} rejected candidate rows. Export JSON retains every count and first failure.`
+        }
+      }
+    }
+    runSweep().catch(error => { runError = String(error) })
+  })
   mountRunLayout(host, () => summarizeRun(
-    busy ? 'Running' : report ? 'Complete' : 'Preparing',
-    latestCompatibility === undefined ? [latestComparison] : [latestComparison, latestCompatibility],
+    busy || sweepRunning ? 'Running' : report ? 'Complete' : 'Preparing',
+    [latestComparison, ...(latestContribution === undefined ? [] : [latestContribution]),
+      ...(latestCompatibility === undefined ? [] : [latestCompatibility])],
     'Other fixtures, pointer-hover tolerance and production picking latency.',
     Object.keys(errors),
     runError,
@@ -216,5 +303,10 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     }
   }
   try { await render() } catch (error) { runError = String(error); Object.values(backends).forEach(backend => backend.destroy()); throw error }
-  return { destroy (): void { disposeRunLayout(host); destroyed = true; if (!busy) Object.values(backends).forEach(backend => backend.destroy()) } }
+  return {
+    destroy (): void {
+      disposeRunLayout(host); destroyed = true; cancelSweep = true
+      if (!busy && !sweepRunning) Object.values(backends).forEach(backend => backend.destroy())
+    },
+  }
 }

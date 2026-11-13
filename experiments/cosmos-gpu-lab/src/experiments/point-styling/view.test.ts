@@ -47,3 +47,25 @@ it('labels candidate geometry separately from production compatibility and repla
   expect(host.querySelector('[role="status"]')!.textContent).toContain('Failed visibility control')
   expect(host.querySelector('[data-picking-rule]')!.textContent).toContain('legacy')
 })
+
+it('keeps invisible foreground rejection visible and cancels a sweep without changing the live canvas', async () => {
+  host = document.createElement('div'); document.body.append(host)
+  instance = await createStylingView(host)
+  const canvas = host.querySelector('canvas')!
+  const select = async (selector: string, value: string): Promise<void> => {
+    const element = host!.querySelector<HTMLSelectElement>(selector)!
+    element.value = value; element.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(element.disabled).toBe(false), { timeout: 20000 })
+  }
+  await select('[data-renderer]', 'explicit'); await select('[data-fixture]', 'tiny-overlap')
+  expect(host.querySelector('[role="status"]')!.textContent).toContain('Failed contribution check')
+  expect(host.querySelector('[data-contribution-audit]')!.textContent).toContain('composed alpha 255')
+  expect(host.querySelector('[data-run-summary-value="failed"]')!.textContent).toContain('failed')
+  host.querySelector<HTMLButtonElement>('[data-tiny-sweep]')!.click()
+  host.querySelector<HTMLButtonElement>('[data-tiny-cancel]')!.click()
+  await vi.waitFor(() => expect(host!.querySelector('[data-tiny-progress]')!.textContent).toContain('cancelled'), { timeout: 20000 })
+  expect(host.querySelectorAll('[data-tiny-alpha-table] tbody tr')).toHaveLength(1)
+  expect(host.querySelector('canvas')).toBe(canvas)
+  expect((canvas as HTMLCanvasElement).width).toBe(512)
+  expect(host.querySelector<HTMLSelectElement>('[data-fixture]')!.value).toBe('tiny-overlap')
+})

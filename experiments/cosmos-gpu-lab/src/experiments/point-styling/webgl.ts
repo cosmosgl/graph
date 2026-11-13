@@ -144,11 +144,11 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
     let explicitColor: Model | undefined; let explicitPick: Model | undefined; let explicitProbe: Model | undefined
     return {
       info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
-      async render (points, settings, diagnose = false, variant = 'production'): Promise<Snapshot> {
+      async render (points, settings, diagnose = false, variant = 'production', display = true): Promise<Snapshot> {
         const frame = resourceScope()
         try {
-          const [width, height] = dimensions(settings); canvas.width = width; canvas.height = height
-          device.canvasContext!.resize({ width, height })
+          const [width, height] = dimensions(settings)
+          if (display) { canvas.width = width; canvas.height = height; device.canvasContext!.resize({ width, height }) }
           const color = frame.own(target(device, width, height)); const ids = frame.own(target(device, width, height))
           const size = Math.max(1, Math.ceil(Math.sqrt(points.length))); const positions = new Float32Array(size * size * 4)
           const absent = positions.slice()
@@ -259,7 +259,9 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
           }
           const colorModel = variant === 'explicit' ? explicitColor! : visible
           const pickModel = variant === 'explicit' ? explicitPick! : picking
-          draw(colorModel, 0, color.framebuffer); draw(pickModel, 3, ids.framebuffer); draw(colorModel, 0); device.submit()
+          draw(colorModel, 0, color.framebuffer); draw(pickModel, 3, ids.framebuffer)
+          if (display) draw(colorModel, 0)
+          device.submit()
           const result: Snapshot = {
             pickingRule: variant === 'explicit' ? 'visible' : 'legacy',
             width,
