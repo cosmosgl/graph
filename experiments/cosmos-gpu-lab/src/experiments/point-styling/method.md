@@ -2,7 +2,7 @@
 source: Recorded findings
 recorded: 2026-11-13
 device: Apple M3; installed Chrome 157 and inline Chromium 157
-scope: Bounded styling and zero-opacity controls, plus a 32-case tiny-alpha sweep exposing invisible source picks; unchanged CPU rules and tolerances, with production failures preserved.
+scope: Three declared policies; quantized visibility passes 32 tiny-alpha cases and 24 styling controls on M3, with 767 quantizer samples per backend. Dense overlap fails production colors by 59/255; acceptance gates remain unchanged.
 ---
 
 ## Question
@@ -55,7 +55,7 @@ fill alpha does not change the contour. At overlap, the last covered point in re
 including translucent points. IDs use the production 24-bit RGB encoding, with black reserved for
 background. Pick targets are linear RGBA8, unblended, without multisampling or color-space conversion.
 
-The candidate additionally requires **positive global opacity**. Its CPU rule is named `visible`;
+The earlier explicit-coordinate candidate additionally requires **positive global opacity**. Its CPU rule is named `visible`;
 at opacity zero it returns background, while any positive opacity keeps the geometric contour.
 Production snapshots retain the `legacy` rule, which ignores global opacity. Resolved fill alpha
 zero, absence, `None` and nonpositive size remain unpickable under both rules. At overlap, an
@@ -375,13 +375,151 @@ Higher precision also changes the storage experiment. In particular, blending wi
 requires the optional [WebGPU `float32-blendable` feature](https://www.w3.org/TR/webgpu/#float32-blendable).
 Neither that feature nor a higher-precision target is required by this RGBA8 study.
 
-**Next:** prototype a shared effective source alpha calculation, including shape coverage,
+**Follow-up:** prototype a shared effective source alpha calculation, including shape coverage,
 subpixel area attenuation, resolved fill alpha and global opacity. Intersect the existing
 geometric half-coverage contour with an explicitly declared source-byte eligibility policy.
 If quantizing explicitly, keep color and picking coherent rather than guessing framebuffer
 rounding only in the ID pass. Preserve the current candidate and production controls; compare
-the new policy with the unchanged exact-ID and color budgets. This is a proposed experiment,
-not a validated fix. Image-atlas alpha follows once this source-visibility policy is established.
+the new policy with the unchanged exact-ID and color budgets. The follow-up below implements and tests this proposed policy as a separate candidate. Image-atlas alpha follows once this source-visibility policy is established.
+
+## Shared source-alpha quantization candidate
+
+Measured **13 November 2026**, **Codex inline Chromium / Apple M3**, luma **10.0.0-alpha.4**.
+This is a third selectable renderer, **Source-alpha quantized candidate**. Production GLSL and
+the earlier explicit candidate remain controls; their failures are retained. Resource creation,
+instanced rendering, submission and readback continue through public luma APIs.
+
+### One alpha value for color and picking
+
+The candidate calculates effective source alpha after shape coverage, subpixel ink attenuation,
+resolved fill alpha and global opacity, with the same multiplication grouping in both shaders:
+
+```text
+a = coverage × (min(1, diameter² / core²) × fillAlpha) × globalOpacity
+q = floor(0.5 + 255 × clamp(a, 0, 1))
+color alpha = q / 255
+pick eligible = original half-coverage geometry AND q > 0
+```
+
+The value is computed once per fragment and used by both modes. A zero-byte foreground cannot
+overwrite a visible point's ID. The geometric half-coverage contour, antialiasing ramp, requested
+diameter, RGB/stroke calculation, blend state, draw order and RGBA8 target are unchanged. Faint
+fringes outside the geometric contour can still paint without being pickable.
+
+| Renderer | CPU rule | Eligibility |
+| --- | --- | --- |
+| Production control | `legacy` | Original shape/fill-alpha rule, including its global-opacity gap |
+| Explicit-coordinate candidate | `visible` | Closed geometry and positive global opacity; retained unchanged |
+| Source-alpha quantized candidate | `source-alpha` | Same geometry intersected with a nonzero source byte |
+
+The new CPU rule is explicit, not a tolerance change or a replacement of the old controls.
+It independently evaluates scalar coverage from inputs and rounds source multiplication and
+uploaded alpha/opacity to float32. It never reads a GPU mask to determine expected IDs. Every
+frame still requires exact cross-backend IDs, exact IDs against its declared CPU rule, colors
+within **2/255**, and no invisible picks. Production compatibility remains a separate comparison
+and can fail even when the candidate passes.
+
+This intentionally changes candidate alpha before blending. It is a proposed RGBA8 rendering
+policy, not proof that legacy picking already obeys it or that the production library has migrated.
+
+### Why the shaders use integer packing
+
+The rounding policy follows the mathematical [WGSL `pack4x8unorm` definition](https://www.w3.org/TR/WGSL/#pack4x8unorm).
+Writing its formula naively in float32 introduces an extra rounding step. For example,
+`a = 0.0019607841968536377` is the float32 immediately below the first byte threshold:
+`255 × a = 0.4999999701976776`. Adding `0.5` in float32 rounds to **1**, although the required
+byte is **0**. This would wrongly make the lower neighbor pickable.
+
+The two candidate shaders instead extract the float32 significand/exponent and multiply the
+significand by **255** in 32-bit unsigned arithmetic. The product fits: its maximum is
+**4,278,189,825**, below 2³². Reading the quotient and rounding bit separately avoids an overflowing
+rounding-bias addition. GLSL uses explicit `highp uint`; no optional 64-bit arithmetic is required.
+The independent CPU quantizer uses JavaScript double arithmetic on the float32 source value.
+
+This also avoids relying on GLSL `round` tie direction, which is implementation-dependent in
+the [GLSL ES 3.00 specification, §8.3](https://registry.khronos.org/OpenGL/specs/es/3.0/GLSL_ES_Specification_3.00.pdf).
+It defines the application's source-byte policy; it does not assert a universal framebuffer
+rounding rule for WebGL or silently change the target to a floating-point format.
+
+### Native validation
+
+The quantizer test renders **767 isolated samples per backend**: every one of the **255** byte
+boundaries, the nearest float32 and both neighboring float32 values, plus alpha **0 and 1**.
+Readback alpha bytes match the independent CPU quantizer exactly. IDs select the sample exactly
+when its byte is nonzero. The lower neighbor of the first threshold stays unpickable; its nearest
+float32 and upper neighbor remain pickable. This checks that the fix does not simply discard all
+faint points.
+
+The bounded styling matrix adds **24 configurations**: shapes, overlap, defaults/edge cases and
+fractional geometry, at ratios **1 and 2** and opacities **0, 0.35 and 1**. All pass the unchanged
+frame gates. Colors also stay within **2/255** of the unquantized explicit renderer in each API.
+Returning to production or explicit mode after quantized draws retains the faint foreground's
+original ID and declared CPU rule.
+
+The full **32-case tiny-alpha sweep passes in the quantized candidate**: exact CPU masks and
+cross-backend IDs, no zero-alpha picks, no color-budget failures, and maximum cross-backend
+channel difference **1/255**. Both isolated-source audits also pass for all overlap rows.
+
+| Fixture and opacity | Ratio 1 / ratio 2 | Quantized result |
+| --- | --- | --- |
+| Isolated grid, 0.0001 | Painted 0 / 0; picked 0 / 0 | Pass; positive input alpha cannot produce ghost IDs |
+| Isolated grid, 1 | Painted 2,857 / 11,219; picked 2,769 / 11,095 | Pass; all selected pixels have nonzero paint |
+| Faint foreground over opaque background, 1 | Foreground picks 0 / 0; selected center ID is background point 0 | Pass; zero-byte foreground cannot block the visible point |
+
+The previous explicit candidate still rejects **28 of 32** rows. In particular its overlap case
+retains **1,396 / 5,544** invisible foreground picks, while the new candidate has **0 / 0**.
+Removing that foreground changes zero color pixels in both candidates. Recorded comparison and
+source-audit summaries for **both retained controls match the preceding sweep in all 32 rows**,
+including their first failures. This is a bounded visibility-policy result, not retroactive
+production compatibility or broad device acceptance.
+
+The original suite and the new checks cover **22 distinct tests** in the inline browser. After
+correcting the UI's CPU-rule label, the affected **6 GPU/UI tests** pass in the final targeted
+rerun. The later live-audit responsiveness changes also pass all **3 UI regression tests**.
+Cancellation retains completed rows and the selected renderer/settings/canvas dimensions.
+The exported **schema 6** includes the quantization policy/version, renderer and CPU rule names,
+all three variants' verdicts and source audits, and the frozen reproduction inputs. Raw JSON
+measurements remain local.
+
+### Dense overlap rejects production color compatibility
+
+A separate stress fixture, **Faint overlap stack · 64 points**, places **64 white circles** at
+the same center with fill alpha **0.51/255**, ratio 1 and global opacity 1. This tests whether
+pre-blend quantization preserves accumulation beyond the two-point overlap control.
+
+| Comparison | ID differences | Color failures beyond 2/255 | Maximum channel difference | Invisible picks, left / right |
+| --- | --- | --- | --- | --- |
+| Production WebGL ↔ compatibility WebGPU | 0 | 0 | 0/255 | 50 / 50 |
+| Quantized WebGL ↔ quantized WebGPU | 0 | 0 | 0/255 | 0 / 0 |
+| Production WebGL ↔ quantized WebGPU | 50 | 1,321 | **59/255** | 50 / 0 |
+
+Both production controls also retain two scalar-mask differences each; the quantized candidate
+has none. These remain reported failures. The color change is independently isolated: production
+WebGL and compatibility WebGPU are byte-identical in color, while quantized WebGPU fails the
+same **2/255** budget at **1,321 pixels**. At the first such pixel, **(252, 140)**, production
+RGBA is **[6, 6, 6, 6]**, versus **[64, 64, 64, 64]** after source quantization. The invisible
+edge IDs are removed, but faint sources accumulate differently when rounded before blending.
+
+**The candidate therefore fails production color compatibility and is not an adoption recommendation.**
+The 32 visibility passes remain valid within their scope; they do not waive this additional
+measured failure. The live status names the failed color budget near the graph, with the full
+production comparison below. This adapter-specific control is recorded rather than asserted
+as a required failure on every GPU.
+
+### Boundary of this result
+
+The demonstrated contract is nonzero **own source alpha**, not perceptual contrast against every
+background. Different nonzero sources can still quantize to the same composed color, while many
+faint sources could accumulate if a different rendering policy retained them. Quantizing every
+source before blending changes that accumulation intentionally. Broader geometry, dense overlap,
+other adapters, runtime GPU cost and image/atlas sampling still need validation. No picking-latency
+or performance improvement is claimed by this readback-heavy diagnostic.
+
+Next, test source-byte **picking eligibility while preserving the original color accumulation**.
+Retain these quantized and production controls and apply the same full-frame, isolated-source and
+threshold checks. That alternative is unvalidated; no new tolerance or driver-rounding assumption
+is accepted here. Then validate image-atlas alpha, transparent texels and overlap order, alongside
+per-fragment GPU cost and broader native coverage.
 
 ## Reproduce
 
@@ -403,13 +541,21 @@ not a validated fix. Image-atlas alpha follows once this source-visibility polic
    preserves the selected settings and live canvas dimensions. CPU mask evaluation yields between
    small row chunks to service input. **Cancel sweep** finishes the current configuration and
    retains completed rows. Export JSON for environment, frozen point inputs/settings, rule names, first invisible
-   samples, frame verdicts and isolated-source audits. Schema **5** includes the sweep and its scope;
+   samples, frame verdicts and isolated-source audits. Schema **6** includes the sweep, quantized policy/version and its scope;
    raw measurements remain local, outside the repository.
+8. Select **Source-alpha quantized candidate**, then rerun the same fixtures and sweep. Compare the
+   **Explicit accepted** and **Quantized accepted** columns. The source-alpha policy must pass all
+   32 local cases; the original explicit candidate retains its 28 failed rows. Use the focused
+   quantizer test for all byte thresholds and their neighboring float32 values.
+9. Select **Faint overlap stack · 64 points**, ratio **1**, opacity **1** and the quantized renderer.
+   Inspect **Production control and compatibility**: the candidate's paired frame passes, while
+   the production color comparison fails its original 2/255 budget on M3. Export this separate
+   control with its 64 frozen inputs; it is not included in the 32-row tiny-alpha matrix.
 
 For the same regression suite **inside Codex**, set `LAB_INLINE_BROWSER=1` as well. This starts
 a local Vitest server without launching Chrome. Open its printed “inline test session” URL in
 the Codex inline browser; the suite runs in that browser, including both GPU backends.
-**19 focused tests pass in the Codex inline browser**, including quiet-draw restoration, partial
+The initial tiny-alpha stage has **19 passing focused tests in the Codex inline browser**, including quiet-draw restoration, partial
 sweep cancellation, the invisible-foreground counterexample and its visible failed result. The
 chunked CPU audit returns the same complete result as the synchronous audit. The
 regression checks that enabling probes preserves production images and counts, that the earlier

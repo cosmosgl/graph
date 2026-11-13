@@ -1,5 +1,6 @@
 import { pick, type PickingRule, type Snapshot } from './backend'
 import { center, diameter, resolvePoint, type Point, type Settings } from './data'
+import { sourceAlphaByte } from './source-alpha'
 const clamp = (x: number, a: number, b: number): number => Math.min(b, Math.max(a, x))
 // Independent scalar geometry control. This does not read a GPU mask or shader output.
 export function shapeDistance (x: number, y: number, shape: number): number {
@@ -53,14 +54,26 @@ export function shapeDistance (x: number, y: number, shape: number): number {
 export function referencePick (points: Point[], settings: Settings, x: number, y: number, rule: PickingRule = 'visible'): number | null {
   // Candidate visibility is explicit. Retain the original opacity-independent
   // geometry reference for the production control; neither rule reads GPU pixels.
-  if (rule === 'visible' && settings.opacity <= 0) return null
+  if (rule !== 'legacy' && settings.opacity <= 0) return null
   const order = points.map((_, id) => id); if (!settings.reverse) order.reverse()
   for (const id of order) {
     const p = resolvePoint(points[id], settings); const d = diameter(p, settings)
     if (p.absent || p.shape === 8 || d <= 0 || p.color[3] <= 0) continue
     const [cx, cy] = center(p, settings); const core = Math.max(d, 1)
     const dx = (x - cx) * 2 / core; const dy = (y - cy) * 2 / core
-    if (Math.abs(dx) <= 1 && Math.abs(dy) <= 1 && shapeDistance(dx, dy, p.shape) <= 0) return id
+    if (!(Math.abs(dx) <= 1 && Math.abs(dy) <= 1)) continue
+    const distance = shapeDistance(dx, dy, p.shape)
+    if (!(distance <= 0)) continue
+    if (rule === 'source-alpha') {
+      // Independent scalar coverage with f32 uploaded alpha/opacity and source
+      // multiplication. It never samples the GPU's color or ID images.
+      const f = Math.fround; const ramp = clamp(distance * core * 0.5 + 0.5, 0, 1)
+      const coverage = f(1 - ramp * ramp * (3 - 2 * ramp))
+      const smallAlpha = f(Math.min(1, f(d * d) / f(core * core)))
+      const alpha = f(f(coverage * f(smallAlpha * f(p.color[3]))) * f(settings.opacity))
+      if (sourceAlphaByte(alpha) === 0) continue
+    }
+    return id
   }
   return null
 }

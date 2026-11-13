@@ -5,6 +5,7 @@ import { resourceScope } from '../../gpu/resource-scope'
 import { dimensions, floatPixels, pixels, target, type Backend, type Snapshot } from './backend'
 import { HEIGHT, resolvePoint, WIDTH } from './data'
 import source from './points.wgsl?raw'
+import { SOURCE_ALPHA_WGSL } from './source-alpha'
 
 export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<Backend> {
   let failure: string | undefined
@@ -14,8 +15,8 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<B
     const shaderLayout = { attributes: [], bindings: bindingLayout([['points', 'read-only-storage'], ['params', 'uniform']]) }
     const vertexArray = scope.own(device.createVertexArray({ shaderLayout, bufferLayout: [] }))
     const make = (format: TextureFormatColor, picking: boolean, display = false): RenderKernel => scope.own(new RenderKernel(device, {
-      vertexSource: source,
-      fragmentSource: source,
+      vertexSource: `${source}\n${SOURCE_ALPHA_WGSL}`,
+      fragmentSource: `${source}\n${SOURCE_ALPHA_WGSL}`,
       vertexEntryPoint: 'vertexMain',
       fragmentEntryPoint: 'fragmentMain',
       topology: 'triangle-list',
@@ -48,7 +49,7 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<B
           const buffer = frame.own(upload(device, records))
           const params = (mode: number): ReturnType<typeof upload> => frame.own(upload(device, new Float32Array([
             WIDTH, HEIGHT, settings.ratio, settings.zoom, settings.sizeScale, settings.maxSize, settings.opacity, 0,
-            Number(settings.scaleOnZoom), mode, Number(variant === 'explicit'), 0,
+            Number(settings.scaleOnZoom), mode, Number(variant !== 'production'), Number(variant === 'quantized'),
           ]), Buffer.UNIFORM))
           const visibleParams = params(0); const pickingParams = params(1)
           const draw = (kernel: RenderKernel, uniforms: ReturnType<typeof upload>, framebuffer?: ReturnType<typeof target>['framebuffer']): void => {
@@ -61,7 +62,7 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<B
           if (display) draw(displayKernel, visibleParams)
           device.submit()
           const result: Snapshot = {
-            pickingRule: variant === 'explicit' ? 'visible' : 'legacy',
+            pickingRule: variant === 'quantized' ? 'source-alpha' : variant === 'explicit' ? 'visible' : 'legacy',
             width,
             height,
             color: await pixels(device, color.texture, color.framebuffer),

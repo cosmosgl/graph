@@ -68,4 +68,13 @@ it('keeps invisible foreground rejection visible and cancels a sweep without cha
   expect(host.querySelector('canvas')).toBe(canvas)
   expect((canvas as HTMLCanvasElement).width).toBe(512)
   expect(host.querySelector<HTMLSelectElement>('[data-fixture]')!.value).toBe('tiny-overlap')
+  await select('[data-renderer]', 'quantized')
+  expect(host.querySelector('[role="status"]')!.textContent).toContain('Quantized candidate passed')
+  expect(host.querySelector('[data-picking-rule]')!.textContent).toContain('source-alpha')
+  host.querySelectorAll('[data-contribution-audit] tbody tr').forEach(row => {
+    expect(row.children[1].textContent).toBe('0'); expect(row.children[2].textContent).toBe('0')
+  })
+  expect(host.querySelector('[data-production-comparison]')!.textContent).toContain('Production WebGL ↔ quantized WebGPU')
+  await select('[data-renderer]', 'explicit')
+  expect(host.querySelector('[role="status"]')!.textContent).toContain('Failed contribution check')
 })

@@ -103,10 +103,17 @@ fn distanceToShape(coord: vec2f, shape: u32) -> f32 {
   // Unblended float-target instrumentation; normal color/ID modes are unchanged.
   if (params.options.y == 2.0) { return vec4f(coord,core,input.diameter); }
   if (params.options.y == 3.0) { return vec4f(coord,distance,coverage); }
+  let smallAlpha = min(1.0,input.diameter * input.diameter / (core * core));
+  var sourceAlpha = coverage * smallAlpha * p.color.a * params.style.z;
+  if (params.options.w > 0.0) {
+    // Same grouping as the GLSL candidate's finalShapeColor.a * pointOpacity.
+    sourceAlpha = quantizeSourceAlpha(coverage * (smallAlpha * p.color.a) * params.style.z);
+  }
   // Keep the production rule when options.z is zero. The candidate additionally
   // rejects invisible points; positive opacity preserves the same pick contour.
   if (params.options.y > 0.0) {
     if (params.options.z > 0.0 && params.style.z <= 0.0) { discard; }
+    if (params.options.w > 0.0 && sourceAlpha <= 0.0) { discard; }
     if (coverage < 0.5) { discard; }
     let id = u32(p.properties.z) + 1u;
     return vec4f(vec3f(f32(id & 255u),f32((id >> 8u) & 255u),f32((id >> 16u) & 255u)) / 255.0,1);
@@ -115,6 +122,5 @@ fn distanceToShape(coord: vec2f, shape: u32) -> f32 {
   let bandDistance = abs(distance + strokeWidth * 0.5) - strokeWidth * 0.5;
   let stroke = select(0.0,1.0 - smoothstep(-0.5,0.5,bandDistance),strokeWidth > 0.0);
   let color = mix(p.color.rgb,p.strokeColor.rgb,stroke * p.strokeColor.a);
-  let smallAlpha = min(1.0,input.diameter * input.diameter / (core * core));
-  return vec4f(color,coverage * smallAlpha * p.color.a * params.style.z);
+  return vec4f(color,sourceAlpha);
 }
