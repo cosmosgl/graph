@@ -7,12 +7,14 @@ import { HEIGHT, resolvePoint, WIDTH } from './data'
 import source from './points.wgsl?raw'
 import { SOURCE_ALPHA_WGSL } from './source-alpha'
 import { atlasTexture, atlasCoords, atlasInfo, GUTTER_SIZE, sourceTexelRects } from './atlas'
+import { createDynamicAtlas } from './dynamic-atlas'
 
 export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExtent = GUTTER_SIZE): Promise<Backend> {
   let failure: string | undefined
   const device = await createDevice('webgpu', canvas, false, error => { failure ??= error.message; return true })
   const scope = resourceScope()
   try {
+    const dynamic = scope.own(createDynamicAtlas(device))
     const shaderLayout = {
       attributes: [],
       bindings: [...bindingLayout([['points', 'read-only-storage'], ['params', 'uniform']]),
@@ -56,14 +58,23 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
     let diagnostic: RenderKernel | undefined
     const displayKernel = make(device.canvasContext!.getCurrentFramebuffer().colorAttachments[0].texture.format as TextureFormatColor, false, true)
     return {
+      atlas: dynamic,
       info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
       async render (points, settings, diagnose = false, variant = 'production', display = true): Promise<Snapshot> {
         const frame = resourceScope()
         try {
           const isolation = variant === 'production' ? 'original' : settings.atlasIsolation ?? 'original'
-          const packing = settings.atlasPacking ?? 'baseline'; const info = atlasInfo(packing)
-          const coords = atlasCoords(isolation, gutterExtent, packing)
-          let imageRects = rectangleBuffers.get(packing)
+          const packing = settings.atlasPacking ?? 'baseline'; const atlasSource = dynamic.layout
+          if (atlasSource && !['original', 'clamp', 'texel'].includes(isolation)) {
+            throw new Error('Dynamic study uses original, clamped or source-texel sampling')
+          }
+          const info = atlasSource ? { imageCount: atlasSource.images.length, coordsSize: atlasSource.coordsSize } : atlasInfo(packing)
+          const coords = atlasSource?.coords ?? atlasCoords(isolation, gutterExtent, packing)
+          let imageRects = atlasSource
+            ? frame.own(upload(device, new Uint32Array(atlasSource.rects.length
+              ? atlasSource.rects.flatMap(r => [r.x, r.y, r.width, r.height])
+              : [0, 0, 0, 0])))
+            : rectangleBuffers.get(packing)
           if (!imageRects) { imageRects = scope.own(upload(device, sourceTexelRects(packing))); rectangleBuffers.set(packing, imageRects) }
           const texel = isolation === 'texel' && (settings.imageFilter ?? 'nearest') === 'nearest'
           const samplerMode = texel ? 2 : Number(isolation === 'clamp' || isolation === 'texel')
@@ -88,9 +99,11 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
           const draw = (kernel: RenderKernel, uniforms: ReturnType<typeof upload>, framebuffer?: ReturnType<typeof target>['framebuffer']): void => {
             const pass = device.beginRenderPass({ framebuffer, clearColor: framebuffer ? [0, 0, 0, 0] : [0.14, 0.16, 0.185, 1], clearDepth: false })
             try {
-              const atlas = packing === 'baseline'
-                ? atlases[isolation === 'gutter' ? 'gutter' : 'original'][settings.imageFilter ?? 'nearest']
-                : packedTexture(packing, isolation === 'gutter', settings.imageFilter ?? 'nearest')
+              const atlas = atlasSource
+                ? dynamic.texture(settings.imageFilter ?? 'nearest')
+                : packing === 'baseline'
+                  ? atlases[isolation === 'gutter' ? 'gutter' : 'original'][settings.imageFilter ?? 'nearest']
+                  : packedTexture(packing, isolation === 'gutter', settings.imageFilter ?? 'nearest')
               kernel.draw(pass, {
                 vertexArray,
                 vertexCount: 6,
@@ -104,6 +117,8 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
           if (display) draw(displayKernel, visibleParams)
           device.submit()
           const result: Snapshot = {
+            atlasSource,
+            atlasGeneration: atlasSource ? dynamic.generation : undefined,
             atlasPacking: packing,
             atlasIsolation: isolation,
             atlasGutterExtent: isolation === 'gutter' ? gutterExtent : undefined,

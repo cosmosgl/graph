@@ -6,6 +6,45 @@ let host: HTMLElement | undefined
 let instance: ExperimentInstance | undefined
 afterEach(() => { instance?.destroy(); host?.remove() })
 
+it('steps live image updates and preserves image state and canvases across sweep cancellation', async () => {
+  host = document.createElement('div'); document.body.append(host)
+  instance = await createStylingView(host)
+  const select = host.querySelector<HTMLSelectElement>('[data-fixture]')!
+  select.value = 'atlas-dynamic'; select.dispatchEvent(new Event('change'))
+  await vi.waitFor(() => expect(select.disabled).toBe(false), { timeout: 20000 })
+  expect(host.querySelector<HTMLSelectElement>('[data-renderer]')!.value).toBe('eligibility')
+  expect(host.querySelector<HTMLSelectElement>('[data-atlas-isolation]')!.value).toBe('texel')
+  const canvas = host.querySelector<HTMLCanvasElement>('canvas')!
+  const next = host.querySelector<HTMLButtonElement>('[data-image-next]')!
+  for (let i = 0; i < 2; i++) {
+    next.click(); await vi.waitFor(() => expect(next.disabled).toBe(false), { timeout: 20000 })
+  }
+  const imageState = host.querySelector('[data-image-stage]')!.textContent
+  expect(imageState).toContain('Make image 0 transparent')
+  const inspect = (): void => {
+    const box = canvas.getBoundingClientRect()
+    canvas.dispatchEvent(new PointerEvent('pointermove', {
+      clientX: box.left + box.width * 130.5 / 512,
+      clientY: box.top + box.height * 200.5 / 320,
+    }))
+    expect(host!.querySelector('[data-pick="webgl"]')!.textContent).toContain('point 0')
+    expect(host!.querySelector('[data-pick="webgpu"]')!.textContent).toContain('point 0')
+  }
+  inspect()
+  host.querySelector<HTMLButtonElement>('[data-dynamic-sweep]')!.click()
+  expect(next.disabled).toBe(true)
+  await vi.waitFor(() => expect(host!.querySelectorAll('[data-dynamic-table] tbody tr').length).toBeGreaterThan(0), { timeout: 20000 })
+  host.querySelector<HTMLButtonElement>('[data-dynamic-cancel]')!.click()
+  await vi.waitFor(() => expect(host!.querySelector('[data-dynamic-progress]')!.textContent).toContain('cancelled'), { timeout: 20000 })
+  expect(host.querySelectorAll('[data-dynamic-table] tbody tr').length).toBeLessThan(72)
+  expect(host.querySelector('[data-image-stage]')!.textContent).toBe(imageState)
+  expect(host.querySelector('canvas')).toBe(canvas); expect([canvas.width, canvas.height]).toEqual([512, 320])
+  next.click(); await vi.waitFor(() => expect(next.disabled).toBe(false), { timeout: 20000 })
+  inspect()
+  expect(host.querySelector('[data-isolation-audit]')!.textContent).not.toContain('Fail')
+  expect(host.querySelector('details')).toBeNull()
+}, 90000)
+
 it('exposes source-texel addressing and retains the clamped control verdict', async () => {
   host = document.createElement('div'); document.body.append(host)
   instance = await createStylingView(host)

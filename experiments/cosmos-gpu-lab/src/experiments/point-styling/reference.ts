@@ -2,7 +2,7 @@ import { pick, type PickingRule, type Snapshot } from './backend'
 import { center, diameter, resolvePoint, type Point, type Settings } from './data'
 import { sourceAlphaByte } from './source-alpha'
 import { IMAGE_COUNT, atlasInfo, sampleAtlasPolicy } from './atlas'
-import { samplePackingPixel } from './atlas-packing'
+import { sampleDynamicPixel, samplePackingPixel } from './atlas-packing'
 const clamp = (x: number, a: number, b: number): number => Math.min(b, Math.max(a, x))
 // Independent scalar geometry control. This does not read a GPU mask or shader output.
 export function shapeDistance (x: number, y: number, shape: number): number {
@@ -54,7 +54,8 @@ export function shapeDistance (x: number, y: number, shape: number): number {
   return Infinity
 }
 function validImage (p: Point, settings: Settings): boolean {
-  const count = settings.atlasPacking && settings.atlasPacking !== 'baseline' ? atlasInfo(settings.atlasPacking).imageCount : IMAGE_COUNT
+  const count = settings.atlasSource?.images.length ??
+    (settings.atlasPacking && settings.atlasPacking !== 'baseline' ? atlasInfo(settings.atlasPacking).imageCount : IMAGE_COUNT)
   return p.image !== undefined && p.image >= 0 && p.image < count
 }
 function imageFragment (p: Point, settings: Settings, x: number, y: number):
@@ -72,11 +73,13 @@ function imageFragment (p: Point, settings: Settings, x: number, y: number):
   const imageCovered = hasImage && imageD > 0 && Math.abs(x - cx) <= imageD / 2 && Math.abs(y - cy) <= imageD / 2
   let image = [0, 0, 0, 0]
   if (imageCovered) {
-    image = settings.atlasPacking && settings.atlasPacking !== 'baseline' &&
+    image = settings.atlasSource
+      ? sampleDynamicPixel(settings.atlasSource, p.image!, x - cx, y - cy, imageD, settings.imageFilter ?? 'nearest', settings.atlasIsolation)
+      : settings.atlasPacking && settings.atlasPacking !== 'baseline' &&
       (settings.atlasIsolation === 'clamp' || settings.atlasIsolation === 'gutter' || settings.atlasIsolation === 'texel')
-      ? samplePackingPixel(settings.atlasPacking, p.image!, x - cx, y - cy, imageD, settings.imageFilter ?? 'nearest')
-      : sampleAtlasPolicy(p.image!, (x - cx) / imageD + 0.5, (y - cy) / imageD + 0.5,
-        settings.imageFilter ?? 'nearest', settings.atlasIsolation ?? 'original', settings.atlasPacking ?? 'baseline')
+        ? samplePackingPixel(settings.atlasPacking, p.image!, x - cx, y - cy, imageD, settings.imageFilter ?? 'nearest')
+        : sampleAtlasPolicy(p.image!, (x - cx) / imageD + 0.5, (y - cy) / imageD + 0.5,
+          settings.imageFilter ?? 'nearest', settings.atlasIsolation ?? 'original', settings.atlasPacking ?? 'baseline')
   }
   const color = [0, 1, 2].map(c => (p.shape === 8 || d <= 0 ? 0 : p.color[c]) * (1 - image[3]) + image[c] * image[3])
   return {
@@ -178,6 +181,7 @@ export function atlasCpuColors (snapshot: Snapshot, points: Point[], settings: S
     ...settings,
     atlasIsolation: snapshot.atlasIsolation ?? settings.atlasIsolation ?? 'original',
     atlasPacking: snapshot.atlasPacking ?? settings.atlasPacking ?? 'baseline',
+    atlasSource: snapshot.atlasSource,
   }
   const { width, height } = snapshot; const color = new Uint8Array(width * height * 4)
   const order = points.map((_, i) => i); if (settings.reverse) order.reverse()
@@ -244,11 +248,13 @@ function * compareRows (gl: Snapshot, gpu: Snapshot, points: Point[], settings: 
     ...settings,
     atlasIsolation: gl.atlasIsolation ?? settings.atlasIsolation ?? 'original',
     atlasPacking: gl.atlasPacking ?? settings.atlasPacking ?? 'baseline',
+    atlasSource: gl.atlasSource,
   }
   const gpuSettings = {
     ...settings,
     atlasIsolation: gpu.atlasIsolation ?? settings.atlasIsolation ?? 'original',
     atlasPacking: gpu.atlasPacking ?? settings.atlasPacking ?? 'baseline',
+    atlasSource: gpu.atlasSource,
   }
   const referenceGl = prepareReferencePick(points, glSettings, result.pickingRules.webgl)
   const referenceGpu = prepareReferencePick(points, gpuSettings, result.pickingRules.webgpu)
@@ -258,7 +264,7 @@ function * compareRows (gl: Snapshot, gpu: Snapshot, points: Point[], settings: 
       const a = pick(gl, x, y); const b = pick(gpu, x, y)
       const expectedGl = referenceGl(x + 0.5, y + 0.5)
       const expectedGpu = result.pickingRules.webgl === result.pickingRules.webgpu && glSettings.atlasIsolation === gpuSettings.atlasIsolation &&
-        glSettings.atlasPacking === gpuSettings.atlasPacking
+        glSettings.atlasPacking === gpuSettings.atlasPacking && glSettings.atlasSource === gpuSettings.atlasSource
         ? expectedGl
         : referenceGpu(x + 0.5, y + 0.5)
       if (a !== b) {

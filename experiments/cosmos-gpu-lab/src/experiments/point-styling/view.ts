@@ -11,7 +11,11 @@ import { investigateFractional, renderFractionalInvestigation } from './fraction
 import { renderExplicitControl } from './explicit'
 import { SOURCE_ALPHA_POLICY, SOURCE_BYTE_PICKING_POLICY } from './source-alpha'
 import { ATLAS_EXPORT, ATLAS_PICKING_POLICY, ATLAS_QUANTIZED_POLICY, ATLAS_ISOLATION_EXPORT, sourceTexelRects } from './atlas'
-import { PACKING_NAMES, packingExport, packingLayout } from './atlas-packing'
+import { PACKING_NAMES, packingExport, packingLayout, type AtlasLayout } from './atlas-packing'
+import {
+  applyDynamicStep, DYNAMIC_STEPS, DYNAMIC_PROFILES, DYNAMIC_ROW_COUNT, dynamicPoints, runDynamicSweep, renderDynamicRows,
+  type DynamicRow,
+} from './dynamic-study'
 import {
   PACKING_FIXTURES, PACKING_PROFILES, PACKING_POLICIES, PACKING_ROW_COUNT, renderPackingRows, runPackingSweep, type PackingRow,
 } from './atlas-packing-study'
@@ -39,6 +43,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         <option value="tiny-overlap">Tiny-alpha overlap</option><option value="alpha-stack">Faint overlap stack · 64 points</option>
         <option value="atlas-images">Atlas · image-only points</option><option value="atlas-shapes">Atlas · image over shape</option>
         <option value="atlas-overlap">Atlas · overlapping points</option><option value="atlas-edges">Atlas · filtering and tile edges</option>
+        <option value="atlas-dynamic">Atlas · dynamic image updates</option>
         <option value="atlas-packing-grid">Packing · five non-square images</option>
         <option value="atlas-packing-edges">Packing · exact texel boundaries</option>
         <option value="atlas-packing-overlap">Packing · overlap and underlying shapes</option></select></label>
@@ -57,6 +62,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       <label>Global opacity <select data-opacity><option selected>1</option><option>0.35</option><option>0</option>
         ${TINY_OPACITIES.filter(x => x > 0 && x < 0.35).map(x => `<option value="${x}">${x.toPrecision(5)}</option>`).join('')}</select></label>
       <label>Draw order <select data-order><option value="normal">Input order</option><option value="reverse">Reversed</option></select></label>
+      <div class="controls"><button data-image-next disabled>Next image update</button><button data-image-reset disabled>Reset image sequence</button></div>
+      <p data-image-stage class="demo-note">Select Atlas · dynamic image updates to step through uploads and atlas replacement.</p>
       <div class="controls"><button data-export disabled
       data-run-action="export">Export JSON</button></div>
     </div><p role="status"
@@ -85,7 +92,12 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       <h3>Non-square atlas packing</h3><p>144 frozen rows compare original UVs, clamping and source-texel addressing across four layouts.</p>
       <div class="controls"><button data-packing-sweep disabled>Run packing sweep</button>
         <button data-packing-cancel disabled>Cancel packing sweep</button></div>
-      <p data-packing-progress>No packing sweep run.</p><div data-packing-results></div></section>
+      <p data-packing-progress>No packing sweep run.</p><div data-packing-results></div>
+      <h3>Dynamic images and atlas replacement</h3><p>72 rows check nine ordered updates with nearest/linear sampling and four profiles.
+        Same-size uploads, repacking, removal, empty atlases and restoration use the existing full-frame gates.</p>
+      <div class="controls"><button data-dynamic-sweep disabled>Run image-update sweep</button>
+        <button data-dynamic-cancel disabled>Cancel image-update sweep</button></div>
+      <p data-dynamic-progress>No image-update sweep run.</p><div data-dynamic-results></div></section>
     <p class="demo-note"
       data-run-part="explanation">Both offscreen passes are read back for this diagnostic. Hover uses the captured ID image;
       this does not measure production picking latency. Atlas fixtures add texture sampling; rings, greyout and transitions remain separate.
@@ -94,12 +106,24 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   const status = el('[role="status"]'); const exportButton = el<HTMLButtonElement>('[data-export]')
   const setSweepDisabled = (disabled: boolean): void => {
     host.querySelectorAll<HTMLButtonElement>('[data-tiny-sweep], [data-atlas-sweep], [data-isolation-sweep], [data-packing-sweep]')
-      .forEach(b => { b.disabled = disabled })
+      .forEach(b => { b.disabled = disabled || dynamicActive })
+    el<HTMLButtonElement>('[data-dynamic-sweep]').disabled = disabled
+    el<HTMLButtonElement>('[data-image-next]').disabled = disabled || !dynamicActive || dynamicStep === DYNAMIC_STEPS.length - 1
+    el<HTMLButtonElement>('[data-image-reset]').disabled = disabled || !dynamicActive
   }
   const backends: Partial<Record<'webgl' | 'webgpu', Backend>> = {}
   let snapshots: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
   const errors: Partial<Record<'webgl' | 'webgpu', string>> = {}
   let destroyed = false; let busy = false; let sweepRunning = false; let cancelSweep = false
+  let dynamicActive = false; let dynamicStep = 0
+  let dynamicStudy: { startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[];
+    rows: DynamicRow[]; error?: string; } | undefined
+  const exportLayout = (layout: AtlasLayout | undefined): object | undefined => layout && ({
+    ...layout,
+    bytes: Array.from(layout.bytes),
+    coords: Array.from(layout.coords),
+    images: layout.images.map(image => ({ ...image, bytes: Array.from(image.bytes) })),
+  })
   let latestComparison: boolean | undefined
   let latestCompatibility: boolean | undefined
   let latestContribution: boolean | undefined
@@ -127,9 +151,17 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     host.querySelectorAll<HTMLElement>('[data-pick]').forEach(label => { label.textContent = 'Move over a shape to inspect its ID' })
     host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
     status.textContent = 'Drawing and checking every framebuffer pixel…'
-    const name = el<HTMLSelectElement>('[data-fixture]').value as Parameters<typeof fixture>[0]
+    const name = el<HTMLSelectElement>('[data-fixture]').value as Parameters<typeof fixture>[0] | 'atlas-dynamic'
+    const isDynamic = name === 'atlas-dynamic'
+    if (isDynamic && !dynamicActive) {
+      dynamicActive = true; dynamicStep = 0
+      el<HTMLSelectElement>('[data-renderer]').value = 'eligibility'; el<HTMLSelectElement>('[data-atlas-isolation]').value = 'texel'
+      Object.values(backends).forEach(backend => applyDynamicStep(backend.atlas, 0))
+    } else if (!isDynamic && dynamicActive) {
+      Object.values(backends).forEach(backend => backend.atlas.replace()); dynamicActive = false
+    }
     const packingSelect = el<HTMLSelectElement>('[data-atlas-packing]')
-    if (name.startsWith('atlas-packing-') && packingSelect.value === 'baseline') packingSelect.value = 'npot-square'
+    if (isDynamic || (name.startsWith('atlas-packing-') && packingSelect.value === 'baseline')) packingSelect.value = 'npot-square'
     packingSelect.options[0].disabled = name.startsWith('atlas-packing-')
     const settings = {
       ...DEFAULTS,
@@ -142,36 +174,38 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       atlasIsolation: el<HTMLSelectElement>('[data-atlas-isolation]').value as NonNullable<Settings['atlasIsolation']>,
       atlasPacking: packingSelect.value as NonNullable<Settings['atlasPacking']>,
     }
-    const points = fixture(name)
+    const points = isDynamic ? dynamicPoints() : fixture(name)
     const variant = el<HTMLSelectElement>('[data-renderer]').value as RenderVariant
     const candidateLabel = variant === 'eligibility' ? 'Source-byte' : variant === 'quantized' ? 'Quantized' : 'Explicit'
     const isAtlas = name.startsWith('atlas-')
     const original: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
     const unmodified: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
     const diagnose = name === 'fractional'
-    el('[data-legend]').textContent = name.startsWith('atlas-packing-')
-      ? 'Five non-square sources include a one-texel-wide faint image and rectangular UV spans. Image footprints follow production’s square sizing.'
-      : isAtlas
-        ? name === 'atlas-images'
-          ? 'Four atlas tiles: asymmetric opaque/transparent image, opaque contrast, invisible RGB, faint alpha 1/255.'
-          : name === 'atlas-shapes'
-            ? 'The same image is smaller and larger than its point shape. Transparent texels may reveal the same point’s shape.'
-            : name === 'atlas-overlap'
-              ? 'A textured foreground over a visible background point. Holes must not steal the background ID; reverse the order to compare.'
-              : 'Fractional sizes/positions and exact UV edges. Production atlas rectangles are retained, including potential neighbor sampling.'
-        : name === 'shapes'
-          ? 'Circle · square · triangle · diamond · pentagon · hexagon · star · cross. Top row: fill. Bottom row: inset stroke.'
-          : name === 'edge-cases'
-            ? 'Top: defaults · zero size · transparent · None · absent · size cap. Bottom: subpixel · capped stroke · translucent.'
-            : name === 'fractional'
-              ? 'Circle diameters from 0.25 to 42.5 CSS px at fractional positions. This is a strict parity diagnostic.'
-              : name === 'tiny-alpha'
-                ? 'Columns: 1/64, 1/8, 1/2, 2 and 42 CSS px. Rows: fill alpha 1, 1/255 and 1/65536. Tiny source ink may quantize to zero.'
-                : name === 'tiny-overlap'
-                  ? 'Opaque blue background point and faint warm foreground point (fill alpha 1/65536). The foreground is also checked in isolation.'
-                  : name === 'alpha-stack'
-                    ? '64 overlapping white circles, each at fill alpha 0.51/255. Compare production color compatibility as well as candidate visibility.'
-                    : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
+    el('[data-legend]').textContent = isDynamic
+      ? 'Seven stable point IDs show holes, an underlying shape and a future sixth image. Step through uploads and replacement; production keeps its sampling.'
+      : name.startsWith('atlas-packing-')
+        ? 'Five non-square sources include a one-texel-wide faint image and rectangular UV spans. Image footprints follow production’s square sizing.'
+        : isAtlas
+          ? name === 'atlas-images'
+            ? 'Four atlas tiles: asymmetric opaque/transparent image, opaque contrast, invisible RGB, faint alpha 1/255.'
+            : name === 'atlas-shapes'
+              ? 'The same image is smaller and larger than its point shape. Transparent texels may reveal the same point’s shape.'
+              : name === 'atlas-overlap'
+                ? 'A textured foreground over a visible background point. Holes must not steal the background ID; reverse the order to compare.'
+                : 'Fractional sizes/positions and exact UV edges. Production atlas rectangles are retained, including potential neighbor sampling.'
+          : name === 'shapes'
+            ? 'Circle · square · triangle · diamond · pentagon · hexagon · star · cross. Top row: fill. Bottom row: inset stroke.'
+            : name === 'edge-cases'
+              ? 'Top: defaults · zero size · transparent · None · absent · size cap. Bottom: subpixel · capped stroke · translucent.'
+              : name === 'fractional'
+                ? 'Circle diameters from 0.25 to 42.5 CSS px at fractional positions. This is a strict parity diagnostic.'
+                : name === 'tiny-alpha'
+                  ? 'Columns: 1/64, 1/8, 1/2, 2 and 42 CSS px. Rows: fill alpha 1, 1/255 and 1/65536. Tiny source ink may quantize to zero.'
+                  : name === 'tiny-overlap'
+                    ? 'Opaque blue background point and faint warm foreground point (fill alpha 1/65536). The foreground is also checked in isolation.'
+                    : name === 'alpha-stack'
+                      ? '64 overlapping white circles, each at fill alpha 0.51/255. Compare production color compatibility as well as candidate visibility.'
+                      : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
     if (isAtlas) {
       el('[data-legend]').textContent += ` Candidate sampling policy: ${settings.atlasIsolation
       }; production retains original UVs. Pick-only color preservation uses the same sampling policy in both draws.`
@@ -179,7 +213,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     if (isAtlas && settings.atlasIsolation === 'texel') {
       el('[data-legend]').textContent += ' Nearest samples use integer source texels; linear filtering retains the clamped sampler.'
     }
-    if (isAtlas && settings.atlasPacking !== 'baseline') {
+    if (isAtlas && !isDynamic && settings.atlasPacking !== 'baseline') {
       const layout = packingLayout(settings.atlasPacking)
       el('[data-legend]').textContent += ` Atlas: ${layout.width} × ${layout.height}; ${layout.images.length} images, ` +
         `${layout.coordsSize} × ${layout.coordsSize} UV records.`
@@ -205,7 +239,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         }
       }
       if (destroyed) return
-      const contribution = (name === 'tiny-overlap' || name === 'atlas-overlap' || name === 'atlas-packing-overlap') && snapshots.webgl && snapshots.webgpu
+      const checkForeground = name === 'tiny-overlap' || name === 'atlas-overlap' || name === 'atlas-packing-overlap' || isDynamic
+      const contribution = checkForeground && snapshots.webgl && snapshots.webgpu
         ? await inspectForeground({ webgl: backends.webgl!, webgpu: backends.webgpu! },
           { webgl: snapshots.webgl, webgpu: snapshots.webgpu }, points, settings, variant)
         : undefined
@@ -243,14 +278,22 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       if (destroyed) return
       latestIsolation = isolatedAtlas?.valid
       report = {
-        schemaVersion: 12,
+        schemaVersion: 13,
+        dynamicAtlas: isDynamic
+          ? {
+            step: dynamicStep,
+            name: DYNAMIC_STEPS[dynamicStep].name,
+            generation: snapshots.webgl?.atlasGeneration,
+            source: exportLayout(backends.webgl?.atlas.layout),
+          }
+          : undefined,
         experiment: 'point-styling',
         isolatedImageReference: 'source-texel-v2; baseline and production-normalized controls retained',
         sourceTexelAddressing: variant !== 'production' && settings.atlasIsolation === 'texel'
           ? {
             nearest: 'pixel offset → source-texel numerator / image diameter → integer floor/clamp → unfiltered texel fetch',
             linear: 'unchanged tile-clamped hardware sampling',
-            rectangles: Array.from(sourceTexelRects(settings.atlasPacking)),
+            rectangles: snapshots.webgl?.atlasSource?.rects ?? Array.from(sourceTexelRects(settings.atlasPacking)),
           }
           : undefined,
         recordedAt: new Date().toISOString(),
@@ -263,9 +306,11 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           : variant === 'quantized' ? (isAtlas ? ATLAS_QUANTIZED_POLICY : SOURCE_ALPHA_POLICY) : undefined,
         colorPreservation,
         atlas: isAtlas
-          ? settings.atlasPacking === 'baseline'
-            ? ATLAS_EXPORT
-            : packingExport(settings.atlasPacking, variant !== 'production' && settings.atlasIsolation === 'gutter')
+          ? snapshots.webgl?.atlasSource
+            ? exportLayout(snapshots.webgl.atlasSource)
+            : settings.atlasPacking === 'baseline'
+              ? ATLAS_EXPORT
+              : packingExport(settings.atlasPacking, variant !== 'production' && settings.atlasIsolation === 'gutter')
           : undefined,
         cpuAtlasColors,
         isolatedAtlas,
@@ -371,12 +416,25 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         output.textContent = 'Incomplete comparison. Both backends must render before a verdict is available.'
         status.textContent = 'Incomplete: see backend errors.'
       }
+      if (isDynamic) {
+        const layout = backends.webgl?.atlas.layout
+        const label = `Update ${dynamicStep + 1}/${DYNAMIC_STEPS.length} · ${DYNAMIC_STEPS[dynamicStep].name}`
+        el('[data-image-stage]').textContent = `${label} · ${
+          layout ? `${layout.images.length} images / ${layout.width} × ${layout.height}` : 'static control restored'}`
+        status.textContent = `${label}. ${status.textContent}`
+      } else el('[data-image-stage]').textContent = 'Select Atlas · dynamic image updates to step through uploads and atlas replacement.'
       exportButton.disabled = false
       setSweepDisabled(!backends.webgl || !backends.webgpu)
     } finally {
       busy = false
       if (destroyed) Object.values(backends).forEach(backend => backend.destroy())
-      else host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
+      else {
+        host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
+        packingSelect.disabled = isDynamic
+        for (const option of el<HTMLSelectElement>('[data-atlas-isolation]').options) {
+          option.disabled = isDynamic && !['original', 'clamp', 'texel'].includes(option.value)
+        }
+      }
     }
   }
   const inspect = (event: PointerEvent): void => {
@@ -397,6 +455,16 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   host.querySelectorAll<HTMLSelectElement>('select').forEach(c => c.addEventListener('change', () => {
     render().catch(error => { status.textContent = String(error) })
   }))
+  el('[data-image-next]').addEventListener('click', () => {
+    if (busy || sweepRunning || !dynamicActive || dynamicStep >= DYNAMIC_STEPS.length - 1) return
+    dynamicStep++; Object.values(backends).forEach(backend => applyDynamicStep(backend.atlas, dynamicStep))
+    render().catch(error => { runError = String(error); status.textContent = runError })
+  })
+  el('[data-image-reset]').addEventListener('click', () => {
+    if (busy || sweepRunning || !dynamicActive) return
+    dynamicStep = 0; Object.values(backends).forEach(backend => applyDynamicStep(backend.atlas, 0))
+    render().catch(error => { runError = String(error); status.textContent = runError })
+  })
   exportButton.addEventListener('click', () => {
     if (!report || busy || sweepRunning) return
     const json = JSON.stringify({
@@ -410,6 +478,21 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           opacities: TINY_OPACITIES,
           ratios: [1, 2],
           fixtures: [{ name: 'tiny-alpha', points: fixture('tiny-alpha') }, { name: 'tiny-overlap', points: fixture('tiny-overlap') }],
+        },
+      },
+      dynamicSweep: dynamicStudy && {
+        ...dynamicStudy,
+        inputs: {
+          points: dynamicPoints(),
+          defaults: DEFAULTS,
+          profiles: DYNAMIC_PROFILES,
+          filters: ['nearest', 'linear'],
+          reference: 'source-texel-v2; immutable requested image generation',
+          steps: DYNAMIC_STEPS.map(step => ({
+            ...step,
+            ...('images' in step ? { images: step.images.map(image => ({ ...image, bytes: Array.from(image.bytes) })) } : {}),
+            ...('image' in step ? { image: { ...step.image, bytes: Array.from(step.image.bytes) } } : {}),
+          })),
         },
       },
       packingSweep: packingStudy && {
@@ -613,6 +696,48 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       }
     }
     runSweep().catch(error => { runError = String(error) })
+  })
+  el('[data-dynamic-cancel]').addEventListener('click', () => { if (sweepRunning) cancelSweep = true })
+  el('[data-dynamic-sweep]').addEventListener('click', () => {
+    if (busy || sweepRunning || destroyed || !backends.webgl || !backends.webgpu) return
+    const runSweep = async (): Promise<void> => {
+      sweepRunning = true; cancelSweep = false; runError = undefined
+      const study = {
+        startedAt: new Date().toISOString(),
+        status: 'running',
+        browser: navigator.userAgent,
+        devices: Object.values(backends).map(backend => backend.info),
+        rows: [] as DynamicRow[],
+        finishedAt: undefined as string | undefined,
+        error: undefined as string | undefined,
+      }
+      dynamicStudy = study
+      const previous = { webgl: backends.webgl!.atlas.layout, webgpu: backends.webgpu!.atlas.layout }
+      host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
+      setSweepDisabled(true); exportButton.disabled = true; el<HTMLButtonElement>('[data-dynamic-cancel]').disabled = false
+      el('[data-dynamic-results]').replaceChildren(); el('[data-dynamic-progress]').textContent = `Starting ${DYNAMIC_ROW_COUNT} image-update rows…`
+      try {
+        await runDynamicSweep({ webgl: backends.webgl!, webgpu: backends.webgpu! }, row => {
+          study.rows.push(row)
+          if (destroyed) return
+          renderDynamicRows(el('[data-dynamic-results]'), study.rows)
+          el('[data-dynamic-progress]').textContent = `${study.rows.length} / ${DYNAMIC_ROW_COUNT} · ${row.name} · ${row.profile} · ${row.filter}`
+        }, () => cancelSweep || destroyed)
+        study.status = cancelSweep || destroyed ? 'cancelled' : 'complete'
+      } catch (error) { study.status = 'failed'; study.error = String(error); runError = study.error } finally {
+        study.finishedAt = new Date().toISOString(); sweepRunning = false
+        if (destroyed) Object.values(backends).forEach(backend => backend.destroy())
+        else {
+          for (const lane of ['webgl', 'webgpu'] as const) backends[lane]!.atlas.replace(previous[lane]?.images)
+          host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
+          el<HTMLSelectElement>('[data-atlas-packing]').disabled = dynamicActive
+          exportButton.disabled = !report; setSweepDisabled(false); el<HTMLButtonElement>('[data-dynamic-cancel]').disabled = true
+          el('[data-dynamic-progress]').textContent = `${study.status} · ${study.rows.length} / ${DYNAMIC_ROW_COUNT} · ` +
+            `${study.rows.filter(row => !row.passed).length} candidate rows rejected. Controls and failed rows retained; live image state restored.`
+        }
+      }
+    }
+    runSweep().catch(error => { runError = String(error); status.textContent = runError })
   })
   mountRunLayout(host, () => summarizeRun(
     busy || sweepRunning ? 'Running' : report ? 'Complete' : 'Preparing',

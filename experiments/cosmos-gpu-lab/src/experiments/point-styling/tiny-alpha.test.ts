@@ -36,7 +36,7 @@ it('detects an invisible selected foreground even when the composed-frame audit 
 it('retains completed sweep rows when cancellation arrives between GPU cases', async () => {
   let stop = false
   const image: Snapshot = { width: 1, height: 1, color: new Uint8Array(4), ids: new Uint8Array(4) }
-  const backend: Backend = { info: 'orchestration control', render: async () => image, destroy: () => {} }
+  const backend: Omit<Backend, 'atlas'> = { info: 'orchestration control', render: async () => image, destroy: () => {} }
   const rows = await runTinyAlphaSweep({ webgl: backend, webgpu: backend }, () => { stop = true }, () => stop)
   expect(rows).toHaveLength(1); expect(rows[0]).toMatchObject({ fixture: 'tiny-alpha', ratio: 1, opacity: 0 })
 })

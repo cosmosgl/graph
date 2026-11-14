@@ -1,3 +1,4 @@
+import type { AtlasLayout } from './atlas-packing'
 export const WIDTH = 512
 export const HEIGHT = 320
 export const SHAPES = ['Circle', 'Square', 'Triangle', 'Diamond', 'Pentagon', 'Hexagon', 'Star', 'Cross', 'None'] as const
@@ -13,6 +14,7 @@ export type Settings = {
   imageFilter?: 'nearest' | 'linear';
   atlasIsolation?: 'original' | 'clamp' | 'inset' | 'gutter' | 'texel';
   atlasPacking?: 'baseline' | 'npot-square' | 'npot-rectangle' | 'npot-scaled' | 'pot-padded';
+  atlasSource?: AtlasLayout;
 }
 export const DEFAULTS: Settings = {
   zoom: 1,
