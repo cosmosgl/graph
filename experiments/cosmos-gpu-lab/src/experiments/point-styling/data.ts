@@ -11,6 +11,7 @@ export type Settings = {
   defaultSize: number; defaultColor: [number, number, number, number];
   defaultStroke: number; defaultStrokeColor: [number, number, number, number]; reverse: boolean;
   imageFilter?: 'nearest' | 'linear';
+  atlasIsolation?: 'original' | 'clamp' | 'inset' | 'gutter';
 }
 export const DEFAULTS: Settings = {
   zoom: 1,

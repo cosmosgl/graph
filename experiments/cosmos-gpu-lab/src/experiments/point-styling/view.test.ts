@@ -6,6 +6,31 @@ let host: HTMLElement | undefined
 let instance: ExperimentInstance | undefined
 afterEach(() => { instance?.destroy(); host?.remove() })
 
+it('labels tile isolation separately and preserves the selected policy after cancellation', async () => {
+  host = document.createElement('div'); document.body.append(host)
+  instance = await createStylingView(host)
+  const select = async (selector: string, value: string): Promise<void> => {
+    const element = host!.querySelector<HTMLSelectElement>(selector)!
+    element.value = value; element.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(element.disabled).toBe(false), { timeout: 20000 })
+  }
+  await select('[data-fixture]', 'atlas-edges'); await select('[data-renderer]', 'eligibility')
+  expect(host.querySelector('[data-isolation-audit]')!.textContent).toContain('Fail')
+  await select('[data-atlas-isolation]', 'clamp')
+  expect(host.querySelector('[data-isolation-audit]')!.textContent).not.toContain('Fail')
+  expect(host.querySelector('[role="status"]')!.textContent).toContain('Production compatibility differs')
+  const canvas = host.querySelector('canvas')!
+  host.querySelector<HTMLButtonElement>('[data-isolation-sweep]')!.click()
+  expect(host.querySelector<HTMLButtonElement>('[data-atlas-sweep]')!.disabled).toBe(true)
+  expect(host.querySelector<HTMLButtonElement>('[data-tiny-sweep]')!.disabled).toBe(true)
+  host.querySelector<HTMLButtonElement>('[data-isolation-cancel]')!.click()
+  await vi.waitFor(() => expect(host!.querySelector('[data-isolation-progress]')!.textContent).toContain('cancelled'), { timeout: 20000 })
+  expect(host.querySelectorAll('[data-isolation-table] tbody tr')).toHaveLength(1)
+  expect(host.querySelector<HTMLSelectElement>('[data-atlas-isolation]')!.value).toBe('clamp')
+  expect(host.querySelector('canvas')).toBe(canvas)
+  expect(host.querySelector('details')).toBeNull()
+})
+
 it('shows the image verdict at startup and keeps the same run when inspecting a pixel', async () => {
   host = document.createElement('div'); document.body.append(host)
   instance = await createStylingView(host)

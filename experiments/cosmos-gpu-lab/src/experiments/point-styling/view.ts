@@ -3,14 +3,15 @@ import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/ru
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { validationContracts } from '../../runtime/validation'
 import { pick, type Backend, type Snapshot, type RenderVariant } from './backend'
-import { DEFAULTS, fixture, HEIGHT, WIDTH } from './data'
+import { DEFAULTS, fixture, HEIGHT, WIDTH, type Settings } from './data'
 import { COLOR_BUDGET, atlasCpuColors, compareColors, compareSnapshotsAsync } from './reference'
 import { createStylingWebGL } from './webgl'
 import { createStylingWebGPU } from './webgpu'
 import { investigateFractional, renderFractionalInvestigation } from './fractional'
 import { renderExplicitControl } from './explicit'
 import { SOURCE_ALPHA_POLICY, SOURCE_BYTE_PICKING_POLICY } from './source-alpha'
-import { ATLAS_EXPORT, ATLAS_PICKING_POLICY, ATLAS_QUANTIZED_POLICY } from './atlas'
+import { ATLAS_EXPORT, ATLAS_PICKING_POLICY, ATLAS_QUANTIZED_POLICY, ATLAS_ISOLATION_EXPORT } from './atlas'
+import { inspectAtlasIsolation, renderIsolationRows, runIsolationSweep, type IsolationRow } from './atlas-isolation'
 import { ATLAS_FIXTURES, ATLAS_PROFILES, renderAtlasRows, runAtlasSweep, type AtlasRow } from './atlas-study'
 import {
   contributionPasses, inspectForeground, renderContributionAudit, renderTinyAlphaRows, runTinyAlphaSweep, TINY_OPACITIES,
@@ -36,6 +37,9 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         <option value="atlas-overlap">Atlas · overlapping points</option><option value="atlas-edges">Atlas · filtering and tile edges</option></select></label>
       <label>Atlas filter <select data-image-filter><option value="nearest">Nearest · production default</option>
         <option value="linear">Linear</option></select></label>
+      <label>Candidate atlas UVs <select data-atlas-isolation><option value="original">Original · control</option>
+        <option value="clamp">Clamp to tile texel centers</option><option value="inset">Inset UV remap · control</option>
+        <option value="gutter">Duplicate-edge gutters</option></select></label>
       <label>Zoom <select data-zoom><option>0.5</option><option selected>1</option><option>2</option></select></label>
       <label>Pixel ratio <select data-ratio><option selected>1</option><option>2</option></select></label>
       <label>Size on zoom <select data-scale><option value="yes">Scale with camera</option>
@@ -63,13 +67,20 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       <p data-tiny-progress>No sweep run. All rows, including failures, remain visible and exportable.</p><div data-tiny-results></div>
       <h3>Image-atlas sweep</h3><p>40 cases compare production, explicit and source-byte paths, sampled CPU colors and foreground visibility.</p>
       <div class="controls"><button data-atlas-sweep disabled>Run image-atlas sweep</button><button data-atlas-cancel disabled>Cancel atlas sweep</button></div>
-      <p data-atlas-progress>No atlas sweep run.</p><div data-atlas-results></div></section>
+      <p data-atlas-progress>No atlas sweep run.</p><div data-atlas-results></div>
+      <h3>Atlas tile isolation</h3><p>Compare four UV policies against separately clamped images. Production always uses its original atlas.</p>
+      <div class="controls"><button data-isolation-sweep disabled>Run tile-isolation sweep</button>
+        <button data-isolation-cancel disabled>Cancel isolation sweep</button></div>
+      <p data-isolation-progress>No isolation sweep run.</p><div data-isolation-results></div></section>
     <p class="demo-note"
       data-run-part="explanation">Both offscreen passes are read back for this diagnostic. Hover uses the captured ID image;
       this does not measure production picking latency. Atlas fixtures add texture sampling; rings, greyout and transitions remain separate.
       <a href="#/point-styling/docs/method">Read the method and limitations</a>.</p>`
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
   const status = el('[role="status"]'); const exportButton = el<HTMLButtonElement>('[data-export]')
+  const setSweepDisabled = (disabled: boolean): void => {
+    host.querySelectorAll<HTMLButtonElement>('[data-tiny-sweep], [data-atlas-sweep], [data-isolation-sweep]').forEach(b => { b.disabled = disabled })
+  }
   const backends: Partial<Record<'webgl' | 'webgpu', Backend>> = {}
   let snapshots: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
   const errors: Partial<Record<'webgl' | 'webgpu', string>> = {}
@@ -79,6 +90,9 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   let latestContribution: boolean | undefined
   let latestColorPreservation: boolean | undefined
   let latestAtlasColors: boolean | undefined
+  let latestIsolation: boolean | undefined
+  let isolationStudy: { startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[];
+    rows: IsolationRow[]; error?: string; } | undefined
   let atlasStudy: { startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[];
     rows: AtlasRow[]; error?: string; } | undefined
   let tinyStudy: {
@@ -89,10 +103,9 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     if (busy || sweepRunning || destroyed) return
     busy = true; snapshots = {}; report = undefined; latestComparison = undefined; latestCompatibility = undefined; latestContribution = undefined
     latestColorPreservation = undefined
-    latestAtlasColors = undefined
+    latestAtlasColors = undefined; latestIsolation = undefined
     runError = undefined; exportButton.disabled = true
-    el<HTMLButtonElement>('[data-tiny-sweep]').disabled = true
-    el<HTMLButtonElement>('[data-atlas-sweep]').disabled = true
+    setSweepDisabled(true)
     host.querySelectorAll<HTMLElement>('[data-cursor]').forEach(cursor => { cursor.hidden = true })
     host.querySelectorAll<HTMLElement>('[data-pick]').forEach(label => { label.textContent = 'Move over a shape to inspect its ID' })
     host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
@@ -105,6 +118,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       scaleOnZoom: el<HTMLSelectElement>('[data-scale]').value === 'yes',
       reverse: el<HTMLSelectElement>('[data-order]').value === 'reverse',
       imageFilter: el<HTMLSelectElement>('[data-image-filter]').value as 'nearest' | 'linear',
+      atlasIsolation: el<HTMLSelectElement>('[data-atlas-isolation]').value as NonNullable<Settings['atlasIsolation']>,
     }
     const name = el<HTMLSelectElement>('[data-fixture]').value as Parameters<typeof fixture>[0]; const points = fixture(name)
     const variant = el<HTMLSelectElement>('[data-renderer]').value as RenderVariant
@@ -134,6 +148,10 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
                 : name === 'alpha-stack'
                   ? '64 overlapping white circles, each at fill alpha 0.51/255. Compare production color compatibility as well as candidate visibility.'
                   : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
+    if (isAtlas) {
+      el('[data-legend]').textContent += ` Candidate UV policy: ${settings.atlasIsolation
+      }; production retains original UVs. Pick-only color preservation uses the same UV policy in both draws.`
+    }
     try {
       for (const name of ['webgl', 'webgpu'] as const) {
         if (!backends[name]) continue
@@ -187,8 +205,13 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         ? { webgl: atlasCpuColors(snapshots.webgl, points, settings), webgpu: atlasCpuColors(snapshots.webgpu, points, settings) }
         : undefined
       latestAtlasColors = cpuAtlasColors ? cpuAtlasColors.webgl.budgetFailures === 0 && cpuAtlasColors.webgpu.budgetFailures === 0 : undefined
+      const isolatedAtlas = isAtlas && snapshots.webgl && snapshots.webgpu
+        ? await inspectAtlasIsolation({ webgl: snapshots.webgl, webgpu: snapshots.webgpu }, points, settings)
+        : undefined
+      if (destroyed) return
+      latestIsolation = isolatedAtlas?.valid
       report = {
-        schemaVersion: 8,
+        schemaVersion: 9,
         experiment: 'point-styling',
         recordedAt: new Date().toISOString(),
         browser: navigator.userAgent,
@@ -201,6 +224,15 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         colorPreservation,
         atlas: isAtlas ? ATLAS_EXPORT : undefined,
         cpuAtlasColors,
+        isolatedAtlas,
+        atlasIsolation: isAtlas
+          ? {
+            requested: settings.atlasIsolation,
+            webgl: snapshots.webgl?.atlasIsolation,
+            webgpu: snapshots.webgpu?.atlasIsolation,
+            definitions: ATLAS_ISOLATION_EXPORT,
+          }
+          : undefined,
         points,
         settings,
         colorBudget: COLOR_BUDGET,
@@ -235,7 +267,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           </tbody></table>`
         if (colorPreservation) {
           output.insertAdjacentHTML('beforeend', `<h3>Original color output</h3>
-            <p>Byte comparison with the unquantized explicit-coordinate control in each API. This checks color independently of the changed picking rule.</p>
+            <p>Byte comparison with the unquantized explicit-coordinate control in each API, using the same atlas UV policy.
+            This checks color independently of the changed picking rule.</p>
             <table data-color-preservation><thead><tr><th>Backend</th><th>Changed color pixels</th>
               <th>Maximum channel difference</th><th>Unchanged</th></tr></thead>
             <tbody>${(['webgl', 'webgpu'] as const).map(lane => `<tr><td>${lane}</td><td>${colorPreservation[lane].changedPixels}</td>
@@ -249,6 +282,18 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
             <tbody>${(['webgl', 'webgpu'] as const).map(lane => `<tr><td>${lane}</td><td>${cpuAtlasColors[lane].budgetFailures}</td>
               <td>${cpuAtlasColors[lane].maxChannelError}/255</td><td>${checkResult(cpuAtlasColors[lane].budgetFailures === 0)}</td></tr>`)
     .join('')}</tbody></table>`)
+        }
+        if (isolatedAtlas) {
+          const m = isolatedAtlas.masks
+          output.insertAdjacentHTML('beforeend', `<h3>Atlas tile isolation</h3>
+            <p>Independent CPU images clamp to their own edges. Paired-policy agreement and production compatibility remain separate.</p>
+            <table data-isolation-audit><tbody><tr><th>Actual UV policy · WebGL / WebGPU</th>
+              <td>${snapshots.webgl?.atlasIsolation} / ${snapshots.webgpu?.atlasIsolation}</td></tr>
+              <tr><th>Isolated-image result</th><td>${checkResult(isolatedAtlas.valid)}</td></tr>
+              <tr><th>Isolated CPU mask differences · WebGL / WebGPU</th><td>${m.webglReferenceFailures} / ${m.webgpuReferenceFailures}</td></tr>
+              <tr><th>Isolated CPU color pixels beyond 2/255 · WebGL / WebGPU</th>
+                <td>${isolatedAtlas.colors.webgl.budgetFailures} / ${isolatedAtlas.colors.webgpu.budgetFailures}</td></tr>
+            </tbody></table>`)
         }
         if (contribution) renderContributionAudit(output, contribution)
         if (original.webgl && original.webgpu) {
@@ -272,6 +317,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
             `max ${compatibility.maxChannelError}/255, budget ${COLOR_BUDGET}/255.`
         }
         if (latestColorPreservation === false) status.textContent = 'Failed color-preservation check: this candidate changed the original color image.'
+        if (latestIsolation === false) status.textContent += ' Tile isolation failed; see the independent image reference.'
         if (latestAtlasColors === false) status.textContent = 'Failed CPU atlas color check. Inspect the full-image counts and export the first rejected pixel.'
         if (latestContribution === false) {
           status.textContent = 'Failed contribution check: the selected foreground paints zero alpha by itself. ' +
@@ -282,8 +328,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         status.textContent = 'Incomplete: see backend errors.'
       }
       exportButton.disabled = false
-      el<HTMLButtonElement>('[data-tiny-sweep]').disabled = !backends.webgl || !backends.webgpu
-      el<HTMLButtonElement>('[data-atlas-sweep]').disabled = !backends.webgl || !backends.webgpu
+      setSweepDisabled(!backends.webgl || !backends.webgpu)
     } finally {
       busy = false
       if (destroyed) Object.values(backends).forEach(backend => backend.destroy())
@@ -323,6 +368,16 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           fixtures: [{ name: 'tiny-alpha', points: fixture('tiny-alpha') }, { name: 'tiny-overlap', points: fixture('tiny-overlap') }],
         },
       },
+      isolationSweep: isolationStudy && {
+        ...isolationStudy,
+        inputs: {
+          defaults: DEFAULTS,
+          definitions: ATLAS_ISOLATION_EXPORT,
+          profiles: ATLAS_PROFILES,
+          filters: ['nearest', 'linear'],
+          fixtures: ATLAS_FIXTURES.map(name => ({ name, points: fixture(name) })),
+        },
+      },
       atlasSweep: atlasStudy && {
         ...atlasStudy,
         inputs: {
@@ -354,10 +409,10 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         error: undefined as string | undefined,
       }
       tinyStudy = study; exportButton.disabled = true
-      el<HTMLButtonElement>('[data-atlas-sweep]').disabled = true
+      setSweepDisabled(true)
       el('[data-tiny-results]').replaceChildren()
       host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
-      el<HTMLButtonElement>('[data-tiny-sweep]').disabled = true; el<HTMLButtonElement>('[data-tiny-cancel]').disabled = false
+      el<HTMLButtonElement>('[data-tiny-cancel]').disabled = false
       el('[data-tiny-progress]').textContent = 'Starting 32 paired rows…'
       try {
         await runTinyAlphaSweep({ webgl: backends.webgl!, webgpu: backends.webgpu! }, row => {
@@ -373,8 +428,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         if (destroyed) Object.values(backends).forEach(backend => backend.destroy())
         else {
           host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
-          exportButton.disabled = !report; el<HTMLButtonElement>('[data-tiny-sweep]').disabled = false
-          el<HTMLButtonElement>('[data-atlas-sweep]').disabled = false
+          exportButton.disabled = !report; setSweepDisabled(false)
           el<HTMLButtonElement>('[data-tiny-cancel]').disabled = true
           el('[data-tiny-progress]').textContent = `${study.status} · ${study.rows.length} / 32 rows · ` +
             `${study.rows.filter(row => !row.candidateAccepted).length} explicit / ` +
@@ -401,7 +455,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       }
       atlasStudy = study; exportButton.disabled = true; el('[data-atlas-results]').replaceChildren()
       host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
-      el<HTMLButtonElement>('[data-atlas-sweep]').disabled = true; el<HTMLButtonElement>('[data-tiny-sweep]').disabled = true
+      setSweepDisabled(true)
       el<HTMLButtonElement>('[data-atlas-cancel]').disabled = false
       el('[data-atlas-progress]').textContent = 'Starting 40 full-frame cases…'
       try {
@@ -417,10 +471,48 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         if (destroyed) Object.values(backends).forEach(backend => backend.destroy())
         else {
           host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
-          exportButton.disabled = !report; el<HTMLButtonElement>('[data-atlas-sweep]').disabled = false
-          el<HTMLButtonElement>('[data-tiny-sweep]').disabled = false; el<HTMLButtonElement>('[data-atlas-cancel]').disabled = true
+          exportButton.disabled = !report; setSweepDisabled(false); el<HTMLButtonElement>('[data-atlas-cancel]').disabled = true
           el('[data-atlas-progress]').textContent = `${study.status} · ${study.rows.length} / 40 · ` +
             `${study.rows.filter(row => !row.accepted).length} source-byte cases rejected. Export retains all counts and first failures.`
+        }
+      }
+    }
+    runSweep().catch(error => { runError = String(error) })
+  })
+  el('[data-isolation-cancel]').addEventListener('click', () => { cancelSweep = true })
+  el('[data-isolation-sweep]').addEventListener('click', () => {
+    if (busy || sweepRunning || destroyed || !backends.webgl || !backends.webgpu) return
+    const runSweep = async (): Promise<void> => {
+      sweepRunning = true; cancelSweep = false
+      const study = {
+        startedAt: new Date().toISOString(),
+        status: 'running',
+        browser: navigator.userAgent,
+        devices: Object.values(backends).map(b => b.info),
+        rows: [] as IsolationRow[],
+        finishedAt: undefined as string | undefined,
+        error: undefined as string | undefined,
+      }
+      isolationStudy = study; exportButton.disabled = true; el('[data-isolation-results]').replaceChildren()
+      host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
+      setSweepDisabled(true); el<HTMLButtonElement>('[data-isolation-cancel]').disabled = false
+      el('[data-isolation-progress]').textContent = 'Starting 160 full-frame policy rows…'
+      try {
+        await runIsolationSweep({ webgl: backends.webgl!, webgpu: backends.webgpu! }, row => {
+          study.rows.push(row)
+          if (destroyed) return
+          renderIsolationRows(el('[data-isolation-results]'), study.rows)
+          el('[data-isolation-progress]').textContent = `${study.rows.length} / 160 · ${row.fixture} · ${row.filter} · ${row.profile} · ${row.policy}`
+        }, () => cancelSweep || destroyed)
+        study.status = cancelSweep || destroyed ? 'cancelled' : 'complete'
+      } catch (error) { study.status = 'failed'; study.error = String(error); runError = study.error } finally {
+        study.finishedAt = new Date().toISOString(); sweepRunning = false
+        if (destroyed) Object.values(backends).forEach(backend => backend.destroy())
+        else {
+          host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
+          exportButton.disabled = !report; setSweepDisabled(false); el<HTMLButtonElement>('[data-isolation-cancel]').disabled = true
+          el('[data-isolation-progress]').textContent = `${study.status} · ${study.rows.length} / 160 · ` +
+            `${study.rows.filter(row => !row.isolatedPass).length} isolated-image rows rejected. All policies and compatibility failures retained.`
         }
       }
     }
@@ -431,6 +523,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     [latestComparison, ...(latestContribution === undefined ? [] : [latestContribution]),
       ...(latestColorPreservation === undefined ? [] : [latestColorPreservation]),
       ...(latestAtlasColors === undefined ? [] : [latestAtlasColors]),
+      ...(latestIsolation === undefined ? [] : [latestIsolation]),
       ...(latestCompatibility === undefined ? [] : [latestCompatibility])],
     'Other fixtures, pointer-hover tolerance and production picking latency.',
     Object.keys(errors),

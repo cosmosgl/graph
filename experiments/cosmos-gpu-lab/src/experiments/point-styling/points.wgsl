@@ -114,7 +114,11 @@ fn distanceToShape(coord: vec2f, shape: u32) -> f32 {
   if (p.image.z > 0.0 && input.imageDiameter > 0.0) {
     let imageCoord = offset * (2.0 / input.imageDiameter);
     if (abs(imageCoord.x) <= 1.0 && abs(imageCoord.y) <= 1.0) {
-      let uv = mix(p.uv.xy,p.uv.zw,(imageCoord + 1.0) * 0.5);
+      var uv = mix(p.uv.xy,p.uv.zw,(imageCoord + 1.0) * 0.5);
+      if (params.style.w > 0.0) {
+        let halfTexel = vec2f(0.5) / vec2f(textureDimensions(atlas));
+        uv = clamp(uv,p.uv.xy + halfTexel,p.uv.zw - halfTexel);
+      }
       imageColor = textureSampleLevel(atlas,atlasSampler,uv,0.0);
       imageCovered = true;
     }
