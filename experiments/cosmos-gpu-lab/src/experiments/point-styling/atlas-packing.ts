@@ -63,6 +63,21 @@ function samplePixels (bytes: Uint8Array, width: number, height: number, x: numb
   return [0, 1, 2, 3].map(c => (texel(ix, iy, c) * (1 - tx) + texel(ix + 1, iy, c) * tx) * (1 - ty) +
     (texel(ix, iy + 1, c) * (1 - tx) + texel(ix + 1, iy + 1, c) * tx) * ty)
 }
+// The dynamic oracle applies the existing isolated source-texel rule to the
+// requested image generation. Original normalized UVs remain a separate control.
+export function sampleDynamicPixel (
+  layout: AtlasLayout, index: number, dx: number, dy: number, diameter: number, filter: 'nearest' | 'linear', policy: Settings['atlasIsolation']
+): number[] {
+  const image = layout.images[index]
+  if (policy === 'texel' || policy === 'clamp') {
+    return samplePixels(image.bytes, image.width, image.height,
+      ((dx + diameter * 0.5) * image.width) / diameter, ((dy + diameter * 0.5) * image.height) / diameter, filter)
+  }
+  const uv = layout.coords.subarray(index * 4, index * 4 + 4)
+  return samplePixels(layout.bytes, layout.width, layout.height,
+    (uv[0] + (uv[2] - uv[0]) * (dx / diameter + 0.5)) * layout.width,
+    (uv[1] + (uv[3] - uv[1]) * (dy / diameter + 0.5)) * layout.height, filter)
+}
 export function samplePacking (
   name: Exclude<AtlasPacking, 'baseline'>, index: number, u: number, v: number, filter: 'nearest' | 'linear', policy: NonNullable<Settings['atlasIsolation']>
 ): number[] {

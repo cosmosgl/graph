@@ -13,6 +13,7 @@ import { dimensions, floatPixels, pixels, target, type Backend, type Snapshot } 
 import { HEIGHT, WIDTH } from './data'
 import { SOURCE_ALPHA_GLSL } from './source-alpha'
 import { atlasTexture, atlasCoords, atlasInfo, GUTTER_SIZE, sourceTexelRects } from './atlas'
+import { createDynamicAtlas } from './dynamic-atlas'
 
 // Declaration order matches the production std140 blocks verbatim.
 const vertexTypes = {
@@ -151,6 +152,7 @@ function instrumentCoverage (fragment: string): string {
 export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExtent = GUTTER_SIZE): Promise<Backend> {
   const device = await createDevice('webgl', canvas, false); const scope = resourceScope()
   try {
+    const dynamic = scope.own(createDynamicAtlas(device))
     const atlases = {
       original: { nearest: scope.own(atlasTexture(device, 'nearest')), linear: scope.own(atlasTexture(device, 'linear')) },
       gutter: {
@@ -208,12 +210,15 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
     let analyticColor: Model | undefined; let analyticPick: Model | undefined
     const candidates = new Map<string, { color: Model; pick: Model; probe: Model }>()
     return {
+      atlas: dynamic,
       info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
       async render (points, settings, diagnose = false, variant = 'production', display = true): Promise<Snapshot> {
         const frame = resourceScope()
         try {
           const isolation = variant === 'production' ? 'original' : settings.atlasIsolation ?? 'original'
-          const packing = settings.atlasPacking ?? 'baseline'; const info = atlasInfo(packing)
+          const packing = settings.atlasPacking ?? 'baseline'; const source = dynamic.layout
+          if (source && !['original', 'clamp', 'texel'].includes(isolation)) throw new Error('Dynamic study uses original, clamped or source-texel sampling')
+          const info = source ? { imageCount: source.images.length, coordsSize: source.coordsSize } : atlasInfo(packing)
           const [width, height] = dimensions(settings)
           if (display) { canvas.width = width; canvas.height = height; device.canvasContext!.resize({ width, height }) }
           const color = frame.own(target(device, width, height)); const ids = frame.own(target(device, width, height))
@@ -235,10 +240,12 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
             positionsTexture: texture(positions),
             exitTexture: texture(absent),
             pointStatus: zero,
-            imageAtlasCoords: texture(atlasCoords(isolation, gutterExtent, packing), info.coordsSize),
-            imageAtlasTexture: packing === 'baseline'
-              ? atlases[isolation === 'gutter' ? 'gutter' : 'original'][settings.imageFilter ?? 'nearest']
-              : packedTexture(packing, isolation === 'gutter', settings.imageFilter ?? 'nearest'),
+            imageAtlasCoords: texture(source?.coords ?? atlasCoords(isolation, gutterExtent, packing), info.coordsSize),
+            imageAtlasTexture: source
+              ? dynamic.texture(settings.imageFilter ?? 'nearest')
+              : packing === 'baseline'
+                ? atlases[isolation === 'gutter' ? 'gutter' : 'original'][settings.imageFilter ?? 'nearest']
+                : packedTexture(packing, isolation === 'gutter', settings.imageFilter ?? 'nearest'),
           }
           const order = points.map((_, i) => i); if (settings.reverse) order.reverse()
           const records: Record<string, Buffer> = {}
@@ -280,7 +287,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
           }
           let rectangleBuffer: Buffer | undefined
           if (models.some(model => model.texel)) {
-            const rectangles = sourceTexelRects(packing)
+            const rectangles = source ? new Uint32Array(source.rects.flatMap(r => [r.x, r.y, r.width, r.height])) : sourceTexelRects(packing)
             const data = new Float32Array(Math.max(4, points.length * 4))
             order.forEach((id, index) => {
               const image = points[id].image ?? -1
@@ -352,6 +359,8 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
           if (display) draw(colorModel, 0)
           device.submit()
           const result: Snapshot = {
+            atlasSource: source,
+            atlasGeneration: source ? dynamic.generation : undefined,
             atlasPacking: packing,
             atlasIsolation: isolation,
             atlasGutterExtent: isolation === 'gutter' ? gutterExtent : undefined,

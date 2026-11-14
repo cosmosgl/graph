@@ -44,7 +44,7 @@ export function auditContribution (composed: Snapshot, isolated: Snapshot, point
 }
 
 export async function inspectForeground (
-  backends: { webgl: Backend; webgpu: Backend }, snapshots: Pair, points: Point[], settings: Settings, variant: RenderVariant
+  backends: { webgl: Pick<Backend, 'render'>; webgpu: Pick<Backend, 'render'> }, snapshots: Pair, points: Point[], settings: Settings, variant: RenderVariant
 ): Promise<ContributionPair> {
   const result = {} as ContributionPair
   for (const lane of ['webgl', 'webgpu'] as const) {
@@ -60,7 +60,7 @@ export function contributionPasses (audit?: ContributionPair): boolean {
 }
 
 export async function runTinyAlphaSweep (
-  backends: { webgl: Backend; webgpu: Backend }, onRow: (row: TinyAlphaRow) => void, cancelled: () => boolean
+  backends: { webgl: Pick<Backend, 'render'>; webgpu: Pick<Backend, 'render'> }, onRow: (row: TinyAlphaRow) => void, cancelled: () => boolean
 ): Promise<TinyAlphaRow[]> {
   const rows: TinyAlphaRow[] = []
   for (const name of ['tiny-alpha', 'tiny-overlap'] as const) {

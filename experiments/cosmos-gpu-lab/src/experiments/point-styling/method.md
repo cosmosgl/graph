@@ -2,7 +2,7 @@
 source: Recorded findings
 recorded: 2026-11-14
 device: Apple M3; installed Chrome 157 and inline Chromium 157
-scope: The corrected 96-row NPOT/non-square audit passes 45/48 clamped configurations on M3. Three native nearest-boundary cases still fail exact CPU masks and colors, including the padded 128 atlas. Production packing, uploads and GPU parity pass; controls and acceptance thresholds remain unchanged.
+scope: On M3, source-texel sampling passes 48 static packing configurations and all 72 dynamic image-update rows. GPU color/IDs and CPU masks match exactly; CPU color error is at most 1/255. All 144 prior packing records remain unchanged. Production compatibility stays separate; broader devices, image decoding and rendering cost remain open.
 ---
 
 ## Question
@@ -40,7 +40,7 @@ Readback · Compare every color and ID pixel; scalar geometry is a separate cont
 - NaN channel defaults, size zero, subpixel size, absent records, overlap and reversed render order.
   Original point identity stays stable when the draw order changes.
 - A separate fractional-size/position diagnostic retains its failing parity gates.
-- Raw image-atlas sampling, transparent holes, independent image/shape sizes and overlap, with nearest/linear CPU color and ID references. Tile isolation remains open.
+- Raw image-atlas sampling, transparent holes, independent image/shape sizes and overlap, with nearest/linear CPU color and ID references. Later sections test tile isolation and dynamic atlas updates.
 
 WebGL receives NaN default sentinels as production does. Before WebGPU upload, the host resolves
 them against configuration defaults; WGSL receives finite records and an explicit absence flag.
@@ -1184,6 +1184,126 @@ image aspect-ratio options and runtime GPU cost need separate validation. The pr
 engine and its configuration are unchanged.
 
 
+
+## Dynamic image updates and atlas replacement
+
+The next study tests whether a new image generation updates visible colors and picking
+without stale texels, UVs or image IDs. Positions and point identities remain fixed. The
+production shader/control, source-byte eligibility, CPU sampling rule and acceptance gates
+are unchanged. Production Cosmos's `Points.createAtlas()` recreates atlas and coordinate
+textures when the image list changes; this lab hosts its unmodified draw/picking shaders,
+rather than exercising the complete production `Graph` setter/lifecycle API.
+
+### Two update paths
+
+- **Same dimensions:** upload the changed image rectangle into the existing texture with
+  public luma `Texture.writeData()`. Explicit origins, extents and tightly packed row strides
+  keep the upload within that image. Update both nearest and linear textures so switching
+  filters cannot expose an old generation. No texture is allocated by an image upload.
+- **Replacement:** independently repack the complete image set, create/upload two replacement
+  textures, then publish the new image count, UVs and integer rectangles before the next
+  draw. Retire the previous pair. Source-rectangle and point/UV bindings are built from that
+  generation. The independent packer must exactly match the production utility's bytes,
+  UVs, coordinate-grid size and atlas dimensions for these unscaled inputs.
+
+This follows the [luma texture upload guide](https://luma.gl/docs/api-guide/gpu/gpu-textures):
+`writeData()` supports typed arrays and explicit update regions; `copyImageData()` is its
+compatibility wrapper. On the pinned WebGPU backend it issues a queue texture write. Its
+upload rows need not use the 256-byte padding required by the separate buffer-copy readback
+path. The one-texel-wide update exercises a **4-byte row**; see the
+[WebGPU texture-write specification](https://www.w3.org/TR/webgpu/#dom-gpuqueue-writetexture).
+No native WebGL/WebGPU handles are accessed.
+
+Snapshots retain their immutable requested image generation for the CPU reference. A later
+upload cannot change an earlier snapshot's expected pixels. Mixed-generation tests check
+each lane against its own source, while continuing to reject any differing GPU IDs.
+Invalid bytes, an unknown image index or a same-size upload with changed dimensions are
+rejected before changing the retained source/resources. Changed dimensions require replacement.
+This tests prevalidated uploads, not rollback after device loss or an asynchronous GPU fault.
+
+### Ordered update sequence
+
+Seven point IDs include an image above a visible background, an image above its own shape,
+transparent/faint sources and a reference to a sixth image that is initially absent.
+
+| Step | Operation | Images / actual atlas | What must change |
+|---|---|---|---|
+| 1 | Initial replacement | 5 / 93 × 93 | Original holes and faint source; sixth image absent |
+| 2 | Upload opaque image 0 | 5 / 93 × 93 | Its holes become painted and pickable |
+| 3 | Upload transparent image 0 | 5 / 93 × 93 | Its paint and ID disappear; background ID returns |
+| 4 | Upload opaque one-texel-wide image | 5 / 93 × 93 | Faint image becomes opaque without changing rectangles |
+| 5 | Grow/repack | 6 / 111 × 111 | New dimensions, rectangles and pixels; sixth image appears |
+| 6 | Shrink/repack | 2 / 38 × 38 | Coordinate grid shrinks from 3 × 3 to 2 × 2; removed images stop painting/picking |
+| 7 | Clear image list | 0 / 1 × 1 dummy | Only underlying shapes remain; stale image references are inactive |
+| 8 | Restore original image set | 5 / 93 × 93 | Dynamic pixels and IDs match the initial generation |
+| 9 | Return to static resources | 5 / 93 × 93 static | Both production and candidate restore their pre-study bytes |
+
+The dynamic atlas owns two textures after replacement and retains them through same-size
+uploads. Replacement allocates a new pair and releases the old pair; both coexist briefly.
+Returning to static resources releases the dynamic pair. The export's mutation receipts count
+these owned textures and uploaded bytes, not total driver allocations or measured VRAM.
+In the final restoration receipt, zero dynamic textures means the static atlas is active.
+
+### Recorded findings
+
+Recorded **14 November 2026**, Codex inline Chromium **157**, **Apple M3 / ANGLE Metal**,
+luma **10.0.0-alpha.4**. The **72-row** sweep is nine ordered steps × nearest/linear × four
+profiles: native, ratio 2, zoom 0.5 with opacity 0.35 and reversed order, and opacity zero.
+Each profile/filter runs the complete sequence on the same live backend devices.
+
+| Check across 20,643,840 paired pixel positions | Result |
+|---|---|
+| Candidate acceptance | **72/72 pass** |
+| WebGL ↔ WebGPU color bytes and IDs | Exact; zero differences |
+| Candidate ↔ independent CPU masks | Exact in both backends |
+| Candidate ↔ CPU colors | At most **1/255**, within the unchanged **2/255** budget |
+| Composed-frame and isolated-foreground invisible picks | Zero |
+| Pick-only color changes within the same sampling policy | Zero |
+| Static production and candidate restoration | Byte-identical in all **8 profile/filter cases**, both APIs |
+| Retained production pair / legacy compatibility | **8/72** and **6/72** pass; failures retained |
+
+For a concrete native nearest replay, pixel **(111, 200)** initially selects background
+**ID 0** through image 0's hole. Filling it selects image point **ID 1**. Making image 0
+transparent returns background ID 0 at both **(111, 200)** and **(130, 200)**. The sixth image
+selects **ID 6** at **(390, 80)** only after growth; shrinking removes it. These probes explain
+the result; acceptance still checks the entire framebuffer without excluding boundary pixels.
+
+The complete **49-test** rendering/reference/UI suite passes in the inline browser. It covers
+real texture reuse/destruction, source ownership, production-packer equality, immutable old
+snapshots, invalid-input retention, filter switching, exact restoration and cancellation.
+The UI test continues stepping after cancellation and verifies that the selected image state,
+live canvases and background picking were restored. A separate rerun of the frozen **144-row
+static packing matrix matches every prior record exactly**, including all rejected controls.
+
+**Migration finding:** dynamic raw RGBA8 image uploads and complete atlas replacement work
+through luma for this bounded native sequence. Metadata and sampled pixels must advance
+together; image-only caches keyed by a static layout name would be insufficient. This does
+not establish asynchronous decode/callback ordering, frames in flight, partial load failures,
+color-space conversion, mipmap updates or behavior on other adapters. Every step is checked
+after readback; GPU update cost and interactive frame latency are not measured. The complete
+production image API and host lifecycle still need integration validation.
+
+### Reproduce the update study
+
+1. Select **Fixture → Atlas · dynamic image updates**. It starts the source-byte candidate
+   with explicit source texels for nearest and the retained clamped linear sampler.
+2. Use **Next image update** beside the settings. The current step appears above the live
+   canvases and in Configuration. Inspect image holes, image 0 becoming transparent, the
+   sixth image appearing and removed images disappearing. **Reset image sequence** returns
+   to step 1. Production remains selectable and retains its original sampling/picking rule.
+3. Keep default native/nearest settings to inspect the exact probe coordinates above. Then
+   change filter, ratio, opacity or draw order and compare full-frame/CPU/source audits.
+4. Run **Run image-update sweep** in Diagnostics for all 72 rows. The selected settings and
+   canvases stay in place. Cancellation completes the current row and retains it; the
+   selected live image generation is restored before stepping continues. Static sweeps are
+   available after selecting a static fixture.
+5. Export schema **13** JSON locally for the frozen sequence and raw image bytes, live source
+   layout, generations, mutation receipts, controls, first failures and restoration checks.
+   Raw measurement files remain outside the repository.
+6. Run `LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling`
+   and open the printed session URL in Codex's inline browser.
+
+
 ## Reproduce
 
 1. Run `pnpm --filter @cosmos.gl/gpu-lab dev` and open **Point styling and picking**.
@@ -1231,7 +1351,7 @@ the boundary pixels at unchanged full-frame gates. JSON exports name the rendere
 candidate geometry/visibility, original production and compatibility verdicts; raw measurements remain local.
 
 No runtime performance, picking-latency or broad device claim follows from the readback-heavy
-diagnostic. Broader atlas geometry/devices, image updates/decoding, rings/highlight priority, greyout, automatic perceptual stroke
+diagnostic. Broader atlas geometry/devices, asynchronous image loading/decoding, rings/highlight priority, greyout, automatic perceptual stroke
 shading, transitions, clipping of offscreen centers, occlusion optimization and host depth/picking
 integration require additional fixtures before full renderer acceptance.
 

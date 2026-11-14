@@ -124,16 +124,16 @@ export const research: Record<string, ResearchSummary> = {
     method: 'validation-contract',
     comparison: 'Same styled points → production WebGL / WebGPU color and ID images → full-image and scalar-mask checks',
     question: 'Does point-ID picking select the shapes that Cosmos actually renders?',
-    conclusion: 'Explicit source texels close all three nearest-boundary failures; the candidate passes all 48 packing configurations.',
-    scope: 'Apple M3: 144-row audit, exact paired GPU color/ID images and CPU masks; CPU colors differ by at most 1/255. ' +
-      'All 96 original/clamped control records are unchanged. Static raw images on one device; legacy compatibility stays separate.',
-    variant: 'Source-byte picking + integer nearest texels / clamped linear sampling; four NPOT/non-square layouts; luma 10.0.0-alpha.4; Apple M3',
+    conclusion: 'Dynamic image updates and atlas replacement pass all 72 cases, extending the 48 passing static packing configurations.',
+    scope: 'Apple M3: exact paired GPU color/IDs and CPU masks; CPU color error ≤ 1/255. Uploads, growth, removal, clearing and restoration pass. ' +
+      'All 144 prior static records are unchanged. Raw images on one device; legacy compatibility stays separate.',
+    variant: 'Source-byte picking + integer nearest texels / clamped linear sampling; live uploads and atlas replacement; luma 10.0.0-alpha.4; Apple M3',
     reviewed: '2026-11-14',
     milestone: 'rendering',
     evidence: 'method',
-    next: 'Validate image updates and broader native devices, then remaining styles and accepted rendering/ID-pass cost.',
-    reproduce: 'Select Source-byte picking candidate, Packing edges, the 93 × 93 grid and Source texels · nearest. ' +
-      'Run the 144-row packing sweep. Clamp must retain its three boundary failures; source texels must pass 48/48. Export JSON locally.',
+    next: 'Validate image decoding/color handling, rings/greyout and broader native devices; measure accepted rendering/ID-pass cost.',
+    reproduce: 'Select Atlas · dynamic image updates and use Next image update to inspect each stage. ' +
+      'Run the 72-row image-update sweep, then the 144-row static packing control. Export JSON locally.',
     investigations: [{
       page: 'method',
       state: 'Current evidence',
@@ -167,10 +167,10 @@ export const milestones = [
   {
     id: 'rendering',
     title: 'Rendering and interaction',
-    position: 'Bounded shapes, strokes, host IDs and static atlas sampling demonstrated, including exact nearest boundaries',
+    position: 'Bounded shapes, strokes, host IDs, exact atlas sampling and dynamic image updates demonstrated',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
-    gates: ['Extend static image evidence to updates and other native devices; settle production coverage and source-visibility policy.',
-      'Validate image updates, rings/greyout, transitions, links, pointer hover and wider native devices; measure accepted rendering cost.'],
+    gates: ['Validate image decoding/color handling and other native devices; settle production coverage and source-visibility policy.',
+      'Validate rings/greyout, transitions, links and pointer hover; measure accepted rendering cost.'],
     evidence: [['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],
   },
   {

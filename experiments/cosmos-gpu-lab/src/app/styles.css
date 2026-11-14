@@ -1773,6 +1773,7 @@ button[data-action="play"][aria-pressed="true"] {
 
 .styling-toolbar select { width: 100%; min-width: 0; }
 .styling-toolbar button { justify-self: start; }
+.styling-toolbar [data-image-stage] { grid-column: 1 / -1; margin: 0; }
 .styling-panels .panel-heading { flex-wrap: wrap; }
 .styling-panels .demo-note { overflow-wrap: anywhere; }
 @media (min-width: 600px) { .styling-panels { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
