@@ -1,7 +1,7 @@
 import { pick, type PickingRule, type Snapshot } from './backend'
 import { center, diameter, resolvePoint, type Point, type Settings } from './data'
 import { sourceAlphaByte } from './source-alpha'
-import { IMAGE_COUNT, sampleAtlas } from './atlas'
+import { IMAGE_COUNT, sampleAtlasPolicy } from './atlas'
 const clamp = (x: number, a: number, b: number): number => Math.min(b, Math.max(a, x))
 // Independent scalar geometry control. This does not read a GPU mask or shader output.
 export function shapeDistance (x: number, y: number, shape: number): number {
@@ -65,7 +65,10 @@ function imageFragment (p: Point, settings: Settings, x: number, y: number):
   const area = Math.min(1, d * d / (core * core)); const f = Math.fround
   const shapeAlpha = f(f(coverage) * f(f(area) * f(p.color[3])))
   const imageCovered = hasImage && imageD > 0 && Math.abs(x - cx) <= imageD / 2 && Math.abs(y - cy) <= imageD / 2
-  const image = imageCovered ? sampleAtlas(p.image!, (x - cx) / imageD + 0.5, (y - cy) / imageD + 0.5, settings.imageFilter ?? 'nearest') : [0, 0, 0, 0]
+  const image = imageCovered
+    ? sampleAtlasPolicy(p.image!, (x - cx) / imageD + 0.5, (y - cy) / imageD + 0.5,
+      settings.imageFilter ?? 'nearest', settings.atlasIsolation ?? 'original')
+    : [0, 0, 0, 0]
   const color = [0, 1, 2].map(c => (p.shape === 8 || d <= 0 ? 0 : p.color[c]) * (1 - image[3]) + image[c] * image[3])
   return {
     imageCovered,
@@ -141,6 +144,7 @@ export function compareColors (a: Snapshot, b: Snapshot): ColorComparison {
 // and max(shapeAlpha, imageAlpha), including its image-only alpha attenuation.
 // Fixtures have no strokes; this is not a CPU renderer for all Cosmos features.
 export function atlasCpuColors (snapshot: Snapshot, points: Point[], settings: Settings): ColorComparison {
+  settings = { ...settings, atlasIsolation: snapshot.atlasIsolation ?? settings.atlasIsolation ?? 'original' }
   const { width, height } = snapshot; const color = new Uint8Array(width * height * 4)
   const order = points.map((_, i) => i); if (settings.reverse) order.reverse()
   for (const id of order) {
@@ -202,14 +206,16 @@ function * compareRows (gl: Snapshot, gpu: Snapshot, points: Point[], settings: 
     firstColorMismatch: undefined as { x: number; y: number; webgl: number[]; webgpu: number[] } | undefined,
     valid: false,
   }
+  const glSettings = { ...settings, atlasIsolation: gl.atlasIsolation ?? settings.atlasIsolation ?? 'original' }
+  const gpuSettings = { ...settings, atlasIsolation: gpu.atlasIsolation ?? settings.atlasIsolation ?? 'original' }
   for (let y = 0; y < gl.height; y++) {
     for (let x = 0; x < gl.width; x++) {
       const offset = (y * gl.width + x) * 4
       const a = pick(gl, x, y); const b = pick(gpu, x, y)
-      const expectedGl = referencePick(points, settings, x + 0.5, y + 0.5, result.pickingRules.webgl)
-      const expectedGpu = result.pickingRules.webgl === result.pickingRules.webgpu
+      const expectedGl = referencePick(points, glSettings, x + 0.5, y + 0.5, result.pickingRules.webgl)
+      const expectedGpu = result.pickingRules.webgl === result.pickingRules.webgpu && glSettings.atlasIsolation === gpuSettings.atlasIsolation
         ? expectedGl
-        : referencePick(points, settings, x + 0.5, y + 0.5, result.pickingRules.webgpu)
+        : referencePick(points, gpuSettings, x + 0.5, y + 0.5, result.pickingRules.webgpu)
       if (a !== b) {
         result.idDisagreements++; result.firstIdMismatch ??= { x, y, webgl: a, webgpu: b, expected: { webgl: expectedGl, webgpu: expectedGpu } }
       }

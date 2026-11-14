@@ -6,9 +6,9 @@ import { dimensions, floatPixels, pixels, target, type Backend, type Snapshot } 
 import { HEIGHT, resolvePoint, WIDTH } from './data'
 import source from './points.wgsl?raw'
 import { SOURCE_ALPHA_WGSL } from './source-alpha'
-import { atlasTexture, ATLAS_COORDS, IMAGE_COUNT } from './atlas'
+import { atlasTexture, atlasCoords, IMAGE_COUNT, GUTTER_SIZE } from './atlas'
 
-export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<Backend> {
+export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExtent = GUTTER_SIZE): Promise<Backend> {
   let failure: string | undefined
   const device = await createDevice('webgpu', canvas, false, error => { failure ??= error.message; return true })
   const scope = resourceScope()
@@ -19,7 +19,13 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<B
         { name: 'atlas', type: 'texture' as const, location: 2, group: 0, sampleType: 'float' as const, viewDimension: '2d' as const },
         { name: 'atlasSampler', type: 'sampler' as const, location: 3, group: 0, samplerType: 'filtering' as const }],
     }
-    const atlases = { nearest: scope.own(atlasTexture(device, 'nearest')), linear: scope.own(atlasTexture(device, 'linear')) }
+    const atlases = {
+      original: { nearest: scope.own(atlasTexture(device, 'nearest')), linear: scope.own(atlasTexture(device, 'linear')) },
+      gutter: {
+        nearest: scope.own(atlasTexture(device, 'nearest', true, gutterExtent)),
+        linear: scope.own(atlasTexture(device, 'linear', true, gutterExtent)),
+      },
+    }
     const vertexArray = scope.own(device.createVertexArray({ shaderLayout, bufferLayout: [] }))
     const make = (format: TextureFormatColor, picking: boolean, display = false): RenderKernel => scope.own(new RenderKernel(device, {
       vertexSource: `${source}\n${SOURCE_ALPHA_WGSL}`,
@@ -44,6 +50,8 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<B
       async render (points, settings, diagnose = false, variant = 'production', display = true): Promise<Snapshot> {
         const frame = resourceScope()
         try {
+          const isolation = variant === 'production' ? 'original' : settings.atlasIsolation ?? 'original'
+          const coords = atlasCoords(isolation, gutterExtent)
           const [width, height] = dimensions(settings)
           if (display) { canvas.width = width; canvas.height = height; device.canvasContext!.resize({ width, height }) }
           const color = frame.own(target(device, width, height)); const ids = frame.own(target(device, width, height))
@@ -54,18 +62,18 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<B
             const image = p.image ?? -1; const hasImage = image >= 0 && image < IMAGE_COUNT
             records.set([p.x, p.y, p.size, p.shape, ...p.color, ...p.strokeColor, p.stroke, Number(!!p.absent), id, 0,
               image, p.imageSize ?? p.size, Number(hasImage), 0,
-              ...(hasImage ? ATLAS_COORDS.subarray(image * 4, image * 4 + 4) : [-1, -1, -1, -1])], index * 24)
+              ...(hasImage ? coords.subarray(image * 4, image * 4 + 4) : [-1, -1, -1, -1])], index * 24)
           })
           const buffer = frame.own(upload(device, records))
           const params = (mode: number): ReturnType<typeof upload> => frame.own(upload(device, new Float32Array([
-            WIDTH, HEIGHT, settings.ratio, settings.zoom, settings.sizeScale, settings.maxSize, settings.opacity, 0,
+            WIDTH, HEIGHT, settings.ratio, settings.zoom, settings.sizeScale, settings.maxSize, settings.opacity, Number(isolation === 'clamp'),
             Number(settings.scaleOnZoom), mode, Number(variant !== 'production'), variant === 'eligibility' ? 2 : Number(variant === 'quantized'),
           ]), Buffer.UNIFORM))
           const visibleParams = params(0); const pickingParams = params(1)
           const draw = (kernel: RenderKernel, uniforms: ReturnType<typeof upload>, framebuffer?: ReturnType<typeof target>['framebuffer']): void => {
             const pass = device.beginRenderPass({ framebuffer, clearColor: framebuffer ? [0, 0, 0, 0] : [0.14, 0.16, 0.185, 1], clearDepth: false })
             try {
-              const atlas = atlases[settings.imageFilter ?? 'nearest']
+              const atlas = atlases[isolation === 'gutter' ? 'gutter' : 'original'][settings.imageFilter ?? 'nearest']
               kernel.draw(pass, {
                 vertexArray,
                 vertexCount: 6,
@@ -79,6 +87,8 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement): Promise<B
           if (display) draw(displayKernel, visibleParams)
           device.submit()
           const result: Snapshot = {
+            atlasIsolation: isolation,
+            atlasGutterExtent: isolation === 'gutter' ? gutterExtent : undefined,
             pickingRule: variant === 'production' ? 'legacy' : variant === 'explicit' ? 'visible' : 'source-alpha',
             width,
             height,

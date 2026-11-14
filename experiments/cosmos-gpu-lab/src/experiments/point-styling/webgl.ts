@@ -12,7 +12,7 @@ import { resourceScope } from '../../gpu/resource-scope'
 import { dimensions, floatPixels, pixels, target, type Backend, type Snapshot } from './backend'
 import { HEIGHT, WIDTH } from './data'
 import { SOURCE_ALPHA_GLSL } from './source-alpha'
-import { atlasTexture, ATLAS_COORDS, IMAGE_COUNT } from './atlas'
+import { atlasTexture, atlasCoords, IMAGE_COUNT, GUTTER_SIZE } from './atlas'
 
 // Declaration order matches the production std140 blocks verbatim.
 const vertexTypes = {
@@ -68,7 +68,7 @@ function moduleSource (source: string): string {
   return match[1]
 }
 
-function coordinateSources (quads: boolean, alphaPolicy: 'unchanged' | 'quantized' | 'eligibility' = 'unchanged'):
+function coordinateSources (quads: boolean, alphaPolicy: 'unchanged' | 'quantized' | 'eligibility' = 'unchanged', clampTile = false):
 { vertex: string; fragment: string } {
   const position = 'gl_Position = vec4(finalPosition.rg, depthZ, 1.0);'
   const coord = 'vec2 pointCoord = 2.0 * gl_PointCoord - 1.0;'
@@ -105,6 +105,13 @@ function coordinateSources (quads: boolean, alphaPolicy: 'unchanged' | 'quantize
     }
     if (alphaPolicy !== 'unchanged') fragment = fragment.replace('|| imageCovered;', '|| (imageCovered && finalImageColor.a > 0.0);')
   }
+  if (clampTile) {
+    const uv = 'vec2 atlasUV = mix(imageAtlasUV.xy, imageAtlasUV.zw, (imageCoord + 1.0) * 0.5);'
+    if (fragment.split(uv).length !== 3) throw new Error('Production image sampling locations changed')
+    fragment = fragment.replaceAll(uv, `${uv}
+      vec2 halfTexel = vec2(0.5) / vec2(textureSize(imageAtlasTexture, 0));
+      atlasUV = clamp(atlasUV, imageAtlasUV.xy + halfTexel, imageAtlasUV.zw - halfTexel);`)
+  }
   return { vertex, fragment }
 }
 
@@ -116,10 +123,16 @@ function instrumentCoverage (fragment: string): string {
     if (renderMode == 5.0) { fragColor = vec4(coreCoord, edgeDistancePx, opacity); return; }`)
 }
 
-export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Backend> {
+export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExtent = GUTTER_SIZE): Promise<Backend> {
   const device = await createDevice('webgl', canvas, false); const scope = resourceScope()
   try {
-    const atlases = { nearest: scope.own(atlasTexture(device, 'nearest')), linear: scope.own(atlasTexture(device, 'linear')) }
+    const atlases = {
+      original: { nearest: scope.own(atlasTexture(device, 'nearest')), linear: scope.own(atlasTexture(device, 'linear')) },
+      gutter: {
+        nearest: scope.own(atlasTexture(device, 'nearest', true, gutterExtent)),
+        linear: scope.own(atlasTexture(device, 'linear', true, gutterExtent)),
+      },
+    }
     const uniforms = scope.own(new UniformStore(device, {
       drawVertexUniforms: { uniformTypes: vertexTypes }, drawFragmentUniforms: { uniformTypes: fragmentTypes },
     }))
@@ -159,14 +172,13 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
     const visible = make(false); const picking = make(true)
     let diagnostic: Model | undefined
     let analyticColor: Model | undefined; let analyticPick: Model | undefined
-    let explicitColor: Model | undefined; let explicitPick: Model | undefined; let explicitProbe: Model | undefined
-    let quantizedColor: Model | undefined; let quantizedPick: Model | undefined; let quantizedProbe: Model | undefined
-    let eligibilityColor: Model | undefined; let eligibilityPick: Model | undefined; let eligibilityProbe: Model | undefined
+    const candidates = new Map<string, { color: Model; pick: Model; probe: Model }>()
     return {
       info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
       async render (points, settings, diagnose = false, variant = 'production', display = true): Promise<Snapshot> {
         const frame = resourceScope()
         try {
+          const isolation = variant === 'production' ? 'original' : settings.atlasIsolation ?? 'original'
           const [width, height] = dimensions(settings)
           if (display) { canvas.width = width; canvas.height = height; device.canvasContext!.resize({ width, height }) }
           const color = frame.own(target(device, width, height)); const ids = frame.own(target(device, width, height))
@@ -188,8 +200,8 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
             positionsTexture: texture(positions),
             exitTexture: texture(absent),
             pointStatus: zero,
-            imageAtlasCoords: texture(ATLAS_COORDS, 2),
-            imageAtlasTexture: atlases[settings.imageFilter ?? 'nearest'],
+            imageAtlasCoords: texture(atlasCoords(isolation, gutterExtent), 2),
+            imageAtlasTexture: atlases[isolation === 'gutter' ? 'gutter' : 'original'][settings.imageFilter ?? 'nearest'],
           }
           const order = points.map((_, i) => i); if (settings.reverse) order.reverse()
           const records: Record<string, Buffer> = {}
@@ -210,21 +222,17 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
             })
             records[name] = frame.own(device.createBuffer({ data: new Float32Array(values.length ? values : [0, 0, 0, 0]) }))
           }
-          if (variant === 'explicit' && !explicitColor) {
-            const { vertex, fragment } = coordinateSources(true)
-            explicitColor = make(false, fragment, vertex, true); explicitPick = make(true, fragment, vertex, true)
-            explicitProbe = make(true, instrumentCoverage(fragment), vertex, true)
+          const key = `${variant}:${isolation === 'clamp'}`
+          if (variant !== 'production' && !candidates.has(key)) {
+            const policy = variant === 'explicit' ? 'unchanged' : variant
+            const { vertex, fragment } = coordinateSources(true, policy, isolation === 'clamp')
+            candidates.set(key, {
+              color: make(false, fragment, vertex, true),
+              pick: make(true, fragment, vertex, true),
+              probe: make(true, instrumentCoverage(fragment), vertex, true),
+            })
           }
-          if (variant === 'quantized' && !quantizedColor) {
-            const { vertex, fragment } = coordinateSources(true, 'quantized')
-            quantizedColor = make(false, fragment, vertex, true); quantizedPick = make(true, fragment, vertex, true)
-            quantizedProbe = make(true, instrumentCoverage(fragment), vertex, true)
-          }
-          if (variant === 'eligibility' && !eligibilityColor) {
-            const { vertex, fragment } = coordinateSources(true, 'eligibility')
-            eligibilityColor = make(false, fragment, vertex, true); eligibilityPick = make(true, fragment, vertex, true)
-            eligibilityProbe = make(true, instrumentCoverage(fragment), vertex, true)
-          }
+          const candidate = candidates.get(key)
           if (diagnose && variant === 'production' && !diagnostic) {
             // Instrument a copy, leaving the production color/picking shader untouched.
             diagnostic = make(true, instrumentCoverage(fs))
@@ -287,16 +295,14 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
             const pass = device.beginRenderPass({ framebuffer, clearColor: framebuffer ? [0, 0, 0, 0] : [0.14, 0.16, 0.185, 1], clearDepth: false })
             try { model.draw(pass) } finally { pass.end() }
           }
-          const colorModel = variant === 'eligibility'
-            ? eligibilityColor!
-            : variant === 'quantized' ? quantizedColor! : variant === 'explicit' ? explicitColor! : visible
-          const pickModel = variant === 'eligibility'
-            ? eligibilityPick!
-            : variant === 'quantized' ? quantizedPick! : variant === 'explicit' ? explicitPick! : picking
+          const colorModel = candidate?.color ?? visible
+          const pickModel = candidate?.pick ?? picking
           draw(colorModel, 0, color.framebuffer); draw(pickModel, 3, ids.framebuffer)
           if (display) draw(colorModel, 0)
           device.submit()
           const result: Snapshot = {
+            atlasIsolation: isolation,
+            atlasGutterExtent: isolation === 'gutter' ? gutterExtent : undefined,
             pickingRule: variant === 'production' ? 'legacy' : variant === 'explicit' ? 'visible' : 'source-alpha',
             width,
             height,
@@ -306,9 +312,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
           if (diagnose) {
             const geometry = frame.own(target(device, width, height, 'rgba32float'))
             const edge = frame.own(target(device, width, height, 'rgba32float'))
-            const probe = variant === 'eligibility'
-              ? eligibilityProbe!
-              : variant === 'quantized' ? quantizedProbe! : variant === 'explicit' ? explicitProbe! : diagnostic!
+            const probe = candidate?.probe ?? diagnostic!
             draw(probe, 4, geometry.framebuffer); draw(probe, 5, edge.framebuffer); device.submit()
             result.probe = {
               geometry: await floatPixels(device, geometry.texture, geometry.framebuffer), edge: await floatPixels(device, edge.texture, edge.framebuffer),
@@ -318,6 +322,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement): Promise<Ba
             const analytic = frame.own(target(device, width, height)); const analyticIds = frame.own(target(device, width, height))
             draw(analyticColor!, 0, analytic.framebuffer); draw(analyticPick!, 3, analyticIds.framebuffer); device.submit()
             result.analyticControl = {
+              atlasIsolation: 'original',
               pickingRule: 'legacy',
               width,
               height,

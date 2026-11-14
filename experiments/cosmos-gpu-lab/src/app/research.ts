@@ -124,16 +124,18 @@ export const research: Record<string, ResearchSummary> = {
     method: 'validation-contract',
     comparison: 'Same styled points → production WebGL / WebGPU color and ID images → full-image and scalar-mask checks',
     question: 'Does point-ID picking select the shapes that Cosmos actually renders?',
-    conclusion: 'Source-byte picking passes 32 visibility and 40 atlas cases with unchanged colors; transparent image holes no longer steal IDs.',
-    scope: 'Apple M3: exact candidate IDs/color bytes, no invisible picks; atlas CPU colors differ by at most 1/255. ' +
-      'Also 24 styling cases, 767 alpha samples per backend and a 64-point stack pass. Legacy compatibility and atlas tile isolation remain open.',
-    variant: 'Production/legacy, explicit/visible, quantized/source-alpha and pick-only/source-alpha; luma 10.0.0-alpha.4; Apple M3',
-    reviewed: '2026-11-13',
+    conclusion: 'Tile clamping passes all 40 isolated-image cases without repacking; inset remapping and compact gutters retain failures.',
+    scope: 'Apple M3: 160 policy rows; clamping passes 40/40, inset remapping 11/40 and compact gutters 39/40. ' +
+      'Clamp CPU colors stay within 1/255; exact masks and pick-only color preservation pass. ' +
+      'Legacy compatibility and wider packing/device coverage remain open.',
+    variant: 'Production/legacy and source-byte candidates with original, clamped, inset and gutter UVs; luma 10.0.0-alpha.4; Apple M3',
+    reviewed: '2026-11-14',
     milestone: 'rendering',
     evidence: 'method',
-    next: 'Compare atlas tile-isolation policies; validate rings/greyout, measure ID-pass cost and expand native coverage.',
-    reproduce: 'Select Source-byte picking candidate and an Atlas fixture; run the 40-row image-atlas sweep. ' +
-      'CPU colors must stay within 2/255 and Original color output must remain unchanged. Compare the retained production failures; export local JSON.',
+    next: 'Validate non-power-of-two and non-square atlas packing, then image updates, rings/greyout, ID-pass cost and other devices.',
+    reproduce: 'Select Source-byte picking candidate, Atlas edges and Clamp to tile texel centers. Run the 160-row tile-isolation sweep. ' +
+      'Inspect isolated CPU images separately from retained production compatibility. ' +
+      'Pick-only colors must stay unchanged within each UV policy. Export local JSON.',
     investigations: [{
       page: 'method',
       state: 'Current evidence',

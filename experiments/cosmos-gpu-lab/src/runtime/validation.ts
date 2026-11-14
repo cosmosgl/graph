@@ -20,7 +20,8 @@ export const validationContracts: Record<string, ValidationContract> = {
       'greyout, transitions, occlusion and latency remain separate. ' +
       'Production zero-opacity visibility and fractional compatibility still fail on M3. Candidate opacity 0/0.35/1 is bounded; ' +
       'Pick-only source-byte eligibility preserves colors in the 32-case M3 sweep, faint stack and 40 atlas cases. ' +
-      'Original raster/picking and pre-blend-quantization failures stay visible; atlas tile isolation, cost and broader devices remain open.',
+      'Original raster/picking and pre-blend-quantization failures stay visible. Tile clamping passes 40 isolated-image cases; ' +
+      'other atlas dimensions, GPU cost and broader devices remain open.',
   },
   'center-mass': {
     question: 'Do blend accumulation and compute reduction calculate the same center accurately?',

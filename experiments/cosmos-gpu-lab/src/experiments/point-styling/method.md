@@ -1,8 +1,8 @@
 ---
 source: Recorded findings
-recorded: 2026-11-13
+recorded: 2026-11-14
 device: Apple M3; installed Chrome 157 and inline Chromium 157
-scope: Source-byte picking passes 32 visibility cases and 40 atlas cases on M3, with exact IDs and unchanged color bytes. Atlas CPU colors stay within 1/255; production picking, raster compatibility and tile-isolation failures remain visible. Also 24 styling controls and 767 alpha samples per backend pass.
+scope: Tile clamping passes all 40 isolated-image cases on M3 without repacking; inset remapping passes 11/40 and compact gutters 39/40. The production control and exact-ID/2/255 gates remain unchanged; legacy compatibility stays separate. Earlier visibility/styling controls remain recorded below.
 ---
 
 ## Question
@@ -704,6 +704,8 @@ original unquantized path.
 
 ### Full-frame atlas sweep
 
+This first atlas sweep always uses the original UV policy, independently of the live candidate UV selection.
+
 Four fixtures cover image-only points, images above their own shapes, overlapping points and
 fractional image sizes/atlas edges. Each runs with nearest and linear sampling under five
 frozen profiles: native, pixel ratio 2, zoom 0.5 with opacity 0.35, zoom 2 with reversed draw
@@ -766,10 +768,10 @@ Tile 0's edge texel is transparent. The nonzero alpha comes from tile 1. The lin
 RGB also reflects the preserved production composition described above.
 
 These samples follow the existing atlas packing and sampling policy. Matching them establishes
-port parity, not correct isolation of each image. A later experiment should compare half-texel
-insets, duplicated-edge gutters and texture-array layers, including minification and mipmaps.
-Those alternatives are not implemented or accepted here. Changing the production UVs or atlas
-padding silently would conceal a separate behavior change.
+port parity, not correct isolation of each image. The follow-up below compares texel-center
+clamping, inset remapping and duplicated-edge gutters explicitly. Texture-array layers and
+mipmapped isolation remain unvalidated. The original UV policy and its compatibility failures
+stay visible as controls.
 
 ### Reproduce the atlas study
 
@@ -794,6 +796,157 @@ This covers raw square images on one native adapter. DOM image decoding/color co
 non-square packing/scaling, mipmaps, images combined with rings/greyout/transitions or strokes,
 pointer-hover scheduling and GPU cost need separate validation. The production engine is
 unchanged, and this readback-heavy diagnostic makes no performance claim.
+
+
+## Neighbor-tile bleeding: isolation candidates
+
+The atlas follow-up keeps the preceding study's original UV policy and acceptance gates.
+It adds a separate question: **does each image sample only its own texels, as it would in an
+individual clamp-to-edge texture?** Matching WebGL and WebGPU is necessary but cannot answer
+that question when both sample the same neighbor.
+
+### Cause and alternatives
+
+For a 32-texel-wide image, local UV `u` maps to texel coordinate `x = 32u`. Texel centers are
+at `0.5, 1.5, …, 31.5`. At `u = 1`, nearest sampling reaches coordinate 32, outside the image;
+bilinear sampling straddles texels 31 and 32. The sampler clamps only at the full texture's
+boundary. It has no knowledge of an atlas rectangle inside that texture.
+
+| Policy | Sample coordinate inside a tile | What changes |
+|---|---|---|
+| Original control | `32u` | Existing production UVs, including neighbor reads |
+| Tile clamp | `clamp(32u, 0.5, 31.5)` | Only the half-texel edge regions |
+| Inset UV remap | `0.5 + 31u` | Every interior coordinate except the midpoint |
+| Duplicated-edge gutter | `32u`, with one copied edge texel around the image | Atlas packing and UV offsets; the image's texel scale is retained |
+
+The same construction applies to V and to corners. A texel-center **clamp** and an inward
+UV **remap** are different operations. At `u = 0.25`, the original and clamped coordinate is
+8, while the inset remap gives 8.25. An inset may remove a seam while also changing image
+details and alpha thresholds away from that seam.
+
+The candidate GLSL and WGSL compute the clamp in the fragment shader using the actual texture
+dimensions:
+
+```wgsl
+let halfTexel = vec2f(0.5) / vec2f(textureDimensions(atlas));
+uv = clamp(uv, tileMin + halfTexel, tileMax - halfTexel);
+```
+
+The clamp retains the original 64 × 64 texture and UV rectangles. The inset control uploads
+texel-center UV endpoints. The gutter candidate packs four 34 × 34 cells into a 68 × 68 RGBA8
+texture, duplicates all four borders and corners, and maps UVs over each original 32-texel
+extent. It uses **18,496 bytes versus 16,384 bytes**, an increase of **2,112 bytes (12.9%)**
+for this fixture, before implementation overhead. These are raw base-level sizes, not measured
+VRAM allocations or a runtime performance comparison.
+
+This investigation follows the sampler boundary/filtering definitions in the
+[WebGPU specification](https://www.w3.org/TR/webgpu/#sampler-creation). NVIDIA's
+[texture-atlas white paper, sections on address modes and filtering](https://developer.download.nvidia.com/SDK/9.5/Samples/DEMOS/Direct3D9/src/BatchingViaTextureAtlases/AtlasCreationTool/Docs/Batching_Via_Texture_Atlases.pdf)
+describes the internal-rectangle problem, shader clamping and border-texel alternatives.
+Its older Direct3D-specific raster and mipmap advice is not treated as a WebGPU guarantee.
+
+### Independent reference and unchanged controls
+
+The CPU reference addresses the original image's 32 × 32 pixels directly, clamping each texel
+lookup to that image. It does not read the gutter atlas or reproduce the GPU's normalized-UV
+clamp. The original Cosmos RGB mix, max(shape alpha, image alpha), source-byte ID rule and
+framebuffer composition remain unchanged.
+
+The UI exposes **Candidate atlas UVs**. Production always binds the original texture and UVs,
+regardless of that selection; regression tests require its color and ID bytes to stay exact.
+Captured snapshots name their actual UV policy, so mixed production/candidate comparisons
+evaluate each lane against its own declared rule. The isolated-image audit is an explicitly
+separate reference, not a replacement CPU rule for the production control.
+
+**Run tile-isolation sweep** covers the same 40 configurations under four policies: **160
+rows**. Every row keeps the paired-policy verdict, isolated CPU masks/colors, foreground source
+audit, pick-only color preservation, original-policy color changes and production compatibility.
+The exact ID/mask requirements, zero invisible picks and **2/255** color budget are unchanged.
+Pick-only preservation still requires zero changed color pixels against an unquantized explicit
+draw using the **same UV policy**. Changes caused by selecting a different UV policy are
+reported separately, not mislabeled as preserved production color.
+
+Recorded **14 November 2026**, in Codex's inline Chromium 157 browser on **Apple M3**, with
+luma **10.0.0-alpha.4**. Each policy covers **10,485,760 pixel positions** across 40 rows:
+
+| Policy | Paired rule passes | Isolated-image passes | Isolated CPU mask failures per backend | Isolated CPU color failures per backend |
+|---|---|---|---|---|
+| Original UVs | 40/40 | 24/40 | 2,959 | 5,166 |
+| Tile clamp | **40/40** | **40/40** | **0** | **0** |
+| Inset remap | 40/40 | 11/40 | 14,871 | 80,956 |
+| 68 × 68 gutter | 39/40 | 39/40 | 64 | 390 |
+
+All 160 rows have exact cross-backend color bytes and IDs, zero composed-frame invisible
+picks, zero isolated-foreground visibility failures and zero changed pick-only color pixels.
+The gutter counterexample is therefore a shared sampling error, not a WebGL/WebGPU disagreement.
+The clamp's independent CPU colors differ by at most **1/255**. No failed row or boundary pixel
+was excluded.
+
+The clamp corrects **5,168 original-policy color pixels per backend**. This is an intentional
+UV-policy difference, not pick-only color preservation. Production compatibility still passes
+**0/40** rows for every policy. In the clamp comparison, **5,085 color pixels** fail the original
+2/255 budget, with a maximum difference of **195/255**, alongside the retained legacy ID
+failures. Those are reported as failed compatibility checks. The original policy's mismatch,
+visibility and maximum-error summaries match the preceding study row for row.
+
+At native edge pixel **(208, 112)**, both clamp candidates now output `[0, 0, 0, 0]` and
+background ID for nearest and linear sampling. The original policy still outputs the previously
+recorded neighbor color/alpha and point ID 0.
+
+### Gutter normalization counterexample
+
+The lone gutter rejection is **Atlas edges / Native / nearest**. At pixel **(180, 100)**, both
+GPUs return transparent black/background while the CPU expects `[60, 70, 180, 255]` and ID 0.
+There are **64 mask failures** and **390 color-budget failures** per backend in that row.
+
+The local image UV is `(0.125, 0.125)`. Float32 interpolation of uploaded endpoints `1/68`
+and `33/68` gives approximately `0.07352940738`, mapping to texel coordinate **4.9999997**
+instead of the ideal **5**. Nearest sampling can consequently select the preceding transparent
+border texel. This is a coordinate-normalization hypothesis supported by the matching first
+pixel and the controlled replay below, not a claim that duplicated gutters always fail.
+
+A controlled GPU replay places the same four gutter cells at the same texel positions in a
+**128 × 128** texture, changing only the full atlas extent and normalized UV endpoints. Both
+nearest and linear now pass the complete isolated CPU mask/color checks in both backends.
+The nearest reading at (180, 100) is `[60, 70, 180, 255]` and ID 0 as expected. The f32
+coordinate is exactly 5 for this extent. This supports coordinate normalization as the cause
+of this bounded rejection; it is not broad acceptance of the 128-wide layout.
+
+That replay uses **65,536 base-level bytes**, four times the original atlas and substantially
+more than the compact gutter. It is exposed as the named normalization replay in
+`atlas-isolation.test.ts`, not as a new default. The 160-row table retains the actual 68-wide
+failure. All **33 full-suite tests** passed inline; the subsequent **12 atlas/UI tests**, including
+the new replay, also pass. No assertion requires every adapter to reproduce the 68-wide failure.
+
+**Recommendation:** use tile clamping as the current base-level candidate. It passes all 40
+isolated-image rows, preserves interior mapping and needs no atlas repacking or extra texels.
+Keep the inset and 68-wide gutter failures visible. Broaden coverage to non-power-of-two tile
+rectangles, non-square packing and other adapters before adopting a production-wide policy.
+Mipmap and image-update behavior remain separate work.
+
+### Reproduce the isolation comparison
+
+1. Select **Source-byte picking candidate**, then **Atlas · filtering and tile edges**.
+2. Leave **Candidate atlas UVs → Original · control**. The paired frame can pass while
+   **Atlas tile isolation** fails. At pixel (208, 112), the preceding edge probe reports
+   neighbor alpha and point ID 0.
+3. Select **Clamp to tile texel centers**. Compare both the visible image and isolated-image
+   mask/color audit. Repeat with linear sampling, opacity 0/0.35/1, ratios 1/2, zoom and order.
+4. Compare **Inset UV remap · control** and **Duplicate-edge gutters** against the same CPU
+   image. A seam disappearing does not by itself pass the full-frame gates.
+5. Run **Run tile-isolation sweep** in Diagnostics for all 160 rows. The four-policy summary
+   precedes the complete visible table. Cancellation retains completed rows and live settings.
+6. Export schema **9** JSON locally for both atlas layouts/bytes, actual/requested policy,
+   all frozen inputs and controls, first mismatches and the edge probes. Raw measurements
+   remain outside the repository.
+7. Run `LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling`
+   and open the printed session URL in Codex's inline browser.
+
+All textures, samplers, draws and readbacks use public luma APIs. This is base-level nearest
+and bilinear sampling, not a mipmap, anisotropic-filtering, non-square-packing or performance
+claim. One border texel is not a general solution for wider filter footprints or generated
+mip chains. Texture arrays remain an unimplemented alternative to investigate if per-image
+mip chains or more complex packing become necessary.
 
 
 ## Reproduce
