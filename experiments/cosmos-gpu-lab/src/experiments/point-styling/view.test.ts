@@ -6,6 +6,27 @@ let host: HTMLElement | undefined
 let instance: ExperimentInstance | undefined
 afterEach(() => { instance?.destroy(); host?.remove() })
 
+it('exposes source-texel addressing and retains the clamped control verdict', async () => {
+  host = document.createElement('div'); document.body.append(host)
+  instance = await createStylingView(host)
+  const select = async (selector: string, value: string): Promise<void> => {
+    const element = host!.querySelector<HTMLSelectElement>(selector)!
+    element.value = value; element.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(element.disabled).toBe(false), { timeout: 20000 })
+  }
+  await select('[data-fixture]', 'atlas-packing-edges'); await select('[data-renderer]', 'eligibility')
+  await select('[data-atlas-isolation]', 'clamp')
+  const control = host.querySelector('[data-isolation-audit]')!.textContent
+  await select('[data-atlas-isolation]', 'texel')
+  expect(host.querySelector('[role="status"]')!.textContent).toContain('Source-byte frame passed')
+  expect(host.querySelector('[data-isolation-audit]')!.textContent).not.toContain('Fail')
+  expect(host.querySelector('[data-atlas-cpu]')!.textContent).not.toContain('Fail')
+  expect(host.querySelector('[data-color-preservation]')!.textContent).not.toContain('Fail')
+  await select('[data-atlas-isolation]', 'clamp')
+  expect(host.querySelector('[data-isolation-audit]')!.textContent).toBe(control)
+  expect(host.querySelector('details')).toBeNull()
+})
+
 it('keeps non-square atlas settings and live canvases when cancelling the packing sweep', async () => {
   host = document.createElement('div'); document.body.append(host)
   instance = await createStylingView(host)

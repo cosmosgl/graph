@@ -10,9 +10,11 @@ import { createStylingWebGPU } from './webgpu'
 import { investigateFractional, renderFractionalInvestigation } from './fractional'
 import { renderExplicitControl } from './explicit'
 import { SOURCE_ALPHA_POLICY, SOURCE_BYTE_PICKING_POLICY } from './source-alpha'
-import { ATLAS_EXPORT, ATLAS_PICKING_POLICY, ATLAS_QUANTIZED_POLICY, ATLAS_ISOLATION_EXPORT } from './atlas'
+import { ATLAS_EXPORT, ATLAS_PICKING_POLICY, ATLAS_QUANTIZED_POLICY, ATLAS_ISOLATION_EXPORT, sourceTexelRects } from './atlas'
 import { PACKING_NAMES, packingExport, packingLayout } from './atlas-packing'
-import { PACKING_FIXTURES, PACKING_PROFILES, renderPackingRows, runPackingSweep, type PackingRow } from './atlas-packing-study'
+import {
+  PACKING_FIXTURES, PACKING_PROFILES, PACKING_POLICIES, PACKING_ROW_COUNT, renderPackingRows, runPackingSweep, type PackingRow,
+} from './atlas-packing-study'
 import { inspectAtlasIsolation, renderIsolationRows, runIsolationSweep, type IsolationRow } from './atlas-isolation'
 import { ATLAS_FIXTURES, ATLAS_PROFILES, renderAtlasRows, runAtlasSweep, type AtlasRow } from './atlas-study'
 import {
@@ -45,9 +47,9 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       <label>Atlas packing <select data-atlas-packing><option value="baseline">Baseline · 64 × 64</option>
         <option value="npot-square">Production grid · 93 × 93</option><option value="npot-rectangle">Rectangular · 93 × 62</option>
         <option value="npot-scaled">Production scaled · 62 × 62</option><option value="pot-padded">Padded control · 128 × 128</option></select></label>
-      <label>Candidate atlas UVs <select data-atlas-isolation><option value="original">Original · control</option>
+      <label>Candidate atlas sampling <select data-atlas-isolation><option value="original">Original · control</option>
         <option value="clamp">Clamp to tile texel centers</option><option value="inset">Inset UV remap · control</option>
-        <option value="gutter">Duplicate-edge gutters</option></select></label>
+        <option value="gutter">Duplicate-edge gutters</option><option value="texel">Source texels · nearest</option></select></label>
       <label>Zoom <select data-zoom><option>0.5</option><option selected>1</option><option>2</option></select></label>
       <label>Pixel ratio <select data-ratio><option selected>1</option><option>2</option></select></label>
       <label>Size on zoom <select data-scale><option value="yes">Scale with camera</option>
@@ -80,7 +82,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       <div class="controls"><button data-isolation-sweep disabled>Run tile-isolation sweep</button>
         <button data-isolation-cancel disabled>Cancel isolation sweep</button></div>
       <p data-isolation-progress>No isolation sweep run.</p><div data-isolation-results></div>
-      <h3>Non-square atlas packing</h3><p>96 frozen rows compare original UVs and clamping across four layouts, including production resampling.</p>
+      <h3>Non-square atlas packing</h3><p>144 frozen rows compare original UVs, clamping and source-texel addressing across four layouts.</p>
       <div class="controls"><button data-packing-sweep disabled>Run packing sweep</button>
         <button data-packing-cancel disabled>Cancel packing sweep</button></div>
       <p data-packing-progress>No packing sweep run.</p><div data-packing-results></div></section>
@@ -171,8 +173,11 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
                     ? '64 overlapping white circles, each at fill alpha 0.51/255. Compare production color compatibility as well as candidate visibility.'
                     : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
     if (isAtlas) {
-      el('[data-legend]').textContent += ` Candidate UV policy: ${settings.atlasIsolation
-      }; production retains original UVs. Pick-only color preservation uses the same UV policy in both draws.`
+      el('[data-legend]').textContent += ` Candidate sampling policy: ${settings.atlasIsolation
+      }; production retains original UVs. Pick-only color preservation uses the same sampling policy in both draws.`
+    }
+    if (isAtlas && settings.atlasIsolation === 'texel') {
+      el('[data-legend]').textContent += ' Nearest samples use integer source texels; linear filtering retains the clamped sampler.'
     }
     if (isAtlas && settings.atlasPacking !== 'baseline') {
       const layout = packingLayout(settings.atlasPacking)
@@ -238,9 +243,16 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       if (destroyed) return
       latestIsolation = isolatedAtlas?.valid
       report = {
-        schemaVersion: 11,
+        schemaVersion: 12,
         experiment: 'point-styling',
         isolatedImageReference: 'source-texel-v2; baseline and production-normalized controls retained',
+        sourceTexelAddressing: variant !== 'production' && settings.atlasIsolation === 'texel'
+          ? {
+            nearest: 'pixel offset → source-texel numerator / image diameter → integer floor/clamp → unfiltered texel fetch',
+            linear: 'unchanged tile-clamped hardware sampling',
+            rectangles: Array.from(sourceTexelRects(settings.atlasPacking)),
+          }
+          : undefined,
         recordedAt: new Date().toISOString(),
         browser: navigator.userAgent,
         validationContract: validationContracts['point-styling'],
@@ -299,7 +311,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           </tbody></table>`
         if (colorPreservation) {
           output.insertAdjacentHTML('beforeend', `<h3>Original color output</h3>
-            <p>Byte comparison with the unquantized explicit-coordinate control in each API, using the same atlas UV policy.
+            <p>Byte comparison with the unquantized explicit-coordinate control in each API, using the same atlas sampling policy.
             This checks color independently of the changed picking rule.</p>
             <table data-color-preservation><thead><tr><th>Backend</th><th>Changed color pixels</th>
               <th>Maximum channel difference</th><th>Unchanged</th></tr></thead>
@@ -319,7 +331,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           const m = isolatedAtlas.masks
           output.insertAdjacentHTML('beforeend', `<h3>Atlas tile isolation</h3>
             <p>Independent CPU images clamp to their own edges. Paired-policy agreement and production compatibility remain separate.</p>
-            <table data-isolation-audit><tbody><tr><th>Actual UV policy · WebGL / WebGPU</th>
+            <table data-isolation-audit><tbody><tr><th>Actual sampling policy · WebGL / WebGPU</th>
               <td>${snapshots.webgl?.atlasIsolation} / ${snapshots.webgpu?.atlasIsolation}</td></tr>
               <tr><th>Isolated-image result</th><td>${checkResult(isolatedAtlas.valid)}</td></tr>
               <tr><th>Isolated CPU mask differences · WebGL / WebGPU</th><td>${m.webglReferenceFailures} / ${m.webgpuReferenceFailures}</td></tr>
@@ -408,7 +420,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           layouts: PACKING_NAMES.map(name => packingExport(name)),
           profiles: PACKING_PROFILES,
           filters: ['nearest', 'linear'],
-          policies: ['original', 'clamp'],
+          policies: PACKING_POLICIES,
           fixtures: PACKING_FIXTURES.map(name => ({ name, points: fixture(name) })),
         },
       },
@@ -579,13 +591,13 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       packingStudy = study; exportButton.disabled = true; el('[data-packing-results]').replaceChildren()
       host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
       setSweepDisabled(true); el<HTMLButtonElement>('[data-packing-cancel]').disabled = false
-      el('[data-packing-progress]').textContent = 'Starting 96 full-frame packing rows…'
+      el('[data-packing-progress]').textContent = `Starting ${PACKING_ROW_COUNT} full-frame packing rows…`
       try {
         await runPackingSweep({ webgl: backends.webgl!, webgpu: backends.webgpu! }, row => {
           study.rows.push(row)
           if (destroyed) return
           renderPackingRows(el('[data-packing-results]'), study.rows)
-          el('[data-packing-progress]').textContent = `${study.rows.length} / 96 · ${row.packing} · ${row.fixture} · ` +
+          el('[data-packing-progress]').textContent = `${study.rows.length} / ${PACKING_ROW_COUNT} · ${row.packing} · ${row.fixture} · ` +
             `${row.filter} · ${row.profile} · ${row.policy}`
         }, () => cancelSweep || destroyed)
         study.status = cancelSweep || destroyed ? 'cancelled' : 'complete'
@@ -595,7 +607,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         else {
           host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
           exportButton.disabled = !report; setSweepDisabled(false); el<HTMLButtonElement>('[data-packing-cancel]').disabled = true
-          el('[data-packing-progress]').textContent = `${study.status} · ${study.rows.length} / 96 · ` +
+          el('[data-packing-progress]').textContent = `${study.status} · ${study.rows.length} / ${PACKING_ROW_COUNT} · ` +
             `${study.rows.filter(row => !row.passed).length} isolated-image rows rejected. All controls and failed rows retained.`
         }
       }

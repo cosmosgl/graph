@@ -73,7 +73,7 @@ function imageFragment (p: Point, settings: Settings, x: number, y: number):
   let image = [0, 0, 0, 0]
   if (imageCovered) {
     image = settings.atlasPacking && settings.atlasPacking !== 'baseline' &&
-      (settings.atlasIsolation === 'clamp' || settings.atlasIsolation === 'gutter')
+      (settings.atlasIsolation === 'clamp' || settings.atlasIsolation === 'gutter' || settings.atlasIsolation === 'texel')
       ? samplePackingPixel(settings.atlasPacking, p.image!, x - cx, y - cy, imageD, settings.imageFilter ?? 'nearest')
       : sampleAtlasPolicy(p.image!, (x - cx) / imageD + 0.5, (y - cy) / imageD + 0.5,
         settings.imageFilter ?? 'nearest', settings.atlasIsolation ?? 'original', settings.atlasPacking ?? 'baseline')

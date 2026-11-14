@@ -4,6 +4,7 @@ struct Params { view: vec4f, style: vec4f, options: vec4f }
 @group(0) @binding(1) var<uniform> params: Params;
 @group(0) @binding(2) var atlas: texture_2d<f32>;
 @group(0) @binding(3) var atlasSampler: sampler;
+@group(0) @binding(4) var<storage, read> imageRects: array<vec4u>;
 struct Vertex {
   @builtin(position) position: vec4f,
   @location(0) coord: vec2f,
@@ -112,15 +113,26 @@ fn distanceToShape(coord: vec2f, shape: u32) -> f32 {
   if (shape == 8u || input.diameter <= 0.0) { coverage = 0.0; }
   var imageColor = vec4f(0.0); var imageCovered = false;
   if (p.image.z > 0.0 && input.imageDiameter > 0.0) {
-    let imageCoord = offset * (2.0 / input.imageDiameter);
-    if (abs(imageCoord.x) <= 1.0 && abs(imageCoord.y) <= 1.0) {
-      var uv = mix(p.uv.xy,p.uv.zw,(imageCoord + 1.0) * 0.5);
-      if (params.style.w > 0.0) {
-        let halfTexel = vec2f(0.5) / vec2f(textureDimensions(atlas));
-        uv = clamp(uv,p.uv.xy + halfTexel,p.uv.zw - halfTexel);
+    if (params.style.w == 2.0) {
+      if (all(abs(offset) <= vec2f(input.imageDiameter * 0.5))) {
+        let rectangle = imageRects[u32(p.image.x)];
+        let size = vec2i(rectangle.zw);
+        let numerator = (offset + vec2f(input.imageDiameter * 0.5)) * vec2f(size);
+        let pixel = clamp(vec2i(floor(numerator / input.imageDiameter)),vec2i(0),size - vec2i(1));
+        imageColor = textureLoad(atlas,vec2i(rectangle.xy) + pixel,0);
+        imageCovered = true;
       }
-      imageColor = textureSampleLevel(atlas,atlasSampler,uv,0.0);
-      imageCovered = true;
+    } else {
+      let imageCoord = offset * (2.0 / input.imageDiameter);
+      if (abs(imageCoord.x) <= 1.0 && abs(imageCoord.y) <= 1.0) {
+        var uv = mix(p.uv.xy,p.uv.zw,(imageCoord + 1.0) * 0.5);
+        if (params.style.w == 1.0) {
+          let halfTexel = vec2f(0.5) / vec2f(textureDimensions(atlas));
+          uv = clamp(uv,p.uv.xy + halfTexel,p.uv.zw - halfTexel);
+        }
+        imageColor = textureSampleLevel(atlas,atlasSampler,uv,0.0);
+        imageCovered = true;
+      }
     }
   }
   // Unblended float-target instrumentation; normal color/ID modes are unchanged.

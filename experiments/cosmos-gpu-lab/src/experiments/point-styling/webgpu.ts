@@ -6,7 +6,7 @@ import { dimensions, floatPixels, pixels, target, type Backend, type Snapshot } 
 import { HEIGHT, resolvePoint, WIDTH } from './data'
 import source from './points.wgsl?raw'
 import { SOURCE_ALPHA_WGSL } from './source-alpha'
-import { atlasTexture, atlasCoords, atlasInfo, GUTTER_SIZE } from './atlas'
+import { atlasTexture, atlasCoords, atlasInfo, GUTTER_SIZE, sourceTexelRects } from './atlas'
 
 export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExtent = GUTTER_SIZE): Promise<Backend> {
   let failure: string | undefined
@@ -17,7 +17,8 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
       attributes: [],
       bindings: [...bindingLayout([['points', 'read-only-storage'], ['params', 'uniform']]),
         { name: 'atlas', type: 'texture' as const, location: 2, group: 0, sampleType: 'float' as const, viewDimension: '2d' as const },
-        { name: 'atlasSampler', type: 'sampler' as const, location: 3, group: 0, samplerType: 'filtering' as const }],
+        { name: 'atlasSampler', type: 'sampler' as const, location: 3, group: 0, samplerType: 'filtering' as const },
+        { name: 'imageRects', type: 'read-only-storage' as const, location: 4, group: 0 }],
     }
     const atlases = {
       original: { nearest: scope.own(atlasTexture(device, 'nearest')), linear: scope.own(atlasTexture(device, 'linear')) },
@@ -34,6 +35,7 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
       return texture
     }
 
+    const rectangleBuffers = new Map<string, ReturnType<typeof upload>>()
     const vertexArray = scope.own(device.createVertexArray({ shaderLayout, bufferLayout: [] }))
     const make = (format: TextureFormatColor, picking: boolean, display = false): RenderKernel => scope.own(new RenderKernel(device, {
       vertexSource: `${source}\n${SOURCE_ALPHA_WGSL}`,
@@ -61,6 +63,10 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
           const isolation = variant === 'production' ? 'original' : settings.atlasIsolation ?? 'original'
           const packing = settings.atlasPacking ?? 'baseline'; const info = atlasInfo(packing)
           const coords = atlasCoords(isolation, gutterExtent, packing)
+          let imageRects = rectangleBuffers.get(packing)
+          if (!imageRects) { imageRects = scope.own(upload(device, sourceTexelRects(packing))); rectangleBuffers.set(packing, imageRects) }
+          const texel = isolation === 'texel' && (settings.imageFilter ?? 'nearest') === 'nearest'
+          const samplerMode = texel ? 2 : Number(isolation === 'clamp' || isolation === 'texel')
           const [width, height] = dimensions(settings)
           if (display) { canvas.width = width; canvas.height = height; device.canvasContext!.resize({ width, height }) }
           const color = frame.own(target(device, width, height)); const ids = frame.own(target(device, width, height))
@@ -75,7 +81,7 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
           })
           const buffer = frame.own(upload(device, records))
           const params = (mode: number): ReturnType<typeof upload> => frame.own(upload(device, new Float32Array([
-            WIDTH, HEIGHT, settings.ratio, settings.zoom, settings.sizeScale, settings.maxSize, settings.opacity, Number(isolation === 'clamp'),
+            WIDTH, HEIGHT, settings.ratio, settings.zoom, settings.sizeScale, settings.maxSize, settings.opacity, samplerMode,
             Number(settings.scaleOnZoom), mode, Number(variant !== 'production'), variant === 'eligibility' ? 2 : Number(variant === 'quantized'),
           ]), Buffer.UNIFORM))
           const visibleParams = params(0); const pickingParams = params(1)
@@ -90,7 +96,7 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
                 vertexCount: 6,
                 instanceCount: points.length,
                 // luma pairs atlas with atlasSampler from the texture's sampler.
-                bindings: { points: buffer, params: uniforms, atlas },
+                bindings: { points: buffer, params: uniforms, atlas, imageRects },
               })
             } finally { pass.end() }
           }
