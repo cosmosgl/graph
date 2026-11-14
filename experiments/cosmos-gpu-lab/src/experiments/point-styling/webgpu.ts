@@ -6,7 +6,7 @@ import { dimensions, floatPixels, pixels, target, type Backend, type Snapshot } 
 import { HEIGHT, resolvePoint, WIDTH } from './data'
 import source from './points.wgsl?raw'
 import { SOURCE_ALPHA_WGSL } from './source-alpha'
-import { atlasTexture, atlasCoords, IMAGE_COUNT, GUTTER_SIZE } from './atlas'
+import { atlasTexture, atlasCoords, atlasInfo, GUTTER_SIZE } from './atlas'
 
 export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExtent = GUTTER_SIZE): Promise<Backend> {
   let failure: string | undefined
@@ -26,6 +26,14 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
         linear: scope.own(atlasTexture(device, 'linear', true, gutterExtent)),
       },
     }
+    const packedTextures = new Map<string, ReturnType<typeof atlasTexture>>()
+    const packedTexture = (packing: NonNullable<import('./data').Settings['atlasPacking']>, gutter: boolean, filter: 'nearest' | 'linear'):
+    ReturnType<typeof atlasTexture> => {
+      const key = `${packing}:${gutter}:${filter}`; let texture = packedTextures.get(key)
+      if (!texture) { texture = scope.own(atlasTexture(device, filter, gutter, gutterExtent, packing)); packedTextures.set(key, texture) }
+      return texture
+    }
+
     const vertexArray = scope.own(device.createVertexArray({ shaderLayout, bufferLayout: [] }))
     const make = (format: TextureFormatColor, picking: boolean, display = false): RenderKernel => scope.own(new RenderKernel(device, {
       vertexSource: `${source}\n${SOURCE_ALPHA_WGSL}`,
@@ -51,7 +59,8 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
         const frame = resourceScope()
         try {
           const isolation = variant === 'production' ? 'original' : settings.atlasIsolation ?? 'original'
-          const coords = atlasCoords(isolation, gutterExtent)
+          const packing = settings.atlasPacking ?? 'baseline'; const info = atlasInfo(packing)
+          const coords = atlasCoords(isolation, gutterExtent, packing)
           const [width, height] = dimensions(settings)
           if (display) { canvas.width = width; canvas.height = height; device.canvasContext!.resize({ width, height }) }
           const color = frame.own(target(device, width, height)); const ids = frame.own(target(device, width, height))
@@ -59,7 +68,7 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
           const records = new Float32Array(Math.max(24, points.length * 24))
           order.forEach((id, index) => {
             const p = resolvePoint(points[id], settings)
-            const image = p.image ?? -1; const hasImage = image >= 0 && image < IMAGE_COUNT
+            const image = p.image ?? -1; const hasImage = image >= 0 && image < info.imageCount
             records.set([p.x, p.y, p.size, p.shape, ...p.color, ...p.strokeColor, p.stroke, Number(!!p.absent), id, 0,
               image, p.imageSize ?? p.size, Number(hasImage), 0,
               ...(hasImage ? coords.subarray(image * 4, image * 4 + 4) : [-1, -1, -1, -1])], index * 24)
@@ -73,7 +82,9 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
           const draw = (kernel: RenderKernel, uniforms: ReturnType<typeof upload>, framebuffer?: ReturnType<typeof target>['framebuffer']): void => {
             const pass = device.beginRenderPass({ framebuffer, clearColor: framebuffer ? [0, 0, 0, 0] : [0.14, 0.16, 0.185, 1], clearDepth: false })
             try {
-              const atlas = atlases[isolation === 'gutter' ? 'gutter' : 'original'][settings.imageFilter ?? 'nearest']
+              const atlas = packing === 'baseline'
+                ? atlases[isolation === 'gutter' ? 'gutter' : 'original'][settings.imageFilter ?? 'nearest']
+                : packedTexture(packing, isolation === 'gutter', settings.imageFilter ?? 'nearest')
               kernel.draw(pass, {
                 vertexArray,
                 vertexCount: 6,
@@ -87,6 +98,7 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
           if (display) draw(displayKernel, visibleParams)
           device.submit()
           const result: Snapshot = {
+            atlasPacking: packing,
             atlasIsolation: isolation,
             atlasGutterExtent: isolation === 'gutter' ? gutterExtent : undefined,
             pickingRule: variant === 'production' ? 'legacy' : variant === 'explicit' ? 'visible' : 'source-alpha',

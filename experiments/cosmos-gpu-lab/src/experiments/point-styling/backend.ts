@@ -6,6 +6,7 @@ export type PickingRule = 'legacy' | 'visible' | 'source-alpha'
 export type Snapshot = {
   width: number; height: number; color: Uint8Array; ids: Uint8Array; probe?: Probe; analyticControl?: Snapshot; pickingRule?: PickingRule;
   atlasIsolation?: Settings['atlasIsolation']; atlasGutterExtent?: number;
+  atlasPacking?: Settings['atlasPacking'];
 }
 export type Backend = {
   info: string; render(points: Point[], settings: Settings, diagnose?: boolean, variant?: RenderVariant, display?: boolean): Promise<Snapshot>; destroy(): void;

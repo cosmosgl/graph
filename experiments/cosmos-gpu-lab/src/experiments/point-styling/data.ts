@@ -12,6 +12,7 @@ export type Settings = {
   defaultStroke: number; defaultStrokeColor: [number, number, number, number]; reverse: boolean;
   imageFilter?: 'nearest' | 'linear';
   atlasIsolation?: 'original' | 'clamp' | 'inset' | 'gutter';
+  atlasPacking?: 'baseline' | 'npot-square' | 'npot-rectangle' | 'npot-scaled' | 'pot-padded';
 }
 export const DEFAULTS: Settings = {
   zoom: 1,
@@ -47,8 +48,22 @@ export function point (x: number, y: number, shape = 0, changes: Partial<Point> 
   return { x, y, shape, size: 42, color: [0.62, 0.71, 0.84, 1], stroke: 0, strokeColor: [0.95, 0.8, 0.57, 1], ...changes }
 }
 export type FixtureName = 'shapes' | 'overlap' | 'edge-cases' | 'fractional' | 'tiny-alpha' | 'tiny-overlap' | 'alpha-stack' |
-  'atlas-images' | 'atlas-shapes' | 'atlas-overlap' | 'atlas-edges'
+  'atlas-images' | 'atlas-shapes' | 'atlas-overlap' | 'atlas-edges' | 'atlas-packing-grid' | 'atlas-packing-edges' | 'atlas-packing-overlap'
 export function fixture (name: FixtureName): Point[] {
+  if (name === 'atlas-packing-grid' || name === 'atlas-packing-edges') {
+    return Array.from({ length: 5 }, (_, image) => point(64.5 + image * 96, 160.5, 8, {
+      size: 0,
+      color: [0, 0, 0, 0],
+      image,
+      imageSize: name === 'atlas-packing-grid' ? 64 : [62, 58, 46, 26, 22][image],
+    }))
+  }
+  if (name === 'atlas-packing-overlap') {
+    return [point(256, 160, 1, { size: 128, color: [0.2, 0.45, 0.8, 1] }),
+      ...Array.from({ length: 5 }, (_, image) => point(208 + image * 24, 160, image === 1 ? 0 : 8, {
+        size: image === 1 ? 42 : 0, color: [0.3, 0.55, 0.85, image === 1 ? 0.6 : 0], image, imageSize: 64,
+      }))]
+  }
   if (name === 'atlas-images') {
     return Array.from({ length: 4 }, (_, image) =>
       point(192 + (image % 2) * 128, 112 + Math.floor(image / 2) * 96, 8, { size: 0, image, imageSize: 64, color: [0, 0, 0, 0] }))

@@ -124,18 +124,16 @@ export const research: Record<string, ResearchSummary> = {
     method: 'validation-contract',
     comparison: 'Same styled points → production WebGL / WebGPU color and ID images → full-image and scalar-mask checks',
     question: 'Does point-ID picking select the shapes that Cosmos actually renders?',
-    conclusion: 'Tile clamping passes all 40 isolated-image cases without repacking; inset remapping and compact gutters retain failures.',
-    scope: 'Apple M3: 160 policy rows; clamping passes 40/40, inset remapping 11/40 and compact gutters 39/40. ' +
-      'Clamp CPU colors stay within 1/255; exact masks and pick-only color preservation pass. ' +
-      'Legacy compatibility and wider packing/device coverage remain open.',
-    variant: 'Production/legacy and source-byte candidates with original, clamped, inset and gutter UVs; luma 10.0.0-alpha.4; Apple M3',
+    conclusion: 'Non-square packing works, but clamping passes 45/48 configurations; three exact nearest-boundary cases remain rejected.',
+    scope: 'Apple M3: corrected 96-row audit; clamping passes 12/12 scaled-grid cases and 11/12 in each other layout. ' +
+      'Paired GPU color/ID images are exact, but independent CPU masks retain 84 failures in each rejected frame. Legacy compatibility stays separate.',
+    variant: 'Unmodified production GLSL and source-byte candidates; four NPOT/non-square packing layouts; luma 10.0.0-alpha.4; Apple M3',
     reviewed: '2026-11-14',
     milestone: 'rendering',
     evidence: 'method',
-    next: 'Validate non-power-of-two and non-square atlas packing, then image updates, rings/greyout, ID-pass cost and other devices.',
-    reproduce: 'Select Source-byte picking candidate, Atlas edges and Clamp to tile texel centers. Run the 160-row tile-isolation sweep. ' +
-      'Inspect isolated CPU images separately from retained production compatibility. ' +
-      'Pick-only colors must stay unchanged within each UV policy. Export local JSON.',
+    next: 'Test source-texel addressing against the nearest-boundary counterexamples, then image updates, rings/greyout, ID-pass cost and other devices.',
+    reproduce: 'Select Source-byte picking candidate, Packing edges, the 93 × 93 grid, nearest sampling and tile clamping. ' +
+      'Run the 96-row packing sweep. The 128 × 128 control must retain the boundary failure. Export local JSON with source-texel-v2 reference metadata.',
     investigations: [{
       page: 'method',
       state: 'Current evidence',
@@ -169,10 +167,10 @@ export const milestones = [
   {
     id: 'rendering',
     title: 'Rendering and interaction',
-    position: 'Bounded production shapes, strokes and host IDs demonstrated',
+    position: 'Bounded shapes, strokes, host IDs and atlas packing demonstrated; exact texel boundaries remain open',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
-    gates: ['Choose production coverage/source-visibility policy; broaden the bounded quantized candidate across devices and measure its cost.',
-      'Validate images, rings/greyout, transitions, links and the separate pointer-hover contract.'],
+    gates: ['Resolve exact image-texel addressing at unchanged masks/color budgets; settle production coverage and source-visibility policy.',
+      'Validate image updates, rings/greyout, transitions, links, pointer hover and wider native devices; measure accepted rendering cost.'],
     evidence: [['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],
   },
   {

@@ -15,13 +15,13 @@ export const validationContracts: Record<string, ValidationContract> = {
       '(visible rule), plus quantized and pick-only candidates with the declared source-alpha rule; offscreen RGBA8 color/ID readback.',
     acceptance: 'Exact IDs and scalar masks at every pixel; at most two RGBA8 channel levels for color; no picked pixels with zero rendered alpha.',
     coverage: 'Frozen eight-shape, overlap, edge-case, fractional and tiny-alpha fixtures, zoom, pixel ratio, strokes, defaults and render order; ' +
-      'raw atlas images with nearest/linear sampling and CPU colors; production, explicit-coordinate and isolated-source verdicts are named separately.',
+      'raw atlas images, NPOT/non-square layouts and nearest/linear CPU colors; production, explicit-coordinate and isolated-source verdicts stay separate.',
     limits: 'Host picking only. Pointer tolerance, image decoding/updates, rings, automatic shades, ' +
       'greyout, transitions, occlusion and latency remain separate. ' +
       'Production zero-opacity visibility and fractional compatibility still fail on M3. Candidate opacity 0/0.35/1 is bounded; ' +
       'Pick-only source-byte eligibility preserves colors in the 32-case M3 sweep, faint stack and 40 atlas cases. ' +
-      'Original raster/picking and pre-blend-quantization failures stay visible. Tile clamping passes 40 isolated-image cases; ' +
-      'other atlas dimensions, GPU cost and broader devices remain open.',
+      'Original raster/picking and pre-blend-quantization failures stay visible. Clamping passes the bounded 64 × 64 atlas, ' +
+      'but three NPOT/non-square nearest-boundary frames still fail. Source-texel addressing, GPU cost and broader devices remain open.',
   },
   'center-mass': {
     question: 'Do blend accumulation and compute reduction calculate the same center accurately?',

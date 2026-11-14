@@ -2,7 +2,7 @@
 source: Recorded findings
 recorded: 2026-11-14
 device: Apple M3; installed Chrome 157 and inline Chromium 157
-scope: Tile clamping passes all 40 isolated-image cases on M3 without repacking; inset remapping passes 11/40 and compact gutters 39/40. The production control and exact-ID/2/255 gates remain unchanged; legacy compatibility stays separate. Earlier visibility/styling controls remain recorded below.
+scope: The corrected 96-row NPOT/non-square audit passes 45/48 clamped configurations on M3. Three native nearest-boundary cases still fail exact CPU masks and colors, including the padded 128 atlas. Production packing, uploads and GPU parity pass; controls and acceptance thresholds remain unchanged.
 ---
 
 ## Question
@@ -920,8 +920,9 @@ the new replay, also pass. No assertion requires every adapter to reproduce the 
 
 **Recommendation:** use tile clamping as the current base-level candidate. It passes all 40
 isolated-image rows, preserves interior mapping and needs no atlas repacking or extra texels.
-Keep the inset and 68-wide gutter failures visible. Broaden coverage to non-power-of-two tile
-rectangles, non-square packing and other adapters before adopting a production-wide policy.
+Keep the inset and 68-wide gutter failures visible. The follow-up below broadens coverage to
+non-power-of-two and non-square layouts and finds a remaining nearest-boundary limitation.
+Other adapters still need validation before adopting a production-wide policy.
 Mipmap and image-update behavior remain separate work.
 
 ### Reproduce the isolation comparison
@@ -947,6 +948,170 @@ and bilinear sampling, not a mipmap, anisotropic-filtering, non-square-packing o
 claim. One border texel is not a general solution for wider filter footprints or generated
 mip chains. Texture arrays remain an unimplemented alternative to investigate if per-image
 mip chains or more complex packing become necessary.
+
+
+## Non-power-of-two and non-square packing
+
+The earlier 40/40 clamping result covered four 32 × 32 images in a 64 × 64 texture. This
+follow-up changes the inputs and packing dimensions while retaining the same production
+GLSL, candidate source-byte rule and acceptance thresholds. It tests **non-square source
+images** and **a rectangular atlas** as separate questions.
+
+### Sources and layouts
+
+Five deterministic RGBA8 images have sizes **31 × 17, 19 × 29, 7 × 23, 13 × 9 and 1 × 11**.
+They include asymmetric gradients, transparent borders/holes, translucent strips, hidden RGB
+at alpha zero, and a one-texel-wide image with alpha 1/255. These images require five valid UV
+records in a 3 × 3 coordinate texture. The four unused records remain `[-1, -1, -1, -1]`.
+
+| Layout | Dimensions | Base-level bytes | Purpose |
+|---|---|---|---|
+| Production-style square grid | 93 × 93 | 34,596 | Three 31-texel cells per axis; non-square sources without resampling |
+| Experimental rectangular layout | 93 × 62 | 23,064 | Same source pixels, cell positions and rectangles; remove the unused third atlas row |
+| Production-style scaled grid | 62 × 62 | 15,376 | Synthetic packing limit of 62; 20-texel cells and two unused texels at the atlas boundary |
+| Padded normalization control | 128 × 128 | 65,536 | Same source pixels and integer positions as the 93 × 93 atlas; different normalized UV endpoints |
+
+The 93 × 93 and scaled 62 × 62 bytes, UVs and coordinate-texture sizes must exactly match
+Cosmos's `createAtlasDataFromImageData`. The independent fixture builder is checked against
+that production utility. Scaling produces **20 × 10, 13 × 20, 6 × 20, 13 × 9 and 1 × 11**
+images using production's nearest resampling. The CPU sampling reference uses those packed
+pixels, rather than comparing a resized GPU image against the original source resolution.
+The 62 limit is a frozen test input, not the M3's hardware limit.
+
+Cosmos's current shader maps each image's full UV rectangle onto a **square point-image
+footprint**. A non-square source therefore follows that existing sizing behavior here.
+Aspect-ratio-preserving image rendering is not silently substituted. The rectangular layout
+and padded control are experimental inputs to the unmodified production shader, not new
+claims about the production packer's default output.
+
+Non-power-of-two textures are supported by WebGL 2 without WebGL 1's special NPOT restrictions;
+see the [WebGL 2 specification](https://registry.khronos.org/webgl/specs/2.0/).
+The experiment uses RGBA8, one mip level, nearest/linear sampling and public luma texture
+uploads. The 93-wide texture has a 372-byte upload row. Upload pitch is distinct from the
+256-byte buffer-copy row alignment used for WebGPU readback. The pinned luma implementation
+uses `queue.writeTexture` behind its public upload API; no native handle is accessed here.
+
+### Frozen matrix and references
+
+The **96-row** sweep covers four layouts, two fixtures, two filters, three profiles and two
+UV policies. The profiles are native, pixel ratio 2, and zoom 0.5 with opacity 0.35 and reversed
+draw order. They are bounded combinations, not every possible setting permutation.
+
+The edge fixture reaches exact texel boundaries at fractional screen positions. The overlap
+fixture includes a visible background, images above their own shapes, source ordering and a
+faint foreground. A separate interactive grid shows all five images; smoke tests verify the
+fifth image's ID, production-control preservation and baseline restoration. UI tests check
+opacity zero and cancellation without changing the live settings or canvases.
+
+Every matrix row retains production GLSL color/ID comparisons, the source-byte paired verdict,
+independent isolated CPU images, per-source visibility and pick-only color preservation.
+Exact IDs/CPU masks, zero invisible picks and the existing **2/255** color budget remain
+required. Color preservation compares picking and unquantized draws **within the same UV
+policy**. Production compatibility remains a separate gate. A passing allocation or restoration
+test does not accept a failed full-image comparison.
+
+Snapshot metadata names the actual packing and UV policy used by each lane. The CPU uses
+per-image width and height independently; it does not assume square images, a 64-texel atlas
+or four UV records. The GLSL/WGSL sampling rule and source-alpha quantizer are unchanged.
+
+### Correct the CPU boundary calculation first
+
+The first packing audit exposed an oracle arithmetic artifact at pixel **(51, 133)**. For
+image 0, `dx = -13`, diameter 62 and width 31:
+
+```text
+Normalize first: (-13 / 62 + 0.5) × 31 = 8.999999999999998 → texel 8
+Texel space:     ((-13 + 31) × 31) / 62 = 9               → texel 9
+```
+
+The GPU's red value 93 is correct there; the earlier CPU value 86 came from the preceding
+texel. The isolated reference now computes `((offset + diameter / 2) × imageSize) / diameter`
+before sampling. Exhaustive nearest-index checks against exact BigInt rational division cover
+the frozen source-image pixel positions. The test fixtures use dyadic screen positions and
+small integer image sizes, so the multiplied numerator is exact in binary64.
+
+This corrects the reference calculation while retaining floor-based nearest selection, the
+source-byte policy and all acceptance thresholds. The production-normalized CPU control and
+GPU shader paths remain unchanged. Exports identify the isolated oracle as **source-texel-v2**.
+The table below is a **complete rerun of all 96 rows** with that reference.
+
+The CPU audit still compares every framebuffer pixel. A conservative point-bound check only
+avoids irrelevant scalar point calculations; equivalence tests preserve the scalar picker's
+results, including absent points, opacity, ordering, image policies and boundary samples.
+
+### Corrected full-matrix findings
+
+Recorded **14 November 2026**, in Codex's inline Chromium 157 browser on **Apple M3**, with
+luma **10.0.0-alpha.4**. The sweep checks **31,457,280 pixel positions**:
+
+| Layout | Original UVs: isolated-image passes | Clamped UVs: isolated-image passes | Clamped CPU mask failures per backend | Clamped CPU color failures per backend |
+|---|---|---|---|---|
+| 93 × 93 production grid | 7/12 | **11/12** | 84 | 233 |
+| 93 × 62 rectangular | 7/12 | **11/12** | 84 | 181 |
+| 62 × 62 resampled grid | 5/12 | **12/12** | 0 | 0 |
+| 128 × 128 padded | 7/12 | **11/12** | 84 | 233 |
+
+Clamping passes **45/48** configurations; original UVs pass 26/48. All 96 paired GPU frames
+have exact color bytes and IDs, zero composed-frame or isolated-source invisible picks and
+zero pick-only color changes. These successes do not override the independent CPU failures.
+Production compatibility passes **0/96** rows and remains a separate failed control.
+
+The three clamped rejections are all **Packing edges / Native / nearest** in the 93 × 93,
+93 × 62 and padded 128 × 128 layouts. All clamped linear-filter, ratio-2 and combined
+zoom/translucency/reversed profiles pass. The scaled grid's CPU colors differ by at most
+**1/255** across its 12 configurations. No failed row or boundary pixel is excluded.
+
+At pixel **(135, 133)**, all three rejected layouts have the same first mask/color failure:
+
+| Reference / backend | RGBA8 | ID |
+|---|---|---|
+| Exact isolated CPU image | [78, 73, 87, 255] | 1 |
+| WebGL candidate | [0, 0, 0, 0] | background |
+| luma WebGPU candidate | [0, 0, 0, 0] | background |
+
+This is a genuine remaining sampling discrepancy after the CPU correction. It is **not**
+fixed by making the atlas power-of-two. The image has height 29, diameter 58 and vertical
+pixel offset −27, so its exact source row is `((-27 + 29) × 29) / 58 = 1`. A float32
+reconstruction of the normalized path gives local V ≈ **0.0344827473**, then source row
+**0.9999996424**: nearest sampling can select the preceding transparent border row. The
+model matches the observed first failure, supporting a local-coordinate/nearest-boundary
+explanation; it is not a claim of a driver-specification violation.
+
+Both full GPU runs keep identical paired GPU image/count summaries, and all 96 production
+control verdicts match row for row before and after the CPU correction. The latest **41-test
+suite passes** in the inline browser, including rational CPU checks, audit equivalence, actual
+production-packer equality, five-image addressing, restoration, zero opacity and cancellation.
+Those regression tests validate the experiment; the three full-image failures stay rejected.
+
+**Migration finding:** non-square packing and raw NPOT texture uploads work through luma, but
+the exact nearest-sampling gate is still open. The 64 × 64 clamp result cannot be generalized
+to arbitrary source dimensions. Next compare explicit source-texel addressing and integer
+image rectangles against these frozen counterexamples, keeping the same CPU rule, original
+controls and tolerances, before image-update and wider-device acceptance.
+
+### Reproduce the packing study
+
+1. Open **Point styling and picking**. Select **Source-byte picking candidate** and a
+   **Packing** fixture. These fixtures select the five-image production grid initially.
+2. Choose **Atlas packing** to compare the four layouts. Start with **Packing · exact texel
+   boundaries**, nearest sampling, native ratio and **Clamp to tile texel centers**.
+3. Compare the frame audit with **Atlas tile isolation** and the CPU color table. Then switch
+   to linear sampling, the overlapping fixture, other profiles and the unchanged production
+   renderer. Both failed and passing results remain visible.
+4. Run **Run packing sweep** in Diagnostics for all 96 frozen rows. The layout/policy summary
+   precedes the complete table. Cancellation finishes the current row and retains it; all
+   sweep controls share the busy state.
+5. Export schema **11** JSON locally for source and packed image pixels, integer rectangles,
+   texture dimensions, float32 UVs, all profiles/settings, control verdicts and first mismatches.
+   The original 64 × 64 studies keep their own frozen inputs. Raw measurements stay outside
+   the repository.
+6. Run `LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling`
+   and open the printed Vitest session URL in Codex's inline browser.
+
+This is static raw-image packing and sampling on one native adapter. DOM decoding/color
+conversion, asynchronous image replacement, arbitrary atlas sizes, mip chains, anisotropy,
+image aspect-ratio options and runtime GPU cost need separate validation. The production
+engine and its configuration are unchanged.
 
 
 ## Reproduce

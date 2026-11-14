@@ -1,7 +1,8 @@
 import { pick, type PickingRule, type Snapshot } from './backend'
 import { center, diameter, resolvePoint, type Point, type Settings } from './data'
 import { sourceAlphaByte } from './source-alpha'
-import { IMAGE_COUNT, sampleAtlasPolicy } from './atlas'
+import { IMAGE_COUNT, atlasInfo, sampleAtlasPolicy } from './atlas'
+import { samplePackingPixel } from './atlas-packing'
 const clamp = (x: number, a: number, b: number): number => Math.min(b, Math.max(a, x))
 // Independent scalar geometry control. This does not read a GPU mask or shader output.
 export function shapeDistance (x: number, y: number, shape: number): number {
@@ -52,10 +53,14 @@ export function shapeDistance (x: number, y: number, shape: number): number {
   }
   return Infinity
 }
+function validImage (p: Point, settings: Settings): boolean {
+  const count = settings.atlasPacking && settings.atlasPacking !== 'baseline' ? atlasInfo(settings.atlasPacking).imageCount : IMAGE_COUNT
+  return p.image !== undefined && p.image >= 0 && p.image < count
+}
 function imageFragment (p: Point, settings: Settings, x: number, y: number):
 { imageCovered: boolean; imageAlpha: number; shapeCovered: boolean; sourceAlpha: number; color: number[] } | null {
   if (p.absent) return null
-  const d = diameter(p, settings); const hasImage = p.image !== undefined && p.image >= 0 && p.image < IMAGE_COUNT
+  const d = diameter(p, settings); const hasImage = validImage(p, settings)
   const imageD = hasImage ? diameter({ ...p, size: p.imageSize ?? p.size }, settings) : 0
   if (Math.max(d, imageD) <= 0) return null
   const sprite = Math.max(d, 1, imageD); const core = Math.max(d, 1); const [cx, cy] = center(p, settings)
@@ -65,10 +70,14 @@ function imageFragment (p: Point, settings: Settings, x: number, y: number):
   const area = Math.min(1, d * d / (core * core)); const f = Math.fround
   const shapeAlpha = f(f(coverage) * f(f(area) * f(p.color[3])))
   const imageCovered = hasImage && imageD > 0 && Math.abs(x - cx) <= imageD / 2 && Math.abs(y - cy) <= imageD / 2
-  const image = imageCovered
-    ? sampleAtlasPolicy(p.image!, (x - cx) / imageD + 0.5, (y - cy) / imageD + 0.5,
-      settings.imageFilter ?? 'nearest', settings.atlasIsolation ?? 'original')
-    : [0, 0, 0, 0]
+  let image = [0, 0, 0, 0]
+  if (imageCovered) {
+    image = settings.atlasPacking && settings.atlasPacking !== 'baseline' &&
+      (settings.atlasIsolation === 'clamp' || settings.atlasIsolation === 'gutter')
+      ? samplePackingPixel(settings.atlasPacking, p.image!, x - cx, y - cy, imageD, settings.imageFilter ?? 'nearest')
+      : sampleAtlasPolicy(p.image!, (x - cx) / imageD + 0.5, (y - cy) / imageD + 0.5,
+        settings.imageFilter ?? 'nearest', settings.atlasIsolation ?? 'original', settings.atlasPacking ?? 'baseline')
+  }
   const color = [0, 1, 2].map(c => (p.shape === 8 || d <= 0 ? 0 : p.color[c]) * (1 - image[3]) + image[c] * image[3])
   return {
     imageCovered,
@@ -86,7 +95,7 @@ export function referencePick (points: Point[], settings: Settings, x: number, y
   const order = points.map((_, id) => id); if (!settings.reverse) order.reverse()
   for (const id of order) {
     const p = resolvePoint(points[id], settings); const d = diameter(p, settings)
-    if (p.image !== undefined && p.image >= 0 && p.image < IMAGE_COUNT) {
+    if (validImage(p, settings)) {
       const fragment = imageFragment(p, settings, x, y)
       if (!fragment) continue
       const covered = fragment.shapeCovered || (fragment.imageCovered && (rule !== 'source-alpha' || fragment.imageAlpha > 0))
@@ -111,6 +120,27 @@ export function referencePick (points: Point[], settings: Settings, x: number, y
     return id
   }
   return null
+}
+
+// Conservative broad phase only: the scalar picker remains the final oracle.
+// A one-pixel margin keeps normalization/edge ties inside the tested region.
+export function prepareReferencePick (points: Point[], settings: Settings, rule: PickingRule = 'visible'):
+(x: number, y: number) => number | null {
+  const entries = points.flatMap((p, id) => {
+    if (p.absent) return []
+    const d = diameter(p, settings); const imageD = validImage(p, settings) ? diameter({ ...p, size: p.imageSize ?? p.size }, settings) : 0
+    const radius = Math.max(d, 1, imageD) * 0.5 + 1; const [cx, cy] = center(p, settings)
+    return [{ id, point: [p], left: cx - radius, right: cx + radius, top: cy - radius, bottom: cy + radius }]
+  })
+  if (!settings.reverse) entries.reverse()
+  return (x, y): number | null => {
+    if (rule !== 'legacy' && settings.opacity <= 0) return null
+    for (const e of entries) {
+      if (x < e.left || x > e.right || y < e.top || y > e.bottom) continue
+      if (referencePick(e.point, settings, x, y, rule) !== null) return e.id
+    }
+    return null
+  }
 }
 // RGBA8 comparison budget declared before evaluation: two channel levels account
 // for quantization/blend evaluation. IDs and visibility checks have no tolerance.
@@ -144,7 +174,11 @@ export function compareColors (a: Snapshot, b: Snapshot): ColorComparison {
 // and max(shapeAlpha, imageAlpha), including its image-only alpha attenuation.
 // Fixtures have no strokes; this is not a CPU renderer for all Cosmos features.
 export function atlasCpuColors (snapshot: Snapshot, points: Point[], settings: Settings): ColorComparison {
-  settings = { ...settings, atlasIsolation: snapshot.atlasIsolation ?? settings.atlasIsolation ?? 'original' }
+  settings = {
+    ...settings,
+    atlasIsolation: snapshot.atlasIsolation ?? settings.atlasIsolation ?? 'original',
+    atlasPacking: snapshot.atlasPacking ?? settings.atlasPacking ?? 'baseline',
+  }
   const { width, height } = snapshot; const color = new Uint8Array(width * height * 4)
   const order = points.map((_, i) => i); if (settings.reverse) order.reverse()
   for (const id of order) {
@@ -206,16 +240,27 @@ function * compareRows (gl: Snapshot, gpu: Snapshot, points: Point[], settings: 
     firstColorMismatch: undefined as { x: number; y: number; webgl: number[]; webgpu: number[] } | undefined,
     valid: false,
   }
-  const glSettings = { ...settings, atlasIsolation: gl.atlasIsolation ?? settings.atlasIsolation ?? 'original' }
-  const gpuSettings = { ...settings, atlasIsolation: gpu.atlasIsolation ?? settings.atlasIsolation ?? 'original' }
+  const glSettings = {
+    ...settings,
+    atlasIsolation: gl.atlasIsolation ?? settings.atlasIsolation ?? 'original',
+    atlasPacking: gl.atlasPacking ?? settings.atlasPacking ?? 'baseline',
+  }
+  const gpuSettings = {
+    ...settings,
+    atlasIsolation: gpu.atlasIsolation ?? settings.atlasIsolation ?? 'original',
+    atlasPacking: gpu.atlasPacking ?? settings.atlasPacking ?? 'baseline',
+  }
+  const referenceGl = prepareReferencePick(points, glSettings, result.pickingRules.webgl)
+  const referenceGpu = prepareReferencePick(points, gpuSettings, result.pickingRules.webgpu)
   for (let y = 0; y < gl.height; y++) {
     for (let x = 0; x < gl.width; x++) {
       const offset = (y * gl.width + x) * 4
       const a = pick(gl, x, y); const b = pick(gpu, x, y)
-      const expectedGl = referencePick(points, glSettings, x + 0.5, y + 0.5, result.pickingRules.webgl)
-      const expectedGpu = result.pickingRules.webgl === result.pickingRules.webgpu && glSettings.atlasIsolation === gpuSettings.atlasIsolation
+      const expectedGl = referenceGl(x + 0.5, y + 0.5)
+      const expectedGpu = result.pickingRules.webgl === result.pickingRules.webgpu && glSettings.atlasIsolation === gpuSettings.atlasIsolation &&
+        glSettings.atlasPacking === gpuSettings.atlasPacking
         ? expectedGl
-        : referencePick(points, gpuSettings, x + 0.5, y + 0.5, result.pickingRules.webgpu)
+        : referenceGpu(x + 0.5, y + 0.5)
       if (a !== b) {
         result.idDisagreements++; result.firstIdMismatch ??= { x, y, webgl: a, webgpu: b, expected: { webgl: expectedGl, webgpu: expectedGpu } }
       }

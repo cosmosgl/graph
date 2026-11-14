@@ -11,9 +11,12 @@ import { articleSectionId, readRoute } from './router'
 let host: HTMLElement | undefined
 let shell: ReturnType<typeof createAppShell> | undefined
 const initial = window.location.href
-afterEach(() => {
+afterEach(async () => {
   shell?.destroy(); host?.remove(); vi.restoreAllMocks()
   window.history.replaceState(null, '', initial)
+  // Let native history/focus work drain between the route-heavy experiments.
+  // A tight burst can throttle same-document navigation in a real browser.
+  await new Promise<void>(resolve => { setTimeout(resolve, 500) })
 })
 
 async function route (hash: string, ready: () => void): Promise<void> {

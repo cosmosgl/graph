@@ -12,7 +12,7 @@ import { resourceScope } from '../../gpu/resource-scope'
 import { dimensions, floatPixels, pixels, target, type Backend, type Snapshot } from './backend'
 import { HEIGHT, WIDTH } from './data'
 import { SOURCE_ALPHA_GLSL } from './source-alpha'
-import { atlasTexture, atlasCoords, IMAGE_COUNT, GUTTER_SIZE } from './atlas'
+import { atlasTexture, atlasCoords, atlasInfo, GUTTER_SIZE } from './atlas'
 
 // Declaration order matches the production std140 blocks verbatim.
 const vertexTypes = {
@@ -133,6 +133,14 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
         linear: scope.own(atlasTexture(device, 'linear', true, gutterExtent)),
       },
     }
+    const packedTextures = new Map<string, ReturnType<typeof atlasTexture>>()
+    const packedTexture = (packing: NonNullable<import('./data').Settings['atlasPacking']>, gutter: boolean, filter: 'nearest' | 'linear'):
+    ReturnType<typeof atlasTexture> => {
+      const key = `${packing}:${gutter}:${filter}`; let texture = packedTextures.get(key)
+      if (!texture) { texture = scope.own(atlasTexture(device, filter, gutter, gutterExtent, packing)); packedTextures.set(key, texture) }
+      return texture
+    }
+
     const uniforms = scope.own(new UniformStore(device, {
       drawVertexUniforms: { uniformTypes: vertexTypes }, drawFragmentUniforms: { uniformTypes: fragmentTypes },
     }))
@@ -179,6 +187,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
         const frame = resourceScope()
         try {
           const isolation = variant === 'production' ? 'original' : settings.atlasIsolation ?? 'original'
+          const packing = settings.atlasPacking ?? 'baseline'; const info = atlasInfo(packing)
           const [width, height] = dimensions(settings)
           if (display) { canvas.width = width; canvas.height = height; device.canvasContext!.resize({ width, height }) }
           const color = frame.own(target(device, width, height)); const ids = frame.own(target(device, width, height))
@@ -200,8 +209,10 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
             positionsTexture: texture(positions),
             exitTexture: texture(absent),
             pointStatus: zero,
-            imageAtlasCoords: texture(atlasCoords(isolation, gutterExtent), 2),
-            imageAtlasTexture: atlases[isolation === 'gutter' ? 'gutter' : 'original'][settings.imageFilter ?? 'nearest'],
+            imageAtlasCoords: texture(atlasCoords(isolation, gutterExtent, packing), info.coordsSize),
+            imageAtlasTexture: packing === 'baseline'
+              ? atlases[isolation === 'gutter' ? 'gutter' : 'original'][settings.imageFilter ?? 'nearest']
+              : packedTexture(packing, isolation === 'gutter', settings.imageFilter ?? 'nearest'),
           }
           const order = points.map((_, i) => i); if (settings.reverse) order.reverse()
           const records: Record<string, Buffer> = {}
@@ -258,9 +269,9 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
               isDarkenGreyout: 1,
               skipHighlighted: 0,
               skipGreyed: 0,
-              hasImages: Number(points.some(p => p.image !== undefined && p.image >= 0 && p.image < IMAGE_COUNT)),
-              imageCount: IMAGE_COUNT,
-              imageAtlasCoordsTextureSize: 2,
+              hasImages: Number(points.some(p => p.image !== undefined && p.image >= 0 && p.image < info.imageCount)),
+              imageCount: info.imageCount,
+              imageAtlasCoordsTextureSize: info.coordsSize,
               transitionProgress: 1,
               animateColors: 0,
               animateSizes: 0,
@@ -301,6 +312,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
           if (display) draw(colorModel, 0)
           device.submit()
           const result: Snapshot = {
+            atlasPacking: packing,
             atlasIsolation: isolation,
             atlasGutterExtent: isolation === 'gutter' ? gutterExtent : undefined,
             pickingRule: variant === 'production' ? 'legacy' : variant === 'explicit' ? 'visible' : 'source-alpha',
@@ -322,6 +334,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
             const analytic = frame.own(target(device, width, height)); const analyticIds = frame.own(target(device, width, height))
             draw(analyticColor!, 0, analytic.framebuffer); draw(analyticPick!, 3, analyticIds.framebuffer); device.submit()
             result.analyticControl = {
+              atlasPacking: packing,
               atlasIsolation: 'original',
               pickingRule: 'legacy',
               width,

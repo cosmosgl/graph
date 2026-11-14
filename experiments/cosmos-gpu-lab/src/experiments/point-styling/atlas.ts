@@ -1,6 +1,7 @@
 import type { Device, Texture } from '@luma.gl/core'
 import { SOURCE_ALPHA_POLICY, SOURCE_BYTE_PICKING_POLICY } from './source-alpha'
 import type { Settings } from './data'
+import { packingLayout, samplePacking, type AtlasPacking } from './atlas-packing'
 
 export type AtlasIsolation = NonNullable<Settings['atlasIsolation']>
 export const ATLAS_ISOLATION_POLICIES: AtlasIsolation[] = ['original', 'clamp', 'inset', 'gutter']
@@ -75,7 +76,16 @@ export function gutterAtlas (size = GUTTER_SIZE): GutterAtlas {
 }
 export const GUTTER_COORDS = gutterAtlas().coords
 export const GUTTER_BYTES = gutterAtlas().bytes
-export function atlasCoords (policy: AtlasIsolation, gutterExtent = GUTTER_SIZE): Float32Array {
+export function atlasInfo (packing: AtlasPacking = 'baseline'): { imageCount: number; coordsSize: number } {
+  if (packing === 'baseline') return { imageCount: IMAGE_COUNT, coordsSize: 2 }
+  const layout = packingLayout(packing); return { imageCount: layout.images.length, coordsSize: layout.coordsSize }
+}
+export function atlasCoords (policy: AtlasIsolation, gutterExtent = GUTTER_SIZE, packing: AtlasPacking = 'baseline'): Float32Array {
+  if (packing !== 'baseline') {
+    const layout = packingLayout(packing, policy === 'gutter')
+    if (policy !== 'inset') return layout.coords
+    return layout.coords.map((v, i) => v < 0 ? v : v + (i % 4 < 2 ? 0.5 : -0.5) / (i % 2 === 0 ? layout.width : layout.height))
+  }
   if (policy === 'gutter') return gutterAtlas(gutterExtent).coords
   if (policy !== 'inset') return ATLAS_COORDS
   return ATLAS_COORDS.map((v, i) => v + (i % 4 < 2 ? 0.5 : -0.5) / ATLAS_SIZE)
@@ -95,7 +105,19 @@ export const ATLAS_ISOLATION_EXPORT = {
   reference: 'Independent 32×32 image sampling with per-image clamp-to-edge; original RGB mix, source-alpha rule and budgets',
 }
 
-export function atlasTexture (device: Device, filter: 'nearest' | 'linear', gutter = false, gutterExtent = GUTTER_SIZE): Texture {
+export function atlasTexture (
+  device: Device, filter: 'nearest' | 'linear', gutter = false, gutterExtent = GUTTER_SIZE, packing: AtlasPacking = 'baseline'
+): Texture {
+  if (packing !== 'baseline') {
+    const layout = packingLayout(packing, gutter)
+    const texture = device.createTexture({
+      width: layout.width,
+      height: layout.height,
+      format: 'rgba8unorm',
+      sampler: { minFilter: filter, magFilter: filter, addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' },
+    })
+    try { texture.copyImageData({ data: layout.bytes, bytesPerRow: layout.width * 4 }); return texture } catch (error) { texture.destroy(); throw error }
+  }
   const layout = gutter ? gutterAtlas(gutterExtent) : { size: ATLAS_SIZE, bytes: ATLAS_BYTES }
   const { size, bytes } = layout
   const texture = device.createTexture({
@@ -135,7 +157,10 @@ export function sampleIsolatedImage (index: number, u: number, v: number, filter
   return [0, 1, 2, 3].map(c => (texel(ix, iy, c) * (1 - tx) + texel(ix + 1, iy, c) * tx) * (1 - ty) +
     (texel(ix, iy + 1, c) * (1 - tx) + texel(ix + 1, iy + 1, c) * tx) * ty)
 }
-export function sampleAtlasPolicy (index: number, u: number, v: number, filter: 'nearest' | 'linear', policy: AtlasIsolation): number[] {
+export function sampleAtlasPolicy (
+  index: number, u: number, v: number, filter: 'nearest' | 'linear', policy: AtlasIsolation, packing: AtlasPacking = 'baseline'
+): number[] {
+  if (packing !== 'baseline') return samplePacking(packing, index, u, v, filter, policy)
   if (policy === 'original') return sampleAtlas(index, u, v, filter)
   if (policy === 'inset') return sampleAtlas(index, (0.5 + u * 31) / 32, (0.5 + v * 31) / 32, filter)
   return sampleIsolatedImage(index, u, v, filter)
