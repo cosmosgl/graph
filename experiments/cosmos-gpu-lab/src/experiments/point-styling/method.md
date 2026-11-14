@@ -852,7 +852,7 @@ lookup to that image. It does not read the gutter atlas or reproduce the GPU's n
 clamp. The original Cosmos RGB mix, max(shape alpha, image alpha), source-byte ID rule and
 framebuffer composition remain unchanged.
 
-The UI exposes **Candidate atlas UVs**. Production always binds the original texture and UVs,
+The UI exposes **Candidate atlas sampling**. Production always binds the original texture and UVs,
 regardless of that selection; regression tests require its color and ID bytes to stay exact.
 Captured snapshots name their actual UV policy, so mixed production/candidate comparisons
 evaluate each lane against its own declared rule. The isolated-image audit is an explicitly
@@ -928,7 +928,7 @@ Mipmap and image-update behavior remain separate work.
 ### Reproduce the isolation comparison
 
 1. Select **Source-byte picking candidate**, then **Atlas · filtering and tile edges**.
-2. Leave **Candidate atlas UVs → Original · control**. The paired frame can pass while
+2. Leave **Candidate atlas sampling → Original · control**. The paired frame can pass while
    **Atlas tile isolation** fails. At pixel (208, 112), the preceding edge probe reports
    neighbor alpha and point ID 0.
 3. Select **Clamp to tile texel centers**. Compare both the visible image and isolated-image
@@ -1031,7 +1031,7 @@ the frozen source-image pixel positions. The test fixtures use dyadic screen pos
 small integer image sizes, so the multiplied numerator is exact in binary64.
 
 This corrects the reference calculation while retaining floor-based nearest selection, the
-source-byte policy and all acceptance thresholds. The production-normalized CPU control and
+source-byte policy and all acceptance thresholds. At this stage, the production-normalized CPU control and
 GPU shader paths remain unchanged. Exports identify the isolated oracle as **source-texel-v2**.
 The table below is a **complete rerun of all 96 rows** with that reference.
 
@@ -1039,7 +1039,7 @@ The CPU audit still compares every framebuffer pixel. A conservative point-bound
 avoids irrelevant scalar point calculations; equivalence tests preserve the scalar picker's
 results, including absent points, opacity, ordering, image policies and boundary samples.
 
-### Corrected full-matrix findings
+### Historical control: corrected clamped matrix
 
 Recorded **14 November 2026**, in Codex's inline Chromium 157 browser on **Apple M3**, with
 luma **10.0.0-alpha.4**. The sweep checks **31,457,280 pixel positions**:
@@ -1083,11 +1083,79 @@ suite passes** in the inline browser, including rational CPU checks, audit equiv
 production-packer equality, five-image addressing, restoration, zero opacity and cancellation.
 Those regression tests validate the experiment; the three full-image failures stay rejected.
 
-**Migration finding:** non-square packing and raw NPOT texture uploads work through luma, but
-the exact nearest-sampling gate is still open. The 64 × 64 clamp result cannot be generalized
+**Finding before the source-texel candidate:** non-square packing and raw NPOT texture uploads
+work through luma, but the exact nearest-sampling gate remains open in the clamped control. The 64 × 64 clamp result cannot be generalized
 to arbitrary source dimensions. Next compare explicit source-texel addressing and integer
 image rectangles against these frozen counterexamples, keeping the same CPU rule, original
 controls and tolerances, before image-update and wider-device acceptance.
+
+### Explicit source-texel addressing closes the three failures
+
+The follow-up candidate retains the same source images, packed pixels, image geometry,
+source-byte picking policy and CPU **source-texel-v2** reference. Only nearest image sampling
+changes. Select **Candidate atlas sampling → Source texels · nearest**.
+
+Both shader candidates compute the source pixel directly from the device-pixel offset:
+
+```text
+source = floor(((offset + imageDiameter / 2) × imageDimensions) / imageDiameter)
+source = clamp(source, 0, imageDimensions − 1)
+atlasTexel = integerImageOrigin + source
+```
+
+The numerator is formed before division. This avoids reconstructing normalized local UVs
+and then interpolating normalized atlas endpoints. At the first failed pixel, the vertical
+calculation is `((-27 + 29) × 29) / 58 = 1`, selecting the opaque second row. There is no
+epsilon, boundary bias or change to the floor/tie rule. The integer clamp prevents a boundary
+sample from addressing another image.
+
+WebGPU stores exact `(x, y, width, height)` rectangles in a cached `u32` storage buffer and
+uses WGSL `textureLoad`. The WebGL candidate receives the same integer-valued rectangles as
+an instance attribute/flat varying and uses GLSL `texelFetch`. Both operations fetch an
+explicit base-level texel without sampler filtering, as specified by
+[WGSL](https://www.w3.org/TR/WGSL/#textureload) and
+[OpenGL ES](https://registry.khronos.org/OpenGL/specs/es/3.1/es_spec_3.1.pdf).
+All resources and draws use public luma APIs. Production GLSL remains unmodified.
+
+**Linear filtering retains the existing clamped hardware sampler.** This is a hybrid policy,
+not a replacement of bilinear filtering with nearest sampling. Regression tests require
+byte-identical color and ID images between its linear mode and the clamped control in all
+four layouts. Color composition and source-byte eligibility remain unchanged.
+
+Recorded **14 November 2026**, in Codex's inline Chromium 157 on **Apple M3**, luma
+**10.0.0-alpha.4**. The expanded sweep has **144 rows**: the same 96 original/clamped controls
+plus 48 source-texel configurations, covering **47,185,920 paired pixel positions**.
+
+| Layout | Original passes | Clamped passes | Source-texel passes | Source-texel CPU mask differences | Maximum CPU color error |
+|---|---|---|---|---|---|
+| 93 × 93 production grid | 7/12 | 11/12 | **12/12** | **0** | 1/255 |
+| 93 × 62 rectangular | 7/12 | 11/12 | **12/12** | **0** | 1/255 |
+| 62 × 62 resampled grid | 5/12 | 12/12 | **12/12** | **0** | 1/255 |
+| 128 × 128 padded | 7/12 | 11/12 | **12/12** | **0** | 1/255 |
+
+All **48/48** source-texel rows pass the unchanged acceptance gates, including all three
+previously rejected native nearest frames. Across their **15,728,640 pixel positions**:
+
+- WebGL/WebGPU color bytes and IDs are identical; independent CPU masks match exactly.
+- CPU color error is at most **1/255** in each backend, within the original **2/255** budget.
+- Composed-frame and isolated-source invisible picks are zero.
+- Pick-only color changes are zero against each backend's unquantized draw using the same
+  sampling policy.
+
+The focused replay also checks **(135, 133)** explicitly: both GPUs now return
+**[78, 73, 87, 255], ID 1**, matching the CPU. Repeated production and clamped draws before and
+after the candidate retain their color and ID images. All **96 prior control records** in
+the expanded export match the previous export exactly, including their failures. The 144-row
+sweep retains 25 rejected original/clamped rows. Production compatibility passes **0/48**
+source-texel rows; the candidate's intentional coverage/visibility
+behavior is not equivalent to the legacy control.
+
+**Migration finding:** direct nearest texel addressing closes this bounded static-image gate
+through luma. It does not prove arbitrary float32 positions/sizes or portable boundary behavior
+on other adapters. Next validate dynamic atlas replacement and broader native devices, then
+measure the accepted color/ID rendering cost. This correctness sweep does not time the added
+rectangle data or shader arithmetic; a speedup is not established. Image decoding, mipmaps,
+image aspect-ratio options and the remaining point styles still need separate validation.
 
 ### Reproduce the packing study
 
@@ -1098,11 +1166,13 @@ controls and tolerances, before image-update and wider-device acceptance.
 3. Compare the frame audit with **Atlas tile isolation** and the CPU color table. Then switch
    to linear sampling, the overlapping fixture, other profiles and the unchanged production
    renderer. Both failed and passing results remain visible.
-4. Run **Run packing sweep** in Diagnostics for all 96 frozen rows. The layout/policy summary
+4. Switch to **Source texels · nearest** and verify the same native case passes. Run
+   **Run packing sweep** in Diagnostics for all 144 frozen rows. The layout/policy summary
    precedes the complete table. Cancellation finishes the current row and retains it; all
    sweep controls share the busy state.
-5. Export schema **11** JSON locally for source and packed image pixels, integer rectangles,
-   texture dimensions, float32 UVs, all profiles/settings, control verdicts and first mismatches.
+5. Export schema **12** JSON locally for source and packed image pixels, integer rectangles,
+   texture dimensions, float32 UVs, all profiles/settings, sampling rules, control verdicts and first mismatches.
+   Nearest source texels must pass 24/24 rows and retained clamped linear filtering 24/24.
    The original 64 × 64 studies keep their own frozen inputs. Raw measurements stay outside
    the repository.
 6. Run `LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling`
@@ -1161,7 +1231,7 @@ the boundary pixels at unchanged full-frame gates. JSON exports name the rendere
 candidate geometry/visibility, original production and compatibility verdicts; raw measurements remain local.
 
 No runtime performance, picking-latency or broad device claim follows from the readback-heavy
-diagnostic. Atlas isolation, image updates/decoding, rings/highlight priority, greyout, automatic perceptual stroke
+diagnostic. Broader atlas geometry/devices, image updates/decoding, rings/highlight priority, greyout, automatic perceptual stroke
 shading, transitions, clipping of offscreen centers, occlusion optimization and host depth/picking
 integration require additional fixtures before full renderer acceptance.
 

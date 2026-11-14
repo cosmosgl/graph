@@ -6,14 +6,16 @@ import { compareColors, compareSnapshotsAsync, type ColorComparison, type Compar
 import { contributionPasses, inspectForeground, type ContributionPair } from './tiny-alpha'
 
 export const PACKING_FIXTURES = ['atlas-packing-edges', 'atlas-packing-overlap'] as const
+export const PACKING_POLICIES = ['original', 'clamp', 'texel'] as const
 export const PACKING_PROFILES = [
   { name: 'Native', settings: {} },
   { name: 'Retina', settings: { ratio: 2 } },
   { name: 'Zoom out · translucent · reversed', settings: { zoom: 0.5, opacity: 0.35, reverse: true } },
 ] satisfies Array<{ name: string; settings: Partial<Settings> }>
+export const PACKING_ROW_COUNT = PACKING_NAMES.length * PACKING_FIXTURES.length * 2 * PACKING_PROFILES.length * PACKING_POLICIES.length
 export type PackingRow = {
   packing: Exclude<AtlasPacking, 'baseline'>; fixture: typeof PACKING_FIXTURES[number]; profile: string;
-  filter: 'nearest' | 'linear'; policy: 'original' | 'clamp'; settings: Settings;
+  filter: 'nearest' | 'linear'; policy: typeof PACKING_POLICIES[number]; settings: Settings;
   production: Comparison; paired: Comparison; isolated: IsolationAudit; compatibility: Comparison; contribution?: ContributionPair;
   preservation: { webgl: ColorComparison; webgpu: ColorComparison }; passed: boolean;
 }
@@ -35,7 +37,7 @@ export async function runPackingSweep (
           const base: Settings = { ...DEFAULTS, ...profile.settings, imageFilter: filter, atlasPacking: packing, atlasIsolation: 'original' }
           const production = await render(points, base, 'production')
           const control = await compareSnapshotsAsync(production.webgl, production.webgpu, points, base)
-          for (const policy of ['original', 'clamp'] as const) {
+          for (const policy of PACKING_POLICIES) {
             if (cancelled() && rows.length) return rows
             const settings = { ...base, atlasIsolation: policy }
             const pair = await render(points, settings, 'eligibility'); const explicit = await render(points, settings, 'explicit')
@@ -69,12 +71,13 @@ export async function runPackingSweep (
   return rows
 }
 export function renderPackingRows (host: HTMLElement, rows: PackingRow[]): void {
-  host.innerHTML = `<p>96 rows: 4 layouts × 2 fixtures × 2 filters × 3 profiles × 2 UV policies. Five non-square images include
+  host.innerHTML = `<p>${PACKING_ROW_COUNT} rows: 4 layouts × 2 fixtures × 2 filters × 3 profiles × 3 sampling policies. Five non-square images include
     a transparent image and a one-texel-wide faint image. Exact IDs/CPU masks, source visibility and the original 2/255 budget apply.
+    Source-texel addressing fetches nearest samples by integer index and retains clamped linear filtering.
     Resampled layouts use the packed source pixels as the CPU reference. Production compatibility remains separate.</p>
     <table data-packing-summary><thead><tr><th>Layout / policy</th><th>Rows</th><th>Isolated image passed</th>
       <th>CPU mask differences · GL / GPU</th><th>CPU color failures · GL / GPU</th><th>Production compatible</th></tr></thead><tbody>
-    ${PACKING_NAMES.flatMap(name => (['original', 'clamp'] as const).map(policy => {
+    ${PACKING_NAMES.flatMap(name => PACKING_POLICIES.map(policy => {
     const selected = rows.filter(r => r.packing === name && r.policy === policy); const layout = packingLayout(name)
     return `<tr><td>${name} · ${layout.width} × ${layout.height}<br>${policy}</td><td>${selected.length}</td>
       <td>${selected.filter(r => r.passed).length}</td>

@@ -23,6 +23,14 @@ export const ATLAS_QUANTIZED_POLICY = {
 export const ATLAS_SIZE = 64
 export const IMAGE_COUNT = 4
 export const ATLAS_COORDS = new Float32Array([0, 0, 0.5, 0.5, 0.5, 0, 1, 0.5, 0, 0.5, 0.5, 1, 0.5, 0.5, 1, 1])
+const rectangleData = new Map<AtlasPacking, Uint32Array>()
+export function sourceTexelRects (packing: AtlasPacking = 'baseline'): Uint32Array {
+  const cached = rectangleData.get(packing); if (cached) return cached
+  const rectangles = packing === 'baseline'
+    ? Array.from({ length: 4 }, (_, image) => [(image % 2) * 32, Math.floor(image / 2) * 32, 32, 32]).flat()
+    : packingLayout(packing).rects.flatMap(r => [r.x, r.y, r.width, r.height])
+  const data = new Uint32Array(rectangles); rectangleData.set(packing, data); return data
+}
 // Four deterministic 32×32 images in the production packer's square-grid layout.
 // Asymmetric alpha and RGB make flipped rows and wrong atlas rectangles observable.
 export const ATLAS_BYTES = new Uint8Array(ATLAS_SIZE * ATLAS_SIZE * 4)

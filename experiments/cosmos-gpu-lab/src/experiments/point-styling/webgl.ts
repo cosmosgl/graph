@@ -12,7 +12,7 @@ import { resourceScope } from '../../gpu/resource-scope'
 import { dimensions, floatPixels, pixels, target, type Backend, type Snapshot } from './backend'
 import { HEIGHT, WIDTH } from './data'
 import { SOURCE_ALPHA_GLSL } from './source-alpha'
-import { atlasTexture, atlasCoords, atlasInfo, GUTTER_SIZE } from './atlas'
+import { atlasTexture, atlasCoords, atlasInfo, GUTTER_SIZE, sourceTexelRects } from './atlas'
 
 // Declaration order matches the production std140 blocks verbatim.
 const vertexTypes = {
@@ -68,7 +68,7 @@ function moduleSource (source: string): string {
   return match[1]
 }
 
-function coordinateSources (quads: boolean, alphaPolicy: 'unchanged' | 'quantized' | 'eligibility' = 'unchanged', clampTile = false):
+function coordinateSources (quads: boolean, alphaPolicy: 'unchanged' | 'quantized' | 'eligibility' = 'unchanged', clampTile = false, texel = false):
 { vertex: string; fragment: string } {
   const position = 'gl_Position = vec4(finalPosition.rg, depthZ, 1.0);'
   const coord = 'vec2 pointCoord = 2.0 * gl_PointCoord - 1.0;'
@@ -112,6 +112,31 @@ function coordinateSources (quads: boolean, alphaPolicy: 'unchanged' | 'quantize
       vec2 halfTexel = vec2(0.5) / vec2(textureSize(imageAtlasTexture, 0));
       atlasUV = clamp(atlasUV, imageAtlasUV.xy + halfTexel, imageAtlasUV.zw - halfTexel);`)
   }
+  if (texel) {
+    vertex = vertex.replace('void main()', 'in vec4 sourceTexelRect;\nflat out vec4 diagnosticTexelRect;\nvoid main()')
+      .replace(position, `diagnosticTexelRect = sourceTexelRect;\n${position}`)
+    fragment = fragment.replace('void main()', `flat in vec4 diagnosticTexelRect;
+      vec4 sampleSourceTexel(vec2 offset, float diameter) {
+        ivec2 origin = ivec2(diagnosticTexelRect.xy);
+        ivec2 dimensions = ivec2(diagnosticTexelRect.zw);
+        vec2 numerator = (offset + vec2(diameter * 0.5)) * vec2(dimensions);
+        ivec2 pixel = clamp(ivec2(floor(numerator / diameter)), ivec2(0), dimensions - ivec2(1));
+        return texelFetch(imageAtlasTexture, origin + pixel, 0);
+      }
+      void main()`)
+    const begin = fragment.indexOf('    // Handle image rendering with centering logic')
+    const end = fragment.indexOf('    // Host picking:', begin)
+    if (begin < 0 || end < 0) throw new Error('Production image block changed')
+    fragment = `${fragment.slice(0, begin)}
+      if (imageAtlasUV.x != -1.0 && imageSizeVarying > 0.0) {
+        vec2 offset = (gl_FragCoord.xy - diagnosticCenter) * vec2(1.0, -1.0);
+        if (all(lessThanEqual(abs(offset), vec2(imageSizeVarying * 0.5)))) {
+          finalImageColor = applyGreyoutToImage(sampleSourceTexel(offset, imageSizeVarying), isGreyedOut);
+          imageCovered = true;
+        }
+      }
+    ${fragment.slice(end)}`
+  }
   return { vertex, fragment }
 }
 
@@ -151,8 +176,8 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
       ['sourceStrokeColor', 'float32x4'], ['targetStrokeColor', 'float32x4'],
       ['sourceStrokeWidth', 'float32'], ['targetStrokeWidth', 'float32'],
     ] as const
-    const models: Array<{ model: Model; quads: boolean }> = []
-    const make = (picking: boolean, fragment = fs, vertex = vs, quads = false): Model => {
+    const models: Array<{ model: Model; quads: boolean; texel: boolean }> = []
+    const make = (picking: boolean, fragment = fs, vertex = vs, quads = false, texel = false): Model => {
       const model = scope.own(new Model(device, {
         vs: vertex,
         fs: fragment,
@@ -168,14 +193,15 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
             EXIT_DEFAULT_SIZE: '0.0', EXIT_DEFAULT_COLOR_CHANNEL: '0.0', EDGE_RAMP_PX: '1.0', POINT_RING_SCALE: '1.3',
           } as unknown as Record<string, boolean>),
         },
-        bufferLayout: attributes.map(([name, format]) => ({ name, format, stepMode: quads ? 'instance' : 'vertex' })),
+        bufferLayout: [...attributes.map(([name, format]) => ({ name, format, stepMode: quads ? 'instance' as const : 'vertex' as const })),
+          ...(texel ? [{ name: 'sourceTexelRect', format: 'float32x4' as const, stepMode: 'instance' as const }] : [])],
         bindings: {
           drawVertexUniforms: uniforms.getManagedUniformBuffer('drawVertexUniforms'),
           drawFragmentUniforms: uniforms.getManagedUniformBuffer('drawFragmentUniforms'),
         },
         parameters: { ...(picking ? { blend: false } : ALPHA_BLEND), depthWriteEnabled: false, depthCompare: 'always', cullMode: 'none' },
       }))
-      models.push({ model, quads }); return model
+      models.push({ model, quads, texel }); return model
     }
     const visible = make(false); const picking = make(true)
     let diagnostic: Model | undefined
@@ -233,14 +259,16 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
             })
             records[name] = frame.own(device.createBuffer({ data: new Float32Array(values.length ? values : [0, 0, 0, 0]) }))
           }
-          const key = `${variant}:${isolation === 'clamp'}`
+          const texel = isolation === 'texel' && (settings.imageFilter ?? 'nearest') === 'nearest'
+          const clamped = isolation === 'clamp' || (isolation === 'texel' && !texel)
+          const key = `${variant}:${clamped}:${texel}`
           if (variant !== 'production' && !candidates.has(key)) {
             const policy = variant === 'explicit' ? 'unchanged' : variant
-            const { vertex, fragment } = coordinateSources(true, policy, isolation === 'clamp')
+            const { vertex, fragment } = coordinateSources(true, policy, clamped, texel)
             candidates.set(key, {
-              color: make(false, fragment, vertex, true),
-              pick: make(true, fragment, vertex, true),
-              probe: make(true, instrumentCoverage(fragment), vertex, true),
+              color: make(false, fragment, vertex, true, texel),
+              pick: make(true, fragment, vertex, true, texel),
+              probe: make(true, instrumentCoverage(fragment), vertex, true, texel),
             })
           }
           const candidate = candidates.get(key)
@@ -250,8 +278,20 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
             const { vertex, fragment } = coordinateSources(false)
             analyticColor = make(false, fragment, vertex); analyticPick = make(true, fragment, vertex)
           }
-          for (const { model, quads } of models) {
-            model.setAttributes(records); model.setBindings(bindings); model.setVertexCount(quads ? 6 : points.length)
+          let rectangleBuffer: Buffer | undefined
+          if (models.some(model => model.texel)) {
+            const rectangles = sourceTexelRects(packing)
+            const data = new Float32Array(Math.max(4, points.length * 4))
+            order.forEach((id, index) => {
+              const image = points[id].image ?? -1
+              if (image >= 0 && image < info.imageCount) data.set(rectangles.subarray(image * 4, image * 4 + 4), index * 4)
+            })
+            rectangleBuffer = frame.own(device.createBuffer({ data }))
+          }
+          for (const { model, quads, texel: needsRectangles } of models) {
+            model.setAttributes(records)
+            if (needsRectangles) model.setAttributes({ sourceTexelRect: rectangleBuffer! })
+            model.setBindings(bindings); model.setVertexCount(quads ? 6 : points.length)
             if (quads) model.setInstanceCount(points.length)
           }
           uniforms.setUniforms({

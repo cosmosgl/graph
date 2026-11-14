@@ -69,7 +69,9 @@ export function samplePacking (
   const layout = packingLayout(name)
   const image = layout.images[index]
   // Independent per-image pixel addressing is the clamp/gutter reference.
-  if (policy === 'clamp' || policy === 'gutter') return samplePixels(image.bytes, image.width, image.height, u * image.width, v * image.height, filter)
+  if (policy === 'clamp' || policy === 'gutter' || policy === 'texel') {
+    return samplePixels(image.bytes, image.width, image.height, u * image.width, v * image.height, filter)
+  }
   const uv = layout.coords.subarray(index * 4, index * 4 + 4)
   const loX = policy === 'inset' ? Math.fround(uv[0] + 0.5 / layout.width) : uv[0]
   const hiX = policy === 'inset' ? Math.fround(uv[2] - 0.5 / layout.width) : uv[2]

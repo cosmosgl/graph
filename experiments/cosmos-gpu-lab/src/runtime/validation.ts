@@ -21,7 +21,8 @@ export const validationContracts: Record<string, ValidationContract> = {
       'Production zero-opacity visibility and fractional compatibility still fail on M3. Candidate opacity 0/0.35/1 is bounded; ' +
       'Pick-only source-byte eligibility preserves colors in the 32-case M3 sweep, faint stack and 40 atlas cases. ' +
       'Original raster/picking and pre-blend-quantization failures stay visible. Clamping passes the bounded 64 × 64 atlas, ' +
-      'but three NPOT/non-square nearest-boundary frames still fail. Source-texel addressing, GPU cost and broader devices remain open.',
+      'while its three NPOT/non-square nearest-boundary failures remain as controls. Integer nearest texels with clamped linear ' +
+      'sampling pass all 48 packing cases on M3. Image updates, GPU cost and broader devices remain open.',
   },
   'center-mass': {
     question: 'Do blend accumulation and compute reduction calculate the same center accurately?',
