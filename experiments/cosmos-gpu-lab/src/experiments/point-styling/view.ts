@@ -11,6 +11,8 @@ import { investigateFractional, renderFractionalInvestigation } from './fraction
 import { renderExplicitControl } from './explicit'
 import { SOURCE_ALPHA_POLICY, SOURCE_BYTE_PICKING_POLICY } from './source-alpha'
 import { ATLAS_EXPORT, ATLAS_PICKING_POLICY, ATLAS_QUANTIZED_POLICY, ATLAS_ISOLATION_EXPORT } from './atlas'
+import { PACKING_NAMES, packingExport, packingLayout } from './atlas-packing'
+import { PACKING_FIXTURES, PACKING_PROFILES, renderPackingRows, runPackingSweep, type PackingRow } from './atlas-packing-study'
 import { inspectAtlasIsolation, renderIsolationRows, runIsolationSweep, type IsolationRow } from './atlas-isolation'
 import { ATLAS_FIXTURES, ATLAS_PROFILES, renderAtlasRows, runAtlasSweep, type AtlasRow } from './atlas-study'
 import {
@@ -34,9 +36,15 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         <option value="fractional">Fractional sizes and positions</option><option value="tiny-alpha">Tiny-alpha grid</option>
         <option value="tiny-overlap">Tiny-alpha overlap</option><option value="alpha-stack">Faint overlap stack · 64 points</option>
         <option value="atlas-images">Atlas · image-only points</option><option value="atlas-shapes">Atlas · image over shape</option>
-        <option value="atlas-overlap">Atlas · overlapping points</option><option value="atlas-edges">Atlas · filtering and tile edges</option></select></label>
+        <option value="atlas-overlap">Atlas · overlapping points</option><option value="atlas-edges">Atlas · filtering and tile edges</option>
+        <option value="atlas-packing-grid">Packing · five non-square images</option>
+        <option value="atlas-packing-edges">Packing · exact texel boundaries</option>
+        <option value="atlas-packing-overlap">Packing · overlap and underlying shapes</option></select></label>
       <label>Atlas filter <select data-image-filter><option value="nearest">Nearest · production default</option>
         <option value="linear">Linear</option></select></label>
+      <label>Atlas packing <select data-atlas-packing><option value="baseline">Baseline · 64 × 64</option>
+        <option value="npot-square">Production grid · 93 × 93</option><option value="npot-rectangle">Rectangular · 93 × 62</option>
+        <option value="npot-scaled">Production scaled · 62 × 62</option><option value="pot-padded">Padded control · 128 × 128</option></select></label>
       <label>Candidate atlas UVs <select data-atlas-isolation><option value="original">Original · control</option>
         <option value="clamp">Clamp to tile texel centers</option><option value="inset">Inset UV remap · control</option>
         <option value="gutter">Duplicate-edge gutters</option></select></label>
@@ -71,7 +79,11 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       <h3>Atlas tile isolation</h3><p>Compare four UV policies against separately clamped images. Production always uses its original atlas.</p>
       <div class="controls"><button data-isolation-sweep disabled>Run tile-isolation sweep</button>
         <button data-isolation-cancel disabled>Cancel isolation sweep</button></div>
-      <p data-isolation-progress>No isolation sweep run.</p><div data-isolation-results></div></section>
+      <p data-isolation-progress>No isolation sweep run.</p><div data-isolation-results></div>
+      <h3>Non-square atlas packing</h3><p>96 frozen rows compare original UVs and clamping across four layouts, including production resampling.</p>
+      <div class="controls"><button data-packing-sweep disabled>Run packing sweep</button>
+        <button data-packing-cancel disabled>Cancel packing sweep</button></div>
+      <p data-packing-progress>No packing sweep run.</p><div data-packing-results></div></section>
     <p class="demo-note"
       data-run-part="explanation">Both offscreen passes are read back for this diagnostic. Hover uses the captured ID image;
       this does not measure production picking latency. Atlas fixtures add texture sampling; rings, greyout and transitions remain separate.
@@ -79,7 +91,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
   const status = el('[role="status"]'); const exportButton = el<HTMLButtonElement>('[data-export]')
   const setSweepDisabled = (disabled: boolean): void => {
-    host.querySelectorAll<HTMLButtonElement>('[data-tiny-sweep], [data-atlas-sweep], [data-isolation-sweep]').forEach(b => { b.disabled = disabled })
+    host.querySelectorAll<HTMLButtonElement>('[data-tiny-sweep], [data-atlas-sweep], [data-isolation-sweep], [data-packing-sweep]')
+      .forEach(b => { b.disabled = disabled })
   }
   const backends: Partial<Record<'webgl' | 'webgpu', Backend>> = {}
   let snapshots: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
@@ -91,6 +104,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   let latestColorPreservation: boolean | undefined
   let latestAtlasColors: boolean | undefined
   let latestIsolation: boolean | undefined
+  let packingStudy: { startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[];
+    rows: PackingRow[]; error?: string; } | undefined
   let isolationStudy: { startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[];
     rows: IsolationRow[]; error?: string; } | undefined
   let atlasStudy: { startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[];
@@ -110,6 +125,10 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     host.querySelectorAll<HTMLElement>('[data-pick]').forEach(label => { label.textContent = 'Move over a shape to inspect its ID' })
     host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
     status.textContent = 'Drawing and checking every framebuffer pixel…'
+    const name = el<HTMLSelectElement>('[data-fixture]').value as Parameters<typeof fixture>[0]
+    const packingSelect = el<HTMLSelectElement>('[data-atlas-packing]')
+    if (name.startsWith('atlas-packing-') && packingSelect.value === 'baseline') packingSelect.value = 'npot-square'
+    packingSelect.options[0].disabled = name.startsWith('atlas-packing-')
     const settings = {
       ...DEFAULTS,
       zoom: Number(el<HTMLSelectElement>('[data-zoom]').value),
@@ -119,38 +138,46 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       reverse: el<HTMLSelectElement>('[data-order]').value === 'reverse',
       imageFilter: el<HTMLSelectElement>('[data-image-filter]').value as 'nearest' | 'linear',
       atlasIsolation: el<HTMLSelectElement>('[data-atlas-isolation]').value as NonNullable<Settings['atlasIsolation']>,
+      atlasPacking: packingSelect.value as NonNullable<Settings['atlasPacking']>,
     }
-    const name = el<HTMLSelectElement>('[data-fixture]').value as Parameters<typeof fixture>[0]; const points = fixture(name)
+    const points = fixture(name)
     const variant = el<HTMLSelectElement>('[data-renderer]').value as RenderVariant
     const candidateLabel = variant === 'eligibility' ? 'Source-byte' : variant === 'quantized' ? 'Quantized' : 'Explicit'
     const isAtlas = name.startsWith('atlas-')
     const original: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
     const unmodified: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
     const diagnose = name === 'fractional'
-    el('[data-legend]').textContent = isAtlas
-      ? name === 'atlas-images'
-        ? 'Four atlas tiles: asymmetric opaque/transparent image, opaque contrast, invisible RGB, faint alpha 1/255.'
-        : name === 'atlas-shapes'
-          ? 'The same image is smaller and larger than its point shape. Transparent texels may reveal the same point’s shape.'
-          : name === 'atlas-overlap'
-            ? 'A textured foreground over a visible background point. Holes must not steal the background ID; reverse the order to compare.'
-            : 'Fractional sizes/positions and exact UV edges. Production atlas rectangles are retained, including potential neighbor sampling.'
-      : name === 'shapes'
-        ? 'Circle · square · triangle · diamond · pentagon · hexagon · star · cross. Top row: fill. Bottom row: inset stroke.'
-        : name === 'edge-cases'
-          ? 'Top: defaults · zero size · transparent · None · absent · size cap. Bottom: subpixel · capped stroke · translucent.'
-          : name === 'fractional'
-            ? 'Circle diameters from 0.25 to 42.5 CSS px at fractional positions. This is a strict parity diagnostic.'
-            : name === 'tiny-alpha'
-              ? 'Columns: 1/64, 1/8, 1/2, 2 and 42 CSS px. Rows: fill alpha 1, 1/255 and 1/65536. Tiny source ink may quantize to zero.'
-              : name === 'tiny-overlap'
-                ? 'Opaque blue background point and faint warm foreground point (fill alpha 1/65536). The foreground is also checked in isolation.'
-                : name === 'alpha-stack'
-                  ? '64 overlapping white circles, each at fill alpha 0.51/255. Compare production color compatibility as well as candidate visibility.'
-                  : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
+    el('[data-legend]').textContent = name.startsWith('atlas-packing-')
+      ? 'Five non-square sources include a one-texel-wide faint image and rectangular UV spans. Image footprints follow production’s square sizing.'
+      : isAtlas
+        ? name === 'atlas-images'
+          ? 'Four atlas tiles: asymmetric opaque/transparent image, opaque contrast, invisible RGB, faint alpha 1/255.'
+          : name === 'atlas-shapes'
+            ? 'The same image is smaller and larger than its point shape. Transparent texels may reveal the same point’s shape.'
+            : name === 'atlas-overlap'
+              ? 'A textured foreground over a visible background point. Holes must not steal the background ID; reverse the order to compare.'
+              : 'Fractional sizes/positions and exact UV edges. Production atlas rectangles are retained, including potential neighbor sampling.'
+        : name === 'shapes'
+          ? 'Circle · square · triangle · diamond · pentagon · hexagon · star · cross. Top row: fill. Bottom row: inset stroke.'
+          : name === 'edge-cases'
+            ? 'Top: defaults · zero size · transparent · None · absent · size cap. Bottom: subpixel · capped stroke · translucent.'
+            : name === 'fractional'
+              ? 'Circle diameters from 0.25 to 42.5 CSS px at fractional positions. This is a strict parity diagnostic.'
+              : name === 'tiny-alpha'
+                ? 'Columns: 1/64, 1/8, 1/2, 2 and 42 CSS px. Rows: fill alpha 1, 1/255 and 1/65536. Tiny source ink may quantize to zero.'
+                : name === 'tiny-overlap'
+                  ? 'Opaque blue background point and faint warm foreground point (fill alpha 1/65536). The foreground is also checked in isolation.'
+                  : name === 'alpha-stack'
+                    ? '64 overlapping white circles, each at fill alpha 0.51/255. Compare production color compatibility as well as candidate visibility.'
+                    : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
     if (isAtlas) {
       el('[data-legend]').textContent += ` Candidate UV policy: ${settings.atlasIsolation
       }; production retains original UVs. Pick-only color preservation uses the same UV policy in both draws.`
+    }
+    if (isAtlas && settings.atlasPacking !== 'baseline') {
+      const layout = packingLayout(settings.atlasPacking)
+      el('[data-legend]').textContent += ` Atlas: ${layout.width} × ${layout.height}; ${layout.images.length} images, ` +
+        `${layout.coordsSize} × ${layout.coordsSize} UV records.`
     }
     try {
       for (const name of ['webgl', 'webgpu'] as const) {
@@ -173,7 +200,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         }
       }
       if (destroyed) return
-      const contribution = (name === 'tiny-overlap' || name === 'atlas-overlap') && snapshots.webgl && snapshots.webgpu
+      const contribution = (name === 'tiny-overlap' || name === 'atlas-overlap' || name === 'atlas-packing-overlap') && snapshots.webgl && snapshots.webgpu
         ? await inspectForeground({ webgl: backends.webgl!, webgpu: backends.webgpu! },
           { webgl: snapshots.webgl, webgpu: snapshots.webgpu }, points, settings, variant)
         : undefined
@@ -211,8 +238,9 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       if (destroyed) return
       latestIsolation = isolatedAtlas?.valid
       report = {
-        schemaVersion: 9,
+        schemaVersion: 11,
         experiment: 'point-styling',
+        isolatedImageReference: 'source-texel-v2; baseline and production-normalized controls retained',
         recordedAt: new Date().toISOString(),
         browser: navigator.userAgent,
         validationContract: validationContracts['point-styling'],
@@ -222,7 +250,11 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           ? (isAtlas ? ATLAS_PICKING_POLICY : SOURCE_BYTE_PICKING_POLICY)
           : variant === 'quantized' ? (isAtlas ? ATLAS_QUANTIZED_POLICY : SOURCE_ALPHA_POLICY) : undefined,
         colorPreservation,
-        atlas: isAtlas ? ATLAS_EXPORT : undefined,
+        atlas: isAtlas
+          ? settings.atlasPacking === 'baseline'
+            ? ATLAS_EXPORT
+            : packingExport(settings.atlasPacking, variant !== 'production' && settings.atlasIsolation === 'gutter')
+          : undefined,
         cpuAtlasColors,
         isolatedAtlas,
         atlasIsolation: isAtlas
@@ -230,7 +262,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
             requested: settings.atlasIsolation,
             webgl: snapshots.webgl?.atlasIsolation,
             webgpu: snapshots.webgpu?.atlasIsolation,
-            definitions: ATLAS_ISOLATION_EXPORT,
+            baselineDefinitions: ATLAS_ISOLATION_EXPORT,
           }
           : undefined,
         points,
@@ -366,6 +398,18 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           opacities: TINY_OPACITIES,
           ratios: [1, 2],
           fixtures: [{ name: 'tiny-alpha', points: fixture('tiny-alpha') }, { name: 'tiny-overlap', points: fixture('tiny-overlap') }],
+        },
+      },
+      packingSweep: packingStudy && {
+        ...packingStudy,
+        inputs: {
+          reference: 'source-texel-v2',
+          defaults: DEFAULTS,
+          layouts: PACKING_NAMES.map(name => packingExport(name)),
+          profiles: PACKING_PROFILES,
+          filters: ['nearest', 'linear'],
+          policies: ['original', 'clamp'],
+          fixtures: PACKING_FIXTURES.map(name => ({ name, points: fixture(name) })),
         },
       },
       isolationSweep: isolationStudy && {
@@ -513,6 +557,46 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           exportButton.disabled = !report; setSweepDisabled(false); el<HTMLButtonElement>('[data-isolation-cancel]').disabled = true
           el('[data-isolation-progress]').textContent = `${study.status} · ${study.rows.length} / 160 · ` +
             `${study.rows.filter(row => !row.isolatedPass).length} isolated-image rows rejected. All policies and compatibility failures retained.`
+        }
+      }
+    }
+    runSweep().catch(error => { runError = String(error) })
+  })
+  el('[data-packing-cancel]').addEventListener('click', () => { cancelSweep = true })
+  el('[data-packing-sweep]').addEventListener('click', () => {
+    if (busy || sweepRunning || destroyed || !backends.webgl || !backends.webgpu) return
+    const runSweep = async (): Promise<void> => {
+      sweepRunning = true; cancelSweep = false
+      const study = {
+        startedAt: new Date().toISOString(),
+        status: 'running',
+        browser: navigator.userAgent,
+        devices: Object.values(backends).map(b => b.info),
+        rows: [] as PackingRow[],
+        finishedAt: undefined as string | undefined,
+        error: undefined as string | undefined,
+      }
+      packingStudy = study; exportButton.disabled = true; el('[data-packing-results]').replaceChildren()
+      host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
+      setSweepDisabled(true); el<HTMLButtonElement>('[data-packing-cancel]').disabled = false
+      el('[data-packing-progress]').textContent = 'Starting 96 full-frame packing rows…'
+      try {
+        await runPackingSweep({ webgl: backends.webgl!, webgpu: backends.webgpu! }, row => {
+          study.rows.push(row)
+          if (destroyed) return
+          renderPackingRows(el('[data-packing-results]'), study.rows)
+          el('[data-packing-progress]').textContent = `${study.rows.length} / 96 · ${row.packing} · ${row.fixture} · ` +
+            `${row.filter} · ${row.profile} · ${row.policy}`
+        }, () => cancelSweep || destroyed)
+        study.status = cancelSweep || destroyed ? 'cancelled' : 'complete'
+      } catch (error) { study.status = 'failed'; study.error = String(error); runError = study.error } finally {
+        study.finishedAt = new Date().toISOString(); sweepRunning = false
+        if (destroyed) Object.values(backends).forEach(backend => backend.destroy())
+        else {
+          host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
+          exportButton.disabled = !report; setSweepDisabled(false); el<HTMLButtonElement>('[data-packing-cancel]').disabled = true
+          el('[data-packing-progress]').textContent = `${study.status} · ${study.rows.length} / 96 · ` +
+            `${study.rows.filter(row => !row.passed).length} isolated-image rows rejected. All controls and failed rows retained.`
         }
       }
     }
