@@ -15,6 +15,7 @@ import { SOURCE_ALPHA_GLSL } from './source-alpha'
 import { atlasTexture, atlasCoords, atlasInfo, GUTTER_SIZE, sourceTexelRects } from './atlas'
 import { createDynamicAtlas } from './dynamic-atlas'
 import { greyed, overlayIndices } from './point-effects'
+import polygonPixels from './polygon-pixels.glsl?raw'
 import { createPointOverlays } from './rings-webgl'
 
 // Declaration order matches the production std140 blocks verbatim.
@@ -71,7 +72,9 @@ function moduleSource (source: string): string {
   return match[1]
 }
 
-function coordinateSources (quads: boolean, alphaPolicy: 'unchanged' | 'quantized' | 'eligibility' = 'unchanged', clampTile = false, texel = false):
+function coordinateSources (
+  quads: boolean, alphaPolicy: 'unchanged' | 'quantized' | 'eligibility' = 'unchanged', clampTile = false, texel = false, pixelPolygons = false
+):
 { vertex: string; fragment: string } {
   const position = 'gl_Position = vec4(finalPosition.rg, depthZ, 1.0);'
   const coord = 'vec2 pointCoord = 2.0 * gl_PointCoord - 1.0;'
@@ -97,6 +100,17 @@ function coordinateSources (quads: boolean, alphaPolicy: 'unchanged' | 'quantize
        if (isOutlined > 0.0) coreCoord = (gl_FragCoord.xy - diagnosticCenter) * vec2(2.0, -2.0) / coreDiameterPx;`)
       .replace('float rPx = length(coreCoord) * coreDiameterPx * 0.5;',
         'float rPx = isOutlined > 0.0 ? length(gl_FragCoord.xy - diagnosticCenter) : length(coreCoord) * coreDiameterPx * 0.5;')
+    if (pixelPolygons) {
+      vertex = vertex.replace('void main()', 'flat out vec2 diagnosticShapeBounds;\nvoid main()')
+        .replace(size, `${size}\ndiagnosticShapeBounds = vec2(0.45,0.275) * max(shapeSize,1.0);`)
+      fragment = fragment.replace('void main()', 'flat in vec2 diagnosticShapeBounds;\nvoid main()')
+      fragment = fragment.replace('void main()', `${polygonPixels}\nvoid main()`)
+        .replace('float opacity = 1.0 - smoothstep(-halfRampPx, halfRampPx, edgeDistancePx);',
+          `if (pointShape == 2.0 || pointShape == 3.0 || pointShape == 6.0) {
+             edgeDistancePx = polygonPixelDistance((gl_FragCoord.xy - diagnosticCenter) * vec2(1,-1), coreDiameterPx, pointShape, diagnosticShapeBounds);
+           }
+           float opacity = 1.0 - smoothstep(-halfRampPx, halfRampPx, edgeDistancePx);`)
+    }
     const picking = 'if (renderMode > 2.5) {'
     if (!fragment.includes(picking)) throw new Error('Production picking control location changed')
     fragment = fragment.replace(picking, `${picking}\nif ((isGreyedOut > 0.0 && greyoutOpacity != -1.0
@@ -286,10 +300,10 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
           }
           const texel = isolation === 'texel' && (settings.imageFilter ?? 'nearest') === 'nearest'
           const clamped = isolation === 'clamp' || (isolation === 'texel' && !texel)
-          const key = `${variant}:${clamped}:${texel}`
+          const key = `${variant}:${clamped}:${texel}:${settings.polygonArithmetic}`
           if (variant !== 'production' && !candidates.has(key)) {
             const policy = variant === 'explicit' ? 'unchanged' : variant
-            const { vertex, fragment } = coordinateSources(true, policy, clamped, texel)
+            const { vertex, fragment } = coordinateSources(true, policy, clamped, texel, settings.polygonArithmetic === 'pixels')
             candidates.set(key, {
               color: make(false, fragment, vertex, true, texel),
               pick: make(true, fragment, vertex, true, texel),
@@ -390,6 +404,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
           if (display) draw(colorModel, 0)
           device.submit()
           const result: Snapshot = {
+            polygonArithmetic: variant === 'production' ? 'normalized' : settings.polygonArithmetic ?? 'normalized',
             atlasSource: source,
             atlasGeneration: source ? dynamic.generation : undefined,
             atlasPacking: packing,

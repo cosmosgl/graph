@@ -1,3 +1,4 @@
+import type { Settings } from './data'
 import type { Backend, Snapshot } from './backend'
 import { compareColors, compareSnapshotsAsync, type ColorComparison, type Comparison } from './reference'
 import { effectsCpuColors } from './effects-reference'
@@ -12,14 +13,14 @@ export type EffectsRow = {
 }
 export async function runEffectsSweep (
   backends: { webgl: Backend; webgpu: Backend }, onRow: (row: EffectsRow) => void, cancelled: () => boolean,
-  views = EFFECTS_VIEWS
+  views = EFFECTS_VIEWS, polygonArithmetic?: Settings['polygonArithmetic']
 ): Promise<EffectsRow[]> {
   const rows: EffectsRow[] = []
   for (const fixture of EFFECTS_FIXTURES) {
     for (const [index, EFFECTS_PROFILE] of EFFECTS_PROFILES.entries()) {
       for (const view of views) {
         if (cancelled()) return rows
-        const { points, settings } = effectScenario(fixture, index, view.settings)
+        const { points, settings } = effectScenario(fixture, index, { ...view.settings, ...(polygonArithmetic ? { polygonArithmetic } : {}) })
         const render = async (variant: 'production' | 'explicit' | 'eligibility', overlays = true): Promise<{ webgl: Snapshot; webgpu: Snapshot }> => {
           const config = overlays ? settings : { ...settings, hovered: [], focused: undefined }
           return {
@@ -64,6 +65,7 @@ export async function runEffectsSweep (
 }
 export function renderEffectsRows (host: HTMLElement, rows: EffectsRow[]): void {
   host.innerHTML = `<p>${rows.filter(r => r.passed).length} passed / ${rows.length} checked of ${EFFECTS_ROW_COUNT} rows.
+    ${rows[0]?.settings.polygonArithmetic === 'pixels' ? 'Pixel-space diagnostic' : 'Normalized control'}.
     Exact IDs and CPU masks, 2/255 color budget and zero invisible picks. Decorative overlays must leave IDs unchanged;
     source-byte picking must leave color bytes unchanged. Production compatibility is reported separately.</p>
     <table data-effects-summary><thead><tr><th>Scene</th><th>Passed / checked</th><th>CPU color failures</th><th>Overlay ID changes</th></tr></thead><tbody>
@@ -74,9 +76,11 @@ export function renderEffectsRows (host: HTMLElement, rows: EffectsRow[]): void 
       <td>${selected.reduce((sum, r) => sum + r.overlayIdDifferences.webgl + r.overlayIdDifferences.webgpu, 0)}</td></tr>`
   }).join('')}</tbody></table>
     <table data-effects-table><thead><tr><th>Scene / profile / view</th><th>Result</th><th>ID differences</th><th>CPU masks · GL / GPU</th>
-      <th>CPU color failures · GL / GPU</th><th>Production compatible</th></tr></thead><tbody>
+      <th>CPU color failures · GL / GPU</th><th>Pick-only color changes · GL / GPU</th><th>Production compatible</th></tr></thead><tbody>
     ${rows.map(r => `<tr><td>${r.fixture} · ${r.profile}<br>${r.view}</td><td>${r.passed ? 'Pass' : 'Fail'}</td>
       <td>${r.paired.idDisagreements}</td><td>${r.paired.webglReferenceFailures} / ${r.paired.webgpuReferenceFailures}</td>
-      <td>${r.colors.webgl.budgetFailures} / ${r.colors.webgpu.budgetFailures}</td><td>${r.compatibility.valid ? 'Pass' : 'Fail'}</td></tr>`).join('')}
+      <td>${r.colors.webgl.budgetFailures} / ${r.colors.webgpu.budgetFailures}</td>
+      <td>${r.preservation.webgl.changedPixels} / ${r.preservation.webgpu.changedPixels}</td>
+      <td>${r.compatibility.valid ? 'Pass' : 'Fail'}</td></tr>`).join('')}
     </tbody></table>`
 }

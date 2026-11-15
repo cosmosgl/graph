@@ -7,6 +7,7 @@ import { DEFAULTS, fixture, HEIGHT, WIDTH, type Settings } from './data'
 import { COLOR_BUDGET, atlasCpuColors, compareColors, compareSnapshotsAsync } from './reference'
 import { effectScenario, EFFECTS_FIXTURES, EFFECTS_PROFILES, EFFECTS_VIEWS, type EffectsFixture } from './effects-fixtures'
 import { effectsCpuColors } from './effects-reference'
+import { auditPolygons, renderPolygonAudit } from './polygon-audit'
 import { EFFECTS_SOURCE_ALPHA } from './point-effects'
 import { EFFECTS_ROW_COUNT, runEffectsSweep, renderEffectsRows, type EffectsRow } from './effects-study'
 import { createStylingWebGL } from './webgl'
@@ -60,6 +61,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     `<option value="${name}">${name === 'shapes' ? 'Eight shapes · exact boundary control' : name}</option>`).join('')}</select></label>
       <label>Ring / greyout profile <select data-effects-profile disabled>${EFFECTS_PROFILES.map((p, i) =>
     `<option value="${i}">${p.name}</option>`).join('')}</select></label>
+      <label>Polygon arithmetic <select data-polygon-arithmetic disabled><option value="normalized">Normalized · retained control</option>
+        <option value="pixels">Pixel-space · diagnostic</option></select></label>
       <label>Atlas filter <select data-image-filter><option value="nearest">Nearest · production default</option>
         <option value="linear">Linear</option></select></label>
       <label>Decode / upload <select data-decode-policy disabled>${DECODE_POLICIES.map(p =>
@@ -189,6 +192,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
     el<HTMLSelectElement>('[data-effects-scene]').disabled = !effectsActive
     el<HTMLSelectElement>('[data-effects-profile]').disabled = !effectsActive
+    el<HTMLSelectElement>('[data-polygon-arithmetic]').disabled = !effectsActive || el<HTMLSelectElement>('[data-renderer]').value === 'production'
     el<HTMLSelectElement>('[data-decode-policy]').disabled = !decodingActive || el<HTMLSelectElement>('[data-renderer]').value === 'production'
     el<HTMLSelectElement>('[data-atlas-packing]').disabled = dynamicActive || decodingActive
     for (const option of el<HTMLSelectElement>('[data-atlas-isolation]').options) {
@@ -231,6 +235,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     packingSelect.options[0].disabled = name.startsWith('atlas-packing-')
     let settings: Settings = {
       ...DEFAULTS,
+      polygonArithmetic: isEffects && el<HTMLSelectElement>('[data-polygon-arithmetic]').value === 'pixels' ? 'pixels' : undefined,
       zoom: Number(el<HTMLSelectElement>('[data-zoom]').value),
       ratio: Number(el<HTMLSelectElement>('[data-ratio]').value),
       opacity: Number(el<HTMLSelectElement>('[data-opacity]').value),
@@ -257,7 +262,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     const isAtlas = name.startsWith('atlas-')
     const original: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
     const unmodified: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
-    const diagnose = name === 'fractional'
+    const polygonReplay = isEffects && el<HTMLSelectElement>('[data-effects-scene]').value === 'shapes'
+    const diagnose = name === 'fractional' || polygonReplay
     el('[data-legend]').textContent = isEffects
       ? 'Outline rings are part of the body fragment; hover/focus rings draw later. Greyed points draw first. ' +
         'Greyout opacity replaces global body opacity. Rings never add a pickable contour.'
@@ -288,6 +294,10 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
                         : name === 'alpha-stack'
                           ? '64 overlapping white circles, each at fill alpha 0.51/255. Compare production color compatibility as well as candidate visibility.'
                           : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
+    if (isEffects) {
+      const arithmetic = variant === 'production' ? 'normalized production' : settings.polygonArithmetic ?? 'normalized control'
+      el('[data-legend]').textContent += ` Polygon arithmetic: ${arithmetic}. The CPU mask is unchanged.`
+    }
     if (isAtlas) {
       el('[data-legend]').textContent += ` Candidate sampling policy: ${settings.atlasIsolation
       }; production retains original UVs. Pick-only color preservation uses the same sampling policy in both draws.`
@@ -340,7 +350,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         : undefined
       if (destroyed) return
       const comparison = snapshots.webgl && snapshots.webgpu ? await compareSnapshotsAsync(snapshots.webgl, snapshots.webgpu, points, settings) : undefined
-      const fractional = diagnose && snapshots.webgl && snapshots.webgpu
+      const fractional = name === 'fractional' && snapshots.webgl && snapshots.webgpu
         ? investigateFractional(snapshots.webgl, snapshots.webgpu, points, settings)
         : undefined
       const analyticControl = snapshots.webgl?.analyticControl && snapshots.webgpu
@@ -389,8 +399,12 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         ? decodedAudit.every(row => row.valid) && canonicalIds === true &&
           canonicalColors.webgl.budgetFailures === 0 && canonicalColors.webgpu.budgetFailures === 0
         : undefined
+      const polygonAudit = polygonReplay && snapshots.webgl && snapshots.webgpu
+        ? auditPolygons(snapshots.webgl, snapshots.webgpu, points, settings)
+        : undefined
       report = {
-        schemaVersion: 15,
+        polygonAudit,
+        schemaVersion: 16,
         effects: scenario && {
           scene: el<HTMLSelectElement>('[data-effects-scene]').value,
           profile: EFFECTS_PROFILES[Number(el<HTMLSelectElement>('[data-effects-profile]').value)].name,
@@ -493,6 +507,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
               <td>${colorPreservation[lane].maxChannelError}/255</td><td>${checkResult(colorPreservation[lane].changedPixels === 0)}</td></tr>`)
     .join('')}</tbody></table>`)
         }
+        if (polygonAudit) renderPolygonAudit(output, polygonAudit)
         if (effectColors) {
           output.insertAdjacentHTML('beforeend', `<h3>CPU ring and greyout colors</h3>
             <p>Independent scalar composition, including image tint, inset strokes and ordered hover/focus overlays. Same 2/255 budget.</p>
@@ -994,7 +1009,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           if (destroyed) return
           renderEffectsRows(el('[data-effects-results]'), study.rows)
           el('[data-effects-progress]').textContent = `${study.rows.length} / ${EFFECTS_ROW_COUNT} · ${row.fixture} · ${row.profile} · ${row.view}`
-        }, () => cancelSweep || destroyed)
+        }, () => cancelSweep || destroyed, undefined,
+        el<HTMLSelectElement>('[data-polygon-arithmetic]').value === 'pixels' ? 'pixels' : undefined)
         study.status = cancelSweep || destroyed ? 'cancelled' : 'complete'
       } catch (error) { study.status = 'failed'; study.error = String(error); runError = study.error } finally {
         study.finishedAt = new Date().toISOString(); sweepRunning = false

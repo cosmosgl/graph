@@ -2,7 +2,7 @@
 source: Recorded findings
 recorded: 2026-11-15
 device: Apple M3; installed Chrome 157 and inline Chromium 157
-scope: The 56-row M3 PNG study accepts production canvas decoding and premultiplied-bitmap to sRGB ImageData normalization in 8/8 configurations each. Both preserve GPU colors/IDs and exact CPU masks; CPU colors stay within 2/255. Other decode/upload paths retain failures. All 144 prior static records remain unchanged; legacy compatibility and broader device/codec coverage remain separate.
+scope: M3 point styling/picking studies. The retained normalized ring/greyout sweep passes 88/96; the opt-in pixel-space diagnostic passes 86/96 and isolates GPU arithmetic, eight native CPU diamond-tie rows and two color-preservation rejections. Earlier image and force studies retain their stated scopes; acceptance and production controls are unchanged.
 ---
 
 ## Question
@@ -1530,6 +1530,88 @@ All **144 frozen static atlas rows match the preceding export record for record*
 6. Run `LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling` and open the printed test URL in Codex's inline browser. The focused regression separates the accepted overlap/image/size-limit scenes from the deliberately rejected polygon diagnostic.
 
 Transitions, arbitrary ring widths, interactive pointer behavior, broader colors/geometry, production setter/default transitions, offscreen culling, host depth integration, runtime GPU cost and other native devices remain separate gates.
+
+
+## Polygon boundary isolation
+
+Recorded **15 November 2026**, Codex inline Chromium **157**, Apple M3 / ANGLE Metal, luma **10.0.0-alpha.4**. This is the time-boxed follow-up to the eight rejected native ring/greyout rows. Production GLSL, the normalized control, the scalar mask and all acceptance thresholds remain unchanged. The new pixel-space path is an opt-in diagnostic, not an accepted replacement.
+
+### What the float probes reveal
+
+Unblended RGBA32F targets capture each fragment's core coordinate, signed edge distance and coverage through public luma APIs. The aligned native scene has **30 distinct rejected pixel positions**: 24 diamond pixels, four triangle corners and two star tips. The normalized control records 24 cross-backend ID differences and 14/22 CPU mask differences.
+
+- A triangle corner at `(148, 89)` should normalize to `(-0.9, -0.55)`. The captured WebGPU coordinate is approximately `(-0.900000036, -0.550000012)`. Both GPUs report a positive edge distance of `1.1920929e-6 px`, coverage `0.49999821`, and background, while the scalar mask includes the vertex. The symmetric corner and second row repeat this.
+- The star's tip `(406, 118)` has the same positive edge distance and rejected coverage. Native normalization of an exact vertex can move it outside the shape's own float32 constant.
+- The diamond mixes coordinate normalization, constant precision and a cancellation-prone sign expression. At `(225, 82)`, WebGL reports about `-4.7683722e-7 px`, WebGPU `+1.2150616e-6 px`, and the CPU `+2.2204460e-15 px`. Their IDs are diamond/background/background. At `(220, 88)`, the CPU distance is zero and WebGL includes the diamond, but WebGPU reports about `+7.5981313e-7 px` and rejects it.
+
+The live **Polygon boundary replay** table lists every rejected pixel, both IDs, the unchanged CPU expectation, signed distances and coverage. Local export includes both core-coordinate probes. Samples explain the failure; the acceptance audit still checks the entire framebuffer.
+
+### Pixel-space diagnostic
+
+Select **Polygon arithmetic → Pixel-space · diagnostic** while using a candidate renderer. Triangle, diamond and star distances operate in device pixels, avoiding a divide into the core followed by rescaling. Triangle/star extents are rounded in the vertex stage and passed as flat values. This stage boundary matters: the first fragment-only pixel-space attempt still lost four triangle corners. A captured distance of `5.3312021e-7 px` is consistent with multiply/subtract contraction retaining a small product residual. The flat-bound version recovers those corners. This observation does not prove a portable compiler evaluation order.
+
+For the diamond, production's mathematical half-diagonals are `2 × core / 5` and `12 × core / 25`. Its inside/edge predicate can therefore clear denominators:
+
+```text
+30 × |pixelOffsetX| + 25 × |pixelOffsetY| − 12 × core ≤ 0
+```
+
+The diagnostic uses that sign with its pixel-space distance magnitude. No epsilon, shifted contour, extra size or relaxed threshold is introduced. Color, source-byte eligibility, ring composition and blending retain their existing rules. The default normalized arithmetic and production mode remain selectable; production ignores the pixel-space selection. This bounded experiment does not establish exact classification for arbitrary float32 coordinates, sizes or devices.
+
+### An independent exact diagnostic exposes a scalar tie artifact
+
+At pixel `(225, 82)`, the diamond center is `(226.5, 100.5)` and `core = 40`, so its offset magnitude is `(1, 18)`:
+
+```text
+30 × 1 + 25 × 18 − 12 × 40 = 0
+```
+
+That point is exactly on the mathematical diamond. The existing scalar SDF instead evaluates normalized double coordinates `(0.05, 0.9)` and the sign `x × 0.96 + y × 0.8 − 0.8 × 0.96`. Binary64 rounding makes this expression positive; its final distance is `2.220446049250313e-15 px`. It rejects this boundary while accepting the equally exact `(6, 12)` edge offset. Double precision alone does not guarantee consistent closed-boundary classification.
+
+The separate CPU **Exact diamond side** diagnostic decomposes binary64 inputs into integer significands and powers of two, then evaluates the denominator-cleared expression with BigInt. Zero proves an exact edge for the supplied dyadic offsets under the mathematical dimensions. It is used only for explanation, never for the accepted mask or expected ID. Tests check all four edge families, signs, scale factors and samples strictly inside/outside. The original scalar reference remains byte-for-byte unchanged.
+
+### Outcome and next decision
+
+For the native darken scene, the final pixel-space diagnostic has **zero cross-backend ID and color differences**. It recovers all four triangle corners and both star tips. Its remaining **eight rejected pixels** are diamond edges: both GPUs report signed distance zero, coverage 0.5 and the diamond ID; the unchanged scalar mask returns background. Both backends therefore retain **8 CPU mask failures**, and the overall result remains **Fail**. CPU colors remain within the original 2/255 budget and invisible picks remain zero.
+
+The investigation separates an observable GPU arithmetic problem from a CPU boundary-classification artifact. It does not justify accepting 96/96 by changing the reference during this comparison. A future decision must explicitly choose and independently validate the intended closed-polygon predicate, retain this historical scalar control, and test neighboring/fractional inputs and other devices. A robust predicate is a correctness policy to investigate, rather than a mask tolerance. [Shewchuk's robust-predicate research](https://www.cs.cmu.edu/~quake/robust.html) explains why near-zero geometric signs need special care. [WGSL floating-point evaluation](https://www.w3.org/TR/WGSL/#floating-point-evaluation) permits precision/evaluation differences; writing the same expression is insufficient to guarantee identical classification.
+
+With this failure family localized, the next roadmap task is production **link rendering and picking**. The unresolved polygon gate remains visible while broader feature coverage proceeds.
+
+### Full diagnostic sweep
+
+The expanded pixel-space sweep accepts **86/96** rows. All **96** have exact cross-backend IDs, zero GPU/CPU color-budget failures, zero invisible picks and zero overlay-ID changes. Eight native rows still fail the unchanged CPU diamond mask. Two additional ratio-2 shape rows fail the separate requirement that pick-only eligibility leave color bytes exactly unchanged:
+
+| Profile | Changed WebGL color pixels | Maximum change | WebGPU changes |
+| --- | --- | --- | --- |
+| Lighten / Retina | 4 | 1/255 | 0 |
+| Greyout override / Retina | 2 | 1/255 | 0 |
+
+These are differences between separately compiled explicit and source-byte WebGL draws with the same pixel-space arithmetic, not GPU/CPU color-budget failures. Their cause is not isolated by this study. They do not reproduce in every standalone replay; the live result follows its captured bytes, and these recorded sweep rows remain rejected. The exact preservation requirement is stricter than the 2/255 cross-renderer color budget; all six changed pixels remain rejected. The prototype therefore is not an overall improvement in accepted-row count. The default normalized control remains selected, and the two color-preservation regressions are retained for a later investigation rather than hidden by a larger budget.
+
+The two matrices check **62,914,560 paired pixel positions** in total. The source-controlled report retains the findings and reproduction instructions; raw JSON remains a local export.
+
+The normalized rerun retains **88/96** accepted rows. All production, compatibility, paired-frame, mask and preservation records match the preceding export. **95/96** complete row records are identical; the native WebGL CPU-color comparison for Lighten / Retina counts 32 differing pixels instead of 36, all within 1/255. This within-budget count variation does not change any verdict and is not isolated further here. The two matrices compare as follows:
+
+| Check across each 96-row matrix | Normalized control | Pixel-space diagnostic |
+| --- | --- | --- |
+| Accepted rows | 88/96 | 86/96 |
+| Cross-backend ID differences, total | 168 | 0 |
+| CPU mask differences, GL / GPU, total | 98 / 154 | 56 / 56 |
+| GPU/CPU color-budget failures | 0 | 0 |
+| Pick-only changed color pixels, GL / GPU | 0 / 0 | 6 / 0 |
+| Invisible picks and overlay-ID changes | 0 | 0 |
+
+The opt-in diagnostic makes the two GPUs agree, but does not satisfy the unchanged acceptance contract. The normalized baseline and its documented failures remain intact.
+
+### Reproduce the boundary investigation
+
+1. Select **Point rings and greyout → Eight shapes · exact boundary control → Darken**, native ratio and zoom, opacity 1, source-byte renderer. Keep **Normalized · retained control** to inspect all 30 rejected positions.
+2. Switch to **Pixel-space · diagnostic**. Inspect the eight remaining diamond rows and the full-frame Fail result. Zero GPU differences must not override the CPU mask failures.
+3. Switch back to normalized arithmetic and production mode to replay their retained results. The pixel selection is ignored and disabled in production mode.
+4. Run the 96-row rings sweep under each arithmetic selection and export each result locally. The selected policy is recorded per row. All rows retain the existing CPU and color gates, overlay-ID invariance, pick-only color preservation and production compatibility.
+5. Export schema **16** JSON for arithmetic choice, float-probe replay, rational side diagnostic, unchanged scalar expectations and all sweep settings/first failures. Raw results stay outside the repository. All 93 focused rendering/reference/navigation checks pass; targeted restoration additionally verifies byte-identical normalized images before and after the diagnostic for native darken and ratio-2 lighten inputs.
+6. Run `LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/polygon-boundary.test.ts` and open the printed session in Codex's inline browser. The test requires the retained CPU rejections, recovered triangle/star vertices, exact production/normalized restoration and unchanged normal images when probes are enabled.
 
 
 ## Reproduce
