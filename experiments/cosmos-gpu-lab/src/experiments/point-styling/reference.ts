@@ -3,6 +3,7 @@ import { center, diameter, resolvePoint, type Point, type Settings } from './dat
 import { sourceAlphaByte } from './source-alpha'
 import { IMAGE_COUNT, atlasInfo, sampleAtlasPolicy } from './atlas'
 import { sampleDynamicPixel, samplePackingPixel } from './atlas-packing'
+import { bodyOpacity, fillColor, greyed, greyRgb, pointOrder, spriteDiameter, strokeColor, shapeInradius } from './point-effects'
 const clamp = (x: number, a: number, b: number): number => Math.min(b, Math.max(a, x))
 // Independent scalar geometry control. This does not read a GPU mask or shader output.
 export function shapeDistance (x: number, y: number, shape: number): number {
@@ -58,18 +59,19 @@ function validImage (p: Point, settings: Settings): boolean {
     (settings.atlasPacking && settings.atlasPacking !== 'baseline' ? atlasInfo(settings.atlasPacking).imageCount : IMAGE_COUNT)
   return p.image !== undefined && p.image >= 0 && p.image < count
 }
-function imageFragment (p: Point, settings: Settings, x: number, y: number):
+export function imageFragment (p: Point, settings: Settings, x: number, y: number):
 { imageCovered: boolean; imageAlpha: number; shapeCovered: boolean; sourceAlpha: number; color: number[] } | null {
   if (p.absent) return null
+  p = resolvePoint(p, settings); const fill = fillColor(p, settings)
   const d = diameter(p, settings); const hasImage = validImage(p, settings)
   const imageD = hasImage ? diameter({ ...p, size: p.imageSize ?? p.size }, settings) : 0
   if (Math.max(d, imageD) <= 0) return null
-  const sprite = Math.max(d, 1, imageD); const core = Math.max(d, 1); const [cx, cy] = center(p, settings)
+  const sprite = spriteDiameter(p, settings, imageD); const core = Math.max(d, 1); const [cx, cy] = center(p, settings)
   if (Math.abs(x - cx) > sprite / 2 || Math.abs(y - cy) > sprite / 2) return null
   const distance = p.shape === 8 || d <= 0 ? Infinity : shapeDistance((x - cx) * 2 / core, (y - cy) * 2 / core, p.shape) * core * 0.5
   const ramp = clamp(distance + 0.5, 0, 1); const coverage = 1 - ramp * ramp * (3 - 2 * ramp)
   const area = Math.min(1, d * d / (core * core)); const f = Math.fround
-  const shapeAlpha = f(f(coverage) * f(f(area) * f(p.color[3])))
+  const shapeAlpha = f(f(coverage) * f(f(area) * f(fill[3])))
   const imageCovered = hasImage && imageD > 0 && Math.abs(x - cx) <= imageD / 2 && Math.abs(y - cy) <= imageD / 2
   let image = [0, 0, 0, 0]
   if (imageCovered) {
@@ -81,12 +83,21 @@ function imageFragment (p: Point, settings: Settings, x: number, y: number):
         : sampleAtlasPolicy(p.image!, (x - cx) / imageD + 0.5, (y - cy) / imageD + 0.5,
           settings.imageFilter ?? 'nearest', settings.atlasIsolation ?? 'original', settings.atlasPacking ?? 'baseline')
   }
-  const color = [0, 1, 2].map(c => (p.shape === 8 || d <= 0 ? 0 : p.color[c]) * (1 - image[3]) + image[c] * image[3])
+  if (!hasImage && (p.shape === 8 || fill[3] === 0)) return null
+  if (greyed(p, settings)) image = [...greyRgb(image.slice(0, 3), settings), image[3]]
+  const width = Math.min(Math.max(p.stroke, 0) * settings.ratio, d * 0.25 * shapeInradius(p.shape))
+  const band = Math.abs(distance + width * 0.5) - width * 0.5; const t = clamp(band + 0.5, 0, 1)
+  const stroke = width > 0 ? 1 - t * t * (3 - 2 * t) : 0
+  const edge = width > 0 ? strokeColor(p, settings) : [0, 0, 0, 0]
+  const color = [0, 1, 2].map(c => {
+    const body = p.shape === 8 || d <= 0 ? 0 : fill[c] * (1 - stroke * edge[3]) + edge[c] * stroke * edge[3]
+    return body * (1 - image[3]) + image[c] * image[3]
+  })
   return {
     imageCovered,
     imageAlpha: image[3],
-    shapeCovered: distance <= 0 && p.color[3] > 0,
-    sourceAlpha: f(Math.max(shapeAlpha, f(image[3])) * f(settings.opacity)),
+    shapeCovered: distance <= 0 && fill[3] > 0,
+    sourceAlpha: f(Math.max(shapeAlpha, f(image[3])) * f(bodyOpacity(p, settings))),
     color,
   }
 }
@@ -94,10 +105,10 @@ function imageFragment (p: Point, settings: Settings, x: number, y: number):
 export function referencePick (points: Point[], settings: Settings, x: number, y: number, rule: PickingRule = 'visible'): number | null {
   // Candidate visibility is explicit. Retain the original opacity-independent
   // geometry reference for the production control; neither rule reads GPU pixels.
-  if (rule !== 'legacy' && settings.opacity <= 0) return null
-  const order = points.map((_, id) => id); if (!settings.reverse) order.reverse()
+  const order = pointOrder(points, settings).reverse()
   for (const id of order) {
-    const p = resolvePoint(points[id], settings); const d = diameter(p, settings)
+    const p = resolvePoint(points[id], settings); const d = diameter(p, settings); const fill = fillColor(p, settings)
+    if (rule !== 'legacy' && bodyOpacity(p, settings) <= 0) continue
     if (validImage(p, settings)) {
       const fragment = imageFragment(p, settings, x, y)
       if (!fragment) continue
@@ -105,10 +116,11 @@ export function referencePick (points: Point[], settings: Settings, x: number, y
       if (covered && (rule !== 'source-alpha' || sourceAlphaByte(fragment.sourceAlpha) > 0)) return id
       continue
     }
-    if (p.absent || p.shape === 8 || d <= 0 || p.color[3] <= 0) continue
+    if (p.absent || p.shape === 8 || d <= 0 || fill[3] <= 0) continue
     const [cx, cy] = center(p, settings); const core = Math.max(d, 1)
     const dx = (x - cx) * 2 / core; const dy = (y - cy) * 2 / core
-    if (!(Math.abs(dx) <= 1 && Math.abs(dy) <= 1)) continue
+    const sprite = spriteDiameter(p, settings)
+    if (Math.abs(x - cx) > sprite * 0.5 || Math.abs(y - cy) > sprite * 0.5) continue
     const distance = shapeDistance(dx, dy, p.shape)
     if (!(distance <= 0)) continue
     if (rule === 'source-alpha') {
@@ -117,7 +129,7 @@ export function referencePick (points: Point[], settings: Settings, x: number, y
       const f = Math.fround; const ramp = clamp(distance * core * 0.5 + 0.5, 0, 1)
       const coverage = f(1 - ramp * ramp * (3 - 2 * ramp))
       const smallAlpha = f(Math.min(1, f(d * d) / f(core * core)))
-      const alpha = f(f(coverage * f(smallAlpha * f(p.color[3]))) * f(settings.opacity))
+      const alpha = f(f(coverage * f(smallAlpha * f(fill[3]))) * f(bodyOpacity(p, settings)))
       if (sourceAlphaByte(alpha) === 0) continue
     }
     return id
@@ -129,15 +141,14 @@ export function referencePick (points: Point[], settings: Settings, x: number, y
 // A one-pixel margin keeps normalization/edge ties inside the tested region.
 export function prepareReferencePick (points: Point[], settings: Settings, rule: PickingRule = 'visible'):
 (x: number, y: number) => number | null {
-  const entries = points.flatMap((p, id) => {
+  const entries = pointOrder(points, settings).reverse().flatMap(id => {
+    const p = points[id]
     if (p.absent) return []
-    const d = diameter(p, settings); const imageD = validImage(p, settings) ? diameter({ ...p, size: p.imageSize ?? p.size }, settings) : 0
-    const radius = Math.max(d, 1, imageD) * 0.5 + 1; const [cx, cy] = center(p, settings)
+    const imageD = validImage(p, settings) ? diameter({ ...p, size: p.imageSize ?? p.size }, settings) : 0
+    const radius = spriteDiameter(p, settings, imageD) * 0.5 + 1; const [cx, cy] = center(p, settings)
     return [{ id, point: [p], left: cx - radius, right: cx + radius, top: cy - radius, bottom: cy + radius }]
   })
-  if (!settings.reverse) entries.reverse()
   return (x, y): number | null => {
-    if (rule !== 'legacy' && settings.opacity <= 0) return null
     for (const e of entries) {
       if (x < e.left || x > e.right || y < e.top || y > e.bottom) continue
       if (referencePick(e.point, settings, x, y, rule) !== null) return e.id
@@ -184,7 +195,7 @@ export function atlasCpuColors (snapshot: Snapshot, points: Point[], settings: S
     atlasSource: snapshot.atlasSource,
   }
   const { width, height } = snapshot; const color = new Uint8Array(width * height * 4)
-  const order = points.map((_, i) => i); if (settings.reverse) order.reverse()
+  const order = pointOrder(points, settings)
   for (const id of order) {
     const p = resolvePoint(points[id], settings)
     if (p.stroke > 0) throw new Error('CPU atlas color fixtures must not have strokes')

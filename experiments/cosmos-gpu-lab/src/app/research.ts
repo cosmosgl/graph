@@ -124,16 +124,16 @@ export const research: Record<string, ResearchSummary> = {
     method: 'validation-contract',
     comparison: 'Same styled points → production WebGL / WebGPU color and ID images → full-image and scalar-mask checks',
     question: 'Does point-ID picking select the shapes that Cosmos actually renders?',
-    conclusion: 'Premultiplied bitmap → sRGB ImageData preserves production PNG input in 8/8 cases; direct bitmap uploads remain rejected.',
-    scope: 'Apple M3: 56 rows with four PNG profiles. The passing normalization preserves color bytes and exact CPU masks at the unchanged 2/255 gate. ' +
-      'All 144 static control records are unchanged. Broader codecs/devices and legacy compatibility remain separate.',
-    variant: 'Premultiplied bitmap → straight-alpha sRGB ImageData → byte upload; source-byte picking; luma 10.0.0-alpha.4; Apple M3',
+    conclusion: 'Rings and greyout pass 88/96 M3 cases; eight exact polygon-boundary cases remain rejected.',
+    scope: 'Apple M3: all 96 effect rows pass 2/255 CPU colors, overlay-ID invariance and pick-only color preservation. ' +
+      'Eight native polygon cases fail exact masks/IDs. All 144 static atlas records are unchanged; legacy compatibility remains separate.',
+    variant: 'Source-byte picking; outline/hover/focus rings and greyout; luma 10.0.0-alpha.4; Apple M3',
     reviewed: '2026-11-15',
     milestone: 'rendering',
     evidence: 'method',
-    next: 'Validate rings/greyout and broader native devices; keep wider codec/color support and rendering/ID-pass cost as separate gates.',
-    reproduce: 'Select Atlas · image decoding and color, then compare Premult bitmap → bytes with the retained controls. ' +
-      'Run the 56-row decoding sweep and export JSON locally. Source checks and renderer checks must both pass.',
+    next: 'Isolate the native polygon-boundary predicates at unchanged gates, then validate transitions, links, pointer behavior and broader devices.',
+    reproduce: 'Select Point rings and greyout; compare the four scenes and eight profiles, then run the 96-row rings sweep. ' +
+      'Export JSON locally. Exact polygon failures remain rejected even when all color checks pass.',
     investigations: [{
       page: 'method',
       state: 'Current evidence',
@@ -159,7 +159,7 @@ export const milestones = [
     title: 'Simulation',
     position: 'Selected composed-force cases through 8,192 points; collision through 512',
     acceptance: 'Remaining forces, graph scalability and affordable precision',
-    gates: ['Validate clusters, per-point attractors and mouse repulsion in production force order.',
+    gates: ['Validate per-point attractors, clusters and mouse repulsion, then compose them in production force order.',
       'Validate the larger collision route and representative graph families at unchanged declared gates.',
       'Agree independent layout-quality and runtime sampling contracts; measure accepted precision cost.'],
     evidence: [['combined-layout', 'Combined forces'], ['collision', 'Collision'], ['matched-layout', 'Matched layouts']],
@@ -167,10 +167,10 @@ export const milestones = [
   {
     id: 'rendering',
     title: 'Rendering and interaction',
-    position: 'Bounded styling, picking, atlas updates and explicit PNG normalization demonstrated on M3',
+    position: 'Bounded styling, images and 88/96 ring/greyout cases demonstrated on M3',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
-    gates: ['Validate remaining point styles and other native devices; settle production coverage and source-visibility policy.',
-      'Validate rings/greyout, transitions, links and pointer hover; measure accepted rendering cost.'],
+    gates: ['Time-box the eight aligned polygon rejections without changing acceptance criteria.',
+      'Validate production link rendering/picking, then transitions and pointer behavior; measure accepted rendering cost and broaden native devices.'],
     evidence: [['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],
   },
   {
@@ -178,8 +178,9 @@ export const milestones = [
     title: 'Library and embedding',
     position: 'Supporting resource-transfer mechanisms demonstrated',
     acceptance: 'Complete Graph and host contracts',
-    gates: ['Exercise typed-array setters, stable IDs, transitions, callbacks and lifecycle through Graph.',
-      'Validate host devices/passes, picking, state isolation, deck integration and position-resource exposure.'],
+    gates: ['Exercise a small GraphSimulation/Graph backend with resident simulation, styled points/links, ' +
+      'updates and picking before large-graph optimization.',
+    'Validate host devices/passes, picking, state isolation, deck integration and position-resource exposure.'],
     evidence: [['point-capacity', 'Resident updates']],
   },
   {

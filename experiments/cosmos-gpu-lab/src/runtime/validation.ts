@@ -16,15 +16,17 @@ export const validationContracts: Record<string, ValidationContract> = {
     acceptance: 'Exact IDs and scalar masks at every pixel; at most two RGBA8 channel levels for color; no picked pixels with zero rendered alpha.',
     coverage: 'Frozen eight-shape, overlap, edge-case, fractional and tiny-alpha fixtures, zoom, pixel ratio, strokes, defaults and render order; ' +
       'raw/decoded atlas images, NPOT/non-square layouts, PNG color/alpha normalization and nearest/linear CPU colors; ' +
+      'outline/hover/focus rings, greyout layers/opacity, bounded OKLab shades and exact polygon boundary diagnostics; ' +
       'production, explicit-coordinate and isolated-source verdicts stay separate.',
-    limits: 'Host picking only. Pointer tolerance, wider codec/color support, rings, automatic shades, ' +
-      'greyout, transitions, occlusion and latency remain separate. ' +
+    limits: 'Host picking only. Pointer tolerance, wider codec/color support, broader automatic shades, ' +
+      'transitions, occlusion and latency remain separate. ' +
       'Production zero-opacity visibility and fractional compatibility still fail on M3. Candidate opacity 0/0.35/1 is bounded; ' +
       'Pick-only source-byte eligibility preserves colors in the 32-case M3 sweep, faint stack and 40 atlas cases. ' +
       'Original raster/picking and pre-blend-quantization failures stay visible. Clamping passes the bounded 64 × 64 atlas, ' +
       'while its three NPOT/non-square nearest-boundary failures remain as controls. Integer nearest texels with clamped linear ' +
       'sampling pass all 48 static packing cases and 72 sequential raw-image update cases on M3. ' +
       'Premultiplied-bitmap to sRGB ImageData normalization passes 8/8 PNG settings; direct bitmap paths remain rejected. ' +
+      'Rings/greyout pass 88/96 M3 rows; all eight native polygon-boundary rejections remain open. ' +
       'Other codecs, concurrent loading/frames, wide-gamut output, GPU cost and broader devices remain open.',
   },
   'center-mass': {

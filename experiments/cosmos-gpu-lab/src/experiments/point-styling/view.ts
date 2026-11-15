@@ -5,6 +5,10 @@ import { validationContracts } from '../../runtime/validation'
 import { pick, type Backend, type Snapshot, type RenderVariant } from './backend'
 import { DEFAULTS, fixture, HEIGHT, WIDTH, type Settings } from './data'
 import { COLOR_BUDGET, atlasCpuColors, compareColors, compareSnapshotsAsync } from './reference'
+import { effectScenario, EFFECTS_FIXTURES, EFFECTS_PROFILES, EFFECTS_VIEWS, type EffectsFixture } from './effects-fixtures'
+import { effectsCpuColors } from './effects-reference'
+import { EFFECTS_SOURCE_ALPHA } from './point-effects'
+import { EFFECTS_ROW_COUNT, runEffectsSweep, renderEffectsRows, type EffectsRow } from './effects-study'
 import { createStylingWebGL } from './webgl'
 import { createStylingWebGPU } from './webgpu'
 import { investigateFractional, renderFractionalInvestigation } from './fractional'
@@ -41,7 +45,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         <option value="explicit">Explicit-coordinate candidate</option><option value="quantized">Source-alpha quantized candidate</option>
         <option value="eligibility">Source-byte picking candidate</option></select></label>
       <label>Fixture <select data-fixture><option value="shapes">Eight shapes · fill and stroke</option>
-        <option value="overlap">Overlap and draw order</option><option value="edge-cases">Defaults and edge cases</option>
+        <option value="point-effects">Point rings and greyout</option><option value="overlap">Overlap and draw order</option>
+        <option value="edge-cases">Defaults and edge cases</option>
         <option value="fractional">Fractional sizes and positions</option><option value="tiny-alpha">Tiny-alpha grid</option>
         <option value="tiny-overlap">Tiny-alpha overlap</option><option value="alpha-stack">Faint overlap stack · 64 points</option>
         <option value="atlas-images">Atlas · image-only points</option><option value="atlas-shapes">Atlas · image over shape</option>
@@ -51,6 +56,10 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         <option value="atlas-packing-grid">Packing · five non-square images</option>
         <option value="atlas-packing-edges">Packing · exact texel boundaries</option>
         <option value="atlas-packing-overlap">Packing · overlap and underlying shapes</option></select></label>
+      <label>Ring / greyout scene <select data-effects-scene disabled>${EFFECTS_FIXTURES.map(name =>
+    `<option value="${name}">${name === 'shapes' ? 'Eight shapes · exact boundary control' : name}</option>`).join('')}</select></label>
+      <label>Ring / greyout profile <select data-effects-profile disabled>${EFFECTS_PROFILES.map((p, i) =>
+    `<option value="${i}">${p.name}</option>`).join('')}</select></label>
       <label>Atlas filter <select data-image-filter><option value="nearest">Nearest · production default</option>
         <option value="linear">Linear</option></select></label>
       <label>Decode / upload <select data-decode-policy disabled>${DECODE_POLICIES.map(p =>
@@ -108,10 +117,16 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         Encoded PNGs include sRGB, linear-sRGB and Display-P3 color tags, alpha ramps and asymmetric rows.</p>
       <div class="controls"><button data-decoding-sweep disabled>Run decoding sweep</button>
         <button data-decoding-cancel disabled>Cancel decoding sweep</button></div>
-      <p data-decoding-progress>No decoding sweep run.</p><div data-decoding-results></div></section>
+      <p data-decoding-progress>No decoding sweep run.</p><div data-decoding-results></div>
+      <h3>Point rings and greyout</h3><p>${EFFECTS_ROW_COUNT} rows compare outline, hover and focus rings, greyout overrides and highlighted draw order.
+        Exact polygon boundary cases remain in the gate; decorative overlays must never change IDs.</p>
+      <div class="controls"><button data-effects-sweep disabled>Run rings and greyout sweep</button>
+        <button data-effects-cancel disabled>Cancel rings sweep</button></div>
+      <p data-effects-progress>No rings and greyout sweep run.</p><div data-effects-results></div></section>
     <p class="demo-note"
       data-run-part="explanation">Both offscreen passes are read back for this diagnostic. Hover uses the captured ID image;
-      this does not measure production picking latency. Atlas fixtures add texture sampling; rings, greyout and transitions remain separate.
+      this does not measure production picking latency. Atlas fixtures add texture sampling;
+      rings and greyout have a separate fixture and sweep; transitions remain unchecked.
       <a href="#/point-styling/docs/method">Read the method and limitations</a>.</p>`
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
   const status = el('[role="status"]'); const exportButton = el<HTMLButtonElement>('[data-export]')
@@ -120,6 +135,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       .forEach(b => { b.disabled = disabled || dynamicActive || decodingActive })
     el<HTMLButtonElement>('[data-dynamic-sweep]').disabled = disabled || decodingActive
     el<HTMLButtonElement>('[data-decoding-sweep]').disabled = disabled
+    el<HTMLButtonElement>('[data-effects-sweep]').disabled = disabled || dynamicActive || decodingActive
     el<HTMLButtonElement>('[data-image-next]').disabled = disabled || !dynamicActive || dynamicStep === DYNAMIC_STEPS.length - 1
     el<HTMLButtonElement>('[data-image-reset]').disabled = disabled || !dynamicActive
   }
@@ -128,6 +144,10 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   const errors: Partial<Record<'webgl' | 'webgpu', string>> = {}
   let destroyed = false; let busy = false; let sweepRunning = false; let cancelSweep = false
   let dynamicActive = false; let dynamicStep = 0; let decodingActive = false
+  let latestEffects: boolean | undefined
+  let effectsStudy: { startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[];
+    rows: EffectsRow[]; error?: string; } | undefined
+  let effectsActive = false
   let latestDecoding: boolean | undefined
   const decodeCache = new Map<DecodePolicy, DecodedImages>()
   const getDecoded = async (policy: DecodePolicy): Promise<DecodedImages> => {
@@ -167,6 +187,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   }
   const restoreSelectControls = (): void => {
     host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
+    el<HTMLSelectElement>('[data-effects-scene]').disabled = !effectsActive
+    el<HTMLSelectElement>('[data-effects-profile]').disabled = !effectsActive
     el<HTMLSelectElement>('[data-decode-policy]').disabled = !decodingActive || el<HTMLSelectElement>('[data-renderer]').value === 'production'
     el<HTMLSelectElement>('[data-atlas-packing]').disabled = dynamicActive || decodingActive
     for (const option of el<HTMLSelectElement>('[data-atlas-isolation]').options) {
@@ -176,7 +198,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   const render = async (): Promise<void> => {
     if (busy || sweepRunning || destroyed) return
     busy = true; snapshots = {}; report = undefined; latestComparison = undefined; latestCompatibility = undefined; latestContribution = undefined
-    latestColorPreservation = undefined
+    latestColorPreservation = undefined; latestEffects = undefined
     latestAtlasColors = undefined; latestIsolation = undefined; latestDecoding = undefined
     runError = undefined; exportButton.disabled = true
     setSweepDisabled(true)
@@ -184,8 +206,14 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     host.querySelectorAll<HTMLElement>('[data-pick]').forEach(label => { label.textContent = 'Move over a shape to inspect its ID' })
     host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
     status.textContent = 'Drawing and checking every framebuffer pixel…'
-    const name = el<HTMLSelectElement>('[data-fixture]').value as Parameters<typeof fixture>[0] | 'atlas-dynamic' | 'atlas-decoding'
+    const name = el<HTMLSelectElement>('[data-fixture]').value as Parameters<typeof fixture>[0] | 'atlas-dynamic' | 'atlas-decoding' | 'point-effects'
     const isDynamic = name === 'atlas-dynamic'; const isDecoding = name === 'atlas-decoding'
+    const isEffects = name === 'point-effects'
+    if (isEffects && !effectsActive) {
+      el<HTMLSelectElement>('[data-renderer]').value = 'eligibility'
+      el<HTMLSelectElement>('[data-atlas-isolation]').value = 'texel'
+    }
+    effectsActive = isEffects
     if (!isDynamic && dynamicActive) { Object.values(backends).forEach(backend => backend.atlas.replace()); dynamicActive = false }
     if (!isDecoding && decodingActive) { Object.values(backends).forEach(backend => backend.atlas.replace()); decodingActive = false }
     if (isDynamic && !dynamicActive) {
@@ -201,7 +229,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     const packingSelect = el<HTMLSelectElement>('[data-atlas-packing]')
     if (isDynamic || isDecoding || (name.startsWith('atlas-packing-') && packingSelect.value === 'baseline')) packingSelect.value = 'npot-square'
     packingSelect.options[0].disabled = name.startsWith('atlas-packing-')
-    const settings = {
+    let settings: Settings = {
       ...DEFAULTS,
       zoom: Number(el<HTMLSelectElement>('[data-zoom]').value),
       ratio: Number(el<HTMLSelectElement>('[data-ratio]').value),
@@ -212,7 +240,15 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       atlasIsolation: el<HTMLSelectElement>('[data-atlas-isolation]').value as NonNullable<Settings['atlasIsolation']>,
       atlasPacking: packingSelect.value as NonNullable<Settings['atlasPacking']>,
     }
-    const points = isDynamic ? dynamicPoints() : isDecoding ? decodingPoints() : fixture(name)
+    const scenario = isEffects
+      ? effectScenario(el<HTMLSelectElement>('[data-effects-scene]').value as EffectsFixture,
+        Number(el<HTMLSelectElement>('[data-effects-profile]').value), settings)
+      : undefined
+    if (scenario) {
+      settings = scenario.settings
+      el<HTMLSelectElement>('[data-opacity]').value = String(settings.opacity)
+    }
+    const points = scenario ? scenario.points : isDynamic ? dynamicPoints() : isDecoding ? decodingPoints() : fixture(name as Parameters<typeof fixture>[0])
     const variant = el<HTMLSelectElement>('[data-renderer]').value as RenderVariant
     const decodePolicy = el<HTMLSelectElement>('[data-decode-policy]').value as DecodePolicy
     let selectedDecode: DecodedImages | undefined; let decodedAudit: ReturnType<typeof auditDecoded> | undefined
@@ -222,33 +258,36 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     const original: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
     const unmodified: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
     const diagnose = name === 'fractional'
-    el('[data-legend]').textContent = isDecoding
-      ? 'Four PNG profiles share asymmetric pixels and alpha ramps. Compare normalized bytes and direct bitmap uploads; source and render gates stay separate.'
-      : isDynamic
-        ? 'Seven point IDs show holes, an underlying shape and an initially absent image. Step through atlas changes; production sampling stays unchanged.'
-        : name.startsWith('atlas-packing-')
-          ? 'Five non-square sources include a one-texel-wide faint image and rectangular UV spans. Image footprints follow production’s square sizing.'
-          : isAtlas
-            ? name === 'atlas-images'
-              ? 'Four atlas tiles: asymmetric opaque/transparent image, opaque contrast, invisible RGB, faint alpha 1/255.'
-              : name === 'atlas-shapes'
-                ? 'The same image is smaller and larger than its point shape. Transparent texels may reveal the same point’s shape.'
-                : name === 'atlas-overlap'
-                  ? 'A textured foreground over a visible background point. Holes must not steal the background ID; reverse the order to compare.'
-                  : 'Fractional sizes/positions and exact UV edges. Production atlas rectangles are retained, including potential neighbor sampling.'
-            : name === 'shapes'
-              ? 'Circle · square · triangle · diamond · pentagon · hexagon · star · cross. Top row: fill. Bottom row: inset stroke.'
-              : name === 'edge-cases'
-                ? 'Top: defaults · zero size · transparent · None · absent · size cap. Bottom: subpixel · capped stroke · translucent.'
-                : name === 'fractional'
-                  ? 'Circle diameters from 0.25 to 42.5 CSS px at fractional positions. This is a strict parity diagnostic.'
-                  : name === 'tiny-alpha'
-                    ? 'Columns: 1/64, 1/8, 1/2, 2 and 42 CSS px. Rows: fill alpha 1, 1/255 and 1/65536. Tiny source ink may quantize to zero.'
-                    : name === 'tiny-overlap'
-                      ? 'Opaque blue background point and faint warm foreground point (fill alpha 1/65536). The foreground is also checked in isolation.'
-                      : name === 'alpha-stack'
-                        ? '64 overlapping white circles, each at fill alpha 0.51/255. Compare production color compatibility as well as candidate visibility.'
-                        : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
+    el('[data-legend]').textContent = isEffects
+      ? 'Outline rings are part of the body fragment; hover/focus rings draw later. Greyed points draw first. ' +
+        'Greyout opacity replaces global body opacity. Rings never add a pickable contour.'
+      : isDecoding
+        ? 'Four PNG profiles share asymmetric pixels and alpha ramps. Compare normalized bytes and direct uploads; source and render gates stay separate.'
+        : isDynamic
+          ? 'Seven point IDs show holes, an underlying shape and an initially absent image. Step through atlas changes; production sampling stays unchanged.'
+          : name.startsWith('atlas-packing-')
+            ? 'Five non-square sources include a one-texel-wide faint image and rectangular UV spans. Image footprints follow production’s square sizing.'
+            : isAtlas
+              ? name === 'atlas-images'
+                ? 'Four atlas tiles: asymmetric opaque/transparent image, opaque contrast, invisible RGB, faint alpha 1/255.'
+                : name === 'atlas-shapes'
+                  ? 'The same image is smaller and larger than its point shape. Transparent texels may reveal the same point’s shape.'
+                  : name === 'atlas-overlap'
+                    ? 'A textured foreground over a visible background point. Holes must not steal the background ID; reverse the order to compare.'
+                    : 'Fractional sizes/positions and exact UV edges. Production atlas rectangles are retained, including potential neighbor sampling.'
+              : name === 'shapes'
+                ? 'Circle · square · triangle · diamond · pentagon · hexagon · star · cross. Top row: fill. Bottom row: inset stroke.'
+                : name === 'edge-cases'
+                  ? 'Top: defaults · zero size · transparent · None · absent · size cap. Bottom: subpixel · capped stroke · translucent.'
+                  : name === 'fractional'
+                    ? 'Circle diameters from 0.25 to 42.5 CSS px at fractional positions. This is a strict parity diagnostic.'
+                    : name === 'tiny-alpha'
+                      ? 'Columns: 1/64, 1/8, 1/2, 2 and 42 CSS px. Rows: fill alpha 1, 1/255 and 1/65536. Tiny source ink may quantize to zero.'
+                      : name === 'tiny-overlap'
+                        ? 'Opaque blue background point and faint warm foreground point (fill alpha 1/65536). The foreground is also checked in isolation.'
+                        : name === 'alpha-stack'
+                          ? '64 overlapping white circles, each at fill alpha 0.51/255. Compare production color compatibility as well as candidate visibility.'
+                          : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
     if (isAtlas) {
       el('[data-legend]').textContent += ` Candidate sampling policy: ${settings.atlasIsolation
       }; production retains original UVs. Pick-only color preservation uses the same sampling policy in both draws.`
@@ -256,7 +295,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     if (isAtlas && settings.atlasIsolation === 'texel') {
       el('[data-legend]').textContent += ' Nearest samples use integer source texels; linear filtering retains the clamped sampler.'
     }
-    if (isAtlas && !isDynamic && !isDecoding && settings.atlasPacking !== 'baseline') {
+    if (isAtlas && !isDynamic && !isDecoding && settings.atlasPacking && settings.atlasPacking !== 'baseline') {
       const layout = packingLayout(settings.atlasPacking)
       el('[data-legend]').textContent += ` Atlas: ${layout.width} × ${layout.height}; ${layout.images.length} images, ` +
         `${layout.coordsSize} × ${layout.coordsSize} UV records.`
@@ -326,6 +365,10 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       const cpuAtlasColors = isAtlas && snapshots.webgl && snapshots.webgpu
         ? { webgl: atlasCpuColors(snapshots.webgl, points, settings), webgpu: atlasCpuColors(snapshots.webgpu, points, settings) }
         : undefined
+      const effectColors = isEffects && snapshots.webgl && snapshots.webgpu
+        ? { webgl: effectsCpuColors(snapshots.webgl, points, settings), webgpu: effectsCpuColors(snapshots.webgpu, points, settings) }
+        : undefined
+      latestEffects = effectColors ? effectColors.webgl.budgetFailures === 0 && effectColors.webgpu.budgetFailures === 0 : undefined
       latestAtlasColors = cpuAtlasColors ? cpuAtlasColors.webgl.budgetFailures === 0 && cpuAtlasColors.webgpu.budgetFailures === 0 : undefined
       const isolatedAtlas = isAtlas && snapshots.webgl && snapshots.webgpu
         ? await inspectAtlasIsolation({ webgl: snapshots.webgl, webgpu: snapshots.webgpu }, points, settings)
@@ -347,7 +390,12 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           canonicalColors.webgl.budgetFailures === 0 && canonicalColors.webgpu.budgetFailures === 0
         : undefined
       report = {
-        schemaVersion: 14,
+        schemaVersion: 15,
+        effects: scenario && {
+          scene: el<HTMLSelectElement>('[data-effects-scene]').value,
+          profile: EFFECTS_PROFILES[Number(el<HTMLSelectElement>('[data-effects-profile]').value)].name,
+          cpuColors: effectColors,
+        },
         decoding: selectedDecode && {
           requested: decodePolicy,
           actual: selectedDecode.policy,
@@ -381,15 +429,17 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         fixture: name,
         renderer: variant,
         sourceAlphaPolicy: variant === 'eligibility'
-          ? (isAtlas ? ATLAS_PICKING_POLICY : SOURCE_BYTE_PICKING_POLICY)
-          : variant === 'quantized' ? (isAtlas ? ATLAS_QUANTIZED_POLICY : SOURCE_ALPHA_POLICY) : undefined,
+          ? (isEffects ? { ...SOURCE_BYTE_PICKING_POLICY, ...EFFECTS_SOURCE_ALPHA } : isAtlas ? ATLAS_PICKING_POLICY : SOURCE_BYTE_PICKING_POLICY)
+          : variant === 'quantized'
+            ? (isEffects ? { ...SOURCE_ALPHA_POLICY, ...EFFECTS_SOURCE_ALPHA } : isAtlas ? ATLAS_QUANTIZED_POLICY : SOURCE_ALPHA_POLICY)
+            : undefined,
         colorPreservation,
         atlas: isAtlas
           ? snapshots.webgl?.atlasSource
             ? exportLayout(snapshots.webgl.atlasSource)
             : settings.atlasPacking === 'baseline'
               ? ATLAS_EXPORT
-              : packingExport(settings.atlasPacking, variant !== 'production' && settings.atlasIsolation === 'gutter')
+              : packingExport(settings.atlasPacking ?? 'npot-square', variant !== 'production' && settings.atlasIsolation === 'gutter')
           : undefined,
         cpuAtlasColors,
         isolatedAtlas,
@@ -442,6 +492,14 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
             <tbody>${(['webgl', 'webgpu'] as const).map(lane => `<tr><td>${lane}</td><td>${colorPreservation[lane].changedPixels}</td>
               <td>${colorPreservation[lane].maxChannelError}/255</td><td>${checkResult(colorPreservation[lane].changedPixels === 0)}</td></tr>`)
     .join('')}</tbody></table>`)
+        }
+        if (effectColors) {
+          output.insertAdjacentHTML('beforeend', `<h3>CPU ring and greyout colors</h3>
+            <p>Independent scalar composition, including image tint, inset strokes and ordered hover/focus overlays. Same 2/255 budget.</p>
+            <table data-effects-cpu><thead><tr><th>Backend</th><th>Pixels beyond 2/255</th><th>Maximum difference</th><th>Result</th></tr></thead><tbody>
+            ${(['webgl', 'webgpu'] as const).map(lane => `<tr><td>${lane}</td><td>${effectColors[lane].budgetFailures}</td>
+              <td>${effectColors[lane].maxChannelError}/255</td><td>${checkResult(effectColors[lane].budgetFailures === 0)}</td></tr>`).join('')}
+            </tbody></table>`)
         }
         if (cpuAtlasColors) {
           output.insertAdjacentHTML('beforeend', `<h3>CPU atlas color reference</h3>
@@ -504,6 +562,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         output.textContent = 'Incomplete comparison. Both backends must render before a verdict is available.'
         status.textContent = 'Incomplete: see backend errors.'
       }
+      if (latestEffects === false) status.textContent += ' CPU ring/greyout color check failed.'
       if (latestDecoding === false) status.textContent += ' Decoded source/input color check failed; see the source audit.'
       if (isDynamic) {
         const layout = backends.webgl?.atlas.layout
@@ -564,6 +623,17 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     if (!report || busy || sweepRunning) return
     const json = JSON.stringify({
       ...report,
+      effectsSweep: effectsStudy && {
+        ...effectsStudy,
+        inputs: {
+          defaults: DEFAULTS,
+          profiles: EFFECTS_PROFILES,
+          views: EFFECTS_VIEWS,
+          fixtures: EFFECTS_FIXTURES,
+          sourceAlpha: EFFECTS_SOURCE_ALPHA,
+          reference: 'scalar body masks + scalar source-over rings; production shaders unchanged',
+        },
+      },
       tinyAlphaSweep: tinyStudy && {
         ...tinyStudy,
         inputs: {
@@ -900,6 +970,45 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     }
     runSweep().catch(error => { runError = String(error); status.textContent = runError })
   })
+  el('[data-effects-cancel]').addEventListener('click', () => { if (sweepRunning) cancelSweep = true })
+  el('[data-effects-sweep]').addEventListener('click', () => {
+    if (busy || sweepRunning || destroyed || !backends.webgl || !backends.webgpu) return
+    const runSweep = async (): Promise<void> => {
+      sweepRunning = true; cancelSweep = false; runError = undefined
+      const study = {
+        startedAt: new Date().toISOString(),
+        finishedAt: undefined as string | undefined,
+        status: 'running',
+        browser: navigator.userAgent,
+        devices: Object.values(backends).map(b => b.info),
+        rows: [] as EffectsRow[],
+        error: undefined as string | undefined,
+      }
+      effectsStudy = study
+      host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
+      setSweepDisabled(true); exportButton.disabled = true; el<HTMLButtonElement>('[data-effects-cancel]').disabled = false
+      el('[data-effects-results]').replaceChildren(); el('[data-effects-progress]').textContent = `Starting ${EFFECTS_ROW_COUNT} ring/greyout rows…`
+      try {
+        await runEffectsSweep({ webgl: backends.webgl!, webgpu: backends.webgpu! }, row => {
+          study.rows.push(row)
+          if (destroyed) return
+          renderEffectsRows(el('[data-effects-results]'), study.rows)
+          el('[data-effects-progress]').textContent = `${study.rows.length} / ${EFFECTS_ROW_COUNT} · ${row.fixture} · ${row.profile} · ${row.view}`
+        }, () => cancelSweep || destroyed)
+        study.status = cancelSweep || destroyed ? 'cancelled' : 'complete'
+      } catch (error) { study.status = 'failed'; study.error = String(error); runError = study.error } finally {
+        study.finishedAt = new Date().toISOString(); sweepRunning = false
+        if (destroyed) disposeBackends()
+        else {
+          restoreSelectControls(); exportButton.disabled = !report; setSweepDisabled(false)
+          el<HTMLButtonElement>('[data-effects-cancel]').disabled = true
+          el('[data-effects-progress]').textContent = `${study.status} · ${study.rows.length} / ${EFFECTS_ROW_COUNT} · ` +
+            `${study.rows.filter(row => !row.passed).length} rows rejected. Exact boundary failures and production controls retained.`
+        }
+      }
+    }
+    runSweep().catch(error => { runError = String(error); status.textContent = runError })
+  })
   mountRunLayout(host, () => summarizeRun(
     busy || sweepRunning ? 'Running' : report ? 'Complete' : 'Preparing',
     [latestComparison, ...(latestContribution === undefined ? [] : [latestContribution]),
@@ -907,7 +1016,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       ...(latestAtlasColors === undefined ? [] : [latestAtlasColors]),
       ...(latestIsolation === undefined ? [] : [latestIsolation]),
       ...(latestCompatibility === undefined ? [] : [latestCompatibility]),
-      ...(latestDecoding === undefined ? [] : [latestDecoding])],
+      ...(latestDecoding === undefined ? [] : [latestDecoding]),
+      ...(latestEffects === undefined ? [] : [latestEffects])],
     'Other fixtures, pointer-hover tolerance and production picking latency.',
     Object.keys(errors),
     runError,

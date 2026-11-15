@@ -14,6 +14,8 @@ import { HEIGHT, WIDTH } from './data'
 import { SOURCE_ALPHA_GLSL } from './source-alpha'
 import { atlasTexture, atlasCoords, atlasInfo, GUTTER_SIZE, sourceTexelRects } from './atlas'
 import { createDynamicAtlas } from './dynamic-atlas'
+import { greyed, overlayIndices } from './point-effects'
+import { createPointOverlays } from './rings-webgl'
 
 // Declaration order matches the production std140 blocks verbatim.
 const vertexTypes = {
@@ -88,21 +90,32 @@ function coordinateSources (quads: boolean, alphaPolicy: 'unchanged' | 'quantize
     .replace(coord, `vec2 pointCoord = (gl_FragCoord.xy - diagnosticCenter) * vec2(2.0, -2.0) / overallSize;
       ${quads ? 'if (abs(pointCoord.x) > 1.0 || abs(pointCoord.y) > 1.0) discard;' : ''}`)
   if (quads) {
+    // Outline padding is a carrier size, not part of the body geometry. Avoid
+    // normalizing by that size and multiplying it back into the body contour.
+    fragment = fragment.replace('vec2 coreCoord = shapeCoord * (shapeDiameterPx / coreDiameterPx);',
+      `vec2 coreCoord = shapeCoord * (shapeDiameterPx / coreDiameterPx);
+       if (isOutlined > 0.0) coreCoord = (gl_FragCoord.xy - diagnosticCenter) * vec2(2.0, -2.0) / coreDiameterPx;`)
+      .replace('float rPx = length(coreCoord) * coreDiameterPx * 0.5;',
+        'float rPx = isOutlined > 0.0 ? length(gl_FragCoord.xy - diagnosticCenter) : length(coreCoord) * coreDiameterPx * 0.5;')
     const picking = 'if (renderMode > 2.5) {'
     if (!fragment.includes(picking)) throw new Error('Production picking control location changed')
-    fragment = fragment.replace(picking, `${picking}\nif (pointOpacity <= 0.0) discard;`)
+    fragment = fragment.replace(picking, `${picking}\nif ((isGreyedOut > 0.0 && greyoutOpacity != -1.0
+      ? greyoutOpacity : pointOpacity) <= 0.0) discard;`)
     if (alphaPolicy === 'quantized') {
       const alpha = 'finalPointAlpha *= pointOpacity;'
       if (!fragment.includes(alpha)) throw new Error('Production source-alpha location changed')
       fragment = fragment.replace('void main()', `${SOURCE_ALPHA_GLSL}\nvoid main()`)
-        .replace(picking, `float candidateSourceAlpha = quantizeSourceAlpha(max(finalShapeColor.a, finalImageColor.a) * pointOpacity);
+        .replace(picking, `float candidateSourceAlpha = quantizeSourceAlpha(max(finalShapeColor.a, finalImageColor.a) *
+          (isGreyedOut > 0.0 && greyoutOpacity != -1.0 ? greyoutOpacity : pointOpacity));
           ${picking}\nif (candidateSourceAlpha <= 0.0) discard;`)
         .replace(alpha, 'finalPointAlpha = candidateSourceAlpha;')
+        .replace('finalPointAlpha *= greyoutOpacity;', 'finalPointAlpha = candidateSourceAlpha;')
     } else if (alphaPolicy === 'eligibility') {
       // Only the ID pass uses the source byte. Leave color alpha and blending
       // exactly as in the explicit control, including faint-source accumulation.
       fragment = fragment.replace('void main()', `${SOURCE_ALPHA_GLSL}\nvoid main()`)
-        .replace(picking, `${picking}\nif (quantizeSourceAlpha(max(finalShapeColor.a, finalImageColor.a) * pointOpacity) <= 0.0) discard;`)
+        .replace(picking, `${picking}\nif (quantizeSourceAlpha(max(finalShapeColor.a, finalImageColor.a) *
+          (isGreyedOut > 0.0 && greyoutOpacity != -1.0 ? greyoutOpacity : pointOpacity)) <= 0.0) discard;`)
     }
     if (alphaPolicy !== 'unchanged') fragment = fragment.replace('|| imageCovered;', '|| (imageCovered && finalImageColor.a > 0.0);')
   }
@@ -174,7 +187,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
     const attributes = [
       ['pointIndices', 'float32x2'], ['sourceSize', 'float32'], ['targetSize', 'float32'],
       ['sourceColor', 'float32x4'], ['targetColor', 'float32x4'], ['shape', 'float32'],
-      ['imageIndex', 'float32'], ['imageSize', 'float32'], ['renderRank', 'float32'],
+      ['imageIndex', 'float32'], ['imageSize', 'float32'], ['renderRank', 'float32'], ['pointRingColor', 'float32x4'],
       ['sourceStrokeColor', 'float32x4'], ['targetStrokeColor', 'float32x4'],
       ['sourceStrokeWidth', 'float32'], ['targetStrokeWidth', 'float32'],
     ] as const
@@ -191,6 +204,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
         defines: {
           USE_UNIFORM_BUFFERS: true,
           POINT_STROKE: true,
+          POINT_RING_COLORS: true,
           ...({
             EXIT_DEFAULT_SIZE: '0.0', EXIT_DEFAULT_COLOR_CHANNEL: '0.0', EDGE_RAMP_PX: '1.0', POINT_RING_SCALE: '1.3',
           } as unknown as Record<string, boolean>),
@@ -207,6 +221,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
     }
     const visible = make(false); const picking = make(true)
     let diagnostic: Model | undefined
+    let overlays: ReturnType<typeof createPointOverlays> | undefined
     let analyticColor: Model | undefined; let analyticPick: Model | undefined
     const candidates = new Map<string, { color: Model; pick: Model; probe: Model }>()
     return {
@@ -235,11 +250,13 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
             }))
             result.copyImageData({ data, bytesPerRow: width * 16 }); return result
           }
-          const zero = texture(new Float32Array(positions.length))
+          const status = new Float32Array(positions.length)
+          points.forEach((p, id) => { status[id * 4] = Number(greyed(p, settings)); status[id * 4 + 1] = Number(!!p.outlined) })
+          const statusTexture = texture(status)
           const bindings = {
             positionsTexture: texture(positions),
             exitTexture: texture(absent),
-            pointStatus: zero,
+            pointStatus: statusTexture,
             imageAtlasCoords: texture(source?.coords ?? atlasCoords(isolation, gutterExtent, packing), info.coordsSize),
             imageAtlasTexture: source
               ? dynamic.texture(settings.imageFilter ?? 'nearest')
@@ -260,6 +277,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
               case 'imageIndex': return [p.image ?? -1]
               case 'imageSize': return [p.imageSize ?? p.size]
               case 'renderRank': return [rank]
+              case 'pointRingColor': return p.ringColor ?? [NaN, NaN, NaN, NaN]
               case 'sourceStrokeWidth': case 'targetStrokeWidth': return [p.stroke]
               default: return p.strokeColor
               }
@@ -309,11 +327,11 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
               sizeScale: settings.sizeScale,
               worldOrigin: [0, 0],
               screenSize: [WIDTH, HEIGHT],
-              greyoutColor: [-1, -1, -1, -1],
-              backgroundColor: [0, 0, 0, 0],
+              greyoutColor: settings.greyoutColor ?? [-1, -1, -1, -1],
+              backgroundColor: settings.backgroundColor ?? [0, 0, 0, 0],
               scalePointsOnZoom: Number(settings.scaleOnZoom),
               maxPointSize: settings.maxSize,
-              isDarkenGreyout: 1,
+              isDarkenGreyout: Number(settings.darkenGreyout !== false),
               skipHighlighted: 0,
               skipGreyed: 0,
               hasImages: Number(points.some(p => p.image !== undefined && p.image >= 0 && p.image < info.imageCount)),
@@ -326,32 +344,45 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
               pointDefaultColor: settings.defaultColor,
               pointDefaultSize: settings.defaultSize,
               pointsNumber: points.length,
-              strokeContrast: 0,
-              strokeDefaultShade: 2,
+              strokeContrast: settings.strokeContrast ?? 0,
+              strokeDefaultShade: settings.strokeShade ?? 2,
               strokeDefaultWidth: settings.defaultStroke,
               strokeDefaultColor: settings.defaultStrokeColor,
               animateStrokeColors: 0,
               animateStrokeWidths: 0,
-              ringDefaultColor: [1, 1, 1, 1],
-              ringDefaultShade: 2,
-              ringContrast: 0,
+              ringDefaultColor: settings.ringColor ?? [1, 1, 1, 1],
+              ringDefaultShade: settings.ringShade ?? 2,
+              ringContrast: settings.ringContrast ?? 0,
             },
           })
           const draw = (model: Model, mode: number, framebuffer?: ReturnType<typeof target>['framebuffer']): void => {
             uniforms.setUniforms({
               drawFragmentUniforms: {
-                greyoutOpacity: -1,
+                greyoutOpacity: settings.greyoutOpacity ?? -1,
                 pointOpacity: settings.opacity,
-                isDarkenGreyout: 1,
-                backgroundColor: [0, 0, 0, 0],
+                isDarkenGreyout: Number(settings.darkenGreyout !== false),
+                backgroundColor: settings.backgroundColor ?? [0, 0, 0, 0],
                 outlineWidth: 0.9,
                 renderMode: mode,
                 pickingAlpha: 1,
                 pickingIndexOffset: 0,
               },
             })
-            const pass = device.beginRenderPass({ framebuffer, clearColor: framebuffer ? [0, 0, 0, 0] : [0.14, 0.16, 0.185, 1], clearDepth: false })
-            try { model.draw(pass) } finally { pass.end() }
+            const pass = device.beginRenderPass({
+              framebuffer,
+              clearColor: framebuffer ? [0, 0, 0, 0] : settings.backgroundColor ?? [0.14, 0.16, 0.185, 1],
+              clearDepth: false,
+            })
+            try {
+              for (const layer of settings.highlighting ? [0, 1] : [-1]) {
+                uniforms.setUniforms({ drawVertexUniforms: { skipHighlighted: Number(layer === 0), skipGreyed: Number(layer === 1) } })
+                model.draw(pass)
+              }
+              if (mode === 0 && overlayIndices(settings, points.length).length) {
+                overlays ??= scope.own(createPointOverlays(device))
+                overlays.draw(pass, bindings, points, { ...settings, atlasSource: source })
+              }
+            } finally { pass.end() }
           }
           const colorModel = candidate?.color ?? visible
           const pickModel = candidate?.pick ?? picking
