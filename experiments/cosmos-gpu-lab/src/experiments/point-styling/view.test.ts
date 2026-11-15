@@ -258,3 +258,32 @@ it('shows atlas checks and retains a cancelled row without changing the live fix
   expect(host.querySelector<HTMLSelectElement>('[data-image-filter]')!.value).toBe('linear')
   expect(host.querySelector('details')).toBeNull()
 })
+
+it('keeps ring boundary failures visible and preserves the selected scene across sweep cancellation', async () => {
+  host = document.createElement('div'); document.body.append(host); instance = await createStylingView(host)
+  const select = async (selector: string, value: string): Promise<void> => {
+    const control = host!.querySelector<HTMLSelectElement>(selector)!
+    control.value = value; control.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(control.disabled).toBe(false), { timeout: 20000 })
+  }
+  await select('[data-fixture]', 'point-effects')
+  expect(host.querySelector<HTMLSelectElement>('[data-renderer]')!.value).toBe('eligibility')
+  // These deliberately exact polygon ties are not waived by passing ring colors.
+  expect(host.querySelector('[role="status"]')!.textContent).toContain('not accepted')
+  expect(host.querySelector('[data-effects-cpu]')!.textContent).not.toContain('Fail')
+  await select('[data-effects-scene]', 'overlap')
+  await select('[data-effects-profile]', '4')
+  expect(host.querySelector<HTMLSelectElement>('[data-opacity]')!.value).toBe('0')
+  expect(host.querySelector('[role="status"]')!.textContent).toContain('frame passed')
+  const canvas = host.querySelector('canvas')!
+  host.querySelector<HTMLButtonElement>('[data-effects-sweep]')!.click()
+  await vi.waitFor(() => expect(host!.querySelectorAll('[data-effects-table] tbody tr').length).toBeGreaterThan(0), { timeout: 20000 })
+  host.querySelector<HTMLButtonElement>('[data-effects-cancel]')!.click()
+  await vi.waitFor(() => expect(host!.querySelector('[data-effects-progress]')!.textContent).toContain('cancelled'), { timeout: 20000 })
+  expect(host.querySelector<HTMLSelectElement>('[data-effects-scene]')!.value).toBe('overlap')
+  expect(host.querySelector<HTMLSelectElement>('[data-effects-profile]')!.value).toBe('4')
+  expect(host.querySelector('canvas')).toBe(canvas)
+  await select('[data-effects-profile]', '0')
+  expect(host.querySelector('[data-effects-cpu]')!.textContent).not.toContain('Fail')
+  expect(host.querySelector('details')).toBeNull()
+}, 90000)

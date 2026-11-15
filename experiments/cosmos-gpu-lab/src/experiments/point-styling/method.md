@@ -1462,6 +1462,76 @@ ICC profiles, wide-gamut/HDR output, mipmaps, GPU/decode cost and other native a
 unvalidated. This is a frozen PNG input-normalization study, not the complete Graph image API.
 
 
+## Point rings, highlighting and greyout
+
+This study keeps the production point shader and the production hover/focus shaders unchanged. WebGL runs them through luma `Model` and `UniformStore`. WebGPU uses luma `RenderKernel`, storage records and separate uniform buffers per draw. The application explicitly orders the draws; [luma's engine guide](https://luma.gl/docs/api-guide/engine) leaves pass ownership and draw order with the application.
+
+```flow
+Greyed point layer · body, inset stroke, image and optional outline
+Highlighted point layer · same shader, original IDs and stable order within each layer
+Hover rings · deduplicate repeated hover IDs
+Focus ring · drawn last, even when the same point is hovered
+Host picking · repeat only the two point layers; omit decorative ring overlays
+```
+
+### Three different ring paths
+
+An **outline** enlarges the point's carrier to `1.3 × max(shapeDiameter, 1, imageDiameter) + 2`, capped by the original maximum point size. Its circular band is composited with the body inside one fragment before framebuffer blending. Moving it into another draw would change intermediate RGBA8 rounding. The inner radius is 90% of the outer radius; the existing one-device-pixel antialiasing ramp is retained. Global/greyout body opacity does not multiply outline alpha. Outline color can be global, per-point, or a lightness-derived shade of the original fill.
+
+**Hover and focus** use separate quad draws, after the bodies, with the unchanged production hover shader in WebGL and its WGSL port. The outer radius is `1.3 × max(pointFootprint, 1) / 2`; the inner radius is `sqrt(0.85) × outerRadius`. A hover ID is drawn once; focus follows hover and can target the same point. These quads are not clamped to the point-sprite cap after their radius expansion. Their alpha normally includes global point opacity. Explicit greyout RGBA replaces that color/alpha first, then greyout opacity multiplies it if supplied. This differs from outline opacity.
+
+Neither ring path adds a pickable contour. The production host-ID branch returns before outline composition, and overlay models never enter the ID pass. A point may have a visible ring while its body is unpickable. Absence, zero footprint and the production transparent-fill/None early-discard rules still apply. These fixtures set hover/focus IDs explicitly; pointer hit testing, event scheduling and nearest-window priority are not validated by drawing the overlays.
+
+### Greyout is a layer and an opacity rule
+
+- Undefined highlighting leaves every point in its ordinary layer. An empty highlighted set greys every point. Otherwise greyed points draw first, then highlighted points, with normal/reversed input order retained within each layer. IDs remain the original point IDs.
+- Default greyout mixes RGB 65% toward `0.2` in darken mode, or toward `max(backgroundRGB, 0.8)` in lighten mode. Explicit greyout RGBA replaces the fill color. Images and outline RGB use the tint, rather than replacing image RGB with the explicit fill color.
+- For a greyed body, supplied greyout opacity **replaces** global opacity. Thus global opacity zero plus greyout opacity 0.35 can leave greyed bodies visible and pickable in the candidate. The source-byte rule uses that effective body opacity, not the decorative ring alpha.
+- Greyed inset strokes derive a shade from the greyed fill, overriding explicit stroke colors. The bounded auto-shade profile ports Cosmos's OKLab transform, lightness direction, gamut check and eight chroma bisections. The independent CPU color reference uses double precision. The gamut epsilon belongs to production's color algorithm; it does not change the 2/255 acceptance budget. [The original OKLab paper](https://bottosson.github.io/posts/oklab/) explains the lightness/chroma model.
+
+### Frozen matrix and interpretation
+
+Four scenes cover all eight shapes at exact half-pixel ties, highlighted/greyed overlap, image-over-shape composition with transparent/faint texels, and zero/subpixel/capped/absent/transparent points. Eight profiles cover darken, lighten, explicit greyout RGBA/opacity, hidden grey bodies, zero global opacity with visible grey bodies, automatic ring/stroke shades, cleared highlighting and all-greyed status. Each runs at native scale, ratio 2, and zoom 0.5 with opacity 0.35 and reversed order: **96 rows**. The zero-global profile explicitly overrides the viewport opacity. Other settings are frozen per exported row.
+
+Every row retains the production pair and legacy compatibility separately. Candidate acceptance still requires exact cross-backend IDs and independent scalar masks at every pixel, no picked zero-alpha pixels, and the unchanged **2/255** GPU/CPU color budget. Additional invariants require zero ID changes when hover/focus overlays are omitted and zero color-byte changes when source-byte picking is enabled. Failed polygon boundary rows are retained and remain rejected even if their colors pass. Passing regression tests do not accept these rejected configurations.
+
+### Ring carrier coordinates and remaining polygon ties
+
+The enlarged outline carrier initially introduced an unnecessary normalization through its own diameter before rescaling to the body. The candidate now reconstructs outlined-body coordinates directly from pixel offset and body diameter. Circles evaluate radius directly in device pixels. This removes the observed outline-induced circle and overlap failures, without a boundary epsilon, different diameter, altered scalar mask or relaxed tolerance. Production GLSL remains unchanged; non-outlined controls retain their previous arithmetic.
+
+The deliberately aligned polygon scene still exposes rounding differences among GLSL, WGSL and the double-precision scalar mask. This is a remaining acceptance failure, not a verified driver defect. [WGSL floating-point evaluation](https://www.w3.org/TR/WGSL/#floating-point-evaluation) permits evaluation differences; a mathematical port alone does not establish exact contour classification. A robust predicate or a documented common arithmetic policy needs its own investigation against the frozen counterexamples, at the same gates.
+
+### Recorded M3 ring/greyout results
+
+Recorded **15 November 2026**, Codex inline Chromium **157**, **Apple M3 / ANGLE Metal**, pinned luma **10.0.0-alpha.4**. The complete sweep checks **31,457,280 paired pixel positions**.
+
+| Scene | Accepted rows | Maximum CPU color error |
+| --- | --- | --- |
+| Eight aligned shapes, including exact polygon ties | 16/24 | 1/255 |
+| Highlighted/greyed overlap | 24/24 | 2/255 |
+| Images over shapes, transparent/faint texels | 24/24 | 1/255 |
+| Zero/subpixel/capped/absent/transparent records | 24/24 | 1/255 |
+
+Overall **88/96 pass**. Across **all 96 rows**, GPU colors differ by at most 1/255, CPU colors stay within the original 2/255 budget, invisible picks are zero, hover/focus overlays change zero ID pixels, and pick-only eligibility changes zero color bytes. The auto-shade colors pass their bounded inputs, including greyed inset strokes. This does not establish arbitrary OKLab gamut inputs or animated/default-update behavior.
+
+All **eight rejections** are the aligned polygon scene at native scale, one per effect profile. Ratio-2 and zoomed profiles pass. The default darken row has **24 cross-backend ID differences**, **14 WebGL / 22 WebGPU CPU mask differences**, and zero color failures. At pixel **(225, 82)** on diamond ID 3, WebGL returns 3 while WebGPU and the scalar reference return background. This is an edge-classification counterexample, not a color or overlay-ID failure. The hidden-grey and zero-global profiles each have 12 cross-backend ID differences and 7/11 CPU mask differences because only one row of body masks remains eligible. The other six native profiles retain 24 and 14/22. No failed pixel is excluded from acceptance.
+
+The retained production pair and production-WebGL/candidate-WebGPU compatibility each pass **12/96** rows. Their failed coverage, opacity and color comparisons remain separate; 88 accepted candidate rows are not a claim of equivalent legacy rendering. The next rendering investigation should isolate these polygon boundary predicates in both shaders and the scalar calculation before expanding feature coverage or selecting a production arithmetic policy.
+
+All **144 frozen static atlas rows match the preceding export record for record**, including its 25 rejected original/clamped controls. Point effects do not change those prior measurements.
+
+### Reproduce rings and greyout
+
+1. Run `pnpm --filter @cosmos.gl/gpu-lab dev` and open **Point styling and picking**.
+2. Select **Fixture → Point rings and greyout**. The source-byte candidate and direct nearest texels are selected initially. Choose a ring/greyout scene and profile. The global opacity control displays the profile's actual opacity. Compare the full framebuffer audit, independent CPU ring/greyout colors and original color-byte preservation.
+3. Select **Renderer → Production control** to inspect the unchanged production shaders and legacy ID rule. Ring/greyout uniforms and status inputs remain the same; production sampling retains its original policy.
+4. Run **Run rings and greyout sweep** for all 96 rows. Summary and full results remain expanded. Cancellation finishes the active row and retains it. Offscreen sweep draws preserve live settings and canvases.
+5. Export schema **15** JSON locally for the exact inputs, profiles, effective settings, devices, time, all verdicts and first rejected pixels. Measurements remain outside the repository.
+6. Run `LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling` and open the printed test URL in Codex's inline browser. The focused regression separates the accepted overlap/image/size-limit scenes from the deliberately rejected polygon diagnostic.
+
+Transitions, arbitrary ring widths, interactive pointer behavior, broader colors/geometry, production setter/default transitions, offscreen culling, host depth integration, runtime GPU cost and other native devices remain separate gates.
+
+
 ## Reproduce
 
 1. Run `pnpm --filter @cosmos.gl/gpu-lab dev` and open **Point styling and picking**.
@@ -1471,7 +1541,7 @@ unvalidated. This is a frozen PNG input-normalization study, not the complete Gr
    Use ratio 2 on the fractional fixture to inspect **Six boundary pixels**.
 3. Move over either canvas: both show the ID at the same normalized pixel. The UI reads the
    captured ID images; it does not issue or time a new GPU pick per pointer event.
-4. Test opacity **0**, **0.35** and **1**. At zero, the candidate must paint and pick no pixels;
+4. For the basic fixtures without rings or greyout overrides, test opacity **0**, **0.35** and **1**. At zero, the candidate must paint and pick no pixels;
    production must retain its failed visibility control. At positive opacity, the pick contour
    stays unchanged. Export JSON to retain settings, CPU rule names, environment and raw mismatches.
 5. Run `LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling`.

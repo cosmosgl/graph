@@ -6,6 +6,7 @@ export type Point = {
   x: number; y: number; size: number; shape: number; color: [number, number, number, number];
   stroke: number; strokeColor: [number, number, number, number]; absent?: boolean;
   image?: number; imageSize?: number;
+  greyed?: boolean; outlined?: boolean; ringColor?: [number, number, number, number];
 }
 export type Settings = {
   zoom: number; ratio: number; scaleOnZoom: boolean; sizeScale: number; opacity: number; maxSize: number;
@@ -15,6 +16,10 @@ export type Settings = {
   atlasIsolation?: 'original' | 'clamp' | 'inset' | 'gutter' | 'texel';
   atlasPacking?: 'baseline' | 'npot-square' | 'npot-rectangle' | 'npot-scaled' | 'pot-padded';
   atlasSource?: AtlasLayout;
+  highlighting?: boolean; darkenGreyout?: boolean; greyoutOpacity?: number; greyoutColor?: [number, number, number, number];
+  backgroundColor?: [number, number, number, number]; ringColor?: [number, number, number, number];
+  ringShade?: number; ringContrast?: number; strokeShade?: number; strokeContrast?: number;
+  hovered?: number[]; focused?: number; hoverColor?: [number, number, number, number]; focusColor?: [number, number, number, number];
 }
 export const DEFAULTS: Settings = {
   zoom: 1,
