@@ -43,7 +43,7 @@ export type AtlasMutation = {
 }
 export type DynamicAtlas = {
   readonly layout: AtlasLayout | undefined; readonly generation: number;
-  replace(images?: readonly AtlasImage[]): AtlasMutation;
+  replace(images?: readonly AtlasImage[], options?: { external?: boolean }): AtlasMutation;
   updateImage(index: number, image: AtlasImage): AtlasMutation;
   texture(filter: 'nearest' | 'linear'): Texture;
   destroy(): void;
@@ -66,7 +66,7 @@ export function createDynamicAtlas (device: Device): DynamicAtlas {
   return {
     get layout (): AtlasLayout | undefined { return layout },
     get generation (): number { return generation },
-    replace (images): AtlasMutation {
+    replace (images, options): AtlasMutation {
       check()
       const next = images ? packDynamicImages(images) : undefined; const created: Texture[] = []
       try {
@@ -76,7 +76,7 @@ export function createDynamicAtlas (device: Device): DynamicAtlas {
               width: next.width,
               height: next.height,
               format: 'rgba8unorm',
-              usage: Texture.SAMPLE | Texture.COPY_DST,
+              usage: Texture.SAMPLE | Texture.COPY_DST | (options?.external ? Texture.RENDER : 0),
               sampler: { minFilter: filter, magFilter: filter, addressModeU: 'clamp-to-edge', addressModeV: 'clamp-to-edge' },
             })
             created.push(texture)

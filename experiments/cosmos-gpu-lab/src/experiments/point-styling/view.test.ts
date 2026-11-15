@@ -6,6 +6,43 @@ let host: HTMLElement | undefined
 let instance: ExperimentInstance | undefined
 afterEach(() => { instance?.destroy(); host?.remove() })
 
+it('exposes decoded-source failures and restores the selected path after cancellation', async () => {
+  host = document.createElement('div'); document.body.append(host); instance = await createStylingView(host)
+  const select = async (selector: string, value: string): Promise<void> => {
+    const control = host!.querySelector<HTMLSelectElement>(selector)!
+    control.value = value; control.dispatchEvent(new Event('change'))
+    await vi.waitFor(() => expect(control.disabled).toBe(false), { timeout: 20000 })
+  }
+  await select('[data-fixture]', 'atlas-decoding')
+  const decoder = host.querySelector<HTMLSelectElement>('[data-decode-policy]')!
+  expect(decoder.value).toBe('normalized-premultiplied')
+  expect(host.querySelector('[data-decode-audit]')!.textContent).not.toContain('Fail')
+  const canvas = host.querySelector<HTMLCanvasElement>('canvas')!
+  await select('[data-decode-policy]', 'flipped')
+  expect(host.querySelector('[data-decode-audit]')!.textContent).toContain('Fail')
+  expect(host.querySelector('[role="status"]')!.textContent).toContain('Decoded source/input color check failed')
+  await select('[data-renderer]', 'production')
+  expect(decoder.disabled).toBe(true)
+  expect(host.querySelector('[data-decode-audit]')!.textContent).not.toContain('Fail')
+  expect(host.querySelector('[role="status"]')!.textContent).not.toContain('Decoded source/input color check failed')
+  await select('[data-renderer]', 'eligibility')
+  expect(decoder.value).toBe('flipped')
+  expect(host.querySelector('[data-decode-audit]')!.textContent).toContain('Fail')
+  await select('[data-decode-policy]', 'normalized-premultiplied')
+  host.querySelector<HTMLButtonElement>('[data-decoding-sweep]')!.click()
+  await vi.waitFor(() => expect(host!.querySelectorAll('[data-decoding-table] tbody tr').length).toBeGreaterThan(0), { timeout: 20000 })
+  host.querySelector<HTMLButtonElement>('[data-decoding-cancel]')!.click()
+  await vi.waitFor(() => expect(host!.querySelector('[data-decoding-progress]')!.textContent).toContain('cancelled'), { timeout: 20000 })
+  expect(host.querySelectorAll('[data-decoding-table] tbody tr').length).toBeLessThan(56)
+  expect(host.querySelector('canvas')).toBe(canvas); expect([canvas.width, canvas.height]).toEqual([512, 320])
+  expect(decoder.value).toBe('normalized-premultiplied')
+  await select('[data-image-filter]', 'linear')
+  expect(host.querySelector('[data-decode-audit]')!.textContent).not.toContain('Fail')
+  expect(host.querySelector('[data-isolation-audit]')!.textContent).not.toContain('Fail')
+  await select('[data-fixture]', 'shapes')
+  expect(decoder.disabled).toBe(true); expect(host.querySelector('details')).toBeNull()
+}, 90000)
+
 it('steps live image updates and preserves image state and canvases across sweep cancellation', async () => {
   host = document.createElement('div'); document.body.append(host)
   instance = await createStylingView(host)

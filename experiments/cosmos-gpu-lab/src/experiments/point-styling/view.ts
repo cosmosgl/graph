@@ -12,6 +12,9 @@ import { renderExplicitControl } from './explicit'
 import { SOURCE_ALPHA_POLICY, SOURCE_BYTE_PICKING_POLICY } from './source-alpha'
 import { ATLAS_EXPORT, ATLAS_PICKING_POLICY, ATLAS_QUANTIZED_POLICY, ATLAS_ISOLATION_EXPORT, sourceTexelRects } from './atlas'
 import { PACKING_NAMES, packingExport, packingLayout, type AtlasLayout } from './atlas-packing'
+import { DECODE_POLICIES, decodeImages, installDecoded, auditDecoded, renderDecodeAudit, type DecodedImages, type DecodePolicy } from './image-decoding'
+import { DECODING_PROFILES, DECODING_ROW_COUNT, decodingPoints, runDecodingSweep, renderDecodingRows, type DecodingRow } from './decoding-study'
+import { DECODE_SPACES, DECODE_PIXELS } from './decode-fixtures'
 import {
   applyDynamicStep, DYNAMIC_STEPS, DYNAMIC_PROFILES, DYNAMIC_ROW_COUNT, dynamicPoints, runDynamicSweep, renderDynamicRows,
   type DynamicRow,
@@ -43,12 +46,15 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         <option value="tiny-overlap">Tiny-alpha overlap</option><option value="alpha-stack">Faint overlap stack · 64 points</option>
         <option value="atlas-images">Atlas · image-only points</option><option value="atlas-shapes">Atlas · image over shape</option>
         <option value="atlas-overlap">Atlas · overlapping points</option><option value="atlas-edges">Atlas · filtering and tile edges</option>
+        <option value="atlas-decoding">Atlas · image decoding and color</option>
         <option value="atlas-dynamic">Atlas · dynamic image updates</option>
         <option value="atlas-packing-grid">Packing · five non-square images</option>
         <option value="atlas-packing-edges">Packing · exact texel boundaries</option>
         <option value="atlas-packing-overlap">Packing · overlap and underlying shapes</option></select></label>
       <label>Atlas filter <select data-image-filter><option value="nearest">Nearest · production default</option>
         <option value="linear">Linear</option></select></label>
+      <label>Decode / upload <select data-decode-policy disabled>${DECODE_POLICIES.map(p =>
+    `<option value="${p.id}">${p.label}</option>`).join('')}</select></label>
       <label>Atlas packing <select data-atlas-packing><option value="baseline">Baseline · 64 × 64</option>
         <option value="npot-square">Production grid · 93 × 93</option><option value="npot-rectangle">Rectangular · 93 × 62</option>
         <option value="npot-scaled">Production scaled · 62 × 62</option><option value="pot-padded">Padded control · 128 × 128</option></select></label>
@@ -97,7 +103,12 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         Same-size uploads, repacking, removal, empty atlases and restoration use the existing full-frame gates.</p>
       <div class="controls"><button data-dynamic-sweep disabled>Run image-update sweep</button>
         <button data-dynamic-cancel disabled>Cancel image-update sweep</button></div>
-      <p data-dynamic-progress>No image-update sweep run.</p><div data-dynamic-results></div></section>
+      <p data-dynamic-progress>No image-update sweep run.</p><div data-dynamic-results></div>
+      <h3>Image decoding and color handling</h3><p>${DECODING_ROW_COUNT} rows compare seven decode/upload paths, nearest/linear and four profiles.
+        Encoded PNGs include sRGB, linear-sRGB and Display-P3 color tags, alpha ramps and asymmetric rows.</p>
+      <div class="controls"><button data-decoding-sweep disabled>Run decoding sweep</button>
+        <button data-decoding-cancel disabled>Cancel decoding sweep</button></div>
+      <p data-decoding-progress>No decoding sweep run.</p><div data-decoding-results></div></section>
     <p class="demo-note"
       data-run-part="explanation">Both offscreen passes are read back for this diagnostic. Hover uses the captured ID image;
       this does not measure production picking latency. Atlas fixtures add texture sampling; rings, greyout and transitions remain separate.
@@ -106,8 +117,9 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   const status = el('[role="status"]'); const exportButton = el<HTMLButtonElement>('[data-export]')
   const setSweepDisabled = (disabled: boolean): void => {
     host.querySelectorAll<HTMLButtonElement>('[data-tiny-sweep], [data-atlas-sweep], [data-isolation-sweep], [data-packing-sweep]')
-      .forEach(b => { b.disabled = disabled || dynamicActive })
-    el<HTMLButtonElement>('[data-dynamic-sweep]').disabled = disabled
+      .forEach(b => { b.disabled = disabled || dynamicActive || decodingActive })
+    el<HTMLButtonElement>('[data-dynamic-sweep]').disabled = disabled || decodingActive
+    el<HTMLButtonElement>('[data-decoding-sweep]').disabled = disabled
     el<HTMLButtonElement>('[data-image-next]').disabled = disabled || !dynamicActive || dynamicStep === DYNAMIC_STEPS.length - 1
     el<HTMLButtonElement>('[data-image-reset]').disabled = disabled || !dynamicActive
   }
@@ -115,7 +127,17 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   let snapshots: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
   const errors: Partial<Record<'webgl' | 'webgpu', string>> = {}
   let destroyed = false; let busy = false; let sweepRunning = false; let cancelSweep = false
-  let dynamicActive = false; let dynamicStep = 0
+  let dynamicActive = false; let dynamicStep = 0; let decodingActive = false
+  let latestDecoding: boolean | undefined
+  const decodeCache = new Map<DecodePolicy, DecodedImages>()
+  const getDecoded = async (policy: DecodePolicy): Promise<DecodedImages> => {
+    const cached = decodeCache.get(policy); if (cached) return cached
+    const source = await decodeImages(policy)
+    if (destroyed) { source.close(); throw new Error('Image decoder view destroyed') }
+    decodeCache.set(policy, source); return source
+  }
+  let decodingStudy: { startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[];
+    rows: DecodingRow[]; error?: string; } | undefined
   let dynamicStudy: { startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[];
     rows: DynamicRow[]; error?: string; } | undefined
   const exportLayout = (layout: AtlasLayout | undefined): object | undefined => layout && ({
@@ -140,28 +162,44 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[]; rows: TinyAlphaRow[]; error?: string;
   } | undefined
   let report: object | undefined
+  const disposeBackends = (): void => {
+    Object.values(backends).forEach(backend => backend.destroy()); decodeCache.forEach(source => source.close()); decodeCache.clear()
+  }
+  const restoreSelectControls = (): void => {
+    host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
+    el<HTMLSelectElement>('[data-decode-policy]').disabled = !decodingActive || el<HTMLSelectElement>('[data-renderer]').value === 'production'
+    el<HTMLSelectElement>('[data-atlas-packing]').disabled = dynamicActive || decodingActive
+    for (const option of el<HTMLSelectElement>('[data-atlas-isolation]').options) {
+      option.disabled = (dynamicActive || decodingActive) && !['original', 'clamp', 'texel'].includes(option.value)
+    }
+  }
   const render = async (): Promise<void> => {
     if (busy || sweepRunning || destroyed) return
     busy = true; snapshots = {}; report = undefined; latestComparison = undefined; latestCompatibility = undefined; latestContribution = undefined
     latestColorPreservation = undefined
-    latestAtlasColors = undefined; latestIsolation = undefined
+    latestAtlasColors = undefined; latestIsolation = undefined; latestDecoding = undefined
     runError = undefined; exportButton.disabled = true
     setSweepDisabled(true)
     host.querySelectorAll<HTMLElement>('[data-cursor]').forEach(cursor => { cursor.hidden = true })
     host.querySelectorAll<HTMLElement>('[data-pick]').forEach(label => { label.textContent = 'Move over a shape to inspect its ID' })
     host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
     status.textContent = 'Drawing and checking every framebuffer pixel…'
-    const name = el<HTMLSelectElement>('[data-fixture]').value as Parameters<typeof fixture>[0] | 'atlas-dynamic'
-    const isDynamic = name === 'atlas-dynamic'
+    const name = el<HTMLSelectElement>('[data-fixture]').value as Parameters<typeof fixture>[0] | 'atlas-dynamic' | 'atlas-decoding'
+    const isDynamic = name === 'atlas-dynamic'; const isDecoding = name === 'atlas-decoding'
+    if (!isDynamic && dynamicActive) { Object.values(backends).forEach(backend => backend.atlas.replace()); dynamicActive = false }
+    if (!isDecoding && decodingActive) { Object.values(backends).forEach(backend => backend.atlas.replace()); decodingActive = false }
     if (isDynamic && !dynamicActive) {
       dynamicActive = true; dynamicStep = 0
       el<HTMLSelectElement>('[data-renderer]').value = 'eligibility'; el<HTMLSelectElement>('[data-atlas-isolation]').value = 'texel'
       Object.values(backends).forEach(backend => applyDynamicStep(backend.atlas, 0))
-    } else if (!isDynamic && dynamicActive) {
-      Object.values(backends).forEach(backend => backend.atlas.replace()); dynamicActive = false
+    }
+    if (isDecoding && !decodingActive) {
+      decodingActive = true
+      el<HTMLSelectElement>('[data-renderer]').value = 'eligibility'; el<HTMLSelectElement>('[data-atlas-isolation]').value = 'texel'
+      el<HTMLSelectElement>('[data-decode-policy]').value = 'normalized-premultiplied'
     }
     const packingSelect = el<HTMLSelectElement>('[data-atlas-packing]')
-    if (isDynamic || (name.startsWith('atlas-packing-') && packingSelect.value === 'baseline')) packingSelect.value = 'npot-square'
+    if (isDynamic || isDecoding || (name.startsWith('atlas-packing-') && packingSelect.value === 'baseline')) packingSelect.value = 'npot-square'
     packingSelect.options[0].disabled = name.startsWith('atlas-packing-')
     const settings = {
       ...DEFAULTS,
@@ -174,38 +212,43 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       atlasIsolation: el<HTMLSelectElement>('[data-atlas-isolation]').value as NonNullable<Settings['atlasIsolation']>,
       atlasPacking: packingSelect.value as NonNullable<Settings['atlasPacking']>,
     }
-    const points = isDynamic ? dynamicPoints() : fixture(name)
+    const points = isDynamic ? dynamicPoints() : isDecoding ? decodingPoints() : fixture(name)
     const variant = el<HTMLSelectElement>('[data-renderer]').value as RenderVariant
+    const decodePolicy = el<HTMLSelectElement>('[data-decode-policy]').value as DecodePolicy
+    let selectedDecode: DecodedImages | undefined; let decodedAudit: ReturnType<typeof auditDecoded> | undefined
+    const canonical: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
     const candidateLabel = variant === 'eligibility' ? 'Source-byte' : variant === 'quantized' ? 'Quantized' : 'Explicit'
     const isAtlas = name.startsWith('atlas-')
     const original: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
     const unmodified: Partial<Record<'webgl' | 'webgpu', Snapshot>> = {}
     const diagnose = name === 'fractional'
-    el('[data-legend]').textContent = isDynamic
-      ? 'Seven stable point IDs show holes, an underlying shape and a future sixth image. Step through uploads and replacement; production keeps its sampling.'
-      : name.startsWith('atlas-packing-')
-        ? 'Five non-square sources include a one-texel-wide faint image and rectangular UV spans. Image footprints follow production’s square sizing.'
-        : isAtlas
-          ? name === 'atlas-images'
-            ? 'Four atlas tiles: asymmetric opaque/transparent image, opaque contrast, invisible RGB, faint alpha 1/255.'
-            : name === 'atlas-shapes'
-              ? 'The same image is smaller and larger than its point shape. Transparent texels may reveal the same point’s shape.'
-              : name === 'atlas-overlap'
-                ? 'A textured foreground over a visible background point. Holes must not steal the background ID; reverse the order to compare.'
-                : 'Fractional sizes/positions and exact UV edges. Production atlas rectangles are retained, including potential neighbor sampling.'
-          : name === 'shapes'
-            ? 'Circle · square · triangle · diamond · pentagon · hexagon · star · cross. Top row: fill. Bottom row: inset stroke.'
-            : name === 'edge-cases'
-              ? 'Top: defaults · zero size · transparent · None · absent · size cap. Bottom: subpixel · capped stroke · translucent.'
-              : name === 'fractional'
-                ? 'Circle diameters from 0.25 to 42.5 CSS px at fractional positions. This is a strict parity diagnostic.'
-                : name === 'tiny-alpha'
-                  ? 'Columns: 1/64, 1/8, 1/2, 2 and 42 CSS px. Rows: fill alpha 1, 1/255 and 1/65536. Tiny source ink may quantize to zero.'
-                  : name === 'tiny-overlap'
-                    ? 'Opaque blue background point and faint warm foreground point (fill alpha 1/65536). The foreground is also checked in isolation.'
-                    : name === 'alpha-stack'
-                      ? '64 overlapping white circles, each at fill alpha 0.51/255. Compare production color compatibility as well as candidate visibility.'
-                      : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
+    el('[data-legend]').textContent = isDecoding
+      ? 'Four PNG profiles share asymmetric pixels and alpha ramps. Compare normalized bytes and direct bitmap uploads; source and render gates stay separate.'
+      : isDynamic
+        ? 'Seven point IDs show holes, an underlying shape and an initially absent image. Step through atlas changes; production sampling stays unchanged.'
+        : name.startsWith('atlas-packing-')
+          ? 'Five non-square sources include a one-texel-wide faint image and rectangular UV spans. Image footprints follow production’s square sizing.'
+          : isAtlas
+            ? name === 'atlas-images'
+              ? 'Four atlas tiles: asymmetric opaque/transparent image, opaque contrast, invisible RGB, faint alpha 1/255.'
+              : name === 'atlas-shapes'
+                ? 'The same image is smaller and larger than its point shape. Transparent texels may reveal the same point’s shape.'
+                : name === 'atlas-overlap'
+                  ? 'A textured foreground over a visible background point. Holes must not steal the background ID; reverse the order to compare.'
+                  : 'Fractional sizes/positions and exact UV edges. Production atlas rectangles are retained, including potential neighbor sampling.'
+            : name === 'shapes'
+              ? 'Circle · square · triangle · diamond · pentagon · hexagon · star · cross. Top row: fill. Bottom row: inset stroke.'
+              : name === 'edge-cases'
+                ? 'Top: defaults · zero size · transparent · None · absent · size cap. Bottom: subpixel · capped stroke · translucent.'
+                : name === 'fractional'
+                  ? 'Circle diameters from 0.25 to 42.5 CSS px at fractional positions. This is a strict parity diagnostic.'
+                  : name === 'tiny-alpha'
+                    ? 'Columns: 1/64, 1/8, 1/2, 2 and 42 CSS px. Rows: fill alpha 1, 1/255 and 1/65536. Tiny source ink may quantize to zero.'
+                    : name === 'tiny-overlap'
+                      ? 'Opaque blue background point and faint warm foreground point (fill alpha 1/65536). The foreground is also checked in isolation.'
+                      : name === 'alpha-stack'
+                        ? '64 overlapping white circles, each at fill alpha 0.51/255. Compare production color compatibility as well as candidate visibility.'
+                        : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
     if (isAtlas) {
       el('[data-legend]').textContent += ` Candidate sampling policy: ${settings.atlasIsolation
       }; production retains original UVs. Pick-only color preservation uses the same sampling policy in both draws.`
@@ -213,16 +256,28 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     if (isAtlas && settings.atlasIsolation === 'texel') {
       el('[data-legend]').textContent += ' Nearest samples use integer source texels; linear filtering retains the clamped sampler.'
     }
-    if (isAtlas && !isDynamic && settings.atlasPacking !== 'baseline') {
+    if (isAtlas && !isDynamic && !isDecoding && settings.atlasPacking !== 'baseline') {
       const layout = packingLayout(settings.atlasPacking)
       el('[data-legend]').textContent += ` Atlas: ${layout.width} × ${layout.height}; ${layout.images.length} images, ` +
         `${layout.coordsSize} × ${layout.coordsSize} UV records.`
     }
     try {
+      if (isDecoding) {
+        const control = await getDecoded('production')
+        selectedDecode = variant === 'production' ? control : await getDecoded(decodePolicy)
+        decodedAudit = auditDecoded(selectedDecode, control)
+        for (const lane of ['webgl', 'webgpu'] as const) {
+          const backend = backends[lane]; if (!backend) continue
+          installDecoded(backend, control)
+          original[lane] = await backend.render(points, settings, false, 'production', false)
+          canonical[lane] = await backend.render(points, settings, false, variant, false)
+          installDecoded(backend, selectedDecode)
+        }
+      }
       for (const name of ['webgl', 'webgpu'] as const) {
         if (!backends[name]) continue
         try {
-          if (variant !== 'production') original[name] = await backends[name]!.render(points, settings)
+          if (variant !== 'production' && !isDecoding) original[name] = await backends[name]!.render(points, settings)
           if (variant === 'eligibility') unmodified[name] = await backends[name]!.render(points, settings, false, 'explicit', false)
           snapshots[name] = await backends[name]!.render(points, settings, diagnose, variant)
           if (destroyed) return
@@ -239,7 +294,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         }
       }
       if (destroyed) return
-      const checkForeground = name === 'tiny-overlap' || name === 'atlas-overlap' || name === 'atlas-packing-overlap' || isDynamic
+      const checkForeground = name === 'tiny-overlap' || name === 'atlas-overlap' || name === 'atlas-packing-overlap' || isDynamic || isDecoding
       const contribution = checkForeground && snapshots.webgl && snapshots.webgpu
         ? await inspectForeground({ webgl: backends.webgl!, webgpu: backends.webgpu! },
           { webgl: snapshots.webgl, webgpu: snapshots.webgpu }, points, settings, variant)
@@ -277,8 +332,32 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         : undefined
       if (destroyed) return
       latestIsolation = isolatedAtlas?.valid
+      const canonicalComparison = canonical.webgl && snapshots.webgpu
+        ? await compareSnapshotsAsync(canonical.webgl, snapshots.webgpu, points, settings)
+        : undefined
+      const canonicalColors = canonical.webgl && canonical.webgpu && snapshots.webgl && snapshots.webgpu
+        ? { webgl: compareColors(canonical.webgl, snapshots.webgl), webgpu: compareColors(canonical.webgpu, snapshots.webgpu) }
+        : undefined
+      const canonicalIds = isDecoding
+        ? (['webgl', 'webgpu'] as const).every(lane =>
+          canonical[lane]?.ids.every((value, index) => value === snapshots[lane]?.ids[index]))
+        : undefined
+      latestDecoding = decodedAudit && canonicalColors
+        ? decodedAudit.every(row => row.valid) && canonicalIds === true &&
+          canonicalColors.webgl.budgetFailures === 0 && canonicalColors.webgpu.budgetFailures === 0
+        : undefined
       report = {
-        schemaVersion: 13,
+        schemaVersion: 14,
+        decoding: selectedDecode && {
+          requested: decodePolicy,
+          actual: selectedDecode.policy,
+          sourceAudit: decodedAudit,
+          options: DECODE_POLICIES.find(p => p.id === selectedDecode!.policy),
+          encodedPngs: selectedDecode.encoded,
+          normalizedImages: selectedDecode.images.map(image => ({ ...image, bytes: Array.from(image.bytes) })),
+          canonicalComparison,
+          canonicalColors,
+        },
         dynamicAtlas: isDynamic
           ? {
             step: dynamicStep,
@@ -390,6 +469,15 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
             { webgl: snapshots.webgl!, webgpu: snapshots.webgpu! }, points, settings,
             { production: productionComparison!, compatibility: compatibility! }, variant)
         }
+        if (decodedAudit && selectedDecode) {
+          const section = document.createElement('section'); output.append(section)
+          renderDecodeAudit(section, decodedAudit, selectedDecode.policy)
+          section.insertAdjacentHTML('beforeend', `<h3>Normalized input preserved</h3>
+            <p>Compare the same candidate geometry with the production-decoded pixels. This is separate from legacy shader compatibility.</p>
+            <table data-decoded-colors><thead><tr><th>Backend</th><th>Pixels beyond 2/255</th><th>Maximum channel error</th></tr></thead><tbody>
+            ${(['webgl', 'webgpu'] as const).map(lane => `<tr><td>${lane}</td><td>${canonicalColors?.[lane].budgetFailures}</td>
+              <td>${canonicalColors?.[lane].maxChannelError}/255</td></tr>`).join('')}</tbody></table>`)
+        }
         if (fractional) {
           renderFractionalInvestigation(output, fractional, snapshots.webgl!, snapshots.webgpu!, points, settings, analyticControl, variant)
         }
@@ -416,23 +504,30 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         output.textContent = 'Incomplete comparison. Both backends must render before a verdict is available.'
         status.textContent = 'Incomplete: see backend errors.'
       }
+      if (latestDecoding === false) status.textContent += ' Decoded source/input color check failed; see the source audit.'
       if (isDynamic) {
         const layout = backends.webgl?.atlas.layout
         const label = `Update ${dynamicStep + 1}/${DYNAMIC_STEPS.length} · ${DYNAMIC_STEPS[dynamicStep].name}`
         el('[data-image-stage]').textContent = `${label} · ${
           layout ? `${layout.images.length} images / ${layout.width} × ${layout.height}` : 'static control restored'}`
         status.textContent = `${label}. ${status.textContent}`
+      } else if (isDecoding) {
+        const selected = DECODE_POLICIES.find(p => p.id === selectedDecode?.policy)
+        el('[data-image-stage]').textContent = `${selected?.name ?? 'Decoding PNGs'} · ${selected?.external
+          ? 'Bitmap uploaded directly; normalized ImageData supplies the CPU reference.'
+          : 'Atlas receives straight-alpha sRGB ImageData bytes.'}`
       } else el('[data-image-stage]').textContent = 'Select Atlas · dynamic image updates to step through uploads and atlas replacement.'
       exportButton.disabled = false
       setSweepDisabled(!backends.webgl || !backends.webgpu)
     } finally {
       busy = false
-      if (destroyed) Object.values(backends).forEach(backend => backend.destroy())
+      if (destroyed) disposeBackends()
       else {
-        host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
-        packingSelect.disabled = isDynamic
+        restoreSelectControls()
+        packingSelect.disabled = isDynamic || isDecoding
+        el<HTMLSelectElement>('[data-decode-policy]').disabled = !isDecoding || variant === 'production'
         for (const option of el<HTMLSelectElement>('[data-atlas-isolation]').options) {
-          option.disabled = isDynamic && !['original', 'clamp', 'texel'].includes(option.value)
+          option.disabled = (isDynamic || isDecoding) && !['original', 'clamp', 'texel'].includes(option.value)
         }
       }
     }
@@ -478,6 +573,20 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           opacities: TINY_OPACITIES,
           ratios: [1, 2],
           fixtures: [{ name: 'tiny-alpha', points: fixture('tiny-alpha') }, { name: 'tiny-overlap', points: fixture('tiny-overlap') }],
+        },
+      },
+      decodingSweep: decodingStudy && {
+        ...decodingStudy,
+        inputs: {
+          points: decodingPoints(),
+          defaults: DEFAULTS,
+          profiles: DECODING_PROFILES,
+          policies: DECODE_POLICIES,
+          filters: ['nearest', 'linear'],
+          spaces: DECODE_SPACES,
+          encodedPixels: Array.from(DECODE_PIXELS),
+          encodedPngs: decodeCache.get('production')?.encoded,
+          reference: 'Production image + default canvas ImageData; ICC opaque-color math; immutable source-texel-v2 GPU reference',
         },
       },
       dynamicSweep: dynamicStudy && {
@@ -564,9 +673,9 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         study.status = cancelSweep || destroyed ? 'cancelled' : 'complete'
       } catch (error) { study.status = 'failed'; study.error = String(error); runError = study.error } finally {
         study.finishedAt = new Date().toISOString(); sweepRunning = false
-        if (destroyed) Object.values(backends).forEach(backend => backend.destroy())
+        if (destroyed) disposeBackends()
         else {
-          host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
+          restoreSelectControls()
           exportButton.disabled = !report; setSweepDisabled(false)
           el<HTMLButtonElement>('[data-tiny-cancel]').disabled = true
           el('[data-tiny-progress]').textContent = `${study.status} · ${study.rows.length} / 32 rows · ` +
@@ -607,9 +716,9 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         study.status = cancelSweep || destroyed ? 'cancelled' : 'complete'
       } catch (error) { study.status = 'failed'; study.error = String(error); runError = study.error } finally {
         study.finishedAt = new Date().toISOString(); sweepRunning = false
-        if (destroyed) Object.values(backends).forEach(backend => backend.destroy())
+        if (destroyed) disposeBackends()
         else {
-          host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
+          restoreSelectControls()
           exportButton.disabled = !report; setSweepDisabled(false); el<HTMLButtonElement>('[data-atlas-cancel]').disabled = true
           el('[data-atlas-progress]').textContent = `${study.status} · ${study.rows.length} / 40 · ` +
             `${study.rows.filter(row => !row.accepted).length} source-byte cases rejected. Export retains all counts and first failures.`
@@ -646,9 +755,9 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         study.status = cancelSweep || destroyed ? 'cancelled' : 'complete'
       } catch (error) { study.status = 'failed'; study.error = String(error); runError = study.error } finally {
         study.finishedAt = new Date().toISOString(); sweepRunning = false
-        if (destroyed) Object.values(backends).forEach(backend => backend.destroy())
+        if (destroyed) disposeBackends()
         else {
-          host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
+          restoreSelectControls()
           exportButton.disabled = !report; setSweepDisabled(false); el<HTMLButtonElement>('[data-isolation-cancel]').disabled = true
           el('[data-isolation-progress]').textContent = `${study.status} · ${study.rows.length} / 160 · ` +
             `${study.rows.filter(row => !row.isolatedPass).length} isolated-image rows rejected. All policies and compatibility failures retained.`
@@ -686,9 +795,9 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         study.status = cancelSweep || destroyed ? 'cancelled' : 'complete'
       } catch (error) { study.status = 'failed'; study.error = String(error); runError = study.error } finally {
         study.finishedAt = new Date().toISOString(); sweepRunning = false
-        if (destroyed) Object.values(backends).forEach(backend => backend.destroy())
+        if (destroyed) disposeBackends()
         else {
-          host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
+          restoreSelectControls()
           exportButton.disabled = !report; setSweepDisabled(false); el<HTMLButtonElement>('[data-packing-cancel]').disabled = true
           el('[data-packing-progress]').textContent = `${study.status} · ${study.rows.length} / ${PACKING_ROW_COUNT} · ` +
             `${study.rows.filter(row => !row.passed).length} isolated-image rows rejected. All controls and failed rows retained.`
@@ -726,14 +835,66 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         study.status = cancelSweep || destroyed ? 'cancelled' : 'complete'
       } catch (error) { study.status = 'failed'; study.error = String(error); runError = study.error } finally {
         study.finishedAt = new Date().toISOString(); sweepRunning = false
-        if (destroyed) Object.values(backends).forEach(backend => backend.destroy())
+        if (destroyed) disposeBackends()
         else {
           for (const lane of ['webgl', 'webgpu'] as const) backends[lane]!.atlas.replace(previous[lane]?.images)
-          host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
+          restoreSelectControls()
           el<HTMLSelectElement>('[data-atlas-packing]').disabled = dynamicActive
           exportButton.disabled = !report; setSweepDisabled(false); el<HTMLButtonElement>('[data-dynamic-cancel]').disabled = true
           el('[data-dynamic-progress]').textContent = `${study.status} · ${study.rows.length} / ${DYNAMIC_ROW_COUNT} · ` +
             `${study.rows.filter(row => !row.passed).length} candidate rows rejected. Controls and failed rows retained; live image state restored.`
+        }
+      }
+    }
+    runSweep().catch(error => { runError = String(error); status.textContent = runError })
+  })
+  el('[data-decoding-cancel]').addEventListener('click', () => { if (sweepRunning) cancelSweep = true })
+  el('[data-decoding-sweep]').addEventListener('click', () => {
+    if (busy || sweepRunning || destroyed || !backends.webgl || !backends.webgpu) return
+    const runSweep = async (): Promise<void> => {
+      sweepRunning = true; cancelSweep = false; runError = undefined
+      const study = {
+        startedAt: new Date().toISOString(),
+        status: 'running',
+        browser: navigator.userAgent,
+        devices: Object.values(backends).map(backend => backend.info),
+        rows: [] as DecodingRow[],
+        finishedAt: undefined as string | undefined,
+        error: undefined as string | undefined,
+      }
+      decodingStudy = study
+      const previous = { webgl: backends.webgl!.atlas.layout, webgpu: backends.webgpu!.atlas.layout }
+      const selected = decodingActive
+        ? decodeCache.get(el<HTMLSelectElement>('[data-renderer]').value === 'production'
+          ? 'production'
+          : el<HTMLSelectElement>('[data-decode-policy]').value as DecodePolicy)
+        : undefined
+      host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
+      setSweepDisabled(true); exportButton.disabled = true; el<HTMLButtonElement>('[data-decoding-cancel]').disabled = false
+      el('[data-decoding-results]').replaceChildren(); el('[data-decoding-progress]').textContent = `Starting ${DECODING_ROW_COUNT} decode/upload rows…`
+      try {
+        await getDecoded('production')
+        await runDecodingSweep({ webgl: backends.webgl!, webgpu: backends.webgpu! }, row => {
+          study.rows.push(row)
+          if (destroyed) return
+          renderDecodingRows(el('[data-decoding-results]'), study.rows)
+          el('[data-decoding-progress]').textContent = `${study.rows.length} / ${DECODING_ROW_COUNT} · ${row.policy} · ${row.profile} · ${row.filter}`
+        }, () => cancelSweep || destroyed)
+        study.status = cancelSweep || destroyed ? 'cancelled' : 'complete'
+      } catch (error) { study.status = 'failed'; study.error = String(error); runError = study.error } finally {
+        study.finishedAt = new Date().toISOString(); sweepRunning = false
+        if (destroyed) disposeBackends()
+        else {
+          for (const lane of ['webgl', 'webgpu'] as const) {
+            if (selected) installDecoded(backends[lane]!, selected)
+            else backends[lane]!.atlas.replace(previous[lane]?.images)
+          }
+          restoreSelectControls()
+          el<HTMLSelectElement>('[data-atlas-packing]').disabled = dynamicActive || decodingActive
+          el<HTMLSelectElement>('[data-decode-policy]').disabled = !decodingActive || el<HTMLSelectElement>('[data-renderer]').value === 'production'
+          exportButton.disabled = !report; setSweepDisabled(false); el<HTMLButtonElement>('[data-decoding-cancel]').disabled = true
+          el('[data-decoding-progress]').textContent = `${study.status} · ${study.rows.length} / ${DECODING_ROW_COUNT} · ` +
+            `${study.rows.filter(row => !row.passed).length} rows rejected. All controls retained; live source restored.`
         }
       }
     }
@@ -745,7 +906,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       ...(latestColorPreservation === undefined ? [] : [latestColorPreservation]),
       ...(latestAtlasColors === undefined ? [] : [latestAtlasColors]),
       ...(latestIsolation === undefined ? [] : [latestIsolation]),
-      ...(latestCompatibility === undefined ? [] : [latestCompatibility])],
+      ...(latestCompatibility === undefined ? [] : [latestCompatibility]),
+      ...(latestDecoding === undefined ? [] : [latestDecoding])],
     'Other fixtures, pointer-hover tolerance and production picking latency.',
     Object.keys(errors),
     runError,
@@ -760,11 +922,11 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       el(`[data-device="${name}"]`).textContent = String(error)
     }
   }
-  try { await render() } catch (error) { runError = String(error); Object.values(backends).forEach(backend => backend.destroy()); throw error }
+  try { await render() } catch (error) { runError = String(error); disposeBackends(); throw error }
   return {
     destroy (): void {
       disposeRunLayout(host); destroyed = true; cancelSweep = true
-      if (!busy && !sweepRunning) Object.values(backends).forEach(backend => backend.destroy())
+      if (!busy && !sweepRunning) disposeBackends()
     },
   }
 }

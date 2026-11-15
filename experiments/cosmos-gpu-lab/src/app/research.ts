@@ -124,16 +124,16 @@ export const research: Record<string, ResearchSummary> = {
     method: 'validation-contract',
     comparison: 'Same styled points → production WebGL / WebGPU color and ID images → full-image and scalar-mask checks',
     question: 'Does point-ID picking select the shapes that Cosmos actually renders?',
-    conclusion: 'Dynamic image updates and atlas replacement pass all 72 cases, extending the 48 passing static packing configurations.',
-    scope: 'Apple M3: exact paired GPU color/IDs and CPU masks; CPU color error ≤ 1/255. Uploads, growth, removal, clearing and restoration pass. ' +
-      'All 144 prior static records are unchanged. Raw images on one device; legacy compatibility stays separate.',
-    variant: 'Source-byte picking + integer nearest texels / clamped linear sampling; live uploads and atlas replacement; luma 10.0.0-alpha.4; Apple M3',
-    reviewed: '2026-11-14',
+    conclusion: 'Premultiplied bitmap → sRGB ImageData preserves production PNG input in 8/8 cases; direct bitmap uploads remain rejected.',
+    scope: 'Apple M3: 56 rows with four PNG profiles. The passing normalization preserves color bytes and exact CPU masks at the unchanged 2/255 gate. ' +
+      'All 144 static control records are unchanged. Broader codecs/devices and legacy compatibility remain separate.',
+    variant: 'Premultiplied bitmap → straight-alpha sRGB ImageData → byte upload; source-byte picking; luma 10.0.0-alpha.4; Apple M3',
+    reviewed: '2026-11-15',
     milestone: 'rendering',
     evidence: 'method',
-    next: 'Validate image decoding/color handling, rings/greyout and broader native devices; measure accepted rendering/ID-pass cost.',
-    reproduce: 'Select Atlas · dynamic image updates and use Next image update to inspect each stage. ' +
-      'Run the 72-row image-update sweep, then the 144-row static packing control. Export JSON locally.',
+    next: 'Validate rings/greyout and broader native devices; keep wider codec/color support and rendering/ID-pass cost as separate gates.',
+    reproduce: 'Select Atlas · image decoding and color, then compare Premult bitmap → bytes with the retained controls. ' +
+      'Run the 56-row decoding sweep and export JSON locally. Source checks and renderer checks must both pass.',
     investigations: [{
       page: 'method',
       state: 'Current evidence',
@@ -167,9 +167,9 @@ export const milestones = [
   {
     id: 'rendering',
     title: 'Rendering and interaction',
-    position: 'Bounded shapes, strokes, host IDs, exact atlas sampling and dynamic image updates demonstrated',
+    position: 'Bounded styling, picking, atlas updates and explicit PNG normalization demonstrated on M3',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
-    gates: ['Validate image decoding/color handling and other native devices; settle production coverage and source-visibility policy.',
+    gates: ['Validate remaining point styles and other native devices; settle production coverage and source-visibility policy.',
       'Validate rings/greyout, transitions, links and pointer hover; measure accepted rendering cost.'],
     evidence: [['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],
   },
