@@ -30,6 +30,16 @@ export const validationContracts: Record<string, ValidationContract> = {
       'CPU diamond ties and exact color-preservation rejections stay open without a reference/tolerance change. ' +
       'Other codecs, concurrent loading/frames, wide-gamut output, GPU cost and broader devices remain open.',
   },
+  'curved-links': {
+    question: 'Do production curved solid ribbons and luma WebGPU match the rendered and pickable footprint?',
+    reference: 'Unmodified production curved-link GLSL and power-spaced geometry; separate visible-footprint/source-byte IDs; ' +
+      'independent scalar triangle-strip masks, blending and RGBA8 colors.',
+    acceptance: 'Exact IDs and scalar masks at every pixel; at most two RGBA8 channel levels for color; no picked pixels with zero rendered alpha.',
+    coverage: 'Rational quadratic curves, tessellation, weight/bow direction, widths/defaults, blend/hard modes, opacity, zoom, DPR, ' +
+      'ordering, overlap and fractional boundaries; original colors and each selected source checked separately.',
+    limits: 'Production padded host IDs remain unchanged. Candidate picking changes policy only. Coincident endpoints have undefined production normals. ' +
+      'Patterns, arrows, gradients, fading, highlights, transitions, Graph integration, GPU cost and broader devices remain open.',
+  },
   'straight-links': {
     question: 'Do production Cosmos straight ribbons and luma WebGPU agree with the rendered and pickable footprint?',
     reference: 'Unmodified production straight-link GLSL and geometry; a separate visible-footprint/source-byte ID candidate; ' +

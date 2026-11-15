@@ -19,7 +19,7 @@ if (process.env.LAB_INLINE_BROWSER === '1') {
 // Full integer-arithmetic shaders currently fail compilation on SwiftShader; those tests opt into native mode.
 // eslint-disable-next-line import/no-default-export
 export default defineConfig({
-  optimizeDeps: { include: ['@luma.gl/shadertools', 'markdown-it'] },
+  optimizeDeps: { include: ['@luma.gl/shadertools', 'markdown-it', 'd3-scale', 'd3-array'] },
   define: {
     'import.meta.env.REQUIRE_WEBGPU': true,
     'import.meta.env.LAB_NATIVE_GPU': process.env.LAB_NATIVE_GPU === '1',
@@ -43,6 +43,7 @@ export default defineConfig({
       'src/experiments/precision-diagnostics/**/*.test.ts',
       'src/experiments/point-styling/**/*.test.ts',
       'src/experiments/straight-links/**/*.test.ts',
+      'src/experiments/curved-links/**/*.test.ts',
     ],
     testTimeout: 60000,
     maxWorkers: 1,

@@ -52,7 +52,7 @@ it('puts every visible migration decision before the complete experiment catalog
     expect(section.closest('details,[hidden]')).toBeNull()
   }
   expect(host.querySelectorAll('.experiment-card')).toHaveLength(experiments.length)
-  expect(host.querySelector('[data-decision="gate"] a[href="#/straight-links"]')).not.toBeNull()
+  expect(host.querySelector('[data-decision="gate"] a[href="#/curved-links"]')).not.toBeNull()
   expect(host.querySelector('[data-decision="milestone"] a[href="#/roadmap?section=milestone-rendering"]')).not.toBeNull()
   creates.forEach(create => expect(create).not.toHaveBeenCalled())
 })
