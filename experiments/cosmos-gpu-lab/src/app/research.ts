@@ -120,6 +120,25 @@ export const research: Record<string, ResearchSummary> = {
       { page: 'center', state: 'Supporting investigation', description: 'Optional center attraction, aggregate checks and paired added GPU cost.' },
     ],
   },
+  'curved-links': {
+    method: 'validation-contract',
+    evidence: 'method',
+    milestone: 'rendering',
+    reviewed: '2026-11-15',
+    comparison: 'Production curved ribbons → WebGL / WebGPU colors and host IDs → independent triangle-strip masks and source checks',
+    question: 'Do production solid curves render and pick consistently through public luma APIs?',
+    conclusion: 'Curved solid links pass 26/64 cases; boundary masks and invisible picks from folded ribbons remain rejected.',
+    scope: 'Apple M3, inline Chromium 157: 18/56 nonzero-opacity plus 8/8 zero-opacity rows pass; all 64 preserve original color. ' +
+      'Ten rows differ in GPU IDs, 36 retain CPU mask failures and four expose invisible source picks.',
+    variant: 'Unmodified GLSL/color control; visible-footprint/source-byte ID candidate; luma 10.0.0-alpha.4',
+    next: 'Isolate the folded-ribbon visibility failure and default-bow boundary pixel without changing color, controls or tolerances.',
+    reproduce: 'Compare both picking rules, then run the curved-link sweep and export JSON locally.',
+    investigations: [{
+      page: 'method',
+      state: 'Current evidence',
+      description: 'Curve sampling, full-frame masks, original color and selected-source visibility.',
+    }],
+  },
   'straight-links': {
     method: 'validation-contract',
     evidence: 'method',
@@ -186,11 +205,12 @@ export const milestones = [
   {
     id: 'rendering',
     title: 'Rendering and interaction',
-    position: 'Bounded point styles/images, 88/96 ring cases and 30/40 straight-link cases demonstrated on M3',
+    position: 'Bounded point styles/images, 88/96 rings, 30/40 straight-link and 26/64 curved-link cases demonstrated on M3',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
-    gates: ['Retain straight-link boundary blockers while validating curved ribbons, patterns, arrows and link states.',
+    gates: ['Resolve curved-ribbon mask/folded-source blockers; retain straight-link failures while validating patterns, arrows and link states.',
       'Retain polygon CPU/preservation gates; validate transitions and pointer behavior, measure accepted rendering cost and broaden native devices.'],
-    evidence: [['straight-links', 'Straight-link rendering/picking'], ['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],
+    evidence: [['curved-links', 'Curved solid links'], ['straight-links', 'Straight-link rendering/picking'],
+      ['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],
   },
   {
     id: 'integration',
@@ -223,7 +243,7 @@ export const mainOpenIssues = [
 // used by Roadmap and the experiment page, never from this browser's live run.
 export const migrationFocus = {
   milestone: 'rendering',
-  experiment: 'straight-links',
+  experiment: 'curved-links',
   phase: 'Prototype validation',
   status: 'Production Cosmos uses WebGL. Integration and production acceptance remain open.',
   demonstrated: ['collision', 'matched-layout', 'point-styling'],

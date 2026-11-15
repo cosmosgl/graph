@@ -8,7 +8,7 @@ import { ALPHA_BLEND, createDevice } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import { target, pixels, floatPixels } from '../../gpu/rgba-readback'
 import { SOURCE_ALPHA_GLSL } from '../../gpu/source-alpha'
-import { WIDTH, HEIGHT } from './data'
+import { WIDTH, HEIGHT, type Settings } from './data'
 import type { Backend, Snapshot } from './backend'
 const vertexTypes = {
   transformationMatrix: 'mat4x4<f32>',
@@ -97,7 +97,11 @@ precision highp float;
 flat in vec4 captured;
 out vec4 fragColor;
 void main() { fragColor = captured; }`
-export async function createLinksWebGL (canvas: HTMLCanvasElement): Promise<Backend> {
+type CurveDraw = { positions: Float32Array; segments: number; weight: number; distance: number }
+const curvedVisibleVertex = vertex.replace(widthPadding, '/* Candidate: visible ribbon width. */')
+const curvedVisibleFragment = fragment.replace('void main()', `${SOURCE_ALPHA_GLSL}\nvoid main()`)
+  .replace(pickBranch, `${pickBranch}\nif (linkBlending > 0.5 && quantizeSourceAlpha(opacity) <= 0.0) discard;`)
+export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (settings: Settings) => CurveDraw): Promise<Backend> {
   const device = await createDevice('webgl', canvas, false); const scope = resourceScope()
   try {
     const uniforms = scope.own(new UniformStore(device, {
@@ -112,8 +116,14 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement): Promise<Back
     const make = (blend: boolean, candidate: boolean, isPicking: boolean, probe = 0): Model => {
       const key = `${blend}:${candidate}:${isPicking}:${probe}`; const cached = models.get(key); if (cached) return cached
       const model = scope.own(new Model(device, {
-        vs: probe === 3 ? captureVertex : candidate || probe === 2 ? visibleVertex : vertex,
-        fs: probe === 3 ? captureFragment : probe === 1 ? varyingProbe : probe === 2 ? pixelProbe : candidate ? visibleFragment : fragment,
+        vs: probe === 3 ? captureVertex : candidate ? curve ? curvedVisibleVertex : visibleVertex : probe === 2 ? visibleVertex : vertex,
+        fs: probe === 3
+          ? captureFragment
+          : probe === 1
+            ? varyingProbe
+            : probe === 2
+              ? pixelProbe
+              : candidate ? curve ? curvedVisibleFragment : visibleFragment : fragment,
         modules: [{ name: 'conicParametricCurve', vs: moduleSource(conic) }, { name: 'pickingColor', fs: moduleSource(picking) }],
         topology: probe === 3 ? 'point-list' : 'triangle-strip',
         vertexCount: 4,
@@ -156,6 +166,8 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement): Promise<Back
         const frame = resourceScope()
         try {
           const { points, links } = scene; const width = WIDTH * settings.ratio; const height = HEIGHT * settings.ratio
+          if (curve && diagnose) throw new Error('Straight-ribbon probes do not describe tessellated curves')
+          const curved = curve?.(settings)
           if (display) { canvas.width = width; canvas.height = height; device.canvasContext!.resize({ width, height }) }
           const color = frame.own(target(device, width, height)); const ids = frame.own(target(device, width, height))
           const size = Math.max(1, Math.ceil(Math.sqrt(points.length))); const positions = new Float32Array(size * size * 4)
@@ -196,10 +208,12 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement): Promise<Back
             })
             buffers[name] = frame.own(device.createBuffer({ data: new Float32Array(data.length ? data : [0, 0, 0, 0]) }))
           }
+          if (curved) buffers.position = frame.own(device.createBuffer({ data: curved.positions }))
           const draw = (mode: number, framebuffer?: ReturnType<typeof target>['framebuffer'], probe = 0): void => {
             // The color pass always uses the unmodified production shaders.
             const model = make(mode === 0 && settings.blend && probe === 0, mode > 0 && variant === 'visible', mode > 0, probe)
             model.setAttributes(buffers); model.setBindings(bindings); model.setInstanceCount(links.length)
+            model.setVertexCount(curved ? curved.positions.length / 2 : 4)
             uniforms.setUniforms({
               captureUniforms: { captureRows: Math.max(1, links.length) },
               drawLineUniforms: {
@@ -212,9 +226,9 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement): Promise<Back
                 linkVisibilityMinTransparency: 1,
                 linkOpacity: settings.opacity,
                 greyoutOpacity: 1,
-                curvedWeight: 1,
-                curvedLinkControlPointDistance: 0,
-                curvedLinkSegments: 1,
+                curvedWeight: curved?.weight ?? 1,
+                curvedLinkControlPointDistance: curved?.distance ?? 0,
+                curvedLinkSegments: curved?.segments ?? 1,
                 scaleLinksOnZoom: Number(settings.scaleOnZoom),
                 maxPointSize: settings.maxWidth,
                 renderMode: mode,
