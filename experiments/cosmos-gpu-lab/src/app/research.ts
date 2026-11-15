@@ -127,13 +127,17 @@ export const research: Record<string, ResearchSummary> = {
     reviewed: '2026-11-15',
     comparison: 'Production straight ribbons → WebGL / WebGPU color and host IDs → independent scalar masks and source checks',
     question: 'Do straight links render and pick consistently through public luma APIs?',
-    conclusion: 'Straight-link candidate passes 30/40 cases; hard-edge and raster-boundary differences remain rejected.',
+    conclusion: 'Straight links remain 30/40; hard-edge interpolation is isolated, with the pixel correction still diagnostic.',
     scope: 'Apple M3, inline Chromium 157: 22/32 nonzero-opacity and 8/8 opacity-zero cases pass. ' +
       'All 40 preserve original color bytes and have zero invisible source picks; ten hard/raster boundary cases remain rejected.',
     variant: 'Production GLSL control and visible-footprint/source-byte ID candidate; original color; luma 10.0.0-alpha.4; Apple M3',
-    next: 'Isolate hard-edge coverage rounding, then cap/fractional raster differences, before broader link styles and interaction.',
+    next: 'Investigate cap/fractional raster differences; retain the hard-edge pixel diagnostic and original-color gate before broader link styles.',
     reproduce: 'Compare both picking rules, blending, zoom and DPR, then run the 40-case straight-link sweep and export JSON locally.',
-    investigations: [{ page: 'method', state: 'Current evidence', description: 'Straight-ribbon geometry, ID policies and full-frame comparisons.' }],
+    investigations: [{
+      page: 'method',
+      state: 'Current evidence',
+      description: 'Straight-ribbon comparisons and isolated native/linear/pixel hard-edge probes with unchanged gates.',
+    }],
   },
   'point-styling': {
     method: 'validation-contract',

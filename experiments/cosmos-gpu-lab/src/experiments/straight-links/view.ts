@@ -9,6 +9,7 @@ import { createLinksWebGPU } from './webgpu'
 import { compare, compareColors, type Comparison } from './reference'
 import { contributions, ROW_COUNT, runSweep, renderRows, type Pair, type Row } from './study'
 import type { Backend } from './backend'
+import { replayHardCoverage, renderHardCoverage, type HardRow } from './hard-coverage'
 export async function createLinksView (host: HTMLElement): Promise<ExperimentInstance> {
   host.innerHTML = `<div data-run-part="configuration" class="scale-toolbar styling-toolbar">
     <label>Picking rule <select data-variant><option value="visible">Visible-footprint candidate</option>
@@ -29,7 +30,7 @@ export async function createLinksView (host: HTMLElement): Promise<ExperimentIns
       <div class="styling-viewport"><canvas data-canvas="${lane}" width="${WIDTH}" height="${HEIGHT}" aria-label="${lane} straight links"></canvas>
       <span class="styling-cursor" data-cursor="${lane}" hidden></span></div><p class="styling-pick" data-pick="${lane}">Move over a link to inspect its ID</p>
       <p class="demo-note" data-device="${lane}"></p></article>`).join('')}</section>
-    <section data-run-part="results" data-results></section>
+    <section data-run-part="results" data-results class="readiness-table"></section>
     <p data-run-part="explanation">Frozen straight ribbons use production GLSL and geometry beside a WGSL port, with resident endpoint reads.
       The production ID pass adds five CSS pixels of width; the candidate removes that allowance and gates blended picks by their source alpha byte.
       Visible color uses the original draw. AA fringes outside the half-coverage contour can paint without being pickable.
@@ -37,17 +38,23 @@ export async function createLinksView (host: HTMLElement): Promise<ExperimentIns
     <section data-run-part="diagnostics"><h3>Repeatable straight-link sweep</h3><p>${ROW_COUNT} cases: four scenes × five profiles × blended/hard modes.
       Production and visible-footprint results remain separate. Fractional and aligned cap failures stay visible.</p>
       <div class="controls"><button data-sweep disabled>Run straight-link sweep</button><button data-cancel disabled>Cancel sweep</button></div>
-      <p data-progress>No sweep run.</p><div data-sweep-results></div></section>`
+      <p data-progress>No sweep run.</p><div data-sweep-results class="readiness-table"></div>
+      <h3>Hard-edge coverage replay</h3><p>Isolate three hard-edge sources. Compare native, linear-interpolated and pixel-distance WebGPU coverage
+        with unchanged Cosmos WebGL and scalar masks. All alternatives retain the original-color check; improved coverage alone does not pass.</p>
+      <div class="controls"><button data-hard-replay disabled>Replay hard-edge coverage</button><button data-hard-cancel disabled>Cancel replay</button></div>
+      <p data-hard-progress>No hard-edge replay run.</p><div data-hard-output class="readiness-table"></div></section>`
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
   const backends: Partial<Record<'webgl' | 'webgpu', Backend>> = {}; let snapshots: Partial<Pair> = {}
   const status = el('[role="status"]'); let report: object | undefined; let accepted: boolean | undefined
   let busy = false; let sweeping = false; let cancelled = false; let destroyed = false; let disposed = false; let runError: string | undefined
   let study: { startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[]; rows: Row[]; error?: string } | undefined
+  let hardReplay: { startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[]; rows: HardRow[]; error?: string } | undefined
   const dispose = (): void => { if (!disposed) { disposed = true; Object.values(backends).forEach(b => b.destroy()) } }
   const controls = (disabled: boolean): void => {
     host.querySelectorAll<HTMLSelectElement>('select').forEach(s => { s.disabled = disabled })
     el<HTMLButtonElement>('[data-compare]').disabled = disabled
     el<HTMLButtonElement>('[data-sweep]').disabled = disabled || !backends.webgl || !backends.webgpu
+    el<HTMLButtonElement>('[data-hard-replay]').disabled = disabled || !backends.webgl || !backends.webgpu
     el<HTMLButtonElement>('[data-export]').disabled = disabled || !report
   }
   const render = async (): Promise<void> => {
@@ -154,6 +161,7 @@ export async function createLinksView (host: HTMLElement): Promise<ExperimentIns
     const json = JSON.stringify({
       ...report,
       sweep: study,
+      hardCoverageReplay: hardReplay,
       reproduction: { defaults: DEFAULTS, fixtures: FIXTURES.map(name => ({ name, scene: fixture(name) })) },
     },
     (key, value) => typeof value === 'number' && Number.isNaN(value) ? 'NaN' : value, 2)
@@ -190,6 +198,41 @@ export async function createLinksView (host: HTMLElement): Promise<ExperimentIns
           controls(false); el<HTMLButtonElement>('[data-cancel]').disabled = true
           const rejected = current.rows.filter(r => !r.passed).length
           el('[data-progress]').textContent = `${current.status} · ${current.rows.length} / ${ROW_COUNT} · ${rejected} candidate cases rejected.`
+        }
+      }
+    }
+    run().catch(error => { runError = String(error) })
+  })
+  el('[data-hard-cancel]').addEventListener('click', () => { cancelled = true })
+  el('[data-hard-replay]').addEventListener('click', () => {
+    if (busy || sweeping || destroyed || !backends.webgl || !backends.webgpu) return
+    const run = async (): Promise<void> => {
+      sweeping = true; cancelled = false; controls(true); el<HTMLButtonElement>('[data-hard-cancel]').disabled = false
+      const current = {
+        startedAt: new Date().toISOString(),
+        finishedAt: undefined as string | undefined,
+        status: 'running',
+        browser: navigator.userAgent,
+        devices: Object.values(backends).map(b => b.info),
+        rows: [] as HardRow[],
+        error: undefined as string | undefined,
+      }
+      hardReplay = current; el('[data-hard-output]').replaceChildren(); el('[data-hard-progress]').textContent = 'Starting nine isolated comparisons…'
+      try {
+        await replayHardCoverage(backends as { webgl: Backend; webgpu: Backend }, row => {
+          current.rows.push(row); if (destroyed) return
+          renderHardCoverage(el('[data-hard-output]'), current.rows)
+          el('[data-hard-progress]').textContent = `${current.rows.length} / 9 · ${row.name} · ${row.method}`
+        }, () => cancelled || destroyed)
+        current.status = cancelled || destroyed ? 'cancelled' : 'complete'
+      } catch (error) { current.status = 'failed'; current.error = String(error); runError = current.error } finally {
+        current.finishedAt = new Date().toISOString(); sweeping = false
+        if (destroyed) dispose()
+        else {
+          controls(false); el<HTMLButtonElement>('[data-hard-cancel]').disabled = true
+          const accepted = current.rows.filter(row => row.passed).length
+          el('[data-hard-progress]').textContent = `${current.status} · ${current.rows.length} / 9 compared · ${accepted} pass all retained gates. ` +
+            'Live settings and canvases preserved.'
         }
       }
     }
