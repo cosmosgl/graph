@@ -42,6 +42,7 @@ export default defineConfig({
       'src/experiments/collision/**/*.test.ts',
       'src/experiments/precision-diagnostics/**/*.test.ts',
       'src/experiments/point-styling/**/*.test.ts',
+      'src/experiments/straight-links/**/*.test.ts',
     ],
     testTimeout: 60000,
     maxWorkers: 1,
