@@ -106,6 +106,80 @@ The nearby-edge regression shifts the width-3 center by `±1/1024` CSS pixel. Pi
 
 **Consequence:** an ID-only patch cannot recover a visible pixel discarded by the color shader while also forbidding invisible picks. Removing this mechanism requires a color-coverage correction. The diagnostic quantifies that correction and its original-color differences; it is not promoted under the unchanged preservation gate. The default candidate remains **30/40**, with cap/fractional raster differences still to investigate.
 
+## Cap and fractional raster investigation
+
+**Cap failures can happen before the fragment shader runs.** The follow-up uses Codex's inline Chromium 157 on Apple M3 with the same production GLSL, WebGPU port, scalar masks, color budget and original-color gate. It adds no renderer correction.
+
+A **48-row sensitivity replay** isolates eight original sources. Each tests the original input, endpoint reversal, and translations of `±1/1024` and `±1/8` **device pixel** along its declared axis. Translation is converted back to input coordinates using zoom and DPR. Moving an input is an investigation of its boundary, not a repair of its original result. Original link IDs remain stable; other widths are zeroed to prevent overdraw from hiding a failure.
+
+### Check the carrier before checking coverage
+
+Separate float programs capture all four pre-clipping vertex positions as one-pixel points in a tiny RGBA32F target. A second pair of trivial shaders then draws **the same four captured float32 clip positions** on both APIs, without endpoint, normal, projection or coverage calculations. All buffers, pipelines, render passes and readback use public luma APIs. Ordinary production color/ID arrays are checked before and after diagnostics and after restoring the control.
+
+```flow
+Input endpoints · original coordinates, widths and link IDs
+Vertex shader · capture the four clip positions separately
+Viewport and polygon rasterizer · determine whether a fragment exists
+Coverage and color · a missing invocation cannot be recovered here
+ID and CPU comparison · unchanged masks, color and visibility gates
+```
+
+| Original source | CPU mask failures · GL / GPU | Same-vertex carrier differences · GL vs GPU | Carrier replay versus native · GL / GPU |
+| --- | ---: | ---: | ---: |
+| Vertical half-pixel caps | `2 / 0` | `4` | `0 / 0` |
+| Vertical caps, zoom 0.5 | `12 / 0` | `14` | `0 / 0` |
+| 3:1 end cap, ratio 2 | `2 / 2` | `0` | `0 / 0` |
+| 45° start cap | `6 / 6` | `0` | `0 / 0` |
+| Horizontal cap control | `0 / 0` | `360` | `0 / 0` |
+| Width 2.5 control | `0 / 0` | `181` | `0 / 0` |
+| Fractional oblique control | `0 / 0` | `0` | `0 / 0` |
+| Clipped hard oblique | `0 / 0` | `0` | `0 / 0` |
+
+The two vertical cases remain different with identical supplied vertices, and the carrier replay reproduces each API's native float-probe footprint. This isolates the difference to the raster path, including viewport precision and edge ownership, rather than different endpoint/extrusion shader calculations. It does not identify a driver's internal rounding algorithm.
+
+At the nominal cap pixel `(280,40)`, WebGL generates no carrier fragment; WebGPU generates one with coverage one. At `(280,260)`, the roles reverse. Color and picking follow that difference:
+
+```text
+nominal y =  40.5   first cap   WebGL background   WebGPU link 2
+                    │
+                    │ ribbon
+                    │
+nominal y = 260.5   last cap    WebGL link 2       WebGPU background
+```
+
+Carrier differences are not automatically visible failures. The horizontal and width-2.5 controls pass their original ID/color gates despite differences at carrier fringes. The carrier includes the antialiasing ramp, including fragments that paint no color. It is an explanatory capture, not a new acceptance mask.
+
+[WebGPU polygon rasterization](https://www.w3.org/TR/webgpu/#polygon-rasterization) defines single-sample pixel-center sampling but leaves inclusion on a polygon edge unspecified, with precision involved. [OpenGL ES 3.0, §3.6.1](https://registry.khronos.org/OpenGL/specs/es/3.0/es_spec_3.0.pdf#page=117) requires unique ownership on a shared polygon edge, without promising the same convention across APIs. The existing scalar top-left rule therefore remains a declared comparison policy; it is not a universal hardware guarantee. These specification limits explain portability concerns and **do not waive any rejected pixel**.
+
+### Exact cap signs versus rounded quads
+
+A separate dyadic-integer diagnostic evaluates the longitudinal cap planes and triangle edge signs over their stored binary coordinates. It adds no epsilon and never supplies expected IDs to acceptance.
+
+- At `(927,382)`, the ratio-two 3:1 ribbon's input geometry puts the pixel exactly on its end cap. Both GPUs select link 7; the unchanged scalar mask and its exact stored-quad sign reject it. Its corresponding start-cap tie is rejected by both GPUs and accepted by the scalar reference. The GPU pair agrees while the two CPU failures remain.
+- At `(326,62)`, the 45° source is exactly on its input start-cap plane. Both GPUs select link 6. The current scalar mask **and the exact sign of its rounded double-precision quad** reject it. This distinguishes the mathematical source plane from the quad produced by normal calculation and extrusion; this sample does not demonstrate a wrong scalar cross-product sign. The six source rejections remain in place.
+- Captured vertices are float32 values before fixed-function clipping/viewport conversion. Their exact top-left signs describe those stored numbers, not a replacement model of the hardware rasterizer. The neutral carrier replay checks their relationship to the measured native footprint.
+
+### Sensitivity results and the remaining body-edge case
+
+**29/48** rows pass all retained gates. Every row preserves original color bytes on both APIs and has zero invisible picks. Every carrier replay matches its corresponding native float footprint. Endpoint reversal changes **zero CPU IDs, GPU IDs and color pixels** in all eight sources.
+
+| Source | Accepted / checked | Main rejected population |
+| --- | ---: | --- |
+| Vertical half-pixel caps | `2 / 6` | Original, reversal and both 1/1024-pixel shifts |
+| Vertical caps, zoom 0.5 | `2 / 6` | Original, reversal and both 1/1024-pixel shifts |
+| 3:1 end cap, ratio 2 | `4 / 6` | Original and reversal |
+| 45° start cap | `4 / 6` | Original and reversal |
+| Horizontal cap control | `5 / 6` | Positive 1/1024-pixel shift |
+| Width 2.5 control | `6 / 6` | None in this population |
+| Fractional oblique control | `6 / 6` | None in this population |
+| Clipped hard oblique | `0 / 6` | One CPU-color failure per input variant |
+
+All tested cap sources pass after a 1/8-device-pixel translation. The smaller 1/1024 shift is insufficient for the vertical cases; reversing its sign switches which API matches the CPU. The horizontal control also acquires a rejection under the positive tiny shift. The record supports subpixel raster sensitivity, not a portable raster grid size or a coordinate-offset workaround. Fractional width and oblique coordinates alone are not generally broken: those two controls pass all twelve comparisons.
+
+The original clipped hard oblique isolates link 5 at zoom two with constant screen width. Its remaining mismatch is `(435,19)`: both GPUs paint an opaque pixel and both candidate IDs match the CPU background. CPU coverage is about `0.497403`, while WebGL/WebGPU varying coverage is about `0.500201` / `0.500200`. All three triangle diagnostics include the pixel and both cap-plane signs are strictly inside. **This is a body-coverage/interpolation failure, not a missing cap fragment.** It retains one CPU-color rejection across all six input variants, so successful ID checks cannot approve it.
+
+**Consequence for migration:** a fragment-only coverage patch cannot recover cap pixels for which no invocation exists. A future common cap rule would need a conservative carrier and explicit shader clipping, followed by the same production/CPU/color checks. Where production WebGL and the declared CPU boundary disagree, a WebGPU change alone cannot make all three images identical. Keep that conflict visible rather than silently changing the reference. This bounded investigation is complete; retain the boundary blockers and extend feature coverage with curved solid links before patterns, arrows and state styling. No alternative renderer is promoted, and the normal matrix remains **30/40**.
+
 ## Reproduce
 
 1. Run `pnpm --filter @cosmos.gl/gpu-lab dev` and open **Straight-link rendering and picking**.
@@ -113,7 +187,8 @@ The nearby-edge regression shifts the width-3 center by `±1/1024` CSS pixel. Pi
 3. Switch to the production picking rule to inspect its width allowance and invisible-pick count. Color bytes must remain unchanged. Compare overlap in both orders, fractional boundaries, widths/defaults, blending, opacity and both pixel ratios.
 4. Run the 40-case sweep. All rows remain expanded, including failures. Cancellation finishes the current row and retains partial data; the live canvases/settings are unchanged.
 5. Select **Replay hard-edge coverage** for the nine isolated method comparisons and float values. Every row includes full-frame ID/mask/color failures, original-color changes and invisible picks. Cancellation keeps completed rows and preserves live canvases/settings. These are three isolated sources, not a new full-graph or 40-case acceptance claim.
-6. Export JSON locally for raw inputs, NaN sentinels, settings, browser/device, timestamps, first failures, all controls and the hard-edge replay. Measurement JSON is not committed. NaN channel sentinels export as the string `NaN`.
-7. Run `LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/straight-links` and open the printed session in Codex's inline browser.
+6. Select **Replay caps and fractional raster** for the 48-row sensitivity study. Read the original samples, identical-vertex carrier replay and endpoint-reversal tables. Every failed pixel, captured quad, input variant and device record exports locally; cancellation preserves completed rows and the live canvases/settings.
+7. Export JSON locally for raw inputs, NaN sentinels, settings, browser/device, timestamps, first failures, all controls and both diagnostic replays. Measurement JSON is not committed. NaN channel sentinels export as the string `NaN`.
+8. Run `LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/straight-links` and open the printed session in Codex's inline browser.
 
 Curved geometry, patterns, arrows, endpoint gradients, visibility-distance fading, highlight states, interrupted updates/transitions, pointer-window scheduling, full Graph/deck embedding, native portability and rendering cost remain separate gates. Large simulation counts and minimal spring-demo lines do not validate these rendering features.

@@ -127,16 +127,16 @@ export const research: Record<string, ResearchSummary> = {
     reviewed: '2026-11-15',
     comparison: 'Production straight ribbons → WebGL / WebGPU color and host IDs → independent scalar masks and source checks',
     question: 'Do straight links render and pick consistently through public luma APIs?',
-    conclusion: 'Straight links remain 30/40; hard-edge interpolation is isolated, with the pixel correction still diagnostic.',
+    conclusion: 'Straight links remain 30/40; cap rasterization and body-coverage failures are isolated and retained as blockers.',
     scope: 'Apple M3, inline Chromium 157: 22/32 nonzero-opacity and 8/8 opacity-zero cases pass. ' +
       'All 40 preserve original color bytes and have zero invisible source picks; ten hard/raster boundary cases remain rejected.',
     variant: 'Production GLSL control and visible-footprint/source-byte ID candidate; original color; luma 10.0.0-alpha.4; Apple M3',
-    next: 'Investigate cap/fractional raster differences; retain the hard-edge pixel diagnostic and original-color gate before broader link styles.',
+    next: 'Retain the boundary blockers and validate curved solid links next; common cap geometry remains a separate candidate with unchanged gates.',
     reproduce: 'Compare both picking rules, blending, zoom and DPR, then run the 40-case straight-link sweep and export JSON locally.',
     investigations: [{
       page: 'method',
       state: 'Current evidence',
-      description: 'Straight-ribbon comparisons and isolated native/linear/pixel hard-edge probes with unchanged gates.',
+      description: 'Straight-ribbon comparisons, hard-edge probes and a 48-row cap/raster investigation with unchanged gates.',
     }],
   },
   'point-styling': {
@@ -188,7 +188,7 @@ export const milestones = [
     title: 'Rendering and interaction',
     position: 'Bounded point styles/images, 88/96 ring cases and 30/40 straight-link cases demonstrated on M3',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
-    gates: ['Resolve straight-link hard-edge/raster failures, then validate curved ribbons, patterns, arrows and link states.',
+    gates: ['Retain straight-link boundary blockers while validating curved ribbons, patterns, arrows and link states.',
       'Retain polygon CPU/preservation gates; validate transitions and pointer behavior, measure accepted rendering cost and broaden native devices.'],
     evidence: [['straight-links', 'Straight-link rendering/picking'], ['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],
   },
