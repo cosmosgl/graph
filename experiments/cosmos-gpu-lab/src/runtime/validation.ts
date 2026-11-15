@@ -26,7 +26,8 @@ export const validationContracts: Record<string, ValidationContract> = {
       'while its three NPOT/non-square nearest-boundary failures remain as controls. Integer nearest texels with clamped linear ' +
       'sampling pass all 48 static packing cases and 72 sequential raw-image update cases on M3. ' +
       'Premultiplied-bitmap to sRGB ImageData normalization passes 8/8 PNG settings; direct bitmap paths remain rejected. ' +
-      'Rings/greyout pass 88/96 M3 rows; all eight native polygon-boundary rejections remain open. ' +
+      'Normalized rings/greyout pass 88/96 M3 rows. The opt-in pixel-space diagnostic passes 86/96; ' +
+      'CPU diamond ties and exact color-preservation rejections stay open without a reference/tolerance change. ' +
       'Other codecs, concurrent loading/frames, wide-gamut output, GPU cost and broader devices remain open.',
   },
   'center-mass': {

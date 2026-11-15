@@ -6,6 +6,7 @@ import { dimensions, floatPixels, pixels, target, type Backend, type Snapshot } 
 import { HEIGHT, resolvePoint, WIDTH } from './data'
 import source from './points.wgsl?raw'
 import effects from './effects.wgsl?raw'
+import polygonPixels from './polygon-pixels.wgsl?raw'
 import { greyed, overlayIndices } from './point-effects'
 import { SOURCE_ALPHA_WGSL } from './source-alpha'
 import { atlasTexture, atlasCoords, atlasInfo, GUTTER_SIZE, sourceTexelRects } from './atlas'
@@ -42,8 +43,8 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
     const rectangleBuffers = new Map<string, ReturnType<typeof upload>>()
     const vertexArray = scope.own(device.createVertexArray({ shaderLayout, bufferLayout: [] }))
     const make = (format: TextureFormatColor, picking: boolean, display = false, overlay = false): RenderKernel => scope.own(new RenderKernel(device, {
-      vertexSource: `${source}\n${SOURCE_ALPHA_WGSL}\n${effects}`,
-      fragmentSource: `${source}\n${SOURCE_ALPHA_WGSL}\n${effects}`,
+      vertexSource: `${source}\n${SOURCE_ALPHA_WGSL}\n${effects}\n${polygonPixels}`,
+      fragmentSource: `${source}\n${SOURCE_ALPHA_WGSL}\n${effects}\n${polygonPixels}`,
       vertexEntryPoint: overlay ? 'overlayVertex' : 'vertexMain',
       fragmentEntryPoint: overlay ? 'overlayFragment' : 'fragmentMain',
       topology: 'triangle-list',
@@ -96,10 +97,11 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
               Number(points[id].strokeColor.some(Number.isNaN))], index * 32)
           })
           const buffer = frame.own(upload(device, records))
+          const coordinateMode = variant === 'production' ? 0 : settings.polygonArithmetic === 'pixels' ? 2 : 1
           const params = (mode: number, layer = -1, overlayIndex = 0, overlayColor?: number[]): ReturnType<typeof upload> =>
             frame.own(upload(device, new Float32Array([
               WIDTH, HEIGHT, settings.ratio, settings.zoom, settings.sizeScale, settings.maxSize, settings.opacity, samplerMode,
-              Number(settings.scaleOnZoom), mode, Number(variant !== 'production'), variant === 'eligibility' ? 2 : Number(variant === 'quantized'),
+              Number(settings.scaleOnZoom), mode, coordinateMode, variant === 'eligibility' ? 2 : Number(variant === 'quantized'),
               ...(settings.greyoutColor ?? [-1, -1, -1, -1]), ...(settings.backgroundColor ?? [0, 0, 0, 0]),
               ...(overlayColor ?? settings.ringColor ?? [1, 1, 1, 1]),
               settings.greyoutOpacity ?? -1, Number(settings.darkenGreyout !== false), settings.strokeContrast ?? 0, settings.ringContrast ?? 0,
@@ -147,6 +149,7 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
           if (display) draw(displayKernel, 0)
           device.submit()
           const result: Snapshot = {
+            polygonArithmetic: variant === 'production' ? 'normalized' : settings.polygonArithmetic ?? 'normalized',
             atlasSource,
             atlasGeneration: atlasSource ? dynamic.generation : undefined,
             atlasPacking: packing,

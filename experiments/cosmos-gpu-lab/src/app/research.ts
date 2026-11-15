@@ -124,16 +124,16 @@ export const research: Record<string, ResearchSummary> = {
     method: 'validation-contract',
     comparison: 'Same styled points → production WebGL / WebGPU color and ID images → full-image and scalar-mask checks',
     question: 'Does point-ID picking select the shapes that Cosmos actually renders?',
-    conclusion: 'Rings and greyout pass 88/96 M3 cases; eight exact polygon-boundary cases remain rejected.',
-    scope: 'Apple M3: all 96 effect rows pass 2/255 CPU colors, overlay-ID invariance and pick-only color preservation. ' +
-      'Eight native polygon cases fail exact masks/IDs. All 144 static atlas records are unchanged; legacy compatibility remains separate.',
-    variant: 'Source-byte picking; outline/hover/focus rings and greyout; luma 10.0.0-alpha.4; Apple M3',
+    conclusion: 'Polygon failures are isolated; CPU boundary and color-preservation gates keep the pixel-space diagnostic rejected.',
+    scope: 'Apple M3: normalized control 88/96; pixel-space diagnostic 86/96. The diagnostic has exact GPU IDs, ' +
+      'eight native CPU diamond-tie rows and two ratio-2 color-preservation rejections. Original gates and controls remain in force.',
+    variant: 'Opt-in pixel-space polygons beside retained normalized source-byte control; luma 10.0.0-alpha.4; Apple M3',
     reviewed: '2026-11-15',
     milestone: 'rendering',
     evidence: 'method',
-    next: 'Isolate the native polygon-boundary predicates at unchanged gates, then validate transitions, links, pointer behavior and broader devices.',
-    reproduce: 'Select Point rings and greyout; compare the four scenes and eight profiles, then run the 96-row rings sweep. ' +
-      'Export JSON locally. Exact polygon failures remain rejected even when all color checks pass.',
+    next: 'Validate production link rendering and picking; retain the polygon counterexamples for a separate reference/preservation decision.',
+    reproduce: 'Select Point rings and greyout and compare Normalized with Pixel-space arithmetic. ' +
+      'Read every rejected pixel in Polygon boundary replay and run the 96-row sweep under each mode. CPU and color-preservation failures stay rejected.',
     investigations: [{
       page: 'method',
       state: 'Current evidence',
@@ -169,8 +169,8 @@ export const milestones = [
     title: 'Rendering and interaction',
     position: 'Bounded styling, images and 88/96 ring/greyout cases demonstrated on M3',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
-    gates: ['Time-box the eight aligned polygon rejections without changing acceptance criteria.',
-      'Validate production link rendering/picking, then transitions and pointer behavior; measure accepted rendering cost and broaden native devices.'],
+    gates: ['Validate production link rendering and picking, beginning with straight ribbons, styles, overlap and IDs.',
+      'Retain polygon CPU/preservation gates; validate transitions and pointer behavior, measure accepted rendering cost and broaden native devices.'],
     evidence: [['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],
   },
   {

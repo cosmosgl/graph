@@ -16,6 +16,7 @@ struct Vertex {
   @location(6) @interpolate(flat) fill: vec4f,
   @location(7) @interpolate(flat) strokeColor: vec4f,
   @location(8) @interpolate(flat) ringColor: vec4f,
+  @location(9) @interpolate(flat) shapeBounds: vec2f,
 }
 fn inradius(shape: u32) -> f32 {
   switch shape {
@@ -104,6 +105,7 @@ fn distanceToShape(coord: vec2f, shape: u32) -> f32 {
   }
   result.coord = corners[vertex]; result.index = index; result.diameter = diameter; result.center = center;
   result.sprite = sprite; result.imageDiameter = imageDiameter; result.fill = fill;
+  result.shapeBounds = vec2f(0.45,0.275) * max(diameter,1.0);
   result.strokeColor = p.strokeColor;
   if (p.status.x > 0.0 || (p.status.w > 0.0 && params.shades.x != 2.0)) {
     result.strokeColor = vec4f(effectShade(fill.rgb,select(params.shades.x,0.0,params.shades.x == 2.0),params.effects.z),1);
@@ -128,6 +130,9 @@ fn distanceToShape(coord: vec2f, shape: u32) -> f32 {
   if (p.status.y > 0.0) { coord = (offset * 2.0) / core; }
   var distance = distanceToShape(coord,shape) * core * 0.5;
   if (p.status.y > 0.0 && shape == 0u) { distance = length(offset) - core * 0.5; }
+  if (params.options.z > 1.5 && (shape == 2u || shape == 3u || shape == 6u)) {
+    distance = polygonPixelDistance(offset,core,shape,input.shapeBounds);
+  }
   var coverage = 1.0 - smoothstep(-0.5,0.5,distance);
   if (shape == 8u || input.diameter <= 0.0) { coverage = 0.0; }
   var imageColor = vec4f(0.0); var imageCovered = false;

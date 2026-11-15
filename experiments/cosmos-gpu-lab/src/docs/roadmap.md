@@ -63,6 +63,8 @@ Time-box one focused investigation of the polygon predicates in GLSL, WGSL and t
 
 **Exit evidence:** a localized explanation and replayable counterexamples, plus a correction verified at the original gates if one is found. Broader codecs, colors and native devices remain open.
 
+**Investigation outcome:** the opt-in pixel-space diagnostic removes all cross-backend ID differences in its 96-row M3 sweep, but passes **86/96** overall. Eight native rows retain CPU diamond-tie failures and two ratio-2 rows reject six changed WebGL color pixels under exact pick-only preservation. The normalized control retains **88/96**. The scalar reference, acceptance and production controls are unchanged. Keep these counterexamples and proceed to step 2; an explicit closed-polygon/reference decision and preservation fix remain separate gates. [Detailed isolation and reproduction](#/point-styling/docs/method).
+
 ### 2 — Validate production link rendering and picking
 
 Start with production straight ribbons: endpoints from resident positions, widths, zoom scaling, colors/alpha, overlap, stable IDs and rendered/picked agreement. Minimal links in the spring experiments do not establish this contract.
