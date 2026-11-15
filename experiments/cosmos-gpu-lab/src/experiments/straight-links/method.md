@@ -68,7 +68,43 @@ All ten rejected cases remain in the repeatable population. Counts below are pix
 
 For the native hard ribbon, `(40,96)` is a first mismatch: WebGL and the scalar reference select link 1, but WebGPU's unchanged color coverage discards it, and the candidate correctly leaves its ID empty. The zoomed overlap first differs at `(253,102)`, at an aligned vertical ribbon cap. In the ratio-two boundary cases, both GPUs select link 7 at `(927,382)`, while the unchanged scalar reference rejects that butt-cap tie. These are reproducible localization clues; they do not yet prove one common arithmetic cause.
 
-**Next gate:** isolate the hard-edge coverage rounding first, then the cap/top-left and fractional raster differences. Keep the original production shaders, scalar reference and acceptance unchanged. Broader styles can follow once these counterexamples are understood or explicitly retained as blockers. No boundary pixels are omitted and no epsilon is added.
+The follow-up below isolates the hard-edge mechanism. The cap/top-left and fractional raster differences remain separate gates. Keep the original production shaders, scalar reference and acceptance unchanged. Broader styles can follow once these counterexamples are understood or explicitly retained as blockers. No boundary pixels are omitted and no epsilon is added.
+
+## Hard-edge coverage investigation
+
+**Interpolation can put an edge pixel on the opposite side of the hard discard.** Three isolated sources reproduce this in Codex's inline Chromium 157 on Apple M3. The original strip geometry and ordinary production draws stay intact. Separate unblended RGBA32F programs expose the interpolated transverse coordinate, smoothing and coverage, then projected pixel distance, half-width and pixel-space coverage. All copies/readback use public luma APIs. Probes never supply expected IDs to the scalar reference.
+
+| Isolated source / observed pixel | Coordinate y · WebGL / WebGPU | Coverage · WebGL / WebGPU | Pixel distance / half-width, both APIs |
+| --- | --- | --- | --- |
+| Width 3, native · `(100,96)` | `−0.375` / `−0.3750000298023224` | `0.5` / `0.4999998211860657` | `1.5 / 1.5` |
+| Default color, zoom 0.5 · `(280,135)` | `0.40000006556510925` / `0.3999999463558197` | `0.4999995231628418` / `0.5000003576278687` | `2 / 2` |
+| Minimum width, zoom 2, clipped · `(100,11)` | `0.2500693202018738` on both | `0.49979203939437866` on both | `0.5 / 0.5` |
+
+The first coordinate difference is one ULP at that magnitude. The clipped minimum-width case is much larger: it should not be described as universally a one-ULP problem. A tiny change around the `0.5` hard cutoff can still produce a full `255/255` color difference because a surviving hard fragment writes opaque color and a discarded fragment writes nothing. This is not a source-alpha quantization failure.
+
+In these isolated captures, the probe predicate predicts each ordinary color's presence. Ordinary color/ID readbacks are unchanged with probing enabled, and restored draws are checked after changing methods. The probes are separate compiled programs, so the UI explicitly flags any future capture that fails that consistency check.
+
+### Three WebGPU methods, same reference
+
+- **Native:** the retained perspective-interpolated coordinate and original `smoothstep` expression.
+- **Linear:** explicit `@interpolate(linear, center)` on the transverse coordinate, with the same coverage expression. This gives the same masks, colors and probe values as native on this M3 replay. All clip positions have `w = 1`, but mathematical equivalence does not promise identical hardware rounding.
+- **Pixel:** an opt-in hard-only diagnostic reconstructs transverse distance from the fragment's pixel center and flat ribbon origin/normal. Its one-device-pixel ramp is `smoothstep(halfWidth + 0.5, halfWidth - 0.5, distancePx)`. Both the color and visible-ID pass use this coverage, without an epsilon. It runs only in this replay; production picking and the normal 40-case sweep keep their original arithmetic. Blended rendering is unchanged.
+
+WGSL defaults floating IO to perspective interpolation at the pixel center; it also supports linear interpolation. See [WGSL interpolation](https://www.w3.org/TR/WGSL/#interpolation). Its [floating-point accuracy rules](https://www.w3.org/TR/WGSL/#floating-point-accuracy) permit variation in compound expressions, including inherited `smoothstep` accuracy. These rules explain why identical real-number formulas are insufficient to promise bitwise parity; the measured interpolation values above localize this replay's failure.
+
+| Isolated source | Native / linear CPU mask failures · GL / GPU | Pixel CPU mask failures · GL / GPU | Pixel GPU pair color failures > 2/255 | WebGPU original color pixels changed by pixel method |
+| --- | ---: | ---: | ---: | ---: |
+| Native width 3 | `0 / 180` | `0 / 0` | `0` | `180` |
+| Zoom 0.5, default color | `85 / 85` | `85 / 0` | `85` | `85` |
+| Clipped minimum width, zoom 2 | `106 / 106` | `106 / 0` | `106` | `106` |
+
+All three pixel-space WebGPU images have zero CPU-mask failures, zero CPU-color failures and zero invisible picks. All nine method comparisons preserve WebGL color bytes. **None passes all retained gates:** the pixel method changes original WebGPU color pixels; two cases also retain production WebGL-versus-CPU errors. This is a promising coverage correction, not an accepted pick-only replacement or a change to the production control.
+
+The minimum-width isolation reports 106 errors, rather than the full scene's 396, because only original link 1 is drawn. Other links keep their indices but receive width zero. The complete scene and every historical rejection remain in the regular sweep.
+
+The nearby-edge regression shifts the width-3 center by `±1/1024` CSS pixel. Pixel-distance WebGPU remains exact against the full CPU mask and color image and selects the expected side. The unchanged WebGL color can still disagree; the pair is not approved merely because the candidate is more accurate. No pixel exclusion or acceptance tolerance changes are involved.
+
+**Consequence:** an ID-only patch cannot recover a visible pixel discarded by the color shader while also forbidding invisible picks. Removing this mechanism requires a color-coverage correction. The diagnostic quantifies that correction and its original-color differences; it is not promoted under the unchanged preservation gate. The default candidate remains **30/40**, with cap/fractional raster differences still to investigate.
 
 ## Reproduce
 
@@ -76,7 +112,8 @@ For the native hard ribbon, `(40,96)` is a first mismatch: WebGL and the scalar 
 2. Start with the visible-footprint candidate and ribbons. Move over either canvas to read the same device pixel in both captured ID images. These pointer events use frozen readback and do not measure production hover latency.
 3. Switch to the production picking rule to inspect its width allowance and invisible-pick count. Color bytes must remain unchanged. Compare overlap in both orders, fractional boundaries, widths/defaults, blending, opacity and both pixel ratios.
 4. Run the 40-case sweep. All rows remain expanded, including failures. Cancellation finishes the current row and retains partial data; the live canvases/settings are unchanged.
-5. Export JSON locally for raw inputs, NaN sentinels, settings, browser/device, timestamps, first failures and all controls. Measurement JSON is not committed. NaN channel sentinels export as the string `NaN`.
-6. Run `LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/straight-links` and open the printed session in Codex's inline browser.
+5. Select **Replay hard-edge coverage** for the nine isolated method comparisons and float values. Every row includes full-frame ID/mask/color failures, original-color changes and invisible picks. Cancellation keeps completed rows and preserves live canvases/settings. These are three isolated sources, not a new full-graph or 40-case acceptance claim.
+6. Export JSON locally for raw inputs, NaN sentinels, settings, browser/device, timestamps, first failures, all controls and the hard-edge replay. Measurement JSON is not committed. NaN channel sentinels export as the string `NaN`.
+7. Run `LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/straight-links` and open the printed session in Codex's inline browser.
 
 Curved geometry, patterns, arrows, endpoint gradients, visibility-distance fading, highlight states, interrupted updates/transitions, pointer-window scheduling, full Graph/deck embedding, native portability and rendering cost remain separate gates. Large simulation counts and minimal spring-demo lines do not validate these rendering features.

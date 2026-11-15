@@ -56,3 +56,15 @@ struct Vertex {
   }
   return vec4f(input.color.rgb,alpha);
 }
+
+
+// Unblended float probes are separate entry points, never acceptance outputs.
+@fragment fn varyingProbe(input: Vertex) -> @location(0) vec4f {
+  let coverage = smoothstep(0.5,0.5 - input.smoothing,abs(input.coord.y));
+  return vec4f(input.coord.y,input.smoothing,coverage,f32(input.id + 1u));
+}
+@fragment fn pixelProbe(input: Vertex) -> @location(0) vec4f {
+  let distancePx = abs(dot(input.position.xy - input.ribbon.xy,input.ribbon.zw));
+  let coverage = smoothstep(input.halfWidth + 0.5,input.halfWidth - 0.5,distancePx);
+  return vec4f(distancePx,input.halfWidth,coverage,f32(input.id + 1u));
+}

@@ -6,7 +6,7 @@ import conic from '../../../../../src/modules/Lines/conic-curve-module.ts?raw'
 import picking from '../../../../../src/modules/Shared/picking-color-module.ts?raw'
 import { ALPHA_BLEND, createDevice } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
-import { target, pixels } from '../../gpu/rgba-readback'
+import { target, pixels, floatPixels } from '../../gpu/rgba-readback'
 import { SOURCE_ALPHA_GLSL } from '../../gpu/source-alpha'
 import { WIDTH, HEIGHT } from './data'
 import type { Backend, Snapshot } from './backend'
@@ -74,6 +74,15 @@ const visibleFragment = fragment.replace('void main()',
     `if (abs(dot(gl_FragCoord.xy - diagnosticRibbon.xy,diagnosticRibbon.zw)) > diagnosticHalf || rgbaColor.a <= 0.0) discard;
      if (linkBlending > 0.5 && quantizeSourceAlpha(opacity) <= 0.0) discard;
      if (linkBlending < 0.5 && coverage < 0.5) discard;`)
+// Separate unblended float programs run after the ordinary images. They never
+// replace the production shader or supply expected masks to acceptance.
+const opacityLine = 'float opacity = rgbaColor.a * coverage;'
+const varyingProbe = fragment.replace(opacityLine,
+  `fragColor = vec4(pos.y, smoothing, coverage, linkIndex + 1.0); return;\n${opacityLine}`)
+const pixelProbe = visibleFragment.replace(opacityLine,
+  `float distancePx = abs(dot(gl_FragCoord.xy - diagnosticRibbon.xy, diagnosticRibbon.zw));
+   float pixelCoverage = smoothstep(diagnosticHalf + 0.5, diagnosticHalf - 0.5, distancePx);
+   fragColor = vec4(distancePx, diagnosticHalf, pixelCoverage, linkIndex + 1.0); return;\n${opacityLine}`)
 export async function createLinksWebGL (canvas: HTMLCanvasElement): Promise<Backend> {
   const device = await createDevice('webgl', canvas, false); const scope = resourceScope()
   try {
@@ -84,11 +93,11 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement): Promise<Back
     const attributes = [['pointA', 'float32x2'], ['pointB', 'float32x2'], ['sourceColor', 'float32x4'], ['targetColor', 'float32x4'],
       ['sourceWidth', 'float32'], ['targetWidth', 'float32'], ['arrow', 'float32'], ['linkIndices', 'float32'], ['linkStyle', 'float32']] as const
     const models = new Map<string, Model>()
-    const make = (blend: boolean, candidate: boolean, isPicking: boolean): Model => {
-      const key = `${blend}:${candidate}:${isPicking}`; const cached = models.get(key); if (cached) return cached
+    const make = (blend: boolean, candidate: boolean, isPicking: boolean, probe = 0): Model => {
+      const key = `${blend}:${candidate}:${isPicking}:${probe}`; const cached = models.get(key); if (cached) return cached
       const model = scope.own(new Model(device, {
-        vs: candidate ? visibleVertex : vertex,
-        fs: candidate ? visibleFragment : fragment,
+        vs: candidate || probe === 2 ? visibleVertex : vertex,
+        fs: probe === 1 ? varyingProbe : probe === 2 ? pixelProbe : candidate ? visibleFragment : fragment,
         modules: [{ name: 'conicParametricCurve', vs: moduleSource(conic) }, { name: 'pickingColor', fs: moduleSource(picking) }],
         topology: 'triangle-strip',
         vertexCount: 4,
@@ -106,7 +115,7 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement): Promise<Back
     }
     return {
       info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
-      async render (scene, settings, variant, display = true): Promise<Snapshot> {
+      async render (scene, settings, variant, display = true, diagnose = false): Promise<Snapshot> {
         const frame = resourceScope()
         try {
           const { points, links } = scene; const width = WIDTH * settings.ratio; const height = HEIGHT * settings.ratio
@@ -150,9 +159,9 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement): Promise<Back
             })
             buffers[name] = frame.own(device.createBuffer({ data: new Float32Array(data.length ? data : [0, 0, 0, 0]) }))
           }
-          const draw = (mode: number, framebuffer?: ReturnType<typeof target>['framebuffer']): void => {
+          const draw = (mode: number, framebuffer?: ReturnType<typeof target>['framebuffer'], probe = 0): void => {
             // The color pass always uses the unmodified production shaders.
-            const model = make(mode === 0 && settings.blend, mode > 0 && variant === 'visible', mode > 0)
+            const model = make(mode === 0 && settings.blend && probe === 0, mode > 0 && variant === 'visible', mode > 0, probe)
             model.setAttributes(buffers); model.setBindings(bindings); model.setInstanceCount(links.length)
             uniforms.setUniforms({
               drawLineUniforms: {
@@ -205,13 +214,23 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement): Promise<Back
           }
           draw(0, color.framebuffer); draw(3, ids.framebuffer); if (display) draw(0)
           device.submit()
-          return {
+          const snapshot: Snapshot = {
             variant,
             width,
             height,
             color: await pixels(device, color.texture, color.framebuffer),
             ids: await pixels(device, ids.texture, ids.framebuffer),
           }
+          if (diagnose) {
+            const varying = frame.own(target(device, width, height, 'rgba32float'))
+            const pixel = frame.own(target(device, width, height, 'rgba32float'))
+            draw(0, varying.framebuffer, 1); draw(0, pixel.framebuffer, 2); device.submit()
+            snapshot.probe = {
+              varying: await floatPixels(device, varying.texture, varying.framebuffer),
+              pixel: await floatPixels(device, pixel.texture, pixel.framebuffer),
+            }
+          }
+          return snapshot
         } finally { frame.destroy() }
       },
       destroy (): void { try { scope.destroy() } finally { device.destroy() } },
