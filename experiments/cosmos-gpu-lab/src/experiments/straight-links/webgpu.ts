@@ -17,6 +17,21 @@ function coverageSource (method: HardCoverage): string {
   }
   return source
 }
+function captureSource (program: string): string {
+  const signature = '@vertex fn vertexMain(@builtin(vertex_index) index: u32, @builtin(instance_index) instance: u32)'
+  if (!program.includes(signature)) throw new Error('WebGPU vertex capture location changed')
+  return `${program.replace(signature, 'fn originalVertex(index: u32, instance: u32)')}
+struct CaptureVertex { @builtin(position) position: vec4f, @location(0) @interpolate(flat) clip: vec4f }
+@vertex fn captureVertex(@builtin(vertex_index) index: u32, @builtin(instance_index) instance: u32) -> CaptureVertex {
+  let original = originalVertex(index,instance);
+  var result: CaptureVertex;
+  result.clip = vec4f(original.position.xy,f32(links[instance].endpoints.z + 1u),f32(index + 1u));
+  result.position = vec4f((f32(index) + 0.5) * 0.5 - 1.0,1.0 - (f32(instance) + 0.5) * 2.0 / f32(arrayLength(&links)),0,1);
+  if (original.position.w != 1.0 || original.position.z != 0.0) { result.position = vec4f(2,2,2,1); }
+  return result;
+}
+@fragment fn captureFragment(input: CaptureVertex) -> @location(0) vec4f { return input.clip; }`
+}
 export async function createLinksWebGPU (canvas: HTMLCanvasElement): Promise<Backend> {
   let failure: string | undefined
   const device = await createDevice('webgpu', canvas, false, error => { failure ??= error.message; return true }); const scope = resourceScope()
@@ -29,12 +44,13 @@ export async function createLinksWebGPU (canvas: HTMLCanvasElement): Promise<Bac
     const kernels = new Map<string, RenderKernel>()
     const kernel = (format: TextureFormatColor, blend: boolean, display: boolean, picking: boolean, probe: number, method: HardCoverage): RenderKernel => {
       const key = `${format}:${blend}:${display}:${picking}:${probe}:${method}`; const cached = kernels.get(key); if (cached) return cached
+      const code = probe === 3 ? captureSource(coverageSource(method)) : coverageSource(method)
       const result = scope.own(new RenderKernel(device, {
-        vertexSource: `${coverageSource(method)}\n${SOURCE_ALPHA_WGSL}`,
-        fragmentSource: `${coverageSource(method)}\n${SOURCE_ALPHA_WGSL}`,
-        vertexEntryPoint: 'vertexMain',
-        fragmentEntryPoint: probe === 1 ? 'varyingProbe' : probe === 2 ? 'pixelProbe' : 'fragmentMain',
-        topology: 'triangle-strip',
+        vertexSource: `${code}\n${SOURCE_ALPHA_WGSL}`,
+        fragmentSource: `${code}\n${SOURCE_ALPHA_WGSL}`,
+        vertexEntryPoint: probe === 3 ? 'captureVertex' : 'vertexMain',
+        fragmentEntryPoint: probe === 3 ? 'captureFragment' : probe === 1 ? 'varyingProbe' : probe === 2 ? 'pixelProbe' : 'fragmentMain',
+        topology: probe === 3 ? 'point-list' : 'triangle-strip',
         shaderLayout,
         colorAttachmentFormats: [format],
         depthStencilAttachmentFormat: display
@@ -48,8 +64,35 @@ export async function createLinksWebGPU (canvas: HTMLCanvasElement): Promise<Bac
       }))
       kernels.set(key, result); return result
     }
+    const carrierLayout = { attributes: [], bindings: bindingLayout([['capturePositions', 'read-only-storage']]) }
+    const carrierArray = scope.own(device.createVertexArray({ shaderLayout: carrierLayout, bufferLayout: [] }))
+    let carrierKernel: RenderKernel | undefined
     return {
       info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
+      async rasterize (clip, width, height): Promise<Uint8Array> {
+        const frame = resourceScope()
+        try {
+          const output = frame.own(target(device, width, height)); const buffer = frame.own(upload(device, new Float32Array(clip)))
+          const code = `@group(0) @binding(0) var<storage,read> capturePositions: array<vec2f>;
+            @vertex fn vertexMain(@builtin(vertex_index) index: u32) -> @builtin(position) vec4f {
+              return vec4f(capturePositions[index],0,1);
+            }
+            @fragment fn fragmentMain() -> @location(0) vec4f { return vec4f(1); }`
+          carrierKernel ??= scope.own(new RenderKernel(device, {
+            vertexSource: code,
+            fragmentSource: code,
+            vertexEntryPoint: 'vertexMain',
+            fragmentEntryPoint: 'fragmentMain',
+            topology: 'triangle-strip',
+            shaderLayout: carrierLayout,
+            colorAttachmentFormats: ['rgba8unorm'],
+            parameters: { blend: false, cullMode: 'none' },
+          }))
+          const pass = device.beginRenderPass({ framebuffer: output.framebuffer, clearColor: [0, 0, 0, 0], clearDepth: false })
+          try { carrierKernel.draw(pass, { vertexArray: carrierArray, vertexCount: 4, bindings: { capturePositions: buffer } }) } finally { pass.end() }
+          device.submit(); return await pixels(device, output.texture, output.framebuffer)
+        } finally { frame.destroy() }
+      },
       async render (scene, settings, variant, display = true, diagnose = false): Promise<Snapshot> {
         const frame = resourceScope()
         try {
@@ -100,10 +143,12 @@ export async function createLinksWebGPU (canvas: HTMLCanvasElement): Promise<Bac
           if (diagnose) {
             const varying = frame.own(target(device, width, height, 'rgba32float'))
             const pixel = frame.own(target(device, width, height, 'rgba32float'))
-            draw(0, varying.framebuffer, 1); draw(0, pixel.framebuffer, 2); device.submit()
+            const vertices = frame.own(target(device, 4, Math.max(1, scene.links.length), 'rgba32float'))
+            draw(0, varying.framebuffer, 1); draw(0, pixel.framebuffer, 2); draw(0, vertices.framebuffer, 3); device.submit()
             result.probe = {
               varying: await floatPixels(device, varying.texture, varying.framebuffer),
               pixel: await floatPixels(device, pixel.texture, pixel.framebuffer),
+              vertices: await floatPixels(device, vertices.texture, vertices.framebuffer),
             }
           }
           if (failure || device.isLost) throw new Error(failure ?? 'WebGPU device lost')
