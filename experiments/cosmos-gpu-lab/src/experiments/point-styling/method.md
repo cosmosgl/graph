@@ -1,8 +1,8 @@
 ---
 source: Recorded findings
-recorded: 2026-11-14
+recorded: 2026-11-15
 device: Apple M3; installed Chrome 157 and inline Chromium 157
-scope: On M3, source-texel sampling passes 48 static packing configurations and all 72 dynamic image-update rows. GPU color/IDs and CPU masks match exactly; CPU color error is at most 1/255. All 144 prior packing records remain unchanged. Production compatibility stays separate; broader devices, image decoding and rendering cost remain open.
+scope: The 56-row M3 PNG study accepts production canvas decoding and premultiplied-bitmap to sRGB ImageData normalization in 8/8 configurations each. Both preserve GPU colors/IDs and exact CPU masks; CPU colors stay within 2/255. Other decode/upload paths retain failures. All 144 prior static records remain unchanged; legacy compatibility and broader device/codec coverage remain separate.
 ---
 
 ## Question
@@ -1302,6 +1302,164 @@ production image API and host lifecycle still need integration validation.
    Raw measurement files remain outside the repository.
 6. Run `LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling`
    and open the printed session URL in Codex's inline browser.
+
+
+
+## Image decoding and color handling
+
+Cosmos accepts **`ImageData`**, rather than decoding a URL itself. Its image story uses
+`HTMLImageElement → default 2D canvas → getImageData()`. The packer copies those bytes and does
+not interpret `ImageData.colorSpace`. This study retains that exact decoding control and its
+production draw/picking GLSL. Candidate decoding is tested before upload, independently of
+the existing full-frame rendering checks.
+
+### Encoded inputs and source checks
+
+Four generated **9 × 5 RGBA8 PNGs** contain identical asymmetric pixels and an alpha ramp
+including 0, 1, 2, 32, 64, 128, 192, 254 and 255. They differ only in color metadata:
+untagged, an sRGB chunk, a linear-sRGB ICC profile and a Display-P3 ICC profile. The fixtures
+are generated directly from bytes, without a canvas encoder that could discard transparent
+RGB first. Their ICC matrix/TRC profiles are constructed from the
+[ICC profile specification](https://www.color.org/specifications/ICC.1-2022-05.pdf) and
+[CSS Color 4 matrices and transfer functions](https://www.w3.org/TR/css-color-4/).
+
+The CPU independently predicts opaque sRGB values using D65 color conversion; the ICC files
+store D50-adapted colorants. Decoding must retain dimensions, row order and every alpha byte,
+produce sRGB ImageData, and match opaque color intent within the existing **2/255** budget.
+All normalized bytes are additionally compared with the production canvas output at that
+same budget. GPU masks/IDs remain exact, CPU/GPU colors retain the original 2/255 limit,
+picked pixels must remain visible, and pick-only draws must preserve color bytes exactly.
+
+There are two distinct questions: **did decoding produce the intended input?** and **did the
+GPU render that input correctly?** A renderer can agree with its CPU reference while both
+receive incorrectly decoded colors. The source audit therefore contributes to the overall
+verdict. Every pixel remains included in the rendering audit.
+
+### Why premultiplication belongs to the decode policy
+
+The passing candidate explicitly requests a premultiplied bitmap, then draws it into an
+sRGB 2D canvas and reads straight-alpha RGBA8 ImageData:
+
+```typescript
+const bitmap = await createImageBitmap(blob, {
+  premultiplyAlpha: 'premultiply',
+  colorSpaceConversion: 'default',
+  imageOrientation: 'from-image',
+})
+// ctx is a 2D context created with {colorSpace: 'srgb'}.
+ctx.drawImage(bitmap, 0, 0)
+const imageData = ctx.getImageData(0, 0, bitmap.width, bitmap.height, {
+  colorSpace: 'srgb',
+})
+bitmap.close()
+```
+
+**The atlas still receives straight-alpha bytes.** The bitmap's storage choice is not a
+request to change Cosmos's blend equation or upload premultiplied RGB as ordinary ImageData.
+The [HTML bitmap options](https://html.spec.whatwg.org/multipage/imagebitmap-and-animations.html)
+define the decode choices. The [2D canvas alpha model](https://html.spec.whatwg.org/multipage/canvas.html#premultiplied-alpha-and-the-2d-rendering-context)
+uses premultiplied storage and permits precision loss during conversion to or from straight
+alpha. On this M3 run, the canvas control changes hidden RGB at all three zero-alpha pixels
+in each PNG, and changes RGB at 12, 12, 13 and 11 translucent pixels respectively. These
+file-to-canvas changes are reported; the study does not claim lossless preservation of every
+encoded PNG component. Its compatibility input is the production-decoded ImageData.
+
+The render target and atlas remain **RGBA8 unorm**. Color normalization happens at the input
+boundary. No sRGB texture format, linear-light blending, shader gamma correction or different
+source-alpha formula is introduced.
+
+### Direct external-image copies are separate candidates
+
+The byte paths use public luma `Texture.writeData()`. Direct candidates use
+`Texture.copyExternalImage()` with explicit region, `colorSpace: 'srgb'`,
+`premultipliedAlpha: false` and `flipY: false`. Their textures declare the render/copy usage
+needed by the WebGPU external-copy path. Both sampler resources are updated. CPU expectations
+come from the separately normalized image, not from GPU readback.
+
+A WebGL ImageBitmap upload does not apply the unpack premultiplication/flip flags as it does
+for other image sources; those choices belong to bitmap construction. See the
+[WebGL upload specification](https://registry.khronos.org/webgl/specs/latest/1.0/) and
+[luma texture API](https://luma.gl/docs/api-reference/core/resources/texture).
+The experiment consequently keeps straight, premultiplied and deliberately flipped bitmaps
+as distinct paths. Passing a few images through an external-copy API does not establish that
+it preserves the production decode/alpha contract.
+
+### Recorded decoding matrix
+
+Recorded **15 November 2026**, Codex inline Chromium **157**, **Apple M3 / ANGLE Metal**, luma
+**10.0.0-alpha.4**. Seven paths × nearest/linear × four profiles give **56 rows** and
+**16,056,320 paired pixel positions**. Profiles are native, ratio 2, zoom 0.5 with opacity 0.35
+and reversed order, and opacity zero. Every row retains the unchanged production decoding
+and production shader control.
+
+| Decode / upload path | Accepted rows | Finding |
+|---|---|---|
+| Production image → canvas → bytes | **8/8** | Source checks and full renderer gates pass |
+| Straight bitmap → sRGB ImageData → bytes | **0/8** | Profiled translucent input differs; linear filtering exposes color failures |
+| Premultiplied bitmap → sRGB ImageData → bytes | **8/8** | Production-normalized input and candidate images are byte-identical |
+| Straight bitmap → luma external copy | **0/8** | Source differences and WebGPU color failures |
+| No color conversion → canvas → bytes | **0/8** | Profiled opaque colors are wrong, although paired GPU images agree |
+| Premultiplied bitmap → luma external copy | **2/8** | Only the two zero-opacity rows pass; all visible configurations fail |
+| Flipped bitmap → luma external copy | **0/8** | Orientation/source checks reject it |
+
+For the two passing paths, GPU color bytes/IDs are identical, independent CPU masks are exact,
+source visibility failures and pick-only color changes are zero, and rendered CPU colors
+remain within **2/255**. Opaque decoded color intent differs by at most **1/255**. The
+premultiplied-bitmap normalization changes **zero canonical rendered color pixels** in either
+backend across all eight settings. Legacy compatibility remains a separate **0/56** result;
+passing decode normalization does not accept the retained sprite/visibility discrepancies.
+
+The failed controls explain why each stage needs checking:
+
+- **Straight bitmap normalization:** all opaque colors and alpha bytes pass, but six
+  linear-sRGB and three P3 source pixels exceed the normalized input budget. Native nearest
+  rendering differs by at most 1/255 and could hide the issue. Native linear rendering then
+  rejects **313 pixels**, with a maximum **38/255** error; ratio-2 linear rejects 1,239 pixels.
+  Interpolating the changed low-alpha RGB makes the difference visible. These pixels remain
+  rejected; the budget and CPU reference are unchanged.
+- **Skipping color conversion:** native nearest pixel **(117, 67)** should be
+  **[162, 99, 38, 255]**, but both APIs render **[153, 102, 51, 255]**. Paired GPU agreement
+  does not validate color intent. The complete path reaches a 73/255 canonical color error.
+- **Direct copies:** straight bitmaps reach 37/255 CPU color error; premultiplied direct
+  uploads reach 38/255. The latter's native nearest WebGL result rejects 1,696 pixels while
+  WebGPU stays within 1/255 of the normalized draw. These are measured pipeline differences,
+  not proof of a driver defect or a portable failure count.
+
+All **53 rendering/decoding/UI tests pass** inline. They include analytical opaque colors,
+negative orientation checks, unchanged production records across decode paths, exact
+restoration, visible failed results, cancellation and selected-path/canvas preservation.
+All 56 production control records match their corresponding reference-path records. A
+separate 144-row static packing rerun after external copies matches the previous study
+record for record, including its rejected controls.
+
+**Migration finding:** preserve an explicit sRGB, straight-alpha ImageData boundary for the
+port. Premultiplied bitmap decoding followed by canvas normalization matches the existing
+control in this bounded M3 study. Direct ImageBitmap uploads are not accepted replacements.
+PNG decoding, GPU sampling and compositing are separate contracts; no blanket image-codec,
+wide-gamut-output or production migration approval follows from these runs.
+
+### Reproduce decoding and color handling
+
+1. Select **Fixture → Atlas · image decoding and color**. The default **Premult bitmap →
+   bytes** path uses source-byte picking, explicit nearest texels and clamped linear filtering.
+2. Read **Decoded source and color handling**, **Normalized input preserved** and the full
+   framebuffer/CPU/source audits. Switch between both filters, then compare the straight,
+   unmanaged, direct and flipped paths. Failures stay visible above and below the graph.
+3. Select **Renderer → Production control** to retain image + default canvas decoding and
+   original production shaders, regardless of the requested candidate decode selection.
+4. Run **Run decoding sweep** for all 56 rows. Cancellation retains completed rows and restores
+   the selected live path and canvases. Then select a static fixture and rerun the packing
+   controls to check restoration after external uploads.
+5. Export schema **14** JSON locally for encoded PNG bytes, ICC/source inputs, requested and
+   actual decode options, normalized source pixels, source/canonical/frame verdicts and first
+   GPU failures. Choose **Image + canvas** to export its normalized source pixels separately.
+   Raw measurements remain outside the repository.
+6. Run `LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling`
+   and open the printed session URL in Codex's inline browser.
+
+JPEG/WebP/AVIF, EXIF orientation, network/CORS failures, asynchronous load ordering, arbitrary
+ICC profiles, wide-gamut/HDR output, mipmaps, GPU/decode cost and other native adapters remain
+unvalidated. This is a frozen PNG input-normalization study, not the complete Graph image API.
 
 
 ## Reproduce
