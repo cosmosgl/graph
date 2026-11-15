@@ -30,6 +30,17 @@ export const validationContracts: Record<string, ValidationContract> = {
       'CPU diamond ties and exact color-preservation rejections stay open without a reference/tolerance change. ' +
       'Other codecs, concurrent loading/frames, wide-gamut output, GPU cost and broader devices remain open.',
   },
+  'straight-links': {
+    question: 'Do production Cosmos straight ribbons and luma WebGPU agree with the rendered and pickable footprint?',
+    reference: 'Unmodified production straight-link GLSL and geometry; a separate visible-footprint/source-byte ID candidate; ' +
+      'independent scalar ribbon triangles, masks and RGBA8 colors.',
+    acceptance: 'Exact IDs and scalar masks at every pixel; at most two RGBA8 channel levels for color; no picked pixels with zero rendered alpha.',
+    coverage: 'Straight solid ribbons, widths/defaults, subpixel attenuation, blend/hard modes, opacity, zoom, DPR, ordering, ' +
+      'absent endpoints, overlap and fractional/aligned boundary controls. Source checks and original color preservation remain separate.',
+    limits: 'Production host picking deliberately adds five CSS pixels of ribbon width. Candidate picking changes that policy, not the production control. ' +
+      'Curves, patterns, arrows, endpoint gradients, visibility fading, highlights, transitions, pointer scheduling, full Graph/host integration, ' +
+      'broader native devices and runtime GPU cost remain open.',
+  },
   'center-mass': {
     question: 'Do blend accumulation and compute reduction calculate the same center accurately?',
     reference: 'Mathematical reference: JavaScript double-precision sum of the uploaded float32 coordinates.',

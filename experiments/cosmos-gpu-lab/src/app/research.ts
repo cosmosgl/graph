@@ -120,6 +120,21 @@ export const research: Record<string, ResearchSummary> = {
       { page: 'center', state: 'Supporting investigation', description: 'Optional center attraction, aggregate checks and paired added GPU cost.' },
     ],
   },
+  'straight-links': {
+    method: 'validation-contract',
+    evidence: 'method',
+    milestone: 'rendering',
+    reviewed: '2026-11-15',
+    comparison: 'Production straight ribbons → WebGL / WebGPU color and host IDs → independent scalar masks and source checks',
+    question: 'Do straight links render and pick consistently through public luma APIs?',
+    conclusion: 'Straight-link candidate passes 30/40 cases; hard-edge and raster-boundary differences remain rejected.',
+    scope: 'Apple M3, inline Chromium 157: 22/32 nonzero-opacity and 8/8 opacity-zero cases pass. ' +
+      'All 40 preserve original color bytes and have zero invisible source picks; ten hard/raster boundary cases remain rejected.',
+    variant: 'Production GLSL control and visible-footprint/source-byte ID candidate; original color; luma 10.0.0-alpha.4; Apple M3',
+    next: 'Isolate hard-edge coverage rounding, then cap/fractional raster differences, before broader link styles and interaction.',
+    reproduce: 'Compare both picking rules, blending, zoom and DPR, then run the 40-case straight-link sweep and export JSON locally.',
+    investigations: [{ page: 'method', state: 'Current evidence', description: 'Straight-ribbon geometry, ID policies and full-frame comparisons.' }],
+  },
   'point-styling': {
     method: 'validation-contract',
     comparison: 'Same styled points → production WebGL / WebGPU color and ID images → full-image and scalar-mask checks',
@@ -167,11 +182,11 @@ export const milestones = [
   {
     id: 'rendering',
     title: 'Rendering and interaction',
-    position: 'Bounded styling, images and 88/96 ring/greyout cases demonstrated on M3',
+    position: 'Bounded point styles/images, 88/96 ring cases and 30/40 straight-link cases demonstrated on M3',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
-    gates: ['Validate production link rendering and picking, beginning with straight ribbons, styles, overlap and IDs.',
+    gates: ['Resolve straight-link hard-edge/raster failures, then validate curved ribbons, patterns, arrows and link states.',
       'Retain polygon CPU/preservation gates; validate transitions and pointer behavior, measure accepted rendering cost and broaden native devices.'],
-    evidence: [['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],
+    evidence: [['straight-links', 'Straight-link rendering/picking'], ['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],
   },
   {
     id: 'integration',
@@ -204,7 +219,7 @@ export const mainOpenIssues = [
 // used by Roadmap and the experiment page, never from this browser's live run.
 export const migrationFocus = {
   milestone: 'rendering',
-  experiment: 'point-styling',
+  experiment: 'straight-links',
   phase: 'Prototype validation',
   status: 'Production Cosmos uses WebGL. Integration and production acceptance remain open.',
   demonstrated: ['collision', 'matched-layout', 'point-styling'],

@@ -67,7 +67,9 @@ Time-box one focused investigation of the polygon predicates in GLSL, WGSL and t
 
 ### 2 — Validate production link rendering and picking
 
-Start with production straight ribbons: endpoints from resident positions, widths, zoom scaling, colors/alpha, overlap, stable IDs and rendered/picked agreement. Minimal links in the spring experiments do not establish this contract.
+The [production straight-link experiment](#/straight-links) now compares unchanged GLSL with a public-luma WebGPU port and independent scalar masks/colors. Its visible-footprint/source-byte candidate passes **30/40** M3 inline-browser rows: **22/32 nonzero-opacity** plus **8/8 opacity-zero** cases. All 40 preserve original color bytes and have zero invisible source picks. The legacy five-CSS-pixel host-pick width allowance is retained as a separate control; its eight passes are all opacity zero, so the candidate does not establish legacy picking compatibility.
+
+**Next exit evidence:** isolate hard-edge coverage rounding first, then fractional/cap raster and scalar top-left differences. Ten cases remain rejected with unchanged exact IDs/masks and the **2/255** color budget. Native hard ribbons can differ by a whole row; ratio-two aligned caps still disagree with the scalar reference even when both GPUs agree. Frozen GPU endpoint reads demonstrate the rendering mechanism, not full evolving Graph integration or cost. Minimal lines in the spring experiments do not establish this contract.
 
 Then add curved ribbons, endpoint gradients, dashed/dotted patterns, arrowheads, distance visibility and hover/focus/greyout states. Keep deterministic rendering inputs separate from evolving force differences.
 
@@ -124,6 +126,7 @@ The lab's alpha pin is an experimental choice, not the production dependency dec
 | [Point capacity](#/point-capacity/docs/findings), [retained capacity](#/point-capacity/docs/reuse) | Same-device prefix transfers, updates and cleanup | Retention/trim, host ownership and total driver memory remain open |
 | [Controlled profiling](#/gpu-stage-profile), [hub springs](#/hub-springs), [grid aggregation](#/cell-aggregation) | Balanced timing and bounded M3 optimizations | Opt-in candidates and device-specific results do not establish a universal gain |
 | [Matched layouts](#/matched-layout/docs/findings), [collision trajectories](#/collision/docs/trajectories) | Independent CPU/GPU behavior and separate geometry observations | Force combinations, arithmetic variants, counts and schedules must stay explicit |
+| [Straight-link rendering and picking](#/straight-links) | Production straight ribbons, width/default/alpha/zoom/DPR/order checks and separate padded/visible ID policies; 30/40 M3 cases accepted | Ten hard/raster boundary failures, legacy ID compatibility, broader link styles, Graph integration, cost and native portability remain open |
 | [Circle rendering](#/point-rendering), [performance lab](#/performance-lab) | Initial visual parity and repeatable isolated timing | Complete renderer, interaction and engine-level speedup remain unproven |
 
 The v10 WebGL 100k-star context-loss investigation remains [parked](#/weighted-links/docs/context-loss). Failed baseline runs cannot support performance comparisons. Bounded M3 evidence and software-browser regressions do not establish cross-device readiness.
