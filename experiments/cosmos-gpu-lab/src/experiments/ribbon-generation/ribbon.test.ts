@@ -47,7 +47,17 @@ describe('compute ribbon generation', () => {
         }
       }
       expect(assessment({ ...r, validation: { ...r.validation, colorPixels: 1 } })).toContain('gate failed')
-      expect(assessment({ ...r, results: r.results.map(row => ({ ...row, gpuMs: null })) })).toContain('unavailable')
+      // Assessment precedence is independent of the adapter running this test.
+      // Even apparently excellent software timings must not imply native gains.
+      const software = { ...r, device: { ...r.device, fallback: true } }
+      const softwareVerdict = 'Software adapter: execution evidence only; native cost remains unmeasured.'
+      expect(assessment(software)).toBe(softwareVerdict)
+      expect(assessment({ ...software, results: r.results.map(row => ({ ...row, gpuMs: null })) })).toBe(softwareVerdict)
+      expect(assessment({ ...software, results: r.results.map((row, i) => ({ ...row, gpuMs: i < 2 ? 10 : 1, wallMs: i < 2 ? 10 : 1 })) }))
+        .toBe(softwareVerdict)
+      if (r.device.fallback) expect(assessment(r)).toBe(softwareVerdict)
+      expect(assessment({ ...r, device: { ...r.device, fallback: false }, results: r.results.map(row => ({ ...row, gpuMs: null })) }))
+        .toBe('GPU timing unavailable or below resolution. No speed conclusion.')
     } finally { device.destroy() }
   })
 })
