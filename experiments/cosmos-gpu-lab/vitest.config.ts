@@ -1,25 +1,6 @@
 import { defineConfig } from 'vitest/config'
-import { playwright } from '@vitest/browser-playwright'
-
-// ANGLE alone enables WebGL, but Linux headless WebGPU canvas presentation also
-// needs Vulkan compositing. Without it, canvas allocation loses the device and
-// later readbacks fail even though offscreen compute/rendering works.
-const softwareArgs = [
-  '--enable-unsafe-webgpu', '--use-angle=swiftshader',
-  ...(process.platform === 'linux' ? ['--use-vulkan=swiftshader', '--enable-features=Vulkan'] : []),
-]
-const browserProvider = playwright({ launchOptions: { ...(process.env.LAB_NATIVE_GPU === '1' ? { channel: 'chrome', args: ['--enable-unsafe-webgpu'] }
-  : { args: softwareArgs }) } })
-// Run the real suite in a user-selected inline browser without launching Chrome.
-// Open the printed session URL through the Codex browser tool to start the tests.
-if (process.env.LAB_INLINE_BROWSER === '1') {
-  browserProvider.name = 'codex-inline'
-  browserProvider.providerFactory = () => ({
-    name: 'codex-inline', supportsParallelism: false, getCommandsContext: () => ({}),
-    openPage: async (_session, url): Promise<void> => { process.stdout.write(`\nOpen inline test session: ${url}\n`) },
-    close: () => {},
-  })
-}
+import { labBrowser } from './browser-provider.mjs'
+import { writeLabArtifact } from './scripts/artifacts.mjs'
 
 // Explicit opt-in for GPU regression tests; fail if no adapter can be created.
 // Default: software Chromium. LAB_NATIVE_GPU=1 uses installed Chrome without forcing an adapter.
@@ -58,13 +39,6 @@ export default defineConfig({
     ],
     testTimeout: 60000,
     maxWorkers: 1,
-    browser: {
-      enabled: true,
-      headless: process.env.LAB_INLINE_BROWSER !== '1',
-      connectTimeout: process.env.LAB_INLINE_BROWSER === '1' ? 180000 : 60000,
-      screenshotFailures: false,
-      provider: browserProvider,
-      instances: [{ browser: 'chromium' }],
-    },
+    browser: { ...labBrowser(true), commands: { writeLabArtifact } },
   },
 })

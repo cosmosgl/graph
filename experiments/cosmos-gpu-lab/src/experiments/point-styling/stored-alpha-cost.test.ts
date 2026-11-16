@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest'
+import { writeArtifact } from '../../testing/artifacts'
 import { DEFAULTS, point } from './data'
 import { createStylingWebGL } from './webgl'
 import { createStylingWebGPU } from './webgpu'
@@ -35,8 +36,9 @@ for (const [lane, create] of [['webgl', createStylingWebGL], ['webgpu', createSt
 const sweep = it.skipIf(!import.meta.env.LAB_STORED_ALPHA_SWEEP || !import.meta.env.LAB_NATIVE_GPU)
 sweep('records the full bounded native stored-alpha cost sweep', async ({ task }) => {
   const rows: StoredAlphaCostRow[] = []; task.meta.storedAlphaCost = rows
-  await runStoredAlphaCost(row => {
+  await runStoredAlphaCost(async row => {
     rows.push(row)
+    await writeArtifact(`stored-alpha-${row.lane}-${row.count}-${row.overlapping}`, row)
     // eslint-disable-next-line no-console
     console.info('Stored-alpha cost', JSON.stringify({
       count: row.count,

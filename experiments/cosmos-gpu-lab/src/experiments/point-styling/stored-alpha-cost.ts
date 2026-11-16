@@ -89,7 +89,7 @@ export async function measureStoredAlphaCase (
   }
 }
 export async function runStoredAlphaCost (
-  onRow: (row: StoredAlphaCostRow) => void, cancelled: () => boolean, counts: readonly number[] = STORED_ALPHA_COST_POLICY.counts
+  onRow: (row: StoredAlphaCostRow) => void | Promise<void>, cancelled: () => boolean, counts: readonly number[] = STORED_ALPHA_COST_POLICY.counts
 ): Promise<void> {
   const gl = await createStylingWebGL(document.createElement('canvas'), undefined, true)
   let gpu: Backend | undefined
@@ -102,7 +102,7 @@ export async function runStoredAlphaCost (
           if (cancelled()) return
           const row = await measureStoredAlphaCase(backend, lane, count, dense, cancelled)
           if (!row) return
-          onRow(row)
+          await onRow(row)
         }
       }
     }

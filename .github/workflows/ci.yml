@@ -42,6 +42,7 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test
       - run: pnpm --filter @cosmos.gl/gpu-lab test:ui
+      - run: node --test scripts/lab-validation.test.mjs experiments/cosmos-gpu-lab/scripts/artifacts.test.mjs
       # The build exits 0 even when TypeScript reports errors; the grep turns
       # them into a failure.
       - name: Build

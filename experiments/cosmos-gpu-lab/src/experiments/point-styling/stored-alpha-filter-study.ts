@@ -67,7 +67,7 @@ export function summarizeFilteredAlpha (row: FilteredAlphaCostRow): Record<strin
   return result
 }
 export async function runFilteredAlphaCost (
-  onRow: (row: FilteredAlphaCostRow) => void, cancelled: () => boolean, counts: readonly number[] = [16, 64, 256, 1024]
+  onRow: (row: FilteredAlphaCostRow) => void | Promise<void>, cancelled: () => boolean, counts: readonly number[] = [16, 64, 256, 1024]
 ): Promise<void> {
   const gl = await createStylingWebGL(document.createElement('canvas'))
   let gpu: Backend | undefined
@@ -80,7 +80,7 @@ export async function runFilteredAlphaCost (
           if (cancelled()) return
           const row = await measureFilteredAlphaCase(backend, lane, count, dense, cancelled)
           if (!row) return
-          onRow(row)
+          await onRow(row)
         }
       }
     }

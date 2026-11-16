@@ -51,7 +51,7 @@ No production shaders, configuration or picking policy changed. This screen does
 The live benchmark controls have been removed. The original harness remains available for explicit command-line reproduction of the bounded six-workload/two-repeat screen:
 
 ```sh
-LAB_RIBBON_COST=1 LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/ribbon-generation/cost.test.ts -u
+LAB_RIBBON_COST=1 LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/ribbon-generation/cost.test.ts
 ```
 
-It writes local, ignored `captures/ribbon-cost-0.json` and `captures/ribbon-cost-1.json`. `-u` replaces prior local measurements; these are artifacts, not expected performance snapshots. The second file contains both repetitions. The test's completion means the screen executed, not that its candidates passed preservation or cost gates. Confirm adapter metadata in the file before treating a run as native.
+It writes local, ignored `captures/local/ribbon-cost-0.json` and `captures/local/ribbon-cost-1.json`. The artifact writer replaces prior local measurements without snapshot comparison; no `-u` is needed. The second file contains both repetitions. The test's completion means the screen executed, not that its candidates passed preservation or cost gates. Confirm adapter metadata in the file before treating a run as native.

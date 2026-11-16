@@ -1,4 +1,5 @@
 import { expect, it } from 'vitest'
+import { writeArtifact } from '../../testing/artifacts'
 import { DEFAULTS, fixture, point, type Point, type Settings } from './data'
 import { pointOrder } from './point-effects'
 import { storedAlphaCandidates } from './stored-alpha-filter'
@@ -97,8 +98,9 @@ for (const [lane, create] of [['webgl', createStylingWebGL], ['webgpu', createSt
 declare module 'vitest' { interface TaskMeta { filteredAlphaCost?: FilteredAlphaCostRow[] } }
 it.skipIf(!import.meta.env.LAB_STORED_ALPHA_SWEEP)('records paired filtered stored-alpha cost on the selected adapter', async ({ task }) => {
   const rows: FilteredAlphaCostRow[] = []; task.meta.filteredAlphaCost = rows
-  await runFilteredAlphaCost(row => {
+  await runFilteredAlphaCost(async row => {
     rows.push(row)
+    await writeArtifact(`filtered-alpha-${row.lane}-${row.count}-${row.overlapping}`, row)
     // eslint-disable-next-line no-console
     console.info('Filtered-alpha cost', JSON.stringify({
       lane: row.lane,

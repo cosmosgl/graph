@@ -1,0 +1,67 @@
+name: Lab validation
+on:
+  workflow_dispatch:
+    inputs:
+      investigation:
+        description: Software investigation (native-only tests remain skipped)
+        type: choice
+        options: [arithmetic, point-styling, links, full]
+        default: point-styling
+      pr_number:
+        description: Optional open PR number; test its pinned merge revision
+        type: string
+        default: ''
+      full_sweep:
+        description: Enable this investigation's explicit software cost sweeps
+        type: boolean
+        default: false
+permissions:
+  contents: read
+  pull-requests: read
+jobs:
+  lab-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LAB_INVESTIGATION: ${{ inputs.investigation }}
+      LAB_FULL_SWEEP: ${{ inputs.full_sweep }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Resolve immutable test revision
+        id: revision
+        env:
+          LAB_REVISION_FILE: ${{ runner.temp }}/lab-revision.json
+          GH_TOKEN: ${{ github.token }}
+          LAB_PR_NUMBER: ${{ inputs.pr_number }}
+        run: node scripts/lab-validation.mjs resolve
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.revision.outputs.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@v6
+      - id: node
+        run: echo "floor=$(node -p "require('./package.json').engines.node.match(/\d+/)[0]")" >> "$GITHUB_OUTPUT"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.node.outputs.floor }}
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - name: Validate selection and merge contracts
+        run: node --test scripts/lab-validation.test.mjs
+      - name: Run selected investigation
+        env:
+          LAB_REVISION_FILE: ${{ runner.temp }}/lab-revision.json
+        run: node scripts/lab-validation.mjs run
+      - name: Retain evidence, including failed assertions
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/lab-revision.json
+            experiments/cosmos-gpu-lab/captures/validation-${{ github.run_id }}-${{ github.run_attempt }}/
+          if-no-files-found: warn
+          retention-days: 14

@@ -1,4 +1,5 @@
 import { expect, it, vi } from 'vitest'
+import { writeArtifact } from '../../testing/artifacts'
 import { createFixture, PARAMETERS } from '../many-body/data'
 import { chooseOperations, summarize, TIMING_POLICY, type Measurement } from '../many-body/timing'
 import { frameFor, buildReference } from './data'
@@ -77,7 +78,7 @@ for (const count of [8192, 16384]) {
           rows: ['residual', 'integer-midpoint'].map((arithmetic, lane) => ({ arithmetic, validation: validation[lane], ...summarize(samples[lane]) })),
         }
         // One distinct ignored file per case also retains completed cases on cancellation.
-        await expect(JSON.stringify(record, null, 2)).toMatchFileSnapshot(`../../../captures/far-arithmetic-cost-${count}-${mode}.json`)
+        await writeArtifact(`far-arithmetic-cost-${count}-${mode}`, record)
       } finally {
         lanes.forEach(lane => lane.destroy())
         vi.mocked(builder).mockImplementation(original)
