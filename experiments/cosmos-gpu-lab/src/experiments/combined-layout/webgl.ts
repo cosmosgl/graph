@@ -1,5 +1,6 @@
 import { Texture, UniformStore, type Buffer, type Device } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
+import { uploadSpringTextures } from '../weighted-links/spring-textures'
 import { graphRgb } from '../../runtime/palette'
 import { forceFrag } from '../../../../../src/modules/ForceLink/force-spring'
 import gravitySource from '../../../../../src/modules/ForceGravity/force-gravity.frag?raw'
@@ -47,16 +48,9 @@ export async function createCombinedWebGL (
       const directions = topology.directions.map(d => {
         const info = new Float32Array(count * 4)
         for (let i = 0; i < count; i++) info.set([d.offsets[i] % linkSize, Math.floor(d.offsets[i] / linkSize), d.offsets[i + 1] - d.offsets[i], 0], i * 4)
-        const indices = new Float32Array(d.neighbors.length * 4); const properties = indices.slice(); const random = indices.slice()
-        for (let i = 0; i < d.neighbors.length; i++) {
-          indices.set([d.neighbors[i] % size, Math.floor(d.neighbors[i] / size)], i * 4)
-          properties.set(d.properties.subarray(i * 4, i * 4 + 2), i * 4); random[i * 4] = d.properties[i * 4 + 2]
-        }
         return {
           linkInfoTexture: texture(size, info),
-          linkIndicesTexture: texture(linkSize, indices),
-          linkPropertiesTexture: texture(linkSize, properties),
-          linkRandomDistanceTexture: texture(linkSize, random),
+          ...uploadSpringTextures(d, size, linkSize, texture),
         }
       })
       const gravityUniforms = own(new UniformStore(device, {

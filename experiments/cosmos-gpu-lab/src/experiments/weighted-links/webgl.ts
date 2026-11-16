@@ -6,6 +6,7 @@ import { forceFrag } from '../../../../../src/modules/ForceLink/force-spring'
 import quad from '../../../../../src/modules/Shared/quad.vert?raw'
 import integrateSource from '../../../../../src/modules/Points/update-position.frag?raw'
 import { waitForGpu } from '../../gpu/luma'
+import { uploadSpringTextures } from './spring-textures'
 import type { LinkBackend, Measurement, Stage, SetupSubmission, WebGLCheckpoint } from './backend'
 import type { GraphInput, Parameters, Topology } from './data'
 import type { Snapshot } from './reference'
@@ -287,16 +288,9 @@ export async function createWebGLBackend (
           info.set([direction.offsets[i] % linkSize, Math.floor(direction.offsets[i] / linkSize),
             direction.offsets[i + 1] - direction.offsets[i], 0], i * 4)
         }
-        const indices = new Float32Array(direction.neighbors.length * 4); const random = indices.slice(); const properties = indices.slice()
-        for (let i = 0; i < direction.neighbors.length; i++) {
-          indices.set([direction.neighbors[i] % pointSize, Math.floor(direction.neighbors[i] / pointSize)], i * 4)
-          properties.set(direction.properties.subarray(i * 4, i * 4 + 2), i * 4); random[i * 4] = direction.properties[i * 4 + 2]
-        }
         return {
           linkInfoTexture: texture(pointSize, info),
-          linkIndicesTexture: texture(linkSize, indices),
-          linkPropertiesTexture: texture(linkSize, properties),
-          linkRandomDistanceTexture: texture(linkSize, random),
+          ...uploadSpringTextures(direction, pointSize, linkSize, texture),
         }
       })
       checkError()
