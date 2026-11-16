@@ -1,5 +1,5 @@
 import { luma } from '@luma.gl/core'
-import { webgpuAdapter, type WebGPUDevice } from '@luma.gl/webgpu'
+import { webgpuAdapter, type WebGPUDevice } from '@luma.gl/core/webgpu'
 import { scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'

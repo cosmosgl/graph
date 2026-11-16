@@ -1,4 +1,5 @@
-import { Model, RenderKernel } from '@luma.gl/engine'
+import { Model } from '@luma.gl/engine'
+import { RenderKernel } from '@luma.gl/graph'
 import { bindingLayout, createDevice, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import { target, floatPixels } from '../../gpu/rgba-readback'

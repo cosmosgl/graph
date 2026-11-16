@@ -25,7 +25,7 @@ it('keeps cancelled timing rows visible and exportable when the comparison canno
     button('stop-timing').click(); release()
     await vi.waitFor(() => expect(button('timing').disabled).toBe(false))
     expect(cancelled).toBe(true)
-    expect(host.querySelector('[data-output="timing"]')!.textContent).toContain('Partial')
+    expect(host.querySelector('[data-output="timing"]')!.textContent).toContain('Unchecked · incomplete batch')
     expect(button('export').disabled).toBe(false); button('export').click()
     const report = JSON.parse(await blob!.text())
     expect(report.frameTimings).toHaveLength(1); expect(report.rows).toEqual([])

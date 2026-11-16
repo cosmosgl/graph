@@ -1,4 +1,4 @@
-import { Kernel } from '@luma.gl/engine'
+import { Kernel } from '@luma.gl/graph'
 import { bindingLayout, createDevice, readFloats, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import { createGraph } from '../combined-layout/data'

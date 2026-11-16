@@ -1,3 +1,4 @@
+import { luma } from '@luma.gl/core'
 import { scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
@@ -115,7 +116,7 @@ export async function createPassDiagnostic (host: HTMLElement, name: 'WebGL' | '
         mode: 'isolated-passes',
         capturedAt: new Date().toISOString(),
         browser: navigator.userAgent,
-        luma: '10.0.0-alpha.4',
+        luma: luma.VERSION,
         backend: name,
         device: backend!.info,
         count: Number(count.value),

@@ -1,5 +1,5 @@
 import { Buffer } from '@luma.gl/core'
-import { Kernel } from '@luma.gl/engine'
+import { Kernel } from '@luma.gl/graph'
 import { bindingLayout, createDevice, readFloats, upload } from '../../gpu/luma'
 import { buildTopology } from '../weighted-links/data'
 import { compareArray, createReferenceIndex, TOLERANCE } from '../weighted-links/reference'

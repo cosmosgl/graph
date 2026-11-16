@@ -1,5 +1,5 @@
 import type { Device, QuerySet } from '@luma.gl/core'
-import type { WEBGLCommandEncoder } from '@luma.gl/webgl'
+import type { WEBGLCommandEncoder } from '@luma.gl/core/webgl'
 import { waitForGpu } from '../../gpu/luma'
 import { readLumaTimer, type TimerStatus } from '../weighted-links/timing'
 
@@ -50,7 +50,7 @@ export async function measureBatch (
   const query = device.features.has('timestamp-query') ? device.createQuerySet({ type: 'timestamp', count: 2 }) : undefined
   try {
     const start = performance.now()
-    // WebGL pass timestamps begin after clear in alpha.4. Use luma command
+    // WebGL pass timestamps begin after clear in alpha.15. Use luma command
     // timestamps there so the first clear is included like all subsequent clears.
     const commandTimestamps = device.type === 'webgl' && query !== undefined
     if (commandTimestamps) (device.commandEncoder as WEBGLCommandEncoder).writeTimestamp(query, 0)

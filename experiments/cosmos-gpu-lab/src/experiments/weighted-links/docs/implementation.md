@@ -18,7 +18,7 @@ order contract, not merely produce the correct neighbor set.
 
 ## Storage layout and luma compatibility
 
-All packages remain pinned to **luma 10.0.0-alpha.4**. The installed package APIs are the compatibility
+All packages remain pinned to **luma 10.0.0-alpha.15**. The installed package APIs are the compatibility
 source of truth; newer online documentation may describe different exports.
 
 | Resource | Layout / ownership |

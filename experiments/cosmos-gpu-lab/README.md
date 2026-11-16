@@ -84,7 +84,7 @@ passes, fences, readback and query sets. Do not access native device handles or 
 objects, including in diagnostics and tests. Shared helpers live in `src/gpu/`. `typecheck` runs a
 source boundary check as well as TypeScript. Canvas 2D remains appropriate for CPU visualizations.
 
-The current implementation uses the pinned luma `10.0.0-alpha.4` APIs throughout. Historical native-API
+The current implementation uses the pinned luma `10.0.0-alpha.15` APIs throughout. Historical native-API
 measurements remain observations of that earlier implementation; rerun benchmarks before comparing
 current performance. New JSON exports identify the GPU API implementation.
 
@@ -248,6 +248,56 @@ cases when WebGPU is unavailable. The root test configuration uses separate engi
 Vite does not resolve the lab's luma v10 imports through the engine's v9 dependency cache. Software-adapter
 timings are not hardware benchmarks.
 
+To run the native-GPU regressions using installed Google Chrome:
+
+```sh
+LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu
+```
+
+This launches Chrome without forcing a software adapter and enables the native arithmetic,
+trajectory and timing regressions as well as UI tests. The separate large-graph research
+runs still require an explicit `LAB_SCALE_COUNT`; they are not part of the default suite.
+
+### Connect an existing browser (optional)
+
+To use an existing WebGPU-capable browser instead of launching Chrome:
+
+```sh
+LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu
+```
+
+Keep the command running and open the printed test-session URL in the browser on the same
+machine within three minutes. Tests start when the page connects; leave it open until the
+terminal reports completion. This mode does not launch or configure the browser. It enables
+the same native-GPU test cases, with the same opt-in research exclusions, but uses the selected
+browser's GPU configuration. Record the browser, device and GPU backend when sharing results.
+
+### Alpha.15 upgrade verification
+
+Checked **16 November 2026**, **Apple M3**, **embedded Chromium browser**, using native-GPU mode
+with a manually connected browser provider. This was a different browser environment from the
+standalone Chrome command above.
+The full run completed all 106 files: **517 passed, 35 failed, 21 opt-in skips**. The first GPU
+failure was the retained 100k-star WebGL simulation/readback case; subsequent adapter failures
+contaminated later tests. A separate stale UI assertion expected “Partial” instead of the existing
+“Unchecked · incomplete batch” label; only that wording assertion was corrected.
+
+Fresh-session reruns establish **548 distinct passing tests** across the full run and follow-ups,
+not a single all-green run. **Four 100k-star WebGL simulation/readback cases remain unresolved**:
+the two early-exit variants, isolated-pass readback and fence-synchronized trajectory. Observations
+include context loss and an isolated first-force mismatch; some cases were blocked by an earlier
+reset. The render-only WebGL 100k control and the WebGPU 100k isolated-pass control both pass separately.
+Production controls and numerical/image tolerances are unchanged. The 21 large-graph research
+cases were not enabled, and these regressions do not replace the recorded experiment matrices.
+
+The production-engine suite was also run in that embedded browser: **248 passed and 11
+ring-color pixel assertions failed**. Its source, luma v9 packages and their runtime dependency
+chain are unchanged. This native-browser result is not a passing engine-suite claim.
+
+To investigate a failed file, rerun its path with `test:gpu` in a fresh browser session.
+Keep `src/experiments/weighted-links/measurement.test.ts` separate when diagnosing other failures:
+its isolated-pass tests also use a 100k star, although their names omit the point count.
+
 ## Original comparison
 
 `center-mass` compares two ways to calculate the global center of mass for the same 8,192 moving `float32x2` points:
@@ -255,8 +305,14 @@ timings are not hardware benchmarks.
 - WebGL2 renders all contributions into a 1×1 `RGBA32F` framebuffer with additive blending.
 - WebGPU performs a two-stage compute reduction through storage and workgroup memory.
 
-The luma.gl dependencies are pinned to the coherent `10.0.0-alpha.4` family because newer prerelease package versions
-were not published in lockstep when the experiment was created.
+The lab pins the coherent `10.0.0-alpha.15` family. Adapters are exported from
+`@luma.gl/core/webgl` and `@luma.gl/core/webgpu`; shader utilities come from
+`@luma.gl/shaders`, and `Kernel` / `RenderKernel` from `@luma.gl/graph`.
+The production engine and deck integration retain their existing luma v9 dependencies.
+After changing dependency versions, stop and restart the Vite dev server, then reload the page.
+A running server can retain old package exports and report a missing `@luma.gl/core/webgl` specifier.
+Recorded measurements retain the version used when they were collected; upgrading the lab
+does not reclassify historical findings.
 
 ## Documentation flows
 

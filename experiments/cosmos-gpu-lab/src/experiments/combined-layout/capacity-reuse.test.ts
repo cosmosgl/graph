@@ -1,5 +1,5 @@
 import { expect, it, vi } from 'vitest'
-import { Kernel } from '@luma.gl/engine'
+import { Kernel } from '@luma.gl/graph'
 import { createCapacityLane, CAPACITY_CYCLE } from './capacity'
 import { createCapacitySession } from './capacity-session'
 import { differingBits } from './resident'

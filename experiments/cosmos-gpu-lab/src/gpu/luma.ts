@@ -1,9 +1,9 @@
 import {
   Buffer, luma, type Device, type CanvasContext, type BindingDeclaration, type PrimitiveTopology, type RenderPipelineParameters, type TextureFormatColor,
 } from '@luma.gl/core'
-import { RenderKernel } from '@luma.gl/engine'
-import { webgl2Adapter } from '@luma.gl/webgl'
-import { webgpuAdapter, type WebGPUDevice } from '@luma.gl/webgpu'
+import { RenderKernel } from '@luma.gl/graph'
+import { webgl2Adapter } from '@luma.gl/core/webgl'
+import { webgpuAdapter, type WebGPUDevice } from '@luma.gl/core/webgpu'
 
 export function describeDevice (device: Device): string {
   const info = device.info

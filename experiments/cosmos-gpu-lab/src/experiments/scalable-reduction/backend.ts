@@ -1,5 +1,5 @@
 import { Buffer, type ComputePass, type Bindings } from '@luma.gl/core'
-import { Kernel } from '@luma.gl/engine'
+import { Kernel } from '@luma.gl/graph'
 import { describeDevice, bindingLayout, createDevice, createStorageRenderer, readFloats, upload, waitForGpu } from '../../gpu/luma'
 import { graphRgba, graphWgsl } from '../../runtime/palette'
 import drawCenterShader from './shaders/draw-center.wgsl?raw'

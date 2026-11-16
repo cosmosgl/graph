@@ -1,4 +1,4 @@
-import { Kernel } from '@luma.gl/engine'
+import { Kernel } from '@luma.gl/graph'
 import { describe, expect, it } from 'vitest'
 import { bindingLayout, readFloats } from '../../gpu/luma'
 import { deviceForTest } from '../../gpu/test-device'

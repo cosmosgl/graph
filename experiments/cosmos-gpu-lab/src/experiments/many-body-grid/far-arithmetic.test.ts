@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 import { Buffer } from '@luma.gl/core'
-import { Kernel } from '@luma.gl/engine'
+import { Kernel } from '@luma.gl/graph'
 import { deviceForTest } from '../../gpu/test-device'
 import { bindingLayout, readFloats, upload } from '../../gpu/luma'
 import { createFixture, PARAMETERS } from '../many-body/data'

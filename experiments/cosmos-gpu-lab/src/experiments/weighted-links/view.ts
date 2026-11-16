@@ -1,3 +1,4 @@
+import { luma } from '@luma.gl/core'
 import { setStatus } from '../../runtime/presentation'
 import { milliseconds, scientific } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
@@ -150,7 +151,7 @@ export async function createWeightedLinksExperiment (host: HTMLElement): Promise
     capture = {
       experiment: 'weighted-links',
       capturedAt: new Date().toISOString(),
-      luma: '10.0.0-alpha.4',
+      luma: luma.VERSION,
       browser: navigator.userAgent,
       devices: backends.map(b => ({ backend: b.name, info: b.info })),
       fixture: fixture.value,

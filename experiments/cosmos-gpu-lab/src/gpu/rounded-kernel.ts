@@ -1,6 +1,7 @@
 import type { BindingDeclaration, Device } from '@luma.gl/core'
-import { Computation, type Kernel } from '@luma.gl/engine'
-import { fp64arithmetic, type ShaderModule } from '@luma.gl/shadertools'
+import { Computation } from '@luma.gl/engine'
+import type { Kernel } from '@luma.gl/graph'
+import { fp64arithmetic, type ShaderModule } from '@luma.gl/shaders'
 
 export async function createRoundedKernel (device: Device, source: string, bindings: BindingDeclaration[]): Promise<Pick<Kernel, 'dispatch' | 'destroy'>> {
   const computation = await Computation.createAsync(device, {

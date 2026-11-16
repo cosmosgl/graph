@@ -178,7 +178,7 @@ does not impose one universal rendering or simulation API.
 
 ### Where luma.gl fits
 
-All experiment GPU work goes through the pinned luma `10.0.0-alpha.4` family:
+All experiment GPU work goes through the pinned luma `10.0.0-alpha.15` family:
 
 - `Model` and `UniformStore` implement WebGL shaders, attributes and uniforms.
 - `Kernel` and `RenderKernel` implement WebGPU compute and drawing with explicit binding layouts.
