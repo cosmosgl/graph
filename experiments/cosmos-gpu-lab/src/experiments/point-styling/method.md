@@ -684,9 +684,9 @@ backends**, independently reproduced with the unchanged boundary assertion:
 The pick predicate agrees with the CPU source-byte prediction here, and the
 candidate preserves original color bytes. The disagreement is between that
 eligibility prediction and actual framebuffer alpha. It is not an ID arithmetic
-mismatch or an adapter-creation failure. The exact blending/conversion operation
-responsible has not yet been isolated. No shader, production control, CPU policy
-or acceptance threshold was changed to suppress it.
+mismatch or an adapter-creation failure. The follow-up below isolates the
+attachment conversion. No shader, production control, CPU policy or acceptance
+threshold was changed to suppress it.
 
 The boundary test now has separate WebGL and WebGPU cases, so a WebGL failure
 cannot prevent the WebGPU assertion from running. Both retain the original 767
@@ -722,6 +722,84 @@ pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/source-b
 Use a separate invocation for each point-styling file to avoid carrying browser
 device failures into another file. Record the browser, platform and flags with
 the results. A working canvas probe is a prerequisite, not migration acceptance.
+
+### Alpha conversion isolation · 16 November 2026
+
+**The shader predicts an eligible source byte, but SwiftShader's actual 8-bit
+attachment conversion stores zero. Blending is not required to reproduce it.**
+
+The luma-only `alpha-conversion.test.ts` diagnostic draws the same 767 alpha
+samples into three targets: unblended `rgba32float`, unblended `rgba8unorm`, and
+`rgba8unorm` with the existing source-over blend over transparent black. The
+float target records the source alpha, its float32 product with 255 and the
+existing integer quantizer's prediction. This removes shape coverage, images
+and the point shaders from the first comparison. A second check uses the actual
+explicit-coordinate, source-byte and retained quantized point renderers.
+
+For sample 3, the input is `0.0019607844296842813` (`0x3b008081`). The shader
+preserves it exactly. Its exact product with 255 is `0.5000000295694917`, which
+the CPU and integer quantizer classify as byte 1. But a **float32** multiplication
+rounds that product to exactly `0.5`; nearest-even integer rounding then produces
+byte 0. The neighboring input floats bracket that effect:
+
+| Alpha bits | Float32 product with 255 | Existing policy byte | SwiftShader stored alpha byte |
+|---|---|---|---|
+| `0x3b008080` | `0.4999999701976776` | 0 | 0 |
+| `0x3b008081` | `0.5` | 1 | 0 |
+| `0x3b008082` | `0.5000000596046448` | 1 | 1 |
+
+This explanation agrees with SwiftShader's implementation: its RGBA8 UNORM
+[attachment write](https://github.com/google/swiftshader/blob/master/src/Pipeline/PixelRoutine.cpp)
+multiplies by 255 and calls `RoundInt`; the x64
+[conversion implementation](https://github.com/google/swiftshader/blob/master/src/Reactor/LLVMReactor.cpp)
+uses `cvtps2dq`. The corresponding source was also checked against the dependency
+selected by [Chromium 151.0.7922.34](https://github.com/chromium/chromium/blob/151.0.7922.34/DEPS).
+This is an explanation of the tested implementation, not a universal WebGPU
+framebuffer rounding rule.
+
+| Observation, per backend | Linux x64 SwiftShader / Chromium 151 | Apple M3 / inline Chromium |
+|---|---|---|
+| Source alpha preserved in float attachment | 767/767 | 767/767 |
+| Stored alpha differs from the explicit byte policy | 128/767 | 0/767 |
+| Eligible sample whose stored alpha is zero | Sample 3 | None in these samples |
+| Blended versus unblended alpha differences | 0/767 | 0/767 |
+| Point-center alpha differs from isolated conversion | 0/767 | 0/767 |
+| Sample 3, original and source-byte candidate RGBA | `[0, 0, 0, 0]` | `[0, 0, 0, 1]` |
+
+Both WebGL and WebGPU reproduce each column. The 128 conversion differences
+are not 128 invisible picks: only the first boundary rounds to zero. Both APIs
+use SwiftShader in the Linux run, so their agreement is not evidence from two
+independent GPU implementations.
+
+The retained quantized-color alternative paints sample 3 as `[1, 1, 1, 1]`, but
+changes original color bytes and therefore fails the preservation requirement.
+Simply discarding sample 3 would instead fail the unchanged CPU mask/ID rule,
+which requires ID 3. Preserving its original zero alpha while picking ID 3 fails
+the nonzero-paint requirement. Thus no eligibility-only tweak can satisfy all
+three current requirements at this sample. An epsilon or a platform-specific
+expected ID would conceal that conflict.
+
+The **four diagnostic checks pass** in both environments. Together with the
+unchanged source-byte tests, the result is **6 pass / 2 fail on SwiftShader** and
+**8 pass on M3**. The two software failures remain the original per-backend
+nonzero-paint assertions. Diagnostic success identifies the cause; it does not
+accept the candidate or establish arbitrary overlap/image behavior.
+
+Reproduce on Linux with native/existing-browser flags unset:
+
+```sh
+pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/alpha-conversion.test.ts src/experiments/point-styling/source-byte.test.ts
+```
+
+The diagnostic prints bounded summaries, including the first invisible eligible
+sample and the retained quantized control. For an existing native browser,
+prepend `LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1` and open the printed session URL.
+
+The next distinct candidate should investigate picking based on the actual
+attachment conversion, with overlap and per-point contribution checks. The
+current mathematical source-byte policy and its failed assertions remain a
+control; accepting a different policy requires an explicit decision about that
+contract. No such policy change is made here.
 
 ### Reproduction and remaining scope
 
