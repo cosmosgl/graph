@@ -8,12 +8,14 @@ import { createStoredAlphaTimer, type StoredAlphaPassTimer, type StoredAlphaTimi
 import { dimensions, type RenderVariant } from './backend'
 import type { Point, Settings } from './data'
 import { pointOrder } from './point-effects'
+import { storedAlphaCandidates } from './stored-alpha-filter'
 
 export type PixelRegion = { x: number; y: number; width: number; height: number }
-export type StoredAlphaOptions = { region: PixelRegion; audit?: boolean; measure?: 'wall' | 'gpu' }
+export type StoredAlphaOptions = { candidate?: 'filtered'; region: PixelRegion; audit?: boolean; measure?: 'wall' | 'gpu' }
 export type StoredAlphaLayer = { id: number; paint: Uint8Array; geometry: Uint8Array }
 export type StoredAlphaResult = {
   timing?: StoredAlphaTiming;
+  candidate: 'prototype' | 'filtered'; candidateCount: number;
   policy: 'stored-alpha-v1'; region: PixelRegion; layers: StoredAlphaLayer[]; cpuIds?: Uint8Array; passes: number;
 }
 export function validateStoredAlpha (points: Point[], settings: Settings, variant: RenderVariant, options: StoredAlphaOptions): void {
@@ -57,6 +59,11 @@ export async function resolveStoredAlpha (
 ): Promise<StoredAlphaResult> {
   const scope = resourceScope()
   if (options.measure) await waitForGpu(device)
+  const requestStart = performance.now()
+  const order = pointOrder(points, settings)
+  const candidates = options.candidate === 'filtered' ? storedAlphaCandidates(points, settings, options.region, order) : order
+  const selectionCpuMs = performance.now() - requestStart
+  const passCount = 1 + candidates.length * 3
   const setupStart = performance.now()
   try {
     const sampledTarget = (): Pick<ReturnType<typeof target>, 'texture' | 'framebuffer'> => {
@@ -124,7 +131,7 @@ void main() {
     const vertexArray = gpu ? scope.own(device.createVertexArray({ shaderLayout, bufferLayout: [] })) : undefined
     const setupCpuMs = performance.now() - setupStart
     const queryStart = performance.now()
-    const timer = options.measure ? scope.own(createStoredAlphaTimer(device, 1 + points.length * 3, options.measure === 'gpu')) : undefined
+    const timer = options.measure ? scope.own(createStoredAlphaTimer(device, passCount, options.measure === 'gpu')) : undefined
     const querySetupCpuMs = performance.now() - queryStart
     if (options.measure) await waitForGpu(device)
     const begin = (props: NonNullable<Parameters<Device['beginRenderPass']>[0]>, stage: import('./stored-alpha-timing').StoredAlphaStage):
@@ -136,7 +143,7 @@ void main() {
     const clear = begin({ framebuffer: output.framebuffer, clearColor: [0, 0, 0, 0], clearDepth: false }, 'clear')
     end(clear)
     const layers: StoredAlphaLayer[] = []
-    for (const id of pointOrder(points, settings)) {
+    for (const id of candidates) {
       draw(id, paint.framebuffer, geometry.framebuffer, timer)
       const pass = begin({ framebuffer: output.framebuffer, clearColor: false, clearDepth: false }, 'resolve')
       try {
@@ -159,6 +166,7 @@ void main() {
     if (options.measure) {
       await waitForGpu(device)
       const completionWallMs = performance.now() - encodeStart
+      const requestWallMs = performance.now() - requestStart
       const queryReadStart = performance.now(); const gpu = await timer!.read()
       // A sum larger than its enclosing, synchronized wall interval is not a
       // trustworthy serial cost. Keep the reason instead of publishing it.
@@ -169,6 +177,8 @@ void main() {
       timing = {
         mode: options.measure,
         setupCpuMs,
+        selectionCpuMs,
+        requestWallMs,
         querySetupCpuMs,
         encodeSubmitCpuMs,
         completionWallMs,
@@ -180,10 +190,12 @@ void main() {
     return {
       timing,
       policy: 'stored-alpha-v1',
+      candidate: options.candidate ?? 'prototype',
+      candidateCount: candidates.length,
       region: { ...options.region },
       layers,
       cpuIds: options.audit ? composeStoredAlpha(layers, options.region) : undefined,
-      passes: 1 + points.length * 3,
+      passes: passCount,
     }
   } finally { scope.destroy() }
 }

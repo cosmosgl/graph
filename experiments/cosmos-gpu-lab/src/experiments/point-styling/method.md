@@ -2040,3 +2040,109 @@ and source-byte controls, stored-alpha correctness, timing guards, UI cancellati
 and export, and shared research records. The opt-in full sweep was skipped in
 that regression command because it had already been run separately. The new
 cost and cancellation checks have not yet been repeated on software rendering.
+
+### Filtered stored-alpha picking · 16 November 2026
+
+**Conservative region filtering preserves the prototype's exact IDs and original
+color bytes in the tested cases. It reduces sparse-request cost, but does not
+solve dense overlap or production pointer scheduling.** The production controls,
+source-byte counterexamples and acceptance gates are unchanged.
+
+The candidate is selected separately with `candidate: 'filtered'` in the
+stored-alpha request. It keeps the same isolated paint, geometric ID and resolve
+passes. Before encoding those passes, it checks each point's screen-space carrier
+against the requested device-pixel rectangle. The carrier includes the larger of
+the body, image and one-pixel minimum, with the renderer's size cap and padding.
+The filter adds another pixel and a generous f32 rounding envelope; non-finite or
+very large transforms stay in the candidate list. False positives cost work;
+false negatives would fail the exact-ID comparison. No alpha quantizer, image
+texel prediction or new coverage threshold participates in filtering.
+
+Original point IDs and greyout/reversed drawing order survive filtering. The
+candidate builds an ID-to-draw-rank lookup once instead of repeatedly searching
+all draw records. The unfiltered prototype remains available for comparison.
+With `K` retained points, the resolver encodes `3K + 1` passes, including the
+initial full-ID-target clear. An empty candidate list still clears stale IDs.
+Scratch storage remains two full-viewport RGBA8 targets.
+
+The new regression compares complete ID buffers and exact original color bytes.
+It also audits omitted points against their actual GPU paint and geometry, so
+an omitted eligible pixel fails. Coverage includes the first source-byte boundary,
+opacity 0/0.35/1, invisible foreground fall-through, reverse/highlight ordering,
+DPR 1/2, fractional and subpixel sizes, defaults, size caps, zoom policies, images,
+non-square atlas packing and empty requests. The separate original stored-alpha
+and source-byte tests remain intact. Decorative rings are still unsupported.
+
+#### Paired cost comparison
+
+The workload retains the previous 512 × 320 frame, 14 × 14 request, 8-pixel circles
+and 16/64/256/1024 point counts. Either four or all points overlap; the last
+foreground point is invisible. Each case alternates prototype/filtered order for
+two warmup pairs and five measured pairs. Both outputs are checked after each
+pair. These are **unprofiled wall timings**, not sums of GPU timestamps.
+
+`requestWallMs` begins after the initial fence excluding ordinary scene work. It
+includes ordering, filtering, resolver setup, the setup synchronization fence,
+encoding/submission and completion polling. `selectionCpuMs` isolates ordering
+and filtering; `completionWallMs` retains the older encode-to-fence interval.
+The rank lookup is included in encoding. Snapshot readback, ordinary rendering,
+scene upload and device creation stay outside the measured request. Resource
+cleanup after completion is also outside this interval. Do not compare the new
+request metric directly with the earlier completion-only table or interpret it
+as pointer-event latency.
+
+The 16 paired cases passed exact outputs on both Apple M3 (native inline browser)
+and Linux x64 Chromium/SwiftShader in Docker. Linux's original source-byte suite
+still has the same two rejected invisible-pick assertions. The final Linux
+filter/UI/timing regression passed 10 tests, with two opt-in sweeps skipped; the
+full filtered sweep had already run separately.
+
+At 1024 points, median **request wall milliseconds** were:
+
+| Adapter | Backend | Overlapping | Retained | Prototype → filtered | Passes |
+|---|---|---|---|---|---|
+| Apple M3 | WebGL | 4 | 4 | 321.3 → 21.2 | 3073 → 13 |
+| Apple M3 | WebGPU | 4 | 4 | 300.6 → 2.7 | 3073 → 13 |
+| Apple M3 | WebGL | 1024 | 1024 | 328.0 → 330.8 | 3073 → 3073 |
+| Apple M3 | WebGPU | 1024 | 1024 | 295.1 → 306.9 | 3073 → 3073 |
+| Linux SwiftShader | WebGL | 4 | 4 | 648.4 → 32.2 | 3073 → 13 |
+| Linux SwiftShader | WebGPU | 4 | 4 | 606.8 → 10.6 | 3073 → 13 |
+| Linux SwiftShader | WebGL | 1024 | 1024 | 1257.4 → 1227.3 | 3073 → 3073 |
+| Linux SwiftShader | WebGPU | 1024 | 1024 | 830.8 → 837.5 | 3073 → 3073 |
+
+The native table comes from the final repeat with the Linux workload stopped;
+all nine final native filter/sweep/UI tests passed. Linux runs in an x64 Docker
+container on the same host, so its times describe that software environment,
+not native Linux hardware. Its four 1024-point rows completed after the initial
+native run ended. No cross-adapter speed ranking is implied.
+
+Filtering plus ordering took 0.3–0.8 ms on M3 and 1.6–3.8 ms in the Linux
+1024-point rows. Sparse requests clearly benefit; dense overlap does not show a
+consistent improvement. These short paired sweeps do not establish a reliable
+small percentage regression or improvement. The remaining WebGL fence/polling
+cost also means 13 passes is not synonymous with a sub-millisecond request.
+
+#### Reproduce the filtered comparison
+
+Choose **Compare filtered picking** in Diagnostics and keep the page visible.
+**Cancel comparison** preserves completed rows and the live scene. Export JSON
+includes both candidates' individual samples, retained counts, passes, device,
+date and exact-output verdict. Keep these local measurements out of the repo.
+
+```sh
+# Focused checks, including cancellation/export (software Chromium by default)
+pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/stored-alpha-filter.test.ts src/experiments/point-styling/stored-alpha-view.test.ts
+
+# Full paired sweep on the selected software adapter
+LAB_STORED_ALPHA_SWEEP=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/stored-alpha-filter.test.ts
+
+# Native GPU; use the README's existing-browser option when appropriate
+LAB_NATIVE_GPU=1 LAB_STORED_ALPHA_SWEEP=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/stored-alpha-filter.test.ts
+```
+
+The filter currently scans CPU-resident inputs: selection is O(N), and GPU work
+is O(K). Production simulation positions live on the GPU, so a full position
+readback would be an additional, unmeasured cost. A GPU broad phase or maintained
+spatial index needs its own validation. Dense overlap retains all points and
+still needs a different optimization. This result supports the bounded candidate;
+it does not approve general interactive picking or close the migration gate.

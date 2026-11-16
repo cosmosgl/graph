@@ -5,6 +5,7 @@ import { readLumaTimer, type TimerStatus } from '../weighted-links/timing'
 export type StoredAlphaStage = 'clear' | 'paint' | 'geometry' | 'resolve'
 export type StoredAlphaPassTimer = { begin(props: RenderPassProps, stage: StoredAlphaStage): RenderPass; end(pass: RenderPass): void }
 export type StoredAlphaTiming = {
+  selectionCpuMs: number; requestWallMs: number;
   mode: 'wall' | 'gpu'; setupCpuMs: number; querySetupCpuMs: number; encodeSubmitCpuMs: number; completionWallMs: number;
   queryReadbackWallMs: number; frameReadbackWallMs?: number; scratchBytes: number;
   gpuMs: number | null; stageGpuMs: Record<StoredAlphaStage, number> | null; timerStatus: TimerStatus; timerDetail?: string;
