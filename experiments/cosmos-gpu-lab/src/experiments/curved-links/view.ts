@@ -8,6 +8,7 @@ import { createCurvesWebGPU } from './webgpu'
 import { assess, runSweep, renderRows, ROW_COUNT, type Pair, type Evidence, type Row } from './study'
 import type { Backend } from './backend'
 import type { Comparison } from './reference'
+import { investigateBow, renderBowReport, type BowReport } from './boundary'
 function renderEvidence (host: HTMLElement, evidence: Evidence): void {
   const row = (label: string, c: Comparison, passed: boolean): string => `<tr><td>${label}</td><td>${passed ? 'Pass' : 'Fail'}</td>
     <td>${c.idDifferences}</td><td>${c.masks.webgl} / ${c.masks.webgpu}</td><td>${c.colors.budgetFailures}</td>
@@ -17,13 +18,17 @@ function renderEvidence (host: HTMLElement, evidence: Evidence): void {
     <table data-curves-frame><thead><tr><th>Policy / comparison</th><th>Result</th><th>IDs</th><th>CPU masks · GL / GPU</th>
       <th>GPU color failures</th><th>CPU color failures · GL / GPU</th><th>Invisible picks · GL / GPU</th></tr></thead><tbody>
       ${row('Production IDs · WebGL / WebGPU', evidence.production, evidence.productionPassed)}
-      ${row('Visible IDs · WebGL / WebGPU', evidence.candidate, evidence.passed)}
+      ${row('Previous visible IDs · WebGL / WebGPU', evidence.candidate, evidence.passed)}
+      ${row('Color-face IDs · WebGL / WebGPU', evidence.front, evidence.frontPassed)}
       ${row('Production GL / candidate GPU', evidence.compatibility, evidence.compatibility.passed)}</tbody></table>
-    <h3>Original color and source visibility</h3><table data-curves-sources><thead><tr><th>Backend</th><th>Changed original color</th>
+    <h3>Original color and source visibility</h3><table data-curves-sources><thead><tr><th>Backend / candidate</th><th>Changed original color</th>
       <th>Invisible source · production / candidate</th><th>Invalid source IDs · production / candidate</th></tr></thead><tbody>
-    ${(['webgl', 'webgpu'] as const).map(lane => `<tr><td>${lane}</td><td>${evidence.preservation[lane].changedPixels}</td>
+    ${(['webgl', 'webgpu'] as const).map(lane => `<tr><td>${lane} · previous visible</td><td>${evidence.preservation[lane].changedPixels}</td>
       <td>${evidence.sourceVisibility.production[lane]} / ${evidence.sourceVisibility.candidate[lane]}</td>
-      <td>${evidence.sourceVisibility.production.unknown[lane]} / ${evidence.sourceVisibility.candidate.unknown[lane]}</td></tr>`).join('')}</tbody></table>
+      <td>${evidence.sourceVisibility.production.unknown[lane]} / ${evidence.sourceVisibility.candidate.unknown[lane]}</td></tr>`).join('')}
+    ${(['webgl', 'webgpu'] as const).map(lane => `<tr><td>${lane} · color-face</td><td>${evidence.frontPreservation[lane].changedPixels}</td>
+      <td>${evidence.sourceVisibility.production[lane]} / ${evidence.frontSources[lane]}</td>
+      <td>${evidence.sourceVisibility.production.unknown[lane]} / ${evidence.frontSources.unknown[lane]}</td></tr>`).join('')}</tbody></table>
     ${evidence.candidate.firstMismatch ? `<p>First ID/mask rejection: (${evidence.candidate.firstMismatch.x}, ${evidence.candidate.firstMismatch.y}).</p>` : ''}
     ${evidence.candidate.firstColorMismatch
     ? `<p>First color rejection: (${evidence.candidate.firstColorMismatch.x}, ${evidence.candidate.firstColorMismatch.y});
@@ -36,7 +41,8 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
   const select = (label: string, name: string, values: Array<string | number>, current: string | number): string =>
     `<label>${label} <select data-${name}>${values.map(v => `<option${v === current ? ' selected' : ''}>${v}</option>`).join('')}</select></label>`
   host.innerHTML = `<div data-run-part="configuration" class="scale-toolbar styling-toolbar">
-    <label>Picking rule <select data-variant><option value="visible">Visible-footprint candidate</option>
+    <label>Picking rule <select data-variant><option value="front">Color-face candidate</option>
+      <option value="visible">Previous visible candidate · both faces</option>
       <option value="production">Production · padded host IDs</option></select></label>
     ${select('Fixture', 'fixture', [...FIXTURES], 'bows')}${select('Segments', 'segments', [1, 3, 8, 19, 32], 19)}
     ${select('Curve weight', 'weight', [0.2, 0.8, 1, 1.5], 0.8)}${select('Control distance', 'distance', [-0.5, 0, 0.25, 0.5, 0.75], 0.5)}
@@ -57,16 +63,22 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
     <section data-run-part="results" data-results class="readiness-table"></section>
     <p data-run-part="explanation">Rational quadratic ribbons use the production power-spaced samples and finite-difference normals.
       The production ID pass widens each curve by five CSS pixels; the separate candidate uses its visible width and source-byte eligibility.
+      The color-face candidate also culls the back faces excluded from color.
       Solid color, back-face culling, alpha and primitive overlap follow the production draw. Frozen positions and captured IDs
       keep pointer inspection deterministic.</p>
     <section data-run-part="diagnostics"><h3>Repeatable curved-link sweep</h3><p>${ROW_COUNT} configurations:
       four fixtures × eight profiles × blended/hard modes.
       CPU checks rasterize the actual tessellated triangle strip. All selected source links are checked in isolation, including folded ribbons.</p>
       <div class="controls"><button data-sweep disabled>Run curved-link sweep</button><button data-cancel disabled>Cancel sweep</button></div>
-      <p data-progress>No sweep run.</p><div data-sweep-results class="readiness-table"></div></section>`
+      <p data-progress>No sweep run.</p><div data-sweep-results class="readiness-table"></div>
+      <h3>Default-bow boundary investigation</h3><p>Replay the isolated amber source at pixel (352, 85) with identical captured vertices.
+        Original images, controls and acceptance masks stay unchanged. This uses fixed production-default curve parameters.</p>
+      <button data-bow-replay disabled>Replay default-bow pixel</button><p data-bow-progress>No boundary replay run.</p>
+      <div data-bow-results class="readiness-table"></div></section>`
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
   const backends: Partial<Record<'webgl' | 'webgpu', Backend>> = {}; let snapshots: Partial<Pair> = {}
   const status = el('[role="status"]'); let busy = false; let sweeping = false; let cancelled = false; let destroyed = false; let disposed = false
+  let replaying = false; let bowReplay: BowReport | undefined
   let accepted: boolean | undefined; let error: string | undefined; let report: object | undefined
   let study: { startedAt: string; finishedAt?: string; status: string; rows: Row[]; browser: string; devices: string[]; error?: string } | undefined
   const dispose = (): void => { if (!disposed) { disposed = true; Object.values(backends).forEach(b => b.destroy()) } }
@@ -75,10 +87,11 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
     el<HTMLButtonElement>('[data-compare]').disabled = disabled
     el<HTMLButtonElement>('[data-sweep]').disabled = disabled || !backends.webgl || !backends.webgpu
     el<HTMLButtonElement>('[data-export]').disabled = disabled || !report
+    el<HTMLButtonElement>('[data-bow-replay]').disabled = disabled || !backends.webgl || !backends.webgpu
   }
   const value = (key: string): string => el<HTMLSelectElement>(`[data-${key}]`).value
   const render = async (): Promise<void> => {
-    if (busy || sweeping || destroyed) return
+    if (busy || sweeping || replaying || destroyed) return
     busy = true; accepted = undefined; error = undefined; report = undefined; snapshots = {}; controls(true)
     status.textContent = 'Drawing the curve mesh and checking every framebuffer pixel…'
     try {
@@ -98,9 +111,9 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
       }
       const { frames, evidence } = await assess(backends as { webgl: Backend; webgpu: Backend }, scene, settings, variant)
       if (destroyed) return
-      snapshots = frames[variant]; accepted = variant === 'visible' ? evidence.passed : evidence.productionPassed
+      snapshots = frames[variant]; accepted = variant === 'front' ? evidence.frontPassed : variant === 'visible' ? evidence.passed : evidence.productionPassed
       report = {
-        schemaVersion: 1,
+        schemaVersion: 2,
         experiment: 'curved-links',
         recordedAt: new Date().toISOString(),
         browser: navigator.userAgent,
@@ -129,7 +142,7 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
   for (const lane of ['webgl', 'webgpu'] as const) {
     const canvas = el<HTMLCanvasElement>(`[data-canvas="${lane}"]`)
     canvas.addEventListener('pointermove', event => {
-      const source = snapshots[lane]; if (!source || busy || sweeping) return
+      const source = snapshots[lane]; if (!source || busy || sweeping || replaying) return
       const bounds = canvas.getBoundingClientRect(); const x = Math.floor((event.clientX - bounds.left) / bounds.width * source.width)
       const y = Math.floor((event.clientY - bounds.top) / bounds.height * source.height)
       for (const target of ['webgl', 'webgpu'] as const) {
@@ -143,10 +156,11 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
     canvas.addEventListener('pointerleave', () => { host.querySelectorAll<HTMLElement>('[data-cursor]').forEach(c => { c.hidden = true }) })
   }
   el('[data-export]').addEventListener('click', () => {
-    if (!report || busy || sweeping) return
+    if (!report || busy || sweeping || replaying) return
     const data = {
       ...report,
       sweep: study,
+      bowReplay,
       reproduction: {
         defaults: DEFAULTS,
         profiles: PROFILES,
@@ -159,7 +173,7 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
   })
   el('[data-cancel]').addEventListener('click', () => { cancelled = true })
   el('[data-sweep]').addEventListener('click', () => {
-    if (busy || sweeping || destroyed || !backends.webgl || !backends.webgpu) return
+    if (busy || sweeping || replaying || destroyed || !backends.webgl || !backends.webgpu) return
     const run = async (): Promise<void> => {
       sweeping = true; cancelled = false; controls(true); el<HTMLButtonElement>('[data-cancel]').disabled = false
       const current = {
@@ -186,13 +200,26 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
         else {
           controls(false); el<HTMLButtonElement>('[data-cancel]').disabled = true
           el('[data-progress]').textContent = `${current.status} · ${current.rows.length} / ${ROW_COUNT} · ` +
-            `${current.rows.filter(r => !r.passed).length} rejected.`
+            `${current.rows.filter(r => !r.frontPassed).length} rejected.`
         }
       }
     }
     run().catch(failure => { error = String(failure) })
   })
-  mountRunLayout(host, () => summarizeRun(busy || sweeping ? 'Running' : report ? 'Complete' : 'Preparing', [accepted],
+  el('[data-bow-replay]').addEventListener('click', () => {
+    if (busy || sweeping || replaying || destroyed) return
+    const run = async (): Promise<void> => {
+      replaying = true; controls(true); el('[data-bow-progress]').textContent = 'Capturing vertices and replaying identical geometry…'
+      try {
+        bowReplay = await investigateBow()
+        if (!destroyed) { renderBowReport(el('[data-bow-results]'), bowReplay); el('[data-bow-progress]').textContent = 'Complete · 9 replay rows.' }
+      } catch (failure) { error = String(failure); if (!destroyed) el('[data-bow-progress]').textContent = error } finally {
+        replaying = false; if (destroyed) dispose(); else controls(false)
+      }
+    }
+    run().catch(failure => { error = String(failure) })
+  })
+  mountRunLayout(host, () => summarizeRun(busy || sweeping || replaying ? 'Running' : report ? 'Complete' : 'Preparing', [accepted],
     'Patterns, arrows, gradients, distance fading, highlights, transitions, full Graph integration, GPU cost and native portability.',
     Object.keys(backends).length === 2 ? [] : ['Missing backend'], error, 'curved-ribbon full-frame comparison'),
   { experiment: 'curved-links', devices: () => Object.values(backends).map(b => b.info) })
@@ -206,7 +233,7 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
   return {
     pause: (): void => { cancelled = true },
     destroy: (): void => {
-      destroyed = true; cancelled = true; disposeRunLayout(host); if (!busy && !sweeping) dispose()
+      destroyed = true; cancelled = true; disposeRunLayout(host); if (!busy && !sweeping && !replaying) dispose()
     },
   }
 }

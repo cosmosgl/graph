@@ -1,6 +1,7 @@
 import { DEFAULTS as BASE, type Settings as BaseSettings, type Scene, type Point, type Link } from '../straight-links/data'
 export { WIDTH, HEIGHT, resolveLink } from '../straight-links/data'
-export type { Scene, Point, Link, Variant } from '../straight-links/data'
+export type { Scene, Point, Link } from '../straight-links/data'
+export type Variant = 'production' | 'visible' | 'front'
 export type Settings = BaseSettings & { segments: number; weight: number; controlDistance: number }
 export const DEFAULTS: Settings = { ...BASE, segments: 19, weight: 0.8, controlDistance: 0.5 }
 export const FIXTURES = ['bows', 'overlap', 'limits', 'fractional'] as const

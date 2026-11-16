@@ -2,12 +2,32 @@ import { Buffer, type TextureFormatColor } from '@luma.gl/core'
 import { RenderKernel } from '@luma.gl/engine'
 import { ALPHA_BLEND, bindingLayout, createDevice, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
-import { pixels, target } from '../../gpu/rgba-readback'
+import { pixels, target, floatPixels } from '../../gpu/rgba-readback'
 import { SOURCE_ALPHA_WGSL } from '../../gpu/source-alpha'
 import source from './curves.wgsl?raw'
 import { HEIGHT, WIDTH, resolveLink } from './data'
 import type { Backend, Snapshot } from './backend'
 import { productionGeometry } from './geometry'
+function captureSource (): string {
+  const signature = '@vertex fn vertexMain(@builtin(vertex_index) index: u32,@builtin(instance_index) instance: u32)'
+  if (!source.includes(signature)) throw new Error('Curved vertex capture location changed')
+  return `${source.replace(signature, 'fn originalVertex(index: u32, instance: u32)')}
+struct CaptureVertex { @builtin(position) position: vec4f, @location(0) @interpolate(flat) clip: vec4f }
+@vertex fn captureVertex(@builtin(vertex_index) index: u32,@builtin(instance_index) instance: u32) -> CaptureVertex {
+  let original = originalVertex(index,instance); var result: CaptureVertex;
+  result.clip = vec4f(original.position.xy,f32(links[instance].endpoints.z + 1u),f32(index + 1u));
+  result.position = vec4f((f32(index) + 0.5) * 2.0 / f32(arrayLength(&nodes)) - 1.0,
+    1.0 - (f32(instance) + 0.5) * 2.0 / f32(arrayLength(&links)),0,1);
+  if (original.position.w != 1.0 || original.position.z != 0.0) { result.position = vec4f(2,2,2,1); }
+  return result;
+}
+@fragment fn captureFragment(input: CaptureVertex) -> @location(0) vec4f { return input.clip; }`
+}
+const varyingSource = `${source}
+@fragment fn varyingProbe(input: Vertex) -> @location(0) vec4f {
+  let coverage = smoothstep(0.5,0.5 - input.smoothing,abs(input.coord.y));
+  return vec4f(input.coord.y,input.smoothing,coverage,f32(input.id + 1u));
+}`
 export async function createCurvesWebGPU (canvas: HTMLCanvasElement): Promise<Backend> {
   let failure: string | undefined
   const device = await createDevice('webgpu', canvas, false, error => { failure ??= error.message; return true }); const scope = resourceScope()
@@ -18,14 +38,14 @@ export async function createCurvesWebGPU (canvas: HTMLCanvasElement): Promise<Ba
     }
     const vertexArray = scope.own(device.createVertexArray({ shaderLayout, bufferLayout: [] }))
     const kernels = new Map<string, RenderKernel>()
-    const kernel = (format: TextureFormatColor, blend: boolean, display: boolean, picking: boolean): RenderKernel => {
-      const key = `${format}:${blend}:${display}:${picking}`; const cached = kernels.get(key); if (cached) return cached
+    const kernel = (format: TextureFormatColor, blend: boolean, display: boolean, picking: boolean, front: boolean, probe = 0): RenderKernel => {
+      const key = `${format}:${blend}:${display}:${picking}:${front}:${probe}`; const cached = kernels.get(key); if (cached) return cached
       const result = scope.own(new RenderKernel(device, {
-        vertexSource: `${source}\n${SOURCE_ALPHA_WGSL}`,
-        fragmentSource: `${source}\n${SOURCE_ALPHA_WGSL}`,
-        vertexEntryPoint: 'vertexMain',
-        fragmentEntryPoint: 'fragmentMain',
-        topology: 'triangle-strip',
+        vertexSource: `${probe === 3 ? captureSource() : probe === 1 ? varyingSource : source}\n${SOURCE_ALPHA_WGSL}`,
+        fragmentSource: `${probe === 3 ? captureSource() : probe === 1 ? varyingSource : source}\n${SOURCE_ALPHA_WGSL}`,
+        vertexEntryPoint: probe === 3 ? 'captureVertex' : 'vertexMain',
+        fragmentEntryPoint: probe === 3 ? 'captureFragment' : probe === 1 ? 'varyingProbe' : 'fragmentMain',
+        topology: probe === 3 ? 'point-list' : 'triangle-strip',
         shaderLayout,
         colorAttachmentFormats: [format],
         depthStencilAttachmentFormat: display
@@ -33,7 +53,7 @@ export async function createCurvesWebGPU (canvas: HTMLCanvasElement): Promise<Ba
           : undefined,
         parameters: {
           ...(blend ? ALPHA_BLEND : { blend: false }),
-          cullMode: picking ? 'none' : 'back',
+          cullMode: picking && !front ? 'none' : 'back',
           ...(display ? { depthWriteEnabled: false, depthCompare: 'always' as const } : {}),
         },
       }))
@@ -41,7 +61,7 @@ export async function createCurvesWebGPU (canvas: HTMLCanvasElement): Promise<Ba
     }
     return {
       info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
-      async render (scene, settings, variant, display = true): Promise<Snapshot> {
+      async render (scene, settings, variant, display = true, diagnose = false): Promise<Snapshot> {
         const frame = resourceScope()
         try {
           const width = WIDTH * settings.ratio; const height = HEIGHT * settings.ratio
@@ -60,17 +80,17 @@ export async function createCurvesWebGPU (canvas: HTMLCanvasElement): Promise<Ba
             values.set([...link.color, link.width, 0, 0, 0], row * 12 + 4)
           })
           const links = frame.own(upload(device, new Uint8Array(storage)))
-          const draw = (mode: number, framebuffer?: ReturnType<typeof target>['framebuffer']): void => {
+          const draw = (mode: number, framebuffer?: ReturnType<typeof target>['framebuffer'], probe = 0): void => {
             const params = frame.own(upload(device, new Float32Array([WIDTH, HEIGHT, settings.zoom, settings.ratio,
               settings.widthScale, settings.maxWidth, settings.opacity, settings.indexOffset,
-              Number(settings.scaleOnZoom), Number(settings.blend), mode, Number(variant === 'visible'),
+              Number(settings.scaleOnZoom), Number(settings.blend), mode, Number(variant !== 'production'),
               settings.segments, settings.weight, settings.controlDistance, 0]), Buffer.UNIFORM))
             const format = framebuffer
-              ? 'rgba8unorm'
+              ? probe > 0 ? 'rgba32float' : 'rgba8unorm'
               : device.canvasContext!.getCurrentFramebuffer().colorAttachments[0].texture.format as TextureFormatColor
             const pass = device.beginRenderPass({ framebuffer, clearColor: framebuffer ? [0, 0, 0, 0] : [0.14, 0.16, 0.185, 1], clearDepth: false })
             try {
-              kernel(format, mode === 0 && settings.blend, !framebuffer, mode > 0).draw(pass, {
+              kernel(format, mode === 0 && settings.blend && probe === 0, !framebuffer, mode > 0, variant === 'front', probe).draw(pass, {
                 vertexArray,
                 vertexCount: geometry.length / 2,
                 instanceCount: scene.links.length,
@@ -86,6 +106,15 @@ export async function createCurvesWebGPU (canvas: HTMLCanvasElement): Promise<Ba
             height,
             color: await pixels(device, color.texture, color.framebuffer),
             ids: await pixels(device, ids.texture, ids.framebuffer),
+          }
+          if (diagnose) {
+            const varying = frame.own(target(device, width, height, 'rgba32float'))
+            const vertices = frame.own(target(device, geometry.length / 2, Math.max(1, scene.links.length), 'rgba32float'))
+            draw(0, varying.framebuffer, 1); draw(0, vertices.framebuffer, 3); device.submit()
+            result.probe = {
+              varying: await floatPixels(device, varying.texture, varying.framebuffer),
+              vertices: await floatPixels(device, vertices.texture, vertices.framebuffer),
+            }
           }
           if (failure || device.isLost) throw new Error(failure ?? 'WebGPU device lost')
           return result

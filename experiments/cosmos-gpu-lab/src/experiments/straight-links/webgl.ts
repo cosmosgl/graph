@@ -86,10 +86,10 @@ const pixelProbe = visibleFragment.replace(opacityLine,
 const finalPosition = 'gl_Position = vec4(final.rg, 0, 1);'
 if (!vertex.includes(finalPosition)) throw new Error('Production vertex capture location changed')
 const captureVertex = vertex.replace('void main()',
-  'layout(std140) uniform captureUniforms { float captureRows; };\nflat out vec4 captured;\nvoid main()')
+  'layout(std140) uniform captureUniforms { float captureRows; float captureCols; };\nflat out vec4 captured;\nvoid main()')
   .replace(finalPosition, `${finalPosition}
     captured = vec4(gl_Position.xy, linkIndex + 1.0, float(gl_VertexID) + 1.0);
-    gl_Position = vec4((float(gl_VertexID) + 0.5) * 0.5 - 1.0,
+    gl_Position = vec4((float(gl_VertexID) + 0.5) * 2.0 / captureCols - 1.0,
       1.0 - (float(gl_InstanceID) + 0.5) * 2.0 / captureRows, 0.0, 1.0);
     gl_PointSize = 1.0;`)
 const captureFragment = `#version 300 es
@@ -97,7 +97,7 @@ precision highp float;
 flat in vec4 captured;
 out vec4 fragColor;
 void main() { fragColor = captured; }`
-type CurveDraw = { positions: Float32Array; segments: number; weight: number; distance: number }
+type CurveDraw = { positions: Float32Array; segments: number; weight: number; distance: number; frontPicking?: boolean }
 const curvedVisibleVertex = vertex.replace(widthPadding, '/* Candidate: visible ribbon width. */')
 const curvedVisibleFragment = fragment.replace('void main()', `${SOURCE_ALPHA_GLSL}\nvoid main()`)
   .replace(pickBranch, `${pickBranch}\nif (linkBlending > 0.5 && quantizeSourceAlpha(opacity) <= 0.0) discard;`)
@@ -107,14 +107,14 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
     const uniforms = scope.own(new UniformStore(device, {
       drawLineUniforms: { uniformTypes: vertexTypes },
       drawLineFragmentUniforms: { uniformTypes: fragmentTypes },
-      captureUniforms: { uniformTypes: { captureRows: 'f32' } },
+      captureUniforms: { uniformTypes: { captureRows: 'f32', captureCols: 'f32' } },
     }))
     const geometry = scope.own(device.createBuffer({ data: new Float32Array([0, 0.5, 0, -0.5, 1, 0.5, 1, -0.5]) }))
     const attributes = [['pointA', 'float32x2'], ['pointB', 'float32x2'], ['sourceColor', 'float32x4'], ['targetColor', 'float32x4'],
       ['sourceWidth', 'float32'], ['targetWidth', 'float32'], ['arrow', 'float32'], ['linkIndices', 'float32'], ['linkStyle', 'float32']] as const
     const models = new Map<string, Model>()
-    const make = (blend: boolean, candidate: boolean, isPicking: boolean, probe = 0): Model => {
-      const key = `${blend}:${candidate}:${isPicking}:${probe}`; const cached = models.get(key); if (cached) return cached
+    const make = (blend: boolean, candidate: boolean, isPicking: boolean, probe = 0, frontPicking = false): Model => {
+      const key = `${blend}:${candidate}:${isPicking}:${probe}:${frontPicking}`; const cached = models.get(key); if (cached) return cached
       const model = scope.own(new Model(device, {
         vs: probe === 3 ? captureVertex : candidate ? curve ? curvedVisibleVertex : visibleVertex : probe === 2 ? visibleVertex : vertex,
         fs: probe === 3
@@ -136,7 +136,12 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
           drawLineFragmentUniforms: uniforms.getManagedUniformBuffer('drawLineFragmentUniforms'),
           ...(probe === 3 ? { captureUniforms: uniforms.getManagedUniformBuffer('captureUniforms') } : {}),
         },
-        parameters: { ...(blend ? ALPHA_BLEND : { blend: false }), depthWriteEnabled: false, depthCompare: 'always', cullMode: isPicking ? 'none' : 'back' },
+        parameters: {
+          ...(blend ? ALPHA_BLEND : { blend: false }),
+          depthWriteEnabled: false,
+          depthCompare: 'always',
+          cullMode: isPicking && !frontPicking ? 'none' : 'back',
+        },
       }))
       models.set(key, model); return model
     }
@@ -166,7 +171,6 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
         const frame = resourceScope()
         try {
           const { points, links } = scene; const width = WIDTH * settings.ratio; const height = HEIGHT * settings.ratio
-          if (curve && diagnose) throw new Error('Straight-ribbon probes do not describe tessellated curves')
           const curved = curve?.(settings)
           if (display) { canvas.width = width; canvas.height = height; device.canvasContext!.resize({ width, height }) }
           const color = frame.own(target(device, width, height)); const ids = frame.own(target(device, width, height))
@@ -211,11 +215,12 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
           if (curved) buffers.position = frame.own(device.createBuffer({ data: curved.positions }))
           const draw = (mode: number, framebuffer?: ReturnType<typeof target>['framebuffer'], probe = 0): void => {
             // The color pass always uses the unmodified production shaders.
-            const model = make(mode === 0 && settings.blend && probe === 0, mode > 0 && variant === 'visible', mode > 0, probe)
+            const model = make(mode === 0 && settings.blend && probe === 0, mode > 0 && variant === 'visible', mode > 0, probe,
+              variant === 'visible' && !!curved?.frontPicking)
             model.setAttributes(buffers); model.setBindings(bindings); model.setInstanceCount(links.length)
             model.setVertexCount(curved ? curved.positions.length / 2 : 4)
             uniforms.setUniforms({
-              captureUniforms: { captureRows: Math.max(1, links.length) },
+              captureUniforms: { captureRows: Math.max(1, links.length), captureCols: curved ? curved.positions.length / 2 : 4 },
               drawLineUniforms: {
                 transformationMatrix: [settings.zoom, 0, 0, 0, 0, settings.zoom, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1],
                 widthScale: settings.widthScale,
@@ -275,12 +280,12 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
           }
           if (diagnose) {
             const varying = frame.own(target(device, width, height, 'rgba32float'))
-            const pixel = frame.own(target(device, width, height, 'rgba32float'))
-            const vertices = frame.own(target(device, 4, Math.max(1, links.length), 'rgba32float'))
-            draw(0, varying.framebuffer, 1); draw(0, pixel.framebuffer, 2); draw(0, vertices.framebuffer, 3); device.submit()
+            const pixel = curved ? undefined : frame.own(target(device, width, height, 'rgba32float'))
+            const vertices = frame.own(target(device, curved ? curved.positions.length / 2 : 4, Math.max(1, links.length), 'rgba32float'))
+            draw(0, varying.framebuffer, 1); if (pixel) draw(0, pixel.framebuffer, 2); draw(0, vertices.framebuffer, 3); device.submit()
             snapshot.probe = {
               varying: await floatPixels(device, varying.texture, varying.framebuffer),
-              pixel: await floatPixels(device, pixel.texture, pixel.framebuffer),
+              pixel: pixel ? await floatPixels(device, pixel.texture, pixel.framebuffer) : new Float32Array(),
               vertices: await floatPixels(device, vertices.texture, vertices.framebuffer),
             }
           }

@@ -28,12 +28,14 @@ async function sourceVisibility (backends: { webgl: Backend; webgpu: Backend }, 
   }
   return result
 }
-export type Evidence = { triangles: number; production: Comparison; candidate: Comparison; compatibility: Comparison;
+export type Evidence = { triangles: number; production: Comparison; candidate: Comparison; compatibility: Comparison; front: Comparison;
+  frontPreservation: { webgl: ColorResult; webgpu: ColorResult };
+  frontSources: Visibility; frontPassed: boolean;
   preservation: { webgl: ColorResult; webgpu: ColorResult }; sourceVisibility: { production: Visibility; candidate: Visibility };
   productionPassed: boolean; passed: boolean; }
 export async function assess (backends: { webgl: Backend; webgpu: Backend }, scene: Scene, settings: Settings,
   display?: Variant): Promise<{ frames: Record<Variant, Pair>; evidence: Evidence }> {
-  const frames: Record<Variant, Pair> = {
+  const frames = {
     production: {
       webgl: await backends.webgl.render(scene, settings, 'production', display === 'production'),
       webgpu: await backends.webgpu.render(scene, settings, 'production', display === 'production'),
@@ -43,8 +45,19 @@ export async function assess (backends: { webgl: Backend; webgpu: Backend }, sce
       webgpu: await backends.webgpu.render(scene, settings, 'visible', display === 'visible'),
     },
   }
+  const frontFrames = {
+    webgl: await backends.webgl.render(scene, settings, 'front', display === 'front'),
+    webgpu: await backends.webgpu.render(scene, settings, 'front', display === 'front'),
+  }
+  const allFrames = { ...frames, front: frontFrames }
   const ref = reference(scene, settings)
   const production = await compare(frames.production.webgl, frames.production.webgpu, ref)
+  const front = await compare(frontFrames.webgl, frontFrames.webgpu, ref)
+  const frontPreservation = {
+    webgl: compareColors(frames.production.webgl.color, frontFrames.webgl.color),
+    webgpu: compareColors(frames.production.webgpu.color, frontFrames.webgpu.color),
+  }
+  const frontSources = await sourceVisibility(backends, frontFrames, scene, settings, 'front')
   const candidate = await compare(frames.visible.webgl, frames.visible.webgpu, ref)
   const compatibility = await compare(frames.production.webgl, frames.visible.webgpu, ref)
   const preservation = {
@@ -57,9 +70,13 @@ export async function assess (backends: { webgl: Backend; webgpu: Backend }, sce
   }
   const sourcePass = (v: Visibility): boolean => v.webgl + v.webgpu + v.unknown.webgl + v.unknown.webgpu === 0
   return {
-    frames,
+    frames: allFrames,
     evidence: {
       triangles: ref.triangles,
+      front,
+      frontPreservation,
+      frontSources,
+      frontPassed: front.passed && sourcePass(frontSources) && frontPreservation.webgl.changedPixels === 0 && frontPreservation.webgpu.changedPixels === 0,
       production,
       candidate,
       compatibility,
@@ -88,19 +105,23 @@ export async function runSweep (backends: { webgl: Backend; webgpu: Backend }, o
   return rows
 }
 export function renderRows (host: HTMLElement, rows: Row[]): void {
-  host.innerHTML = `<p>${rows.filter(r => r.passed).length} passed / ${rows.length} checked of ${ROW_COUNT} configurations.
-    Every original control and rejection remains included.</p>
-    <table data-curves-summary><thead><tr><th>Scene</th><th>Candidate passed / checked</th><th>Production passed</th></tr></thead><tbody>
+  host.innerHTML = `<p>Color-face candidate: ${rows.filter(r => r.frontPassed).length} passed / ${rows.length} checked of ${ROW_COUNT}.
+    Previous visible candidate: ${rows.filter(r => r.passed).length} passed. Every original control and rejection remains included.</p>
+    <table data-curves-summary><thead><tr><th>Scene</th><th>Color-face passed / checked</th><th>Previous visible passed</th>
+      <th>Production passed</th></tr></thead><tbody>
     ${FIXTURES.map(name => {
     const selected = rows.filter(r => r.fixture === name)
-    return `<tr><td>${name}</td><td>${selected.filter(r => r.passed).length} / ${selected.length}</td>
-      <td>${selected.filter(r => r.productionPassed).length}</td></tr>`
+    return `<tr><td>${name}</td><td>${selected.filter(r => r.frontPassed).length} / ${selected.length}</td>
+      <td>${selected.filter(r => r.passed).length}</td><td>${selected.filter(r => r.productionPassed).length}</td></tr>`
   }).join('')}</tbody></table>
-    <table data-curves-sweep><thead><tr><th>Scene / profile / mode</th><th>Candidate</th><th>IDs</th><th>CPU masks · GL / GPU</th>
-      <th>Color failures · pair / CPU GL / CPU GPU</th><th>Invisible · frame / source</th><th>Changed original color · GL / GPU</th></tr></thead><tbody>
-    ${rows.map(r => `<tr><td>${r.fixture} · ${r.profile}<br>${r.settings.blend ? 'Blended' : 'Hard opaque'}</td><td>${r.passed ? 'Pass' : 'Fail'}</td>
-      <td>${r.candidate.idDifferences}</td><td>${r.candidate.masks.webgl} / ${r.candidate.masks.webgpu}</td>
-      <td>${r.candidate.colors.budgetFailures} / ${r.candidate.cpuColors.webgl.budgetFailures} / ${r.candidate.cpuColors.webgpu.budgetFailures}</td>
-      <td>${r.candidate.invisible.webgl + r.candidate.invisible.webgpu} / ${r.sourceVisibility.candidate.webgl + r.sourceVisibility.candidate.webgpu}</td>
-      <td>${r.preservation.webgl.changedPixels} / ${r.preservation.webgpu.changedPixels}</td></tr>`).join('')}</tbody></table>`
+    <table data-curves-sweep><thead><tr><th>Scene / profile / mode</th><th>Previous visible</th><th>Color-face candidate</th><th>IDs</th>
+      <th>CPU masks · GL / GPU</th><th>Color failures · pair / CPU GL / CPU GPU</th><th>Invisible · frame / source</th>
+      <th>Changed original color · GL / GPU</th></tr></thead><tbody>
+    ${rows.map(r => `<tr><td>${r.fixture} · ${r.profile}<br>${r.settings.blend ? 'Blended' : 'Hard opaque'}</td>
+      <td>${r.passed ? 'Pass' : 'Fail'}</td><td>${r.frontPassed ? 'Pass' : 'Fail'}</td>
+      <td>${r.front.idDifferences}</td><td>${r.front.masks.webgl} / ${r.front.masks.webgpu}</td>
+      <td>${r.front.colors.budgetFailures} / ${r.front.cpuColors.webgl.budgetFailures} / ${r.front.cpuColors.webgpu.budgetFailures}</td>
+      <td>${r.front.invisible.webgl + r.front.invisible.webgpu} / ${r.frontSources.webgl + r.frontSources.webgpu}</td>
+      <td>${r.frontPreservation.webgl.changedPixels} / ${r.frontPreservation.webgpu.changedPixels}</td></tr>`).join('')}</tbody></table>
+    <p>Detailed counters refer to the color-face candidate. Export JSON also retains every previous visible and production result.</p>`
 }
