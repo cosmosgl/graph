@@ -105,6 +105,7 @@ export function imageFragment (p: Point, settings: Settings, x: number, y: numbe
 export function referencePick (points: Point[], settings: Settings, x: number, y: number, rule: PickingRule = 'visible'): number | null {
   // Candidate visibility is explicit. Retain the original opacity-independent
   // geometry reference for the production control; neither rule reads GPU pixels.
+  if (rule === 'stored-alpha') throw new Error('Stored-alpha requires the measured per-point attachment reference')
   const order = pointOrder(points, settings).reverse()
   for (const id of order) {
     const p = resolvePoint(points[id], settings); const d = diameter(p, settings); const fill = fillColor(p, settings)

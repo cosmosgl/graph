@@ -2,6 +2,7 @@ import { checkResult, count as formatCount } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { validationContracts } from '../../runtime/validation'
+import { storedAlphaReplay, renderStoredAlphaRows, type StoredAlphaRow } from './stored-alpha-study'
 import { pick, type Backend, type Snapshot, type RenderVariant } from './backend'
 import { DEFAULTS, fixture, HEIGHT, WIDTH, type Settings } from './data'
 import { COLOR_BUDGET, atlasCpuColors, compareColors, compareSnapshotsAsync } from './reference'
@@ -96,6 +97,13 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     </article>`).join('')}</section>
     <div class="many-body-results"
       data-run-part="results" data-results></div>
+    <section data-run-part="diagnostics"><h3>Stored-alpha picking · bounded prototype</h3>
+      <p>Replay the first alpha-byte boundary alone and over a visible point. Picking reads each point’s stored alpha;
+        the explicit-coordinate color pass stays unchanged. This is a separate policy from source-byte picking.</p>
+      <button data-stored-alpha disabled>Check stored-alpha picking</button>
+      <p data-stored-progress aria-live="polite">Unchecked · 14 × 14 pixel region; bodies only. Three extra passes per point plus one clear.
+        This checks correctness, not picking latency or migration approval.</p><div class="table-scroll" data-stored-results></div>
+    </section>
     <section data-run-part="diagnostics"><h3>Tiny-alpha sweep</h3>
       <p>Check tiny positive opacity, subpixel ink and faint foreground picks. Uses offscreen draws; the live canvases and settings stay in place.</p>
       <div class="controls"><button data-tiny-sweep disabled>Run tiny-alpha sweep</button><button data-tiny-cancel disabled>Cancel sweep</button></div>
@@ -138,6 +146,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       .forEach(b => { b.disabled = disabled || dynamicActive || decodingActive })
     el<HTMLButtonElement>('[data-dynamic-sweep]').disabled = disabled || decodingActive
     el<HTMLButtonElement>('[data-decoding-sweep]').disabled = disabled
+    el<HTMLButtonElement>('[data-stored-alpha]').disabled = disabled
     el<HTMLButtonElement>('[data-effects-sweep]').disabled = disabled || dynamicActive || decodingActive
     el<HTMLButtonElement>('[data-image-next]').disabled = disabled || !dynamicActive || dynamicStep === DYNAMIC_STEPS.length - 1
     el<HTMLButtonElement>('[data-image-reset]').disabled = disabled || !dynamicActive
@@ -184,6 +193,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   let tinyStudy: {
     startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[]; rows: TinyAlphaRow[]; error?: string;
   } | undefined
+  let storedStudy: { policy: string; startedAt: string; finishedAt?: string; status: string; error?: string;
+    browser: string; region: { x: number; y: number; width: number; height: number }; rows: Array<StoredAlphaRow & { lane: string }>; } | undefined
   let report: object | undefined
   const disposeBackends = (): void => {
     Object.values(backends).forEach(backend => backend.destroy()); decodeCache.forEach(source => source.close()); decodeCache.clear()
@@ -638,6 +649,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     if (!report || busy || sweepRunning) return
     const json = JSON.stringify({
       ...report,
+      storedAlphaReplay: storedStudy,
       effectsSweep: effectsStudy && {
         ...effectsStudy,
         inputs: {
@@ -1024,6 +1036,48 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       }
     }
     runSweep().catch(error => { runError = String(error); status.textContent = runError })
+  })
+  el('[data-stored-alpha]').addEventListener('click', () => {
+    if (busy || sweepRunning || destroyed || !backends.webgl || !backends.webgpu) return
+    const replay = async (): Promise<void> => {
+      sweepRunning = true; setSweepDisabled(true); exportButton.disabled = true
+      host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
+      const rows: Array<StoredAlphaRow & { lane: string }> = []
+      const study = {
+        policy: 'stored-alpha-v1',
+        startedAt: new Date().toISOString(),
+        finishedAt: undefined as string | undefined,
+        status: 'running',
+        error: undefined as string | undefined,
+        browser: navigator.userAgent,
+        region: { x: 250, y: 154, width: 14, height: 14 },
+        rows,
+      }
+      storedStudy = study
+      el('[data-stored-results]').replaceChildren(); el('[data-stored-progress]').textContent = 'Running stored-alpha replay…'
+      try {
+        for (const lane of ['webgl', 'webgpu'] as const) {
+          rows.push(...(await storedAlphaReplay(backends[lane]!)).map(row => ({ ...row, lane })))
+          if (destroyed) return
+          renderStoredAlphaRows(el('[data-stored-results]'), rows)
+        }
+        const failures = rows.filter(r => r.changedColors || r.cpuMismatches || r.invisiblePicks).length
+        study.status = failures ? 'failed' : 'passed'
+        el('[data-stored-progress]').textContent = `${failures ? 'Fail' : 'Pass'} · ${rows.length} live rows · ` +
+          `${failures} failed · ${new Date().toLocaleString()}. CPU replays measured masks; geometry tests run separately. ` +
+          'Rings, production latency and broader device coverage remain unchecked.'
+      } catch (error) {
+        study.status = 'unavailable'; study.error = String(error)
+        if (!destroyed) el('[data-stored-progress]').textContent = `Unavailable: ${study.error}`
+      } finally {
+        study.finishedAt = new Date().toISOString()
+        if (destroyed) study.status = 'cancelled'
+        sweepRunning = false
+        if (destroyed) disposeBackends()
+        else { restoreSelectControls(); exportButton.disabled = !report; setSweepDisabled(false) }
+      }
+    }
+    replay().catch(error => { if (!destroyed) el('[data-stored-progress]').textContent = String(error) })
   })
   mountRunLayout(host, () => summarizeRun(
     busy || sweepRunning ? 'Running' : report ? 'Complete' : 'Preparing',

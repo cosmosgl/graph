@@ -801,6 +801,93 @@ current mathematical source-byte policy and its failed assertions remain a
 control; accepting a different policy requires an explicit decision about that
 contract. No such policy change is made here.
 
+### Stored-alpha picking prototype · 16 November 2026
+
+**Keep the color pass unchanged and let the stored alpha decide whether a point
+can claim a picking pixel.** This is the separate `stored-alpha-v1` candidate,
+not a correction to the retained mathematical source-byte policy. The difference
+is intentional: on a device that stores zero at the first boundary, the candidate
+must return no ID even though the old CPU quantizer predicts byte 1.
+
+The candidate uses the existing explicit-coordinate color and geometric picking
+shaders without modifying either. For each point, in the same drawing order:
+
+```flow
+Render that point alone over transparent black · Original source-over blend into rgba8unorm
+Render its geometric ID mask · Retain the half-coverage shape contour and image rectangle
+Read the two stored textures in a later pass · Zero paint alpha or no geometric ID discards the fragment
+Write the eligible ID · Rejected foreground fragments leave the previous point’s ID intact
+```
+
+The color image of the whole scene remains untouched. Each mask belongs to one
+point, so neither the page background nor an unrelated point can make an invisible
+foreground pickable. Reading the finished textures in a subsequent pass also
+avoids sampling a texture while writing that same attachment; see WebGPU's
+[resource usage scopes](https://www.w3.org/TR/webgpu/#resource-usage-scopes).
+The implementation uses luma `Model`, `RenderKernel`, textures, render passes and
+readback APIs. It does not use native WebGL or WebGPU handles.
+
+**“Visible” here means nonzero stored alpha for that point alone**, inside the
+retained picking contour. It does not mean every antialiased edge pixel is
+pickable, or that the point measurably changes the final RGB over every possible
+background. Faint sources can still accumulate in the unchanged color pass even
+when they individually store zero over transparent black. Outlines, hover/focus
+rings, multisampling and other attachment formats are outside this prototype;
+decorative-ring requests are rejected explicitly.
+
+The CPU composition check reads the isolated per-point masks and independently
+resolves their order. It is an **attachment-aware reference**, not an independent
+prediction of framebuffer rounding. Regression tests separately compare the
+geometric masks against the existing scalar CPU geometry, check exact original
+color preservation, require zero invisible picks, and verify that ordinary
+rendering is restored after the diagnostic. The original source-byte assertions
+remain unchanged and continue to expose the software boundary conflict.
+
+Run **Check stored-alpha picking** under Diagnostics for a fixed 14 × 14 replay:
+the boundary alone, the boundary over a visible point, and a smaller-alpha
+foreground over a visible point. It preserves the live scene and settings. The
+six live rows show both backends, the foreground's stored alpha, old and new IDs,
+color changes, CPU composition mismatches and invisible picks. Export JSON includes
+this separately labelled policy, run dates, browser and device descriptions.
+
+Recorded checks on 16 November 2026:
+
+| Check | Apple M3 · native inline browser | Linux x64 SwiftShader · Chromium 151 |
+|---|---|---|
+| New candidate and UI/export tests | 5/5 pass | 5/5 pass |
+| Candidate plus unchanged styling/source-byte controls | 21/21 pass | 19 pass; 2 retained source-byte failures |
+| First-boundary point, stored alpha / candidate ID | 1 / point 0 | 0 / none |
+| Tested candidate color changes / invisible picks | 0 / 0 | 0 / 0 |
+
+The Linux run uses the same isolated, emulated x64 Playwright environment described
+above. Both APIs agree within each tested environment. Tests include opacity 0,
+0.35 and 1, neighboring first-boundary floats, overlapping points, normal/reversed
+order, highlighted drawing layers, nearest-filtered image transparency, pixel
+ratios 1 and 2, off-center regions, empty inputs and restoration of the ordinary
+renderer. The two retained Linux failures still come from the old mathematical
+source-byte control; no assertions were skipped or loosened. These bounded
+results do not establish all-device or all-image coverage.
+
+This is a correctness prototype, **not a scalable picking implementation**. It
+supports regions up to 64 × 64 pixels and at most 1024 points. The viewport stays
+at the original size; scissoring restricts fragment work without moving the
+pixel centers. Two full-viewport scratch textures are reused, and each point
+adds three render passes, including full-target clears, plus one initial ID
+clear per request. Audit mode additionally reads the masks back; the GPU-only
+resolver performs no per-point CPU readback. End-to-end picking latency and GPU
+time have not been measured. Compact scratch targets or batching require a
+separate measurement and the same exact correctness checks.
+
+Reproduce the candidate and its UI/export check:
+
+```sh
+pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/stored-alpha.test.ts src/experiments/point-styling/stored-alpha-view.test.ts
+```
+
+Use the existing-browser instructions for native GPU runs. Run the unchanged
+`source-byte.test.ts` alongside these tests to see the distinction between the
+two policies. Passing the new candidate does not turn the old control green.
+
 ### Reproduction and remaining scope
 
 Select **Source-byte picking candidate**, then **Tiny-alpha overlap**, opacity **1**. Compare

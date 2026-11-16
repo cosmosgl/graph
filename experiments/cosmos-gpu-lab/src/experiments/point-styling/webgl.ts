@@ -9,6 +9,7 @@ import pointSize from '../../../../../src/modules/Points/point-size.glsl?raw'
 import exitRamp from '../../../../../src/modules/Points/exit-ramp.glsl?raw'
 import { ALPHA_BLEND, createDevice } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
+import { resolveStoredAlpha, validateStoredAlpha, regionScissor } from './stored-alpha'
 import { dimensions, floatPixels, pixels, target, type Backend, type Snapshot } from './backend'
 import { HEIGHT, WIDTH } from './data'
 import { SOURCE_ALPHA_GLSL } from './source-alpha'
@@ -241,7 +242,8 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
     return {
       atlas: dynamic,
       info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
-      async render (points, settings, diagnose = false, variant = 'production', display = true): Promise<Snapshot> {
+      async render (points, settings, diagnose = false, variant = 'production', display = true, storedAlpha): Promise<Snapshot> {
+        if (storedAlpha) validateStoredAlpha(points, settings, variant, storedAlpha)
         const frame = resourceScope()
         try {
           const isolation = variant === 'production' ? 'original' : settings.atlasIsolation ?? 'original'
@@ -369,7 +371,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
               ringContrast: settings.ringContrast ?? 0,
             },
           })
-          const draw = (model: Model, mode: number, framebuffer?: ReturnType<typeof target>['framebuffer']): void => {
+          const draw = (model: Model, mode: number, framebuffer?: ReturnType<typeof target>['framebuffer'], rank?: number): void => {
             uniforms.setUniforms({
               drawFragmentUniforms: {
                 greyoutOpacity: settings.greyoutOpacity ?? -1,
@@ -382,35 +384,55 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
                 pickingIndexOffset: 0,
               },
             })
+            if (rank !== undefined) {
+              const byteOffsets = Object.fromEntries(attributes.map(([name, format]) => [name, rank * 4 * Number(format.split('x')[1] ?? 1)]))
+              model.setAttributes(records, { byteOffsets }); model.setInstanceCount(1)
+              if (texel) model.setAttributes({ sourceTexelRect: rectangleBuffer! }, { byteOffsets: { sourceTexelRect: rank * 16 } })
+            }
             const pass = device.beginRenderPass({
               framebuffer,
               clearColor: framebuffer ? [0, 0, 0, 0] : settings.backgroundColor ?? [0.14, 0.16, 0.185, 1],
               clearDepth: false,
             })
             try {
+              if (rank !== undefined) pass.setParameters({ scissorRect: regionScissor(device, height, storedAlpha!.region) })
               for (const layer of settings.highlighting ? [0, 1] : [-1]) {
                 uniforms.setUniforms({ drawVertexUniforms: { skipHighlighted: Number(layer === 0), skipGreyed: Number(layer === 1) } })
                 model.draw(pass)
               }
-              if (mode === 0 && overlayIndices(settings, points.length).length) {
+              if (rank === undefined && mode === 0 && overlayIndices(settings, points.length).length) {
                 overlays ??= scope.own(createPointOverlays(device))
                 overlays.draw(pass, bindings, points, { ...settings, atlasSource: source })
               }
-            } finally { pass.end() }
+            } finally {
+              pass.end()
+              if (rank !== undefined) {
+                model.setAttributes(records); model.setInstanceCount(points.length)
+                if (texel) model.setAttributes({ sourceTexelRect: rectangleBuffer! })
+              }
+            }
           }
           const colorModel = candidate?.color ?? visible
           const pickModel = candidate?.pick ?? picking
           draw(colorModel, 0, color.framebuffer); draw(pickModel, 3, ids.framebuffer)
           if (display) draw(colorModel, 0)
           device.submit()
+          const stored = storedAlpha
+            ? await resolveStoredAlpha(device, width, height, points, settings, storedAlpha,
+              (id, mask, geometry) => {
+                const rank = order.indexOf(id)
+                draw(colorModel, 0, mask, rank); draw(pickModel, 3, geometry, rank)
+              }, ids)
+            : undefined
           const result: Snapshot = {
+            storedAlpha: stored,
             polygonArithmetic: variant === 'production' ? 'normalized' : settings.polygonArithmetic ?? 'normalized',
             atlasSource: source,
             atlasGeneration: source ? dynamic.generation : undefined,
             atlasPacking: packing,
             atlasIsolation: isolation,
             atlasGutterExtent: isolation === 'gutter' ? gutterExtent : undefined,
-            pickingRule: variant === 'production' ? 'legacy' : variant === 'explicit' ? 'visible' : 'source-alpha',
+            pickingRule: stored ? 'stored-alpha' : variant === 'production' ? 'legacy' : variant === 'explicit' ? 'visible' : 'source-alpha',
             width,
             height,
             color: await pixels(device, color.texture, color.framebuffer),
