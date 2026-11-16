@@ -20,6 +20,20 @@ export function researchMethodPages (record: ResearchSummary): string[] {
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match public experiment routes. */
 export const research: Record<string, ResearchSummary> = {
   ...additionalResearch(BASELINE_REVIEWED),
+  'ribbon-generation': {
+    question: 'Can WebGPU share curve generation across ribbon sides and passes at a lower total cost?',
+    conclusion: 'Stopped without adoption: rebuilding cost more, static reuse was inconsistent, and coarse curves changed color pixels.',
+    scope: 'Same-device color/ID preservation and GPU plus completion cost on frozen curves.',
+    variant: 'Vertex baseline, duplicate baseline, compute rebuild and static sample reuse; luma 10.0.0-alpha.15',
+    reviewed: '2026-11-16',
+    milestone: 'rendering',
+    method: 'method',
+    evidence: 'findings',
+    investigations: [{ page: 'findings', state: 'Parked', description: 'Investigation stopped; native measurements and the coarse-curve color failure are retained for reference.' }],
+    comparison: 'Resident endpoints → vertex generation / compute sample cache → identical raster and coverage paths',
+    next: 'No further work planned. Keep the current vertex renderer.',
+    reproduce: 'This page is a retained research record. Recorded findings describe the original conditions and optional command-line reproduction.',
+  },
   collision: {
     comparison: 'Shared initial graph → WebGL / WebGPU / CPU → shared-input or independent collision checks',
     question: 'Can WebGPU preserve collision behavior when composed with the other Cosmos forces?',
