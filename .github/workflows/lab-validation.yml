@@ -26,6 +26,20 @@ jobs:
       LAB_INVESTIGATION: ${{ inputs.investigation }}
       LAB_FULL_SWEEP: ${{ inputs.full_sweep }}
     steps:
+      - name: Require a repository writer to dispatch
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const actors = new Set([context.actor, process.env.GITHUB_TRIGGERING_ACTOR]);
+            for (const username of actors) {
+              if (!username) throw new Error('Missing dispatch actor');
+              const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                ...context.repo, username
+              });
+              if (!['write', 'maintain', 'admin'].includes(data.permission)) {
+                throw new Error(`${username} does not have repository write permission`);
+              }
+            }
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
