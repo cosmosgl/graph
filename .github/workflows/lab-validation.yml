@@ -40,13 +40,15 @@ jobs:
         with:
           ref: ${{ steps.revision.outputs.sha }}
           persist-credentials: false
+      # PR code must not populate caches in the dispatch/default-branch scope.
       - uses: pnpm/action-setup@v6
+        with:
+          cache: false
       - id: node
         run: echo "floor=$(node -p "require('./package.json').engines.node.match(/\d+/)[0]")" >> "$GITHUB_OUTPUT"
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ steps.node.outputs.floor }}
-          cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm exec playwright install --with-deps chromium
       - name: Validate selection and merge contracts
