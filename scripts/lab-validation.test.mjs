@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { selection, verifyMergeParents } from './lab-validation.mjs'
+import { selection, verifyMergeParents, verifyPrSource } from './lab-validation.mjs'
 test('fixed investigation choices cannot inject commands or silently enable native work', () => {
   for (const choice of ['arithmetic', 'point-styling', 'links', 'full']) {
     const base = selection(choice, false); const sweep = selection(choice, true)
@@ -19,4 +19,10 @@ test('a PR merge must have the exact base and head parents', () => {
   assert.doesNotThrow(() => verifyMergeParents('base head\n', 'base', 'head'))
   assert.throws(() => verifyMergeParents('old-base head', 'base', 'head'))
   assert.throws(() => verifyMergeParents('head', 'base', 'head'))
+})
+
+test('manual dispatch rejects fork and missing source repositories', () => {
+  assert.doesNotThrow(() => verifyPrSource({ head: { repo: { full_name: 'cosmosgl/graph' } } }, 'cosmosgl/graph'))
+  assert.throws(() => verifyPrSource({ head: { repo: { full_name: 'someone/graph' } } }, 'cosmosgl/graph'))
+  assert.throws(() => verifyPrSource({ head: { repo: null } }, 'cosmosgl/graph'))
 })

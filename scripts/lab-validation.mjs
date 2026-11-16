@@ -31,6 +31,11 @@ export function selection (investigation, sweep) {
         (has('point-styling') ? ['Original stored-alpha cost sweep still requires native mode; filtered paired sweep runs on software'] : []))],
   }
 }
+export function verifyPrSource (pr, repository) {
+  if (pr.head?.repo?.full_name !== repository) {
+    throw new Error('Manual investigations accept same-repository branches only; fork code must not run in the dispatch cache scope')
+  }
+}
 export function verifyMergeParents (parents, base, head) {
   if (parents.trim().split(/\s+/).join(' ') !== `${base} ${head}`) throw new Error('Merge revision does not match the current PR base and head; retry after GitHub refreshes it')
 }
@@ -42,6 +47,7 @@ async function resolveRevision () {
   if (number) {
     if (!/^[1-9]\d*$/.test(number)) throw new Error('PR number must be a positive integer')
     const pr = JSON.parse(exec('gh', ['api', `repos/${repository}/pulls/${number}`]))
+    verifyPrSource(pr, repository)
     if (pr.state !== 'open' || pr.mergeable !== true) throw new Error('PR must be open and mergeable; no head-only fallback')
     exec('git', ['fetch', '--no-tags', '--depth=2', 'origin', `refs/pull/${number}/merge`])
     const sha = exec('git', ['rev-parse', 'FETCH_HEAD'])
