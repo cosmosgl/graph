@@ -50,36 +50,29 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           LAB_PR_NUMBER: ${{ inputs.pr_number }}
         run: node scripts/lab-validation.mjs resolve
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ steps.revision.outputs.sha }}
-          persist-credentials: false
-      - name: Read the selected revision's Node floor
-        id: node
-        run: |
-          node --input-type=module -e '
-            import {readFileSync, appendFileSync} from "node:fs";
-            const pkg = JSON.parse(readFileSync("package.json", "utf8"));
-            const floor = pkg.engines.node.match(/\d+/)?.[0];
-            if (!floor) throw new Error("Missing Node floor");
-            appendFileSync(process.env.GITHUB_OUTPUT, `floor=${floor}\n`);
-          '
       - name: Run investigation in an isolated software container
         env:
           LAB_REVISION_FILE: ${{ runner.temp }}/lab-revision.json
-          NODE_FLOOR: ${{ steps.node.outputs.floor }}
+          NODE_FLOOR: ${{ steps.revision.outputs.node_floor }}
+          LAB_SHA: ${{ steps.revision.outputs.sha }}
         run: |
-          # No host credentials, runtime/cache tokens or Docker socket enter the container.
+          # The selected revision is fetched and executed only inside this container.
+          # No host checkout, credentials, cache tokens or Docker socket enter it.
+          mkdir -p experiments/cosmos-gpu-lab/captures
           docker run --rm --init \
-            --mount "type=bind,src=$PWD,dst=/work" \
+            --mount "type=bind,src=$PWD/experiments/cosmos-gpu-lab/captures,dst=/work/experiments/cosmos-gpu-lab/captures" \
             --mount "type=bind,src=$LAB_REVISION_FILE,dst=/lab-revision.json,readonly" \
             --workdir /work \
             -e CI=1 -e COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
             -e LAB_INVESTIGATION -e LAB_FULL_SWEEP \
-            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT \
+            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_REPOSITORY -e LAB_SHA \
             -e LAB_REVISION_FILE=/lab-revision.json \
             "node:${NODE_FLOOR}-bookworm" sh -ec '
-              git config --global --add safe.directory /work
+              git init -q .
+              git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+              git fetch --no-tags --depth=1 origin "$LAB_SHA"
+              git checkout --detach FETCH_HEAD
+              test "$(git rev-parse HEAD)" = "$LAB_SHA"
               corepack enable
               pnpm install --frozen-lockfile
               pnpm exec playwright install --with-deps chromium
