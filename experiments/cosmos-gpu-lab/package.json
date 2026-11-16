@@ -7,6 +7,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
+    "test:ui": "vitest run --config vitest.ui.config.mjs",
     "test:gpu": "vitest run --config vitest.config.ts",
     "typecheck": "node scripts/check-luma-api.mjs && tsc --noEmit"
   },
@@ -18,6 +19,7 @@
     "markdown-it": "14.3.3"
   },
   "devDependencies": {
+    "@types/node": "26.6.6",
     "@types/markdown-it": "14.1.2",
     "typescript": "7.0.2",
     "vite": "catalog:"
