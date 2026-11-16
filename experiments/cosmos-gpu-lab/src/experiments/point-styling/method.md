@@ -634,6 +634,95 @@ LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu 
 Open the printed test-session URL in the existing browser. Omit `LAB_INLINE_BROWSER=1` to launch
 installed Chrome; record that different browser environment separately.
 
+### Linux software CI reproduction · 16 November 2026
+
+The native pass above does not generalize to software rendering. This follow-up uses
+luma **10.0.0-alpha.15**, Playwright **1.62.1**, Chromium **151.0.7922.34**, Node
+**22.23.4** and pnpm **10.15.0** in the official
+`mcr.microsoft.com/playwright:v1.62.1-resolute` Linux x64 container, under emulation
+on Apple M3. The browser/runtime and Ubuntu release family match CI; the host CPU,
+kernel and complete GitHub runner image do not. No timing result is a hardware
+performance comparison.
+
+Each of the 14 point-styling files was launched in a fresh Chromium process with
+CI's original `--enable-unsafe-webgpu --use-angle=swiftshader` arguments. The
+`view.test.ts` file reproduced all **10 failures** and `styling.test.ts` reproduced
+**8 failures / 4 passes**. Chromium's earlier error is
+`Could not find SharedImageBackingFactory … WebgpuSwapChainTexture`; the resulting
+device loss appears later as `mapAsync: A valid external Instance reference no
+longer exists`, missing UI results and WebGL context-loss messages.
+
+A minimal luma-only probe separates this from the styling shaders: clearing and
+reading a one-pixel offscreen target passes; adding a canvas render pass makes
+the readback fail. Enabling both `--use-vulkan=swiftshader` and
+`--enable-features=Vulkan` makes both probes pass. The driver flag alone does not.
+`--disable-vulkan-surface` was also checked and is unnecessary in this pinned
+image. The Linux software test configuration now includes the two required
+arguments; native and non-Linux launch settings are unchanged. This follows
+Chromium's distinction between [SwiftShader's driver modes](https://chromium.googlesource.com/chromium/src/+/main/docs/gpu/swiftshader.md)
+and [enabling Vulkan compositing](https://chromium.googlesource.com/chromium/src/+/main/content/browser/gpu/fallback.md).
+
+Across all 14 files, the original **58 tests** change from **20 passes / 38
+failures** to **55 passes / 3 failures**. The full per-file rerun used the two
+Vulkan arguments plus `--disable-vulkan-surface`. The final configuration omits
+that unnecessary third flag and was separately checked with the 12 styling tests,
+two canvas probes, 17 weighted-link measurement tests, and the two independently
+named boundary cases below. This is focused validation, not a full-lab green run.
+
+The corrected setup exposes a **real source-byte visibility failure in both
+backends**, independently reproduced with the unchanged boundary assertion:
+
+| Input or observation | Value |
+|---|---|
+| Sample / pixel | 3 / `(56, 6)` |
+| Input float32 alpha | `0.0019607844296842813`, bits `0x3b008081` |
+| CPU source-byte prediction | 1, therefore eligible |
+| Actual picked ID, WebGL and WebGPU | 3 |
+| Original and candidate RGBA, both backends | `[0, 0, 0, 0]` |
+| Unchanged gate | A picked sample must have nonzero painted alpha: **Fail** |
+
+The pick predicate agrees with the CPU source-byte prediction here, and the
+candidate preserves original color bytes. The disagreement is between that
+eligibility prediction and actual framebuffer alpha. It is not an ID arithmetic
+mismatch or an adapter-creation failure. The exact blending/conversion operation
+responsible has not yet been isolated. No shader, production control, CPU policy
+or acceptance threshold was changed to suppress it.
+
+The boundary test now has separate WebGL and WebGPU cases, so a WebGL failure
+cannot prevent the WebGPU assertion from running. Both retain the original 767
+samples and stop at their first failed assertion; these failing runs do not
+establish results for every later sample.
+
+The corrected software run also exposes an environment-specific UI expectation:
+the normalized polygon audit produces **8 rows**, while the test expects the
+**30** recorded on the M3. The status still correctly says **not accepted**. That
+assertion remains unchanged and failing; neither count makes those pixels
+acceptable. [Weighted-link isolation](#/weighted-links/docs/results) records the
+separate spring checks and their remaining limits.
+
+The third failing test is the ring/greyout CPU color comparison: **10 of 24
+scenarios** fail the unchanged color budget, although their paired WebGL/WebGPU
+checks pass. Both backends show the same CPU-budget failure counts. The largest
+channel error is **12 bytes** in the darkened overlap scene; at `(237, 92)` the
+GPU output is `[4, 4, 3, 5]` and the CPU prediction is `[1, 2, 1, 2]`. This needs
+its own investigation of ring coverage and compositing; paired agreement does
+not waive the independent CPU gate. Decorative-ring picking and the separate
+polygon-boundary regression pass. The three original failing tests remain
+failures; splitting the alpha assertion adds a second backend result rather than
+changing its acceptance rule.
+
+Reproduce the focused checks on Linux, with native/existing-browser flags unset:
+
+```sh
+pnpm --filter @cosmos.gl/gpu-lab test:gpu src/gpu/canvas-readback.test.ts
+pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/source-byte.test.ts -t 'WebGL: keeps original colors'
+pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/source-byte.test.ts -t 'WebGPU: keeps original colors'
+```
+
+Use a separate invocation for each point-styling file to avoid carrying browser
+device failures into another file. Record the browser, platform and flags with
+the results. A working canvas probe is a prerequisite, not migration acceptance.
+
 ### Reproduction and remaining scope
 
 Select **Source-byte picking candidate**, then **Tiny-alpha overlap**, opacity **1**. Compare

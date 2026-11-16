@@ -249,6 +249,18 @@ job using this package's browser configuration; the core `verify` job remains re
 test runs also keep the lab's luma v10 dependency cache isolated from the engine's v9 cache.
 Software-adapter timings are not hardware benchmarks.
 
+On Linux, the software configuration also enables SwiftShader Vulkan compositing:
+WebGL's ANGLE flag alone can leave WebGPU canvas presentation unavailable even when
+offscreen readback works. Check both paths before diagnosing a shader failure:
+
+```sh
+pnpm --filter @cosmos.gl/gpu-lab test:gpu src/gpu/canvas-readback.test.ts
+```
+
+The [point-styling findings](src/experiments/point-styling/method.md#linux-software-ci-reproduction--16-november-2026)
+and [weighted-link isolation](src/experiments/weighted-links/docs/results.md#linux-software-ci-isolation--16-november-2026)
+record the pinned Linux reproduction environment, remaining failures and focused commands.
+
 To run the native-GPU regressions using installed Google Chrome:
 
 ```sh
