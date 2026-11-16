@@ -1,12 +1,13 @@
-import { expect, it } from 'vitest'
+import { it } from 'vitest'
+import { writeArtifact } from '../../testing/artifacts'
 import { createDevice, describeDevice } from '../../gpu/luma'
 import { DEFAULTS } from '../curved-links/data'
 import { makeScene } from './data'
 import { runStudy, assessment, type Report } from './study'
 
 // Explicit opt-in: local measurements are ignored artifacts, never timing assertions.
-// Run with LAB_RIBBON_COST=1 LAB_NATIVE_GPU=1 ... test:gpu .../cost.test.ts -u
-it.runIf(import.meta.env.LAB_RIBBON_COST)('records the bounded native cost screen', async () => {
+// Run with LAB_RIBBON_COST=1 LAB_NATIVE_GPU=1 ... test:gpu .../cost.test.ts
+it.runIf(import.meta.env.LAB_RIBBON_COST)('records the bounded cost screen on the selected adapter', async () => {
   const device = await createDevice('webgpu')
   const rows: Array<Omit<Report, 'baseline' | 'candidate'> & { assessment: string }> = []
   try {
@@ -20,8 +21,7 @@ it.runIf(import.meta.env.LAB_RIBBON_COST)('records the bounded native cost scree
         rows.push({ ...data, assessment: assessment(report) })
       }
       // Keep each complete repetition even if a later device failure interrupts.
-      await expect(JSON.stringify({ device: describeDevice(device), repeat, rows }, null, 2))
-        .toMatchFileSnapshot(`../../../captures/ribbon-cost-${repeat}.json`)
+      await writeArtifact(`ribbon-cost-${repeat}`, { device: describeDevice(device), repeat, rows })
     }
   } finally { device.destroy() }
 }, 180000)

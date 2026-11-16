@@ -211,10 +211,10 @@ Add `LAB_INLINE_BROWSER=1` to use an existing browser and open the printed sessi
 To compare the previous residual arithmetic with the integer candidate using paired complete-step GPU timestamps:
 
 ```sh
-LAB_FAR_ARITHMETIC_COST=1 LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/many-body-grid/arithmetic-cost.test.ts -u
+LAB_FAR_ARITHMETIC_COST=1 LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/many-body-grid/arithmetic-cost.test.ts
 ```
 
-This opt-in run writes ignored local `captures/far-arithmetic-cost-<count>-<mode>.json` files. It alternates lane order, uses the same
+This opt-in run writes ignored local `captures/local/far-arithmetic-cost-<count>-<mode>.json` files. It alternates lane order, uses the same
 batch size for both, takes two warmups and seven samples, and retains both validation results. A completion-time
 cap reduces slow-adapter batches instead of increasing the GPU timeout. The old control may
 fail on software adapters; the integer candidate must pass. Measurements do not become timing acceptance gates.

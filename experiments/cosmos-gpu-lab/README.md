@@ -234,7 +234,7 @@ before introducing animations, observers or GPU resources. Chapter links support
 Run the documentation interaction checks with:
 
 ```sh
-pnpm --filter @cosmos.gl/gpu-lab test:gpu src/app/learning-examples.test.ts src/app/flow.test.ts
+pnpm --filter @cosmos.gl/gpu-lab test:ui src/app/learning-examples.test.ts src/app/flow.test.ts
 ```
 
 ## GPU regression checks
@@ -243,12 +243,57 @@ pnpm --filter @cosmos.gl/gpu-lab test:gpu src/app/learning-examples.test.ts src/
 pnpm --filter @cosmos.gl/gpu-lab test:gpu
 ```
 
-This runs rendering, reductions, neighborhood-force, shared-grid, weighted-link and global many-body tests in Chromium with its software WebGPU
-adapter enabled. It fails if no adapter is available. The normal repository test run (`pnpm test`)
-covers the engine and deck integration only. CI runs lab checks in a separate, non-blocking `gpu-lab`
-job using this package's browser configuration; the core `verify` job remains required. Separate
-test runs also keep the lab's luma v10 dependency cache isolated from the engine's v9 cache.
-Software-adapter timings are not hardware benchmarks.
+This runs the lab's broad browser suite with a software adapter. Missing adapters and failed
+assertions fail the run. Software-adapter timings are not hardware benchmarks. The normal
+repository `pnpm test` covers the engine and deck integration; separate runs keep luma v9 and
+v10 dependency caches isolated.
+
+### Automatic application checks
+
+```sh
+pnpm --filter @cosmos.gl/gpu-lab test:ui
+```
+
+The core `verify` job runs lab lint, typechecking, builds and this app/runtime subset. Its guard
+rejects WebGL/WebGPU canvas, adapter and device requests, including requests whose errors the
+application catches. Canvas 2D is allowed. This subset is intentionally incomplete: experiment
+UI tests that create real devices stay in GPU investigations until their reporting and cancellation
+contracts can be isolated. Do not weaken the guard to include them.
+
+### Manual software investigations
+
+The **Lab validation** workflow accepts an investigation (`arithmetic`, `point-styling`, `links`
+or `full`), an optional open PR number and an explicit cost-sweep switch. For example:
+
+```sh
+gh workflow run lab-validation.yml --ref main -f investigation=point-styling -f pr_number=298 -f full_sweep=true
+```
+
+The workflow must exist on the default branch before it can be dispatched. During rollout, the
+automatic advisory `gpu-lab` job stays enabled until a real dispatch and its artifacts have been
+checked. Branch protection must separately require `verify`; declaring the job does not configure
+that repository setting.
+
+A PR run fetches and pins its merge SHA, checks its base/head parents and fails if no usable merge
+revision exists. It never substitutes the PR head. Without a PR, it tests the dispatched revision;
+that revision must contain the lab. The workflow token is read-only and is not persisted in Git.
+
+`full` selects all files in the broad configuration. It does **not** enable native-only tests or
+large-layout research: `LAB_NATIVE_GPU=0` and `LAB_SCALE_COUNT=0`. The cost-sweep switch enables
+`LAB_FAR_ARITHMETIC_COST` for arithmetic, `LAB_STORED_ALPHA_SWEEP` for point styling and
+`LAB_RIBBON_COST` for links (all three for `full`). Native-only conditions still apply; the original
+stored-alpha timing sweep remains skipped on software while the filtered paired sweep can run.
+The manifest records every selected flag and file; the outcome lists actual remaining skips.
+
+Failed assertions make the manual run fail. Rejected candidates keep their verdicts and gates.
+Artifacts are uploaded even after failure: revision, manifest, selected files, test results, skipped
+cases, console log, adapter/browser identity and enabled benchmark captures. A timeout can leave
+partial captures; do not interpret missing outcomes as passes. Artifacts expire after 14 days.
+
+Benchmark JSON uses a dedicated writer under ignored `captures/<run>/`, with `local` as the default
+run directory. Measurements are observations, never golden snapshots, and require no `-u`. Each
+completed filtered-picking row is saved immediately so a later failure retains prior rows. Native
+runs remain local through the commands below; the software workflow makes no native speed claim.
 
 On Linux, the software configuration also enables SwiftShader Vulkan compositing:
 WebGL's ANGLE flag alone can leave WebGPU canvas presentation unavailable even when
