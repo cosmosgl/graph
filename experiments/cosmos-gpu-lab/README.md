@@ -279,8 +279,9 @@ revision exists. It never substitutes the PR head. Without a PR, it tests the di
 that revision must contain the lab. The workflow token is read-only and is not persisted in Git. Dispatch and rerun actors must have
 repository write permission, and PRs must come from branches in this repository. Fork PRs are
 rejected: a dispatch runs in its selected branch's cache scope even with read-only repository
-permissions. Setup-action caches are disabled, but that alone is not an isolation boundary.
-Use a separately isolated environment for untrusted fork code.
+permissions. Installation and tests run in a software container with only the checkout, revision metadata and
+explicit test flags mounted or passed. No host GitHub/cache credentials or Docker socket enter it.
+Fork investigations remain outside this workflow.
 
 `full` selects all files in the broad configuration. It does **not** enable native-only tests or
 large-layout research: `LAB_NATIVE_GPU=0` and `LAB_SCALE_COUNT=0`. The cost-sweep switch enables
