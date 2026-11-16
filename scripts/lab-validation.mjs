@@ -54,8 +54,12 @@ async function resolveRevision () {
     verifyMergeParents(exec('git', ['show', '-s', '--format=%P', sha]), pr.base.sha, pr.head.sha)
     data = { source: 'pr-merge', repository, pr: Number(number), sha, base: pr.base.sha, head: pr.head.sha, baseRef: pr.base.ref }
   } else data = { source: 'dispatch-ref', repository, sha: exec('git', ['rev-parse', 'HEAD']) }
+  const pkg = JSON.parse(exec('git', ['show', `${data.sha}:package.json`]))
+  const nodeFloor = pkg.engines?.node?.match(/\d+/)?.[0]
+  if (!nodeFloor) throw new Error('Selected revision has no Node floor')
+  data.nodeFloor = nodeFloor
   await writeFile(process.env.LAB_REVISION_FILE, JSON.stringify(data, null, 2))
-  await appendFile(process.env.GITHUB_OUTPUT, `sha=${data.sha}\n`)
+  await appendFile(process.env.GITHUB_OUTPUT, `sha=${data.sha}\nnode_floor=${nodeFloor}\n`)
   console.log(JSON.stringify(data, null, 2))
 }
 async function run () {
