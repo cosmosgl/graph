@@ -1,6 +1,10 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createStylingView } from './view'
+import { SHAPES, type Settings } from './data'
+import type { PolygonAudit } from './polygon-audit'
+import type { ColorComparison, Comparison } from './reference'
+import type { EffectsRow } from './effects-study'
 
 let host: HTMLElement | undefined
 let instance: ExperimentInstance | undefined
@@ -260,47 +264,114 @@ it('shows atlas checks and retains a cancelled row without changing the live fix
 })
 
 it('keeps ring boundary failures visible and preserves the selected scene across sweep cancellation', async () => {
-  host = document.createElement('div'); document.body.append(host); instance = await createStylingView(host)
-  const select = async (selector: string, value: string): Promise<void> => {
-    const control = host!.querySelector<HTMLSelectElement>(selector)!
-    control.value = value; control.dispatchEvent(new Event('change'))
-    await vi.waitFor(() => expect(control.disabled).toBe(false), { timeout: 20000 })
+  type Report = {
+    polygonAudit: PolygonAudit; comparison: Comparison; compatibility: Comparison; renderer: string; settings: Settings;
+    effects: { scene: string; profile: string; cpuColors: Record<'webgl' | 'webgpu', ColorComparison> };
+    colorPreservation: Record<'webgl' | 'webgpu', ColorComparison>;
+    effectsSweep?: { status: string; finishedAt?: string; rows: EffectsRow[] };
   }
-  await select('[data-fixture]', 'point-effects')
-  expect(host.querySelector<HTMLSelectElement>('[data-renderer]')!.value).toBe('eligibility')
-  // These deliberately exact polygon ties are not waived by passing ring colors.
-  expect(host.querySelector('[role="status"]')!.textContent).toContain('not accepted')
-  expect(host.querySelector('[data-effects-cpu]')!.textContent).not.toContain('Fail')
-  expect(host.querySelectorAll('[data-polygon-audit] tbody tr')).toHaveLength(30)
-  await select('[data-polygon-arithmetic]', 'pixels')
-  expect(host.querySelectorAll('[data-polygon-audit] tbody tr')).toHaveLength(8)
-  expect(host.querySelector('[role="status"]')!.textContent).toContain('not accepted')
-  await select('[data-renderer]', 'production')
-  expect(host.querySelector<HTMLSelectElement>('[data-polygon-arithmetic]')!.disabled).toBe(true)
-  await select('[data-renderer]', 'eligibility')
-  expect(host.querySelectorAll('[data-polygon-audit] tbody tr')).toHaveLength(8)
-  await select('[data-effects-profile]', '1')
-  await select('[data-ratio]', '2')
-  expect(host.querySelectorAll('[data-polygon-audit] tbody tr')).toHaveLength(0)
-  // The recorded one-byte GL differences do not reproduce in every standalone
-  // replay. The live verdict must follow its actual exact-preservation result.
-  const preservationFailed = host.querySelector('[data-color-preservation]')!.textContent!.includes('Fail')
-  expect(host.querySelector('[role="status"]')!.textContent!.includes('Failed color-preservation')).toBe(preservationFailed)
-  await select('[data-ratio]', '1')
-  await select('[data-effects-scene]', 'overlap')
-  await select('[data-effects-profile]', '4')
-  expect(host.querySelector<HTMLSelectElement>('[data-opacity]')!.value).toBe('0')
-  expect(host.querySelector('[role="status"]')!.textContent).toContain('frame passed')
-  const canvas = host.querySelector('canvas')!
-  host.querySelector<HTMLButtonElement>('[data-effects-sweep]')!.click()
-  await vi.waitFor(() => expect(host!.querySelectorAll('[data-effects-table] tbody tr').length).toBeGreaterThan(0), { timeout: 20000 })
-  host.querySelector<HTMLButtonElement>('[data-effects-cancel]')!.click()
-  await vi.waitFor(() => expect(host!.querySelector('[data-effects-progress]')!.textContent).toContain('cancelled'), { timeout: 20000 })
-  expect(host.querySelector<HTMLSelectElement>('[data-effects-scene]')!.value).toBe('overlap')
-  expect(host.querySelector<HTMLSelectElement>('[data-effects-profile]')!.value).toBe('4')
-  expect(host.querySelector<HTMLSelectElement>('[data-polygon-arithmetic]')!.value).toBe('pixels')
-  expect(host.querySelector('canvas')).toBe(canvas)
-  await select('[data-effects-profile]', '0')
-  expect(host.querySelector('[data-effects-cpu]')!.textContent).not.toContain('Fail')
-  expect(host.querySelector('details')).toBeNull()
+  let exported: Blob | undefined
+  const createUrl = vi.spyOn(URL, 'createObjectURL').mockImplementation(blob => { exported = blob as Blob; return 'blob:test' })
+  const revokeUrl = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+  const download = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+  try {
+    host = document.createElement('div'); document.body.append(host); instance = await createStylingView(host)
+    const select = async (selector: string, value: string): Promise<void> => {
+      const control = host!.querySelector<HTMLSelectElement>(selector)!
+      control.value = value; control.dispatchEvent(new Event('change'))
+      await vi.waitFor(() => expect(control.disabled).toBe(false), { timeout: 20000 })
+    }
+    const readReport = async (): Promise<Report> => {
+      const button = host!.querySelector<HTMLButtonElement>('[data-export]')!
+      expect(button.disabled).toBe(false); exported = undefined; button.click()
+      expect(exported).toBeDefined()
+      return JSON.parse(await exported!.text()) as Report
+    }
+    const cells = (selector: string): string[][] => Array.from(host!.querySelectorAll(selector),
+      row => Array.from(row.children, cell => cell.textContent ?? ''))
+    const checkCpuColors = (report: Report): void => {
+      expect(cells('[data-effects-cpu] tbody tr')).toEqual((['webgl', 'webgpu'] as const).map(lane => {
+        const colors = report.effects.cpuColors[lane]
+        return [lane, String(colors.budgetFailures), `${colors.maxChannelError}/255`, colors.budgetFailures === 0 ? 'Pass' : 'Fail']
+      }))
+    }
+    const checkAudit = async (arithmetic: PolygonAudit['arithmetic']): Promise<Report> => {
+      const report = await readReport()
+      expect(report.polygonAudit.arithmetic).toBe(arithmetic)
+      // Check the whole displayed sequence against computed evidence, not one
+      // GPU's historical mismatch count. No pixel acceptance rule changes here.
+      const id = (value: number | null): string => value === null ? 'Background' : String(value)
+      expect(cells('[data-polygon-audit] tbody tr').map(row => row.slice(0, 2))).toEqual(report.polygonAudit.samples.map(sample => [
+        `(${sample.x}, ${sample.y}) · ${SHAPES[sample.shape]} · ${sample.point}`,
+        `${id(sample.expected)} / ${id(sample.webgl)} / ${id(sample.webgpu)}`,
+      ]))
+      checkCpuColors(report)
+      return report
+    }
+    await select('[data-fixture]', 'point-effects')
+    expect(host.querySelector<HTMLSelectElement>('[data-renderer]')!.value).toBe('eligibility')
+    const rejected = await checkAudit('normalized')
+    // Non-vacuous rejection check: the deliberately rejected fixture must not
+    // become accepted merely because its diagnostic row count varies by GPU.
+    expect(rejected.comparison.valid).toBe(false)
+    expect(host.querySelector('[role="status"]')!.textContent).toContain('not accepted')
+    await select('[data-polygon-arithmetic]', 'pixels')
+    const pixelReport = await checkAudit('pixels')
+    expect(pixelReport.settings.polygonArithmetic).toBe('pixels')
+    expect(pixelReport.comparison.valid).toBe(false)
+    expect(host.querySelector('[role="status"]')!.textContent).toContain('not accepted')
+    await select('[data-renderer]', 'production')
+    expect(host.querySelector<HTMLSelectElement>('[data-polygon-arithmetic]')!.disabled).toBe(true)
+    expect((await checkAudit('normalized')).renderer).toBe('production')
+    await select('[data-renderer]', 'eligibility')
+    expect((await checkAudit('pixels')).polygonAudit).toEqual(pixelReport.polygonAudit)
+    await select('[data-effects-profile]', '1')
+    await select('[data-ratio]', '2')
+    const retina = await checkAudit('pixels')
+    expect(retina.settings.ratio).toBe(2)
+    const preservationFailed = Object.values(retina.colorPreservation).some(result => result.changedPixels > 0)
+    expect(host.querySelector('[role="status"]')!.textContent!.includes('Failed color-preservation')).toBe(preservationFailed)
+    await select('[data-ratio]', '1')
+    await select('[data-effects-scene]', 'overlap')
+    await select('[data-effects-profile]', '4')
+    expect(host.querySelector<HTMLSelectElement>('[data-opacity]')!.value).toBe('0')
+    const selected = await readReport()
+    expect(selected.comparison.valid).toBe(true)
+    const selectedStatus = host.querySelector('[role="status"]')!.textContent!
+    if (selected.compatibility.colorFailures > 0) {
+      expect(selectedStatus).toContain('Source-byte frame passed. Production color compatibility failed')
+    } else {
+      expect(selectedStatus).toContain(`Source-byte candidate passed. Production compatibility ${
+        selected.compatibility.valid ? 'passed' : 'differs'}`)
+    }
+    const canvas = host.querySelector('canvas')!
+    host.querySelector<HTMLButtonElement>('[data-effects-sweep]')!.click()
+    await vi.waitFor(() => expect(host!.querySelectorAll('[data-effects-table] tbody tr').length).toBeGreaterThan(0), { timeout: 20000 })
+    const completed = cells('[data-effects-table] tbody tr')
+    host.querySelector<HTMLButtonElement>('[data-effects-cancel]')!.click()
+    await vi.waitFor(() => expect(host!.querySelector('[data-effects-progress]')!.textContent).toContain('cancelled'), { timeout: 20000 })
+    const retained = cells('[data-effects-table] tbody tr')
+    // A row already in flight may finish; every previously completed row stays.
+    expect(retained.length).toBeGreaterThanOrEqual(completed.length)
+    expect(retained.slice(0, completed.length)).toEqual(completed)
+    const cancelled = await readReport()
+    expect(cancelled.effectsSweep!.status).toBe('cancelled'); expect(cancelled.effectsSweep!.finishedAt).toBeTruthy()
+    expect(cancelled.effectsSweep!.rows).toHaveLength(retained.length)
+    expect(retained.map(row => row.slice(1))).toEqual(cancelled.effectsSweep!.rows.map(row => [
+      row.passed ? 'Pass' : 'Fail', String(row.paired.idDisagreements),
+      `${row.paired.webglReferenceFailures} / ${row.paired.webgpuReferenceFailures}`,
+      `${row.colors.webgl.budgetFailures} / ${row.colors.webgpu.budgetFailures}`,
+      `${row.preservation.webgl.changedPixels} / ${row.preservation.webgpu.changedPixels}`,
+      row.compatibility.valid ? 'Pass' : 'Fail',
+    ]))
+    expect(cancelled.effects).toEqual(selected.effects); expect(cancelled.settings).toEqual(selected.settings)
+    expect(cancelled.comparison).toEqual(selected.comparison)
+    expect(host.querySelector<HTMLSelectElement>('[data-effects-scene]')!.value).toBe('overlap')
+    expect(host.querySelector<HTMLSelectElement>('[data-effects-profile]')!.value).toBe('4')
+    expect(host.querySelector<HTMLSelectElement>('[data-polygon-arithmetic]')!.value).toBe('pixels')
+    expect(host.querySelector('canvas')).toBe(canvas)
+    await select('[data-effects-profile]', '0')
+    checkCpuColors(await readReport())
+    expect(host.querySelector('details')).toBeNull()
+  } finally { createUrl.mockRestore(); revokeUrl.mockRestore(); download.mockRestore() }
 }, 90000)
