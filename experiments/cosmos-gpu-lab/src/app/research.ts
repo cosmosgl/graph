@@ -127,16 +127,16 @@ export const research: Record<string, ResearchSummary> = {
     reviewed: '2026-11-15',
     comparison: 'Production curved ribbons → WebGL / WebGPU colors and host IDs → independent triangle-strip masks and source checks',
     question: 'Do production solid curves render and pick consistently through public luma APIs?',
-    conclusion: 'Curved solid links pass 26/64 cases; boundary masks and invisible picks from folded ribbons remain rejected.',
-    scope: 'Apple M3, inline Chromium 157: 18/56 nonzero-opacity plus 8/8 zero-opacity rows pass; all 64 preserve original color. ' +
-      'Ten rows differ in GPU IDs, 36 retain CPU mask failures and four expose invisible source picks.',
-    variant: 'Unmodified GLSL/color control; visible-footprint/source-byte ID candidate; luma 10.0.0-alpha.4',
-    next: 'Isolate the folded-ribbon visibility failure and default-bow boundary pixel without changing color, controls or tolerances.',
-    reproduce: 'Compare both picking rules, then run the curved-link sweep and export JSON locally.',
+    conclusion: 'Color-face picking fixes folded-ribbon visibility and passes 28/64; native boundary mask/color failures remain rejected.',
+    scope: 'Apple M3, inline Chromium 157: 20/56 nonzero-opacity plus 8/8 zero-opacity rows pass; all 64 preserve color and avoid invisible source picks. ' +
+      'The previous 26/64 rows reproduce identically; nine identical-geometry replays retain the bow interpolation split.',
+    variant: 'Unmodified GLSL/color control; color-face/source-byte ID candidate; previous two-sided IDs retained; luma 10.0.0-alpha.4',
+    next: 'Retain native boundary mask/color blockers and compare endpoint gradients under unchanged production and acceptance gates.',
+    reproduce: 'Compare all three picking policies, run the 64-case sweep and default-bow pixel replay, then export JSON locally.',
     investigations: [{
       page: 'method',
       state: 'Current evidence',
-      description: 'Curve sampling, full-frame masks, original color and selected-source visibility.',
+      description: 'Curve sampling, 64-case culling comparison and nine identical-geometry boundary replays under unchanged gates.',
     }],
   },
   'straight-links': {
@@ -205,9 +205,9 @@ export const milestones = [
   {
     id: 'rendering',
     title: 'Rendering and interaction',
-    position: 'Bounded point styles/images, 88/96 rings, 30/40 straight-link and 26/64 curved-link cases demonstrated on M3',
+    position: 'Bounded point styles/images, 88/96 rings, 30/40 straight-link and 28/64 curved-link cases demonstrated on M3',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
-    gates: ['Resolve curved-ribbon mask/folded-source blockers; retain straight-link failures while validating patterns, arrows and link states.',
+    gates: ['Retain straight/curved native mask/color blockers while validating endpoint gradients, patterns, arrows and link states.',
       'Retain polygon CPU/preservation gates; validate transitions and pointer behavior, measure accepted rendering cost and broaden native devices.'],
     evidence: [['curved-links', 'Curved solid links'], ['straight-links', 'Straight-link rendering/picking'],
       ['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],

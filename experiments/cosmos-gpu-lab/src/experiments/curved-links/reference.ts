@@ -78,20 +78,22 @@ export type Reference = { width: number; height: number; color: Uint8Array; ids:
 export function reference (scene: Scene, settings: Settings): Reference {
   const width = WIDTH * settings.ratio; const height = HEIGHT * settings.ratio; const color = new Uint8Array(width * height * 4)
   const visible = mesh(scene, settings, false, 'visible'); const ids = {
-    production: new Int32Array(width * height).fill(-1), visible: new Int32Array(width * height).fill(-1),
+    production: new Int32Array(width * height).fill(-1),
+    visible: new Int32Array(width * height).fill(-1),
+    front: new Int32Array(width * height).fill(-1),
   }
-  // Color follows production back-face culling; host IDs use its uncullled pass.
+  // Color follows production back-face culling; host IDs use its unculled pass.
   raster(visible.filter(t => t.area < 0), width, height, (tri, i, coverage) => {
     if (!settings.blend && (coverage < 0.5 || tri.alpha <= 0)) return
     const alpha = settings.blend ? Math.max(0, Math.min(1, Math.fround(tri.alpha * Math.fround(coverage)))) : 1
     for (let c = 0; c < 3; c++) color[i * 4 + c] = Math.round((tri.color[c] * alpha + color[i * 4 + c] / 255 * (1 - alpha)) * 255)
     color[i * 4 + 3] = Math.round((alpha + color[i * 4 + 3] / 255 * (1 - alpha)) * 255)
   })
-  for (const variant of ['production', 'visible'] as const) {
-    const triangles = variant === 'visible' ? visible : mesh(scene, settings, true, variant)
+  for (const variant of ['production', 'visible', 'front'] as const) {
+    const triangles = variant === 'production' ? mesh(scene, settings, true, variant) : variant === 'front' ? visible.filter(t => t.area < 0) : visible
     raster(triangles, width, height, (tri, i, coverage) => {
       if (coverage < 0.5 || tri.alpha <= 0) return
-      if (variant === 'visible' && settings.blend && sourceAlphaByte(Math.fround(tri.alpha * Math.fround(coverage))) === 0) return
+      if (variant !== 'production' && settings.blend && sourceAlphaByte(Math.fround(tri.alpha * Math.fround(coverage))) === 0) return
       ids[variant][i] = tri.id
     })
   }
