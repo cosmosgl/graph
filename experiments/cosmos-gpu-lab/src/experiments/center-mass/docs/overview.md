@@ -4,8 +4,6 @@ This experiment isolates one operation used by a force simulation: reduce every 
 It compares the current Cosmos-style WebGL technique with a WebGPU compute implementation while keeping the input,
 tick order and CPU reference identical.
 
-![WebGL and WebGPU reduction pipelines](reductionPipeline)
-
 ## Question
 
 Can a portable WebGPU compute reduction replace the additive floating-point blend used by the WebGL engine without

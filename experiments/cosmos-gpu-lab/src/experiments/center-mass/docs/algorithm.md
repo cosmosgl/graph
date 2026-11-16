@@ -18,7 +18,17 @@ contents for a given tick.
 WebGL has no compute shaders. Cosmos can nevertheless perform a global sum by drawing every point into the same
 one-pixel floating-point framebuffer.
 
-The vertex shader passes the source position to the fragment shader. Every fragment writes:
+Think of this pixel as a **running total**. It starts at zero. Each point adds its x and y coordinates to their
+respective totals and increases the point count by `1`. The pixel's red channel stores the x total, green stores
+the y total, blue stores the count, and alpha stays zero.
+
+After all points contribute, divide the x and y totals by the count: that is the global center.
+The pixel belongs to a separate calculation texture. The graph's points stay where they are.
+
+In the accumulation vertex shader, `gl_Position = vec4(0, 0, 0, 1)` and `gl_PointSize = 1.0` make every point
+cover the sole pixel. The original coordinates reach the fragment shader separately as `pointPosition`.
+
+Every fragment writes:
 
 ```glsl
 contribution = vec4(pointPosition, 1.0, 0.0);

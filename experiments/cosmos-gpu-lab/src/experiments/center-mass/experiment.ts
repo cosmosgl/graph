@@ -1,10 +1,5 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { defineExperiment } from '../../runtime/experiment'
-import reductionDiagramUrl from './diagrams/reduction-pipeline.svg?url'
-
-const diagramAssets = {
-  reductionPipeline: reductionDiagramUrl,
-}
 
 export const experiment = defineExperiment({
   id: 'center-mass',
@@ -21,7 +16,6 @@ export const experiment = defineExperiment({
       id: 'overview',
       title: 'Overview',
       load: async (): Promise<string> => (await import('./docs/overview.md?raw')).default,
-      assets: diagramAssets,
     },
     {
       kind: 'markdown',
