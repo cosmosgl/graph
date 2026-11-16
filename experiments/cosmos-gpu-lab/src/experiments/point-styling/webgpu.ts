@@ -2,6 +2,7 @@ import { Buffer, type TextureFormatColor } from '@luma.gl/core'
 import { RenderKernel } from '@luma.gl/graph'
 import { ALPHA_BLEND, bindingLayout, createDevice, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
+import { resolveStoredAlpha, validateStoredAlpha, regionScissor } from './stored-alpha'
 import { dimensions, floatPixels, pixels, target, type Backend, type Snapshot } from './backend'
 import { HEIGHT, resolvePoint, WIDTH } from './data'
 import source from './points.wgsl?raw'
@@ -63,7 +64,8 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
     return {
       atlas: dynamic,
       info: `${String(device.info.vendor)} / ${String(device.info.renderer)}`,
-      async render (points, settings, diagnose = false, variant = 'production', display = true): Promise<Snapshot> {
+      async render (points, settings, diagnose = false, variant = 'production', display = true, storedAlpha): Promise<Snapshot> {
+        if (storedAlpha) validateStoredAlpha(points, settings, variant, storedAlpha)
         const frame = resourceScope()
         try {
           const isolation = variant === 'production' ? 'original' : settings.atlasIsolation ?? 'original'
@@ -107,13 +109,14 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
               settings.greyoutOpacity ?? -1, Number(settings.darkenGreyout !== false), settings.strokeContrast ?? 0, settings.ringContrast ?? 0,
               settings.strokeShade ?? 2, settings.ringShade ?? 2, layer, overlayIndex,
             ]), Buffer.UNIFORM))
-          const draw = (kernel: RenderKernel, mode: number, framebuffer?: ReturnType<typeof target>['framebuffer']): void => {
+          const draw = (kernel: RenderKernel, mode: number, framebuffer?: ReturnType<typeof target>['framebuffer'], rank?: number): void => {
             const pass = device.beginRenderPass({
               framebuffer,
               clearColor: framebuffer ? [0, 0, 0, 0] : settings.backgroundColor ?? [0.14, 0.16, 0.185, 1],
               clearDepth: false,
             })
             try {
+              if (rank !== undefined) pass.setParameters({ scissorRect: regionScissor(device, height, storedAlpha!.region) })
               const atlas = atlasSource
                 ? dynamic.texture(settings.imageFilter ?? 'nearest')
                 : packing === 'baseline'
@@ -123,11 +126,12 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
                 kernel.draw(pass, {
                   vertexArray,
                   vertexCount: 6,
-                  instanceCount: points.length,
+                  instanceCount: rank === undefined ? points.length : 1,
+                  firstInstance: rank ?? 0,
                   bindings: { points: buffer, params: params(mode, layer), atlas, imageRects },
                 })
               }
-              if (mode === 0) {
+              if (mode === 0 && rank === undefined) {
                 for (const ring of overlayIndices(settings, points.length)) {
                   overlayKernel ??= make('rgba8unorm', false, false, true)
                   if (!framebuffer) {
@@ -148,14 +152,22 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
           draw(colorKernel, 0, color.framebuffer); draw(pickKernel, 1, ids.framebuffer)
           if (display) draw(displayKernel, 0)
           device.submit()
+          const stored = storedAlpha
+            ? await resolveStoredAlpha(device, width, height, points, settings, storedAlpha,
+              (id, mask, geometry) => {
+                const rank = order.indexOf(id)
+                draw(colorKernel, 0, mask, rank); draw(pickKernel, 1, geometry, rank)
+              }, ids)
+            : undefined
           const result: Snapshot = {
+            storedAlpha: stored,
             polygonArithmetic: variant === 'production' ? 'normalized' : settings.polygonArithmetic ?? 'normalized',
             atlasSource,
             atlasGeneration: atlasSource ? dynamic.generation : undefined,
             atlasPacking: packing,
             atlasIsolation: isolation,
             atlasGutterExtent: isolation === 'gutter' ? gutterExtent : undefined,
-            pickingRule: variant === 'production' ? 'legacy' : variant === 'explicit' ? 'visible' : 'source-alpha',
+            pickingRule: stored ? 'stored-alpha' : variant === 'production' ? 'legacy' : variant === 'explicit' ? 'visible' : 'source-alpha',
             width,
             height,
             color: await pixels(device, color.texture, color.framebuffer),
