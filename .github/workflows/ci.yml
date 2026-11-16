@@ -41,6 +41,7 @@ jobs:
       # Real-GPU browser suite (headless Chromium on SwiftShader).
       - run: pnpm exec playwright install --with-deps chromium
       - run: pnpm test
+      - run: pnpm --filter @cosmos.gl/gpu-lab test:ui
       # The build exits 0 even when TypeScript reports errors; the grep turns
       # them into a failure.
       - name: Build
@@ -57,7 +58,7 @@ jobs:
         run: pnpm audit --prod --audit-level=high
 
   gpu-lab:
-    # Experimental GPU coverage is advisory; verify remains the required check.
+    # Rollout stage 1: retain automatic GPU evidence until manual dispatch is verified.
     runs-on: ubuntu-latest
     continue-on-error: true
     timeout-minutes: 30
