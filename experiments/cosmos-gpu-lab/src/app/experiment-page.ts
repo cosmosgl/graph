@@ -26,7 +26,7 @@ export function renderExperimentContents (host: HTMLElement, experiment: Experim
   }
   for (const [id, label] of contentsSections) {
     const target = host.querySelector<HTMLElement>(`#${id}`); if (!target) continue
-    const item = append(contents.querySelector('ul')!, target, label)
+    const item = append(contents.querySelector('ul')!, target, target.dataset.sectionLabel ?? label)
     const articles = target.querySelectorAll<HTMLElement>('.experiment-article')
     if (!articles.length && id !== 'run-explanation') continue
     const children = document.createElement('ul'); item.append(children)
@@ -129,13 +129,14 @@ async function renderArticle (
 
 async function renderNotes (host: HTMLElement, experiment: ExperimentDefinition, record: ResearchSummary): Promise<void> {
   const contract = validationContracts[experiment.id]
+  const parked = record.investigations.some(item => item.page === record.evidence && item.state === 'Parked')
   const content = document.createElement('div'); content.className = 'experiment-notes'
   const contractId = articleSectionId('validation-contract')
   const fields = [['question', 'Comparison question', contract.question], ['reference', 'Reference', contract.reference],
     ['acceptance', 'Acceptance', contract.acceptance], ['checked-population', 'Checked population', contract.coverage], ['limits', 'Limits', contract.limits]]
   content.innerHTML = `<section class="experiment-method" id="run-explanation" aria-labelledby="experiment-method-title">
     <h2 id="experiment-method-title">How it works</h2><p class="section-summary">${record.comparison}</p>
-    <div data-experiment-guidance></div><h3>Try it</h3><p>${record.reproduce}</p>
+    <div data-experiment-guidance></div><h3>${parked ? 'Research record' : 'Try it'}</h3><p>${record.reproduce}</p>
     <section id="${contractId}"><h3>What we compare</h3><dl class="experiment-contract">${fields.map(([id, title, value]) =>
   `<div id="${articleSectionId('validation-contract', id)}"><dt>${title}</dt><dd>${value}</dd></div>`).join('')}</dl></section>
     ${record.methods?.length

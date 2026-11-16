@@ -127,6 +127,7 @@ fixtures needed to reproduce correctness bugs belong with tests, separately from
 - `resident-layout`: GPU bounds and composed compute-to-render ticks compared with the staged precision reference.
 - `point-capacity`: same-device point-count changes, GPU prefix preservation, retained-capacity/kernel reuse,
   update costs and buffer cleanup.
+- `ribbon-generation`: stopped compute-cache investigation; retained native findings and reproduction harness, with no live benchmark controls.
 - `gpu-stage-profile`: frozen-input stage timing, balanced rebuilt/retained trials and exact instrumentation replay.
 - `hub-springs`: pinned/unpinned degree controls and ordered cooperative neighbor prefetch, checked against the
   strict baseline on one device, evolving checkpoint validation and GPU-batched normal-frame threshold controls.

@@ -9,6 +9,14 @@ export type ValidationContract = {
 // These describe existing gates, not new pass thresholds or production approvals.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match existing public hash routes. */
 export const validationContracts: Record<string, ValidationContract> = {
+  'ribbon-generation': {
+    question: 'Does WebGPU compute sample reuse reduce complete ribbon drawing cost?',
+    reference: 'The existing curved-link WGSL vertex generator, on the same device, inputs, rasterizer and color-face picking policy.',
+    acceptance: 'Exact RGBA8 color and ID preservation on the selected scene, nonempty color control and exact static-cache reuse. Cost is separate.',
+    coverage: 'Solid rational curves; fixed tessellation, rebuilt and static caches; color-only or color plus IDs; duplicate baseline and balanced timing.',
+    limits: 'No independent CPU geometry gate or WebGL equivalence claim. Frozen endpoints model rebuilding cost, not an evolving simulation. ' +
+      'Existing curved-link raster failures remain open. Full styles, invalidation integration, culling, adaptive tessellation and cross-device costs are unchecked.',
+  },
   'point-styling': {
     question: 'Do production Cosmos styling and shape-aware host picking match a luma WebGPU port and the rendered footprint?',
     reference: 'Unmodified production GLSL with the legacy CPU rule; independent candidate CPU geometry with positive global opacity ' +

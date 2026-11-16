@@ -30,6 +30,7 @@ export default defineConfig({
   define: {
     'import.meta.env.REQUIRE_WEBGPU': true,
     'import.meta.env.LAB_STORED_ALPHA_SWEEP': process.env.LAB_STORED_ALPHA_SWEEP === '1',
+    'import.meta.env.LAB_RIBBON_COST': process.env.LAB_RIBBON_COST === '1',
     'import.meta.env.LAB_NATIVE_GPU': process.env.LAB_NATIVE_GPU === '1',
     // Vite define strings are JavaScript expressions; quote the selected mode.
     'import.meta.env.LAB_SCALE_PRECISION': JSON.stringify(process.env.LAB_SCALE_PRECISION ?? 'products'),
@@ -52,6 +53,7 @@ export default defineConfig({
       'src/experiments/point-styling/**/*.test.ts',
       'src/experiments/straight-links/**/*.test.ts',
       'src/experiments/curved-links/**/*.test.ts',
+      'src/experiments/ribbon-generation/**/*.test.ts',
     ],
     testTimeout: 60000,
     maxWorkers: 1,
