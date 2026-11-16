@@ -134,7 +134,7 @@ async function renderNotes (host: HTMLElement, experiment: ExperimentDefinition,
   const fields = [['question', 'Comparison question', contract.question], ['reference', 'Reference', contract.reference],
     ['acceptance', 'Acceptance', contract.acceptance], ['checked-population', 'Checked population', contract.coverage], ['limits', 'Limits', contract.limits]]
   content.innerHTML = `<section class="experiment-method" id="run-explanation" aria-labelledby="experiment-method-title">
-    <h2 id="experiment-method-title">How it works</h2><p>${record.comparison}</p>
+    <h2 id="experiment-method-title">How it works</h2><p class="section-summary">${record.comparison}</p>
     <div data-experiment-guidance></div><h3>Try it</h3><p>${record.reproduce}</p>
     <section id="${contractId}"><h3>What we compare</h3><dl class="experiment-contract">${fields.map(([id, title, value]) =>
   `<div id="${articleSectionId('validation-contract', id)}"><dt>${title}</dt><dd>${value}</dd></div>`).join('')}</dl></section>
