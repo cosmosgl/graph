@@ -22,11 +22,27 @@ it('keeps original colors and visible source-byte picks at every alpha-byte boun
     for (const backend of [gl, gpu]) {
       const before = await backend.render(points, DEFAULTS, false, 'explicit', false)
       const image = await backend.render(points, DEFAULTS, false, 'eligibility', false)
-      expect(compareColors(before, image)).toEqual({ changedPixels: 0, maxChannelError: 0, budgetFailures: 0 })
+      expect(compareColors(before, image), `${backend.info}: original color preservation`)
+        .toEqual({ changedPixels: 0, maxChannelError: 0, budgetFailures: 0 })
       points.forEach((p, i) => {
-        const x = Math.floor(p.x); const y = Math.floor(p.y); const eligible = sourceAlphaByte(alpha[i]) > 0
-        expect(pick(image, x, y), `sample ${i}: ${alpha[i]}`).toBe(eligible ? i : null)
-        if (eligible) expect(image.color[(y * image.width + x) * 4 + 3], `own paint ${i}`).toBeGreaterThan(0)
+        const x = Math.floor(p.x); const y = Math.floor(p.y); const expectedByte = sourceAlphaByte(alpha[i])
+        const eligible = expectedByte > 0; const actualId = pick(image, x, y)
+        const offset = (y * image.width + x) * 4
+        f[0] = alpha[i]
+        const context = JSON.stringify({
+          backend: backend.info,
+          sample: i,
+          alpha: alpha[i],
+          alphaBits: `0x${bits[0].toString(16).padStart(8, '0')}`,
+          pixel: [x, y],
+          expectedByte,
+          expectedId: eligible ? i : null,
+          actualId,
+          originalRgba: Array.from(before.color.subarray(offset, offset + 4)),
+          candidateRgba: Array.from(image.color.subarray(offset, offset + 4)),
+        })
+        expect(actualId, context).toBe(eligible ? i : null)
+        if (eligible) expect(image.color[offset + 3], `own paint: ${context}`).toBeGreaterThan(0)
       })
     }
   } finally { gpu?.destroy(); gl.destroy() }

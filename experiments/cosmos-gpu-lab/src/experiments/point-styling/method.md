@@ -610,6 +610,30 @@ Whole production picking compatibility still fails: its **50 invisible IDs** and
 mismatches** remain visible, while the source-byte candidate has no CPU-mask failures. These are
 retained legacy failures, not waived acceptance gates or a claim of identical production picking.
 
+### Alpha.15 regression check · 16 November 2026
+
+Rechecked on Apple M3 in the embedded Chromium browser with native GPU access and luma
+`10.0.0-alpha.15`. The source-byte file passes **3/3 tests** in a fresh session. A second fresh
+session passes all **10 tests** across `source-byte.test.ts`, `source-alpha.test.ts` and
+`tiny-alpha.test.ts`, including the 767 boundary samples per backend, original color preservation,
+faint-source visibility, accumulation and retained-control restoration.
+
+The inspected earlier CI failure in the alpha-boundary test was **“Failed to request WebGPU
+adapter”** during backend creation, before any boundary assertion ran. It does not establish an
+alpha arithmetic mismatch. This native recheck does not establish Linux/SwiftShader behavior or
+replace the full rendering matrices. No production control, shader, reference policy or acceptance
+gate changed. Boundary assertion messages now include the backend, exact input alpha and float32
+bits, pixel, expected byte/ID, actual ID and original/candidate RGBA for a future failing replay.
+
+To reproduce this focused native check, run:
+
+```sh
+LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/source-byte.test.ts src/experiments/point-styling/source-alpha.test.ts src/experiments/point-styling/tiny-alpha.test.ts
+```
+
+Open the printed test-session URL in the existing browser. Omit `LAB_INLINE_BROWSER=1` to launch
+installed Chrome; record that different browser environment separately.
+
 ### Reproduction and remaining scope
 
 Select **Source-byte picking candidate**, then **Tiny-alpha overlap**, opacity **1**. Compare
