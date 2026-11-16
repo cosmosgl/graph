@@ -54,23 +54,38 @@ jobs:
         with:
           ref: ${{ steps.revision.outputs.sha }}
           persist-credentials: false
-      # PR code must not populate caches in the dispatch/default-branch scope.
-      - uses: pnpm/action-setup@v6
-        with:
-          cache: false
-      - id: node
-        run: echo "floor=$(node -p "require('./package.json').engines.node.match(/\d+/)[0]")" >> "$GITHUB_OUTPUT"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ steps.node.outputs.floor }}
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm exec playwright install --with-deps chromium
-      - name: Validate selection and merge contracts
-        run: node --test scripts/lab-validation.test.mjs
-      - name: Run selected investigation
+      - name: Read the selected revision's Node floor
+        id: node
+        run: |
+          node --input-type=module -e '
+            import {readFileSync, appendFileSync} from "node:fs";
+            const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+            const floor = pkg.engines.node.match(/\d+/)?.[0];
+            if (!floor) throw new Error("Missing Node floor");
+            appendFileSync(process.env.GITHUB_OUTPUT, `floor=${floor}\n`);
+          '
+      - name: Run investigation in an isolated software container
         env:
           LAB_REVISION_FILE: ${{ runner.temp }}/lab-revision.json
-        run: node scripts/lab-validation.mjs run
+          NODE_FLOOR: ${{ steps.node.outputs.floor }}
+        run: |
+          # No host credentials, runtime/cache tokens or Docker socket enter the container.
+          docker run --rm --init \
+            --mount "type=bind,src=$PWD,dst=/work" \
+            --mount "type=bind,src=$LAB_REVISION_FILE,dst=/lab-revision.json,readonly" \
+            --workdir /work \
+            -e CI=1 -e COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+            -e LAB_INVESTIGATION -e LAB_FULL_SWEEP \
+            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT \
+            -e LAB_REVISION_FILE=/lab-revision.json \
+            "node:${NODE_FLOOR}-bookworm" sh -ec '
+              git config --global --add safe.directory /work
+              corepack enable
+              pnpm install --frozen-lockfile
+              pnpm exec playwright install --with-deps chromium
+              node --test scripts/lab-validation.test.mjs experiments/cosmos-gpu-lab/scripts/artifacts.test.mjs
+              node scripts/lab-validation.mjs run
+            '
       - name: Retain evidence, including failed assertions
         if: always()
         uses: actions/upload-artifact@v4
