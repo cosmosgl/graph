@@ -49,10 +49,11 @@ async function resolveRevision () {
     const pr = JSON.parse(exec('gh', ['api', `repos/${repository}/pulls/${number}`]))
     verifyPrSource(pr, repository)
     if (pr.state !== 'open' || pr.mergeable !== true) throw new Error('PR must be open and mergeable; no head-only fallback')
+    const base = JSON.parse(exec('gh', ['api', `repos/${repository}/git/ref/heads/${encodeURIComponent(pr.base.ref)}`])).object.sha
     exec('git', ['fetch', '--no-tags', '--depth=2', 'origin', `refs/pull/${number}/merge`])
     const sha = exec('git', ['rev-parse', 'FETCH_HEAD'])
-    verifyMergeParents(exec('git', ['show', '-s', '--format=%P', sha]), pr.base.sha, pr.head.sha)
-    data = { source: 'pr-merge', repository, pr: Number(number), sha, base: pr.base.sha, head: pr.head.sha, baseRef: pr.base.ref }
+    verifyMergeParents(exec('git', ['show', '-s', '--format=%P', sha]), base, pr.head.sha)
+    data = { source: 'pr-merge', repository, pr: Number(number), sha, base, reportedBase: pr.base.sha, head: pr.head.sha, baseRef: pr.base.ref }
   } else data = { source: 'dispatch-ref', repository, sha: exec('git', ['rev-parse', 'HEAD']) }
   const pkg = JSON.parse(exec('git', ['show', `${data.sha}:package.json`]))
   const nodeFloor = pkg.engines?.node?.match(/\d+/)?.[0]
