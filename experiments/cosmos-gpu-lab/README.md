@@ -276,7 +276,11 @@ that repository setting.
 
 A PR run fetches and pins its merge SHA, checks its base/head parents and fails if no usable merge
 revision exists. It never substitutes the PR head. Without a PR, it tests the dispatched revision;
-that revision must contain the lab. The workflow token is read-only and is not persisted in Git.
+that revision must contain the lab. The workflow token is read-only and is not persisted in Git. Dispatch and rerun actors must have
+repository write permission, and PRs must come from branches in this repository. Fork PRs are
+rejected: a dispatch runs in its selected branch's cache scope even with read-only repository
+permissions. Setup-action caches are disabled, but that alone is not an isolation boundary.
+Use a separately isolated environment for untrusted fork code.
 
 `full` selects all files in the broad configuration. It does **not** enable native-only tests or
 large-layout research: `LAB_NATIVE_GPU=0` and `LAB_SCALE_COUNT=0`. The cost-sweep switch enables
