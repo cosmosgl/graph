@@ -233,7 +233,7 @@ before introducing animations, observers or GPU resources. Chapter links support
 Run the documentation interaction checks with:
 
 ```sh
-pnpm exec vitest run --project gpu-lab src/app/learning-examples.test.ts src/app/flow.test.ts
+pnpm --filter @cosmos.gl/gpu-lab test:gpu src/app/learning-examples.test.ts src/app/flow.test.ts
 ```
 
 ## GPU regression checks
@@ -243,10 +243,11 @@ pnpm --filter @cosmos.gl/gpu-lab test:gpu
 ```
 
 This runs rendering, reductions, neighborhood-force, shared-grid, weighted-link and global many-body tests in Chromium with its software WebGPU
-adapter enabled. It fails if no adapter is available. The normal repository test run skips GPU
-cases when WebGPU is unavailable. The root test configuration uses separate engine and lab projects so
-Vite does not resolve the lab's luma v10 imports through the engine's v9 dependency cache. Software-adapter
-timings are not hardware benchmarks.
+adapter enabled. It fails if no adapter is available. The normal repository test run (`pnpm test`)
+covers the engine and deck integration only. CI runs lab checks in a separate, non-blocking `gpu-lab`
+job using this package's browser configuration; the core `verify` job remains required. Separate
+test runs also keep the lab's luma v10 dependency cache isolated from the engine's v9 cache.
+Software-adapter timings are not hardware benchmarks.
 
 To run the native-GPU regressions using installed Google Chrome:
 
