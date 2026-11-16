@@ -271,8 +271,8 @@ gh workflow run ci.yml --ref experiment/cosmos-gpu-lab -f investigation=point-st
 
 The CI workflow already exists on the default branch; select the lab branch while the lab is
 still under review. After it merges, use `--ref main`. Manual runs skip automatic verification jobs
-and have separate concurrency groups. During rollout, the automatic advisory `gpu-lab` job stays
-enabled until a real dispatch and its artifacts have been checked. Branch protection must separately require `verify`; declaring the job does not configure
+and have separate concurrency groups. The automatic GPU job was retired after successful and
+failed manual runs both retained their evidence. Automatic CI keeps the guarded application subset. Branch protection must separately require `verify`; declaring the job does not configure
 that repository setting.
 
 A PR run fetches and pins its merge SHA, checks its base/head parents and fails if no usable merge

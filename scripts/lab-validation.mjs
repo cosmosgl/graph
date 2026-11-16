@@ -102,9 +102,10 @@ async function run () {
       skippedTests: report.testResults.flatMap(file => file.assertionResults.filter(test => ['pending', 'skipped', 'todo'].includes(test.status))
         .map(test => ({ file: file.name, test: test.fullName, status: test.status }))) }
   } catch (error) { outcome = { incompleteReport: String(error) } }
-  await writeFile(resolve(output, 'outcome.json'), JSON.stringify({ finishedAt: new Date().toISOString(), exitCode: code, ...outcome }, null, 2))
+  const exitCode = code || (outcome.incompleteReport ? 1 : 0)
+  await writeFile(resolve(output, 'outcome.json'), JSON.stringify({ finishedAt: new Date().toISOString(), exitCode, ...outcome }, null, 2))
   console.log(JSON.stringify(outcome, null, 2))
-  process.exitCode = code || (outcome.incompleteReport ? 1 : 0)
+  process.exitCode = exitCode
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const action = process.argv[2]
