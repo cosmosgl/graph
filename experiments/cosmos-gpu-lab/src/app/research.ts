@@ -2,13 +2,15 @@ import { additionalResearch } from './research-catalog'
 
 export type EvidenceState = 'Current evidence' | 'Supporting investigation' | 'Historical baseline' | 'Superseded' | 'Parked'
 export type Investigation = { page: string; state: EvidenceState; description: string; replacement?: string }
+export type MethodAssessment = { title: string; verdict: 'Method under test' | 'Reference control' | 'Rejected under current gates';
+  detail: string; page: string; section?: string; }
 export type ResearchSummary = {
   question: string; conclusion: string; scope: string; variant: string; reviewed: string;
   milestone: 'execution' | 'simulation' | 'rendering' | 'integration' | 'production';
   evidence?: string; next: string; reproduce: string; comparison: string;
-  method: string; methodPages?: string[]; investigations: Investigation[];
+  methods?: MethodAssessment[]; method: string; methodPages?: string[]; investigations: Investigation[];
 }
-export const REVIEWED = '2026-11-12'
+const BASELINE_REVIEWED = '2026-11-12'
 
 export function researchMethodPages (record: ResearchSummary): string[] {
   return [...new Set([record.method, ...record.methodPages ?? [], 'validation-contract'])]
@@ -17,14 +19,14 @@ export function researchMethodPages (record: ResearchSummary): string[] {
 // experiment pages read these same records; exact measurements stay linked.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match public experiment routes. */
 export const research: Record<string, ResearchSummary> = {
-  ...additionalResearch(REVIEWED),
+  ...additionalResearch(BASELINE_REVIEWED),
   collision: {
     comparison: 'Shared initial graph → WebGL / WebGPU / CPU → shared-input or independent collision checks',
     question: 'Can WebGPU preserve collision behavior when composed with the other Cosmos forces?',
     conclusion: 'The targeted correction passes all 1,700 tick and 1,700 independent trajectory gates in the recorded M3 matrix.',
     scope: 'Selected isolated and combined fixtures through 512 points; zero measured pointwise drift. This is bounded compatibility evidence.',
     variant: 'Targeted collision distance + contributions; corrected high/low center; luma 10.0.0-alpha.4; M3 / Chromium 157',
-    reviewed: REVIEWED,
+    reviewed: BASELINE_REVIEWED,
     milestone: 'simulation',
     evidence: 'precision',
     method: 'method',
@@ -53,7 +55,7 @@ export const research: Record<string, ResearchSummary> = {
     scope: 'Selected force settings, own-input checkpoints and full-strength probes. These runs do not include the newer ' +
       'collision workload or prove broad layout quality.',
     variant: 'Refined gravity + rounded steps (trig); luma 10.0.0-alpha.4; Apple M3',
-    reviewed: REVIEWED,
+    reviewed: BASELINE_REVIEWED,
     milestone: 'simulation',
     evidence: 'gravity-trig',
     method: 'method',
@@ -110,7 +112,7 @@ export const research: Record<string, ResearchSummary> = {
     conclusion: 'The center-off strict WebGPU comparison records zero measured pointwise drift across 11,200 independently evolving M3 ticks.',
     scope: '12 selected runs; shared CPU sampling decisions. Center-on historical runs and full runtime adaptation remain separate.',
     variant: 'Strict WebGPU, center off; luma 10.0.0-alpha.4; Apple M3',
-    reviewed: REVIEWED,
+    reviewed: BASELINE_REVIEWED,
     milestone: 'simulation',
     evidence: 'findings',
     next: 'Validate independent runtime scheduling and agree quality budgets across representative data and devices.',
@@ -133,6 +135,28 @@ export const research: Record<string, ResearchSummary> = {
     variant: 'Unmodified GLSL/color control; color-face/source-byte ID candidate; previous two-sided IDs retained; luma 10.0.0-alpha.4',
     next: 'Retain native boundary mask/color blockers and compare endpoint gradients under unchanged production and acceptance gates.',
     reproduce: 'Compare all three picking policies, run the 64-case sweep and default-bow pixel replay, then export JSON locally.',
+    methods: [
+      {
+        title: 'Rational ribbon · color-face picking',
+        verdict: 'Method under test',
+        page: 'method',
+        detail: 'Matches ID culling to color; native mask/color boundary failures still prevent complete acceptance.',
+      },
+      {
+        title: 'Previous visible-width, two-sided IDs',
+        verdict: 'Reference control',
+        page: 'method',
+        section: 'folded-ribbon-picking-investigation',
+        detail: 'Retained unchanged; folded back faces can select invisible sources.',
+      },
+      {
+        title: 'Explicit linear interpolation',
+        verdict: 'Rejected under current gates',
+        page: 'method',
+        section: 'default-bow-boundary-investigation',
+        detail: 'Identical-geometry replay retains the native bow cutoff disagreement.',
+      },
+    ],
     investigations: [{
       page: 'method',
       state: 'Current evidence',
@@ -152,6 +176,21 @@ export const research: Record<string, ResearchSummary> = {
     variant: 'Production GLSL control and visible-footprint/source-byte ID candidate; original color; luma 10.0.0-alpha.4; Apple M3',
     next: 'Retain the boundary blockers and validate curved solid links next; common cap geometry remains a separate candidate with unchanged gates.',
     reproduce: 'Compare both picking rules, blending, zoom and DPR, then run the 40-case straight-link sweep and export JSON locally.',
+    methods: [
+      {
+        title: 'Straight ribbon · source-byte picking',
+        verdict: 'Method under test',
+        page: 'method',
+        detail: 'Preserves original color and source visibility; hard-edge and raster boundaries remain rejected.',
+      },
+      {
+        title: 'Hard-only pixel-distance coverage',
+        verdict: 'Rejected under current gates',
+        page: 'method',
+        section: 'hard-edge-coverage-investigation',
+        detail: 'Removes selected WebGPU/CPU mask failures but changes original color pixels; retained as a diagnostic.',
+      },
+    ],
     investigations: [{
       page: 'method',
       state: 'Current evidence',
@@ -172,6 +211,20 @@ export const research: Record<string, ResearchSummary> = {
     next: 'Validate production link rendering and picking; retain the polygon counterexamples for a separate reference/preservation decision.',
     reproduce: 'Select Point rings and greyout and compare Normalized with Pixel-space arithmetic. ' +
       'Read every rejected pixel in Polygon boundary replay and run the 96-row sweep under each mode. CPU and color-preservation failures stay rejected.',
+    methods: [
+      {
+        title: 'Styled points · normalized coverage',
+        verdict: 'Method under test',
+        page: 'method',
+        detail: 'Bounded shape/image/ring checks coexist with retained polygon and visibility counterexamples.',
+      },
+      {
+        title: 'Pixel-space polygon predicates',
+        verdict: 'Rejected under current gates',
+        page: 'method',
+        detail: 'CPU diamond ties and original-color preservation failures remain; matching GPU IDs is insufficient.',
+      },
+    ],
     investigations: [{
       page: 'method',
       state: 'Current evidence',
@@ -205,7 +258,7 @@ export const milestones = [
   {
     id: 'rendering',
     title: 'Rendering and interaction',
-    position: 'Bounded point styles/images, 88/96 rings, 30/40 straight-link and 28/64 curved-link cases demonstrated on M3',
+    position: 'Bounded point-style and link studies; native mask/color boundaries remain open',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
     gates: ['Retain straight/curved native mask/color blockers while validating endpoint gradients, patterns, arrows and link states.',
       'Retain polygon CPU/preservation gates; validate transitions and pointer behavior, measure accepted rendering cost and broaden native devices.'],
@@ -242,9 +295,6 @@ export const mainOpenIssues = [
 // Current editorial priority. The gate and findings come from the same records
 // used by Roadmap and the experiment page, never from this browser's live run.
 export const migrationFocus = {
-  milestone: 'rendering',
+  step: 2,
   experiment: 'curved-links',
-  phase: 'Prototype validation',
-  status: 'Production Cosmos uses WebGL. Integration and production acceptance remain open.',
-  demonstrated: ['collision', 'matched-layout', 'point-styling'],
 } as const

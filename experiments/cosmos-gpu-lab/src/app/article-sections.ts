@@ -10,7 +10,7 @@ export function addArticleSections (host: HTMLElement, experimentId: string, pag
   // so their existing deep links survive repeated titles and deeper headings.
   const legacy = headings.filter(h => h.dataset.headingLevel === '2' || h.dataset.headingLevel === '3')
   for (const heading of [...legacy, ...headings.filter(h => !legacy.includes(h))]) {
-    const label = heading.textContent!.trim()
+    const label = heading.textContent!.trim(); heading.dataset.sectionLabel = label
     const stem = heading.dataset.headingLevel === '1' ? 'title' : headingSlug(label)
     let slug = stem; let suffix = 2
     while (used.has(slug)) slug = `${stem}-${suffix++}`

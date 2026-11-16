@@ -6,6 +6,7 @@ import { validationContracts } from '../runtime/validation'
 import { createAppShell } from './app-shell'
 import { experiments, findExperiment } from './registry'
 import { research } from './research'
+import { coverage } from './coverage'
 import { articleSectionId, readRoute } from './router'
 
 let host: HTMLElement | undefined
@@ -39,21 +40,44 @@ function mockRun (id: string): { create: MockInstance<ExperimentDefinition['crea
   return { create, pause, destroy }
 }
 
-it('puts every visible migration decision before the complete experiment catalog without starting GPU work', async () => {
+it('puts feature coverage and the current action before a regroupable catalog without starting GPU work', async () => {
   const creates = experiments.map(experiment => vi.spyOn(experiment, 'create'))
   window.history.replaceState(null, '', '#/')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.experiment-catalog')).not.toBeNull())
   const catalog = host.querySelector('.experiment-catalog')!
   const decisions = host.querySelectorAll('[data-decision]')
-  expect(decisions).toHaveLength(4)
+  expect(decisions).toHaveLength(2)
   for (const section of decisions) {
     expect(section.compareDocumentPosition(catalog) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     expect(section.closest('details,[hidden]')).toBeNull()
   }
   expect(host.querySelectorAll('.experiment-card')).toHaveLength(experiments.length)
-  expect(host.querySelector('[data-decision="gate"] a[href="#/curved-links"]')).not.toBeNull()
-  expect(host.querySelector('[data-decision="milestone"] a[href="#/roadmap?section=milestone-rendering"]')).not.toBeNull()
+  expect(host.querySelector('[data-decision="focus"] a[href="#/curved-links"]')).not.toBeNull()
+  expect(host.querySelectorAll('#feature-map tbody tr')).toHaveLength(coverage.length)
+  expect(host.querySelector('.experiment-card[data-current]')?.getAttribute('href')).toBe('#/curved-links')
+  const grouping = host.querySelector<HTMLSelectElement>('[data-catalog-grouping]')!
+  grouping.value = 'reading'; grouping.dispatchEvent(new Event('change'))
+  expect(host.querySelector('#catalog-foundations')).not.toBeNull()
+  expect(host.querySelectorAll('.experiment-card')).toHaveLength(experiments.length)
+  expect(host.querySelector('[data-decision="next"] a[href="#/roadmap?section=journey-link-rendering"]')).not.toBeNull()
+  creates.forEach(create => expect(create).not.toHaveBeenCalled())
+})
+
+it('keeps the current step consistent on the roadmap and resolves feature-row links without starting a device', async () => {
+  const creates = experiments.map(experiment => vi.spyOn(experiment, 'create'))
+  window.history.replaceState(null, '', '#/roadmap')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('#journey-link-rendering')).not.toBeNull())
+  expect(host.querySelector('[data-nav="roadmap"]')!.getAttribute('aria-current')).toBe('page')
+  expect(host.querySelector('.lab-position')!.textContent).toContain(findExperiment('curved-links')!.title)
+  expect(host.querySelector('#journey-link-rendering')!.textContent).toContain(research['curved-links'].next)
+  expect(host.querySelector('.flow-branches')!.textContent).toContain('Simulation')
+  expect(host.querySelector('.flow-branches')!.textContent).toContain('Rendering and interaction')
+  await route('#/feature-inventory?section=feature-curved-links', () => expect(document.activeElement?.id).toBe('feature-curved-links'))
+  expect(host.querySelector('[data-nav="feature-inventory"]')!.getAttribute('aria-current')).toBe('page')
+  expect(host.querySelector('#feature-curved-links')!.textContent).toContain('Curved links')
+  expect(host.querySelector('.coverage-summary')!.textContent).toContain('37 feature rows')
   creates.forEach(create => expect(create).not.toHaveBeenCalled())
 })
 
@@ -110,6 +134,13 @@ for (const { id } of experiments) {
     const canvas = host.querySelector('canvas')!; const input = host.querySelector('input')!
     const findings = host.querySelector('[data-recorded-report]')!
     expect(host.querySelector('.research-conclusion')!.textContent).toBe(research[id].conclusion)
+    expect(host.querySelector('.experiment-role')!.textContent).toContain(id === 'curved-links' ? 'Current investigation' : '')
+    for (const article of host.querySelectorAll<HTMLElement>('.experiment-article')) {
+      expect(host.querySelector(`.experiment-contents a[href$="section=${article.id}"]`)).not.toBeNull()
+      for (const heading of article.querySelectorAll('[data-heading-level="2"]')) {
+        expect(host.querySelector(`.experiment-contents a[href$="section=${heading.id}"]`)).not.toBeNull()
+      }
+    }
     expect(host.querySelector('.page-tabs,.method-topics,.research-actions,.run-contents,.evidence-index,details')).toBeNull()
     expect(host.querySelectorAll('main nav')).toHaveLength(1)
     expect(host.querySelector('.sidebar,.experiment-return,.unified-document')).toBeNull()

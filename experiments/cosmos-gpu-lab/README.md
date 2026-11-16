@@ -7,17 +7,20 @@ lifecycle.
 Follow the **WebGPU migration** roadmap (`#/roadmap`) for Cosmos migration readiness, demonstrated capabilities,
 remaining gaps and the evidence needed for a production switch.
 
-The homepage opens with the current milestone, demonstrated successes and their scope, main blockers,
-and the next acceptance gate before the experiment catalog. All four sections stay expanded. The
-current focus is editorial data in `research.ts`; conclusions, criteria and blockers reuse the same
-records as experiment pages and Roadmap. The complete milestone table and checklists remain on
-Roadmap, linked from the homepage. Reviewed findings remain separate from this browser's live run.
+Home opens with the current investigation and its next action, then a feature coverage map derived from
+`src/docs/feature-inventory.md`. Counts describe bounded coverage, not migration completion. Feature rows
+link to methods, detailed limits and retained counterexamples. The experiment catalog can group the same
+studies by migration area or prerequisite reading order. The roadmap keeps the five-row task plan and
+still-open milestone checklists; these are different from the reading path.
+
+`migrationFocus` identifies one current experiment and research step. Its title, review date, conclusion
+and next action come from the experiment records. The header repeats that position on every page and
+marks the current navigation area. Reviewed findings remain separate from this browser's live run.
 
 Each experiment is one complete document: question and current finding, live visualization,
 expanded settings and results, technical explanations, current and earlier findings, diagnostics,
-and references. A sticky contents menu sits on the right on wide screens and becomes a short,
-expanded list above the experiment on narrow screens. The top header links to All experiments,
-Roadmap and Learn; there is no permanent catalog sidebar.
+and references. A sticky contents menu sits on the right on wide screens and stays expanded after the live run, before explanations, on narrow screens. It includes article titles,
+evidence states and their top-level sections. The header links to Experiments, Roadmap, Feature coverage and Learn; there is no permanent catalog sidebar.
 
 All technical articles and investigations are embedded, with their source metadata and historical
 warnings intact. Shared comparison criteria appear once. Sources move into References with their

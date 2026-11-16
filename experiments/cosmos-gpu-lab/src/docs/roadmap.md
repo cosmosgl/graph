@@ -1,6 +1,6 @@
 **A full Cosmos WebGPU backend is technically credible. We have a bounded simulation prototype through public luma APIs; production adoption still needs complete feature, integration and performance acceptance.**
 
-Reviewed **15 November 2026**. The production engine remains WebGL with luma `~9.3.0` peers. The lab pins the luma `10.0.0-alpha.4` package family. This page describes current readiness and the next decisions. Experiment pages preserve the detailed investigations, controls and reproduction instructions.
+Roadmap reviewed **16 November 2026**. Measurement dates remain on the linked experiment pages. The production engine remains WebGL with luma `~9.3.0` peers. The lab pins the luma `10.0.0-alpha.4` package family. This page describes current readiness and the next decisions. Experiment pages preserve the detailed investigations, controls and reproduction instructions.
 
 The destination is **full WebGPU simulation and rendering sharing resident GPU state**. Reduced device coverage is acceptable. The current WebGL engine supplies the behavioral reference; a permanent WebGL fallback is not a requirement for the destination.
 
@@ -51,61 +51,13 @@ The correction adds roughly **0.84–0.89 ms** to initial dense-star GPU frames 
 
 Agree layout-quality targets for overlap, stress, motion, stability and representative data. Those targets supplement the numerical checks. They do not relabel a failed coordinate comparison as passing. Cooled stillness alone does not establish force balance or an overlap-free layout.
 
-## 3. The next work, in order
+## 3. The ordered research plan
 
-### 1 — Preserve the ring/greyout baseline and isolate polygon boundaries
+This is the current task order. A closed investigation can retain failing cases; it does not close the associated feature or milestone. Detailed methods, alternatives and counterexamples live on their experiment pages.
 
-The [point styling study](#/point-styling/docs/method) now covers shapes, strokes, source-byte picking, atlas packing/updates, PNG normalization, outline/hover/focus rings and greyout. Retain its production controls and reproducible findings before further changes.
-
-The ring/greyout sweep accepts **88/96** rows. All color, overlay-ID and pick-only preservation checks pass. The eight rejections repeat the aligned polygon scene at native scale across eight effect profiles. All 144 static atlas records remain unchanged. Earlier source-texel packing passes 48/48 cases, raw-image updates pass 72/72, and production canvas plus premultiplied-bitmap → sRGB ImageData normalization each pass 8/8 PNG settings. Legacy sprite/visibility and direct-bitmap failures remain separate controls.
-
-Time-box one focused investigation of the polygon predicates in GLSL, WGSL and the scalar reference. Keep exact masks/IDs, zero invisible picks and the **2/255** color budget unchanged. A passing color comparison cannot override a rejected mask. If this investigation does not resolve the cases, retain the counterexamples and proceed with broader feature coverage.
-
-**Exit evidence:** a localized explanation and replayable counterexamples, plus a correction verified at the original gates if one is found. Broader codecs, colors and native devices remain open.
-
-**Investigation outcome:** the opt-in pixel-space diagnostic removes all cross-backend ID differences in its 96-row M3 sweep, but passes **86/96** overall. Eight native rows retain CPU diamond-tie failures and two ratio-2 rows reject six changed WebGL color pixels under exact pick-only preservation. The normalized control retains **88/96**. The scalar reference, acceptance and production controls are unchanged. Keep these counterexamples and proceed to step 2; an explicit closed-polygon/reference decision and preservation fix remain separate gates. [Detailed isolation and reproduction](#/point-styling/docs/method).
-
-### 2 — Validate production link rendering and picking
-
-The [production straight-link experiment](#/straight-links) now compares unchanged GLSL with a public-luma WebGPU port and independent scalar masks/colors. Its visible-footprint/source-byte candidate passes **30/40** M3 inline-browser rows: **22/32 nonzero-opacity** plus **8/8 opacity-zero** cases. All 40 preserve original color bytes and have zero invisible source picks. The legacy five-CSS-pixel host-pick width allowance is retained as a separate control; its eight passes are all opacity zero, so the candidate does not establish legacy picking compatibility.
-
-**Hard-edge follow-up:** three isolated M3 sources locate the discard difference in interpolated coordinates, not source-alpha quantization. Explicit linear interpolation reproduces native results. A hard-only pixel-distance diagnostic removes all WebGPU-versus-CPU mask/color failures in those sources, but changes 180, 85 and 106 original WebGPU color pixels; two sources retain WebGL-versus-CPU errors. All alternatives remain diagnostic under the original-color gate. [Probes and reproduction](#/straight-links?section=doc-method-hard-edge-coverage-investigation).
-
-**Cap/raster follow-up:** the 48-row M3 sensitivity replay accepts **29/48** inputs. Identical captured vertices still produce 4 and 14 different carrier pixels in the vertical cases; native-footprint replays match exactly. Oblique cap ties retain GPU/CPU differences, while fractional-width and oblique controls pass their twelve rows. The remaining clipped hard-oblique rejection is a body-coverage failure, not a cap failure. All inputs preserve original color and avoid invisible picks. Tiny coordinate shifts and endpoint reversal remain diagnostics, not fixes. [Evidence and reproduction](#/straight-links?section=doc-method-cap-and-fractional-raster-investigation).
-
-**Curved solid links:** the [production curve experiment](#/curved-links) retains power-spaced rational geometry and finite-difference normals through public luma APIs. The M3 inline matrix accepts **28/64** cases (**20/56 nonzero-opacity**, **8/8 zero-opacity**), preserving original color and avoiding invisible-source picks in all 64. Matching the ID culling rule to color removes all four folded-ribbon visibility failures; two DPR 2 rows still fail CPU boundaries. Every prior 26/64 result field reproduces identically.
-
-**Boundary follow-up:** nine identical-geometry replays preserve the default bow’s WebGL coverage 0.499902 versus WebGPU 0.500224 at the 0.5 cutoff. Explicit linear interpolation does not help. The hard colors themselves differ, so an ID-only change cannot close this gate while preserving production color. The native mask/color blocker remains, together with the straight-link failures. [Culling and boundary evidence](#/curved-links?section=doc-method-folded-ribbon-picking-investigation).
-
-**Next exit evidence:** retain the native boundary and original-color blockers and continue with endpoint gradients, dashed/dotted patterns, arrowheads, distance visibility and hover/focus/greyout states. A shared explicit-coverage renderer is a separate diagnostic candidate that must face the same original-color contract. Frozen GPU endpoint reads and diagnostic readbacks do not establish full evolving Graph integration or runtime cost.
-
-**Exit evidence:** production WebGL, luma WebGPU and suitable independent references pass declared visual/ID gates for the tested link features. Transitions, occlusion optimization and pointer behavior remain explicit follow-ups.
-
-### 3 — Complete the missing force families
-
-Validate **per-point attractors → cluster attraction → mouse repulsion**, then compose them in production force order with the already checked forces. Include target/membership updates, missing targets, per-point strengths, pinning, cooling, coordinate transforms and paused-simulation interaction.
-
-Global center reduction supplies infrastructure for clusters; it does not establish grouped aggregation or cluster-force behavior. The bounded corrected collision gate remains separate from these new force checks.
-
-**Exit evidence:** production GLSL, luma WebGPU and CPU agree for isolated cases and complete small-graph force composition at unchanged tolerances.
-
-### 4 — Exercise a small production API integration
-
-Bring a small `GraphSimulation`/`Graph` WebGPU path together before further large-graph optimization: resident simulation, styled points and links, updates and picking using shared GPU state. Exercise typed-array ingest, defaults/invalid data, stable indices, pause/resume, reheating, resize and destruction.
-
-Expand this into full channel/setter coverage, interrupted transitions, additions/removals, callbacks, selection and tracking. Validate borrowed devices/passes, position-resource exposure, state isolation, host picking, deck integration and device loss. The current WebGL position-texture interface needs an explicit WebGPU contract.
-
-**Exit evidence:** a small integrated backend demonstrates the supported API, ownership and update contracts. Complete public API/embedding acceptance remains required before switching production. Document intentional public changes.
-
-### 5 — Establish graph scalability and the production envelope
-
-Port collision's production hash/slot route above 4,096 points. Address crowded-cell scans and hierarchy construction in global repulsion, then measure larger connected, dense, disconnected and multi-hub graphs with the accepted renderer and interactions.
-
-The [spatial grid](#/spatial-grid), [ordered aggregation](#/cell-aggregation/docs/findings) and [hub study](#/hub-springs/docs/acceptance) provide bounded infrastructure and optimization evidence. They do not establish complete-graph scaling or portable thresholds.
-
-Agree representative graph sizes, distributions and style/interaction workloads, with quality, frame-time, startup/update latency and peak-memory budgets. Include construction, occupancy, updates and latency tails; compare WebGL/WebGPU at accepted output quality and feature scope. Validate the intended native GPU/browser matrix and unsupported-device behavior. Optional timestamps must not become a runtime requirement.
-
-**Ready to switch:** required forces, rendering, interaction, API/embedding, performance, memory and native portability meet their stated contracts, with upgrade guidance available. Reduced device coverage is acceptable.
+```example
+journeyPlan
+```
 
 ## 4. luma decisions still open
 
@@ -142,12 +94,8 @@ Keep concise findings and reproduction instructions in Markdown, with environmen
 
 ## 6. The migration journey
 
-```flow
-Primitive feasibility · Demonstrated
-luma integration · Milestone 1; resident path demonstrated, production contracts open
-Cosmos simulation · Milestone 2; bounded validation | Cosmos renderer and interaction · Milestone 3; early coverage
-Complete Graph API and host contracts · Milestone 4; still to establish
-Production envelope and supported devices · Milestone 5; release gate
+```example
+journeyFlow
 ```
 
 Update this page's current boundary and next exit evidence as experiments close. Keep detailed numerical history in the linked experiment pages, and lab construction/contributor guidance in [Lab architecture](#/architecture). The objective is a defensible full Cosmos → WebGPU decision.
