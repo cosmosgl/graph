@@ -2,6 +2,7 @@ import { checkResult, count as formatCount } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { validationContracts } from '../../runtime/validation'
+import { runStoredAlphaCost, renderStoredAlphaCost, STORED_ALPHA_COST_POLICY, type StoredAlphaCostRow } from './stored-alpha-cost'
 import { storedAlphaReplay, renderStoredAlphaRows, type StoredAlphaRow } from './stored-alpha-study'
 import { pick, type Backend, type Snapshot, type RenderVariant } from './backend'
 import { DEFAULTS, fixture, HEIGHT, WIDTH, type Settings } from './data'
@@ -103,6 +104,14 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       <button data-stored-alpha disabled>Check stored-alpha picking</button>
       <p data-stored-progress aria-live="polite">Unchecked · 14 × 14 pixel region; bodies only. Three extra passes per point plus one clear.
         This checks correctness, not picking latency or migration approval.</p><div class="table-scroll" data-stored-results></div>
+      <h4>Stored-alpha cost</h4>
+      <p>16 bounded cases: 16–1024 points, four or all points at the pointer, both backends.
+        Five normal/profiled pairs after warmup. Keep this page visible; correctness checks stay outside each measured interval.</p>
+      <div class="controls"><button data-stored-cost disabled>Measure stored-alpha cost</button>
+        <button data-stored-cost-cancel disabled>Cancel cost sweep</button></div>
+      <p data-stored-cost-progress aria-live="polite">Unchecked · setup, encoding, synchronized completion, snapshot readback
+        and GPU pass sums stay separate. Invalid timing samples remain unavailable.</p>
+      <div class="table-scroll" data-stored-cost-results></div>
     </section>
     <section data-run-part="diagnostics"><h3>Tiny-alpha sweep</h3>
       <p>Check tiny positive opacity, subpixel ink and faint foreground picks. Uses offscreen draws; the live canvases and settings stay in place.</p>
@@ -147,6 +156,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     el<HTMLButtonElement>('[data-dynamic-sweep]').disabled = disabled || decodingActive
     el<HTMLButtonElement>('[data-decoding-sweep]').disabled = disabled
     el<HTMLButtonElement>('[data-stored-alpha]').disabled = disabled
+    el<HTMLButtonElement>('[data-stored-cost]').disabled = disabled
     el<HTMLButtonElement>('[data-effects-sweep]').disabled = disabled || dynamicActive || decodingActive
     el<HTMLButtonElement>('[data-image-next]').disabled = disabled || !dynamicActive || dynamicStep === DYNAMIC_STEPS.length - 1
     el<HTMLButtonElement>('[data-image-reset]').disabled = disabled || !dynamicActive
@@ -195,6 +205,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
   } | undefined
   let storedStudy: { policy: string; startedAt: string; finishedAt?: string; status: string; error?: string;
     browser: string; region: { x: number; y: number; width: number; height: number }; rows: Array<StoredAlphaRow & { lane: string }>; } | undefined
+  let storedCost: { startedAt: string; finishedAt?: string; status: string; browser: string; error?: string;
+    policy: typeof STORED_ALPHA_COST_POLICY; rows: StoredAlphaCostRow[]; } | undefined
   let report: object | undefined
   const disposeBackends = (): void => {
     Object.values(backends).forEach(backend => backend.destroy()); decodeCache.forEach(source => source.close()); decodeCache.clear()
@@ -650,6 +662,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     const json = JSON.stringify({
       ...report,
       storedAlphaReplay: storedStudy,
+      storedAlphaCost: storedCost,
       effectsSweep: effectsStudy && {
         ...effectsStudy,
         inputs: {
@@ -1078,6 +1091,48 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       }
     }
     replay().catch(error => { if (!destroyed) el('[data-stored-progress]').textContent = String(error) })
+  })
+  el('[data-stored-cost-cancel]').addEventListener('click', () => { if (sweepRunning) cancelSweep = true })
+  el('[data-stored-cost]').addEventListener('click', () => {
+    if (busy || sweepRunning || destroyed) return
+    const runCost = async (): Promise<void> => {
+      sweepRunning = true; cancelSweep = false; setSweepDisabled(true); exportButton.disabled = true
+      el<HTMLButtonElement>('[data-stored-cost-cancel]').disabled = false
+      host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
+      const study = {
+        startedAt: new Date().toISOString(),
+        finishedAt: undefined as string | undefined,
+        status: 'running',
+        browser: navigator.userAgent,
+        error: undefined as string | undefined,
+        policy: STORED_ALPHA_COST_POLICY,
+        rows: [] as StoredAlphaCostRow[],
+      }
+      storedCost = study
+      el('[data-stored-cost-results]').replaceChildren(); el('[data-stored-cost-progress]').textContent = 'Preparing dedicated timing devices…'
+      try {
+        await runStoredAlphaCost(row => {
+          study.rows.push(row)
+          if (destroyed) return
+          renderStoredAlphaCost(el('[data-stored-cost-results]'), study.rows)
+          el('[data-stored-cost-progress]').textContent = `${study.rows.length} / 16 · ${row.lane} · ${row.count} points / ${row.overlapping} overlapping`
+        }, () => cancelled())
+        study.status = cancelled() ? 'cancelled' : 'complete'
+      } catch (error) { study.status = 'failed'; study.error = String(error) } finally {
+        study.finishedAt = new Date().toISOString(); sweepRunning = false
+        if (destroyed) disposeBackends()
+        else {
+          restoreSelectControls(); setSweepDisabled(false); exportButton.disabled = !report
+          el<HTMLButtonElement>('[data-stored-cost-cancel]').disabled = true
+          const note = study.error ??
+            'GPU sums exclude between-pass gaps; wall completion includes encoding and waiting. Not production hover latency.'
+          el('[data-stored-cost-progress]').textContent =
+            `${study.status} · ${study.rows.length} / 16 validated rows · ${study.finishedAt}. ${note}`
+        }
+      }
+    }
+    const cancelled = (): boolean => cancelSweep || destroyed
+    runCost().catch(error => { if (!destroyed) el('[data-stored-cost-progress]').textContent = String(error) })
   })
   mountRunLayout(host, () => summarizeRun(
     busy || sweepRunning ? 'Running' : report ? 'Complete' : 'Preparing',

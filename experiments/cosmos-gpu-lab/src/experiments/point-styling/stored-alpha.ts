@@ -2,18 +2,22 @@ import { Texture, type Device, type Framebuffer } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { RenderKernel } from '@luma.gl/graph'
 import { pixels, target } from '../../gpu/rgba-readback'
+import { waitForGpu } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
+import { createStoredAlphaTimer, type StoredAlphaPassTimer, type StoredAlphaTiming } from './stored-alpha-timing'
 import { dimensions, type RenderVariant } from './backend'
 import type { Point, Settings } from './data'
 import { pointOrder } from './point-effects'
 
 export type PixelRegion = { x: number; y: number; width: number; height: number }
-export type StoredAlphaOptions = { region: PixelRegion; audit?: boolean }
+export type StoredAlphaOptions = { region: PixelRegion; audit?: boolean; measure?: 'wall' | 'gpu' }
 export type StoredAlphaLayer = { id: number; paint: Uint8Array; geometry: Uint8Array }
 export type StoredAlphaResult = {
+  timing?: StoredAlphaTiming;
   policy: 'stored-alpha-v1'; region: PixelRegion; layers: StoredAlphaLayer[]; cpuIds?: Uint8Array; passes: number;
 }
 export function validateStoredAlpha (points: Point[], settings: Settings, variant: RenderVariant, options: StoredAlphaOptions): void {
+  if (options.audit && options.measure) throw new Error('Timing requires per-point audit readbacks to be disabled')
   const r = options.region; const [width, height] = dimensions(settings)
   if (variant !== 'explicit') throw new Error('Stored-alpha picking uses the unchanged explicit-coordinate color control')
   if (!Object.values(r).every(Number.isInteger) || r.x < 0 || r.y < 0 || r.width < 1 || r.height < 1 ||
@@ -49,9 +53,11 @@ export function composeStoredAlpha (layers: StoredAlphaLayer[], region: PixelReg
 
 export async function resolveStoredAlpha (
   device: Device, width: number, height: number, points: Point[], settings: Settings, options: StoredAlphaOptions,
-  draw: (id: number, paint: Framebuffer, geometry: Framebuffer) => void, output: ReturnType<typeof target>
+  draw: (id: number, paint: Framebuffer, geometry: Framebuffer, timer?: StoredAlphaPassTimer) => void, output: ReturnType<typeof target>
 ): Promise<StoredAlphaResult> {
   const scope = resourceScope()
+  if (options.measure) await waitForGpu(device)
+  const setupStart = performance.now()
   try {
     const sampledTarget = (): Pick<ReturnType<typeof target>, 'texture' | 'framebuffer'> => {
       const texture = scope.own(device.createTexture({
@@ -116,19 +122,28 @@ void main() {
       }))
       : undefined
     const vertexArray = gpu ? scope.own(device.createVertexArray({ shaderLayout, bufferLayout: [] })) : undefined
+    const setupCpuMs = performance.now() - setupStart
+    const queryStart = performance.now()
+    const timer = options.measure ? scope.own(createStoredAlphaTimer(device, 1 + points.length * 3, options.measure === 'gpu')) : undefined
+    const querySetupCpuMs = performance.now() - queryStart
+    if (options.measure) await waitForGpu(device)
+    const begin = (props: NonNullable<Parameters<Device['beginRenderPass']>[0]>, stage: import('./stored-alpha-timing').StoredAlphaStage):
+    ReturnType<Device['beginRenderPass']> => timer ? timer.begin(props, stage) : device.beginRenderPass(props)
+    const end = (pass: ReturnType<Device['beginRenderPass']>): void => { if (timer) timer.end(pass); else pass.end() }
+    const encodeStart = performance.now()
     // Clear the whole ID target once. Each eligible point overwrites its own
     // covered pixels; rejected fragments leave the previously visible ID intact.
-    const clear = device.beginRenderPass({ framebuffer: output.framebuffer, clearColor: [0, 0, 0, 0], clearDepth: false })
-    clear.end()
+    const clear = begin({ framebuffer: output.framebuffer, clearColor: [0, 0, 0, 0], clearDepth: false }, 'clear')
+    end(clear)
     const layers: StoredAlphaLayer[] = []
     for (const id of pointOrder(points, settings)) {
-      draw(id, paint.framebuffer, geometry.framebuffer)
-      const pass = device.beginRenderPass({ framebuffer: output.framebuffer, clearColor: false, clearDepth: false })
+      draw(id, paint.framebuffer, geometry.framebuffer, timer)
+      const pass = begin({ framebuffer: output.framebuffer, clearColor: false, clearDepth: false }, 'resolve')
       try {
         pass.setParameters({ scissorRect: regionScissor(device, height, options.region) })
         if (gl) gl.draw(pass)
         else gpu!.draw(pass, { vertexArray: vertexArray!, vertexCount: 3, bindings })
-      } finally { pass.end() }
+      } finally { end(pass) }
       if (options.audit) {
         device.submit()
         layers.push({
@@ -139,7 +154,31 @@ void main() {
       }
     }
     device.submit()
+    const encodeSubmitCpuMs = performance.now() - encodeStart
+    let timing: StoredAlphaTiming | undefined
+    if (options.measure) {
+      await waitForGpu(device)
+      const completionWallMs = performance.now() - encodeStart
+      const queryReadStart = performance.now(); const gpu = await timer!.read()
+      // A sum larger than its enclosing, synchronized wall interval is not a
+      // trustworthy serial cost. Keep the reason instead of publishing it.
+      if (gpu.gpuMs !== null && gpu.gpuMs > completionWallMs) {
+        gpu.timerDetail = `GPU pass sum ${gpu.gpuMs} ms exceeds completion wall ${completionWallMs} ms`
+        gpu.gpuMs = null; gpu.stageGpuMs = null; gpu.timerStatus = 'invalid'
+      }
+      timing = {
+        mode: options.measure,
+        setupCpuMs,
+        querySetupCpuMs,
+        encodeSubmitCpuMs,
+        completionWallMs,
+        queryReadbackWallMs: performance.now() - queryReadStart,
+        scratchBytes: width * height * 4 * 2,
+        ...gpu,
+      }
+    }
     return {
+      timing,
       policy: 'stored-alpha-v1',
       region: { ...options.region },
       layers,

@@ -9,6 +9,7 @@ import pointSize from '../../../../../src/modules/Points/point-size.glsl?raw'
 import exitRamp from '../../../../../src/modules/Points/exit-ramp.glsl?raw'
 import { ALPHA_BLEND, createDevice } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
+import type { StoredAlphaPassTimer } from './stored-alpha-timing'
 import { resolveStoredAlpha, validateStoredAlpha, regionScissor } from './stored-alpha'
 import { dimensions, floatPixels, pixels, target, type Backend, type Snapshot } from './backend'
 import { HEIGHT, WIDTH } from './data'
@@ -177,8 +178,8 @@ function instrumentCoverage (fragment: string): string {
     if (renderMode == 5.0) { fragColor = vec4(coreCoord, edgeDistancePx, opacity); return; }`)
 }
 
-export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExtent = GUTTER_SIZE): Promise<Backend> {
-  const device = await createDevice('webgl', canvas, false); const scope = resourceScope()
+export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExtent = GUTTER_SIZE, timestamps = false): Promise<Backend> {
+  const device = await createDevice('webgl', canvas, timestamps); const scope = resourceScope()
   try {
     const dynamic = scope.own(createDynamicAtlas(device))
     const atlases = {
@@ -371,7 +372,8 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
               ringContrast: settings.ringContrast ?? 0,
             },
           })
-          const draw = (model: Model, mode: number, framebuffer?: ReturnType<typeof target>['framebuffer'], rank?: number): void => {
+          const draw = (model: Model, mode: number, framebuffer?: ReturnType<typeof target>['framebuffer'], rank?: number,
+            timer?: StoredAlphaPassTimer): void => {
             uniforms.setUniforms({
               drawFragmentUniforms: {
                 greyoutOpacity: settings.greyoutOpacity ?? -1,
@@ -389,11 +391,12 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
               model.setAttributes(records, { byteOffsets }); model.setInstanceCount(1)
               if (texel) model.setAttributes({ sourceTexelRect: rectangleBuffer! }, { byteOffsets: { sourceTexelRect: rank * 16 } })
             }
-            const pass = device.beginRenderPass({
+            const passProps = {
               framebuffer,
-              clearColor: framebuffer ? [0, 0, 0, 0] : settings.backgroundColor ?? [0.14, 0.16, 0.185, 1],
-              clearDepth: false,
-            })
+              clearColor: (framebuffer ? [0, 0, 0, 0] : settings.backgroundColor ?? [0.14, 0.16, 0.185, 1]) as [number, number, number, number],
+              clearDepth: false as const,
+            }
+            const pass = timer ? timer.begin(passProps, mode === 0 ? 'paint' : 'geometry') : device.beginRenderPass(passProps)
             try {
               if (rank !== undefined) pass.setParameters({ scissorRect: regionScissor(device, height, storedAlpha!.region) })
               for (const layer of settings.highlighting ? [0, 1] : [-1]) {
@@ -405,7 +408,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
                 overlays.draw(pass, bindings, points, { ...settings, atlasSource: source })
               }
             } finally {
-              pass.end()
+              if (timer) timer.end(pass); else pass.end()
               if (rank !== undefined) {
                 model.setAttributes(records); model.setInstanceCount(points.length)
                 if (texel) model.setAttributes({ sourceTexelRect: rectangleBuffer! })
@@ -419,11 +422,12 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
           device.submit()
           const stored = storedAlpha
             ? await resolveStoredAlpha(device, width, height, points, settings, storedAlpha,
-              (id, mask, geometry) => {
+              (id, mask, geometry, timer) => {
                 const rank = order.indexOf(id)
-                draw(colorModel, 0, mask, rank); draw(pickModel, 3, geometry, rank)
+                draw(colorModel, 0, mask, rank, timer); draw(pickModel, 3, geometry, rank, timer)
               }, ids)
             : undefined
+          const readbackStart = performance.now()
           const result: Snapshot = {
             storedAlpha: stored,
             polygonArithmetic: variant === 'production' ? 'normalized' : settings.polygonArithmetic ?? 'normalized',
@@ -438,6 +442,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
             color: await pixels(device, color.texture, color.framebuffer),
             ids: await pixels(device, ids.texture, ids.framebuffer),
           }
+          if (stored?.timing) stored.timing.frameReadbackWallMs = performance.now() - readbackStart
           if (diagnose) {
             const geometry = frame.own(target(device, width, height, 'rgba32float'))
             const edge = frame.own(target(device, width, height, 'rgba32float'))

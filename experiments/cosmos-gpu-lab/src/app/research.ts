@@ -174,7 +174,7 @@ export const research: Record<string, ResearchSummary> = {
     scope: 'Apple M3, inline Chromium 157: 22/32 nonzero-opacity and 8/8 opacity-zero cases pass. ' +
       'All 40 preserve original color bytes and have zero invisible source picks; ten hard/raster boundary cases remain rejected.',
     variant: 'Production GLSL control and visible-footprint/source-byte ID candidate; original color; luma 10.0.0-alpha.4; Apple M3',
-    next: 'Retain the boundary blockers and validate curved solid links next; common cap geometry remains a separate candidate with unchanged gates.',
+    next: 'Replay the shared source-alpha boundary, then extend link styles; retain cap/raster blockers and unchanged color gates.',
     reproduce: 'Compare both picking rules, blending, zoom and DPR, then run the 40-case straight-link sweep and export JSON locally.',
     methods: [
       {
@@ -201,17 +201,25 @@ export const research: Record<string, ResearchSummary> = {
     method: 'validation-contract',
     comparison: 'Same styled points → production WebGL / WebGPU color and ID images → full-image and scalar-mask checks',
     question: 'Does point-ID picking select the shapes that Cosmos actually renders?',
-    conclusion: 'Polygon failures are isolated; CPU boundary and color-preservation gates keep the pixel-space diagnostic rejected.',
-    scope: 'Apple M3: normalized control 88/96; pixel-space diagnostic 86/96. The diagnostic has exact GPU IDs, ' +
-      'eight native CPU diamond-tie rows and two ratio-2 color-preservation rejections. Original gates and controls remain in force.',
-    variant: 'Opt-in pixel-space polygons beside retained normalized source-byte control; luma 10.0.0-alpha.4; Apple M3',
-    reviewed: '2026-11-15',
+    conclusion: 'Stored-alpha picking resolves the tested invisible-source boundary on M3 and SwiftShader without changing color bytes; ' +
+      'the unfiltered 1024-point prototype is too costly for hover picking.',
+    scope: 'Five original candidate/UI checks pass on both environments; software retains two old source-byte failures. ' +
+      'All 16 M3 cost cases pass exact outputs. ' +
+      'The reference consumes measured source masks; this is not a portable rounding prediction. Historical polygon failures remain rejected.',
+    variant: 'Stored-alpha-v1 through public luma 10.0.0-alpha.15 APIs; Apple M3 and Linux x64 SwiftShader. Earlier polygon measurements retain alpha.4.',
+    reviewed: '2026-11-16',
     milestone: 'rendering',
     evidence: 'method',
-    next: 'Validate production link rendering and picking; retain the polygon counterexamples for a separate reference/preservation decision.',
-    reproduce: 'Select Point rings and greyout and compare Normalized with Pixel-space arithmetic. ' +
-      'Read every rejected pixel in Polygon boundary replay and run the 96-row sweep under each mode. CPU and color-preservation failures stay rejected.',
+    next: 'Test order-preserving region filtering against the measured unfiltered baseline, then replay link alpha boundaries before endpoint gradients.',
+    reproduce: 'Run Check stored-alpha picking in Diagnostics, then Measure stored-alpha cost with this page visible. ' +
+      'The fixed replay and bounded cost sweep preserve the live scene; historical polygon and source-byte controls stay selectable.',
     methods: [
+      {
+        title: 'Stored-alpha picking',
+        verdict: 'Method under test',
+        page: 'method',
+        detail: 'Per-point stored paint gates geometric IDs without changing original colors. Region-limited prototype; GPU and runtime cost are not accepted.',
+      },
       {
         title: 'Styled points · normalized coverage',
         verdict: 'Method under test',
@@ -260,7 +268,8 @@ export const milestones = [
     title: 'Rendering and interaction',
     position: 'Bounded point-style and link studies; native mask/color boundaries remain open',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
-    gates: ['Retain straight/curved native mask/color blockers while validating endpoint gradients, patterns, arrows and link states.',
+    gates: ['Reduce stored-alpha picking cost and replay the shared alpha boundary in link candidates without changing production controls.',
+      'Retain straight/curved native mask/color blockers while validating endpoint gradients, patterns, arrows and link states.',
       'Retain polygon CPU/preservation gates; validate transitions and pointer behavior, measure accepted rendering cost and broaden native devices.'],
     evidence: [['curved-links', 'Curved solid links'], ['straight-links', 'Straight-link rendering/picking'],
       ['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],
@@ -296,5 +305,5 @@ export const mainOpenIssues = [
 // used by Roadmap and the experiment page, never from this browser's live run.
 export const migrationFocus = {
   step: 2,
-  experiment: 'curved-links',
+  experiment: 'point-styling',
 } as const

@@ -59,6 +59,32 @@ This is the current task order. A closed investigation can retain failing cases;
 journeyPlan
 ```
 
+### Immediate checkpoint: picking cost, then link coverage
+
+The [stored-alpha candidate](#/point-styling?section=doc-method-stored-alpha-picking-prototype-16-november-2026)
+checks actual per-point attachment alpha before composing IDs. Its five bounded
+candidate/UI tests pass on M3 and Linux SwiftShader with original colors intact.
+The old mathematical source-byte control still fails its two software visibility
+assertions. The new CPU composition reference consumes measured per-point masks;
+it does not independently predict attachment rounding.
+
+This closes the tested visibility counterexample for a separate candidate, not
+point rendering or picking acceptance. Its current implementation adds three
+passes per point and reuses two full-viewport scratch targets within each request.
+The [bounded cost study](#/point-styling?section=doc-method-stored-alpha-cost-16-november-2026)
+passed exact outputs in all 16 M3 cases. At 1024 points with only four overlapping,
+unprofiled resolver completion medians were 566 ms for WebGL and 464 ms for
+WebGPU. GPU timestamp caveats prevent a pure GPU comparison. Conservative region
+filtering is next, with scratch reuse secondary; preserve original order, IDs,
+geometry and color bytes. Production pointer latency remains unchecked.
+
+Then replay the shared source-byte boundary in straight and curved links before
+returning to endpoint gradients, patterns, arrows and link states. Their shared
+quantizer makes this relevant; it does not prove those link fixtures fail. Keep
+polygon and native link raster/color blockers visible. Continue afterward with
+missing forces, small Graph integration and complete-workload acceptance rather
+than expanding this focused picking investigation indefinitely.
+
 ## 4. luma decisions still open
 
 All experiment GPU operations use public luma APIs. The lab enforces this boundary for implementations, diagnostics and tests. Future comparisons should use public luma paths; historical native-handle timings are not a required implementation baseline.
@@ -84,6 +110,7 @@ The lab's alpha pin is an experimental choice, not the production dependency dec
 | [Point capacity](#/point-capacity/docs/findings), [retained capacity](#/point-capacity/docs/reuse) | Same-device prefix transfers, updates and cleanup | Retention/trim, host ownership and total driver memory remain open |
 | [Controlled profiling](#/gpu-stage-profile), [hub springs](#/hub-springs), [grid aggregation](#/cell-aggregation) | Balanced timing and bounded M3 optimizations | Opt-in candidates and device-specific results do not establish a universal gain |
 | [Matched layouts](#/matched-layout/docs/findings), [collision trajectories](#/collision/docs/trajectories) | Independent CPU/GPU behavior and separate geometry observations | Force combinations, arithmetic variants, counts and schedules must stay explicit |
+| [Point styling and picking](#/point-styling) | Bounded styling/image/ring studies and a stored-alpha visibility candidate on M3/SwiftShader | Historical polygon gates, actual pointer scheduling, practical picking cost and broader devices remain open |
 | [Straight-link rendering and picking](#/straight-links) | Production straight ribbons, width/default/alpha/zoom/DPR/order checks and separate padded/visible ID policies; 30/40 M3 cases accepted | Ten hard/raster boundary failures, legacy ID compatibility, broader link styles, Graph integration, cost and native portability remain open |
 | [Curved solid links](#/curved-links) | Production power-spaced rational ribbons, scalar triangle-strip masks and selected-source checks; 28/64 M3 cases accepted, all original colors preserved and no invisible source picks | Native mask/color boundaries remain rejected; other styles, integration, cost and portability remain open |
 | [Circle rendering](#/point-rendering), [performance lab](#/performance-lab) | Initial visual parity and repeatable isolated timing | Complete renderer, interaction and engine-level speedup remain unproven |
