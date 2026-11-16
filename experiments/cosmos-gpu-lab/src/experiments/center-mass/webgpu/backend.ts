@@ -1,5 +1,5 @@
 import { Buffer } from '@luma.gl/core'
-import { Kernel } from '@luma.gl/engine'
+import { Kernel } from '@luma.gl/graph'
 import { describeDevice, bindingLayout, createDevice, createStorageRenderer, readFloats, upload } from '../../../gpu/luma'
 import { graphRgba, graphWgsl } from '../../../runtime/palette'
 import type { BackendResult, CenterMassBackend } from '../backend'

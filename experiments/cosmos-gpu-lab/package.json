@@ -11,11 +11,10 @@
     "typecheck": "node scripts/check-luma-api.mjs && tsc --noEmit"
   },
   "dependencies": {
-    "@luma.gl/core": "10.0.0-alpha.4",
-    "@luma.gl/engine": "10.0.0-alpha.4",
-    "@luma.gl/shadertools": "10.0.0-alpha.4",
-    "@luma.gl/webgl": "10.0.0-alpha.4",
-    "@luma.gl/webgpu": "10.0.0-alpha.4",
+    "@luma.gl/core": "10.0.0-alpha.15",
+    "@luma.gl/engine": "10.0.0-alpha.15",
+    "@luma.gl/graph": "10.0.0-alpha.15",
+    "@luma.gl/shaders": "10.0.0-alpha.15",
     "markdown-it": "14.3.3"
   },
   "devDependencies": {

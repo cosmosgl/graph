@@ -1,5 +1,5 @@
 import { Buffer, type Device, type ComputePass } from '@luma.gl/core'
-import { Kernel } from '@luma.gl/engine'
+import { Kernel } from '@luma.gl/graph'
 import { bindingLayout, upload } from '../../gpu/luma'
 import { createRoundedKernel } from '../../gpu/rounded-kernel'
 import { resourceScope, type BufferLedger } from '../../gpu/resource-scope'

@@ -1,5 +1,5 @@
 import { Buffer, type ComputePass } from '@luma.gl/core'
-import { Kernel } from '@luma.gl/engine'
+import { Kernel } from '@luma.gl/graph'
 import { createWebGPU, type WebGPUForceFactory, type WebGPUOptions } from '../many-body/webgpu'
 import { resourceScope } from '../../gpu/resource-scope'
 import { bindingLayout, readFloats, upload } from '../../gpu/luma'

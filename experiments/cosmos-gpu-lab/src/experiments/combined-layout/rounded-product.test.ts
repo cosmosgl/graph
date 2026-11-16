@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { Kernel } from '@luma.gl/engine'
+import { Kernel } from '@luma.gl/graph'
 import { bindingLayout, createDevice, readFloats, upload } from '../../gpu/luma'
 import product from '../../gpu/rounded-product.wgsl?raw'
 

@@ -1,5 +1,5 @@
 import { Buffer, type ComputePass, type Device } from '@luma.gl/core'
-import { Kernel } from '@luma.gl/engine'
+import { Kernel } from '@luma.gl/graph'
 import { bindingLayout, readFloats, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import { replaceOnce } from '../many-body-grid/trace'

@@ -1,5 +1,5 @@
 import { Buffer, type ComputePass, type RenderPass, type Device } from '@luma.gl/core'
-import { Kernel } from '@luma.gl/engine'
+import { Kernel } from '@luma.gl/graph'
 import { graphRgb } from '../../runtime/palette'
 import { bindingLayout, createStorageRenderer, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'

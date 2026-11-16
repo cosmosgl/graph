@@ -1,5 +1,5 @@
 import { Buffer, type Device, type CommandEncoder, type Bindings, type ComputePassProps } from '@luma.gl/core'
-import { Kernel } from '@luma.gl/engine'
+import { Kernel } from '@luma.gl/graph'
 import { describeDevice, bindingLayout, upload, waitForGpu } from '../../gpu/luma'
 import clearShader from './shaders/clear.wgsl?raw'
 import addBlockOffsetsShader from './shaders/add-block-offsets.wgsl?raw'

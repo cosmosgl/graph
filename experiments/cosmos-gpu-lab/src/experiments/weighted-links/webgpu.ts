@@ -1,6 +1,6 @@
 import { Buffer, luma, type BindingDeclaration } from '@luma.gl/core'
-import { Kernel, RenderKernel } from '@luma.gl/engine'
-import { webgpuAdapter, type WebGPUDevice } from '@luma.gl/webgpu'
+import { Kernel, RenderKernel } from '@luma.gl/graph'
+import { webgpuAdapter, type WebGPUDevice } from '@luma.gl/core/webgpu'
 import { graphRgb, graphRgba } from '../../runtime/palette'
 import { waitForGpu } from '../../gpu/luma'
 import type { LinkBackend, Measurement, Stage, SetupSubmission } from './backend'

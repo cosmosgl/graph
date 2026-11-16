@@ -1,6 +1,6 @@
 import { luma, Texture, UniformStore, type Buffer, type Framebuffer, type QuerySet, type RenderPassProps } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
-import { webgl2Adapter, type WebGLDevice } from '@luma.gl/webgl'
+import { webgl2Adapter, type WebGLDevice } from '@luma.gl/core/webgl'
 import { graphRgb, graphRgba } from '../../runtime/palette'
 import { forceFrag } from '../../../../../src/modules/ForceLink/force-spring'
 import quad from '../../../../../src/modules/Shared/quad.vert?raw'

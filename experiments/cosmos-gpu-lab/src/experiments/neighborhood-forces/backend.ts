@@ -1,5 +1,5 @@
 import { Buffer, type Device, type CommandEncoder, type Bindings, type CanvasContext } from '@luma.gl/core'
-import { Kernel } from '@luma.gl/engine'
+import { Kernel } from '@luma.gl/graph'
 import { graphRgba } from '../../runtime/palette'
 import { ALPHA_BLEND, bindingLayout, createStorageRenderer, readFloats, waitForGpu } from '../../gpu/luma'
 import { createSpatialGridResources, type SpatialGridBackend, type GridTimestamps } from '../spatial-grid/resources'

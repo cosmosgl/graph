@@ -1,5 +1,5 @@
 import { Buffer, type Device } from '@luma.gl/core'
-import { Kernel } from '@luma.gl/engine'
+import { Kernel } from '@luma.gl/graph'
 import { bindingLayout, upload } from '../../gpu/luma'
 import division from './divide-by-count.wgsl?raw'
 export type DivisionCheck = { cases: number; mismatches: number; firstFailure: number | null }

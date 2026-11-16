@@ -1,5 +1,5 @@
 import { Buffer, type TextureFormatColor } from '@luma.gl/core'
-import { RenderKernel } from '@luma.gl/engine'
+import { RenderKernel } from '@luma.gl/graph'
 import { ALPHA_BLEND, bindingLayout, createDevice, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import { pixels, target, floatPixels } from '../../gpu/rgba-readback'

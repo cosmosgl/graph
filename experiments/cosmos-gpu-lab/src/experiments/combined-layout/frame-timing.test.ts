@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest'
-import { Kernel } from '@luma.gl/engine'
+import { Kernel } from '@luma.gl/graph'
 import { bindingLayout, createDevice, upload } from '../../gpu/luma'
 import { measureFrameBatch } from './frame-timing'
 it.skipIf(!import.meta.env.LAB_NATIVE_GPU)('pairs compute-pass timestamps and runs every dispatch in every frame', async () => {
