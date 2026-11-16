@@ -1307,8 +1307,7 @@ button[data-action="play"][aria-pressed="true"] {
   background: #292e36;
 }
 
-.prose img[data-source="diagrams/reduction-tree.svg"],
-.prose img[data-source="reductionPipeline"] {
+.prose img[data-source="diagrams/reduction-tree.svg"] {
   border: 0;
   border-radius: 0;
   background: none;
