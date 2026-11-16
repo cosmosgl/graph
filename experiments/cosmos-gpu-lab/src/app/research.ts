@@ -216,23 +216,24 @@ export const research: Record<string, ResearchSummary> = {
     comparison: 'Same styled points → production WebGL / WebGPU color and ID images → full-image and scalar-mask checks',
     question: 'Does point-ID picking select the shapes that Cosmos actually renders?',
     conclusion: 'Stored-alpha picking resolves the tested invisible-source boundary on M3 and SwiftShader without changing color bytes; ' +
-      'the unfiltered 1024-point prototype is too costly for hover picking.',
+      'region filtering reduces sparse-request cost while dense overlap remains expensive.',
     scope: 'Five original candidate/UI checks pass on both environments; software retains two old source-byte failures. ' +
-      'All 16 M3 cost cases pass exact outputs. ' +
+      'All 16 paired filtered/prototype cases pass exact outputs on M3 and SwiftShader. ' +
       'The reference consumes measured source masks; this is not a portable rounding prediction. Historical polygon failures remain rejected.',
     variant: 'Stored-alpha-v1 through public luma 10.0.0-alpha.15 APIs; Apple M3 and Linux x64 SwiftShader. Earlier polygon measurements retain alpha.4.',
     reviewed: '2026-11-16',
     milestone: 'rendering',
     evidence: 'method',
-    next: 'Test order-preserving region filtering against the measured unfiltered baseline, then replay link alpha boundaries before endpoint gradients.',
-    reproduce: 'Run Check stored-alpha picking in Diagnostics, then Measure stored-alpha cost with this page visible. ' +
+    next: 'Replay link alpha boundaries before endpoint gradients; keep dense picking cost and GPU-resident candidate discovery open.',
+    reproduce: 'Run Check stored-alpha picking in Diagnostics, then Compare filtered picking with this page visible. ' +
       'The fixed replay and bounded cost sweep preserve the live scene; historical polygon and source-byte controls stay selectable.',
     methods: [
       {
         title: 'Stored-alpha picking',
         verdict: 'Method under test',
         page: 'method',
-        detail: 'Per-point stored paint gates geometric IDs without changing original colors. Region-limited prototype; GPU and runtime cost are not accepted.',
+        detail: 'Per-point stored paint gates geometric IDs without changing original colors. ' +
+          'Filtered sparse requests improve; dense cost and runtime integration remain open.',
       },
       {
         title: 'Styled points · normalized coverage',

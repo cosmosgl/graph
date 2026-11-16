@@ -2,6 +2,7 @@ import { checkResult, count as formatCount } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { validationContracts } from '../../runtime/validation'
+import { runFilteredAlphaCost, renderFilteredAlphaCost, type FilteredAlphaCostRow } from './stored-alpha-filter-study'
 import { runStoredAlphaCost, renderStoredAlphaCost, STORED_ALPHA_COST_POLICY, type StoredAlphaCostRow } from './stored-alpha-cost'
 import { storedAlphaReplay, renderStoredAlphaRows, type StoredAlphaRow } from './stored-alpha-study'
 import { pick, type Backend, type Snapshot, type RenderVariant } from './backend'
@@ -112,6 +113,15 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       <p data-stored-cost-progress aria-live="polite">Unchecked · setup, encoding, synchronized completion, snapshot readback
         and GPU pass sums stay separate. Invalid timing samples remain unavailable.</p>
       <div class="table-scroll" data-stored-cost-results></div>
+      <h4>Filtered stored-alpha comparison</h4>
+      <p>Compare the prototype with conservative region filtering: exact IDs, unchanged colors and request cost.
+        Two warmup pairs and five measured pairs per case; 16–1024 points, sparse and dense overlap, both backends.
+        Filtering uses CPU-resident positions. Dense overlap may retain every point.</p>
+      <div class="controls"><button data-filtered-cost disabled>Compare filtered picking</button>
+        <button data-filtered-cost-cancel disabled>Cancel comparison</button></div>
+      <p data-filtered-cost-progress aria-live="polite">Unchecked · request wall time includes filtering, setup, encoding and GPU completion.
+        Ordinary rendering and snapshot readback are excluded. All content and controls remain unchanged.</p>
+      <div class="table-scroll" data-filtered-cost-results></div>
     </section>
     <section data-run-part="diagnostics"><h3>Tiny-alpha sweep</h3>
       <p>Check tiny positive opacity, subpixel ink and faint foreground picks. Uses offscreen draws; the live canvases and settings stay in place.</p>
@@ -157,6 +167,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     el<HTMLButtonElement>('[data-decoding-sweep]').disabled = disabled
     el<HTMLButtonElement>('[data-stored-alpha]').disabled = disabled
     el<HTMLButtonElement>('[data-stored-cost]').disabled = disabled
+    el<HTMLButtonElement>('[data-filtered-cost]').disabled = disabled
     el<HTMLButtonElement>('[data-effects-sweep]').disabled = disabled || dynamicActive || decodingActive
     el<HTMLButtonElement>('[data-image-next]').disabled = disabled || !dynamicActive || dynamicStep === DYNAMIC_STEPS.length - 1
     el<HTMLButtonElement>('[data-image-reset]').disabled = disabled || !dynamicActive
@@ -207,6 +218,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     browser: string; region: { x: number; y: number; width: number; height: number }; rows: Array<StoredAlphaRow & { lane: string }>; } | undefined
   let storedCost: { startedAt: string; finishedAt?: string; status: string; browser: string; error?: string;
     policy: typeof STORED_ALPHA_COST_POLICY; rows: StoredAlphaCostRow[]; } | undefined
+  let filteredCost: { startedAt: string; finishedAt?: string; status: string; browser: string; error?: string;
+    policy: string; rows: FilteredAlphaCostRow[]; } | undefined
   let report: object | undefined
   const disposeBackends = (): void => {
     Object.values(backends).forEach(backend => backend.destroy()); decodeCache.forEach(source => source.close()); decodeCache.clear()
@@ -663,6 +676,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       ...report,
       storedAlphaReplay: storedStudy,
       storedAlphaCost: storedCost,
+      filteredStoredAlphaCost: filteredCost,
       effectsSweep: effectsStudy && {
         ...effectsStudy,
         inputs: {
@@ -1133,6 +1147,49 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     }
     const cancelled = (): boolean => cancelSweep || destroyed
     runCost().catch(error => { if (!destroyed) el('[data-stored-cost-progress]').textContent = String(error) })
+  })
+  el('[data-filtered-cost-cancel]').addEventListener('click', () => { if (sweepRunning) cancelSweep = true })
+  el('[data-filtered-cost]').addEventListener('click', () => {
+    if (busy || sweepRunning || destroyed) return
+    const runCost = async (): Promise<void> => {
+      sweepRunning = true; cancelSweep = false; setSweepDisabled(true); exportButton.disabled = true
+      el<HTMLButtonElement>('[data-filtered-cost-cancel]').disabled = false
+      host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
+      const study = {
+        startedAt: new Date().toISOString(),
+        finishedAt: undefined as string | undefined,
+        status: 'running',
+        browser: navigator.userAgent,
+        error: undefined as string | undefined,
+        policy: 'stored-alpha-v1 / conservative-filter-v1',
+        rows: [] as FilteredAlphaCostRow[],
+      }
+      filteredCost = study
+      el('[data-filtered-cost-results]').replaceChildren(); el('[data-filtered-cost-progress]').textContent = 'Preparing dedicated timing devices…'
+      try {
+        await runFilteredAlphaCost(row => {
+          study.rows.push(row)
+          if (destroyed) return
+          renderFilteredAlphaCost(el('[data-filtered-cost-results]'), study.rows)
+          el('[data-filtered-cost-progress]').textContent = `${study.rows.length} / 16 · ${row.lane} · ${row.count} points / ${row.overlapping} overlapping`
+        }, () => cancelled())
+        study.status = cancelled() ? 'cancelled' : 'complete'
+      } catch (error) { study.status = 'failed'; study.error = String(error) } finally {
+        study.finishedAt = new Date().toISOString(); sweepRunning = false
+        if (destroyed) disposeBackends()
+        else {
+          restoreSelectControls(); setSweepDisabled(false); exportButton.disabled = !report
+          el<HTMLButtonElement>('[data-filtered-cost-cancel]').disabled = true
+          const note = study.error ??
+            ('Exact IDs and colors compared with the prototype. Request wall includes filtering and setup; ' +
+            'scene rendering and readback excluded. Not production hover latency.')
+          el('[data-filtered-cost-progress]').textContent =
+            `${study.status} · ${study.rows.length} / 16 validated rows · ${study.finishedAt}. ${note}`
+        }
+      }
+    }
+    const cancelled = (): boolean => cancelSweep || destroyed
+    runCost().catch(error => { if (!destroyed) el('[data-filtered-cost-progress]').textContent = String(error) })
   })
   mountRunLayout(host, () => summarizeRun(
     busy || sweepRunning ? 'Running' : report ? 'Complete' : 'Preparing',

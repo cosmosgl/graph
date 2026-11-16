@@ -420,10 +420,13 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
           draw(colorModel, 0, color.framebuffer); draw(pickModel, 3, ids.framebuffer)
           if (display) draw(colorModel, 0)
           device.submit()
+          let storedRanks: Map<number, number> | undefined
           const stored = storedAlpha
             ? await resolveStoredAlpha(device, width, height, points, settings, storedAlpha,
               (id, mask, geometry, timer) => {
-                const rank = order.indexOf(id)
+                // The candidate retains original IDs; filtering never repacks the draw records.
+                if (storedAlpha.candidate === 'filtered' && !storedRanks) storedRanks = new Map(order.map((id, rank) => [id, rank]))
+                const rank = storedRanks ? storedRanks.get(id)! : order.indexOf(id)
                 draw(colorModel, 0, mask, rank, timer); draw(pickModel, 3, geometry, rank, timer)
               }, ids)
             : undefined

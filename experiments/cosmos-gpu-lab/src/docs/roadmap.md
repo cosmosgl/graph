@@ -74,9 +74,16 @@ passes per point and reuses two full-viewport scratch targets within each reques
 The [bounded cost study](#/point-styling?section=doc-method-stored-alpha-cost-16-november-2026)
 passed exact outputs in all 16 M3 cases. At 1024 points with only four overlapping,
 unprofiled resolver completion medians were 566 ms for WebGL and 464 ms for
-WebGPU. GPU timestamp caveats prevent a pure GPU comparison. Conservative region
-filtering is next, with scratch reuse secondary; preserve original order, IDs,
-geometry and color bytes. Production pointer latency remains unchecked.
+WebGPU. GPU timestamp caveats prevent a pure GPU comparison.
+The [filtered comparison](#/point-styling?section=doc-method-filtered-stored-alpha-picking-16-november-2026)
+now passes exact IDs and original colors in all 16 paired cases on M3 and Linux
+SwiftShader. At 1024 points with four overlapping, it keeps four candidates and
+reduces 3073 passes to 13. M3 request wall medians (including filtering and setup)
+fall from 321.3 to 21.2 ms in WebGL and 300.6 to 2.7 ms in WebGPU. Dense overlap
+retains every point and remains expensive. The CPU-resident broad phase does not
+yet solve GPU-resident candidate discovery or production pointer latency; those
+remain open, alongside decorative rings. Preserve the unfiltered baseline and
+old source-byte failures.
 
 Then replay the shared source-byte boundary in straight and curved links before
 returning to endpoint gradients, patterns, arrows and link states. Their shared
