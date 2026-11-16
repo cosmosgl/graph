@@ -1,10 +1,11 @@
 import roundedSquare from './rounded-square.wgsl?raw'
 import farArithmetic from './far-arithmetic.wgsl?raw'
+import quotientRoot from './rounded-quotient-root.wgsl?raw'
 import { replaceOnce } from './trace'
 
 // A storage boundary separates per-cell force evaluation from accumulation.
 export function materializedFarShader (shader: string): string {
-  shader += roundedSquare + farArithmetic
+  shader += roundedSquare + quotientRoot + farArithmetic
   const call = 'if (a.z > 0.) { velocity += pairVelocity(point.xy - centroids[cellIndex].xy, vec2(0.), a.z); }'
   const index = '(targetIndex * u32(params.levelCount) + level) * 100u + u32(j * width + i)'
   const start = shader.indexOf('@compute @workgroup_size(64)\nfn forceMain')
@@ -23,7 +24,7 @@ export function materializedFarShader (shader: string): string {
 
 export function refinedFarShader (shader: string): string {
   return replaceOnce(shader, 'velocity += pairVelocity(point.xy - centroids[cellIndex].xy, vec2(0.), a.z)',
-    'velocity += farPairVelocity(point.xy - centroids[cellIndex].xy, vec2(0.), a.z)') + roundedSquare + farArithmetic
+    'velocity += farPairVelocity(point.xy - centroids[cellIndex].xy, vec2(0.), a.z)') + roundedSquare + quotientRoot + farArithmetic
 }
 
 // Reuse one level's contribution slots, retaining only each cumulative far sum.

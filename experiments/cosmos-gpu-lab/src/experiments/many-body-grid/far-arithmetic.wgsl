@@ -1,10 +1,8 @@
 fn refinedDivide(a: f32, b: f32) -> f32 {
-  let q = a / b;
-  return q + fma(-q, b, a) / b;
+  return roundedQuotient(a, b);
 }
 fn refinedRoot(a: f32) -> f32 {
-  let q = sqrt(a);
-  return q + fma(-q, q, a) / (2. * q);
+  return roundedRoot(a);
 }
 fn farPairVelocity(delta: vec2<f32>, randomDir: vec2<f32>, mass: f32) -> vec2<f32> {
   let squared = roundedSquare(delta.x) + roundedSquare(delta.y);

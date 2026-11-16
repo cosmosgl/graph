@@ -1,16 +1,17 @@
 ---
 source: Recorded findings
-recorded: Not recorded
-device: Apple M3; native browser
-scope: 8,192 and 16,384 clustered points over three CPU-anchored ticks; refined and stored force contributions.
+recorded: 2026-11-16
+device: Apple M3 inline browser; Linux Chromium 151 SwiftShader
+scope: Integer midpoint arithmetic; 8,192 and 16,384 clustered points over three CPU-anchored ticks. Earlier M3 measurements are labeled historical.
 ---
 
 ## Closing the dense far-field mismatch
 
-**The refined, stored-contribution candidate passes the checked dense cases at the original tolerance.**
-On Apple M3, both 8,192 and 16,384 clustered points pass force and position checks over three CPU-anchored ticks.
-At the first dense tick, every cumulative far-field level matches the CPU exactly. This is a bounded correctness
-result, not a production-ready performance result or a claim of bitwise portability across GPUs.
+**Integer midpoint rounding fixes the checked SwiftShader failures while preserving the native M3 passes.**
+Both stored-contribution variants pass 8,192 and 16,384 clustered points over three CPU-anchored ticks on both
+adapters, at the original `2e−5 + 3e−5 × |reference|` tolerance. Production shaders, CPU references, sampled
+neighbors, accumulation order and integration are unchanged. This is a bounded arithmetic correction, not
+validation of longer independently evolving layouts or every GPU vendor.
 
 The default inline path is unchanged. The failing intermediate candidates remain visible so the lab distinguishes
 agreement with production WebGL from agreement with the independent CPU reference.
@@ -62,30 +63,69 @@ The correction has three parts:
    full 48-bit product in two `u32` words, and rounds once with ties-to-even. The subsequent addition therefore cannot
    absorb an unrounded multiplication. This exact path covers normal inputs whose squared result is normal; outside
    that range it falls back to native multiplication. It is not a complete software float library.
-2. **Refine division and square root.** An initial hardware estimate is corrected with its residual:
+2. **Round division and square root using exact midpoints.** Normalize the significands into a bounded integer
+   range and use the native quotient or root only as an initial estimate. For a candidate significand `m`, compare
+   the exact input against the midpoints immediately below and above it:
 
-   ```wgsl
-   let q = a / b;
-   let improvedQuotient = q + fma(-q, b, a) / b;
+   - Division compares twice the scaled numerator against `(2m − 1) × divisor` and `(2m + 1) × divisor`.
+   - Square root compares four times the scaled radicand against `(2m − 1)²` and `(2m + 1)²`.
 
-   let s = sqrt(a);
-   let improvedRoot = s + fma(-s, s, a) / (2. * s);
-   ```
+   Two `u32` words hold each exact product, including the low bits that a float residual could lose. Move to an
+   adjacent significand only when the comparison requires it; a midpoint tie chooses the even significand.
+   Eight neighbor checks cover nearby estimates, followed by a bounded integer binary search if needed. The search
+   fallback makes correctness independent of the estimate's accuracy. Exponent carry is handled after rounding.
 
-   The first residual measures the numerator left after `q × b`. The second measures the error in `s²`;
-   dividing by `2s` supplies a Newton correction. Far-field direction uses component division by the refined distance.
-   The original softening rule is retained: below unit squared distance, the magnitude denominator uses another square
-   root. These floating-point refinements are verified candidates, not a WGSL guarantee of correctly rounded roots or
-   division on every implementation. `fma` itself has implementation latitude.
+   This helper covers normal finite operands whose normalized quotient exponent is normal, positive normal roots,
+   and zero. Subnormal operands, quotient underflow/overflow and non-finite values use native behavior; this is
+   **not** a complete software IEEE-754 implementation. The original below-unit softening still takes a second root.
 3. **Store contributions before adding them.** A compute dispatch writes the completed x/y force for each far cell. A
    later dispatch accumulates those float32 values in the original order. This prevents contraction across the
    contribution/accumulation boundary. The near-field code and CPU oracle are unchanged.
 
-Neither changing `normalize` to explicit division nor storing ordinary contributions was sufficient in the initial
-M3 probes. Refining roots/division without explicit square rounding left one force failure at 16,384 points.
-Refined arithmetic without the contribution buffer also fails that case, as the table below shows.
+## Why the residual correction was replaced
 
-## Native Apple M3 results
+The earlier candidate used `q + fma(-q, b, a) / b` for division and
+`s + fma(-s, s, a) / (2s)` for square root. Those corrections need an accurately fused residual, but
+[WGSL permits an ordinary multiply followed by an ordinary addition](https://www.w3.org/TR/WGSL/#fma-builtin).
+A separately rounded product can exaggerate the residual and move an already-correct answer by one ULP.
+
+On Linux SwiftShader, the seeded 4,096-pair division probe produced **0** mismatches with plain division and
+**418** with the residual correction. All sampled residuals matched separately rounded multiplication/addition.
+Restoring the residual code reproduced all four dense failures; bypassing just the root correction passed both
+8,192-point modes and the clustered centroid test. Bypassing both corrections passed all four dense cases.
+CPU integration given GPU forces matched exactly at both dense sizes: these failures originated before integration.
+These observations describe this adapter and corpus, not all SwiftShader versions or all division inputs.
+
+Deleting the correction is not the portable fix: earlier M3 investigations needed arithmetic correction.
+The current implementation uses integer decisions on both adapters, with no vendor switch or capability probe.
+The spring candidates still contain residual formulas; replacing and validating those is separate follow-up work.
+
+## Current regression coverage
+
+On 16 November 2026, both Linux SwiftShader and native Apple M3 passed:
+
+- **85,385 input pairs**, checking quotient and root bits against the CPU. The corpus includes the original 4,096
+  pairs, both signs, all normal input exponents, boundary significands, zero and recorded dense-cell radicands.
+- **270 exact midpoint cases**, including ties-to-even, adjacent boundary values and deliberately poor estimates
+  that exercise the integer search fallback.
+- All four dense cases: materialized and streamed contributions, 8,192 and 16,384 clustered points, three
+  CPU-anchored ticks. Existing structure, centroid, force, position and stage-replay assertions are unchanged.
+
+The broader far-arithmetic, centroid and trace run passed **36 tests** on Linux and M3. M3 additionally passed the
+**two unchanged combined-layout dense replays** at 4,096 and 8,192 points. These totals exclude the two new isolated
+arithmetic tests. The 65,024-case squared-significand and 131,080-case centroid-division checks remain intact.
+
+The shared near/exact builder also includes the integer helpers when a far-field builder has not already supplied
+them. Three additional regressions compile and execute `strictExactShader()` against the unchanged CPU force
+reference on Linux and M3 (uniform, coincident and edge-case fixtures). All seven existing native production-routing
+tests pass, including transitions across the 4,096-point exact/grid cutoff.
+
+## Historical native M3 residual results
+
+The following measurements describe the earlier `fma` residual candidate, not the integer midpoint implementation.
+Neither changing `normalize` to explicit division nor storing ordinary contributions was sufficient in those initial
+M3 probes. Refining roots/division without explicit square rounding left one force failure at 16,384 points.
+Refined arithmetic without the contribution buffer also failed that case.
 
 Precise quality, eight samples, clustered fixture, tick 1. Entries are failing **force / position components**,
 using the original `2e−5 + 3e−5 × |reference|` budget:
@@ -107,10 +147,34 @@ Both dense counts also pass ticks 2 and 3, with a fresh common frame/seed and CP
 consecutive shared inputs, not independently evolving GPU trajectories. An 8,192-point uniform fixture and the
 8,192-point clustered fixture with balanced quality also pass on the M3.
 
-Software Chromium tests require full CPU parity at both dense sizes over three ticks. Additional tests cover both
+Software Chromium tests retain the original CPU tolerance at both dense sizes over three ticks. Additional tests cover both
 shell qualities, uniform/coincident points, absent/pinned points and boundaries. A separate **65,024-case GPU corpus**
 checks rounded squares bit-for-bit across every normal-result exponent, both signs and boundary significands on that
 software adapter. The existing **131,080-case centroid division corpus** remains part of the comparison.
+
+## Integer midpoint cost on M3
+
+A paired run on 16 November 2026 in the native M3 inline browser measured complete compute steps on frozen clustered
+inputs. Both variants used batches of four steps, two warmups and seven samples, with alternating execution order.
+The timed interval includes hierarchy, centroids, far/near force work and integration; rendering, uploads and
+readback validation are outside it. Both variants passed every measured and warmup batch on this native adapter.
+
+| Points | Contribution storage | Previous residual · median ms | Integer midpoint · median ms | Change |
+| ---: | --- | ---: | ---: | ---: |
+| 8,192 | Materialized | 2.966 | 3.768 | +27.1% |
+| 8,192 | Streamed | 3.342 | 4.440 | +32.8% |
+| 16,384 | Materialized | 5.145 | 6.390 | +24.2% |
+| 16,384 | Streamed | 5.095 | 6.455 | +26.7% |
+
+All four medians are higher with integer rounding, by **24–33%**. Sample ranges overlap in three comparisons;
+this is one device and a bounded sweep, not a portable performance estimate. The Linux software workload was stopped
+before recording these native timings. No new buffers or dispatches are required, but the arithmetic cost is real
+and remains an optimization target.
+
+The timing test checks the generated shader strings to ensure the historical residual and integer candidates are
+distinct. As a negative control, the 8,192-point materialized run on Linux recorded **0/10** valid residual
+batches versus **10/10** valid integer batches, using the same acceptance gates. Software batches were capped at one
+step to retain the existing completion timeout. Timing numbers from that adapter are not used for the M3 comparison.
 
 ## Cost and migration decision
 
@@ -138,8 +202,22 @@ force now meets the dense CPU budget.
 
 ```sh
 pnpm --filter @cosmos.gl/gpu-lab dev
-pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/many-body-grid/far-arithmetic.test.ts
+pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/many-body-grid/rounded-quotient-root.test.ts src/experiments/many-body-grid/far-arithmetic.test.ts src/experiments/many-body-grid/centroids.test.ts src/experiments/many-body-grid/trace.test.ts
 ```
+
+The command above uses software Chromium. For native GPU verification, prefix it with `LAB_NATIVE_GPU=1`.
+Add `LAB_INLINE_BROWSER=1` to use an existing browser and open the printed session URL there.
+
+To compare the previous residual arithmetic with the integer candidate using paired complete-step GPU timestamps:
+
+```sh
+LAB_FAR_ARITHMETIC_COST=1 LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/many-body-grid/arithmetic-cost.test.ts -u
+```
+
+This opt-in run writes ignored local `captures/far-arithmetic-cost-<count>-<mode>.json` files. It alternates lane order, uses the same
+batch size for both, takes two warmups and seven samples, and retains both validation results. A completion-time
+cap reduces slow-adapter batches instead of increasing the GPU timeout. The old control may
+fail on software adapters; the integer candidate must pass. Measurements do not become timing acceptance gates.
 
 Open **Hierarchical global repulsion**, choose **clusters**, **8,192** or **16,384**, **8 samples**, **Precise**,
 then **Compare centroid pass**. The comparison advances one CPU-anchored tick and displays all six variants. Reset

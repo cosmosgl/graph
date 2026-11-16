@@ -5,6 +5,10 @@ device: Apple M3; standalone Chrome
 scope: Paired precision variants on frozen inputs; eight samples per cell and precise shell.
 ---
 
+The timings below describe the historical residual-arithmetic implementation. The subsequent
+[integer midpoint correction](#/many-body-grid/docs/far-field) preserves the buffer layout and traversal but changes
+arithmetic cost; its paired measurements are reported separately.
+
 ## Preserving precision with less memory
 
 **Streaming one hierarchy level at a time cuts the correction's extra storage by about 80%, with comparable GPU
