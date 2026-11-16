@@ -29,3 +29,31 @@ it('replays stored-alpha picking without changing the live scene and exports its
     expect(report.storedAlphaReplay.rows.every((r: { backend: string }) => r.backend.length > 0)).toBe(true)
   } finally { vi.restoreAllMocks(); instance.destroy(); host.remove() }
 }, 60000)
+
+it('cancels a cost sweep and exports complete rows without changing the live scene', async () => {
+  const host = document.createElement('div'); document.body.append(host)
+  const instance = await createStylingView(host)
+  try {
+    const fixture = host.querySelector<HTMLSelectElement>('[data-fixture]')!
+    const before = fixture.value
+    const run = host.querySelector<HTMLButtonElement>('[data-stored-cost]')!
+    const cancel = host.querySelector<HTMLButtonElement>('[data-stored-cost-cancel]')!
+    run.click(); expect(run.disabled).toBe(true); expect(cancel.disabled).toBe(false)
+    await vi.waitFor(() => expect(host.querySelectorAll('[data-stored-cost-results] tbody tr').length).toBeGreaterThan(0), { timeout: 20000 })
+    cancel.click()
+    await vi.waitFor(() => expect(host.querySelector('[data-stored-cost-progress]')!.textContent).toContain('cancelled'), { timeout: 20000 })
+    expect(fixture.value).toBe(before); expect(fixture.disabled).toBe(false)
+    expect(run.disabled).toBe(false); expect(cancel.disabled).toBe(true)
+    let exported: Blob | undefined
+    vi.spyOn(URL, 'createObjectURL').mockImplementation(blob => { exported = blob as Blob; return 'blob:test' })
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+    vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    host.querySelector<HTMLButtonElement>('[data-export]')!.click()
+    const report = JSON.parse(await exported!.text()).storedAlphaCost
+    expect(report.status).toBe('cancelled'); expect(report.finishedAt).toBeTruthy()
+    expect(report.rows.length).toBeGreaterThan(0); expect(report.rows.length).toBeLessThan(16)
+    for (const row of report.rows) {
+      expect(row.valid).toBe(true); expect(row.normal).toHaveLength(5); expect(row.profiled).toHaveLength(5)
+    }
+  } finally { vi.restoreAllMocks(); instance.destroy(); host.remove() }
+}, 60000)

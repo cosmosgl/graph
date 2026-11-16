@@ -874,9 +874,9 @@ at the original size; scissoring restricts fragment work without moving the
 pixel centers. Two full-viewport scratch textures are reused, and each point
 adds three render passes, including full-target clears, plus one initial ID
 clear per request. Audit mode additionally reads the masks back; the GPU-only
-resolver performs no per-point CPU readback. End-to-end picking latency and GPU
-time have not been measured. Compact scratch targets or batching require a
-separate measurement and the same exact correctness checks.
+resolver performs no per-point CPU readback. The controlled request-cost study below does not measure production hover
+latency. Compact scratch targets or batching require a separate measurement
+and the same exact correctness checks.
 
 Reproduce the candidate and its UI/export check:
 
@@ -1949,3 +1949,94 @@ integration require additional fixtures before full renderer acceptance.
 - [luma interaction and picking](https://luma.gl/docs/api-guide/engine/interactivity): identity picking and readback costs.
 - [WebGPU specification](https://www.w3.org/TR/webgpu/): render attachment formats, copies and row alignment.
 - [OpenGL ES 3.0 specification, section 3.4](https://registry.khronos.org/OpenGL/specs/es/3.0/es_spec_3.0.pdf): point rasterization and point-coordinate evaluation.
+
+### Stored-alpha cost · 16 November 2026
+
+**The bounded prototype is too expensive for interactive picking at 1024 points.**
+Reducing work to points that can touch the requested region is the next candidate.
+Scissoring alone does not remove per-point encoding, passes or full-target clears.
+This is a performance finding about the prototype, not a change to its visibility
+policy, the production controls or the acceptance gates.
+
+The native Apple M3 inline-browser run used luma 10.0.0-alpha.15, a 512 × 320
+frame, a 14 × 14 picking region and 8-pixel circles. At each count, either four
+points or all points overlap the region. The last overlapping point has alpha
+1/65536 and must leave the previous visible ID intact; other points are opaque.
+Distant points are outside the region. These unambiguous opacities let the
+existing scalar CPU oracle check exact IDs independently of measured masks.
+Boundary-alpha and image correctness remain covered by the separate replay above.
+
+Each case has two warmup pairs followed by five measured pairs, alternating
+wall-only and timestamp-profiled order. Both APIs run the same workload; backend
+order also alternates. All **16 cases passed** exact original-color preservation,
+exact region IDs and zero IDs outside the region. Validation happens after the
+measured work. No per-point audit readbacks are allowed in timing mode.
+
+Ordinary, unprofiled request medians in milliseconds:
+
+| Points | Overlap | WebGL encode / completion | WebGPU encode / completion |
+|---|---|---|---|
+| 16 | 4 | 7.3 / 19.1 | 2.4 / 7.3 |
+| 16 | 16 | 7.2 / 16.7 | 2.7 / 10.2 |
+| 64 | 4 | 25.1 / 34.6 | 5.9 / 20.9 |
+| 64 | 64 | 20.5 / 30.1 | 5.2 / 21.7 |
+| 256 | 4 | 89.0 / 98.4 | 18.8 / 75.5 |
+| 256 | 256 | 87.0 / 96.6 | 18.6 / 75.6 |
+| 1024 | 4 | 555.6 / 566.0 | 147.1 / 464.2 |
+| 1024 | 1024 | 503.7 / 513.0 | 123.7 / 353.1 |
+
+“Encode” includes submission. “Completion” starts at the same point and waits for
+a luma GPU fence; it includes encoding and polling/scheduling overhead, so these
+two columns must not be added. Resolver setup is separately measured: case
+medians were 0.1–0.6 ms. That is CPU resource/pipeline setup, not a measurement of
+physical GPU allocation latency. Full color/ID snapshot readback, outside the
+completion interval, had medians of 1.5–5.6 ms. Device creation, scene upload and
+ordinary scene drawing are outside the resolver interval. Therefore these are
+**not end-to-end pointer-event latencies**.
+
+Every request allocates two 512 × 320 RGBA8 scratch targets: 1.25 MiB of logical
+texture storage, excluding driver overhead and other frame resources. It encodes
+`3N + 1` passes, reaching 3073 at 1024 points. Even four overlapping points incur
+all of those passes. Their high cost supports conservative candidate filtering
+as the next experiment. Retain original IDs and drawing order, include fractional
+boundary coverage conservatively, and compare exact outputs before claiming a
+speedup. Production candidate discovery must also account for GPU-resident
+positions; a full position readback would introduce another cost. Reusing scratch resources is also worth testing, but the observed CPU
+setup time alone does not explain the hundreds of milliseconds.
+
+**GPU timestamps are diagnostic, not a trustworthy overall comparison in this
+run.** WebGPU returned a nonzero start and zero end for the initial clear-only
+pass. Its full pass sum is unavailable. Some WebGL sums exceeded their enclosing
+completion interval; those samples are now rejected too. No invalid sample is
+replaced by zero or silently omitted from a median. Short-pass quantization,
+profiling overhead and scheduling prevent treating a per-pass sum as ordinary
+frame GPU time. This run does not establish the relative pure GPU cost of the two
+backends or that dense overlap is intrinsically faster than sparse overlap.
+
+The profiler uses public luma QuerySets and WebGPU submission snapshots. WebGL
+command timestamps surround the whole pass, including its clear; the pinned
+luma built-in render-pass timestamp begins after the clear. Adjacent timestamp
+pairs stay together in query sets of at most 4096 entries, following the
+[WebGPU query-set limit](https://www.w3.org/TR/webgpu/#dom-gpuquerysetdescriptor-count).
+The [timestamp rules](https://www.w3.org/TR/webgpu/#timestamp) also allow counter
+resets. Negative/incomplete pairs are rejected; the export retains the reason.
+
+To reproduce, choose **Measure stored-alpha cost** in Diagnostics and keep the
+page visible. **Cancel cost sweep** retains complete rows. Export JSON contains
+the policy, device descriptions, dates, individual normal/profiled samples and
+timer status; measurements are local artifacts, not repository data. The tests
+run small timing/output checks by default. The full native sweep is opt-in:
+
+```sh
+LAB_NATIVE_GPU=1 LAB_STORED_ALPHA_SWEEP=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/stored-alpha-cost.test.ts
+```
+
+Use the README's existing-browser option to run that same test in an already-open
+browser. Results from another machine should be recorded with its own device,
+browser and date, not substituted into the table above.
+
+The follow-up native regression run passed **28 focused tests**: unchanged styling
+and source-byte controls, stored-alpha correctness, timing guards, UI cancellation
+and export, and shared research records. The opt-in full sweep was skipped in
+that regression command because it had already been run separately. The new
+cost and cancellation checks have not yet been repeated on software rendering.

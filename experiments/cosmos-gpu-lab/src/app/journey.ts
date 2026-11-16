@@ -16,9 +16,9 @@ export const journeySteps = [
   {
     number: 2,
     id: 'link-rendering',
-    title: 'Link rendering',
+    title: 'Rendering and picking',
     status: 'Planned',
-    position: 'Validate remaining link styles and retain native mask/color blockers.',
+    position: 'Bound stored-alpha picking cost, replay link alpha eligibility, then endpoint gradients, patterns, arrows and states.',
     exit: 'Declared color, exact ID/mask and source-visibility gates; remaining styles still need validation.',
     href: '#/roadmap?section=milestone-rendering',
   },

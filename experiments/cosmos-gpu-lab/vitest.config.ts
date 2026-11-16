@@ -29,6 +29,7 @@ export default defineConfig({
   optimizeDeps: { include: ['@luma.gl/shaders', 'markdown-it', 'd3-scale', 'd3-array'] },
   define: {
     'import.meta.env.REQUIRE_WEBGPU': true,
+    'import.meta.env.LAB_STORED_ALPHA_SWEEP': process.env.LAB_STORED_ALPHA_SWEEP === '1',
     'import.meta.env.LAB_NATIVE_GPU': process.env.LAB_NATIVE_GPU === '1',
     // Vite define strings are JavaScript expressions; quote the selected mode.
     'import.meta.env.LAB_SCALE_PRECISION': JSON.stringify(process.env.LAB_SCALE_PRECISION ?? 'products'),

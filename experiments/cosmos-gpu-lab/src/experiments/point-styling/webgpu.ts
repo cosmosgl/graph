@@ -2,6 +2,7 @@ import { Buffer, type TextureFormatColor } from '@luma.gl/core'
 import { RenderKernel } from '@luma.gl/graph'
 import { ALPHA_BLEND, bindingLayout, createDevice, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
+import type { StoredAlphaPassTimer } from './stored-alpha-timing'
 import { resolveStoredAlpha, validateStoredAlpha, regionScissor } from './stored-alpha'
 import { dimensions, floatPixels, pixels, target, type Backend, type Snapshot } from './backend'
 import { HEIGHT, resolvePoint, WIDTH } from './data'
@@ -13,9 +14,9 @@ import { SOURCE_ALPHA_WGSL } from './source-alpha'
 import { atlasTexture, atlasCoords, atlasInfo, GUTTER_SIZE, sourceTexelRects } from './atlas'
 import { createDynamicAtlas } from './dynamic-atlas'
 
-export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExtent = GUTTER_SIZE): Promise<Backend> {
+export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExtent = GUTTER_SIZE, timestamps = false): Promise<Backend> {
   let failure: string | undefined
-  const device = await createDevice('webgpu', canvas, false, error => { failure ??= error.message; return true })
+  const device = await createDevice('webgpu', canvas, timestamps, error => { failure ??= error.message; return true })
   const scope = resourceScope()
   try {
     const dynamic = scope.own(createDynamicAtlas(device))
@@ -109,12 +110,14 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
               settings.greyoutOpacity ?? -1, Number(settings.darkenGreyout !== false), settings.strokeContrast ?? 0, settings.ringContrast ?? 0,
               settings.strokeShade ?? 2, settings.ringShade ?? 2, layer, overlayIndex,
             ]), Buffer.UNIFORM))
-          const draw = (kernel: RenderKernel, mode: number, framebuffer?: ReturnType<typeof target>['framebuffer'], rank?: number): void => {
-            const pass = device.beginRenderPass({
+          const draw = (kernel: RenderKernel, mode: number, framebuffer?: ReturnType<typeof target>['framebuffer'], rank?: number,
+            timer?: StoredAlphaPassTimer): void => {
+            const passProps = {
               framebuffer,
-              clearColor: framebuffer ? [0, 0, 0, 0] : settings.backgroundColor ?? [0.14, 0.16, 0.185, 1],
-              clearDepth: false,
-            })
+              clearColor: (framebuffer ? [0, 0, 0, 0] : settings.backgroundColor ?? [0.14, 0.16, 0.185, 1]) as [number, number, number, number],
+              clearDepth: false as const,
+            }
+            const pass = timer ? timer.begin(passProps, mode === 0 ? 'paint' : 'geometry') : device.beginRenderPass(passProps)
             try {
               if (rank !== undefined) pass.setParameters({ scissorRect: regionScissor(device, height, storedAlpha!.region) })
               const atlas = atlasSource
@@ -147,18 +150,19 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
                   })
                 }
               }
-            } finally { pass.end() }
+            } finally { if (timer) timer.end(pass); else pass.end() }
           }
           draw(colorKernel, 0, color.framebuffer); draw(pickKernel, 1, ids.framebuffer)
           if (display) draw(displayKernel, 0)
           device.submit()
           const stored = storedAlpha
             ? await resolveStoredAlpha(device, width, height, points, settings, storedAlpha,
-              (id, mask, geometry) => {
+              (id, mask, geometry, timer) => {
                 const rank = order.indexOf(id)
-                draw(colorKernel, 0, mask, rank); draw(pickKernel, 1, geometry, rank)
+                draw(colorKernel, 0, mask, rank, timer); draw(pickKernel, 1, geometry, rank, timer)
               }, ids)
             : undefined
+          const readbackStart = performance.now()
           const result: Snapshot = {
             storedAlpha: stored,
             polygonArithmetic: variant === 'production' ? 'normalized' : settings.polygonArithmetic ?? 'normalized',
@@ -173,6 +177,7 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
             color: await pixels(device, color.texture, color.framebuffer),
             ids: await pixels(device, ids.texture, ids.framebuffer),
           }
+          if (stored?.timing) stored.timing.frameReadbackWallMs = performance.now() - readbackStart
           if (diagnose) {
             diagnostic ??= make('rgba32float', true)
             const geometry = frame.own(target(device, width, height, 'rgba32float'))
