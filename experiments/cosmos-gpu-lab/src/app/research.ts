@@ -127,7 +127,7 @@ export const research: Record<string, ResearchSummary> = {
     evidence: 'method',
     milestone: 'rendering',
     reviewed: '2026-11-15',
-    comparison: 'Production curved ribbons → WebGL / WebGPU colors and host IDs → independent triangle-strip masks and source checks',
+    comparison: 'Compare production curved ribbons across WebGL and WebGPU against independent triangle-strip masks and source checks.',
     question: 'Do production solid curves render and pick consistently through public luma APIs?',
     conclusion: 'Color-face picking fixes folded-ribbon visibility and passes 28/64; native boundary mask/color failures remain rejected.',
     scope: 'Apple M3, inline Chromium 157: 20/56 nonzero-opacity plus 8/8 zero-opacity rows pass; all 64 preserve color and avoid invisible source picks. ' +

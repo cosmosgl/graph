@@ -61,11 +61,12 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
       <p class="styling-pick" data-pick="${lane}">Move over a curve to inspect its ID</p>
       <p class="demo-note" data-device="${lane}"></p></article>`).join('')}</section>
     <section data-run-part="results" data-results class="readiness-table"></section>
-    <p data-run-part="explanation">Rational quadratic ribbons use the production power-spaced samples and finite-difference normals.
+    <div data-run-part="explanation"><p>Rational quadratic ribbons use the production power-spaced samples and finite-difference normals.</p>
+      <p>
       The production ID pass widens each curve by five CSS pixels; the separate candidate uses its visible width and source-byte eligibility.
-      The color-face candidate also culls the back faces excluded from color.
-      Solid color, back-face culling, alpha and primitive overlap follow the production draw. Frozen positions and captured IDs
-      keep pointer inspection deterministic.</p>
+      The color-face candidate also culls the back faces excluded from color.</p>
+      <p>Solid color, back-face culling, alpha and primitive overlap follow the production draw. Frozen positions and captured IDs
+      keep pointer inspection deterministic.</p></div>
     <section data-run-part="diagnostics"><h3>Repeatable curved-link sweep</h3><p>${ROW_COUNT} configurations:
       four fixtures × eight profiles × blended/hard modes.
       CPU checks rasterize the actual tessellated triangle strip. All selected source links are checked in isolation, including folded ribbons.</p>

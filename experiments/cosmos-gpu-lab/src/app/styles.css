@@ -11,6 +11,9 @@
   --text-primary: #ececef;
   --text-secondary: #b1b6c0;
   --type-title: 32px;
+  --type-section: 22px;
+  --type-subsection: 16px;
+  --reading-width: 70ch;
   --type-body: 14px;
   --type-meta: 12px;
   --accent-hover: #c6daf1;
@@ -140,11 +143,11 @@ p {
   margin-top: 0;
 }
 
-:where(h2, h3, h4, h5, h6) {
-  font-size: var(--type-body);
-  font-weight: 500;
-  line-height: 1.65;
-}
+/* Document hierarchy; compact panel labels opt into their own size below. */
+h2 { margin: 36px 0 10px; font-size: var(--type-section); line-height: 1.3; }
+h3 { margin: 30px 0 10px; font-size: var(--type-subsection); line-height: 1.4; }
+h4, h5, h6 { margin: 24px 0 10px; font-size: var(--type-body); line-height: 1.4; }
+h1, h2, h3, h4, h5, h6 { font-weight: 600; overflow-wrap: anywhere; }
 
 :where(strong, b, th) { font-weight: 500; }
 
@@ -152,7 +155,7 @@ h1 {
   margin: 6px 0 14px;
   color: var(--text-primary);
   font-size: var(--type-title);
-  font-weight: 500;
+  font-weight: 600;
   letter-spacing: 0;
 }
 
@@ -193,8 +196,6 @@ h1 {
 .catalog-group-heading h2 {
   margin-bottom: 8px;
   color: var(--text-primary);
-  font-size: var(--type-body);
-  font-weight: 500;
   letter-spacing: 0;
 }
 
@@ -265,8 +266,6 @@ h1 {
 
 .experiment-card h3 {
   margin: 0 0 10px;
-  font-size: var(--type-body);
-  font-weight: 500;
 }
 
 .experiment-card p {
@@ -1043,19 +1042,14 @@ button[data-action="play"][aria-pressed="true"] {
 
 .prose h1 {
   margin: 0 0 24px;
-  font-size: var(--type-body);
 }
 
 .prose h2 {
-  margin: 42px 0 14px;
-  font-size: var(--type-body);
-  font-weight: 500;
+  margin: 36px 0 10px;
 }
 
 .prose h3 {
   margin: 30px 0 10px;
-  font-size: var(--type-body);
-  font-weight: 500;
 }
 
 .prose p,
@@ -1697,8 +1691,6 @@ button[data-action="play"][aria-pressed="true"] {
   padding: 14px 0;
   margin: 0;
   color: var(--text-primary);
-  font-size: var(--type-body);
-  font-weight: 500;
 }
 
 .learning-contents nav {
@@ -1786,14 +1778,14 @@ button[data-action="play"][aria-pressed="true"] {
 .fractional-mask-previews canvas { display: block; width: 144px; height: 144px; }
 .styling-pick { min-height: 1.5em; color: var(--accent); font-variant-numeric: tabular-nums; }
 
-/* Three shared text roles: title, reading text, secondary metadata. */
+/* Reading text and secondary metadata share the document hierarchy above. */
 .migration-overview, .compact-run, .investigation-context {
   color: var(--text-primary); font-size: var(--type-body); line-height: 1.7;
 }
 .migration-overview { margin: 0 0 48px; max-width: 1100px; }
 .migration-overview :is(h2, h3),
 .compact-run :is(h2, h3), .milestone-gates :is(h2, h3) {
-  font-size: var(--type-body); font-weight: 500; line-height: 1.7; letter-spacing: 0;
+  letter-spacing: 0;
 }
 .migration-overview h2 { margin: 12px 0; }
 .migration-overview p { margin: 0 0 16px; }
@@ -1878,11 +1870,11 @@ button[data-action="play"][aria-pressed="true"] {
 .many-body-benchmark table { min-width: 760px; }
 
 .visible-section { margin-block: 24px; }
-.visible-section > .visible-section-heading { margin: 0 0 12px; font-size: var(--type-body); font-weight: 500; line-height: 1.7; }
+.visible-section > .visible-section-heading { margin: 0 0 12px; }
 .saved-diagnostic { width: 100%; min-width: 0; max-width: 100%; }
 .saved-diagnostic pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font-size: var(--type-meta); line-height: 1.6; }
 .precision-trace .visible-section-heading { padding: 12px 0; }
-.precision-trace h3 { margin: 24px 0 12px; font-size: var(--type-body); font-weight: 500; }
+.precision-trace h3 { margin: 24px 0 12px; }
 .precision-trace .visible-section .visible-section { margin: 12px 0 24px; }
 
 .trajectory-panels canvas { max-height: 220px; object-fit: contain; }
@@ -1899,7 +1891,7 @@ button[data-action="play"][aria-pressed="true"] {
 .run-overview dt { font-weight: 500; margin-bottom: 6px; }
 .run-overview dd { margin: 0; color: var(--text-secondary); overflow-wrap: anywhere; }
 .run-overview [data-run-slot="status"] > * { margin: 14px 0 0; padding: 0; font-size: var(--type-body); overflow-wrap: anywhere; }
-.run-layout h2 { font-size: var(--type-body); font-weight: 500; margin: 0 0 16px; }
+.run-layout h2 { margin: 0 0 16px; }
 .run-workbench { display: grid; gap: 28px; align-items: start; }
 .run-settings, .run-display, .run-visualization, .run-diagnostics, .run-layout [data-run-part] { min-width: 0; }
 .run-layout :is(#run-configuration, #run-run, #run-results, #run-diagnostics) { scroll-margin-top: 24px; }
@@ -1972,8 +1964,8 @@ button[data-action="play"][aria-pressed="true"] {
 .integrated-run .run-overview .run-source { margin-top: 0; }
 .integrated-run .run-settings .demo-toolbar { margin-bottom: 0; }
 .experiment-notes { margin-top: 36px; max-width: 840px; }
-.experiment-notes h2 { margin: 0 0 16px; }
-.experiment-notes h3, .experiment-notes h4 { margin: 24px 0 12px; font-size: var(--type-body); font-weight: 500; }
+.experiment-notes h2 { margin: 0 0 10px; }
+.experiment-notes h3, .experiment-notes h4 { margin: 30px 0 10px; }
 .experiment-notes p { margin-bottom: 16px; }
 .experiment-contract { margin: 24px 0; }
 .experiment-contract > div { margin-bottom: 16px; }
@@ -2041,7 +2033,7 @@ button[data-action="play"][aria-pressed="true"] {
 .migration-overview [data-decision] { margin: 14px 0; max-width: 900px; }
 .migration-overview [data-decision] h2, .migration-overview [data-decision] h3 { margin-bottom: 8px; }
 .feature-map { margin-block: 32px 48px; }
-.feature-map h2, .coverage-group h3 { font-size: var(--type-body); font-weight: 500; margin: 28px 0 14px; }
+.feature-map h2, .coverage-group h3 { margin: 28px 0 14px; }
 .coverage-summary { line-height: 1.8; }
 .coverage-summary strong { font-weight: 500; }
 .coverage-group table { width: 100%; }
@@ -2092,4 +2084,14 @@ button[data-action="play"][aria-pressed="true"] {
 @media (max-width: 1050px) {
   .experiment-contents { max-height: none; }
   .document-layout > .document-contents { max-height: none; }
+}
+
+/* Keep prose readable without constraining tables, canvases or experiment controls. */
+:is(.prose, .experiment-notes, .experiment-references, .migration-overview) :is(p, ul, ol, dl) {
+  max-width: var(--reading-width);
+}
+.experiment-method > .section-summary {
+  max-width: var(--reading-width);
+  margin-bottom: 24px;
+  color: var(--text-secondary);
 }
