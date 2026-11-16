@@ -30,6 +30,56 @@ This page records the tested scope, not a claim that the complete engine is read
 
 These checks support semantic feasibility. They do not establish large-graph speedups or production readiness.
 
+## Linux software CI isolation · 16 November 2026
+
+Reproduced with luma **10.0.0-alpha.15**, Playwright **1.62.1**, Chromium
+**151.0.7922.34**, Node **22.23.4** and pnpm **10.15.0** in the official
+`mcr.microsoft.com/playwright:v1.62.1-resolute` Linux x64 image. The container runs
+under emulation on Apple M3; it matches the CI browser/runtime and Ubuntu release
+family, not the GitHub runner's kernel, CPU or complete system image. These are
+correctness observations, not performance measurements.
+
+Each GPU measurement test was first run in its own Chromium process with the old
+CI arguments, `--enable-unsafe-webgpu --use-angle=swiftshader`:
+
+| Check | Result |
+|---|---|
+| WebGL 129-point early-exit comparison and batched stages | Both pass |
+| WebGL 100k star, original and early-exit loops, 25 ticks and timed-stage output checks | Both pass |
+| WebGL and WebGPU isolated 100k pass readbacks | Both pass |
+| WebGL 100k fence trajectory and bounded/unbounded draw comparison | Both pass |
+| WebGPU batched stages | Device lost during completion; Chromium reports canvas allocation failure |
+
+The same device failure reproduces with a one-pixel luma clear/readback after a
+canvas pass, without any spring shader. Offscreen-only clear/readback passes.
+Adding `--use-vulkan=swiftshader --enable-features=Vulkan` enables the Linux
+software canvas path; the **complete measurement file then passes 17/17 tests**.
+The lab now supplies these arguments for Linux software runs only.
+
+The six WebGL failures from the inspected CI job did **not** reproduce in fresh
+processes or in a replay of its three failing files together. That replay produced
+19 failures, including the WebGPU canvas failure, rather than the original 25.
+A single failed canvas followed by a new WebGL spring backend also passed. Thus
+the browser/canvas problem is isolated, but a causal explanation for all six
+original WebGL failures is not established. They are not evidence for a spring
+arithmetic correction, and this software result does not resolve the separately
+recorded native 100k-star context loss.
+
+The production shader, CPU reference and `2e−6 + 2e−5 × abs(expected)` gate remain
+unchanged. No new GPU speedup claim follows from running timed-stage contracts
+under CPU emulation.
+
+On Linux, reproduce the corrected software run with:
+
+```sh
+pnpm --filter @cosmos.gl/gpu-lab test:gpu src/gpu/canvas-readback.test.ts
+pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/weighted-links/measurement.test.ts
+```
+
+Append `-t 'WebGL: early exit preserves'` or `-t 'WebGPU: batched stages'` to the
+second command to launch just that case in a fresh browser. Leave `LAB_NATIVE_GPU`
+and `LAB_INLINE_BROWSER` unset for software reproduction.
+
 ## Reproduce correctness
 
 From the repository root:

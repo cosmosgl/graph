@@ -7,19 +7,18 @@ import { contributionPasses, inspectForeground } from './tiny-alpha'
 import { createStylingWebGL } from './webgl'
 import { createStylingWebGPU } from './webgpu'
 
-it('keeps original colors and visible source-byte picks at every alpha-byte boundary', async () => {
-  const gl = await createStylingWebGL(document.createElement('canvas'))
-  let gpu: Awaited<ReturnType<typeof createStylingWebGPU>> | undefined
-  try {
-    gpu = await createStylingWebGPU(document.createElement('canvas'))
-    const f = new Float32Array(1); const bits = new Uint32Array(f.buffer)
-    const alpha = [0, 1, ...Array.from({ length: 255 }, (_, byte) => {
-      f[0] = (byte + 0.5) / 255; const center = bits[0]
-      return [-1, 0, 1].map(offset => { bits[0] = center + offset; return f[0] })
-    }).flat()]
-    const points = alpha.map((a, i) => point(8.5 + (i % 32) * 16, 6.5 + Math.floor(i / 32) * 13, 0,
-      { size: 4, color: [0.62, 0.71, 0.84, a] }))
-    for (const backend of [gl, gpu]) {
+// Report both backends even when the first one fails its unchanged pixel gate.
+for (const [name, create] of [['WebGL', createStylingWebGL], ['WebGPU', createStylingWebGPU]] as const) {
+  it(`${name}: keeps original colors and visible source-byte picks at every alpha-byte boundary`, async () => {
+    const backend = await create(document.createElement('canvas'))
+    try {
+      const f = new Float32Array(1); const bits = new Uint32Array(f.buffer)
+      const alpha = [0, 1, ...Array.from({ length: 255 }, (_, byte) => {
+        f[0] = (byte + 0.5) / 255; const center = bits[0]
+        return [-1, 0, 1].map(offset => { bits[0] = center + offset; return f[0] })
+      }).flat()]
+      const points = alpha.map((a, i) => point(8.5 + (i % 32) * 16, 6.5 + Math.floor(i / 32) * 13, 0,
+        { size: 4, color: [0.62, 0.71, 0.84, a] }))
       const before = await backend.render(points, DEFAULTS, false, 'explicit', false)
       const image = await backend.render(points, DEFAULTS, false, 'eligibility', false)
       expect(compareColors(before, image), `${backend.info}: original color preservation`)
@@ -44,9 +43,9 @@ it('keeps original colors and visible source-byte picks at every alpha-byte boun
         expect(actualId, context).toBe(eligible ? i : null)
         if (eligible) expect(image.color[offset + 3], `own paint: ${context}`).toBeGreaterThan(0)
       })
-    }
-  } finally { gpu?.destroy(); gl.destroy() }
-})
+    } finally { backend.destroy() }
+  })
+}
 
 it('preserves styling colors byte-for-byte at unchanged full-frame CPU and GPU gates', async () => {
   const gl = await createStylingWebGL(document.createElement('canvas'))

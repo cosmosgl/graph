@@ -1,8 +1,15 @@
 import { defineConfig } from 'vitest/config'
 import { playwright } from '@vitest/browser-playwright'
 
+// ANGLE alone enables WebGL, but Linux headless WebGPU canvas presentation also
+// needs Vulkan compositing. Without it, canvas allocation loses the device and
+// later readbacks fail even though offscreen compute/rendering works.
+const softwareArgs = [
+  '--enable-unsafe-webgpu', '--use-angle=swiftshader',
+  ...(process.platform === 'linux' ? ['--use-vulkan=swiftshader', '--enable-features=Vulkan'] : []),
+]
 const browserProvider = playwright({ launchOptions: { ...(process.env.LAB_NATIVE_GPU === '1' ? { channel: 'chrome', args: ['--enable-unsafe-webgpu'] }
-  : { args: ['--enable-unsafe-webgpu', '--use-angle=swiftshader'] }) } })
+  : { args: softwareArgs }) } })
 // Run the real suite in a user-selected inline browser without launching Chrome.
 // Open the printed session URL through the Codex browser tool to start the tests.
 if (process.env.LAB_INLINE_BROWSER === '1') {
