@@ -5,13 +5,15 @@ import { disposeRunLayout, mountRunLayout, summarizeRun } from '../runtime/run-l
 import { validationContracts } from '../runtime/validation'
 import { createAppShell } from './app-shell'
 import { experiments, findExperiment } from './registry'
-import { research } from './research'
+import { migrationFocus, research } from './research'
+import { journeySteps } from './journey'
 import { coverage } from './coverage'
 import { articleSectionId, readRoute } from './router'
 
 let host: HTMLElement | undefined
 let shell: ReturnType<typeof createAppShell> | undefined
 const initial = window.location.href
+const currentStep = journeySteps.find(step => step.number === migrationFocus.step)!
 afterEach(async () => {
   shell?.destroy(); host?.remove(); vi.restoreAllMocks()
   window.history.replaceState(null, '', initial)
@@ -53,14 +55,15 @@ it('puts feature coverage and the current action before a regroupable catalog wi
     expect(section.closest('details,[hidden]')).toBeNull()
   }
   expect(host.querySelectorAll('.experiment-card')).toHaveLength(experiments.length)
-  expect(host.querySelector('[data-decision="focus"] a[href="#/curved-links"]')).not.toBeNull()
+  expect(host.querySelector(`[data-decision="focus"] a[href="#/${migrationFocus.experiment}"]`)).not.toBeNull()
   expect(host.querySelectorAll('#feature-map tbody tr')).toHaveLength(coverage.length)
-  expect(host.querySelector('.experiment-card[data-current]')?.getAttribute('href')).toBe('#/curved-links')
+  expect(Array.from(host.querySelectorAll('.experiment-card[data-current]'), card => card.getAttribute('href')))
+    .toEqual([`#/${migrationFocus.experiment}`])
   const grouping = host.querySelector<HTMLSelectElement>('[data-catalog-grouping]')!
   grouping.value = 'reading'; grouping.dispatchEvent(new Event('change'))
   expect(host.querySelector('#catalog-foundations')).not.toBeNull()
   expect(host.querySelectorAll('.experiment-card')).toHaveLength(experiments.length)
-  expect(host.querySelector('[data-decision="next"] a[href="#/roadmap?section=journey-link-rendering"]')).not.toBeNull()
+  expect(host.querySelector(`[data-decision="next"] a[href="#/roadmap?section=journey-${currentStep.id}"]`)).not.toBeNull()
   creates.forEach(create => expect(create).not.toHaveBeenCalled())
 })
 
@@ -68,10 +71,10 @@ it('keeps the current step consistent on the roadmap and resolves feature-row li
   const creates = experiments.map(experiment => vi.spyOn(experiment, 'create'))
   window.history.replaceState(null, '', '#/roadmap')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelector('#journey-link-rendering')).not.toBeNull())
+  await vi.waitFor(() => expect(host!.querySelector(`#journey-${currentStep.id}`)).not.toBeNull())
   expect(host.querySelector('[data-nav="roadmap"]')!.getAttribute('aria-current')).toBe('page')
-  expect(host.querySelector('.lab-position')!.textContent).toContain(findExperiment('curved-links')!.title)
-  expect(host.querySelector('#journey-link-rendering')!.textContent).toContain(research['curved-links'].next)
+  expect(host.querySelector('.lab-position')!.textContent).toContain(findExperiment(migrationFocus.experiment)!.title)
+  expect(host.querySelector(`#journey-${currentStep.id}`)!.textContent).toContain(research[migrationFocus.experiment].next)
   expect(host.querySelector('.flow-branches')!.textContent).toContain('Simulation')
   expect(host.querySelector('.flow-branches')!.textContent).toContain('Rendering and interaction')
   await route('#/feature-inventory?section=feature-curved-links', () => expect(document.activeElement?.id).toBe('feature-curved-links'))
@@ -134,7 +137,7 @@ for (const { id } of experiments) {
     const canvas = host.querySelector('canvas')!; const input = host.querySelector('input')!
     const findings = host.querySelector('[data-recorded-report]')!
     expect(host.querySelector('.research-conclusion')!.textContent).toBe(research[id].conclusion)
-    expect(host.querySelector('.experiment-role')!.textContent).toContain(id === 'curved-links' ? 'Current investigation' : '')
+    expect(host.querySelector('.experiment-role')!.textContent?.includes('Current investigation')).toBe(id === migrationFocus.experiment)
     for (const article of host.querySelectorAll<HTMLElement>('.experiment-article')) {
       expect(host.querySelector(`.experiment-contents a[href$="section=${article.id}"]`)).not.toBeNull()
       for (const heading of article.querySelectorAll('[data-heading-level="2"]')) {
