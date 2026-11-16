@@ -1,12 +1,16 @@
 import roundedProduct from '../../gpu/rounded-product.wgsl?raw'
 import roundedSquare from './rounded-square.wgsl?raw'
 import arithmetic from './far-arithmetic.wgsl?raw'
+import quotientRoot from './rounded-quotient-root.wgsl?raw'
 import { replaceOnce } from './trace'
 
 // Shared with the production-routing exact kernel. Keep the scalar evaluation
 // order: softened magnitude, separately divided direction, rounded product.
 export function refinedPairShader (source: string): string {
   if (!source.includes('fn refinedDivide(')) source += roundedSquare + arithmetic
+  // Exact/near-only compositions do not pass through the far-field builder.
+  // Far + near compositions already contain this bundle; do not define it twice.
+  if (!source.includes('fn roundedQuotient(')) source += quotientRoot
   source += roundedProduct
   return `${source}
 fn nearPairVelocity(delta: vec2<f32>, randomDir: vec2<f32>) -> vec2<f32> {

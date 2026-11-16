@@ -31,6 +31,7 @@ export default defineConfig({
     'import.meta.env.REQUIRE_WEBGPU': true,
     'import.meta.env.LAB_STORED_ALPHA_SWEEP': process.env.LAB_STORED_ALPHA_SWEEP === '1',
     'import.meta.env.LAB_RIBBON_COST': process.env.LAB_RIBBON_COST === '1',
+    'import.meta.env.LAB_FAR_ARITHMETIC_COST': process.env.LAB_FAR_ARITHMETIC_COST === '1',
     'import.meta.env.LAB_NATIVE_GPU': process.env.LAB_NATIVE_GPU === '1',
     // Vite define strings are JavaScript expressions; quote the selected mode.
     'import.meta.env.LAB_SCALE_PRECISION': JSON.stringify(process.env.LAB_SCALE_PRECISION ?? 'products'),
