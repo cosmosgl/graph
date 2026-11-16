@@ -1,6 +1,21 @@
 name: CI
 
 on:
+  workflow_dispatch:
+    inputs:
+      investigation:
+        description: Software investigation (native-only tests remain skipped)
+        type: choice
+        options: [arithmetic, point-styling, links, full]
+        default: point-styling
+      pr_number:
+        description: Optional open PR number; test its pinned merge revision
+        type: string
+        default: ''
+      full_sweep:
+        description: Enable this investigation's explicit software cost sweeps
+        type: boolean
+        default: false
   pull_request:
   push:
     branches: [main]
@@ -9,11 +24,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: true
 
 jobs:
   verify:
+    # A skipped manual job must never satisfy the required verify check.
+    name: ${{ github.event_name == 'workflow_dispatch' && 'core verification omitted' || 'verify' }}
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       # This workflow runs PR-controlled code; never leave the GITHUB_TOKEN
@@ -59,6 +77,7 @@ jobs:
         run: pnpm audit --prod --audit-level=high
 
   gpu-lab:
+    if: github.event_name != 'workflow_dispatch'
     # Rollout stage 1: retain automatic GPU evidence until manual dispatch is verified.
     runs-on: ubuntu-latest
     continue-on-error: true
@@ -79,3 +98,78 @@ jobs:
       # Run from the lab package so its config supplies WebGPU/SwiftShader
       # launch flags, required-adapter checks, and isolated luma v10 imports.
       - run: pnpm --filter @cosmos.gl/gpu-lab test:gpu
+
+  lab-validation:
+    if: github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
+      pull-requests: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      LAB_INVESTIGATION: ${{ inputs.investigation }}
+      LAB_FULL_SWEEP: ${{ inputs.full_sweep }}
+    steps:
+      - name: Require a repository writer to dispatch
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const actors = new Set([context.actor, process.env.GITHUB_TRIGGERING_ACTOR]);
+            for (const username of actors) {
+              if (!username) throw new Error('Missing dispatch actor');
+              const { data } = await github.rest.repos.getCollaboratorPermissionLevel({
+                ...context.repo, username
+              });
+              if (!['write', 'maintain', 'admin'].includes(data.permission)) {
+                throw new Error(`${username} does not have repository write permission`);
+              }
+            }
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Resolve immutable test revision
+        id: revision
+        env:
+          LAB_REVISION_FILE: ${{ runner.temp }}/lab-revision.json
+          GH_TOKEN: ${{ github.token }}
+          LAB_PR_NUMBER: ${{ inputs.pr_number }}
+        run: node scripts/lab-validation.mjs resolve
+      - name: Run investigation in an isolated software container
+        env:
+          LAB_REVISION_FILE: ${{ runner.temp }}/lab-revision.json
+          NODE_FLOOR: ${{ steps.revision.outputs.node_floor }}
+          LAB_SHA: ${{ steps.revision.outputs.sha }}
+        run: |
+          # The selected revision is fetched and executed only inside this container.
+          # No host checkout, credentials, cache tokens or Docker socket enter it.
+          mkdir -p experiments/cosmos-gpu-lab/captures
+          docker run --rm --init \
+            --mount "type=bind,src=$PWD/experiments/cosmos-gpu-lab/captures,dst=/work/experiments/cosmos-gpu-lab/captures" \
+            --mount "type=bind,src=$LAB_REVISION_FILE,dst=/lab-revision.json,readonly" \
+            --workdir /work \
+            -e CI=1 -e COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+            -e LAB_INVESTIGATION -e LAB_FULL_SWEEP \
+            -e GITHUB_RUN_ID -e GITHUB_RUN_ATTEMPT -e GITHUB_REPOSITORY -e LAB_SHA \
+            -e LAB_REVISION_FILE=/lab-revision.json \
+            "node:${NODE_FLOOR}-bookworm" sh -ec '
+              git init -q .
+              git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+              git fetch --no-tags --depth=1 origin "$LAB_SHA"
+              git checkout --detach FETCH_HEAD
+              test "$(git rev-parse HEAD)" = "$LAB_SHA"
+              corepack enable
+              pnpm install --frozen-lockfile
+              pnpm exec playwright install --with-deps chromium
+              node --test scripts/lab-validation.test.mjs experiments/cosmos-gpu-lab/scripts/artifacts.test.mjs
+              node scripts/lab-validation.mjs run
+            '
+      - name: Retain evidence, including failed assertions
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lab-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/lab-revision.json
+            experiments/cosmos-gpu-lab/captures/validation-${{ github.run_id }}-${{ github.run_attempt }}/
+          if-no-files-found: warn
+          retention-days: 14

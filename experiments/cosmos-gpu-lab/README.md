@@ -262,16 +262,17 @@ contracts can be isolated. Do not weaken the guard to include them.
 
 ### Manual software investigations
 
-The **Lab validation** workflow accepts an investigation (`arithmetic`, `point-styling`, `links`
+The **CI** workflow’s manual **lab-validation** job accepts an investigation (`arithmetic`, `point-styling`, `links`
 or `full`), an optional open PR number and an explicit cost-sweep switch. For example:
 
 ```sh
-gh workflow run lab-validation.yml --ref main -f investigation=point-styling -f pr_number=298 -f full_sweep=true
+gh workflow run ci.yml --ref experiment/cosmos-gpu-lab -f investigation=point-styling -f pr_number=298 -f full_sweep=true
 ```
 
-The workflow must exist on the default branch before it can be dispatched. During rollout, the
-automatic advisory `gpu-lab` job stays enabled until a real dispatch and its artifacts have been
-checked. Branch protection must separately require `verify`; declaring the job does not configure
+The CI workflow already exists on the default branch; select the lab branch while the lab is
+still under review. After it merges, use `--ref main`. Manual runs skip automatic verification jobs
+and have separate concurrency groups. During rollout, the automatic advisory `gpu-lab` job stays
+enabled until a real dispatch and its artifacts have been checked. Branch protection must separately require `verify`; declaring the job does not configure
 that repository setting.
 
 A PR run fetches and pins its merge SHA, checks its base/head parents and fails if no usable merge
