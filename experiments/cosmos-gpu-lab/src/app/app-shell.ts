@@ -8,10 +8,12 @@ import { createRetainedRun } from '../runtime/retained-run'
 import { disposeDocumentTables } from '../runtime/result-tables'
 import { experimentGroups, findExperiment } from './registry'
 import {
-  architectureHref, articleSectionId, conceptHref, experimentHref, featureInventoryHref, readRoute, roadmapHref, vocabularyHref, currentSection,
+  architectureHref, articleSectionId, conceptHref, experimentHref, readRoute, vocabularyHref, currentSection,
 } from './router'
 import { indexVocabularyTerms } from './vocabulary'
-import { research } from './research'
+import { research, milestones, migrationFocus } from './research'
+import { currentStep, currentJourneyStep, experimentRole, focusedExperiment, milestoneTitle, renderJourney, renderJourneyFlow } from './journey'
+import { renderCoverageIndex, renderCoverageSummary, markCoverageRows } from './coverage'
 import { renderMigrationOverview } from './research-ui'
 import { scrollToSection } from './sections'
 import { resolveExperimentSection } from './article-sections'
@@ -24,102 +26,52 @@ function requiredElement<T extends HTMLElement> (host: ParentNode, selector: str
 }
 
 function renderHome (host: HTMLElement): void {
-  host.innerHTML = `
-    <header class="home-intro">
-      <h1>Cosmos GPU Lab</h1>
-    </header>
-    <div data-migration-overview></div>
-    <div class="home-sections">
-    <div class="experiment-catalog" id="experiment-catalog" aria-label="Available experiments">
-      <header class="catalog-header">
-      <h2 class="catalog-title">Experiment catalog</h2>
-      <p class="catalog-intro">Explore the groups from foundations to validation.
-        Experiments within each group follow a suggested reading order; the migration roadmap records our findings and next steps.</p>
-      </header>
-    </div>
-
-    <a class="reference-card" href="#/validation-workflow">
-      <span class="card-index">VALIDATION</span>
-      <span><strong>Validation workflow</strong><small>Separate behavioral contracts, accuracy, compatibility, quality and cost</small></span>
-      <span aria-hidden="true">→</span>
-    </a>
-    <a class="reference-card" href="${roadmapHref()}">
-      <span class="card-index">THE JOURNEY</span>
-      <span>
-        <strong>Cosmos → WebGPU</strong>
-        <small>Migration readiness: what is demonstrated, what is missing and what would justify switching</small>
-      </span>
-      <span aria-hidden="true">→</span>
-    </a>
-    <a class="reference-card" href="#/learn">
-      <span class="card-index">START HERE</span>
-      <span>
-        <strong>How WebGPU works</strong>
-        <small>Learn the vocabulary through small interactive examples, from point data to pixels</small>
-      </span>
-      <span aria-hidden="true">→</span>
-    </a>
-    <a class="reference-card" href="${featureInventoryHref()}">
-      <span class="card-index">COVERAGE</span>
-      <span>
-        <strong>Cosmos feature coverage</strong>
-        <small>Forces and rendering: how WebGL works, what experiments cover and what WebGPU still needs to prove</small>
-      </span>
-      <span aria-hidden="true">→</span>
-    </a>
-    <a class="reference-card" href="${architectureHref()}">
-      <span class="card-index">REFERENCE</span>
-      <span>
-        <strong>Lab architecture</strong>
-        <small>How the shell, experiments, GPU backends and documentation fit together</small>
-      </span>
-      <span aria-hidden="true">→</span>
-    </a>
-    <a class="reference-card" href="${vocabularyHref()}">
-      <span class="card-index">REFERENCE</span>
-      <span>
-        <strong>WebGPU vocabulary</strong>
-        <small>Core concepts, execution model, resources and Cosmos compute terms</small>
-      </span>
-      <span aria-hidden="true">→</span>
-    </a>
-    <a class="reference-card" href="${conceptHref('reduction')}">
-      <span class="card-index">CONCEPT</span>
-      <span>
-        <strong>Parallel reduction</strong>
-        <small>From algebra and workgroup trees to a production Cosmos compute primitive</small>
-      </span>
-      <span aria-hidden="true">→</span>
-    </a>
-    </div>
-  `
+  host.innerHTML = `<header class="home-intro"><h1>Cosmos GPU Lab</h1>
+    <p>WebGPU methods, demonstrated scope and remaining Cosmos feature gaps. Production still uses WebGL.</p></header>
+    <div data-migration-overview></div><section id="feature-map" class="feature-map" aria-label="Feature coverage map"></section>
+    <nav class="home-references" aria-label="Lab references"><a href="#/validation-workflow">Validation workflow</a>
+      <a href="${architectureHref()}">Lab architecture</a><a href="${vocabularyHref()}">Vocabulary</a>
+      <a href="${conceptHref('reduction')}">Parallel reduction</a></nav>
+    <section class="experiment-catalog" id="experiment-catalog" aria-label="Available experiments">
+      <header class="catalog-header"><h2 class="catalog-title">Experiment catalog</h2>
+      <label>Group experiments by <select data-catalog-grouping><option value="milestone">Migration area</option>
+        <option value="reading">Reading path</option></select></label>
+      <p class="catalog-intro">Roles describe the purpose of a study, not approval.
+        Reading order teaches prerequisites; it is not migration progress.</p></header>
+      <div data-catalog-groups></div></section>`
   renderMigrationOverview(requiredElement(host, '[data-migration-overview]'))
-  const catalog = requiredElement<HTMLElement>(host, '.experiment-catalog')
-  for (const group of experimentGroups) {
-    const section = document.createElement('section')
-    section.className = 'home-experiment-group'
-    section.setAttribute('aria-labelledby', `catalog-${group.id}`)
-    section.innerHTML = `
-      <header class="catalog-group-heading">
-        <h2 id="catalog-${group.id}">${group.title}</h2>
-        <p>${group.description}</p>
-      </header>
-      <div class="experiment-grid"></div>
-    `
-    const grid = requiredElement<HTMLElement>(section, '.experiment-grid')
-    for (const experiment of group.experiments) {
-      const link = document.createElement('a')
-      link.className = 'experiment-card'
-      link.href = experimentHref(experiment.id)
-      link.innerHTML = `
-        <h3>${experiment.title}</h3>
-        <p>${research[experiment.id]?.conclusion ?? experiment.summary}</p>
-        <span class="tag-row">${experiment.tags.map(tag => `<span>${tag}</span>`).join('')}</span>
-      `
-      grid.append(link)
+  renderCoverageIndex(requiredElement(host, '#feature-map'))
+  const catalog = requiredElement<HTMLElement>(host, '[data-catalog-groups]')
+  const grouping = requiredElement<HTMLSelectElement>(host, '[data-catalog-grouping]')
+  const renderGroups = (): void => {
+    catalog.replaceChildren()
+    const groups = grouping.value === 'reading'
+      ? experimentGroups
+      : milestones.map(m => ({
+        id: m.id,
+        title: m.title,
+        description: `Open workstream · ${m.position}`,
+        experiments: experimentGroups.flatMap(group => group.experiments).filter(e => research[e.id].milestone === m.id),
+      }))
+    for (const group of groups) {
+      if (!group.experiments.length) continue
+      const section = document.createElement('section'); section.className = 'home-experiment-group'
+      section.setAttribute('aria-labelledby', `catalog-${group.id}`)
+      section.innerHTML = `<header class="catalog-group-heading"><h3 id="catalog-${group.id}">${group.title}</h3>
+        <p>${group.description}</p></header><div class="experiment-grid"></div>`
+      const grid = requiredElement<HTMLElement>(section, '.experiment-grid')
+      for (const experiment of group.experiments) {
+        const link = document.createElement('a'); link.className = 'experiment-card'; link.href = experimentHref(experiment.id)
+        link.dataset.experimentId = experiment.id
+        if (experiment.id === migrationFocus.experiment) link.dataset.current = 'true'
+        link.innerHTML = `<p class="research-meta">${experimentRole(experiment.id)} · ${milestoneTitle(research[experiment.id].milestone)}</p>
+          <h3>${experiment.title}</h3><p>${research[experiment.id].conclusion}</p>`
+        grid.append(link)
+      }
+      catalog.append(section)
     }
-    catalog.append(section)
   }
+  grouping.addEventListener('change', renderGroups); renderGroups()
 }
 
 function renderVocabularyFrame (host: HTMLElement): HTMLElement {
@@ -211,7 +163,9 @@ function renderReductionFrame (host: HTMLElement): HTMLElement {
 function renderExperimentFrame (host: HTMLElement, experiment: ExperimentDefinition): void {
   const record = research[experiment.id]
   host.innerHTML = `<div class="experiment-document">
-    <header class="experiment-header unified-header"><h1>${experiment.title}</h1><p>${record.question}</p>
+    <header class="experiment-header unified-header"><h1>${experiment.title}</h1>
+      <p class="experiment-role">${experimentRole(experiment.id)} ·
+        <a href="#/roadmap?section=milestone-${record.milestone}">${milestoneTitle(record.milestone)}</a></p><p>${record.question}</p>
       <p class="research-conclusion">${record.conclusion}</p></header>
     <section class="experiment-stage unified-experiment" aria-busy="true"></section></div>`
 }
@@ -248,14 +202,21 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
           <span class="brand-mark" aria-hidden="true"></span>
           <span><strong>Cosmos</strong><small>GPU Lab</small></span>
         </a>
+        <p class="lab-position">Current work · Step ${currentStep} ·
+          <a href="#/roadmap?section=journey-${currentJourneyStep().id}">${currentJourneyStep().title}</a>
+          <a href="${experimentHref(migrationFocus.experiment)}">${focusedExperiment().title}</a></p>
         <nav class="lab-navigation" aria-label="Lab navigation">
-          <a href="#/?section=experiment-catalog">All experiments</a><a href="#/roadmap">Roadmap</a><a href="#/learn">Learn</a>
+          <a data-nav="experiments" href="#/?section=experiment-catalog">Experiments</a><a data-nav="roadmap" href="#/roadmap">Roadmap</a>
+          <a data-nav="feature-inventory" href="#/feature-inventory">Feature coverage</a><a data-nav="learn" href="#/learn">Learn</a>
         </nav>
       </header>
       <main class="workspace" tabindex="-1"></main>
     </div>
   `
 
+  const header = requiredElement<HTMLElement>(root, '.lab-header')
+  const measureHeader = (): void => { root.style.setProperty('--lab-header-height', `${Math.ceil(header.getBoundingClientRect().height)}px`) }
+  const headerSize = new ResizeObserver(measureHeader); headerSize.observe(header); measureHeader()
   const workspace = requiredElement<HTMLElement>(root, '.workspace')
   const run = createRetainedRun(disposeExperimentNotes)
   let disposeContents = (): void => {}
@@ -276,6 +237,15 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
 
   const render = async (): Promise<void> => {
     const route = readRoute()
+    const selectedNav = route.kind === 'experiment' || (route.kind === 'home' && currentSection() === 'experiment-catalog')
+      ? 'experiments'
+      : route.kind === 'vocabulary' || route.kind === 'concept' ? 'learn' : route.kind
+    const brand = root.querySelector('.brand')!
+    if (selectedNav === 'home') brand.setAttribute('aria-current', 'page'); else brand.removeAttribute('aria-current')
+    for (const link of root.querySelectorAll<HTMLAnchorElement>('[data-nav]')) {
+      if (link.dataset.nav === selectedNav) link.setAttribute('aria-current', route.kind === 'experiment' ? 'true' : 'page')
+      else link.removeAttribute('aria-current')
+    }
     const definition = route.kind === 'experiment' ? findExperiment(route.experimentId) : undefined
     const validPage = definition && (route.kind !== 'experiment' || !route.pageId || definition.pages.some(page => page.id === route.pageId))
     if (route.kind === 'experiment' && validPage) {
@@ -370,8 +340,14 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
         ])
         if (version !== renderVersion) return
         await renderer.renderMarkdown(stage, source.default, {}, {
-          examples: { migrationStatus: host => renderMigrationOverview(host, true) },
+          examples: {
+            migrationStatus: host => renderMigrationOverview(host, true),
+            journeyPlan: renderJourney,
+            journeyFlow: renderJourneyFlow,
+            featureCoverageSummary: renderCoverageSummary,
+          },
         })
+        if (route.kind === 'feature-inventory') markCoverageRows(stage)
         if (version === renderVersion) scrollToSection(stage, currentSection())
       } catch (error) {
         if (version !== renderVersion) return
@@ -482,7 +458,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
   handleRoute()
   return {
     destroy (): void {
-      disposeDocumentTables(workspace)
+      headerSize.disconnect(); disposeDocumentTables(workspace)
       renderVersion++; disposeContents(); run.destroy()
       if (failedRun) disposeExperimentNotes(failedRun)
       root.removeEventListener('click', handleSameSection)

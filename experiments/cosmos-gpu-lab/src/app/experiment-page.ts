@@ -16,33 +16,61 @@ const contentsSections = [
 export function renderExperimentContents (host: HTMLElement, experiment: ExperimentDefinition): () => void {
   const contents = document.createElement('nav'); contents.className = 'experiment-contents'
   contents.setAttribute('aria-label', 'On this page'); contents.innerHTML = '<p>On this page</p><ul></ul>'
+  host.querySelectorAll('.experiment-contents').forEach(node => node.remove())
   const targets: Array<{ link: HTMLAnchorElement; target: HTMLElement }> = []
-  for (const [id, label] of contentsSections) {
-    const target = host.querySelector<HTMLElement>(`#${id}`)
-    if (!target && id === 'run-diagnostics') continue
+  const append = (list: HTMLElement, target: HTMLElement, label: string, state?: string): HTMLLIElement => {
     const item = document.createElement('li'); const link = document.createElement('a'); link.textContent = label
-    link.href = `${experimentHref(experiment.id)}?section=${id}`; item.append(link); contents.querySelector('ul')!.append(item)
-    if (target) targets.push({ link, target })
+    link.href = `${experimentHref(experiment.id)}?section=${encodeURIComponent(target.id)}`
+    if (state) { const note = document.createElement('small'); note.textContent = state; link.append(note) }
+    item.append(link); list.append(item); targets.push({ link, target }); return item
   }
-  host.querySelector(':scope > .experiment-contents')?.remove()
+  for (const [id, label] of contentsSections) {
+    const target = host.querySelector<HTMLElement>(`#${id}`); if (!target) continue
+    const item = append(contents.querySelector('ul')!, target, label)
+    const articles = target.querySelectorAll<HTMLElement>('.experiment-article')
+    if (!articles.length && id !== 'run-explanation') continue
+    const children = document.createElement('ul'); item.append(children)
+    if (id === 'run-explanation') {
+      for (const [section, name] of [['validation-contract', 'Reference and acceptance'], ['methods-and-alternatives', 'Methods and alternatives']]) {
+        const group = target.querySelector<HTMLElement>(`#${section === 'validation-contract' ? articleSectionId(section) : section}`)
+        if (group) append(children, group, name)
+      }
+    }
+    for (const article of articles) {
+      const entry = append(children, article, article.dataset.articleTitle!, article.dataset.evidenceState)
+      const headings = article.querySelectorAll<HTMLElement>('[data-heading-level="2"]')
+      if (!headings.length) continue
+      const sections = document.createElement('ul'); entry.append(sections)
+      for (const heading of headings) append(sections, heading, heading.dataset.sectionLabel ?? heading.childNodes[0]?.textContent?.trim() ?? '')
+    }
+  }
   host.querySelector('.experiment-header')!.after(contents)
   let frame = 0
   const refresh = (): void => {
     frame = 0
     let active = targets[0]
-    for (const entry of targets) if (entry.target.getBoundingClientRect().top <= 130) active = entry
+    const threshold = (document.querySelector('.lab-header')?.getBoundingClientRect().bottom ?? 100) + 24
+    for (const entry of targets) if (entry.target.getBoundingClientRect().top <= threshold) active = entry
     for (const entry of targets) {
       if (entry === active) entry.link.setAttribute('aria-current', 'location')
       else entry.link.removeAttribute('aria-current')
     }
   }
   const schedule = (): void => { if (!frame) frame = requestAnimationFrame(refresh) }
+  const media = window.matchMedia('(max-width: 1050px)')
+  const place = (): void => {
+    const explanation = media.matches ? host.querySelector('#run-explanation') : null
+    if (explanation) explanation.before(contents)
+    else host.querySelector('.experiment-header')!.after(contents)
+    schedule()
+  }
+  media.addEventListener('change', place); place()
   const resize = new ResizeObserver(schedule); resize.observe(host)
   window.addEventListener('scroll', schedule, { passive: true }); window.addEventListener('resize', schedule)
   refresh()
   return () => {
     resize.disconnect(); window.removeEventListener('scroll', schedule); window.removeEventListener('resize', schedule)
-    cancelAnimationFrame(frame)
+    cancelAnimationFrame(frame); media.removeEventListener('change', place); contents.remove()
   }
 }
 
@@ -71,6 +99,8 @@ async function renderArticle (
 ): Promise<void> {
   const wrapper = document.createElement('section'); wrapper.className = 'experiment-article'
   wrapper.id = articleSectionId(page.id); wrapper.dataset.documentId = page.id
+  wrapper.dataset.articleTitle = page.title === 'Overview' ? 'Concept and pipeline' : page.title
+  wrapper.dataset.evidenceState = record.investigations.find(item => item.page === page.id)?.state ?? 'Method'
   const target = document.createElement('div'); wrapper.append(target); parent.append(wrapper)
   const item = record.investigations.find(item => item.page === page.id)
   if (item && page.id !== record.evidence && item.state === 'Supporting investigation') {
@@ -108,12 +138,16 @@ async function renderNotes (host: HTMLElement, experiment: ExperimentDefinition,
     <div data-experiment-guidance></div><h3>Try it</h3><p>${record.reproduce}</p>
     <section id="${contractId}"><h3>What we compare</h3><dl class="experiment-contract">${fields.map(([id, title, value]) =>
   `<div id="${articleSectionId('validation-contract', id)}"><dt>${title}</dt><dd>${value}</dd></div>`).join('')}</dl></section>
+    ${record.methods?.length
+    ? `<section id="methods-and-alternatives"><h3>Methods and alternatives</h3><ul class="method-assessments">
+      ${record.methods.map(method => `<li><a href="${experimentHref(experiment.id, method.page, method.section)}">${method.title}</a>
+      <span class="research-meta"> · ${method.verdict}</span><p>${method.detail}</p></li>`).join('')}</ul></section>`
+    : ''}
     <div data-method-articles></div></section>
     <section class="recorded-findings" id="recorded-findings" aria-labelledby="recorded-findings-title">
       <h2 id="recorded-findings-title">Recorded findings</h2><div data-findings-articles></div>
       <h3>Scope and next steps</h3><p>${record.scope}</p><p>${record.next}</p>
       <p class="research-meta">Assessed variant: ${record.variant}. Reviewed ${record.reviewed}.</p>
-      <p><a href="#/roadmap?section=milestone-${record.milestone}">Related migration milestone</a></p>
       <section class="earlier-findings"><h3>Earlier investigations</h3><div data-earlier-articles></div></section>
     </section>
     <section class="experiment-references" id="experiment-references"><h2>References</h2>

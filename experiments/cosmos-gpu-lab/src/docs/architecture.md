@@ -40,7 +40,7 @@ section links take precedence. Retiring a run also retires its saved scroll posi
 
 The shell lives in `src/app/app-shell.ts`; route parsing lives in `src/app/router.ts`.
 
-The homepage and sidebar share a curated catalog in `src/app/registry.ts`:
+The reading-path view uses a curated catalog in `src/app/registry.ts`:
 
 | Group | Reading path |
 | --- | --- |
@@ -64,7 +64,7 @@ other experiments retain their detailed reports with the contract explaining the
 Every experiment is a complete document assembled by `src/app/experiment-page.ts`. The live view,
 technical articles, current findings, earlier investigations, diagnostics and references remain
 expanded on that document. A sticky right-hand contents menu tracks the section being read; on
-narrow screens it becomes a short list above the experiment. Simple header links replace the
+narrow screens it stays expanded after the live run and before the explanations. Simple header links replace the
 permanent left catalog sidebar. The full grouped catalog remains on Home.
 
 Articles reuse their Markdown, assets, source metadata and investigation warnings. Shared comparison
@@ -79,14 +79,10 @@ without a published matrix say so explicitly; a local run never becomes a record
 
 `src/app/research.ts` and `research-catalog.ts` own the compact reviewed summaries, document
 assignments and milestone gates. The homepage and roadmap use the same assessment renderer;
-home highlights and experiment pages read the same
-experiment conclusion. Detailed measurements stay in their embedded source articles. These are editorial
+home and experiment pages read the same conclusion, next action and focused review date. Detailed measurements stay in their embedded source articles. These are editorial
 assessments, not status inferred from a test count or a completion percentage.
 
-Home leads with the current milestone, bounded demonstrated successes, blockers and next acceptance
-gate before the experiment catalog. These sections stay visible; the full milestone table and
-checklists live on Roadmap. `migrationFocus` selects the working milestone and highlighted records;
-gate text and numerical criteria come from the existing milestone and validation contracts.
+Home leads with the current investigation and next action, then the feature coverage map. The shared inventory supplies its counts and feature links; the full milestone checklists stay on the roadmap. Execution and simulation remain open alongside rendering. The catalog retains both migration-area and prerequisite grouping.
 
 Long Markdown pages gain duplicate-safe heading IDs, route-preserving section links and a contents
 rail, with a visible short contents list above the article on smaller screens. The learning guide and
@@ -109,16 +105,20 @@ metadata in Markdown. Missing historical metadata stays marked as not recorded; 
 does not become a measurement date. Table scrolling and source labels change presentation only,
 not the numerical gates or exported raw measurements.
 
-This structure addresses run retention, status/entry-point and history-priority problems across
-the catalog. Each comparison description names its actual backends and reference roles; a
+Home starts with the feature coverage map. Its counts and rows are parsed from the inventory; they are not another hand-maintained checklist. The focused experiment supplies the current conclusion, next action and review date. `migrationFocus.step` selects one task in the shared five-row journey. The same step appears in the header and roadmap; the open milestone workstreams are a separate concept.
+
+The catalog can group the same experiments by migration area or reading path. Current investigation, bounded study, foundation and parked describe purpose, not approval. A parked sub-investigation does not park its whole experiment. Explicit method verdicts name retained controls or rejected alternatives only where the evidence has been reviewed; archive states alone never imply viability.
+
+The experiment contents tree includes article titles, evidence states and source-level section headings. On wide screens it stays beside the article; on narrow screens it stays expanded after the live run and before explanations, so the graph remains near the top. Sticky-header height is measured for section offsets. Links preserve the live canvas and settings.
+
+This structure addresses run retention, status/entry-point and history-priority problems across the catalog. Each comparison description names its actual backends and reference roles; a
 WebGPU-only study does not inherit an independent WebGL/WebGPU/CPU trajectory description.
 Full-text search and further reader-usability checks remain follow-up work.
 
 The design follows [Diátaxis’s incremental approach](https://diataxis.fr/how-to-use-diataxis/),
 [clear section labels and contents alternatives](https://design-system.service.gov.uk/components/tabs/),
-[progressive disclosure](https://www.nngroup.com/articles/progressive-disclosure/) and
 [retaining superseded decisions with explicit status](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions).
-These sources guide the design; they do not establish that this exact four-destination layout is
+These sources guide the design; they do not establish that this exact single-document layout is
 optimal for every experiment. Browser task checks validate navigation behavior, not reader usability.
 
 ## 2. Each experiment is a self-contained module

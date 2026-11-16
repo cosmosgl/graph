@@ -5,6 +5,12 @@ Reviewed **15 November 2026** against the production source in this repository.
 The [migration roadmap](#/roadmap) describes the overall readiness decision; this page is the feature checklist.
 All current experiments use luma v10 APIs for GPU resources, execution, timing and readback.
 
+## Coverage summary
+
+```example
+featureCoverageSummary
+```
+
 ## How to read coverage
 
 - **Covered in isolation** — an experiment implements and checks the named capability. This does not establish complete-engine or all-device parity.

@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import { validationContracts } from '../runtime/validation'
 import { experiments, findExperiment } from './registry'
-import { mainOpenIssues, migrationFocus, milestones, research, researchMethodPages } from './research'
+import { migrationFocus, milestones, research, researchMethodPages } from './research'
 import { renderInvestigationContext, renderMigrationOverview } from './research-ui'
 
 it('assigns every experiment and document to the shared research destinations without dropping history', () => {
@@ -11,6 +11,7 @@ it('assigns every experiment and document to the shared research destinations wi
     expect(experiment).toBeDefined()
     if (record.evidence) expect(experiment.pages.some(page => page.id === record.evidence)).toBe(true)
     expect(experiment.pages.some(page => page.id === record.method)).toBe(true)
+    for (const method of record.methods ?? []) expect(experiment.pages.some(page => page.id === method.page)).toBe(true)
     const indexed = record.investigations.map(item => item.page)
     expect(new Set(indexed).size).toBe(indexed.length)
     for (const page of experiment.pages) {
@@ -27,18 +28,16 @@ it('assigns every experiment and document to the shared research destinations wi
 it('derives the bounded home assessment from shared experiment records', () => {
   const home = document.createElement('div')
   renderMigrationOverview(home)
-  expect(home.textContent).toContain(research.collision.conclusion)
-  expect(Array.from(home.querySelectorAll<HTMLElement>('[data-decision]'), section => section.dataset.decision))
-    .toEqual(['milestone', 'successes', 'blockers', 'gate'])
-  const current = milestones.find(m => m.id === migrationFocus.milestone)!
-  expect(home.querySelector('[data-decision="milestone"]')!.textContent).toContain(current.title)
-  expect(home.querySelector('[data-decision="gate"]')!.textContent).toContain(current.gates[0])
-  expect(home.querySelector('[data-decision="gate"]')!.textContent).toContain(validationContracts[migrationFocus.experiment].acceptance)
-  for (const id of migrationFocus.demonstrated) {
-    expect(home.querySelector('.migration-successes')!.textContent).toContain(research[id].conclusion)
-    expect(home.querySelector('.migration-successes')!.textContent).toContain(research[id].scope)
-  }
-  for (const issue of mainOpenIssues) expect(home.querySelector(`a[href="${issue.href}"]`)).not.toBeNull()
+  const focus = research[migrationFocus.experiment]
+  const current = findExperiment(migrationFocus.experiment)!
+  expect(home.querySelector('[data-decision="focus"]')!.textContent).toContain(focus.conclusion)
+  expect(home.querySelector(`[href="#/${current.id}"]`)!.textContent).toBe(current.title)
+  expect(home.querySelector('[data-decision="next"]')!.textContent).toContain(focus.next)
+  expect(home.querySelector('[data-decision="next"]')!.textContent).not.toContain(validationContracts[current.id].acceptance)
+  expect(home.querySelector('.research-meta')!.textContent).toContain(new Intl.DateTimeFormat('en-GB', {
+    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
+  }).format(new Date(focus.reviewed)))
+  expect(home.querySelector('[href="#/roadmap?section=journey-link-rendering"]')).not.toBeNull()
   expect(home.querySelector('details')).toBeNull()
 })
 
