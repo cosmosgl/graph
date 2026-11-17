@@ -190,15 +190,15 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       }],
     }),
     'integrated-webgpu': entry('integrated-webgpu', {
-      conclusion: 'Interaction and sampled rendering checks pass, but timing is not repeatable: ' +
-        'the final run misses every workload. First-slice usability remains unproven.',
+      conclusion: 'Three controlled 1,024-community repeats and an original-path cross-check pass. ' +
+        'Earlier stalls remain unexplained; 8,192 and full readiness remain unaccepted.',
       reviewed: '2026-11-17',
       variant: 'luma WebGPU resident core with corrected arithmetic; bounded circle and straight-link renderer',
       comparison: 'Resident simulation → shared positions → rendering and interaction → complete frame and feedback checks',
       milestone: 'integration',
       method: 'method',
       evidence: 'findings',
-      next: 'Establish repeatable small-graph frame/picking latency, then profile 8,192 points and assess settled real-graph readability.',
+      next: 'Separate actual GPU execution from completion-notification delay, then revisit 8,192 and settled real-graph readability.',
       reproduce: 'Start with Check interaction + pixels at 1,024 points. Then evaluate the declared matrix in a visible native browser.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Separate strict compatibility, practical usability and full readiness.' }],
     }),

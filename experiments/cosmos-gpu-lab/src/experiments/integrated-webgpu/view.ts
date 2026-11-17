@@ -3,6 +3,7 @@ import { mountRunLayout, disposeRunLayout } from '../../runtime/run-layout'
 import { createIntegrated } from './runtime'
 import { workload, matrix, unsupported, type Workload } from './data'
 import { evaluate, interactionCheck, protocol } from './evaluate'
+import { pacingProtocol, profilePacing, pacingVerdict, type PacingRow } from './pacing'
 import { fit, validateFrame } from './validation'
 export async function createView (host: HTMLElement): Promise<ExperimentInstance> {
   host.innerHTML = `<div data-run-part="configuration" class="scale-toolbar">
@@ -21,10 +22,10 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     <section data-run-part="diagnostics"><h3>Declared local evaluation</h3><p>${protocol}</p>
     <div class="controls"><button data-action="check">Check interaction + pixels</button><button data-action="measure">Measure this graph</button>
     <button data-action="matrix">Evaluate declared matrix</button><button data-action="cancel">Cancel evaluation</button>
-    <button data-action="export">Export JSON</button></div>
+    <button data-action="export">Export JSON</button><button data-action="pacing">Profile small-graph pacing</button></div>
     <p>Matrix order: 1,024 chain, communities, star; then 8,192 chain, communities, star; then Karate Club.
     The matrix first checks 1,024-point picking and dragging.
-    An incorrect initial interaction blocks scaling; timing misses remain failures while the diagnostic matrix continues.</p></section>
+    An incorrect initial interaction blocks scaling; timing misses remain failures while the diagnostic matrix continues.</p><p>${pacingProtocol}</p></section>
     <section data-run-part="explanation"><h3>Supported first slice</h3><p>Corrected resident repulsion, weighted directional springs,
     gravity, high/low center reduction and cooling. Circles and solid straight links read the same positions. Picking reads one RGBA8 ID pixel.</p>
     <h3>Unsupported options</h3><p>${unsupported}</p><p>Strict compatibility: historical failures remain.
@@ -79,7 +80,20 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
         <td>${r.workload.kind} ${r.workload.count}</td><td>${r.quality.warmup.stressRms?.toFixed(3)} → ${r.quality.end.stressRms?.toFixed(3)}</td>
         <td>${r.quality.end.overlapPairs.toLocaleString()}</td><td>${r.quality.residual.motionRms.toFixed(4)}</td></tr>`).join('')}</tbody></table>`)
     }
-    if (!rows.length) {
+    const pacing = records.filter((r): r is PacingRow => typeof r === 'object' && r !== null && 'pacing' in r)
+    if (pacing.length) {
+      report.insertAdjacentHTML('beforeend', `<table><caption>Small-graph pacing · wall-clock components, not GPU timestamps</caption>
+        <thead><tr><th>Repeat / control</th><th>Frame p95</th><th>Within 33 ms</th><th>Encode simulation p95</th>
+        <th>Encode draw p95</th><th>Completion wait p95</th><th>Next frame wait p95</th><th>Pick max paused / running</th><th>Local gates</th></tr></thead>
+        <tbody>${pacing.map(r => `<tr><td>${r.repetition} · ${r.mode}</td><td>${ms(r.frames.p95)}</td>
+        <td>${(r.within33 * 100).toFixed(1)}%</td><td>${ms(r.stages.encodeSimulationMs.p95)}</td><td>${ms(r.stages.encodeDrawMs.p95)}</td>
+        <td>${ms(r.stages.completionWaitMs.p95)}</td><td>${ms(r.stages.nextFrameWaitMs.p95)}</td>
+        <td>${r.interactions ? `${ms(r.interactions.pick.max)} / ${ms(r.interactions.activePick.max)}` : 'Unchecked'}</td>
+        <td>${pacingVerdict(r)}</td></tr>`).join('')}</tbody></table>
+        <p>Controls describe scheduling, not migration acceptance. Full-tick targets remain unchanged.
+        Completion wait includes GPU work and delivery of its completion notification. Export includes per-pick phases and raw samples.</p>`)
+    }
+    if (!rows.length && !pacing.length) {
       const paragraph = document.createElement('p'); paragraph.textContent = JSON.stringify(value, null, 2); report.append(paragraph)
     }
   }
@@ -96,6 +110,14 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
       if (name === 'check') {
         runtime.pause(); const interactions = await interactionCheck(runtime); const validation = await validateFrame(runtime)
         show({ interactions, validation }); checks = 'Interaction and sampled pixels checked; inspect counts below'
+      }
+      if (name === 'pacing') {
+        kind.value = 'communities'; count.value = '1024'
+        runtime.pause(); canvas.scrollIntoView({ block: 'center' })
+        await profilePacing(runtime, () => cancelled || destroyed, text => { status.textContent = text }, row => {
+          show(row); checks = `${row.mode}: ${pacingVerdict(row)}; inspect retained rows`
+          if (pacingVerdict(row) === 'Not accepted') failure = 'A full-tick pacing row missed the existing local gates'
+        })
       }
       if (name === 'measure' || name === 'matrix') {
         runtime.pause(); runtime.resize(960, 600, devicePixelRatio); canvas.scrollIntoView({ block: 'center' })
@@ -120,7 +142,8 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
         }
       }
       if (name === 'export') {
-        const blob = new Blob([JSON.stringify({ protocol, recordedAt: new Date().toISOString(), records }, null, 2)], { type: 'application/json' })
+        const content = JSON.stringify({ protocol, pacingProtocol, recordedAt: new Date().toISOString(), records }, null, 2)
+        const blob = new Blob([content], { type: 'application/json' })
         const url = URL.createObjectURL(blob); const link = document.createElement('a')
         link.href = url; link.download = 'integrated-webgpu-local.json'; link.click(); URL.revokeObjectURL(url)
       }

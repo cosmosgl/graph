@@ -43,16 +43,23 @@ Running picks reached **199.5 ms**. All sampled pixel audits and functional chec
 [Both runs, quality measurements and retained failures](#/integrated-webgpu?section=doc-findings).
 
 Keep the conclusions separate: **strict compatibility is not established**;
-**first-slice usability is not accepted yet** because timing is not repeatable;
+**first-slice usability has bounded local evidence**, with earlier timing stalls unresolved;
 **full migration is not ready**. The early evolving run does not prove convergence or
 real-graph readability. Fixed framing leaves some star and real-graph points offscreen
 until Fit; faint nonzero opacity below 0.02 and advanced features remain unsupported.
 Historical exact comparisons keep their original verdicts.
 
-**Next:** establish repeatable small-graph timing, isolate complete-frame pacing and
-running-pick queueing, then profile 8,192 and assess settled real-graph readability.
-Preserve the corrected arithmetic and current gates. Investigate measurement overhead
-and host scheduling alongside force/render cost; no cause is established yet.
+A later controlled comparison repeated **1,024 communities three times**, rotating
+browser-only, redraw and full-tick controls. All 900 full-tick intervals met 33 ms;
+picking peaked at 32.2 ms. An original-path cross-check also passed. CPU submission
+was small, while simulation completion waits reached roughly 14 ms at p95. These
+are wall-clock observations, not GPU timestamps, and do not explain the earlier stalls.
+[Controlled pacing results](#/integrated-webgpu?section=doc-findings-small-graph-pacing-investigation).
+
+**Next:** separate actual GPU execution from completion-notification delay, then revisit
+8,192 and settled real-graph readability. Preserve corrected arithmetic, current gates
+and all prior failures. No scheduling or solver optimization is justified by this
+measurement alone.
 Further deep boundary debugging, arrows and advanced styles remain parked until this
 integration decision. Missing force families, collision and host/deck integration remain
 later feature-completion work, rather than implicit pilot support.
