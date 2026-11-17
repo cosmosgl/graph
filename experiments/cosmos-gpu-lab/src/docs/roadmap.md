@@ -56,10 +56,16 @@ was small, while simulation completion waits reached roughly 14 ms at p95. These
 are wall-clock observations, not GPU timestamps, and do not explain the earlier stalls.
 [Controlled pacing results](#/integrated-webgpu?section=doc-findings-small-graph-pacing-investigation).
 
-**Next:** separate actual GPU execution from completion-notification delay, then revisit
-8,192 and settled real-graph readability. Preserve corrected arithmetic, current gates
-and all prior failures. No scheduling or solver optimization is justified by this
-measurement alone.
+A subsequent off/on/on/off timestamp comparison measured **8.5–11.3 ms simulation GPU
+p95** and **0.4–1.6 ms drawing GPU p95**. All 1,200 complete intervals met 33 ms; picks
+stayed within 33 ms, and final state bits matched. The bounded 1,024-community case is
+good enough to continue; stop small-graph profiling here. Timestamp overhead is not
+zero-proven, and earlier stalls still have no demonstrated cause or fix.
+[Actual GPU durations](#/integrated-webgpu?section=doc-findings-actual-gpu-duration-in-the-small-graph).
+
+**Next:** measure GPU duration in the previously failing 8,192-point envelope before
+choosing an optimization, then assess settled real-graph readability. Keep the current
+small-graph solver and pacing, corrected arithmetic, current gates and all prior failures.
 Further deep boundary debugging, arrows and advanced styles remain parked until this
 integration decision. Missing force families, collision and host/deck integration remain
 later feature-completion work, rather than implicit pilot support.

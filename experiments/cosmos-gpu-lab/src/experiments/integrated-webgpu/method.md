@@ -154,3 +154,43 @@ WebGPU completion promises report queue progress; they are not GPU-only stopwatc
 The monotonic browser clock measures when JavaScript observes that progress.
 [WebGPU queue completion](https://www.w3.org/TR/webgpu/#dom-gpuqueue-onsubmittedworkdone),
 [High Resolution Time](https://www.w3.org/TR/hr-time/).
+
+## GPU timestamps on the integrated passes
+
+**Compare GPU timestamps** measures the existing simulation pass and the existing
+circle/straight-link render pass using public luma timestamp queries. The device requests
+`timestamp-query` as an optional feature; ordinary frames write no queries. If unavailable,
+the diagnostic reports that limitation rather than substituting a CPU duration.
+
+Predeclared workload: 1,024 communities / 1,919 links, seed 29471, original forces and
+styles, 960 × 600 logical pixels at recorded DPR. Run four reset windows in **off, on,
+on, off** order. Every window advances 60 warmup ticks, fits outside timing, then measures
+300 complete evolving frames. Quality calculations are omitted. The completion fence and
+next-animation-frame pacing stay unchanged. Both control and instrumented windows use the
+same device, with the optional feature enabled throughout.
+
+Each instrumented frame writes four endpoints: start/end of compute and start/end of
+render. Only subtract endpoints **within the same pass**, then add those two durations
+for that frame. Never subtract timestamps across passes on this Metal path. The sum
+excludes gaps between passes, other queue work, CPU submission, completion notification
+and presentation. GPU timestamp resolution is limited; reported digits do not imply
+nanosecond measurement precision. [WebGPU timestamp queries](https://www.w3.org/TR/webgpu/#timestamp-query).
+
+Query results are mapped/read only after the 300-frame window. luma may encode GPU-side
+query resolution/copies during submission; these instrumentation costs are included in
+complete intervals, but are outside the measured pass endpoints. Compare on/off controls
+to detect a practical regression rather than assuming measurement is free. Invalid,
+negative, timed-out or unavailable results are never converted to zero GPU time.
+
+After timing, compare final position and force bits with the first window, then perform
+the existing interaction and sampled-pixel checks. The baseline establishes comparison
+state; it is not an independent numerical reference. A separate regression compares
+query-on/off positions, forces and rendered colors exactly, and the existing whole-tick
+CPU comparison retains its tolerance. Completed rows survive cancellation; visibility loss
+invalidates the unfinished row. JSON export includes individual pass durations, frame
+intervals, adapter/viewport, state comparisons and interaction checks.
+
+Do not subtract independent p95 columns to infer a notification delay. Even a per-frame
+subtraction mixes different endpoints: GPU work can start before CPU submission ends,
+and the completion wait includes work outside the measured passes. These observations
+can identify where most work occurs without attributing every unmeasured millisecond.

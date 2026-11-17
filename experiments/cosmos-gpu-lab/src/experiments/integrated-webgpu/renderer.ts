@@ -1,4 +1,4 @@
-import { Buffer, type Framebuffer, type TextureFormatColor } from '@luma.gl/core'
+import { Buffer, type Framebuffer, type ComputePassProps, type TextureFormatColor } from '@luma.gl/core'
 import { RenderKernel } from '@luma.gl/graph'
 import { ALPHA_BLEND, bindingLayout, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
@@ -11,7 +11,7 @@ export type Camera = { x: number; y: number; zoom: number }
 export function createRenderer (position: () => PositionSource, graph: GraphInput, canvas: HTMLCanvasElement): {
   camera: Camera; styles: Float32Array; selected: number; ratio: number;
   linkStyle: { color: number[]; width: number }; setLinkStyle(color: number[], width: number): void;
-  draw(): void; pick(x: number, y: number): Promise<number | null>;
+  draw(timestamps?: ComputePassProps): void; pick(x: number, y: number): Promise<number | null>;
   snapshot(): Promise<{ color: Uint8Array; ids: Uint8Array; width: number; height: number }>;
   replace(graph: GraphInput): void; setStyle(index: number, color: number[], size: number): void;
   destroy(): void;
@@ -50,11 +50,13 @@ export function createRenderer (position: () => PositionSource, graph: GraphInpu
       }
       return value
     }
-    const render = (framebuffer: Framebuffer, ids: boolean, origin = [0, 0], transparent = false): void => {
+    const render = (framebuffer: Framebuffer, ids: boolean, origin = [0, 0], transparent = false, timestamps?: ComputePassProps): void => {
       const { camera, ratio, selected } = api
       params.write(new Float32Array([camera.x, camera.y, camera.zoom * ratio, 0,
         canvas.width, canvas.height, ratio, 0, ...origin, framebuffer.width, framebuffer.height, selected, api.linkStyle.width, 0, 0, ...api.linkStyle.color]))
-      const pass = device.beginRenderPass({ framebuffer, clearColor: ids || transparent ? [0, 0, 0, 0] : graphRgba.background, clearDepth: false })
+      const pass = device.beginRenderPass({
+        ...timestamps, framebuffer, clearColor: ids || transparent ? [0, 0, 0, 0] : graphRgba.background, clearDepth: false,
+      })
       const bindings = { positions: position().buffer, styles: styleBuffer, links: linkBuffer, params }
       const format = framebuffer.colorAttachments[0].texture.format as TextureFormatColor
       try {
@@ -95,7 +97,7 @@ export function createRenderer (position: () => PositionSource, graph: GraphInpu
           !Number.isFinite(size) || size < 0 || size > 64) throw new Error('Unsupported point style: RGBA 0..1, alpha 0 or >= 0.02, size 0..64 CSS px')
         const data = new Float32Array([...color, size, 0, 0, 0]); api.styles.set(data, index * 8); styleBuffer.write(data, index * 32)
       },
-      draw (): void { render(device.canvasContext!.getCurrentFramebuffer(), false) },
+      draw (timestamps?: ComputePassProps): void { render(device.canvasContext!.getCurrentFramebuffer(), false, [0, 0], false, timestamps) },
       async pick (x: number, y: number): Promise<number | null> {
         if (x < 0 || y < 0 || x >= canvas.width || y >= canvas.height) return null
         render(pickTarget.framebuffer, true, [Math.floor(x), Math.floor(y)])

@@ -1,3 +1,4 @@
+import type { ComputePassProps } from '@luma.gl/core'
 import type { GridBackend } from '../many-body-grid/backend'
 import type { View, PositionTransfer } from '../many-body/backend'
 import type { Input } from '../many-body/data'
@@ -13,7 +14,7 @@ export type CombinedBackend = GridBackend & {
   repulsionMethod?(): RepulsionMethod;
   readCenter?(): Promise<Float32Array>;
   stepStage(stage: Stage, alpha: number): void;
-  stepTick?(alpha: number, tick: number): void;
+  stepTick?(alpha: number, tick: number, timestamps?: ComputePassProps): void;
   resizeGraph?(graph: GraphInput, input: Input, preserve: boolean): PositionTransfer;
   replaceLinks?(input: LinkInput): { version: number; bytes: number; edgeCount: number; buildMs: number };
   measureFrames?(options: FrameBatch): Promise<{ timing: Measurement; snapshot: Snapshot }>;

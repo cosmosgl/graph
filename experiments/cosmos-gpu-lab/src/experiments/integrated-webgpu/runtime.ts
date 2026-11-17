@@ -1,9 +1,11 @@
+import type { QuerySet } from '@luma.gl/core'
 import { createDevice, describeDevice, waitForGpu } from '../../gpu/luma'
 import { createCombinedWebGPU } from '../combined-layout/webgpu'
 import { cool } from '../combined-layout/data'
 import { forceSettings } from '../combined-layout/production-settings'
 import { createRenderer } from './renderer'
 import { workload, type Workload } from './data'
+export type FrameTimestamps = { query: QuerySet; offset: number }
 export type FrameTrace = { encodeSimulationMs: number; encodeDrawMs: number; completionWaitMs: number }
 export type Feedback = { kind: string; ms: number; id: number | null; readMs: number; highlightMs: number; opportunityMs: number }
 export const nextFrame = async (): Promise<number> => await new Promise(resolve => requestAnimationFrame(resolve))
@@ -11,7 +13,7 @@ export async function createIntegrated (canvas: HTMLCanvasElement, kind: Workloa
   canvas: HTMLCanvasElement; backend: Awaited<ReturnType<typeof createCombinedWebGPU>>; renderer: ReturnType<typeof createRenderer>;
   readonly data: ReturnType<typeof workload>; readonly tick: number; readonly running: boolean; readonly destroyed: boolean;
   readonly error: string; readonly info: string; feedback: Feedback[]; intervals: number[];
-  frame(simulate?: boolean, trace?: FrameTrace): Promise<void>; pause(): void; resume(): void; step(): Promise<void>;
+  frame(simulate?: boolean, trace?: FrameTrace, timestamps?: FrameTimestamps): Promise<void>; pause(): void; resume(): void; step(): Promise<void>;
   pick(x: number, y: number, start?: number): Promise<number | null>;
   drag(id: number, x: number, y: number, release?: boolean): void;
   pan(dx: number, dy: number): void; zoom(factor: number, x: number, y: number): void;
@@ -19,7 +21,7 @@ export async function createIntegrated (canvas: HTMLCanvasElement, kind: Workloa
   world(x: number, y: number): [number, number]; screen(x: number, y: number): [number, number]; destroy(): void;
 }> {
   let data = workload(kind, count); let tick = 0; let alpha = 1; let running = false; let destroyed = false; let error = ''
-  const device = await createDevice('webgpu', canvas, false)
+  const device = await createDevice('webgpu', canvas, true)
   const makeBackend = async (next: ReturnType<typeof workload>): Promise<Awaited<ReturnType<typeof createCombinedWebGPU>>> =>
     await createCombinedWebGPU(canvas, next.graph, next.input, 'trig', {
       context: { device },
@@ -63,11 +65,23 @@ export async function createIntegrated (canvas: HTMLCanvasElement, kind: Workloa
       get destroyed (): boolean { return destroyed },
       get error (): string { return error },
       info: `${describeDevice(device)} · ${JSON.stringify(device.info)} · ${navigator.userAgent}`,
-      async frame (simulate = running, trace?: FrameTrace): Promise<void> {
+      async frame (simulate = running, trace?: FrameTrace, timestamps?: FrameTimestamps): Promise<void> {
         healthy(); const start = trace ? performance.now() : 0
-        if (simulate) { backend.stepTick!(alpha, tick); tick++; alpha = cool(alpha, 5000) }
+        if (timestamps && !simulate) throw new Error('Full-frame timestamps require simulation')
+        if (simulate) {
+          backend.stepTick!(alpha, tick, timestamps
+            ? {
+              timestampQuerySet: timestamps.query, beginTimestampIndex: timestamps.offset, endTimestampIndex: timestamps.offset + 1,
+            }
+            : undefined)
+          tick++; alpha = cool(alpha, 5000)
+        }
         const simulated = trace ? performance.now() : 0
-        drawing.draw()
+        drawing.draw(timestamps
+          ? {
+            timestampQuerySet: timestamps.query, beginTimestampIndex: timestamps.offset + 2, endTimestampIndex: timestamps.offset + 3,
+          }
+          : undefined)
         const drawn = trace ? performance.now() : 0
         // Bound the queue to one completed frame. This pacing cost is included in normal frame intervals.
         await waitForGpu(device)

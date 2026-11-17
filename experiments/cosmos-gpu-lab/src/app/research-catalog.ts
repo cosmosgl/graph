@@ -190,15 +190,15 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       }],
     }),
     'integrated-webgpu': entry('integrated-webgpu', {
-      conclusion: 'Three controlled 1,024-community repeats and an original-path cross-check pass. ' +
-        'Earlier stalls remain unexplained; 8,192 and full readiness remain unaccepted.',
+      conclusion: 'The bounded 1,024-community case passes repeated frame/picking checks; GPU timestamps show simulation dominates. ' +
+        'Keep this implementation and assess 8,192 next; earlier stalls remain unexplained.',
       reviewed: '2026-11-17',
       variant: 'luma WebGPU resident core with corrected arithmetic; bounded circle and straight-link renderer',
       comparison: 'Resident simulation → shared positions → rendering and interaction → complete frame and feedback checks',
       milestone: 'integration',
       method: 'method',
       evidence: 'findings',
-      next: 'Separate actual GPU execution from completion-notification delay, then revisit 8,192 and settled real-graph readability.',
+      next: 'Stop small-graph profiling; measure the failing 8,192-point envelope before choosing an optimization, then assess settled readability.',
       reproduce: 'Start with Check interaction + pixels at 1,024 points. Then evaluate the declared matrix in a visible native browser.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Separate strict compatibility, practical usability and full readiness.' }],
     }),
