@@ -1,3 +1,39 @@
+## Pattern boundary audit · 17 November 2026
+
+**The first straight dash rejection is an interpolated side/coverage tie, not
+a phase mismatch.** An isolated replay of the existing ribbons fixture at
+pixel `(40,96)` reports phase `0.5` in both APIs, with the same phase derivative
+within float32 rounding. The independent CPU also gives phase `0.5`.
+
+| Observation | WebGL | WebGPU | CPU |
+|---|---|---|---|
+| Ribbon side | −0.375 | −0.3750000298 | −0.375 |
+| Combined coverage in float probe | 0.5 | 0.4999998212 | 0.5 |
+| Ordinary candidate ID | Source 0 | Background | Source 0 |
+| Ordinary blended RGBA | `[76,54,31,89]` | `[76,54,31,89]` | — |
+
+The source is relabeled to 0 only by this isolated fixture. Its half-coverage
+edge retains the exact cutoff: no epsilon, changed ID or color rounding rule
+is introduced. Matching blended bytes do not imply identical picking at that
+cutoff. The full pattern acceptance result remains **14/24**; this diagnostic
+does not rerun or replace that matrix.
+
+The native float probes run after ordinary images through public luma APIs.
+Checks compare ordinary color and ID buffers before, during and after probes.
+They capture phase/derivatives/coverage, dot radius/derivatives/diameter, and
+ribbon coordinates/smoothing/width. WebGPU also captures explicit fine and
+coarse derivative variants. These are diagnostic programs, not acceptance
+renderers or a source of CPU masks. See the [curve investigation](#/curved-links?section=doc-method-pattern-boundary-audit-17-november-2026)
+for why a changed diagnostic program must not be treated as the original draw.
+
+```sh
+LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/curved-links/pattern-diagnostics.test.ts
+```
+
+Open the printed session in the local native browser. The ignored local
+`link-pattern-boundaries.json` capture records device, browser, isolated
+inputs and witnesses. Production shaders and acceptance gates remain unchanged.
+
 ## Dash and dot patterns · 17 November 2026
 
 **The patterned candidate passes 14/24 full-frame cases on Apple M3.**

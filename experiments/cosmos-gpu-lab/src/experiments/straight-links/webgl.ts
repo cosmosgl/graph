@@ -9,6 +9,7 @@ import { resourceScope } from '../../gpu/resource-scope'
 import { target, pixels, floatPixels } from '../../gpu/rgba-readback'
 import { SOURCE_ALPHA_GLSL } from '../../gpu/source-alpha'
 import { patternCode, hasPatterns } from './patterns'
+import { patternProbeGL } from './pattern-probe'
 import { WIDTH, HEIGHT, type Settings } from './data'
 import type { Backend, Snapshot } from './backend'
 const vertexTypes = {
@@ -128,13 +129,15 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
           : candidate && patterned
             ? vertex
             : candidate ? curve ? curvedVisibleVertex : visibleVertex : probe === 2 ? visibleVertex : vertex,
-        fs: probe === 3
-          ? captureFragment
-          : probe === 1
-            ? varyingProbe
-            : probe === 2
-              ? pixelProbe
-              : candidate ? patterned ? patternedCandidate : candidateFragment : fragment,
+        fs: probe >= 4
+          ? patternProbeGL(probe)
+          : probe === 3
+            ? captureFragment
+            : probe === 1
+              ? varyingProbe
+              : probe === 2
+                ? pixelProbe
+                : candidate ? patterned ? patternedCandidate : candidateFragment : fragment,
         modules: [{ name: 'conicParametricCurve', vs: moduleSource(conic) }, { name: 'pickingColor', fs: moduleSource(picking) }],
         topology: probe === 3 ? 'point-list' : 'triangle-strip',
         vertexCount: 4,
@@ -300,6 +303,14 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
               varying: await floatPixels(device, varying.texture, varying.framebuffer),
               pixel: pixel ? await floatPixels(device, pixel.texture, pixel.framebuffer) : new Float32Array(),
               vertices: await floatPixels(device, vertices.texture, vertices.framebuffer),
+            }
+            if (hasPatterns(scene.links, settings)) {
+              snapshot.probe.pattern = []
+              for (const probe of [4, 5, 6]) {
+                const output = frame.own(target(device, width, height, 'rgba32float'))
+                draw(0, output.framebuffer, probe); device.submit()
+                snapshot.probe.pattern.push(await floatPixels(device, output.texture, output.framebuffer))
+              }
             }
           }
           return snapshot

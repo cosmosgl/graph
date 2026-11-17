@@ -27,6 +27,31 @@ migrationStatus
 
 The [feature inventory](#/feature-inventory) is the detailed force/rendering checklist. Status means demonstrated scope, rather than a percentage of the migration completed.
 
+### Audit: are we following the migration plan?
+
+**Yes, but rendering research needs a bounded exit.** Recent work follows the
+planned progression from point styling to straight/curved links, faint alpha,
+endpoint gradients and patterns. It has expanded tested feature coverage; it
+has not established a complete renderer or a production-ready backend.
+
+| Area | Demonstrated | Still needed |
+|---|---|---|
+| GPU execution | Public luma APIs, resident state and bounded capacity changes | Complete ownership, recovery and engine lifecycle |
+| Simulation | Selected combined layouts through 8,192 points; corrected collision through 512 | Mouse/cluster/attractor forces, larger collision route and accepted precision cost |
+| Rendering | Point and link controls, independent masks, gradients and pattern comparisons | Rejected boundaries, arrows, interaction states, transitions and practical picking |
+| Integration | Supporting pieces | One small resident Graph workload combining simulation, styling, updates and picking |
+| Adoption | Local evidence | Workload budgets, library/host contracts and a production dependency decision |
+
+The bounded pattern-intermediate investigation below is complete: it captures
+phase, coverage and derivatives at known rejected pixels and verifies unchanged
+ordinary images. The straight coverage tie is localized; curve root causes
+remain open after the fine/coarse diagnostic check. These remain explicit
+blockers, without triggering an indefinite search before the remaining
+features. Continue with arrows and
+link states, missing forces, and a small integrated Graph workload before more
+large-graph optimization. Keep all existing acceptance gates; passing a
+reporting or diagnostic test is not feature acceptance.
+
 ## 2. Current numerical and layout boundary
 
 Keep three contracts distinct, with the **existing tolerances unchanged**:
@@ -65,7 +90,7 @@ This is the current task order. A closed investigation can retain failing cases;
 journeyPlan
 ```
 
-### Immediate checkpoint: patterned-link visibility; retain picking and raster limits
+### Immediate checkpoint: arrow geometry and picking; retain pattern and raster limits
 
 The [stored-alpha candidate](#/point-styling?section=doc-method-stored-alpha-picking-prototype-16-november-2026)
 checks actual per-point attachment alpha before composing IDs. Its five bounded
@@ -125,11 +150,21 @@ unresolved. Native/CPU pattern mask and color boundaries remain rejected.
 See [straight patterns](#/straight-links?section=doc-method-dash-and-dot-patterns-17-november-2026)
 and [curved patterns](#/curved-links?section=doc-method-dash-and-dot-patterns-17-november-2026).
 
-Next isolate **pattern derivative/CPU boundaries**, retaining dash-wrap visibility regressions,
-before arrows and link states on the current machine. Keep polygon and native link raster/color blockers visible.
-Continue afterward with
-missing forces, small Graph integration and complete-workload acceptance rather
-than expanding this focused picking investigation indefinitely.
+The **bounded pattern audit** captures four isolated witnesses through public
+luma APIs. The straight dash tie is coverage `0.5` in WebGL versus
+`0.4999998212` in WebGPU, with equal phase. At the three curve witnesses,
+ordinary GPU colors agree while the CPU differs; separate float probes are
+not always faithful reconstructions of ordinary paint. Explicit fine/coarse
+WebGPU diagnostics return the same sampled values. All four focused tests
+pass, including the existing solid curve diagnostics, but no rendering row is
+reclassified. See [pattern boundary findings](#/curved-links?section=doc-method-pattern-boundary-audit-17-november-2026).
+
+**Next: production arrow geometry and picking**, first straight then curved,
+including endpoint trimming, short links and overlap, with unchanged production
+controls and acceptance gates. Then link states/transitions, missing forces,
+small Graph integration and complete-workload acceptance. Keep unresolved
+polygon, pattern and native raster/color blockers visible; a diagnostic pass
+is not approval to ship them.
 
 ## 4. luma decisions still open
 

@@ -148,7 +148,7 @@ export const research: Record<string, ResearchSummary> = {
       'The alpha.15 gradient matrix preserves colors and source visibility in all 64 cases; the separate faint-alpha replay passes 72/72.',
     variant: 'Unmodified GLSL/color control; color-face/source-byte IDs; previous two-sided IDs retained. ' +
       'Luma alpha.15 patterns/gradients and matched solid controls; older geometry uses alpha.4.',
-    next: 'Isolate pattern derivatives and CPU/native boundaries; retain original controls and exact acceptance gates.',
+    next: 'Compare production arrows, endpoint trimming and picking; retain the unresolved pattern and native raster boundaries.',
     reproduce: 'Compare all three picking policies, run the 64-case sweep and default-bow pixel replay, then export JSON locally.',
     methods: [
       {
@@ -190,7 +190,7 @@ export const research: Record<string, ResearchSummary> = {
       'The separate 72-case alpha replay retains four blended threshold-edge and four hard-edge failures; neither matrix is production approval.',
     variant: 'Production GLSL control and visible-footprint/source-byte IDs; original color. ' +
       'Luma alpha.15 patterns/gradients and matched solid controls; Apple M3.',
-    next: 'Isolate pattern mask/color boundaries; retain dash-wrap repeatability checks, original colors and solid/gradient controls.',
+    next: 'Compare straight arrows and endpoint trimming next; retain pattern boundaries, dash-wrap checks and original colors.',
     reproduce: 'Compare both picking rules, blending, zoom and DPR, then run the 40-case straight-link sweep and export JSON locally.',
     methods: [
       {
@@ -287,7 +287,7 @@ export const milestones = [
     position: 'Bounded point-style and link studies; native mask/color boundaries remain open',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
     gates: ['Reduce dense stored-alpha picking cost; retain the completed M3 link alpha replay and its rejected edge cases.',
-      'Retain straight/curved native mask/color blockers while resolving patterned-link visibility and derivative boundaries before arrows and link states.',
+      'Validate arrow geometry, endpoint trimming and link states; retain the bounded pattern audit and unresolved native mask/color blockers.',
       'Retain polygon CPU/preservation gates; validate transitions and pointer behavior, measure accepted rendering cost and broaden native devices.'],
     evidence: [['curved-links', 'Curved solid links'], ['straight-links', 'Straight-link rendering/picking'],
       ['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],

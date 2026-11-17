@@ -4,6 +4,66 @@ Can Cosmos preserve its actual curved-link geometry, color and picking when movi
 
 This experiment renders frozen links through unmodified production GLSL and a WGSL port, using public luma APIs only. It does not replace the production renderer or its padded host-picking policy. Straight-link boundary failures remain open in their own experiment.
 
+## Pattern boundary audit · 17 November 2026
+
+**A fine/coarse derivative switch does not resolve the sampled M3 curve
+witnesses.** The bounded replay isolates the blue source from the existing bows
+fixture and captures native float values at three previously rejected pixels.
+Ordinary colors and IDs remain byte-identical before, during and after probes.
+The independent CPU reference and all acceptance gates are unchanged.
+
+| Witness | Ordinary alpha byte · GL / GPU | Float coverage · GL probe / GPU probe | CPU coverage |
+|---|---|---|---|
+| Dashed `(135,79)` | 172 / 172 | 0.662559 / 0.674103 | 0.663491 |
+| Dotted `(121,79)` | 41 / 41 | 0.170714 / 0.160860 | 0.172014 |
+| Dotted `(43,118)` | 128 / 128 | 0.500299 / 0.501340 | 0.499227 |
+
+At the last pixel, both ordinary GPU ID passes pick the isolated source while
+the independent CPU mask rejects it. The source is visible in both images;
+this is not an invisible-picking failure. At the first two pixels, both GPUs
+agree on ordinary color while the CPU differs beyond the existing budget.
+This identifies a reference/native difference at those samples, not a reason
+to waive their failures or a proof that the whole WebGPU port is correct.
+
+The diagnostic phase, side and derivatives expose different native values
+around tessellated ribbon boundaries. However, the separate WebGL float
+program's coverage does **not always reconstruct the ordinary paint**: the
+dashed sample would round to alpha 169 from its probe, but ordinary alpha is
+172. A changed diagnostic program, primitive interpolation and derivative
+execution need further isolation before assigning a root cause. These float
+captures must not replace the actual image or supply expected CPU masks.
+
+WebGPU's default, explicitly fine and explicitly coarse diagnostic variants
+return identical phase/derivative/coverage tuples at all four replay witnesses
+(the three curves above and one straight edge). That rules out this simple
+mode switch as a diagnostic remedy on this device; it is not a full candidate
+renderer trial. [WGSL's derivative rules](https://www.w3.org/TR/WGSL/#derivative-builtin-functions)
+define the available modes and uniformity requirements, not equivalence to a
+particular CPU interpolation model. WebGL's vertical derivative sign is
+opposite in these probes because its window origin is inverted; the pattern
+ramps use absolute derivatives.
+
+Recorded **17 November 2026**, Apple M3 / ANGLE Metal and Apple WebGPU, inline
+Chromium 157, luma **10.0.0-alpha.15**. The ordinary patterned matrix is not
+rerun by this diagnostic and retains **4/24**, all four at zero opacity.
+The earlier solid diagnostics also pass, including identical-vertex replay.
+No production shader, color path, CPU rule or threshold changed.
+
+```sh
+LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/curved-links/pattern-diagnostics.test.ts src/experiments/curved-links/diagnostics.test.ts
+```
+
+Open the printed session in the local native browser. The local ignored
+`link-pattern-boundaries.json` records the selected fixtures, source indices,
+2×2 pixel neighborhoods, devices and diagnostic values. No raw capture is
+committed. A passing preservation/probe test does not mean those pixels pass
+rendering acceptance.
+
+**Next:** retain these pattern and raster blockers and proceed with production
+arrow geometry, endpoint trimming and picking. A common coverage renderer or
+an identical-primitive derivative replay would be a separate future candidate,
+not a silent adjustment to the current gates.
+
 ## Dash and dot patterns · 17 November 2026
 
 **The patterned candidate passes 4/24 full-frame cases on Apple M3.**
