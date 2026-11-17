@@ -13,14 +13,16 @@ export type EffectsRow = {
 }
 export async function runEffectsSweep (
   backends: { webgl: Backend; webgpu: Backend }, onRow: (row: EffectsRow) => void, cancelled: () => boolean,
-  views = EFFECTS_VIEWS, polygonArithmetic?: Settings['polygonArithmetic']
+  views = EFFECTS_VIEWS, polygonArithmetic?: Settings['polygonArithmetic'], overlayArithmetic?: Settings['overlayArithmetic']
 ): Promise<EffectsRow[]> {
   const rows: EffectsRow[] = []
   for (const fixture of EFFECTS_FIXTURES) {
     for (const [index, EFFECTS_PROFILE] of EFFECTS_PROFILES.entries()) {
       for (const view of views) {
         if (cancelled()) return rows
-        const { points, settings } = effectScenario(fixture, index, { ...view.settings, ...(polygonArithmetic ? { polygonArithmetic } : {}) })
+        const { points, settings } = effectScenario(fixture, index, {
+          ...view.settings, ...(polygonArithmetic ? { polygonArithmetic } : {}), ...(overlayArithmetic ? { overlayArithmetic } : {}),
+        })
         const render = async (variant: 'production' | 'explicit' | 'eligibility', overlays = true): Promise<{ webgl: Snapshot; webgpu: Snapshot }> => {
           const config = overlays ? settings : { ...settings, hovered: [], focused: undefined }
           return {
@@ -66,6 +68,7 @@ export async function runEffectsSweep (
 export function renderEffectsRows (host: HTMLElement, rows: EffectsRow[]): void {
   host.innerHTML = `<p>${rows.filter(r => r.passed).length} passed / ${rows.length} checked of ${EFFECTS_ROW_COUNT} rows.
     ${rows[0]?.settings.polygonArithmetic === 'pixels' ? 'Pixel-space diagnostic' : 'Normalized control'}.
+    Hover/focus distance: ${rows[0]?.settings.overlayArithmetic === 'pixels' ? 'pixel-distance candidate' : 'interpolated control'}.
     Exact IDs and CPU masks, 2/255 color budget and zero invisible picks. Decorative overlays must leave IDs unchanged;
     source-byte picking must leave color bytes unchanged. Production compatibility is reported separately.</p>
     <table data-effects-summary><thead><tr><th>Scene</th><th>Passed / checked</th><th>CPU color failures</th><th>Overlay ID changes</th></tr></thead><tbody>

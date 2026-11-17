@@ -9,6 +9,7 @@ export type Snapshot = {
   width: number; height: number; color: Uint8Array; ids: Uint8Array; probe?: Probe; analyticControl?: Snapshot; pickingRule?: PickingRule;
   storedAlpha?: StoredAlphaResult;
   polygonArithmetic?: 'normalized' | 'pixels';
+  overlayArithmetic?: 'normalized' | 'pixels';
   atlasIsolation?: Settings['atlasIsolation']; atlasGutterExtent?: number;
   atlasPacking?: Settings['atlasPacking'];
   atlasSource?: Settings['atlasSource']; atlasGeneration?: number;

@@ -85,6 +85,15 @@ yet solve GPU-resident candidate discovery or production pointer latency; those
 remain open, alongside decorative rings. Preserve the unfiltered baseline and
 old source-byte failures.
 
+The [pixel-distance hover/focus overlay](#/point-styling?section=doc-method-pixel-distance-hover-focus-overlays)
+clears the Linux ring-color discrepancy at the unchanged 2/255 budget: all 96
+cases pass CPU colors on both M3 and SwiftShader, with maximum error 1/255.
+The original Linux overlay still fails 17 cases; its control and tests remain
+intact. Candidate picking IDs and pick-only color bytes are unchanged, but
+corrected overlay colors differ from the old control. Eight polygon-mask rows
+remain rejected. This closes a bounded color investigation, not point-feature
+acceptance or stored-alpha support for decorative rings.
+
 Then replay the shared source-byte boundary in straight and curved links before
 returning to endpoint gradients, patterns, arrows and link states. Their shared
 quantizer makes this relevant; it does not prove those link fixtures fail. Keep
