@@ -4,6 +4,7 @@ import { ALPHA_BLEND, bindingLayout, createDevice, upload } from '../../gpu/luma
 import { resourceScope } from '../../gpu/resource-scope'
 import { pixels, target, floatPixels } from '../../gpu/rgba-readback'
 import { SOURCE_ALPHA_WGSL } from '../../gpu/source-alpha'
+import { patternCode, hasPatterns, patternShader } from './patterns'
 import { endpointColorShader, resolvedEndpointColor } from './endpoint-colors'
 import source from './links.wgsl?raw'
 import { HEIGHT, WIDTH, resolveLink, type HardCoverage } from './data'
@@ -50,10 +51,12 @@ export async function createLinksWebGPU (canvas: HTMLCanvasElement): Promise<Bac
     const gradientArray = scope.own(device.createVertexArray({ shaderLayout: gradientLayout, bufferLayout: [] }))
     const kernels = new Map<string, RenderKernel>()
     const kernel = (format: TextureFormatColor, blend: boolean, display: boolean, picking: boolean,
-      probe: number, method: HardCoverage, gradient = false): RenderKernel => {
-      const key = `${format}:${blend}:${display}:${picking}:${probe}:${method}:${gradient}`; const cached = kernels.get(key); if (cached) return cached
+      probe: number, method: HardCoverage, gradient = false, patterned = false): RenderKernel => {
+      const key = `${format}:${blend}:${display}:${picking}:${probe}:${method}:${gradient}:${patterned}`
+      const cached = kernels.get(key); if (cached) return cached
       const base = probe === 3 ? captureSource(coverageSource(method)) : coverageSource(method)
-      const code = gradient ? endpointColorShader(base, 3) : base
+      const decorated = patterned ? patternShader(base, false) : base
+      const code = gradient ? endpointColorShader(decorated, 3) : decorated
       const result = scope.own(new RenderKernel(device, {
         vertexSource: `${code}\n${SOURCE_ALPHA_WGSL}`,
         fragmentSource: `${code}\n${SOURCE_ALPHA_WGSL}`,
@@ -124,9 +127,10 @@ export async function createLinksWebGPU (canvas: HTMLCanvasElement): Promise<Bac
           const indices = new Uint32Array(storage); const values = new Float32Array(storage)
           order.forEach((id, row) => {
             const link = resolveLink(scene.links[id], settings); indices.set([link.source, link.target, id, 0], row * 12)
-            values.set([...link.color, link.width, 0, 0, 0], row * 12 + 4)
+            values.set([...link.color, link.width, patternCode(link, settings), settings.dashLength ?? 5, settings.dashGap ?? 5], row * 12 + 4)
           })
           const links = frame.own(upload(device, new Uint8Array(storage)))
+          const patterned = hasPatterns(scene.links, settings)
           const draw = (mode: number, framebuffer?: ReturnType<typeof target>['framebuffer'], probe = 0): void => {
             const gradient = !!settings.endpointColors && mode === 0 && probe === 0
             const params = frame.own(upload(device, new Float32Array([WIDTH, HEIGHT, settings.zoom, settings.ratio,
@@ -137,7 +141,8 @@ export async function createLinksWebGPU (canvas: HTMLCanvasElement): Promise<Bac
               : device.canvasContext!.getCurrentFramebuffer().colorAttachments[0].texture.format as TextureFormatColor
             const pass = device.beginRenderPass({ framebuffer, clearColor: framebuffer ? [0, 0, 0, 0] : [0.14, 0.16, 0.185, 1], clearDepth: false })
             try {
-              kernel(format, mode === 0 && settings.blend && probe === 0, !framebuffer, mode > 0, probe, method, gradient).draw(pass, {
+              kernel(format, mode === 0 && settings.blend && probe === 0, !framebuffer, mode > 0,
+                probe, method, gradient, patterned && probe === 0).draw(pass, {
                 vertexArray: gradient ? gradientArray : vertexArray,
                 vertexCount: 4,
                 instanceCount: scene.links.length,

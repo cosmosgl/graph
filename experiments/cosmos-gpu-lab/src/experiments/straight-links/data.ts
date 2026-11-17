@@ -1,9 +1,11 @@
+import type { Pattern } from './patterns'
 export const WIDTH = 512; export const HEIGHT = 320
 export type Point = { x: number; y: number; absent?: boolean; color?: [number, number, number, number] }
-export type Link = { source: number; target: number; width: number; color: [number, number, number, number] }
+export type Link = { pattern?: Pattern; source: number; target: number; width: number; color: [number, number, number, number] }
 export type Scene = { points: Point[]; links: Link[] }
 export type HardCoverage = 'native' | 'linear' | 'pixel'
-export type Settings = { endpointColors?: boolean; pointDefaultColor?: Link['color']; hardCoverage?: HardCoverage;
+export type Settings = { pattern?: Pattern; dashLength?: number; dashGap?: number;
+  endpointColors?: boolean; pointDefaultColor?: Link['color']; hardCoverage?: HardCoverage;
   zoom: number; ratio: number; opacity: number; blend: boolean; scaleOnZoom: boolean;
   widthScale: number; maxWidth: number; defaultWidth: number; defaultColor: Link['color']; reverse: boolean; indexOffset: number; }
 export type Variant = 'production' | 'visible'
