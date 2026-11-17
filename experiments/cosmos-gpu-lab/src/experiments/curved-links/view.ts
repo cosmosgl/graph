@@ -1,3 +1,4 @@
+import { PATTERNS, type Pattern } from '../straight-links/patterns'
 import { GRADIENT_PRESETS, GRADIENT_LABELS, gradientScene, type GradientPreset } from '../straight-links/gradient-fixtures'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
@@ -42,6 +43,10 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
   const select = (label: string, name: string, values: Array<string | number>, current: string | number): string =>
     `<label>${label} <select data-${name}>${values.map(v => `<option${v === current ? ' selected' : ''}>${v}</option>`).join('')}</select></label>`
   host.innerHTML = `<div data-run-part="configuration" class="scale-toolbar styling-toolbar">
+    <label>Stroke <select data-pattern>${PATTERNS.map(p => `<option value="${p}">${p}</option>`).join('')}</select>
+      <span class="control-guidance">Production IDs include gaps; the visible-pixel candidate checks patterned paint.</span></label>
+    <label>Dash length <select data-dash-length><option>3.5</option><option selected>5</option><option>12</option></select></label>
+    <label>Pattern gap <select data-dash-gap><option>0</option><option>3.25</option><option selected>5</option></select></label>
     <label>Color source <select data-gradient>${GRADIENT_PRESETS.map((p, i) =>
     `<option value="${p}">${GRADIENT_LABELS[i]}</option>`).join('')}</select>
       <span class="control-guidance">RGB follows the ribbon parameter. Link alpha controls opacity; endpoint alpha is ignored.</span></label>
@@ -72,7 +77,7 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
       <p>The selected color source, back-face culling, alpha and primitive overlap follow the production draw. Frozen positions and captured IDs
       keep pointer inspection deterministic.</p></div>
     <section data-run-part="diagnostics"><h3>Repeatable curved-link sweep</h3><p>${ROW_COUNT} configurations:
-      four fixtures × eight profiles × blended/hard modes, using the selected color source.
+      four fixtures × eight profiles × blended/hard modes, using the selected color source and stroke.
       The boundary replay keeps its recorded solid control.
       CPU checks rasterize the actual tessellated triangle strip. All selected source links are checked in isolation, including folded ribbons.</p>
       <div class="controls"><button data-sweep disabled>Run curved-link sweep</button><button data-cancel disabled>Cancel sweep</button></div>
@@ -86,7 +91,8 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
   const status = el('[role="status"]'); let busy = false; let sweeping = false; let cancelled = false; let destroyed = false; let disposed = false
   let replaying = false; let bowReplay: BowReport | undefined
   let accepted: boolean | undefined; let error: string | undefined; let report: object | undefined
-  let study: { gradient: GradientPreset; startedAt: string; finishedAt?: string; status: string; rows: Row[];
+  let study: { patternSettings: Pick<Settings, 'pattern' | 'dashLength' | 'dashGap'>;
+    gradient: GradientPreset; startedAt: string; finishedAt?: string; status: string; rows: Row[];
     browser: string; devices: string[]; error?: string; } | undefined
   const dispose = (): void => { if (!disposed) { disposed = true; Object.values(backends).forEach(b => b.destroy()) } }
   const controls = (disabled: boolean): void => {
@@ -108,6 +114,9 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
       const settings: Settings = {
         ...DEFAULTS,
         endpointColors: gradient !== 'solid',
+        pattern: el<HTMLSelectElement>('[data-pattern]').value as Pattern,
+        dashLength: Number(el<HTMLSelectElement>('[data-dash-length]').value),
+        dashGap: Number(el<HTMLSelectElement>('[data-dash-gap]').value),
         segments: Number(value('segments')),
         weight: Number(value('weight')),
         controlDistance: Number(value('distance')),
@@ -187,6 +196,11 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
       sweeping = true; cancelled = false; controls(true); el<HTMLButtonElement>('[data-cancel]').disabled = false
       const current = {
         gradient: el<HTMLSelectElement>('[data-gradient]').value as GradientPreset,
+        patternSettings: {
+          pattern: el<HTMLSelectElement>('[data-pattern]').value as Pattern,
+          dashLength: Number(el<HTMLSelectElement>('[data-dash-length]').value),
+          dashGap: Number(el<HTMLSelectElement>('[data-dash-gap]').value),
+        },
         startedAt: new Date().toISOString(),
         finishedAt: undefined as string | undefined,
         status: 'running',
@@ -202,7 +216,7 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
           renderRows(el('[data-sweep-results]'), current.rows)
           el('[data-progress]').textContent = `${current.rows.length} / ${ROW_COUNT} · ${row.fixture} · ${row.profile} · ${
             row.settings.blend ? 'blended' : 'hard'}`
-        }, () => cancelled || destroyed, current.gradient)
+        }, () => cancelled || destroyed, current.gradient, current.patternSettings)
         current.status = cancelled || destroyed ? 'cancelled' : 'complete'
       } catch (failure) { current.status = 'failed'; current.error = String(failure); error = current.error } finally {
         current.finishedAt = new Date().toISOString(); sweeping = false
@@ -230,7 +244,7 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
     run().catch(failure => { error = String(failure) })
   })
   mountRunLayout(host, () => summarizeRun(busy || sweeping || replaying ? 'Running' : report ? 'Complete' : 'Preparing', [accepted],
-    'Other color modes, patterns, arrows, distance fading, highlights, transitions, full Graph integration, GPU cost and native portability.',
+    'Other color/stroke settings, arrows, distance fading, highlights, transitions, full Graph integration, GPU cost and native portability.',
     Object.keys(backends).length === 2 ? [] : ['Missing backend'], error, 'curved-ribbon full-frame comparison'),
   { experiment: 'curved-links', devices: () => Object.values(backends).map(b => b.info) })
   controls(true)

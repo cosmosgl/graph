@@ -143,13 +143,12 @@ export const research: Record<string, ResearchSummary> = {
     reviewed: '2026-11-17',
     comparison: 'Compare production curved ribbons across WebGL and WebGPU against independent triangle-strip masks and source checks.',
     question: 'Do production solid curves render and pick consistently through public luma APIs?',
-    conclusion: 'M3 endpoint gradients retain 28/64 full-frame passes and original colors; ' +
-      'all solid-control row verdicts match. Boundary failures remain rejected.',
+    conclusion: 'M3 dash/dot curves preserve original colors and source visibility, but only the 4/24 zero-opacity rows pass all gates.',
     scope: 'Earlier M3 / Chromium 157 geometry matrix: 20/56 nonzero-opacity plus 8/8 zero-opacity rows pass; all 64 preserve color and source visibility. ' +
       'The alpha.15 gradient matrix preserves colors and source visibility in all 64 cases; the separate faint-alpha replay passes 72/72.',
     variant: 'Unmodified GLSL/color control; color-face/source-byte IDs; previous two-sided IDs retained. ' +
-      'Luma alpha.15 gradients and matched solid controls; older geometry uses alpha.4.',
-    next: 'Compare dash/dot patterns next; retain native boundary mask/color blockers and unchanged production controls.',
+      'Luma alpha.15 patterns/gradients and matched solid controls; older geometry uses alpha.4.',
+    next: 'Isolate pattern derivatives and CPU/native boundaries; retain original controls and exact acceptance gates.',
     reproduce: 'Compare all three picking policies, run the 64-case sweep and default-bow pixel replay, then export JSON locally.',
     methods: [
       {
@@ -186,13 +185,12 @@ export const research: Record<string, ResearchSummary> = {
     reviewed: '2026-11-17',
     comparison: 'Production straight ribbons → WebGL / WebGPU color and host IDs → independent scalar masks and source checks',
     question: 'Do straight links render and pick consistently through public luma APIs?',
-    conclusion: 'M3 endpoint gradients retain 30/40 full-frame passes and original colors; ' +
-      'all solid-control row verdicts match. Ten boundary cases stay rejected.',
+    conclusion: 'M3 dash/dot links pass 14/24 cases with original colors intact; mask and color boundary failures keep the candidate rejected.',
     scope: 'Earlier M3 / Chromium 157 geometry matrix: 22/32 nonzero-opacity and 8/8 opacity-zero cases pass. ' +
       'The separate 72-case alpha replay retains four blended threshold-edge and four hard-edge failures; neither matrix is production approval.',
     variant: 'Production GLSL control and visible-footprint/source-byte IDs; original color. ' +
-      'Luma alpha.15 gradients and matched solid controls; Apple M3.',
-    next: 'Compare dash/dot patterns; retain cap/raster and alpha-edge blockers with unchanged color gates.',
+      'Luma alpha.15 patterns/gradients and matched solid controls; Apple M3.',
+    next: 'Isolate pattern mask/color boundaries; retain dash-wrap repeatability checks, original colors and solid/gradient controls.',
     reproduce: 'Compare both picking rules, blending, zoom and DPR, then run the 40-case straight-link sweep and export JSON locally.',
     methods: [
       {
@@ -229,7 +227,7 @@ export const research: Record<string, ResearchSummary> = {
     reviewed: '2026-11-16',
     milestone: 'rendering',
     evidence: 'method',
-    next: 'Continue with link patterns; keep dense picking cost and GPU-resident candidate discovery open.',
+    next: 'Continue with patterned-link visibility; keep dense picking cost and GPU-resident candidate discovery open.',
     reproduce: 'Run Check stored-alpha picking in Diagnostics, then Compare filtered picking with this page visible. ' +
       'The fixed replay and bounded cost sweep preserve the live scene; historical polygon and source-byte controls stay selectable.',
     methods: [
@@ -289,7 +287,7 @@ export const milestones = [
     position: 'Bounded point-style and link studies; native mask/color boundaries remain open',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
     gates: ['Reduce dense stored-alpha picking cost; retain the completed M3 link alpha replay and its rejected edge cases.',
-      'Retain straight/curved native mask/color blockers while extending the matched endpoint-gradient study to patterns, arrows and link states.',
+      'Retain straight/curved native mask/color blockers while resolving patterned-link visibility and derivative boundaries before arrows and link states.',
       'Retain polygon CPU/preservation gates; validate transitions and pointer behavior, measure accepted rendering cost and broaden native devices.'],
     evidence: [['curved-links', 'Curved solid links'], ['straight-links', 'Straight-link rendering/picking'],
       ['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],

@@ -91,15 +91,17 @@ export async function assess (backends: { webgl: Backend; webgpu: Backend }, sce
 export const ROW_COUNT = FIXTURES.length * PROFILES.length * 2
 export type Row = Evidence & { fixture: Fixture; profile: string; settings: Settings }
 export async function runSweep (backends: { webgl: Backend; webgpu: Backend }, onRow: (row: Row) => void,
-  cancelled: () => boolean, gradient: GradientPreset = 'solid'): Promise<Row[]> {
+  cancelled: () => boolean, gradient: GradientPreset = 'solid', patternSettings: Pick<Settings, 'pattern' | 'dashLength' | 'dashGap'> = {}): Promise<Row[]> {
   const rows: Row[] = []
   for (const name of FIXTURES) {
     for (const profile of PROFILES) {
       for (const blend of [true, false]) {
         if (cancelled()) return rows
-        const settings = { ...DEFAULTS, ...profile.settings, blend, endpointColors: gradient !== 'solid' }
+        const settings = { ...DEFAULTS, ...profile.settings, blend, endpointColors: gradient !== 'solid', ...patternSettings }
         const { evidence } = await assess(backends, gradientScene(fixture(name), gradient), settings)
-        const row: Row = { fixture: name, profile: gradient === 'solid' ? profile.name : `${profile.name} · ${gradient}`, settings, ...evidence }
+        const label = [profile.name, gradient === 'solid' ? '' : gradient,
+          patternSettings.pattern === 'solid' ? '' : patternSettings.pattern].filter(Boolean).join(' · ')
+        const row: Row = { fixture: name, profile: label, settings, ...evidence }
         rows.push(row); onRow(row); await new Promise<void>(resolve => { setTimeout(resolve, 0) })
       }
     }

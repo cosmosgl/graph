@@ -1,4 +1,5 @@
 import { pick } from '../../gpu/rgba-readback'
+import { hasPatterns } from './patterns'
 import { gradientScene, type GradientPreset } from './gradient-fixtures'
 import { DEFAULTS, FIXTURES, PROFILES, fixture, resolveLink, type Scene, type Settings, type Variant, type Fixture } from './data'
 import type { Backend, Snapshot } from './backend'
@@ -11,7 +12,7 @@ export async function contributions (backends: { webgl: Backend; webgpu: Backend
   const result: Contributions = { webgl: 0, webgpu: 0, sources: [] }
   for (const [id, link] of scene.links.entries()) {
     const alpha = resolveLink(link, settings).color[3] * settings.opacity
-    if (alpha <= 0 || alpha >= 1 / 255) continue
+    if (!hasPatterns(scene.links, settings) && (alpha <= 0 || alpha >= 1 / 255)) continue
     result.sources.push(id)
     const isolated = { points: scene.points, links: scene.links.map((l, i) => i === id ? l : { ...l, width: 0 }) }
     for (const lane of ['webgl', 'webgpu'] as const) {
@@ -29,14 +30,14 @@ export type Row = { fixture: Fixture; profile: string; settings: Settings; produ
   compatibility: Comparison; preservation: { webgl: ColorResult; webgpu: ColorResult };
   sourceVisibility: { production: Contributions; candidate: Contributions }; passed: boolean; }
 export async function runSweep (backends: { webgl: Backend; webgpu: Backend }, onRow: (row: Row) => void,
-  cancelled: () => boolean, gradient: GradientPreset = 'solid'): Promise<Row[]> {
+  cancelled: () => boolean, gradient: GradientPreset = 'solid', patternSettings: Pick<Settings, 'pattern' | 'dashLength' | 'dashGap'> = {}): Promise<Row[]> {
   const rows: Row[] = []
   for (const name of FIXTURES) {
     for (const profile of PROFILES) {
       for (const blend of [true, false]) {
         if (cancelled()) return rows
         const scene = gradientScene(fixture(name), gradient)
-        const settings = { ...DEFAULTS, ...profile.settings, blend, endpointColors: gradient !== 'solid' }
+        const settings = { ...DEFAULTS, ...profile.settings, blend, endpointColors: gradient !== 'solid', ...patternSettings }
         const render = async (variant: Variant): Promise<Pair> => ({
           webgl: await backends.webgl.render(scene, settings, variant, false),
           webgpu: await backends.webgpu.render(scene, settings, variant, false),
@@ -48,9 +49,11 @@ export async function runSweep (backends: { webgl: Backend; webgpu: Backend }, o
           production: await contributions(backends, a, scene, settings, 'production'),
           candidate: await contributions(backends, b, scene, settings, 'visible'),
         }
+        const label = [profile.name, gradient === 'solid' ? '' : gradient,
+          patternSettings.pattern === 'solid' ? '' : patternSettings.pattern].filter(Boolean).join(' · ')
         const row: Row = {
           fixture: name,
-          profile: gradient === 'solid' ? profile.name : `${profile.name} · ${gradient}`,
+          profile: label,
           settings,
           production,
           candidate,
@@ -76,7 +79,7 @@ export function renderRows (host: HTMLElement, rows: Row[]): void {
   }).join('')}
     </tbody></table>
     <table data-links-sweep><thead><tr><th>Scene / profile / mode</th><th>Candidate</th><th>ID differences</th><th>CPU masks · GL / GPU</th>
-      <th>GPU color failures</th><th>CPU color failures · GL / GPU</th><th>Invisible picks · frame / faint source</th>
+      <th>GPU color failures</th><th>CPU color failures · GL / GPU</th><th>Invisible picks · frame / source</th>
       <th>Color changed · GL / GPU</th><th>Production / compatible</th></tr></thead><tbody>
     ${rows.map(r => `<tr><td>${r.fixture} · ${r.profile}<br>${r.settings.blend ? 'Blended' : 'Hard opaque'}</td><td>${r.passed ? 'Pass' : 'Fail'}</td>
       <td>${r.candidate.idDifferences}</td><td>${r.candidate.masks.webgl} / ${r.candidate.masks.webgpu}</td><td>${r.candidate.colors.budgetFailures}</td>

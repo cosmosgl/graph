@@ -65,7 +65,7 @@ This is the current task order. A closed investigation can retain failing cases;
 journeyPlan
 ```
 
-### Immediate checkpoint: link patterns; retain picking and raster limits
+### Immediate checkpoint: patterned-link visibility; retain picking and raster limits
 
 The [stored-alpha candidate](#/point-styling?section=doc-method-stored-alpha-picking-prototype-16-november-2026)
 checks actual per-point attachment alpha before composing IDs. Its five bounded
@@ -116,8 +116,17 @@ Endpoint alpha, missing/default channels and solid-mode restoration pass focused
 checks. See [straight gradients](#/straight-links?section=doc-method-endpoint-gradients-17-november-2026)
 and [curved gradients](#/curved-links?section=doc-method-endpoint-gradients-17-november-2026).
 
-Next compare **dash/dot patterns**, then arrows and link states on the
-current machine. Keep polygon and native link raster/color blockers visible.
+The **17 November M3 dash/dot study** retains exact original colors but passes
+only **14/24 straight** and **4/24 curved** full-frame cases; the four curved
+passes have zero opacity. Latest replays report zero invisible frame/source
+picks in both backends, with a passing 12-check straight dash-wrap repeatability
+probe. Two earlier runs reported 12 invisible WebGL picks; the cause remains
+unresolved. Native/CPU pattern mask and color boundaries remain rejected.
+See [straight patterns](#/straight-links?section=doc-method-dash-and-dot-patterns-17-november-2026)
+and [curved patterns](#/curved-links?section=doc-method-dash-and-dot-patterns-17-november-2026).
+
+Next isolate **pattern derivative/CPU boundaries**, retaining dash-wrap visibility regressions,
+before arrows and link states on the current machine. Keep polygon and native link raster/color blockers visible.
 Continue afterward with
 missing forces, small Graph integration and complete-workload acceptance rather
 than expanding this focused picking investigation indefinitely.

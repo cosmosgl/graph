@@ -1,10 +1,11 @@
 import { pick } from '../../gpu/rgba-readback'
 import { sourceAlphaByte } from '../../gpu/source-alpha'
+import { patternCode, patternCoverage, type PatternGeometry } from './patterns'
 import { HEIGHT, WIDTH, resolveLink, type Scene, type Settings, type Variant } from './data'
 import type { Snapshot } from './backend'
 import { resolvedEndpointColor } from './endpoint-colors'
 type Vec = [number, number]
-type Ribbon = { id: number; a: Vec; b: Vec; normal: Vec; length: number; core: number; thin: number; color: number[];
+type Ribbon = { pattern?: PatternGeometry; id: number; a: Vec; b: Vec; normal: Vec; length: number; core: number; thin: number; color: number[];
   endpointColors?: number[][]; vertices: Vec[]; left: number; top: number; right: number; bottom: number; }
 function triangle (p: Vec, a: Vec, b: Vec, c: Vec): boolean {
   const cross = (a: Vec, b: Vec, p: Vec): number => (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])
@@ -31,6 +32,16 @@ export function ribbons (scene: Scene, settings: Settings, picking: boolean, var
     const shift = (p: Vec, sign: number): Vec => [p[0] + normal[0] * half * sign, p[1] + normal[1] * half * sign]
     const vertices = [shift(a, 1), shift(a, -1), shift(b, 1), shift(b, -1)]
     return [{
+      pattern: patternCode(link, settings)
+        ? {
+          code: patternCode(link, settings),
+          span: length / (settings.ratio * (settings.scaleOnZoom ? settings.zoom : 1)),
+          width: (core + 1) / (settings.ratio * (settings.scaleOnZoom ? settings.zoom : 1)),
+          smoothing: 1 / (core + 1),
+          coords: (x, y) => [((x - a[0]) * dx + (y - a[1]) * dy) / (length * length),
+            ((x - a[0]) * normal[0] + (y - a[1]) * normal[1]) / (core + 1)],
+        }
+        : undefined,
       id: index + settings.indexOffset,
       a,
       b,
@@ -48,20 +59,20 @@ export function ribbons (scene: Scene, settings: Settings, picking: boolean, var
     }]
   })
 }
-function fragment (r: Ribbon, x: number, y: number, settings: Settings): { coverage: number; alpha: number } | undefined {
+function fragment (r: Ribbon, x: number, y: number, settings: Settings, patterned = true): { coverage: number; alpha: number } | undefined {
   if (x < r.left || x > r.right || y < r.top || y > r.bottom) return undefined
   const v = r.vertices; const p: Vec = [x, y]
   if (!triangle(p, v[0], v[1], v[2]) && !triangle(p, v[2], v[1], v[3])) return undefined
   const distance = Math.abs((x - r.a[0]) * r.normal[0] + (y - r.a[1]) * r.normal[1])
   const t = Math.max(0, Math.min(1, (r.core + 1) * 0.5 - distance))
-  const coverage = t * t * (3 - 2 * t); const f = Math.fround
+  const coverage = t * t * (3 - 2 * t) * (patterned ? patternCoverage(r.pattern, settings, x, y) : 1); const f = Math.fround
   return { coverage, alpha: f(f(f(r.color[3] * f(settings.opacity)) * f(r.thin)) * f(coverage)) }
 }
 export function scalarPick (entries: Ribbon[], settings: Settings, variant: Variant): (x: number, y: number) => number | null {
   const order = [...entries].reverse()
   return (x, y): number | null => {
     for (const r of order) {
-      const sample = fragment(r, x, y, settings)
+      const sample = fragment(r, x, y, settings, variant !== 'production')
       if (!sample || sample.coverage < 0.5 || r.color[3] * settings.opacity <= 0) continue
       if (variant === 'visible' && settings.blend && sourceAlphaByte(sample.alpha) === 0) continue
       return r.id

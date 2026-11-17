@@ -1,3 +1,97 @@
+## Dash and dot patterns · 17 November 2026
+
+**The patterned candidate passes 14/24 full-frame cases on Apple M3.**
+Every case preserves each backend's original production color bytes exactly.
+Production gap-picking remains a separate unchanged control; the candidate
+requires half coverage of the patterned paint and the existing source-alpha
+eligibility rule. The exact-ID, CPU-mask, 2/255 color and zero-invisible-pick
+gates are unchanged.
+
+| Stroke | Candidate passed / checked |
+|---|---|
+| Dashed | 6 / 12 |
+| Dotted | 8 / 12 |
+
+The latest two full straight-pattern replays have **zero invisible frame or
+isolated-source picks** in both backends. Full-frame acceptance remains 14/24:
+the remaining mask/color discrepancies are still rejected. Passing the focused
+preservation and visibility tests does not accept those rows.
+
+Two earlier runs reported 12 invisible WebGL candidate picks in the zoom-2,
+constant-screen-pattern overlap case. That observation has not reproduced in
+the latest full replays or the targeted repeatability check below. Its cause
+is unresolved; this is not evidence of a proven fix. Patterned candidate IDs
+use the original color vertex shader and color-mode vertex uniforms. The
+separate solid/gradient controls retain their original shaders.
+
+Recorded **17 November 2026**, ANGLE Metal / Apple WebGPU, inline Chromium 157,
+luma **10.0.0-alpha.15**. The 24 cases are two existing scenes × dashed/dotted ×
+six profiles: blended, hard, DPR 2, zoom-2 constant-screen patterns with dash
+length 7.5/gap 3.25, reversed endpoint gradients at opacity 0.35, and opacity
+zero. Other profiles use dash length/gap 5. This is a bounded local study;
+short-link extremes, arbitrary pattern parameters, animated updates and cost
+are not covered by it.
+
+### Production pattern rules
+
+Production uses the ribbon parameter times the endpoint **chord length**,
+including on curves. This is not distance integrated along the curved path.
+When widths scale with zoom, pattern units are world units; otherwise the
+chord and carrier width are multiplied by zoom to keep pattern units in CSS
+screen pixels. DPR enters the antialiasing ramp, not a second pattern zoom.
+
+Dashes repeat every `dashLength + dashGap`. Dots repeat every visible stroke
+diameter plus the gap; hard dots have production's minimum diameter of
+approximately √2 device pixels. Both multiply the existing ribbon coverage.
+Production deliberately omits the pattern mask in its ID pass, keeping gaps
+pickable. The visible-pixel candidate applies it to IDs too; it does not change
+production interaction policy or any rendered color.
+
+The port uses `dpdx`/`dpdy`/`fwidth` before any style branch or discard, as
+required for [WGSL derivative uniformity](https://www.w3.org/TR/WGSL/#derivative-builtin-functions).
+The CPU independently extrapolates each primitive's parameter and side values
+at four pixel centers and uses fine local differences. Native default
+derivatives may be fine or coarse. This CPU model is explicit, not a promise
+to predict every driver's derivative choice; its discrepancies stay failures.
+No GPU mask/readback supplies CPU expectations.
+
+### Dash-wrap repeatability
+
+The targeted replay checks the previously implicated dashed overlap on fresh
+devices and after switching through all six profiles. Each is repeated at the
+original coordinates and at horizontal shifts of −1/1024 and +1/1024 device
+pixel. All **12 backend/history/shift checks** preserve original colors exactly
+and report zero invisible picks on M3. The test still requires zero; it records
+pixel coordinates, IDs, stored RGBA and independently calculated phase when a
+witness exists.
+
+The production dash formula is discontinuous at a period wrap: its smooth
+start contributes half coverage at remainder zero, while the preceding gap
+approaches zero. Interpolation rounding is therefore a plausible boundary
+mechanism, but these passing replays do not establish why the earlier runs
+differed. Keep that uncertainty alongside the rejected full-frame rows.
+
+```sh
+LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/straight-links/patterns.test.ts src/experiments/straight-links/pattern-boundary.test.ts
+```
+
+### Reproduce the pattern comparison
+
+Choose **Stroke → dashed/dotted**, then set **Dash length** and **Pattern gap**.
+Dash length controls dashes; dot diameter comes from stroke width. Both color
+source modes remain available. The full scene sweep uses the selected color
+and pattern settings; fixed boundary-replay tools retain their recorded solid
+controls. For the bounded 24-case pattern study:
+
+```sh
+LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/straight-links/patterns.test.ts
+```
+
+Open the printed session URL in the local native browser. Local JSON captures
+retain every comparison, preservation result and isolated-source visibility
+count, including rejected rows. They are not committed. Solid and endpoint-
+gradient matrices remain separate regression controls.
+
 ## Endpoint gradients · 17 November 2026
 
 **The visible-footprint candidate passes 30/40 full-frame cases with endpoint
@@ -65,7 +159,7 @@ LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/s
 
 Open the printed session URL in the existing native browser. Local captures
 contain both `solidRows` and gradient `rows`, including rejected results;
-measurements are not committed. Next compare dash/dot patterns, retaining
+measurements are not committed. The pattern comparison above retains
 these boundary and original padded-picking controls.
 
 ## Faint-alpha picking replay · 17 November 2026

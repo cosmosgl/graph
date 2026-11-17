@@ -8,6 +8,7 @@ import { ALPHA_BLEND, createDevice } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
 import { target, pixels, floatPixels } from '../../gpu/rgba-readback'
 import { SOURCE_ALPHA_GLSL } from '../../gpu/source-alpha'
+import { patternCode, hasPatterns } from './patterns'
 import { WIDTH, HEIGHT, type Settings } from './data'
 import type { Backend, Snapshot } from './backend'
 const vertexTypes = {
@@ -113,17 +114,27 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
     const attributes = [['pointA', 'float32x2'], ['pointB', 'float32x2'], ['sourceColor', 'float32x4'], ['targetColor', 'float32x4'],
       ['sourceWidth', 'float32'], ['targetWidth', 'float32'], ['arrow', 'float32'], ['linkIndices', 'float32'], ['linkStyle', 'float32']] as const
     const models = new Map<string, Model>()
-    const make = (blend: boolean, candidate: boolean, isPicking: boolean, probe = 0, frontPicking = false): Model => {
-      const key = `${blend}:${candidate}:${isPicking}:${probe}:${frontPicking}`; const cached = models.get(key); if (cached) return cached
+    const make = (blend: boolean, candidate: boolean, isPicking: boolean, probe = 0, frontPicking = false, patterned = false): Model => {
+      const key = `${blend}:${candidate}:${isPicking}:${probe}:${frontPicking}:${patterned}`; const cached = models.get(key); if (cached) return cached
+      const candidateFragment = curve ? curvedVisibleFragment : visibleFragment
+      const patternedCandidate = curvedVisibleFragment
+        .replace('renderMode < 0.5 &&', '(renderMode < 0.5 || renderMode > 2.5) &&')
+        .replace('float opacity = rgbaColor.a * coverage;',
+          `if (renderMode > 2.5 && (vLinkStyle == 1.0 || vLinkStyle == 2.0) && coverage < 0.5) discard;
+           float opacity = rgbaColor.a * coverage;`)
       const model = scope.own(new Model(device, {
-        vs: probe === 3 ? captureVertex : candidate ? curve ? curvedVisibleVertex : visibleVertex : probe === 2 ? visibleVertex : vertex,
+        vs: probe === 3
+          ? captureVertex
+          : candidate && patterned
+            ? vertex
+            : candidate ? curve ? curvedVisibleVertex : visibleVertex : probe === 2 ? visibleVertex : vertex,
         fs: probe === 3
           ? captureFragment
           : probe === 1
             ? varyingProbe
             : probe === 2
               ? pixelProbe
-              : candidate ? curve ? curvedVisibleFragment : visibleFragment : fragment,
+              : candidate ? patterned ? patternedCandidate : candidateFragment : fragment,
         modules: [{ name: 'conicParametricCurve', vs: moduleSource(conic) }, { name: 'pickingColor', fs: moduleSource(picking) }],
         topology: probe === 3 ? 'point-list' : 'triangle-strip',
         vertexCount: 4,
@@ -208,6 +219,7 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
               case 'sourceColor': case 'targetColor': return link.color
               case 'sourceWidth': case 'targetWidth': return [link.width]
               case 'linkIndices': return [id]
+              case 'linkStyle': return [patternCode(link, settings)]
               default: return [0]
               }
             })
@@ -217,7 +229,7 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
           const draw = (mode: number, framebuffer?: ReturnType<typeof target>['framebuffer'], probe = 0): void => {
             // The color pass always uses the unmodified production shaders.
             const model = make(mode === 0 && settings.blend && probe === 0, mode > 0 && variant === 'visible', mode > 0, probe,
-              variant === 'visible' && !!curved?.frontPicking)
+              variant === 'visible' && !!curved?.frontPicking, hasPatterns(scene.links, settings) && probe === 0)
             model.setAttributes(buffers); model.setBindings(bindings); model.setInstanceCount(links.length)
             model.setVertexCount(curved ? curved.positions.length / 2 : 4)
             uniforms.setUniforms({
@@ -237,7 +249,7 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
                 curvedLinkSegments: curved?.segments ?? 1,
                 scaleLinksOnZoom: Number(settings.scaleOnZoom),
                 maxPointSize: settings.maxWidth,
-                renderMode: mode,
+                renderMode: mode > 0 && variant === 'visible' && hasPatterns(scene.links, settings) && probe === 0 ? 0 : mode,
                 hoveredLinkIndex: -1,
                 hoveredLinkWidthIncrease: 0,
                 isLinkHighlightingActive: 0,
@@ -257,8 +269,8 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
               },
               drawLineFragmentUniforms: {
                 renderMode: mode,
-                linkDashLength: 5,
-                linkDashGap: 5,
+                linkDashLength: settings.dashLength ?? 5,
+                linkDashGap: settings.dashGap ?? 5,
                 linkColorInterpolateFromEndpoints: Number(!!settings.endpointColors),
                 hoveredLinkIndex: -1,
                 hoveredLinkColor: [-1, -1, -1, -1],

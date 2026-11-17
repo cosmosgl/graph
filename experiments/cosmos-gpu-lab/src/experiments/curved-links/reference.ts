@@ -1,3 +1,4 @@
+import { patternCode, patternCoverage, type PatternGeometry } from '../straight-links/patterns'
 import { sourceAlphaByte } from '../../gpu/source-alpha'
 import { pick } from '../../gpu/rgba-readback'
 import { compareColors, type Comparison as BaseComparison } from '../straight-links/reference'
@@ -6,7 +7,8 @@ import { WIDTH, HEIGHT, resolveLink, validateCurve, type Scene, type Settings, t
 import type { Snapshot } from './backend'
 export type Vec = [number, number]
 export type Vertex = { xy: Vec; side: number; along?: number }
-export type Triangle = { vertices: Vertex[]; area: number; id: number; color: number[]; alpha: number; smoothing: number; endpointColors?: number[][] }
+export type Triangle = { pattern?: PatternGeometry; vertices: Vertex[]; area: number; id: number; color: number[];
+  alpha: number; smoothing: number; endpointColors?: number[][]; }
 export function nodes (segments: number): number[] {
   return Array.from({ length: segments + 1 }, (_, i) => {
     const x = 2 * i / segments - 1
@@ -53,6 +55,19 @@ export function mesh (scene: Scene, settings: Settings, picking: boolean, varian
       const area = cross(v[0].xy, v[1].xy, v[2].xy)
       if (area) {
         triangles.push({
+          pattern: patternCode(link, settings)
+            ? {
+              code: patternCode(link, settings),
+              span: length * (settings.scaleOnZoom ? 1 : settings.zoom),
+              width: carrier / (settings.ratio * (settings.scaleOnZoom ? settings.zoom : 1)),
+              smoothing: 1 / carrier,
+              coords: (x, y): [number, number] => {
+                const p: Vec = [x, y]; const weights = [cross(v[1].xy, v[2].xy, p), cross(v[2].xy, v[0].xy, p), cross(v[0].xy, v[1].xy, p)]
+                return [weights.reduce((sum, w, i) => sum + w * (v[i].along ?? 0), 0) / area,
+                  weights.reduce((sum, w, i) => sum + w * v[i].side, 0) / area]
+              },
+            }
+            : undefined,
           vertices: v,
           area,
           id: id + settings.indexOffset,
@@ -96,6 +111,7 @@ export function reference (scene: Scene, settings: Settings): Reference {
   }
   // Color follows production back-face culling; host IDs use its unculled pass.
   raster(visible.filter(t => t.area < 0), width, height, (tri, i, coverage, along) => {
+    coverage *= patternCoverage(tri.pattern, settings, i % width + 0.5, Math.floor(i / width) + 0.5)
     if (!settings.blend && (coverage < 0.5 || tri.alpha <= 0)) return
     const alpha = settings.blend ? Math.max(0, Math.min(1, Math.fround(tri.alpha * Math.fround(coverage)))) : 1
     for (let c = 0; c < 3; c++) {
@@ -108,6 +124,7 @@ export function reference (scene: Scene, settings: Settings): Reference {
   for (const variant of ['production', 'visible', 'front'] as const) {
     const triangles = variant === 'production' ? mesh(scene, settings, true, variant) : variant === 'front' ? visible.filter(t => t.area < 0) : visible
     raster(triangles, width, height, (tri, i, coverage) => {
+      if (variant !== 'production') coverage *= patternCoverage(tri.pattern, settings, i % width + 0.5, Math.floor(i / width) + 0.5)
       if (coverage < 0.5 || tri.alpha <= 0) return
       if (variant !== 'production' && settings.blend && sourceAlphaByte(Math.fround(tri.alpha * Math.fround(coverage))) === 0) return
       ids[variant][i] = tri.id

@@ -4,6 +4,74 @@ Can Cosmos preserve its actual curved-link geometry, color and picking when movi
 
 This experiment renders frozen links through unmodified production GLSL and a WGSL port, using public luma APIs only. It does not replace the production renderer or its padded host-picking policy. Straight-link boundary failures remain open in their own experiment.
 
+## Dash and dot patterns · 17 November 2026
+
+**The patterned candidate passes 4/24 full-frame cases on Apple M3.**
+Every case preserves each backend's original production color bytes exactly.
+Production gap-picking remains a separate unchanged control; the candidate
+requires half coverage of the patterned paint and the existing source-alpha
+eligibility rule. The exact-ID, CPU-mask, 2/255 color and zero-invisible-pick
+gates are unchanged.
+
+| Stroke | Candidate passed / checked |
+|---|---|
+| Dashed | 2 / 12 |
+| Dotted | 2 / 12 |
+
+All four passing rows have zero global opacity. **None of the 20 visible
+curve cases passes the full gate.** Patterned color-face IDs make zero invisible
+frame/source picks, but independent CPU masks/colors and some paired GPU color
+boundaries disagree. The focused preservation/visibility test passes; that
+must not be confused with accepting the visible curve matrix.
+
+Recorded **17 November 2026**, ANGLE Metal / Apple WebGPU, inline Chromium 157,
+luma **10.0.0-alpha.15**. The 24 cases are two existing scenes × dashed/dotted ×
+six profiles: blended, hard, DPR 2, zoom-2 constant-screen patterns with dash
+length 7.5/gap 3.25, reversed endpoint gradients at opacity 0.35, and opacity
+zero. Other profiles use dash length/gap 5. This is a bounded local study;
+short-link extremes, arbitrary pattern parameters, animated updates and cost
+are not covered by it.
+
+### Production pattern rules
+
+Production uses the ribbon parameter times the endpoint **chord length**,
+including on curves. This is not distance integrated along the curved path.
+When widths scale with zoom, pattern units are world units; otherwise the
+chord and carrier width are multiplied by zoom to keep pattern units in CSS
+screen pixels. DPR enters the antialiasing ramp, not a second pattern zoom.
+
+Dashes repeat every `dashLength + dashGap`. Dots repeat every visible stroke
+diameter plus the gap; hard dots have production's minimum diameter of
+approximately √2 device pixels. Both multiply the existing ribbon coverage.
+Production deliberately omits the pattern mask in its ID pass, keeping gaps
+pickable. The visible-pixel candidate applies it to IDs too; it does not change
+production interaction policy or any rendered color.
+
+The port uses `dpdx`/`dpdy`/`fwidth` before any style branch or discard, as
+required for [WGSL derivative uniformity](https://www.w3.org/TR/WGSL/#derivative-builtin-functions).
+The CPU independently extrapolates each primitive's parameter and side values
+at four pixel centers and uses fine local differences. Native default
+derivatives may be fine or coarse. This CPU model is explicit, not a promise
+to predict every driver's derivative choice; its discrepancies stay failures.
+No GPU mask/readback supplies CPU expectations.
+
+### Reproduce the pattern comparison
+
+Choose **Stroke → dashed/dotted**, then set **Dash length** and **Pattern gap**.
+Dash length controls dashes; dot diameter comes from stroke width. Both color
+source modes remain available. The full scene sweep uses the selected color
+and pattern settings; fixed boundary-replay tools retain their recorded solid
+controls. For the bounded 24-case pattern study:
+
+```sh
+LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/curved-links/patterns.test.ts
+```
+
+Open the printed session URL in the local native browser. Local JSON captures
+retain every comparison, preservation result and isolated-source visibility
+count, including rejected rows. They are not committed. Solid and endpoint-
+gradient matrices remain separate regression controls.
+
 ## Endpoint gradients · 17 November 2026
 
 **The color-face candidate passes 28/64 full-frame cases with endpoint
@@ -71,7 +139,7 @@ LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/c
 
 Open the printed session URL in the existing native browser. Local captures
 contain both `solidRows` and gradient `rows`, including rejected results;
-measurements are not committed. Next compare dash/dot patterns, retaining
+measurements are not committed. The pattern comparison above retains
 these boundary and original padded-picking controls.
 
 ## Faint-alpha picking replay · 17 November 2026
