@@ -9,6 +9,13 @@ export type ValidationContract = {
 // These describe existing gates, not new pass thresholds or production approvals.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match existing public hash routes. */
 export const validationContracts: Record<string, ValidationContract> = {
+  'integrated-webgpu': {
+    question: 'Can one resident WebGPU runtime provide a usable first Cosmos migration slice?',
+    reference: 'Existing corrected simulation backend; independent sampled CPU circle/straight-link geometry and IDs; declared M3 interaction workload.',
+    acceptance: '95% of complete paced frame intervals <= 33 ms; pick feedback <= 50 ms; no interior ID errors or invisible picks; <= 2/255 color error away from a geometry-derived one-device-pixel boundary.',
+    coverage: 'Core forces, circles, solid straight links, point picking/dragging, camera, replacement, pause, resize and destruction. Local sampled evidence only.',
+    limits: 'No strict compatibility or full migration approval. Historical failures remain. Faint nonzero opacity < 0.02 and advanced features are explicitly unsupported. Browser feedback is a GPU-completed presentation opportunity, not measured physical scanout.',
+  },
   'ribbon-generation': {
     question: 'Does WebGPU compute sample reuse reduce complete ribbon drawing cost?',
     reference: 'The existing curved-link WGSL vertex generator, on the same device, inputs, rasterizer and color-face picking policy.',

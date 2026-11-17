@@ -17,7 +17,7 @@ export const journeySteps = [
     number: 2,
     id: 'graph-integration',
     title: 'First integrated migration',
-    status: 'Planned',
+    status: 'Bounded pilot evaluated',
     position: 'Core forces, circles, solid straight links, point interaction and updates on shared resident state.',
     exit: 'Practical first-slice behavior and responsiveness assessed on M3; strict compatibility remains a separate verdict.',
     href: '#/validation-workflow?section=first-migration-rules',
