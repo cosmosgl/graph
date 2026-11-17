@@ -4,8 +4,10 @@ export type Point = { x: number; y: number; absent?: boolean; color?: [number, n
 export type Link = { pattern?: Pattern; source: number; target: number; width: number; color: [number, number, number, number] }
 export type Scene = { points: Point[]; links: Link[] }
 export type HardCoverage = 'native' | 'linear' | 'pixel'
+export type CoverageFormula = 'descending' | 'ascending'
 export type Settings = { pattern?: Pattern; dashLength?: number; dashGap?: number;
   endpointColors?: boolean; pointDefaultColor?: Link['color']; hardCoverage?: HardCoverage;
+  coverageFormula?: CoverageFormula;
   zoom: number; ratio: number; opacity: number; blend: boolean; scaleOnZoom: boolean;
   widthScale: number; maxWidth: number; defaultWidth: number; defaultColor: Link['color']; reverse: boolean; indexOffset: number; }
 export type Variant = 'production' | 'visible'

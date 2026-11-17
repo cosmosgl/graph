@@ -20,6 +20,24 @@ export function researchMethodPages (record: ResearchSummary): string[] {
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match public experiment routes. */
 export const research: Record<string, ResearchSummary> = {
   ...additionalResearch(BASELINE_REVIEWED),
+  'smoothstep-coverage': {
+    method: 'method',
+    evidence: 'findings',
+    milestone: 'rendering',
+    reviewed: '2026-11-17',
+    comparison: 'Same input → original and ascending-edge coverage on WebGL and WebGPU → actual line pixels and IDs',
+    question: 'Can changing how we calculate a line edge make WebGL and WebGPU draw the same pixels?',
+    conclusion: 'On M3, the hard line still differs at 180 pixels. The same saved corners reproduce the different positions in both renderers.',
+    scope: 'Three fixed inputs, two line draws and a matched-corner position trace with 17 lengths on M3; other settings remain available locally.',
+    variant: 'Original production expression and an ascending-edge diagnostic on both backends',
+    next: 'The focused study is closed. Reopen for a practical coverage change or exact cross-device parity; broader straight-link research remains parked.',
+    reproduce: 'Open the experiment and select Run comparison; export the measured values and device details.',
+    investigations: [{
+      page: 'findings',
+      state: 'Current evidence',
+      description: 'Focused M3 study closed with its evidence; no production replacement is approved.',
+    }],
+  },
   'ribbon-generation': {
     question: 'Can WebGPU share curve generation across ribbon sides and passes at a lower total cost?',
     conclusion: 'Stopped without adoption: rebuilding cost more, static reuse was inconsistent, and coarse curves changed color pixels.',
