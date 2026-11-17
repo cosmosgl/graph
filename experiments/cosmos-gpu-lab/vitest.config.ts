@@ -2,9 +2,9 @@ import { defineConfig } from 'vitest/config'
 import { labBrowser } from './browser-provider.mjs'
 import { writeLabArtifact } from './scripts/artifacts.mjs'
 
-// Explicit opt-in for GPU regression tests; fail if no adapter can be created.
-// Default: software Chromium. LAB_NATIVE_GPU=1 uses installed Chrome without forcing an adapter.
-// Full integer-arithmetic shaders currently fail compilation on SwiftShader; those tests opt into native mode.
+// Local research checks use the current machine's native browser/GPU.
+// Keep the legacy flag for existing native-only tests and historical reproduction commands.
+// Expensive sweeps still require their own explicit flags.
 // eslint-disable-next-line import/no-default-export
 export default defineConfig({
   optimizeDeps: { include: ['@luma.gl/shaders', 'markdown-it', 'd3-scale', 'd3-array'] },
@@ -13,7 +13,7 @@ export default defineConfig({
     'import.meta.env.LAB_STORED_ALPHA_SWEEP': process.env.LAB_STORED_ALPHA_SWEEP === '1',
     'import.meta.env.LAB_RIBBON_COST': process.env.LAB_RIBBON_COST === '1',
     'import.meta.env.LAB_FAR_ARITHMETIC_COST': process.env.LAB_FAR_ARITHMETIC_COST === '1',
-    'import.meta.env.LAB_NATIVE_GPU': process.env.LAB_NATIVE_GPU === '1',
+    'import.meta.env.LAB_NATIVE_GPU': true,
     // Vite define strings are JavaScript expressions; quote the selected mode.
     'import.meta.env.LAB_SCALE_PRECISION': JSON.stringify(process.env.LAB_SCALE_PRECISION ?? 'products'),
     'import.meta.env.LAB_SCALE_COUNT': Number(process.env.LAB_SCALE_COUNT ?? 0),

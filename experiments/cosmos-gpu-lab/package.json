@@ -9,7 +9,8 @@
     "preview": "vite preview",
     "test:ui": "vitest run --config vitest.ui.config.mjs",
     "test:gpu": "vitest run --config vitest.config.ts",
-    "typecheck": "node scripts/check-luma-api.mjs && tsc --noEmit"
+    "typecheck": "node scripts/check-luma-api.mjs && tsc --noEmit",
+    "lint": "eslint --cache ./src --ext .ts --ignore-path ../../.gitignore"
   },
   "dependencies": {
     "@luma.gl/core": "10.0.0-alpha.15",

@@ -237,106 +237,70 @@ Run the documentation interaction checks with:
 pnpm --filter @cosmos.gl/gpu-lab test:ui src/app/learning-examples.test.ts src/app/flow.test.ts
 ```
 
-## GPU regression checks
+## Local investigation checks
+
+The lab is a research application, not a production package. Test the experiment
+being investigated on the current machine and record its browser and actual GPU.
+There are no automatic lab checks or manual software-GPU jobs in GitHub Actions.
+Root lint, typecheck and build commands cover production code and integrations;
+lab checks are separate local commands. Shared dependency installation and
+repository security checks still apply.
+
+Start with a focused file, for example:
 
 ```sh
-pnpm --filter @cosmos.gl/gpu-lab test:gpu
+pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/overlay-pixels.test.ts
 ```
 
-This runs the lab's broad browser suite with a software adapter. Missing adapters and failed
-assertions fail the run. Software-adapter timings are not hardware benchmarks. The normal
-repository `pnpm test` covers the engine and deck integration; separate runs keep luma v9 and
-v10 dependency caches isolated.
+This uses installed Google Chrome without forcing a software adapter. Native
+arithmetic and trajectory checks are enabled by default. `LAB_NATIVE_GPU=1` in
+older reproduction commands is now redundant; setting it to `0` does not select
+software rendering. Large-layout and cost sweeps still require their explicit
+flags (`LAB_SCALE_COUNT`, `LAB_STORED_ALPHA_SWEEP`, `LAB_RIBBON_COST` or
+`LAB_FAR_ARITHMETIC_COST`). Run them only when they answer the current question.
 
-### Automatic application checks
+Omitting the file filter runs the broad lab suite, including retained rejected
+candidates. It is not a required green gate before committing or moving to the
+next investigation. Assertions and acceptance criteria stay truthful: a failed
+candidate remains failed, and passing on this machine does not establish support
+on other devices. Historical Linux/SwiftShader findings remain historical evidence;
+reproducing or fixing them is not part of the current local research policy.
+
+### Connect an existing browser
+
+To run in the browser already open on your machine:
+
+```sh
+LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/overlay-pixels.test.ts
+```
+
+Keep the command running and open the printed test-session URL within three
+minutes. Tests start when the page connects; leave it open until the terminal
+reports completion. This mode does not launch or configure another browser.
+Record the actual adapter: the browser controls which GPU it uses.
+
+### Optional application and tooling checks
+
+Use the relevant local checks when changing the shell, documentation or tooling:
 
 ```sh
 pnpm --filter @cosmos.gl/gpu-lab test:ui
+pnpm --filter @cosmos.gl/gpu-lab lint
+pnpm --filter @cosmos.gl/gpu-lab typecheck
+pnpm --filter @cosmos.gl/gpu-lab build
+node --test experiments/cosmos-gpu-lab/scripts/artifacts.test.mjs
 ```
 
-The core `verify` job runs lab lint, typechecking, builds and this app/runtime subset. Its guard
-rejects WebGL/WebGPU canvas, adapter and device requests, including requests whose errors the
-application catches. Canvas 2D is allowed. This subset is intentionally incomplete: experiment
-UI tests that create real devices stay in GPU investigations until their reporting and cancellation
-contracts can be isolated. Do not weaken the guard to include them.
+The UI subset guards against GPU API calls so navigation and reporting can be
+checked independently. Experiment UI tests that create devices remain in the
+GPU suite. `LAB_INLINE_BROWSER=1` also connects the UI subset to an existing
+browser. These checks are available locally, not required lab CI jobs.
 
-### Manual software investigations
-
-The **CI** workflow’s manual **lab-validation** job accepts an investigation (`arithmetic`, `point-styling`, `links`
-or `full`), an optional open PR number and an explicit cost-sweep switch. For example:
-
-```sh
-gh workflow run ci.yml --ref experiment/cosmos-gpu-lab -f investigation=point-styling -f pr_number=298 -f full_sweep=true
-```
-
-The CI workflow already exists on the default branch; select the lab branch while the lab is
-still under review. After it merges, use `--ref main`. Manual runs skip automatic verification jobs
-and have separate concurrency groups. The automatic GPU job was retired after successful and
-failed manual runs both retained their evidence. Automatic CI keeps the guarded application subset. Branch protection must separately require `verify`; declaring the job does not configure
-that repository setting.
-
-A PR run fetches and pins its merge SHA, checks its base/head parents and fails if no usable merge
-revision exists. It never substitutes the PR head. Without a PR, it tests the dispatched revision;
-that revision must contain the lab. The workflow token is read-only and is not persisted in Git. Dispatch and rerun actors must have
-repository write permission, and PRs must come from branches in this repository. Fork PRs are
-rejected: a dispatch runs in its selected branch's cache scope even with read-only repository
-permissions. The selected public revision is fetched, installed and tested only inside a software container.
-Only the capture directory, read-only revision metadata and explicit test flags are mounted or passed.
-No host checkout, GitHub/cache credentials or Docker socket enter it.
-Fork investigations remain outside this workflow.
-
-`full` selects all files in the broad configuration. It does **not** enable native-only tests or
-large-layout research: `LAB_NATIVE_GPU=0` and `LAB_SCALE_COUNT=0`. The cost-sweep switch enables
-`LAB_FAR_ARITHMETIC_COST` for arithmetic, `LAB_STORED_ALPHA_SWEEP` for point styling and
-`LAB_RIBBON_COST` for links (all three for `full`). Native-only conditions still apply; the original
-stored-alpha timing sweep remains skipped on software while the filtered paired sweep can run.
-The manifest records every selected flag and file; the outcome lists actual remaining skips.
-
-Failed assertions make the manual run fail. Rejected candidates keep their verdicts and gates.
-Artifacts are uploaded even after failure: revision, manifest, selected files, test results, skipped
-cases, console log, adapter/browser identity and enabled benchmark captures. A timeout can leave
-partial captures; do not interpret missing outcomes as passes. Artifacts expire after 14 days.
-
-Benchmark JSON uses a dedicated writer under ignored `captures/<run>/`, with `local` as the default
-run directory. Measurements are observations, never golden snapshots, and require no `-u`. Each
-completed filtered-picking row is saved immediately so a later failure retains prior rows. Native
-runs remain local through the commands below; the software workflow makes no native speed claim.
-
-On Linux, the software configuration also enables SwiftShader Vulkan compositing:
-WebGL's ANGLE flag alone can leave WebGPU canvas presentation unavailable even when
-offscreen readback works. Check both paths before diagnosing a shader failure:
-
-```sh
-pnpm --filter @cosmos.gl/gpu-lab test:gpu src/gpu/canvas-readback.test.ts
-```
-
-The [point-styling findings](src/experiments/point-styling/method.md#linux-software-ci-reproduction--16-november-2026)
-and [weighted-link isolation](src/experiments/weighted-links/docs/results.md#linux-software-ci-isolation--16-november-2026)
-record the pinned Linux reproduction environment, remaining failures and focused commands.
-
-To run the native-GPU regressions using installed Google Chrome:
-
-```sh
-LAB_NATIVE_GPU=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu
-```
-
-This launches Chrome without forcing a software adapter and enables the native arithmetic,
-trajectory and timing regressions as well as UI tests. The separate large-graph research
-runs still require an explicit `LAB_SCALE_COUNT`; they are not part of the default suite.
-
-### Connect an existing browser (optional)
-
-To use an existing WebGPU-capable browser instead of launching Chrome:
-
-```sh
-LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu
-```
-
-Keep the command running and open the printed test-session URL in the browser on the same
-machine within three minutes. Tests start when the page connects; leave it open until the
-terminal reports completion. This mode does not launch or configure the browser. It enables
-the same native-GPU test cases, with the same opt-in research exclusions, but uses the selected
-browser's GPU configuration. Record the browser, device and GPU backend when sharing results.
+Benchmark JSON is written under ignored `captures/<run>/`, with `local` as the
+default. Measurements are observations, never golden snapshots, and require no
+`-u`. Keep exports local; commit concise findings, scope and reproduction steps.
+The normal repository `pnpm test` still covers the production engine and deck
+integration with its existing browser configuration.
 
 ### Alpha.15 upgrade verification
 

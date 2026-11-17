@@ -1900,10 +1900,11 @@ pnpm --filter @cosmos.gl/gpu-lab test:gpu \
   src/experiments/point-styling/overlay-view.test.ts
 ```
 
-To repeat on this machine, prefix the command with
-`LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1` and open the printed session URL in an
-existing native browser. Run `point-effects.test.ts` separately to inspect the
-original control. The Linux measurements above retain their stated environment. The two measurement artifacts are written under
+Run that command on the current machine, or prefix it with
+`LAB_INLINE_BROWSER=1` and open the printed session URL in an existing native
+browser. Run `point-effects.test.ts` separately to inspect the original control.
+The Linux measurements above are retained historical evidence; the local-only
+research policy adopted on 17 November does not require repeating that environment. The two measurement artifacts are written under
 ignored `captures/local/`; keep raw JSON local and share these findings plus
 the reproduction instructions.
 
