@@ -1,8 +1,9 @@
 # Integrated findings
 
-The graph renders and its interaction checks pass, but **repeatable first-slice usability
-is not established**. An earlier quiet run met the small-graph timing targets; the final
-run missed them on every workload. Both observations remain below.
+The graph renders and its interaction checks pass. A later controlled investigation
+repeated the **1,024-community workload successfully three times**, plus one original-path
+cross-check. Earlier whole-matrix timing failures remain unexplained. This is bounded
+local usability evidence, not approval of the whole first slice. All observations remain below.
 
 Measured **17 November 2026**, visible inline Chromium 157 on the **Apple M3** host
 (10 GPU cores), luma **10.0.0-alpha.15**. Actual luma adapter: `webgpu`, vendor `apple`,
@@ -15,7 +16,7 @@ integrated canvas rendered successfully before evaluation.
 | Question | Conclusion |
 | --- | --- |
 | Strict compatibility | **Not established.** Historical exact raster, polygon, faint-alpha and ribbon failures retain their verdicts. The new small whole-tick CPU check passes its unchanged tolerance; it does not approve the renderer. |
-| First-slice usability | **Not accepted yet.** Functional and sampled rendering checks pass, but the final run misses timing gates on every workload. Earlier small-graph passes are bounded observations, not repeatable approval. Settled quality remains unassessed. |
+| First-slice usability | **Bounded local evidence.** Three later 1,024-community repeats and an original-path cross-check pass. Earlier matrix stalls remain unexplained; 8,192 and settled quality remain unaccepted. |
 | Full migration readiness | **Not ready.** Advanced styles, remaining forces, collision, host integration, recovery, broader data and the parked investigations remain open. |
 
 ## Complete frame and interaction results
@@ -160,3 +161,57 @@ LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/i
 Open the printed session URL in the visible inline browser. The regression is separate
 from timing and cannot silently approve a missed frame or picking target. The full
 measurement procedure and unsupported options are in the scope and evaluation protocol.
+
+## Small-graph pacing investigation
+
+**17 November 2026, 18:33 UTC**, same visible inline Chromium 157 / Apple M3,
+`apple`, `metal-3`, `fallback: false`, 1,920 × 1,200 render attachment. Canvas rendering
+was verified first. No lab build/test process ran alongside measurement. The browser
+window was narrower than in the earlier matrix; the render attachment remained unchanged.
+
+The declared three-repeat, rotated-order comparison on **1,024 communities / 1,919 links**
+passed every measured full-tick frame and picking gate. The earlier long stalls did
+**not** reproduce. No scheduling optimization was made; this is new bounded evidence,
+not a demonstrated fix for the prior failures.
+
+| Repeat | Control | Frame p95, ms | Intervals ≤33 ms | Simulation submit p95, ms | Draw submit p95, ms | Completion wait p95, ms |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | RAF only | 17.1 | 100% | — | — | — |
+| 1 | Redraw | 17.0 | 100% | — | 0.5 | 2.5 |
+| 1 | Full tick | 17.1 | 100% | 0.6 | 0.4 | 14.1 |
+| 2 | Redraw | 16.8 | 100% | — | 0.4 | 2.2 |
+| 2 | Full tick | 17.2 | 100% | 0.5 | 0.3 | 14.5 |
+| 2 | RAF only | 16.8 | 100% | — | — | — |
+| 3 | Full tick | 17.7 | 100% | 0.6 | 0.4 | 13.9 |
+| 3 | RAF only | 16.9 | 100% | — | — | — |
+| 3 | Redraw | 17.7 | 100% | — | 0.3 | 2.1 |
+
+The full-tick maximum frame interval was 17.8 ms. The browser-only control was stable,
+and drawing alone had a much shorter completion wait. This narrows the likely source
+of additional frame work to the simulation/queue-completion path, rather than expensive
+CPU command submission. It does **not** separate GPU force execution from notification
+scheduling, or explain earlier environment-dependent stalls. GPU timestamps are the
+next discriminating measurement. Removing the completion fence has not been tested.
+
+| Full-tick repeat | Paused pick max, ms | Running pick max, ms | Drag max, ms |
+| ---: | ---: | ---: | ---: |
+| 1 | 17.6 | 17.6 | 16.9 |
+| 2 | 21.9 | 32.2 | 16.8 |
+| 3 | 17.8 | 17.7 | 17.7 |
+
+Across these picks, the largest ID/readback phase was 14.9 ms, the highlight-completion
+phase 6.9 ms and next-frame wait 15.1 ms. These maxima belong to different requests;
+they must not be summed. All functional checks passed. Every row checked 2,432 pixels
+with zero interior ID/color failures and invisible picks; all 1,024 points were visible.
+
+A separately declared follow-up reran **Measure this graph** for the same community
+fixture, including the original quality calculations. It also passed: frame p95
+**17.6 ms**, **100%** within 33 ms, paused/running pick maxima **17.7 / 33.2 ms**,
+zero sampled pixel failures. Thus a good result was not exclusive to the profiling path.
+One successful cross-check cannot exclude occasional garbage collection or host load.
+
+**Decision:** this small workload is locally repeatable within this session. Keep the
+prior adverse runs and the rejected 8,192 envelope. Strict compatibility and full
+migration readiness remain unestablished; this does not approve every first-slice
+workload or settled layout quality. Next measure actual GPU force/render duration before
+choosing a pacing or solver optimization. Raw captures remain local via Export JSON.

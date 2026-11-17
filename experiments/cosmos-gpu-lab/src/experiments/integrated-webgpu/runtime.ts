@@ -4,13 +4,14 @@ import { cool } from '../combined-layout/data'
 import { forceSettings } from '../combined-layout/production-settings'
 import { createRenderer } from './renderer'
 import { workload, type Workload } from './data'
-export type Feedback = { kind: string; ms: number; id: number | null }
+export type FrameTrace = { encodeSimulationMs: number; encodeDrawMs: number; completionWaitMs: number }
+export type Feedback = { kind: string; ms: number; id: number | null; readMs: number; highlightMs: number; opportunityMs: number }
 export const nextFrame = async (): Promise<number> => await new Promise(resolve => requestAnimationFrame(resolve))
 export async function createIntegrated (canvas: HTMLCanvasElement, kind: Workload = 'chain', count = 1024): Promise<{
   canvas: HTMLCanvasElement; backend: Awaited<ReturnType<typeof createCombinedWebGPU>>; renderer: ReturnType<typeof createRenderer>;
   readonly data: ReturnType<typeof workload>; readonly tick: number; readonly running: boolean; readonly destroyed: boolean;
   readonly error: string; readonly info: string; feedback: Feedback[]; intervals: number[];
-  frame(simulate?: boolean): Promise<void>; pause(): void; resume(): void; step(): Promise<void>;
+  frame(simulate?: boolean, trace?: FrameTrace): Promise<void>; pause(): void; resume(): void; step(): Promise<void>;
   pick(x: number, y: number, start?: number): Promise<number | null>;
   drag(id: number, x: number, y: number, release?: boolean): void;
   pan(dx: number, dy: number): void; zoom(factor: number, x: number, y: number): void;
@@ -62,12 +63,18 @@ export async function createIntegrated (canvas: HTMLCanvasElement, kind: Workloa
       get destroyed (): boolean { return destroyed },
       get error (): string { return error },
       info: `${describeDevice(device)} · ${JSON.stringify(device.info)} · ${navigator.userAgent}`,
-      async frame (simulate = running): Promise<void> {
-        healthy()
+      async frame (simulate = running, trace?: FrameTrace): Promise<void> {
+        healthy(); const start = trace ? performance.now() : 0
         if (simulate) { backend.stepTick!(alpha, tick); tick++; alpha = cool(alpha, 5000) }
+        const simulated = trace ? performance.now() : 0
         drawing.draw()
+        const drawn = trace ? performance.now() : 0
         // Bound the queue to one completed frame. This pacing cost is included in normal frame intervals.
         await waitForGpu(device)
+        if (trace) {
+          trace.encodeSimulationMs = simulated - start; trace.encodeDrawMs = drawn - simulated
+          trace.completionWaitMs = performance.now() - drawn
+        }
       },
       pause (): void { running = false; cancelAnimationFrame(raf); lastFrame = 0 },
       resume (): void { healthy(); if (running) return; running = true; lastFrame = 0; raf = requestAnimationFrame(loop) },
@@ -84,9 +91,13 @@ export async function createIntegrated (canvas: HTMLCanvasElement, kind: Workloa
         healthy(); const token = ++generation
         const id = await drawing.pick(x, y)
         if (destroyed || token !== generation) return null
-        drawing.selected = id ?? -1
-        await api.frame(false); await nextFrame()
-        if (!destroyed && token === generation) feedback.push({ kind: 'pick', ms: performance.now() - start, id })
+        const read = performance.now(); drawing.selected = id ?? -1
+        await api.frame(false); const highlighted = performance.now(); await nextFrame(); const end = performance.now()
+        if (!destroyed && token === generation) {
+          feedback.push({
+            kind: 'pick', ms: end - start, id, readMs: read - start, highlightMs: highlighted - read, opportunityMs: end - highlighted,
+          })
+        }
         return id
       },
       drag (id: number, x: number, y: number, release = false): void {

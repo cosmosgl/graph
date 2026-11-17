@@ -5,7 +5,7 @@ import { compareArray } from '../many-body/reference'
 import { writeArtifact } from '../../testing/artifacts'
 import { validateFrame } from './validation'
 import { interactionCheck } from './evaluate'
-import { createIntegrated, nextFrame } from './runtime'
+import { createIntegrated, nextFrame, type FrameTrace } from './runtime'
 
 it('renders 1,024 shared positions, picks/drags before scaling, preserves state and destroys safely', async () => {
   const canvas = document.createElement('canvas'); canvas.width = 960; canvas.height = 600
@@ -17,7 +17,10 @@ it('renders 1,024 shared positions, picks/drags before scaling, preserves state 
     const identity = r.backend.resourceIdentity!()
     const oracle = createOracle(r.data.graph, r.data.input, 'production', { ...forceSettings('reference', 1024), center: 0.1 })
     const expected = oracle.tick(r.data.input.points, 1, 0)
-    await r.step()
+    const trace: FrameTrace = { encodeSimulationMs: -1, encodeDrawMs: -1, completionWaitMs: -1 }
+    await r.frame(true, trace)
+    expect(Object.values(trace).every(v => Number.isFinite(v) && v >= 0)).toBe(true)
+    expect(r.tick).toBe(1)
     expect(compareArray((await r.backend.read()).positions, expected).valid).toBe(true)
     const checks = await interactionCheck(r); await writeArtifact('integrated-preflight', { info: r.info, checks })
     expect(checks.exactIds).toBe(true); expect(checks.dragPinned).toBe(true)

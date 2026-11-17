@@ -116,3 +116,41 @@ are not implicitly ignored. Replacement prepares a new force generation on the s
 Strict compatibility, practical first-slice usability and full migration readiness are
 three separate conclusions. The historical source-alpha, polygon and ribbon failures
 remain visible in their original experiments. A usable pilot cannot approve them.
+
+## Small-graph pacing controls
+
+**Profile small-graph pacing** is a diagnostic added after the first integrated run.
+It fixes the workload to 1,024 communities (1,919 links), the original seed and styling,
+and 960 × 600 logical pixels at recorded DPR. Three repetitions rotate this order:
+
+```flow
+RAF only · paused canvas; measure browser animation callbacks without new GPU work
+Redraw · same tick-60 positions; submit points and links, await completion
+Full tick · original corrected forces, drawing and completion fence
+```
+
+Each control replaces the graph, advances 60 ticks, fits once outside timing and waits
+60 redraw/callback warmup frames. It then records 300 intervals. Full ticks advance
+from tick 60 to 360; the two static controls retain tick 60. Quality calculations are
+omitted from this diagnostic. All rendering audits and position readbacks follow timing.
+Full-tick controls then perform the same 20 paused picks, 20 running picks, 20-move drag
+and camera/lifecycle interaction checks. Completed rows survive cancellation; any tab
+visibility loss invalidates the unfinished row, even if the tab becomes visible again.
+
+Every interval retains the original animation timestamp difference and a separate
+`performance.now()` callback-arrival difference. Optional frame tracing separates CPU
+simulation submission, drawing submission, completion wait and the next-frame wait.
+These are **wall-clock phases, not GPU timestamp durations**. Completion wait includes
+GPU queue execution and notification scheduling. Picking records ID draw/readback,
+highlight draw/completion and next-frame wait, whose durations sum to its total.
+Individual phase p95 values need not occur on the same frame and must not be added.
+
+The runtime still has one completed GPU frame in flight; profiling does not remove the
+fence, change force arithmetic or relax any acceptance gate. RAF-only and redraw rows
+are diagnostic controls, not simulation acceptance. Full-tick observations retain the
+95%-within-33-ms, 50-ms feedback and existing sampled-rendering rules.
+
+WebGPU completion promises report queue progress; they are not GPU-only stopwatches.
+The monotonic browser clock measures when JavaScript observes that progress.
+[WebGPU queue completion](https://www.w3.org/TR/webgpu/#dom-gpuqueue-onsubmittedworkdone),
+[High Resolution Time](https://www.w3.org/TR/hr-time/).
