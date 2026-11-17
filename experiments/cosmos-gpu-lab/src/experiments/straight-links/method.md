@@ -1,3 +1,88 @@
+## Faint-alpha picking replay · 17 November 2026
+
+**The visible-footprint candidate makes zero invisible frame or foreground
+picks in all 72 cases and preserves original color bytes exactly. Full-frame
+acceptance is 64/72; eight edge cases remain rejected.**
+
+Recorded **17 November 2026**, Apple M3 / ANGLE Metal and Apple WebGPU,
+inline Chromium 157, luma **10.0.0-alpha.15**. This is a focused local replay,
+not a repeat of the older feature matrix or a portability claim. Production
+shaders, candidate shaders, CPU references, colors and acceptance gates are
+unchanged; the replay only supplies new inputs and reads existing outputs.
+
+The population has **72 cases** per link type:
+
+- 48 native-ratio cases: eight alpha inputs × opacity 0/0.35/1 × isolated/overlap.
+- 12 ratio-2 cases around the first byte threshold at opacity 0.35 and 1.
+- Six reversed-order overlap cases around that threshold.
+- Six hard-edge controls using alpha `1/65536`, all three opacities and both scenes.
+
+The alpha inputs include zero, `1/65536`, the float32 value nearest
+`0.5 / 255 / float32(opacity)` and its immediate neighbors, a one-byte interior
+alpha, 0.35 and 1. Compensating the threshold input for opacity keeps the
+positive-opacity replays near the same attachment boundary. The zero-opacity
+control uses the opacity-one sample inputs. These are full-frame comparisons,
+not checks restricted to a favorable interior pixel.
+
+Source ID **1** is the faint link; ID **0** is a wider blue underlying link.
+Isolation sets only the underlying width to zero, preserving IDs. Every
+candidate ID selecting source 1 is checked against that link's own isolated
+stored alpha. At global opacity 1 the underlying link is opaque; at 0.35 both
+links receive the original global-opacity rule. Thus composed background alpha
+cannot conceal an invisible foreground pick. The independent CPU reference
+still supplies masks and colors; isolated readback supplies the separate
+actual-source-visibility check.
+
+At the opacity-one interior probe, both APIs behave identically:
+
+| Input alpha | Predicted byte | Isolated stored RGBA | Candidate overlap ID |
+| --- | --- | --- | --- |
+| 0.0019607841968536377 | 0 | `[0, 0, 0, 0]` | 0: underlying link |
+| 0.0019607844296842813 | 1 | `[0, 0, 0, 1]` | 1: faint link |
+| 0.001960784662514925 | 1 | `[0, 0, 0, 1]` | 1: faint link |
+
+The middle input is the nearest float32 to the mathematical half-byte
+threshold, not an exactly representable half-byte tie. The production padded
+ID control selects source 1 for all three samples. Its broader interaction
+policy remains recorded separately, not relabeled as candidate behavior.
+
+The straight scene runs from `(80, 160.5)` to `(432, 160.5)`, with a six-pixel
+foreground and fourteen-pixel underlying link. The interior probe above is
+`(150, 160)` at ratio 1. The production padded control passes 20/72 full-frame
+comparisons under the existing visible-image criteria; 44 cases select some
+foreground pixels with zero isolated alpha. This control's failures do not
+change the candidate's criteria.
+
+| Retained failure group | Cases | Observed disagreement |
+| --- | --- | --- |
+| Blended, one-byte interior alpha | 4 | 704 WebGL/WebGPU ID differences per case; 352 CPU mask failures per backend. Colors stay within 1/255. |
+| Hard-edge, tiny positive alpha | 4 | 704 ID differences in isolation or 1408 in overlap; CPU/color differences remain, up to 255/255. |
+
+For example, at opacity 1 and input alpha `1/255`, the isolated pixel `(80,157)`
+is selected as ID 1 by WebGL and CPU; WebGPU leaves it empty. Over the blue link,
+WebGPU falls through to ID 0. Neither backend selects a source whose own stored
+alpha is zero. The same edge splits occur at opacity 0.35 after compensating
+input alpha. They concern coverage and mask agreement; this replay does not
+establish their exact arithmetic cause or waive the failures. Hard mode retains
+production's opaque output for positive opacity, so its errors are not small
+faint-color differences.
+
+This closes the narrow invisible-source question on this device. Keep the eight
+new input rejections alongside earlier raster/coverage blockers and proceed to
+endpoint gradients; do not infer whole-feature acceptance from visibility alone.
+
+### Repeat locally
+
+```sh
+LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/straight-links/faint-alpha.test.ts
+```
+
+Open the printed session URL in the local browser. The test asserts unchanged
+color bytes and zero invisible picks; it records, rather than overrides, each
+full-frame acceptance verdict. Its ignored `captures/local/straight-link-faint-alpha.json`
+contains inputs, settings, devices, both policy comparisons, CPU results, source
+counts and first failing pixels. No raw capture is committed.
+
 ## Question
 
 Can luma WebGPU preserve production Cosmos straight-ribbon rendering and select the visible link at a pixel?

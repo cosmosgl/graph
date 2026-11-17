@@ -4,6 +4,85 @@ Can Cosmos preserve its actual curved-link geometry, color and picking when movi
 
 This experiment renders frozen links through unmodified production GLSL and a WGSL port, using public luma APIs only. It does not replace the production renderer or its padded host-picking policy. Straight-link boundary failures remain open in their own experiment.
 
+## Faint-alpha picking replay · 17 November 2026
+
+**The existing color-face candidate passes all 72 full-frame comparisons. It
+makes zero invisible frame or foreground picks and preserves original color
+bytes exactly.** This does not supersede the rejected rows in the earlier
+64-case geometry study below.
+
+Recorded **17 November 2026**, Apple M3 / ANGLE Metal and Apple WebGPU,
+inline Chromium 157, luma **10.0.0-alpha.15**. This is a focused local replay,
+not a repeat of the older feature matrix or a portability claim. Production
+shaders, candidate shaders, CPU references, colors and acceptance gates are
+unchanged; the replay only supplies new inputs and reads existing outputs.
+
+The population has **72 cases** per link type:
+
+- 48 native-ratio cases: eight alpha inputs × opacity 0/0.35/1 × isolated/overlap.
+- 12 ratio-2 cases around the first byte threshold at opacity 0.35 and 1.
+- Six reversed-order overlap cases around that threshold.
+- Six hard-edge controls using alpha `1/65536`, all three opacities and both scenes.
+
+The alpha inputs include zero, `1/65536`, the float32 value nearest
+`0.5 / 255 / float32(opacity)` and its immediate neighbors, a one-byte interior
+alpha, 0.35 and 1. Compensating the threshold input for opacity keeps the
+positive-opacity replays near the same attachment boundary. The zero-opacity
+control uses the opacity-one sample inputs. These are full-frame comparisons,
+not checks restricted to a favorable interior pixel.
+
+Source ID **1** is the faint link; ID **0** is a wider blue underlying link.
+Isolation sets only the underlying width to zero, preserving IDs. Every
+candidate ID selecting source 1 is checked against that link's own isolated
+stored alpha. At global opacity 1 the underlying link is opaque; at 0.35 both
+links receive the original global-opacity rule. Thus composed background alpha
+cannot conceal an invisible foreground pick. The independent CPU reference
+still supplies masks and colors; isolated readback supplies the separate
+actual-source-visibility check.
+
+At the opacity-one interior probe, both APIs behave identically:
+
+| Input alpha | Predicted byte | Isolated stored RGBA | Candidate overlap ID |
+| --- | --- | --- | --- |
+| 0.0019607841968536377 | 0 | `[0, 0, 0, 0]` | 0: underlying link |
+| 0.0019607844296842813 | 1 | `[0, 0, 0, 1]` | 1: faint link |
+| 0.001960784662514925 | 1 | `[0, 0, 0, 1]` | 1: faint link |
+
+The middle input is the nearest float32 to the mathematical half-byte
+threshold, not an exactly representable half-byte tie. The production padded
+ID control selects source 1 for all three samples. Its broader interaction
+policy remains recorded separately, not relabeled as candidate behavior.
+
+The curve runs from `(80,200)` to `(432,200)`, with a six-pixel foreground and
+fourteen-pixel underlying link. It uses the existing defaults: 19 segments,
+weight 0.8 and control distance 0.5. The interior probe above is `(256,122)` at
+ratio 1. The production padded control passes 20/72 full-frame comparisons
+under the existing visible-image criteria; 44 cases select some foreground
+pixels with zero isolated alpha.
+
+For the color-face candidate, both GPU ID images match the independent CPU
+masks in all 72 cases. CPU color differences are at most 1/255, below the
+unchanged 2/255 gate. No new renderer or stored-alpha resolver was needed for
+these inputs. The previous two-sided candidate is not retested here; its folded
+ribbon failures remain in the earlier study.
+
+This closes the bounded alpha replay on this device. Other curve geometries,
+folds and boundary failures retain their previous verdicts. Next compare
+endpoint gradients while preserving those controls.
+
+### Repeat locally
+
+```sh
+LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/curved-links/faint-alpha.test.ts
+```
+
+Open the printed session URL in the local browser. The test asserts unchanged
+color bytes and zero invisible picks and records every unchanged full-frame
+CPU/GPU gate. Its ignored `captures/local/curved-link-faint-alpha.json` contains
+inputs, settings, devices, both policy comparisons, CPU results and source checks.
+No raw capture is committed. Passing this focused test is not a replacement for
+the broader geometry study's acceptance result.
+
 ## Recorded result · 15 November 2026
 
 **The color-face candidate passes 28/64 configurations on Apple M3 in Codex inline Chromium 157.** This is 20/56 nonzero-opacity cases and all 8 opacity-zero cases. Blended and hard modes each pass 14/32. All 64 preserve original color bytes exactly within each backend and have zero invisible frame/source picks or invalid source IDs. The 36 rejected configurations remain rejected under the original criteria.
