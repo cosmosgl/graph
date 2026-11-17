@@ -1,5 +1,6 @@
 import { Buffer, type TextureFormatColor } from '@luma.gl/core'
 import { RenderKernel } from '@luma.gl/graph'
+import { patternProbeGPU } from '../straight-links/pattern-probe'
 import { patternCode, hasPatterns, patternShader } from '../straight-links/patterns'
 import { ALPHA_BLEND, bindingLayout, createDevice, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
@@ -51,13 +52,13 @@ export async function createCurvesWebGPU (canvas: HTMLCanvasElement): Promise<Ba
       const key = `${format}:${blend}:${display}:${picking}:${front}:${probe}:${gradient}:${patterned}`
       const cached = kernels.get(key); if (cached) return cached
       const base = probe === 3 ? captureSource() : probe === 1 ? varyingSource : source
-      const decorated = patterned ? patternShader(base, true) : base
+      const decorated = probe >= 4 ? patternProbeGPU(base, true, probe) : patterned ? patternShader(base, true) : base
       const code = gradient ? endpointColorShader(decorated, 4) : decorated
       const result = scope.own(new RenderKernel(device, {
         vertexSource: `${code}\n${SOURCE_ALPHA_WGSL}`,
         fragmentSource: `${code}\n${SOURCE_ALPHA_WGSL}`,
         vertexEntryPoint: probe === 3 ? 'captureVertex' : 'vertexMain',
-        fragmentEntryPoint: probe === 3 ? 'captureFragment' : probe === 1 ? 'varyingProbe' : 'fragmentMain',
+        fragmentEntryPoint: probe >= 4 ? 'patternProbe' : probe === 3 ? 'captureFragment' : probe === 1 ? 'varyingProbe' : 'fragmentMain',
         topology: probe === 3 ? 'point-list' : 'triangle-strip',
         shaderLayout: gradient ? gradientLayout : shaderLayout,
         colorAttachmentFormats: [format],
@@ -135,6 +136,14 @@ export async function createCurvesWebGPU (canvas: HTMLCanvasElement): Promise<Ba
             result.probe = {
               varying: await floatPixels(device, varying.texture, varying.framebuffer),
               vertices: await floatPixels(device, vertices.texture, vertices.framebuffer),
+            }
+            if (patterned) {
+              result.probe.pattern = []
+              for (const probe of [4, 5, 6, 7, 8]) {
+                const output = frame.own(target(device, width, height, 'rgba32float'))
+                draw(0, output.framebuffer, probe); device.submit()
+                result.probe.pattern.push(await floatPixels(device, output.texture, output.framebuffer))
+              }
             }
           }
           if (failure || device.isLost) throw new Error(failure ?? 'WebGPU device lost')
