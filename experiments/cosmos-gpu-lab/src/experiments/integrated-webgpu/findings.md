@@ -215,3 +215,45 @@ prior adverse runs and the rejected 8,192 envelope. Strict compatibility and ful
 migration readiness remain unestablished; this does not approve every first-slice
 workload or settled layout quality. Next measure actual GPU force/render duration before
 choosing a pacing or solver optimization. Raw captures remain local via Export JSON.
+
+## Actual GPU duration in the small graph
+
+**17 November 2026, 18:47 UTC**, visible inline Chromium 157 on the Apple M3; actual adapter
+`apple`, `metal-3`, `fallback: false`, timestamp queries supported. The canvas rendered
+successfully before the four declared **off/on/on/off** windows. Same 1,024-community
+fixture and 1,920 × 1,200 attachment; no build or test process ran during measurement.
+
+**Simulation accounts for most measured GPU pass time.** This is useful evidence against
+treating the entire earlier completion wait as browser notification overhead. The small
+workload remains usable in this session; no solver or scheduling optimization was made.
+
+| Window | Timestamps | Simulation GPU p95, ms | Drawing GPU p95, ms | Per-frame GPU sum p95, ms | Completion wait p95, ms | Frame p95, ms |
+| ---: | --- | ---: | ---: | ---: | ---: | ---: |
+| 1 | Off | Not measured | Not measured | Not measured | 10.8 | 17.7 |
+| 2 | On | 8.520 | 0.393 | 8.847 | 11.7 | 17.7 |
+| 3 | On | 11.272 | 1.638 | 11.600 | 14.9 | 17.7 |
+| 4 | Off | Not measured | Not measured | Not measured | 10.7 | 17.7 |
+
+Simulation medians were 7.274 and 8.651 ms; drawing's median was 0.328 ms in both
+instrumented windows. Durations were visibly quantized in the capture. Independent
+p95 values do not add: the per-frame sum is calculated before taking its percentile.
+
+All **1,200 frame intervals** met 33 ms (maximum 17.8 ms). Paused/running pick maxima
+were respectively **17.7/33.0**, **17.7/32.3**, **17.7/17.8** and **17.6/18.4 ms**;
+drag maxima were 17.7–17.8 ms. Every functional check passed. All four final position and
+force arrays matched the first window bit-for-bit before interaction; every row had zero
+sampled interior ID/color failures and invisible picks across 2,432 sampled pixels.
+
+Timestamped completion waits were longer and varied between windows. This experiment
+found no frame/picking target regression, but does **not** establish zero instrumentation
+overhead or attribute the whole difference to timestamps. GPU clock/load variation,
+query resolution and notification delivery remain possible contributors. The earlier
+long stalls still have no demonstrated cause or fix; all adverse evidence stays above.
+
+**Decision:** stop small-graph timing investigation here. The bounded 1,024-community
+case is good enough to continue the first migration attempt. Keep its corrected solver,
+colors and pacing. Next apply a bounded GPU-duration comparison to the previously failing
+8,192-point envelope before deciding whether it needs force or scheduling optimization.
+Do not approve larger graphs, settled layout quality, strict compatibility or full
+migration readiness from this small case. All four native runtime regressions pass,
+including exact query-on/off state and color equivalence.

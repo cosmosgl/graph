@@ -1,8 +1,9 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { mountRunLayout, disposeRunLayout } from '../../runtime/run-layout'
+import { gpuTimingProtocol, profileGpuTiming, gpuTimingVerdict, type GpuTimingRow } from './gpu-timing'
 import { createIntegrated } from './runtime'
 import { workload, matrix, unsupported, type Workload } from './data'
-import { evaluate, interactionCheck, protocol } from './evaluate'
+import { evaluate, interactionCheck, protocol, percentiles } from './evaluate'
 import { pacingProtocol, profilePacing, pacingVerdict, type PacingRow } from './pacing'
 import { fit, validateFrame } from './validation'
 export async function createView (host: HTMLElement): Promise<ExperimentInstance> {
@@ -22,10 +23,12 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     <section data-run-part="diagnostics"><h3>Declared local evaluation</h3><p>${protocol}</p>
     <div class="controls"><button data-action="check">Check interaction + pixels</button><button data-action="measure">Measure this graph</button>
     <button data-action="matrix">Evaluate declared matrix</button><button data-action="cancel">Cancel evaluation</button>
-    <button data-action="export">Export JSON</button><button data-action="pacing">Profile small-graph pacing</button></div>
+    <button data-action="export">Export JSON</button><button data-action="pacing">Profile small-graph pacing</button>
+    <button data-action="gpu-timing">Compare GPU timestamps</button></div>
     <p>Matrix order: 1,024 chain, communities, star; then 8,192 chain, communities, star; then Karate Club.
     The matrix first checks 1,024-point picking and dragging.
-    An incorrect initial interaction blocks scaling; timing misses remain failures while the diagnostic matrix continues.</p><p>${pacingProtocol}</p></section>
+    An incorrect initial interaction blocks scaling; timing misses remain failures while the diagnostic matrix continues.</p>
+    <p>${pacingProtocol}</p><p>${gpuTimingProtocol}</p></section>
     <section data-run-part="explanation"><h3>Supported first slice</h3><p>Corrected resident repulsion, weighted directional springs,
     gravity, high/low center reduction and cooling. Circles and solid straight links read the same positions. Picking reads one RGBA8 ID pixel.</p>
     <h3>Unsupported options</h3><p>${unsupported}</p><p>Strict compatibility: historical failures remain.
@@ -93,7 +96,21 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
         <p>Controls describe scheduling, not migration acceptance. Full-tick targets remain unchanged.
         Completion wait includes GPU work and delivery of its completion notification. Export includes per-pick phases and raw samples.</p>`)
     }
-    if (!rows.length && !pacing.length) {
+    const gpuRows = records.filter((r): r is GpuTimingRow => typeof r === 'object' && r !== null && 'gpuTiming' in r)
+    if (gpuRows.length) {
+      const duration = (values: number[] | null): string => values ? `${percentiles(values).p95.toFixed(3)} ms` : 'Not measured'
+      report.insertAdjacentHTML('beforeend', `<table><caption>Actual GPU pass durations · p95 milliseconds</caption>
+        <thead><tr><th>Window / timestamps</th><th>Simulation GPU</th><th>Drawing GPU</th><th>GPU sum</th>
+        <th>Completion wait</th><th>Frame interval</th><th>Within 33 ms</th><th>State bits</th><th>Local gates</th></tr></thead>
+        <tbody>${gpuRows.map(r => `<tr><td>${r.window} · ${r.instrumented ? r.gpu.status : 'off'}</td>
+        <td>${duration(r.gpu.simulationMs)}</td><td>${duration(r.gpu.drawingMs)}</td><td>${duration(r.gpu.totalMs)}</td>
+        <td>${ms(r.completionWait.p95)}</td><td>${ms(r.frames.p95)}</td><td>${(r.within33 * 100).toFixed(1)}%</td>
+        <td>${r.window === 1 ? 'Baseline' : r.sameState.positions && r.sameState.forces ? 'Match' : 'Mismatch'}</td>
+        <td>${gpuTimingVerdict(r)}</td></tr>`).join('')}</tbody></table>
+        <p>GPU sum adds compute and render duration within each frame. It excludes gaps between passes, CPU work and presentation.
+        Independent p95 columns cannot be subtracted to infer notification latency. Export retains per-frame values and picking checks.</p>`)
+    }
+    if (!rows.length && !pacing.length && !gpuRows.length) {
       const paragraph = document.createElement('p'); paragraph.textContent = JSON.stringify(value, null, 2); report.append(paragraph)
     }
   }
@@ -110,6 +127,13 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
       if (name === 'check') {
         runtime.pause(); const interactions = await interactionCheck(runtime); const validation = await validateFrame(runtime)
         show({ interactions, validation }); checks = 'Interaction and sampled pixels checked; inspect counts below'
+      }
+      if (name === 'gpu-timing') {
+        kind.value = 'communities'; count.value = '1024'; runtime.pause(); canvas.scrollIntoView({ block: 'center' })
+        await profileGpuTiming(runtime, () => cancelled || destroyed, text => { status.textContent = text }, row => {
+          show(row); checks = `GPU timing ${row.window}: ${gpuTimingVerdict(row)}; inspect retained rows`
+          if (gpuTimingVerdict(row) === 'Not accepted') failure = 'A GPU timing window missed the existing local gates or state check'
+        })
       }
       if (name === 'pacing') {
         kind.value = 'communities'; count.value = '1024'
@@ -142,7 +166,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
         }
       }
       if (name === 'export') {
-        const content = JSON.stringify({ protocol, pacingProtocol, recordedAt: new Date().toISOString(), records }, null, 2)
+        const content = JSON.stringify({ protocol, pacingProtocol, gpuTimingProtocol, recordedAt: new Date().toISOString(), records }, null, 2)
         const blob = new Blob([content], { type: 'application/json' })
         const url = URL.createObjectURL(blob); const link = document.createElement('a')
         link.href = url; link.download = 'integrated-webgpu-local.json'; link.click(); URL.revokeObjectURL(url)

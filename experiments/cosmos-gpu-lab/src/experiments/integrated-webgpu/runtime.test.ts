@@ -103,3 +103,31 @@ it('keeps a thin solid link visible rather than excluding its entire footprint a
     }
   } finally { r.destroy() }
 })
+
+it('timestamps the existing passes without changing position, force or color bits', async (context) => {
+  const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 96
+  const r = await createIntegrated(canvas, 'communities', 1024)
+  try {
+    const device = r.backend.positionSource!().device
+    if (!device.features.has('timestamp-query')) { context.skip(); return }
+    for (let i = 0; i < 3; i++) await r.frame(true)
+    const control = await r.backend.read(); const color = (await r.renderer.snapshot()).color
+    await r.replace('communities', 1024)
+    const query = device.createQuerySet({ type: 'timestamp', count: 12 })
+    try {
+      for (let i = 0; i < 3; i++) await r.frame(true, undefined, { query, offset: i * 4 })
+      const measured = await r.backend.read()
+      for (const key of ['positions', 'forces'] as const) {
+        expect(new Uint32Array(measured[key].buffer)).toEqual(new Uint32Array(control[key].buffer))
+      }
+      expect((await r.renderer.snapshot()).color).toEqual(color)
+      const times = await query.readResults({ firstQuery: 0, queryCount: 12 })
+      expect(times.length).toBe(12)
+      let total = 0n
+      for (let i = 0; i < times.length; i += 2) {
+        expect(times[i + 1] >= times[i]).toBe(true); total += times[i + 1] - times[i]
+      }
+      expect(total > 0n).toBe(true)
+    } finally { query.destroy() }
+  } finally { r.destroy() }
+}, 30000)

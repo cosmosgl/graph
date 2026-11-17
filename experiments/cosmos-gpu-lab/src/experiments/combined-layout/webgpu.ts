@@ -418,9 +418,9 @@ export async function createCombinedWebGPU (
       }
       : undefined,
     stepTick: overrides.gpuBounds
-      ? (alpha, tick): void => {
+      ? (alpha, tick, timestamps): void => {
         base.setGpuFrame!(tick)
-        const pass = device.beginComputePass()
+        const pass = device.beginComputePass(timestamps)
         try {
           for (const next of stagesFor(settings.center, settings.collision)) { stage = next; p.alpha = alpha; base.step({ submit: false, pass }) }
         } finally { pass.end() }
