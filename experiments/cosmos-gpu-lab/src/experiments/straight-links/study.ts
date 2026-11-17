@@ -1,4 +1,5 @@
 import { pick } from '../../gpu/rgba-readback'
+import { gradientScene, type GradientPreset } from './gradient-fixtures'
 import { DEFAULTS, FIXTURES, PROFILES, fixture, resolveLink, type Scene, type Settings, type Variant, type Fixture } from './data'
 import type { Backend, Snapshot } from './backend'
 import { compare, compareColors, type Comparison, type ColorResult } from './reference'
@@ -28,13 +29,14 @@ export type Row = { fixture: Fixture; profile: string; settings: Settings; produ
   compatibility: Comparison; preservation: { webgl: ColorResult; webgpu: ColorResult };
   sourceVisibility: { production: Contributions; candidate: Contributions }; passed: boolean; }
 export async function runSweep (backends: { webgl: Backend; webgpu: Backend }, onRow: (row: Row) => void,
-  cancelled: () => boolean): Promise<Row[]> {
+  cancelled: () => boolean, gradient: GradientPreset = 'solid'): Promise<Row[]> {
   const rows: Row[] = []
   for (const name of FIXTURES) {
     for (const profile of PROFILES) {
       for (const blend of [true, false]) {
         if (cancelled()) return rows
-        const scene = fixture(name); const settings = { ...DEFAULTS, ...profile.settings, blend }
+        const scene = gradientScene(fixture(name), gradient)
+        const settings = { ...DEFAULTS, ...profile.settings, blend, endpointColors: gradient !== 'solid' }
         const render = async (variant: Variant): Promise<Pair> => ({
           webgl: await backends.webgl.render(scene, settings, variant, false),
           webgpu: await backends.webgpu.render(scene, settings, variant, false),
@@ -48,7 +50,7 @@ export async function runSweep (backends: { webgl: Backend; webgpu: Backend }, o
         }
         const row: Row = {
           fixture: name,
-          profile: profile.name,
+          profile: gradient === 'solid' ? profile.name : `${profile.name} · ${gradient}`,
           settings,
           production,
           candidate,

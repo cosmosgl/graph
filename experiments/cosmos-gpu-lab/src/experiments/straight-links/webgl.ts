@@ -179,6 +179,7 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
           points.forEach((p, id) => {
             positions.set([p.absent ? NaN : p.x - WIDTH / 2, p.absent ? NaN : HEIGHT / 2 - p.y, 0, 0], id * 4)
             exits[id * 4 + 1] = Number(!!p.absent)
+            pointColors.set(p.color ?? [NaN, NaN, NaN, NaN], id * 4)
           })
           const texture = (data: Float32Array, dimension = size): Texture => {
             const result = frame.own(device.createTexture({
@@ -247,10 +248,10 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
                 animateColors: 0,
                 animateWidths: 0,
                 animatePositions: 0,
-                pointDefaultColor: [1, 1, 1, 1],
+                pointDefaultColor: settings.pointDefaultColor ?? [1, 1, 1, 1],
                 linkDefaultColor: settings.defaultColor,
                 linkDefaultWidth: settings.defaultWidth,
-                linkColorInterpolateFromEndpoints: 0,
+                linkColorInterpolateFromEndpoints: Number(!!settings.endpointColors),
                 linkBlending: Number(settings.blend),
                 pixelRatio: settings.ratio,
               },
@@ -258,7 +259,7 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
                 renderMode: mode,
                 linkDashLength: 5,
                 linkDashGap: 5,
-                linkColorInterpolateFromEndpoints: 0,
+                linkColorInterpolateFromEndpoints: Number(!!settings.endpointColors),
                 hoveredLinkIndex: -1,
                 hoveredLinkColor: [-1, -1, -1, -1],
                 linkBlending: Number(settings.blend),

@@ -1,3 +1,73 @@
+## Endpoint gradients · 17 November 2026
+
+**The visible-footprint candidate passes 30/40 full-frame cases with endpoint
+RGB enabled.** All 40 cases preserve each backend's production gradient
+color bytes exactly and have zero invisible frame/source picks. The remaining
+10 cases stay rejected under the original exact-ID, independent CPU-mask
+and **2/255** color gates. A completed test run is not full rendering acceptance.
+
+Recorded on **Apple M3**, ANGLE Metal / Apple WebGPU, inline Chromium 157,
+luma **10.0.0-alpha.15**. This is a bounded local comparison, not a portability
+or performance claim. The existing solid-color matrix is replayed separately
+on the same setup; every row retains the same pass/fail verdict and mask/ID
+error counts with gradients enabled.
+
+| Scene | Gradient candidate passed / checked |
+|---|---|
+| Ordinary ribbons | 8 / 10 |
+| Overlap | 8 / 10 |
+| Width/default/absence limits | 8 / 10 |
+| Fractional boundaries | 6 / 10 |
+
+### What production interpolates
+
+With `linkColorInterpolateFromEndpoints` enabled, Cosmos reads the source and
+target **point colors** and mixes their RGB using the ribbon's interpolated
+parameter `t`, clamped to 0–1:
+
+```text
+RGB = sourceRGB × (1 − t) + targetRGB × t
+alpha = linkAlpha × globalOpacity × thinWidthFactor × coverage
+```
+
+Endpoint alpha does not fade the link. NaN endpoint channels use
+`pointDefaultColor`; absent endpoints still suppress their links. Hard-edge
+mode keeps the original opaque-output rule. No color-space conversion,
+source-alpha quantization or new picking threshold is introduced.
+
+The CPU computes the longitudinal projection onto the straight segment.
+
+The WebGL adapter supplies point colors and enables the existing production
+uniforms; the imported GLSL remains unchanged. WebGPU uses a separate gradient
+color pipeline through public luma APIs. Solid-color and ID shader sources
+remain unchanged. The CPU reference independently evaluates the gradient and
+retains its original coverage and byte-composition rules.
+
+Focused checks cover endpoint alpha 0/0.35/1, ignored per-link RGB in gradient
+mode, per-channel and wholly missing point colors, a non-white default with
+alpha zero, global opacity zero in both blend modes, exact gradient/solid ID
+identity and restoring the solid control. Default-channel and endpoint-alpha
+cases also compare CPU and GPU color at the existing budget. The matrix adds
+overlap, reversed order, zoom, DPR 2, fractional widths and hard/blended modes.
+
+### Try and reproduce gradients
+
+Choose **Color source → Endpoint RGB**, **Endpoint alpha ignored** or
+**Default endpoint channels** in Configuration. The live report and full sweep
+use that selection. **Link color · control** restores the original solid
+study. Boundary-replay diagnostics keep their original solid controls.
+Cancellation preserves the selected mode and displayed scene. Export JSON
+retains the live inputs, sweep color preset and reproduction fixtures locally.
+
+```sh
+LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/straight-links/gradients.test.ts
+```
+
+Open the printed session URL in the existing native browser. Local captures
+contain both `solidRows` and gradient `rows`, including rejected results;
+measurements are not committed. Next compare dash/dot patterns, retaining
+these boundary and original padded-picking controls.
+
 ## Faint-alpha picking replay · 17 November 2026
 
 **The visible-footprint candidate makes zero invisible frame or foreground
@@ -276,4 +346,4 @@ The original clipped hard oblique isolates link 5 at zoom two with constant scre
 7. Export JSON locally for raw inputs, NaN sentinels, settings, browser/device, timestamps, first failures, all controls and both diagnostic replays. Measurement JSON is not committed. NaN channel sentinels export as the string `NaN`.
 8. Run `LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/straight-links` and open the printed session in Codex's inline browser.
 
-Curved geometry, patterns, arrows, endpoint gradients, visibility-distance fading, highlight states, interrupted updates/transitions, pointer-window scheduling, full Graph/deck embedding, native portability and rendering cost remain separate gates. Large simulation counts and minimal spring-demo lines do not validate these rendering features.
+Curved geometry, patterns, arrows, gradient transitions, visibility-distance fading, highlight states, interrupted updates/transitions, pointer-window scheduling, full Graph/deck embedding, native portability and rendering cost remain separate gates. Large simulation counts and minimal spring-demo lines do not validate these rendering features.

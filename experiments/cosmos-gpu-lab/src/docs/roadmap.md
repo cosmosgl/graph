@@ -65,7 +65,7 @@ This is the current task order. A closed investigation can retain failing cases;
 journeyPlan
 ```
 
-### Immediate checkpoint: endpoint gradients; retain picking and raster limits
+### Immediate checkpoint: link patterns; retain picking and raster limits
 
 The [stored-alpha candidate](#/point-styling?section=doc-method-stored-alpha-picking-prototype-16-november-2026)
 checks actual per-point attachment alpha before composing IDs. Its five bounded
@@ -108,7 +108,15 @@ and four hard-edge failures. The older geometry matrices keep their verdicts.
 See [straight-link evidence](#/straight-links?section=doc-method-faint-alpha-picking-replay-17-november-2026)
 and [curved-link evidence](#/curved-links?section=doc-method-faint-alpha-picking-replay-17-november-2026).
 
-Next compare **endpoint gradients**, then patterns, arrows and link states on the
+The **17 November M3 endpoint-gradient comparison** preserves each backend's
+production gradient colors and source visibility in all 40 straight and 64
+curved rows. Full-frame acceptance remains **30/40 straight** and **28/64 curved**;
+matched solid controls retain the same row verdicts and mask/ID error counts.
+Endpoint alpha, missing/default channels and solid-mode restoration pass focused
+checks. See [straight gradients](#/straight-links?section=doc-method-endpoint-gradients-17-november-2026)
+and [curved gradients](#/curved-links?section=doc-method-endpoint-gradients-17-november-2026).
+
+Next compare **dash/dot patterns**, then arrows and link states on the
 current machine. Keep polygon and native link raster/color blockers visible.
 Continue afterward with
 missing forces, small Graph integration and complete-workload acceptance rather

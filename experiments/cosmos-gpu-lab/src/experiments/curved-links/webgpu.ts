@@ -4,6 +4,7 @@ import { ALPHA_BLEND, bindingLayout, createDevice, upload } from '../../gpu/luma
 import { resourceScope } from '../../gpu/resource-scope'
 import { pixels, target, floatPixels } from '../../gpu/rgba-readback'
 import { SOURCE_ALPHA_WGSL } from '../../gpu/source-alpha'
+import { endpointColorShader, resolvedEndpointColor } from '../straight-links/endpoint-colors'
 import source from './curves.wgsl?raw'
 import { HEIGHT, WIDTH, resolveLink } from './data'
 import type { Backend, Snapshot } from './backend'
@@ -37,16 +38,25 @@ export async function createCurvesWebGPU (canvas: HTMLCanvasElement): Promise<Ba
       bindings: bindingLayout([['positions', 'read-only-storage'], ['links', 'read-only-storage'], ['params', 'uniform'], ['nodes', 'read-only-storage']]),
     }
     const vertexArray = scope.own(device.createVertexArray({ shaderLayout, bufferLayout: [] }))
+    const gradientLayout = {
+      ...shaderLayout,
+      bindings: [...shaderLayout.bindings,
+        ...bindingLayout([['pointColors', 'read-only-storage']]).map(b => ({ ...b, location: 4 }))],
+    }
+    const gradientArray = scope.own(device.createVertexArray({ shaderLayout: gradientLayout, bufferLayout: [] }))
     const kernels = new Map<string, RenderKernel>()
-    const kernel = (format: TextureFormatColor, blend: boolean, display: boolean, picking: boolean, front: boolean, probe = 0): RenderKernel => {
-      const key = `${format}:${blend}:${display}:${picking}:${front}:${probe}`; const cached = kernels.get(key); if (cached) return cached
+    const kernel = (format: TextureFormatColor, blend: boolean, display: boolean, picking: boolean,
+      front: boolean, probe = 0, gradient = false): RenderKernel => {
+      const key = `${format}:${blend}:${display}:${picking}:${front}:${probe}:${gradient}`; const cached = kernels.get(key); if (cached) return cached
+      const base = probe === 3 ? captureSource() : probe === 1 ? varyingSource : source
+      const code = gradient ? endpointColorShader(base, 4) : base
       const result = scope.own(new RenderKernel(device, {
-        vertexSource: `${probe === 3 ? captureSource() : probe === 1 ? varyingSource : source}\n${SOURCE_ALPHA_WGSL}`,
-        fragmentSource: `${probe === 3 ? captureSource() : probe === 1 ? varyingSource : source}\n${SOURCE_ALPHA_WGSL}`,
+        vertexSource: `${code}\n${SOURCE_ALPHA_WGSL}`,
+        fragmentSource: `${code}\n${SOURCE_ALPHA_WGSL}`,
         vertexEntryPoint: probe === 3 ? 'captureVertex' : 'vertexMain',
         fragmentEntryPoint: probe === 3 ? 'captureFragment' : probe === 1 ? 'varyingProbe' : 'fragmentMain',
         topology: probe === 3 ? 'point-list' : 'triangle-strip',
-        shaderLayout,
+        shaderLayout: gradient ? gradientLayout : shaderLayout,
         colorAttachmentFormats: [format],
         depthStencilAttachmentFormat: display
           ? device.canvasContext!.getCurrentFramebuffer().depthStencilAttachment?.texture.format as 'depth24plus'
@@ -72,6 +82,11 @@ export async function createCurvesWebGPU (canvas: HTMLCanvasElement): Promise<Ba
           const positions = new Float32Array(Math.max(4, scene.points.length * 4))
           scene.points.forEach((p, i) => positions.set([p.x - WIDTH / 2, HEIGHT / 2 - p.y, Number(!!p.absent), 0], i * 4))
           const positionBuffer = frame.own(upload(device, positions))
+          const colorBuffer = settings.endpointColors
+            ? frame.own(upload(device, new Float32Array(scene.points.length
+              ? scene.points.flatMap(p => resolvedEndpointColor(p, settings))
+              : [1, 1, 1, 1])))
+            : undefined
           const order = scene.links.map((_, i) => i); if (settings.reverse) order.reverse()
           const storage = new ArrayBuffer(Math.max(48, scene.links.length * 48))
           const indices = new Uint32Array(storage); const values = new Float32Array(storage)
@@ -81,6 +96,7 @@ export async function createCurvesWebGPU (canvas: HTMLCanvasElement): Promise<Ba
           })
           const links = frame.own(upload(device, new Uint8Array(storage)))
           const draw = (mode: number, framebuffer?: ReturnType<typeof target>['framebuffer'], probe = 0): void => {
+            const gradient = !!settings.endpointColors && mode === 0 && probe === 0
             const params = frame.own(upload(device, new Float32Array([WIDTH, HEIGHT, settings.zoom, settings.ratio,
               settings.widthScale, settings.maxWidth, settings.opacity, settings.indexOffset,
               Number(settings.scaleOnZoom), Number(settings.blend), mode, Number(variant !== 'production'),
@@ -90,11 +106,11 @@ export async function createCurvesWebGPU (canvas: HTMLCanvasElement): Promise<Ba
               : device.canvasContext!.getCurrentFramebuffer().colorAttachments[0].texture.format as TextureFormatColor
             const pass = device.beginRenderPass({ framebuffer, clearColor: framebuffer ? [0, 0, 0, 0] : [0.14, 0.16, 0.185, 1], clearDepth: false })
             try {
-              kernel(format, mode === 0 && settings.blend && probe === 0, !framebuffer, mode > 0, variant === 'front', probe).draw(pass, {
-                vertexArray,
+              kernel(format, mode === 0 && settings.blend && probe === 0, !framebuffer, mode > 0, variant === 'front', probe, gradient).draw(pass, {
+                vertexArray: gradient ? gradientArray : vertexArray,
                 vertexCount: geometry.length / 2,
                 instanceCount: scene.links.length,
-                bindings: { positions: positionBuffer, links, params, nodes },
+                bindings: { positions: positionBuffer, links, params, nodes, ...(gradient ? { pointColors: colorBuffer! } : {}) },
               })
             } finally { pass.end() }
           }
