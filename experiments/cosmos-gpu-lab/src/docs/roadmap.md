@@ -27,28 +27,35 @@ migrationStatus
 
 The [feature inventory](#/feature-inventory) is the detailed force/rendering checklist. Status means demonstrated scope, rather than a percentage of the migration completed.
 
-### Decision: build the first integrated migration
+### First integrated migration: bounded pilot evaluated
 
-The next milestone is a **useful experimental WebGPU backend**, assessed under
-[the first-migration rules](#/validation-workflow?section=first-migration-rules).
-Those rules allow small boundary/coordinate differences while retaining correct
-behavior, meaningful layout quality and responsive interaction. The integrated
-candidate is **not assessed yet**. Historical exact comparisons and rejected
-candidates keep their original verdicts.
+The [integrated WebGPU graph](#/integrated-webgpu) now combines corrected core forces,
+shared resident positions, circles, solid straight links, point picking/dragging,
+pan/zoom, graph replacement, pause/resume, resize and destruction. Production remains
+unchanged. It follows the [first-migration rules](#/validation-workflow?section=first-migration-rules).
 
-Use circle points, solid straight links, the tested core force sequence, resident
-positions, point picking/dragging, pan/zoom and basic updates. Begin near 1,000
-points, then 8,192 on chain/communities/star and a representative real graph.
-Measure complete frame intervals and picking feedback on the M3. The initial
-targets are 95% of steady-state frame intervals within 33 ms and picking feedback
-within 50 ms, not a claim that current components already meet them.
+The declared M3 inline-browser run evaluated chain, communities and star at **1,024 and
+8,192 points**, plus the preselected **34-point, 78-link Karate Club** social graph.
+An earlier quiet run met small-graph frame/picking gates, but the final run did not
+reproduce that result: only **81.7–84%** of 1,024-point frame intervals met 33 ms;
+8,192-point rows reached **17.7–58.3%**. Even Karate Club missed the 95% target.
+Running picks reached **199.5 ms**. All sampled pixel audits and functional checks passed.
+[Both runs, quality measurements and retained failures](#/integrated-webgpu?section=doc-findings).
 
-Further boundary debugging, arrows and advanced styles no longer precede this
-integration attempt. Use the resident-layout work as a foundation; it does not
-yet implement the complete supported slice or production Graph lifecycle.
-Missing force families, optional collision scaling and host/deck integration
-remain later feature-completion work. A useful first slice is not full migration
-approval.
+Keep the conclusions separate: **strict compatibility is not established**;
+**first-slice usability is not accepted yet** because timing is not repeatable;
+**full migration is not ready**. The early evolving run does not prove convergence or
+real-graph readability. Fixed framing leaves some star and real-graph points offscreen
+until Fit; faint nonzero opacity below 0.02 and advanced features remain unsupported.
+Historical exact comparisons keep their original verdicts.
+
+**Next:** establish repeatable small-graph timing, isolate complete-frame pacing and
+running-pick queueing, then profile 8,192 and assess settled real-graph readability.
+Preserve the corrected arithmetic and current gates. Investigate measurement overhead
+and host scheduling alongside force/render cost; no cause is established yet.
+Further deep boundary debugging, arrows and advanced styles remain parked until this
+integration decision. Missing force families, collision and host/deck integration remain
+later feature-completion work, rather than implicit pilot support.
 
 ## 2. Current numerical and layout boundary
 

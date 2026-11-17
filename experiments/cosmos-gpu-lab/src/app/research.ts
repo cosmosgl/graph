@@ -326,5 +326,5 @@ export const mainOpenIssues = [
 // used by Roadmap and the experiment page, never from this browser's live run.
 export const migrationFocus = {
   step: 2,
-  experiment: 'resident-layout',
+  experiment: 'integrated-webgpu',
 } as const

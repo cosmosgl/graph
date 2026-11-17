@@ -189,15 +189,29 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
         description: 'Independent repulsion trajectories and their bounded local-error/drift observations.',
       }],
     }),
+    'integrated-webgpu': entry('integrated-webgpu', {
+      conclusion: 'Interaction and sampled rendering checks pass, but timing is not repeatable: ' +
+        'the final run misses every workload. First-slice usability remains unproven.',
+      reviewed: '2026-11-17',
+      variant: 'luma WebGPU resident core with corrected arithmetic; bounded circle and straight-link renderer',
+      comparison: 'Resident simulation → shared positions → rendering and interaction → complete frame and feedback checks',
+      milestone: 'integration',
+      method: 'method',
+      evidence: 'findings',
+      next: 'Establish repeatable small-graph frame/picking latency, then profile 8,192 points and assess settled real-graph readability.',
+      reproduce: 'Start with Check interaction + pixels at 1,024 points. Then evaluate the declared matrix in a visible native browser.',
+      investigations: [{ page: 'findings', state: 'Current evidence', description: 'Separate strict compatibility, practical usability and full readiness.' }],
+    }),
     'resident-layout': entry('resident-layout', {
-      conclusion: 'Resident execution and edits are demonstrated in isolation. The first integrated migration is not yet assessed under the practical rules.',
+      conclusion: 'Resident execution and edits are demonstrated in isolation. ' +
+        'The integrated pilot now tests practical usability; its timing gates remain unmet.',
       reviewed: '2026-11-17',
       variant: 'Two luma WebGPU execution paths using the same force kernels; recorded Apple M3 / Chrome evidence.',
       comparison: 'Same graph and kernels → staged CPU-bounds / GPU-resident execution → checkpoint bits, edits and frame timing',
       milestone: 'integration',
       method: 'validation-contract',
       evidence: 'timing-updates',
-      next: 'Build the first slice: core forces, circles, solid straight links, point picking/dragging and updates; assess M3 frame and picking latency.',
+      next: 'Follow the integrated pilot for shared-position rendering, interaction and complete-frame M3 timing; retain these isolated resident controls.',
       reproduce: 'Step and check the selected graph, apply a point/link edit, and continue. Use Time resident frames for separately validated timing batches.',
       investigations: [
         {
