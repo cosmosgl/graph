@@ -1,8 +1,14 @@
 **A full Cosmos WebGPU backend is technically credible. We have a bounded simulation prototype through public luma APIs; production adoption still needs complete feature, integration and performance acceptance.**
 
-Roadmap reviewed **16 November 2026**. Measurement dates remain on the linked experiment pages. The production engine remains WebGL with luma `~9.3.0` peers. The lab pins the luma `10.0.0-alpha.15` package family. This page describes current readiness and the next decisions. Experiment pages preserve the detailed investigations, controls and reproduction instructions.
+Roadmap reviewed **17 November 2026**. Measurement dates remain on the linked experiment pages. The production engine remains WebGL with luma `~9.3.0` peers. The lab pins the luma `10.0.0-alpha.15` package family. This page describes current readiness and the next decisions. Experiment pages preserve the detailed investigations, controls and reproduction instructions.
 
 The destination is **full WebGPU simulation and rendering sharing resident GPU state**. Reduced device coverage is acceptable. The current WebGL engine supplies the behavioral reference; a permanent WebGL fallback is not a requirement for the destination.
+
+**Research workflow:** run focused checks on the current machine's native GPU.
+The lab is not a production package and has no required CI checks or manual
+software-GPU workflow. Keep measured failures and original gates visible without
+requiring a green broad suite to continue. Historical cross-device results retain
+their scope; further device coverage is a later migration decision.
 
 ## 1. Where we are
 

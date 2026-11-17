@@ -2,9 +2,23 @@ Preserve Cosmos's behavioral contracts while allowing a WebGPU implementation to
 storage, execution and numerically sound algorithms. CPU and WebGL results are evidence with a
 stated purpose, not universal ground truth. Existing numerical gates remain unchanged.
 
+## Local research scope
+
+As of **17 November 2026**, run focused experiments on the machine doing the
+investigation, using its native GPU and browser. The lab has no required CI tests
+or software-GPU investigation workflow. Optional local UI, lint, typecheck and
+build commands help keep the research tool usable; a broad green suite is not a
+prerequisite for the next experiment.
+
+Keep failed-candidate verdicts and existing acceptance criteria intact. A finding
+on one device is evidence for that device, not portable production approval.
+Historical Linux/SwiftShader results remain recorded, but their discrepancies do
+not need to be resolved before local research continues. Broader device testing
+can be chosen later if it answers a migration decision.
+
 ## 1. Declare the comparison
 
-Every experiment has a **Validation contract** tab: question, reference, acceptance rule, checked
+Every experiment has a **What we compare** section: question, reference, acceptance rule, checked
 population and limits. Contracts describe checks, not results from a run. New experiments must add
 their contract in `src/runtime/validation.ts`; registration rejects a missing contract.
 
@@ -36,8 +50,8 @@ and findings retain their original meaning.
 
 ## 3. Investigate consequential differences
 
-Prioritize wrong discrete decisions, errors beyond a justified budget, instability, cross-device
-failures and precision corrections with substantial cost. Do not investigate every differing bit.
+Prioritize wrong discrete decisions, errors beyond a justified budget, instability and precision
+corrections with substantial cost on the current machine. Do not investigate every differing bit.
 
 ```flow
 Freeze input · Float32 positions, uniforms, seed, topology, traversal and force order

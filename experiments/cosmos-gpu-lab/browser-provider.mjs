@@ -1,12 +1,11 @@
 import { playwright } from '@vitest/browser-playwright'
 
 export function labBrowser (gpu) {
-  const native = gpu && process.env.LAB_NATIVE_GPU === '1'
-  const args = !gpu ? [] : native ? ['--enable-unsafe-webgpu'] : [
-    '--enable-unsafe-webgpu', '--use-angle=swiftshader',
-    ...(process.platform === 'linux' ? ['--use-vulkan=swiftshader', '--enable-features=Vulkan'] : []),
-  ]
-  const provider = playwright({ launchOptions: { ...(native ? { channel: 'chrome' } : {}), args } })
+  // The lab investigates the current machine. Do not force a software adapter.
+  const provider = playwright({ launchOptions: {
+    channel: 'chrome',
+    args: gpu ? ['--enable-unsafe-webgpu'] : [],
+  } })
   const inline = process.env.LAB_INLINE_BROWSER === '1'
   if (inline) {
     provider.name = 'existing-browser'
