@@ -3,6 +3,12 @@ point and link rendering, and the supporting interactions a replacement backend 
 Reviewed **15 November 2026** against the production source in this repository; picking evidence updated **16 November 2026**.
 
 The [migration roadmap](#/roadmap) describes the overall readiness decision; this page is the feature checklist.
+
+**First-migration policy · 17 November 2026:** integration of a small core slice
+now takes priority under the [practical rules](#/validation-workflow?section=first-migration-rules).
+Some detailed investigations are [parked](#/roadmap?section=parked-investigations).
+Their feature statuses below do not become accepted: full-readiness review must
+revisit retained failures and deferred features before claiming complete parity.
 All current experiments use luma v10 APIs for GPU resources, execution, timing and readback.
 
 ## Coverage summary

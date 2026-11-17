@@ -27,30 +27,28 @@ migrationStatus
 
 The [feature inventory](#/feature-inventory) is the detailed force/rendering checklist. Status means demonstrated scope, rather than a percentage of the migration completed.
 
-### Audit: are we following the migration plan?
+### Decision: build the first integrated migration
 
-**Yes, but rendering research needs a bounded exit.** Recent work follows the
-planned progression from point styling to straight/curved links, faint alpha,
-endpoint gradients and patterns. It has expanded tested feature coverage; it
-has not established a complete renderer or a production-ready backend.
+The next milestone is a **useful experimental WebGPU backend**, assessed under
+[the first-migration rules](#/validation-workflow?section=first-migration-rules).
+Those rules allow small boundary/coordinate differences while retaining correct
+behavior, meaningful layout quality and responsive interaction. The integrated
+candidate is **not assessed yet**. Historical exact comparisons and rejected
+candidates keep their original verdicts.
 
-| Area | Demonstrated | Still needed |
-|---|---|---|
-| GPU execution | Public luma APIs, resident state and bounded capacity changes | Complete ownership, recovery and engine lifecycle |
-| Simulation | Selected combined layouts through 8,192 points; corrected collision through 512 | Mouse/cluster/attractor forces, larger collision route and accepted precision cost |
-| Rendering | Point and link controls, independent masks, gradients and pattern comparisons | Rejected boundaries, arrows, interaction states, transitions and practical picking |
-| Integration | Supporting pieces | One small resident Graph workload combining simulation, styling, updates and picking |
-| Adoption | Local evidence | Workload budgets, library/host contracts and a production dependency decision |
+Use circle points, solid straight links, the tested core force sequence, resident
+positions, point picking/dragging, pan/zoom and basic updates. Begin near 1,000
+points, then 8,192 on chain/communities/star and a representative real graph.
+Measure complete frame intervals and picking feedback on the M3. The initial
+targets are 95% of steady-state frame intervals within 33 ms and picking feedback
+within 50 ms, not a claim that current components already meet them.
 
-The bounded pattern-intermediate investigation below is complete: it captures
-phase, coverage and derivatives at known rejected pixels and verifies unchanged
-ordinary images. The straight coverage tie is localized; curve root causes
-remain open after the fine/coarse diagnostic check. These remain explicit
-blockers, without triggering an indefinite search before the remaining
-features. Continue with arrows and
-link states, missing forces, and a small integrated Graph workload before more
-large-graph optimization. Keep all existing acceptance gates; passing a
-reporting or diagnostic test is not feature acceptance.
+Further boundary debugging, arrows and advanced styles no longer precede this
+integration attempt. Use the resident-layout work as a foundation; it does not
+yet implement the complete supported slice or production Graph lifecycle.
+Missing force families, optional collision scaling and host/deck integration
+remain later feature-completion work. A useful first slice is not full migration
+approval.
 
 ## 2. Current numerical and layout boundary
 
@@ -90,7 +88,7 @@ This is the current task order. A closed investigation can retain failing cases;
 journeyPlan
 ```
 
-### Immediate checkpoint: arrow geometry and picking; retain pattern and raster limits
+### Retained rendering evidence
 
 The [stored-alpha candidate](#/point-styling?section=doc-method-stored-alpha-picking-prototype-16-november-2026)
 checks actual per-point attachment alpha before composing IDs. Its five bounded
@@ -159,12 +157,34 @@ WebGPU diagnostics return the same sampled values. All four focused tests
 pass, including the existing solid curve diagnostics, but no rendering row is
 reclassified. See [pattern boundary findings](#/curved-links?section=doc-method-pattern-boundary-audit-17-november-2026).
 
-**Next: production arrow geometry and picking**, first straight then curved,
-including endpoint trimming, short links and overlap, with unchanged production
-controls and acceptance gates. Then link states/transitions, missing forces,
-small Graph integration and complete-workload acceptance. Keep unresolved
-polygon, pattern and native raster/color blockers visible; a diagnostic pass
-is not approval to ship them.
+**Next: the integrated first slice.** Use the practical contract above and
+retain these exact-boundary results as compatibility evidence. Deeper rendering
+investigation resumes only when it affects pilot usability or the corresponding
+feature enters the full-migration scope.
+
+### Parked investigations
+
+“Parked” means further investigation is stopped for the first attempt. It does
+not mean accepted, fixed or deleted. The demos and strict checks remain available.
+Review this register before claiming full readiness; some items will need deeper
+investigation. Reopen earlier whenever an integrated workload exposes a practical
+problem. Passing the first slice must not silently close these items.
+
+| Investigation | Why stop now / retained result | Reopen condition before full readiness |
+|---|---|---|
+| [Straight-link hard edges, caps and fractional raster](#/straight-links) | Exact coverage ties and original-color failures remain; no further pixel-perfect work scheduled | Boundary displacement exceeds the pilot rule, thin links vanish, picking fails in practice, or stricter compatibility is required |
+| [Curved links and dash/dot boundaries](#/curved-links) | Four-pixel diagnostic is bounded; fine/coarse switching did not explain curve failures; earlier intermittent dash picks remain unexplained | Curves/patterns enter scope; verify motion, actual source visibility and color before deciding whether deeper primitive/derivative replay is needed |
+| [Point fractional/polygon boundaries](#/point-styling) | Rejected native masks and color-preservation alternatives retained | Circle pilot shows a practical defect, or additional shapes require acceptance |
+| [Exact faint-alpha / stored-alpha picking](#/point-styling) | Prototype closes selected visibility cases, but dense per-source passes remain costly; historical source-byte failures retained | Pilot picking is incorrect/slow, or images/translucent dense overlap enter scope; practical visibility is never waived |
+| [Ribbon compute generation](#/ribbon-generation) | Stopped without adoption; cost and color problems retained; keep the vertex path | Integrated profiling identifies curve generation as a meaningful bottleneck |
+| [v10 WebGL 100k star context loss](#/weighted-links/docs/context-loss) | Parked native baseline failure; cannot support timing comparisons | Such a baseline is needed for the declared workload or similar instability appears in the supported path |
+| [Further arithmetic optimization and larger collision](#/collision/docs/precision) | Reuse the tested corrected solver; the 512-point collision envelope does not establish 8,192-point collision | Composed profiling misses targets, collision enters the pilot, or full supported force/count coverage is being approved |
+
+Not-yet-implemented features (arrows, advanced states/transitions, remaining forces,
+host integration) are **deferred scope**, not completed investigations. Revisit
+all retained failures and deferred features during the full-readiness audit:
+resolve them, validate an alternative, or explicitly document an approved behavior
+change. A narrowed feature set cannot be described as complete Cosmos parity.
 
 ## 4. luma decisions still open
 

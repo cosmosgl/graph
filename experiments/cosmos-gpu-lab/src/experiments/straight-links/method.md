@@ -1,3 +1,10 @@
+Further exact-edge and pattern investigation is **parked for the first migration**,
+not resolved. Solid straight links remain part of the integrated first slice.
+Reopen if its rendering or picking violates the practical rules; review retained
+failures before full readiness. Historical verdicts and reproduction steps below
+remain unchanged. See [first-migration rules](#/validation-workflow?section=first-migration-rules)
+and the [parked register](#/roadmap?section=parked-investigations).
+
 ## Pattern boundary audit · 17 November 2026
 
 **The first straight dash rejection is an interpolated side/coverage tie, not

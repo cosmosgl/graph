@@ -5,6 +5,14 @@ device: Apple M3 / inline Chromium 157; Linux Chromium 151 / SwiftShader; earlie
 scope: Pixel-distance hover/focus overlays pass CPU colors in 96/96 cases on M3 and SwiftShader; eight polygon-mask rows remain rejected. Original controls and gates are retained. Earlier sections keep their own measurement scopes.
 ---
 
+**First-migration status · 17 November 2026:** basic circles and point picking
+are integration inputs. Further fractional/polygon edge research, advanced
+styling and dense stored-alpha optimization are parked for this attempt, not
+resolved. Reopen if supported picking is incorrect/slow or those features enter
+scope. Historical rejections remain; review them before full approval. See
+[first-migration rules](#/validation-workflow?section=first-migration-rules) and
+[return conditions](#/roadmap?section=parked-investigations).
+
 ## Question
 
 Can a luma WebGPU quad renderer preserve Cosmos point styling and select the point actually
