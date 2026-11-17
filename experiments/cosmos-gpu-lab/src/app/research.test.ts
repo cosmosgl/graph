@@ -1,5 +1,6 @@
 import { expect, it } from 'vitest'
 import { validationContracts } from '../runtime/validation'
+import { currentJourneyStep } from './journey'
 import { experiments, findExperiment } from './registry'
 import { migrationFocus, milestones, research, researchMethodPages } from './research'
 import { renderInvestigationContext, renderMigrationOverview } from './research-ui'
@@ -37,7 +38,7 @@ it('derives the bounded home assessment from shared experiment records', () => {
   expect(home.querySelector('.research-meta')!.textContent).toContain(new Intl.DateTimeFormat('en-GB', {
     day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
   }).format(new Date(focus.reviewed)))
-  expect(home.querySelector('[href="#/roadmap?section=journey-link-rendering"]')).not.toBeNull()
+  expect(home.querySelector(`[href="#/roadmap?section=journey-${currentJourneyStep().id}"]`)).not.toBeNull()
   expect(home.querySelector('details')).toBeNull()
 })
 

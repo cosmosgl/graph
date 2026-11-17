@@ -5,7 +5,7 @@ import type { ResearchSummary } from './research'
 // Empty investigations mean no recorded measurement matrix is published here.
 export function additionalResearch (reviewed: string): Record<string, ResearchSummary> {
   const entry = (id: string, details: Omit<ResearchSummary, 'question' | 'reviewed' | 'scope' | 'reproduce'> &
-    Partial<Pick<ResearchSummary, 'scope' | 'reproduce'>>): ResearchSummary => ({
+    Partial<Pick<ResearchSummary, 'scope' | 'reproduce' | 'reviewed'>>): ResearchSummary => ({
     question: validationContracts[id].question,
     reviewed,
     scope: validationContracts[id].coverage,
@@ -190,13 +190,14 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       }],
     }),
     'resident-layout': entry('resident-layout', {
-      conclusion: 'The resident slice preserves checked staged outputs and supports immediate edits. GPU timings retain the cost of the chosen precision path.',
+      conclusion: 'Resident execution and edits are demonstrated in isolation. The first integrated migration is not yet assessed under the practical rules.',
+      reviewed: '2026-11-17',
       variant: 'Two luma WebGPU execution paths using the same force kernels; recorded Apple M3 / Chrome evidence.',
       comparison: 'Same graph and kernels → staged CPU-bounds / GPU-resident execution → checkpoint bits, edits and frame timing',
-      milestone: 'execution',
+      milestone: 'integration',
       method: 'validation-contract',
       evidence: 'timing-updates',
-      next: 'Validate the remaining forces, complete rendering and host/runtime contracts; shared kernels still need independent force references.',
+      next: 'Build the first slice: core forces, circles, solid straight links, point picking/dragging and updates; assess M3 frame and picking latency.',
       reproduce: 'Step and check the selected graph, apply a point/link edit, and continue. Use Time resident frames for separately validated timing batches.',
       investigations: [
         {

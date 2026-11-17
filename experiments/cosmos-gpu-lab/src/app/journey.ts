@@ -15,30 +15,30 @@ export const journeySteps = [
   },
   {
     number: 2,
-    id: 'link-rendering',
-    title: 'Rendering and picking',
+    id: 'graph-integration',
+    title: 'First integrated migration',
     status: 'Planned',
-    position: 'Bound stored-alpha picking cost, replay link alpha eligibility, then endpoint gradients, patterns, arrows and states.',
-    exit: 'Declared color, exact ID/mask and source-visibility gates; remaining styles still need validation.',
-    href: '#/roadmap?section=milestone-rendering',
+    position: 'Core forces, circles, solid straight links, point interaction and updates on shared resident state.',
+    exit: 'Practical first-slice behavior and responsiveness assessed on M3; strict compatibility remains a separate verdict.',
+    href: '#/validation-workflow?section=first-migration-rules',
   },
   {
     number: 3,
-    id: 'missing-forces',
-    title: 'Missing force families',
-    status: 'Planned',
-    position: 'Per-point attractors → clusters → mouse repulsion; then compose them in production order.',
-    exit: 'Isolated and composed WebGL/WebGPU/CPU agreement at unchanged tolerances.',
-    href: '#/feature-inventory?section=1-simulation-forces',
+    id: 'link-rendering',
+    title: 'Remaining rendering and interaction',
+    status: 'Deferred until first slice',
+    position: 'Arrows, curves/patterns, images and advanced states; reopen retained failures as their features enter scope.',
+    exit: 'Supported styles and picking validated; explicit review of parked investigations before full approval.',
+    href: '#/roadmap?section=parked-investigations',
   },
   {
     number: 4,
-    id: 'graph-integration',
-    title: 'Small Graph integration',
-    status: 'Planned',
-    position: 'Resident simulation, styled rendering, updates and picking through the production API.',
-    exit: 'Supported API, ownership, host and lifecycle contracts exercised together.',
-    href: '#/roadmap?section=milestone-integration',
+    id: 'missing-forces',
+    title: 'Remaining forces and collision scope',
+    status: 'Deferred until first slice',
+    position: 'Per-point attractors, clusters, mouse repulsion and larger collision workloads; compose in production order.',
+    exit: 'Declared behavior, numerical accuracy, layout quality and cost for the supported force set.',
+    href: '#/feature-inventory?section=1-simulation-forces',
   },
   {
     number: 5,
@@ -71,7 +71,7 @@ export function renderJourney (host: HTMLElement): void {
       <td>${active ? 'Current' : step.status}</td><td>${position}</td><td>${step.exit}</td></tr>`
   }).join('')}</tbody></table></div>
     <p>These are ordered research tasks, not completed migration milestones. ${milestoneTitle('execution')} and
-      ${milestoneTitle('simulation')} remain open alongside the active ${milestoneTitle('rendering')} work.</p>`
+      ${milestoneTitle('simulation')} remain open alongside ${milestoneTitle('rendering')} and ${milestoneTitle('integration')}.</p>`
 }
 export function renderJourneyFlow (host: HTMLElement): void {
   const label = (id: string): string => {

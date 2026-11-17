@@ -148,7 +148,7 @@ export const research: Record<string, ResearchSummary> = {
       'The alpha.15 gradient matrix preserves colors and source visibility in all 64 cases; the separate faint-alpha replay passes 72/72.',
     variant: 'Unmodified GLSL/color control; color-face/source-byte IDs; previous two-sided IDs retained. ' +
       'Luma alpha.15 patterns/gradients and matched solid controls; older geometry uses alpha.4.',
-    next: 'Compare production arrows, endpoint trimming and picking; retain the unresolved pattern and native raster boundaries.',
+    next: 'Further curve/pattern investigation is parked for the first migration. Reopen when these features enter scope or practical defects appear.',
     reproduce: 'Compare all three picking policies, run the 64-case sweep and default-bow pixel replay, then export JSON locally.',
     methods: [
       {
@@ -174,8 +174,9 @@ export const research: Record<string, ResearchSummary> = {
     ],
     investigations: [{
       page: 'method',
-      state: 'Current evidence',
-      description: 'Curve sampling, 64-case culling comparison and nine identical-geometry boundary replays under unchanged gates.',
+      state: 'Parked',
+      description: 'Further curve/pattern investigation is stopped for the first slice, not resolved. ' +
+        'Retain all gates and revisit before full feature approval.',
     }],
   },
   'straight-links': {
@@ -190,7 +191,7 @@ export const research: Record<string, ResearchSummary> = {
       'The separate 72-case alpha replay retains four blended threshold-edge and four hard-edge failures; neither matrix is production approval.',
     variant: 'Production GLSL control and visible-footprint/source-byte IDs; original color. ' +
       'Luma alpha.15 patterns/gradients and matched solid controls; Apple M3.',
-    next: 'Compare straight arrows and endpoint trimming next; retain pattern boundaries, dash-wrap checks and original colors.',
+    next: 'Reuse solid straight links in the first slice; further exact-edge research is parked unless practical rendering or picking fails.',
     reproduce: 'Compare both picking rules, blending, zoom and DPR, then run the 40-case straight-link sweep and export JSON locally.',
     methods: [
       {
@@ -209,8 +210,9 @@ export const research: Record<string, ResearchSummary> = {
     ],
     investigations: [{
       page: 'method',
-      state: 'Current evidence',
-      description: 'Straight-ribbon comparisons, hard-edge probes and a 48-row cap/raster investigation with unchanged gates.',
+      state: 'Parked',
+      description: 'Exact-boundary research is stopped for the first slice. Solid links remain an integration input; ' +
+        'practical defects reopen the investigation.',
     }],
   },
   'point-styling': {
@@ -227,7 +229,8 @@ export const research: Record<string, ResearchSummary> = {
     reviewed: '2026-11-16',
     milestone: 'rendering',
     evidence: 'method',
-    next: 'Continue with patterned-link visibility; keep dense picking cost and GPU-resident candidate discovery open.',
+    next: 'Integrate basic circles and point picking first. Advanced styles and exact-edge research are parked; ' +
+      'practical visibility and latency remain required.',
     reproduce: 'Run Check stored-alpha picking in Diagnostics, then Compare filtered picking with this page visible. ' +
       'The fixed replay and bounded cost sweep preserve the live scene; historical polygon and source-byte controls stay selectable.',
     methods: [
@@ -287,7 +290,7 @@ export const milestones = [
     position: 'Bounded point-style and link studies; native mask/color boundaries remain open',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
     gates: ['Reduce dense stored-alpha picking cost; retain the completed M3 link alpha replay and its rejected edge cases.',
-      'Validate arrow geometry, endpoint trimming and link states; retain the bounded pattern audit and unresolved native mask/color blockers.',
+      'Integrate circles and solid straight links first; defer advanced styles and review parked boundary failures before full readiness.',
       'Retain polygon CPU/preservation gates; validate transitions and pointer behavior, measure accepted rendering cost and broaden native devices.'],
     evidence: [['curved-links', 'Curved solid links'], ['straight-links', 'Straight-link rendering/picking'],
       ['point-styling', 'Point styling/picking'], ['point-rendering', 'Circle primitive']],
@@ -323,5 +326,5 @@ export const mainOpenIssues = [
 // used by Roadmap and the experiment page, never from this browser's live run.
 export const migrationFocus = {
   step: 2,
-  experiment: 'curved-links',
+  experiment: 'resident-layout',
 } as const

@@ -1,3 +1,10 @@
+Further curve/pattern investigation is **parked for the first migration**,
+not resolved. These features are outside the initial integrated slice. Reopen
+when they enter scope or a practical issue requires it; review retained failures
+before full readiness. Historical verdicts and reproduction steps below
+remain unchanged. See [first-migration rules](#/validation-workflow?section=first-migration-rules)
+and the [parked register](#/roadmap?section=parked-investigations).
+
 # Curved solid links: method and findings
 
 Can Cosmos preserve its actual curved-link geometry, color and picking when moving from WebGL to luma WebGPU?
@@ -59,9 +66,10 @@ Open the printed session in the local native browser. The local ignored
 committed. A passing preservation/probe test does not mean those pixels pass
 rendering acceptance.
 
-**Next:** retain these pattern and raster blockers and proceed with production
-arrow geometry, endpoint trimming and picking. A common coverage renderer or
-an identical-primitive derivative replay would be a separate future candidate,
+**Priority update:** the later first-migration decision parks this investigation
+and defers arrows in favor of the integrated core slice. These pattern and raster
+blockers remain. A common coverage renderer or an identical-primitive derivative
+replay is a possible future investigation when this feature returns to scope,
 not a silent adjustment to the current gates.
 
 ## Dash and dot patterns · 17 November 2026

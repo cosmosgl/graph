@@ -1,6 +1,109 @@
-Preserve Cosmos's behavioral contracts while allowing a WebGPU implementation to use different
-storage, execution and numerically sound algorithms. CPU and WebGL results are evidence with a
-stated purpose, not universal ground truth. Existing numerical gates remain unchanged.
+Preserve Cosmos's behavioral contracts while allowing WebGPU to use different
+storage, execution and numerically sound algorithms. CPU and WebGL results are
+evidence with a stated purpose, not universal ground truth. Historical strict
+checks remain unchanged; the first migration has a separate practical contract.
+
+## First migration rules
+
+Agreed **17 November 2026**. The immediate goal is a useful, integrated,
+experimental WebGPU backend on the current Apple M3 and native browser. This
+is a first migration attempt, not a complete replacement or production approval.
+**These rules are documented targets; the integrated candidate has not yet been
+assessed against them.** Existing experiment pass counts do not establish this
+new verdict, and no test threshold or shader changes with this document.
+
+### Supported first slice
+
+- Circle points and solid straight links, with colors, sizes and opacity.
+- Repulsion, weighted springs, gravity, center and cooling, reusing the tested
+  corrected arithmetic rather than reopening precision optimization now.
+- Resident GPU positions shared by simulation and drawing, through public
+  luma APIs and the pinned `10.0.0-alpha.15` package family.
+- Point picking, dragging, pan/zoom, basic data replacement and pause/resume.
+- Current native machine first; production Cosmos remains on its existing
+  WebGL/luma version until a separate adoption decision.
+
+Curved/patterned links, arrows, images, decorative rings, advanced transitions,
+clusters, per-point attractors, mouse repulsion and host/deck integration are
+outside this first slice. Point dragging does not imply mouse-repulsion support.
+Collision remains a separate bounded option until composed behavior and cost are
+measured. Unsupported options must be identified explicitly, not silently ignored.
+Full feature migration remains the destination.
+
+### Practical acceptance
+
+| Area | Required | Acceptable difference for this first slice |
+|---|---|---|
+| Data and topology | Correct endpoints, weights, stable IDs, absence and pinned state | None in these discrete contracts |
+| Simulation | Finite, stable layouts; intended forces and comparable convergence on selected graphs | Small coordinate differences without material layout degradation; identical trajectories are not required |
+| Rendering | Correct shapes, widths, colors, ordering and transparency | Minor boundary/antialiasing differences under the boundary rule below |
+| Picking | Correct visible source and overlap order; hidden sources cannot intercept selection | Selectable edges can differ slightly between backends under the declared visible-footprint policy |
+| Interaction and lifecycle | Pan, zoom, dragging, updates, pause/resume, resize and destruction work together | Advanced unsupported features are explicitly outside scope |
+| Responsiveness | At least 95% of steady-state frame intervals at or below 33 ms; picking feedback within 50 ms on the M3 | No requirement to beat WebGL in the first attempt |
+
+**Rendering boundary rule:** allow at most one device pixel of boundary
+displacement between backends for this practical assessment. Keep the existing
+2/255 channel budget away from the boundary. Determine the boundary from the
+object geometry/reference, not by marking every failed pixel as an edge. Record
+boundary mismatches separately. This allowance must not excuse disappearing thin
+links or points, wrong interior colors/IDs, obvious flicker or lost objects. A
+thin object does not become exempt merely because all its pixels are near edges.
+Inspect motion, fractional zoom and pixel ratios 1 and 2, not only still images.
+
+**Picking remains a behavior check:** exact object identity and ordering matter.
+A small difference in the two backends' selectable silhouettes is allowed; an
+invisible foreground intercepting a visible object is not. Check each selected
+source's own visibility, not only the final composed frame's alpha. Production's
+padded picking policy stays a comparison control; it is not silently redefined.
+
+**Simulation remains accountable:** retain existing stage/checkpoint tests and
+compare quality separately. Use the already-tested corrected solver initially.
+Record convergence, overlap, stress and residual motion on matched workloads;
+cooled stillness alone is not proof of a useful layout. Quality metrics without
+an agreed numerical budget stay “Measured only.” Do not invent a tolerance after
+seeing a failure. A practical pilot decision may use a documented side-by-side
+quality review while strict compatibility remains failed or unassessed.
+
+### Workload and measurement
+
+Start with chain, communities and star at about 1,000 points, then 8,192, plus
+one representative real graph selected before evaluation. Record link count,
+seed, settings, cooling schedule, viewport, pixel ratio, browser, device and luma
+version. Existing 8,192-point evidence does not include the full collision path.
+
+Compare moving and settled layouts. Exercise repeated updates, dragging, resize,
+pause/resume and teardown. Measure the complete supported workload without
+validation readbacks in the timed path. Report steady-state frame intervals
+separately from initialization and uploads; record picking request-to-visible-
+feedback latency, including scheduling and readback. Declare the measurement
+window and input sequence before each run. Keep GPU timestamps, CPU submission
+and end-to-end responsiveness distinct. A 33 ms GPU-only timing is not a pass for
+the frame target. Raw captures remain local exports.
+
+### Verdicts and stopping rule
+
+Keep **strict compatibility**, **first-migration usability** and **full migration
+readiness** separate. Historical failures remain failures under their original
+rules. “Usable for the first slice” must name the supported features, tested
+workloads, machine and accepted differences. Until that assessment is actually
+run, the practical verdict is **Not assessed**.
+
+Investigate further now when a difference breaks behavior, is visibly distracting,
+destabilizes a layout, exceeds the boundary rule or misses the responsiveness
+target. Otherwise, record it and continue integration. Profile the integrated
+application before optimizing arithmetic or adding expensive exact picking paths.
+Do not require a green broad GPU suite to continue this research.
+
+A parked investigation is **stopped for the first attempt, not resolved**. Retain
+its inputs, original verdicts, evidence, reproduction instructions and reason for
+stopping. Reopen it if the integrated slice exposes a practical problem or when
+its feature enters scope. Before declaring full migration readiness, review every
+parked item: resolve it, validate a replacement, or explicitly approve a supported
+behavioral difference. If a feature is still excluded, do not claim complete
+Cosmos parity. Full readiness concerns a declared feature/device/workload envelope,
+not a promise of identical results on every GPU. The [roadmap's parked register](#/roadmap?section=parked-investigations)
+tracks these return conditions; deeper research may be necessary **before** full
+approval, not after it.
 
 ## Local research scope
 

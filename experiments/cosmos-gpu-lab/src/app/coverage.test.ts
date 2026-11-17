@@ -1,7 +1,7 @@
 import { expect, it } from 'vitest'
 import inventory from '../docs/feature-inventory.md?raw'
 import { coverage, parseCoverage, renderCoverageIndex, renderCoverageSummary } from './coverage'
-import { experimentRole, journeySteps, renderJourney, currentStep } from './journey'
+import { experimentRole, journeySteps, renderJourney, currentStep, currentJourneyStep } from './journey'
 import { migrationFocus } from './research'
 it('indexes all inventory features without treating partial curves as unstarted or a parked sub-study as the whole experiment', () => {
   expect(coverage).toHaveLength(37)
@@ -28,5 +28,5 @@ it('distinguishes the ordered current investigation from still-open migration wo
   expect(journeySteps.filter(step => step.number === currentStep)).toHaveLength(1)
   expect(host.querySelector('#journey-polygon-boundaries')!.textContent).toContain('Closed with retained failures')
   expect(host.textContent).toContain('GPU execution and resources and')
-  expect(host.querySelector('#journey-link-rendering a')!.getAttribute('href')).toBe(`#/${migrationFocus.experiment}`)
+  expect(host.querySelector(`#journey-${currentJourneyStep().id} a`)!.getAttribute('href')).toBe(`#/${migrationFocus.experiment}`)
 })
