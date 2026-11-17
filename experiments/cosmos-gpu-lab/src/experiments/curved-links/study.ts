@@ -1,3 +1,4 @@
+import { gradientScene, type GradientPreset } from '../straight-links/gradient-fixtures'
 import { compareColors, type ColorResult } from '../straight-links/reference'
 import type { Backend, Snapshot } from './backend'
 import { DEFAULTS, FIXTURES, PROFILES, fixture, type Scene, type Settings, type Variant, type Fixture } from './data'
@@ -90,14 +91,15 @@ export async function assess (backends: { webgl: Backend; webgpu: Backend }, sce
 export const ROW_COUNT = FIXTURES.length * PROFILES.length * 2
 export type Row = Evidence & { fixture: Fixture; profile: string; settings: Settings }
 export async function runSweep (backends: { webgl: Backend; webgpu: Backend }, onRow: (row: Row) => void,
-  cancelled: () => boolean): Promise<Row[]> {
+  cancelled: () => boolean, gradient: GradientPreset = 'solid'): Promise<Row[]> {
   const rows: Row[] = []
   for (const name of FIXTURES) {
     for (const profile of PROFILES) {
       for (const blend of [true, false]) {
         if (cancelled()) return rows
-        const settings = { ...DEFAULTS, ...profile.settings, blend }; const { evidence } = await assess(backends, fixture(name), settings)
-        const row: Row = { fixture: name, profile: profile.name, settings, ...evidence }
+        const settings = { ...DEFAULTS, ...profile.settings, blend, endpointColors: gradient !== 'solid' }
+        const { evidence } = await assess(backends, gradientScene(fixture(name), gradient), settings)
+        const row: Row = { fixture: name, profile: gradient === 'solid' ? profile.name : `${profile.name} · ${gradient}`, settings, ...evidence }
         rows.push(row); onRow(row); await new Promise<void>(resolve => { setTimeout(resolve, 0) })
       }
     }

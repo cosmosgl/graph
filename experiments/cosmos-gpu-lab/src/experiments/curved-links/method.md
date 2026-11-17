@@ -4,6 +4,76 @@ Can Cosmos preserve its actual curved-link geometry, color and picking when movi
 
 This experiment renders frozen links through unmodified production GLSL and a WGSL port, using public luma APIs only. It does not replace the production renderer or its padded host-picking policy. Straight-link boundary failures remain open in their own experiment.
 
+## Endpoint gradients · 17 November 2026
+
+**The color-face candidate passes 28/64 full-frame cases with endpoint
+RGB enabled.** All 64 cases preserve each backend's production gradient
+color bytes exactly and have zero invisible frame/source picks. The remaining
+36 cases stay rejected under the original exact-ID, independent CPU-mask
+and **2/255** color gates. A completed test run is not full rendering acceptance.
+
+Recorded on **Apple M3**, ANGLE Metal / Apple WebGPU, inline Chromium 157,
+luma **10.0.0-alpha.15**. This is a bounded local comparison, not a portability
+or performance claim. The existing solid-color matrix is replayed separately
+on the same setup; every row retains the same pass/fail verdict and mask/ID
+error counts with gradients enabled.
+
+| Scene | Gradient candidate passed / checked |
+|---|---|
+| Ordinary bows | 4 / 16 |
+| Overlap | 10 / 16 |
+| Width/default/absence limits | 10 / 16 |
+| Fractional boundaries | 4 / 16 |
+
+### What production interpolates
+
+With `linkColorInterpolateFromEndpoints` enabled, Cosmos reads the source and
+target **point colors** and mixes their RGB using the ribbon's interpolated
+parameter `t`, clamped to 0–1:
+
+```text
+RGB = sourceRGB × (1 − t) + targetRGB × t
+alpha = linkAlpha × globalOpacity × thinWidthFactor × coverage
+```
+
+Endpoint alpha does not fade the link. NaN endpoint channels use
+`pointDefaultColor`; absent endpoints still suppress their links. Hard-edge
+mode keeps the original opaque-output rule. No color-space conversion,
+source-alpha quantization or new picking threshold is introduced.
+
+The CPU carries each sampled curve parameter through the triangle strip and interpolates it with barycentric weights. This is **not arc-length interpolation**: equal steps in the curve parameter need not cover equal screen distances.
+
+The WebGL adapter supplies point colors and enables the existing production
+uniforms; the imported GLSL remains unchanged. WebGPU uses a separate gradient
+color pipeline through public luma APIs. Solid-color and ID shader sources
+remain unchanged. The CPU reference independently evaluates the gradient and
+retains its original coverage and byte-composition rules.
+
+Focused checks cover endpoint alpha 0/0.35/1, ignored per-link RGB in gradient
+mode, per-channel and wholly missing point colors, a non-white default with
+alpha zero, global opacity zero in both blend modes, exact gradient/solid ID
+identity and restoring the solid control. Default-channel and endpoint-alpha
+cases also compare CPU and GPU color at the existing budget. The matrix adds
+overlap, reversed order, zoom, DPR 2, fractional widths and hard/blended modes.
+
+### Try and reproduce gradients
+
+Choose **Color source → Endpoint RGB**, **Endpoint alpha ignored** or
+**Default endpoint channels** in Configuration. The live report and full sweep
+use that selection. **Link color · control** restores the original solid
+study. Boundary-replay diagnostics keep their original solid controls.
+Cancellation preserves the selected mode and displayed scene. Export JSON
+retains the live inputs, sweep color preset and reproduction fixtures locally.
+
+```sh
+LAB_INLINE_BROWSER=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/curved-links/gradients.test.ts
+```
+
+Open the printed session URL in the existing native browser. Local captures
+contain both `solidRows` and gradient `rows`, including rejected results;
+measurements are not committed. Next compare dash/dot patterns, retaining
+these boundary and original padded-picking controls.
+
 ## Faint-alpha picking replay · 17 November 2026
 
 **The existing color-face candidate passes all 72 full-frame comparisons. It
@@ -67,8 +137,7 @@ these inputs. The previous two-sided candidate is not retested here; its folded
 ribbon failures remain in the earlier study.
 
 This closes the bounded alpha replay on this device. Other curve geometries,
-folds and boundary failures retain their previous verdicts. Next compare
-endpoint gradients while preserving those controls.
+folds and boundary failures retain their previous verdicts. The endpoint-gradient comparison above extends those controls without clearing their failures.
 
 ### Repeat locally
 
@@ -135,7 +204,7 @@ Both blended colors at this pixel are **RGBA8 (76, 54, 31, 89)**, with a nonzero
 
 Changing IDs alone cannot make both hard colors agree or select WebGL's invisible pixel. A shared explicit coverage/color algorithm would be a separate rendering candidate, and would still have to preserve original colors under the existing gate. No epsilon, pixel exclusion, tolerance change or production shader edit is introduced here.
 
-**Next:** retain these exact-mask/color blockers while extending the bounded rendering comparison to endpoint gradients, then patterns, arrows and link states. A common explicit coverage renderer remains a separate diagnostic direction, not an accepted substitute for the production reference.
+**Next:** retain these exact-mask/color blockers while extending the bounded rendering comparison to patterns, arrows and link states; the endpoint-gradient results above retain these failures. A common explicit coverage renderer remains a separate diagnostic direction, not an accepted substitute for the production reference.
 
 ## The production curve
 
@@ -202,4 +271,4 @@ Open the printed Vitest session URL in Codex's inline browser. Device selection 
 
 ## Scope and limits
 
-This first experiment covers solid curves with positive rational weights and bounded geometry. Coincident endpoints retain the original production normalization ambiguity; an empty observation is not a portable contract. Patterns, arrows, endpoint gradients, distance fading, highlights, transitions, pointer scheduling, full Graph/host integration, GPU timing and broader native hardware remain unvalidated.
+This first experiment covers solid curves with positive rational weights and bounded geometry. Coincident endpoints retain the original production normalization ambiguity; an empty observation is not a portable contract. Patterns, arrows, gradient transitions, distance fading, highlights, transitions, pointer scheduling, full Graph/host integration, GPU timing and broader native hardware remain unvalidated.

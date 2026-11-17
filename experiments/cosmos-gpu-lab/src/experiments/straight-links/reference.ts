@@ -2,9 +2,10 @@ import { pick } from '../../gpu/rgba-readback'
 import { sourceAlphaByte } from '../../gpu/source-alpha'
 import { HEIGHT, WIDTH, resolveLink, type Scene, type Settings, type Variant } from './data'
 import type { Snapshot } from './backend'
+import { resolvedEndpointColor } from './endpoint-colors'
 type Vec = [number, number]
 type Ribbon = { id: number; a: Vec; b: Vec; normal: Vec; length: number; core: number; thin: number; color: number[];
-  vertices: Vec[]; left: number; top: number; right: number; bottom: number; }
+  endpointColors?: number[][]; vertices: Vec[]; left: number; top: number; right: number; bottom: number; }
 function triangle (p: Vec, a: Vec, b: Vec, c: Vec): boolean {
   const cross = (a: Vec, b: Vec, p: Vec): number => (b[0] - a[0]) * (p[1] - a[1]) - (b[1] - a[1]) * (p[0] - a[0])
   if (cross(a, b, c) < 0) [b, c] = [c, b]
@@ -38,6 +39,7 @@ export function ribbons (scene: Scene, settings: Settings, picking: boolean, var
       core,
       thin: settings.blend ? Math.min(width, 1) : 1,
       color: link.color.map(Math.fround),
+      endpointColors: settings.endpointColors ? [resolvedEndpointColor(pa, settings), resolvedEndpointColor(pb, settings)] : undefined,
       vertices,
       left: Math.min(...vertices.map(v => v[0])),
       right: Math.max(...vertices.map(v => v[0])),
@@ -76,7 +78,13 @@ export function cpuColors (scene: Scene, settings: Settings): Uint8Array {
         if (!sample || (!settings.blend && (sample.coverage < 0.5 || sample.alpha <= 0))) continue
         const alpha = settings.blend ? Math.max(0, Math.min(1, sample.alpha)) : 1
         const offset = (y * width + x) * 4
-        for (let c = 0; c < 3; c++) bytes[offset + c] = Math.round((r.color[c] * alpha + bytes[offset + c] / 255 * (1 - alpha)) * 255)
+        const along = r.endpointColors
+          ? Math.max(0, Math.min(1, ((x + 0.5 - r.a[0]) * (r.b[0] - r.a[0]) + (y + 0.5 - r.a[1]) * (r.b[1] - r.a[1])) / (r.length * r.length)))
+          : 0
+        for (let c = 0; c < 3; c++) {
+          const rgb = r.endpointColors ? r.endpointColors[0][c] * (1 - along) + r.endpointColors[1][c] * along : r.color[c]
+          bytes[offset + c] = Math.round((rgb * alpha + bytes[offset + c] / 255 * (1 - alpha)) * 255)
+        }
         bytes[offset + 3] = Math.round((alpha + bytes[offset + 3] / 255 * (1 - alpha)) * 255)
       }
     }

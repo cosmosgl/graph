@@ -44,9 +44,9 @@ export const validationContracts: Record<string, ValidationContract> = {
       'independent scalar triangle-strip masks, blending and RGBA8 colors.',
     acceptance: 'Exact IDs and scalar masks at every pixel; at most two RGBA8 channel levels for color; no picked pixels with zero rendered alpha.',
     coverage: 'Rational quadratic curves, tessellation, weight/bow direction, widths/defaults, blend/hard modes, opacity, zoom, DPR, ' +
-      'ordering, overlap and fractional boundaries; original colors and each selected source checked separately.',
+      'ordering, overlap, fractional boundaries and selected solid/endpoint RGB; original colors and each selected source checked separately.',
     limits: 'Production padded host IDs remain unchanged. Candidate picking changes policy only. Coincident endpoints have undefined production normals. ' +
-      'Patterns, arrows, gradients, fading, highlights, transitions, Graph integration, GPU cost and broader devices remain open.',
+      'Patterns, arrows, fading, highlights, transitions, Graph integration, GPU cost and broader devices remain open.',
   },
   'straight-links': {
     question: 'Do production Cosmos straight ribbons and luma WebGPU agree with the rendered and pickable footprint?',
@@ -54,9 +54,9 @@ export const validationContracts: Record<string, ValidationContract> = {
       'independent scalar ribbon triangles, masks and RGBA8 colors.',
     acceptance: 'Exact IDs and scalar masks at every pixel; at most two RGBA8 channel levels for color; no picked pixels with zero rendered alpha.',
     coverage: 'Straight solid ribbons, widths/defaults, subpixel attenuation, blend/hard modes, opacity, zoom, DPR, ordering, ' +
-      'absent endpoints, overlap and fractional/aligned boundary controls. Source checks and original color preservation remain separate.',
+      'absent endpoints, overlap, fractional/aligned boundaries and selected solid/endpoint RGB. Source visibility and color preservation stay separate.',
     limits: 'Production host picking deliberately adds five CSS pixels of ribbon width. Candidate picking changes that policy, not the production control. ' +
-      'Curves, patterns, arrows, endpoint gradients, visibility fading, highlights, transitions, pointer scheduling, full Graph/host integration, ' +
+      'Curves, patterns, arrows, visibility fading, highlights, transitions, pointer scheduling, full Graph/host integration, ' +
       'broader native devices and runtime GPU cost remain open.',
   },
   'center-mass': {

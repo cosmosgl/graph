@@ -3,6 +3,7 @@ import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/ru
 import { validationContracts } from '../../runtime/validation'
 import { pick } from '../../gpu/rgba-readback'
 import { SOURCE_BYTE_PICKING_POLICY } from '../../gpu/source-alpha'
+import { GRADIENT_PRESETS, GRADIENT_LABELS, gradientScene, type GradientPreset } from './gradient-fixtures'
 import { DEFAULTS, FIXTURES, fixture, WIDTH, HEIGHT, type Fixture, type Settings, type Variant } from './data'
 import { createLinksWebGL } from './webgl'
 import { createLinksWebGPU } from './webgpu'
@@ -13,6 +14,9 @@ import { replayHardCoverage, renderHardCoverage, type HardRow } from './hard-cov
 import { replayRaster, renderRaster, RASTER_ROWS, type RasterRow } from './raster-audit'
 export async function createLinksView (host: HTMLElement): Promise<ExperimentInstance> {
   host.innerHTML = `<div data-run-part="configuration" class="scale-toolbar styling-toolbar">
+    <label>Color source <select data-gradient>${GRADIENT_PRESETS.map((p, i) =>
+    `<option value="${p}">${GRADIENT_LABELS[i]}</option>`).join('')}</select>
+      <span class="control-guidance">RGB follows the ribbon parameter. Link alpha controls opacity; endpoint alpha is ignored.</span></label>
     <label>Picking rule <select data-variant><option value="visible">Visible-footprint candidate</option>
       <option value="production">Production · padded host IDs</option></select></label>
     <label>Fixture <select data-fixture>${FIXTURES.map(name => `<option value="${name}">${name}</option>`).join('')}</select></label>
@@ -37,6 +41,7 @@ export async function createLinksView (host: HTMLElement): Promise<ExperimentIns
       Visible color uses the original draw. AA fringes outside the half-coverage contour can paint without being pickable.
       Opaque mode ignores positive opacity magnitude, like production. This is host picking, not the pointer window or its latency.</p>
     <section data-run-part="diagnostics"><h3>Repeatable straight-link sweep</h3><p>${ROW_COUNT} cases: four scenes × five profiles × blended/hard modes.
+      The sweep uses the selected color source; boundary replays keep their recorded solid controls.
       Production and visible-footprint results remain separate. Fractional and aligned cap failures stay visible.</p>
       <div class="controls"><button data-sweep disabled>Run straight-link sweep</button><button data-cancel disabled>Cancel sweep</button></div>
       <p data-progress>No sweep run.</p><div data-sweep-results class="readiness-table"></div>
@@ -53,7 +58,8 @@ export async function createLinksView (host: HTMLElement): Promise<ExperimentIns
   const backends: Partial<Record<'webgl' | 'webgpu', Backend>> = {}; let snapshots: Partial<Pair> = {}
   const status = el('[role="status"]'); let report: object | undefined; let accepted: boolean | undefined
   let busy = false; let sweeping = false; let cancelled = false; let destroyed = false; let disposed = false; let runError: string | undefined
-  let study: { startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[]; rows: Row[]; error?: string } | undefined
+  let study: { gradient: GradientPreset; startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[];
+    rows: Row[]; error?: string; } | undefined
   let hardReplay: { startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[]; rows: HardRow[]; error?: string } | undefined
   let rasterReplay: {
     startedAt: string; finishedAt?: string; status: string; browser: string; devices: string[]; rows: RasterRow[]; error?: string;
@@ -70,9 +76,12 @@ export async function createLinksView (host: HTMLElement): Promise<ExperimentIns
   const render = async (): Promise<void> => {
     if (busy || sweeping || destroyed) return
     busy = true; report = undefined; accepted = undefined; runError = undefined; controls(true)
-    const name = el<HTMLSelectElement>('[data-fixture]').value as Fixture; const scene = fixture(name)
+    const name = el<HTMLSelectElement>('[data-fixture]').value as Fixture
+    const gradient = el<HTMLSelectElement>('[data-gradient]').value as GradientPreset
+    const scene = gradientScene(fixture(name), gradient)
     const settings: Settings = {
       ...DEFAULTS,
+      endpointColors: gradient !== 'solid',
       zoom: Number(el<HTMLSelectElement>('[data-zoom]').value),
       ratio: Number(el<HTMLSelectElement>('[data-ratio]').value),
       opacity: Number(el<HTMLSelectElement>('[data-opacity]').value),
@@ -173,7 +182,7 @@ export async function createLinksView (host: HTMLElement): Promise<ExperimentIns
       sweep: study,
       hardCoverageReplay: hardReplay,
       rasterReplay,
-      reproduction: { defaults: DEFAULTS, fixtures: FIXTURES.map(name => ({ name, scene: fixture(name) })) },
+      reproduction: { defaults: DEFAULTS, fixtures: FIXTURES.map(name => ({ name, scene: gradientScene(fixture(name), study?.gradient ?? 'solid') })) },
     },
     (key, value) => typeof value === 'number' && Number.isNaN(value) ? 'NaN' : value, 2)
     const url = URL.createObjectURL(new Blob([json], { type: 'application/json' })); const link = document.createElement('a')
@@ -185,6 +194,7 @@ export async function createLinksView (host: HTMLElement): Promise<ExperimentIns
     const run = async (): Promise<void> => {
       sweeping = true; cancelled = false; controls(true); el<HTMLButtonElement>('[data-cancel]').disabled = false
       const current = {
+        gradient: el<HTMLSelectElement>('[data-gradient]').value as GradientPreset,
         startedAt: new Date().toISOString(),
         finishedAt: undefined as string | undefined,
         status: 'running',
@@ -200,7 +210,7 @@ export async function createLinksView (host: HTMLElement): Promise<ExperimentIns
           renderRows(el('[data-sweep-results]'), current.rows)
           const mode = row.settings.blend ? 'blended' : 'hard'
           el('[data-progress]').textContent = `${current.rows.length} / ${ROW_COUNT} · ${row.fixture} · ${row.profile} · ${mode}`
-        }, () => cancelled || destroyed)
+        }, () => cancelled || destroyed, current.gradient)
         current.status = cancelled || destroyed ? 'cancelled' : 'complete'
       } catch (error) { current.status = 'failed'; current.error = String(error); runError = current.error } finally {
         current.finishedAt = new Date().toISOString(); sweeping = false
@@ -287,7 +297,7 @@ export async function createLinksView (host: HTMLElement): Promise<ExperimentIns
     run().catch(error => { runError = String(error) })
   })
   mountRunLayout(host, () => summarizeRun(busy || sweeping ? 'Running' : report ? 'Complete' : 'Preparing', [accepted],
-    'Curves, patterns, arrows, gradients, transitions, pointer-window behavior, wider devices and runtime GPU cost.',
+    'Other color modes, curves, patterns, arrows, transitions, pointer-window behavior, wider devices and runtime GPU cost.',
     Object.keys(backends).length === 2 ? [] : ['Missing backend'], runError, 'straight-ribbon full-frame comparison'),
   { experiment: 'straight-links', devices: () => Object.values(backends).map(b => b.info) })
   for (const [lane, create] of [['webgl', createLinksWebGL], ['webgpu', createLinksWebGPU]] as const) {

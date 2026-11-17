@@ -1,3 +1,4 @@
+import { GRADIENT_PRESETS, GRADIENT_LABELS, gradientScene, type GradientPreset } from '../straight-links/gradient-fixtures'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import { validationContracts } from '../../runtime/validation'
@@ -41,6 +42,9 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
   const select = (label: string, name: string, values: Array<string | number>, current: string | number): string =>
     `<label>${label} <select data-${name}>${values.map(v => `<option${v === current ? ' selected' : ''}>${v}</option>`).join('')}</select></label>`
   host.innerHTML = `<div data-run-part="configuration" class="scale-toolbar styling-toolbar">
+    <label>Color source <select data-gradient>${GRADIENT_PRESETS.map((p, i) =>
+    `<option value="${p}">${GRADIENT_LABELS[i]}</option>`).join('')}</select>
+      <span class="control-guidance">RGB follows the ribbon parameter. Link alpha controls opacity; endpoint alpha is ignored.</span></label>
     <label>Picking rule <select data-variant><option value="front">Color-face candidate</option>
       <option value="visible">Previous visible candidate · both faces</option>
       <option value="production">Production · padded host IDs</option></select></label>
@@ -65,10 +69,11 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
       <p>
       The production ID pass widens each curve by five CSS pixels; the separate candidate uses its visible width and source-byte eligibility.
       The color-face candidate also culls the back faces excluded from color.</p>
-      <p>Solid color, back-face culling, alpha and primitive overlap follow the production draw. Frozen positions and captured IDs
+      <p>The selected color source, back-face culling, alpha and primitive overlap follow the production draw. Frozen positions and captured IDs
       keep pointer inspection deterministic.</p></div>
     <section data-run-part="diagnostics"><h3>Repeatable curved-link sweep</h3><p>${ROW_COUNT} configurations:
-      four fixtures × eight profiles × blended/hard modes.
+      four fixtures × eight profiles × blended/hard modes, using the selected color source.
+      The boundary replay keeps its recorded solid control.
       CPU checks rasterize the actual tessellated triangle strip. All selected source links are checked in isolation, including folded ribbons.</p>
       <div class="controls"><button data-sweep disabled>Run curved-link sweep</button><button data-cancel disabled>Cancel sweep</button></div>
       <p data-progress>No sweep run.</p><div data-sweep-results class="readiness-table"></div>
@@ -81,7 +86,8 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
   const status = el('[role="status"]'); let busy = false; let sweeping = false; let cancelled = false; let destroyed = false; let disposed = false
   let replaying = false; let bowReplay: BowReport | undefined
   let accepted: boolean | undefined; let error: string | undefined; let report: object | undefined
-  let study: { startedAt: string; finishedAt?: string; status: string; rows: Row[]; browser: string; devices: string[]; error?: string } | undefined
+  let study: { gradient: GradientPreset; startedAt: string; finishedAt?: string; status: string; rows: Row[];
+    browser: string; devices: string[]; error?: string; } | undefined
   const dispose = (): void => { if (!disposed) { disposed = true; Object.values(backends).forEach(b => b.destroy()) } }
   const controls = (disabled: boolean): void => {
     host.querySelectorAll<HTMLSelectElement>('select').forEach(s => { s.disabled = disabled })
@@ -97,9 +103,11 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
     status.textContent = 'Drawing the curve mesh and checking every framebuffer pixel…'
     try {
       if (!backends.webgl || !backends.webgpu) throw new Error('Both backends are required; see device availability')
-      const name = value('fixture') as Fixture; const scene = fixture(name); const variant = value('variant') as Variant
+      const name = value('fixture') as Fixture; const gradient = value('gradient') as GradientPreset
+      const scene = gradientScene(fixture(name), gradient); const variant = value('variant') as Variant
       const settings: Settings = {
         ...DEFAULTS,
+        endpointColors: gradient !== 'solid',
         segments: Number(value('segments')),
         weight: Number(value('weight')),
         controlDistance: Number(value('distance')),
@@ -165,7 +173,7 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
       reproduction: {
         defaults: DEFAULTS,
         profiles: PROFILES,
-        fixtures: FIXTURES.map(name => ({ name, scene: fixture(name) })),
+        fixtures: FIXTURES.map(name => ({ name, scene: gradientScene(fixture(name), study?.gradient ?? 'solid') })),
       },
     }
     const json = JSON.stringify(data, (key, value) => typeof value === 'number' && Number.isNaN(value) ? 'NaN' : value, 2)
@@ -178,6 +186,7 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
     const run = async (): Promise<void> => {
       sweeping = true; cancelled = false; controls(true); el<HTMLButtonElement>('[data-cancel]').disabled = false
       const current = {
+        gradient: el<HTMLSelectElement>('[data-gradient]').value as GradientPreset,
         startedAt: new Date().toISOString(),
         finishedAt: undefined as string | undefined,
         status: 'running',
@@ -193,7 +202,7 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
           renderRows(el('[data-sweep-results]'), current.rows)
           el('[data-progress]').textContent = `${current.rows.length} / ${ROW_COUNT} · ${row.fixture} · ${row.profile} · ${
             row.settings.blend ? 'blended' : 'hard'}`
-        }, () => cancelled || destroyed)
+        }, () => cancelled || destroyed, current.gradient)
         current.status = cancelled || destroyed ? 'cancelled' : 'complete'
       } catch (failure) { current.status = 'failed'; current.error = String(failure); error = current.error } finally {
         current.finishedAt = new Date().toISOString(); sweeping = false
@@ -221,7 +230,7 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
     run().catch(failure => { error = String(failure) })
   })
   mountRunLayout(host, () => summarizeRun(busy || sweeping || replaying ? 'Running' : report ? 'Complete' : 'Preparing', [accepted],
-    'Patterns, arrows, gradients, distance fading, highlights, transitions, full Graph integration, GPU cost and native portability.',
+    'Other color modes, patterns, arrows, distance fading, highlights, transitions, full Graph integration, GPU cost and native portability.',
     Object.keys(backends).length === 2 ? [] : ['Missing backend'], error, 'curved-ribbon full-frame comparison'),
   { experiment: 'curved-links', devices: () => Object.values(backends).map(b => b.info) })
   controls(true)
