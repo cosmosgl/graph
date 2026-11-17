@@ -140,13 +140,14 @@ export const research: Record<string, ResearchSummary> = {
     method: 'validation-contract',
     evidence: 'method',
     milestone: 'rendering',
-    reviewed: '2026-11-15',
+    reviewed: '2026-11-17',
     comparison: 'Compare production curved ribbons across WebGL and WebGPU against independent triangle-strip masks and source checks.',
     question: 'Do production solid curves render and pick consistently through public luma APIs?',
-    conclusion: 'Color-face picking fixes folded-ribbon visibility and passes 28/64; native boundary mask/color failures remain rejected.',
-    scope: 'Apple M3, inline Chromium 157: 20/56 nonzero-opacity plus 8/8 zero-opacity rows pass; all 64 preserve color and avoid invisible source picks. ' +
-      'The previous 26/64 rows reproduce identically; nine identical-geometry replays retain the bow interpolation split.',
-    variant: 'Unmodified GLSL/color control; color-face/source-byte ID candidate; previous two-sided IDs retained; luma 10.0.0-alpha.4',
+    conclusion: 'The separate M3 faint-alpha replay passes 72/72; the earlier curve geometry matrix remains 28/64 with boundary failures rejected.',
+    scope: 'Earlier M3 / Chromium 157 geometry matrix: 20/56 nonzero-opacity plus 8/8 zero-opacity rows pass; all 64 preserve color and source visibility. ' +
+      'The alpha.15 faint-alpha replay preserves colors and has zero invisible picks; broader geometry limits remain.',
+    variant: 'Unmodified GLSL/color control; color-face/source-byte IDs; previous two-sided IDs retained. ' +
+      'Luma alpha.15 faint-alpha replay; earlier geometry uses alpha.4.',
     next: 'Retain native boundary mask/color blockers and compare endpoint gradients under unchanged production and acceptance gates.',
     reproduce: 'Compare all three picking policies, run the 64-case sweep and default-bow pixel replay, then export JSON locally.',
     methods: [
@@ -181,14 +182,15 @@ export const research: Record<string, ResearchSummary> = {
     method: 'validation-contract',
     evidence: 'method',
     milestone: 'rendering',
-    reviewed: '2026-11-15',
+    reviewed: '2026-11-17',
     comparison: 'Production straight ribbons → WebGL / WebGPU color and host IDs → independent scalar masks and source checks',
     question: 'Do straight links render and pick consistently through public luma APIs?',
-    conclusion: 'Straight links remain 30/40; cap rasterization and body-coverage failures are isolated and retained as blockers.',
-    scope: 'Apple M3, inline Chromium 157: 22/32 nonzero-opacity and 8/8 opacity-zero cases pass. ' +
-      'All 40 preserve original color bytes and have zero invisible source picks; ten hard/raster boundary cases remain rejected.',
-    variant: 'Production GLSL control and visible-footprint/source-byte ID candidate; original color; luma 10.0.0-alpha.4; Apple M3',
-    next: 'Replay the shared source-alpha boundary, then extend link styles; retain cap/raster blockers and unchanged color gates.',
+    conclusion: 'Faint-alpha replay preserves source visibility and colors in 72/72 cases; full-frame parity is 64/72 with eight edge failures retained.',
+    scope: 'Earlier M3 / Chromium 157 geometry matrix: 22/32 nonzero-opacity and 8/8 opacity-zero cases pass. ' +
+      'The separate 72-case alpha replay retains four blended threshold-edge and four hard-edge failures; neither matrix is production approval.',
+    variant: 'Production GLSL control and visible-footprint/source-byte IDs; original color. ' +
+      'Luma alpha.15 faint-alpha replay; earlier geometry uses alpha.4; Apple M3.',
+    next: 'Compare endpoint gradients; retain cap/raster and alpha-edge blockers with unchanged color gates.',
     reproduce: 'Compare both picking rules, blending, zoom and DPR, then run the 40-case straight-link sweep and export JSON locally.',
     methods: [
       {
@@ -225,7 +227,7 @@ export const research: Record<string, ResearchSummary> = {
     reviewed: '2026-11-16',
     milestone: 'rendering',
     evidence: 'method',
-    next: 'Replay link alpha boundaries before endpoint gradients; keep dense picking cost and GPU-resident candidate discovery open.',
+    next: 'Continue with link endpoint gradients; keep dense picking cost and GPU-resident candidate discovery open.',
     reproduce: 'Run Check stored-alpha picking in Diagnostics, then Compare filtered picking with this page visible. ' +
       'The fixed replay and bounded cost sweep preserve the live scene; historical polygon and source-byte controls stay selectable.',
     methods: [
@@ -284,7 +286,7 @@ export const milestones = [
     title: 'Rendering and interaction',
     position: 'Bounded point-style and link studies; native mask/color boundaries remain open',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
-    gates: ['Reduce stored-alpha picking cost and replay the shared alpha boundary in link candidates without changing production controls.',
+    gates: ['Reduce dense stored-alpha picking cost; retain the completed M3 link alpha replay and its rejected edge cases.',
       'Retain straight/curved native mask/color blockers while validating endpoint gradients, patterns, arrows and link states.',
       'Retain polygon CPU/preservation gates; validate transitions and pointer behavior, measure accepted rendering cost and broaden native devices.'],
     evidence: [['curved-links', 'Curved solid links'], ['straight-links', 'Straight-link rendering/picking'],
@@ -321,5 +323,5 @@ export const mainOpenIssues = [
 // used by Roadmap and the experiment page, never from this browser's live run.
 export const migrationFocus = {
   step: 2,
-  experiment: 'point-styling',
+  experiment: 'curved-links',
 } as const

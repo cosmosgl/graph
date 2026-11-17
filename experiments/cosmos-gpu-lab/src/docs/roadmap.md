@@ -65,7 +65,7 @@ This is the current task order. A closed investigation can retain failing cases;
 journeyPlan
 ```
 
-### Immediate checkpoint: picking cost, then link coverage
+### Immediate checkpoint: endpoint gradients; retain picking and raster limits
 
 The [stored-alpha candidate](#/point-styling?section=doc-method-stored-alpha-picking-prototype-16-november-2026)
 checks actual per-point attachment alpha before composing IDs. Its five bounded
@@ -100,10 +100,17 @@ corrected overlay colors differ from the old control. Eight polygon-mask rows
 remain rejected. This closes a bounded color investigation, not point-feature
 acceptance or stored-alpha support for decorative rings.
 
-Then replay the shared source-byte boundary in straight and curved links before
-returning to endpoint gradients, patterns, arrows and link states. Their shared
-quantizer makes this relevant; it does not prove those link fixtures fail. Keep
-polygon and native link raster/color blockers visible. Continue afterward with
+The **17 November M3 faint-alpha replay** completes the bounded link check:
+72 straight and 72 curved cases preserve original colors and have zero invisible
+frame/source picks. Curved color-face picking passes all 72 full-frame CPU/GPU
+comparisons; straight picking passes 64/72, retaining four blended threshold-edge
+and four hard-edge failures. The older geometry matrices keep their verdicts.
+See [straight-link evidence](#/straight-links?section=doc-method-faint-alpha-picking-replay-17-november-2026)
+and [curved-link evidence](#/curved-links?section=doc-method-faint-alpha-picking-replay-17-november-2026).
+
+Next compare **endpoint gradients**, then patterns, arrows and link states on the
+current machine. Keep polygon and native link raster/color blockers visible.
+Continue afterward with
 missing forces, small Graph integration and complete-workload acceptance rather
 than expanding this focused picking investigation indefinitely.
 
