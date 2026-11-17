@@ -8,17 +8,21 @@ import { patternProbeGPU } from './pattern-probe'
 import { patternCode, hasPatterns, patternShader } from './patterns'
 import { endpointColorShader, resolvedEndpointColor } from './endpoint-colors'
 import source from './links.wgsl?raw'
-import { HEIGHT, WIDTH, resolveLink, type HardCoverage } from './data'
+import { HEIGHT, WIDTH, resolveLink, type CoverageFormula, type HardCoverage } from './data'
 import type { Backend, Snapshot } from './backend'
-function coverageSource (method: HardCoverage): string {
-  if (method === 'linear') return source.replace('@location(0) coord: vec2f', '@location(0) @interpolate(linear, center) coord: vec2f')
+function coverageSource (method: HardCoverage, formula: CoverageFormula): string {
+  let result = source
+  if (method === 'linear') result = result.replace('@location(0) coord: vec2f', '@location(0) @interpolate(linear, center) coord: vec2f')
   if (method === 'pixel') {
-    return source.replace(
+    result = result.replace(
       'let coverage = smoothstep(0.5,0.5 - input.smoothing,abs(input.coord.y));',
       `let distancePx = abs(dot(input.position.xy - input.ribbon.xy,input.ribbon.zw));
      let coverage = smoothstep(input.halfWidth + 0.5,input.halfWidth - 0.5,distancePx);`)
   }
-  return source
+  return formula === 'ascending'
+    ? result.replaceAll('smoothstep(0.5,0.5 - input.smoothing,abs(input.coord.y))',
+      '(1.0 - smoothstep(0.5 - input.smoothing,0.5,abs(input.coord.y)))')
+    : result
 }
 function captureSource (program: string): string {
   const signature = '@vertex fn vertexMain(@builtin(vertex_index) index: u32, @builtin(instance_index) instance: u32)'
@@ -52,10 +56,10 @@ export async function createLinksWebGPU (canvas: HTMLCanvasElement): Promise<Bac
     const gradientArray = scope.own(device.createVertexArray({ shaderLayout: gradientLayout, bufferLayout: [] }))
     const kernels = new Map<string, RenderKernel>()
     const kernel = (format: TextureFormatColor, blend: boolean, display: boolean, picking: boolean,
-      probe: number, method: HardCoverage, gradient = false, patterned = false): RenderKernel => {
-      const key = `${format}:${blend}:${display}:${picking}:${probe}:${method}:${gradient}:${patterned}`
+      probe: number, method: HardCoverage, gradient = false, patterned = false, formula: CoverageFormula = 'descending'): RenderKernel => {
+      const key = `${format}:${blend}:${display}:${picking}:${probe}:${method}:${gradient}:${patterned}:${formula}`
       const cached = kernels.get(key); if (cached) return cached
-      const base = probe === 3 ? captureSource(coverageSource(method)) : coverageSource(method)
+      const base = probe === 3 ? captureSource(coverageSource(method, formula)) : coverageSource(method, formula)
       const decorated = probe >= 4 ? patternProbeGPU(base, false, probe) : patterned ? patternShader(base, false) : base
       const code = gradient ? endpointColorShader(decorated, 3) : decorated
       const result = scope.own(new RenderKernel(device, {
@@ -145,7 +149,7 @@ export async function createLinksWebGPU (canvas: HTMLCanvasElement): Promise<Bac
             const pass = device.beginRenderPass({ framebuffer, clearColor: framebuffer ? [0, 0, 0, 0] : [0.14, 0.16, 0.185, 1], clearDepth: false })
             try {
               kernel(format, mode === 0 && settings.blend && probe === 0, !framebuffer, mode > 0,
-                probe, method, gradient, patterned && probe === 0).draw(pass, {
+                probe, method, gradient, patterned && probe === 0, settings.coverageFormula ?? 'descending').draw(pass, {
                 vertexArray: gradient ? gradientArray : vertexArray,
                 vertexCount: 4,
                 instanceCount: scene.links.length,

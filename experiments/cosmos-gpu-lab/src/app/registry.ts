@@ -54,7 +54,8 @@ export const experimentGroups = [
     id: 'foundations',
     title: 'Foundations',
     description: 'Start with reductions, spatial indexing and basic point rendering.',
-    experiments: ['center-mass', 'scalable-reduction', 'spatial-grid', 'point-rendering', 'point-styling', 'straight-links', 'curved-links'],
+    experiments: ['center-mass', 'scalable-reduction', 'spatial-grid', 'point-rendering', 'point-styling', 'straight-links',
+      'smoothstep-coverage', 'curved-links'],
   },
   {
     id: 'forces',

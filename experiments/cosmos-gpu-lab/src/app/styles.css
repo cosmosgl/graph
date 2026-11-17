@@ -2095,3 +2095,8 @@ button[data-action="play"][aria-pressed="true"] {
   margin-bottom: 24px;
   color: var(--text-secondary);
 }
+
+.run-layout .run-visualization .smoothstep-panels { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (max-width: 540px) {
+  .run-layout .run-visualization .smoothstep-panels { grid-template-columns: minmax(0, 1fr); }
+}

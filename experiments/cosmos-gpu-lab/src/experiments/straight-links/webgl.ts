@@ -10,7 +10,7 @@ import { target, pixels, floatPixels } from '../../gpu/rgba-readback'
 import { SOURCE_ALPHA_GLSL } from '../../gpu/source-alpha'
 import { patternCode, hasPatterns } from './patterns'
 import { patternProbeGL } from './pattern-probe'
-import { WIDTH, HEIGHT, type Settings } from './data'
+import { WIDTH, HEIGHT, type CoverageFormula, type Settings } from './data'
 import type { Backend, Snapshot } from './backend'
 const vertexTypes = {
   transformationMatrix: 'mat4x4<f32>',
@@ -63,7 +63,10 @@ function moduleSource (text: string): string {
 }
 const widthPadding = 'linkWidthPx += 5.0 / transformationMatrix[0][0];'
 const pickBranch = 'if (coverage < 0.5 || rgbaColor.a <= 0.0) discard;'
+const originalCoverage = 'smoothstep(0.5, 0.5 - smoothing, abs(pos.y))'
+const ascendingCoverage = '(1.0 - smoothstep(0.5 - smoothing, 0.5, abs(pos.y)))'
 if (!vertex.includes(widthPadding) || !fragment.includes(pickBranch)) throw new Error('Production link candidate patch location changed')
+if (!fragment.includes(originalCoverage)) throw new Error('Production stroke coverage location changed')
 const visibleVertex = vertex.replace(widthPadding, '/* Candidate: host ID ribbon uses the visible width. */')
   .replace('void main()', 'flat out vec4 diagnosticRibbon;\nflat out float diagnosticHalf;\nvoid main()')
   .replace('linkWidthPx = max(linkWidthPx, minWidthPx) + smoothingPx;',
@@ -115,29 +118,32 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
     const attributes = [['pointA', 'float32x2'], ['pointB', 'float32x2'], ['sourceColor', 'float32x4'], ['targetColor', 'float32x4'],
       ['sourceWidth', 'float32'], ['targetWidth', 'float32'], ['arrow', 'float32'], ['linkIndices', 'float32'], ['linkStyle', 'float32']] as const
     const models = new Map<string, Model>()
-    const make = (blend: boolean, candidate: boolean, isPicking: boolean, probe = 0, frontPicking = false, patterned = false): Model => {
-      const key = `${blend}:${candidate}:${isPicking}:${probe}:${frontPicking}:${patterned}`; const cached = models.get(key); if (cached) return cached
+    const make = (blend: boolean, candidate: boolean, isPicking: boolean, probe = 0, frontPicking = false, patterned = false,
+      formula: CoverageFormula = 'descending'): Model => {
+      const key = `${blend}:${candidate}:${isPicking}:${probe}:${frontPicking}:${patterned}:${formula}`
+      const cached = models.get(key); if (cached) return cached
       const candidateFragment = curve ? curvedVisibleFragment : visibleFragment
       const patternedCandidate = curvedVisibleFragment
         .replace('renderMode < 0.5 &&', '(renderMode < 0.5 || renderMode > 2.5) &&')
         .replace('float opacity = rgbaColor.a * coverage;',
           `if (renderMode > 2.5 && (vLinkStyle == 1.0 || vLinkStyle == 2.0) && coverage < 0.5) discard;
            float opacity = rgbaColor.a * coverage;`)
+      const fragmentSource = probe >= 4
+        ? patternProbeGL(probe)
+        : probe === 3
+          ? captureFragment
+          : probe === 1
+            ? varyingProbe
+            : probe === 2
+              ? pixelProbe
+              : candidate ? patterned ? patternedCandidate : candidateFragment : fragment
       const model = scope.own(new Model(device, {
         vs: probe === 3
           ? captureVertex
           : candidate && patterned
             ? vertex
             : candidate ? curve ? curvedVisibleVertex : visibleVertex : probe === 2 ? visibleVertex : vertex,
-        fs: probe >= 4
-          ? patternProbeGL(probe)
-          : probe === 3
-            ? captureFragment
-            : probe === 1
-              ? varyingProbe
-              : probe === 2
-                ? pixelProbe
-                : candidate ? patterned ? patternedCandidate : candidateFragment : fragment,
+        fs: formula === 'ascending' ? fragmentSource.replace(originalCoverage, ascendingCoverage) : fragmentSource,
         modules: [{ name: 'conicParametricCurve', vs: moduleSource(conic) }, { name: 'pickingColor', fs: moduleSource(picking) }],
         topology: probe === 3 ? 'point-list' : 'triangle-strip',
         vertexCount: 4,
@@ -230,9 +236,10 @@ export async function createLinksWebGL (canvas: HTMLCanvasElement, curve?: (sett
           }
           if (curved) buffers.position = frame.own(device.createBuffer({ data: curved.positions }))
           const draw = (mode: number, framebuffer?: ReturnType<typeof target>['framebuffer'], probe = 0): void => {
-            // The color pass always uses the unmodified production shaders.
+            // The original production shaders remain the default; the formula is an explicit lab-only diagnostic.
             const model = make(mode === 0 && settings.blend && probe === 0, mode > 0 && variant === 'visible', mode > 0, probe,
-              variant === 'visible' && !!curved?.frontPicking, hasPatterns(scene.links, settings) && probe === 0)
+              variant === 'visible' && !!curved?.frontPicking, hasPatterns(scene.links, settings) && probe === 0,
+              settings.coverageFormula ?? 'descending')
             model.setAttributes(buffers); model.setBindings(bindings); model.setInstanceCount(links.length)
             model.setVertexCount(curved ? curved.positions.length / 2 : 4)
             uniforms.setUniforms({

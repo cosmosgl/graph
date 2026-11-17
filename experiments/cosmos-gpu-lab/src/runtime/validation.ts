@@ -9,6 +9,15 @@ export type ValidationContract = {
 // These describe existing gates, not new pass thresholds or production approvals.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match existing public hash routes. */
 export const validationContracts: Record<string, ValidationContract> = {
+  'smoothstep-coverage': {
+    question: 'Does changing the order of smoothstep edges change the observed straight-link pixels?',
+    reference: 'The original production WebGL and WebGPU stroke expressions; identical float32 probe inputs and the independent scalar ribbon model.',
+    acceptance: 'Report coverage, color and ID changes separately. Keep the existing straight-link strict gates and original colors visible; ' +
+      'this diagnostic does not approve a replacement.',
+    coverage: 'One width-3 line, hard/blended and fractional shifts; fixed inputs around a 0.5 tie; matched-corner position traces and 17 lengths.',
+    limits: 'Separate probes can compile differently and cannot reveal the driver’s internal interpolation. Caps, arrows, patterns, other devices, ' +
+      'full Graph interaction and performance are not assessed.',
+  },
   'integrated-webgpu': {
     question: 'Can one resident WebGPU runtime provide a usable first Cosmos migration slice?',
     reference: 'Existing corrected simulation backend; independent sampled CPU circle/straight-link geometry and IDs; declared M3 interaction workload.',

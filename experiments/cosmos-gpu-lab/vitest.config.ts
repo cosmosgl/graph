@@ -35,6 +35,7 @@ export default defineConfig({
       'src/experiments/precision-diagnostics/**/*.test.ts',
       'src/experiments/point-styling/**/*.test.ts',
       'src/experiments/straight-links/**/*.test.ts',
+      'src/experiments/smoothstep-coverage/**/*.test.ts',
       'src/experiments/curved-links/**/*.test.ts',
       'src/experiments/ribbon-generation/**/*.test.ts',
     ],

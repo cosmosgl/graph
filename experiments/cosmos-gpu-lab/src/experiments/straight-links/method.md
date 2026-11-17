@@ -5,6 +5,164 @@ failures before full readiness. Historical verdicts and reproduction steps below
 remain unchanged. See [first-migration rules](#/validation-workflow?section=first-migration-rules)
 and the [parked register](#/roadmap?section=parked-investigations).
 
+## Theoretical follow-up · 17 November 2026
+
+**The most useful next investigation is the interaction between interpolated
+coverage and the hard `0.5` cutoff, with cap rasterization investigated
+separately.** Source and specification review also found an independent GLSL
+portability defect: the production stroke calls `smoothstep` with descending
+edges. This original source review added hypotheses and experiment designs, not
+a renderer change or a new GPU verdict. The M3 measurements cited here are
+the existing replays below; the short-link example is a mathematical
+counterexample, not a GPU capture.
+
+For a focused, interactive comparison and its later M3 result, see
+[Why a line edge changes](#/smoothstep-coverage).
+That focused study is closed with its evidence recorded; this broader
+straight-link investigation remains parked.
+
+### Assumptions and pipeline
+
+This analysis concerns the frozen, straight, solid, single-sample ribbons in
+the study, with finite endpoints, positive zoom and DPR, and no arrows, patterns,
+gradients or transitions. It does not assume pixel-exact equivalence is a WebGPU
+requirement. The color pass uses the production vertex and fragment shaders on
+WebGL and their lab port on WebGPU; the visible-footprint ID pass is a separate
+candidate, not production's five-CSS-pixel padded picking policy.
+
+The vertex shader extrudes a triangle-strip carrier to the stroke width plus one
+device-pixel ramp. The triangle rasterizer first decides whether a fragment
+exists. For each generated fragment, the shader interpolates `pos.y`, computes
+transverse coverage, and in hard mode discards below `0.5`. The carrier stops at
+the endpoints: straight butt caps receive no longitudinal extension or fade.
+Consequently a missing cap fragment and a wrong hard-coverage decision require
+different probes. A fragment shader alone cannot recover a fragment the
+rasterizer did not generate.
+
+### 1. Defined shader arithmetic is the first control
+
+In `src/modules/Lines/draw-curve-line.frag`, the solid-stroke expression is
+`smoothstep(0.5, 0.5 - smoothing, abs(pos.y))`; the arrow body has another
+descending-edge call. With positive smoothing, the first edge is greater than
+the second, unless rounding makes them equal. [GLSL ES 3.00](https://registry.khronos.org/OpenGL/specs/es/3.0/GLSL_ES_Specification_3.00.pdf#page=97)
+declares `smoothstep` results undefined in both cases. The
+[WGSL definition](https://www.w3.org/TR/WGSL/#smoothstep-builtin)
+specifies the Hermite formula for unequal edges, including descending ones.
+Thus mirroring the expression does not establish a portable GLSL reference.
+
+For an isolated diagnostic, the corresponding ascending GLSL expression is
+`1.0 - smoothstep(0.5 - smoothing, 0.5, abs(pos.y))`. The arrow-body expression
+has an analogous conversion. These are equivalent to the intended descending
+formula in real arithmetic when the two edges remain distinct; finite-precision
+rounding and the original undefined expression can still change pixels. Try
+both expressions on both APIs, with the original production draws retained as
+controls, before proposing a production change. **This defect is established by
+the specification; it has not been shown to cause the observed M3 failures.**
+It cannot explain a carrier fragment that is absent before fragment shading.
+
+### 2. Hard coverage magnifies tiny differences
+
+The recorded width-3 witness at `(100,96)` has transverse coordinates `-0.375`
+and `-0.3750000298` in the two APIs. Their measured coverages are `0.5` and
+`0.4999998212`. The hard branch turns that small difference into an opaque
+pixel versus no pixel. In the earlier diagnostic, explicit linear interpolation
+did not change the M3 result; the pixel-distance method removed the WebGPU
+CPU-mask errors in three isolated cases but changed original WebGPU color and
+did not repair every WebGL-versus-CPU mismatch.
+
+The clipped oblique witness `(435,19)` is more informative than a tie alone. At
+zoom 2 its ideal screen-space endpoints are `(392,-30)` and `(664,244)`, its
+core half-width is 4 device pixels, and the sample center is `(435.5,19.5)`.
+The ideal perpendicular distance is approximately `4.0017313` pixels, giving
+CPU coverage `0.4974030`. The recorded float probes report about `0.500201`
+and `0.500200`, and both ordinary color draws paint an opaque pixel. Those
+coverage values correspond to an effective distance about `0.0019` pixel
+closer to the center than the ideal distance, if interpreted through the same
+Hermite ramp. The source is near a viewport clip boundary, so clip-generated
+vertices and interpolation setup are plausible contributors; vertex rounding,
+rasterizer precision and other arithmetic remain alternatives. **The capture
+does not isolate which contributor caused this displacement.**
+
+At that pixel both candidate IDs are background while both colors are opaque.
+The candidate's analytic half-width test agrees with the CPU, but the original
+hard color uses interpolated coverage. Therefore zero *invisible* picks does not
+prove that every painted hard-edge pixel is pickable. For blended links, the
+candidate deliberately excludes some visible antialiasing fringe below half
+coverage, so a reverse-direction check must state the intended picking policy.
+
+### 3. Caps and the reference have a separate boundary problem
+
+In the recorded vertical-cap replay, both APIs receive identical captured
+float32 clip vertices, yet disagree on carrier fragments, and each neutral
+carrier replay matches its own native probe. That localizes the disagreement
+to the raster path, including viewport conversion and edge ownership, rather
+than establishing a particular driver rounding algorithm. WebGPU specifies
+pixel-center sampling without defining inclusion exactly on a polygon edge; the
+[polygon rasterization rules](https://www.w3.org/TR/webgpu/#polygon-rasterization)
+also flag precision as relevant. The scalar reference's double-precision quad
+and top-left rule are an independent comparison policy, not a portable promise
+about either API's exact edge pixels.
+
+Rounding is a plausible explanation for why a `1/1024` device-pixel shift does
+not always change a cap while a `1/8` shift does. Other raster pipelines can
+snap post-clipping positions before rasterization, as described in the
+[Direct3D 11.3 specification](https://microsoft.github.io/DirectX-Specs/d3d/archive/D3D11_3_FunctionalSpec.htm);
+that is an example of a permitted design, **not evidence of the M3 grid size or
+the mechanism in this capture**. Do not infer a universal correction offset.
+
+### 4. A positive-width short link can miss every sample
+
+Under the stated single-sample model, take a horizontal link from
+`(100.1,100.25)` to `(100.2,100.25)` in device pixels, with core width 1 and
+nonzero opacity. Its butt-capped carrier spans only `100.1..100.2` in x; no
+pixel center has an x coordinate in that interval. No color or ID fragment can
+be generated, even though the width is floored to one pixel. This applies to
+the blended carrier as well as hard mode. It is a theoretical case, not evidence
+that a practical graph has exhibited a vanished link. Short segments, moving
+layouts and fractional zoom need explicit checks before the pilot's no-vanishing
+rule can be assessed. Coincident endpoints are a separate degeneracy: the
+production vertex shader normalizes a zero vector, while the lab's WGSL port
+explicitly culls a zero-distance link. A zero-length test does not establish the
+behavior of a short, positive-length link.
+
+### Recommended next experiments
+
+1. **Reproduce the baseline and vary only coverage arithmetic.** Run the
+   existing 40-row sweep and the hard/cap replays on the current pinned luma and
+   native device. Add diagnostic ascending-edge coverage on WebGL and WebGPU;
+   compare float probes, ordinary color bytes, candidate IDs and the unchanged
+   scalar reference. Include the arrow-body expression in a separate scoped
+   check. If M3 values do not improve, the undefined GLSL call remains a
+   portability issue rather than the explanation of these failures.
+2. **Separate clipping from interpolation.** Replay the clipped oblique source
+   and an otherwise equivalent, fully visible placement, preserving device-pixel
+   phase and comparing corresponding samples. Capture each backend's float32
+   vertices and varyings, then compare observed interpolation with a barycentric
+   calculation on those captured vertices. Control viewport-transform and
+   translation rounding: moving a source alone changes more than clipping. A
+   persistent difference points beyond clipping; a change only when clipped is
+   evidence for the clipping/interpolator path, not proof of a specific driver
+   implementation.
+3. **Prototype a common geometric decision, without replacing controls.** Test
+   a conservatively enlarged carrier with explicit longitudinal butt-cap and
+   transverse distance tests in both color and ID passes. State the tie rule,
+   guard degenerate endpoints, and verify the carrier is conservative for the
+   tested coordinate range. Measure original-color changes, overlaps, edge
+   pixels, source visibility and fill cost. This can change both color and
+   picking. A corrected pair cannot become identical while retaining every
+   original color byte where the original backends already disagree.
+4. **Exercise visible behavior, not only still-image mismatch counts.** Sweep
+   subpixel translations and zoom continuously across short and long links,
+   widths around one device pixel, several angles, DPR 1/2 and viewport edges.
+   Record per-source painted and pickable pixels, gaps, flicker, ordering and
+   geometry-relative boundary displacement. Keep strict failures separate from
+   the existing one-device-pixel pilot allowance; that allowance does not excuse
+   vanished thin links, wrong interior colors/IDs or invisible foreground picks.
+
+The `30/40` strict result, original-color controls and practical pilot verdict
+are unchanged. In particular, the pilot remains **not assessed**. The next
+experiment should measure before promoting any alternative or changing a gate.
+
 ## Pattern boundary audit · 17 November 2026
 
 **The first straight dash rejection is an interpolated side/coverage tie, not
