@@ -9,9 +9,10 @@ import { resourceScope } from '../../gpu/resource-scope'
 import { HEIGHT, WIDTH, type Point, type Settings } from './data'
 import { overlayIndices } from './point-effects'
 import { atlasInfo } from './atlas'
+import { pixelOverlayGLSL } from './overlay-pixels'
 
-// Verbatim production hover/focus shaders and std140 declaration order.
-export function createPointOverlays (device: Device): {
+// Default retains verbatim production hover/focus shaders and std140 declaration order.
+export function createPointOverlays (device: Device, pixels = false): {
   draw(pass: RenderPass, bindings: Record<'positionsTexture' | 'pointStatus' | 'exitTexture', Texture>, points: Point[], settings: Settings): void;
   destroy(): void;
 } {
@@ -47,9 +48,10 @@ export function createPointOverlays (device: Device): {
       },
     }))
     const buffer = scope.own(device.createBuffer({ data: new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]) }))
+    const shaders = pixels ? pixelOverlayGLSL(vs, fs) : { vertex: vs, fragment: fs }
     const model = scope.own(new Model(device, {
-      vs,
-      fs,
+      vs: shaders.vertex,
+      fs: shaders.fragment,
       topology: 'triangle-strip',
       vertexCount: 4,
       modules: [{ name: 'pointSize', vs: pointSize, fs: pointSize }, { name: 'exitRamp', vs: exitRamp }],

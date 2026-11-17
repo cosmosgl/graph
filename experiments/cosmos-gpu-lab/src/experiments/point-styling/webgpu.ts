@@ -10,6 +10,7 @@ import source from './points.wgsl?raw'
 import effects from './effects.wgsl?raw'
 import polygonPixels from './polygon-pixels.wgsl?raw'
 import { greyed, overlayIndices } from './point-effects'
+import { pixelOverlayWGSL } from './overlay-pixels'
 import { SOURCE_ALPHA_WGSL } from './source-alpha'
 import { atlasTexture, atlasCoords, atlasInfo, GUTTER_SIZE, sourceTexelRects } from './atlas'
 import { createDynamicAtlas } from './dynamic-atlas'
@@ -44,9 +45,11 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
 
     const rectangleBuffers = new Map<string, ReturnType<typeof upload>>()
     const vertexArray = scope.own(device.createVertexArray({ shaderLayout, bufferLayout: [] }))
-    const make = (format: TextureFormatColor, picking: boolean, display = false, overlay = false): RenderKernel => scope.own(new RenderKernel(device, {
-      vertexSource: `${source}\n${SOURCE_ALPHA_WGSL}\n${effects}\n${polygonPixels}`,
-      fragmentSource: `${source}\n${SOURCE_ALPHA_WGSL}\n${effects}\n${polygonPixels}`,
+    const make = (
+      format: TextureFormatColor, picking: boolean, display = false, overlay = false, pixelDistance = false
+    ): RenderKernel => scope.own(new RenderKernel(device, {
+      vertexSource: `${pixelDistance ? pixelOverlayWGSL(source) : source}\n${SOURCE_ALPHA_WGSL}\n${effects}\n${polygonPixels}`,
+      fragmentSource: `${pixelDistance ? pixelOverlayWGSL(source) : source}\n${SOURCE_ALPHA_WGSL}\n${effects}\n${polygonPixels}`,
       vertexEntryPoint: overlay ? 'overlayVertex' : 'vertexMain',
       fragmentEntryPoint: overlay ? 'overlayFragment' : 'fragmentMain',
       topology: 'triangle-list',
@@ -60,7 +63,8 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
       },
     }))
     const colorKernel = make('rgba8unorm', false); const pickKernel = make('rgba8unorm', true)
-    let diagnostic: RenderKernel | undefined; let overlayKernel: RenderKernel | undefined; let overlayDisplay: RenderKernel | undefined
+    let diagnostic: RenderKernel | undefined
+    const overlayKernels = new Map<string, RenderKernel>()
     const displayKernel = make(device.canvasContext!.getCurrentFramebuffer().colorAttachments[0].texture.format as TextureFormatColor, false, true)
     return {
       atlas: dynamic,
@@ -136,12 +140,15 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
               }
               if (mode === 0 && rank === undefined) {
                 for (const ring of overlayIndices(settings, points.length)) {
-                  overlayKernel ??= make('rgba8unorm', false, false, true)
-                  if (!framebuffer) {
-                    overlayDisplay ??= make(device.canvasContext!.getCurrentFramebuffer().colorAttachments[0].texture.format as TextureFormatColor,
-                      false, true, true)
+                  const pixelDistance = variant !== 'production' && settings.overlayArithmetic === 'pixels'
+                  const key = `${!!framebuffer}:${pixelDistance}`
+                  let overlay = overlayKernels.get(key)
+                  if (!overlay) {
+                    const format = framebuffer
+                      ? 'rgba8unorm'
+                      : device.canvasContext!.getCurrentFramebuffer().colorAttachments[0].texture.format as TextureFormatColor
+                    overlay = make(format, false, !framebuffer, true, pixelDistance); overlayKernels.set(key, overlay)
                   }
-                  const overlay = framebuffer ? overlayKernel : overlayDisplay!
                   overlay.draw(pass, {
                     vertexArray,
                     vertexCount: 6,
@@ -168,6 +175,7 @@ export async function createStylingWebGPU (canvas: HTMLCanvasElement, gutterExte
           const readbackStart = performance.now()
           const result: Snapshot = {
             storedAlpha: stored,
+            overlayArithmetic: variant === 'production' ? 'normalized' : settings.overlayArithmetic ?? 'normalized',
             polygonArithmetic: variant === 'production' ? 'normalized' : settings.polygonArithmetic ?? 'normalized',
             atlasSource,
             atlasGeneration: atlasSource ? dynamic.generation : undefined,

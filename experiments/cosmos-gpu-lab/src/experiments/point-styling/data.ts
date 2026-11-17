@@ -14,6 +14,7 @@ export type Settings = {
   defaultStroke: number; defaultStrokeColor: [number, number, number, number]; reverse: boolean;
   imageFilter?: 'nearest' | 'linear';
   polygonArithmetic?: 'normalized' | 'pixels';
+  overlayArithmetic?: 'normalized' | 'pixels';
   atlasIsolation?: 'original' | 'clamp' | 'inset' | 'gutter' | 'texel';
   atlasPacking?: 'baseline' | 'npot-square' | 'npot-rectangle' | 'npot-scaled' | 'pot-padded';
   atlasSource?: AtlasLayout;

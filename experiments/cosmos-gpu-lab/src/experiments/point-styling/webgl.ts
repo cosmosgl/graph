@@ -237,7 +237,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
     }
     const visible = make(false); const picking = make(true)
     let diagnostic: Model | undefined
-    let overlays: ReturnType<typeof createPointOverlays> | undefined
+    const overlays = new Map<boolean, ReturnType<typeof createPointOverlays>>()
     let analyticColor: Model | undefined; let analyticPick: Model | undefined
     const candidates = new Map<string, { color: Model; pick: Model; probe: Model }>()
     return {
@@ -404,8 +404,10 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
                 model.draw(pass)
               }
               if (rank === undefined && mode === 0 && overlayIndices(settings, points.length).length) {
-                overlays ??= scope.own(createPointOverlays(device))
-                overlays.draw(pass, bindings, points, { ...settings, atlasSource: source })
+                const pixelDistance = variant !== 'production' && settings.overlayArithmetic === 'pixels'
+                let overlay = overlays.get(pixelDistance)
+                if (!overlay) { overlay = scope.own(createPointOverlays(device, pixelDistance)); overlays.set(pixelDistance, overlay) }
+                overlay.draw(pass, bindings, points, { ...settings, atlasSource: source })
               }
             } finally {
               if (timer) timer.end(pass); else pass.end()
@@ -433,6 +435,7 @@ export async function createStylingWebGL (canvas: HTMLCanvasElement, gutterExten
           const readbackStart = performance.now()
           const result: Snapshot = {
             storedAlpha: stored,
+            overlayArithmetic: variant === 'production' ? 'normalized' : settings.overlayArithmetic ?? 'normalized',
             polygonArithmetic: variant === 'production' ? 'normalized' : settings.polygonArithmetic ?? 'normalized',
             atlasSource: source,
             atlasGeneration: source ? dynamic.generation : undefined,

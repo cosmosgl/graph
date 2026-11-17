@@ -64,6 +64,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     `<option value="${name}">${name === 'shapes' ? 'Eight shapes · exact boundary control' : name}</option>`).join('')}</select></label>
       <label>Ring / greyout profile <select data-effects-profile disabled>${EFFECTS_PROFILES.map((p, i) =>
     `<option value="${i}">${p.name}</option>`).join('')}</select></label>
+      <label>Hover / focus distance <select data-overlay-arithmetic disabled><option value="normalized">Interpolated · retained control</option>
+        <option value="pixels">Pixel distance · candidate</option></select></label>
       <label>Polygon arithmetic <select data-polygon-arithmetic disabled><option value="normalized">Normalized · retained control</option>
         <option value="pixels">Pixel-space · diagnostic</option></select></label>
       <label>Atlas filter <select data-image-filter><option value="nearest">Nearest · production default</option>
@@ -228,6 +230,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = false })
     el<HTMLSelectElement>('[data-effects-scene]').disabled = !effectsActive
     el<HTMLSelectElement>('[data-effects-profile]').disabled = !effectsActive
+    el<HTMLSelectElement>('[data-overlay-arithmetic]').disabled = !effectsActive || el<HTMLSelectElement>('[data-renderer]').value === 'production'
     el<HTMLSelectElement>('[data-polygon-arithmetic]').disabled = !effectsActive || el<HTMLSelectElement>('[data-renderer]').value === 'production'
     el<HTMLSelectElement>('[data-decode-policy]').disabled = !decodingActive || el<HTMLSelectElement>('[data-renderer]').value === 'production'
     el<HTMLSelectElement>('[data-atlas-packing]').disabled = dynamicActive || decodingActive
@@ -271,6 +274,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     packingSelect.options[0].disabled = name.startsWith('atlas-packing-')
     let settings: Settings = {
       ...DEFAULTS,
+      overlayArithmetic: isEffects && el<HTMLSelectElement>('[data-overlay-arithmetic]').value === 'pixels' ? 'pixels' : undefined,
       polygonArithmetic: isEffects && el<HTMLSelectElement>('[data-polygon-arithmetic]').value === 'pixels' ? 'pixels' : undefined,
       zoom: Number(el<HTMLSelectElement>('[data-zoom]').value),
       ratio: Number(el<HTMLSelectElement>('[data-ratio]').value),
@@ -332,7 +336,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
                           : 'Three overlapping shapes; reverse the order to change the topmost ID without changing point identity.'
     if (isEffects) {
       const arithmetic = variant === 'production' ? 'normalized production' : settings.polygonArithmetic ?? 'normalized control'
-      el('[data-legend]').textContent += ` Polygon arithmetic: ${arithmetic}. The CPU mask is unchanged.`
+      el('[data-legend]').textContent += ` Polygon arithmetic: ${arithmetic}. The CPU mask is unchanged. Hover/focus distance: ${
+        variant !== 'production' && settings.overlayArithmetic === 'pixels' ? 'pixel-distance candidate' : 'interpolated control'}.`
     }
     if (isAtlas) {
       el('[data-legend]').textContent += ` Candidate sampling policy: ${settings.atlasIsolation
@@ -440,11 +445,12 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         : undefined
       report = {
         polygonAudit,
-        schemaVersion: 16,
+        schemaVersion: 17,
         effects: scenario && {
           scene: el<HTMLSelectElement>('[data-effects-scene]').value,
           profile: EFFECTS_PROFILES[Number(el<HTMLSelectElement>('[data-effects-profile]').value)].name,
           cpuColors: effectColors,
+          overlayArithmetic: { webgl: snapshots.webgl?.overlayArithmetic, webgpu: snapshots.webgpu?.overlayArithmetic },
         },
         decoding: selectedDecode && {
           requested: decodePolicy,
@@ -1049,7 +1055,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           renderEffectsRows(el('[data-effects-results]'), study.rows)
           el('[data-effects-progress]').textContent = `${study.rows.length} / ${EFFECTS_ROW_COUNT} · ${row.fixture} · ${row.profile} · ${row.view}`
         }, () => cancelSweep || destroyed, undefined,
-        el<HTMLSelectElement>('[data-polygon-arithmetic]').value === 'pixels' ? 'pixels' : undefined)
+        el<HTMLSelectElement>('[data-polygon-arithmetic]').value === 'pixels' ? 'pixels' : undefined,
+        el<HTMLSelectElement>('[data-overlay-arithmetic]').value === 'pixels' ? 'pixels' : undefined)
         study.status = cancelSweep || destroyed ? 'cancelled' : 'complete'
       } catch (error) { study.status = 'failed'; study.error = String(error); runError = study.error } finally {
         study.finishedAt = new Date().toISOString(); sweepRunning = false

@@ -219,7 +219,8 @@ export const research: Record<string, ResearchSummary> = {
       'region filtering reduces sparse-request cost while dense overlap remains expensive.',
     scope: 'Five original candidate/UI checks pass on both environments; software retains two old source-byte failures. ' +
       'All 16 paired filtered/prototype cases pass exact outputs on M3 and SwiftShader. ' +
-      'The reference consumes measured source masks; this is not a portable rounding prediction. Historical polygon failures remain rejected.',
+      'Pixel-distance hover/focus overlays pass CPU colors in 96/96 cases on both; eight polygon-mask rows remain rejected. ' +
+      'The stored-alpha reference consumes measured source masks, not a portable rounding prediction.',
     variant: 'Stored-alpha-v1 through public luma 10.0.0-alpha.15 APIs; Apple M3 and Linux x64 SwiftShader. Earlier polygon measurements retain alpha.4.',
     reviewed: '2026-11-16',
     milestone: 'rendering',

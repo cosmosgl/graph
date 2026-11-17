@@ -1,8 +1,8 @@
 ---
 source: Recorded findings
-recorded: 2026-11-15
-device: Apple M3; installed Chrome 157 and inline Chromium 157
-scope: M3 point styling/picking studies. The retained normalized ring/greyout sweep passes 88/96; the opt-in pixel-space diagnostic passes 86/96 and isolates GPU arithmetic, eight native CPU diamond-tie rows and two color-preservation rejections. Earlier image and force studies retain their stated scopes; acceptance and production controls are unchanged.
+recorded: 2026-11-16
+device: Apple M3 / inline Chromium 157; Linux Chromium 151 / SwiftShader; earlier native studies retain their stated devices
+scope: Pixel-distance hover/focus overlays pass CPU colors in 96/96 cases on M3 and SwiftShader; eight polygon-mask rows remain rejected. Original controls and gates are retained. Earlier sections keep their own measurement scopes.
 ---
 
 ## Question
@@ -1809,6 +1809,109 @@ All **144 frozen static atlas rows match the preceding export record for record*
 
 Transitions, arbitrary ring widths, interactive pointer behavior, broader colors/geometry, production setter/default transitions, offscreen culling, host depth integration, runtime GPU cost and other native devices remain separate gates.
 
+
+## Pixel-distance hover/focus overlays
+
+Recorded **16 November 2026**, luma **10.0.0-alpha.15**, Linux Chromium 151 /
+SwiftShader and inline Chromium 157 / Apple M3. This is a separate opt-in
+hover/focus candidate. It does not change the polygon-arithmetic diagnostic,
+production shaders, CPU reference or acceptance gates.
+
+**Direct pixel distance clears the observed ring-color failures in both
+backends. It does not close the polygon-mask or source-byte picking gates.**
+
+### What the failure isolates
+
+In Linux's overlap / Darken / native-view control, both backends store
+`[4, 4, 3, 5]` at pixel `(237, 92)` while the CPU expects `[1, 2, 1, 2]`.
+The complete frame has 989 pixels outside the existing 2/255 channel budget,
+with a maximum error of 12/255. The candidate matches the CPU exactly in this
+case. Removing only hover/focus overlays also matches exactly.
+
+The retained overlay computes its radial distance as
+`length(interpolatedQuadCoordinate) * quadHalfSize`. The candidate passes the
+projected center as a flat varying and computes
+`length(fragmentPosition - centerInDevicePixels)` instead. The radius, ring
+width, edge ramp, color, alpha, greyout rules, order and blending stay the same.
+Point-body outlines and picking shaders are unchanged.
+
+This ablation localizes the discrepancy to the overlay's normalized-distance
+path. It does not separately prove whether interpolation, `length`, rescaling
+or compiler evaluation supplies each error. There is no adapter-specific branch
+or widened tolerance.
+
+WebGL uses `gl_FragCoord` with a bottom-left origin; the WebGPU fragment's
+`position` and its center use top-left framebuffer coordinates. Both measure
+from pixel centers. See the [Khronos fragment-coordinate specification](https://registry.khronos.org/OpenGL/specs/gl/GLSLangSpec.4.60.html#built-in-language-variables)
+and [WGSL position input](https://www.w3.org/TR/WGSL/#position-builtin-value).
+The WebGL candidate's center projection is scoped to this lab's scale-only
+camera about the viewport center; general host transforms remain unvalidated.
+
+### Matched results
+
+The same 96 cases cover four scenes, eight profiles and three views, including
+pixel ratios 1/2, zoom-out, reversed order, images, hidden/absent points,
+size limits, duplicate hover IDs and focus overlays. Polygon arithmetic remains
+the normalized control throughout.
+
+| Environment | Retained overlay: CPU color failures, per backend | Pixel-distance overlay: CPU color failures, per backend | Largest candidate error |
+| --- | --- | --- | --- |
+| Linux SwiftShader | 17/96 cases; max 12/255 | 0/96 cases | 1/255 |
+| Apple M3, inline browser | 0/96 cases; max 2/255 | 0/96 cases | 1/255 |
+
+The original 24-case non-polygon/native-view regression still exposes ten
+Linux configurations with bad control colors. That test remains unchanged;
+the candidate is tested separately. Removing overlays passes the CPU color
+budget in all 96 cases on both environments.
+
+The candidate retains exact IDs relative to the old overlay and to draws with
+no decorative overlays. Switching explicit picking to source-byte picking
+preserves candidate color bytes exactly. The paired frame and scalar-mask
+comparison passes **88/96** cases in both environments: the eight native-view
+polygon-mask rows remain rejected. No new mask policy is introduced here.
+
+An additional eight fractional configurations (both backends: 16 checks per
+environment) cover fractional positions and sizes, ratios 1/2, zoom 0.5/2 and
+both size-scaling modes. They pass CPU colors, overlay-ID invariance,
+pick-only color preservation, hover deduplication and byte-identical production
+restoration. Production ignores the candidate selection.
+
+**Correcting the overlay is a color change relative to the retained control.**
+It changes pixels in 45/96 Linux cases and 35/96 M3 cases per backend. M3 stays
+within 2/255 of its control; Linux exceeds that budget in the same 17 failing
+control cases. Do not relabel these as unchanged production colors. The lab
+continues to report production compatibility separately. Unchanged color bytes
+apply to the picking-only comparison, not to replacing overlay arithmetic.
+
+### Reproduce and limits
+
+Select **Point rings and greyout → overlap → Darken**, then switch **Hover /
+focus distance** between **Interpolated · retained control** and **Pixel
+distance · candidate**. Keep polygon arithmetic normalized. The CPU-color table
+and legend identify the live result; production always uses its original
+shader. Run the rings sweep for all 96 cases. Export JSON includes the requested
+setting, actual backend selection and per-row policy; cancelled sweeps retain
+completed rows. All content stays visible.
+
+```sh
+pnpm --filter @cosmos.gl/gpu-lab test:gpu \
+  src/experiments/point-styling/overlay-pixels.test.ts \
+  src/experiments/point-styling/overlay-contracts.test.ts \
+  src/experiments/point-styling/overlay-view.test.ts
+```
+
+To repeat on this machine, prefix the command with
+`LAB_NATIVE_GPU=1 LAB_INLINE_BROWSER=1` and open the printed session URL in an
+existing native browser. Run `point-effects.test.ts` separately to inspect the
+original control. The Linux measurements above retain their stated environment. The two measurement artifacts are written under
+ignored `captures/local/`; keep raw JSON local and share these findings plus
+the reproduction instructions.
+
+This is bounded correctness evidence for a candidate, not a production default
+change. GPU cost, general transforms, transitions and other native devices
+remain unmeasured. Stored-alpha picking still does not support decorative
+rings. Historical polygon failures and source-byte visibility failures remain
+rejected; the next focused investigation is the shared link alpha boundary.
 
 ## Polygon boundary isolation
 
