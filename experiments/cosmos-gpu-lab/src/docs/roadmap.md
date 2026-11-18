@@ -44,6 +44,7 @@ Current evidence from the native M3 inline browser, with unchanged gates:
 | 8,192 star | Stage attribution identifies the serial incoming hub pass; ordered prefetch preserves state/colors and helps modestly | Every candidate star window still fails. Keep default `hoist`; further tuning parked |
 | Cooled Karate Club | After Fit, all 34 points are visible, separate and pickable; two hub regions are readable; frame and sampled-pixel gates pass | Original whole assessment rejected by a 68.2-ms pick; fixed early camera clips half the graph; dense links are harder to trace |
 | Paused picking replay | Original exported cooled geometry, 102/102 exact picks, maximum 17.5 ms; actual pointer checks 20.1–27.1 ms | The 68.2-ms event did not recur. No cause or fix established; paused replay is not whole-runtime acceptance |
+| Small production/viewer comparison | Karate moving/cooled frames, running picks/dragging, style/data replacement and settled resize pass on M3; layouts look similar after Fit | Same-geometry interior color checks fail; first-slice usability is not strict production compatibility |
 | Interaction/lifecycle | Point drag/pin release, camera, replacement, pause/resume, resize and destruction demonstrated in the lab runtime | Full setters, repeated production workflows, host ownership/deck and recovery still need acceptance |
 
 Detailed evidence stays with the experiment:
@@ -62,15 +63,15 @@ advanced styles and automatic framing remain explicitly unsupported.
 
 **Next, in order:**
 
-1. Compare a small production WebGL and integrated WebGPU viewer on the same Karate
-   topology/settings: moving and cooled appearance, data/style replacement, picking
-   and dragging while running, pause, resize and teardown. Record differences from
-   the actual production workflow; do not demand identical independently evolved
-   coordinates or invent a quality threshold.
-2. Make an explicit first-slice decision: supported options/workloads, measured
+1. Make an explicit first-slice decision: supported options/workloads, measured
    behavior, unresolved limitations and what would block trying it in a real viewer.
-3. Only then expand force/style/host coverage. Keep deep raster investigations,
+   The [small production/viewer comparison](#/viewer-comparison) is complete:
+   all four frame windows pass and running picks, dragging, data/style replacement
+   and settled resize work. Strict color compatibility fails. Keep that distinction
+   explicit; do not reopen broad raster research just to turn the pilot green.
+2. Only then expand force/style/host coverage. Keep deep raster investigations,
    further arithmetic tuning and larger graphs parked unless the pilot needs them.
+   Resolve the retained color failures before claiming production color compatibility.
 
 The bounded picking replay is complete. Do not repeat until a pass is selected:
 retain the 68.2-ms failure and reopen latency investigation when a practical stall

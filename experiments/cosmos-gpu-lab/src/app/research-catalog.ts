@@ -189,6 +189,18 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
         description: 'Independent repulsion trajectories and their bounded local-error/drift observations.',
       }],
     }),
+    'viewer-comparison': entry('viewer-comparison', {
+      conclusion: 'Small M3 viewers pass frame, update and running-picking checks; layouts look similar after Fit. ' +
+        'Same-geometry interior colors still differ, so strict compatibility is rejected.',
+      reviewed: '2026-11-18',
+      variant: 'Unchanged production Graph / luma v9 versus integrated corrected luma v10 core',
+      comparison: 'Same topology and supplied styles → independent layouts and running interaction → bounded workflow checks',
+      milestone: 'integration',
+      method: 'method',
+      evidence: 'findings',
+      next: 'Decide the supported first-slice pilot envelope with color failures, historical stalls and unsupported options explicit.',
+      investigations: [{ page: 'findings', state: 'Current evidence', description: 'Separate measured workflow behavior from full migration approval.' }],
+    }),
     'integrated-webgpu': entry('integrated-webgpu', {
       conclusion: 'Cooled Karate Club is readable after Fit: all 34 points are visible and pickable. Frames and sampled pixels pass; ' +
         'a 102-pick replay peaks at 17.5 ms. The earlier 68.2-ms failure is unexplained, not fixed. Large-star performance remains outside the accepted scope.',

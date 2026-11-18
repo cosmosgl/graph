@@ -67,7 +67,7 @@ export const experimentGroups = [
     id: 'combined',
     title: 'Combined engine',
     description: 'Follow independently evolving layouts, compose the forces and keep a complete frame on the GPU.',
-    experiments: ['repulsion-trajectories', 'combined-layout', 'resident-layout', 'integrated-webgpu', 'matched-layout'],
+    experiments: ['repulsion-trajectories', 'combined-layout', 'resident-layout', 'integrated-webgpu', 'viewer-comparison', 'matched-layout'],
   },
   {
     id: 'validation',
