@@ -249,7 +249,14 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
       }
       if (name === 'paint') {
         playing = false; gl.graph.pause(); gpu.pause(); style()
-        record({ action: 'same-geometry-paint', style: alternate ? 'B' : 'A', ...await comparePaint(gl, gpu) })
+        record({
+          action: 'same-geometry-paint',
+          scene,
+          pointCount: gpu.data.input.points.length / 4,
+          linkCount: gpu.data.graph.links.length / 2,
+          style: alternate ? 'B' : 'A',
+          ...await comparePaint(gl, gpu),
+        })
       }
       if (name === 'check') await check()
       if (name === 'assess') {

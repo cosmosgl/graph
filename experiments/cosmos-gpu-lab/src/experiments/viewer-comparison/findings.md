@@ -130,3 +130,36 @@ check, targeted lint and build passed. No production file or dependency changed.
 The next decision is the explicit supported first-slice envelope, not an open-ended
 raster investigation. Preserve these color failures; isolate them before claiming
 production color compatibility, or sooner if they visibly obstruct the intended pilot.
+
+## Follow-up: style-A paint on a small chain
+
+On 18 November 2026, a focused follow-up asked whether the same strict color failure
+also appears on a different small graph. The clean source revision was
+`5a5bdbc3ca2355d90b19022841d72529d645b9e4`. In a visible native Chromium 157 session,
+production WebGL reported Apple M3 through ANGLE Metal and the candidate reported
+Apple WebGPU / `metal-3`, `fallback: false`. The luma versions were 9.3.6 and
+10.0.0-alpha.15 respectively. This is separate from the earlier timed assessment.
+
+Both panels measured 305 × 320 CSS pixels at DPR 2 (610 × 640 attachments). For
+each fresh fitted fixture, candidate positions and camera were copied into the
+production viewer. The original geometry-derived one-device-pixel boundary was
+excluded; the interior color limit remained 2/255 per channel.
+
+| Fixture, style A | Points / links | Interior pixels | ID errors | Color errors | Max channel error | Strict paint |
+|---|---:|---:|---:|---:|---:|---|
+| Karate Club | 34 / 78 | 323,298 | 0 | 88 | 35/255 | Fail |
+| Chain | 32 / 31 | 358,200 | 0 | 113 | 29/255 | Fail |
+
+Both images were nonempty, with zero invisible picks in either viewer. The color
+gate failed on both fixtures while exact interior IDs passed. The fixtures also
+differ in positions, link density and framing, so these results do not isolate a
+cause. Style B, evolved layouts, pointer interaction, timing, other devices and
+full migration readiness were not assessed. The earlier color failures remain.
+
+To repeat this bounded comparison, build the source revision above, open
+**Production and WebGPU viewers**, recreate the viewers, compare style-A paint,
+replace with the 32-point chain, compare again and export JSON. Use the declared
+panel size and DPR for a direct comparison. The raw local capture is in
+`captures/chain-paint-investigation-20261118T091319Z-89050/`. Its two paint rows
+predate fixture labels: their preceding update rows and geometry lengths identify
+Karate and chain. Future paint exports include the fixture and point/link counts.

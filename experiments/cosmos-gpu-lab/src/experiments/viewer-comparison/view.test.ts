@@ -70,12 +70,31 @@ it('shows real graphs on load and keeps the viewer working after reference navig
       expect(host.querySelector('[data-results]')!.textContent).toContain('style A')
       expect(check.disabled).toBe(false)
     }, { timeout: 30000 })
+    const paint = host.querySelector<HTMLButtonElement>('[data-action="paint"]')!
+    paint.click()
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-results]')!.textContent).toContain('Same-geometry paint · karate · style A')
+      expect(paint.disabled).toBe(false)
+    }, { timeout: 30000 })
+    host.querySelector<HTMLButtonElement>('[data-action="chain"]')!.click()
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-results]')!.textContent).toContain('chain · style A · paused update')
+      expect(paint.disabled).toBe(false)
+    }, { timeout: 30000 })
+    paint.click()
+    await vi.waitFor(() => {
+      expect(host.querySelector('[data-results]')!.textContent).toContain('Same-geometry paint · chain · style A')
+      expect(paint.disabled).toBe(false)
+    }, { timeout: 30000 })
     const capture = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:viewer-test')
     vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
     host.querySelector<HTMLButtonElement>('[data-action="export"]')!.click()
     await vi.waitFor(() => expect(capture).toHaveBeenCalledOnce())
     const result = JSON.parse(await (capture.mock.calls[0][0] as Blob).text())
     expect(result.records.find((row: { action: string }) => row.action === 'updates').candidatePixels.paintedSamples).toBeGreaterThan(0)
+    expect(result.records.filter((row: { action: string }) => row.action === 'same-geometry-paint')
+      .map(({ scene, pointCount, linkCount }: { scene: string; pointCount: number; linkCount: number }) => ({ scene, pointCount, linkCount })))
+      .toEqual([{ scene: 'karate', pointCount: 34, linkCount: 78 }, { scene: 'chain', pointCount: 32, linkCount: 31 }])
 
     host.querySelector<HTMLButtonElement>('[data-action="run"]')!.click()
     await vi.waitFor(() => expect(control.tick).toBeGreaterThan(0), { timeout: 15000 })
