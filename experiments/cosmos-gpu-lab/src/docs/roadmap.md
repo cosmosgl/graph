@@ -72,8 +72,14 @@ advanced styles and automatic framing remain explicitly unsupported.
    about 4.3–4.4× lower force-only medians for large/uneven groups; WebGL has lower
    medians for balanced groups and supplied targets. This is one short session,
    not a complete-frame result. The finding workflow retains the plan and source.
-2. **Next: per-point attractors**, then mouse repulsion as separate forces.
-3. Compose accepted candidates, including clusters, with the resident core in production order;
+2. Preserve the [per-point attractor baseline](#/point-attractors): all 144
+   backend/CPU rows, 18 direct pairs and 18 post-timing checks pass on M3 through
+   8,192 points, including live target changes and disabling/re-enabling. The
+   corrected candidate has higher force-only cost: roughly 0.32–0.49 ms versus
+   0.03–0.04 ms WebGL at 8,192 points. Full-frame cost remains unchecked.
+3. **Next: mouse repulsion** as a separate force, including pointer coordinates,
+   the minimum-distance clamp and running/paused behavior.
+4. Compose accepted candidates, including clusters and per-point attractors, with the resident core in production order;
    check independently evolving layouts and added complete-frame GPU cost.
 
 The unresolved picking issue does **not** block independent force research. It
