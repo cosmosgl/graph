@@ -6,6 +6,7 @@ import { evaluate } from '../integrated-webgpu/evaluate'
 import { fit, validateFrame } from '../integrated-webgpu/validation'
 import { assessmentChecks, pixelCheck, protocol, type Check } from './checks'
 import { member, pointSize } from './members'
+import { investigateLatency, latencyProtocol, type LatencyBlock } from './latency'
 export async function createView (host: HTMLElement): Promise<ExperimentInstance> {
   host.innerHTML = `<div class="controls">
     <button data-action="run" data-run-action="primary">Run</button>
@@ -29,12 +30,15 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     <section data-run-part="results"><p>Research pilot only. Production color compatibility remains rejected; a local pass does not approve migration.</p>
       <div data-report>No checks run in this session.</div></section>
     <section data-run-part="diagnostics"><div class="controls"><button data-action="assess">Assess this pilot</button>
+      <button data-action="latency">Investigate picking latency</button>
       <button data-action="pixels">Check current pixels</button><button data-action="cancel">Cancel assessment</button>
       <button data-action="export">Export JSON</button></div><p>${protocol}</p>
-      <p>Assessment resets the graph and uniform sizes. Inspection, uploads and validation remain outside timed frames.</p></section>`
+      <p>Assessment resets the graph and uniform sizes. Inspection, uploads and validation remain outside timed frames.</p>
+      <h3>Picking-latency investigation</h3><p>${latencyProtocol}</p></section>`
   const canvas = host.querySelector('canvas')!; const status = host.querySelector<HTMLElement>('[role=status]')!
   const input = host.querySelector<HTMLInputElement>('[data-member]')!; const degree = host.querySelector<HTMLInputElement>('[data-degree]')!
   const message = host.querySelector<HTMLElement>('[data-member-message]')!; const rows: Check[] = []; const captures: unknown[] = []
+  const latencyRuns: Array<{ startedAt: string; protocol: string; blocks: LatencyBlock[] }> = []
   let busy = false; let dead = false; let cancelled = false; let failure = ''; let displayed = -2
   host.querySelectorAll<HTMLButtonElement>('button').forEach(b => { b.disabled = true })
   const r = await createIntegrated(canvas, 'karate', 34)
@@ -47,7 +51,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     passed: `${rows.filter(row => row.pass).length} named checks`,
     failed: failure || r.error || `${rows.filter(row => !row.pass).length} failed checks`,
     unchecked: 'Strict production color compatibility remains rejected. Full migration and larger viewer workloads are not approved.',
-  }), { experiment: 'pilot-viewer', devices: () => [r.info] })
+  }), { experiment: 'pilot-viewer', visualFirst: true, devices: () => [r.info] })
   host.querySelector<HTMLElement>('.run-workbench')!.style.display = 'block'
   const record = (checks: Check[], capture: unknown): void => {
     rows.push(...checks); captures.push(capture)
@@ -133,7 +137,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
         const visibility = (): void => { hidden ||= document.visibilityState !== 'visible' }
         document.addEventListener('visibilitychange', visibility)
         try {
-          host.querySelector('#run-run')!.scrollIntoView({ block: 'start' })
+          host.querySelector('#run-live-viewer, #run-run')!.scrollIntoView({ block: 'start' })
           const result = await evaluate(r, () => cancelled || dead || hidden, text => { status.textContent = text })
           if (cancelled || dead || hidden) throw new Error('Assessment interrupted; no completed verdict recorded')
           record(assessmentChecks(result), { action: 'assessment', ...result, firstFeedback, lastFeedback: r.feedback.length })
@@ -141,16 +145,31 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
         // The existing interaction probe deliberately perturbs a point; Fit is outside timing.
         fit(r, (await r.backend.read()).positions); await r.frame(false)
       }
+      if (action === 'latency') {
+        resume = false
+        const run = { startedAt: new Date().toISOString(), protocol: latencyProtocol, blocks: [] as LatencyBlock[] }
+        latencyRuns.push(run)
+        host.querySelector('#run-live-viewer, #run-run')!.scrollIntoView({ block: 'start' })
+        await investigateLatency(r, reset, () => cancelled || dead, text => { status.textContent = text }, run.blocks, block => {
+          if (dead) return
+          const checks = block.checks ?? [{ name: 'Incomplete block', pass: false, detail: block.error ?? 'Not completed' }]
+          record(checks.map(check => ({ ...check, name: `Block ${block.index} · ${block.mode} · ${check.name}` })),
+            { action: 'latency-block', run: latencyRuns.length, block: block.index, state: block.state })
+        })
+        fit(r, (await r.backend.read()).positions); await r.frame(false)
+      }
       if (action === 'export') {
         const rect = canvas.getBoundingClientRect()
         const url = URL.createObjectURL(new Blob([JSON.stringify({
           recordedAt: new Date().toISOString(),
+          timeOrigin: performance.timeOrigin,
           protocol,
           adapter: r.info,
           logicalViewport: [canvas.width / r.renderer.ratio, canvas.height / r.renderer.ratio, r.renderer.ratio],
           displayedCss: [rect.width, rect.height],
           rows,
           captures,
+          latencyRuns,
           feedback: r.feedback,
           strictCompatibility: 'Rejected: retained production color failures',
           fullMigration: 'Not ready',
