@@ -15,6 +15,18 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
   })
   /* eslint-disable @typescript-eslint/naming-convention -- Keys match experiment routes. */
   return {
+    'point-attractors': entry('point-attractors', {
+      conclusion: 'The isolated comparison is prepared. Native correctness and force-only cost remain unchecked.',
+      reviewed: '2026-11-18',
+      variant: 'Production attractor GLSL, corrected WebGPU arithmetic and independent raw-channel CPU reference',
+      comparison: 'Per-point target → correction → integration → independent trajectory and live updates',
+      milestone: 'simulation',
+      method: 'method',
+      methodPages: ['agent-recipe'],
+      evidence: 'findings',
+      next: 'Run the fixed M3 matrix, then move to mouse repulsion if the bounded candidate passes. Compose accepted forces later.',
+      investigations: [{ page: 'findings', state: 'Current evidence', description: 'Isolated attractor investigation; full-frame cost remains unchecked.' }],
+    }),
     'cluster-attraction': entry('cluster-attraction', {
       conclusion: 'The bounded M3 cluster matrix passes through 8,192 points. WebGPU is faster for large/uneven groups; ' +
         'WebGL has lower medians for balanced groups and supplied targets. Complete-frame cost remains unchecked.',

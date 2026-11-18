@@ -9,6 +9,13 @@ export type ValidationContract = {
 // These describe existing gates, not new pass thresholds or production approvals.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match existing public hash routes. */
 export const validationContracts: Record<string, ValidationContract> = {
+  'point-attractors': {
+    question: 'Can WebGPU preserve Cosmos per-point target/strength rules and live updates at useful cost?',
+    reference: 'Unchanged production attractor GLSL and integrator; independent raw-channel CPU reference.',
+    acceptance: 'Existing force gate: absolute 2e-5 + relative 3e-5 per XY component, exact flags; disabled-stage positions exactly unchanged.',
+    coverage: 'Isolated force: 12-point semantics and 1,024/8,192 shared, individual, mixed and translated inputs; sampled trajectories and live updates.',
+    limits: 'No combined-force, full-frame, long cooling, production setter/transition or full migration acceptance.',
+  },
   'cluster-attraction': {
     question: 'Can WebGPU preserve Cosmos cluster attraction and membership updates at useful cost?',
     reference: 'Unchanged production cluster GLSL and integrator; independent scalar CPU group sums and float32 force reference.',

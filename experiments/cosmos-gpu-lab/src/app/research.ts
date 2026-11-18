@@ -300,7 +300,7 @@ export const milestones = [
     gates: ['Validate clusters, per-point attractors and mouse repulsion in that order, then compose them in production force order.',
       'Validate the larger collision route and representative graph families at unchanged declared gates.',
       'Agree independent layout-quality and runtime sampling contracts; measure accepted precision cost.'],
-    evidence: [['cluster-attraction', 'Cluster study'], ['combined-layout', 'Combined forces'], ['collision', 'Collision'], ['matched-layout', 'Matched layouts']],
+    evidence: [['point-attractors', 'Per-point attractors'], ['cluster-attraction', 'Cluster study'], ['combined-layout', 'Combined forces'], ['collision', 'Collision'], ['matched-layout', 'Matched layouts']],
   },
   {
     id: 'rendering',
@@ -344,5 +344,5 @@ export const mainOpenIssues = [
 // used by Roadmap and the experiment page, never from this browser's live run.
 export const migrationFocus = {
   step: 3,
-  experiment: 'cluster-attraction',
+  experiment: 'point-attractors',
 } as const

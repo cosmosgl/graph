@@ -61,7 +61,7 @@ export const experimentGroups = [
     id: 'forces',
     title: 'Cosmos forces',
     description: 'Apply the building blocks to local neighbors, global repulsion, linked points and overlapping discs.',
-    experiments: ['neighborhood-forces', 'many-body', 'many-body-grid', 'weighted-links', 'collision', 'cluster-attraction'],
+    experiments: ['neighborhood-forces', 'many-body', 'many-body-grid', 'weighted-links', 'collision', 'cluster-attraction', 'point-attractors'],
   },
   {
     id: 'combined',
