@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "experiment": "point-attractors",
+  "status": "complete",
+  "recordedAt": "2026-11-18",
+  "question": "Can WebGPU preserve per-point targets, strengths and live updates at useful cost?",
+  "result": "Yes for this bounded M3 comparison: all 144 backend/CPU rows, 18 shared-input pairs and 18 post-timing checks pass. Live target changes, disabling and re-enabling preserve the declared behavior. The corrected WebGPU force is slower here: 0.32–0.49 ms at 8,192 points versus about 0.03–0.04 ms for WebGL.",
+  "limits": "One native session, 30 fixed-alpha ticks and four checkpoints per input. No full-frame acceptance, long cooling/reheating, combined-force ordering, production setters/transitions or broader device coverage. Historical pilot picking and color failures remain open.",
+  "environment": "User’s M3, visible inline Chromium 157; WebGL ANGLE Metal Renderer Apple M3; WebGPU Apple / metal-3, fallback false; luma 10.0.0-alpha.15. Both timestamp APIs available. Attachments 480 × 340, displayed 304.5 × 216.27 CSS pixels; DPR 2, viewport 663 × 827.",
+  "evidence": "One declared nine-input run completed with no failed or unavailable checks. WebGPU matched the CPU exactly at all sampled rows. All 126 measured batches and 36 warmups, source/plan, preflight logs and screenshots are retained in experiments/cosmos-gpu-lab/captures/attractors-20261118-sl8owzze/. Timing ranges are retained; this is not a full-frame result.",
+  "source": {
+    "revision": "011edd61701d21006fbcf35c39fa983c68b98930",
+    "state": "clean",
+    "snapshot": null
+  },
+  "reproduction": [
+    "Use the recorded clean revision and frozen lockfile. Run lab typecheck/build and the focused attractor tests before measurement. Keep production shaders and numerical gates unchanged.",
+    "Open #/point-attractors in the visible inline browser on the M3. Verify actual native adapters and rendered canvases. Use Step and check once, then Reset; do not substitute another browser or software adapter.",
+    "Read the fixed plan and run Run declared study once: 12-point semantics, then shared, individual, mixed and translated targets at 1,024 and 8,192 points. Validate independent ticks 1, 2, 10, 30, live target replacement, disable/re-enable and frozen update.",
+    "Keep the page visible. The study alternates two warmups and seven measured batches of 16 frozen force evaluations per backend/input. Keep builds, tests and validation readbacks outside timing.",
+    "Export every row, error, cancellation and timing sample to a unique local capture directory. Review exact disabled positions and direct pairs as well as tolerance checks. Publish the bounded answer and remaining unknowns; do not infer frame acceptance or migration readiness."
+  ],
+  "evidenceSection": "native-attractor-comparison",
+  "replaySection": "run-and-retain-the-evidence"
+}

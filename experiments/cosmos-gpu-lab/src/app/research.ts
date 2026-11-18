@@ -297,7 +297,7 @@ export const milestones = [
     title: 'Simulation',
     position: 'Selected composed-force cases through 8,192 points; collision through 512',
     acceptance: 'Remaining forces, graph scalability and affordable precision',
-    gates: ['Validate clusters, per-point attractors and mouse repulsion in that order, then compose them in production force order.',
+    gates: ['Preserve the bounded cluster/attractor baselines; validate mouse repulsion, then compose accepted forces in production order.',
       'Validate the larger collision route and representative graph families at unchanged declared gates.',
       'Agree independent layout-quality and runtime sampling contracts; measure accepted precision cost.'],
     evidence: [['point-attractors', 'Per-point attractors'], ['cluster-attraction', 'Cluster study'], ['combined-layout', 'Combined forces'], ['collision', 'Collision'], ['matched-layout', 'Matched layouts']],
