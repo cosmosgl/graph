@@ -316,12 +316,12 @@ export const milestones = [
   {
     id: 'integration',
     title: 'Library and embedding',
-    position: 'Integrated core pilot evaluated on M3; bounded passes and retained failures',
+    position: 'Representative M3 explorer works; a 100.4-ms running pick fails responsiveness',
     acceptance: 'Complete Graph and host contracts',
-    gates: ['Compare the small integrated viewer with production WebGL: cooled appearance, data/style updates and running interactions.',
-      'Decide the supported first-slice envelope; retain large-star and intermittent-latency failures.',
+    gates: ['Attribute the representative viewer’s running-pick delay, retaining the unchanged 50-ms target and recorded phases.',
+      'Keep the documented first-pilot scope bounded; production color compatibility and large-star performance remain rejected.',
       'Validate host devices/passes, picking, state isolation, deck integration and position-resource exposure.'],
-    evidence: [['integrated-webgpu', 'Integrated core pilot'], ['point-capacity', 'Resident updates']],
+    evidence: [['pilot-viewer', 'Representative pilot'], ['viewer-comparison', 'Production comparison'], ['point-capacity', 'Resident updates']],
   },
   {
     id: 'production',
@@ -344,5 +344,5 @@ export const mainOpenIssues = [
 // used by Roadmap and the experiment page, never from this browser's live run.
 export const migrationFocus = {
   step: 2,
-  experiment: 'integrated-webgpu',
+  experiment: 'pilot-viewer',
 } as const

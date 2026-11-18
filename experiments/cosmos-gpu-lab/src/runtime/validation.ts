@@ -18,6 +18,15 @@ export const validationContracts: Record<string, ValidationContract> = {
     limits: 'Separate probes can compile differently and cannot reveal the driver’s internal interpolation. Caps, arrows, patterns, other devices, ' +
       'full Graph interaction and performance are not assessed.',
   },
+  'pilot-viewer': {
+    question: 'Can the bounded WebGPU backend support a useful Karate Club exploration workflow?',
+    reference: 'Existing corrected integrated runtime, original Karate topology, sampled CPU pixel audit and retained production viewer comparison.',
+    acceptance: 'At least 95% of complete intervals <= 33 ms; input feedback <= 50 ms; exact IDs, no invisible picks; ' +
+      'unchanged one-device-pixel geometric boundary and 2/255 interior color gates.',
+    coverage: '34-member / 78-link Karate Club explorer on native M3; controlled intervals and interaction, native exploration and degree sizes.',
+    limits: 'Research-only pilot. Strict production color compatibility remains rejected; ' +
+      'larger viewer workloads, full API and full migration are not approved.',
+  },
   'viewer-comparison': {
     question: 'Can the small candidate viewer support the production appearance, update and running-interaction workflow?',
     reference: 'Unchanged workspace production Graph with luma v9, corrected integrated luma v10 runtime, ' +
