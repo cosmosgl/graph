@@ -197,6 +197,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       comparison: 'Explore the real graph → verify identity and updates → measure complete frames and feedback',
       milestone: 'integration',
       method: 'scope',
+      methodPages: ['agent-recipe'],
       evidence: 'findings',
       next: 'Attribute the running-pick delay: 92.8 ms fell after highlight completion, awaiting an animation opportunity. Keep the 50-ms gate unchanged.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Bounded pilot behavior, independent of strict production compatibility.' }],

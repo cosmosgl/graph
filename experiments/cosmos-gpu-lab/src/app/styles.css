@@ -2122,12 +2122,11 @@ button[data-action="play"][aria-pressed="true"] {
 .study-investigation h3 { margin: 0 0 10px; }
 .study-investigation p, .study-investigation ol { max-width: var(--reading-width); margin: 0 0 10px; overflow-wrap: anywhere; }
 .study-investigation .study-source { color: var(--text-secondary); font-size: var(--type-meta); }
-.study-investigation a, .study-finding-reproduction summary { color: var(--accent); text-underline-offset: 3px; }
+.study-investigation a { color: var(--accent); text-underline-offset: 3px; }
 .study-finding-unavailable { color: var(--text-secondary); }
 .study-finding-status { font-weight: 600; }
 .study-finding-reproduction { margin-top: 12px; }
-.study-finding-reproduction summary { cursor: pointer; }
-.study-finding-reproduction[open] summary { margin-bottom: 10px; }
+.study-finding-reproduction h4 { margin: 0 0 10px; font-size: var(--type-body); font-weight: 500; }
 .study-live { margin: 16px 0 28px; scroll-margin-top: calc(var(--lab-header-height, 88px) + 24px); }
 .study-live-intro h2 { margin: 0 0 8px; }
 .study-live-intro p { max-width: var(--reading-width); margin: 0 0 16px; color: var(--text-secondary); }

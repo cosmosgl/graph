@@ -170,9 +170,9 @@ it('shows an agent finding and its reproduction steps even when the live study f
   expect(host.querySelector('.experiment-contents a[href$="section=study-investigations"]')).not.toBeNull()
   expect(host.querySelector('#doc-method-follow-up-input-order')).not.toBeNull()
   expect(result.querySelector('a')!.getAttribute('href')).toBe('#/precision-diagnostics?section=doc-method-follow-up-input-order')
-  const details = result.querySelector<HTMLDetailsElement>('details')!
-  details.querySelector('summary')!.click()
-  await vi.waitFor(() => expect(details.open).toBe(true))
+  const details = result.querySelector<HTMLElement>('.study-finding-reproduction')!
+  expect(result.querySelector('details')).toBeNull()
+  expect(details.checkVisibility()).toBe(true)
   expect(details.textContent).toContain(record.environment)
   expect(details.textContent).toContain(record.evidence)
   expect(details.textContent).toContain(record.source.snapshot)
@@ -284,7 +284,7 @@ for (const { id } of experiments) {
         expect(host.querySelector(`.experiment-contents a[href$="section=${heading.id}"]`)).not.toBeNull()
       }
     }
-    expect(host.querySelector('.page-tabs,.method-topics,.research-actions,.run-contents,.evidence-index,details:not(.study-finding-reproduction)')).toBeNull()
+    expect(host.querySelector('.page-tabs,.method-topics,.research-actions,.run-contents,.evidence-index,details')).toBeNull()
     expect(host.querySelectorAll('main nav')).toHaveLength(1)
     expect(host.querySelector('.sidebar,.experiment-return,.unified-document')).toBeNull()
     expect(host.querySelectorAll('main h1')).toHaveLength(1)

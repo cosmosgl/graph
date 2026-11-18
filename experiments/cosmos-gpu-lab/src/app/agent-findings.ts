@@ -32,8 +32,8 @@ export function renderAgentFindings (experiment: ExperimentDefinition): HTMLElem
       evidence.dataset.findingTarget = articleSectionId(study.record.sourcePage, finding.evidenceSection)
       evidence.textContent = 'Read the evidence'; article.append(evidence)
     }
-    const details = document.createElement('details'); details.className = 'study-finding-reproduction'
-    const summary = document.createElement('summary'); summary.textContent = 'Instructions for agents'; details.append(summary)
+    const details = document.createElement('section'); details.className = 'study-finding-reproduction'
+    const summary = document.createElement('h4'); summary.textContent = 'Instructions for agents'; details.append(summary)
     const source = finding.source
     const description = [`Revision: ${source.revision ?? 'Not recorded'}`, `Source state: ${source.state}`,
       ...(source.snapshot ? [`Snapshot: ${source.snapshot}`] : [])].join(' · ')
