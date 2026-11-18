@@ -210,7 +210,9 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       milestone: 'integration',
       method: 'method',
       evidence: 'findings',
+      methodPages: ['agent-recipe'],
       next: 'Follow the bounded pilot viewer and its reopened responsiveness investigation; retain these production color failures.',
+      reproduce: 'The live viewers show a new local run. The agent recipe specifies a focused same-geometry paint comparison.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Separate measured workflow behavior from full migration approval.' }],
     }),
     'integrated-webgpu': entry('integrated-webgpu', {
@@ -271,10 +273,15 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       comparison: 'Frozen numeric corpus → analytic / float32 / GLSL / WGSL paths → accuracy and compatibility separately',
       milestone: 'simulation',
       method: 'method',
+      evidence: 'method',
+      methodPages: ['agent-recipe'],
       next: 'Agree the intended mathematical contract and accuracy budget before choosing a production arithmetic policy.',
-      reproduce: 'Choose a finite corpus and seed above. Compare mathematical error and legacy ' +
-        'compatibility separately; export results for local investigation.',
-      investigations: [],
+      reproduce: 'Choose a corpus and seed in the live experiment. The agent recipe records one focused cancellation replay.',
+      investigations: [{
+        page: 'method',
+        state: 'Current evidence',
+        description: 'The 12 November M3 observations are recorded separately from a new local run.',
+      }],
     }),
     'point-capacity': entry('point-capacity', {
       conclusion: 'The recorded resize cycles preserve checked state and show lower in-capacity update ' +

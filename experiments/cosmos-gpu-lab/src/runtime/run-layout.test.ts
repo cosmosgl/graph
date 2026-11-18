@@ -1,8 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest'
 import { disposeRunLayout, mountRunLayout, summarizeRun } from './run-layout'
+import { disposeDocumentTables, presentDocumentTables } from './result-tables'
 
 let host: HTMLElement | undefined
-afterEach(() => { if (host) { disposeRunLayout(host); host.remove() }; vi.restoreAllMocks() })
+afterEach(() => { if (host) { disposeRunLayout(host); disposeDocumentTables(host); host.remove() }; vi.restoreAllMocks() })
 
 it('preserves controls, listeners and canvas identity while separating diagnostic actions', async () => {
   host = document.createElement('div'); document.body.append(host)
@@ -71,4 +72,15 @@ it('keeps guidance accessible and adds scrolling to new result tables without ch
   expect(table.querySelector('th')!.scope).toBe('col')
   expect(table.querySelector('td')!.textContent).toBe('Unchecked')
   expect(table.parentElement!.tabIndex).toBe(0)
+})
+
+it('does not add a second scroll hint to a recorded result inside the live run', () => {
+  host = document.createElement('div'); document.body.append(host)
+  mountRunLayout(host, () => summarizeRun('Ready', [], 'Other inputs'))
+  const recorded = document.createElement('section'); recorded.className = 'study-overview'
+  recorded.innerHTML = '<table><tr><td>Recorded value</td></tr></table>'
+  presentDocumentTables(recorded)
+  host.querySelector('#run-run')!.append(recorded)
+  host.dispatchEvent(new Event('change')) // Refresh the live run's tables after the result is inserted.
+  expect(recorded.querySelectorAll('.table-scroll-hint')).toHaveLength(1)
 })

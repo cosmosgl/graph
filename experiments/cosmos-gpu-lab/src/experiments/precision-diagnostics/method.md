@@ -99,8 +99,9 @@ summation follows. No force or layout acceptance threshold was changed.
 Focused tests run with `pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/precision-diagnostics/precision.test.ts`.
 They check bindings, analytic axes for the Cartesian law, positive sums and finite cancellation
 outputs. Cancellation error is required only by the deterministic CPU demonstration; native GPU
-sums may be exact. Tests do not require the same native polar axis failure on other adapters. Set
-`LAB_NATIVE_GPU=1` to use installed native Chrome rather than software Chromium.
+sums may be exact. Tests do not require the same native polar axis failure on other adapters. The
+current test provider uses installed Chrome without forcing a software adapter; record the actual
+adapter. The older `LAB_NATIVE_GPU=1` flag is redundant. See the Lab README for the existing-browser option.
 
 ## Reproduction
 

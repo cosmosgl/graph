@@ -9,6 +9,7 @@ import { renderInvestigationContext } from './research-ui'
 type Notes = { ready: Promise<void>; disposed: boolean; dispose(): void }
 const notes = new WeakMap<HTMLElement, Notes>()
 const contentsSections = [
+  ['study-overview', 'Recorded result'],
   ['run-run', 'Experiment'], ['run-results', 'Live results'], ['run-explanation', 'How it works'],
   ['recorded-findings', 'Recorded findings'], ['run-diagnostics', 'Diagnostics'], ['experiment-references', 'References'],
 ]
@@ -24,8 +25,11 @@ export function renderExperimentContents (host: HTMLElement, experiment: Experim
     if (state) { const note = document.createElement('small'); note.textContent = state; link.append(note) }
     item.append(link); list.append(item); targets.push({ link, target }); return item
   }
-  for (const [id, label] of contentsSections) {
-    const target = host.querySelector<HTMLElement>(`#${id}`); if (!target) continue
+  const sections = contentsSections.flatMap(([id, label]) => {
+    const target = host.querySelector<HTMLElement>(`#${id}`)
+    return target ? [{ id, label, target }] : []
+  }).sort((a, b) => a.target.compareDocumentPosition(b.target) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1)
+  for (const { id, label, target } of sections) {
     const item = append(contents.querySelector('ul')!, target, target.dataset.sectionLabel ?? label)
     const articles = target.querySelectorAll<HTMLElement>('.experiment-article')
     if (!articles.length && id !== 'run-explanation') continue
