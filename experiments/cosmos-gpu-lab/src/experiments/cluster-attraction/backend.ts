@@ -195,7 +195,10 @@ export async function createBackend (api: Api, canvas: HTMLCanvasElement, input:
   const description = environment().device
   return {
     ...base,
-    info: `${base.info}; ${description.gpuArchitecture ?? description.gpuBackend}; fallback ${description.fallback ?? 'not exposed'}`,
+    info: api === 'webgl'
+      ? base.info
+      : `${description.vendor} ${description.gpuArchitecture}; fallback ${description.fallback}; luma Computation / RenderKernel; ` +
+        '256 invocations per reduction workgroup, 64 per force workgroup',
     async read (): Promise<ClusterSnapshot> { return { ...await base.read(), aggregates: await readAggregates() } },
     updateClusters (next): void {
       validate(next)
