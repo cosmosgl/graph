@@ -2117,6 +2117,7 @@ button[data-action="play"][aria-pressed="true"] {
 .study-key-result a { color: var(--accent); text-underline-offset: 3px; white-space: nowrap; }
 .study-investigations { max-width: 900px; margin: 32px 0 24px; scroll-margin-top: calc(var(--lab-header-height, 88px) + 24px); }
 .study-investigations h2 { margin: 0 0 12px; }
+.study-findings-warning { overflow-wrap: anywhere; }
 .study-investigation { padding: 18px 0; border-top: 1px solid var(--control-border); }
 .study-investigation h3 { margin: 0 0 10px; }
 .study-investigation p, .study-investigation ol { max-width: var(--reading-width); margin: 0 0 10px; overflow-wrap: anywhere; }
