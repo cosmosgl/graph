@@ -9,6 +9,13 @@ export type ValidationContract = {
 // These describe existing gates, not new pass thresholds or production approvals.
 /* eslint-disable @typescript-eslint/naming-convention -- Keys match existing public hash routes. */
 export const validationContracts: Record<string, ValidationContract> = {
+  'cluster-attraction': {
+    question: 'Can WebGPU preserve Cosmos cluster attraction and membership updates at useful cost?',
+    reference: 'Unchanged production cluster GLSL and integrator; independent scalar CPU group sums and float32 force reference.',
+    acceptance: 'Existing force gate: absolute 2e-5 + relative 3e-5 per XY component, exact counts and flags; retain every failed control.',
+    coverage: 'Isolated clusters: 8-point semantics, 1,024 and 8,192 balanced/uneven/single-group/custom-target inputs; sampled independent trajectories and updates.',
+    limits: 'No community detection, combined-force or complete-frame acceptance, production API/labels validation or migration approval.',
+  },
   'smoothstep-coverage': {
     question: 'Does changing the order of smoothstep edges change the observed straight-link pixels?',
     reference: 'The original production WebGL and WebGPU stroke expressions; identical float32 probe inputs and the independent scalar ribbon model.',

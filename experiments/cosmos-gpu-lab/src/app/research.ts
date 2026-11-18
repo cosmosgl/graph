@@ -297,10 +297,10 @@ export const milestones = [
     title: 'Simulation',
     position: 'Selected composed-force cases through 8,192 points; collision through 512',
     acceptance: 'Remaining forces, graph scalability and affordable precision',
-    gates: ['Validate per-point attractors, clusters and mouse repulsion, then compose them in production force order.',
+    gates: ['Validate clusters, per-point attractors and mouse repulsion in that order, then compose them in production force order.',
       'Validate the larger collision route and representative graph families at unchanged declared gates.',
       'Agree independent layout-quality and runtime sampling contracts; measure accepted precision cost.'],
-    evidence: [['combined-layout', 'Combined forces'], ['collision', 'Collision'], ['matched-layout', 'Matched layouts']],
+    evidence: [['cluster-attraction', 'Cluster study'], ['combined-layout', 'Combined forces'], ['collision', 'Collision'], ['matched-layout', 'Matched layouts']],
   },
   {
     id: 'rendering',
@@ -343,6 +343,6 @@ export const mainOpenIssues = [
 // Current editorial priority. The gate and findings come from the same records
 // used by Roadmap and the experiment page, never from this browser's live run.
 export const migrationFocus = {
-  step: 2,
-  experiment: 'pilot-viewer',
+  step: 3,
+  experiment: 'cluster-attraction',
 } as const

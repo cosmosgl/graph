@@ -64,19 +64,28 @@ advanced styles and automatic framing remain explicitly unsupported.
 
 **Next, in order:**
 
-1. Make one declared wider-window control of the running-pick stall in the
-   [representative viewer](#/pilot-viewer?section=doc-findings-four-block-latency-investigation).
-   The first finding-workflow investigation completed four blocks at 627 × 353
-   logical pixels: no feedback failure, no long traced frame/callback gap, and no
-   cause established. Repeat the fixed normal/traced/traced/normal procedure once
-   near the historical 961 × 541 logical failing size, recording actual dimensions.
-   This is an environment control, not a claim that width caused the 100.4-ms wait.
-   If it does not recur, retain the uncertainty and set a bounded collection plan;
-   do not select a runtime optimization without evidence.
-2. Once the bounded responsiveness question is resolved, choose the next required
-   force/style/host capability. Keep deep raster investigations,
-   further arithmetic tuning and larger graphs parked unless the pilot needs them.
-   Resolve the retained color failures before claiming production color compatibility.
+1. Investigate [cluster attraction](#/cluster-attraction): unchanged production
+   WebGL, luma WebGPU and independent CPU, first tiny semantic cases, then 1,024
+   and 8,192 points. Validate centers, force, integration, uneven/singleton/empty
+   groups, absence/pinning, supplied targets, strengths and membership updates.
+   Record GPU cost through the finding workflow. Existing grouped fixtures did
+   not exercise `simulationCluster`.
+2. Validate per-point attractors, then mouse repulsion as separate forces.
+3. Compose accepted candidates with the resident core in production order;
+   check independently evolving layouts and added complete-frame GPU cost.
+
+The unresolved picking issue does **not** block independent force research. It
+still blocks a clean responsiveness verdict for the affected pilot: keep the
+50-ms target and the recorded failures. A single declared wider-window
+normal/traced/traced/normal control remains a separate follow-up near the
+historical 961 × 541 logical size. The narrower study did not reproduce the
+stall or establish its cause; width is not an established explanation.
+Do not repeat until passing or optimize the runtime without supporting evidence.
+
+The existing pilot remains the baseline; new forces are not supported there
+until composition is validated. Keep deep raster work, further arithmetic tuning
+and larger graphs parked unless the pilot needs them. Retained color failures
+still prevent a production-color compatibility claim.
 
 The bounded paused replay and first four-block attribution study are complete;
 the cause is still unresolved. The 100.4-ms event included 92.8 ms after highlight
@@ -197,8 +206,8 @@ WebGPU diagnostics return the same sampled values. All four focused tests
 pass, including the existing solid curve diagnostics, but no rendering row is
 reclassified. See [pattern boundary findings](#/curved-links?section=doc-method-pattern-boundary-audit-17-november-2026).
 
-**Next: the integrated first slice.** Use the practical contract above and
-retain these exact-boundary results as compatibility evidence. Deeper rendering
+**First slice now evaluated; rendering follow-up remains bounded.** Retain
+these exact-boundary results as compatibility evidence. Deeper rendering
 investigation resumes only when it affects pilot usability or the corresponding
 feature enters the full-migration scope.
 

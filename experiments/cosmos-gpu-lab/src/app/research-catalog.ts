@@ -15,6 +15,18 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
   })
   /* eslint-disable @typescript-eslint/naming-convention -- Keys match experiment routes. */
   return {
+    'cluster-attraction': entry('cluster-attraction', {
+      conclusion: 'The isolated cluster comparison is prepared; native correctness and cost remain unchecked.',
+      reviewed: '2026-11-18',
+      variant: 'Production cluster GLSL, grouped WebGPU high/low reduction and corrected force arithmetic, independent CPU reference',
+      comparison: 'Group sums → attraction → integration → independent trajectory and update checks',
+      milestone: 'simulation',
+      method: 'method',
+      methodPages: ['agent-recipe'],
+      evidence: 'findings',
+      next: 'Run the declared M3 cluster study, retain all failures and publish the result through the finding workflow.',
+      investigations: [{ page: 'findings', state: 'Current evidence', description: 'Bounded isolated cluster investigation; combined forces remain unchecked.' }],
+    }),
     'center-mass': entry('center-mass', {
       conclusion: 'Both reductions produced centers close to the CPU sum in the recorded 8,192-point smoke run; no production accuracy budget is agreed.',
       variant: 'Additive WebGL blend and two-stage WebGPU reduction; luma 10.0.0-alpha.4. Historical GPU identity was not recorded.',

@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "experiment": "cluster-attraction",
+  "recordedAt": "2026-11-18",
+  "sourceRevision": null,
+  "environment": "Planned: user's M3, visible inline browser, luma 10.0.0-alpha.15; actual adapter must be recorded.",
+  "scope": "Isolated cluster centroids, attraction and integration; 8, 1,024 and 8,192 points.",
+  "question": "Can WebGPU preserve Cosmos cluster attraction and its update semantics at useful cost?",
+  "method": "Unchanged production GLSL, grouped high/low WebGPU reduction and corrected arithmetic, independent scalar CPU reference.",
+  "conclusion": "The comparison is prepared. No measured cluster verdict has been published yet.",
+  "checks": [{ "name": "Cluster comparison", "outcome": "Not assessed", "detail": "Run the declared native study before interpreting correctness or cost." }],
+  "limits": "This is not community detection, full Graph API validation or combined-force/frame acceptance. Existing picking failures remain open.",
+  "visual": "Live positions evolve separately. The preview is a new local session, not recorded evidence.",
+  "sourcePage": "findings"
+}
