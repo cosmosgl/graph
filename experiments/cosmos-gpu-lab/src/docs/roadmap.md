@@ -64,14 +64,16 @@ advanced styles and automatic framing remain explicitly unsupported.
 
 **Next, in order:**
 
-1. Investigate [cluster attraction](#/cluster-attraction): unchanged production
-   WebGL, luma WebGPU and independent CPU, first tiny semantic cases, then 1,024
-   and 8,192 points. Validate centers, force, integration, uneven/singleton/empty
-   groups, absence/pinning, supplied targets, strengths and membership updates.
-   Record GPU cost through the finding workflow. Existing grouped fixtures did
-   not exercise `simulationCluster`.
-2. Validate per-point attractors, then mouse repulsion as separate forces.
-3. Compose accepted candidates with the resident core in production order;
+1. Preserve the [cluster-attraction baseline](#/cluster-attraction). The declared
+   M3 run passes all 90 backend/CPU checkpoint/update rows through 8,192 points,
+   all 18 shared-input backend comparisons and all 18 post-timing sum checks.
+   Group sums, forces, integrated positions, independent trajectories and
+   membership updates retain the existing gates. At 8,192 points, WebGPU has
+   about 4.3–4.4× lower force-only medians for large/uneven groups; WebGL has lower
+   medians for balanced groups and supplied targets. This is one short session,
+   not a complete-frame result. The finding workflow retains the plan and source.
+2. **Next: per-point attractors**, then mouse repulsion as separate forces.
+3. Compose accepted candidates, including clusters, with the resident core in production order;
    check independently evolving layouts and added complete-frame GPU cost.
 
 The unresolved picking issue does **not** block independent force research. It

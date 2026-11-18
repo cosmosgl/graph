@@ -239,6 +239,35 @@ it('places the live pilot graph before the published investigation', async () =>
   expect(canvas.compareDocumentPosition(finding) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
 })
 
+it('keeps the cluster finding, limits and expanded reproduction readable without a live device', async () => {
+  const experiment = findExperiment('cluster-attraction')!
+  vi.spyOn(experiment, 'create').mockRejectedValue(new Error('Test adapter unavailable'))
+  window.history.replaceState(null, '', '#/cluster-attraction')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('[data-study-status]')?.textContent).toContain('Test adapter unavailable'))
+  await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
+  expect(experiment.study!.agentFindings!.invalid).toEqual([])
+  const record = experiment.study!.agentFindings!.records[0]
+  const result = host.querySelector<HTMLElement>('#study-finding-isolated-clusters')!
+  expect(result.textContent).toContain(record.result)
+  expect(result.textContent).toContain(record.limits)
+  expect(result.querySelector<HTMLElement>('.study-finding-reproduction')!.checkVisibility()).toBe(true)
+  expect(result.querySelectorAll('li')).toHaveLength(record.reproduction.length)
+  expect(host.querySelector('details')).toBeNull()
+  for (const link of result.querySelectorAll<HTMLAnchorElement>('a')) {
+    expect(host.querySelector(`#${link.dataset.findingTarget}`)).not.toBeNull()
+  }
+})
+
+it('keeps the live cluster graph above the recorded finding', async () => {
+  mockRun('cluster-attraction')
+  window.history.replaceState(null, '', '#/cluster-attraction')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('canvas')).not.toBeNull())
+  const finding = host.querySelector('#study-finding-isolated-clusters')!
+  expect(host.querySelector('canvas')!.compareDocumentPosition(finding) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})
+
 it('keeps the contents links when a delayed live setup fails', async () => {
   let rejectSetup!: (error: Error) => void
   const pending = new Promise<never>((resolve, reject) => { rejectSetup = reject })

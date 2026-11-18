@@ -7,6 +7,7 @@ it('indexes all inventory features without treating partial curves as unstarted 
   expect(coverage).toHaveLength(37)
   expect(coverage.find(row => row.name === 'Curved links')?.status).toBe('Partial')
   expect(coverage.find(row => row.name === 'Per-point attractors')?.status).toBe('Needs validation')
+  expect(coverage.find(row => row.name === 'Cluster attraction')).toMatchObject({ status: 'Partial', experiments: ['cluster-attraction'] })
   expect(experimentRole('weighted-links')).not.toBe('Parked')
   expect(experimentRole(migrationFocus.experiment)).toBe('Current investigation')
   expect(() => parseCoverage(inventory.replace('**Partial.**', '**Unclassified.**'))).toThrow('Unclassified inventory feature')
@@ -18,8 +19,8 @@ it('derives visible counts and method links from the inventory and retains every
   expect(host.querySelector('[href="#/curved-links"]')!.textContent).toContain('color-face')
   renderCoverageSummary(host)
   expect(host.textContent).toContain('1 covered in isolation')
-  expect(host.textContent).toContain('26 partial')
-  expect(host.textContent).toContain('10 needs validation')
+  expect(host.textContent).toContain('27 partial')
+  expect(host.textContent).toContain('9 needs validation')
   expect(host.textContent).toContain('not a completion percentage')
 })
 it('distinguishes the ordered current investigation from still-open migration workstreams', () => {

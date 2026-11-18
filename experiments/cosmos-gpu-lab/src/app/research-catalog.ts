@@ -16,7 +16,8 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
   /* eslint-disable @typescript-eslint/naming-convention -- Keys match experiment routes. */
   return {
     'cluster-attraction': entry('cluster-attraction', {
-      conclusion: 'The isolated cluster comparison is prepared; native correctness and cost remain unchecked.',
+      conclusion: 'The bounded M3 cluster matrix passes through 8,192 points. WebGPU is faster for large/uneven groups; ' +
+        'WebGL has lower medians for balanced groups and supplied targets. Complete-frame cost remains unchecked.',
       reviewed: '2026-11-18',
       variant: 'Production cluster GLSL, grouped WebGPU high/low reduction and corrected force arithmetic, independent CPU reference',
       comparison: 'Group sums → attraction → integration → independent trajectory and update checks',
@@ -24,7 +25,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       method: 'method',
       methodPages: ['agent-recipe'],
       evidence: 'findings',
-      next: 'Run the declared M3 cluster study, retain all failures and publish the result through the finding workflow.',
+      next: 'Preserve the cluster baseline. Validate per-point attractors, then mouse repulsion, before composing accepted forces and measuring full frames.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Bounded isolated cluster investigation; combined forces remain unchecked.' }],
     }),
     'center-mass': entry('center-mass', {

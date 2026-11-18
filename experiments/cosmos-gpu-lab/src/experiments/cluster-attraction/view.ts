@@ -44,6 +44,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
   let frame = 0; let passed = 0; let failed = 0; let error = ''; let report: Report | undefined
   select('fixture').value = 'balanced'
   const controls = (): void => {
+    if (destroyed) return
     host.querySelectorAll<HTMLButtonElement | HTMLSelectElement>('button,select').forEach(c => { c.disabled = busy || running })
     el<HTMLButtonElement>('[data-action="stop"]').disabled = !busy && !running
     el<HTMLButtonElement>('[data-action="export"]').disabled = !report || busy
@@ -61,7 +62,13 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     }
     status.textContent = `${running ? 'Running' : 'Paused'} · tick ${tick} · ${input.membership.length.toLocaleString()} points · ${select('fixture').value}`
   }
-  const stop = (): void => { running = false; cancelled = true; cancelAnimationFrame(frame); controls() }
+  const stop = (): void => {
+    const wasRunning = running
+    running = false; cancelled = true; cancelAnimationFrame(frame)
+    if (!destroyed && wasRunning) status.textContent = `Paused · tick ${tick} · ${input.membership.length.toLocaleString()} points · ${select('fixture').value}`
+    if (!destroyed && busy) status.textContent = 'Stopping after the current operation…'
+    controls()
+  }
   const initialize = async (): Promise<void> => {
     stop(); busy = true; controls(); error = ''; status.textContent = 'Preparing devices…'
     Object.values(backends).forEach(b => b.destroy()); backends = {}
@@ -122,7 +129,10 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     await runStudy(canvases, message => { status.textContent = message }, () => cancelled || destroyed, report)
     if (destroyed) return
     const result = report.status; showReport(); await initialize(); status.textContent = `Study ${result}. Results and export retained below. Live preview reset.`
-    passed = report.checks.filter(c => c.checks.valid && c.trajectory.valid).length; failed = report.checks.length - passed
+    const gates = [...report.checks.map(c => c.checks.valid && c.trajectory.valid),
+      ...report.pairs.map(c => c.checks.valid), ...report.postTiming.map(c => c.aggregate.valid)]
+    passed = gates.filter(Boolean).length; failed = gates.length - passed
+    error = report.errors.join('; ') || error
   }
   const click = (event: Event): void => {
     const action = (event.target as HTMLElement).closest<HTMLButtonElement>('[data-action]')?.dataset.action
