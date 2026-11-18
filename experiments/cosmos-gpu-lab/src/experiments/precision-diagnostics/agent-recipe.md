@@ -92,6 +92,43 @@ instructions for constructing the input. Keep raw measurements in a unique
 local capture. The [input-order follow-up](#/precision-diagnostics?section=doc-method-follow-up-input-order)
 is an example.
 
+### Add a finding to this page
+
+Create one JSON file per investigation in
+`experiments/cosmos-gpu-lab/src/experiments/precision-diagnostics/agent-findings/`.
+Use a lowercase, hyphenated filename, such as `input-order.json`; it becomes the
+finding's stable identifier. The dev server reloads when a file is added, so
+export any needed live evidence before writing the record. A built Lab needs a
+rebuild. Do not replace the existing recorded summary or edit page code. Use
+the existing `input-order.json` as a complete example and include:
+
+- `schemaVersion: 1`, `experiment: "precision-diagnostics"`, and `status`
+  (`"complete"` or `"incomplete"`). Keep failures and incomplete work visible.
+- `recordedAt` as `YYYY-MM-DD`; plain-language `question`, `result`, `limits`,
+  and `environment`, including what the adapter actually reported. Use `evidence`
+  to identify the retained observations and say when they are local-only.
+- Write the question and result for someone who has not read the study. Start
+  with the answer, explain any necessary technical terms, and keep the main
+  limits short. Put test machinery and dependency details in `environment`,
+  `evidence`, or `reproduction` rather than in the user-facing answer.
+- `source` with a full lowercase commit `revision`, `state` (`"clean"`, `"modified"`,
+  or `"unknown"`), and `snapshot`. Use `null` for an absent value. Clean source
+  has a null snapshot. For modified source, retain an exact snapshot in the
+  repository and give its repository-relative path. Unknown source must be
+  incomplete; explain any local-only inputs in `limits`.
+- A nonempty `reproduction` array with concrete steps or commands and the
+  location of any needed inputs. Keep raw captures local and name their limits.
+- Optional `evidenceSection` and `replaySection` slugs only when the matching
+  headings already exist in **Method and findings** and this recipe, respectively.
+  The Lab marks missing headings as unavailable. The steps must still be useful
+  without these links.
+
+Run `pnpm --filter @cosmos.gl/gpu-lab test:ui src/runtime/agent-findings.test.ts`
+to check the records. An invalid file is reported on the page without hiding
+other findings or the experiment; fix it rather than treating it as evidence.
+This checks the record's format, not whether its claims or snapshot are correct;
+verify the underlying evidence and retained source before reporting completion.
+
 ### Replay the input-order follow-up
 
 The recorded follow-up used revision `531d1fab66f3cddae3e39979c3e48dc1132e3e95`

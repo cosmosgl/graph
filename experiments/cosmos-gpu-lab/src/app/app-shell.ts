@@ -19,6 +19,7 @@ import { scrollToSection } from './sections'
 import { resolveExperimentSection } from './article-sections'
 import { disposeExperimentNotes, mountExperimentNotes, renderExperimentContents } from './experiment-page'
 import { renderStudyOverview } from './study-overview'
+import { checkAgentFindingLinks, renderAgentFindings } from './agent-findings'
 
 function requiredElement<T extends HTMLElement> (host: ParentNode, selector: string): T {
   const element = host.querySelector<T>(selector)
@@ -178,7 +179,11 @@ function renderExperimentFrame (host: HTMLElement, experiment: ExperimentDefinit
     summary.append(label, document.createTextNode(`${experiment.study.record.conclusion} `), link)
     requiredElement(host, '.experiment-header').append(summary)
   }
-  if (experiment.study && !experiment.study.visualFirst) requiredElement(host, '.experiment-header').append(renderStudyOverview(experiment))
+  if (experiment.study && !experiment.study.visualFirst) {
+    const header = requiredElement(host, '.experiment-header')
+    const findings = renderAgentFindings(experiment); if (findings) header.append(findings)
+    header.append(renderStudyOverview(experiment))
+  }
 }
 
 function wantsLiveStudy (view: 'run' | 'evidence' | undefined, section: string | null): boolean {
@@ -446,9 +451,11 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       const slot = document.createElement('div'); slot.className = 'study-live-slot'
       liveSection.append(intro, launch, slot)
       const overview = experiment.study.visualFirst ? renderStudyOverview(experiment) : undefined
+      const findings = experiment.study.visualFirst ? renderAgentFindings(experiment) : undefined
       const notesHost = document.createElement('div'); notesHost.className = 'study-notes-host'
       notesHost.innerHTML = '<div class="run-layout"></div>'
       stage.append(liveSection); if (overview) stage.append(overview)
+      if (findings) stage.append(findings)
       stage.append(notesHost); studyNotes = notesHost
       const button = requiredElement<HTMLButtonElement>(launch, '[data-start-study]')
       const status = requiredElement<HTMLElement>(launch, '[data-study-status]')
@@ -483,6 +490,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       try {
         await mountExperimentNotes(notesHost, experiment, record)
         if (version !== renderVersion) return
+        checkAgentFindingLinks(documentFrame)
         mountedExperiment = experiment.id; stage.setAttribute('aria-busy', 'false'); refreshContents()
         if (wantsLiveStudy(route.view, currentSection())) await liveReady
         if (version !== renderVersion) return
@@ -492,6 +500,8 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
         run.destroy(); startStudyLive = undefined; disposeContents(); disposeContents = (): void => {}
         disposeExperimentNotes(notesHost); studyNotes = undefined
         stage.setAttribute('aria-busy', 'false'); renderFailure(stage, error)
+        if (findings) stage.append(findings)
+        checkAgentFindingLinks(documentFrame)
       }
       finish(); return
     }

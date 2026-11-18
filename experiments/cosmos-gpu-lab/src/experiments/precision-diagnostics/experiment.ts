@@ -1,5 +1,6 @@
 import { defineExperiment } from '../../runtime/experiment'
 import { readStudyRecord } from '../../runtime/study-record'
+import { agentFindings } from './agent-findings'
 import recordedSummary from './recorded-summary.json'
 
 export const experiment = defineExperiment({
@@ -7,7 +8,7 @@ export const experiment = defineExperiment({
   title: 'Precision diagnostics',
   summary: 'Separate analytic gravity accuracy, legacy polar compatibility and cancellation in controlled GPU sums.',
   tags: ['validation', 'precision', 'WebGL', 'WebGPU'],
-  study: { record: readStudyRecord(recordedSummary, 'precision-diagnostics'), recipePage: 'agent-recipe' },
+  study: { record: readStudyRecord(recordedSummary, 'precision-diagnostics'), recipePage: 'agent-recipe', agentFindings },
   create: async host => (await import('./view')).createPrecisionView(host),
   pages: [{
     kind: 'markdown',
