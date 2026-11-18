@@ -201,6 +201,44 @@ it('keeps a finding and its steps readable when referenced headings are missing'
   } finally { experiment.study!.agentFindings = previousFindings }
 })
 
+it('keeps the inconclusive pilot finding and expanded recipe usable without a GPU', async () => {
+  const experiment = findExperiment('pilot-viewer')!
+  const create = vi.spyOn(experiment, 'create').mockRejectedValue(new Error('Test adapter unavailable'))
+  window.history.replaceState(null, '', '#/pilot-viewer')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('[data-study-status]')?.textContent).toContain('Test adapter unavailable'))
+  await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
+  expect(experiment.study!.agentFindings!.invalid).toEqual([])
+  const record = experiment.study!.agentFindings!.records.find(item => item.id === 'picking-latency')!
+  const result = host.querySelector<HTMLElement>('#study-finding-picking-latency')!
+  expect(result.textContent).toContain(record.result)
+  expect(result.textContent).toContain(record.limits)
+  const instructions = result.querySelector<HTMLElement>('.study-finding-reproduction')!
+  expect(instructions.checkVisibility()).toBe(true)
+  expect(instructions.textContent).toContain(record.source.revision)
+  expect(instructions.querySelectorAll('li')).toHaveLength(record.reproduction.length)
+  expect(host.querySelector('details')).toBeNull()
+  expect(host.querySelector('#study-overview')!.textContent).toContain('100.4 ms')
+  for (const link of result.querySelectorAll<HTMLAnchorElement>('a')) {
+    const target = link.dataset.findingTarget!
+    expect(host.querySelector(`#${target}`)).not.toBeNull()
+    link.click()
+    await vi.waitFor(() => expect(document.activeElement?.id).toBe(target))
+  }
+  expect(result.querySelectorAll('a')).toHaveLength(2)
+  expect(create).toHaveBeenCalledTimes(1)
+})
+
+it('places the live pilot graph before the published investigation', async () => {
+  mockRun('pilot-viewer')
+  window.history.replaceState(null, '', '#/pilot-viewer')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('canvas')).not.toBeNull())
+  const canvas = host.querySelector('canvas')!
+  const finding = host.querySelector('#study-finding-picking-latency')!
+  expect(canvas.compareDocumentPosition(finding) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+})
+
 it('keeps the contents links when a delayed live setup fails', async () => {
   let rejectSetup!: (error: Error) => void
   const pending = new Promise<never>((resolve, reject) => { rejectSetup = reject })

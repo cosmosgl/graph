@@ -213,12 +213,16 @@ their separate meanings.
 
 ### Experiment navigation
 
-The Production and WebGPU viewers and Precision diagnostics pages prototype an
+The Production and WebGPU viewers, Precision diagnostics and Karate Club pilot pages prototype an
 experience combining a live demonstration with recorded evidence. Their `recorded-summary.json` files summarize a
 named historical observation, including its environment, checks and limits;
 the linked findings remain the source. An `agent-recipe.md` beside each study
 describes a focused replay and the final account. Their live views open with the
 page; the recorded evidence and recipe remain readable if initialization fails.
+Precision diagnostics and the pilot automatically load small, reviewed investigation
+records from their `agent-findings/` directories. Their reproduction instructions
+remain expanded. A completed investigation can be inconclusive; record presence
+and schema validation do not establish a passing result or scientific correctness.
 Existing `/run` links and links to live controls, results or diagnostics still work.
 When a browser cannot preserve an embedded viewer while moving it, returning from
 a reference starts a fresh viewer. Completed viewer results are kept separately
