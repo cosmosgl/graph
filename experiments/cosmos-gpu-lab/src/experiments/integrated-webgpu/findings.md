@@ -1,11 +1,11 @@
 # Integrated findings
 
-The bounded star investigation identifies **incoming hub springs** as its largest
-measured stage. Ordered prefetch preserves state/colors and modestly lowers GPU cost,
-but **8,192 star still fails** the unchanged frame and picking gates. Chain and
-communities pass their control/candidate windows. Keep the current default and move to
-settled real-graph readability with the large-star limit explicit. Earlier stalls and
-all historical observations remain below; full migration is not approved.
+The cooled Karate Club layout is visually usable for this small pilot **after manual
+Fit**: all 34 points are visible and individually pickable, with no circle overlaps.
+Early/cooled frame windows and sampled rendering pass, but one all-point picking
+observation reaches **68.2 ms**, so this assessment is **not accepted** under the
+unchanged 50-ms gate. Readability is a visual review, not numerical quality approval.
+The larger-star performance failure and earlier evidence remain below.
 
 Measured **17 November 2026**, visible inline Chromium 157 on the **Apple M3** host
 (10 GPU cores), luma **10.0.0-alpha.15**. Actual luma adapter: `webgpu`, vendor `apple`,
@@ -18,7 +18,7 @@ integrated canvas rendered successfully before evaluation.
 | Question | Conclusion |
 | --- | --- |
 | Strict compatibility | **Not established.** Historical exact raster, polygon, faint-alpha and ribbon failures retain their verdicts. The new small whole-tick CPU check passes its unchanged tolerance; it does not approve the renderer. |
-| First-slice usability | **Bounded local evidence.** Repeated 1,024 communities and the latest four-window 8,192 chain/communities checks pass. The 8,192 star remains rejected; earlier stalls and settled quality remain unresolved. |
+| First-slice usability | **Bounded local evidence.** Repeated 1,024 communities and 8,192 chain/communities controls pass. Cooled Karate Club is visually usable after Fit, but its all-point picking sweep reaches 68.2 ms. That run and the 8,192 star remain rejected; broader quality and latency repeatability remain open. |
 | Full migration readiness | **Not ready.** Advanced styles, remaining forces, collision, host integration, recovery, broader data and the parked investigations remain open. |
 
 ## Complete frame and interaction results
@@ -429,3 +429,99 @@ Reproduce with **Profile star pacing**, **Profile star stages**, then **Compare 
 prefetch** in Diagnostics. Each action records its protocol and preserves completed
 rows for **Export JSON**. Raw machine-specific captures remain local. No production
 Cosmos code or acceptance gate changes; the final comparison window restores `hoist`.
+
+
+## Cooled Karate Club: readability and exploration
+
+**18 November 2026, assessment captured 04:54:48 UTC**, visible Codex inline Chromium
+157 on the Apple M3. Actual adapter: `webgpu`, `apple`, `metal-3`, `fallback: false`;
+the canvas rendered successfully before evaluation. Original 34 points / 78 weighted
+links, seed 29471, corrected forces, `hoist` springs, 5,000-tick cooling and original
+styles. Attachment 1,920 × 1,200, corresponding to 960 × 600 logical pixels at DPR 2.
+No build or test process ran alongside measurement.
+[Declared protocol](#/integrated-webgpu?section=doc-method-settled-karate-club-assessment).
+
+### Geometry improves, but the original camera loses points
+
+| Tick / framing | Stress RMS | Spring mismatch RMS | Circle overlap pairs | Visible centers | Radius, world units |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 60 / Fit | 0.381 | 0.348 | 0 | 34/34 | 14.26 |
+| 360 / same camera | 0.317 | 0.280 | 0 | 10/34 | 14.30 |
+| 2,500 / same camera | 0.280 | 0.207 | 0 | 17/34 | 15.13 |
+| 5,000 / same camera | 0.280 | 0.206 | 0 | 17/34 | 15.14 |
+| 5,000 / manual Fit | 0.280 | 0.206 | 0 | 34/34 | 15.14 |
+| 5,300 / fitted camera | 0.280 | 0.206 | 0 | 34/34 | 15.14 |
+
+Stress covers all 561 unweighted shortest-path pairs; original edge weights remain in
+the simulation. These are **Measured only**, with no new quality budget. Stress is not
+strictly monotonic: the values at 2,500 and 5,000 are approximately 0.280310 and 0.280456.
+RMS displacement over ticks 5,001–5,300 is 0.01109 world units; the following single-tick
+probe is **2.974 × 10⁻⁵ world units**. Low motion partly reflects cooling: alpha is about
+0.001 at tick 5,000. This is a cooled geometry observation, not proof of equilibrium.
+
+The fixed early camera clips half the cooled graph. The ID inventory after manual Fit
+contains **all IDs 0–33**, so these are offscreen points rather than missing rendering
+or topology. Automatic fit is already outside the supported slice. A real viewer must
+make deliberate reframing easy; do not use this result to claim automatic framing works.
+
+### Visual review and actual pointer exploration
+
+After Fit, the two hub regions and peripheral branches are distinguishable. Points are
+separated, and the broad connecting structure can be followed. The middle has crossing
+links and closely spaced spokes, so tracing every relationship is difficult. This is
+qualitative inspection of the existing geometry, not a claim that the original social
+community memberships were recovered or that all links were individually validated.
+
+In the visible inline browser, actual pointer input selected peripheral point **16**
+and hub **33** with the expected yellow highlight and reported ID. Dragging point 16
+moved it and its attached links; empty-space dragging panned the view; wheel input
+zoomed around the pointer. Run advanced the cooled simulation, Pause stopped it, and
+Fit brought the edited graph back into view. Observed pointer-request feedback in these
+manual checks was 23.5–32.9 ms. These few observations do not replace the scripted
+latency gate or measure physical display scanout.
+
+Current limits: uniform styling, no labels, no neighbor highlighting and no link picking.
+The six-logical-pixel circles are further reduced when the responsive page scales the
+960-pixel logical canvas into its narrower column. Selection works, but small targets
+and dense links limit semantic exploration. No colors, sizes, forces or acceptance
+rules were changed to improve the picture. The visual decision is **usable for this
+small pilot after Fit**, with these limitations; broader layout quality remains open.
+
+### Performance and rendering keep separate verdicts
+
+| Check | Recorded result | Verdict |
+| --- | --- | --- |
+| Early ticks 61–360 | Frame p95 17.6 ms; 100% ≤33 ms | Pass |
+| Cooled ticks 5,001–5,300 | Frame p95 17.4 ms; 100% ≤33 ms | Pass |
+| Every visible point, 34 picks | All IDs correct; median 16.6 ms, p95 17.9 ms, **max 68.2 ms** | **Not accepted: 50-ms maximum exceeded** |
+| Existing 20 paused / 20 running picks | Max 16.8 / 19.3 ms, exact IDs | Pass |
+| Existing 20-move drag | Max 17.0 ms; pin/release state correct | Pass |
+| Camera, pause/resume and resize contracts | All functional checks pass | Pass |
+| Original framing, fitted DPR 1/2, fractional zoom and pan at DPR 1/2 | 0 sampled interior ID/color failures; 0 invisible picks; all finite | Pass within sampled scope |
+
+There are 2,099 sampled pixels before the final Fit, 2,150 per fitted DPR audit and
+2,147 per fractional-zoom/pan audit. The original geometry-derived one-device-pixel
+boundary and two-byte interior color budget are unchanged. Maximum complete interval
+is 17.7 ms in both windows. Those frame passes do **not** cancel the picking failure.
+
+The first all-point capture retains aggregate picking percentiles, not the individual
+point's readback/highlight/presentation phases. Its 68.2-ms event is therefore **unexplained**;
+do not label it a shader, browser or cold-start problem without evidence. Subsequent
+captures now retain each ID and all three feedback phases for a focused replay. No
+repeat was selected to replace this failed result, and no threshold was relaxed.
+
+**Decision:** geometry/readability is good enough to continue the first migration
+attempt at this small scale, but the whole assessment remains **Not accepted** because
+of the picking maximum. Strict compatibility is still not established; full migration
+readiness is not ready. Keep the existing default and the parked 8,192-star failure.
+
+**Next:** make a bounded replay of the all-point picking sweep on the same cooled
+geometry, retaining per-request phases to locate the 68.2-ms outlier. Keep the 50-ms
+gate, original colors and exact IDs. Broader UI features or another force optimization
+are not required to answer that question.
+
+Reproduce with **Assess settled Karate Club** in Diagnostics and keep the inline tab
+visible throughout cooling and measurement. Use **Export JSON** for local checkpoints,
+frame intervals, checks and future per-point feedback samples. After scripted checks,
+the recorded geometry is restored for manual exploration; post-check pointer edits are
+not new convergence measurements. Raw captures stay local rather than in the repository.

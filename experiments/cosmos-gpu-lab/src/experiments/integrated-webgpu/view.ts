@@ -5,6 +5,7 @@ import { createIntegrated } from './runtime'
 import { workload, matrix, unsupported, type Workload } from './data'
 import { evaluate, interactionCheck, protocol, percentiles } from './evaluate'
 import { pacingProtocol, profilePacing, pacingVerdict, type PacingRow } from './pacing'
+import { settledProtocol, assessSettled, settledVerdict, type SettledRow } from './settled'
 import { starProfileProtocol, profileStarStages, type StarProfileRow } from './star-profile'
 import { fit, validateFrame } from './validation'
 export async function createView (host: HTMLElement): Promise<ExperimentInstance> {
@@ -28,11 +29,12 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     <button data-action="gpu-timing">Compare GPU timestamps</button>
     <button data-action="gpu-large">Time 8,192-point graphs</button>
     <button data-action="star-pacing">Profile star pacing</button><button data-action="star-stages">Profile star stages</button>
-    <button data-action="hub-compare">Compare hub prefetch</button></div>
+    <button data-action="hub-compare">Compare hub prefetch</button>
+    <button data-action="settled">Assess settled Karate Club</button></div>
     <p>Matrix order: 1,024 chain, communities, star; then 8,192 chain, communities, star; then Karate Club.
     The matrix first checks 1,024-point picking and dragging.
     An incorrect initial interaction blocks scaling; timing misses remain failures while the diagnostic matrix continues.</p>
-    <p>${pacingProtocol}</p><p>${gpuTimingProtocol}</p><p>${starProfileProtocol}</p><p>${hubComparisonProtocol}</p></section>
+    <p>${pacingProtocol}</p><p>${gpuTimingProtocol}</p><p>${starProfileProtocol}</p><p>${hubComparisonProtocol}</p><p>${settledProtocol}</p></section>
     <section data-run-part="explanation"><h3>Supported first slice</h3><p>Corrected resident repulsion, weighted directional springs,
     gravity, high/low center reduction and cooling. Circles and solid straight links read the same positions. Picking reads one RGBA8 ID pixel.</p>
     <h3>Unsupported options</h3><p>${unsupported}</p><p>Strict compatibility: historical failures remain.
@@ -41,7 +43,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
   const canvas = host.querySelector('canvas')!; const status = host.querySelector<HTMLElement>('[role=status]')!
   const report = host.querySelector<HTMLElement>('[data-report]')!
   const kind = host.querySelector<HTMLSelectElement>('[data-kind]')!; const count = host.querySelector<HTMLSelectElement>('[data-count]')!
-  let destroyed = false; let busy = false; let cancelled = false; let checks = 'No checks yet'; let failure = ''
+  let destroyed = false; let busy = false; let cancelled = false; let checks = 'No checks yet'; let failure = ''; let evidenceFailure = ''
   const records: unknown[] = []
   const runtime = await createIntegrated(canvas)
   runtime.resize(960, 600, devicePixelRatio)
@@ -49,7 +51,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
   mountRunLayout(host, () => ({
     state: busy ? 'Evaluating' : runtime.running ? 'Running' : 'Paused',
     passed: checks,
-    failed: failure || runtime.error || 'None recorded',
+    failed: failure || runtime.error || evidenceFailure || 'None recorded',
     unchecked: 'Strict pixel compatibility, physical display latency and full migration readiness.',
   }), { experiment: 'integrated-webgpu', devices: () => [runtime.info] })
   const update = (): void => {
@@ -126,7 +128,34 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
         <td>${s.samples ? ms(percentiles(s.samples).median) : r.timerStatus}</td><td>${s.samples ? ms(percentiles(s.samples).p95) : r.timerStatus}</td>
         <td>${Object.values(r.sameState).every(Boolean) ? 'Match' : 'Mismatch'}</td></tr>`)).join('')}</tbody></table>`)
     }
-    if (!rows.length && !pacing.length && !gpuRows.length && !profiles.length) {
+    const settled = records.filter((r): r is SettledRow => typeof r === 'object' && r !== null && 'settled' in r)
+    for (const r of settled) {
+      const i = r.interactions; const functional = i.exactIds && i.dragPinned && i.pause && i.resume && i.resize
+      report.insertAdjacentHTML('beforeend', `<h3>Settled Karate Club · ${settledVerdict(r)}</h3>
+        <p>Visible point IDs: ${r.inventory.visibleIds.length}/34; missing: ${r.inventory.missingIds.join(', ') || 'none'}.
+        Every visible ID picked correctly: ${r.inventory.exactIds ? 'Yes' : 'No'}; worst feedback ${ms(r.inventory.pick.max)}.</p>
+        <table><caption>Complete frame intervals</caption><thead><tr><th>Ticks</th><th>Frame p95</th><th>Within 33 ms</th></tr></thead>
+        <tbody>${r.windows.map(w => `<tr><td>${w.from}–${w.to}</td><td>${ms(w.frames.p95)}</td>
+        <td>${(w.within33 * 100).toFixed(1)}%</td></tr>`).join('')}</tbody></table>
+        <table><caption>Geometry · measured only, no quality threshold</caption><thead><tr><th>Tick / framing</th><th>Stress</th>
+        <th>Overlapping pairs</th><th>Visible centers</th><th>Radius, world units</th></tr></thead><tbody>${r.checkpoints.map(q => `<tr>
+        <td>${q.tick} · ${q.fitted ? 'Fit' : 'held camera'}</td><td>${q.stressRms?.toFixed(3)}</td><td>${q.overlapPairs}</td>
+        <td>${q.visiblePoints}/34</td><td>${q.radius.toFixed(2)}</td></tr>`).join('')}</tbody></table>
+        <p>Residual motion after tick 5,300: ${r.residual.motionRms.toExponential(3)} world units per tick.
+        Cooling reduces force strength; low motion does not establish useful geometry.</p>
+        <p>Existing interaction checks: ${functional ? 'Pass' : 'Fail'}.
+        Worst paused / running pick: ${ms(r.interactions.pick.max)} / ${ms(r.interactions.activePick.max)}; drag: ${ms(r.interactions.drag.max)}.</p>
+        <table><caption>Rendering audits · original boundary and color rules</caption><thead><tr><th>View</th><th>Samples</th>
+        <th>Interior ID / color failures</th>
+        <th>Invisible picks</th></tr></thead><tbody>${r.audits.map(a => `<tr><td>${a.view}</td><td>${a.validation.samples}</td>
+        <td>${a.validation.interiorIdFailures} / ${a.validation.interiorColorFailures}</td>
+        <td>${a.validation.invisiblePicks}</td></tr>`).join('')}</tbody></table>`)
+    }
+    if (rows.some(r => !r.passed) || pacing.some(r => pacingVerdict(r) === 'Not accepted') ||
+      gpuRows.some(r => gpuTimingVerdict(r) === 'Not accepted') || settled.some(r => settledVerdict(r).startsWith('Not accepted'))) {
+      evidenceFailure = 'A retained evaluation missed its local gates; inspect results'
+    }
+    if (!rows.length && !pacing.length && !gpuRows.length && !profiles.length && !settled.length) {
       const paragraph = document.createElement('p'); paragraph.textContent = JSON.stringify(value, null, 2); report.append(paragraph)
     }
   }
@@ -177,6 +206,12 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
           }
         })
       }
+      if (name === 'settled') {
+        kind.value = 'karate'; runtime.pause(); canvas.scrollIntoView({ block: 'center' })
+        const result = await assessSettled(runtime, () => cancelled || destroyed, text => { status.textContent = text })
+        show(result); checks = settledVerdict(result)
+        if (checks.startsWith('Not accepted')) failure = 'Settled assessment missed existing functional/performance gates'
+      }
       if (name === 'measure' || name === 'matrix') {
         runtime.pause(); runtime.resize(960, 600, devicePixelRatio); canvas.scrollIntoView({ block: 'center' })
         const inputs = name === 'matrix' ? matrix : [{ kind: kind.value as Workload, count: Number(count.value) }]
@@ -201,7 +236,14 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
       }
       if (name === 'export') {
         const content = JSON.stringify({
-          protocol, pacingProtocol, gpuTimingProtocol, starProfileProtocol, hubComparisonProtocol, recordedAt: new Date().toISOString(), records,
+          protocol,
+          pacingProtocol,
+          gpuTimingProtocol,
+          starProfileProtocol,
+          hubComparisonProtocol,
+          settledProtocol,
+          recordedAt: new Date().toISOString(),
+          records,
         }, null, 2)
         const blob = new Blob([content], { type: 'application/json' })
         const url = URL.createObjectURL(blob); const link = document.createElement('a')

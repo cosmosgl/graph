@@ -81,11 +81,26 @@ Candidate picking reaches **65.8 ms**. All 16 chain/community control/candidate 
 pass. Keep `hoist` as the default; this is not an accepted star fix.
 [Controls, stage attribution and candidate evidence](#/integrated-webgpu?section=doc-findings-star-bottleneck-and-one-bounded-candidate).
 
-**Next:** assess settled Karate Club readability, framing and exploration after cooling.
-Stop further large-star optimization for this first attempt, retaining its failed verdict
-and explicit workload limit. Reopen it when large hubs are required by the pilot or
-before claiming full migration readiness. Keep the corrected solver, existing gates and
-all prior failures. This pause is not a relaxed acceptance criterion.
+The cooled **Karate Club assessment** is now recorded. After manual Fit, all **34/34**
+points are visible, independently pickable and non-overlapping; two hub regions and
+peripheral branches are visually distinguishable. The tick-60 camera contains only
+**17/34** centers after cooling, so deliberate reframing is required. Labels, neighbor
+highlighting and link picking remain absent; dense central relationships are harder
+to trace. Readability is **visually usable for this small pilot after Fit**, not broad
+numerical layout-quality approval.
+
+Early and cooled 300-frame windows both achieve **100% within 33 ms**; sampled pixels
+pass at DPR 1/2 and fractional zoom. However, the all-point sweep reaches **68.2 ms**
+for one picking observation. Correct IDs and later interaction passes do not waive the
+50-ms maximum: **the complete assessment remains Not accepted**. The cause is unknown;
+future captures retain per-ID readback/highlight/presentation phases.
+[Cooled geometry, pointer exploration and retained latency failure](#/integrated-webgpu?section=doc-findings-cooled-karate-club-readability-and-exploration).
+
+**Next:** replay all-point picking on the same cooled geometry to locate that outlier,
+with unchanged IDs, colors and the 50-ms gate. Further large-star tuning stays stopped
+for this first attempt, with its failed verdict and workload limit visible. Reopen it
+when large hubs are required by the pilot or before full migration readiness. Keep all
+prior failures; neither the visual review nor parked work relaxes an acceptance gate.
 Further deep boundary debugging, arrows and advanced styles remain parked until this
 integration decision. Missing force families, collision and host/deck integration remain
 later feature-completion work, rather than implicit pilot support.
