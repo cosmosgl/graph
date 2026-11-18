@@ -1,34 +1,41 @@
-import type { QuerySet } from '@luma.gl/core'
+import type { QuerySet, RenderPassProps } from '@luma.gl/core'
 import { createDevice, describeDevice, waitForGpu } from '../../gpu/luma'
 import { createCombinedWebGPU } from '../combined-layout/webgpu'
+import type { ComputeScope } from '../many-body/backend'
 import { cool } from '../combined-layout/data'
 import { forceSettings } from '../combined-layout/production-settings'
 import { createRenderer } from './renderer'
 import { workload, type Workload } from './data'
-export type FrameTimestamps = { query: QuerySet; offset: number }
+export type IntegratedSpring = 'hoist' | 'prefetch'
+export type FrameTimestamps = { query: QuerySet; offset: number } | { scope: ComputeScope; draw: RenderPassProps }
 export type FrameTrace = { encodeSimulationMs: number; encodeDrawMs: number; completionWaitMs: number }
 export type Feedback = { kind: string; ms: number; id: number | null; readMs: number; highlightMs: number; opportunityMs: number }
 export const nextFrame = async (): Promise<number> => await new Promise(resolve => requestAnimationFrame(resolve))
 export async function createIntegrated (canvas: HTMLCanvasElement, kind: Workload = 'chain', count = 1024): Promise<{
   canvas: HTMLCanvasElement; backend: Awaited<ReturnType<typeof createCombinedWebGPU>>; renderer: ReturnType<typeof createRenderer>;
-  readonly data: ReturnType<typeof workload>; readonly tick: number; readonly running: boolean; readonly destroyed: boolean;
+  readonly springOptimization: IntegratedSpring; readonly data: ReturnType<typeof workload>;
+  readonly tick: number; readonly running: boolean; readonly destroyed: boolean;
   readonly error: string; readonly info: string; feedback: Feedback[]; intervals: number[];
   frame(simulate?: boolean, trace?: FrameTrace, timestamps?: FrameTimestamps): Promise<void>; pause(): void; resume(): void; step(): Promise<void>;
   pick(x: number, y: number, start?: number): Promise<number | null>;
   drag(id: number, x: number, y: number, release?: boolean): void;
   pan(dx: number, dy: number): void; zoom(factor: number, x: number, y: number): void;
-  replace(kind: Workload, count: number): Promise<void>; resize(width: number, height: number, ratio?: number): void;
+  replace(kind: Workload, count: number, springOptimization?: IntegratedSpring): Promise<void>; resize(width: number, height: number, ratio?: number): void;
   world(x: number, y: number): [number, number]; screen(x: number, y: number): [number, number]; destroy(): void;
 }> {
   let data = workload(kind, count); let tick = 0; let alpha = 1; let running = false; let destroyed = false; let error = ''
+  let springOptimization: IntegratedSpring = 'hoist'
   const device = await createDevice('webgpu', canvas, true)
-  const makeBackend = async (next: ReturnType<typeof workload>): Promise<Awaited<ReturnType<typeof createCombinedWebGPU>>> =>
+  const makeBackend = async (
+    next: ReturnType<typeof workload>, optimization: IntegratedSpring = 'hoist'
+  ): Promise<Awaited<ReturnType<typeof createCombinedWebGPU>>> =>
     await createCombinedWebGPU(canvas, next.graph, next.input, 'trig', {
       context: { device },
       gpuBounds: true,
       repulsionPolicy: 'production',
       nearArithmetic: 'refined',
-      springOptimization: 'hoist',
+      springOptimization: optimization,
+      hubThreshold: 1024,
       forceSettings: { ...forceSettings('reference', next.input.points.length / 4), center: 0.1 },
     })
   let backend!: Awaited<ReturnType<typeof createCombinedWebGPU>>
@@ -59,6 +66,7 @@ export async function createIntegrated (canvas: HTMLCanvasElement, kind: Workloa
       renderer: drawing,
       feedback,
       intervals,
+      get springOptimization (): IntegratedSpring { return springOptimization },
       get data (): ReturnType<typeof workload> { return data },
       get tick (): number { return tick },
       get running (): boolean { return running },
@@ -69,19 +77,24 @@ export async function createIntegrated (canvas: HTMLCanvasElement, kind: Workloa
         healthy(); const start = trace ? performance.now() : 0
         if (timestamps && !simulate) throw new Error('Full-frame timestamps require simulation')
         if (simulate) {
-          backend.stepTick!(alpha, tick, timestamps
-            ? {
-              timestampQuerySet: timestamps.query, beginTimestampIndex: timestamps.offset, endTimestampIndex: timestamps.offset + 1,
-            }
-            : undefined)
+          if (timestamps && 'scope' in timestamps) backend.stepProfiledTick!(alpha, tick, timestamps.scope)
+          else {
+            backend.stepTick!(alpha, tick, timestamps
+              ? {
+                timestampQuerySet: timestamps.query, beginTimestampIndex: timestamps.offset, endTimestampIndex: timestamps.offset + 1,
+              }
+              : undefined)
+          }
           tick++; alpha = cool(alpha, 5000)
         }
         const simulated = trace ? performance.now() : 0
-        drawing.draw(timestamps
-          ? {
-            timestampQuerySet: timestamps.query, beginTimestampIndex: timestamps.offset + 2, endTimestampIndex: timestamps.offset + 3,
-          }
-          : undefined)
+        drawing.draw(timestamps && 'scope' in timestamps
+          ? timestamps.draw
+          : timestamps
+            ? {
+              timestampQuerySet: timestamps.query, beginTimestampIndex: timestamps.offset + 2, endTimestampIndex: timestamps.offset + 3,
+            }
+            : undefined)
         const drawn = trace ? performance.now() : 0
         // Bound the queue to one completed frame. This pacing cost is included in normal frame intervals.
         await waitForGpu(device)
@@ -129,13 +142,13 @@ export async function createIntegrated (canvas: HTMLCanvasElement, kind: Workloa
         const after = api.world(x, y); drawing.camera.x += before[0] - after[0]; drawing.camera.y += before[1] - after[1]
         if (!running) drawing.draw()
       },
-      async replace (nextKind: Workload, nextCount: number): Promise<void> {
+      async replace (nextKind: Workload, nextCount: number, optimization: IntegratedSpring = 'hoist'): Promise<void> {
         healthy(); const next = workload(nextKind, nextCount); const wasRunning = running
         api.pause(); generation++; press = undefined; await pending; healthy()
-        const candidate = await makeBackend(next)
+        const candidate = await makeBackend(next, optimization)
         try { healthy(); drawing.replace(next.graph) } catch (e) { candidate.destroy(); throw e }
         const previous = backend; backend = candidate; previous.destroy()
-        data = next; tick = 0; alpha = 1; drawing.camera = { x: 0, y: 0, zoom: 2 }
+        data = next; springOptimization = optimization; tick = 0; alpha = 1; drawing.camera = { x: 0, y: 0, zoom: 2 }
         await api.frame(false); if (wasRunning) api.resume()
       },
       resize (width: number, height: number, ratio = devicePixelRatio): void {

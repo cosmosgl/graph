@@ -72,9 +72,20 @@ sampled rendering/functional checks pass. These later passes do not explain or e
 earlier stalls, and star fails with timestamps off as well.
 [Large-graph GPU timing results](#/integrated-webgpu?section=doc-findings-gpu-timestamps-at-8-192-points).
 
-**Next:** do one bounded star redraw/full-tick control, then identify the expensive force
-stage before choosing an optimization. Assess settled real-graph readability afterward.
-Keep the corrected solver, current gates, normal-frame pacing control and all prior failures.
+The bounded star investigation is now complete. Drawing-only controls pass; full ticks
+fail in all three repeats. Incoming hub springs are the largest measured stage at
+**7.7 ms median**. The existing ordered-prefetch candidate preserves exact state and
+color bits and reduces the average normal-pass GPU-sum p95 by about **5.6%** in this
+comparison, but **all eight star windows still fail** the unchanged frame gate.
+Candidate picking reaches **65.8 ms**. All 16 chain/community control/candidate windows
+pass. Keep `hoist` as the default; this is not an accepted star fix.
+[Controls, stage attribution and candidate evidence](#/integrated-webgpu?section=doc-findings-star-bottleneck-and-one-bounded-candidate).
+
+**Next:** assess settled Karate Club readability, framing and exploration after cooling.
+Stop further large-star optimization for this first attempt, retaining its failed verdict
+and explicit workload limit. Reopen it when large hubs are required by the pilot or
+before claiming full migration readiness. Keep the corrected solver, existing gates and
+all prior failures. This pause is not a relaxed acceptance criterion.
 Further deep boundary debugging, arrows and advanced styles remain parked until this
 integration decision. Missing force families, collision and host/deck integration remain
 later feature-completion work, rather than implicit pilot support.

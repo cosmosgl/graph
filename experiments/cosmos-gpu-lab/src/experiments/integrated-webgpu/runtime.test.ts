@@ -5,6 +5,7 @@ import { compareArray } from '../many-body/reference'
 import { writeArtifact } from '../../testing/artifacts'
 import { validateFrame } from './validation'
 import { interactionCheck } from './evaluate'
+import { integratedProfileStages } from './star-profile'
 import { createIntegrated, nextFrame, type FrameTrace } from './runtime'
 
 it('renders 1,024 shared positions, picks/drags before scaling, preserves state and destroys safely', async () => {
@@ -131,3 +132,64 @@ it('timestamps the existing passes without changing position, force or color bit
     } finally { query.destroy() }
   } finally { r.destroy() }
 }, 30000)
+
+it('profiles every integrated star stage including center without changing state or color bits', async context => {
+  const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 96
+  const r = await createIntegrated(canvas, 'star', 8192)
+  try {
+    const device = r.backend.positionSource!().device
+    if (!device.features.has('timestamp-query')) { context.skip(); return }
+    for (let i = 0; i < 3; i++) await r.frame(true)
+    const control = await r.backend.read(); const colors = (await r.renderer.snapshot()).color
+    await r.replace('star', 8192)
+    const query = device.createQuerySet({ type: 'timestamp', count: integratedProfileStages.length * 2 * 3 })
+    try {
+      for (let frame = 0; frame < 3; frame++) {
+        const names: string[] = []; const offset = frame * integratedProfileStages.length * 2
+        await r.frame(true, undefined, {
+          scope: (name, work) => {
+            const index = offset + names.length * 2; names.push(name)
+            const pass = device.beginComputePass({ timestampQuerySet: query, beginTimestampIndex: index, endTimestampIndex: index + 1 })
+            try { work(pass) } finally { pass.end() }
+          },
+          draw: {
+            timestampQuerySet: query,
+            beginTimestampIndex: offset + (integratedProfileStages.length - 1) * 2,
+            endTimestampIndex: offset + integratedProfileStages.length * 2 - 1,
+          },
+        })
+        expect(names).toEqual(integratedProfileStages.slice(0, -1))
+      }
+      const measured = await r.backend.read()
+      for (const key of ['positions', 'forces'] as const) {
+        expect(new Uint32Array(measured[key].buffer)).toEqual(new Uint32Array(control[key].buffer))
+      }
+      expect((await r.renderer.snapshot()).color).toEqual(colors)
+      const times = await query.readResults({ firstQuery: 0, queryCount: integratedProfileStages.length * 2 * 3 })
+      for (let i = 0; i < times.length; i += 2) expect(times[i + 1] >= times[i]).toBe(true)
+      expect(times.some((value, i) => i % 2 === 1 && value > times[i - 1])).toBe(true)
+    } finally { query.destroy() }
+  } finally { r.destroy() }
+}, 30000)
+
+it('keeps ordered prefetch equivalent in star and low-degree controls and restores the default', async () => {
+  const canvas = document.createElement('canvas'); canvas.width = 128; canvas.height = 96
+  const r = await createIntegrated(canvas)
+  try {
+    for (const kind of ['star', 'chain', 'communities'] as const) {
+      await r.replace(kind, 8192)
+      expect(r.springOptimization).toBe('hoist')
+      for (let i = 0; i < 3; i++) await r.frame(true)
+      const control = await r.backend.read(); const color = (await r.renderer.snapshot()).color
+      await r.replace(kind, 8192, 'prefetch')
+      expect(r.springOptimization).toBe('prefetch')
+      for (let i = 0; i < 3; i++) await r.frame(true)
+      const candidate = await r.backend.read()
+      for (const key of ['positions', 'forces'] as const) {
+        expect(new Uint32Array(candidate[key].buffer)).toEqual(new Uint32Array(control[key].buffer))
+      }
+      expect((await r.renderer.snapshot()).color).toEqual(color)
+    }
+    await r.replace('chain', 1024); expect(r.springOptimization).toBe('hoist')
+  } finally { r.destroy() }
+}, 60000)

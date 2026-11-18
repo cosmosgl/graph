@@ -216,3 +216,55 @@ A missed gate remains rejected while the remaining diagnostic windows continue; 
 execution error or visibility loss interrupts the run. The existing **Compare GPU
 timestamps** action now uses the selected graph/count, allowing a single fixture to be
 reproduced. This adds no force, shader, color, tolerance or scheduling optimization.
+
+## Bounded star investigation
+
+Declared on **18 November 2026** before evaluation. **Profile star pacing** uses the
+same 8,192-point unpinned star, 8,191 links, seed, camera fit, 960 × 600 logical viewport
+and actual DPR as the timestamp sweep. Three repetitions rotate browser-only, redraw
+and full-tick order. All reset to the same tick-60 scene; redraw holds it fixed while
+full-tick evolves it. Each includes 60 redraw/browser warmups before 300 measured
+intervals. Post-window rendering checks stay outside timing. Full-tick windows retain
+20 paused picks, 20 running picks, the 20-move drag and all existing gates. Browser-only
+and redraw are controls, never acceptance evidence for simulation.
+
+**Profile star stages** is a separate diagnostic: normal/split/split/normal windows,
+60 warmup ticks, one fit and 60 measured evolving ticks (61–120) each. Normal frames
+retain the original compute/render passes; split frames put timestamps around each
+existing force/integration or hierarchy stage, including the corrected center force.
+There are 16 compute stages plus the same integrated circle/straight-link drawing pass.
+Kernels, arithmetic, force order, alpha schedule and uniforms are unchanged. Split-pass
+overhead and synchronization can change timing: these shorter windows cannot pass the
+300-frame usability gate or be extrapolated to the whole cooling trajectory.
+
+Each query pair measures only its own pass. There are 2,040 query entries in a split
+window, all read afterward. Exact position, force and rendered-color bits must match
+the first normal window; CPU sampled rendering uses the original acceptance rules.
+Any mismatch makes attribution provisional. No validation/readback runs inside timing.
+The [WebGPU timestamp-query specification](https://www.w3.org/TR/webgpu/#timestamp-query)
+notes limited timestamp precision; zero-duration small stages are unresolved, not free.
+
+The historical fifteen-stage combined-layout profiler remains unchanged and continues
+to reject optional-force workloads. This integrated diagnostic explicitly adds center.
+No production Cosmos code or acceptance threshold changes. Prior chain/community
+passes remain controls; normal-frame evaluation must confirm any later optimization.
+
+### One existing spring candidate
+
+After the stage measurements identified incoming springs as the largest measured stage,
+**Compare hub prefetch** was declared before evaluation: star, then chain and communities,
+all at 8,192 points. Reuse the [existing ordered prefetch candidate](#/hub-springs/docs/acceptance)
+with its provisional 1,024-neighbor threshold. Each tile loads 64 neighbors cooperatively;
+one lane retains the serial velocity correction in original adjacency order. No arithmetic,
+force law, colors or acceptance rules change. The default integrated path stays `hoist`.
+
+Each graph resets for eight 60-warmup/300-measured windows: hoist/prefetch/prefetch/hoist
+with timestamps **off**, followed by the same order with timestamps **on**. Every window
+must match the first control's final position, force and rendered-color bits before
+interaction checks. Paused/running picking, dragging, functional and sampled rendering
+gates are unchanged. State/color and timer readbacks are outside frame timing. Low-degree
+chain and communities are controls for candidate overhead; absence of hubs retains the
+candidate's existing plain-kernel fallback. Construction and extra buffer allocation are
+outside this steady-state comparison. It does not establish data-update cost or memory
+scalability. The last window restores `hoist`; a candidate pass never silently changes
+the default. No further candidate is part of this bounded investigation.

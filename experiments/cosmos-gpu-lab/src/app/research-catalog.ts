@@ -190,16 +190,16 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       }],
     }),
     'integrated-webgpu': entry('integrated-webgpu', {
-      conclusion: 'At 8,192 points, chain and communities pass four local timing/interaction windows; star still misses frame and picking targets. ' +
-        'GPU timestamps show simulation dominates; earlier stalls remain unexplained.',
+      conclusion: 'Incoming hub springs dominate the star profile. Ordered prefetch helps modestly but the 8,192-point star still fails; ' +
+        'chain and communities pass. Keep the default and assess settled readability next.',
       reviewed: '2026-11-18',
       variant: 'luma WebGPU resident core with corrected arithmetic; bounded circle and straight-link renderer',
       comparison: 'Resident simulation → shared positions → rendering and interaction → complete frame and feedback checks',
       milestone: 'integration',
       method: 'method',
       evidence: 'findings',
-      next: 'Separate star redraw and full-tick cost, then identify the costly force stage before choosing an optimization. Settled readability remains open.',
-      reproduce: 'Use Time 8,192-point graphs in Diagnostics for chain, communities and star; Compare GPU timestamps uses the selected graph/count.',
+      next: 'Assess settled Karate Club readability and exploration. Park further large-star tuning with its unchanged failed performance verdict visible.',
+      reproduce: 'Diagnostics: Profile star pacing, Profile star stages and Compare hub prefetch. Each exports its protocol and retained results.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Separate strict compatibility, practical usability and full readiness.' }],
     }),
     'resident-layout': entry('resident-layout', {
