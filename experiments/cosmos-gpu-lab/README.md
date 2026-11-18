@@ -213,6 +213,17 @@ their separate meanings.
 
 ### Experiment navigation
 
+The Production and WebGPU viewers and Precision diagnostics pages prototype an
+experience combining a live demonstration with recorded evidence. Their `recorded-summary.json` files summarize a
+named historical observation, including its environment, checks and limits;
+the linked findings remain the source. An `agent-recipe.md` beside each study
+describes a focused replay and the final account. Their live views open with the
+page; the recorded evidence and recipe remain readable if initialization fails.
+Existing `/run` links and links to live controls, results or diagnostics still work.
+When a browser cannot preserve an embedded viewer while moving it, returning from
+a reference starts a fresh viewer. Completed viewer results are kept separately
+in the current tab and included in Export JSON; graph and playback state restart.
+
 `src/app/research.ts` and `research-catalog.ts` hold reviewed findings, technical article links,
 and earlier investigations. Add a summary, primary method article, related articles and an
 investigation list when adding an experiment. Describe its actual comparison paths: a WebGPU-only
@@ -265,7 +276,9 @@ software rendering. Large-layout and cost sweeps still require their explicit
 flags (`LAB_SCALE_COUNT`, `LAB_STORED_ALPHA_SWEEP`, `LAB_RIBBON_COST` or
 `LAB_FAR_ARITHMETIC_COST`). Run them only when they answer the current question.
 
-Omitting the file filter runs the broad lab suite, including retained rejected
+Omitting the file filter runs the broad lab suite, including the real viewer smoke
+test. First run `pnpm run build` from the repository root so its production control
+matches the current source. The broad suite also includes retained rejected
 candidates. It is not a required green gate before committing or moving to the
 next investigation. Assertions and acceptance criteria stay truthful: a failed
 candidate remains failed, and passing on this machine does not establish support
@@ -302,11 +315,45 @@ checked independently. Experiment UI tests that create devices remain in the
 GPU suite. `LAB_INLINE_BROWSER=1` also connects the UI subset to an existing
 browser. These checks are available locally, not required lab CI jobs.
 
+The real viewer comparison smoke test also needs the production control built
+from the repository root: run `pnpm run build` first, then run
+`pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/viewer-comparison/view.test.ts`.
+
 Benchmark JSON is written under ignored `captures/<run>/`, with `local` as the
 default. Measurements are observations, never golden snapshots, and require no
 `-u`. Keep exports local; commit concise findings, scope and reproduction steps.
+Set `LAB_ARTIFACT_RUN` to a unique directory name for a new test-produced capture;
+the same artifact name in the same directory is replaced on the next run.
 The normal repository `pnpm test` still covers the production engine and deck
 integration with its existing browser configuration.
+
+### Recording reproducible source
+
+For a result another agent should reproduce, use a clean commit or retain an
+exact snapshot of the source used. Record the revision and working-tree state
+before and after the run. If they change during the run, report it as provisional.
+For a modified tree, the following commands save the tracked changes and list
+new files in the existing unique capture directory. Set `lab_run_id` to that
+directory's name before running them:
+
+```sh
+lab_capture="experiments/cosmos-gpu-lab/captures/$lab_run_id"
+mkdir -p "$lab_capture"
+git rev-parse HEAD > "$lab_capture/source-revision.txt"
+git status --short > "$lab_capture/source-status.txt"
+git diff --binary HEAD > "$lab_capture/source.patch"
+git ls-files --others --exclude-standard > "$lab_capture/untracked-files.txt"
+```
+
+The patch includes staged and unstaged tracked contents; the list does not contain
+the new files themselves. Copy every new source or input needed by the run into
+the capture, preserving its repository-relative path. Record any required ignored
+inputs too. After the run, check that the patch and copied files still match the
+working tree; a status list can stay the same when file contents change. To
+reproduce, start from the recorded revision in a separate checkout,
+apply the patch, restore those files, install the recorded dependencies and rebuild
+generated controls before running. If the exact source cannot be retained, label
+the result provisional rather than claiming it can be recreated.
 
 ### Alpha.15 upgrade verification
 

@@ -11,7 +11,7 @@ export type RunSummary = {
 
 type Dispose = () => void
 const presentations = new WeakMap<HTMLElement, Dispose>()
-type RunContext = { experiment: string; devices?: () => string[] }
+type RunContext = { experiment: string; devices?: () => string[]; visualFirst?: boolean }
 
 // Regions and action roles are authored by each view. Never classify prose by
 // its DOM position, or infer numerical acceptance from a status message.
@@ -82,6 +82,7 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
   })
   slot('#run-results > h2').after(slot('.run-overview'))
   slot('.run-visualization').before(slot('[data-run-slot="status"]'))
+  if (context?.visualFirst) slot('#run-run').prepend(slot('.run-visualization'))
   const tick = frame.querySelector('.tick-counter')
   if (tick) {
     const toolbar = tick.parentElement!
@@ -94,18 +95,23 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
   // Move the original nodes so visual, keyboard and reading order agree at
   // both sizes. Settings never push the narrow-screen canvas out of reach.
   const reflow = (): void => {
-    if (wide.matches) {
+    if (wide.matches && !context?.visualFirst) {
       display.append(visualization, results); workbench.replaceChildren(display, settings)
     } else workbench.replaceChildren(visualization, settings, results)
   }
-  reflow(); wide.addEventListener('change', reflow)
+  // The visual-first viewer uses an iframe, which reloads if reparented after setup.
+  reflow(); if (!context?.visualFirst) wide.addEventListener('change', reflow)
+  // Study pages own the navigation targets while their live view is loading.
+  if (host.hasAttribute('data-study-run')) {
+    visualization.id = 'run-live-viewer'; explanation.id = 'run-live-explanation'
+  }
   host.prepend(frame)
   if (context) addRunGuidance(frame, context.experiment)
   slot('[data-run-scope]').textContent = context
     ? `${validationContracts[context.experiment]?.coverage ?? 'Only the inputs and checks explicitly named below.'} ` +
       'Sweeps use their own row parameters. This session does not approve the overall migration.'
     : 'Only the inputs and checks explicitly named below; no overall migration approval.'
-  const tables = createResultTables(frame, { exclude: '.experiment-notes, .experiment-references' })
+  const tables = createResultTables(frame, { exclude: '.experiment-notes, .experiment-references, .study-overview' })
   const refresh = (): void => {
     const values = read()
     for (const key of ['state', 'passed', 'failed', 'unchecked'] as const) {

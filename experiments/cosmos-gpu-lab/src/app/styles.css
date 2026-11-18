@@ -2100,3 +2100,29 @@ button[data-action="play"][aria-pressed="true"] {
 @media (max-width: 540px) {
   .run-layout .run-visualization .smoothstep-panels { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* A recorded result can be read without starting a GPU session. */
+.study-overview { margin-top: 24px; max-width: 900px; }
+.study-overview h2 { margin: 0 0 8px; }
+.study-overview p { max-width: var(--reading-width); margin: 0 0 12px; }
+.study-overview .study-source { color: var(--text-secondary); font-size: var(--type-meta); }
+.study-overview .research-conclusion { color: var(--text-primary); }
+.study-overview table { margin-block: 12px 20px; }
+.study-overview caption { text-align: left; font-weight: 500; margin-bottom: 8px; }
+.study-overview th:first-child { min-width: 150px; }
+.study-overview td:nth-child(2) { white-space: nowrap; }
+.study-links { display: flex; flex-wrap: wrap; gap: 8px 24px; }
+.study-links a { color: var(--accent); text-underline-offset: 3px; }
+.study-live { margin: 16px 0 28px; scroll-margin-top: calc(var(--lab-header-height, 88px) + 24px); }
+.study-live-intro h2 { margin: 0 0 8px; }
+.study-live-intro p { max-width: var(--reading-width); margin: 0 0 16px; color: var(--text-secondary); }
+.study-launch { padding-block: 8px 20px; }
+.study-launch p { margin: 0 0 12px; color: var(--text-secondary); }
+.study-launch [data-study-status] { margin: 12px 0 0; }
+.study-launch [data-study-status]:empty { display: none; }
+.study-notes-host .experiment-notes { margin-top: 0; }
+#study-overview { scroll-margin-top: calc(var(--lab-header-height, 88px) + 24px); }
+.viewer-comparison-panels { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 600px) {
+  .viewer-comparison-panels { grid-template-columns: minmax(0, 1fr); }
+}

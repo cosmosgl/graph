@@ -18,6 +18,7 @@ import { renderMigrationOverview } from './research-ui'
 import { scrollToSection } from './sections'
 import { resolveExperimentSection } from './article-sections'
 import { disposeExperimentNotes, mountExperimentNotes, renderExperimentContents } from './experiment-page'
+import { renderStudyOverview } from './study-overview'
 
 function requiredElement<T extends HTMLElement> (host: ParentNode, selector: string): T {
   const element = host.querySelector<T>(selector)
@@ -165,9 +166,15 @@ function renderExperimentFrame (host: HTMLElement, experiment: ExperimentDefinit
   host.innerHTML = `<div class="experiment-document">
     <header class="experiment-header unified-header"><h1>${experiment.title}</h1>
       <p class="experiment-role">${experimentRole(experiment.id)} ·
-        <a href="#/roadmap?section=milestone-${record.milestone}">${milestoneTitle(record.milestone)}</a></p><p>${record.question}</p>
-      <p class="research-conclusion">${record.conclusion}</p></header>
+        <a href="#/roadmap?section=milestone-${record.milestone}">${milestoneTitle(record.milestone)}</a></p>
+      <p>${record.question}</p>
+      ${experiment.study ? '' : `<p class="research-conclusion">${record.conclusion}</p>`}</header>
     <section class="experiment-stage unified-experiment" aria-busy="true"></section></div>`
+  if (experiment.study && !experiment.study.visualFirst) requiredElement(host, '.experiment-header').append(renderStudyOverview(experiment))
+}
+
+function wantsLiveStudy (view: 'run' | 'evidence' | undefined, section: string | null): boolean {
+  return (view === 'run' && !section) || ['run-run', 'run-configuration', 'run-results', 'run-diagnostics'].includes(section ?? '')
 }
 
 function renderMissing (host: HTMLElement, id: string): void {
@@ -222,6 +229,8 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
   let disposeContents = (): void => {}
   let mountedExperiment: string | undefined
   let failedRun: HTMLElement | undefined
+  let studyNotes: HTMLElement | undefined
+  let startStudyLive: (() => Promise<void>) | undefined
   let renderVersion = 0
   const scrollPositions = new Map<string, number>()
   let previousPath: string | undefined
@@ -253,12 +262,17 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       if (route.pageId) params.set('section', articleSectionId(route.pageId, currentSection() ?? undefined))
       else if (route.view === 'evidence' && !params.has('section')) params.set('section', 'recorded-findings')
       window.history.replaceState(null, '', `${experimentHref(route.experimentId)}${params.size ? `?${params}` : ''}`)
-      if (mountedExperiment === route.experimentId) { focusExperimentSection(route.experimentId); return }
+      if (mountedExperiment === route.experimentId) {
+        if (startStudyLive && wantsLiveStudy(route.view, currentSection())) await startStudyLive()
+        focusExperimentSection(route.experimentId); return
+      }
     }
     renderVersion += 1
     const version = renderVersion
     disposeContents(); mountedExperiment = undefined
     if (failedRun) { disposeExperimentNotes(failedRun); failedRun = undefined }
+    if (studyNotes) { disposeExperimentNotes(studyNotes); studyNotes = undefined }
+    startStudyLive = undefined
     disposeDocumentTables(workspace)
     if (previousPath) scrollPositions.set(previousPath, window.scrollY)
     const path = window.location.hash.split('?')[0] || '#/'
@@ -413,6 +427,66 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
     const documentFrame = requiredElement<HTMLElement>(workspace, '.experiment-document')
     const stage = requiredElement<HTMLElement>(workspace, '.experiment-stage')
     disposeContents = renderExperimentContents(documentFrame, experiment)
+    if (experiment.study) {
+      const liveSection = document.createElement('section'); liveSection.id = 'run-run'; liveSection.className = 'study-live'
+      const intro = document.createElement('div'); intro.className = 'study-live-intro'
+      intro.innerHTML = '<h2>Live experiment</h2><p></p>'
+      requiredElement(intro, 'p').textContent = experiment.study.liveDescription ??
+        'This is a new local session, separate from the recorded findings.'
+      const launch = document.createElement('div'); launch.className = 'study-launch'
+      launch.innerHTML = '<p role="status" data-study-status></p><button type="button" data-start-study hidden>Retry live experiment</button>'
+      const slot = document.createElement('div'); slot.className = 'study-live-slot'
+      liveSection.append(intro, launch, slot)
+      const overview = experiment.study.visualFirst ? renderStudyOverview(experiment) : undefined
+      const notesHost = document.createElement('div'); notesHost.className = 'study-notes-host'
+      notesHost.innerHTML = '<div class="run-layout"></div>'
+      stage.append(liveSection); if (overview) stage.append(overview)
+      stage.append(notesHost); studyNotes = notesHost
+      const button = requiredElement<HTMLButtonElement>(launch, '[data-start-study]')
+      const status = requiredElement<HTMLElement>(launch, '[data-study-status]')
+      let opening: Promise<void> | undefined; let opened = false
+      const refreshContents = (): void => { disposeContents(); disposeContents = renderExperimentContents(documentFrame, experiment) }
+      startStudyLive = (): Promise<void> => {
+        if (opened) return Promise.resolve()
+        if (opening) return opening
+        button.disabled = true; button.hidden = true; status.textContent = 'Creating the live experiment…'
+        opening = (async (): Promise<void> => {
+          try {
+            await run.show(experiment, slot)
+            if (version !== renderVersion || !slot.isConnected) return
+            // The complete document is already mounted independently of GPU setup.
+            if (overview) {
+              const live = requiredElement<HTMLElement>(slot, '#run-live-viewer')
+              live.querySelector('#study-overview')?.remove()
+              live.append(overview); live.setAttribute('aria-label', 'Live comparison and recorded result')
+            }
+            launch.remove(); opened = true; refreshContents()
+          } catch (error) {
+            if (version !== renderVersion || !slot.isConnected) return
+            status.textContent = `Live experiment unavailable: ${error instanceof Error ? error.message : String(error)}`
+            button.hidden = false; button.disabled = false
+            refreshContents()
+          }
+        })().finally(() => { opening = undefined })
+        return opening
+      }
+      button.addEventListener('click', () => { startStudyLive?.().catch(error => { status.textContent = String(error) }) })
+      const liveReady = startStudyLive()
+      try {
+        await mountExperimentNotes(notesHost, experiment, record)
+        if (version !== renderVersion) return
+        mountedExperiment = experiment.id; stage.setAttribute('aria-busy', 'false'); refreshContents()
+        if (wantsLiveStudy(route.view, currentSection())) await liveReady
+        if (version !== renderVersion) return
+        if (currentSection()) focusExperimentSection(experiment.id)
+      } catch (error) {
+        if (version !== renderVersion) return
+        run.destroy(); startStudyLive = undefined; disposeContents(); disposeContents = (): void => {}
+        disposeExperimentNotes(notesHost); studyNotes = undefined
+        stage.setAttribute('aria-busy', 'false'); renderFailure(stage, error)
+      }
+      finish(); return
+    }
     try {
       let live: HTMLElement
       try {
@@ -461,6 +535,7 @@ export function createAppShell (root: HTMLElement): { destroy(): void } {
       headerSize.disconnect(); disposeDocumentTables(workspace)
       renderVersion++; disposeContents(); run.destroy()
       if (failedRun) disposeExperimentNotes(failedRun)
+      if (studyNotes) disposeExperimentNotes(studyNotes)
       root.removeEventListener('click', handleSameSection)
       window.removeEventListener('hashchange', handleRoute)
       window.removeEventListener('beforeunload', run.destroy)

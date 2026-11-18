@@ -52,3 +52,45 @@ it('retires late setup results without replacing the newer run, and permits retr
   await run.show(definition('retry', async (): Promise<ExperimentInstance> => ({ destroy })), next)
   run.destroy(); expect(destroy).toHaveBeenCalledTimes(2)
 })
+
+it('recreates an embedded viewer if the browser cannot move it without reloading', async () => {
+  const original = Object.getOwnPropertyDescriptor(Element.prototype, 'moveBefore')
+  Object.defineProperty(Element.prototype, 'moveBefore', { value: undefined, configurable: true })
+  const run = createRetainedRun(); const destroy = vi.fn(); const restoreEvidence = vi.fn()
+  const create = vi.fn(async (host: HTMLElement): Promise<ExperimentInstance> => {
+    host.innerHTML = '<iframe></iframe>'
+    return { destroy, saveEvidence: () => ({ results: ['completed'] }), restoreEvidence }
+  })
+  try {
+    const container = parent()
+    await run.show(definition('viewer', create), container)
+    run.hide()
+    expect(destroy).toHaveBeenCalledTimes(1); expect(run.id).toBeUndefined()
+    await run.show(definition('viewer', create), container)
+    expect(create).toHaveBeenCalledTimes(2)
+    expect(restoreEvidence).toHaveBeenCalledWith({ results: ['completed'] })
+  } finally {
+    run.destroy()
+    if (original) Object.defineProperty(Element.prototype, 'moveBefore', original)
+    else Reflect.deleteProperty(Element.prototype, 'moveBefore')
+  }
+})
+
+it.runIf(typeof Element.prototype.moveBefore === 'function')('parks and restores the same embedded viewer', async () => {
+  const run = createRetainedRun(); const first = parent(); const second = parent()
+  first.style.width = '480px'; const pause = vi.fn(); const resume = vi.fn(); const destroy = vi.fn()
+  try {
+    await run.show(definition('viewer', async host => {
+      host.innerHTML = '<iframe></iframe>'; return { pause, resume, destroy }
+    }), first)
+    const frame = first.querySelector('iframe')!; const frameWindow = frame.contentWindow
+    run.hide()
+    expect(pause).toHaveBeenCalledTimes(1); expect(destroy).not.toHaveBeenCalled()
+    expect(frame.isConnected).toBe(true); expect(frame.contentWindow).toBe(frameWindow)
+    expect(frame.closest('[inert]')).not.toBeNull()
+    expect(frame.closest('.experiment-run')!.getBoundingClientRect().width).toBe(480)
+    await run.show(definition('viewer', async () => { throw new Error('Unexpected recreation') }), second)
+    expect(second.querySelector('iframe')).toBe(frame); expect(frame.contentWindow).toBe(frameWindow)
+    expect(resume).toHaveBeenCalledTimes(1)
+  } finally { run.destroy() }
+})

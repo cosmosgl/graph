@@ -20,7 +20,8 @@ export async function createIntegrated (canvas: HTMLCanvasElement, kind: Workloa
   pick(x: number, y: number, start?: number): Promise<number | null>;
   drag(id: number, x: number, y: number, release?: boolean): void;
   pan(dx: number, dy: number): void; zoom(factor: number, x: number, y: number): void;
-  replace(kind: Workload, count: number, springOptimization?: IntegratedSpring): Promise<void>; resize(width: number, height: number, ratio?: number): void;
+  replace(kind: Workload, count: number, springOptimization?: IntegratedSpring): Promise<void>;
+  resize(width: number, height: number, ratio?: number, pixelRounding?: 'floor' | 'round'): void;
   world(x: number, y: number): [number, number]; screen(x: number, y: number): [number, number]; destroy(): void;
 }> {
   let data = workload(kind, count); let tick = 0; let alpha = 1; let running = false; let destroyed = false; let error = ''
@@ -151,12 +152,13 @@ export async function createIntegrated (canvas: HTMLCanvasElement, kind: Workloa
         data = next; springOptimization = optimization; tick = 0; alpha = 1; drawing.camera = { x: 0, y: 0, zoom: 2 }
         await api.frame(false); if (wasRunning) api.resume()
       },
-      resize (width: number, height: number, ratio = devicePixelRatio): void {
+      resize (width: number, height: number, ratio = devicePixelRatio, pixelRounding: 'floor' | 'round' = 'round'): void {
         healthy()
         if (![width, height, ratio].every(v => Number.isFinite(v) && v > 0) || width * ratio > 4096 || height * ratio > 4096) {
           throw new Error('Invalid pilot viewport')
         }
-        canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio)
+        const round = pixelRounding === 'floor' ? Math.floor : Math.round
+        canvas.width = round(width * ratio); canvas.height = round(height * ratio)
         drawing.ratio = ratio; device.canvasContext!.resize({ width: canvas.width, height: canvas.height }); drawing.draw()
       },
       destroy (): void {

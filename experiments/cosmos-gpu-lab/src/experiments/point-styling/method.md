@@ -2242,14 +2242,14 @@ includes both candidates' individual samples, retained counts, passes, device,
 date and exact-output verdict. Keep these local measurements out of the repo.
 
 ```sh
-# Focused checks, including cancellation/export (software Chromium by default)
+# Focused checks, including cancellation/export; verify the actual adapter
 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/stored-alpha-filter.test.ts src/experiments/point-styling/stored-alpha-view.test.ts
 
-# Full paired sweep on the selected software adapter
+# Full paired sweep on the configured adapter
 LAB_STORED_ALPHA_SWEEP=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/stored-alpha-filter.test.ts
 
-# Native GPU; use the README's existing-browser option when appropriate
-LAB_NATIVE_GPU=1 LAB_STORED_ALPHA_SWEEP=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/stored-alpha-filter.test.ts
+# Connect a visible existing browser for a native GPU measurement
+LAB_INLINE_BROWSER=1 LAB_STORED_ALPHA_SWEEP=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/point-styling/stored-alpha-filter.test.ts
 ```
 
 The filter currently scans CPU-resident inputs: selection is O(N), and GPU work

@@ -73,6 +73,7 @@ export async function nativeDiagnostics (points: Float32Array, values: Float32Ar
   gravity: Array<{ name: string; forces: Float32Array }>;
   sums: Array<{ name: string; value: number }>;
   device: string;
+  adapter: Record<string, unknown>;
 }> {
   const device = await createDevice('webgpu', undefined, false)
   const scope = resourceScope()
@@ -100,6 +101,6 @@ export async function nativeDiagnostics (points: Float32Array, values: Float32Ar
     for (const [name, source] of [['WGSL serial', serial], ['WGSL blocked 64', blocked], ['WGSL tree 256', tree]]) {
       sums.push({ name, value: (await evaluate(source, 'values'))[0] })
     }
-    return { gravity, sums, device: `${String(device.info.vendor)} / ${String(device.info.renderer)}` }
+    return { gravity, sums, device: `${String(device.info.vendor)} / ${String(device.info.renderer)}`, adapter: { ...device.info } }
   } finally { try { scope.destroy() } finally { device.destroy() } }
 }

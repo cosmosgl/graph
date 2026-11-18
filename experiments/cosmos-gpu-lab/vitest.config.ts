@@ -11,6 +11,10 @@ export default defineConfig({
   define: {
     'import.meta.env.REQUIRE_WEBGPU': true,
     'import.meta.env.LAB_STORED_ALPHA_SWEEP': process.env.LAB_STORED_ALPHA_SWEEP === '1',
+    'import.meta.env.LAB_PRECISION_REPLAY': process.env.LAB_PRECISION_REPLAY === '1',
+    'import.meta.env.LAB_SOURCE_REVISION': JSON.stringify(process.env.LAB_SOURCE_REVISION ?? ''),
+    'import.meta.env.LAB_WORKTREE_STATE': JSON.stringify(process.env.LAB_WORKTREE_STATE ?? ''),
+    'import.meta.env.LAB_SOURCE_SNAPSHOT': JSON.stringify(process.env.LAB_SOURCE_SNAPSHOT ?? ''),
     'import.meta.env.LAB_RIBBON_COST': process.env.LAB_RIBBON_COST === '1',
     'import.meta.env.LAB_FAR_ARITHMETIC_COST': process.env.LAB_FAR_ARITHMETIC_COST === '1',
     'import.meta.env.LAB_NATIVE_GPU': true,

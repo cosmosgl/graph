@@ -127,6 +127,83 @@ it('preserves explicit isolated-link diagnostic entry points', () => {
   expect(readRoute()).toMatchObject({ experimentId: 'weighted-links', view: undefined })
 })
 
+it('opens an agent recipe from a direct link', async () => {
+  mockRun('precision-diagnostics')
+  window.history.replaceState(null, '', '#/precision-diagnostics?section=doc-agent-recipe')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(document.activeElement?.id).toBe('doc-agent-recipe'))
+})
+
+it('keeps the recorded result readable and offers retry when live setup fails', async () => {
+  const { create } = mockRun('viewer-comparison')
+  create.mockRejectedValueOnce(new Error('Test adapter unavailable'))
+  window.history.replaceState(null, '', '#/viewer-comparison')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
+  await vi.waitFor(() => expect(host!.querySelector('[data-study-status]')!.textContent).toContain('Test adapter unavailable'))
+  expect(host.querySelector('#study-overview')!.textContent).toContain(findExperiment('viewer-comparison')!.study!.record.conclusion)
+  expect(host.querySelector('#doc-agent-recipe')).not.toBeNull()
+  expect(host.querySelector('.experiment-contents a[href$="section=doc-agent-recipe"]')).not.toBeNull()
+  const retry = host.querySelector<HTMLButtonElement>('[data-start-study]')!
+  expect(retry.hidden).toBe(false); retry.click()
+  await vi.waitFor(() => expect(host!.querySelector('canvas')).not.toBeNull())
+  expect(create).toHaveBeenCalledTimes(2)
+})
+
+it('keeps the contents links when a delayed live setup fails', async () => {
+  let rejectSetup!: (error: Error) => void
+  const pending = new Promise<never>((resolve, reject) => { rejectSetup = reject })
+  vi.spyOn(findExperiment('viewer-comparison')!, 'create').mockImplementation(async stage => {
+    stage.innerHTML = '<div data-run-part="visualization">Graph</div><p data-run-part="explanation">Live guidance.</p>'
+    mountRunLayout(stage, () => summarizeRun('Loading', [], 'Other inputs'), { experiment: 'viewer-comparison' })
+    return await pending
+  })
+  window.history.replaceState(null, '', '#/viewer-comparison')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
+  const ids = Array.from(host.querySelectorAll('[id]'), node => node.id)
+  expect(new Set(ids).size).toBe(ids.length)
+  expect(host.querySelector('.experiment-contents a[href$="section=doc-agent-recipe"]')).not.toBeNull()
+  rejectSetup(new Error('Delayed setup failure'))
+  await vi.waitFor(() => expect(host!.querySelector('[data-study-status]')?.textContent).toContain('Delayed setup failure'))
+  expect(host.querySelector('.experiment-contents a[href$="section=doc-agent-recipe"]')).not.toBeNull()
+  expect(host.querySelector('#doc-agent-recipe')).not.toBeNull()
+})
+
+it('retires a viewer whose notes fail while setup is still running', async () => {
+  let finish!: () => void
+  const pending = new Promise<void>(resolve => { finish = resolve }); const destroy = vi.fn()
+  vi.spyOn(findExperiment('viewer-comparison')!, 'create').mockImplementation(async stage => {
+    stage.innerHTML = '<iframe></iframe>'; await pending; return { destroy }
+  })
+  const query = Element.prototype.querySelector
+  vi.spyOn(Element.prototype, 'querySelector').mockImplementation(function (this: Element, selector: string) {
+    if (this.classList.contains('study-notes-host') && selector === '.run-layout') throw new Error('Notes failed')
+    return query.call(this, selector)
+  } as typeof Element.prototype.querySelector)
+  window.history.replaceState(null, '', '#/viewer-comparison')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  try {
+    await vi.waitFor(() => expect(host!.querySelector('.failure')).not.toBeNull())
+    finish(); await vi.waitFor(() => expect(destroy).toHaveBeenCalledTimes(1))
+  } finally { finish() }
+})
+
+it('keeps one recorded result when returning to the retained live viewer', async () => {
+  const { create } = mockRun('viewer-comparison')
+  window.history.replaceState(null, '', '#/viewer-comparison')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('[data-study-status]')).toBeNull())
+  const canvas = host.querySelector('canvas')!
+  await route('#/validation-workflow', () => expect(host!.querySelector('h1')!.textContent).toBe('Validation workflow'))
+  await route('#/viewer-comparison', () => {
+    expect(host!.querySelector('canvas')).toBe(canvas)
+    expect(host!.querySelector('[data-study-status]')).toBeNull()
+    expect(host!.querySelectorAll('#study-overview')).toHaveLength(1)
+  })
+  expect(create).toHaveBeenCalledTimes(1)
+})
+
 for (const { id } of experiments) {
   it(`keeps ${id} on one visible page and preserves its run through sections, aliases and articles`, async () => {
     const { create, pause, destroy } = mockRun(id)
@@ -134,9 +211,10 @@ for (const { id } of experiments) {
     window.history.replaceState(null, '', `#/${id}`)
     host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
     await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
+    await vi.waitFor(() => expect(host!.querySelector('.experiment-run canvas')).not.toBeNull())
     const canvas = host.querySelector('canvas')!; const input = host.querySelector('input')!
     const findings = host.querySelector('[data-recorded-report]')!
-    expect(host.querySelector('.research-conclusion')!.textContent).toBe(research[id].conclusion)
+    expect(host.querySelector('.research-conclusion')!.textContent).toBe(definition.study?.record.conclusion ?? research[id].conclusion)
     expect(host.querySelector('.experiment-role')!.textContent?.includes('Current investigation')).toBe(id === migrationFocus.experiment)
     for (const article of host.querySelectorAll<HTMLElement>('.experiment-article')) {
       expect(host.querySelector(`.experiment-contents a[href$="section=${article.id}"]`)).not.toBeNull()
@@ -148,7 +226,7 @@ for (const { id } of experiments) {
     expect(host.querySelectorAll('main nav')).toHaveLength(1)
     expect(host.querySelector('.sidebar,.experiment-return,.unified-document')).toBeNull()
     expect(host.querySelectorAll('main h1')).toHaveLength(1)
-    expect(host.querySelector('#run-explanation')!.textContent).toContain('Original guidance.')
+    expect(host.querySelector('.experiment-run')!.textContent).toContain('Original guidance.')
     for (const value of Object.values(validationContracts[id]).slice(1)) expect(host.textContent).toContain(value)
     for (const page of definition.pages) expect(host.querySelector(`#${articleSectionId(page.id)}`)).not.toBeNull()
     const ids = Array.from(host.querySelectorAll('[id]'), node => node.id)
