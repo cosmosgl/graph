@@ -45,7 +45,7 @@ Current evidence from the native M3 inline browser, with unchanged gates:
 | Cooled Karate Club | After Fit, all 34 points are visible, separate and pickable; two hub regions are readable; frame and sampled-pixel gates pass | Original whole assessment rejected by a 68.2-ms pick; fixed early camera clips half the graph; dense links are harder to trace |
 | Paused picking replay | Original exported cooled geometry, 102/102 exact picks, maximum 17.5 ms; actual pointer checks 20.1–27.1 ms | The 68.2-ms event did not recur. No cause or fix established; paused replay is not whole-runtime acceptance |
 | Small production/viewer comparison | Karate moving/cooled frames, running picks/dragging, style/data replacement and settled resize pass on M3; layouts look similar after Fit | Same-geometry interior color checks fail; first-slice usability is not strict production compatibility |
-| Representative pilot viewer | Explicit 34-member scope; native selection/dragging, member/neighbor inspection, size updates and reset work; both frame windows and sampled CPU audits pass | Wider window records a **100.4-ms running pick**, failing the unchanged 50-ms target; responsiveness investigation reopened |
+| Representative pilot viewer | Explicit 34-member scope; native exploration works. A new normal/traced/traced/normal sequence passes all 160 picks, 1,200 intervals and sampled CPU checks | New narrower control did not reproduce or explain the historical **100.4-ms running pick**; 50-ms responsiveness remains unresolved |
 | Interaction/lifecycle | Point drag/pin release, camera, replacement, pause/resume, resize and destruction demonstrated in the lab runtime | Full setters, repeated production workflows, host ownership/deck and recovery still need acceptance |
 
 Detailed evidence stays with the experiment:
@@ -64,22 +64,31 @@ advanced styles and automatic framing remain explicitly unsupported.
 
 **Next, in order:**
 
-1. Attribute the recurring running-pick stall in the [representative viewer](#/pilot-viewer?section=doc-findings).
-   The [supported scope and blockers](#/pilot-viewer?section=doc-scope) are now explicit,
-   and the Karate Club explorer has been tried with real pointer input on M3.
-   One narrow window passes, but the wider window fails at 100.4 ms: 3.3 ms reading
-   the pick, 4.3 ms drawing the highlight and 92.8 ms awaiting an animation opportunity.
-   This locates the measured delay, not its cause. Investigate scheduling and the
-   running frame loop before changing GPU arithmetic or broadening the pilot.
+1. Make one declared wider-window control of the running-pick stall in the
+   [representative viewer](#/pilot-viewer?section=doc-findings-four-block-latency-investigation).
+   The first finding-workflow investigation completed four blocks at 627 × 353
+   logical pixels: no feedback failure, no long traced frame/callback gap, and no
+   cause established. Repeat the fixed normal/traced/traced/normal procedure once
+   near the historical 961 × 541 logical failing size, recording actual dimensions.
+   This is an environment control, not a claim that width caused the 100.4-ms wait.
+   If it does not recur, retain the uncertainty and set a bounded collection plan;
+   do not select a runtime optimization without evidence.
 2. Once the bounded responsiveness question is resolved, choose the next required
    force/style/host capability. Keep deep raster investigations,
    further arithmetic tuning and larger graphs parked unless the pilot needs them.
    Resolve the retained color failures before claiming production color compatibility.
 
-The bounded paused picking replay is complete. The practical viewer now meets its
-reopen condition: a stall recurs with per-request phases. Retain both the original
-68.2-ms event and the new failure; do not repeat until a pass is selected.
+The bounded paused replay and first four-block attribution study are complete;
+the cause is still unresolved. The 100.4-ms event included 92.8 ms after highlight
+completion, which locates the wait without explaining it. Retain that event and
+the original 68.2-ms failure; do not repeat until a pass is selected.
 The 50-ms picking target, 95%-within-33-ms frame target and rendering rules stay unchanged.
+
+The pilot now publishes new investigations through the finding workflow. Its live
+graph remains prominent; results and expanded instructions remain readable without
+a working GPU. This first new investigation is inconclusive, and its reproduction
+procedure has not yet been independently rerun by another agent. Older experiments
+should be converted only when a new investigation gives a reason to revisit them.
 
 ## 2. Current numerical and layout boundary
 

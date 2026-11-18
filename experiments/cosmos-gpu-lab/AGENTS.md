@@ -31,8 +31,8 @@ was not tested. New local evidence does not erase a historical failure or approv
 the full migration. The validation workflow describes the existing numerical and
 performance policies.
 
-The live views and `recorded-summary.json` files for `viewer-comparison` and
-`precision-diagnostics` are a prototype. Their small records summarize named
+The live views and `recorded-summary.json` files for `viewer-comparison`,
+`precision-diagnostics` and `pilot-viewer` are a prototype. Their small records summarize named
 historical findings; they do not substitute for their source documents or raw
 captures. Their recipes describe focused replays and explicitly name what remains
 outside those replays.

@@ -191,7 +191,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
     }),
     'pilot-viewer': entry('pilot-viewer', {
       conclusion: 'The M3 explorer works, but a wider run records a 100.4-ms running pick and fails responsiveness. ' +
-        'Both frame windows and sampled pixels pass; production color compatibility remains rejected.',
+        'A four-block narrower follow-up passes without reproducing the stall; its cause remains unknown. Production colors remain rejected.',
       reviewed: '2026-11-18',
       variant: 'Existing corrected luma WebGPU runtime with a bounded Karate Club explorer',
       comparison: 'Explore the real graph → verify identity and updates → measure complete frames and feedback',
@@ -199,7 +199,8 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       method: 'scope',
       methodPages: ['agent-recipe'],
       evidence: 'findings',
-      next: 'Attribute the running-pick delay: 92.8 ms fell after highlight completion, awaiting an animation opportunity. Keep the 50-ms gate unchanged.',
+      next: 'Run one declared normal/traced/traced/normal control near the historical wider canvas size. ' +
+        'The narrower follow-up did not reproduce the stall or establish a fix. Keep the 50-ms gate unchanged.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Bounded pilot behavior, independent of strict production compatibility.' }],
     }),
     'viewer-comparison': entry('viewer-comparison', {

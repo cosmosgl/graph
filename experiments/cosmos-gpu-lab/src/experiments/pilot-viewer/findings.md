@@ -5,6 +5,11 @@ window, one running pick took **100.4 ms**, exceeding the unchanged 50-ms target
 Both measured frame windows, exact-identity checks and sampled CPU pixel audits pass.
 The earlier production interior-color failures remain rejected separately.
 
+**Follow-up:** one planned four-block investigation at a narrower size did not
+reproduce the stall. Its 160 picks and 1,200 frame intervals passed, but no cause
+or fix was established. The [new finding](#/pilot-viewer?section=study-finding-picking-latency)
+retains the source, local evidence and expanded reproduction instructions.
+
 Recorded **18 November 2026** on the user's Apple M3, in the visible inline browser.
 The reported WebGPU adapter was Apple, `metal-3`, `fallback: false`, Chromium 157.
 The adapter and a nonempty rendered canvas were verified before each window. No
@@ -110,3 +115,97 @@ test now waits for that report. No rendering assertion or acceptance gate change
 During that rerun the original inline tab became unreachable to automation; a fresh
 visible tab in the same inline browser recovered access. Adapter and rendering were
 verified again before the wider measurement.
+
+## Four-block latency investigation
+
+**The delay did not recur, so its cause remains unknown.** On 18 November 2026,
+we ran the declared normal → traced → traced → normal sequence exactly once.
+No runtime optimization, production change or acceptance change was made.
+The question was whether surrounding frame work or callback delays could explain
+the long wait after highlighting a selection.
+
+The visible Codex inline browser on the user's M3 reported Apple WebGPU,
+`metal-3`, fallback false, Chromium 157, with luma 10.0.0-alpha.15. The API did
+not report the exact adapter model. The graph was visibly rendered before timing.
+This canvas was **627 × 352.6875 CSS pixels**, logically 627 × 353 at DPR 2,
+with 1,254 × 706 attachments. This is a new, narrower control, **not an exact
+replay** of the historical 961 × 541 logical failing window. Width was not varied
+within this sequence, so it does not establish a width effect.
+
+Each block reset the same 34 members / 78 links and original settings, advanced
+60 warmup ticks, applied Fit, and measured 300 evolving intervals. Each frame
+window lasted about five seconds. Then the unchanged interaction sequence checked
+20 paused picks, 20 drag moves, camera/lifecycle behavior, 20 running picks on the
+temporary pinned target and sampled CPU pixels. Validation stayed outside frame
+timing; the pick's own readback stayed inside feedback timing. The entire sequence
+ran from 11:55:03 to 11:55:32 UTC, without concurrent tests, builds or source edits.
+
+| Block | Frame p95 / maximum, ms | Intervals within 33 ms | Paused pick maximum, ms | Running pick maximum, ms | Drag maximum, ms |
+|---|---:|---:|---:|---:|---:|
+| 1 · normal | 18.7 / 18.8 | 300/300 | 18.9 | 18.9 | 18.9 |
+| 2 · traced | 18.7 / 18.7 | 300/300 | 22.1 | 25.3 | 18.6 |
+| 3 · traced | 18.7 / 18.8 | 300/300 | 19.0 | 19.2 | 19.3 |
+| 4 · normal | 18.7 / 18.8 | 300/300 | 18.7 | 18.7 | 18.9 |
+
+Every block had **0/20 paused and 0/20 running picks above 50 ms**, exact IDs/camera,
+and passing drag-pin, pause/resume and resize checks. Each sampled CPU audit
+checked 2,101 samples and found zero interior ID/color failures or invisible picks.
+These are bounded samples, not full-mask or production-color acceptance.
+
+### What the trace tells us
+
+Tracing observes calls to the existing runtime plus independent animation and
+16-ms timer callbacks. It adds callbacks, allocations and promise continuations;
+the two traced blocks are observation controls, not normal runtime benchmarks.
+Normal blocks bracketed them. This one sequential session does not estimate
+tracing overhead reliably or isolate session drift.
+
+The slowest traced running pick was request 60 in the export, returning member 33
+in **25.3 ms**: 5.2 ms through readback, 1.8 ms completing the highlight and 18.3 ms
+awaiting an animation opportunity. The overlapping simulation frame spent about
+0.2 ms submitting work and completed in 5.0 ms. No long synchronous frame call
+explains a stall at this request; this request itself did not fail.
+
+Across the two traced blocks, maximum synchronous frame-call times were 1.0 and
+1.1 ms. Maximum observed animation-callback gaps were 19.4 and 19.3 ms; timer gaps
+were 18.8 and 18.6 ms. There was no long callback gap to attribute. These observations
+cannot explain an event that did not occur, exclude an intermittent application
+stall, or identify a browser/OS cause. The feedback endpoint remains GPU completion
+plus the next animation opportunity, not physical display scanout.
+
+### Decision after this investigation
+
+- **Strict compatibility:** production interior-color failures remain rejected;
+  this study did not rerun or waive them.
+- **First-slice usability:** all four new windows pass, but the historical 100.4-ms
+  and 68.2-ms failures remain unexplained. Overall responsiveness is still unresolved.
+- **Full migration readiness:** not ready; this bounded local result adds no feature,
+  device or larger-workload acceptance.
+
+The next useful control is **one declared four-block sequence near the historical
+wider canvas size**, with actual dimensions recorded and the same 50-ms endpoint.
+Do not infer a width cause or repeat until passing. If the failure again does not
+recur, retain the unresolved finding and choose a bounded evidence-collection plan;
+do not invent a renderer fix from passing runs.
+
+### Evidence and workflow review
+
+The finding record retains the exact clean measured revision. Source state was
+identical before and after measurement. The original export, per-block analysis,
+declared protocol, dependency/environment record and checksums remain in the local
+ignored capture directory named by the finding. Raw measurements are not committed.
+Follow [the recipe](#/pilot-viewer?section=doc-agent-recipe) to reproduce the procedure;
+matching timing is not promised.
+
+This trial used the finding workflow for a new question in an existing experiment.
+It produced a completed but inconclusive investigation, rather than turning a
+passing run into a fix claim. The result and remaining unknown are ordinary text;
+agent instructions stay expanded. The live graph remains above the record, and a
+focused UI regression checks the finding and both document links when GPU setup
+fails. All **53 focused tests across five files passed in the inline browser**,
+including the new publication checks. Browser automation initially disconnected
+after the capture was exported; the final checks completed after reconnecting,
+without repeating the measured investigation. Typecheck, targeted lint, build and
+finding-schema checks pass. No other browser was substituted.
+Schema validation checks required information, not the correctness of the
+interpretation. Another agent has not independently rerun this investigation.
