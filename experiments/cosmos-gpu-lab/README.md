@@ -39,8 +39,14 @@ Every experiment includes **What we compare**, describing its reference, gates, 
 From the repository root:
 
 ```sh
+# Build the workspace control before the first lab start
+pnpm run build
 pnpm --filter @cosmos.gl/gpu-lab dev
 ```
+
+The **Production and WebGPU viewers** comparison loads the unchanged standalone production
+bundle from `dist/index.min.js`; rebuild it after changing the production checkout.
+The lab build includes that bundle as an asset.
 
 The application uses hash routes, so experiment demos and documentation pages can be linked directly without server
 rewrite configuration.

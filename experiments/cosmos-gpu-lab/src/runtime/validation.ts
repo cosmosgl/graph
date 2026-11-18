@@ -18,6 +18,16 @@ export const validationContracts: Record<string, ValidationContract> = {
     limits: 'Separate probes can compile differently and cannot reveal the driver’s internal interpolation. Caps, arrows, patterns, other devices, ' +
       'full Graph interaction and performance are not assessed.',
   },
+  'viewer-comparison': {
+    question: 'Can the small candidate viewer support the production appearance, update and running-interaction workflow?',
+    reference: 'Unchanged workspace production Graph with luma v9, corrected integrated luma v10 runtime, ' +
+      'supplied styles and independent candidate pixel audit.',
+    acceptance: '95% of complete intervals <= 33 ms; feedback <= 50 ms; exact IDs, no invisible picks, ' +
+      '<= 2/255 interior color error outside a geometric one-device-pixel boundary.',
+    coverage: 'Karate Club 34/78; early/cooled views, point/link styles, 32-point replacement, running picks/drags, resize and recreation on native M3.',
+    limits: 'Public host-driven production scheduler, not its default autonomous loop. Independent trajectories are quality observations. ' +
+      'Strict compatibility and full migration remain unapproved.',
+  },
   'integrated-webgpu': {
     question: 'Can one resident WebGPU runtime provide a usable first Cosmos migration slice?',
     reference: 'Existing corrected simulation backend; independent sampled CPU circle/straight-link geometry and IDs; declared M3 interaction workload.',

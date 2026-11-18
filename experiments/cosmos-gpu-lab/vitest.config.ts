@@ -30,6 +30,7 @@ export default defineConfig({
       'src/experiments/repulsion-trajectories/**/*.test.ts',
       'src/experiments/combined-layout/**/*.test.ts',
       'src/experiments/integrated-webgpu/**/*.test.ts',
+      'src/experiments/viewer-comparison/**/*.test.ts',
       'src/experiments/matched-layout/**/*.test.ts',
       'src/experiments/collision/**/*.test.ts',
       'src/experiments/precision-diagnostics/**/*.test.ts',
