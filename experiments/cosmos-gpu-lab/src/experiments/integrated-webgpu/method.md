@@ -311,3 +311,35 @@ feedback retains 50 ms. Functional/rendering passes are reported separately from
 and **full migration readiness: not ready**. Record limitations such as clipped points,
 coincident nodes, dense links, lack of labels or inability to trace relationships;
 do not change colors or hide difficult geometry to improve the verdict.
+
+## Bounded cooled picking replay
+
+Declared **18 November 2026** before evaluation. Use **Replay cooled picking** with
+an earlier local Export JSON, or this session’s completed settled assessment.
+The reader imports only the finite 34-point tick-5,300 geometry and source metadata;
+imported historical results cannot become live passes. Restore it on a fresh Karate
+backend, paused, with original styles, manual Fit and a 960 × 600 logical viewport
+at actual DPR. Runtime tick resets to zero: this is a **frozen-geometry picking
+replay**, not continuation of the captured cooling schedule or a new frame benchmark.
+
+Before timing, inventory the ID attachment and choose the nearest pixel to each
+point center. Run exactly three sweeps: IDs 0–33, 33–0, 0–33. Do not warm up picking,
+discard the first request, stop on a latency miss or add repeats after observing
+results. Clear selection before each request. Retain all 102 samples with expected
+and returned ID, coordinates, total feedback latency and its three wall-clock
+phases: ID draw/readback, highlight drawing/completion, and next animation-frame
+opportunity. Their sum is the same request’s duration; these are not GPU timestamps
+or physical scanout measurements. Preparation already draws the scene/ID attachment,
+so the first request is not a cold-device measurement.
+
+Exact IDs and the **50-ms maximum** remain unchanged. Missing points, interruption,
+changed positions or sampled pixel failures prevent acceptance. Read positions and
+validate pixels only after the sweeps; do not rerun simulation. Cancellation retains
+completed samples as an incomplete, unaccepted row. A visibility loss invalidates
+the row. Then check actual pointer clicks on a peripheral point and both hubs;
+export these subsequent feedback samples separately from the scripted sweeps.
+No build/test process runs alongside timing.
+
+A passing replay does not explain a previous stall. Stop this bounded investigation
+unless a reproducible practical failure supplies new evidence; keep the previous
+whole assessment rejected and move to the production-workflow comparison.

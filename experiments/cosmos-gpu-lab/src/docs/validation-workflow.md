@@ -8,9 +8,11 @@ checks remain unchanged; the first migration has a separate practical contract.
 Agreed **17 November 2026**. The immediate goal is a useful, integrated,
 experimental WebGPU backend on the current Apple M3 and native browser. This
 is a first migration attempt, not a complete replacement or production approval.
-**These rules are documented targets; the integrated candidate has not yet been
-assessed against them.** Existing experiment pass counts do not establish this
-new verdict, and no test threshold or shader changes with this document.
+**The [integrated candidate](#/integrated-webgpu) has now been assessed in bounded
+M3 workloads.** Small-graph and selected 8,192-point controls pass; large-star and
+intermittent latency failures remain recorded. This is neither blanket first-slice
+acceptance nor production approval. See the [current roadmap](#/roadmap) for the
+decision and next gate; isolated experiment passes cannot substitute for it.
 
 ### Supported first slice
 
