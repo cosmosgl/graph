@@ -268,3 +268,46 @@ candidate's existing plain-kernel fallback. Construction and extra buffer alloca
 outside this steady-state comparison. It does not establish data-update cost or memory
 scalability. The last window restores `hoist`; a candidate pass never silently changes
 the default. No further candidate is part of this bounded investigation.
+
+## Settled Karate Club assessment
+
+Declared on **18 November 2026** before evaluation. **Assess settled Karate Club** uses
+only the preselected 34-point, 78-weighted-link graph, seed 29471, existing corrected
+core forces, `hoist` springs and the original 5,000-tick cooling schedule. The canvas is
+960 × 600 logical pixels at the actual recorded DPR. No alternate layout, seed, solver,
+style or quality tolerance is selected after observing the result.
+
+Advance normally in the visible browser. Fit at tick 60, then hold that camera while
+recording geometry at ticks 60, 360, 2,500 and 5,000. Measure complete frame intervals
+for ticks 61–360 without readbacks or quality calculations. At tick 5,000, record the
+original framing and sampled pixels before a deliberate manual-equivalent Fit; record
+the fitted geometry too. Then measure ticks 5,001–5,300 and one untimed residual tick.
+The cooling factor reaches about 0.001 after 5,000 ticks; it is not mathematically zero.
+Report this as a cooled layout, not a proof of equilibrium.
+
+Quality uses the existing stress, spring mismatch, radius, motion and exact screen-space
+circle-overlap measurements. Stress uses all 561 unweighted shortest-path pairs;
+topology weights still enter the simulation. Quality has no new pass threshold. Low
+residual motion caused by cooling does not by itself establish readable geometry.
+Keep screenshots/visual observations distinct from numerical acceptance evidence.
+
+Outside timing, retain the actual tick-5,300 positions for reproducible exploration.
+Inventory every ID present in the rendered ID attachment and pick a near-center pixel
+for each. Record missing IDs and each request-to-visible-feedback duration. Then run
+the existing 20 paused picks, 20 running picks, 20-move drag, zoom anchoring, pan,
+pause/resume and resize checks. Restore the retained geometry after those deliberately
+perturbing checks; this is an inspection reset, not simulation convergence evidence.
+
+Audit that same geometry at DPR 1 and 2, both fitted and at 1.25× zoom with a 24/12 CSS-pixel
+pan. The one-device-pixel geometric boundary, two-byte interior color budget, exact IDs
+and invisible-picking checks remain unchanged. Return to the actual DPR and fitted
+geometry, paused, for manual pointer picking/dragging, pan/zoom and Fit in the inline
+browser. Scripted feedback includes GPU completion plus a browser presentation
+opportunity, not physical scanout or OS input-dispatch latency.
+
+Both 300-frame windows retain the 95%-within-33-ms gate. All measured picking/drag
+feedback retains 50 ms. Functional/rendering passes are reported separately from
+**readability: measured and visually reviewed**, **strict compatibility: not established**
+and **full migration readiness: not ready**. Record limitations such as clipped points,
+coincident nodes, dense links, lack of labels or inability to trace relationships;
+do not change colors or hide difficult geometry to improve the verdict.
