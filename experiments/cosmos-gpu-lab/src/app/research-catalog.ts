@@ -190,21 +190,22 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       }],
     }),
     'integrated-webgpu': entry('integrated-webgpu', {
-      conclusion: 'Cooled Karate Club is readable after Fit: all 34 points are visible and pickable. Frames and sampled pixels pass, ' +
-        'but a 68.2-ms picking outlier keeps this run unaccepted. The large-star limit remains.',
+      conclusion: 'Cooled Karate Club is readable after Fit: all 34 points are visible and pickable. Frames and sampled pixels pass; ' +
+        'a 102-pick replay peaks at 17.5 ms. The earlier 68.2-ms failure is unexplained, not fixed. Large-star performance remains outside the accepted scope.',
       reviewed: '2026-11-18',
       variant: 'luma WebGPU resident core with corrected arithmetic; bounded circle and straight-link renderer',
       comparison: 'Resident simulation → shared positions → rendering and interaction → complete frame and feedback checks',
       milestone: 'integration',
       method: 'method',
       evidence: 'findings',
-      next: 'Replay all-point picking on the cooled graph with per-request phases; locate the 68.2-ms outlier without changing the 50-ms gate.',
-      reproduce: 'Use Assess settled Karate Club in Diagnostics. Keep the tab visible through cooling; export local evidence and explore the fitted graph.',
+      next: 'Compare a small production WebGL and integrated WebGPU workflow: cooled appearance, data/style updates and running interactions.',
+      reproduce: 'Use Assess settled Karate Club and Export JSON. Replay cooled picking accepts that capture ' +
+        'or the current session’s assessment; keep the native tab visible.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Separate strict compatibility, practical usability and full readiness.' }],
     }),
     'resident-layout': entry('resident-layout', {
       conclusion: 'Resident execution and edits are demonstrated in isolation. ' +
-        'The integrated pilot now tests practical usability; its timing gates remain unmet.',
+        'The integrated pilot has bounded timing passes; large-star and intermittent latency failures remain open.',
       reviewed: '2026-11-17',
       variant: 'Two luma WebGPU execution paths using the same force kernels; recorded Apple M3 / Chrome evidence.',
       comparison: 'Same graph and kernels → staged CPU-bounds / GPU-resident execution → checkpoint bits, edits and frame timing',

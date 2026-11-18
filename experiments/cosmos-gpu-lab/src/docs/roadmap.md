@@ -1,6 +1,6 @@
-**A full Cosmos WebGPU backend is technically credible. We have a bounded simulation prototype through public luma APIs; production adoption still needs complete feature, integration and performance acceptance.**
+**A full Cosmos WebGPU backend is technically credible. We have a bounded integrated prototype through public luma APIs; production adoption still needs complete feature, integration and performance acceptance.**
 
-Roadmap reviewed **17 November 2026**. Measurement dates remain on the linked experiment pages. The production engine remains WebGL with luma `~9.3.0` peers. The lab pins the luma `10.0.0-alpha.15` package family. This page describes current readiness and the next decisions. Experiment pages preserve the detailed investigations, controls and reproduction instructions.
+Roadmap reviewed **18 November 2026**. Measurement dates remain on the linked experiment pages. The production engine remains WebGL with luma `~9.3.0` peers. The lab pins the luma `10.0.0-alpha.15` package family. This page describes current readiness and the next decisions. Experiment pages preserve the detailed investigations, controls and reproduction instructions.
 
 The destination is **full WebGPU simulation and rendering sharing resident GPU state**. Reduced device coverage is acceptable. The current WebGL engine supplies the behavioral reference; a permanent WebGL fallback is not a requirement for the destination.
 
@@ -34,76 +34,48 @@ shared resident positions, circles, solid straight links, point picking/dragging
 pan/zoom, graph replacement, pause/resume, resize and destruction. Production remains
 unchanged. It follows the [first-migration rules](#/validation-workflow?section=first-migration-rules).
 
-The declared M3 inline-browser run evaluated chain, communities and star at **1,024 and
-8,192 points**, plus the preselected **34-point, 78-link Karate Club** social graph.
-An earlier quiet run met small-graph frame/picking gates, but the final run did not
-reproduce that result: only **81.7–84%** of 1,024-point frame intervals met 33 ms;
-8,192-point rows reached **17.7–58.3%**. Even Karate Club missed the 95% target.
-Running picks reached **199.5 ms**. All sampled pixel audits and functional checks passed.
-[Both runs, quality measurements and retained failures](#/integrated-webgpu?section=doc-findings).
+Current evidence from the native M3 inline browser, with unchanged gates:
 
-Keep the conclusions separate: **strict compatibility is not established**;
-**first-slice usability has bounded local evidence**, with earlier timing stalls unresolved;
-**full migration is not ready**. The early evolving run does not prove convergence or
-real-graph readability. Fixed framing leaves some star and real-graph points offscreen
-until Fit; faint nonzero opacity below 0.02 and advanced features remain unsupported.
-Historical exact comparisons keep their original verdicts.
+| Area | Demonstrated scope | Remaining limit |
+|---|---|---|
+| Core simulation + drawing | Corrected resident forces share positions with circle points and solid straight links | Not the full production Graph API or every force/style |
+| Small workload timing | Repeated 1,024-community controls and normal-path cross-check pass | Earlier intermittent timing stalls remain unexplained and retained |
+| 8,192 chain and communities | All four timestamp-comparison windows and later control/candidate windows pass | Early evolving windows do not establish cooled large-graph quality or all graph shapes |
+| 8,192 star | Stage attribution identifies the serial incoming hub pass; ordered prefetch preserves state/colors and helps modestly | Every candidate star window still fails. Keep default `hoist`; further tuning parked |
+| Cooled Karate Club | After Fit, all 34 points are visible, separate and pickable; two hub regions are readable; frame and sampled-pixel gates pass | Original whole assessment rejected by a 68.2-ms pick; fixed early camera clips half the graph; dense links are harder to trace |
+| Paused picking replay | Original exported cooled geometry, 102/102 exact picks, maximum 17.5 ms; actual pointer checks 20.1–27.1 ms | The 68.2-ms event did not recur. No cause or fix established; paused replay is not whole-runtime acceptance |
+| Interaction/lifecycle | Point drag/pin release, camera, replacement, pause/resume, resize and destruction demonstrated in the lab runtime | Full setters, repeated production workflows, host ownership/deck and recovery still need acceptance |
 
-A later controlled comparison repeated **1,024 communities three times**, rotating
-browser-only, redraw and full-tick controls. All 900 full-tick intervals met 33 ms;
-picking peaked at 32.2 ms. An original-path cross-check also passed. CPU submission
-was small, while simulation completion waits reached roughly 14 ms at p95. These
-are wall-clock observations, not GPU timestamps, and do not explain the earlier stalls.
-[Controlled pacing results](#/integrated-webgpu?section=doc-findings-small-graph-pacing-investigation).
+Detailed evidence stays with the experiment:
+[earlier adverse runs](#/integrated-webgpu?section=doc-findings-final-run-and-repeatability-limit),
+[small-graph controls](#/integrated-webgpu?section=doc-findings-small-graph-pacing-investigation),
+[8,192 GPU timing](#/integrated-webgpu?section=doc-findings-gpu-timestamps-at-8-192-points),
+[bounded star investigation](#/integrated-webgpu?section=doc-findings-star-bottleneck-and-one-bounded-candidate),
+[cooled readability](#/integrated-webgpu?section=doc-findings-cooled-karate-club-readability-and-exploration),
+and [picking replay](#/integrated-webgpu?section=doc-findings-bounded-cooled-picking-replay).
+Later passes do not replace prior failures.
 
-A subsequent off/on/on/off timestamp comparison measured **8.5–11.3 ms simulation GPU
-p95** and **0.4–1.6 ms drawing GPU p95**. All 1,200 complete intervals met 33 ms; picks
-stayed within 33 ms, and final state bits matched. The bounded 1,024-community case is
-good enough to continue; stop small-graph profiling here. Timestamp overhead is not
-zero-proven, and earlier stalls still have no demonstrated cause or fix.
-[Actual GPU durations](#/integrated-webgpu?section=doc-findings-actual-gpu-duration-in-the-small-graph).
+**Three verdicts:** strict compatibility remains **not established**;
+first-slice usability has **bounded local evidence**, with rejected workloads and
+unresolved stalls; full migration is **not ready**. Faint nonzero opacity below 0.02,
+advanced styles and automatic framing remain explicitly unsupported.
 
-The **18 November 8,192-point off/on/on/off sweep** passes all four chain and communities
-windows: **99.7–100%** of intervals meet 33 ms and running picks stay within 33.3 ms.
-Star remains rejected in all four: **81.3–86.7%** meet 33 ms, with two running-pick maxima
-of **50.6 and 50.2 ms**. GPU sum p95 is **12.8–13.4 ms** for chain/communities and
-**17.4–17.6 ms** for star; simulation dominates. Final position/force bits and all
-sampled rendering/functional checks pass. These later passes do not explain or erase
-earlier stalls, and star fails with timestamps off as well.
-[Large-graph GPU timing results](#/integrated-webgpu?section=doc-findings-gpu-timestamps-at-8-192-points).
+**Next, in order:**
 
-The bounded star investigation is now complete. Drawing-only controls pass; full ticks
-fail in all three repeats. Incoming hub springs are the largest measured stage at
-**7.7 ms median**. The existing ordered-prefetch candidate preserves exact state and
-color bits and reduces the average normal-pass GPU-sum p95 by about **5.6%** in this
-comparison, but **all eight star windows still fail** the unchanged frame gate.
-Candidate picking reaches **65.8 ms**. All 16 chain/community control/candidate windows
-pass. Keep `hoist` as the default; this is not an accepted star fix.
-[Controls, stage attribution and candidate evidence](#/integrated-webgpu?section=doc-findings-star-bottleneck-and-one-bounded-candidate).
+1. Compare a small production WebGL and integrated WebGPU viewer on the same Karate
+   topology/settings: moving and cooled appearance, data/style replacement, picking
+   and dragging while running, pause, resize and teardown. Record differences from
+   the actual production workflow; do not demand identical independently evolved
+   coordinates or invent a quality threshold.
+2. Make an explicit first-slice decision: supported options/workloads, measured
+   behavior, unresolved limitations and what would block trying it in a real viewer.
+3. Only then expand force/style/host coverage. Keep deep raster investigations,
+   further arithmetic tuning and larger graphs parked unless the pilot needs them.
 
-The cooled **Karate Club assessment** is now recorded. After manual Fit, all **34/34**
-points are visible, independently pickable and non-overlapping; two hub regions and
-peripheral branches are visually distinguishable. The tick-60 camera contains only
-**17/34** centers after cooling, so deliberate reframing is required. Labels, neighbor
-highlighting and link picking remain absent; dense central relationships are harder
-to trace. Readability is **visually usable for this small pilot after Fit**, not broad
-numerical layout-quality approval.
-
-Early and cooled 300-frame windows both achieve **100% within 33 ms**; sampled pixels
-pass at DPR 1/2 and fractional zoom. However, the all-point sweep reaches **68.2 ms**
-for one picking observation. Correct IDs and later interaction passes do not waive the
-50-ms maximum: **the complete assessment remains Not accepted**. The cause is unknown;
-future captures retain per-ID readback/highlight/presentation phases.
-[Cooled geometry, pointer exploration and retained latency failure](#/integrated-webgpu?section=doc-findings-cooled-karate-club-readability-and-exploration).
-
-**Next:** replay all-point picking on the same cooled geometry to locate that outlier,
-with unchanged IDs, colors and the 50-ms gate. Further large-star tuning stays stopped
-for this first attempt, with its failed verdict and workload limit visible. Reopen it
-when large hubs are required by the pilot or before full migration readiness. Keep all
-prior failures; neither the visual review nor parked work relaxes an acceptance gate.
-Further deep boundary debugging, arrows and advanced styles remain parked until this
-integration decision. Missing force families, collision and host/deck integration remain
-later feature-completion work, rather than implicit pilot support.
+The bounded picking replay is complete. Do not repeat until a pass is selected:
+retain the 68.2-ms failure and reopen latency investigation when a practical stall
+recurs with per-request phases or the intended viewer workload misses its gate.
+The 50-ms picking target, 95%-within-33-ms frame target and rendering rules stay unchanged.
 
 ## 2. Current numerical and layout boundary
 
@@ -227,6 +199,8 @@ problem. Passing the first slice must not silently close these items.
 
 | Investigation | Why stop now / retained result | Reopen condition before full readiness |
 |---|---|---|
+| [8,192-point integrated star](#/integrated-webgpu?section=doc-findings-star-bottleneck-and-one-bounded-candidate) | Ordered prefetch improves measured cost but all star windows remain rejected; keep `hoist` | Large hubs are required by the pilot, or before approving the full workload envelope |
+| [Intermittent integrated picking latency](#/integrated-webgpu?section=doc-findings-bounded-cooled-picking-replay) | Original 68.2-ms failure retained; fixed 102-pick replay does not reproduce it; no fix claimed | A practical stall recurs with phase evidence, or the production-comparison workload misses 50 ms |
 | [Straight-link hard edges, caps and fractional raster](#/straight-links) | Exact coverage ties and original-color failures remain; no further pixel-perfect work scheduled | Boundary displacement exceeds the pilot rule, thin links vanish, picking fails in practice, or stricter compatibility is required |
 | [Curved links and dash/dot boundaries](#/curved-links) | Four-pixel diagnostic is bounded; fine/coarse switching did not explain curve failures; earlier intermittent dash picks remain unexplained | Curves/patterns enter scope; verify motion, actual source visibility and color before deciding whether deeper primitive/derivative replay is needed |
 | [Point fractional/polygon boundaries](#/point-styling) | Rejected native masks and color-preservation alternatives retained | Circle pilot shows a practical defect, or additional shapes require acceptance |

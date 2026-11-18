@@ -5,9 +5,12 @@ Fit**: all 34 points are visible and individually pickable, with no circle overl
 Early/cooled frame windows and sampled rendering pass, but one all-point picking
 observation reaches **68.2 ms**, so this assessment is **not accepted** under the
 unchanged 50-ms gate. Readability is a visual review, not numerical quality approval.
-The larger-star performance failure and earlier evidence remain below.
+A bounded replay on that same exported geometry subsequently passes all 102 picks
+(maximum 17.5 ms), without explaining or fixing the original failure. The larger-star
+performance failure and earlier evidence remain below.
 
-Measured **17 November 2026**, visible inline Chromium 157 on the **Apple M3** host
+Initial matrix measured **17 November 2026**; follow-ups are dated in their sections.
+Visible inline Chromium 157 on the **Apple M3** host
 (10 GPU cores), luma **10.0.0-alpha.15**. Actual luma adapter: `webgpu`, vendor `apple`,
 architecture `metal-3`, `fallback: false`. The renderer name is redacted; the M3 model
 comes from the host hardware report. Both the existing resident scene and the new
@@ -525,3 +528,53 @@ visible throughout cooling and measurement. Use **Export JSON** for local checkp
 frame intervals, checks and future per-point feedback samples. After scripted checks,
 the recorded geometry is restored for manual exploration; post-check pointer edits are
 not new convergence measurements. Raw captures stay local rather than in the repository.
+
+## Bounded cooled picking replay
+
+**18 November 2026, 05:12:34 UTC**, visible Codex inline Chromium 157 on the M3;
+actual adapter `apple`, `metal-3`, `fallback: false`. Canvas rendering verified first.
+The replay imports the **original 04:54:48 UTC assessment’s tick-5,300 positions**,
+not a newly selected layout. Same original 34 points / 78 links, styles, Fit and
+1,920 × 1,200 attachment (DPR 2). No build/test process ran during timing.
+[Predeclared replay protocol](#/integrated-webgpu?section=doc-method-bounded-cooled-picking-replay).
+
+**All 102 requests return the exact expected ID and meet 50 ms.** All 34 IDs are
+present; positions remain unchanged. The first request is retained, with no pick
+warmup. Times below are milliseconds. Each phase triple belongs to that row’s
+actual worst request, rather than unrelated phase percentiles.
+
+| Sweep | First | p95 | Maximum / point ID | Readback | Highlight completion | Next-frame wait |
+|---|---:|---:|---|---:|---:|---:|
+| Ascending 0–33 | 17.1 | 17.2 | 17.3 / 20 | 1.8 | 1.7 | 13.8 |
+| Descending 33–0 | 16.7 | 17.4 | 17.5 / 9 | 1.9 | 1.9 | 13.7 |
+| Ascending 0–33 | 16.8 | 16.8 | 17.5 / 5 | 1.3 | 1.6 | 14.6 |
+
+The first request spends 3.7 ms in ID draw/readback, 2.0 ms in highlight/completion
+and 11.4 ms waiting for the next frame. The worst observed requests spend most of
+their duration waiting for that opportunity. This describes **these requests**;
+it cannot attribute the earlier 68.2-ms event, whose individual phases were not saved.
+These wall-clock measurements are not GPU-only timing or physical display latency.
+
+After the sweeps, all coordinates are finite and 2,150 sampled pixels have zero
+interior ID/color failures or invisible picks; 143 samples fall in the original
+geometry-derived boundary region. All 34 point centers remain in view. The original
+one-device-pixel boundary and two-byte color rules are unchanged. Native pointer
+clicks select peripheral point 16 and hubs 33 and 0 with the expected yellow
+highlight, at **20.1, 27.1 and 23.9 ms** respectively. These three clicks are a
+bounded input-wiring check, not another statistically meaningful latency sweep.
+
+**Decision:** the paused replay passes its scope. The original **68.2-ms failure
+remains unexplained and rejected**; nonreproduction is not a fix. No solver, renderer,
+picking optimization, production control or acceptance threshold changed. Stop
+repeating this investigation without new evidence. Next compare the small viewer
+with production WebGL: moving/cooled appearance, data/style updates and running
+interactions. Reopen latency work if that practical workflow stalls or a new failure
+has per-request evidence. Strict compatibility remains unestablished, first-slice
+usability remains bounded, and full migration is not ready. The large-star limit stays.
+
+Reproduce using **Assess settled Karate Club → Export JSON → Replay cooled picking**,
+or select a previous local capture in **Cooled Karate capture (local JSON)**.
+The import stays in the browser; it sends no data to a server. Export retains source
+geometry/provenance, every sample, validation and subsequent feedback. Keep captures
+local. A fresh assessment supplies its own geometry and must not be described as an
+exact replay of the original capture without comparing those positions.

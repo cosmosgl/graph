@@ -316,12 +316,12 @@ export const milestones = [
   {
     id: 'integration',
     title: 'Library and embedding',
-    position: 'Supporting resource-transfer mechanisms demonstrated',
+    position: 'Integrated core pilot evaluated on M3; bounded passes and retained failures',
     acceptance: 'Complete Graph and host contracts',
-    gates: ['Exercise a small GraphSimulation/Graph backend with resident simulation, styled points/links, ' +
-      'updates and picking before large-graph optimization.',
-    'Validate host devices/passes, picking, state isolation, deck integration and position-resource exposure.'],
-    evidence: [['point-capacity', 'Resident updates']],
+    gates: ['Compare the small integrated viewer with production WebGL: cooled appearance, data/style updates and running interactions.',
+      'Decide the supported first-slice envelope; retain large-star and intermittent-latency failures.',
+      'Validate host devices/passes, picking, state isolation, deck integration and position-resource exposure.'],
+    evidence: [['integrated-webgpu', 'Integrated core pilot'], ['point-capacity', 'Resident updates']],
   },
   {
     id: 'production',

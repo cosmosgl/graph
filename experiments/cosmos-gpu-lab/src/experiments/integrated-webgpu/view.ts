@@ -7,6 +7,7 @@ import { evaluate, interactionCheck, protocol, percentiles } from './evaluate'
 import { pacingProtocol, profilePacing, pacingVerdict, type PacingRow } from './pacing'
 import { settledProtocol, assessSettled, settledVerdict, type SettledRow } from './settled'
 import { starProfileProtocol, profileStarStages, type StarProfileRow } from './star-profile'
+import { pickReplayProtocol, parseCooledCapture, replayCooledPicking, pickReplayVerdict, replaySummary, type PickReplayRow } from './pick-replay'
 import { fit, validateFrame } from './validation'
 export async function createView (host: HTMLElement): Promise<ExperimentInstance> {
   host.innerHTML = `<div data-run-part="configuration" class="scale-toolbar">
@@ -31,6 +32,10 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     <button data-action="star-pacing">Profile star pacing</button><button data-action="star-stages">Profile star stages</button>
     <button data-action="hub-compare">Compare hub prefetch</button>
     <button data-action="settled">Assess settled Karate Club</button></div>
+    <label>Cooled Karate capture (local JSON) <input type="file" accept=".json,application/json" data-cooled-capture></label>
+    <button data-action="pick-replay">Replay cooled picking</button>
+    <p>Choose an earlier Export JSON, or use this session’s settled assessment. Only its tick-5,300 geometry is restored;
+    imported results do not become live passes.</p><p>${pickReplayProtocol}</p>
     <p>Matrix order: 1,024 chain, communities, star; then 8,192 chain, communities, star; then Karate Club.
     The matrix first checks 1,024-point picking and dragging.
     An incorrect initial interaction blocks scaling; timing misses remain failures while the diagnostic matrix continues.</p>
@@ -45,6 +50,8 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
   const kind = host.querySelector<HTMLSelectElement>('[data-kind]')!; const count = host.querySelector<HTMLSelectElement>('[data-count]')!
   let destroyed = false; let busy = false; let cancelled = false; let checks = 'No checks yet'; let failure = ''; let evidenceFailure = ''
   const records: unknown[] = []
+  let replayFeedbackStart: number | undefined
+  const captureFile = host.querySelector<HTMLInputElement>('[data-cooled-capture]')!
   const runtime = await createIntegrated(canvas)
   runtime.resize(960, 600, devicePixelRatio)
   host.querySelector<HTMLElement>('[data-device]')!.textContent = runtime.info
@@ -58,7 +65,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     host.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button => {
       button.disabled = busy && button.dataset.action !== 'cancel'
     })
-    kind.disabled = busy; count.disabled = busy; canvas.style.pointerEvents = busy ? 'none' : 'auto'
+    captureFile.disabled = busy; kind.disabled = busy; count.disabled = busy; canvas.style.pointerEvents = busy ? 'none' : 'auto'
     if (!busy) {
       const points = runtime.data.input.points.length / 4; const links = runtime.data.graph.links.length / 2
       status.textContent = `${runtime.running ? 'Running' : 'Paused'} · tick ${runtime.tick} · ` +
@@ -151,11 +158,33 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
         <td>${a.validation.interiorIdFailures} / ${a.validation.interiorColorFailures}</td>
         <td>${a.validation.invisiblePicks}</td></tr>`).join('')}</tbody></table>`)
     }
+    const replays = records.filter((r): r is PickReplayRow => typeof r === 'object' && r !== null && 'pickReplay' in r)
+    for (const r of replays) {
+      const v = r.validation
+      const pixels = v
+        ? `${v.samples} pixels; ${v.interiorIdFailures} interior ID failures, ${v.interiorColorFailures} color failures, ${v.invisiblePicks} invisible picks`
+        : 'Unchecked'
+      report.insertAdjacentHTML('beforeend', `<h3>Cooled picking replay · ${pickReplayVerdict(r)}</h3>
+        <p>Frozen imported geometry, source tick 5,300. Runtime tick is reset; this is not continued cooling.
+        ${r.samples.length}/102 requests; missing IDs: ${r.missingIds.join(', ') || 'none'};
+        exact IDs: ${!r.samples.length ? 'Unchecked' : r.samples.every(s => s.id === s.expectedId) ? 'Yes' : 'No'};
+        unchanged positions: ${r.samePositions ? 'Yes' : 'Not confirmed'}.</p>
+        <p>Sampled rendering: ${pixels}.</p>
+        <table><caption>All requests retained · milliseconds; phases belong to each sweep’s worst request</caption>
+        <thead><tr><th>Sweep / requests</th><th>First</th><th>p95</th><th>Worst / ID</th><th>ID readback</th>
+        <th>Highlight completion</th><th>Next frame wait</th></tr></thead><tbody>${replaySummary(r).map(s => `<tr>
+        <td>${s.sweep} / ${s.count}</td><td>${ms(s.first)}</td><td>${ms(s.p95)}</td><td>${ms(s.worst.ms)} / ${s.worst.expectedId}</td>
+        <td>${ms(s.worst.readMs)}</td><td>${ms(s.worst.highlightMs)}</td><td>${ms(s.worst.opportunityMs)}</td></tr>`).join('')}</tbody></table>
+        <p>Historical 68.2-ms failure remains rejected. A successful replay is not a demonstrated fix.
+        Raw samples and subsequent feedback are in Export JSON.</p>`)
+      if (r.interruption) { const p = document.createElement('p'); p.textContent = r.interruption; report.append(p) }
+    }
+    if (replays.some(r => pickReplayVerdict(r) === 'Not accepted')) evidenceFailure = 'A retained picking replay missed its gates; inspect results'
     if (rows.some(r => !r.passed) || pacing.some(r => pacingVerdict(r) === 'Not accepted') ||
       gpuRows.some(r => gpuTimingVerdict(r) === 'Not accepted') || settled.some(r => settledVerdict(r).startsWith('Not accepted'))) {
       evidenceFailure = 'A retained evaluation missed its local gates; inspect results'
     }
-    if (!rows.length && !pacing.length && !gpuRows.length && !profiles.length && !settled.length) {
+    if (!rows.length && !pacing.length && !gpuRows.length && !profiles.length && !settled.length && !replays.length) {
       const paragraph = document.createElement('p'); paragraph.textContent = JSON.stringify(value, null, 2); report.append(paragraph)
     }
   }
@@ -206,6 +235,15 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
           }
         })
       }
+      if (name === 'pick-replay') {
+        const file = captureFile.files?.[0]
+        if (file && file.size > 10 * 1024 * 1024) throw new Error('Choose a capture smaller than 10 MB')
+        const source = parseCooledCapture(file ? await file.text() : JSON.stringify({ records }))
+        kind.value = 'karate'; runtime.pause(); canvas.scrollIntoView({ block: 'center' })
+        status.textContent = 'Replaying three paused picking sweeps on retained tick-5300 geometry'
+        const result = await replayCooledPicking(runtime, source, () => cancelled || destroyed)
+        show(result); checks = pickReplayVerdict(result); replayFeedbackStart = runtime.feedback.length
+      }
       if (name === 'settled') {
         kind.value = 'karate'; runtime.pause(); canvas.scrollIntoView({ block: 'center' })
         const result = await assessSettled(runtime, () => cancelled || destroyed, text => { status.textContent = text })
@@ -242,6 +280,8 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
           starProfileProtocol,
           hubComparisonProtocol,
           settledProtocol,
+          pickReplayProtocol,
+          feedbackAfterReplay: replayFeedbackStart === undefined ? [] : runtime.feedback.slice(replayFeedbackStart),
           recordedAt: new Date().toISOString(),
           records,
         }, null, 2)
