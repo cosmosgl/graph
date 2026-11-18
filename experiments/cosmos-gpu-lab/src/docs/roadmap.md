@@ -63,9 +63,18 @@ good enough to continue; stop small-graph profiling here. Timestamp overhead is 
 zero-proven, and earlier stalls still have no demonstrated cause or fix.
 [Actual GPU durations](#/integrated-webgpu?section=doc-findings-actual-gpu-duration-in-the-small-graph).
 
-**Next:** measure GPU duration in the previously failing 8,192-point envelope before
-choosing an optimization, then assess settled real-graph readability. Keep the current
-small-graph solver and pacing, corrected arithmetic, current gates and all prior failures.
+The **18 November 8,192-point off/on/on/off sweep** passes all four chain and communities
+windows: **99.7–100%** of intervals meet 33 ms and running picks stay within 33.3 ms.
+Star remains rejected in all four: **81.3–86.7%** meet 33 ms, with two running-pick maxima
+of **50.6 and 50.2 ms**. GPU sum p95 is **12.8–13.4 ms** for chain/communities and
+**17.4–17.6 ms** for star; simulation dominates. Final position/force bits and all
+sampled rendering/functional checks pass. These later passes do not explain or erase
+earlier stalls, and star fails with timestamps off as well.
+[Large-graph GPU timing results](#/integrated-webgpu?section=doc-findings-gpu-timestamps-at-8-192-points).
+
+**Next:** do one bounded star redraw/full-tick control, then identify the expensive force
+stage before choosing an optimization. Assess settled real-graph readability afterward.
+Keep the corrected solver, current gates, normal-frame pacing control and all prior failures.
 Further deep boundary debugging, arrows and advanced styles remain parked until this
 integration decision. Missing force families, collision and host/deck integration remain
 later feature-completion work, rather than implicit pilot support.

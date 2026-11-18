@@ -190,16 +190,16 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       }],
     }),
     'integrated-webgpu': entry('integrated-webgpu', {
-      conclusion: 'The bounded 1,024-community case passes repeated frame/picking checks; GPU timestamps show simulation dominates. ' +
-        'Keep this implementation and assess 8,192 next; earlier stalls remain unexplained.',
-      reviewed: '2026-11-17',
+      conclusion: 'At 8,192 points, chain and communities pass four local timing/interaction windows; star still misses frame and picking targets. ' +
+        'GPU timestamps show simulation dominates; earlier stalls remain unexplained.',
+      reviewed: '2026-11-18',
       variant: 'luma WebGPU resident core with corrected arithmetic; bounded circle and straight-link renderer',
       comparison: 'Resident simulation → shared positions → rendering and interaction → complete frame and feedback checks',
       milestone: 'integration',
       method: 'method',
       evidence: 'findings',
-      next: 'Stop small-graph profiling; measure the failing 8,192-point envelope before choosing an optimization, then assess settled readability.',
-      reproduce: 'Start with Check interaction + pixels at 1,024 points. Then evaluate the declared matrix in a visible native browser.',
+      next: 'Separate star redraw and full-tick cost, then identify the costly force stage before choosing an optimization. Settled readability remains open.',
+      reproduce: 'Use Time 8,192-point graphs in Diagnostics for chain, communities and star; Compare GPU timestamps uses the selected graph/count.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Separate strict compatibility, practical usability and full readiness.' }],
     }),
     'resident-layout': entry('resident-layout', {
