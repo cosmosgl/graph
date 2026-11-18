@@ -1,10 +1,11 @@
 # Integrated findings
 
-The latest 8,192-point timestamp sweep passes all four chain and communities windows.
-**Star still fails the frame target in every window**, and two running-pick maxima
-slightly exceed 50 ms. State bits and sampled rendering checks pass throughout. Earlier
-whole-matrix stalls remain unexplained; this is bounded local usability evidence, not
-approval of the whole first slice. All historical observations remain below.
+The bounded star investigation identifies **incoming hub springs** as its largest
+measured stage. Ordered prefetch preserves state/colors and modestly lowers GPU cost,
+but **8,192 star still fails** the unchanged frame and picking gates. Chain and
+communities pass their control/candidate windows. Keep the current default and move to
+settled real-graph readability with the large-star limit explicit. Earlier stalls and
+all historical observations remain below; full migration is not approved.
 
 Measured **17 November 2026**, visible inline Chromium 157 on the **Apple M3** host
 (10 GPU cores), luma **10.0.0-alpha.15**. Actual luma adapter: `webgpu`, vendor `apple`,
@@ -331,3 +332,100 @@ To reproduce, open Diagnostics and choose **Time 8,192-point graphs** in a visib
 native browser. **Compare GPU timestamps** runs the selected graph/count alone.
 Use **Export JSON** for local raw samples and metadata; machine-specific captures are
 not committed. All earlier failing results above remain evidence, not superseded passes.
+
+## Star bottleneck and one bounded candidate
+
+**18 November 2026**, visible inline Chromium 157 on the Apple M3, native `apple` /
+`metal-3` / `fallback: false`; canvas rendering verified before evaluation. Same 1,920 ×
+1,200 attachment, corrected arithmetic, forces, colors and acceptance criteria. No build
+or test process ran alongside timing. These are the
+[predeclared star controls and candidate comparison](#/integrated-webgpu?section=doc-method-bounded-star-investigation).
+
+### Drawing alone is not the limiting part
+
+Three rotated repetitions reset to the same tick-60 scene. Redraw holds those positions
+fixed; full tick evolves them over 300 frames. This isolates the cost of an evolving
+simulation workload, not identical frozen geometry throughout every mode.
+
+| Control | Frame p95, ms across repeats | Intervals ≤33 ms | Completion wait p95, ms | Worst running pick, ms | Verdict |
+| --- | ---: | ---: | ---: | ---: | --- |
+| RAF only | 16.8–17.7 | 100.0% | 0.0 | Unchecked | Control only |
+| Redraw | 18.7 | 100.0% | 8.1–9.3 | Unchecked | Control only |
+| Full tick | 50.0 | 77.3–78.0% | 21.8–24.0 | 66.1 | Not accepted |
+
+Full-tick simulation submission p95 is only 1.2–1.3 ms. Every sampled rendering and
+functional check passes, but all three full-tick repeats miss both performance targets.
+Redraw completion waits are wall-clock observations, not isolated GPU drawing cost.
+Do not subtract unrelated percentiles to derive notification or scheduling overhead.
+
+### Incoming hub springs dominate the measured stage window
+
+Four reset windows compare normal/split/split/normal passes over ticks 61–120. Both
+split windows match the first normal window's position, force and color bits exactly;
+all timestamps are valid and all sampled pixel checks pass. Normal simulation GPU p95
+is 16.6–17.6 ms. The stage split changes pass boundaries, so the following values are
+attribution evidence, not replacements for normal-frame performance.
+
+| Stage | GPU median, ms across split windows | GPU p95, ms |
+| --- | ---: | ---: |
+| gravity.force | 1.245 | 1.376 |
+| center.force | 1.376 | 1.507 |
+| repulsion.aggregate | 1.901–1.966 | 2.425–2.818 |
+| repulsion.far | 2.753 | 3.867–3.998 |
+| incoming.force | 7.668–7.733 | 8.258–8.454 |
+| outgoing.force | 0.000 | 0.066 |
+| draw | 1.376 | 2.032–2.359 |
+
+Other small stages have limited timestamp resolution; a measured zero is not evidence
+of zero work. The incoming pass has one 8,191-neighbor hub with a serial velocity
+recurrence. The profile supports trying the existing order-preserving prefetch kernel;
+it does not justify changing the force law, adjacency order or arithmetic tolerance.
+
+### Prefetch helps modestly but does not meet the star gate
+
+The comparison ran **04:34–04:38 UTC**. Each graph gets hoist/prefetch/prefetch/hoist
+with timestamps off, then the same order with timestamps on: **24 windows**, 7,200
+measured complete intervals. Prefetch uses the existing 1,024-neighbor threshold and
+64-neighbor cooperative tiles; serial correction order is unchanged. Every window
+retains 20 paused picks, 20 running picks and a 20-move drag after timing.
+
+| Graph / variant | Intervals ≤33 ms, timestamps off | Intervals ≤33 ms, timestamps on | Normal-pass GPU sum p95, ms | Worst running pick across all windows, ms | Local gates |
+| --- | ---: | ---: | ---: | ---: | --- |
+| star / hoist | 79.0–79.7% | 70.3–75.7% | 18.350–18.809 | 67.6 | Not accepted |
+| star / prefetch | 83.3–85.3% | 77.7–80.3% | 17.433–17.629 | 65.8 | Not accepted |
+| chain / hoist | 99.3–100.0% | 97.3–99.0% | 13.042–14.680 | 35.7 | Pass, bounded |
+| chain / prefetch | 98.0–98.7% | 96.0–99.3% | 12.190–13.042 | 40.0 | Pass, bounded |
+| communities / hoist | 100.0% | 99.3–99.7% | 11.665–12.583 | 47.4 | Pass, bounded |
+| communities / prefetch | 100.0% | 98.3–100.0% | 11.993–12.124 | 38.6 | Pass, bounded |
+
+Across the two instrumented windows per variant, the average of the star's per-window
+GPU-sum p95 falls from 18.579 to 17.531 ms (about **5.6%**). This is a descriptive block
+comparison, not a statistically established portable speedup. Timestamp-off star frame
+p95 improves from 49.8–50.0 to 34.7–34.9 ms, but only 83.3–85.3% of candidate intervals
+meet 33 ms. Candidate running picking reaches **65.8 ms** overall. Neither variant
+passes the star gate in any window. The low-degree controls pass but their durations
+also vary; GPU clock/load and notification delivery are not isolated here.
+
+All **24 position, force and color comparisons** match the first control for their graph
+bit-for-bit before interaction. All sampled rendering audits and functional checks
+pass. The candidate adds no observed numerical or color discrepancy in this bounded
+run. It also does not establish construction/update cost, memory scaling, full cooling
+behavior or cross-device readiness. Exact three-tick regression coverage now retains
+star and both low-degree controls; the longer measured runs remain local evidence.
+
+**Stopping decision:** retain `hoist` as the default. Keep prefetch as a reproducible
+candidate with a measured benefit and an unchanged rejected star verdict. Do not add
+another optimization to this bounded investigation. The 8,192-point hub-heavy workload
+remains outside accepted first-slice performance; earlier small-star passing evidence
+is local, not a guarantee for every graph below that count. Reopen large-hub performance
+when that workload is required by the pilot or before claiming full migration readiness.
+
+**Next:** assess the preselected Karate Club graph after cooling: settled geometry,
+readability, framing and exploration. Keep strict compatibility, bounded usability and
+full migration readiness separate. Chain/community timing passes do not establish
+settled quality, and the parked large-star failure must remain visible.
+
+Reproduce with **Profile star pacing**, **Profile star stages**, then **Compare hub
+prefetch** in Diagnostics. Each action records its protocol and preserves completed
+rows for **Export JSON**. Raw machine-specific captures remain local. No production
+Cosmos code or acceptance gate changes; the final comparison window restores `hoist`.

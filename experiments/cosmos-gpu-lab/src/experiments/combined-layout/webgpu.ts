@@ -229,7 +229,7 @@ export async function createCombinedWebGPU (
           if (stage === 'center') {
             if (!center) throw new Error('Center force was not allocated')
             const encodeCenter = (pass: ComputePass): void => center.encode(pass, positions[source], p.alpha, settings.center ?? 0)
-            if (profile) throw new Error('Center-enabled frames use normal-frame timing, not the historical fifteen-stage profile')
+            if (profile) { profile('force', encodeCenter); return }
             const pass = sharedPass ?? device.beginComputePass(timing)
             try { encodeCenter(pass) } finally { if (!sharedPass) pass.end() }
             return
@@ -415,6 +415,19 @@ export async function createCombinedWebGPU (
           tick++; alpha = cool(alpha, decay)
         }).catch(error => { base.resourceIdentity!(); throw error })
         return { timing, snapshot: await base.read() }
+      }
+      : undefined,
+    // Diagnostic pass boundaries only; the normal tick still uses one compute pass.
+    stepProfiledTick: overrides.gpuBounds
+      ? (alpha, tick, scope): void => {
+        base.resourceIdentity!()
+        if (settings.collision?.strength) throw new Error('Collision profiling is unsupported')
+        base.setGpuFrame!(tick)
+        for (const next of stagesFor(settings.center, settings.collision)) {
+          stage = next; p.alpha = alpha
+          base.step({ submit: false, profile: (name, work) => scope(`${next}.${name}`, work) })
+        }
+        device.submit()
       }
       : undefined,
     stepTick: overrides.gpuBounds

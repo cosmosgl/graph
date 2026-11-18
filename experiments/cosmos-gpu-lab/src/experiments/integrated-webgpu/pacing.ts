@@ -1,3 +1,4 @@
+import type { Workload } from './data'
 import { type Integrated, type FrameTrace, nextFrame } from './runtime'
 import { percentiles, interactionCheck } from './evaluate'
 import { fit, validateFrame } from './validation'
@@ -7,7 +8,7 @@ export const pacingProtocol = '1,024 communities, seed 29471, 960 × 600 CSS px 
 type Mode = 'RAF only' | 'Redraw' | 'Full tick'
 type Sample = FrameTrace & { intervalMs: number; wallIntervalMs: number; nextFrameWaitMs: number }
 export type PacingRow = {
-  pacing: true; repetition: number; mode: Mode; info: string; viewport: number[]; recordedAt: string;
+  pacing: true; fixture: Workload; pointCount: number; repetition: number; mode: Mode; info: string; viewport: number[]; recordedAt: string;
   frames: ReturnType<typeof percentiles>; within33: number; samples: Sample[];
   stages: Record<keyof FrameTrace | 'nextFrameWaitMs' | 'wallIntervalMs', ReturnType<typeof percentiles>>;
   validation: Awaited<ReturnType<typeof validateFrame>>;
@@ -15,7 +16,8 @@ export type PacingRow = {
   picks: Integrated['feedback'];
 }
 export async function profilePacing (
-  r: Integrated, cancelled: () => boolean, progress: (text: string) => void, record: (row: PacingRow) => void
+  r: Integrated, cancelled: () => boolean, progress: (text: string) => void, record: (row: PacingRow) => void,
+  input: { kind: Workload; count: number } = { kind: 'communities', count: 1024 }
 ): Promise<void> {
   const guard = (): void => {
     if (cancelled()) throw new Error('Cancelled; completed pacing rows retained')
@@ -32,8 +34,8 @@ export async function profilePacing (
     for (let repetition = 0; repetition < 3; repetition++) {
       for (let offset = 0; offset < 3; offset++) {
         check(); const mode = modes[(repetition + offset) % 3]
-        progress(`Pacing ${repetition + 1}/3 · ${mode}`)
-        await r.replace('communities', 1024)
+        progress(`${input.kind} ${input.count} · Pacing ${repetition + 1}/3 · ${mode}`)
+        await r.replace(input.kind, input.count)
         // Identical tick-60 starting scene in every control; no CPU quality allocations before timing.
         for (let i = 0; i < 60; i++) { check(); await nextFrame(); await r.frame(true) }
         fit(r, (await r.backend.read()).positions); await r.frame(false)
@@ -53,6 +55,8 @@ export async function profilePacing (
           .map(key => [key, percentiles(samples.map(s => s[key]))])) as PacingRow['stages']
         record({
           pacing: true,
+          fixture: input.kind,
+          pointCount: r.data.input.points.length / 4,
           repetition: repetition + 1,
           mode,
           info: r.info,
