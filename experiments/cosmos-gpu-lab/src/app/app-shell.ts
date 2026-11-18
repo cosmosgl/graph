@@ -170,6 +170,14 @@ function renderExperimentFrame (host: HTMLElement, experiment: ExperimentDefinit
       <p>${record.question}</p>
       ${experiment.study ? '' : `<p class="research-conclusion">${record.conclusion}</p>`}</header>
     <section class="experiment-stage unified-experiment" aria-busy="true"></section></div>`
+  if (experiment.study?.visualFirst) {
+    const summary = document.createElement('p'); summary.className = 'study-key-result'
+    const label = document.createElement('strong'); label.textContent = 'Recorded result: '
+    const link = document.createElement('a'); link.href = `${experimentHref(experiment.id)}?section=study-overview`
+    link.textContent = 'See details'
+    summary.append(label, document.createTextNode(`${experiment.study.record.conclusion} `), link)
+    requiredElement(host, '.experiment-header').append(summary)
+  }
   if (experiment.study && !experiment.study.visualFirst) requiredElement(host, '.experiment-header').append(renderStudyOverview(experiment))
 }
 

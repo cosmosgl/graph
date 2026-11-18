@@ -10,8 +10,7 @@ export const experiment = defineExperiment({
     record: readStudyRecord(recordedSummary, 'viewer-comparison'),
     recipePage: 'agent-recipe',
     visualFirst: true,
-    liveDescription: 'The initial graph shows 34 karate-club members as dots and 78 connections as lines. ' +
-      'The viewers can arrange and frame the network differently. This new local run is separate from the recorded findings below.',
+    liveDescription: 'Each dot is a person and each line is a connection.',
   },
   create: async host => (await import('./view')).createView(host),
   pages: [

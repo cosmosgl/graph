@@ -83,3 +83,59 @@ question, inputs, reference and any agreed acceptance rule. Save a separate
 capture, explain how it differs from this replay and retain negative or incomplete
 results. Follow the Lab's [validation workflow](#/validation-workflow) and
 `experiments/cosmos-gpu-lab/AGENTS.md` for the full research contract.
+
+For a custom input, `model.ts` contains the fixtures and CPU sum models;
+`gpu.ts` exposes the diagnostic GPU paths. The existing `reproduction.test.ts`
+shows how to run those paths and write a capture. Record a concise finding with
+the question, observed results, limits and exact source, plus a small fixture or
+instructions for constructing the input. Keep raw measurements in a unique
+local capture. The [input-order follow-up](#/precision-diagnostics?section=doc-method-follow-up-input-order)
+is an example.
+
+### Replay the input-order follow-up
+
+The recorded follow-up used revision `531d1fab66f3cddae3e39979c3e48dc1132e3e95`
+plus the preserved test patch. Start from an isolated checkout at that revision;
+set `lab_patch` to the absolute path of `experiments/cosmos-gpu-lab/fixtures/precision-order-followup.patch`
+in a checkout that contains it. Install the lockfile dependencies in the isolated
+checkout, then run from its root:
+
+```sh
+set -eu
+set -o pipefail
+test "$(git rev-parse HEAD)" = 531d1fab66f3cddae3e39979c3e48dc1132e3e95
+test -z "$(git status --porcelain)"
+git apply --index "$lab_patch"
+mkdir -p experiments/cosmos-gpu-lab/captures
+lab_capture="$(mktemp -d "$PWD/experiments/cosmos-gpu-lab/captures/precision-order-XXXXXX")"
+lab_run_id="$(basename "$lab_capture")"
+cp "$lab_patch" "$lab_capture/supplied.patch"
+git diff --binary --full-index HEAD > "$lab_capture/source.patch"
+git rev-parse HEAD > "$lab_capture/source-revision.txt"
+git status --short > "$lab_capture/source-status-before.txt"
+node --version > "$lab_capture/node-version.txt"
+pnpm --version > "$lab_capture/pnpm-version.txt"
+pnpm --filter @cosmos.gl/gpu-lab list --depth Infinity --json > "$lab_capture/dependencies.json"
+if LAB_SOURCE_REVISION="$(cat "$lab_capture/source-revision.txt")" \
+   LAB_WORKTREE_STATE=modified LAB_SOURCE_SNAPSHOT="$lab_capture" LAB_ARTIFACT_RUN="$lab_run_id" LAB_INLINE_BROWSER=0 \
+   pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/precision-diagnostics/order-followup.test.ts 2>&1 | tee "$lab_capture/terminal.log"; then
+  lab_test_status=0
+else
+  lab_test_status=$?
+fi
+printf '%s\n' "$lab_test_status" > "$lab_capture/test-exit-status.txt"
+git rev-parse HEAD > "$lab_capture/source-revision-after.txt"
+git status --short > "$lab_capture/source-status-after.txt"
+git diff --binary --full-index HEAD > "$lab_capture/source-after.patch"
+cmp "$lab_capture/source-revision.txt" "$lab_capture/source-revision-after.txt"
+cmp "$lab_capture/source-status-before.txt" "$lab_capture/source-status-after.txt"
+cmp "$lab_capture/source.patch" "$lab_capture/source-after.patch"
+test -f "$lab_capture/order-followup-summary.json"
+test "$lab_test_status" -eq 0
+```
+
+Read the 12 trial records and summary, including the actual browser and adapter.
+The command completes only if the positive controls and finite-output checks pass;
+the cancellation sums are observations, not a GPU accuracy gate. An unavailable
+adapter or missing summary is incomplete. Repeatability in one session does not
+establish behavior on other devices or production readiness.

@@ -103,6 +103,43 @@ sums may be exact. Tests do not require the same native polar axis failure on ot
 current test provider uses installed Chrome without forcing a software adapter; record the actual
 adapter. The older `LAB_NATIVE_GPU=1` flag is redundant. See the Lab README for the existing-browser option.
 
+## Follow-up: input order
+
+**The same numbers gave different tree sums when their order changed.** On 18 November 2026,
+a follow-up compared the existing 1,024-value cancellation fixture with a rearrangement containing
+exactly the same values. The exact sum is 512 in both cases.
+
+| Input order | Exact sum | CPU float32 tree | WebGPU tree |
+| --- | ---: | ---: | ---: |
+| Repeating `16777216, 1, -16777216, 1` | 512 | 512 | 512 in all four trials |
+| Same values grouped into blocks of 256 | 512 | 256 | 256 in all four trials |
+
+The eight cancellation trials were interleaved in one session, with a fresh device for each.
+Positive-number controls before and after returned the exact sum of 2,560 in every CPU and GPU
+sum path. All GPU outputs were finite. In the CPU model, rounding during each lane's additions
+explains the smaller result; GPU intermediate values were not captured, so their exact operations
+are not established by this observation.
+
+The browser reported headless Chrome 157 and an Apple WebGPU adapter with `metal-3` architecture
+and `fallback: false`; its model and backend were not reported. The run used luma 10.0.0-alpha.15.
+Four trials per order in one browser session, with matching reported adapter details, do not establish
+portability, performance, gravity accuracy, layout quality or production readiness. No new accuracy
+threshold was set.
+
+To construct the second input in a browser test, using `sumFixture` from `model.ts`:
+
+```ts
+const original = sumFixture('cancellation', 1024)
+const grouped = Float32Array.from(original, (_, i) => original[(i % 256) * 4 + Math.floor(i / 256)])
+```
+
+The focused test used `cpuSums` and the existing `nativeDiagnostics` kernels, with seed 5931 for
+their shared gravity input. Its source was revision `531d1fab66f3cddae3e39979c3e48dc1132e3e95`
+plus the test preserved in `experiments/cosmos-gpu-lab/fixtures/precision-order-followup.patch`.
+The [agent recipe](#/precision-diagnostics?section=doc-agent-recipe-replay-the-input-order-follow-up)
+explains how to replay it. The original trial records remain local in
+`captures/new-order-followup-20261118T100325Z-24320/`; captures are not committed.
+
 ## Reproduction
 
 The cancellation fixture demonstrates why compatibility and accuracy differ: adding 1 to `2^24`
