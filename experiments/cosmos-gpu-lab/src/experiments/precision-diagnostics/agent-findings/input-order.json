@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "experiment": "precision-diagnostics",
+  "status": "complete",
+  "recordedAt": "2026-11-18",
+  "question": "Can changing the order of the same numbers change the answer?",
+  "result": "Yes. The correct sum was 512. The same GPU calculation returned 512 for one order and 256 for another, in all four trials of each.",
+  "limits": "This used one browser session and matching reported adapter details. It did not assess other devices, performance, gravity, layout or production readiness.",
+  "environment": "Headless Chrome 157; luma 10.0.0-alpha.15; Apple WebGPU reported metal-3 and fallback false. The adapter model and backend were not reported.",
+  "evidence": "Twelve trial records and a summary are retained locally in experiments/cosmos-gpu-lab/captures/new-order-followup-20261118T100325Z-24320/.",
+  "source": {
+    "revision": "531d1fab66f3cddae3e39979c3e48dc1132e3e95",
+    "state": "modified",
+    "snapshot": "experiments/cosmos-gpu-lab/fixtures/precision-order-followup.patch"
+  },
+  "reproduction": [
+    "Start with a clean isolated checkout of the recorded source revision and install its lockfile dependencies.",
+    "Apply the preserved test patch and run order-followup.test.ts with a unique LAB_ARTIFACT_RUN directory.",
+    "Record the actual browser and adapter, and inspect all 12 trial records and the summary. The linked recipe contains the exact commands."
+  ],
+  "evidenceSection": "follow-up-input-order",
+  "replaySection": "replay-the-input-order-follow-up"
+}

@@ -1,4 +1,5 @@
 import { validationContractMarkdown } from './validation'
+import type { AgentFindings } from './agent-findings'
 import type { StudyRecord } from './study-record'
 export type ExperimentInstance = {
   // Stop playback/sweeps at a safe boundary without discarding the current run.
@@ -52,7 +53,7 @@ export type ExperimentDefinition = {
   summary: string;
   tags: string[];
   // Optional prototype: a readable recorded result and a linked agent recipe.
-  study?: { record: StudyRecord; recipePage: string; visualFirst?: boolean; liveDescription?: string };
+  study?: { record: StudyRecord; recipePage: string; visualFirst?: boolean; liveDescription?: string; agentFindings?: AgentFindings };
   create: (host: HTMLElement) => Promise<ExperimentInstance>;
   pages: ExperimentPage[];
 }

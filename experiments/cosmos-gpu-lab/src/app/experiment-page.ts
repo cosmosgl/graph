@@ -10,6 +10,7 @@ type Notes = { ready: Promise<void>; disposed: boolean; dispose(): void }
 const notes = new WeakMap<HTMLElement, Notes>()
 const contentsSections = [
   ['study-overview', 'Recorded result'],
+  ['study-investigations', 'Investigations'],
   ['run-run', 'Experiment'], ['run-results', 'Live results'], ['run-explanation', 'How it works'],
   ['recorded-findings', 'Recorded findings'], ['run-diagnostics', 'Diagnostics'], ['experiment-references', 'References'],
 ]

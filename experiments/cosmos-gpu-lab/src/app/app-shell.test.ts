@@ -153,6 +153,54 @@ it('keeps the recorded result readable and offers retry when live setup fails', 
   expect(create).toHaveBeenCalledTimes(2)
 })
 
+it('shows an agent finding and its reproduction steps even when the live study fails', async () => {
+  const experiment = findExperiment('precision-diagnostics')!
+  vi.spyOn(experiment, 'create').mockRejectedValue(new Error('Test adapter unavailable'))
+  window.history.replaceState(null, '', '#/precision-diagnostics')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('[data-study-status]')?.textContent).toContain('Test adapter unavailable'))
+  await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
+  const record = experiment.study!.agentFindings!.records.find(item => item.id === 'input-order')!
+  const result = host.querySelector<HTMLElement>('#study-finding-input-order')!
+  expect(result.textContent).toContain(record.question)
+  expect(result.textContent).toContain(record.result)
+  expect(result.textContent).toContain(record.limits)
+  expect(host.querySelector('#study-overview')!.textContent).toContain(experiment.study!.record.conclusion)
+  expect(result.compareDocumentPosition(host.querySelector('#study-overview')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(host.querySelector('.experiment-contents a[href$="section=study-investigations"]')).not.toBeNull()
+  expect(host.querySelector('#doc-method-follow-up-input-order')).not.toBeNull()
+  expect(result.querySelector('a')!.getAttribute('href')).toBe('#/precision-diagnostics?section=doc-method-follow-up-input-order')
+  const details = result.querySelector<HTMLDetailsElement>('details')!
+  details.querySelector('summary')!.click()
+  await vi.waitFor(() => expect(details.open).toBe(true))
+  expect(details.textContent).toContain(record.environment)
+  expect(details.textContent).toContain(record.evidence)
+  expect(details.textContent).toContain(record.source.snapshot)
+  expect(details.textContent).toContain(record.reproduction[0])
+  expect(host.querySelector('#doc-agent-recipe-replay-the-input-order-follow-up')).not.toBeNull()
+  expect(details.querySelector('a')!.getAttribute('href')).toBe('#/precision-diagnostics?section=doc-agent-recipe-replay-the-input-order-follow-up')
+})
+
+it('keeps a finding and its steps readable when referenced headings are missing', async () => {
+  const experiment = findExperiment('precision-diagnostics')!
+  const previousFindings = experiment.study!.agentFindings!
+  const original = previousFindings.records.find(item => item.id === 'input-order')!
+  const finding = { ...original, evidenceSection: 'missing-evidence', replaySection: 'missing-replay' }
+  experiment.study!.agentFindings = { records: [finding], invalid: [] }
+  vi.spyOn(experiment, 'create').mockRejectedValue(new Error('Test adapter unavailable'))
+  window.history.replaceState(null, '', '#/precision-diagnostics')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  try {
+    await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
+    const result = host.querySelector<HTMLElement>('#study-finding-input-order')!
+    expect(result.textContent).toContain(finding.result)
+    expect(result.textContent).toContain('Read the evidence unavailable')
+    expect(result.textContent).toContain('Exact replay instructions unavailable')
+    expect(result.textContent).toContain(finding.reproduction[0])
+    expect(result.querySelectorAll('a')).toHaveLength(0)
+  } finally { experiment.study!.agentFindings = previousFindings }
+})
+
 it('keeps the contents links when a delayed live setup fails', async () => {
   let rejectSetup!: (error: Error) => void
   const pending = new Promise<never>((resolve, reject) => { rejectSetup = reject })
@@ -176,7 +224,10 @@ it('keeps the contents links when a delayed live setup fails', async () => {
 it('retires a viewer whose notes fail while setup is still running', async () => {
   let finish!: () => void
   const pending = new Promise<void>(resolve => { finish = resolve }); const destroy = vi.fn()
-  vi.spyOn(findExperiment('viewer-comparison')!, 'create').mockImplementation(async stage => {
+  const viewer = findExperiment('viewer-comparison')!
+  const previousFindings = viewer.study!.agentFindings
+  viewer.study!.agentFindings = findExperiment('precision-diagnostics')!.study!.agentFindings
+  vi.spyOn(viewer, 'create').mockImplementation(async stage => {
     stage.innerHTML = '<iframe></iframe>'; await pending; return { destroy }
   })
   const query = Element.prototype.querySelector
@@ -188,23 +239,31 @@ it('retires a viewer whose notes fail while setup is still running', async () =>
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   try {
     await vi.waitFor(() => expect(host!.querySelector('.failure')).not.toBeNull())
+    expect(host.querySelector('#study-finding-input-order')).not.toBeNull()
     finish(); await vi.waitFor(() => expect(destroy).toHaveBeenCalledTimes(1))
-  } finally { finish() }
+  } finally { viewer.study!.agentFindings = previousFindings; finish() }
 })
 
 it('keeps one recorded result when returning to the retained live viewer', async () => {
+  const viewer = findExperiment('viewer-comparison')!
+  const previousFindings = viewer.study!.agentFindings
+  viewer.study!.agentFindings = findExperiment('precision-diagnostics')!.study!.agentFindings
   const { create } = mockRun('viewer-comparison')
   window.history.replaceState(null, '', '#/viewer-comparison')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelector('[data-study-status]')).toBeNull())
-  const canvas = host.querySelector('canvas')!
-  await route('#/validation-workflow', () => expect(host!.querySelector('h1')!.textContent).toBe('Validation workflow'))
-  await route('#/viewer-comparison', () => {
-    expect(host!.querySelector('canvas')).toBe(canvas)
-    expect(host!.querySelector('[data-study-status]')).toBeNull()
-    expect(host!.querySelectorAll('#study-overview')).toHaveLength(1)
-  })
-  expect(create).toHaveBeenCalledTimes(1)
+  try {
+    await vi.waitFor(() => expect(host!.querySelector('[data-study-status]')).toBeNull())
+    const canvas = host.querySelector('canvas')!
+    expect(host.querySelector('#run-run')!.compareDocumentPosition(host.querySelector('#study-investigations')!) &
+      Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await route('#/validation-workflow', () => expect(host!.querySelector('h1')!.textContent).toBe('Validation workflow'))
+    await route('#/viewer-comparison', () => {
+      expect(host!.querySelector('canvas')).toBe(canvas)
+      expect(host!.querySelector('[data-study-status]')).toBeNull()
+      expect(host!.querySelectorAll('#study-overview')).toHaveLength(1)
+    })
+    expect(create).toHaveBeenCalledTimes(1)
+  } finally { viewer.study!.agentFindings = previousFindings }
 })
 
 for (const { id } of experiments) {
@@ -225,7 +284,7 @@ for (const { id } of experiments) {
         expect(host.querySelector(`.experiment-contents a[href$="section=${heading.id}"]`)).not.toBeNull()
       }
     }
-    expect(host.querySelector('.page-tabs,.method-topics,.research-actions,.run-contents,.evidence-index,details')).toBeNull()
+    expect(host.querySelector('.page-tabs,.method-topics,.research-actions,.run-contents,.evidence-index,details:not(.study-finding-reproduction)')).toBeNull()
     expect(host.querySelectorAll('main nav')).toHaveLength(1)
     expect(host.querySelector('.sidebar,.experiment-return,.unified-document')).toBeNull()
     expect(host.querySelectorAll('main h1')).toHaveLength(1)
