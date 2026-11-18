@@ -14,8 +14,8 @@ export function renderAgentFindings (experiment: ExperimentDefinition): HTMLElem
   const section = document.createElement('section'); section.id = 'study-investigations'; section.className = 'study-investigations'
   const title = document.createElement('h2'); title.textContent = 'Investigations'; section.append(title)
   if (findings.invalid.length) {
-    const warning = document.createElement('p'); warning.setAttribute('role', 'status')
-    warning.textContent = 'Some investigation records could not be displayed. Check the record files.'; section.append(warning)
+    const warning = document.createElement('p'); warning.className = 'study-findings-warning'; warning.setAttribute('role', 'status')
+    warning.textContent = `Some investigation records could not be displayed. Check: ${findings.invalid.join(', ')}`; section.append(warning)
   }
   for (const finding of findings.records) {
     const article = document.createElement('article'); article.className = 'study-investigation'; article.id = `study-finding-${finding.id}`
