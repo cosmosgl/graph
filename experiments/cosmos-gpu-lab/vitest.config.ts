@@ -39,6 +39,7 @@ export default defineConfig({
       'src/experiments/matched-layout/**/*.test.ts',
       'src/experiments/collision/**/*.test.ts',
       'src/experiments/cluster-attraction/**/*.test.ts',
+      'src/experiments/point-attractors/**/*.test.ts',
       'src/experiments/precision-diagnostics/**/*.test.ts',
       'src/experiments/point-styling/**/*.test.ts',
       'src/experiments/straight-links/**/*.test.ts',

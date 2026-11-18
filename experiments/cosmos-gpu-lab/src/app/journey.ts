@@ -29,7 +29,7 @@ export const journeySteps = [
     status: 'Isolated clusters validated on M3',
     position: 'Cluster baseline passes; next per-point attractors → mouse repulsion → combined-force integration. Larger collision scope remains pending.',
     exit: 'Declared behavior, numerical accuracy, layout quality and cost for the supported force set.',
-    href: '#/cluster-attraction',
+    href: '#/point-attractors',
   },
   {
     number: 4,

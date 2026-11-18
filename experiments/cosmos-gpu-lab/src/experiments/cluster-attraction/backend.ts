@@ -1,7 +1,8 @@
-import { Buffer, Texture, UniformStore, type ComputePass, type Device } from '@luma.gl/core'
+import { Buffer, Texture, UniformStore, type ComputePass } from '@luma.gl/core'
 import { Model } from '@luma.gl/engine'
 import { bindingLayout, readFloats, upload } from '../../gpu/luma'
 import { resourceScope } from '../../gpu/resource-scope'
+import { describeEnvironment } from '../../gpu/force-preview'
 import { createRoundedKernel, roundedArithmetic, roundedIntegrationSource } from '../combined-layout/spring-precision'
 import { createWebGL } from '../many-body/webgl'
 import { createWebGPU } from '../many-body/webgpu'
@@ -15,29 +16,13 @@ import type { ClusterSnapshot } from './reference'
 import { SETTINGS, grouping, validate, type ClusterInput } from './data'
 import reduction from './reduce.wgsl?raw'
 import forceSource from './force.wgsl?raw'
+export { replaceCanvas } from '../../gpu/force-preview'
 export type Api = 'webgl' | 'webgpu'
-// A destroyed luma device must not be rediscovered through the old canvas context.
-export function replaceCanvas (previous: HTMLCanvasElement): HTMLCanvasElement {
-  const next = previous.cloneNode(false) as HTMLCanvasElement
-  previous.replaceWith(next)
-  return next
-}
 export type ClusterBackend = Omit<Backend, 'read'> & {
   read(): Promise<ClusterSnapshot>;
   updateClusters(input: ClusterInput): void;
   measureForce(operations: number): Promise<Measurement>;
-  environment(): { browser: string; device: Device['info']; timestamps: boolean; visible: boolean;
-    canvas: { width: number; height: number; cssWidth: number; cssHeight: number; dpr: number }; };
-}
-function describeEnvironment (device: Device, canvas: HTMLCanvasElement): ReturnType<ClusterBackend['environment']> {
-  const rect = canvas.getBoundingClientRect()
-  return {
-    browser: navigator.userAgent,
-    device: device.info,
-    timestamps: device.features.has('timestamp-query'),
-    visible: document.visibilityState === 'visible',
-    canvas: { width: canvas.width, height: canvas.height, cssWidth: rect.width, cssHeight: rect.height, dpr: window.devicePixelRatio },
-  }
+  environment(): ReturnType<typeof describeEnvironment>;
 }
 export async function createBackend (api: Api, canvas: HTMLCanvasElement, input: ClusterInput): Promise<ClusterBackend> {
   validate(input)
