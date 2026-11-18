@@ -7,7 +7,7 @@
   "scope": "Karate Club: 34 points and 78 weighted links; selected timing, interaction and rendering checks with both viewers controlled by the test.",
   "question": "Can the experimental WebGPU viewer support a small graph exploration workflow?",
   "method": "Compare the production and WebGPU viewers on the same graph. Measure animation and interaction; separately compare their pixels with the same fixed point and link positions.",
-  "conclusion": "The small workflow was usable on the recorded machine, but strict color compatibility failed in the tested comparisons. Full migration readiness was not assessed by this experiment.",
+  "conclusion": "On one machine, both viewers ran the small graph, but their colors did not match closely enough to pass the test. We don't yet know why, and this test did not cover all Cosmos features or devices.",
   "checks": [
     { "name": "Evolving frame intervals", "outcome": "Pass", "detail": "Both viewers met the 33 ms target in all 300 measured intervals." },
     { "name": "Point identities at fixed positions", "outcome": "Pass", "detail": "Point identities matched away from edges; no invisible point IDs appeared in the picking image in the cooled style-A comparison." },

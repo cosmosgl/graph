@@ -141,6 +141,9 @@ it('keeps the recorded result readable and offers retry when live setup fails', 
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
   await vi.waitFor(() => expect(host!.querySelector('[data-study-status]')!.textContent).toContain('Test adapter unavailable'))
+  const keyResult = host.querySelector('.experiment-header .study-key-result')!
+  expect(keyResult.textContent).toContain(findExperiment('viewer-comparison')!.study!.record.conclusion)
+  expect(keyResult.querySelector('a')!.getAttribute('href')).toBe('#/viewer-comparison?section=study-overview')
   expect(host.querySelector('#study-overview')!.textContent).toContain(findExperiment('viewer-comparison')!.study!.record.conclusion)
   expect(host.querySelector('#doc-agent-recipe')).not.toBeNull()
   expect(host.querySelector('.experiment-contents a[href$="section=doc-agent-recipe"]')).not.toBeNull()
