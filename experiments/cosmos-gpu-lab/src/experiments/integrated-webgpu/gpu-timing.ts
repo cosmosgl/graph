@@ -1,14 +1,18 @@
 import { readLumaTimer, type TimerStatus } from '../weighted-links/timing'
 import type { Snapshot } from '../many-body/reference'
+import type { Workload } from './data'
 import { type Integrated, type FrameTrace, nextFrame } from './runtime'
 import { percentiles, interactionCheck } from './evaluate'
 import { validateFrame, fit } from './validation'
-export const gpuTimingProtocol = '1,024 communities, seed 29471, 960 × 600 CSS px at recorded DPR. ' +
+export const gpuTimingProtocol = 'Selected graph and point count, seed 29471, 960 × 600 CSS px at recorded DPR. ' +
   'Four reset windows: timestamps off / on / on / off. Each advances 60 warmup ticks, fits once, then measures 300 full frames. ' +
-  'Read timestamps and validate after each window; keep completion pacing, forces, colors and acceptance gates unchanged.'
+  'Read timestamps and validate after each window; keep completion pacing, forces, colors and acceptance gates unchanged. ' +
+  'The 8,192-point sweep runs chain, communities and star in that order, with four windows for each graph.'
+export const gpuLargeMatrix = (['chain', 'communities', 'star'] as const).map(kind => ({ kind, count: 8192 }))
 type Sample = FrameTrace & { intervalMs: number }
 export type GpuTimingRow = {
   gpuTiming: true; window: number; instrumented: boolean; info: string; viewport: number[]; recordedAt: string;
+  fixture: Workload; pointCount: number; linkCount: number; repulsionMethod: string;
   samples: Sample[]; frames: ReturnType<typeof percentiles>; within33: number;
   completionWait: ReturnType<typeof percentiles>;
   gpu: { status: TimerStatus | 'not measured'; simulationMs: number[] | null; drawingMs: number[] | null; totalMs: number[] | null; error?: string };
@@ -29,7 +33,8 @@ export function gpuTimingVerdict (r: GpuTimingRow): string {
   return passes ? 'Pass within sampled scope' : 'Not accepted'
 }
 export async function profileGpuTiming (
-  r: Integrated, cancelled: () => boolean, progress: (text: string) => void, record: (row: GpuTimingRow) => void
+  r: Integrated, cancelled: () => boolean, progress: (text: string) => void, record: (row: GpuTimingRow) => void,
+  input: { kind: Workload; count: number } = { kind: 'communities', count: 1024 }
 ): Promise<void> {
   const device = r.backend.positionSource!().device
   if (!device.features.has('timestamp-query')) throw new Error('GPU timestamps unavailable on this device; no wall-clock substitution')
@@ -43,8 +48,8 @@ export async function profileGpuTiming (
   try {
     r.pause(); r.resize(960, 600, devicePixelRatio)
     for (const [index, instrumented] of [false, true, true, false].entries()) {
-      guard(); progress(`GPU timing ${index + 1}/4 · timestamps ${instrumented ? 'on' : 'off'}`)
-      await r.replace('communities', 1024)
+      guard(); progress(`${input.kind} ${input.kind === 'karate' ? 34 : input.count} · GPU timing ${index + 1}/4 · timestamps ${instrumented ? 'on' : 'off'}`)
+      await r.replace(input.kind, input.count)
       for (let i = 0; i < 60; i++) { guard(); await nextFrame(); await r.frame(true) }
       fit(r, (await r.backend.read()).positions); await r.frame(false)
       const query = instrumented ? device.createQuerySet({ type: 'timestamp', count: 1200 }) : undefined
@@ -84,6 +89,10 @@ export async function profileGpuTiming (
       const interactions = await interactionCheck(r); guard(); const validation = await validateFrame(r); guard()
       record({
         gpuTiming: true,
+        fixture: input.kind,
+        pointCount: r.data.input.points.length / 4,
+        linkCount: r.data.graph.links.length / 2,
+        repulsionMethod: r.backend.repulsionMethod?.() ?? 'unknown',
         window: index + 1,
         instrumented,
         info: r.info,

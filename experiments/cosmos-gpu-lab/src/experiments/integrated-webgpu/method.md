@@ -194,3 +194,25 @@ Do not subtract independent p95 columns to infer a notification delay. Even a pe
 subtraction mixes different endpoints: GPU work can start before CPU submission ends,
 and the completion wait includes work outside the measured passes. These observations
 can identify where most work occurs without attributing every unmeasured millisecond.
+
+## 8,192-point timestamp sweep
+
+The **Time 8,192-point graphs** action extends the same comparison to chain,
+communities and star, in that order. Declared on 18 November 2026 before evaluation:
+8,192 points each; 8,191 chain/star links and 15,359 community links; seed 29471;
+960 × 600 logical pixels at actual recorded DPR. The resident backend selects its
+existing hierarchical repulsion at this count. The star remains unpinned.
+
+Each graph gets its own four reset windows: timestamps off/on/on/off, 60 warmup ticks,
+one fit outside timing and 300 complete measured frames. Its first window establishes
+its own bitwise baseline; comparisons never mix graphs. Post-window checks retain the
+same 20 paused picks, 20 running picks, 20-move drag, camera/pause/resize checks and
+sampled rendering rules. Validation and query readbacks remain outside frame timing.
+The original 95%-within-33-ms frame and 50-ms feedback gates are unchanged.
+
+Every completed window records graph, actual point/link counts, repulsion route,
+adapter, viewport, raw timings and checks. Cancellation retains completed windows.
+A missed gate remains rejected while the remaining diagnostic windows continue; an
+execution error or visibility loss interrupts the run. The existing **Compare GPU
+timestamps** action now uses the selected graph/count, allowing a single fixture to be
+reproduced. This adds no force, shader, color, tolerance or scheduling optimization.

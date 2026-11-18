@@ -1,6 +1,6 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { mountRunLayout, disposeRunLayout } from '../../runtime/run-layout'
-import { gpuTimingProtocol, profileGpuTiming, gpuTimingVerdict, type GpuTimingRow } from './gpu-timing'
+import { gpuTimingProtocol, gpuLargeMatrix, profileGpuTiming, gpuTimingVerdict, type GpuTimingRow } from './gpu-timing'
 import { createIntegrated } from './runtime'
 import { workload, matrix, unsupported, type Workload } from './data'
 import { evaluate, interactionCheck, protocol, percentiles } from './evaluate'
@@ -24,7 +24,8 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     <div class="controls"><button data-action="check">Check interaction + pixels</button><button data-action="measure">Measure this graph</button>
     <button data-action="matrix">Evaluate declared matrix</button><button data-action="cancel">Cancel evaluation</button>
     <button data-action="export">Export JSON</button><button data-action="pacing">Profile small-graph pacing</button>
-    <button data-action="gpu-timing">Compare GPU timestamps</button></div>
+    <button data-action="gpu-timing">Compare GPU timestamps</button>
+    <button data-action="gpu-large">Time 8,192-point graphs</button></div>
     <p>Matrix order: 1,024 chain, communities, star; then 8,192 chain, communities, star; then Karate Club.
     The matrix first checks 1,024-point picking and dragging.
     An incorrect initial interaction blocks scaling; timing misses remain failures while the diagnostic matrix continues.</p>
@@ -100,11 +101,13 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     if (gpuRows.length) {
       const duration = (values: number[] | null): string => values ? `${percentiles(values).p95.toFixed(3)} ms` : 'Not measured'
       report.insertAdjacentHTML('beforeend', `<table><caption>Actual GPU pass durations · p95 milliseconds</caption>
-        <thead><tr><th>Window / timestamps</th><th>Simulation GPU</th><th>Drawing GPU</th><th>GPU sum</th>
-        <th>Completion wait</th><th>Frame interval</th><th>Within 33 ms</th><th>State bits</th><th>Local gates</th></tr></thead>
-        <tbody>${gpuRows.map(r => `<tr><td>${r.window} · ${r.instrumented ? r.gpu.status : 'off'}</td>
+        <thead><tr><th>Graph / window / timestamps</th><th>Simulation GPU</th><th>Drawing GPU</th><th>GPU sum</th>
+        <th>Completion wait</th><th>Frame interval</th><th>Within 33 ms</th>
+        <th>Pick max paused / running</th><th>State bits</th><th>Local gates</th></tr></thead>
+        <tbody>${gpuRows.map(r => `<tr><td>${r.fixture} · ${r.pointCount.toLocaleString()} · ${r.window} · ${r.instrumented ? r.gpu.status : 'off'}</td>
         <td>${duration(r.gpu.simulationMs)}</td><td>${duration(r.gpu.drawingMs)}</td><td>${duration(r.gpu.totalMs)}</td>
         <td>${ms(r.completionWait.p95)}</td><td>${ms(r.frames.p95)}</td><td>${(r.within33 * 100).toFixed(1)}%</td>
+        <td>${ms(r.interactions.pick.max)} / ${ms(r.interactions.activePick.max)}</td>
         <td>${r.window === 1 ? 'Baseline' : r.sameState.positions && r.sameState.forces ? 'Match' : 'Mismatch'}</td>
         <td>${gpuTimingVerdict(r)}</td></tr>`).join('')}</tbody></table>
         <p>GPU sum adds compute and render duration within each frame. It excludes gaps between passes, CPU work and presentation.
@@ -128,12 +131,17 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
         runtime.pause(); const interactions = await interactionCheck(runtime); const validation = await validateFrame(runtime)
         show({ interactions, validation }); checks = 'Interaction and sampled pixels checked; inspect counts below'
       }
-      if (name === 'gpu-timing') {
-        kind.value = 'communities'; count.value = '1024'; runtime.pause(); canvas.scrollIntoView({ block: 'center' })
-        await profileGpuTiming(runtime, () => cancelled || destroyed, text => { status.textContent = text }, row => {
-          show(row); checks = `GPU timing ${row.window}: ${gpuTimingVerdict(row)}; inspect retained rows`
-          if (gpuTimingVerdict(row) === 'Not accepted') failure = 'A GPU timing window missed the existing local gates or state check'
-        })
+      if (name === 'gpu-timing' || name === 'gpu-large') {
+        runtime.pause(); canvas.scrollIntoView({ block: 'center' })
+        const inputs = name === 'gpu-large' ? gpuLargeMatrix : [{ kind: kind.value as Workload, count: Number(count.value) }]
+        for (const input of inputs) {
+          if (cancelled || destroyed) break
+          kind.value = input.kind; count.value = String(input.count)
+          await profileGpuTiming(runtime, () => cancelled || destroyed, text => { status.textContent = text }, row => {
+            show(row); checks = `${row.fixture} ${row.pointCount} · GPU timing ${row.window}: ${gpuTimingVerdict(row)}; inspect retained rows`
+            if (gpuTimingVerdict(row) === 'Not accepted') failure = 'A GPU timing window missed the existing local gates or state check'
+          }, input)
+        }
       }
       if (name === 'pacing') {
         kind.value = 'communities'; count.value = '1024'

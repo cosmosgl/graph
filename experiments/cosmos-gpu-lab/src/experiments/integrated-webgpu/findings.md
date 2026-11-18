@@ -1,9 +1,10 @@
 # Integrated findings
 
-The graph renders and its interaction checks pass. A later controlled investigation
-repeated the **1,024-community workload successfully three times**, plus one original-path
-cross-check. Earlier whole-matrix timing failures remain unexplained. This is bounded
-local usability evidence, not approval of the whole first slice. All observations remain below.
+The latest 8,192-point timestamp sweep passes all four chain and communities windows.
+**Star still fails the frame target in every window**, and two running-pick maxima
+slightly exceed 50 ms. State bits and sampled rendering checks pass throughout. Earlier
+whole-matrix stalls remain unexplained; this is bounded local usability evidence, not
+approval of the whole first slice. All historical observations remain below.
 
 Measured **17 November 2026**, visible inline Chromium 157 on the **Apple M3** host
 (10 GPU cores), luma **10.0.0-alpha.15**. Actual luma adapter: `webgpu`, vendor `apple`,
@@ -16,7 +17,7 @@ integrated canvas rendered successfully before evaluation.
 | Question | Conclusion |
 | --- | --- |
 | Strict compatibility | **Not established.** Historical exact raster, polygon, faint-alpha and ribbon failures retain their verdicts. The new small whole-tick CPU check passes its unchanged tolerance; it does not approve the renderer. |
-| First-slice usability | **Bounded local evidence.** Three later 1,024-community repeats and an original-path cross-check pass. Earlier matrix stalls remain unexplained; 8,192 and settled quality remain unaccepted. |
+| First-slice usability | **Bounded local evidence.** Repeated 1,024 communities and the latest four-window 8,192 chain/communities checks pass. The 8,192 star remains rejected; earlier stalls and settled quality remain unresolved. |
 | Full migration readiness | **Not ready.** Advanced styles, remaining forces, collision, host integration, recovery, broader data and the parked investigations remain open. |
 
 ## Complete frame and interaction results
@@ -257,3 +258,76 @@ colors and pacing. Next apply a bounded GPU-duration comparison to the previousl
 Do not approve larger graphs, settled layout quality, strict compatibility or full
 migration readiness from this small case. All four native runtime regressions pass,
 including exact query-on/off state and color equivalence.
+
+## GPU timestamps at 8,192 points
+
+**18 November 2026, 04:09–04:11 UTC**, visible inline Chromium 157 on the Apple M3.
+Actual adapter: `webgpu`, `apple`, `metal-3`, `fallback: false`; timestamp queries
+supported. Verified the 8,192-point canvas rendered before starting. Attachment:
+**1,920 × 1,200**, 960 × 600 logical pixels at DPR 2. No build or test ran alongside
+measurement. This uses the [predeclared sweep](#/integrated-webgpu?section=doc-method-8-192-point-timestamp-sweep),
+unchanged solver, production controls, colors, pacing and acceptance gates.
+
+**Chain and communities pass all four local windows; star does not.** Each graph has
+1,200 measured frames across off/on/on/off windows. Chain/star have 8,191 links;
+communities has 15,359. All use the existing hierarchical repulsion route. This is an
+extension of the measurement, not a performance fix for the earlier adverse runs.
+
+| Graph | Window / timestamps | Simulation GPU p95, ms | Drawing GPU p95, ms | GPU sum p95, ms | Completion wait p95, ms | Frame p95, ms | Intervals ≤33 ms | Pick max paused / running, ms | Local gates |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |
+| chain | 1 / off | — | — | — | 14.5 | 17.6 | 100.0% | 19.3 / 33.3 | Pass, bounded |
+| chain | 2 / on | 13.107 | 1.376 | 13.435 | 16.2 | 17.4 | 99.7% | 16.8 / 29.8 | Pass, bounded |
+| chain | 3 / on | 12.976 | 1.376 | 13.304 | 15.7 | 17.4 | 99.7% | 17.1 / 33.0 | Pass, bounded |
+| chain | 4 / off | — | — | — | 15.1 | 17.2 | 100.0% | 20.6 / 30.7 | Pass, bounded |
+| communities | 1 / off | — | — | — | 14.6 | 17.5 | 100.0% | 17.7 / 32.5 | Pass, bounded |
+| communities | 2 / on | 12.386 | 1.442 | 12.845 | 14.8 | 18.3 | 100.0% | 18.2 / 32.9 | Pass, bounded |
+| communities | 3 / on | 12.386 | 1.442 | 12.845 | 14.6 | 18.3 | 100.0% | 18.8 / 31.6 | Pass, bounded |
+| communities | 4 / off | — | — | — | 14.0 | 18.2 | 100.0% | 17.0 / 26.7 | Pass, bounded |
+| star | 1 / off | — | — | — | 19.8 | 35.1 | 86.7% | 18.8 / 43.0 | Not accepted |
+| star | 2 / on | 15.925 | 2.294 | 17.433 | 20.3 | 49.2 | 83.7% | 18.7 / 37.1 | Not accepted |
+| star | 3 / on | 15.794 | 2.359 | 17.564 | 20.8 | 49.6 | 81.3% | 18.7 / 50.6 | Not accepted |
+| star | 4 / off | — | — | — | 19.5 | 35.3 | 85.3% | 18.6 / 50.2 | Not accepted |
+
+The six instrumented windows produced valid paired GPU timestamps. Independent p95
+columns do not add: the GPU sum is computed per frame before taking its percentile.
+Durations are quantized; do not interpret the last decimal as timing accuracy. Query
+readbacks, state comparisons and pixel audits occur outside the 300-frame windows.
+
+All **12 final position and force snapshots** match their own graph's first window
+bit-for-bit before interactions. Exact IDs, pin/release, camera, pause/resume and resize
+checks pass throughout. Every sampled pixel audit has zero interior ID failures, zero
+interior color failures and zero invisible picks, under the original one-device-pixel
+boundary and two-byte color rules. There are 2,432 sampled pixels per chain/community
+window and 2,381 per star window. All coordinates remain finite. Drag feedback peaks
+at 17.6 ms (chain), 18.7 ms (communities) and 18.7 ms (star).
+
+The star is still evolving: only 7,233–7,241 of its 8,192 point centers remain in the
+fixed view after interaction checks, versus all points in chain and communities. Fit
+is performed after warmup, not continuously. Passing sampled rendering is not a settled
+layout/readability verdict. Interaction checks add running frames after the bitwise
+comparison, so their final sampled geometry can vary slightly between windows.
+
+**What the timings establish:** simulation dominates measured GPU pass duration. The
+star's per-frame GPU sum reaches 17.4–17.6 ms at p95, compared with 12.8–13.4 ms for the
+other graphs. Its completion wait reaches 19.5–20.8 ms at p95 and its frame p95 reaches
+35.1–49.6 ms. Both timestamp-off star windows fail too; instrumentation alone cannot
+explain the rejection. The on windows perform worse here, but fixed order and GPU/load
+variation prevent attributing that difference solely to queries.
+
+**Interpretation, not yet a measured cause:** extra star work can cross a refresh
+boundary under the current one-completed-frame-in-flight pacing. These whole-pass
+measurements do not identify the expensive force stage, isolate scheduling overhead,
+or explain why the earlier chain/community runs stalled. Do not subtract unrelated
+percentiles to manufacture that attribution.
+
+**Decision:** retain bounded local acceptance for chain and communities and the rejected
+star result. Do one bounded star control next: separate redraw cost from full-tick
+cost, then identify the expensive force stage if simulation is the limiting part. Keep
+the corrected arithmetic, gates and normal-frame control. Do not expand to larger counts or deep pixel debugging yet. Settled real-graph readability
+remains the following integration gate. Strict compatibility and full migration
+readiness remain unestablished.
+
+To reproduce, open Diagnostics and choose **Time 8,192-point graphs** in a visible
+native browser. **Compare GPU timestamps** runs the selected graph/count alone.
+Use **Export JSON** for local raw samples and metadata; machine-specific captures are
+not committed. All earlier failing results above remain evidence, not superseded passes.
