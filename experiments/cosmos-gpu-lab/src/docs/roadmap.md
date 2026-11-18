@@ -45,6 +45,7 @@ Current evidence from the native M3 inline browser, with unchanged gates:
 | Cooled Karate Club | After Fit, all 34 points are visible, separate and pickable; two hub regions are readable; frame and sampled-pixel gates pass | Original whole assessment rejected by a 68.2-ms pick; fixed early camera clips half the graph; dense links are harder to trace |
 | Paused picking replay | Original exported cooled geometry, 102/102 exact picks, maximum 17.5 ms; actual pointer checks 20.1–27.1 ms | The 68.2-ms event did not recur. No cause or fix established; paused replay is not whole-runtime acceptance |
 | Small production/viewer comparison | Karate moving/cooled frames, running picks/dragging, style/data replacement and settled resize pass on M3; layouts look similar after Fit | Same-geometry interior color checks fail; first-slice usability is not strict production compatibility |
+| Representative pilot viewer | Explicit 34-member scope; native selection/dragging, member/neighbor inspection, size updates and reset work; both frame windows and sampled CPU audits pass | Wider window records a **100.4-ms running pick**, failing the unchanged 50-ms target; responsiveness investigation reopened |
 | Interaction/lifecycle | Point drag/pin release, camera, replacement, pause/resume, resize and destruction demonstrated in the lab runtime | Full setters, repeated production workflows, host ownership/deck and recovery still need acceptance |
 
 Detailed evidence stays with the experiment:
@@ -63,19 +64,21 @@ advanced styles and automatic framing remain explicitly unsupported.
 
 **Next, in order:**
 
-1. Make an explicit first-slice decision: supported options/workloads, measured
-   behavior, unresolved limitations and what would block trying it in a real viewer.
-   The [small production/viewer comparison](#/viewer-comparison) is complete:
-   all four frame windows pass and running picks, dragging, data/style replacement
-   and settled resize work. Strict color compatibility fails. Keep that distinction
-   explicit; do not reopen broad raster research just to turn the pilot green.
-2. Only then expand force/style/host coverage. Keep deep raster investigations,
+1. Attribute the recurring running-pick stall in the [representative viewer](#/pilot-viewer?section=doc-findings).
+   The [supported scope and blockers](#/pilot-viewer?section=doc-scope) are now explicit,
+   and the Karate Club explorer has been tried with real pointer input on M3.
+   One narrow window passes, but the wider window fails at 100.4 ms: 3.3 ms reading
+   the pick, 4.3 ms drawing the highlight and 92.8 ms awaiting an animation opportunity.
+   This locates the measured delay, not its cause. Investigate scheduling and the
+   running frame loop before changing GPU arithmetic or broadening the pilot.
+2. Once the bounded responsiveness question is resolved, choose the next required
+   force/style/host capability. Keep deep raster investigations,
    further arithmetic tuning and larger graphs parked unless the pilot needs them.
    Resolve the retained color failures before claiming production color compatibility.
 
-The bounded picking replay is complete. Do not repeat until a pass is selected:
-retain the 68.2-ms failure and reopen latency investigation when a practical stall
-recurs with per-request phases or the intended viewer workload misses its gate.
+The bounded paused picking replay is complete. The practical viewer now meets its
+reopen condition: a stall recurs with per-request phases. Retain both the original
+68.2-ms event and the new failure; do not repeat until a pass is selected.
 The 50-ms picking target, 95%-within-33-ms frame target and rendering rules stay unchanged.
 
 ## 2. Current numerical and layout boundary
@@ -198,10 +201,12 @@ Review this register before claiming full readiness; some items will need deeper
 investigation. Reopen earlier whenever an integrated workload exposes a practical
 problem. Passing the first slice must not silently close these items.
 
+Picking latency is **no longer parked**: the representative viewer reproduced a
+100.4-ms request with phase evidence. It is the next bounded investigation above.
+
 | Investigation | Why stop now / retained result | Reopen condition before full readiness |
 |---|---|---|
 | [8,192-point integrated star](#/integrated-webgpu?section=doc-findings-star-bottleneck-and-one-bounded-candidate) | Ordered prefetch improves measured cost but all star windows remain rejected; keep `hoist` | Large hubs are required by the pilot, or before approving the full workload envelope |
-| [Intermittent integrated picking latency](#/integrated-webgpu?section=doc-findings-bounded-cooled-picking-replay) | Original 68.2-ms failure retained; fixed 102-pick replay does not reproduce it; no fix claimed | A practical stall recurs with phase evidence, or the production-comparison workload misses 50 ms |
 | [Straight-link hard edges, caps and fractional raster](#/straight-links) | Exact coverage ties and original-color failures remain; no further pixel-perfect work scheduled | Boundary displacement exceeds the pilot rule, thin links vanish, picking fails in practice, or stricter compatibility is required |
 | [Curved links and dash/dot boundaries](#/curved-links) | Four-pixel diagnostic is bounded; fine/coarse switching did not explain curve failures; earlier intermittent dash picks remain unexplained | Curves/patterns enter scope; verify motion, actual source visibility and color before deciding whether deeper primitive/derivative replay is needed |
 | [Point fractional/polygon boundaries](#/point-styling) | Rejected native masks and color-preservation alternatives retained | Circle pilot shows a practical defect, or additional shapes require acceptance |

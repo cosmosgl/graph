@@ -189,6 +189,18 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
         description: 'Independent repulsion trajectories and their bounded local-error/drift observations.',
       }],
     }),
+    'pilot-viewer': entry('pilot-viewer', {
+      conclusion: 'The M3 explorer works, but a wider run records a 100.4-ms running pick and fails responsiveness. ' +
+        'Both frame windows and sampled pixels pass; production color compatibility remains rejected.',
+      reviewed: '2026-11-18',
+      variant: 'Existing corrected luma WebGPU runtime with a bounded Karate Club explorer',
+      comparison: 'Explore the real graph → verify identity and updates → measure complete frames and feedback',
+      milestone: 'integration',
+      method: 'scope',
+      evidence: 'findings',
+      next: 'Attribute the running-pick delay: 92.8 ms fell after highlight completion, awaiting an animation opportunity. Keep the 50-ms gate unchanged.',
+      investigations: [{ page: 'findings', state: 'Current evidence', description: 'Bounded pilot behavior, independent of strict production compatibility.' }],
+    }),
     'viewer-comparison': entry('viewer-comparison', {
       conclusion: 'Small M3 viewers pass frame, update and running-picking checks; layouts look similar after Fit. ' +
         'Same-geometry interior colors still differ, so strict compatibility is rejected.',
@@ -198,7 +210,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       milestone: 'integration',
       method: 'method',
       evidence: 'findings',
-      next: 'Decide the supported first-slice pilot envelope with color failures, historical stalls and unsupported options explicit.',
+      next: 'Follow the bounded pilot viewer and its reopened responsiveness investigation; retain these production color failures.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Separate measured workflow behavior from full migration approval.' }],
     }),
     'integrated-webgpu': entry('integrated-webgpu', {
@@ -210,7 +222,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       milestone: 'integration',
       method: 'method',
       evidence: 'findings',
-      next: 'Compare a small production WebGL and integrated WebGPU workflow: cooled appearance, data/style updates and running interactions.',
+      next: 'Follow the pilot viewer: the practical trial has reproduced a running-pick stall with request phases recorded.',
       reproduce: 'Use Assess settled Karate Club and Export JSON. Replay cooled picking accepts that capture ' +
         'or the current session’s assessment; keep the native tab visible.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Separate strict compatibility, practical usability and full readiness.' }],
