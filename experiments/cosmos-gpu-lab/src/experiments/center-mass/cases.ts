@@ -1,60 +1,83 @@
-import type { ExperimentCase } from '../../runtime/experiment'
+import type { ExperimentCase, SinglePageCase } from '../../runtime/experiment'
 
-export const centerMassCases: ExperimentCase[] = [
-  {
-    id: 'center-comparison',
-    title: 'Compare center-of-mass calculations',
-    kind: 'compare',
-    question: 'How closely do WebGL and WebGPU calculate the same center?',
-    description: 'WebGL and WebGPU calculate the average position of the same 8,192 moving points. A CPU average is the reference.',
-    tryIt: 'Press Step to move the points once. Compare how far each result is from the CPU center.',
-    reference: 'The CPU averages the uploaded point coordinates using JavaScript double-precision arithmetic.',
-    acceptance: 'The displayed errors are distances from the CPU center. This demo has no agreed pass threshold.',
-    recorded: {
-      conclusion: 'Both GPU centers were close to the CPU average in the initial exploratory comparison.',
-      date: '2026-11-05',
-      environment: 'macOS Chromium; exact GPU and browser version were not recorded.',
-      scope: '8,192 moving points, with GPU results read back each tick.',
-      limits: 'One exploratory run; no agreed accuracy budget or controlled speed comparison.',
-      evidence: [{ label: 'Initial center comparison', page: 'results' }, { label: 'How the comparison works', page: 'overview' }],
-    },
+export const centerMassCase: ExperimentCase = {
+  id: 'center-comparison',
+  title: 'Center of mass',
+  kind: 'compare',
+  question: 'How closely do WebGL and WebGPU calculate the same center?',
+  description: 'Both use the same 8,192 moving points. The CPU average is the reference.',
+  tryIt: 'Press Step to move the points once. Compare how far each result is from the CPU center.',
+  reference: 'WebGL adds positions into a texture with blending. WebGPU combines partial sums in two passes. The CPU averages the same coordinates.',
+  acceptance: 'The errors are distances in world units from the CPU center. The exploratory comparison has no accuracy pass threshold.',
+  recorded: {
+    conclusion: 'Both centers were close to the CPU reference. The faster center force failed the strict position check on one moving graph.',
+    date: '5 and 18 November 2026',
+    environment: 'Chromium on macOS for the initial comparison and Apple M3 with Chrome 157 for the follow-up measurements.',
+    scope: 'Moving centers, frozen force timings, and two independently evolving community graphs.',
+    limits: 'The timing and trajectory studies covered one device. Full-frame cost and broader layouts remain open.',
+    evidence: [
+      { label: 'Initial correctness findings', page: 'results' },
+      { label: 'Center-force measurement evidence', page: 'cost-evidence' },
+      { label: 'Calculate the center once', page: 'once-findings' },
+      { label: 'Center-force trajectory evidence', page: 'trajectory-evidence' },
+    ],
   },
-  {
-    id: 'center-measurements',
-    title: 'Measure center-force cost',
-    kind: 'measure',
-    question: 'How much GPU work do the center and force calculations take?',
-    description: 'Measure how much GPU time it takes to find the center and pull points toward it.',
-    tryIt: 'Leave the count at 8,192 and press Run scale study. Keep this tab visible and compare GPU time in the table.',
-    reference: 'The scale study compares the GPU center with a CPU sum and checks the linear force against the current force.',
-    acceptance: 'Counts and named numerical checks are reported separately from GPU timings; there is no performance pass threshold.',
-    recorded: {
-      conclusion: 'At 8,192 points on one GPU, the existing force took 4.802 ms and the linear candidate took 0.012 ms in isolated measurements.',
-      date: '2026-11-18',
-      environment: 'Apple M3, visible Chrome 157, luma.gl 10.0.0-alpha.15.',
-      scope: 'One offset distribution through 4,194,240 points, with bounded graph and paired timing studies.',
-      limits: 'One device and input distribution. Isolated GPU work is not complete-frame responsiveness or proof of trajectory equivalence.',
-      evidence: [{ label: 'Center-force measurement evidence', page: 'cost-evidence' },
-        { label: 'Trajectory comparison', page: 'trajectory-evidence' }],
+}
+
+/* eslint-disable @typescript-eslint/naming-convention -- Aliases are public URL slugs. */
+export const centerMassPage: SinglePageCase = {
+  observations: [
+    {
+      id: 'center-accuracy',
+      title: 'Center accuracy',
+      date: '5 November 2026',
+      evidence: 'The recorded center errors were 2.124e−9 world units for WebGL and 3.252e−10 for WebGPU.',
+      limits: 'One exploratory Chromium run on macOS with 8,192 moving points. There was no accuracy threshold or controlled speed comparison.',
     },
-  },
-  {
-    id: 'center-force-scale',
-    title: 'Center-force scaling and trajectories',
-    kind: 'recorded',
-    question: 'Can a faster center force preserve graph trajectories as the input grows?',
-    description: 'This recorded study examines a recursive center calculation and an optional linear force on moving graphs.',
-    reference: 'The current center-force shader and independently evolving graph trajectories are the comparison controls.',
-    acceptance: 'Frozen force components use the existing absolute and relative tolerance; ' +
-      'trajectories use the existing strict position checks.',
-    recorded: {
-      conclusion: 'The linear candidate passed the frozen force checks, but its 8,192-point independently evolving graph ' +
-        'failed the strict trajectory comparison.',
-      date: '2026-11-18',
-      environment: 'Apple M3, visible Chrome 157, luma.gl 10.0.0-alpha.15.',
-      scope: 'Two independently evolving community graphs of 512 and 8,192 points, checked over 200 ticks, plus frozen-input force checks.',
-      limits: 'One native device and limited graph inputs; the candidate is not yet a production replacement.',
-      evidence: [{ label: 'Center-force trajectory evidence', page: 'trajectory-evidence' }],
+    {
+      id: 'center-force-cost',
+      title: 'Center-force cost',
+      date: '18 November 2026',
+      evidence: 'At 8,192 points, the existing force took 4.802 ms and the linear candidate took 0.012 ms. ' +
+        'Frozen force checks passed through 4,194,240 points.',
+      limits: 'Medians from seven isolated GPU samples on one Apple M3. Complete interactive frames were outside the measurement.',
     },
+    {
+      id: 'center-trajectories',
+      title: 'Force and trajectories',
+      date: '18 November 2026',
+      evidence: 'The 512-point graph passed every checkpoint. The 8,192-point graph failed the strict position comparison from tick 10. ' +
+        'By tick 200, 1,103 coordinate components exceeded tolerance.',
+      limits: 'Two independently evolving community graphs over 200 ticks on one Apple M3.',
+    },
+    {
+      id: 'center-once',
+      title: 'Calculate the center once',
+      date: '18 November 2026',
+      evidence: 'At one million points, calculating the center per point took 2.431 ms and calculating it once took 2.447 ms.',
+      limits: 'The paired GPU timings varied from −0.201 to +0.105 ms on one device, leaving the speed difference inconclusive.',
+    },
+  ],
+  related: ['cluster-attraction', 'point-attractors'],
+  legacyCases: {
+    'center-measurements': 'run-diagnostics',
+    'center-force-scale': 'center-trajectories',
   },
-]
+  pageSections: {
+    'cost-evidence': 'center-force-cost',
+    'trajectory-evidence': 'center-trajectories',
+    overview: 'case-comparison',
+    algorithm: 'case-comparison',
+    implementation: 'case-comparison',
+    correctness: 'center-accuracy',
+    results: 'center-accuracy',
+    performance: 'center-force-cost',
+    'scale-method': 'run-diagnostics',
+    'scale-findings': 'center-force-cost',
+    'once-findings': 'center-once',
+    limitations: 'recorded-findings',
+    references: 'case-comparison',
+    'validation-contract': 'case-comparison',
+  },
+}
+/* eslint-enable @typescript-eslint/naming-convention */

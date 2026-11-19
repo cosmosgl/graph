@@ -1,11 +1,12 @@
 import { expect, it } from 'vitest'
-import { createCenterMeasurementsExperiment } from './view'
+import { createCenterMassExperiment } from './view'
 
-it.skipIf(!import.meta.env.LAB_NATIVE_GPU)('runs and displays both measurements from the center measurement case', async () => {
+it.skipIf(!import.meta.env.LAB_NATIVE_GPU)('runs both local measurements on the center-of-mass page', async () => {
   const host = document.createElement('div')
   document.body.append(host)
-  const experiment = createCenterMeasurementsExperiment(host)
+  const experiment = await createCenterMassExperiment(host)
   try {
+    host.querySelector<HTMLDetailsElement>('#run-diagnostics details')!.open = true
     const input = host.querySelector<HTMLInputElement>('[data-scale-counts]')!
     input.value = '257'
     host.querySelector<HTMLButtonElement>('[data-scale-run]')!.click()

@@ -13,6 +13,19 @@ it('keeps the styled experiment cards within the page at the current browser wid
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth)
   expect(host.querySelectorAll('main details, main [hidden]')).toHaveLength(0)
 })
+
+it('keeps the open center measurement preview inside a narrow page', async () => {
+  window.history.replaceState(null, '', '#/center-mass?section=center-force-cost')
+  host = document.createElement('div'); host.style.width = '320px'; document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(document.activeElement?.id).toBe('center-force-cost'))
+  window.location.hash = '#/center-mass?section=run-diagnostics'
+  await vi.waitFor(() => expect(host!.querySelector('#run-diagnostics details[open]')).not.toBeNull())
+  const preview = host.querySelector('[data-scale-preview]')!.getBoundingClientRect()
+  const diagnostics = host.querySelector('#run-diagnostics')!.getBoundingClientRect()
+  expect(preview.width).toBeGreaterThan(0)
+  expect(preview.right).toBeLessThanOrEqual(diagnostics.right)
+})
+
 it('keeps the graph before its finding and returns from evidence without rebuilding it', async () => {
   const create = vi.spyOn(findExperiment('curved-links')!, 'create').mockImplementation(async stage => {
     stage.innerHTML = `<section data-run-part="configuration"><label>Fixture <input value="custom"></label></section>

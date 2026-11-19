@@ -77,8 +77,10 @@ export function experimentHref (experimentId: string, pageId?: string, section?:
   return pageId ? `${root}?section=${encodeURIComponent(articleSectionId(pageId, section))}` : root
 }
 
-export function caseHref (experimentId: string, caseId: string): string {
-  return `${experimentHref(experimentId)}?${new URLSearchParams({ case: caseId })}`
+export function caseHref (experimentId: string, caseId: string, section?: string): string {
+  const params = new URLSearchParams({ case: caseId })
+  if (section) params.set('section', section)
+  return `${experimentHref(experimentId)}?${params}`
 }
 
 export function caseEvidenceHref (experimentId: string, caseId: string, pageId: string, section?: string): string {

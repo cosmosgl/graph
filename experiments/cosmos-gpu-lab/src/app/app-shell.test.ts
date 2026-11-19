@@ -113,14 +113,14 @@ it('keeps the current step consistent on the roadmap and resolves feature-row li
   creates.forEach(create => expect(create).not.toHaveBeenCalled())
 })
 
-it('opens a legacy center evidence link without starting the live experiment', async () => {
+it('opens a legacy center method link on the same page without starting a device', async () => {
   const create = vi.spyOn(findExperiment('center-mass')!, 'create').mockRejectedValue(new Error('Test adapter unavailable'))
   window.history.replaceState(null, '', '#/center-mass/docs/algorithm?section=webgpu-reduction')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(document.activeElement?.id).toBe('doc-algorithm-webgpu-reduction'))
-  expect(host.querySelector('.case-evidence-page')).not.toBeNull()
-  expect(host.querySelector('#doc-algorithm-webgpu-reduction')).not.toBeNull()
-  expect(host.querySelector('#doc-agent-recipe')).toBeNull()
+  await vi.waitFor(() => expect(document.activeElement?.id).toBe('case-comparison'))
+  expect(host.querySelector('h1')!.textContent).toBe('Center of mass')
+  expect(host.querySelector('#recorded-findings, .case-intro')).not.toBeNull()
+  expect(host.querySelector('.case-evidence-page, #doc-agent-recipe')).toBeNull()
   expect(create).not.toHaveBeenCalled()
 })
 
@@ -188,7 +188,7 @@ it('keeps the selected case finding and retry available when live setup fails', 
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.case-load-status')?.textContent).toContain('Test adapter unavailable'))
   expect(host.querySelector('.case-recorded')!.textContent).toContain(item.recorded!.conclusion)
-  expect(host.querySelector('.case-recorded')!.textContent).toContain(item.recorded!.limits)
+  expect(host.querySelector('.case-recorded')!.textContent).toContain(experiment.singlePage!.observations[1].limits)
   expect(host.textContent).not.toContain('Instructions for agents')
   const retry = host.querySelector<HTMLButtonElement>('.case-stage button')!
   expect(retry.hidden).toBe(false); retry.click()
@@ -197,17 +197,22 @@ it('keeps the selected case finding and retry available when live setup fails', 
   expect(create.mock.calls[1][1]).toBe('center-comparison')
 })
 
-it('keeps a recorded-only center-force finding available without starting a device', async () => {
-  const create = vi.spyOn(findExperiment('center-mass')!, 'create')
+it('keeps the trajectory finding visible with an opt-in live comparison from the legacy URL', async () => {
+  const { create } = mockRun('center-mass')
   window.history.replaceState(null, '', '#/center-mass?case=center-force-scale')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
-  expect(host.querySelector('.case-recorded')!.textContent).toContain('failed the strict trajectory comparison')
-  expect(host.querySelector('.case-intro, canvas')).toBeNull()
+  expect(document.activeElement?.id).toBe('center-trajectories')
+  expect(host.querySelector('#center-trajectories')!.textContent).toContain('failed the strict position comparison from tick 10')
+  expect(host.querySelector('canvas')).toBeNull()
   expect(create).not.toHaveBeenCalled()
+  const start = host.querySelector<HTMLButtonElement>('.case-live-slot > button')!
+  expect(start.textContent).toBe('Start the live comparison'); start.click()
+  await vi.waitFor(() => expect(host!.querySelector('canvas')).not.toBeNull())
+  expect(create.mock.calls[0][1]).toBe('center-comparison')
 })
 
-it('opens the center measurement controls without initializing a device', async () => {
+it('opens the old center measurement URL on the page with both local controls', async () => {
   const create = vi.spyOn(findExperiment('center-mass')!, 'create')
   window.history.replaceState(null, '', '#/center-mass?case=center-measurements')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
@@ -215,8 +220,14 @@ it('opens the center measurement controls without initializing a device', async 
   expect(host.querySelector<HTMLInputElement>('[data-once-count]')!.value).toBe('8192')
   expect(host.querySelector('[data-scale-status]')!.textContent).toContain('Not run')
   expect(host.querySelector('[data-once-status]')!.textContent).toContain('Not run')
+  expect(host.querySelector('h1')!.textContent).toBe('Center of mass')
+  expect(document.activeElement?.id).toBe('run-diagnostics')
+  expect(host.querySelector('#run-diagnostics details summary')!.textContent).toBe('Run local measurements')
+  expect(host.querySelector<HTMLDetailsElement>('#run-diagnostics details')!.open).toBe(true)
+  expect(host.querySelector<HTMLButtonElement>('[data-action="initialize"]')!.hidden).toBe(false)
   expect(create).toHaveBeenCalledTimes(1)
-  expect(create.mock.calls[0][1]).toBe('center-measurements')
+  expect(create.mock.calls[0][1]).toBe('center-comparison')
+  expect(create.mock.calls[0][2]).toEqual({ deferComparison: true })
 })
 
 for (const id of ['pilot-viewer', 'cluster-attraction', 'point-attractors']) {
@@ -314,7 +325,6 @@ it('keeps one recorded result when returning to the retained live viewer', async
 })
 
 for (const [id, caseId] of [
-  ['center-mass', 'center-comparison'],
   ['precision-diagnostics', 'gravity-accuracy'],
   ['point-styling', 'picking'],
 ]) {
@@ -355,30 +365,28 @@ for (const [id, caseId] of [
   })
 }
 
-it('preserves a live case and its state through evidence and legacy article links', async () => {
+it('preserves the live center comparison through every inline finding and old evidence link', async () => {
   const { create, pause, destroy } = mockRun('center-mass')
   window.history.replaceState(null, '', '#/center-mass?case=center-comparison')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
   const canvas = host.querySelector('canvas')!; const input = host.querySelector('.experiment-run input')!
   host.querySelector<HTMLButtonElement>('.run-primary-actions button')!.click()
-  host.querySelector<HTMLAnchorElement>('.case-evidence-links a[href*="evidence=results"]')!.click()
-  await vi.waitFor(() => expect(host!.querySelector('#doc-results')).not.toBeNull())
-  expect(host.querySelector('.case-evidence-page')!.textContent).toContain('Both approaches produced centers close to the CPU reference')
-  expect(host.querySelector('.case-evidence-page')!.textContent).not.toContain('Instructions for agents')
-  expect(host.querySelector('.case-evidence-page .case-navigation a[href="#/center-mass?case=center-measurements"]')).not.toBeNull()
-  expect(pause).toHaveBeenCalledTimes(1); expect(destroy).not.toHaveBeenCalled()
-  host.querySelector<HTMLAnchorElement>('[data-back]')!.click()
-  await vi.waitFor(() => expect(host!.querySelector('canvas')).toBe(canvas))
-  expect(host.querySelector('.experiment-run input')).toBe(input)
-  expect(host.querySelector('[data-test-tick]')!.textContent).toBe('1')
+  for (const [href, section] of [
+    ['#/center-mass?case=center-comparison&section=center-force-cost', 'center-force-cost'],
+    ['#/center-mass?case=center-measurements&evidence=trajectory-evidence', 'center-trajectories'],
+    ['#/center-mass?case=center-comparison&evidence=results', 'center-accuracy'],
+    ['#/center-mass?section=doc-once-findings-computing-the-center-once', 'center-once'],
+    ['#/center-mass/docs/algorithm?section=webgpu-reduction', 'case-comparison'],
+  ]) {
+    await route(href, () => expect(document.activeElement?.id).toBe(section))
+    expect(host.querySelector('canvas')).toBe(canvas)
+    expect(host.querySelector('.experiment-run input')).toBe(input)
+    expect(host.querySelector('[data-test-tick]')!.textContent).toBe('1')
+  }
   expect(host.querySelectorAll('#recorded-findings')).toHaveLength(1)
-  await route('#/center-mass/docs/algorithm?section=webgpu-reduction', () =>
-    expect(document.activeElement?.id).toBe('doc-algorithm-webgpu-reduction'))
-  expect(host.querySelector('.case-evidence-page')).not.toBeNull()
-  host.querySelector<HTMLAnchorElement>('[data-back]')!.click()
-  await vi.waitFor(() => expect(host!.querySelector('canvas')).toBe(canvas))
-  expect(host.querySelector('[data-test-tick]')!.textContent).toBe('1')
+  expect(host.querySelector('.case-evidence-page, .case-evidence-links')).toBeNull()
+  expect(pause).not.toHaveBeenCalled()
   expect(create).toHaveBeenCalledTimes(1); expect(destroy).not.toHaveBeenCalled()
 })
 
@@ -419,7 +427,7 @@ it('keeps the current run intact while searching and restores it after visiting 
   await vi.waitFor(() => expect(host!.querySelector(selector)).not.toBeNull())
   host.querySelector<HTMLAnchorElement>(selector)!.click()
   await vi.waitFor(() => expect(next.create).toHaveBeenCalledTimes(2))
-  search.value = 'compare center of mass calculations'; search.dispatchEvent(new Event('input'))
+  search.value = 'center of mass'; search.dispatchEvent(new Event('input'))
   const originalSelector = '.global-search-results a[href="#/center-mass?case=center-comparison"]'
   await vi.waitFor(() => expect(host!.querySelector(originalSelector)).not.toBeNull())
   host.querySelector<HTMLAnchorElement>(originalSelector)!.click()
@@ -460,38 +468,35 @@ it('restores completed evidence after searching away from an embedded viewer tha
   }
 }, 30000)
 
-it('destroys the previous run when switching cases and does not start the recorded case', async () => {
-  const { create, destroy } = mockRun('center-mass')
-  window.history.replaceState(null, '', '#/center-mass?case=center-comparison')
+it('destroys the previous run when switching to a separate recorded case', async () => {
+  const { create, destroy } = mockRun('viewer-comparison')
+  window.history.replaceState(null, '', '#/viewer-comparison?case=compare-viewers')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
-  const previousCanvas = host.querySelector('canvas')!
-  host.querySelector<HTMLAnchorElement>('.case-navigation a[href="#/center-mass?case=center-measurements"]')!.click()
+  host.querySelector<HTMLAnchorElement>('.case-navigation a[href="#/viewer-comparison?case=link-color-evidence"]')!.click()
   await vi.waitFor(() => {
-    expect(host!.querySelector('h1')?.textContent).toBe('Measure center-force cost')
-    expect(create).toHaveBeenCalledTimes(2)
-  })
-  expect(create.mock.calls[1][1]).toBe('center-measurements')
-  expect(destroy).toHaveBeenCalledTimes(1)
-  expect(host.querySelector('canvas')).not.toBe(previousCanvas)
-  await route('#/center-mass?case=center-force-scale', () => {
     expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false')
-    expect(host!.querySelector('h1')?.textContent).toBe('Center-force scaling and trajectories')
+    expect(host!.querySelector('h1')?.textContent).toBe('Investigate link-color differences')
   })
-  expect(destroy).toHaveBeenCalledTimes(2)
-  expect(create).toHaveBeenCalledTimes(2)
+  expect(destroy).toHaveBeenCalledTimes(1)
+  expect(create).toHaveBeenCalledTimes(1)
   expect(host.querySelector('canvas')).toBeNull()
-  expect(host.querySelector('.case-navigation a[href="#/center-mass?case=center-comparison"]')).not.toBeNull()
+  expect(host.querySelector('.case-navigation a[href="#/viewer-comparison?case=compare-viewers"]')).not.toBeNull()
 })
 
-it('opens a legacy center diagnostics link in the separate measurement case', async () => {
+it('keeps the Forces and motion peers discoverable from the center case', async () => {
   const { create } = mockRun('center-mass')
-  window.history.replaceState(null, '', '#/center-mass?section=run-diagnostics')
+  window.history.replaceState(null, '', '#/center-mass')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
-  expect(host.querySelector('h1')!.textContent).toBe('Measure center-force cost')
-  expect(document.activeElement?.id).toBe('case-live')
-  expect(create.mock.calls[0][1]).toBe('center-measurements')
+  const peers = host.querySelector('.case-group-navigation')!
+  expect(peers.getAttribute('aria-label')).toBe('More in Forces and motion')
+  expect(Array.from(peers.querySelectorAll('a'), link => link.getAttribute('href'))).toEqual(['#/cluster-attraction', '#/point-attractors'])
+  const group = host.querySelector<HTMLAnchorElement>('.case-topic-link')!
+  expect(group.getAttribute('href')).toBe('#/?section=catalog-forces-motion'); group.click()
+  await vi.waitFor(() => expect(document.activeElement?.id).toBe('catalog-forces-motion'))
+  expect(host.querySelectorAll('.experiment-card[data-experiment-id="center-mass"]')).toHaveLength(1)
+  expect(create).toHaveBeenCalledTimes(1)
 })
 
 for (const { id } of experiments.filter(experiment => !experiment.cases)) {

@@ -23,6 +23,10 @@ topic peers discoverable. Links open human-readable method and evidence separate
 cases are marked and do not initialize a live device. Optional advanced settings and checks use
 keyboard-accessible disclosures; the practical context and results remain visible.
 
+Center of mass presents its starting comparison, recorded evidence and limits on one page. Old case
+and evidence URLs and search results jump to the relevant section. Local measurements are available
+under **Run local measurements**. The topic link returns to **Forces and motion** in the catalog.
+
 The readiness strip summarizes recorded evidence for the named case, not the current browser run or a
 formal production approval. A ready-to-integrate assessment would mean the candidate is ready to begin
 integration, not ready to ship. Unassessed work stays neutral; a slowdown is a warning, and a failed
@@ -31,7 +35,7 @@ alongside later passing results. Case assessments live in `src/app/readiness/` a
 when their linked evidence changes.
 
 Agent recipes and agent-finding replay steps remain in their source folders and are not embedded in the app.
-Old human-facing article links still open their evidence. Opening evidence pauses the current run;
+Old human-facing article links still reach their evidence. Opening a separate evidence page pauses the current run;
 returning to the same case retains its controls and state when the browser supports it. Switching
 cases, experiments or Home normally releases the prior run. Opening or closing search does not interrupt
 the run. Following a search result to another experiment retains the previous run in memory so returning
