@@ -223,16 +223,16 @@ This is the current task order. A closed investigation can retain failing cases;
 
 ### Recommended next work
 
-1. **Reduce drawing and highlight cost at scale.** Use the frozen Fit and
-   zoom controls to test drawing fewer overlapping opaque points while
-   preserving visible color and picking order. Test the cost of highlighting
-   a picked point without drawing the full scene again. Rerun the moving
-   dense and high-degree workloads with the same timing references.
-2. **Bring the composed forces into a representative interactive M3 workload.**
+1. [x] **Reduce drawing and highlight cost at scale.** Reduced drawing passed
+   exact frozen pixel and pick checks at Fit and 3× zoom. Both moving M3
+   workloads reached 33.3 ms median frame intervals, and all 16 clicks met
+   50 ms with cached highlights. The 33 ms frame gate remains open under
+   the production envelope. [Drawing results](#/million-graph?section=doc-draw-cost)
+2. [ ] **Bring the composed forces into a representative interactive M3 workload.**
    Extend the passed one-pixel screen to deeper zoom and more graph shapes.
    Retain the strict failures and use same-input replay to diagnose any
    visible layout change.
-3. **Resolve the viewer API and color gaps.** Profile link paint at the
+3. [ ] **Resolve the viewer API and color gaps.** Profile link paint at the
    remaining interior witnesses. Decide how production serves readback to
    selection and tracking callers. Run the host integration against a single
    luma family before approving a production switch.
@@ -334,7 +334,7 @@ Picking latency remains a production blocker. The pilot records the
 | [Point fractional/polygon boundaries](#/point-styling) | Rejected native masks and color-preservation alternatives retained | Circle pilot shows a practical defect, or additional shapes require acceptance |
 | [Exact faint-alpha / stored-alpha picking](#/point-styling) | Prototype closes selected visibility cases, but dense per-source passes remain costly; historical source-byte failures retained | Pilot picking is incorrect/slow, or images/translucent dense overlap enter scope; practical visibility is never waived |
 | [Ribbon compute generation](#/ribbon-generation) | Stopped without adoption; cost and color problems retained; keep the vertex path | Integrated profiling identifies curve generation as a meaningful bottleneck |
-| [v10 WebGL 100k star context loss](#/weighted-links/docs/context-loss) | Parked native baseline failure; cannot support timing comparisons | Such a baseline is needed for the declared workload or similar instability appears in the supported path |
+| [Direct WebGL 100k-star reset](#/weighted-links/docs/context-loss) | The lab now passes its 100k checks with bounded, ordered spring passes. The earlier direct-shader failures remain recorded | A direct-shader baseline is required or a reset recurs in the bounded path |
 | [Larger collision integration](#/collision?section=doc-hashed-findings) | The isolated hash and slot route passes the CPU model through 8,192 points. WebGL GPU parity and timing are still open | Compare the original slot shader, integrate the candidate and measure collision cost on dense inputs |
 
 Arrows, advanced states, full transition scheduling and production host integration

@@ -45,7 +45,7 @@ export const journeySteps = [
     id: 'production-envelope',
     title: 'Production envelope',
     status: 'Scale interaction measured',
-    position: 'Both million-point M3 workloads support pan, zoom and picking. They miss the frame and pick timing references.',
+    position: 'Reduced drawing met the pick target in both million-point M3 workloads. The frame target remains open.',
     exit: 'Feature, quality, latency, memory and portability acceptance before switching production.',
     href: '#/roadmap?section=milestone-production',
   },
