@@ -295,9 +295,9 @@ export const milestones = [
   {
     id: 'execution',
     title: 'GPU execution and resources',
-    position: 'Resident resizing, host ownership and explicit restart tested on M3',
+    position: 'Resident resizing, explicit restart and a shared-device Deck prerelease tested on M3',
     acceptance: 'Host ownership, recovery and the production dependency',
-    gates: ['Choose a shared luma package family for the complete engine and deck.gl.',
+    gates: ['Validate the production engine and deck.gl layer on a supported shared luma family.',
       'Verify full viewer recovery after unplanned device loss, including pending reads and interactions.'],
     evidence: [['resident-layout', 'Resident execution'], ['point-capacity', 'Point capacity'], ['integrated-webgpu', 'Host ownership']],
   },
@@ -327,17 +327,17 @@ export const milestones = [
   {
     id: 'integration',
     title: 'Library and embedding',
-    position: 'Wider DPR 1 and standalone DPR 2 replays pass on M3. Historical inline picks still exceed 50 ms',
+    position: 'Corrected interior paint, async reads and a pinned Deck host pass bounded M3 checks',
     acceptance: 'Complete Graph and host contracts',
     gates: ['Attribute the representative viewer’s running-pick delay, retaining the unchanged 50-ms target and recorded phases.',
-      'Keep the documented first-pilot scope bounded; production color compatibility and large-star performance remain rejected.',
-      'Connect production setters, tracking and selection to asynchronous GPU reads. Verify deck integration on a shared dependency family.'],
+      'Verify the corrected paint and frame pacing under broader production styles and larger workloads.',
+      'Connect production setters and asynchronous readback to the full CosmosGraphLayer with a supported shared dependency.'],
     evidence: [['pilot-viewer', 'Representative pilot'], ['viewer-comparison', 'Production comparison'], ['point-capacity', 'Resident updates']],
   },
   {
     id: 'production',
     title: 'Production acceptance',
-    position: 'Reduced drawing meets the M3 pick target in one replay. The million-point frame target and strict color compatibility remain open',
+    position: 'Reduced drawing meets the M3 pick target. Million-point frame pacing and full styling coverage remain open',
     acceptance: 'Agreed quality/performance budgets and native support matrix',
     gates: ['Agree representative workloads, quality, frame/update latency and peak-memory budgets.',
       'Verify intended native GPUs/browsers and unsupported-device behavior before switching production.'],
@@ -357,6 +357,6 @@ export const mainOpenIssues = [
 // Current editorial priority. The gate and findings come from the same records
 // used by Roadmap and the experiment page, never from this browser's live run.
 export const migrationFocus = {
-  step: 4,
-  experiment: 'viewer-comparison',
+  step: 5,
+  experiment: 'million-graph',
 } as const

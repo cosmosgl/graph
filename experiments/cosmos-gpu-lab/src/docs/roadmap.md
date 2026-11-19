@@ -250,10 +250,23 @@ This is the current task order. A closed investigation can retain failing cases;
    traced the original failures to a pointer force difference amplified by
    repulsion. The frame targets and full-force million-point run remain open.
    [Interactive force results](#/integrated-webgpu?section=doc-composed-interaction)
-3. [ ] **Resolve the viewer API and color gaps.** Profile link paint at the
-   remaining interior witnesses. Decide how production serves readback to
-   selection and tracking callers. Run the host integration against a single
-   luma family before approving a production switch.
+3. [x] **Resolve the viewer API and color gaps.** Matching the short-link
+   opacity rule cleared all 557 interior failures in the frozen replay.
+   The moving-view tests validate async snapshots and the last-completed
+   tracking cache through 8,192 points. Deck draws and picks a resident
+   marker on one shared luma prerelease.
+   [Paint](#/viewer-comparison?section=doc-link-color-evidence) ·
+   [Readback](#/integrated-webgpu?section=doc-readback) ·
+   [Deck host](#/integrated-webgpu?section=doc-host-ownership)
+
+The default production, Lab UI and native GPU runs passed 259, 89 and 754
+tests. The native suite skipped 91 opt-in cases. Focused replays separately
+verified the composed viewer, corrected paint, readback and Deck host.
+
+Continue with the [production envelope](#/roadmap?section=milestone-production).
+Profile the slow frames in the current million-point viewer. Extend the
+workload to the full force and style set and measure frame, pick and memory
+budgets together.
 
 ```example
 journeyPlan
