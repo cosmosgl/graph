@@ -5,6 +5,7 @@ import { buildTopology, createFixture, PARAMETERS } from './data'
 import { createSweepGraph, createSweepPlan, measureStages, runSweep, validateTrajectory, type SweepRow } from './sweep'
 import { chooseOperations, gpuMedian, normalizeMeasurement, readLumaTimer, STAGES } from './timing'
 import { compare, referenceTick } from './reference'
+import { SPRING_NEIGHBORS_PER_PASS } from './spring-continuation'
 import { createWebGLBackend, springShader } from './webgl'
 import { createWebGPUBackend } from './webgpu'
 import type { LinkBackend, Measurement } from './backend'
@@ -107,6 +108,34 @@ it('WebGL: early exit preserves ordered springs, absent neighbors and collision 
         expect(compare(actual, expected), `${shape} CPU tick ${tick}`).toMatchObject({ valid: true })
       }
     }
+  } finally { backend.destroy() }
+})
+
+it('WebGL: ordered continuation carries unequal hub degrees and collision radii across chunk boundaries', async () => {
+  const chunk = SPRING_NEIGHBORS_PER_PASS
+  const graph = createFixture('chain', 2 * chunk + 18)
+  const links: number[] = []
+  for (let i = 1; i < graph.points.length / 4; i++) {
+    links.push(0, i, i, 6)
+    if (i <= chunk + 5) links.push(3, i)
+  }
+  graph.links = Float32Array.from(links)
+  graph.weights = new Float32Array(links.length / 2).fill(1)
+  graph.points[(chunk + 1) * 4 + 3] = 1
+  graph.points[2] = 1
+  graph.sizes[0] = 0.3
+  graph.sizes[3] = 0.4
+  graph.sizes[6] = 0.5
+  const parameters = { ...PARAMETERS, collision: true }
+  const canvas = document.createElement('canvas'); canvas.width = 480; canvas.height = 340
+  const backend = await createWebGLBackend(canvas, () => true)
+  try {
+    const topology = buildTopology(graph)
+    expect(topology.directions.every(direction => direction.maxDegree > 2 * chunk)).toBe(true)
+    backend.setGraph(graph, topology, parameters)
+    expect(backend.info).toContain('ordered continuation')
+    backend.step(false)
+    expect(compare(await backend.read(), referenceTick(graph, graph.points, parameters))).toMatchObject({ valid: true })
   } finally { backend.destroy() }
 })
 
