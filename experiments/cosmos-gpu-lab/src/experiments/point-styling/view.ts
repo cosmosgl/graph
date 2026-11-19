@@ -7,6 +7,7 @@ import { runStoredAlphaCost, renderStoredAlphaCost, STORED_ALPHA_COST_POLICY, ty
 import { storedAlphaReplay, renderStoredAlphaRows, type StoredAlphaRow } from './stored-alpha-study'
 import { pick, type Backend, type Snapshot, type RenderVariant } from './backend'
 import { DEFAULTS, fixture, HEIGHT, WIDTH, type Settings } from './data'
+import { initializeStylingCase, refreshStylingCase, stylingCaseId } from './case-view'
 import { COLOR_BUDGET, atlasCpuColors, compareColors, compareSnapshotsAsync } from './reference'
 import { effectScenario, EFFECTS_FIXTURES, EFFECTS_PROFILES, EFFECTS_VIEWS, type EffectsFixture } from './effects-fixtures'
 import { effectsCpuColors } from './effects-reference'
@@ -37,18 +38,14 @@ import {
   type TinyAlphaRow,
 } from './tiny-alpha'
 
-export async function createStylingView (host: HTMLElement): Promise<ExperimentInstance> {
+export async function createStylingView (host: HTMLElement, requestedCase?: string): Promise<ExperimentInstance> {
   let runError: string | undefined
-  host.innerHTML = `<p class="demo-note"
-      data-run-part="explanation">Production Cosmos draw and host-picking GLSL beside a WGSL quad renderer.
-    Move over either canvas to inspect the same pixel in both. Shape picking uses the half-coverage interior.
-    For images, compare production rectangle picking with the source-byte candidate’s sampled-alpha rule.</p>
-    <div
+  host.innerHTML = `<div
       data-run-part="configuration" class="scale-toolbar styling-toolbar">
       <label>Renderer <select data-renderer><option value="production">Production control</option>
         <option value="explicit">Explicit-coordinate candidate</option><option value="quantized">Source-alpha quantized candidate</option>
         <option value="eligibility">Source-byte picking candidate</option></select></label>
-      <label>Fixture <select data-fixture><option value="shapes">Eight shapes · fill and stroke</option>
+      <label>Scene <select data-fixture><option value="shapes">Eight shapes · fill and stroke</option>
         <option value="point-effects">Point rings and greyout</option><option value="overlap">Overlap and draw order</option>
         <option value="edge-cases">Defaults and edge cases</option>
         <option value="fractional">Fractional sizes and positions</option><option value="tiny-alpha">Tiny-alpha grid</option>
@@ -85,23 +82,25 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       <label>Global opacity <select data-opacity><option selected>1</option><option>0.35</option><option>0</option>
         ${TINY_OPACITIES.filter(x => x > 0 && x < 0.35).map(x => `<option value="${x}">${x.toPrecision(5)}</option>`).join('')}</select></label>
       <label>Draw order <select data-order><option value="normal">Input order</option><option value="reverse">Reversed</option></select></label>
-      <div class="controls"><button data-image-next disabled>Next image update</button><button data-image-reset disabled>Reset image sequence</button></div>
+      <div class="controls" data-image-actions><button data-image-next disabled>Next image update</button>
+        <button data-image-reset disabled>Reset image sequence</button></div>
       <p data-image-stage class="demo-note">Select Atlas · dynamic image updates to step through uploads and atlas replacement.</p>
       <div class="controls"><button data-export disabled
       data-run-action="export">Export JSON</button></div>
     </div><p role="status"
       data-run-part="status">Creating luma devices…</p>
-    <p class="demo-note" data-legend></p>
-    <section
-      data-run-part="visualization" class="backend-panels styling-panels">${(['webgl', 'webgpu'] as const).map(name => `<article class="backend-panel">
+    <section data-run-part="visualization"><p class="demo-note" data-legend></p>
+    <div class="backend-panels styling-panels">${(['webgl', 'webgpu'] as const).map(name => `<article class="backend-panel">
       <div class="panel-heading"><h2>${name === 'webgl' ? 'Cosmos WebGL' : 'luma WebGPU'}</h2><span class="status" data-state="${name}">Starting…</span></div>
       <div class="styling-viewport"><canvas width="${WIDTH}" height="${HEIGHT}" data-canvas="${name}" aria-label="${name} styled points"></canvas>
         <span class="styling-cursor" data-cursor="${name}" hidden></span></div>
       <p data-pick="${name}" class="styling-pick">Move over a shape to inspect its ID</p><p class="demo-note" data-device="${name}"></p>
-    </article>`).join('')}</section>
+    </article>`).join('')}</div>
+    <div class="controls"><button type="button" data-inspect-center disabled>Inspect center pixel</button></div>
+    <p data-inspect-feedback aria-live="polite"></p></section>
     <div class="many-body-results"
       data-run-part="results" data-results></div>
-    <section data-run-part="diagnostics"><h3>Stored-alpha picking · bounded prototype</h3>
+    <section data-run-part="diagnostics" data-case-diagnostic="picking"><h3>Stored-alpha picking · bounded prototype</h3>
       <p>Replay the first alpha-byte boundary alone and over a visible point. Picking reads each point’s stored alpha;
         the explicit-coordinate color pass stays unchanged. This is a separate policy from source-byte picking.</p>
       <button data-stored-alpha disabled>Check stored-alpha picking</button>
@@ -125,10 +124,11 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         Ordinary rendering and snapshot readback are excluded. All content and controls remain unchanged.</p>
       <div class="table-scroll" data-filtered-cost-results></div>
     </section>
-    <section data-run-part="diagnostics"><h3>Tiny-alpha sweep</h3>
+    <section data-run-part="diagnostics" data-case-diagnostic="picking"><h3>Tiny-alpha sweep</h3>
       <p>Check tiny positive opacity, subpixel ink and faint foreground picks. Uses offscreen draws; the live canvases and settings stay in place.</p>
       <div class="controls"><button data-tiny-sweep disabled>Run tiny-alpha sweep</button><button data-tiny-cancel disabled>Cancel sweep</button></div>
-      <p data-tiny-progress>No sweep run. All rows, including failures, remain visible and exportable.</p><div data-tiny-results></div>
+      <p data-tiny-progress>No sweep run. All rows, including failures, remain visible and exportable.</p><div data-tiny-results></div></section>
+    <section data-run-part="diagnostics" data-case-diagnostic="images">
       <h3>Image-atlas sweep</h3><p>40 cases compare production, explicit and source-byte paths, sampled CPU colors and foreground visibility.</p>
       <div class="controls"><button data-atlas-sweep disabled>Run image-atlas sweep</button><button data-atlas-cancel disabled>Cancel atlas sweep</button></div>
       <p data-atlas-progress>No atlas sweep run.</p><div data-atlas-results></div>
@@ -149,18 +149,23 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
         Encoded PNGs include sRGB, linear-sRGB and Display-P3 color tags, alpha ramps and asymmetric rows.</p>
       <div class="controls"><button data-decoding-sweep disabled>Run decoding sweep</button>
         <button data-decoding-cancel disabled>Cancel decoding sweep</button></div>
-      <p data-decoding-progress>No decoding sweep run.</p><div data-decoding-results></div>
+      <p data-decoding-progress>No decoding sweep run.</p><div data-decoding-results></div></section>
+    <section data-run-part="diagnostics" data-case-diagnostic="effects">
       <h3>Point rings and greyout</h3><p>${EFFECTS_ROW_COUNT} rows compare outline, hover and focus rings, greyout overrides and highlighted draw order.
         Exact polygon boundary cases remain in the gate; decorative overlays must never change IDs.</p>
       <div class="controls"><button data-effects-sweep disabled>Run rings and greyout sweep</button>
         <button data-effects-cancel disabled>Cancel rings sweep</button></div>
       <p data-effects-progress>No rings and greyout sweep run.</p><div data-effects-results></div></section>
-    <p class="demo-note"
-      data-run-part="explanation">Both offscreen passes are read back for this diagnostic. Hover uses the captured ID image;
-      this does not measure production picking latency. Atlas fixtures add texture sampling;
-      rings and greyout have a separate fixture and sweep; transitions remain unchecked.
-      <a href="#/point-styling/docs/method">Read the method and limitations</a>.</p>`
+    <p class="demo-note" data-run-part="explanation" data-case-explanation></p>`
   const el = <T extends HTMLElement>(selector: string): T => host.querySelector<T>(selector)!
+  const caseId = stylingCaseId(requestedCase)
+  initializeStylingCase(host, caseId)
+  el('[data-case-explanation]').textContent = {
+    shapes: 'The selected scene is checked pixel by pixel against the other renderer and a CPU shape mask.',
+    picking: 'The pixel readout uses a captured ID image. It does not measure production hover latency.',
+    images: 'The CPU reference checks sampled image colors and picking masks; production compatibility is reported separately.',
+    effects: 'The selected scene checks ring and greyout colors and picking masks. Decorative rings must not change IDs.',
+  }[caseId]
   const status = el('[role="status"]'); const exportButton = el<HTMLButtonElement>('[data-export]')
   const setSweepDisabled = (disabled: boolean): void => {
     host.querySelectorAll<HTMLButtonElement>('[data-tiny-sweep], [data-atlas-sweep], [data-isolation-sweep], [data-packing-sweep]')
@@ -244,9 +249,11 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     latestColorPreservation = undefined; latestEffects = undefined
     latestAtlasColors = undefined; latestIsolation = undefined; latestDecoding = undefined
     runError = undefined; exportButton.disabled = true
+    el<HTMLButtonElement>('[data-inspect-center]').disabled = true
     setSweepDisabled(true)
     host.querySelectorAll<HTMLElement>('[data-cursor]').forEach(cursor => { cursor.hidden = true })
     host.querySelectorAll<HTMLElement>('[data-pick]').forEach(label => { label.textContent = 'Move over a shape to inspect its ID' })
+    el('[data-inspect-feedback]').textContent = ''
     host.querySelectorAll<HTMLSelectElement>('select').forEach(c => { c.disabled = true })
     status.textContent = 'Drawing and checking every framebuffer pixel…'
     const name = el<HTMLSelectElement>('[data-fixture]').value as Parameters<typeof fixture>[0] | 'atlas-dynamic' | 'atlas-decoding' | 'point-effects'
@@ -372,7 +379,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
           snapshots[name] = await backends[name]!.render(points, settings, diagnose, variant)
           if (destroyed) return
           delete errors[name]
-          el(`[data-device="${name}"]`).textContent = backends[name]!.info
+          // Full device details stay in Live results and the exported report.
+          el(`[data-device="${name}"]`).textContent = ''
           el(`[data-state="${name}"]`).textContent = 'Rendered'
           el(`[data-canvas="${name}"]`).closest('.backend-panel')!.querySelector('h2')!.textContent = variant !== 'production'
             ? `${candidateLabel} ${name === 'webgl' ? 'WebGL' : 'WebGPU'} quads`
@@ -639,6 +647,7 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       busy = false
       if (destroyed) disposeBackends()
       else {
+        el<HTMLButtonElement>('[data-inspect-center]').disabled = !Object.keys(snapshots).length
         restoreSelectControls()
         packingSelect.disabled = isDynamic || isDecoding
         el<HTMLSelectElement>('[data-decode-policy]').disabled = !isDecoding || variant === 'production'
@@ -648,11 +657,8 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       }
     }
   }
-  const inspect = (event: PointerEvent): void => {
-    if (busy || destroyed) return
-    const canvas = event.currentTarget as HTMLCanvasElement; const box = canvas.getBoundingClientRect()
-    const u = (event.clientX - box.left) / box.width; const v = (event.clientY - box.top) / box.height
-
+  const inspectAt = (u: number, v: number): string => {
+    const descriptions: string[] = []
     for (const name of ['webgl', 'webgpu'] as const) {
       const cursor = el(`[data-cursor="${name}"]`); cursor.hidden = false; cursor.style.left = `${u * 100}%`; cursor.style.top = `${v * 100}%`
       const snapshot = snapshots[name]; if (!snapshot) continue
@@ -660,10 +666,21 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
       const offset = (y * snapshot.width + x) * 4
       const alpha = snapshot.color[offset + 3]
       el(`[data-pick="${name}"]`).textContent = `Pixel (${x}, ${y}) · ${id === null ? 'background' : `point ${id}`} · rendered alpha ${alpha}/255`
+      descriptions.push(`${name === 'webgl' ? 'WebGL' : 'WebGPU'}: ${id === null ? 'background' : `point ${id}`}`)
     }
+    return descriptions.length ? descriptions.join(' · ') : 'No rendered pixel is available.'
+  }
+  const inspect = (event: PointerEvent): void => {
+    if (busy || destroyed) return
+    const canvas = event.currentTarget as HTMLCanvasElement; const box = canvas.getBoundingClientRect()
+    inspectAt((event.clientX - box.left) / box.width, (event.clientY - box.top) / box.height)
   }
   for (const name of ['webgl', 'webgpu'] as const) el(`[data-canvas="${name}"]`).addEventListener('pointermove', inspect)
+  el('[data-inspect-center]').addEventListener('click', () => {
+    if (!busy && !destroyed) el('[data-inspect-feedback]').textContent = `Center pixel · ${inspectAt(0.5, 0.5)}`
+  })
   host.querySelectorAll<HTMLSelectElement>('select').forEach(c => c.addEventListener('change', () => {
+    refreshStylingCase(host, caseId)
     render().catch(error => { status.textContent = String(error) })
   }))
   el('[data-image-next]').addEventListener('click', () => {
@@ -1210,11 +1227,15 @@ export async function createStylingView (host: HTMLElement): Promise<ExperimentI
     'Other fixtures, pointer-hover tolerance and production picking latency.',
     Object.keys(errors),
     runError,
-    'full-image styling and picking comparisons'), { experiment: 'point-styling', devices: () => Object.values(backends).map(b => b.info) })
+    'full-image styling and picking comparisons'), {
+    experiment: 'point-styling',
+    scope: 'The selected scene, renderer and settings in this session. Recorded studies cover their own inputs.',
+    devices: () => Object.values(backends).map(b => b.info),
+  })
+  refreshStylingCase(host, caseId)
   for (const [name, create] of [['webgl', createStylingWebGL], ['webgpu', createStylingWebGPU]] as const) {
     try {
       const backend = await create(el<HTMLCanvasElement>(`[data-canvas="${name}"]`)); backends[name] = backend
-      el(`[data-device="${name}"]`).textContent = backend.info
     } catch (error) {
       runError = String(error)
       errors[name] = String(error); el(`[data-state="${name}"]`).textContent = 'Unavailable'

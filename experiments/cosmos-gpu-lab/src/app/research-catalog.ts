@@ -299,7 +299,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       evidence: 'findings',
       methodPages: ['agent-recipe'],
       next: 'Replay the isolated link witnesses to compare paint inputs and fragment output at the same interior pixels.',
-      reproduce: 'The live viewers show a new local run. The agent recipe specifies a focused same-geometry paint comparison.',
+      reproduce: 'Use the live viewers to explore a new local run, then inspect the recorded same-geometry paint comparison.',
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Separate measured workflow behavior from full migration approval.' }],
     }),
     'integrated-webgpu': entry('integrated-webgpu', {
@@ -376,7 +376,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       evidence: 'method',
       methodPages: ['agent-recipe'],
       next: 'Agree the intended mathematical contract and accuracy budget before choosing a production arithmetic policy.',
-      reproduce: 'Choose a corpus and seed in the live experiment. The agent recipe records one focused cancellation replay.',
+      reproduce: 'Choose an addition or gravity case, then compare the live results with the recorded findings.',
       investigations: [{
         page: 'method',
         state: 'Current evidence',

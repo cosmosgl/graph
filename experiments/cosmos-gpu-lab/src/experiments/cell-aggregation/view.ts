@@ -1,5 +1,6 @@
 import { count as formatCount, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createGridStudy, type GridStudy, type GridCase } from '../combined-layout/grid-study'
 import { FROZEN_POLICY, frozenSummary, frozenPairedWins } from '../combined-layout/frozen-timing'
@@ -15,8 +16,8 @@ export async function createGridAggregationView (host: HTMLElement, acceptance =
       'Normal frames measure the gain. Diagnostic profiles and cell occupancy explain the work.'}</p>
     <div
       data-run-part="configuration" class="scale-toolbar">
-      <label>Points <select data-control="count">${acceptance ? '<option>4095</option>' : ''}<option>4096</option>
-      ${acceptance ? '<option>4097</option>' : ''}<option selected>8192</option></select></label>
+      <label>Points <select data-control="count">${acceptance ? '<option>4095</option>' : ''}<option ${acceptance ? '' : 'selected'}>4096</option>
+      ${acceptance ? '<option>4097</option>' : ''}<option ${acceptance ? 'selected' : ''}>8192</option></select></label>
       <label>Graph <select data-control="fixture"><option value="chain">Chain</option><option value="communities">Communities</option>
         ${acceptance ? '<option value="star">Star</option>' : ''}</select></label>
       <label>Positions <select data-control="distribution"><option value="uniform">Uniform</option>
@@ -220,5 +221,10 @@ export async function createGridAggregationView (host: HTMLElement, acceptance =
     [],
     runError,
     'paired cases'), { experiment: acceptance ? 'layout-acceptance' : 'cell-aggregation', devices: () => study?.report.info ? [study.report.info] : [] })
+  compactRunControls(host, {
+    settings: ['[data-control="distribution"]', '[data-control="history"]', '[data-control="pinned"]',
+      '[data-control="checkpoint"]', '[data-control="candidate"]'],
+    diagnostics: true,
+  })
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; retire() } }
 }

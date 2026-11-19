@@ -50,6 +50,11 @@ export function rewriteArticleLinks (host: HTMLElement, experiment: ExperimentDe
     const canonical = new URL(link.href)
     if (canonical.hash.split('?')[0] !== experimentHref(experiment.id)) continue
     const params = new URLSearchParams(canonical.hash.split('?')[1])
+    if (params.get('section')?.startsWith('doc-agent-recipe')) {
+      params.set('section', 'recorded-findings'); link.href = `${experimentHref(experiment.id)}?${params}`
+      link.textContent = 'recorded findings'
+      continue
+    }
     const section = resolveExperimentSection(host, record, params.get('section'))
     if (section) { params.set('section', section); link.href = `${experimentHref(experiment.id)}?${params}` }
   }

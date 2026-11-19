@@ -32,6 +32,19 @@ it('never turns pending work or benchmark completion into a numerical pass', () 
   expect(summarizeRun('Ready', [], 'All checks', [], 'Pipeline error')).toMatchObject({ state: 'Failed' })
 })
 
+it('places the selected case results before session details and uses its own scope', () => {
+  host = document.createElement('div'); document.body.append(host)
+  host.innerHTML = '<button data-run-action="primary">Compare</button><section data-run-part="results">Current sum: 512</section>'
+  mountRunLayout(host, () => summarizeRun('Complete', [], 'Other inputs'), {
+    experiment: 'precision-diagnostics', scope: 'Selected addition input only.', resultsFirst: true,
+  })
+  const results = host.querySelector('#run-results')!
+  const values = results.querySelector('[data-run-part="results"]')!
+  const details = results.querySelector('.run-overview')!
+  expect(values.compareDocumentPosition(details) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  expect(results.querySelector('[data-run-scope]')!.textContent).toBe('Selected addition input only.')
+})
+
 it('keeps the integrated canvas first on narrow screens and preserves controls when the columns change', () => {
   const media = Object.assign(new EventTarget(), { matches: false })
   vi.spyOn(window, 'matchMedia').mockReturnValue(media as MediaQueryList)

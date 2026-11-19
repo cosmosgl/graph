@@ -1,11 +1,19 @@
 import { defineExperiment } from '../../runtime/experiment'
+import { cases } from './cases'
 export const experiment = defineExperiment({
   id: 'many-body',
   title: 'Global many-body repulsion',
   summary: 'Compare Cosmos’s exact all-pairs repulsion: production GLSL, ordered or tiled luma WebGPU, and an independent CPU reference.',
   tags: ['simulation', 'repulsion', 'WebGL', 'WebGPU'],
+  cases,
   create: async host => (await import('./view')).createManyBodyExperiment(host),
   pages: [
+    {
+      kind: 'markdown',
+      id: 'case-evidence',
+      title: 'Exact repulsion evidence',
+      load: async (): Promise<string> => (await import('./docs/case-evidence.md?raw')).default,
+    },
     { kind: 'markdown', id: 'timing', title: 'Timing', load: async (): Promise<string> => (await import('./docs/timing.md?raw')).default },
     { kind: 'markdown', id: 'overview', title: 'Force contract', load: async (): Promise<string> => (await import('./docs/overview.md?raw')).default },
     { kind: 'markdown', id: 'research', title: 'Implementation choices', load: async (): Promise<string> => (await import('./docs/research.md?raw')).default },

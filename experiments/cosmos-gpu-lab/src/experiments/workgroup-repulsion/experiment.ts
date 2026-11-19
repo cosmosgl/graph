@@ -1,14 +1,22 @@
 import { defineExperiment } from '../../runtime/experiment'
+import { cases } from './cases'
 
 export const experiment = defineExperiment({
   id: 'workgroup-repulsion',
   title: 'Workgroup repulsion',
   summary: 'Try the workgroup-memory variant of hierarchical global repulsion.',
   tags: ['simulation', 'repulsion', 'WebGPU'],
+  cases,
   create: async host => (await import('../many-body-grid/view')).createGridExperiment(host, {
     initialFarMode: 'workgroup-local', experimentId: 'workgroup-repulsion',
   }),
   pages: [
+    {
+      kind: 'markdown',
+      id: 'case-evidence',
+      title: 'Workgroup repulsion evidence',
+      load: async (): Promise<string> => (await import('./case-evidence.md?raw')).default,
+    },
     { kind: 'markdown', id: 'overview', title: 'How it works', load: async (): Promise<string> => (await import('./overview.md?raw')).default },
     {
       kind: 'markdown',

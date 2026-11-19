@@ -2,6 +2,7 @@ import { PATTERNS, type Pattern } from '../straight-links/patterns'
 import { GRADIENT_PRESETS, GRADIENT_LABELS, gradientScene, type GradientPreset } from '../straight-links/gradient-fixtures'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import { validationContracts } from '../../runtime/validation'
 import { pick } from '../../gpu/rgba-readback'
 import { DEFAULTS, FIXTURES, PROFILES, fixture, WIDTH, HEIGHT, type Settings, type Fixture, type Variant } from './data'
@@ -247,6 +248,11 @@ export async function createCurvesView (host: HTMLElement): Promise<ExperimentIn
     'Other color/stroke settings, arrows, distance fading, highlights, transitions, full Graph integration, GPU cost and native portability.',
     Object.keys(backends).length === 2 ? [] : ['Missing backend'], error, 'curved-ribbon full-frame comparison'),
   { experiment: 'curved-links', devices: () => Object.values(backends).map(b => b.info) })
+  compactRunControls(host, {
+    diagnostics: true,
+    settings: ['[data-dash-length]', '[data-dash-gap]', '[data-gradient]', '[data-segments]', '[data-weight]', '[data-distance]',
+      '[data-zoom]', '[data-ratio]', '[data-opacity]', '[data-scale]', '[data-order]'],
+  })
   controls(true)
   for (const [lane, create] of [['webgl', createCurvesWebGL], ['webgpu', createCurvesWebGPU]] as const) {
     try {

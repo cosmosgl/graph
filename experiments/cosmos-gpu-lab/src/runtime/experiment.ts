@@ -47,14 +47,44 @@ export type ReportPage = {
 
 export type ExperimentPage = MarkdownPage | ReportPage
 
+// A case has one question and its own bounded evidence. The files that retain
+// detailed research remain attached to the experiment, not copied into the UI.
+export type CaseEvidenceLink = { label: string; page: string; section?: string }
+export type ExperimentCase = {
+  id: string;
+  title: string;
+  kind: 'compare' | 'demonstrate' | 'explore' | 'measure' | 'recorded';
+  question: string;
+  description: string;
+  tryIt?: string;
+  reference: string;
+  acceptance: string;
+  // A useful method can be available even before there is a recorded result.
+  evidence?: CaseEvidenceLink[];
+  recorded: {
+    conclusion: string;
+    date: string;
+    environment: string;
+    scope: string;
+    limits: string;
+    evidence: CaseEvidenceLink[];
+  } | null;
+}
+
+export function caseEvidenceLinks (item: ExperimentCase): CaseEvidenceLink[] {
+  const links = [...item.evidence ?? [], ...item.recorded?.evidence ?? []]
+  return links.filter((link, index) => links.findIndex(other => other.page === link.page && other.section === link.section) === index)
+}
+
 export type ExperimentDefinition = {
   id: string;
   title: string;
   summary: string;
   tags: string[];
+  cases?: ExperimentCase[];
   // Optional prototype: a readable recorded result and a linked agent recipe.
   study?: { record: StudyRecord; recipePage: string; visualFirst?: boolean; liveDescription?: string; agentFindings?: AgentFindings };
-  create: (host: HTMLElement) => Promise<ExperimentInstance>;
+  create: (host: HTMLElement, caseId?: string) => Promise<ExperimentInstance>;
   pages: ExperimentPage[];
 }
 
@@ -68,6 +98,18 @@ export function defineExperiment (definition: ExperimentDefinition): ExperimentD
     !definition.pages.some(page => page.id === definition.study!.record.sourcePage) ||
     !definition.pages.some(page => page.id === definition.study!.recipePage))) {
     throw new Error(`Invalid study links for ${definition.id}`)
+  }
+  if (definition.cases) {
+    const ids = new Set<string>()
+    if (!definition.cases.length) throw new Error(`Missing cases for ${definition.id}`)
+    for (const item of definition.cases) {
+      if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(item.id) || ids.has(item.id) ||
+        (item.kind === 'recorded' && !item.recorded) ||
+        caseEvidenceLinks(item).some(link => !definition.pages.some(page => page.id === link.page))) {
+        throw new Error(`Invalid case ${item.id} for ${definition.id}`)
+      }
+      ids.add(item.id)
+    }
   }
   // Resolve eagerly so a new experiment cannot silently omit its comparison contract.
   const contract = validationContractMarkdown(definition.id)

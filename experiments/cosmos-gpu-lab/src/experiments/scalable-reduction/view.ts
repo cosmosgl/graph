@@ -1,5 +1,6 @@
 import { milliseconds, scientific } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import {
   createScalableReductionBackend,
@@ -15,7 +16,7 @@ import {
 } from './reference'
 
 const POINT_PRESETS = [8_192, 65_536, 1_000_000, 10_000_000] as const
-const DEFAULT_POINT_COUNT = 1_000_000
+const DEFAULT_POINT_COUNT = 8_192
 
 function element<T extends HTMLElement> (host: ParentNode, selector: string): T {
   const found = host.querySelector<T>(selector)
@@ -298,6 +299,7 @@ export async function createScalableReductionExperiment (
     'Center accuracy budget; unsampled GPU-resident ticks and pixel parity.',
     [],
     runError), { experiment: 'scalable-reduction', devices: () => backend?.info ? [backend.info] : [] })
+  compactRunControls(host, { diagnostics: true })
   await configure()
 
   return {

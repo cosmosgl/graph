@@ -1,9 +1,11 @@
 import { defineExperiment } from '../../runtime/experiment'
+import { cases } from './cases'
 export const experiment = defineExperiment({
   id: 'combined-layout',
   title: 'Combined layout convergence',
   summary: 'Compose gravity, hierarchical repulsion, ordered springs and cooling; compare settling layouts and full-strength residual motion.',
   tags: ['simulation', 'convergence', 'WebGL', 'WebGPU'],
+  cases,
   create: async host => (await import('./view')).createCombinedView(host),
   pages: [{
     kind: 'markdown',

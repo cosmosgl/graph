@@ -1,7 +1,7 @@
 import type { ExperimentDefinition, ExperimentInstance } from './experiment'
 
 type Run = {
-  id: string; host: HTMLElement; ready: Promise<ExperimentInstance>;
+  id: string; caseId?: string; host: HTMLElement; ready: Promise<ExperimentInstance>;
   instance?: ExperimentInstance; visible: boolean; retired: boolean;
 }
 type MoveTarget = HTMLElement & { moveBefore?: (node: Node, child: Node | null) => void }
@@ -10,13 +10,15 @@ type MoveTarget = HTMLElement & { moveBefore?: (node: Node, child: Node | null) 
 // completed evidence if an embedded viewer has to be recreated.
 export function createRetainedRun (disposePresentation: (host: HTMLElement) => void = (): void => {}): {
   readonly id: string | undefined;
-  show(definition: ExperimentDefinition, parent: HTMLElement): Promise<void>;
+  readonly caseId: string | undefined;
+  show(definition: ExperimentDefinition, parent: HTMLElement, caseId?: string): Promise<void>;
   hide(): void;
   destroy(): void;
   } {
   let current: Run | undefined
   let parking: HTMLElement | undefined
   const savedEvidence = new Map<string, unknown>()
+  const evidenceKey = (run: Run): string => `${run.id}/${run.caseId ?? ''}`
   const clearParking = (): void => { parking?.remove(); parking = undefined }
   const hide = (): void => {
     if (!current || !current.visible) return
@@ -37,28 +39,30 @@ export function createRetainedRun (disposePresentation: (host: HTMLElement) => v
     const run = current; current = undefined; run.retired = true
     run.instance?.pause?.()
     const evidence = run.instance?.saveEvidence?.()
-    if (evidence !== undefined) savedEvidence.set(run.id, evidence)
+    if (evidence !== undefined) savedEvidence.set(evidenceKey(run), evidence)
     disposePresentation(run.host)
     try { run.instance?.destroy() } finally { run.host.remove(); clearParking() }
   }
   return {
     get id (): string | undefined { return current?.id },
+    get caseId (): string | undefined { return current?.caseId },
     hide,
     destroy,
-    async show (definition, parent): Promise<void> {
-      if (current?.id !== definition.id) destroy()
+    async show (definition, parent, caseId): Promise<void> {
+      if (current?.id !== definition.id || current.caseId !== caseId) destroy()
       if (!current) {
         const host = document.createElement('div'); host.className = 'experiment-run'
         if (definition.study) host.dataset.studyRun = ''
         host.innerHTML = '<div class="loading">Creating GPU devices…</div>'
-        const run: Run = { id: definition.id, host, ready: undefined!, visible: true, retired: false }
+        const run: Run = { id: definition.id, caseId, host, ready: undefined!, visible: true, retired: false }
         current = run; parent.append(host)
-        run.ready = Promise.resolve().then(async () => await definition.create(host)).then(instance => {
+        run.ready = Promise.resolve().then(async () => await definition.create(host, caseId)).then(instance => {
           if (run.retired) instance.destroy()
           else {
-            const evidence = savedEvidence.get(run.id)
+            const key = evidenceKey(run)
+            const evidence = savedEvidence.get(key)
             if (evidence !== undefined && instance.restoreEvidence) {
-              instance.restoreEvidence(evidence); savedEvidence.delete(run.id)
+              instance.restoreEvidence(evidence); savedEvidence.delete(key)
             }
             run.instance = instance; if (!run.visible) instance.pause?.()
           }

@@ -188,7 +188,7 @@ export async function createPointRenderingExperiment (
     [],
     'Visual comparison only: pixel parity and picking are not tested here.',
     slots.filter(s => renderErrors.has(s.id)).map(s => s.id),
-    runError), { experiment: 'point-rendering', devices: () => slots.flatMap(s => s.backend?.info ? [s.backend.info] : []) })
+    runError), { experiment: 'point-rendering', showChecks: false, devices: () => slots.flatMap(s => s.backend?.info ? [s.backend.info] : []) })
   await Promise.all(constructors.map(async ({ slot, create }) => {
     try {
       slot.backend = await create()

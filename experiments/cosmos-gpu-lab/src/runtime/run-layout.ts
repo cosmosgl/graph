@@ -11,7 +11,9 @@ export type RunSummary = {
 
 type Dispose = () => void
 const presentations = new WeakMap<HTMLElement, Dispose>()
-type RunContext = { experiment: string; devices?: () => string[]; visualFirst?: boolean; scope?: string; showChecks?: boolean }
+type RunContext = {
+  experiment: string; devices?: () => string[]; visualFirst?: boolean; scope?: string; showChecks?: boolean; resultsFirst?: boolean;
+}
 
 // Regions and action roles are authored by each view. Never classify prose by
 // its DOM position, or infer numerical acceptance from a status message.
@@ -84,6 +86,11 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
     return { select, hint }
   })
   slot('#run-results > h2').after(slot('.run-overview'))
+  if (context?.resultsFirst) {
+    const results = Array.from(slot('#run-results').children).filter(element =>
+      element instanceof HTMLElement && (element.dataset.runPart === 'results' || element.dataset.runSection === 'results'))
+    slot('#run-results > h2').after(...results)
+  }
   slot('.run-visualization').before(slot('[data-run-slot="status"]'))
   if (context?.visualFirst) slot('#run-run').prepend(slot('.run-visualization'))
   const tick = frame.querySelector('.tick-counter')
@@ -111,9 +118,8 @@ export function mountRunLayout (host: HTMLElement, read: () => RunSummary, conte
   host.prepend(frame)
   if (context) addRunGuidance(frame, context.experiment)
   slot('[data-run-scope]').textContent = context?.scope ?? (context
-    ? `${validationContracts[context.experiment]?.coverage ?? 'Only the inputs and checks explicitly named below.'} ` +
-      'Use the settings listed in each benchmark table. This session does not approve the overall migration.'
-    : 'Only the inputs and checks explicitly named below; no overall migration approval.')
+    ? validationContracts[context.experiment]?.coverage ?? 'Only the inputs and checks explicitly named below.'
+    : 'Only the inputs and checks explicitly named below.')
   const tables = createResultTables(frame, { exclude: '.experiment-notes, .experiment-references, .study-overview' })
   const refresh = (): void => {
     const values = read()

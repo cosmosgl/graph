@@ -36,11 +36,9 @@ export function renderStudyOverview (experiment: ExperimentDefinition): HTMLElem
   const links = document.createElement('p'); links.className = 'study-links'
   const sourceLink = document.createElement('a'); sourceLink.href = experimentHref(experiment.id, record.sourcePage)
   sourceLink.textContent = 'Read the recorded evidence'
-  const recipeLink = document.createElement('a'); recipeLink.href = experimentHref(experiment.id, study.recipePage)
-  recipeLink.textContent = 'Reproduce with an agent'
   const researchLink = document.createElement('a'); researchLink.href = '#/validation-workflow'
   researchLink.textContent = 'Plan a new investigation'
-  links.append(sourceLink, recipeLink, researchLink)
+  links.append(sourceLink, researchLink)
   section.append(title, source, conclusion, paragraph('Recorded question', record.question), paragraph('How it worked', record.method), table,
     paragraph('Scope', record.scope), paragraph('Limits', record.limits), paragraph('Visual evidence', record.visual), links)
   presentDocumentTables(section)

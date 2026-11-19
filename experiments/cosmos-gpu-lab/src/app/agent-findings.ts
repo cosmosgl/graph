@@ -32,21 +32,7 @@ export function renderAgentFindings (experiment: ExperimentDefinition): HTMLElem
       evidence.dataset.findingTarget = articleSectionId(study.record.sourcePage, finding.evidenceSection)
       evidence.textContent = 'Read the evidence'; article.append(evidence)
     }
-    const details = document.createElement('section'); details.className = 'study-finding-reproduction'
-    const summary = document.createElement('h4'); summary.textContent = 'Instructions for agents'; details.append(summary)
-    const source = finding.source
-    const description = [`Revision: ${source.revision ?? 'Not recorded'}`, `Source state: ${source.state}`,
-      ...(source.snapshot ? [`Snapshot: ${source.snapshot}`] : [])].join(' · ')
-    details.append(paragraph('Environment', finding.environment), paragraph('Evidence', finding.evidence), paragraph('Source', description))
-    const steps = document.createElement('ol')
-    for (const step of finding.reproduction) { const item = document.createElement('li'); item.textContent = step; steps.append(item) }
-    details.append(steps)
-    if (finding.replaySection) {
-      const replay = document.createElement('a'); replay.href = experimentHref(experiment.id, study.recipePage, finding.replaySection)
-      replay.dataset.findingTarget = articleSectionId(study.recipePage, finding.replaySection)
-      replay.textContent = 'Exact replay instructions'; details.append(replay)
-    }
-    article.append(details); section.append(article)
+    section.append(article)
   }
   return section
 }

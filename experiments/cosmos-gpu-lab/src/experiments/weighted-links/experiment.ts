@@ -1,11 +1,19 @@
 import { defineExperiment } from '../../runtime/experiment'
+import { cases } from './cases'
 export const experiment = defineExperiment({
   id: 'weighted-links',
   title: 'Weighted link forces',
   summary: 'Port Cosmos springs to luma compute: stable directional CSR, weighted forces, integration and resident point/link rendering.',
   tags: ['simulation', 'WebGL', 'WebGPU', 'topology', 'luma'],
+  cases,
   create: async host => (await import('./view')).createWeightedLinksExperiment(host),
   pages: [
+    {
+      kind: 'markdown',
+      id: 'case-evidence',
+      title: 'Weighted spring evidence',
+      load: async (): Promise<string> => (await import('./docs/case-evidence.md?raw')).default,
+    },
     {
       kind: 'markdown',
       id: 'performance',

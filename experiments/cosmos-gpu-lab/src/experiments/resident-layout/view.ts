@@ -1,5 +1,6 @@
 import { milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createResidentComparison, type ResidentComparison } from '../combined-layout/resident'
 import { type Fixture, type SpringPrecision, PRECISION_LABELS } from '../combined-layout/data'
@@ -247,6 +248,7 @@ export async function createResidentView (host: HTMLElement): Promise<Experiment
     [],
     runError ?? failure,
     'resident checkpoints'), { experiment: 'resident-layout', devices: () => session?.info ?? [] })
+  compactRunControls(host, { diagnostics: true })
   await reset()
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

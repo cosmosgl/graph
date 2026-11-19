@@ -11,6 +11,9 @@ it('keeps unavailable lanes explicit, stops the run and exports the partial comp
   const app = await createMatchedView(host)
   const button = (action: string): HTMLButtonElement => host.querySelector(`[data-action="${action}"]`)!
   try {
+    const center = host.querySelector<HTMLSelectElement>('[data-control="center"]')!
+    expect(center.value).toBe('0')
+    expect(center.closest('details')?.querySelector('summary')?.textContent).toBe('More settings')
     expect(host.querySelector('[role="status"]')!.textContent).toContain('Partial comparison')
     button('run').click()
     await vi.waitFor(() => expect(button('step').disabled).toBe(false))

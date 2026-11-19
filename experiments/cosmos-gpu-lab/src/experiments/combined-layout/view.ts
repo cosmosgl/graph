@@ -3,6 +3,7 @@ import { count as formatCount, scientific, milliseconds } from '../../runtime/re
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import { organizeRunControls } from '../../runtime/run-controls'
+import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { fitView } from '../many-body/backend'
 import { TOLERANCE as repulsionTolerance } from '../many-body/reference'
@@ -30,14 +31,13 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
         <option value="1">Every tick · diagnostic</option></select></label>
       <label>Center attraction <select data-control="center"><option value="0">Off · production default</option><option value="1">1</option></select></label>
       <label>WebGPU arithmetic <select data-control="precision">${PRECISION_MODES.map(mode =>
-    `<option value="${mode}">${PRECISION_LABELS[mode]}</option>`).join('')}</select></label>
+    `<option value="${mode}"${mode === 'trig' ? ' selected' : ''}>${PRECISION_LABELS[mode]}</option>`).join('')}</select></label>
     </div>
     <p class="demo-note"
       data-run-part="diagnostics">Precision candidates use integer-controlled rounding for selected spring operations through luma compute kernels.
       The aligned candidate restores Cosmos's polar gravity calculation and rounds repulsion integration. Native f32 remains the baseline.</p>
     <p class="demo-note"
-      data-run-part="diagnostics">Optional center attraction always uses the refined polar kernel; the selector controls the other stages.
-      <a href="#/matched-layout/docs/center">Matched center comparison</a> adds aggregate checks and paired GPU cost measurements.</p>
+      data-run-part="diagnostics">Optional center attraction always uses the refined polar kernel; the selector controls the other stages.</p>
     <p class="demo-note"
       data-run-part="diagnostics">Checkpoint mode checks all four stages and the whole tick at selected ticks only. Other ticks are unvalidated.
       CPU continues independently; bounds and final metrics still require readback. All force tolerances stay unchanged.
@@ -507,6 +507,13 @@ export async function createCombinedView (host: HTMLElement): Promise<Experiment
     Object.keys(session?.errors ?? {}),
     runError,
     'backend checkpoints'), { experiment: 'combined-layout', devices: () => session?.lanes.map(l => l.backend.info) ?? [] })
+  compactRunControls(host, {
+    diagnostics: true,
+    settings: [
+      '[data-control="decay"]', '[data-control="checkpoint"]', '[data-control="center"]',
+    ],
+  })
+  host.querySelector('#run-configuration .advanced-controls > div')?.prepend(host.querySelector('.run-presets')!)
   await task(setup)
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

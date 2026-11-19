@@ -8,13 +8,14 @@ export type AppRoute =
   | { kind: 'numerical-research' }
   | { kind: 'vocabulary'; termId?: string }
   | { kind: 'concept'; conceptId: string }
-  | { kind: 'experiment'; experimentId: string; pageId?: string; view?: 'run' | 'evidence' }
+  | { kind: 'experiment'; experimentId: string; pageId?: string; caseId?: string; evidencePage?: string; view?: 'run' | 'evidence' }
 
 export function currentSection (): string | null {
   return new URLSearchParams(window.location.hash.split('?')[1] ?? '').get('section')
 }
 
 export function readRoute (): AppRoute {
+  const params = new URLSearchParams(window.location.hash.split('?')[1] ?? '')
   const segments = window.location.hash
     .split('?')[0]
     .replace(/^#\/?/, '')
@@ -43,6 +44,8 @@ export function readRoute (): AppRoute {
   return {
     kind: 'experiment',
     experimentId: decodeURIComponent(segments[0]),
+    caseId: params.get('case') ?? undefined,
+    evidencePage: params.get('evidence') ?? undefined,
     // Retain the old Run/Evidence routes and in-page Run bookmarks as aliases.
     view: segments[1] === 'run' || (segments.length === 1 && legacyRun)
       ? 'run'
@@ -72,6 +75,16 @@ export function articleSectionId (pageId: string, section?: string): string {
 export function experimentHref (experimentId: string, pageId?: string, section?: string): string {
   const root = `#/${encodeURIComponent(experimentId)}`
   return pageId ? `${root}?section=${encodeURIComponent(articleSectionId(pageId, section))}` : root
+}
+
+export function caseHref (experimentId: string, caseId: string): string {
+  return `${experimentHref(experimentId)}?${new URLSearchParams({ case: caseId })}`
+}
+
+export function caseEvidenceHref (experimentId: string, caseId: string, pageId: string, section?: string): string {
+  const params = new URLSearchParams({ case: caseId, evidence: pageId })
+  if (section) params.set('section', articleSectionId(pageId, section))
+  return `${experimentHref(experimentId)}?${params}`
 }
 
 export function runHref (experimentId: string): string {

@@ -1,11 +1,19 @@
 import { defineExperiment } from '../../runtime/experiment'
+import { cases } from './cases'
 export const experiment = defineExperiment({
   id: 'many-body-grid',
   title: 'Hierarchical global repulsion',
   summary: 'Compare production grid repulsion with luma WebGPU: distant cell aggregates, sampled near neighbors and exact-force error.',
   tags: ['simulation', 'repulsion', 'WebGL', 'WebGPU'],
+  cases,
   create: async host => (await import('./view')).createGridExperiment(host),
   pages: [
+    {
+      kind: 'markdown',
+      id: 'case-evidence',
+      title: 'Hierarchical repulsion evidence',
+      load: async (): Promise<string> => (await import('./docs/case-evidence.md?raw')).default,
+    },
     {
       kind: 'markdown',
       id: 'direct-alternatives',

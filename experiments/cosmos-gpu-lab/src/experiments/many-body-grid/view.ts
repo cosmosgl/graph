@@ -1,6 +1,7 @@
 import { setStatus, drawPoint } from '../../runtime/presentation'
 import { count as formatCount, scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun, recordVerdicts } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import { graphPalette } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { createFixture, PARAMETERS, type Fixture } from '../many-body/data'
@@ -76,23 +77,24 @@ export async function createGridExperiment (host: HTMLElement, options: {
       </div><span class="tick-counter">Tick <strong data-output="tick">0</strong></span></div>
     <p class="many-body-status" data-output="status" role="status"
       data-run-part="status">Preparing backends…</p>
-    <p class="demo-note" data-output="grid"></p>
+    <p class="demo-note" data-output="grid" data-run-part="visualization"></p>
     <section
       data-run-part="visualization" class="backend-panels many-body-panels">${['WebGL', 'WebGPU', 'CPU'].map(name => `<article class="backend-panel">
       <div class="panel-heading"><h2>${name}</h2><span data-status="${name}" class="status">Starting…</span></div>
       <canvas data-canvas="${name}" width="480" height="340" aria-label="${name} hierarchical positions"></canvas>
       <p class="demo-note" data-info="${name}"></p></article>`).join('')}</section>
-    <p class="demo-note">Each tick starts from CPU-model positions. Blue circles are free, yellow squares pinned; absent points are hidden.
+    <p class="demo-note" data-run-part="explanation">Each tick starts from CPU-model positions.
+      Blue circles are free, yellow squares pinned; absent points are hidden.
       GPU panels draw resident positions. Force-only motion expands the layout; springs, gravity and cooling are disabled.
       This view supports up to 16,384 points; it does not run the separate million-point force test.</p>
     <div class="many-body-results" data-output="results"
       data-run-part="results"></div>
-    <div class="many-body-results" data-output="approximation"></div>
+    <div class="many-body-results" data-output="approximation" data-run-part="results"></div>
     <div class="many-body-results precision-trace" data-output="centroids"
       data-run-part="diagnostics"></div>
     <div class="many-body-results precision-trace" data-output="trace"
       data-run-part="diagnostics"></div>
-    <section class="many-body-results precision-trace" data-output="timing" aria-label="Precision performance comparison">
+    <section class="many-body-results precision-trace" data-output="timing" data-run-part="diagnostics" aria-label="Precision performance comparison">
       <p class="demo-note">Benchmark precision compares inline, stored and streamed contributions at 8,192 and 16,384 points,
         uniform and clustered. Batched GPU timestamps cover grid construction + force, and complete steps. Rendering is excluded.
         Stop keeps partial results; Export JSON includes timings and validation.</p></section>
@@ -459,6 +461,7 @@ export async function createGridExperiment (host: HTMLElement, options: {
     Object.keys(errors),
     runError,
     'complete tick comparisons'), { experiment: experimentId, devices: () => lanes.map(l => l.backend.info) })
+  compactRunControls(host, { diagnostics: true, settings: ['[data-control="slots"]', '[data-control="quality"]'] })
   await task(setup)
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; cleanup() } }
 }

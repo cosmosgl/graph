@@ -1,12 +1,20 @@
 import { defineExperiment } from '../../runtime/experiment'
+import { cases } from './cases'
 
 export const experiment = defineExperiment({
   id: 'neighborhood-forces',
   title: 'Neighborhood forces',
   summary: 'Turn a spatial grid into motion: compare tiled all-pairs and grid-based local repulsion on WebGPU.',
   tags: ['simulation', 'neighbors', 'grid', 'WebGPU'],
+  cases,
   create: async host => (await import('./view')).createNeighborhoodExperiment(host),
   pages: [
+    {
+      kind: 'markdown',
+      id: 'case-evidence',
+      title: 'Local repulsion evidence',
+      load: async (): Promise<string> => (await import('./docs/case-evidence.md?raw')).default,
+    },
     {
       kind: 'markdown',
       id: 'precision-cost',

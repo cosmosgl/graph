@@ -1,6 +1,7 @@
 import { drawPoint } from '../../runtime/presentation'
 import { count as formatCount, milliseconds, scientific } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import { graphPalette, comparisonSeries, seriesKey } from '../../runtime/palette'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { PRESETS, type ProductionPreset } from '../combined-layout/production-settings'
@@ -30,8 +31,8 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
       <label>Cooling <select data-control="ticks"><option>100</option><option>300</option><option>5000</option></select></label>
       <label>Force settings <select data-control="preset">${presets}</select></label>
       <label>Anchor <select data-control="pinned"><option value="true">Pin point 0</option><option value="false">Unpinned</option></select></label>
-      <label>Center attraction <select data-control="center"><option value="0">Off · production default</option>
-        <option value="0.1">0.1</option><option value="1" selected>1 · comparison</option></select></label>
+      <label>Center attraction <select data-control="center"><option value="0" selected>Off · production default</option>
+        <option value="0.1">0.1</option><option value="1">1 · comparison</option></select></label>
     </div>
     <div class="demo-toolbar playback-toolbar"><div class="controls">
       <button data-action="step"
@@ -351,6 +352,11 @@ export async function createMatchedView (host: HTMLElement): Promise<ExperimentI
     Object.keys(session?.report.errors ?? {}),
     runError,
     'backend checkpoints'), { experiment: 'matched-layout', devices: () => Object.values(session?.report.devices ?? {}) })
+  compactRunControls(host, {
+    settings: ['[data-control="distribution"]', '[data-control="ticks"]', '[data-control="preset"]',
+      '[data-control="pinned"]', '[data-control="center"]'],
+    diagnostics: true,
+  })
   await task(setup)
   return { pause (): void { stopped = true }, destroy (): void { disposeRunLayout(host); destroyed = true; stopped = true; session?.destroy() } }
 }

@@ -1,11 +1,15 @@
 import { defineExperiment } from '../../runtime/experiment'
+import { cases } from './cases'
 
 export const experiment = defineExperiment({
   id: 'million-graph',
   title: 'Million-point moving graph',
   summary: 'Compare individual and shared distant pushes on a moving WebGPU graph.',
   tags: ['simulation', 'repulsion', 'WebGPU', 'large-data'],
-  create: async host => (await import('./view')).createMillionGraphView(host),
+  cases,
+  create: async host => (await import('./view')).createMillionGraphView(host, undefined, {
+    points: 65536, distribution: 'persistent-communities', force: 'four-corners',
+  }),
   pages: [
     { kind: 'markdown', id: 'overview', title: 'How it works', load: async (): Promise<string> => (await import('./overview.md?raw')).default },
     {

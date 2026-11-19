@@ -2,6 +2,7 @@ import { luma } from '@luma.gl/core'
 import { webgpuAdapter, type WebGPUDevice } from '@luma.gl/core/webgpu'
 import { scientific, milliseconds } from '../../runtime/result-format'
 import { mountRunLayout, disposeRunLayout, summarizeRun } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { BATCH_POLICY } from './gpu-timer'
 import { COMPARISON_SEED, createPrecisionPlan, runPrecisionComparison, type PrecisionRow } from './precision-comparison'
@@ -58,7 +59,7 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
           <button data-action="reset"
       data-run-action="primary">Reset</button>
       <button data-action="validate"
-      data-run-action="diagnostic">Validate next step</button>
+      data-run-action="primary">Validate next step</button>
         </div>
         <span class="tick-counter">Tick <strong data-output="tick">0</strong></span>
       </div>
@@ -631,6 +632,10 @@ export async function createNeighborhoodExperiment (host: HTMLElement): Promise<
     [],
     runError,
     'latest backend validations'), { experiment: 'neighborhood-forces', devices: () => device ? [JSON.stringify(device.info)] : [] })
+  compactRunControls(host, {
+    diagnostics: true,
+    settings: ['[data-control="density"]', '[data-control="grid"]', '[data-control="accumulation"]'],
+  })
   describePlan()
   configure()
   return {

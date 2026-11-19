@@ -1,5 +1,6 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { mountRunLayout, disposeRunLayout } from '../../runtime/run-layout'
+import { compactRunControls } from '../../runtime/compact-controls'
 import { graphRgba } from '../../runtime/palette'
 import { createIntegrated } from '../integrated-webgpu/runtime'
 import { evaluate } from '../integrated-webgpu/evaluate'
@@ -27,14 +28,12 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
       <p data-member-message></p><section aria-label="Selected member neighbors"><h3>Neighbors</h3>
       <div data-neighbors style="display:flex;flex-wrap:wrap;gap:8px"></div>
       <p>Neighbor buttons locate a member; they are not GPU picking checks.</p></section></section>
-    <section data-run-part="results"><p>Research pilot only. Production color compatibility remains rejected; a local pass does not approve migration.</p>
-      <div data-report>No checks run in this session.</div></section>
+    <section data-run-part="results"><div data-report>No checks run in this session.</div></section>
     <section data-run-part="diagnostics"><div class="controls"><button data-action="assess">Assess this pilot</button>
       <button data-action="latency">Investigate picking latency</button>
       <button data-action="pixels">Check current pixels</button><button data-action="cancel">Cancel assessment</button>
-      <button data-action="export">Export JSON</button></div><p>${protocol}</p>
-      <p>Assessment resets the graph and uniform sizes. Inspection, uploads and validation remain outside timed frames.</p>
-      <h3>Picking-latency investigation</h3><p>${latencyProtocol}</p></section>`
+      <button data-action="export">Export JSON</button></div>
+      <p>Assessment resets the graph. Timing and pixel checks are reported separately from exploration.</p></section>`
   const canvas = host.querySelector('canvas')!; const status = host.querySelector<HTMLElement>('[role=status]')!
   const input = host.querySelector<HTMLInputElement>('[data-member]')!; const degree = host.querySelector<HTMLInputElement>('[data-degree]')!
   const message = host.querySelector<HTMLElement>('[data-member-message]')!; const rows: Check[] = []; const captures: unknown[] = []
@@ -50,8 +49,9 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     state: busy ? 'Assessing' : r.running ? 'Running' : 'Paused',
     passed: `${rows.filter(row => row.pass).length} named checks`,
     failed: failure || r.error || `${rows.filter(row => !row.pass).length} failed checks`,
-    unchecked: 'Strict production color compatibility remains rejected. Full migration and larger viewer workloads are not approved.',
+    unchecked: 'Larger graphs and feedback outside the named checks.',
   }), { experiment: 'pilot-viewer', visualFirst: true, devices: () => [r.info] })
+  compactRunControls(host, { diagnostics: true })
   host.querySelector<HTMLElement>('.run-workbench')!.style.display = 'block'
   const record = (checks: Check[], capture: unknown): void => {
     rows.push(...checks); captures.push(capture)

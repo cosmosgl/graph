@@ -6,7 +6,10 @@ import { labBrowser } from './browser-provider.mjs'
 export default defineConfig({
   optimizeDeps: { include: ['markdown-it', 'd3-scale', 'd3-array'] },
   test: {
-    include: ['src/app/**/*.test.ts', 'src/runtime/**/*.test.ts'],
+    include: [
+      'src/app/**/*.test.ts', 'src/runtime/**/*.test.ts',
+      'src/experiments/performance-lab/view.test.ts', 'src/experiments/cell-aggregation/view.test.ts',
+    ],
     setupFiles: ['./src/testing/no-gpu.ts'],
     testTimeout: 60000,
     maxWorkers: 1,

@@ -14,10 +14,12 @@ it('assigns every experiment and document to the shared research destinations wi
     expect(experiment.pages.some(page => page.id === record.method)).toBe(true)
     for (const method of record.methods ?? []) expect(experiment.pages.some(page => page.id === method.page)).toBe(true)
     const indexed = record.investigations.map(item => item.page)
+    const caseEvidence = experiment.cases?.flatMap(item => [...item.evidence ?? [], ...item.recorded?.evidence ?? []].map(link => link.page)) ?? []
     expect(new Set(indexed).size).toBe(indexed.length)
     for (const page of experiment.pages) {
-      expect([...researchMethodPages(record), ...indexed]).toContain(page.id)
+      expect([...researchMethodPages(record), ...indexed, ...caseEvidence]).toContain(page.id)
     }
+    for (const page of caseEvidence) expect(experiment.pages.some(item => item.id === page)).toBe(true)
     for (const item of record.investigations) {
       expect(experiment.pages.some(page => page.id === item.page)).toBe(true)
       if (item.replacement) expect(indexed).toContain(item.replacement)

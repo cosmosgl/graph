@@ -1,20 +1,32 @@
 import { defineExperiment } from '../../runtime/experiment'
 import { readStudyRecord } from '../../runtime/study-record'
 import { agentFindings } from './agent-findings'
+import { precisionCases } from './cases'
 import recordedSummary from './recorded-summary.json'
 
 export const experiment = defineExperiment({
   id: 'precision-diagnostics',
   title: 'Precision diagnostics',
-  summary: 'Separate analytic gravity accuracy, legacy polar compatibility and cancellation in controlled GPU sums.',
+  summary: 'Explore how addition order and gravity calculations affect numerical results.',
   tags: ['validation', 'precision', 'WebGL', 'WebGPU'],
+  cases: precisionCases,
   study: { record: readStudyRecord(recordedSummary, 'precision-diagnostics'), recipePage: 'agent-recipe', agentFindings },
-  create: async host => (await import('./view')).createPrecisionView(host),
+  create: async (host, caseId) => (await import('./view')).createPrecisionView(host, caseId),
   pages: [{
     kind: 'markdown',
     id: 'method',
     title: 'Method and findings',
     load: async (): Promise<string> => (await import('./method.md?raw')).default,
+  }, {
+    kind: 'markdown',
+    id: 'addition-evidence',
+    title: 'Addition-order evidence',
+    load: async (): Promise<string> => (await import('./addition-evidence.md?raw')).default,
+  }, {
+    kind: 'markdown',
+    id: 'gravity-evidence',
+    title: 'Gravity accuracy evidence',
+    load: async (): Promise<string> => (await import('./gravity-evidence.md?raw')).default,
   }, {
     kind: 'markdown',
     id: 'agent-recipe',

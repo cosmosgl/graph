@@ -2,14 +2,22 @@ import { defineExperiment } from '../../runtime/experiment'
 import { readStudyRecord } from '../../runtime/study-record'
 import recordedSummary from './recorded-summary.json'
 import { agentFindings } from './agent-findings'
+import { cases } from './cases'
 export const experiment = defineExperiment({
   id: 'pilot-viewer',
   title: 'Karate Club pilot viewer',
   summary: 'Try the bounded WebGPU pilot as a small graph explorer: find members, inspect neighbors and move the running graph.',
   tags: ['integration', 'interaction'],
+  cases,
   study: { record: readStudyRecord(recordedSummary, 'pilot-viewer'), recipePage: 'agent-recipe', visualFirst: true, agentFindings },
   create: async host => (await import('./view')).createView(host),
   pages: [
+    {
+      kind: 'markdown',
+      id: 'latency-evidence',
+      title: 'Selection feedback evidence',
+      load: async (): Promise<string> => (await import('./latency-evidence.md?raw')).default,
+    },
     { kind: 'markdown', id: 'scope', title: 'First pilot contract', load: async (): Promise<string> => (await import('./scope.md?raw')).default },
     {
       kind: 'markdown',

@@ -4,10 +4,9 @@ import type { ExperimentDefinition } from '../runtime/experiment'
 import { disposeRunLayout, mountRunLayout, summarizeRun } from '../runtime/run-layout'
 import { validationContracts } from '../runtime/validation'
 import { createAppShell } from './app-shell'
-import { experiments, findExperiment } from './registry'
+import { experimentGroups, experiments, findExperiment } from './registry'
 import { migrationFocus, research } from './research'
 import { journeySteps } from './journey'
-import { coverage } from './coverage'
 import { articleSectionId, readRoute } from './router'
 
 let host: HTMLElement | undefined
@@ -42,36 +41,40 @@ function mockRun (id: string): { create: MockInstance<ExperimentDefinition['crea
   return { create, pause, destroy }
 }
 
-it('puts feature coverage and the current action before a regroupable catalog without starting GPU work', async () => {
+it('shows topic cards and the global search without starting GPU work', async () => {
   const creates = experiments.map(experiment => vi.spyOn(experiment, 'create'))
   window.history.replaceState(null, '', '#/')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('.experiment-catalog')).not.toBeNull())
-  const catalog = host.querySelector('.experiment-catalog')!
-  const decisions = host.querySelectorAll('[data-decision]')
-  expect(decisions).toHaveLength(2)
-  for (const section of decisions) {
-    expect(section.compareDocumentPosition(catalog) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    expect(section.closest('details,[hidden]')).toBeNull()
+  const count = experiments.reduce((total, experiment) => total + (experiment.cases?.length ?? 1), 0)
+  const links = Array.from(host.querySelectorAll<HTMLAnchorElement>('a[data-experiment-id]'))
+  expect(links).toHaveLength(count)
+  expect(host.querySelectorAll('.experiment-grid > li')).toHaveLength(experiments.length)
+  for (const group of experimentGroups) expect(host.querySelector(`#catalog-${group.id}`)?.textContent).toBe(group.title)
+  for (const experiment of experiments) {
+    if (!experiment.cases) {
+      expect(host.querySelector(`.experiment-card[href="#/${experiment.id}"]`)).not.toBeNull()
+      continue
+    }
+    for (const item of experiment.cases) {
+      const link = host.querySelector<HTMLAnchorElement>(`a[data-experiment-id="${experiment.id}"][href="#/${experiment.id}?case=${item.id}"]`)
+      expect(link?.textContent).toContain(item.title)
+      if (item.kind === 'recorded') expect(link?.textContent).toContain('Recorded study')
+    }
   }
-  expect(host.querySelectorAll('.experiment-card')).toHaveLength(experiments.length)
-  const simulation = host.querySelector('#catalog-simulation')!.closest('section')!
-  const workgroup = simulation.querySelector<HTMLAnchorElement>('[data-experiment-id="workgroup-repulsion"]')!
-  expect(workgroup.textContent).toContain('Workgroup repulsion')
-  expect(workgroup.getAttribute('href')).toBe('#/workgroup-repulsion')
-  const million = simulation.querySelector<HTMLAnchorElement>('[data-experiment-id="million-graph"]')!
-  expect(million.textContent).toContain('Million-point moving graph')
-  expect(million.getAttribute('href')).toBe('#/million-graph')
-  expect(host.querySelector(`[data-decision="focus"] a[href="#/${migrationFocus.experiment}"]`)).not.toBeNull()
-  expect(host.querySelectorAll('#feature-map tbody tr')).toHaveLength(coverage.length)
-  expect(Array.from(host.querySelectorAll('.experiment-card[data-current]'), card => card.getAttribute('href')))
-    .toEqual([`#/${migrationFocus.experiment}`])
-  const grouping = host.querySelector<HTMLSelectElement>('[data-catalog-grouping]')!
-  grouping.value = 'reading'; grouping.dispatchEvent(new Event('change'))
-  expect(host.querySelector('#catalog-foundations')).not.toBeNull()
-  expect(host.querySelector('#catalog-forces')!.closest('section')!.querySelector('[data-experiment-id="workgroup-repulsion"]')).not.toBeNull()
-  expect(host.querySelectorAll('.experiment-card')).toHaveLength(experiments.length)
-  expect(host.querySelector(`[data-decision="next"] a[href="#/roadmap?section=journey-${currentStep.id}"]`)).not.toBeNull()
+  expect(host.querySelector('[data-catalog-grouping], .lab-position')).toBeNull()
+  expect(host.querySelector('form[role="search"] label[for="lab-search"]')!.textContent).toBe('Search the lab')
+  expect(host.querySelector<HTMLInputElement>('#lab-search')!.value).toBe('')
+  expect(host.querySelector<HTMLElement>('.global-search-results')!.hidden).toBe(true)
+  expect(links.every(link => !link.closest('[hidden]'))).toBe(true)
+  for (const path of ['roadmap', 'feature-inventory', 'learn']) {
+    expect(host.querySelector(`.lab-navigation a[href="#/${path}"]`)).not.toBeNull()
+  }
+  for (const path of ['validation-workflow', 'architecture', 'vocabulary', 'concepts/reduction']) {
+    expect(host.querySelector(`.home-references a[href="#/${path}"]`)).not.toBeNull()
+  }
+  expect(host.querySelector('.home-references')!.compareDocumentPosition(host.querySelector('.experiment-catalog')!) &
+    Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   creates.forEach(create => expect(create).not.toHaveBeenCalled())
 })
 
@@ -81,9 +84,9 @@ it('opens the workgroup repulsion experiment from the catalog', async () => {
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector('[data-experiment-id="workgroup-repulsion"]')).not.toBeNull())
   host.querySelector<HTMLAnchorElement>('[data-experiment-id="workgroup-repulsion"]')!.click()
-  await vi.waitFor(() => expect(host!.querySelector('main h1')?.textContent).toBe('Workgroup repulsion'))
-  await vi.waitFor(() => expect(host!.querySelector('#doc-direct-alternatives')).not.toBeNull())
-  await vi.waitFor(() => expect(host!.querySelector('#doc-force-speed')?.textContent).toContain('GPU order + native force'))
+  await vi.waitFor(() => expect(host!.querySelector('main h1')?.textContent).toBe('Compare workgroup repulsion'))
+  expect(host.querySelector('.case-question')!.textContent).toContain('workgroup buffer')
+  expect(host.querySelector('.case-evidence-links a')!.textContent).toContain('evidence')
   expect(create).toHaveBeenCalledOnce()
 })
 
@@ -92,29 +95,29 @@ it('keeps the current step consistent on the roadmap and resolves feature-row li
   window.history.replaceState(null, '', '#/roadmap')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(host!.querySelector(`#journey-${currentStep.id}`)).not.toBeNull())
+  expect(host.querySelector('.lab-navigation a')!.getAttribute('href')).toBe('#/?section=experiment-catalog')
   expect(host.querySelector('[data-nav="roadmap"]')!.getAttribute('aria-current')).toBe('page')
-  expect(host.querySelector('.lab-position')!.textContent).toContain(findExperiment(migrationFocus.experiment)!.title)
+  expect(host.querySelector('.lab-position')).toBeNull()
   expect(host.querySelector(`#journey-${currentStep.id}`)!.textContent).toContain(research[migrationFocus.experiment].next)
   expect(host.querySelector('.flow-branches')!.textContent).toContain('Simulation')
   expect(host.querySelector('.flow-branches')!.textContent).toContain('Rendering and interaction')
   await route('#/feature-inventory?section=feature-curved-links', () => expect(document.activeElement?.id).toBe('feature-curved-links'))
   expect(host.querySelector('[data-nav="feature-inventory"]')!.getAttribute('aria-current')).toBe('page')
+  expect(host.querySelector('[data-nav="roadmap"]')!.hasAttribute('aria-current')).toBe(false)
   expect(host.querySelector('#feature-curved-links')!.textContent).toContain('Curved links')
   expect(host.querySelector('.coverage-summary')!.textContent).toContain('37 feature rows')
   creates.forEach(create => expect(create).not.toHaveBeenCalled())
 })
 
-it('keeps the complete document readable when GPU initialization fails', async () => {
+it('opens a legacy center evidence link without starting the live experiment', async () => {
   const create = vi.spyOn(findExperiment('center-mass')!, 'create').mockRejectedValue(new Error('Test adapter unavailable'))
   window.history.replaceState(null, '', '#/center-mass/docs/algorithm?section=webgpu-reduction')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(document.activeElement?.id).toBe('doc-algorithm-webgpu-reduction'))
-  expect(window.location.hash).toBe('#/center-mass?section=doc-algorithm-webgpu-reduction')
-  expect(host.textContent).toContain('Live experiment unavailable')
-  for (const page of findExperiment('center-mass')!.pages) expect(host.querySelector(`#${articleSectionId(page.id)}`)).not.toBeNull()
-  expect(host.textContent).toContain(validationContracts['center-mass'].acceptance)
-  expect(host.querySelector('details')).toBeNull()
-  expect(create).toHaveBeenCalledTimes(1)
+  expect(host.querySelector('.case-evidence-page')).not.toBeNull()
+  expect(host.querySelector('#doc-algorithm-webgpu-reduction')).not.toBeNull()
+  expect(host.querySelector('#doc-agent-recipe')).toBeNull()
+  expect(create).not.toHaveBeenCalled()
 })
 
 it('rejects an unknown legacy article without creating a device', async () => {
@@ -130,7 +133,7 @@ it('preserves old base-route Run bookmarks and focuses the requested result', as
   window.history.replaceState(null, '', '#/point-rendering?section=run-results')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   await vi.waitFor(() => expect(document.activeElement?.id).toBe('run-results'))
-  expect(host.querySelector('.research-conclusion')).not.toBeNull()
+  expect(host.querySelector('.case-question')!.textContent).toContain('same circles')
   expect(create).toHaveBeenCalledTimes(1)
 })
 
@@ -147,177 +150,113 @@ it('preserves explicit isolated-link diagnostic entry points', () => {
   expect(readRoute()).toMatchObject({ experimentId: 'weighted-links', view: undefined })
 })
 
-it('opens an agent recipe from a direct link', async () => {
+it('redirects an old agent recipe link to the human-facing recorded finding', async () => {
   mockRun('precision-diagnostics')
   window.history.replaceState(null, '', '#/precision-diagnostics?section=doc-agent-recipe')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(document.activeElement?.id).toBe('doc-agent-recipe'))
+  await vi.waitFor(() => expect(document.activeElement?.id).toBe('recorded-findings'))
+  expect(host!.querySelector('#doc-agent-recipe')).toBeNull()
+  expect(host!.textContent).not.toContain('Instructions for agents')
+  expect(host!.querySelector('.case-recorded')!.textContent).toContain('addition')
 })
 
 it('keeps the recorded result readable and offers retry when live setup fails', async () => {
-  const { create } = mockRun('viewer-comparison')
+  const experiment = findExperiment('viewer-comparison')!
+  const { create } = mockRun(experiment.id)
   create.mockRejectedValueOnce(new Error('Test adapter unavailable'))
   window.history.replaceState(null, '', '#/viewer-comparison')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
-  await vi.waitFor(() => expect(host!.querySelector('[data-study-status]')!.textContent).toContain('Test adapter unavailable'))
-  const keyResult = host.querySelector('.experiment-header .study-key-result')!
-  expect(keyResult.textContent).toContain(findExperiment('viewer-comparison')!.study!.record.conclusion)
-  expect(keyResult.querySelector('a')!.getAttribute('href')).toBe('#/viewer-comparison?section=study-overview')
-  expect(host.querySelector('#study-overview')!.textContent).toContain(findExperiment('viewer-comparison')!.study!.record.conclusion)
-  expect(host.querySelector('#doc-agent-recipe')).not.toBeNull()
-  expect(host.querySelector('.experiment-contents a[href$="section=doc-agent-recipe"]')).not.toBeNull()
-  const retry = host.querySelector<HTMLButtonElement>('[data-start-study]')!
+  await vi.waitFor(() => expect(host!.querySelector('.case-load-status')?.textContent).toContain('Test adapter unavailable'))
+  expect(host.querySelector('.case-recorded')!.textContent).toContain(experiment.cases![0].recorded!.conclusion)
+  expect(host.querySelector('#doc-agent-recipe')).toBeNull()
+  const retry = host.querySelector<HTMLButtonElement>('.case-stage button')!
   expect(retry.hidden).toBe(false); retry.click()
   await vi.waitFor(() => expect(host!.querySelector('canvas')).not.toBeNull())
   expect(create).toHaveBeenCalledTimes(2)
 })
 
-it('shows an agent finding and its reproduction steps even when the live study fails', async () => {
-  const experiment = findExperiment('precision-diagnostics')!
-  vi.spyOn(experiment, 'create').mockRejectedValue(new Error('Test adapter unavailable'))
-  window.history.replaceState(null, '', '#/precision-diagnostics')
+it('keeps the selected case finding and retry available when live setup fails', async () => {
+  const experiment = findExperiment('center-mass')!
+  const item = experiment.cases!.find(entry => entry.id === 'center-comparison')!
+  const { create } = mockRun(experiment.id)
+  create.mockRejectedValueOnce(new Error('Test adapter unavailable'))
+  window.history.replaceState(null, '', '#/center-mass?case=center-comparison')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelector('[data-study-status]')?.textContent).toContain('Test adapter unavailable'))
-  await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
-  const record = experiment.study!.agentFindings!.records.find(item => item.id === 'input-order')!
-  const result = host.querySelector<HTMLElement>('#study-finding-input-order')!
-  expect(result.textContent).toContain(record.question)
-  expect(result.textContent).toContain(record.result)
-  expect(result.textContent).toContain(record.limits)
-  expect(host.querySelector('#study-overview')!.textContent).toContain(experiment.study!.record.conclusion)
-  expect(result.compareDocumentPosition(host.querySelector('#study-overview')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  expect(host.querySelector('.experiment-contents a[href$="section=study-investigations"]')).not.toBeNull()
-  expect(host.querySelector('#doc-method-follow-up-input-order')).not.toBeNull()
-  expect(result.querySelector('a')!.getAttribute('href')).toBe('#/precision-diagnostics?section=doc-method-follow-up-input-order')
-  const details = result.querySelector<HTMLElement>('.study-finding-reproduction')!
-  expect(result.querySelector('details')).toBeNull()
-  expect(details.checkVisibility()).toBe(true)
-  expect(details.textContent).toContain(record.environment)
-  expect(details.textContent).toContain(record.evidence)
-  expect(details.textContent).toContain(record.source.snapshot)
-  expect(details.textContent).toContain(record.reproduction[0])
-  expect(host.querySelector('#doc-agent-recipe-replay-the-input-order-follow-up')).not.toBeNull()
-  expect(details.querySelector('a')!.getAttribute('href')).toBe('#/precision-diagnostics?section=doc-agent-recipe-replay-the-input-order-follow-up')
+  await vi.waitFor(() => expect(host!.querySelector('.case-load-status')?.textContent).toContain('Test adapter unavailable'))
+  expect(host.querySelector('.case-recorded')!.textContent).toContain(item.recorded!.conclusion)
+  expect(host.querySelector('.case-recorded')!.textContent).toContain(item.recorded!.limits)
+  expect(host.textContent).not.toContain('Instructions for agents')
+  const retry = host.querySelector<HTMLButtonElement>('.case-stage button')!
+  expect(retry.hidden).toBe(false); retry.click()
+  await vi.waitFor(() => expect(host!.querySelector('canvas')).not.toBeNull())
+  expect(create).toHaveBeenCalledTimes(2)
+  expect(create.mock.calls[1][1]).toBe('center-comparison')
 })
 
-it('keeps a finding and its steps readable when referenced headings are missing', async () => {
-  const experiment = findExperiment('precision-diagnostics')!
-  const previousFindings = experiment.study!.agentFindings!
-  const original = previousFindings.records.find(item => item.id === 'input-order')!
-  const finding = { ...original, evidenceSection: 'missing-evidence', replaySection: 'missing-replay' }
-  experiment.study!.agentFindings = { records: [finding], invalid: [] }
-  vi.spyOn(experiment, 'create').mockRejectedValue(new Error('Test adapter unavailable'))
-  window.history.replaceState(null, '', '#/precision-diagnostics')
+it('keeps a recorded-only center-force finding available without starting a device', async () => {
+  const create = vi.spyOn(findExperiment('center-mass')!, 'create')
+  window.history.replaceState(null, '', '#/center-mass?case=center-force-scale')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  try {
-    await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
-    const result = host.querySelector<HTMLElement>('#study-finding-input-order')!
-    expect(result.textContent).toContain(finding.result)
-    expect(result.textContent).toContain('Read the evidence unavailable')
-    expect(result.textContent).toContain('Exact replay instructions unavailable')
-    expect(result.textContent).toContain(finding.reproduction[0])
-    expect(result.querySelectorAll('a')).toHaveLength(0)
-  } finally { experiment.study!.agentFindings = previousFindings }
+  await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
+  expect(host.querySelector('.case-recorded')!.textContent).toContain('failed the strict trajectory comparison')
+  expect(host.querySelector('.case-intro, canvas')).toBeNull()
+  expect(create).not.toHaveBeenCalled()
 })
 
-it('keeps the inconclusive pilot finding and expanded recipe usable without a GPU', async () => {
-  const experiment = findExperiment('pilot-viewer')!
-  const create = vi.spyOn(experiment, 'create').mockRejectedValue(new Error('Test adapter unavailable'))
-  window.history.replaceState(null, '', '#/pilot-viewer')
+it('opens the center measurement controls without initializing a device', async () => {
+  const create = vi.spyOn(findExperiment('center-mass')!, 'create')
+  window.history.replaceState(null, '', '#/center-mass?case=center-measurements')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelector('[data-study-status]')?.textContent).toContain('Test adapter unavailable'))
-  await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
-  expect(experiment.study!.agentFindings!.invalid).toEqual([])
-  const record = experiment.study!.agentFindings!.records.find(item => item.id === 'picking-latency')!
-  const result = host.querySelector<HTMLElement>('#study-finding-picking-latency')!
-  expect(result.textContent).toContain(record.result)
-  expect(result.textContent).toContain(record.limits)
-  const instructions = result.querySelector<HTMLElement>('.study-finding-reproduction')!
-  expect(instructions.checkVisibility()).toBe(true)
-  expect(instructions.textContent).toContain(record.source.revision)
-  expect(instructions.querySelectorAll('li')).toHaveLength(record.reproduction.length)
-  expect(host.querySelector('details')).toBeNull()
-  expect(host.querySelector('#study-overview')!.textContent).toContain('100.4 ms')
-  for (const link of result.querySelectorAll<HTMLAnchorElement>('a')) {
-    const target = link.dataset.findingTarget!
-    expect(host.querySelector(`#${target}`)).not.toBeNull()
-    link.click()
-    await vi.waitFor(() => expect(document.activeElement?.id).toBe(target))
-  }
-  expect(result.querySelectorAll('a')).toHaveLength(2)
+  await vi.waitFor(() => expect(host!.querySelector<HTMLInputElement>('[data-scale-counts]')?.value).toBe('8192'))
+  expect(host.querySelector<HTMLInputElement>('[data-once-count]')!.value).toBe('8192')
+  expect(host.querySelector('[data-scale-status]')!.textContent).toContain('Not run')
+  expect(host.querySelector('[data-once-status]')!.textContent).toContain('Not run')
   expect(create).toHaveBeenCalledTimes(1)
+  expect(create.mock.calls[0][1]).toBe('center-measurements')
 })
 
-it('places the live pilot graph before the published investigation', async () => {
-  mockRun('pilot-viewer')
-  window.history.replaceState(null, '', '#/pilot-viewer')
+for (const id of ['pilot-viewer', 'cluster-attraction', 'point-attractors']) {
+  it(`keeps ${id} findings and limits readable when live setup fails`, async () => {
+    const experiment = findExperiment(id)!
+    const item = experiment.cases![0]
+    vi.spyOn(experiment, 'create').mockRejectedValue(new Error('Test adapter unavailable'))
+    window.history.replaceState(null, '', `#/${id}?case=${item.id}`)
+    host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+    await vi.waitFor(() => expect(host!.querySelector('.case-load-status')?.textContent).toContain('Test adapter unavailable'))
+    const finding = host.querySelector<HTMLElement>('.case-recorded')!
+    expect(finding.textContent).toContain(item.recorded!.conclusion)
+    expect(finding.textContent).toContain(item.recorded!.scope)
+    expect(finding.textContent).toContain(item.recorded!.limits)
+    expect(finding.querySelector('.case-evidence-links a')).not.toBeNull()
+    expect(host.textContent).not.toContain('Instructions for agents')
+    expect(host.querySelector('#doc-agent-recipe')).toBeNull()
+  })
+
+  it(`places the ${id} live result before its recorded finding`, async () => {
+    mockRun(id)
+    window.history.replaceState(null, '', `#/${id}`)
+    host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+    await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
+    const finding = host.querySelector('#recorded-findings')!
+    expect(host.querySelector('canvas')!.compareDocumentPosition(finding) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(finding.closest('details')).toBeNull()
+  })
+}
+
+it('opens the recorded pilot latency investigation without creating a GPU device', async () => {
+  const create = vi.spyOn(findExperiment('pilot-viewer')!, 'create')
+  window.history.replaceState(null, '', '#/pilot-viewer?case=selection-feedback')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelector('canvas')).not.toBeNull())
-  const canvas = host.querySelector('canvas')!
-  const finding = host.querySelector('#study-finding-picking-latency')!
-  expect(canvas.compareDocumentPosition(finding) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
+  expect(host.querySelector('.case-recorded')!.textContent).toContain('100.4 ms')
+  expect(host.querySelector('.case-recorded')!.textContent).toContain('remain unexplained')
+  host.querySelector<HTMLAnchorElement>('.case-evidence-links a')!.click()
+  await vi.waitFor(() => expect(host!.querySelector('.case-evidence-page h1')?.textContent).toBe('Selection feedback evidence'))
+  expect(host.textContent).not.toContain('Instructions for agents')
+  expect(create).not.toHaveBeenCalled()
 })
 
-it('keeps the cluster finding, limits and expanded reproduction readable without a live device', async () => {
-  const experiment = findExperiment('cluster-attraction')!
-  vi.spyOn(experiment, 'create').mockRejectedValue(new Error('Test adapter unavailable'))
-  window.history.replaceState(null, '', '#/cluster-attraction')
-  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelector('[data-study-status]')?.textContent).toContain('Test adapter unavailable'))
-  await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
-  expect(experiment.study!.agentFindings!.invalid).toEqual([])
-  const record = experiment.study!.agentFindings!.records[0]
-  const result = host.querySelector<HTMLElement>('#study-finding-isolated-clusters')!
-  expect(result.textContent).toContain(record.result)
-  expect(result.textContent).toContain(record.limits)
-  expect(result.querySelector<HTMLElement>('.study-finding-reproduction')!.checkVisibility()).toBe(true)
-  expect(result.querySelectorAll('li')).toHaveLength(record.reproduction.length)
-  expect(host.querySelector('details')).toBeNull()
-  for (const link of result.querySelectorAll<HTMLAnchorElement>('a')) {
-    expect(host.querySelector(`#${link.dataset.findingTarget}`)).not.toBeNull()
-  }
-})
-
-it('keeps the live cluster graph above the recorded finding', async () => {
-  mockRun('cluster-attraction')
-  window.history.replaceState(null, '', '#/cluster-attraction')
-  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelector('canvas')).not.toBeNull())
-  const finding = host.querySelector('#study-finding-isolated-clusters')!
-  expect(host.querySelector('canvas')!.compareDocumentPosition(finding) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-})
-
-it('keeps the attractor finding, limits and expanded reproduction readable without a live device', async () => {
-  const experiment = findExperiment('point-attractors')!
-  vi.spyOn(experiment, 'create').mockRejectedValue(new Error('Test adapter unavailable'))
-  window.history.replaceState(null, '', '#/point-attractors')
-  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelector('[data-study-status]')?.textContent).toContain('Test adapter unavailable'))
-  await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
-  expect(experiment.study!.agentFindings!.invalid).toEqual([])
-  const record = experiment.study!.agentFindings!.records[0]
-  const result = host.querySelector<HTMLElement>('#study-finding-isolated-attractors')!
-  expect(result.textContent).toContain(record.result)
-  expect(result.textContent).toContain(record.limits)
-  expect(result.querySelector<HTMLElement>('.study-finding-reproduction')!.checkVisibility()).toBe(true)
-  expect(result.querySelectorAll('li')).toHaveLength(record.reproduction.length)
-  expect(host.querySelector('details')).toBeNull()
-  for (const link of result.querySelectorAll<HTMLAnchorElement>('a')) {
-    expect(host.querySelector(`#${link.dataset.findingTarget}`)).not.toBeNull()
-  }
-})
-
-it('keeps the live attractor graph above the recorded finding', async () => {
-  mockRun('point-attractors')
-  window.history.replaceState(null, '', '#/point-attractors')
-  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelector('canvas')).not.toBeNull())
-  const finding = host.querySelector('#study-finding-isolated-attractors')!
-  expect(host.querySelector('canvas')!.compareDocumentPosition(finding) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-})
-
-it('keeps the contents links when a delayed live setup fails', async () => {
+it('keeps the finding and evidence available while delayed live setup fails', async () => {
   let rejectSetup!: (error: Error) => void
   const pending = new Promise<never>((resolve, reject) => { rejectSetup = reject })
   vi.spyOn(findExperiment('viewer-comparison')!, 'create').mockImplementation(async stage => {
@@ -327,62 +266,231 @@ it('keeps the contents links when a delayed live setup fails', async () => {
   })
   window.history.replaceState(null, '', '#/viewer-comparison')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
+  await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('true'))
   const ids = Array.from(host.querySelectorAll('[id]'), node => node.id)
   expect(new Set(ids).size).toBe(ids.length)
-  expect(host.querySelector('.experiment-contents a[href$="section=doc-agent-recipe"]')).not.toBeNull()
+  expect(host.querySelector('.case-recorded')!.textContent).toContain(findExperiment('viewer-comparison')!.cases![0].recorded!.conclusion)
+  expect(host.querySelector('.case-evidence-links a')).not.toBeNull()
+  expect(host.querySelector('#doc-agent-recipe')).toBeNull()
   rejectSetup(new Error('Delayed setup failure'))
-  await vi.waitFor(() => expect(host!.querySelector('[data-study-status]')?.textContent).toContain('Delayed setup failure'))
-  expect(host.querySelector('.experiment-contents a[href$="section=doc-agent-recipe"]')).not.toBeNull()
-  expect(host.querySelector('#doc-agent-recipe')).not.toBeNull()
+  await vi.waitFor(() => expect(host!.querySelector('.case-load-status')?.textContent).toContain('Delayed setup failure'))
+  expect(host.querySelector('.case-evidence-links a')).not.toBeNull()
+  expect(host.querySelector('#doc-agent-recipe')).toBeNull()
 })
 
-it('retires a viewer whose notes fail while setup is still running', async () => {
+it('retires a viewer that finishes creating after the user leaves', async () => {
   let finish!: () => void
   const pending = new Promise<void>(resolve => { finish = resolve }); const destroy = vi.fn()
   const viewer = findExperiment('viewer-comparison')!
-  const previousFindings = viewer.study!.agentFindings
-  viewer.study!.agentFindings = findExperiment('precision-diagnostics')!.study!.agentFindings
   vi.spyOn(viewer, 'create').mockImplementation(async stage => {
     stage.innerHTML = '<iframe></iframe>'; await pending; return { destroy }
   })
-  const query = Element.prototype.querySelector
-  vi.spyOn(Element.prototype, 'querySelector').mockImplementation(function (this: Element, selector: string) {
-    if (this.classList.contains('study-notes-host') && selector === '.run-layout') throw new Error('Notes failed')
-    return query.call(this, selector)
-  } as typeof Element.prototype.querySelector)
   window.history.replaceState(null, '', '#/viewer-comparison')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
   try {
-    await vi.waitFor(() => expect(host!.querySelector('.failure')).not.toBeNull())
-    expect(host.querySelector('#study-finding-input-order')).not.toBeNull()
+    await vi.waitFor(() => expect(host!.querySelector('iframe')).not.toBeNull())
+    await route('#/', () => expect(host!.querySelector('.experiment-catalog')).not.toBeNull())
     finish(); await vi.waitFor(() => expect(destroy).toHaveBeenCalledTimes(1))
-  } finally { viewer.study!.agentFindings = previousFindings; finish() }
+  } finally { finish() }
 })
 
 it('keeps one recorded result when returning to the retained live viewer', async () => {
-  const viewer = findExperiment('viewer-comparison')!
-  const previousFindings = viewer.study!.agentFindings
-  viewer.study!.agentFindings = findExperiment('precision-diagnostics')!.study!.agentFindings
   const { create } = mockRun('viewer-comparison')
   window.history.replaceState(null, '', '#/viewer-comparison')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  try {
-    await vi.waitFor(() => expect(host!.querySelector('[data-study-status]')).toBeNull())
-    const canvas = host.querySelector('canvas')!
-    expect(host.querySelector('#run-run')!.compareDocumentPosition(host.querySelector('#study-investigations')!) &
-      Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-    await route('#/validation-workflow', () => expect(host!.querySelector('h1')!.textContent).toBe('Validation workflow'))
-    await route('#/viewer-comparison', () => {
-      expect(host!.querySelector('canvas')).toBe(canvas)
-      expect(host!.querySelector('[data-study-status]')).toBeNull()
-      expect(host!.querySelectorAll('#study-overview')).toHaveLength(1)
-    })
-    expect(create).toHaveBeenCalledTimes(1)
-  } finally { viewer.study!.agentFindings = previousFindings }
+  await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
+  const canvas = host.querySelector('canvas')!
+  expect(canvas.compareDocumentPosition(host.querySelector('#recorded-findings')!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  await route('#/validation-workflow', () => expect(host!.querySelector('h1')!.textContent).toBe('Validation workflow'))
+  await route('#/viewer-comparison', () => {
+    expect(host!.querySelector('canvas')).toBe(canvas)
+    expect(host!.querySelectorAll('#recorded-findings')).toHaveLength(1)
+  })
+  expect(create).toHaveBeenCalledTimes(1)
 })
 
-for (const { id } of experiments) {
+for (const [id, caseId] of [
+  ['center-mass', 'center-comparison'],
+  ['precision-diagnostics', 'gravity-accuracy'],
+  ['point-styling', 'picking'],
+]) {
+  it(`opens the ${id} ${caseId} case with its own context and finding`, async () => {
+    const { create } = mockRun(id)
+    const experiment = findExperiment(id)!
+    const item = experiment.cases!.find(entry => entry.id === caseId)!
+    window.history.replaceState(null, '', `#/${id}?case=${caseId}`)
+    host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+    await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
+    expect(host.querySelector('h1')!.textContent).toBe(item.title)
+    expect(host.querySelector('.case-question')!.textContent).toBe(item.question)
+    expect(host.querySelector('.case-description')!.textContent).toBe(item.description)
+    expect(host.querySelector('.case-intro')!.textContent).toContain(item.tryIt)
+    expect(host.querySelector('.case-comparison')!.textContent).toContain(item.reference)
+    expect(host.querySelector('.case-comparison')!.textContent).toContain(item.acceptance)
+    expect(host.querySelector('.case-recorded')!.textContent).toContain(item.recorded!.conclusion)
+    expect(host.querySelector('.case-recorded')!.textContent).toContain(item.recorded!.limits)
+    expect(host.querySelector('#run-results')!.compareDocumentPosition(host.querySelector('.case-recorded')!) &
+      Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    const diagnostics = host.querySelector('#run-diagnostics')
+    if (diagnostics) {
+      expect(host.querySelector('.case-comparison')!.compareDocumentPosition(diagnostics) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    }
+    const navigation = host.querySelector<HTMLElement>('.case-navigation')!
+    expect(navigation.getAttribute('aria-label')).toBe(`Other experiments in ${experiment.title}`)
+    expect(navigation.querySelectorAll('a')).toHaveLength(experiment.cases!.length - 1)
+    expect(host.querySelector('.lab-navigation a')!.getAttribute('href')).toBe('#/?section=experiment-catalog')
+    for (const other of experiment.cases!.filter(entry => entry.id !== caseId)) {
+      expect(navigation.querySelector(`a[href="#/${id}?case=${other.id}"]`)!.textContent).toBe(other.title)
+    }
+    expect(navigation.querySelector(`a[href="#/${id}?case=${caseId}"]`)).toBeNull()
+    expect(host.querySelector('canvas')).not.toBeNull()
+    expect(host.querySelector('#doc-agent-recipe, .study-finding-reproduction')).toBeNull()
+    expect(host.textContent).not.toContain('Instructions for agents')
+    expect(create).toHaveBeenCalledTimes(1)
+    expect(create.mock.calls[0][1]).toBe(caseId)
+  })
+}
+
+it('preserves a live case and its state through evidence and legacy article links', async () => {
+  const { create, pause, destroy } = mockRun('center-mass')
+  window.history.replaceState(null, '', '#/center-mass?case=center-comparison')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
+  const canvas = host.querySelector('canvas')!; const input = host.querySelector('.experiment-run input')!
+  host.querySelector<HTMLButtonElement>('.run-primary-actions button')!.click()
+  host.querySelector<HTMLAnchorElement>('.case-evidence-links a[href*="evidence=results"]')!.click()
+  await vi.waitFor(() => expect(host!.querySelector('#doc-results')).not.toBeNull())
+  expect(host.querySelector('.case-evidence-page')!.textContent).toContain('Both approaches produced centers close to the CPU reference')
+  expect(host.querySelector('.case-evidence-page')!.textContent).not.toContain('Instructions for agents')
+  expect(host.querySelector('.case-evidence-page .case-navigation a[href="#/center-mass?case=center-measurements"]')).not.toBeNull()
+  expect(pause).toHaveBeenCalledTimes(1); expect(destroy).not.toHaveBeenCalled()
+  host.querySelector<HTMLAnchorElement>('[data-back]')!.click()
+  await vi.waitFor(() => expect(host!.querySelector('canvas')).toBe(canvas))
+  expect(host.querySelector('.experiment-run input')).toBe(input)
+  expect(host.querySelector('[data-test-tick]')!.textContent).toBe('1')
+  expect(host.querySelectorAll('#recorded-findings')).toHaveLength(1)
+  await route('#/center-mass/docs/algorithm?section=webgpu-reduction', () =>
+    expect(document.activeElement?.id).toBe('doc-algorithm-webgpu-reduction'))
+  expect(host.querySelector('.case-evidence-page')).not.toBeNull()
+  host.querySelector<HTMLAnchorElement>('[data-back]')!.click()
+  await vi.waitFor(() => expect(host!.querySelector('canvas')).toBe(canvas))
+  expect(host.querySelector('[data-test-tick]')!.textContent).toBe('1')
+  expect(create).toHaveBeenCalledTimes(1); expect(destroy).not.toHaveBeenCalled()
+})
+
+it('keeps the current run intact while searching and restores it after visiting another experiment', async () => {
+  const original = mockRun('center-mass'); const next = mockRun('precision-diagnostics')
+  window.history.replaceState(null, '', '#/center-mass?case=center-comparison')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
+  const canvas = host.querySelector('canvas')!; const setting = host.querySelector<HTMLInputElement>('.experiment-run input')!
+  setting.value = 'kept setting'
+  host.querySelector<HTMLButtonElement>('.run-primary-actions button')!.click()
+  const search = host.querySelector<HTMLInputElement>('#lab-search')!
+  search.value = 'gravity force accuracy'; search.dispatchEvent(new Event('input'))
+  expect(original.pause).not.toHaveBeenCalled(); expect(original.destroy).not.toHaveBeenCalled()
+  const selector = '.global-search-results a[href="#/precision-diagnostics?case=gravity-accuracy"]'
+  await vi.waitFor(() => expect(host!.querySelector(selector)).not.toBeNull(), { timeout: 20000 })
+  expect(host.querySelector('canvas')).toBe(canvas); expect(setting.value).toBe('kept setting')
+  host.querySelector<HTMLAnchorElement>(selector)!.click()
+  await vi.waitFor(() => expect(host!.querySelector('h1')?.textContent).toBe('Gravity force accuracy'))
+  await vi.waitFor(() => expect(next.create).toHaveBeenCalledTimes(1))
+  expect(original.pause).toHaveBeenCalled(); expect(original.destroy).not.toHaveBeenCalled()
+  window.history.back()
+  await vi.waitFor(() => expect(host!.querySelector('canvas')).toBe(canvas))
+  expect(host.querySelector<HTMLInputElement>('.experiment-run input')).toBe(setting)
+  expect(setting.value).toBe('kept setting')
+  expect(host.querySelector('[data-test-tick]')!.textContent).toBe('1')
+  expect(original.create).toHaveBeenCalledTimes(1); expect(original.destroy).not.toHaveBeenCalled()
+  expect(next.destroy).toHaveBeenCalledTimes(1)
+  expect(search.value).toBe('gravity force accuracy')
+  search.focus()
+  await vi.waitFor(() => expect(host!.querySelector<HTMLElement>('.global-search-results')!.hidden).toBe(false))
+  host.querySelector('main')!.focus()
+  host.querySelector('main')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  expect(host.querySelector<HTMLElement>('.global-search-results')!.hidden).toBe(true)
+  expect(host.querySelector('canvas')).toBe(canvas)
+
+  search.value = 'gravity force accuracy'; search.dispatchEvent(new Event('input'))
+  await vi.waitFor(() => expect(host!.querySelector(selector)).not.toBeNull())
+  host.querySelector<HTMLAnchorElement>(selector)!.click()
+  await vi.waitFor(() => expect(next.create).toHaveBeenCalledTimes(2))
+  search.value = 'compare center of mass calculations'; search.dispatchEvent(new Event('input'))
+  const originalSelector = '.global-search-results a[href="#/center-mass?case=center-comparison"]'
+  await vi.waitFor(() => expect(host!.querySelector(originalSelector)).not.toBeNull())
+  host.querySelector<HTMLAnchorElement>(originalSelector)!.click()
+  await vi.waitFor(() => expect(host!.querySelector('canvas')).toBe(canvas))
+  expect(host.querySelector<HTMLInputElement>('.experiment-run input')).toBe(setting)
+  expect(setting.value).toBe('kept setting')
+  expect(host.querySelector('[data-test-tick]')!.textContent).toBe('1')
+  expect(original.create).toHaveBeenCalledTimes(1); expect(original.destroy).not.toHaveBeenCalled()
+  expect(next.destroy).toHaveBeenCalledTimes(2)
+}, 30000)
+
+it('restores completed evidence after searching away from an embedded viewer that must restart', async () => {
+  const originalMove = Object.getOwnPropertyDescriptor(Element.prototype, 'moveBefore')
+  Object.defineProperty(Element.prototype, 'moveBefore', { value: undefined, configurable: true })
+  const destroy = vi.fn(); const restoreEvidence = vi.fn()
+  const create = vi.spyOn(findExperiment('center-mass')!, 'create').mockImplementation(async stage => {
+    stage.innerHTML = '<iframe title="Fixture viewer"></iframe>'
+    return { destroy, saveEvidence: (): { results: string[] } => ({ results: ['completed'] }), restoreEvidence }
+  })
+  const next = mockRun('precision-diagnostics')
+  try {
+    window.history.replaceState(null, '', '#/center-mass?case=center-comparison')
+    host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+    await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
+    const search = host.querySelector<HTMLInputElement>('#lab-search')!
+    search.value = 'gravity force accuracy'; search.dispatchEvent(new Event('input'))
+    const selector = '.global-search-results a[href="#/precision-diagnostics?case=gravity-accuracy"]'
+    await vi.waitFor(() => expect(host!.querySelector(selector)).not.toBeNull(), { timeout: 20000 })
+    host.querySelector<HTMLAnchorElement>(selector)!.click()
+    await vi.waitFor(() => expect(next.create).toHaveBeenCalledTimes(1))
+    expect(destroy).toHaveBeenCalledTimes(1)
+    window.history.back()
+    await vi.waitFor(() => expect(restoreEvidence).toHaveBeenCalledWith({ results: ['completed'] }))
+    expect(create).toHaveBeenCalledTimes(2)
+  } finally {
+    if (originalMove) Object.defineProperty(Element.prototype, 'moveBefore', originalMove)
+    else Reflect.deleteProperty(Element.prototype, 'moveBefore')
+  }
+}, 30000)
+
+it('destroys the previous run when switching cases and does not start the recorded case', async () => {
+  const { create, destroy } = mockRun('center-mass')
+  window.history.replaceState(null, '', '#/center-mass?case=center-comparison')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
+  const previousCanvas = host.querySelector('canvas')!
+  host.querySelector<HTMLAnchorElement>('.case-navigation a[href="#/center-mass?case=center-measurements"]')!.click()
+  await vi.waitFor(() => {
+    expect(host!.querySelector('h1')?.textContent).toBe('Measure center-force cost')
+    expect(create).toHaveBeenCalledTimes(2)
+  })
+  expect(create.mock.calls[1][1]).toBe('center-measurements')
+  expect(destroy).toHaveBeenCalledTimes(1)
+  expect(host.querySelector('canvas')).not.toBe(previousCanvas)
+  await route('#/center-mass?case=center-force-scale', () => {
+    expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false')
+    expect(host!.querySelector('h1')?.textContent).toBe('Center-force scaling and trajectories')
+  })
+  expect(destroy).toHaveBeenCalledTimes(2)
+  expect(create).toHaveBeenCalledTimes(2)
+  expect(host.querySelector('canvas')).toBeNull()
+  expect(host.querySelector('.case-navigation a[href="#/center-mass?case=center-comparison"]')).not.toBeNull()
+})
+
+it('opens a legacy center diagnostics link in the separate measurement case', async () => {
+  const { create } = mockRun('center-mass')
+  window.history.replaceState(null, '', '#/center-mass?section=run-diagnostics')
+  host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
+  await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
+  expect(host.querySelector('h1')!.textContent).toBe('Measure center-force cost')
+  expect(document.activeElement?.id).toBe('case-live')
+  expect(create.mock.calls[0][1]).toBe('center-measurements')
+})
+
+for (const { id } of experiments.filter(experiment => !experiment.cases)) {
   it(`keeps ${id} on one visible page and preserves its run through sections, aliases and articles`, async () => {
     const { create, pause, destroy } = mockRun(id)
     const definition = findExperiment(id)!
@@ -390,23 +498,24 @@ for (const { id } of experiments) {
     host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
     await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
     await vi.waitFor(() => expect(host!.querySelector('.experiment-run canvas')).not.toBeNull())
-    const canvas = host.querySelector('canvas')!; const input = host.querySelector('input')!
+    const canvas = host.querySelector('canvas')!; const input = host.querySelector('.experiment-run input')!
     const findings = host.querySelector('[data-recorded-report]')!
     expect(host.querySelector('.research-conclusion')!.textContent).toBe(definition.study?.record.conclusion ?? research[id].conclusion)
-    expect(host.querySelector('.experiment-role')!.textContent?.includes('Current investigation')).toBe(id === migrationFocus.experiment)
+    expect(host.querySelector('.experiment-role')).toBeNull()
     for (const article of host.querySelectorAll<HTMLElement>('.experiment-article')) {
       expect(host.querySelector(`.experiment-contents a[href$="section=${article.id}"]`)).not.toBeNull()
-      for (const heading of article.querySelectorAll('[data-heading-level="2"]')) {
-        expect(host.querySelector(`.experiment-contents a[href$="section=${heading.id}"]`)).not.toBeNull()
-      }
     }
+    expect(host.querySelector('.experiment-contents ul ul')).toBeNull()
     expect(host.querySelector('.page-tabs,.method-topics,.research-actions,.run-contents,.evidence-index,details')).toBeNull()
     expect(host.querySelectorAll('main nav')).toHaveLength(1)
     expect(host.querySelector('.sidebar,.experiment-return,.unified-document')).toBeNull()
     expect(host.querySelectorAll('main h1')).toHaveLength(1)
     expect(host.querySelector('.experiment-run')!.textContent).toContain('Original guidance.')
     for (const value of Object.values(validationContracts[id]).slice(1)) expect(host.textContent).toContain(value)
-    for (const page of definition.pages) expect(host.querySelector(`#${articleSectionId(page.id)}`)).not.toBeNull()
+    for (const page of definition.pages) {
+      if (page.id === 'agent-recipe') expect(host.querySelector(`#${articleSectionId(page.id)}`)).toBeNull()
+      else expect(host.querySelector(`#${articleSectionId(page.id)}`)).not.toBeNull()
+    }
     const ids = Array.from(host.querySelectorAll('[id]'), node => node.id)
     expect(new Set(ids).size).toBe(ids.length)
     for (const link of host.querySelectorAll<HTMLAnchorElement>('.experiment-contents a')) {
@@ -426,7 +535,7 @@ for (const { id } of experiments) {
     expect(pause).toHaveBeenCalledTimes(pausesBeforeSection)
     await route(`#/${id}/run?section=run-results`, () => expect(document.activeElement?.id).toBe('run-results'))
     expect(window.location.hash).toBe(`#/${id}?section=run-results`)
-    expect(host.querySelector('canvas')).toBe(canvas); expect(host.querySelector('input')).toBe(input)
+    expect(host.querySelector('canvas')).toBe(canvas); expect(host.querySelector('.experiment-run input')).toBe(input)
     expect(host.querySelector('[data-test-tick]')!.textContent).toBe('1')
     await route(`#/${id}/evidence`, () => expect(document.activeElement?.id).toBe('recorded-findings'))
     expect(window.location.hash).toBe(`#/${id}?section=recorded-findings`)

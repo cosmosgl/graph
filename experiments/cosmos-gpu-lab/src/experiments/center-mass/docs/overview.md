@@ -6,8 +6,7 @@ tick order and CPU reference identical.
 
 ## Question
 
-Can a portable WebGPU compute reduction replace the additive floating-point blend used by the WebGL engine without
-changing the result enough to affect simulation behavior?
+How closely do WebGL blending and WebGPU compute calculate the center of the same point snapshot?
 
 ## What the demo does
 
@@ -21,10 +20,8 @@ changing the result enough to affect simulation behavior?
 The visualization is deliberately minimal. It exists to expose the compute path, not to reproduce the complete Cosmos
 renderer.
 
-The original comparison remains available above. The separate M3 scale study
-in Diagnostics tests the newer recursive center force and an opt-in linear
-candidate; see its [method](#/center-mass?section=doc-scale-method-m3-center-force-scale-study)
-and [findings](#/center-mass?section=doc-scale-findings-m3-center-force-scale-findings).
+This comparison measures the center of a shared point snapshot. It does not test
+the resulting force or independently evolving graph trajectories.
 
 ## Result shape
 

@@ -2,17 +2,17 @@ import { afterEach, expect, it, vi } from 'vitest'
 import './styles.css'
 import { disposeRunLayout, mountRunLayout, summarizeRun } from '../runtime/run-layout'
 import { createAppShell } from './app-shell'
-import { findExperiment } from './registry'
+import { experiments, findExperiment } from './registry'
 let host: HTMLElement | undefined; let shell: ReturnType<typeof createAppShell> | undefined
 const initial = window.location.href
 afterEach(() => { shell?.destroy(); host?.remove(); vi.restoreAllMocks(); window.history.replaceState(null, '', initial) })
-it('keeps the styled feature map within the page at the current browser width', async () => {
+it('keeps the styled experiment cards within the page at the current browser width', async () => {
   window.history.replaceState(null, '', '#/'); host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelectorAll('#feature-map tbody tr')).toHaveLength(37))
+  await vi.waitFor(() => expect(host!.querySelectorAll('.experiment-grid > li')).toHaveLength(experiments.length))
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth)
-  expect(host.querySelectorAll('details,[hidden]')).toHaveLength(0)
+  expect(host.querySelectorAll('main details, main [hidden]')).toHaveLength(0)
 })
-it('keeps the graph before the expanded contents on narrow screens and jumps below the sticky header without rebuilding it', async () => {
+it('keeps the graph before its finding and returns from evidence without rebuilding it', async () => {
   const create = vi.spyOn(findExperiment('curved-links')!, 'create').mockImplementation(async stage => {
     stage.innerHTML = `<section data-run-part="configuration"><label>Fixture <input value="custom"></label></section>
       <button data-run-action="primary">Compare</button><section data-run-part="visualization" class="backend-panels styling-panels">
@@ -23,18 +23,20 @@ it('keeps the graph before the expanded contents on narrow screens and jumps bel
   })
   window.history.replaceState(null, '', '#/curved-links')
   host = document.createElement('div'); document.body.append(host); shell = createAppShell(host)
-  await vi.waitFor(() => expect(host!.querySelector('.unified-experiment')?.getAttribute('aria-busy')).toBe('false'))
-  const canvas = host.querySelector('canvas')!; const contents = host.querySelector('.experiment-contents')!
-  if (window.matchMedia('(max-width: 1050px)').matches) {
-    expect(contents.closest('.run-layout')).not.toBeNull()
-    expect(canvas.compareDocumentPosition(contents) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
-  } else expect(contents.parentElement?.className).toBe('experiment-document')
+  await vi.waitFor(() => expect(host!.querySelector('.case-stage')?.getAttribute('aria-busy')).toBe('false'))
+  const canvas = host.querySelector('canvas')!
+  const finding = host.querySelector('#recorded-findings')!
+  expect(canvas.compareDocumentPosition(finding) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
   expect(document.documentElement.scrollWidth).toBeLessThanOrEqual(document.documentElement.clientWidth)
-  const id = 'doc-method-default-bow-boundary-investigation'
-  host.querySelector<HTMLAnchorElement>(`.experiment-contents a[href$="section=${id}"]`)!.click()
+  host.querySelector<HTMLAnchorElement>('.case-evidence-links a')!.click()
+  const id = 'doc-case-evidence-what-was-compared'
+  await vi.waitFor(() => expect(host!.querySelector(`#${id}`)).not.toBeNull())
+  host.querySelector<HTMLAnchorElement>(`#${id} .section-permalink`)!.click()
   await vi.waitFor(() => expect(document.activeElement?.id).toBe(id))
   const header = host.querySelector('.lab-header')!.getBoundingClientRect()
   expect(host.querySelector(`#${id}`)!.getBoundingClientRect().top).toBeGreaterThanOrEqual(header.bottom - 1)
-  expect(host.querySelector('canvas')).toBe(canvas); expect(create).toHaveBeenCalledTimes(1)
-  expect(host.querySelector('input')!.value).toBe('custom')
+  host.querySelector<HTMLAnchorElement>('[data-back]')!.click()
+  await vi.waitFor(() => expect(host!.querySelector('canvas')).toBe(canvas))
+  expect(create).toHaveBeenCalledTimes(1)
+  expect(host.querySelector<HTMLInputElement>('.experiment-run input')!.value).toBe('custom')
 })

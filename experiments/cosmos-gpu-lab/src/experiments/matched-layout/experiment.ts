@@ -1,9 +1,11 @@
 import { defineExperiment } from '../../runtime/experiment'
+import { cases } from './cases'
 export const experiment = defineExperiment({
   id: 'matched-layout',
   title: 'Matched layout comparison',
   summary: 'Evolve production GLSL, luma WebGPU and CPU from shared inputs; measure layout quality separately from strict frozen-input checks.',
   tags: ['simulation', 'validation', 'layout'],
+  cases,
   create: async host => (await import('./view')).createMatchedView(host),
   pages: [
     { kind: 'markdown', id: 'center', title: 'Center force', load: async (): Promise<string> => (await import('./center.md?raw')).default },
