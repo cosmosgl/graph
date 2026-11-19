@@ -16,15 +16,15 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
   /* eslint-disable @typescript-eslint/naming-convention -- Keys match experiment routes. */
   return {
     'million-graph': entry('million-graph', {
-      conclusion: 'The M3 viewer meets both timing references at 196,608 points in two sessions. Both million-point workloads miss them.',
+      conclusion: 'Reduced drawing met the 50 ms pick target on both million-point M3 workloads. Their frame p95 remained near 50 ms.',
       reviewed: '2026-11-19',
       variant: 'Per-point, shared cell center and four-corner distant repulsion with the same GPU hierarchy and nearby forces',
       comparison: 'Matched force runs, frozen draw layers and browser interaction on moving graphs',
       milestone: 'simulation',
       method: 'overview',
       evidence: 'interactive-study',
-      next: 'Reduce opaque point draw cost and measure selection feedback with a cheaper highlight on the same M3 workloads.',
-      reproduce: 'Choose starting positions and distant repulsion under Configuration, then press Run graph.',
+      next: 'Improve slow frames at one million points and verify the full force and rendering workload.',
+      reproduce: 'Choose a starting layout, Four corners and Reduced drawing, then press Run graph.',
       investigations: [
         { page: 'dense-communities', state: 'Supporting investigation', description: 'Persistent communities, cell-crossing motion and stage timestamps.' },
         { page: 'draw-cost', state: 'Supporting investigation', description: 'Frozen point and link drawing at two attachment sizes and two camera settings.' },
@@ -242,15 +242,14 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       ],
     }),
     'weighted-links': entry('weighted-links', {
-      conclusion: 'The experiment checks ordered weighted springs against independent CPU edge lists. ' +
-        'The large WebGL-star context-loss investigation remains parked.',
-      variant: 'Production directional GLSL and luma WebGPU CSR traversal; dedicated original spring budget.',
+      conclusion: 'The lab passes both 100,000-point M3 WebGL star replays using bounded ordered spring passes.',
+      variant: 'Directional GLSL with ordered continuation for large hubs, and luma WebGPU CSR traversal.',
       comparison: 'Shared graph and weights → ordered incoming/outgoing spring passes → independent CPU substep checks',
       milestone: 'simulation',
       method: 'overview',
       evidence: 'results',
       methodPages: ['implementation'],
-      next: 'Extend accepted topology/device coverage and validate springs in the full runtime; keep the parked reset investigation separate.',
+      next: 'Extend topology coverage and measure the full runtime with large hubs.',
       reproduce: 'Select a graph and count above, then Step or Play and validate. Stage timing and isolated pass tools remain in Diagnostics.',
       investigations: [
         { page: 'results', state: 'Current evidence', description: 'Directional CPU reference, edge semantics and bounded native correctness findings.' },

@@ -316,9 +316,9 @@ export const milestones = [
   {
     id: 'rendering',
     title: 'Rendering and interaction',
-    position: 'Scale viewer picks the expected IDs on M3. Drawing and highlight cost limit million-point interaction',
+    position: 'Reduced drawing preserves frozen pixels and meets the pick target in the million-point M3 replay',
     acceptance: 'Coverage discrepancies, remaining styles and pointer interaction',
-    gates: ['Reduce point drawing and highlight cost at full Fit. Preserve the exact visible IDs.',
+    gates: ['Verify covered-point drawing and cached highlights with the supported production styles.',
       'Integrate circles and solid straight links first; defer advanced styles and review parked boundary failures before full readiness.',
       'Validate transitions, remaining styles and pointer behavior. Resolve the selection readback API before production integration.'],
     evidence: [['curved-links', 'Curved solid links'], ['straight-links', 'Straight-link rendering/picking'],
@@ -337,7 +337,7 @@ export const milestones = [
   {
     id: 'production',
     title: 'Production acceptance',
-    position: 'The basic M3 million-point viewer misses frame and pick targets. Strict color compatibility remains unresolved',
+    position: 'Reduced drawing meets the M3 pick target in one replay. The million-point frame target and strict color compatibility remain open',
     acceptance: 'Agreed quality/performance budgets and native support matrix',
     gates: ['Agree representative workloads, quality, frame/update latency and peak-memory budgets.',
       'Verify intended native GPUs/browsers and unsupported-device behavior before switching production.'],
@@ -348,7 +348,7 @@ export const milestones = [
 export const mainOpenIssues = [
   { text: 'Complete production force/rendering coverage and the Graph/host contracts.', href: '#/feature-inventory' },
   {
-    text: 'Reduce drawing cost and pointer latency at scale. Verify production styles and graph updates afterward.',
+    text: 'Meet the frame target at scale and verify production styles and graph updates.',
     href: '#/million-graph?section=doc-interactive-study',
   },
   { text: 'Agree quality, latency/memory budgets and the intended native GPU/browser matrix.', href: '#/roadmap?section=milestone-production' },
@@ -357,6 +357,6 @@ export const mainOpenIssues = [
 // Current editorial priority. The gate and findings come from the same records
 // used by Roadmap and the experiment page, never from this browser's live run.
 export const migrationFocus = {
-  step: 5,
-  experiment: 'million-graph',
+  step: 3,
+  experiment: 'combined-layout',
 } as const

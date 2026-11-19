@@ -24,9 +24,9 @@ featureCoverageSummary
 - **Needs validation** — no experiment yet implements and checks the production feature on WebGPU. A related demo is not evidence of parity.
 
 Every row states the remaining work. Coverage is not a completion percentage or a performance guarantee.
-Historical measurements made before the luma API migration need fresh runs. The native v10 WebGL
-[100k-star context-loss investigation](#/weighted-links/docs/context-loss) remains unresolved and parked;
-failed baseline runs cannot support performance comparisons.
+Historical measurements made before the luma API migration need fresh runs. Bounded, ordered
+WebGL spring passes now complete the lab's M3 100k-star checks. The earlier direct-shader resets
+and their limits remain in the [context-loss investigation](#/weighted-links/docs/context-loss).
 
 ## 1. Simulation forces
 
