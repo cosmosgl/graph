@@ -1,7 +1,14 @@
 // Use Chrome's real pointer input for the moving-graph benchmark. Coordinates
 // are canvas-local CSS pixels in the test iframe.
 export async function residentInput ({ page, iframe }, action, from, to) {
-  const canvas = iframe.locator('[data-resident-study] [data-canvas]')
+  return await graphInput(page, iframe.locator('[data-resident-study] [data-canvas]'), action, from, to)
+}
+
+export async function composedInput ({ page, iframe }, action, from) {
+  return await graphInput(page, iframe.locator('[data-composed-study] canvas'), action, from)
+}
+
+async function graphInput (page, canvas, action, from, to) {
   if (action === 'layout') await canvas.scrollIntoViewIfNeeded()
   const bounds = await canvas.boundingBox()
   const viewport = page.viewportSize()
@@ -10,6 +17,10 @@ export async function residentInput ({ page, iframe }, action, from, to) {
     throw new Error('The entire study canvas must be visible in the browser')
   }
   if (action === 'layout') return { bounds, viewport }
+  if (action === 'left-up' || action === 'right-up') {
+    await page.mouse.up({ button: action === 'left-up' ? 'left' : 'right' })
+    return
+  }
 
   const coordinate = (position) => {
     const [x, y] = position
@@ -20,9 +31,13 @@ export async function residentInput ({ page, iframe }, action, from, to) {
   }
   const point = coordinate(from)
   if (action === 'pick') await page.mouse.click(...point)
-  else if (action === 'zoom') {
+  else if (action === 'move') await page.mouse.move(...point)
+  else if (action === 'left-down' || action === 'right-down') {
     await page.mouse.move(...point)
-    await page.mouse.wheel(0, -100)
+    await page.mouse.down({ button: action === 'left-down' ? 'left' : 'right' })
+  } else if (action === 'zoom' || action === 'zoom-deep') {
+    await page.mouse.move(...point)
+    await page.mouse.wheel(0, action === 'zoom-deep' ? -1200 : -100)
   } else if (action === 'pan') {
     const end = coordinate(to)
     await page.mouse.move(...point)

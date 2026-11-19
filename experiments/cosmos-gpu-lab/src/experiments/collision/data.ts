@@ -2,6 +2,7 @@ import { createFixture as pointFixture, type Input } from '../many-body/data'
 import type { GraphInput } from '../weighted-links/data'
 import type { CenterReduction } from '../combined-layout/center-reduction'
 export type CollisionParameters = { strength: number; radius: number; padding: number; iterations: number; cooling: number }
+export const COLLISION_EXACT_LIMIT = 4096
 // Distance/accumulation are diagnostic ablations, rather than accepted kernels.
 export const COLLISION_ARITHMETICS = ['native', 'targeted', 'distance', 'accumulation', 'strict'] as const
 export type CollisionArithmetic = typeof COLLISION_ARITHMETICS[number]
@@ -21,7 +22,7 @@ export function validateCollision (p: CollisionParameters): void {
     !Number.isInteger(p.iterations) || p.iterations < 1 || p.iterations > 8) throw new Error('Invalid collision parameters')
 }
 export function validateSizes (sizes: Float32Array, count: number): void {
-  if (sizes.length !== count || count > 4096 || !sizes.every(v => Number.isFinite(v) && v >= 0)) {
+  if (sizes.length !== count || count > COLLISION_EXACT_LIMIT || !sizes.every(v => Number.isFinite(v) && v >= 0)) {
     throw new Error('Exact collision requires 0–4096 points and finite nonnegative sizes')
   }
 }
@@ -32,7 +33,9 @@ export function maxRadius (sizes: Float32Array, p: CollisionParameters): number 
   return Math.fround((p.radius > 0 ? p.radius : Math.max(0, ...sizes) * 0.5) + p.padding)
 }
 export function createFixture (fixture: Fixture, requested = 128, topology: Topology = 'chain'): { input: Input; graph: GraphInput } {
-  if (!FIXTURES.includes(fixture) || !Number.isInteger(requested) || requested < 2 || requested > 4096) throw new Error('Invalid collision fixture')
+  if (!FIXTURES.includes(fixture) || !Number.isInteger(requested) || requested < 2 || requested > COLLISION_EXACT_LIMIT) {
+    throw new Error('Invalid collision fixture')
+  }
   if (!TOPOLOGIES.includes(topology)) throw new Error('Invalid collision topology')
   const count = fixture === 'pair' ? 2 : fixture === 'masks' ? 8 : requested
   const input = pointFixture('uniform', count); const sizes = new Float32Array(count)

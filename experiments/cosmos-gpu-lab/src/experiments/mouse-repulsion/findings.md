@@ -2,8 +2,7 @@
 
 The isolated WebGPU mouse force passed the declared M3 matrix through 8,192
 points. The live preview advanced while the right button was held and stopped
-after release without a second pointer move. Simulation composition and
-end-to-end input latency remain open. [Declared matrix](#/mouse-repulsion?section=doc-agent-recipe)
+after release without a second pointer move. [Declared matrix](#/mouse-repulsion?section=doc-agent-recipe)
 
 ## Behavior and numerical agreement
 
@@ -40,6 +39,35 @@ gates passed, with positions unchanged exactly and forces within tolerance.
 At 8,192 points the WebGPU median was lower and its range overlapped WebGL's.
 The timings cover the force only. Layout quality and interactive frame
 responsiveness need the composed pipeline.
+
+## Precision while the pointer is held
+
+In the integrated test on the 8,192-point chain and star, the first small
+position difference appeared during a paused mouse frame. The expanded
+kernel carries high and low floats through distance and force evaluation.
+It matched every stored CPU force component in four separate checks,
+including a translated input with negative strength. The native kernel
+differed in 10,815 components on the captured 8,192-point pointer input,
+with a maximum difference of 3.58e-7.
+
+On that frozen input, the median GPU force cost rose from 0.0024 ms to
+0.245 ms. The median through GPU completion rose from 0.044 ms to
+0.281 ms. All 18 timestamp batches passed, and the expanded forces still
+matched. The composed viewer uses this kernel. Its independent trajectories
+matched exactly on the four tested graphs.
+[Interactive results](#/integrated-webgpu?section=doc-composed-interaction)
+
+The correctness and timing captures are `captures/mouse-expanded-check-mwnfws3f/`
+and `captures/mouse-expanded-cost-mwnfyh8c/`. Their source archive hashes are
+`f8442eaad1b539e5763d310285fd9c076ab91c8eb217ee4404e5a0769388e621` and
+`d3ca295665d572d5312d99a058d087f9195f8a9971b4a46978dec47bc560a462`.
+
+A follow-up found that a very faint force at a distance of about `1e12`
+could disappear when the scale underflowed. Applying the displacement before
+division in that case preserved the CPU's `1e-35` float32 result. The five
+expanded correctness fixtures and the native fallback check passed in
+`captures/mouse-expanded-underflow-mwngd00q/`. Its source archive SHA-256 is
+`33fdb0f1030ef5a67670363090a4b4831f4ac2c1b80162893a2ca414c63d3235`.
 
 ## Source and environment
 

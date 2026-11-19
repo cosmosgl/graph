@@ -3,7 +3,7 @@ import { COLLISION_ARITHMETICS, validateCollision, type CollisionParameters, typ
 import type { CenterReduction } from './center-reduction'
 export type ForceSettings = {
   samples: number; variation: [number, number]; precise: boolean; origin?: [number, number]; center?: number;
-  collision?: CollisionParameters; collisionArithmetic?: CollisionArithmetic; centerReduction?: CenterReduction;
+  collision?: CollisionParameters; collisionArithmetic?: CollisionArithmetic; hashedCollision?: boolean; centerReduction?: CenterReduction;
 }
 export type ProductionPreset = 'reference' | 'samples32' | 'varied32' | 'adaptive'
 export const PRESETS: Record<ProductionPreset, string> = {

@@ -1,15 +1,23 @@
 import { collisionRotationSeed } from '../../../../../src/modules/ForceCollision/collision-grid'
 import { getFinestGridSize, getNearFieldSlotCount } from '../../../../../src/modules/Shared/cell-slots'
-import { validateCollision, type CollisionParameters } from './data'
+import { frameSamples } from '../many-body-grid/data'
+import { COLLISION_EXACT_LIMIT, validateCollision, type CollisionParameters } from './data'
 
 export type CollisionOrigin = readonly [number, number]
 export type CollisionSlotFrame = { tick: number; seed: number; alpha: number }
+export const HASHED_COLLISION_LIMIT = 8192
+
+// Rotation counts collision passes, including repeated passes within a tick.
+// Use the Lab's deterministic samples to replay the same seed on CPU and GPU.
+export function collisionPassFrame (pass: number, alpha: number): CollisionSlotFrame {
+  return { tick: pass, alpha, seed: Math.min(frameSamples(pass).seed, 1 - 2 ** -24) }
+}
 
 export function collisionSlotGrid (sizes: Float32Array, settings: CollisionParameters, origin: CollisionOrigin): {
   edge: number; capacity: number; cellsPerUnit: number;
 } {
   validateCollision(settings)
-  if (sizes.length <= 4096 || sizes.length > 8192 ||
+  if (sizes.length <= COLLISION_EXACT_LIMIT || sizes.length > HASHED_COLLISION_LIMIT ||
     !sizes.every(size => Number.isFinite(size) && size >= 0) || !origin.every(Number.isFinite)) {
     throw new Error('The collision slot experiment covers 4,097–8,192 points with resolved sizes and a finite origin')
   }

@@ -7,7 +7,7 @@ export const cases: ExperimentCase[] = [
     kind: 'explore',
     question: 'Can one WebGPU graph simulate, draw and respond to interaction?',
     description: 'This 1,024-point graph combines the core forces with circles, straight links and point picking.',
-    tryIt: 'Press Run, then click or drag a point. Drag empty space to pan and scroll to zoom.',
+    tryIt: 'Press Run, then click or drag a point. To try all forces, choose Composed with collision and click Replace graph / reset.',
     reference: 'The recorded evaluation checks sampled pixels, point identity and complete-frame and interaction timing.',
     acceptance: 'The live graph is an exploratory session. Its appearance alone does not establish the recorded timing or pixel checks.',
     recorded: {
@@ -16,7 +16,11 @@ export const cases: ExperimentCase[] = [
       environment: 'Apple M3, inline Chromium 157, luma 10.0.0-alpha.15.',
       scope: 'A 300-frame window, sampled rendering and bounded picking and dragging on the initial graph matrix.',
       limits: 'One device and a limited feature set; later interaction outliers and the 8,192-point star remain unresolved.',
-      evidence: [{ label: 'Integrated graph evidence', page: 'findings' }, { label: 'Evaluation scope', page: 'method' }],
+      evidence: [
+        { label: 'Integrated graph evidence', page: 'findings' },
+        { label: 'Interactive composed forces', page: 'composed-interaction' },
+        { label: 'Evaluation scope', page: 'method' },
+      ],
     },
   },
   {

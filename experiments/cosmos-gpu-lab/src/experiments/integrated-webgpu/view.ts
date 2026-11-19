@@ -1,9 +1,11 @@
 import type { ExperimentInstance } from '../../runtime/experiment'
 import { mountRunLayout, disposeRunLayout } from '../../runtime/run-layout'
 import { compactRunControls } from '../../runtime/compact-controls'
+import { changedMembership } from '../cluster-attraction/study'
+import { changedTargets } from '../point-attractors/data'
 import { gpuTimingProtocol, hubComparisonProtocol, gpuLargeMatrix, profileGpuTiming, gpuTimingVerdict, type GpuTimingRow } from './gpu-timing'
 import { createIntegrated } from './runtime'
-import { workload, matrix, unsupported, type Workload } from './data'
+import { workload, matrix, unsupported, type IntegratedForceMode, type Workload } from './data'
 import { evaluate, interactionCheck, protocol, percentiles } from './evaluate'
 import { pacingProtocol, profilePacing, pacingVerdict, type PacingRow } from './pacing'
 import { settledProtocol, assessSettled, settledVerdict, type SettledRow } from './settled'
@@ -13,7 +15,9 @@ import { fit, validateFrame } from './validation'
 export async function createView (host: HTMLElement): Promise<ExperimentInstance> {
   host.innerHTML = `<div data-run-part="configuration" class="scale-toolbar">
     <label>Graph <select data-kind><option>chain</option><option>communities</option><option>star</option><option>karate</option></select></label>
-    <label>Points <select data-count><option>1024</option><option>8192</option></select></label>
+    <label>Points <select data-count><option>256</option><option selected>1024</option><option>8192</option></select></label>
+    <label>Forces <select data-forces><option value="core">Core pilot</option><option value="composed">Composed forces</option>
+      <option value="composed-collision">Composed with collision</option></select></label>
     <p>Karate Club uses its original 34 points and 78 weighted links.</p></div>
     <div class="controls"><button data-action="step" data-run-action="primary">Step</button>
     <button data-action="run" data-run-action="primary">Run</button><button data-action="pause" data-run-action="primary">Pause</button>
@@ -21,10 +25,17 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     <p role="status" data-run-part="status">Creating the integrated WebGPU runtime…</p>
     <section data-run-part="visualization"><canvas width="960" height="600" aria-label="Interactive integrated WebGPU graph"
       style="width:100%;aspect-ratio:8/5;display:block;touch-action:none"></canvas>
-    <p>Click a circle to select it; drag to move it. Drag empty space to pan; scroll to zoom. Selection turns yellow.
-    The graph stays paused until Run. Fit downloads positions once; ordinary frames do not.</p></section>
+    <p>Click a circle to select it and drag to move it. Drag empty space to pan and scroll to zoom. Selection turns yellow.
+    The graph stays paused until Run. Fit samples the current positions.</p>
+    <div data-composition-controls hidden>
+      <p>Hold the right mouse button over the graph to repel points, including while paused.</p>
+      <div class="controls"><button data-action="update-clusters">Update cluster membership</button>
+      <button data-action="update-targets">Update attractor targets</button><button data-action="clear-targets">Clear attractor targets</button></div>
+      <p data-composition-status aria-live="polite"></p>
+    </div></section>
     <section data-run-part="results"><p data-device></p><div data-report></div></section>
-    <section data-run-part="diagnostics"><h3>Additional measurements</h3><p>Run focused pixel, interaction and timing checks on this device.</p>
+    <section data-run-part="diagnostics"><h3>Additional measurements</h3>
+    <p>Run focused pixel, interaction and timing checks with the core pilot on this device.</p>
     <div class="controls"><button data-action="check">Check interaction + pixels</button><button data-action="measure">Measure this graph</button>
     <button data-action="matrix">Evaluate declared matrix</button><button data-action="cancel">Cancel evaluation</button>
     <button data-action="export">Export JSON</button><button data-action="pacing">Profile small-graph pacing</button>
@@ -39,12 +50,17 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     imported results do not become live passes.</p></section>
     <section data-run-part="explanation"><h3>Supported first slice</h3><p>Corrected resident repulsion, weighted directional springs,
     gravity, high/low center reduction and cooling. Circles and solid straight links read the same positions. Picking reads one RGBA8 ID pixel.</p>
+    <h3>Composed forces</h3><p>Choose a composed mode and replace the graph to add mouse repulsion, clusters and individual attractors.
+    Collision runs twice after attraction. It checks every pair through 4,096 points and uses hashed neighbors up to 8,192 points.</p>
     <h3>Unsupported options</h3><p>${unsupported}</p><p>Strict compatibility: historical failures remain.
     First-slice usability: requires this declared local evaluation.
     Full migration readiness: not established.</p></section>`
   const canvas = host.querySelector('canvas')!; const status = host.querySelector<HTMLElement>('[role=status]')!
   const report = host.querySelector<HTMLElement>('[data-report]')!
   const kind = host.querySelector<HTMLSelectElement>('[data-kind]')!; const count = host.querySelector<HTMLSelectElement>('[data-count]')!
+  const forces = host.querySelector<HTMLSelectElement>('[data-forces]')!
+  const compositionControls = host.querySelector<HTMLElement>('[data-composition-controls]')!
+  const compositionStatus = host.querySelector<HTMLElement>('[data-composition-status]')!
   let destroyed = false; let busy = false; let cancelled = false; let checks = 'No checks yet'; let failure = ''; let evidenceFailure = ''
   const records: unknown[] = []
   let replayFeedbackStart: number | undefined
@@ -59,15 +75,22 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     unchecked: 'Strict pixel compatibility, physical display latency and full migration readiness.',
   }), { experiment: 'integrated-webgpu', devices: () => [runtime.info] })
   compactRunControls(host, { diagnostics: true })
+  const pilotDiagnostics = host.querySelector<HTMLElement>('#run-diagnostics')!
   const update = (): void => {
+    compositionControls.hidden = !runtime.composition
+    pilotDiagnostics.hidden = !!runtime.composition
     host.querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button => {
       button.disabled = busy && button.dataset.action !== 'cancel'
     })
-    captureFile.disabled = busy; kind.disabled = busy; count.disabled = busy; canvas.style.pointerEvents = busy ? 'none' : 'auto'
+    captureFile.disabled = busy; kind.disabled = busy; count.disabled = busy; forces.disabled = busy
+    canvas.style.pointerEvents = busy ? 'none' : 'auto'
     if (!busy) {
       const points = runtime.data.input.points.length / 4; const links = runtime.data.graph.links.length / 2
+      const settings = runtime.composition?.settings
+      const forceLabel = settings ? 'composed forces' : runtime.springOptimization
+      const collisionLabel = settings?.collision ? ` · ${settings.hashedCollision ? 'hashed' : 'exact'} collision` : ''
       status.textContent = `${runtime.running ? 'Running' : 'Paused'} · tick ${runtime.tick} · ` +
-        `${points} points · ${links} links · ${runtime.springOptimization}${
+        `${points} points · ${links} links · ${forceLabel}${collisionLabel}${
           runtime.feedback.length
             ? ` · selected ${runtime.renderer.selected < 0 ? 'none' : runtime.renderer.selected}` +
             ` · last pick ${runtime.feedback.at(-1)!.ms.toFixed(1)} ms`
@@ -194,7 +217,22 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
       if (name === 'run') runtime.resume()
       if (name === 'pause') runtime.pause()
       if (name === 'step') await runtime.step()
-      if (name === 'replace') await runtime.replace(kind.value as Workload, Number(count.value))
+      if (name === 'replace') {
+        await runtime.replace(kind.value as Workload, Number(count.value), 'hoist', forces.value as IntegratedForceMode)
+        compositionStatus.textContent = ''
+      }
+      if (name === 'update-clusters' && runtime.composition) {
+        runtime.replaceClusters(changedMembership(runtime.composition.cluster))
+        compositionStatus.textContent = 'Cluster membership and targets updated.'
+      }
+      if (name === 'update-targets' && runtime.composition) {
+        runtime.replaceAttractors(changedTargets(runtime.composition.attractor))
+        compositionStatus.textContent = 'Attractor targets updated.'
+      }
+      if (name === 'clear-targets' && runtime.composition) {
+        runtime.replaceAttractors({})
+        compositionStatus.textContent = 'Attractor targets cleared.'
+      }
       if (name === 'fit') { runtime.pause(); fit(runtime, (await runtime.backend.read()).positions); await runtime.frame(false) }
       if (name === 'check') {
         runtime.pause(); const interactions = await interactionCheck(runtime); const validation = await validateFrame(runtime)
@@ -295,7 +333,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
   })
   const timer = setInterval(update, 500); update()
   return {
-    pause: (): void => { cancelled = true; runtime.pause() },
+    pause: (): void => { cancelled = true; runtime.pause(true) },
     destroy: (): void => {
       destroyed = true; cancelled = true; clearInterval(timer); abort.abort(); runtime.destroy(); disposeRunLayout(host)
     },
