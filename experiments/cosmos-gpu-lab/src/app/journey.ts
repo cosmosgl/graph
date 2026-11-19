@@ -35,10 +35,10 @@ export const journeySteps = [
     number: 4,
     id: 'link-rendering',
     title: 'Remaining rendering and interaction',
-    status: 'Bounded checks complete',
-    position: 'Selection and link color have bounded evidence. Remaining styles, transitions and runtime acceptance are open.',
+    status: 'Viewer and host studies complete',
+    position: 'Corrected interior paint matches both styles. Async area reads, cached tracking and Deck hosting pass bounded M3 checks.',
     exit: 'Supported styles and picking validated; explicit review of parked investigations before full approval.',
-    href: '#/roadmap?section=parked-investigations',
+    href: '#/viewer-comparison?section=doc-link-color-evidence',
   },
   {
     number: 5,
