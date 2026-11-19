@@ -6,6 +6,7 @@ import { forceFrag } from '../../../../../src/modules/ForceLink/force-spring'
 import quad from '../../../../../src/modules/Shared/quad.vert?raw'
 import integrateSource from '../../../../../src/modules/Points/update-position.frag?raw'
 import { waitForGpu } from '../../gpu/luma'
+import { continueSpringShader, scatterContinuationFragment, scatterContinuationVertex, SPRING_NEIGHBORS_PER_PASS } from './spring-continuation'
 import { uploadSpringTextures } from './spring-textures'
 import type { LinkBackend, Measurement, Stage, SetupSubmission, WebGLCheckpoint } from './backend'
 import type { GraphInput, Parameters, Topology } from './data'
@@ -48,6 +49,16 @@ precision highp int;
 ${renderUniformBlock}
 in vec3 color; flat in float pinnedMarker; out vec4 outColor;
 void main() { if (isLink == 0 && pinnedMarker <= 0.5 && length(gl_PointCoord * 2. - 1.) > 1.) discard; outColor = vec4(color, 1.); }`
+
+type ContinuationUniforms = { springContinuation: { neighborStart: number; firstContinuation: number } }
+type SpringContinuation = {
+  model: Model;
+  scatter: Model;
+  uniforms: UniformStore<ContinuationUniforms>;
+  points: Texture;
+  forces: Texture[];
+  targets: Framebuffer[];
+}
 
 export function springShader (maxDegree: number, stopAtDegree: boolean): string {
   const source = forceFrag(maxDegree)
@@ -106,6 +117,7 @@ export async function createWebGLBackend (
   let directionTextures: Array<Record<string, Texture>>
   let exit: Texture; let pinned: Texture; let sizes: Texture; let links: Texture
   let springs: Model[]; let integrate: Model; let renderPoints: Model; let renderLinks: Model
+  let continuations: Array<SpringContinuation | undefined> = []
   let renderUniforms: UniformStore<{ renderUniforms: { pointSize: number; linkSize: number; isLink: number } }>
   let activeTimer: QuerySet | undefined
   const timestamps = (begin: boolean, end: boolean): Partial<RenderPassProps> => activeTimer && (begin || end)
@@ -134,16 +146,36 @@ export async function createWebGLBackend (
     const bytes = target.readDataSyncWebGL(onePixel ? { width: 1, height: 1 } : {})
     return bytes instanceof ArrayBuffer ? new Float32Array(bytes) : new Float32Array(bytes.buffer, bytes.byteOffset, bytes.byteLength / 4)
   }
-  const encodeForce = (side: number, begin = false, end = false): void => {
-    const model = springs[side]
-    model.setBindings({ positionsTexture: positions[side], exitTexture: exit, sizeTexture: sizes, ...directionTextures[side] })
+  const drawSpring = (model: Model, framebuffer: Framebuffer, begin: boolean, end: boolean, preserve = false): void => {
     const pass = device.beginRenderPass({
-      framebuffer: forceFbos[side],
-      clearColor: [0, 0, 0, 0],
+      framebuffer,
+      clearColor: preserve ? false : [0, 0, 0, 0],
       clearDepth: false,
       ...timestamps(begin, end),
     })
     try { model.draw(pass) } finally { pass.end() }
+  }
+  const encodeForce = (side: number, begin = false, end = false): void => {
+    const model = springs[side]
+    const continuation = continuations[side]
+    const bindings = { positionsTexture: positions[side], exitTexture: exit, sizeTexture: sizes, ...directionTextures[side] }
+    model.setBindings(bindings)
+    drawSpring(model, forceFbos[side], begin, end && !continuation)
+    if (!continuation) return
+
+    let previousForce = forces[side]
+    let target = 0
+    const maxDegree = topology.directions[side].maxDegree
+    for (let neighborStart = SPRING_NEIGHBORS_PER_PASS; neighborStart < maxDegree; neighborStart += SPRING_NEIGHBORS_PER_PASS) {
+      const firstContinuation = Number(neighborStart === SPRING_NEIGHBORS_PER_PASS)
+      continuation.uniforms.setUniforms({ springContinuation: { neighborStart, firstContinuation } })
+      continuation.model.setBindings({ ...bindings, continuationPoints: continuation.points, previousForce })
+      drawSpring(continuation.model, continuation.targets[target], false, false)
+      previousForce = continuation.forces[target]
+      target = 1 - target
+    }
+    continuation.scatter.setBindings({ continuationPoints: continuation.points, previousForce, positionsTexture: positions[side] })
+    drawSpring(continuation.scatter, forceFbos[side], false, end, true)
   }
   const draw = (positionIndex = 0, mode = 'both', verticesPerDraw = Infinity, begin = false, end = false, framebuffer?: Framebuffer): void => {
     const pass = device.beginRenderPass({ framebuffer, clearColor: graphRgba.background, clearDepth: false, ...timestamps(begin, end) })
@@ -191,9 +223,10 @@ export async function createWebGLBackend (
   const backend: LinkBackend = {
     name: 'WebGL',
     get info (): string {
+      const loop = stopAtDegree() ? 'early exit' : 'Cosmos bounds'
+      const continuation = continuations.some(Boolean) ? ` + ordered continuation (${SPRING_NEIGHBORS_PER_PASS} neighbors per pass)` : ''
       return `${device.info.vendor} ${device.info.renderer}; luma-model-directional-v1; luma Model + UniformStore; ` +
-        `directional springs (${stopAtDegree() ? 'early exit' : 'Cosmos bounds'})` +
-        ` + integration; GPU timer ${hasTimer ? 'available' : 'unavailable'}`
+        `directional springs (${loop})${continuation} + integration; GPU timer ${hasTimer ? 'available' : 'unavailable'}`
     },
     setGraph (next: GraphInput, nextTopology: Topology, parameters: Parameters): SetupSubmission {
       phase = 'graph setup'
@@ -248,9 +281,39 @@ export async function createWebGLBackend (
         models.push(model); return model
       }
       // Cosmos compiles each direction with its own adjacency maximum, not total point degree.
-      springs = topology.directions.map((direction, side) => makeQuad(`spring-${side}`, springShader(direction.maxDegree, stopAtDegree()), {
-        forceLinkUniforms: springUniforms.getManagedUniformBuffer('forceLinkUniforms'),
-      }))
+      const springBindings = { forceLinkUniforms: springUniforms.getManagedUniformBuffer('forceLinkUniforms') }
+      const earlyExit = stopAtDegree()
+      springs = topology.directions.map((direction, side) => makeQuad(`spring-${side}`,
+        springShader(Math.min(direction.maxDegree, SPRING_NEIGHBORS_PER_PASS), earlyExit), springBindings))
+      continuations = topology.directions.map((direction, side) => {
+        if (direction.maxDegree <= SPRING_NEIGHBORS_PER_PASS) return undefined
+        const points: number[] = []
+        for (let i = 0; i + 1 < direction.offsets.length; i++) {
+          if (direction.offsets[i + 1] - direction.offsets[i] > SPRING_NEIGHBORS_PER_PASS) points.push(i)
+        }
+        const pointTexels = new Float32Array(points.length * 4)
+        points.forEach((index, i) => pointTexels.set([index % pointSize, Math.floor(index / pointSize), 0, 1], i * 4))
+        const size = Math.ceil(Math.sqrt(points.length))
+        const mapping = texture(size, pointTexels)
+        const partials = [texture(size, new Float32Array()), texture(size, new Float32Array())]
+        const uniforms = new UniformStore<ContinuationUniforms>(device, {
+          springContinuation: { uniformTypes: { neighborStart: 'i32', firstContinuation: 'i32' } },
+        })
+        stores.push(uniforms)
+        const model = makeQuad(`spring-continuation-${side}`, continueSpringShader(springShader(SPRING_NEIGHBORS_PER_PASS, earlyExit)), {
+          ...springBindings, springContinuation: uniforms.getManagedUniformBuffer('springContinuation'),
+        })
+        const scatter = new Model(device, {
+          id: `spring-scatter-${side}`,
+          vs: scatterContinuationVertex,
+          fs: scatterContinuationFragment,
+          topology: 'point-list',
+          vertexCount: points.length,
+          parameters: pipelineParameters,
+        })
+        models.push(scatter)
+        return { model, scatter, uniforms, points: mapping, forces: partials, targets: partials.map(framebuffer) }
+      })
       const integrationUniforms = new UniformStore(device, { updatePositionUniforms: { uniformTypes: { friction: 'f32', maxStep: 'f32' } } })
       stores.push(integrationUniforms)
       integrationUniforms.getManagedUniformBuffer('updatePositionUniforms')

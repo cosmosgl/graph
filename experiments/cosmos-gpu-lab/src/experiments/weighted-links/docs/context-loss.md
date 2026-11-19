@@ -1,14 +1,42 @@
 ---
 source: Recorded findings
-recorded: Not recorded
-device: Apple M3 / ANGLE Metal; eight fresh Chrome 156 processes
-scope: Parked 100k-star context-loss investigation; temporary production controls have been removed.
+recorded: November 19, 2026
+device: Apple M3 / ANGLE Metal on Chrome 156–157
+scope: Bounded 100k-star Lab replay and historical direct-path context loss.
 ---
 
 ## Investigating the 100k-star WebGL reset
 
-**Investigation parked.** The temporary production v9 control, sample-replay bridge and fresh-Chrome
-runner have been removed. The weighted-links experiment and its CPU validation remain available.
+### Bounded continuation in the Lab
+
+The Lab now splits a high-degree spring calculation into passes of at most 4,096 neighbors. Each
+pass reads the previous partial force and visits the next neighbors in their original order. Compact
+float textures hold the partial forces until the last pass scatters them back for integration. The
+star has 100,000 points, 99,999 links and directional maximum degrees of 99,999 and 1.
+
+On visible Chrome 157.0.8103.79, the WebGL backend reported `ANGLE Metal Renderer: Apple M3`.
+Both a fixed loop with one-pixel synchronization and an early-exit loop with fence synchronization
+completed all 25 ticks. Every CPU comparison at ticks 1, 10 and 25 passed the existing tolerance.
+The largest component errors were `5.96e−8`, `1.19e−7` and `7.45e−8` respectively in both runs.
+Both runs kept the WebGL context healthy. A separate fresh Chrome process passed all **38 weighted-links
+tests**, including the four timing stages, both loop modes, full snapshots, the isolated simulation
+passes, and the render-only image comparison. The tests also checked unequal hub degrees, absent
+neighbors and collision radii across continuation boundaries.
+
+Reproduce the current Lab checks with:
+
+```sh
+LAB_NATIVE_VISIBLE=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/weighted-links
+```
+
+The historical direct-path failure and its original cause remain open. The evidence above covers
+the bounded Lab v10 path on this M3 and the fixtures in the test suite.
+
+### Historical production v9 comparison
+
+The temporary production v9 control, sample-replay bridge and fresh-Chrome runner were retired when
+the paired investigation was parked. The remaining sections record the direct shader and its earlier
+diagnostics.
 
 Before removal, eight fresh Chrome 156 processes on Apple M3 / ANGLE Metal compared production v9
 with the lab's v10 WebGL path. Each case ran a 1k warm-up, then up to two 25-tick 100k-star trajectories,
@@ -21,8 +49,8 @@ with final-XY snapshots at ticks 1, 10 and 25 and unchanged tolerance. The cases
 
 Sample values alone did not explain the failures. Different allocation and pass scheduling remained;
 no luma or driver defect was isolated. These are historical findings, not a currently runnable production
-comparison. Native v10 WebGL stability remains unresolved, and failed runs cannot support performance
-claims. The findings do not establish a failure of the WebGPU implementation.
+comparison. Native WebGL stability for that direct v10 path remains unresolved, and failed runs cannot
+support performance claims. The findings do not establish a failure of the WebGPU implementation.
 
 ## Corrected luma baseline: standalone Chrome on M3
 
@@ -255,7 +283,10 @@ The earlier WebGPU error is also not a diagnosis by itself: the
 explicitly calls for more evidence and a reproducible browser report. No matching upstream driver bug
 has been established for this lab.
 
-## Reproduce the isolated checks
+## Historical isolated checks on the direct path
+
+These instructions describe the Lab revisions used for the original captures. The current weighted-links
+view uses ordered continuation for high-degree directions.
 
 1. Open **WebGL only** or **WebGPU only** from the weighted-links demo. Each creates one device.
 2. Start with 1,000 points. **Prepare star** uploads the graph and computes the independent CPU reference,
@@ -267,7 +298,7 @@ has been established for this lab.
 5. Export JSON locally before switching pages or preparing another case. No timer query or render draw
    is submitted by these diagnostics.
 
-## What would resolve the remaining uncertainty
+## Remaining uncertainty about the direct path
 
 The checkpoints locate the browser notification boundary, but more synchronous health checks alone
 will not reveal the original GPU fault. The next useful controlled comparison is to separate GPU
@@ -277,17 +308,17 @@ Any mode without full readback is an isolation probe, not a correctness pass. Pr
 process and stop after loss so residual device state does not contaminate subsequent comparisons.
 An upstream browser reproduction should include this distinction and the complete exported trace.
 
-If the high-degree shader is confirmed as the trigger, test bounded **ordered continuation**: process a
-fixed number of neighbors per pass, carry the accumulated velocity to the next pass, and retain every
-edge in its original order. The neighbor delta depends on that accumulated velocity, so replacing the
-hub with an ordinary parallel sum would change Cosmos's spring semantics. This is a proposed follow-up,
-not an implemented or validated fix.
+The bounded follow-up uses ordered continuation because each neighbor's delta depends on the accumulated
+velocity. The successful bounded replay narrows the reproduction to a particular implementation and
+workload. The precise failure mechanism of the direct path remains unknown.
 
 The last diagnostic checkpoint is saved locally before submission and after completion. Reloading shows
 it under **Last saved diagnostic** even when no GPU can be created. It is one rolling checkpoint, not
 an archive; use Export JSON before starting another run. Nothing is uploaded or committed.
 
-## Run the corrected paired diagnostic
+## Historical paired diagnostic on the direct path
+
+These instructions apply to the original direct-path revision.
 
 1. Start the lab with `pnpm --filter @cosmos.gl/gpu-lab dev` and open [Weighted link forces](?#/weighted-links).
 2. Run **Check WebGL rendering only** to isolate the initial geometry from simulation and timer queries.
