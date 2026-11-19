@@ -6,33 +6,32 @@ export const cases: ExperimentCase[] = [{
   kind: 'compare',
   question: 'How do the two viewers behave on the same small graph?',
   description: 'Explore the Karate Club graph in the production WebGL viewer and the experimental WebGPU viewer.',
-  tryIt: 'Press Run both, then select or drag a point in each viewer. Use Fit both if a graph moves out of view.',
+  tryIt: 'Press Run both, then select or drag a point in each viewer. Use Compare corrected link paint under Additional checks to check frozen colors.',
   reference: 'The existing production viewer, using the same graph and supplied point and link styles.',
   acceptance: 'The live views are for exploration. Separate recorded checks cover frame intervals, picking and fixed-position pixels.',
   recorded: {
-    conclusion: 'Both viewers supported the small exploration workflow. A fixed-position comparison still found 557 interior link-color failures, ' +
-      'even after an edge-smoothing control removed most edge differences.',
+    conclusion: 'Both viewers supported the small exploration workflow. Applying production’s short-link opacity in the candidate ' +
+      'cleared all 557 original interior color failures across the two frozen styles.',
     date: '18–19 November 2026',
     environment: 'Apple M3; visible Chromium 157; production WebGL and experimental WebGPU.',
     scope: '34 points and 78 links, selected interactions and two fixed-position color styles.',
-    limits: 'One device and a bounded workflow. The interior color difference and a previous selection-latency outlier remain unexplained.',
+    limits: 'The color result covers one device and two fresh styles. The earlier selection-latency outlier remains unexplained.',
     evidence: [{ label: 'Viewer comparison evidence', page: 'findings' }, { label: 'Comparison method', page: 'method' }],
   },
 }, {
   id: 'link-color-evidence',
   title: 'Investigate link-color differences',
   kind: 'recorded',
-  question: 'Where do the recorded differences between viewer colors occur?',
-  description: 'A fixed-position comparison isolates the link layer and tests a separate edge-smoothing control.',
+  question: 'What caused the original interior link colors to differ?',
+  description: 'Frozen draws isolate individual links and check how projected length affects opacity.',
   reference: 'The production renderer and experimental renderer using the same frozen positions, camera and styles.',
   acceptance: 'Exact interior IDs and the existing 2/255 interior color tolerance; geometric edge pixels are evaluated separately.',
   recorded: {
-    conclusion: 'All 557 interior color failures remained in link-only draws. Edge smoothing removed most edge differences ' +
-      'but none of those interior failures.',
+    conclusion: 'WebGL boosted opacity on short links. The candidate matched every interior RGBA byte after applying the same rule.',
     date: '19 November 2026',
     environment: 'Apple M3, native Chrome 157; production WebGL and experimental WebGPU.',
-    scope: 'Frozen Karate Club geometry and two styles, with point-only and link-only controls.',
-    limits: 'One device and two bounded styles. The underlying cause of the interior difference is not established.',
+    scope: 'Frozen Karate Club geometry and two styles, with point-only, link-only, smoothing and distance-opacity controls.',
+    limits: 'Two styles at one camera on M3. Results for other adapters, styles and moving layouts are still open.',
     evidence: [{ label: 'Link-color evidence', page: 'link-color-evidence' }],
   },
 }]

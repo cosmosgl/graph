@@ -11,12 +11,15 @@ struct Selection {
   pointCount: u32,
   pathLength: u32,
   usePolygon: u32,
+  useStyles: u32,
 }
 
+struct Style { color: vec4f, size: vec4f }
 @group(0) @binding(0) var<storage, read> points: array<vec4f>;
 @group(0) @binding(1) var<storage, read> path: array<vec2f>;
 @group(0) @binding(2) var<uniform> selection: Selection;
 @group(0) @binding(3) var<storage, read_write> selected: array<u32>;
+@group(0) @binding(4) var<storage, read> styles: array<Style>;
 
 fn inRect(center: vec2f, resolvedSize: f32) -> bool {
   let size = resolvedSize * selection.sizeScale;
@@ -55,6 +58,8 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
   if (selection.usePolygon != 0u) {
     selected[id.x] = select(0u, 1u, inPolygon(center));
   } else {
-    selected[id.x] = select(0u, 1u, inRect(center, point.z));
+    var size = point.z;
+    if (selection.useStyles != 0u) { size = styles[id.x].size.x; }
+    selected[id.x] = select(0u, 1u, inRect(center, size));
   }
 }

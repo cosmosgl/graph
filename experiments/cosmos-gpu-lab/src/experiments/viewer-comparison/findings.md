@@ -1,9 +1,8 @@
 # Small viewer comparison on M3
 
-**Both small viewers were usable in the declared workflow. Strict color compatibility
-failed; this is not full migration approval.** Production Cosmos and the acceptance
-gates remain unchanged. The native inline-browser evaluation was recorded on
-18 November 2026; no software adapter or separate browser substituted for it.
+**Both small viewers worked in the 18 November workflow. That run failed its
+color gate. A later native replay matched both frozen styles with the short-link
+opacity rule.** The workflow evaluation used the native inline browser.
 
 ## Environment and timing
 
@@ -53,9 +52,9 @@ the **same candidate positions and camera** into the unchanged production render
 Style A uses opaque six-pixel blue circles and translucent grey straight links.
 Style B uses larger translucent coral circles on every third point, an invisible
 point 0, and wider coral links. The fresh A/B comparisons used identical frozen
-geometry. Maximum interior channel differences were **35/255 and 56/255** respectively,
-above the unchanged **2/255** gate. Their cause is **not isolated**. Do not assume
-these are harmless antialiasing differences or accept them as boundary pixels.
+geometry. Maximum interior channel differences in that run were **35/255 and
+56/255**, above the unchanged **2/255** gate. The short-link opacity study below
+replays the fresh styles and identifies their cause.
 
 The first B comparison conservatively excluded a boundary band even around the
 invisible circle. The final comparator excludes only visible circle boundaries;
@@ -187,8 +186,8 @@ Each of the 557 failing pixels stayed within tolerance with only the points
 drawn. For example, at device pixel (1021, 99) in style B, both the full and
 links-only images read RGBA `[217, 96, 83, 234]` in production and
 `[166, 74, 64, 178]` in WebGPU. The points-only images read transparent black
-there. This locates the observed discrepancy in the link draw. The mechanism
-inside the link pipeline and production color acceptance remain open.
+there. This located the discrepancy in the link draw. The short-link opacity
+study below compares the isolated production and candidate draws at that pixel.
 
 Use **Attribute paint differences** beside **Compare same-geometry paint** to
 repeat the controls. The [agent recipe](#/viewer-comparison?section=doc-agent-recipe)
@@ -220,9 +219,8 @@ Each style compared 1,228,800 pixels at an unchanged 2/255 color tolerance.
 Smoothing removed about 96–97% of over-tolerance edge differences. Those
 pixels are outside the original interior gate. All 557 interior failures
 persisted in the isolated link draws, with the same first witnesses. Exact
-interior IDs and invisible-pick checks passed throughout. The strict
-production color gate still fails. The cause of the interior differences
-remains unresolved.
+interior IDs and invisible-pick checks passed throughout. The smoothing-only
+control failed the original production interior color gate.
 
 **Test link edge smoothing** uses that shader only for the diagnostic
 capture. The normal display and its original paint control still use the
@@ -232,3 +230,53 @@ camera and geometric boundary and exercised the candidate on both styles.
 Raw results, the declared protocol and the source archive are in
 `captures/viewer-link-smoothing-20261119-k36ve6q1/`. The source archive
 SHA-256 is `83aabf23fe67a88e171d39f54c37ec93be95cd5b2e964b6ce9c33457c6430787`.
+
+## Short-link opacity
+
+On the same frozen Karate Club scene, both A/B witnesses intersected link 32
+(point 3 to point 7). It projected to 19.15 CSS pixels. Production evaluates
+`max(1, (150 - length) / 100)` with this viewer's configured limits and raises
+the source opacity by about 1.309×. The CPU calculation from the actual
+positions, camera and source color predicted the isolated RGBA bytes exactly.
+
+| Style | Device pixel | Production RGBA | Constant-opacity candidate | Candidate with distance rule |
+|---|---|---|---|---|
+| A | (1020, 100) | 75, 81, 90, 150 | 57, 62, 68, 115 | 75, 81, 90, 150 |
+| B | (1021, 99) | 217, 96, 83, 234 | 166, 74, 64, 178 | 217, 96, 83, 234 |
+
+The production probe made the other links transparent through its public color
+channel. The WebGPU probe rendered the same single instance. A separate WebGL
+probe set the near threshold to zero, matched the original candidate bytes and
+restored the threshold before the full replay. The WebGPU candidate uses length
+in CSS pixels and applies distance opacity before coverage in both edge modes.
+
+| Style | Original | Smoothing only | Distance opacity only | Distance opacity and smoothing |
+|---|---:|---:|---:|---:|
+| A interior color failures | 88 | 88 | 0 | 0 |
+| B interior color failures | 469 | 469 | 0 | 0 |
+| A excluded edge failures | 30,265 | 823 | 29,998 | 172 |
+| B excluded edge failures | 29,126 | 1,082 | 28,709 | 158 |
+
+The full captures used 960 × 320 CSS panels at DPR 2 and checked 1,228,800
+pixels per style. Every interior channel matched exactly with distance opacity.
+The replay required exact interior IDs, zero invisible picks and a 2/255
+interior color tolerance. The production control used luma 9.3.6 on Apple M3
+ANGLE Metal WebGL 2.
+The candidate used luma 10.0.0-alpha.15 on non-fallback Apple Metal 3 WebGPU.
+Chrome `157.0.8103.79` was visible. The focused replay and viewer regressions
+passed 4/4 from the isolated source archive. The evaluated scope is two fresh
+styles at one camera on M3. Moving and cooled positions, corrected frame cost,
+other link styles and other adapters still need their own comparisons.
+
+**Compare corrected link paint** under **Additional checks** uses the two
+corrections in the paired snapshots and reports the result in Live results.
+The native viewer and report tests passed 5/5 with this action and the same
+production UMD checksum.
+
+The recorded bytes, four paint comparisons, original controls and generated UMD
+are in `captures/viewer-link-opacity-m3-20261119.iazxmC/`, built from a frozen
+copy of the source archive at base `5a211b93`. The archive SHA-256 is
+`5fe2855417c8ab65a0907959274d39cff9350acc610361358fd17b51a819fdd4`.
+The production UMD SHA-256 is
+`1e5d4c779f33c2a510a0d3c9ee43dbf7f0d0cb6e99a728d1ca0bee98130cd4dc`.
+[Replay method](#/viewer-comparison?section=doc-agent-recipe-check-the-short-link-opacity-rule)

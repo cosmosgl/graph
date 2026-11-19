@@ -6,6 +6,7 @@ import { migrationFocus } from './research'
 it('indexes all inventory features without treating partial curves as unstarted or a parked sub-study as the whole experiment', () => {
   expect(coverage).toHaveLength(37)
   expect(coverage.find(row => row.name === 'Curved links')?.status).toBe('Partial')
+  expect(coverage.find(row => row.name === 'Distance-based visibility')).toMatchObject({ status: 'Partial', experiments: ['viewer-comparison'] })
   expect(coverage.find(row => row.name === 'Per-point attractors')).toMatchObject({
     status: 'Partial',
     experiments: ['point-attractors', 'integrated-webgpu'],
@@ -25,8 +26,8 @@ it('derives visible counts and method links from the inventory and retains every
   expect(host.querySelector('[href="#/curved-links"]')!.textContent).toContain('color-face')
   renderCoverageSummary(host)
   expect(host.textContent).toContain('1 covered in isolation')
-  expect(host.textContent).toContain('32 partial')
-  expect(host.textContent).toContain('4 needs validation')
+  expect(host.textContent).toContain('33 partial')
+  expect(host.textContent).toContain('3 needs validation')
   expect(host.textContent).toContain('not a completion percentage')
 })
 it('distinguishes the ordered current investigation from still-open migration workstreams', () => {

@@ -17,8 +17,7 @@ all recorded interior color failures in the link draw.
 | B | 469 | 56/255 | 469 |
 
 Point-only draws stayed within tolerance at those pixels. Both styles passed the
-interior ID and invisible-picking checks. The observation identifies the affected
-layer, but does not establish the underlying mechanism.
+interior ID and invisible-picking checks.
 
 ## Edge-smoothing control
 
@@ -26,5 +25,30 @@ A separate replay enabled a one-device-pixel link-coverage ramp in the
 experimental renderer. It removed about 96–97% of the over-tolerance differences
 in the excluded edge region. All 557 interior failures remained unchanged.
 
-These observations cover two styles and one device. The remaining interior color
-failure is unresolved; this is not a complete visual-compatibility assessment.
+## Short-link opacity
+
+The first failure in each style came from the link from point 3 to point 7.
+It measured 19.15 CSS pixels. Production's visibility rule uses
+`max(1, (150 - length) / 100)` in this viewer. At that length the rule boosts
+the configured opacity by 1.309×. That multiplier predicted the exact isolated
+RGBA in the production renderer. The candidate originally used the configured
+link opacity directly.
+
+| Style | Device pixel | Production alpha | Original candidate alpha | Candidate with distance rule |
+| --- | --- | ---: | ---: | ---: |
+| A | (1020, 100) | 150 | 115 | 150 |
+| B | (1021, 99) | 234 | 178 | 234 |
+
+Changing the production near-distance threshold to zero in the isolated probe
+gave the original candidate's exact RGBA in both styles. Applying production's
+distance rule in the candidate matched the original production RGBA.
+
+The native A/B replay compared 1,228,800 pixels per style. The original controls
+retained 88 and 469 interior failures. The distance-opacity candidate matched
+every interior RGBA byte in both styles, with either edge treatment. Exact
+interior IDs and invisible picks also passed. Combining distance opacity and
+the ramp left 172 and 158 over-tolerance pixels in the excluded boundary region.
+
+The result covers the frozen Karate Club styles and camera on Apple M3 native
+Chrome 157. The [viewer findings](#/viewer-comparison?section=doc-findings-short-link-opacity)
+include the source snapshot and production control checksum.

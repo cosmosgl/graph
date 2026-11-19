@@ -45,7 +45,8 @@ export function report (value: unknown): Report {
   }
   if (r.action === 'resize') return { name: 'Resize delivery', verdict: 'Recorded', detail: `Settled after ${r.frames} animation opportunities.` }
   const scene = typeof r.scene === 'string' ? ` · ${r.scene}` : ''
-  const paint = r.smoothLinks === true ? 'Smoothed links' : 'Same-geometry paint'
+  let paint = r.smoothLinks === true ? 'Smoothed links' : 'Same-geometry paint'
+  if (r.distanceOpacity === true) paint = 'Corrected link paint'
   const layers = r.colorAttribution as Record<string, { count: number }> | undefined
   return {
     name: r.pixelAudit ? `${r.backend} · CPU pixel audit` : `${paint}${scene} · style ${r.style}`,

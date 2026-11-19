@@ -6,9 +6,14 @@ import { composedInput, residentInput } from './scripts/resident-input.mjs'
 // Local research checks use the current machine's native browser/GPU.
 // Keep the legacy flag for existing native-only tests and historical reproduction commands.
 // Expensive sweeps still require their own explicit flags.
+const deckHost = process.env.LAB_DECK_HOST === '1'
 // eslint-disable-next-line import/no-default-export
 export default defineConfig({
-  optimizeDeps: { include: ['@luma.gl/shaders', 'markdown-it', 'd3-scale', 'd3-array'] },
+  optimizeDeps: {
+    include: ['@luma.gl/shaders', 'markdown-it', 'd3-scale', 'd3-array', ...(deckHost
+      ? ['@deck.gl/core', '@luma.gl/core', '@luma.gl/core/webgl', '@luma.gl/core/webgpu', '@luma.gl/engine', '@luma.gl/graph']
+      : [])],
+  },
   define: {
     'import.meta.env.REQUIRE_WEBGPU': true,
     'import.meta.env.LAB_STORED_ALPHA_SWEEP': process.env.LAB_STORED_ALPHA_SWEEP === '1',
@@ -53,7 +58,7 @@ export default defineConfig({
     'import.meta.env.LAB_RUN_ID': JSON.stringify(process.env.LAB_ARTIFACT_RUN ?? ''),
   },
   test: {
-    include: [
+    include: deckHost ? ['scripts/deck-host.test.mts'] : [
       'src/app/**/*.test.ts',
       'src/gpu/**/*.test.ts',
       'src/runtime/**/*.test.ts',

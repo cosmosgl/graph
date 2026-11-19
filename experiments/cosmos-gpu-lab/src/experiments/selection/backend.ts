@@ -5,14 +5,18 @@ import quad from '../../../../../src/modules/Shared/quad.vert?raw'
 import rectFrag from '../../../../../src/modules/Points/find-points-in-rect.frag?raw'
 import polygonFrag from '../../../../../src/modules/Points/find-points-in-polygon.frag?raw'
 import pointSize from '../../../../../src/modules/Points/point-size.glsl?raw'
-import { bindingLayout, upload, waitForGpu } from '../../gpu/luma'
+import { bindingLayout, upload } from '../../gpu/luma'
 import { target } from '../../gpu/rgba-readback'
 import { resourceScope } from '../../gpu/resource-scope'
+import type { PositionSource } from '../many-body/backend'
 import type { Camera, Pair, Point, Query } from './reference'
 import source from './selection.wgsl?raw'
 
 type Select = (points: Point[], camera: Camera, query: Query) => Promise<number[]>
 type Backend = { select: Select; destroy(): void }
+type WebGPUBackend = Backend & {
+  selectResident(positions: PositionSource, styles: Buffer, camera: Camera, query: Query): Promise<number[]>;
+}
 
 function bounds (camera: Camera, [[left, top], [right, bottom]]: [Pair, Pair]): [Pair, Pair] {
   return [[left, camera.viewport[1] - bottom], [right, camera.viewport[1] - top]]
@@ -28,43 +32,61 @@ function indices (mask: ArrayLike<number>, count: number, stride = 1): number[] 
   return results
 }
 
-export async function createSelectionWebGPU (device: Device): Promise<Backend> {
-  const kernel = await Kernel.createAsync(device, {
-    source,
-    shaderLayout: {
-      bindings: bindingLayout([
-        ['points', 'read-only-storage'], ['path', 'read-only-storage'], ['selection', 'uniform'], ['selected', 'storage'],
-      ]),
-    },
-  })
-  return {
-    async select (points, camera, query): Promise<number[]> {
-      if (!points.length || ('polygon' in query && query.polygon.length < 3)) return []
+export async function createSelectionWebGPU (device: Device): Promise<WebGPUBackend> {
+  const scope = resourceScope()
+  try {
+    const kernel = scope.own(await Kernel.createAsync(device, {
+      source,
+      shaderLayout: {
+        bindings: bindingLayout([
+          ['points', 'read-only-storage'], ['path', 'read-only-storage'], ['selection', 'uniform'], ['selected', 'storage'],
+          ['styles', 'read-only-storage'],
+        ]),
+      },
+    }))
+    const dummyStyles = scope.own(upload(device, new Float32Array(8)))
+    const dispatch = async (positions: PositionSource, camera: Camera, query: Query, styles?: Buffer): Promise<number[]> => {
+      const { count } = positions
+      if (!count || ('polygon' in query && query.polygon.length < 3)) return []
       const { origin, viewport, translation, zoom, ratio, sizeScale, maxSize, scaleOnZoom } = camera
       const coords = 'rect' in query ? bounds(camera, query.rect).flat() : [0, 0, 0, 0]
       const path = 'polygon' in query ? pathForGpu(camera, query.polygon).flat() : []
       const params = new Float32Array(20)
       params.set([...origin, ...viewport, ...translation, zoom, ratio, ...coords, sizeScale, maxSize])
-      new Uint32Array(params.buffer).set([Number(scaleOnZoom), points.length, path.length / 2, Number('polygon' in query)], 14)
-      const scope = resourceScope(); const own = scope.own
+      new Uint32Array(params.buffer).set([Number(scaleOnZoom), count, path.length / 2, Number('polygon' in query), Number(!!styles)], 14)
+      const request = resourceScope(); const own = request.own
       try {
         const bindings = {
-          points: own(upload(device, Float32Array.from(points.flatMap(p => [...p.world, p.size, p.absent])))),
+          points: positions.buffer,
           path: own(upload(device, Float32Array.from(path))),
           selection: own(upload(device, params, Buffer.UNIFORM)),
-          selected: own(upload(device, new Uint32Array(points.length).fill(2))),
+          selected: styles
+            ? own(device.createBuffer({ byteLength: count * 4, usage: Buffer.STORAGE | Buffer.COPY_SRC }))
+            : own(upload(device, new Uint32Array(count).fill(2))),
+          styles: styles ?? dummyStyles,
         }
         const pass = device.beginComputePass()
-        try { kernel.dispatch(pass, { x: Math.ceil(points.length / 64), bindings }) } finally { pass.end() }
-        await waitForGpu(device)
-        const bytes = await bindings.selected.readAsync(0, points.length * 4)
-        const mask = new Uint32Array(bytes.buffer, bytes.byteOffset, points.length)
+        try { kernel.dispatch(pass, { x: Math.ceil(count / 64), bindings }) } finally { pass.end() }
+        device.submit()
+        const bytes = await bindings.selected.readAsync(0, count * 4)
+        const mask = new Uint32Array(bytes.buffer, bytes.byteOffset, count)
         if (mask.some(value => value !== 0 && value !== 1)) throw new Error('WebGPU left a selection flag unwritten')
-        return indices(mask, points.length)
-      } finally { scope.destroy() }
-    },
-    destroy: (): void => { kernel.destroy() },
-  }
+        return indices(mask, count)
+      } finally { request.destroy() }
+    }
+    return {
+      async select (points, camera, query): Promise<number[]> {
+        if (!points.length || ('polygon' in query && query.polygon.length < 3)) return []
+        const buffer = upload(device, Float32Array.from(points.flatMap(p => [...p.world, p.size, p.absent])))
+        try { return await dispatch({ device, buffer, count: points.length }, camera, query) } finally { buffer.destroy() }
+      },
+      selectResident (positions, styles, camera, query): Promise<number[]> {
+        if (positions.device !== device || styles.device !== device) throw new Error('Selection inputs belong to another device')
+        return dispatch(positions, camera, query, styles)
+      },
+      destroy: scope.destroy,
+    }
+  } catch (error) { scope.destroy(); throw error }
 }
 
 export function createSelectionWebGL (device: Device): Backend {

@@ -61,3 +61,49 @@ outside both production ranges. Sharing a Lab luma device establishes a
 prototype contract. A production host still needs one mutually supported
 luma package family and the production draw and position-sharing contracts
 on that family.
+## Deck host on one luma family
+
+The published deck.gl `10.0.0-alpha.1` Core package uses luma
+`10.0.0-alpha.14`. The isolated host test pins the Lab's core, graph, engine
+and shaders to the same version. A separate resolution check confirms that
+Deck and the Lab load each package from the same installation. The main
+Lab uses alpha.15.
+[Deck prerelease](https://github.com/visgl/deck.gl/releases/tag/v10.0.0-alpha.1)
+
+On the native M3 adapter in visible Chrome 157, a Deck layer drew a marker
+from the Lab layout's current GPU buffer in Deck's render pass. Deck, the
+layout and the layer used the same device object. The 512 × 256 offscreen
+view used an orthographic camera. The GPU gravity step swapped the resident
+buffer, and the projected pixels and asynchronous Deck pick still returned
+point ID 0 after a camera change. The fixture has 32 slots, with one present
+point and a separate green host marker.
+
+Removing the layout layer let Deck continue drawing the host marker. The
+old point disappeared from pixels and picks. Layout cleanup released all
+tracked buffers, and finalizing Deck left the borrowed device usable. The
+first attempt destroyed the layout before Deck applied the new layer list,
+which left two draws referencing destroyed resources. The passing replay
+waits for the layer finalization before destroying the layout.
+
+The passing capture and dependency resolution are in
+`captures/deck-host-m3-a2646e35/`, with source SHA-256
+`4be39476cd0b4862dbc5c568532cc42cf36c5de7e521865645f481273527746d`.
+The rejected removal order is in `captures/deck-host-m3-70318046/`, with
+source SHA-256 `e604067f8f484864f3d32d1e6386e2acff4489ddc4b437fab4bb878ee7d4b44f`.
+
+Use the pinned alpha.14 pair for this host proof. Production adoption still
+requires a common supported luma version and the full Graph layer, link and
+style draws, overlay styling and unplanned recovery. The installed production
+Deck layer runs on the luma 9.3 family.
+
+### Replay the isolated Deck test
+
+The archived source includes the exact manifests and lockfile. Extract it
+into a temporary directory, install that workspace with
+`pnpm --filter @cosmos.gl/gpu-lab... install --frozen-lockfile --ignore-scripts`,
+and set a new `LAB_ARTIFACT_RUN`, the base commit in `LAB_SOURCE_REVISION`
+and the absolute archive path in `LAB_SOURCE_SNAPSHOT`.
+
+```sh
+LAB_DECK_HOST=1 LAB_NATIVE_VISIBLE=1 pnpm --filter @cosmos.gl/gpu-lab test:gpu
+```

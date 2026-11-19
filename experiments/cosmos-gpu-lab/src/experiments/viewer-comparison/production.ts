@@ -3,7 +3,7 @@ import type { Graph } from '../../../../../dist/index.js'
 import { workload } from '../integrated-webgpu/data'
 import type { PaintLayers } from '../integrated-webgpu/renderer'
 import { graphPalette, graphRgba } from '../../runtime/palette'
-import { styles, type Scene } from './styles'
+import { LINK_VISIBILITY, styles, type Scene } from './styles'
 const nextFrame = async (): Promise<number> => await new Promise(resolve => requestAnimationFrame(resolve))
 export async function createProduction (host: HTMLDivElement): Promise<{
   graph: Graph; canvas: HTMLCanvasElement; info: string; tick: number; readonly selected: number | undefined; errors: string[];
@@ -30,7 +30,8 @@ export async function createProduction (host: HTMLDivElement): Promise<{
     scalePointsOnZoom: false,
     scaleLinksOnZoom: false,
     linkOpacity: 1,
-    linkVisibilityMinTransparency: 1,
+    linkVisibilityDistanceRange: [...LINK_VISIBILITY.range],
+    linkVisibilityMinTransparency: LINK_VISIBILITY.minimum,
     pointOcclusionCulling: false,
     simulationGravity: 0.25,
     simulationCenter: 0.1,

@@ -127,3 +127,33 @@ open unless the original interior criteria pass, and preserve earlier evidence.
 ```sh
 LAB_NATIVE_VISIBLE=1 VITE_LAB_PAINT_LINK_SMOOTHING=1 LAB_ARTIFACT_RUN=viewer-link-smoothing-20261119-r1 pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/viewer-comparison/paint-layers.test.ts
 ```
+
+## Check the short-link opacity rule
+
+Use **Compare corrected link paint** under **Additional checks** to run the
+candidate with both distance opacity and smoothing on the current frozen
+positions. To replay the recorded four comparisons, use the test below.
+
+Replay the same native M3 viewport, fresh Karate Club positions, camera and
+styles. Keep the original 2/255 interior color gate, boundary, exact IDs and
+invisible-pick check. Save four comparisons per style using constant opacity
+or the production distance rule, each with the original hard edge or the
+separate smoothing ramp.
+
+At each saved link witness, render edge 32 by itself with the production
+renderer and the candidate. Keep the endpoints, width and source RGBA fixed.
+In a separate diagnostic, set the WebGL near threshold to zero, which holds
+opacity at the source value. Restore the original threshold before replaying
+the full scene. Predict the isolated RGBA from each renderer's endpoint
+coordinates, camera zoom and source color. Record the measured attachment bytes
+and the CPU prediction together. An accepted result covers the frozen styles
+at this camera and environment.
+
+Use the source snapshot variables above and rebuild the UMD production
+control before the run. Record its checksum in the capture.
+
+```sh
+VITE_LAB_PRODUCTION_SHA256=$(shasum -a 256 dist/index.min.js | cut -d' ' -f1)
+export LAB_NATIVE_VISIBLE=1 VITE_LAB_PAINT_LINK_OPACITY=1 VITE_LAB_PRODUCTION_SHA256
+pnpm --filter @cosmos.gl/gpu-lab test:gpu src/experiments/viewer-comparison/paint-link-opacity.test.ts
+```

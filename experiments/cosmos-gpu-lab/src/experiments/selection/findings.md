@@ -16,6 +16,10 @@ Visible Chrome 157 reported ANGLE Metal on Apple M3 for WebGL and non-fallback A
 
 Production setter and transition behavior, arbitrary near-edge rounding, browser pointer wiring and million-point query cost remain open. `Graph.findPointsInRect` and `Graph.findPointsInPolygon` currently return arrays synchronously. The latest GPU-produced flags in this candidate arrive through async readback, so the production API still needs a compatibility decision. [WebGPU buffer mapping](https://www.w3.org/TR/webgpu/#buffer-mapping)
 
+The integrated viewer tests an async snapshot from live resident buffers. Its
+caller contract, M3 results and remaining costs are recorded in the
+[live graph readback study](#/integrated-webgpu?section=doc-readback).
+
 ## Reproduce
 
 The recorded run is under `captures/selection-20261119-ja9befei/`. It contains `selection-parity.json`, `native.log`, `context.json`, the declared protocol and the exact `source.tar.gz` used for the test. The archive SHA-256 is `d198ad584c8e488a5dc4bf036020fbbbcef51f95868545e382181d857e3aa970`.

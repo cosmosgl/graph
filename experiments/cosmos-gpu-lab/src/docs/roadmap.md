@@ -105,24 +105,26 @@ identical pixels. At one million points, both moving workloads reached a
   community trajectory. Larger workloads with all forces remain open.
   [Interactive composed forces](#/integrated-webgpu?section=doc-composed-interaction) ·
   [Hashed collision](#/collision?section=doc-hashed-findings)
-- **Rendering and interaction.** The integrated viewer retains 557
-  interior color failures across two styles. All are in the link layer.
-  The antialiasing candidate improves edges. Isolated point transitions
-  match 12 fixed checkpoints. Interior colors, remaining styles and full
-  transition and pointer integration are still open.
-  [Feature inventory](#/feature-inventory) · [Link edge smoothing](#/viewer-comparison?section=doc-findings-straight-link-edge-smoothing)
+- **Rendering and interaction.** The original viewer's 557 interior
+  failures came from the distance-based opacity of short links. Applying
+  that rule with edge smoothing yields exact interior RGBA and IDs for
+  both frozen styles. Edge differences remain outside the one-pixel
+  interior gate. Broader production styles, transitions and pointer
+  behavior still need integration checks.
+  [Feature inventory](#/feature-inventory) · [Corrected link paint](#/viewer-comparison?section=doc-link-color-evidence)
 - **Integrated scale.** Reduced drawing meets the pick reference in one
   million-point replay. The dense and high-degree workloads still miss the
   33 ms frame reference. Test the full force and style set, updates,
   presentation and memory on representative data.
   [Moving graph results](#/million-graph?section=doc-interactive-study)
-- **Graph and host contracts.** Borrowed device cleanup and explicit checkpoint
-  restart pass. Rectangle and polygon IDs and tracked positions match bounded
-  fixtures. Full setters, synchronous read APIs, automatic recovery and deck
-  integration still need a production design. Choose a shared luma family and verify the
-  supported native GPU and browser matrix. [Host study](#/integrated-webgpu?section=doc-host-ownership) ·
-  [Selection study](#/integrated-webgpu?section=doc-selection) ·
-  [Tracking study](#/integrated-webgpu?section=doc-tracked-points) ·
+- **Graph and host contracts.** The Lab tests async area selection and
+  tracked-position snapshots on a moving 8,192-point graph. It exposes the
+  last completed tracking result for moving labels. Deck draws and picks
+  resident positions on a borrowed M3 device when both use luma
+  `10.0.0-alpha.14`. A supported common dependency, complete production
+  setters, label latency and automatic recovery remain open.
+  [Host study](#/integrated-webgpu?section=doc-host-ownership) ·
+  [Readback contract](#/integrated-webgpu?section=doc-readback) ·
   [Production checklist](#/roadmap?section=milestone-production)
 
 ```example
@@ -148,9 +150,9 @@ Current evidence from the native M3 inline browser, with unchanged gates:
 | 8,192 star | Stage attribution identifies the serial incoming hub pass; ordered prefetch preserves state/colors and helps modestly | Every candidate star window still fails. Keep default `hoist`; further tuning parked |
 | Cooled Karate Club | After Fit, all 34 points are visible, separate and pickable; two hub regions are readable; frame and sampled-pixel gates pass | Original whole assessment rejected by a 68.2-ms pick; fixed early camera clips half the graph; dense links are harder to trace |
 | Paused picking replay | Original exported cooled geometry, 102/102 exact picks, maximum 17.5 ms; actual pointer checks 20.1–27.1 ms | The 68.2-ms event did not recur. No cause or fix established; paused replay is not whole-runtime acceptance |
-| Small production/viewer comparison | Karate moving/cooled frames, running picks/dragging, style/data replacement and settled resize pass on M3; layouts look similar after Fit | Same-geometry interior color checks fail; first-slice usability is not strict production compatibility |
+| Small production/viewer comparison | Karate moving/cooled frames, running picks/dragging, style/data replacement and settled resize pass on M3. The corrected paint snapshot matches interior pixels of both styles | The original paint failures remain reproducible. Remaining styles, transitions and full runtime parity need acceptance |
 | Representative pilot viewer | 34 members. The wider DPR 1 control peaks at 32.3 ms. The wider DPR 2 standalone Chrome control peaks at 20.0 ms while running | The historical **100.4 ms running pick** in the inline browser remains unexplained |
-| Interaction/lifecycle | Point drag/pin release, camera, replacement, pause/resume, resize and destruction in the lab runtime. Separate selection and host checks pass | Full setters, asynchronous readback contracts, deck integration and automatic recovery still need acceptance |
+| Interaction/lifecycle | Point drag/pin release, camera, replacement, pause/resume, resize and destruction in the Lab. Async selection and tracking work in the opt-in runtime, and Deck draws on the borrowed luma device | Full setters and caller migration, production Deck integration, label latency and automatic recovery still need acceptance |
 
 Detailed evidence stays with the experiment:
 [earlier adverse runs](#/integrated-webgpu?section=doc-findings-final-run-and-repeatability-limit),
@@ -388,8 +390,8 @@ force model before choosing it for production.
 | [Weighted links](#/weighted-links), [combined layouts](#/combined-layout) | Ordered topology, force composition, cooling and precision reference paths | Selected settings/counts; historical failing controls remain documented |
 | [Resident layout](#/resident-layout/docs/dataflow) | Bounds, simulation and minimal drawing without ordinary position readback | Validation checkpoints synchronize; the renderer and force set are incomplete |
 | [Million-point Four corners](#/million-graph?section=doc-dense-communities) | GPU hierarchy, native repulsion and basic drawing on three million-point workloads on M3 | Slowest ticks, high-degree workloads and interactive viewer acceptance remain open |
-| [Point capacity](#/point-capacity/docs/findings), [retained capacity](#/point-capacity/docs/reuse), [host ownership](#/integrated-webgpu?section=doc-host-ownership) | Same-device prefix transfers and updates, borrowed device cleanup and explicit restart | Retention/trim, full Graph ownership and recovery, and total driver memory remain open |
-| [Selection](#/integrated-webgpu?section=doc-selection), [tracked points](#/integrated-webgpu?section=doc-tracked-points) | Exact bounded IDs and position snapshots from asynchronous readback | Public synchronous APIs, latency at scale, pointer and label scheduling |
+| [Point capacity](#/point-capacity/docs/findings), [retained capacity](#/point-capacity/docs/reuse), [host ownership](#/integrated-webgpu?section=doc-host-ownership) | Same-device updates, cleanup, restart and Deck drawing/picking on a pinned shared device | Retention/trim, production dependency alignment and recovery, and total driver memory remain open |
+| [Selection and tracked points](#/integrated-webgpu?section=doc-readback) | Exact IDs and position snapshots up to 8,192 points, with a current label cache and invalidation after removal | Production caller wiring, latency at scale, pointer and label scheduling |
 | [Point transitions](#/point-styling?section=doc-transition-findings) | Exact same-count position, fill, size and exit comparisons | Count changes, link transitions and full rendering and scheduling |
 | [Controlled profiling](#/gpu-stage-profile), [hub springs](#/hub-springs), [grid aggregation](#/cell-aggregation) | Balanced timing and bounded M3 optimizations | Opt-in candidates and device-specific results do not establish a universal gain |
 | [Matched layouts](#/matched-layout/docs/findings), [collision trajectories](#/collision/docs/trajectories) | Independent CPU/GPU behavior and separate geometry observations | Force combinations, arithmetic variants, counts and schedules must stay explicit |

@@ -289,17 +289,21 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       investigations: [{ page: 'findings', state: 'Current evidence', description: 'Bounded pilot behavior, independent of strict production compatibility.' }],
     }),
     'viewer-comparison': entry('viewer-comparison', {
-      conclusion: 'Link edge smoothing removes most edge differences on M3. All 557 link-only interior color failures remain.',
+      conclusion: 'Corrected short-link opacity clears all 557 interior color failures on M3. Smoothing reduces the remaining edge differences.',
       reviewed: '2026-11-19',
       variant: 'Unchanged production Graph / luma v9 versus integrated corrected luma v10 core',
       comparison: 'Same topology and supplied styles → independent layouts and running interaction → bounded workflow checks',
       milestone: 'integration',
       method: 'method',
-      evidence: 'findings',
+      evidence: 'link-color-evidence',
       methodPages: ['agent-recipe'],
-      next: 'Replay the isolated link witnesses to compare paint inputs and fragment output at the same interior pixels.',
-      reproduce: 'Use the live viewers to explore a new local run, then inspect the recorded same-geometry paint comparison.',
-      investigations: [{ page: 'findings', state: 'Current evidence', description: 'Separate measured workflow behavior from full migration approval.' }],
+      next: 'Verify the corrected paint across production link styles, sizes, and transitions.',
+      reproduce: 'Run Compare corrected link paint in the live viewer. The original paint and smoothing controls preserve the starting discrepancy.',
+      investigations: [{
+        page: 'link-color-evidence',
+        state: 'Current evidence',
+        description: 'Same-geometry opacity and edge comparisons for both Karate styles.',
+      }],
     }),
     'integrated-webgpu': entry('integrated-webgpu', {
       conclusion: 'Cooled Karate Club is readable after Fit: all 34 points are visible and pickable. Frames and sampled pixels pass; ' +
@@ -310,7 +314,7 @@ export function additionalResearch (reviewed: string): Record<string, ResearchSu
       milestone: 'integration',
       method: 'method',
       evidence: 'findings',
-      next: 'Bring the asynchronous selection and tracking probes into the Graph contract and retain the original timing failures.',
+      next: 'Integrate the Lab readback contract with production Graph callers and verify end-to-end label and selection latency.',
       reproduce: 'Use Assess settled Karate Club and Export JSON. Replay cooled picking accepts that capture ' +
         'or the current session’s assessment; keep the native tab visible.',
       investigations: [

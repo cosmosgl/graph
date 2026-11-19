@@ -10,7 +10,8 @@ import source from './render.wgsl?raw'
 import linkSmoothing from './link-smoothing.wgsl?raw'
 export type Camera = { x: number; y: number; zoom: number }
 export type PaintLayers = { links?: boolean; points?: boolean }
-type PaintOptions = { smoothLinks?: boolean }
+export type LinkDistanceOpacity = { range: readonly [number, number]; minimum: number }
+type PaintOptions = { smoothLinks?: boolean; linkDistanceOpacity?: LinkDistanceOpacity; linkIndex?: number }
 const entries = {
   point: ['pointVertex', 'pointColor'],
   link: ['linkVertex', 'linkColor'],
@@ -18,7 +19,7 @@ const entries = {
   smoothLink: ['smoothLinkVertex', 'smoothLinkColor'],
 }
 export function createRenderer (position: () => PositionSource, graph: GraphInput, canvas: HTMLCanvasElement): {
-  camera: Camera; styles: Float32Array; selected: number; ratio: number;
+  camera: Camera; styles: Float32Array; readonly styleSource: Buffer; selected: number; ratio: number;
   linkStyle: { color: number[]; width: number }; setLinkStyle(color: number[], width: number): void;
   draw(timestamps?: ComputePassProps): void; pick(x: number, y: number): Promise<number | null>;
   snapshot(options?: PaintOptions): Promise<{ color: Uint8Array; ids: Uint8Array; width: number; height: number }>;
@@ -35,7 +36,7 @@ export function createRenderer (position: () => PositionSource, graph: GraphInpu
     ]),
   }
   try {
-    const params = scope.own(upload(device, new Float32Array(20), Buffer.UNIFORM))
+    const params = scope.own(upload(device, new Float32Array(24), Buffer.UNIFORM))
     const vertexArray = scope.own(device.createVertexArray({ shaderLayout: layout, bufferLayout: [] }))
     const pickTarget = scope.own(target(device, 1, 1))
     const kernels = new Map<string, RenderKernel>()
@@ -66,8 +67,14 @@ export function createRenderer (position: () => PositionSource, graph: GraphInpu
       layers?: PaintLayers & PaintOptions
     ): void => {
       const { camera, ratio, selected } = api
-      params.write(new Float32Array([camera.x, camera.y, camera.zoom * ratio, 0,
-        canvas.width, canvas.height, ratio, 0, ...origin, framebuffer.width, framebuffer.height, selected, api.linkStyle.width, 0, 0, ...api.linkStyle.color]))
+      const visibility = layers?.linkDistanceOpacity
+      const linkIndex = layers?.linkIndex
+      if (linkIndex !== undefined && (!Number.isInteger(linkIndex) || linkIndex < 0 || linkIndex >= edges)) {
+        throw new Error('Invalid diagnostic link index')
+      }
+      params.write(new Float32Array([camera.x, camera.y, camera.zoom * ratio, camera.zoom,
+        canvas.width, canvas.height, ratio, 0, ...origin, framebuffer.width, framebuffer.height, selected, api.linkStyle.width, 0, 0,
+        ...api.linkStyle.color, ...(visibility ? [...visibility.range, visibility.minimum, 1] : [0, 0, 0, 0])]))
       const pass = device.beginRenderPass({
         ...timestamps, framebuffer, clearColor: ids || transparent ? [0, 0, 0, 0] : graphRgba.background, clearDepth: false,
       })
@@ -76,7 +83,7 @@ export function createRenderer (position: () => PositionSource, graph: GraphInpu
       try {
         if (!ids && edges && layers?.links !== false) {
           kernel(format, layers?.smoothLinks ? 'smoothLink' : 'link', !!framebuffer.depthStencilAttachment).draw(pass, {
-            vertexArray, vertexCount: 4, instanceCount: edges, bindings,
+            vertexArray, vertexCount: 4, firstInstance: linkIndex ?? 0, instanceCount: linkIndex === undefined ? edges : 1, bindings,
           })
         }
         if (position().count && layers?.points !== false) {
@@ -96,6 +103,7 @@ export function createRenderer (position: () => PositionSource, graph: GraphInpu
         api.linkStyle = { color: [...color], width }
       },
       styles: new Float32Array(),
+      get styleSource (): Buffer { return styleBuffer },
       selected: -1,
       ratio: 1,
       replace (next: GraphInput): void {

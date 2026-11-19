@@ -39,6 +39,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
     <button data-action="assess">Assess early and cooled viewers</button>
     <button data-action="paint">Compare same-geometry paint</button><button data-action="paint-layers">Attribute paint differences</button>
     <button data-action="paint-link-smoothing">Test link edge smoothing</button>
+    <button data-action="paint-corrected-links">Compare corrected link paint</button>
     <button data-action="check">Check current updates</button>
     <button data-action="cancel">Cancel assessment</button><button data-action="export">Export JSON</button></div>
     <p>Paint checks use the same fixed positions in both viewers and replace the current production layout.
@@ -222,6 +223,8 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
   const action = async (name: string): Promise<void> => {
     if (name === 'cancel') { cancelled = true; return }
     if (busy || dead) return
+    const paint = ['paint', 'paint-layers', 'paint-link-smoothing', 'paint-corrected-links'].includes(name)
+    const correctedLinks = name === 'paint-corrected-links'
     if (name !== 'export') interacted = true
     const startedAt = pauseGeneration
     failure = ''; busy = true; cancelled = false; stopLoop(); update(); await flight
@@ -250,7 +253,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
         await create()
         record({ action: 'recreate', oldCanvasDetached: !old.isConnected, candidateReady: !gpu.destroyed }); await check()
       }
-      if (name === 'paint' || name === 'paint-layers' || name === 'paint-link-smoothing') {
+      if (paint) {
         playing = false; gl.graph.pause(); gpu.pause(); style()
         record({
           action: 'same-geometry-paint',
@@ -258,7 +261,11 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
           pointCount: gpu.data.input.points.length / 4,
           linkCount: gpu.data.graph.links.length / 2,
           style: alternate ? 'B' : 'A',
-          ...await comparePaint(gl, gpu, { attributeLayers: name !== 'paint', smoothLinks: name === 'paint-link-smoothing' }),
+          ...await comparePaint(gl, gpu, {
+            attributeLayers: name !== 'paint',
+            smoothLinks: name === 'paint-link-smoothing' || correctedLinks,
+            distanceOpacity: correctedLinks,
+          }),
         })
       }
       if (name === 'check') await check()
@@ -296,7 +303,7 @@ export async function createView (host: HTMLElement): Promise<ExperimentInstance
         a.click(); URL.revokeObjectURL(url)
       }
     } catch (e) { failure = String(e); record({ error: failure, action: name }); playing = false; failed = true } finally {
-      if (!['run', 'pause', 'assess', 'paint', 'paint-layers', 'paint-link-smoothing'].includes(name) &&
+      if (!paint && !['run', 'pause', 'assess'].includes(name) &&
         !dead && !failed && visible && pauseGeneration === startedAt) playing = wasPlaying
       busy = false; if (!dead) { update(); if (viewportQueued) queueViewport(); else schedule() }
     }
